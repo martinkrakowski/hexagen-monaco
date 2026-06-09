@@ -60,6 +60,8 @@ export class ManifestWriteAdapter implements ManifestWritePort {
     // destroy the split layout and inline every context file. The same guard
     // exists in writeManifestDocument (manifest-io.ts) — this adapter has its
     // own write path, so it needs its own check against the ON-DISK file.
+    // NOTE: non-atomic check — a race between this read and the rename below
+    // is possible; acceptable for single-operator local tooling (TUI/stdio).
     try {
       const raw = await fs.readFile(manifestPath, "utf-8");
       if (isIndexManifest(yaml.load(raw))) {
@@ -154,6 +156,18 @@ export class ManifestWriteAdapter implements ManifestWritePort {
         return {
           success: false,
           error: new Error(`Target module not found: ${command.targetModule}`),
+        };
+      }
+
+      // GOVERNANCE GATE — self-edge check. The BFS below cannot catch a fresh
+      // self-edge (no existing edge reaches the source yet), so refuse it
+      // explicitly, mirroring validateDependency.
+      if (command.sourceModule === command.targetModule) {
+        return {
+          success: false,
+          error: new Error(
+            `Source and target modules cannot be the same: ${command.sourceModule}`,
+          ),
         };
       }
 
@@ -312,12 +326,16 @@ export class ManifestWriteAdapter implements ManifestWritePort {
       // GOVERNANCE GATE — referential check. An adapter implements a port;
       // refuse to register one against a port the context does not declare
       // (previously command.portName was accepted but silently ignored).
+      // Ports may be declared as plain strings OR objects with a `name` key
+      // (LegacyOrNewPortSchema in project-configuration) — normalize both.
       const appLayer = (layer.application ?? {}) as Record<string, unknown>;
       const ports = (appLayer.ports ?? { in: [], out: [] }) as Record<
         string,
-        string[]
+        Array<string | { name?: string }>
       >;
-      const knownPorts = [...(ports.in ?? []), ...(ports.out ?? [])];
+      const knownPorts = [...(ports.in ?? []), ...(ports.out ?? [])].map((p) =>
+        typeof p === "string" ? p : (p?.name ?? ""),
+      );
       if (!knownPorts.includes(command.portName)) {
         return {
           success: false,

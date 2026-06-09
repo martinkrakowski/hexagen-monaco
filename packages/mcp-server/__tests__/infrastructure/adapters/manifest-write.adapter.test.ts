@@ -180,6 +180,25 @@ describe("manifest write adapter", () => {
     assert.ok((result.error as Error).message.includes("bar"));
   });
 
+  it("should refuse a self-edge for addDependency", async () => {
+    const result = await withTempWorkspace(
+      {
+        bounded_contexts: [minimalContext("foo")],
+      },
+      async (workspaceRoot) => {
+        const adapter = new ManifestWriteAdapter(workspaceRoot);
+        return adapter.addDependency({
+          sourceModule: "foo",
+          targetModule: "foo",
+        });
+      },
+    );
+    // The BFS cycle check cannot catch a fresh self-edge — the explicit
+    // source===target refusal must.
+    assert.strictEqual(result.success, false);
+    assert.ok((result.error as Error).message.includes("same"));
+  });
+
   it("should refuse a direct dependency cycle for addDependency", async () => {
     const result = await withTempWorkspace(
       {
@@ -335,6 +354,39 @@ describe("manifest write adapter", () => {
             layers: {
               domain: {},
               application: { ports: { in: ["PaymentPort"], out: [] } },
+              infrastructure: { adapters: [] },
+            },
+          },
+        ],
+      },
+      async (workspaceRoot) => {
+        const adapter = new ManifestWriteAdapter(workspaceRoot);
+        return adapter.registerAdapter({
+          contextName: "billing",
+          adapterName: "StripeAdapter",
+          portName: "PaymentPort",
+        });
+      },
+    );
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.value.registered, true);
+  });
+
+  it("should accept registerAdapter against an object-form port declaration", async () => {
+    // LegacyOrNewPortSchema allows ports as `{ name: "..." }` objects, not
+    // just strings — the referential gate must normalize both forms.
+    const result = await withTempWorkspace(
+      {
+        bounded_contexts: [
+          {
+            name: "billing",
+            type: "core" as const,
+            description: "",
+            layers: {
+              domain: {},
+              application: {
+                ports: { in: [{ name: "PaymentPort" }], out: [] },
+              },
               infrastructure: { adapters: [] },
             },
           },
@@ -603,6 +655,9 @@ describe("manifest write adapter", () => {
       const adapter = new ManifestWriteAdapter(tmpDir);
       const result = await adapter.registerBoundedContext({ name: "new-ctx" });
       assert.strictEqual(result.success, false);
+      // Anchor on the guard's message so this test cannot pass via a
+      // read-path failure (which would also refuse + leave bytes untouched).
+      assert.ok((result.error as Error).message.includes("split"));
 
       const after = await fs.readFile(manifestPath, "utf-8");
       assert.strictEqual(after, indexContent);

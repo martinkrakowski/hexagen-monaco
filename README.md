@@ -99,7 +99,7 @@ The terminal control plane (`apps/tui`) built with [Ink](https://github.com/vadi
   <img src="https://hexagen-monaco.cloud/images/tui-violation-inspector.png" alt="TUI violation inspector — three-pane layout showing navigation tree, rule engine, and boundary violation details" width="720" />
 </p>
 
-When the linter detects a boundary violation, pressing `r` routes the violation context through a local MCP client to an agent, which selects a remediation from an allow-listed set of MCP tools (audit, add-dependency, create-port, create-adapter, scaffold-module) and applies it immediately — pressing `r` is the operator's sign-off, and the structural/referential write gates described in The Governance Loop above are what stand between the agent's suggestion and the manifest. A review-before-apply step is planned follow-up work. Key bindings: `j/k` to navigate, `Tab` to switch panes, `r` to request an agent remediation, `u` to refresh, `q` to quit.
+When the linter detects a boundary violation, pressing `r` sends the violation context to an LLM, which selects a remediation from an allow-listed set of MCP tools (audit, add-dependency, create-port, create-adapter, scaffold-module); the TUI then executes the selected tool through a local MCP client immediately — pressing `r` is the operator's sign-off, and the structural/referential write gates described in The Governance Loop above are what stand between the agent's suggestion and the manifest. A review-before-apply step is planned follow-up work. Key bindings: `j/k` to navigate, `Tab` to switch panes, `r` to request an agent remediation, `u` to refresh, `q` to quit.
 
 ```bash
 yarn workspace @hexagen/tui dev       # development
@@ -145,7 +145,7 @@ No domain code references a provider by name. Switching providers, swapping in a
 - **7 read resources:** manifest, dependency graph, linter report, decisions, invariants, linter config, workspace context.
 - **19 tools:** audit boundaries, diff manifest, scaffold module, create / remove port / context / adapter, add dependency, generate topology / adapters / manifest pipeline, accept / reject / get / list transaction, log agent remediation, initialize feature worktree, submit architectural spec.
 
-All mutations are transaction-gated. The MCP server is constrained by the same manifest invariants as every other mutation surface; it can only propose changes that the linter and the human reviewer approve.
+Mutation tools write to the manifest directly, behind deterministic fail-closed write gates (split-manifest protection, dependency-cycle refusal, port/context referential checks — see The Governance Loop above). The transaction accept/reject tools operate on proposals from the web control plane's transaction flow; routing the MCP mutation tools through that same approval path is planned follow-up work.
 
 ## Architecture Topology
 
@@ -171,7 +171,7 @@ Hexagen-Monaco is a modular monolith. Thirty-five bounded contexts live across f
 | **Core**           | architectural-enforcement | Architectural enforcement tooling (ESLint plugin + arch-linter boundaries)                     |
 | **Core**           | code-generation           | Code-generation tooling (folded into sync + project-generation)                                |
 | **Probabilistic**  | agentic-interaction       | Outbound LLM ports, R16-R18 quality controls, retry + escalation                               |
-| **Probabilistic**  | mcp-server                | Stdio MCP server; 7 governance reads, 19 transaction-gated tools                               |
+| **Probabilistic**  | mcp-server                | Stdio MCP server; 7 governance reads, 19 tools (mutations behind deterministic write gates)    |
 | **Probabilistic**  | local-llm                 | WebGPU/WebLLM inference, IndexedDB model + chat persistence                                    |
 | **Probabilistic**  | reconciliation-engine     | Reconciles agent proposals against current manifest state                                      |
 | **Probabilistic**  | tandem-execution          | Tandem LLM execution — multi-tiered local + cloud inference                                    |
