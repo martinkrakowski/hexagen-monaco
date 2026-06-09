@@ -83,7 +83,10 @@ export const emptyFormValues: ProjectConfig = {
         inboundPorts: [],
         outboundPorts: [],
       },
-      uiFramework: "",
+      // ADR-0041 single-app preset: a fresh project defaults to one Next.js web
+      // app. The Applications step fans this out across contexts; a loaded
+      // headless project (all uiFramework "") is preserved, not flipped.
+      uiFramework: "Next.js",
       persistenceAdapter: "",
       messagingAdapter: "",
       telemetryProvider: "",
@@ -100,6 +103,15 @@ export const wizardSteps = [
     title: "Workspace Governance",
     description: "Define workspace name, package manager, and topology.",
     fields: ["governance"],
+  },
+  {
+    // ADR-0041: project-level Applications (UI framework + API backend), placed
+    // before Bounded Contexts so the choice frames domain modelling and new
+    // contexts inherit it at creation. Writes the per-context fields via fan-out.
+    id: "applications",
+    title: "Applications",
+    description: "Choose the UI framework and API backend for your project.",
+    fields: ["boundedContexts"],
   },
   {
     id: "bounded_contexts",
@@ -139,3 +151,13 @@ export const wizardSteps = [
     fields: [],
   },
 ];
+
+/**
+ * Resolve a wizard step's index by its stable `id`. Step-index-dependent logic
+ * (validation gates, navigation side effects, the router) looks steps up by id
+ * rather than hardcoding numeric positions, so inserting/reordering a step (e.g.
+ * the ADR-0041 Applications step) can't silently shift those checks.
+ */
+export function stepIndexById(id: string): number {
+  return wizardSteps.findIndex((step) => step.id === id);
+}

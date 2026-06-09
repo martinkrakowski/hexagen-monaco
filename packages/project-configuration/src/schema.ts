@@ -75,6 +75,11 @@ export const BoundedContextSchema = z.object({
       "Please enter a name for this bounded context (e.g., 'UserService', 'OrderProcessing')",
     ),
   description: z.string().optional(),
+  // ADR-0041: `infrastructureTarget` (API backend) and `uiFramework` (below)
+  // are PROJECT-LEVEL choices managed by the wizard's Applications step, which
+  // fans a single selection out to every context. They persist per-context (the
+  // source of truth `deriveApps` reads), but are NOT direct per-context input —
+  // do not re-add per-context UI/API editing without revisiting ADR-0041.
   infrastructureTarget: z
     .enum(["nestjs", "express", "serverless", "plain-ts", "nitro"])
     .optional(),

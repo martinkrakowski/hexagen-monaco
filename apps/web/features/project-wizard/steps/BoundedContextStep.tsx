@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useFormContext, useWatch } from "react-hook-form";
-import type { BoundedContext, ProjectConfig } from "@hexagen/project-configuration";
+import type {
+  BoundedContext,
+  ProjectConfig,
+} from "@hexagen/project-configuration";
 
 import { StepHeader } from "./StepHeader";
 import { WizardFooter } from "../WizardFooter";
@@ -11,6 +14,7 @@ import {
   ContextForm,
   createEmptyContext,
 } from "./bounded-context-step";
+import { collapseApplications } from "./applications-step";
 
 interface BoundedContextStepProps {
   onNext: () => void;
@@ -77,7 +81,11 @@ export function BoundedContextStep({
 
   const handleAddContext = () => {
     const current = getValues("boundedContexts") || [];
-    const next = createEmptyContext();
+    // ADR-0041: a context created after the Applications step inherits the
+    // project's UI/API selection (collapsed from existing contexts) so it
+    // converges with them instead of defaulting independently.
+    const { uiFramework, infrastructureTarget } = collapseApplications(current);
+    const next = createEmptyContext({ uiFramework, infrastructureTarget });
     setValue("boundedContexts", [...current, next], {
       shouldDirty: true,
       shouldValidate: true,
