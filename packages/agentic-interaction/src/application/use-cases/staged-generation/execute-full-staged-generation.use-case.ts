@@ -52,7 +52,13 @@ export interface FullStagedGenerationOptions {
   /** Overrides the Stage 3 escalation model (see STAGE3_ESCALATION_CONFIG). */
   escalationModel?: string;
   /** Overrides the `<architecture>` block injected into the Stage 0 prompt.
-   * Defaults to the greenfield static contract (T2b). */
+   * Defaults to the greenfield static contract (T2b).
+   *
+   * SECURITY: this is injected into the prompt UNESCAPED (it is trusted
+   * static configuration, set once at construction). Never thread user
+   * input or other untrusted data through this option — user text belongs
+   * in `userDescription`, which goes through the XML-wrapping injection
+   * protections in generate-manifest.prompt.ts. */
   architectureContext?: string;
 }
 
@@ -249,10 +255,16 @@ export class ExecuteFullStagedGenerationUseCase {
     const yaml = assembledManifest.yaml || "";
     const parsed =
       (assembledManifest.parsedObject as Record<string, unknown>) || {};
+    // The assembled manifest (draftToManifest output) nests ports under
+    // layers.application.ports and adapters under layers.infrastructure.adapters
+    // — NOT at the context root. (The blueprint reads ctx.ports/ctx.adapters
+    // and therefore always records 0; fixed here, blueprint fix deferred to A4.)
     const boundedContexts = Array.isArray(parsed.bounded_contexts)
       ? (parsed.bounded_contexts as Array<{
-          ports?: { in?: unknown[]; out?: unknown[] };
-          adapters?: unknown[];
+          layers?: {
+            application?: { ports?: { in?: unknown[]; out?: unknown[] } };
+            infrastructure?: { adapters?: unknown[] };
+          };
         }>)
       : [];
 
@@ -263,25 +275,42 @@ export class ExecuteFullStagedGenerationUseCase {
         origin: "full-staged-generation",
         yaml,
         contextCount: boundedContexts.length,
-        portCount: boundedContexts.reduce(
-          (sum, ctx) =>
+        portCount: boundedContexts.reduce((sum, ctx) => {
+          const ports = ctx.layers?.application?.ports;
+          return (
             sum +
-            (Array.isArray(ctx.ports?.in) ? ctx.ports.in.length : 0) +
-            (Array.isArray(ctx.ports?.out) ? ctx.ports.out.length : 0),
-          0,
-        ),
-        adapterCount: boundedContexts.reduce(
-          (sum, ctx) =>
-            sum + (Array.isArray(ctx.adapters) ? ctx.adapters.length : 0),
-          0,
-        ),
+            (Array.isArray(ports?.in) ? ports.in.length : 0) +
+            (Array.isArray(ports?.out) ? ports.out.length : 0)
+          );
+        }, 0),
+        adapterCount: boundedContexts.reduce((sum, ctx) => {
+          const adapters = ctx.layers?.infrastructure?.adapters;
+          return sum + (Array.isArray(adapters) ? adapters.length : 0);
+        }, 0),
       });
     } catch (beginError) {
       return { success: false, error: beginError };
     }
 
     try {
-      await this.transactionManager.transition(transaction.id, "speculative");
+      // The port contract signals failure by returning null (not only by
+      // throwing) — treat both as a failed transition.
+      const transitioned = await this.transactionManager.transition(
+        transaction.id,
+        "speculative",
+      );
+      if (transitioned == null) {
+        await this.transactionManager.rollback(
+          transaction.id,
+          "transition to speculative returned null",
+        );
+        return {
+          success: false,
+          error: new Error(
+            `Transaction ${transaction.id} could not transition to "speculative"`,
+          ),
+        };
+      }
     } catch (transitionError) {
       await this.transactionManager.rollback(transaction.id);
       return { success: false, error: transitionError };

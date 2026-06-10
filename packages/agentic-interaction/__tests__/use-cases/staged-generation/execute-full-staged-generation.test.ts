@@ -109,7 +109,10 @@ const happyPathStreamResponses = [
   stage6Response,
 ];
 
-function createMockTransactionManager(opts?: { failTransition?: boolean }) {
+function createMockTransactionManager(opts?: {
+  failTransition?: boolean;
+  nullTransition?: boolean;
+}) {
   const calls: Array<{ method: string; args: unknown[] }> = [];
   const manager = {
     begin: (intentId: string, metadata?: Record<string, unknown>) => {
@@ -120,6 +123,10 @@ function createMockTransactionManager(opts?: { failTransition?: boolean }) {
       calls.push({ method: "transition", args: [transactionId, status] });
       if (opts?.failTransition) {
         throw new Error("transition failed");
+      }
+      if (opts?.nullTransition) {
+        // Port contract: null = transition rejected (e.g. unknown tx)
+        return null;
       }
       return { id: transactionId, status };
     },
@@ -178,6 +185,12 @@ describe("ExecuteFullStagedGenerationUseCase", () => {
     const beginMetadata = calls[0].args[1] as Record<string, unknown>;
     assert.equal(beginMetadata.origin, "full-staged-generation");
     assert.ok(typeof beginMetadata.yaml === "string");
+    // Counts must read the manifest's nested layout
+    // (layers.application.ports / layers.infrastructure.adapters):
+    // 1 context, 2 ports (createInvoice + invoiceRepository), 1 adapter.
+    assert.equal(beginMetadata.contextCount, 1);
+    assert.equal(beginMetadata.portCount, 2);
+    assert.equal(beginMetadata.adapterCount, 1);
   });
 
   test("chaining: each stage's prompt embeds upstream output", async () => {
@@ -336,6 +349,31 @@ describe("ExecuteFullStagedGenerationUseCase", () => {
     const result = await useCase.execute("Build an invoice management system");
 
     assert.equal(result.success, false);
+    assert.deepEqual(
+      calls.map((c) => c.method),
+      ["begin", "transition", "rollback"],
+    );
+  });
+
+  test("transition returning null (port contract failure signal) rolls back and fails the run", async () => {
+    const { port } = createScriptedPort(
+      happyPathSendResponses,
+      happyPathStreamResponses,
+    );
+    const { manager, calls } = createMockTransactionManager({
+      nullTransition: true,
+    });
+    const useCase = new ExecuteFullStagedGenerationUseCase(port, manager);
+
+    const result = await useCase.execute("Build an invoice management system");
+
+    assert.equal(result.success, false);
+    if (!result.success) {
+      assert.ok(
+        String(result.error).includes("speculative"),
+        "error must explain the failed transition",
+      );
+    }
     assert.deepEqual(
       calls.map((c) => c.method),
       ["begin", "transition", "rollback"],
