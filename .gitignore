@@ -114,6 +114,8 @@ coverage/
 *.lcov
 apps/web/playwright-report/
 apps/web/test-results/
+packages/agentic-interaction/golden-harness-results/
+packages/agentic-interaction/benchmark-results.ndjson
 
 # ───────────────────────────────────────────────
 # HexaGen generated files
