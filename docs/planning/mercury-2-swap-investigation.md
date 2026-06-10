@@ -235,5 +235,43 @@ for context richness the Stage-6 judge has never rewarded.
 **Disposition:** rejected as a default stage; recorded as the designed
 fallback. If single-context manifests become a real production complaint,
 the shape is a stage-1 escalation (à la stage 3's `escalationConfig`):
-fire Ultra-refine only when the #298 soft-retry still leaves <2 subdomains
+fire a refine pass only when the #298 soft-retry still leaves <2 subdomains
 (~4% tail, currently benign and judge-passing).
+
+## 8. Addendum — mercury → gpt-4o cascade (same probe, cheaper refiner)
+
+The same cascade probe was re-run with `openai/gpt-4o` (via OpenRouter) as
+the refine hop instead of Ultra — identical draft config, refinement prompt,
+and metrics:
+
+| prompt                  | mercury union | cascade union | refine cost |
+| ----------------------- | ------------- | ------------- | ----------- |
+| blog                    | 2             | 2             | +2.6s       |
+| ecommerce               | 4             | 5             | +2.8s       |
+| fleet-logistics         | 4             | 4             | +3.3s       |
+| saas-billing            | 3             | 3             | +2.9s       |
+| healthcare-appointments | 3             | 4             | +3.7s       |
+| banking-ledger          | 2             | 3             | +1.7s       |
+| iot-telemetry           | 4             | 4             | +2.7s       |
+| minimal-books           | 3             | 3             | +2.4s       |
+| **median**              | **3**         | **3.5**       | **~2.8s**   |
+
+(Mercury drafts are re-sampled per run, so unions differ from the Ultra
+table — this run happened to draft richer, with only one 2-union draft
+needing rescue.)
+
+Same mechanical cleanliness (8/8 valid NDJSON), same shape of effect —
+rescues thin drafts (banking 2→3), +0/+1 elsewhere, and it also repaired a
+declared/implied mismatch (saas-billing declared 1 vs implied 3 → re-emitted
+consistently as 3, doing the union-recovery parser's job at the source). The
+difference is price: **~2.8s median vs Ultra's ~25s — a ~9× cheaper refine**
+that keeps a hypothetical cascade pipeline well inside mercury-class latency
+(~+3s on a ~14s p95) instead of pushing it into gpt-4o-incumbent territory.
+
+**Disposition:** still not wired as a default — the judge has never rewarded
+the extra contexts, and the #298 soft-retry already covers the ~4% collapse
+tail with zero added latency in the common case. But this result **replaces
+Ultra as the designated escalation refiner**: if the stage-1 escalation
+fallback is ever wired, the refine hop should be gpt-4o (~3s, no throttling
+risk), not Ultra (~25s, monotonic provider degradation). Ultra remains a
+quality benchmark anchor only.
