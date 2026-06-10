@@ -2,12 +2,18 @@ import { NextRequest } from "next/server";
 import { checkRateLimit } from "../../../../../lib/rate-limiter";
 import {
   ExecuteStagedGenerationUseCase,
+  ExecuteFullStagedGenerationUseCase,
   type StagedGenerationCallbacks,
 } from "@hexagen/agentic-interaction";
 import type { PromptVariables } from "@hexagen/agentic-interaction";
 import { createLLMProviderSelector } from "../../../../lib/wire.server";
 import { logger } from "../../../../../lib/structured-logger";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
+import {
+  selectPipeline,
+  createFullPipelineEventAdapter,
+  type StageRouteEvent,
+} from "./pipeline-selection";
 
 interface StageRequestBody {
   description: string;
@@ -17,26 +23,6 @@ interface StageRequestBody {
   preferLocal?: boolean;
 }
 
-type NDJSONEvent =
-  | { type: "stage-start"; stage: number; label: string }
-  | { type: "stage-complete"; stage: number; label: string; durationMs: number }
-  | {
-      type: "stage-telemetry";
-      stage: number;
-      telemetry: Record<string, unknown>;
-    }
-  | { type: "chunk"; stage: number; data: string }
-  | { type: "validation-error"; stage: number; errors: string[] }
-  | {
-      type: "done";
-      yaml: string;
-      contextCount: number;
-      portCount: number;
-      adapterCount: number;
-      transactionId: string;
-    }
-  | { type: "error"; message: string };
-
 export async function POST(request: NextRequest) {
   // Rate limiting
   const rateCheck = checkRateLimit(request, 10, 60 * 1000);
@@ -44,16 +30,16 @@ export async function POST(request: NextRequest) {
     const retryAfter = Math.ceil(rateCheck.retryAfter! / 1000);
     return new Response(
       JSON.stringify({ type: "error", message: "Rate limit exceeded" }) + "\n",
-      { 
+      {
         status: 429,
         headers: {
           "Content-Type": "application/x-ndjson",
           "Retry-After": retryAfter.toString(),
         },
-      }
+      },
     );
   }
-  
+
   let body: StageRequestBody;
   try {
     body = await request.json();
@@ -71,27 +57,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // A3 cutover seam: stub (default) vs full 0→6 pipeline, selected per
+  // request via STAGED_GENERATION_PIPELINE / STAGED_GENERATION_FULL_PERCENT.
+  const pipeline = selectPipeline({
+    STAGED_GENERATION_PIPELINE: process.env.STAGED_GENERATION_PIPELINE,
+    STAGED_GENERATION_FULL_PERCENT: process.env.STAGED_GENERATION_FULL_PERCENT,
+  });
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (event: NDJSONEvent) => {
+      const send = (event: StageRouteEvent) => {
         controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
-      };
-
-      const callbacks: StagedGenerationCallbacks = {
-        onStageStart: (stage, label) =>
-          send({ type: "stage-start", stage, label }),
-        onStageComplete: (stage, label, durationMs) =>
-          send({ type: "stage-complete", stage, label, durationMs }),
-        onChunk: (stage, data) => send({ type: "chunk", stage, data }),
-        onValidationError: (stage, errors) =>
-          send({ type: "validation-error", stage, errors }),
-        onStageTelemetry: (telemetry) =>
-          send({
-            type: "stage-telemetry",
-            stage: telemetry.stage,
-            telemetry: telemetry as unknown as Record<string, unknown>,
-          }),
       };
 
       try {
@@ -102,10 +79,6 @@ export async function POST(request: NextRequest) {
         });
 
         const transactionManager = new InMemoryTransactionManager();
-        const useCase = new ExecuteStagedGenerationUseCase(
-          llmAdapter,
-          transactionManager,
-        );
 
         const variables: PromptVariables = {
           userDescription: body.description,
@@ -114,11 +87,46 @@ export async function POST(request: NextRequest) {
           additionalContext: body.additionalContext,
         };
 
-        const result = await useCase.execute(
-          body.description,
-          variables,
-          callbacks,
-        );
+        // Canary comparison key: every request logs which pipeline served it.
+        logger.info("[staged-gen] pipeline selected", { pipeline });
+
+        let result;
+        if (pipeline === "full") {
+          const useCase = new ExecuteFullStagedGenerationUseCase(
+            llmAdapter,
+            transactionManager,
+          );
+          result = await useCase.execute(
+            body.description,
+            variables,
+            createFullPipelineEventAdapter(send),
+          );
+        } else {
+          const callbacks: StagedGenerationCallbacks = {
+            onStageStart: (stage, label) =>
+              send({ type: "stage-start", stage, label }),
+            onStageComplete: (stage, label, durationMs) =>
+              send({ type: "stage-complete", stage, label, durationMs }),
+            onChunk: (stage, data) => send({ type: "chunk", stage, data }),
+            onValidationError: (stage, errors) =>
+              send({ type: "validation-error", stage, errors }),
+            onStageTelemetry: (telemetry) =>
+              send({
+                type: "stage-telemetry",
+                stage: telemetry.stage,
+                telemetry: telemetry as unknown as Record<string, unknown>,
+              }),
+          };
+          const useCase = new ExecuteStagedGenerationUseCase(
+            llmAdapter,
+            transactionManager,
+          );
+          result = await useCase.execute(
+            body.description,
+            variables,
+            callbacks,
+          );
+        }
 
         if (result.success) {
           const yaml = result.state.stage5?.yaml || "";
@@ -141,6 +149,7 @@ export async function POST(request: NextRequest) {
             portCount,
             adapterCount,
             transactionId: result.transactionId,
+            pipeline,
           });
         } else {
           const msg =
