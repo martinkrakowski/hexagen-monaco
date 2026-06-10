@@ -46,7 +46,7 @@ If any assumption flips, only Workstream A's slices A3+ change shape; A1–A2, B
    - **T2 — latency:** full p95 (successful runs) must not exceed **2× stub p95**.
    - **T3 — quality:** symmetric-judge pass-rate must not regress vs stub, **and** full output must contain **zero** banned context names (`isBannedContextName` over accepted stage2 names).
    - **T4 — empty output:** **no** successful full run may produce 0 accepted contexts.
-     The harness evaluates T1–T4 per run-set and exits 1 on any failure; in the live canary the same triggers apply to the `[staged-gen] pipeline selected` log stream + done-event `pipeline` field.
+     The harness evaluates T1–T4 per run-set and exits 1 on any failure; in the live canary the same triggers apply to the `[staged-gen] pipeline selected` log stream + done-event `pipeline` field. **Evaluability precondition:** the gates require a measured stub baseline (≥1 stub run with ≥1 success) and judge verdicts for every pipeline that produced successes — a run-set missing either is _not evaluable_ and counts as a gate FAILURE (exit 1), never a pass (e.g. an invalid API key erroring every run must not exit green).
 4. Canary window → swap default → keep flag one release as the rollback lever.
 
 **Exit:** new pipeline is the default; rollback is a flag flip.

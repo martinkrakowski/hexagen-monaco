@@ -55,9 +55,13 @@ function parseCli(argv: string[]): CliOptions {
   const options: CliOptions = { repeat: 1, pipelines: ["stub", "full"] };
   for (const arg of argv) {
     if (arg.startsWith("--repeat=")) {
-      const n = parseInt(arg.slice("--repeat=".length), 10);
-      if (!Number.isFinite(n) || n < 1) {
-        throw new Error(`Invalid --repeat value: ${arg}`);
+      // Number(), not parseInt(): "2.5" and "3abc" must be rejected, not
+      // silently truncated to 2 / 3.
+      const n = Number(arg.slice("--repeat=".length));
+      if (!Number.isInteger(n) || n < 1) {
+        throw new Error(
+          `Invalid --repeat value: ${arg} (expected a positive integer)`,
+        );
       }
       options.repeat = n;
     } else if (arg.startsWith("--only=")) {

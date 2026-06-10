@@ -71,8 +71,10 @@ export interface PipelineSummary {
   successCount: number;
   /** successCount / total; 0 when there are no runs. */
   successRate: number;
-  /** Percentiles over SUCCESSFUL runs only — failures fail fast and would
-   * flatter the latency profile. 0 when there are no successes. */
+  /** Percentiles over SUCCESSFUL runs only — T2 asks "how long does a
+   * delivered manifest take?"; failure cost (including slow timeouts) is
+   * T1's signal and stays visible per-run in the report. 0 when there are
+   * no successes. */
   p50DurationMs: number;
   p95DurationMs: number;
   judgedCount: number;
@@ -231,13 +233,16 @@ export function evaluateGates(
   full: PipelineSummary,
 ): GateResult[] {
   if (full.total === 0) {
-    const detail = "no full-pipeline runs — gates not evaluable";
-    return (["T1", "T2", "T3", "T4"] as const).map((id) => ({
-      id,
-      description: GATE_DESCRIPTIONS[id],
-      passed: false,
-      detail,
-    }));
+    return notEvaluable("no full-pipeline runs — gates not evaluable");
+  }
+  // A measured stub baseline is a precondition for every gate: with zero
+  // stub runs (--pipelines=full) or zero stub successes (e.g. an invalid
+  // API key erroring every run), T1's floor collapses to −10pp and T2/T3
+  // compare against empty aggregates — all four gates would pass vacuously.
+  if (stub.total === 0 || stub.successCount === 0) {
+    return notEvaluable(
+      `no stub baseline — gates not evaluable (stub runs: ${stub.total}, successes: ${stub.successCount})`,
+    );
   }
 
   const t1Passed = full.successRate >= stub.successRate - 0.1;
@@ -248,6 +253,9 @@ export function evaluateGates(
     detail: `full ${pct(full.successRate)} vs stub ${pct(stub.successRate)} (floor ${pct(Math.max(stub.successRate - 0.1, 0))})`,
   };
 
+  // The stub-baseline guard above guarantees ≥1 stub success, so p95 can
+  // only be 0 here if every stub success completed in <1ms — degenerate;
+  // surface it in the detail rather than dividing judgement by it.
   const t2NotEvaluable = stub.p95DurationMs === 0;
   const t2: GateResult = {
     id: "T2",
@@ -260,13 +268,26 @@ export function evaluateGates(
       : `full p95 ${full.p95DurationMs}ms vs 2× stub p95 ${2 * stub.p95DurationMs}ms`,
   };
 
+  // Judge evaluability: a pipeline with successes but ZERO judge verdicts
+  // (judge provider erroring on every run) has judgePassRate 0/0 → 0, and
+  // the rate comparison would pass vacuously (0 ≥ 0). No verdicts where
+  // verdicts were due means the quality gate cannot certify anything.
+  const judgeBrokenFor = [
+    ...(stub.successCount > 0 && stub.judgedCount === 0 ? ["stub"] : []),
+    ...(full.successCount > 0 && full.judgedCount === 0 ? ["full"] : []),
+  ];
   const t3Passed =
-    full.judgePassRate >= stub.judgePassRate && full.bannedNameCount === 0;
+    judgeBrokenFor.length === 0 &&
+    full.judgePassRate >= stub.judgePassRate &&
+    full.bannedNameCount === 0;
   const t3: GateResult = {
     id: "T3",
     description: GATE_DESCRIPTIONS.T3,
     passed: t3Passed,
-    detail: `judge pass-rate full ${pct(full.judgePassRate)} vs stub ${pct(stub.judgePassRate)}; banned names in full output: ${full.bannedNameCount}`,
+    detail:
+      judgeBrokenFor.length > 0
+        ? `judge produced no verdicts for ${judgeBrokenFor.join(" and ")} successes — gate not evaluable`
+        : `judge pass-rate full ${pct(full.judgePassRate)} vs stub ${pct(stub.judgePassRate)}; banned names in full output: ${full.bannedNameCount}`,
   };
 
   const t4: GateResult = {
@@ -279,12 +300,29 @@ export function evaluateGates(
   return [t1, t2, t3, t4];
 }
 
+/** All four gates fail with one shared detail when the run set cannot
+ * support a verdict at all (missing pipeline or missing stub baseline). */
+function notEvaluable(detail: string): GateResult[] {
+  return (["T1", "T2", "T3", "T4"] as const).map((id) => ({
+    id,
+    description: GATE_DESCRIPTIONS[id],
+    passed: false,
+    detail,
+  }));
+}
+
 const GATE_DESCRIPTIONS: Record<GateResult["id"], string> = {
   T1: "error rate — full success-rate ≥ stub − 10pp",
   T2: "latency — full p95 ≤ 2× stub p95",
   T3: "quality — judge pass-rate not regressed AND zero banned context names",
   T4: "empty output — no successful full run yields 0 contexts",
 };
+
+/** Free text destined for a markdown table cell (provider error messages,
+ * model-produced names) may contain pipes or newlines that would break the
+ * row structure — escape/flatten them. */
+const mdCell = (text: string): string =>
+  text.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 
 export function renderMarkdown(
   summaries: PipelineSummary[],
@@ -344,7 +382,7 @@ export function renderMarkdown(
       ...(run.error ? [run.error] : []),
     ].join("; ");
     lines.push(
-      `| ${run.promptId} | ${run.pipeline} | ${run.success ? "ok" : "ERROR"} | ${run.durationMs}ms | ${m?.contextCount ?? "—"} | ${m?.portCount ?? "—"} | ${m?.adapterCount ?? "—"} | ${m ? (m.yamlParses ? "parses" : "INVALID") : "—"} | ${judge} | ${run.judge?.ruleIds.join(" ") || "—"} | ${notes} |`,
+      `| ${run.promptId} | ${run.pipeline} | ${run.success ? "ok" : "ERROR"} | ${run.durationMs}ms | ${m?.contextCount ?? "—"} | ${m?.portCount ?? "—"} | ${m?.adapterCount ?? "—"} | ${m ? (m.yamlParses ? "parses" : "INVALID") : "—"} | ${judge} | ${run.judge?.ruleIds.join(" ") || "—"} | ${mdCell(notes)} |`,
     );
   }
   lines.push("");

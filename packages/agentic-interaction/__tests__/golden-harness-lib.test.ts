@@ -157,6 +157,15 @@ describe("computeStateMetrics", () => {
     assert.strictEqual(empty.yamlParses, false);
   });
 
+  test("bare-scalar YAML (valid YAML, not a manifest) reports yamlParses=false", () => {
+    // yaml.load("just text") succeeds but yields a string — the object check
+    // is what rejects it, not a parse error.
+    const scalar = computeStateMetrics({
+      stage5: { yaml: "just some prose, no mapping", parsedObject: {} },
+    });
+    assert.strictEqual(scalar.yamlParses, false);
+  });
+
   test("adapter implements matching is context-scoped, normalized and case-insensitive", () => {
     const metrics = computeStateMetrics({
       stage3: {
@@ -304,6 +313,19 @@ describe("summarizeRuns", () => {
     assert.strictEqual(summary.zeroContextSuccesses, 1);
   });
 
+  test("a success whose judge errored is excluded from judgedCount, not counted as a fail", () => {
+    const runs: RunRecord[] = [
+      run({ pipeline: "full" }), // judged, passed
+      run({ pipeline: "full", judge: undefined }), // success, judge errored
+    ];
+    const s = summarizeRuns(runs, "full");
+    assert.strictEqual(s.successCount, 2);
+    assert.strictEqual(s.judgedCount, 1);
+    assert.strictEqual(s.judgePassCount, 1);
+    // Denominator is judgedCount, not successCount: 1/1, not 1/2.
+    assert.strictEqual(s.judgePassRate, 1);
+  });
+
   test("empty pipeline yields all-zero summary (no NaN division)", () => {
     const summary = summarizeRuns([], "full");
     assert.strictEqual(summary.total, 0);
@@ -356,6 +378,12 @@ describe("evaluateGates", () => {
       summary({ pipeline: "full", successRate: 0.8 }),
     );
     assert.strictEqual(atFloor[0]?.passed, true);
+    // Interior of the tolerance band (−5pp) passes too.
+    const within = evaluateGates(
+      summary({ successRate: 0.9 }),
+      summary({ pipeline: "full", successRate: 0.85 }),
+    );
+    assert.strictEqual(within[0]?.passed, true);
   });
 
   test("T2 fails when full p95 exceeds 2× stub p95; 0ms stub p95 is not evaluable (pass)", () => {
@@ -390,6 +418,58 @@ describe("evaluateGates", () => {
     assert.strictEqual(banned[2]?.passed, false);
   });
 
+  test("T3 passes when full STRICTLY exceeds stub (≥, not ===)", () => {
+    const gates = evaluateGates(
+      summary({ judgePassRate: 0.9 }),
+      summary({
+        pipeline: "full",
+        judgePassCount: 10,
+        judgePassRate: 1,
+        bannedNameCount: 0,
+      }),
+    );
+    assert.strictEqual(gates[2]?.passed, true);
+  });
+
+  test("T3 fails (not vacuously passes) when a pipeline has successes but zero judge verdicts", () => {
+    // Both judges broken: judgePassRate is 0/0 → 0 on both sides, so the
+    // bare rate comparison would pass 0 ≥ 0. The evaluability clause must
+    // fail it instead.
+    const bothBroken = evaluateGates(
+      summary({ judgedCount: 0, judgePassCount: 0, judgePassRate: 0 }),
+      summary({
+        pipeline: "full",
+        judgedCount: 0,
+        judgePassCount: 0,
+        judgePassRate: 0,
+      }),
+    );
+    assert.strictEqual(bothBroken[2]?.passed, false);
+    assert.match(bothBroken[2]?.detail ?? "", /stub and full/);
+    assert.match(bothBroken[2]?.detail ?? "", /not evaluable/);
+
+    // Only the full-side judge broken.
+    const fullBroken = evaluateGates(
+      summary({}),
+      summary({
+        pipeline: "full",
+        judgedCount: 0,
+        judgePassCount: 0,
+        judgePassRate: 0,
+      }),
+    );
+    assert.strictEqual(fullBroken[2]?.passed, false);
+    assert.match(fullBroken[2]?.detail ?? "", /full successes/);
+
+    // Only the stub-side judge broken — full could not prove non-regression.
+    const stubBroken = evaluateGates(
+      summary({ judgedCount: 0, judgePassCount: 0, judgePassRate: 0 }),
+      summary({ pipeline: "full" }),
+    );
+    assert.strictEqual(stubBroken[2]?.passed, false);
+    assert.match(stubBroken[2]?.detail ?? "", /stub successes/);
+  });
+
   test("T4 fails on any zero-context full success", () => {
     const gates = evaluateGates(
       summary({}),
@@ -407,6 +487,49 @@ describe("evaluateGates", () => {
     for (const gate of gates) {
       assert.strictEqual(gate.passed, false);
       assert.match(gate.detail, /no full-pipeline runs/);
+    }
+  });
+
+  test("no stub runs at all (--pipelines=full) fails every gate explicitly", () => {
+    const gates = evaluateGates(
+      summary({ total: 0, successCount: 0, successRate: 0 }),
+      summary({ pipeline: "full" }),
+    );
+    assert.strictEqual(gates.length, 4);
+    for (const gate of gates) {
+      assert.strictEqual(gate.passed, false);
+      assert.match(gate.detail, /no stub baseline/);
+    }
+  });
+
+  test("stub baseline with ZERO successes (e.g. invalid API key) fails every gate", () => {
+    // Without the guard: stub successRate 0 → T1 floor −10pp → trivially
+    // passes; stub p95 0 → T2 "not evaluable, pass"; judge 0/0 → T3 0 ≥ 0.
+    // An all-error run set must never exit green.
+    const gates = evaluateGates(
+      summary({
+        successCount: 0,
+        successRate: 0,
+        p50DurationMs: 0,
+        p95DurationMs: 0,
+        judgedCount: 0,
+        judgePassCount: 0,
+        judgePassRate: 0,
+      }),
+      summary({
+        pipeline: "full",
+        successCount: 0,
+        successRate: 0,
+        p50DurationMs: 0,
+        p95DurationMs: 0,
+        judgedCount: 0,
+        judgePassCount: 0,
+        judgePassRate: 0,
+      }),
+    );
+    for (const gate of gates) {
+      assert.strictEqual(gate.passed, false);
+      assert.match(gate.detail, /no stub baseline/);
     }
   });
 });
@@ -436,5 +559,34 @@ describe("renderMarkdown", () => {
     assert.match(report, /\| stub \| 1 \|/);
     assert.match(report, /stage 2 accepted no contexts/);
     assert.match(report, /❌ FAIL/); // full run failed → at least one gate trips
+  });
+
+  test("escapes pipes and newlines in free-text notes so table rows stay intact", () => {
+    const runs: RunRecord[] = [
+      run({ pipeline: "stub" }),
+      run({
+        pipeline: "full",
+        success: false,
+        error: "provider said: a | b\nsecond line",
+        metrics: undefined,
+        judge: undefined,
+      }),
+    ];
+    const stub = summarizeRuns(runs, "stub");
+    const full = summarizeRuns(runs, "full");
+    const report = renderMarkdown(
+      [stub, full],
+      evaluateGates(stub, full),
+      runs,
+    );
+    assert.match(report, /provider said: a \\\| b second line/);
+    // Every line of the Runs table keeps its 11-column shape (12 pipes).
+    const runRows = report
+      .split("\n")
+      .filter((line) => line.startsWith("| p |"));
+    assert.strictEqual(runRows.length, 2);
+    for (const row of runRows) {
+      assert.strictEqual((row.match(/(?<!\\)\|/g) ?? []).length, 12);
+    }
   });
 });
