@@ -25,6 +25,7 @@ import { fileURLToPath } from "url";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 import { ExecuteStagedGenerationUseCase } from "../src/application/use-cases/staged-generation/execute-staged-generation.use-case";
 import { ExecuteFullStagedGenerationUseCase } from "../src/application/use-cases/staged-generation/execute-full-staged-generation.use-case";
+import type { Stage1RefinementConfig } from "../src/application/use-cases/staged-generation/execute-domain-extraction.use-case";
 import { ExecuteValidationReviewUseCase } from "../src/application/use-cases/staged-generation/execute-validation-review.use-case";
 import { LLMProviderSelectorAdapter } from "../src/infrastructure/adapters/llm-provider-selector.adapter";
 import { EnvironmentSecretVaultAdapter } from "../src/infrastructure/adapters/environment-secret-vault.adapter";
@@ -121,6 +122,40 @@ function createLLMAdapter(): LLMProviderSelectorAdapter {
   });
 }
 
+/** Stage-1 draft→refine cascade, same env contract as the stage route
+ * (createStage1RefinerConfig in wire.server.ts): active only when
+ * STAGE1_REFINER_API_KEY is set, so harness runs can measure the cascade
+ * with the exact wiring prod would use. */
+function createStage1Refinement(): Stage1RefinementConfig | null {
+  if (!process.env.STAGE1_REFINER_API_KEY) return null;
+  const mode =
+    process.env.STAGE1_REFINER_MODE === "escalation" ? "escalation" : "always";
+  const model = process.env.STAGE1_REFINER_MODEL || "openai/gpt-4o";
+  console.log(`Stage-1 refiner: ${model} (mode: ${mode})\n`);
+  return {
+    mode,
+    port: new LLMProviderSelectorAdapter({
+      webLlmAdapter: null,
+      preferLocal: false,
+      validateLocalLLM: false,
+      fallbackChain: {
+        primary: {
+          providerId: "openai" as const,
+          baseUrl:
+            process.env.STAGE1_REFINER_BASE_URL ||
+            "https://openrouter.ai/api/v1",
+          model,
+          apiKeyEnvVar: "STAGE1_REFINER_API_KEY",
+          temperature: 0.3,
+          maxTokens: 4000,
+        },
+        fallbacks: [],
+      },
+      secretVault: new EnvironmentSecretVaultAdapter(),
+    }),
+  };
+}
+
 function assertApiKeyPresent(): void {
   const vault = new EnvironmentSecretVaultAdapter();
   const keys = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "LLM_API_KEY"];
@@ -135,6 +170,7 @@ async function runOne(
   judge: ExecuteValidationReviewUseCase,
   prompt: GoldenPrompt,
   pipeline: HarnessPipeline,
+  stage1Refinement: Stage1RefinementConfig | null,
 ): Promise<RunRecord> {
   const variables: PromptVariables = {
     userDescription: prompt.description,
@@ -156,6 +192,7 @@ async function runOne(
       const useCase = new ExecuteFullStagedGenerationUseCase(
         llm,
         transactionManager,
+        stage1Refinement ? { stage1Refinement } : undefined,
       );
       const result = await useCase.execute(prompt.description, variables);
       success = result.success;
@@ -229,6 +266,7 @@ async function main(): Promise<void> {
 
   const llm = createLLMAdapter();
   const judge = new ExecuteValidationReviewUseCase(llm);
+  const stage1Refinement = createStage1Refinement();
   const totalRuns = selected.length * options.repeat * options.pipelines.length;
   console.log(
     `Golden harness: ${selected.length} prompt(s) × ${options.repeat} repeat(s) × [${options.pipelines.join(", ")}] = ${totalRuns} run(s)\n`,
@@ -244,7 +282,13 @@ async function main(): Promise<void> {
         process.stdout.write(
           `[${runNumber}/${totalRuns}] ${prompt.id} × ${pipeline} … `,
         );
-        const record = await runOne(llm, judge, prompt, pipeline);
+        const record = await runOne(
+          llm,
+          judge,
+          prompt,
+          pipeline,
+          stage1Refinement,
+        );
         runs.push(record);
         console.log(
           record.success

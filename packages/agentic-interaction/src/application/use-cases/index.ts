@@ -6,6 +6,10 @@ export type { ModifyArchitectureDeps } from "./modify-architecture.use-case";
 export { GenerateManifestFromDescriptionUseCase } from "./generate-manifest-from-description.use-case";
 export { ExecutePromptNormalizationUseCase } from "./staged-generation/execute-prompt-normalization.use-case";
 export { ExecuteDomainExtractionUseCase } from "./staged-generation/execute-domain-extraction.use-case";
+export type {
+  Stage1RefinementConfig,
+  Stage1RefinementMode,
+} from "./staged-generation/execute-domain-extraction.use-case";
 export { ExecuteContextClassificationUseCase } from "./staged-generation/execute-context-classification.use-case";
 export { ExecutePortMappingUseCase } from "./staged-generation/execute-port-mapping.use-case";
 export type { PortMappingResult } from "./staged-generation/execute-port-mapping.use-case";
