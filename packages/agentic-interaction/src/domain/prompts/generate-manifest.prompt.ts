@@ -155,8 +155,13 @@ Emit a series of objects, one per line:
 {"type": "domainEvent", "name": "OrderPlaced", "emitter": "Order", "trigger": "place() called"}
 {"type": "useCase", "name": "Place Order", "subdomain": "ordering", "actor": "Customer", "commandName": "PlaceOrder"}
 
+DECOMPOSITION REQUIREMENT:
+- Decompose the domain into MULTIPLE subdomains — one per distinct business capability. Do NOT merge the whole system into a single subdomain (e.g. for a blog platform, "user-accounts" and "content-management" are SEPARATE subdomains, never one "Blog Management").
+- A typical system has 3-6 subdomains. Emit one "subdomain" line per capability.
+- Every aggregateRoot and useCase must name the subdomain it belongs to.
+
 RULES:
-- Emit zero or more "verb", "noun", and "subdomain" objects (backward compatibility).
+- Emit zero or more "verb" and "noun" objects (backward compatibility), and one "subdomain" object per distinct business capability (see DECOMPOSITION REQUIREMENT).
 - Emit zero or more "aggregateRoot" objects. Each MUST have "name", "subdomain", and optionally "identityFields". Aggregates are consistency boundaries — every aggregate root must have a unique identity.
 - Emit zero or more "entity" objects. Each MUST have "name" and "parentAggregate" (the aggregate root it belongs to).
 - Emit zero or more "valueObject" objects. Each MUST have "name" and optionally "rules" (the invariant or constraint it enforces).
