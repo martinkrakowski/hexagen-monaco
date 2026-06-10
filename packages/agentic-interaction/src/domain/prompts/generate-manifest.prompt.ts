@@ -711,7 +711,7 @@ export type RetryResult = { kind: "prompt"; content: string };
  * Each describes the minimum correct output for that stage.
  */
 const STAGE_RETRY_HINTS: Record<number, string> = {
-  0: `Emit: one "intent" object, one "projectName" object, zero or more "technology" / "pattern" / "ambiguity" objects. No other object types.`,
+  0: `Emit: one "intent" object, zero or one "projectName" / "isStructuredConfig" objects, zero or more "technology" / "pattern" / "ambiguity" objects. No other object types.`,
   1: `Emit: "subdomain", "aggregateRoot", "entity", "valueObject", "domainEvent", "useCase", "verb", "noun" objects only. Each aggregateRoot must have "subdomain" and "identityFields". Each entity must have "parentAggregate". Each domainEvent must have past-tense "value".`,
   2: `Emit: "accepted", "rejected", or "uncertain" objects only. Every "accepted" must have: name (kebab-case), contextType (core|supporting|generic|shared-kernel|driver), responsibility, aggregateRoots (array), useCaseNames (array), eventsPublished (array), reasoning. Every "uncertain" must have "reasoning".`,
   3: `Emit port and contextMapping objects only. Every port must have: contextName (matching an accepted context), direction (in|out), portType (command|query|event for in; repository|publisher|external-client|notifier for out), name (PascalCase), description, forAggregate. Every contextMapping must have: upstream, downstream, pattern, mechanism, events.`,

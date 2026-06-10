@@ -133,6 +133,8 @@ export class ExecutePromptNormalizationUseCase {
       const explicitTechnologies: string[] = [];
       const explicitPatterns: string[] = [];
       const ambiguities: string[] = [];
+      let projectName: string | undefined;
+      let isStructuredConfig: boolean | undefined;
       let hasValidLine = false;
 
       for (const line of lines) {
@@ -147,6 +149,18 @@ export class ExecutePromptNormalizationUseCase {
             explicitPatterns.push(parsed.value);
           } else if (parsed.type === "ambiguity") {
             ambiguities.push(parsed.value);
+          } else if (parsed.type === "projectName") {
+            // Zero-or-one per the system prompt; guard the type since the
+            // model may emit anything. Blank strings are as useless as none.
+            if (typeof parsed.value === "string" && parsed.value.trim()) {
+              projectName = parsed.value;
+            }
+          } else if (parsed.type === "isStructuredConfig") {
+            // Only literal `true` is meaningful (the prompt says to omit the
+            // object entirely for natural-language input).
+            if (parsed.value === true) {
+              isStructuredConfig = true;
+            }
           }
         } catch {
           // Ignore malformed lines
@@ -162,11 +176,13 @@ export class ExecutePromptNormalizationUseCase {
 
       if (!parseError) {
         const durationMs = Date.now() - stageStart;
-        const result = {
+        const result: NormalizedPrompt = {
           intent,
           explicitTechnologies,
           explicitPatterns,
           ambiguities,
+          ...(projectName !== undefined ? { projectName } : {}),
+          ...(isStructuredConfig !== undefined ? { isStructuredConfig } : {}),
         };
         onStageTelemetry?.({
           stage: STAGE_NUMBER,
