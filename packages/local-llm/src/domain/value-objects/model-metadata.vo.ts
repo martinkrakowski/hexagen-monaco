@@ -9,6 +9,19 @@ export interface ModelMetadata {
   contextLength: number;
   vocabularySize: number;
   recommendedTemperature: number;
+  /**
+   * True for models that emit chain-of-thought ("thinking") by default
+   * (e.g. the Qwen3 family). The WebLLM adapter must disable thinking at
+   * generation time (`extra_body.enable_thinking: false`) for these models:
+   * thinking tokens are billed against maxTokens caps and the emitted
+   * `<think>` blocks break structured-output JSON parsing — the local
+   * analog of baseline finding F1
+   * (docs/planning/staged-generation-baseline-findings.md).
+   *
+   * Models whose thinking CANNOT be disabled (e.g. DeepSeek-R1-Distill)
+   * are excluded from the catalog entirely for the same reason.
+   */
+  reasoningDefault?: boolean;
 }
 
 /**
@@ -25,6 +38,28 @@ export interface LLMInitializeConfig {
  */
 export const MODEL_METADATA_MAP: Record<DomainModelId, ModelMetadata> = {
   // Desktop High-End
+  [DomainModelId.QWEN3_8B]: {
+    modelId: DomainModelId.QWEN3_8B,
+    name: "Qwen3 8B",
+    vendor: "Alibaba",
+    parameterSize: "8B",
+    quantizeLevel: "q4f16_1",
+    contextLength: 32768,
+    vocabularySize: 151936,
+    recommendedTemperature: 0.7,
+    reasoningDefault: true,
+  },
+  [DomainModelId.QWEN3_4B]: {
+    modelId: DomainModelId.QWEN3_4B,
+    name: "Qwen3 4B",
+    vendor: "Alibaba",
+    parameterSize: "4B",
+    quantizeLevel: "q4f16_1",
+    contextLength: 32768,
+    vocabularySize: 151936,
+    recommendedTemperature: 0.7,
+    reasoningDefault: true,
+  },
   [DomainModelId.QWEN_CODER_3B]: {
     modelId: DomainModelId.QWEN_CODER_3B,
     name: "Qwen Coder 3B",
@@ -45,26 +80,17 @@ export const MODEL_METADATA_MAP: Record<DomainModelId, ModelMetadata> = {
     vocabularySize: 128256,
     recommendedTemperature: 0.6,
   },
-  [DomainModelId.PHI_3_5_MINI]: {
-    modelId: DomainModelId.PHI_3_5_MINI,
-    name: "Phi 3.5 Mini",
-    vendor: "Microsoft",
-    parameterSize: "3.8B",
-    quantizeLevel: "q4f16_1",
-    contextLength: 4096,
-    vocabularySize: 32064,
-    recommendedTemperature: 0.7,
-  },
   // Desktop Compact
-  [DomainModelId.GEMMA_2_2B]: {
-    modelId: DomainModelId.GEMMA_2_2B,
-    name: "Gemma 2 2B",
-    vendor: "Google",
-    parameterSize: "2B",
+  [DomainModelId.QWEN3_1_7B]: {
+    modelId: DomainModelId.QWEN3_1_7B,
+    name: "Qwen3 1.7B",
+    vendor: "Alibaba",
+    parameterSize: "1.7B",
     quantizeLevel: "q4f16_1",
-    contextLength: 8192,
-    vocabularySize: 256000,
-    recommendedTemperature: 0.6,
+    contextLength: 32768,
+    vocabularySize: 151936,
+    recommendedTemperature: 0.7,
+    reasoningDefault: true,
   },
   [DomainModelId.QWEN_CODER_1_5B]: {
     modelId: DomainModelId.QWEN_CODER_1_5B,
@@ -77,6 +103,17 @@ export const MODEL_METADATA_MAP: Record<DomainModelId, ModelMetadata> = {
     recommendedTemperature: 0.6,
   },
   // Ultra-Light
+  [DomainModelId.QWEN3_0_6B]: {
+    modelId: DomainModelId.QWEN3_0_6B,
+    name: "Qwen3 0.6B",
+    vendor: "Alibaba",
+    parameterSize: "0.6B",
+    quantizeLevel: "q4f16_1",
+    contextLength: 32768,
+    vocabularySize: 151936,
+    recommendedTemperature: 0.7,
+    reasoningDefault: true,
+  },
   [DomainModelId.LLAMA_3_2_1B]: {
     modelId: DomainModelId.LLAMA_3_2_1B,
     name: "Llama 3.2 1B",
@@ -105,9 +142,10 @@ export function getModelMetadata(modelId: DomainModelId): ModelMetadata {
 
 export const MANIFEST_CAPABLE_MODEL_IDS: ReadonlySet<DomainModelId> =
   new Set<DomainModelId>([
+    DomainModelId.QWEN3_8B,
+    DomainModelId.QWEN3_4B,
     DomainModelId.QWEN_CODER_3B,
     DomainModelId.LLAMA_3_2_3B,
-    DomainModelId.PHI_3_5_MINI,
   ]);
 
 export function isManifestCapableModel(modelId: DomainModelId): boolean {
