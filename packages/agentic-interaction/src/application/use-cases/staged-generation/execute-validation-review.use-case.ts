@@ -234,16 +234,30 @@ export class ExecuteValidationReviewUseCase {
         //   at worst a contradiction of the deterministic source (observed in
         //   the 2026-06-10 model sweep: LLM R17s on every model alongside the
         //   programmatic ones). The deterministic result is the sole source.
-        // The rule-tagging above guarantees the rule id is present in the
-        // string for all three finding shapes; case-insensitive in case the
-        // model lowercases it.
-        const deterministicRuleClaim = /\bR(?:01|16|17|18)\b/i;
-        const finalErrors = errors.filter(
-          (m) => !deterministicRuleClaim.test(m),
-        );
-        const finalWarnings = warnings.filter(
-          (m) => !deterministicRuleClaim.test(m),
-        );
+        // Two-tier discard, keyed on the finding's OWN rule:
+        // - Tagged findings (`[Rxx] …` from parse-time tagging) are judged by
+        //   their leading tag alone — an [R02] finding whose message text
+        //   merely *mentions* R17 is not an R17 claim and must survive.
+        // - Untagged findings (the tolerated bare-string shape in
+        //   result.errors/warnings, or objects missing a rule field) have no
+        //   tag to anchor on; there, a deterministic-rule mention anywhere in
+        //   the prose is the best available evidence the claim is one of the
+        //   recomputed rules, so the broad scan applies as fallback. An
+        //   untagged deterministic claim that never names its rule is
+        //   undetectable by construction — bounded harm: it duplicates (or
+        //   contradicts) the programmatic recomputation below, which was the
+        //   universal pre-discard status quo.
+        // Case-insensitive throughout in case the model lowercases rule ids.
+        const leadingRuleTag = /^\[(R\d{2})\]/i;
+        const deterministicRule = /^R(?:01|16|17|18)$/i;
+        const deterministicMention = /\bR(?:01|16|17|18)\b/i;
+        const isDeterministicClaim = (m: string): boolean => {
+          const tag = leadingRuleTag.exec(m);
+          if (tag) return deterministicRule.test(tag[1] as string);
+          return deterministicMention.test(m);
+        };
+        const finalErrors = errors.filter((m) => !isDeterministicClaim(m));
+        const finalWarnings = warnings.filter((m) => !isDeterministicClaim(m));
         for (const ctx of state.stage2?.accepted ?? []) {
           if (isBannedContextName(ctx.name)) {
             finalErrors.push(

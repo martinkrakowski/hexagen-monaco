@@ -470,6 +470,56 @@ describe("deterministic R01 (judge-grounding fix)", () => {
     }
   });
 
+  test("a non-deterministic finding that MENTIONS a deterministic rule survives (tag-anchored discard)", async () => {
+    // The discard must key on the finding's own rule tag, not on rule ids
+    // appearing anywhere in free-form message prose — otherwise an R02
+    // finding cross-referencing R17 would be silently dropped.
+    const ndjson =
+      '{"type":"error","rule":"R02","message":"Context has no inbound ports; see also R17 for the trivial descriptions."}\n{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const result = await useCase.execute(createMockPipelineState());
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.errors.length, 1);
+      assert.ok(result.value.errors[0]?.startsWith("[R02]"));
+      assert.strictEqual(result.value.passed, false);
+    }
+  });
+
+  test("untagged string findings naming a deterministic rule are discarded (mention fallback)", async () => {
+    // result.errors may carry bare strings (no rule field → no parse-time
+    // tag). With no tag to anchor on, a deterministic-rule mention anywhere
+    // is treated as a deterministic claim and discarded.
+    const ndjson =
+      '{"type":"result","passed":false,"errors":["R17: port description is trivial."],"warnings":["R01 banned token in context name"]}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const result = await useCase.execute(createMockPipelineState());
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.errors, []);
+      assert.deepStrictEqual(result.value.warnings, []);
+      assert.strictEqual(result.value.passed, true);
+    }
+  });
+
+  test("untagged string findings without deterministic-rule mentions survive", async () => {
+    const ndjson =
+      '{"type":"result","passed":false,"errors":["Context invoice-management has no inbound ports."]}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const result = await useCase.execute(createMockPipelineState());
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.errors.length, 1);
+      assert.strictEqual(result.value.passed, false);
+    }
+  });
+
   test("line-form findings are tagged with their rule id (non-R01 survives, tagged)", async () => {
     const ndjson =
       '{"type":"error","rule":"R02","message":"Context \'invoice-management\' has no inbound ports."}\n{"type":"warning","rule":"R10","message":"No publisher port."}\n{"type":"result","passed":false}\n';
