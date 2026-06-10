@@ -47,7 +47,7 @@ If any assumption flips, only Workstream A's slices A3+ change shape; A1–A2, B
    - **T3 — quality:** symmetric-judge pass-rate must not regress vs stub, **and** full output must contain **zero** banned context names (`isBannedContextName` over accepted stage2 names).
    - **T4 — empty output:** **no** successful full run may produce 0 accepted contexts.
      The harness evaluates T1–T4 per run-set and exits 1 on any failure; in the live canary the same triggers apply to the `[staged-gen] pipeline selected` log stream + done-event `pipeline` field. **Evaluability precondition:** the gates require a measured stub baseline (≥1 stub run with ≥1 success) and judge verdicts for every pipeline that produced successes — a run-set missing either is _not evaluable_ and counts as a gate FAILURE (exit 1), never a pass (e.g. an invalid API key erroring every run must not exit green).
-4. Canary window → swap default → keep flag one release as the rollback lever.
+4. Canary window → swap default → keep flag one release as the rollback lever. **Runbook + env plumbing — this PR:** [staged-generation-canary-runbook.md](./staged-generation-canary-runbook.md). Discovery: the deploy workflow regenerates prod `.env` from a guarded heredoc, so "runbook, no code" needed one deploy.yml change — the canary flags are GitHub Actions repository **variables** (`gh variable set` + deploy re-run = the whole flip; unset variables fail closed to stub/dark). "Swap default" = percent 100, deliberately not a code change (the unset default stays dark-safe; the code default flips in A4 when the stub is deleted).
 
 **Exit:** new pipeline is the default; rollback is a flag flip.
 

@@ -65,11 +65,19 @@ jobs:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          # A3 staged-generation canary (repo VARIABLES, not secrets — they are
+          # not sensitive, and `gh variable set` + a deploy re-run is the whole
+          # flip). Unset variables become empty strings, which `selectPipeline`
+          # fails closed to the stub (empty pin → canary path; empty/NaN percent
+          # → 0 = ship dark). Runbook:
+          # docs/planning/staged-generation-canary-runbook.md
+          STAGED_GENERATION_PIPELINE: ${{ vars.STAGED_GENERATION_PIPELINE }}
+          STAGED_GENERATION_FULL_PERCENT: ${{ vars.STAGED_GENERATION_FULL_PERCENT }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: AUTH_SECRET, NEXTAUTH_URL, GH_OAUTH_ID, GH_OAUTH_SECRET, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
+          envs: AUTH_SECRET, NEXTAUTH_URL, GH_OAUTH_ID, GH_OAUTH_SECRET, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, STAGED_GENERATION_PIPELINE, STAGED_GENERATION_FULL_PERCENT
           # set -eu (POSIX-safe; appleboy/ssh-action has no `set -e` by default)
           # so a failed `docker load` aborts instead of silently leaving the old
           # container up. pipefail is omitted intentionally — the remote /bin/sh
@@ -99,9 +107,11 @@ jobs:
             LLM_API_KEY=\"$LLM_API_KEY\"\n\
             LLM_BASE_URL=\"$LLM_BASE_URL\"\n\
             LLM_MODEL=\"$LLM_MODEL\"\n\
+            STAGED_GENERATION_PIPELINE=\"$STAGED_GENERATION_PIPELINE\"\n\
+            STAGED_GENERATION_FULL_PERCENT=\"$STAGED_GENERATION_FULL_PERCENT\"\n\
             EOF\n\
             chmod 600 .env\n\
-            [ \"$(wc -l < .env)\" -eq 8 ] || { echo 'FATAL: .env line count != 8 — keep this in sync with the heredoc keys above (embedded newline in a secret?)' >&2; exit 1; }\n\
+            [ \"$(wc -l < .env)\" -eq 10 ] || { echo 'FATAL: .env line count != 10 — keep this in sync with the heredoc keys above (embedded newline in a secret?)' >&2; exit 1; }\n\
             docker load < hexagen-web.tar.gz\n\
             docker image inspect hexagen-monaco-web:prod >/dev/null\n\
             docker compose -f docker-compose.prod.yml up -d --force-recreate --wait --wait-timeout 90\n\
