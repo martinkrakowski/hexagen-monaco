@@ -29,6 +29,21 @@ export type ReasoningBodyField =
 
 let warnedInvalid = false;
 
+/** Loud once, shared by both dialects: a typo (e.g. "off", or Inception's
+ * own mode name "instant", which is NOT an accepted LLM_REASONING value)
+ * silently reverts a reasoning model to its provider default — the exact F1
+ * failure mode this knob prevents. Shared flag so a chain with both
+ * providers configured warns once, not per dialect. */
+function warnInvalidReasoningOnce(raw: string): void {
+  if (warnedInvalid) return;
+  warnedInvalid = true;
+  // eslint-disable-next-line no-console -- operator-facing misconfiguration warning; no logger port at this layer
+  console.warn(
+    `LLM_REASONING="${raw}" is not one of disabled|low|medium|high — ` +
+      `ignoring it (reasoning field omitted; model uses its provider default).`,
+  );
+}
+
 /** Spread the result into an OpenAI-compatible request body:
  * `{ ...body, ...reasoningBodyField() }`. */
 export function reasoningBodyField(
@@ -40,16 +55,7 @@ export function reasoningBodyField(
   if (raw === "low" || raw === "medium" || raw === "high") {
     return { reasoning: { effort: raw } };
   }
-  // Loud once: a typo here (e.g. "off") silently reverts a reasoning model
-  // to its provider default — the exact F1 failure mode this knob prevents.
-  if (!warnedInvalid) {
-    warnedInvalid = true;
-    // eslint-disable-next-line no-console -- operator-facing misconfiguration warning; no logger port at this layer
-    console.warn(
-      `LLM_REASONING="${raw}" is not one of disabled|low|medium|high — ` +
-        `ignoring it (reasoning field omitted; model uses its provider default).`,
-    );
-  }
+  warnInvalidReasoningOnce(raw);
   return {};
 }
 
@@ -70,9 +76,10 @@ export function inceptionReasoningBodyField(
   if (raw === "low" || raw === "medium" || raw === "high") {
     return { reasoning_effort: raw };
   }
-  // Invalid values already warn once inside reasoningBodyField; calling it
-  // here would double the warning paths, so just omit silently — the
-  // generic provider's warning covers the misconfiguration.
+  // Warn here too: in an Inception-only chain (INCEPTION_API_KEY set,
+  // LLM_API_KEY unset — the mercury-primary end state) reasoningBodyField
+  // never runs, so without this the misconfiguration would be silent.
+  warnInvalidReasoningOnce(raw);
   return {};
 }
 
