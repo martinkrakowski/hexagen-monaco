@@ -171,6 +171,112 @@ describe("ExecuteDomainExtractionUseCase", () => {
     }
   });
 
+  // Collapse soft-retry fixtures: a "rich" domain (3 aggregates) crammed into
+  // one subdomain vs the properly decomposed equivalent.
+  const collapsedRichNdjson = [
+    '{"type":"subdomain","value":"Shop Management"}',
+    '{"type":"aggregateRoot","name":"Product","subdomain":"Shop Management"}',
+    '{"type":"aggregateRoot","name":"Order","subdomain":"Shop Management"}',
+    '{"type":"aggregateRoot","name":"Payment","subdomain":"Shop Management"}',
+  ].join("\n");
+  const decomposedNdjson = [
+    '{"type":"subdomain","value":"Catalog"}',
+    '{"type":"subdomain","value":"Ordering"}',
+    '{"type":"subdomain","value":"Payments"}',
+    '{"type":"aggregateRoot","name":"Product","subdomain":"Catalog"}',
+    '{"type":"aggregateRoot","name":"Order","subdomain":"Ordering"}',
+    '{"type":"aggregateRoot","name":"Payment","subdomain":"Payments"}',
+  ].join("\n");
+
+  const createSequencedPort = (contents: string[]) => {
+    let calls = 0;
+    const port = {
+      sendRequest: async () => {
+        const content = contents[Math.min(calls, contents.length - 1)];
+        calls++;
+        return {
+          success: true as const,
+          value: {
+            id: "test",
+            modelId: "gpt-4o-mini" as any,
+            content,
+            finishReason: "stop" as const,
+            timestamp: Date.now(),
+          },
+        };
+      },
+    } as unknown as SendStructuredRequestPort;
+    return { port, callCount: () => calls };
+  };
+
+  test("soft-retries when a rich domain collapses to one subdomain", async () => {
+    const { port, callCount } = createSequencedPort([
+      collapsedRichNdjson,
+      decomposedNdjson,
+    ]);
+    const useCase = new ExecuteDomainExtractionUseCase(port);
+    const result = await useCase.execute(mockStage0State);
+    assert.strictEqual(callCount(), 2);
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.subdomains, [
+        "Catalog",
+        "Ordering",
+        "Payments",
+      ]);
+    }
+  });
+
+  test("accepts the collapsed result when decomposition retries are exhausted", async () => {
+    // Every attempt collapses — return the last valid result rather than
+    // failing the run (a single-context manifest can still be coherent).
+    const { port, callCount } = createSequencedPort([collapsedRichNdjson]);
+    const useCase = new ExecuteDomainExtractionUseCase(port);
+    const result = await useCase.execute(mockStage0State);
+    assert.strictEqual(callCount(), 3); // MAX_RETRY_ATTEMPTS
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.subdomains, ["Shop Management"]);
+      assert.strictEqual(result.value.aggregateRoots?.length, 3);
+    }
+  });
+
+  test("falls back to the collapsed result when retry attempts fail to parse", async () => {
+    // Attempt 1 collapses, attempts 2-3 return garbage: the collapsed-but-
+    // valid attempt must win over StageMaxRetriesError (pre-retry behavior
+    // returned it immediately, so erroring here would be a regression).
+    const { port, callCount } = createSequencedPort([
+      collapsedRichNdjson,
+      "not json at all",
+      "still not json",
+    ]);
+    const useCase = new ExecuteDomainExtractionUseCase(port);
+    const result = await useCase.execute(mockStage0State);
+    assert.strictEqual(callCount(), 3);
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.subdomains, ["Shop Management"]);
+    }
+  });
+
+  test("does not retry a small domain with a single subdomain", async () => {
+    // 2 aggregates is below the multi-capability threshold (3+ aggregates or
+    // 4+ use cases) — a single subdomain is plausible, accept first attempt.
+    const smallDomain = [
+      '{"type":"subdomain","value":"Library"}',
+      '{"type":"aggregateRoot","name":"Book","subdomain":"Library"}',
+      '{"type":"aggregateRoot","name":"Member","subdomain":"Library"}',
+    ].join("\n");
+    const { port, callCount } = createSequencedPort([smallDomain]);
+    const useCase = new ExecuteDomainExtractionUseCase(port);
+    const result = await useCase.execute(mockStage0State);
+    assert.strictEqual(callCount(), 1);
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.subdomains, ["Library"]);
+    }
+  });
+
   test("telemetry callback is invoked on success", async () => {
     const telemetryCalls: StageTelemetry[] = [];
     const mockPort = createMockLLMPort([createSuccessStream(validNdjson)]);
