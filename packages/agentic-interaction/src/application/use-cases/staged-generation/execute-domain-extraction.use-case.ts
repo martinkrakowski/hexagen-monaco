@@ -221,6 +221,23 @@ export class ExecuteDomainExtractionUseCase {
         : "";
 
       if (!parseError) {
+        // Subdomain recovery: models sometimes under-emit standalone
+        // "subdomain" lines while still assigning every aggregateRoot and
+        // useCase a subdomain (mercury-2 probes: 1 declared subdomain line vs
+        // 4 distinct subdomains across the aggregate/useCase lines — and the
+        // declared one can be DISJOINT from the implied set). The full
+        // decomposition is in the output either way; union it back in
+        // deterministically. Declared lines keep their position; implied
+        // subdomains append in encounter order. Exact-string dedupe only —
+        // naming normalization is Stage 2's job.
+        const seenSubdomains = new Set(subdomains);
+        for (const item of [...aggregateRoots, ...useCases]) {
+          if (!seenSubdomains.has(item.subdomain)) {
+            seenSubdomains.add(item.subdomain);
+            subdomains.push(item.subdomain);
+          }
+        }
+
         const durationMs = Date.now() - stageStart;
         const result: DomainAnalysis = { verbs, nouns, subdomains };
         if (aggregateRoots.length > 0) result.aggregateRoots = aggregateRoots;

@@ -131,6 +131,46 @@ describe("ExecuteDomainExtractionUseCase", () => {
     assert.ok(failureResult.error instanceof StageMaxRetriesError);
   });
 
+  test("recovers implied subdomains from aggregateRoot and useCase lines", async () => {
+    // Mercury-2 probes: the model under-emits standalone "subdomain" lines
+    // (sometimes one, sometimes a DISJOINT one) while still assigning every
+    // aggregate/use case a subdomain. The parser unions them back: declared
+    // lines first, implied appended in encounter order, exact-string dedupe.
+    const underReportedNdjson = [
+      '{"type":"subdomain","value":"Customer Notification"}',
+      '{"type":"aggregateRoot","name":"Product","subdomain":"Catalog Management"}',
+      '{"type":"aggregateRoot","name":"Order","subdomain":"Ordering"}',
+      '{"type":"useCase","name":"Pay Invoice","subdomain":"Payments"}',
+      '{"type":"useCase","name":"Notify Customer","subdomain":"Customer Notification"}',
+    ].join("\n");
+    const mockPort = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: underReportedNdjson,
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
+      streamStructuredRequest: async function* () {
+        yield { success: true, value: underReportedNdjson };
+      },
+    } as unknown as SendStructuredRequestPort;
+    const useCase = new ExecuteDomainExtractionUseCase(mockPort);
+    const result = await useCase.execute(mockStage0State);
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.subdomains, [
+        "Customer Notification",
+        "Catalog Management",
+        "Ordering",
+        "Payments",
+      ]);
+    }
+  });
+
   test("telemetry callback is invoked on success", async () => {
     const telemetryCalls: StageTelemetry[] = [];
     const mockPort = createMockLLMPort([createSuccessStream(validNdjson)]);
