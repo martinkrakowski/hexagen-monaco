@@ -503,6 +503,98 @@ describe("deterministic R01 (judge-grounding fix)", () => {
   });
 });
 
+describe("deterministic R16/R17/R18 (LLM-duplicate discard, A4 pull-forward)", () => {
+  // collectPortQualityIssues recomputes the port-quality rules exactly
+  // (validatePortQuality, runtime-concern net included), so LLM claims for
+  // R16/R17/R18 are at best double-counted duplicates of the programmatic
+  // findings — the 2026-06-10 model sweep showed LLM R17s on every model
+  // alongside the programmatic ones. Same policy as R01: the deterministic
+  // result is the sole source.
+
+  test("LLM-emitted R16/R17/R18 claims are discarded (line form)", async () => {
+    const ndjson =
+      '{"type":"warning","rule":"R16","message":"Port description is trivial."}\n' +
+      '{"type":"error","rule":"R17","message":"Port forAggregate \'Ghost\' is not a known aggregate root."}\n' +
+      '{"type":"error","rule":"R18","message":"Port name leaks deployment platform \'Vercel\'."}\n' +
+      '{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    // No stage3 in the mock state → no programmatic issues either, so the
+    // report must come out empty with passed re-derived to true.
+    const result = await useCase.execute(createMockPipelineState());
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.errors, []);
+      assert.deepStrictEqual(result.value.warnings, []);
+      assert.strictEqual(result.value.passed, true);
+    }
+  });
+
+  test("LLM R17 duplicate is discarded while the programmatic R17 survives (no double count)", async () => {
+    const ndjson =
+      '{"type":"error","rule":"R17","message":"Port forAggregate \'NotReal\' is not a known aggregate root."}\n' +
+      '{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const state = {
+      ...createMockPipelineState(),
+      stage3: {
+        contexts: [
+          {
+            contextName: "invoice-management",
+            in: [
+              {
+                name: "CreateInvoicePort",
+                type: "command",
+                description:
+                  "Accepts invoice creation requests from upstream billing flows.",
+                forAggregate: "NotReal",
+              },
+            ],
+            out: [],
+          },
+        ],
+      },
+    };
+    const result = await useCase.execute(state);
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      const r17Errors = result.value.errors.filter((e) => /\bR17\b/.test(e));
+      assert.strictEqual(
+        r17Errors.length,
+        1,
+        `expected exactly one (programmatic) R17, got: ${JSON.stringify(result.value.errors)}`,
+      );
+      // The survivor is the programmatic finding (context/port shape), not
+      // the LLM's prose.
+      assert.ok(r17Errors[0].startsWith("[R17] invoice-management/"));
+      assert.strictEqual(result.value.passed, false);
+    }
+  });
+
+  test("LLM-emitted R16/R18 claims are discarded (result-array form)", async () => {
+    const ndjson =
+      '{"type":"result","passed":false,"errors":[{"rule":"R18","message":"Port name leaks platform."},{"rule":"R02","message":"Context has no inbound ports."}],"warnings":[{"rule":"R16","message":"Port description is trivial."}]}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const result = await useCase.execute(createMockPipelineState());
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      const errorsString = JSON.stringify(result.value.errors);
+      assert.ok(!errorsString.includes("R18"), `R18 survived: ${errorsString}`);
+      assert.ok(
+        errorsString.includes("R02"),
+        "non-deterministic rules survive",
+      );
+      assert.deepStrictEqual(result.value.warnings, []);
+      assert.strictEqual(result.value.passed, false);
+    }
+  });
+});
+
 describe("STAGE6_VALIDATION_SYSTEM_PROMPT", () => {
   test("declares R16 (port description quality)", () => {
     assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /R16/);

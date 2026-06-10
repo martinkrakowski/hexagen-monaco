@@ -220,17 +220,30 @@ export class ExecuteValidationReviewUseCase {
         : "";
 
       if (!parseError) {
-        // R01 is deterministic (judge-grounding fix, baseline findings F3):
-        // the judge prompt no longer carries the banned-token list, so any
-        // R01 claim the LLM emits is by construction ungrounded — discard it,
-        // then recompute R01 here from the accepted context names. Uses
-        // isBannedContextName, so the prose-only "rest" carve-out applies
-        // (consistent with the Stage 2 deterministic filter). The rule-tagging
-        // above guarantees the rule id is present in the string for all three
-        // finding shapes; case-insensitive in case the model lowercases it.
-        const r01Claim = /\bR01\b/i;
-        const finalErrors = errors.filter((m) => !r01Claim.test(m));
-        const finalWarnings = warnings.filter((m) => !r01Claim.test(m));
+        // R01 and the port-quality rules R16/R17/R18 are deterministic:
+        // - R01 (judge-grounding fix, baseline findings F3): the judge prompt
+        //   no longer carries the banned-token list, so any R01 claim the LLM
+        //   emits is by construction ungrounded — discard it, then recompute
+        //   R01 here from the accepted context names. Uses isBannedContextName,
+        //   so the prose-only "rest" carve-out applies (consistent with the
+        //   Stage 2 deterministic filter).
+        // - R16/R17/R18: collectPortQualityIssues below recomputes them
+        //   exactly (validatePortQuality, including the runtime-concern leak
+        //   net — runtimeConcerns is passed), so any LLM claim for these
+        //   rules is at best a duplicate that double-counts the finding and
+        //   at worst a contradiction of the deterministic source (observed in
+        //   the 2026-06-10 model sweep: LLM R17s on every model alongside the
+        //   programmatic ones). The deterministic result is the sole source.
+        // The rule-tagging above guarantees the rule id is present in the
+        // string for all three finding shapes; case-insensitive in case the
+        // model lowercases it.
+        const deterministicRuleClaim = /\bR(?:01|16|17|18)\b/i;
+        const finalErrors = errors.filter(
+          (m) => !deterministicRuleClaim.test(m),
+        );
+        const finalWarnings = warnings.filter(
+          (m) => !deterministicRuleClaim.test(m),
+        );
         for (const ctx of state.stage2?.accepted ?? []) {
           if (isBannedContextName(ctx.name)) {
             finalErrors.push(
