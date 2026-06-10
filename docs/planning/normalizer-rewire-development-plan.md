@@ -39,9 +39,14 @@ If any assumption flips, only Workstream A's slices A3+ change shape; A1–A2, B
 
 ### A3 — Cutover (assumes Q1 = flag + canary) — 1–2 PRs
 
-1. Feature flag at the `stage/route.ts` seam: stub vs `ExecuteFullStagedGenerationUseCase`.
-2. Golden-manifest comparison harness (N reference prompts → diff against stub output; gate per Q3: R01–R18 pass-rate must not regress).
-3. Define quantitative rollback triggers **here** (error rate, p95 latency, golden regression) — deliberately absent from the scope doc until Q1 confirmed.
+1. ~~Feature flag at the `stage/route.ts` seam: stub vs `ExecuteFullStagedGenerationUseCase`.~~ **DONE — PR #288.** `STAGED_GENERATION_PIPELINE=full|stub` hard-pins (`stub` overrides the percent — the one-flip rollback lever); unset → `STAGED_GENERATION_FULL_PERCENT` canary, default 0 = ship dark; malformed/negative fails closed to stub.
+2. ~~Golden-manifest comparison harness~~ **DONE — this PR.** `yarn workspace @hexagen/agentic-interaction golden-harness` runs `scripts/golden-prompts.json` (8 reference prompts) through both pipelines against the production provider chain, then judges every successful result with the **same** `ExecuteValidationReviewUseCase` (symmetric judge — the stub never runs Stage 6 itself, so comparing the full pipeline's own stage6 against nothing would be asymmetric). Per Q3 the judged R01–R18 pass-rate must not regress (gate T3 below). Pure helpers + gate math live in `scripts/golden-harness-lib.ts` (unit-tested); reports land in `golden-harness-results/` (gitignored).
+3. **Quantitative rollback triggers (defined here per Q1):** any failed gate ⇒ set `STAGED_GENERATION_PIPELINE=stub` and investigate before resuming the canary.
+   - **T1 — error rate:** full success-rate must not drop more than **10 pp** below stub.
+   - **T2 — latency:** full p95 (successful runs) must not exceed **2× stub p95**.
+   - **T3 — quality:** symmetric-judge pass-rate must not regress vs stub, **and** full output must contain **zero** banned context names (`isBannedContextName` over accepted stage2 names).
+   - **T4 — empty output:** **no** successful full run may produce 0 accepted contexts.
+     The harness evaluates T1–T4 per run-set and exits 1 on any failure; in the live canary the same triggers apply to the `[staged-gen] pipeline selected` log stream + done-event `pipeline` field.
 4. Canary window → swap default → keep flag one release as the rollback lever.
 
 **Exit:** new pipeline is the default; rollback is a flag flip.

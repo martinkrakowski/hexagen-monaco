@@ -1,0 +1,49 @@
+[
+  {
+    "id": "ecommerce",
+    "description": "Build an e-commerce platform where customers browse a product catalog, place orders, and pay online. Orders reserve stock from inventory; payments are processed through an external payment provider; customers get email confirmations.",
+    "platform": "Node.js",
+    "deployment": "Cloud-native"
+  },
+  {
+    "id": "blog",
+    "description": "Build me a blog platform with user accounts and post management",
+    "platform": "Node.js",
+    "deployment": "Cloud-native"
+  },
+  {
+    "id": "fleet-logistics",
+    "description": "A logistics system that tracks delivery vehicles in real time, assigns routes to drivers, monitors driver rest periods for compliance, and notifies dispatchers when shipments are delayed.",
+    "platform": "Node.js",
+    "deployment": "Cloud-native"
+  },
+  {
+    "id": "healthcare-appointments",
+    "description": "A clinic appointment system: patients book, reschedule, and cancel appointments; practitioners manage their availability; reminders go out via SMS and email; an audit trail records every change for compliance.",
+    "platform": "Node.js",
+    "deployment": "On-premise"
+  },
+  {
+    "id": "banking-ledger",
+    "description": "A double-entry ledger for a small bank: accounts hold balances, transfers move money atomically between accounts, every transaction is immutable and auditable, and suspicious activity is flagged for review.",
+    "platform": "Node.js",
+    "deployment": "On-premise"
+  },
+  {
+    "id": "iot-telemetry",
+    "description": "An IoT platform that ingests telemetry from thousands of sensors, detects anomalies in the readings, raises alerts to operators, and lets engineers manage device registration and firmware versions.",
+    "platform": "Node.js",
+    "deployment": "Cloud-native"
+  },
+  {
+    "id": "saas-billing",
+    "description": "Subscription billing for a SaaS product: customers pick plans, are invoiced monthly through Stripe, can upgrade or downgrade mid-cycle with proration, and dunning emails are sent on failed payments.",
+    "platform": "Node.js",
+    "deployment": "Cloud-native",
+    "additionalContext": "The payment provider must stay behind an anti-corruption layer."
+  },
+  {
+    "id": "minimal-books",
+    "description": "an app for managing my book collection"
+  }
+]

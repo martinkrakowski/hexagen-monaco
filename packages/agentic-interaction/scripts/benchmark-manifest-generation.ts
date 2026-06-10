@@ -9,6 +9,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { GenerateManifestFromDescriptionUseCase } from "../src/application/use-cases/generate-manifest-from-description.use-case";
+import { createProjectDescription } from "../src/domain/value-objects/project-description";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
 import type { LLMRequest } from "@hexagen/local-llm";
 import type { Result } from "@hexagen/shared";
@@ -76,11 +77,10 @@ async function benchmarkManifestGeneration(runs: number = 50): Promise<void> {
     const startTime = Date.now();
     try {
       const response = await useCase.execute({
-        description: {
-          text: desc,
+        description: createProjectDescription(desc, {
           platform: "Node.js",
           deployment: "Cloud-native",
-        } as Record<string, string>,
+        }),
       });
 
       results.push({
