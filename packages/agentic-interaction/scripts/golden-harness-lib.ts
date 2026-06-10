@@ -225,7 +225,8 @@ const pct = (rate: number): string => `${(rate * 100).toFixed(1)}%`;
  * (docs/planning/normalizer-rewire-development-plan.md, A3):
  *
  * - T1 error rate:  full success-rate must not drop more than 10pp below stub.
- * - T2 latency:     full p95 must not exceed max(2× stub p95, 45s absolute).
+ * - T2 latency:     full p95 must not exceed max(2× stub p95,
+ *                   T2_ABSOLUTE_CEILING_MS).
  * - T3 quality:     full judge pass-rate must not regress vs stub, and full
  *                   output must contain ZERO banned context names.
  * - T4 empty output: no successful full run may produce 0 contexts.
@@ -244,6 +245,11 @@ const pct = (rate: number): string => `${(rate * 100).toFixed(1)}%`;
  * a full pipeline at user-facing latency under ~45s is acceptable regardless
  * of how fast the stub it replaced was; slower than that, the relative bound
  * still governs.
+ *
+ * NOT a hard cap on full p95: the gate is `full p95 ≤ max(2× stub p95,
+ * ceiling)`, so this value is the floor of the gate threshold — when
+ * 2× stub p95 exceeds it (slow-stub regime), full p95 may legitimately
+ * pass above 45s. Despite the name, never change `max` to `min`.
  */
 export const T2_ABSOLUTE_CEILING_MS = 45_000;
 export function evaluateGates(
@@ -332,7 +338,7 @@ function notEvaluable(detail: string): GateResult[] {
 
 const GATE_DESCRIPTIONS: Record<GateResult["id"], string> = {
   T1: "error rate — full success-rate ≥ stub − 10pp",
-  T2: "latency — full p95 ≤ max(2× stub p95, 45s absolute ceiling)",
+  T2: `latency — full p95 ≤ max(2× stub p95, ${T2_ABSOLUTE_CEILING_MS / 1000}s absolute ceiling)`,
   T3: "quality — judge pass-rate not regressed AND zero banned context names",
   T4: "empty output — no successful full run yields 0 contexts",
 };
