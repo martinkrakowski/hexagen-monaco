@@ -326,6 +326,76 @@ test("compileStage6Prompt excludes R01 from the LLM's rule range (deterministic)
   assert.doesNotMatch(prompt, /R01/);
 });
 
+test("compileStage6Prompt normalizes port names in grounding sections to match the YAML", () => {
+  // Stage 5 renders the YAML through normalizePortName (PascalCase + "Port"
+  // suffix); the judge-grounding sections must go through the same function
+  // or raw stage3/stage4 names sit next to the suffixed YAML and manufacture
+  // grounded R04 "port has no adapter" errors out of consistent pipelines.
+  const state0 = {
+    intent: "Test",
+    projectName: undefined,
+    explicitTechnologies: [],
+    explicitPatterns: [],
+    ambiguities: [],
+  };
+  const state2 = {
+    accepted: [],
+    rejected: [],
+    uncertain: [],
+  };
+  const state3 = {
+    contexts: [
+      {
+        contextName: "book-catalog",
+        in: [],
+        out: [
+          {
+            name: "BookCollectionRepository",
+            type: "repository",
+            description: "Persists book collections",
+            justification: "Aggregate persistence",
+          },
+        ],
+      },
+    ],
+  };
+  const state4 = {
+    contexts: [
+      {
+        contextName: "book-catalog",
+        adapters: [
+          {
+            name: "PostgresBookCollectionRepository",
+            implements: "BookCollectionRepository",
+            technology: "postgres",
+          },
+        ],
+      },
+    ],
+  };
+  const state5 = {
+    yaml: "test",
+    parsedObject: {},
+    assemblyWarnings: [],
+  };
+  const state = {
+    stage0: state0,
+    stage2: state2,
+    stage3: state3,
+    stage4: state4,
+    stage5: state5,
+    contextMappings: [],
+  };
+  const prompt = compileStage6Prompt(state);
+  // Suffixed in both grounding sections…
+  assert.match(prompt, /"name":"BookCollectionRepositoryPort"/);
+  assert.match(prompt, /"implements":"BookCollectionRepositoryPort"/);
+  // …and the bare (raw stage3/stage4) name never appears as a value.
+  assert.doesNotMatch(prompt, /"BookCollectionRepository"/);
+  // Adapter names are deliberately NOT normalized (stage 5 leaves them raw).
+  assert.match(prompt, /"name":"PostgresBookCollectionRepository"/);
+});
+
 test("compileTopologyUserPrompt includes contexts", () => {
   const prompt = compileTopologyUserPrompt({ userDescription: "Test system" });
   assert.match(prompt, /Test system/);

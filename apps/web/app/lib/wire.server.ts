@@ -251,6 +251,20 @@ export const createLLMProviderSelector = (
           temperature: 0.3,
           maxTokens: 4000,
         },
+        // Inception Labs (Mercury diffusion models) — OpenAI-compatible chat
+        // completions; activates only when INCEPTION_API_KEY is set. Mercury
+        // reasons by default (reasoning_effort: "medium"), so runs should set
+        // LLM_REASONING=disabled → reasoning_effort: "instant" (see
+        // cloud-llm-reasoning.ts). Never send `diffusing: true` — it streams
+        // noisy intermediate tokens that break structured-output parsing.
+        {
+          providerId: "inception" as const,
+          baseUrl: "https://api.inceptionlabs.ai/v1",
+          model: process.env.INCEPTION_MODEL || "mercury-2",
+          apiKeyEnvVar: "INCEPTION_API_KEY",
+          temperature: 0.3,
+          maxTokens: 4000,
+        },
       ],
     },
     secretVault,

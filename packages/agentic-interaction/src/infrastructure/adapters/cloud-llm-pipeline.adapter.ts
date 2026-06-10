@@ -15,6 +15,8 @@ import {
 } from "./cloud-llm-types";
 import { streamStructuredRequest as streamStructuredRequestImpl } from "./cloud-llm-streaming";
 import { reasoningBodyFieldFor } from "./cloud-llm-reasoning";
+import { clampTemperatureFor } from "./cloud-llm-temperature";
+import { ndjsonResponseFormatFor, unwrapNdjsonLines } from "./cloud-llm-ndjson";
 
 export type { CloudLLMPipelineAdapterConfig } from "./cloud-llm-types";
 
@@ -73,12 +75,17 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
     }));
 
     const model = request.preferredCloudModel ?? provider.model;
+    const ndjsonResponseFormat = ndjsonResponseFormatFor(provider, request);
     const body: Record<string, unknown> = {
       model,
       messages,
-      temperature: request.temperature ?? provider.temperature ?? 0.4,
+      temperature: clampTemperatureFor(
+        provider,
+        request.temperature ?? provider.temperature ?? 0.4,
+      ),
       max_tokens: request.maxTokens ?? provider.maxTokens ?? 4096,
       ...reasoningBodyFieldFor(provider),
+      ...ndjsonResponseFormat,
     };
 
     const abortController = new AbortController();
@@ -120,7 +127,15 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
       }
 
       const data = (await httpResponse.json()) as ChatCompletionResponse;
-      const content = data.choices?.[0]?.message?.content ?? "";
+      const rawContent = data.choices?.[0]?.message?.content ?? "";
+      // When this request enforced the NDJSON-lines schema, convert the
+      // returned JSON array back to NDJSON text so the stages' line-oriented
+      // parsers work unchanged; on shape mismatch fall back to the raw
+      // content (the stage retry loop must see what the model actually said).
+      const content =
+        "response_format" in ndjsonResponseFormat
+          ? (unwrapNdjsonLines(rawContent) ?? rawContent)
+          : rawContent;
       const finishReason = data.choices?.[0]?.finish_reason ?? "stop";
 
       const modelId = model as unknown as DomainModelId;

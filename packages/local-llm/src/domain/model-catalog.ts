@@ -11,6 +11,15 @@ import { DomainModelId } from "./value-objects/model-id.vo.js";
  * Provenance: sizes are approximate, sourced from HuggingFace MLC
  * model artifacts and WebLLM's vram_required_MB figures. Values
  * drift as model weights are updated upstream.
+ *
+ * Reasoning-model policy (baseline finding F1,
+ * docs/planning/staged-generation-baseline-findings.md): models that
+ * emit chain-of-thought by default burn output-token caps and break
+ * structured-output parsing with <think> blocks. Qwen3 models are
+ * included because WebLLM supports disabling thinking per request
+ * (extra_body.enable_thinking: false — the adapter does this
+ * automatically via ModelMetadata.reasoningDefault). DeepSeek-R1-Distill
+ * models are deliberately EXCLUDED: their thinking cannot be turned off.
  */
 
 /**
@@ -46,6 +55,33 @@ export interface ModelDescriptor {
 export const LOCAL_MODELS: readonly ModelDescriptor[] = [
   // Desktop High-End
   {
+    modelId: DomainModelId.QWEN3_8B,
+    displayName: "Qwen3-8B",
+    shortName: "Qwen3 8B",
+    downloadSizeGB: 4.6,
+    vramRequiredMB: 5700,
+    description:
+      "Flagship local model. Strongest in-browser option for architecture and manifest work; needs a high-VRAM GPU (Apple Silicon or discrete).",
+    tier: "desktop-high",
+    backend: "webgpu",
+    codingRating: 5,
+    coreStrength:
+      "Highest local quality for architecture & manifest generation",
+  },
+  {
+    modelId: DomainModelId.QWEN3_4B,
+    displayName: "Qwen3-4B",
+    shortName: "Qwen3 4B",
+    downloadSizeGB: 2.4,
+    vramRequiredMB: 3450,
+    description:
+      "Current-generation generalist that outperforms older 3B-class models on logic and instruction following.",
+    tier: "desktop-high",
+    backend: "webgpu",
+    codingRating: 5,
+    coreStrength: "Logic & algorithm reasoning",
+  },
+  {
     modelId: DomainModelId.QWEN_CODER_3B,
     displayName: "Qwen2.5-Coder-3B",
     shortName: "Qwen-Coder 3B",
@@ -71,32 +107,19 @@ export const LOCAL_MODELS: readonly ModelDescriptor[] = [
     codingRating: 5,
     coreStrength: "Strong generalist & coding capabilities",
   },
-  {
-    modelId: DomainModelId.PHI_3_5_MINI,
-    displayName: "Phi-3.5-Mini",
-    shortName: "Phi-3.5 Mini",
-    downloadSizeGB: 2.4,
-    vramRequiredMB: 2800,
-    description:
-      "Microsoft's logic powerhouse. Punches above its weight in Python and algorithms.",
-    tier: "desktop-high",
-    backend: "webgpu",
-    codingRating: 4,
-    coreStrength: "Logic & algorithm reasoning",
-  },
   // Desktop Compact
   {
-    modelId: DomainModelId.GEMMA_2_2B,
-    displayName: "Gemma-2-2B",
-    shortName: "Gemma 2 2B",
-    downloadSizeGB: 1.8,
-    vramRequiredMB: 2200,
+    modelId: DomainModelId.QWEN3_1_7B,
+    displayName: "Qwen3-1.7B",
+    shortName: "Qwen3 1.7B",
+    downloadSizeGB: 1.2,
+    vramRequiredMB: 2050,
     description:
-      "High-quality Google model. Great for rigid formatting and fill-in-the-middle tasks.",
+      "Modern compact generalist. Best quality-per-GB in the compact tier.",
     tier: "desktop-compact",
     backend: "webgpu",
     codingRating: 4,
-    coreStrength: "Formatting & Fill-in-the-Middle",
+    coreStrength: "Compact-tier generalist quality",
   },
   {
     modelId: DomainModelId.QWEN_CODER_1_5B,
@@ -112,6 +135,19 @@ export const LOCAL_MODELS: readonly ModelDescriptor[] = [
     coreStrength: "Speed & code completion",
   },
   // Ultra-Light (Mobile-ready)
+  {
+    modelId: DomainModelId.QWEN3_0_6B,
+    displayName: "Qwen3-0.6B",
+    shortName: "Qwen3 0.6B",
+    downloadSizeGB: 0.5,
+    vramRequiredMB: 1450,
+    description:
+      "Tiny current-generation model. Strong instruction following for its size; good for routing and simple completion.",
+    tier: "ultra-light",
+    backend: "webgpu",
+    codingRating: 3,
+    coreStrength: "Modern quality at edge-device size",
+  },
   {
     modelId: DomainModelId.LLAMA_3_2_1B,
     displayName: "Llama-3.2-1B",

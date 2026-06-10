@@ -20,6 +20,7 @@ import {
   STAGE1_REFINEMENT_MODE_SUFFIX,
   compileStage1RefinementUserPrompt,
 } from "../../../domain/prompts/generate-manifest.prompt";
+import { STAGE1_NDJSON_LINE_SCHEMA } from "../../../domain/prompts/ndjson-line-schemas";
 import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
@@ -283,11 +284,17 @@ export class ExecuteDomainExtractionUseCase {
           { role: "user", content: prompt },
         ],
         z.string(),
-        // 1600, not 800: the decomposition requirement in the system prompt
-        // makes a correct Stage 1 answer 3-6 subdomains plus their aggregates,
-        // use cases, and events — probes showed compliant outputs hitting
-        // finish=length at 800 (truncating later subdomains' building blocks).
-        { stream: true, temperature: 0.1, maxTokens: 1600 },
+        {
+          stream: true,
+          temperature: 0.1,
+          // 1600, not 800: the decomposition requirement in the system prompt
+          // makes a correct Stage 1 answer 3-6 subdomains plus their
+          // aggregates, use cases, and events — probes showed compliant
+          // outputs hitting finish=length at 800 (truncating later
+          // subdomains' building blocks).
+          maxTokens: 1600,
+          ndjsonLineSchema: STAGE1_NDJSON_LINE_SCHEMA,
+        },
       );
       request.signal = abortController.signal;
 

@@ -11,7 +11,8 @@
  * quantitative rollback gates T1–T4 from
  * docs/planning/normalizer-rewire-development-plan.md (A3).
  *
- * Run manually (needs OPENAI_API_KEY, ANTHROPIC_API_KEY, or LLM_API_KEY):
+ * Run manually (needs OPENAI_API_KEY, ANTHROPIC_API_KEY, LLM_API_KEY, or
+ * INCEPTION_API_KEY):
  *   yarn workspace @hexagen/agentic-interaction golden-harness
  *   npx tsx scripts/golden-manifest-harness.ts [--repeat=N] [--only=id] [--pipelines=stub,full]
  *
@@ -116,6 +117,14 @@ function createLLMAdapter(): LLMProviderSelectorAdapter {
           temperature: 0.3,
           maxTokens: 4000,
         },
+        {
+          providerId: "inception" as const,
+          baseUrl: "https://api.inceptionlabs.ai/v1",
+          model: process.env.INCEPTION_MODEL || "mercury-2",
+          apiKeyEnvVar: "INCEPTION_API_KEY",
+          temperature: 0.3,
+          maxTokens: 4000,
+        },
       ],
     },
     secretVault: new EnvironmentSecretVaultAdapter(),
@@ -158,7 +167,12 @@ function createStage1Refinement(): Stage1RefinementConfig | null {
 
 function assertApiKeyPresent(): void {
   const vault = new EnvironmentSecretVaultAdapter();
-  const keys = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "LLM_API_KEY"];
+  const keys = [
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "LLM_API_KEY",
+    "INCEPTION_API_KEY",
+  ];
   if (!keys.some((key) => vault.getSecret(key) !== null)) {
     console.error(`No LLM API key configured. Set one of: ${keys.join(", ")}.`);
     process.exit(1);

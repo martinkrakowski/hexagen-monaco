@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 import {
   reasoningBodyField,
   reasoningBodyFieldFor,
+  inceptionReasoningBodyField,
 } from "../../../src/infrastructure/adapters/cloud-llm-reasoning";
 import { CloudLLMPipelineAdapter } from "../../../src/infrastructure/adapters/cloud-llm-pipeline.adapter";
 import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/client";
@@ -57,17 +58,65 @@ describe("reasoningBodyField", () => {
   });
 });
 
+describe("inceptionReasoningBodyField (Mercury dialect)", () => {
+  // Mercury models reason BY DEFAULT (reasoning_effort defaults to "medium"),
+  // so "disabled" must map to their explicit no-reasoning mode, "instant" —
+  // omitting the field would silently reproduce the F1 failure mode.
+  test("unset → empty object (provider default = medium reasoning)", () => {
+    assert.deepStrictEqual(inceptionReasoningBodyField({}), {});
+    assert.deepStrictEqual(
+      inceptionReasoningBodyField({ LLM_REASONING: "" }),
+      {},
+    );
+  });
+
+  test('disabled → { reasoning_effort: "instant" }', () => {
+    assert.deepStrictEqual(
+      inceptionReasoningBodyField({ LLM_REASONING: "disabled" }),
+      { reasoning_effort: "instant" },
+    );
+  });
+
+  test("low/medium/high pass through as reasoning_effort", () => {
+    for (const effort of ["low", "medium", "high"] as const) {
+      assert.deepStrictEqual(
+        inceptionReasoningBodyField({ LLM_REASONING: effort }),
+        { reasoning_effort: effort },
+      );
+    }
+  });
+
+  test("unrecognized value → omitted", () => {
+    assert.deepStrictEqual(
+      inceptionReasoningBodyField({ LLM_REASONING: "off" }),
+      {},
+    );
+  });
+});
+
 describe("reasoningBodyFieldFor (provider scoping)", () => {
-  // The field is OpenRouter-shaped; direct endpoints (api.openai.com rejects
+  // The field is dialect-specific; direct endpoints (api.openai.com rejects
   // unknown body args with a non-retryable 400) must never see it, even when
-  // LLM_REASONING is set. Only the LLM_* family's generic endpoint qualifies.
-  test("LLM_API_KEY provider → passthrough", () => {
+  // LLM_REASONING is set. Only providers whose dialect we know qualify: the
+  // LLM_* family's generic endpoint (OpenRouter shape) and Inception
+  // (reasoning_effort string).
+  test("LLM_API_KEY provider → OpenRouter shape", () => {
     assert.deepStrictEqual(
       reasoningBodyFieldFor(
         { apiKeyEnvVar: "LLM_API_KEY" },
         { LLM_REASONING: "disabled" },
       ),
       { reasoning: { enabled: false } },
+    );
+  });
+
+  test("INCEPTION_API_KEY provider → Mercury reasoning_effort shape", () => {
+    assert.deepStrictEqual(
+      reasoningBodyFieldFor(
+        { apiKeyEnvVar: "INCEPTION_API_KEY" },
+        { LLM_REASONING: "disabled" },
+      ),
+      { reasoning_effort: "instant" },
     );
   });
 
@@ -155,6 +204,25 @@ describe("reasoning passthrough reaches the wire (live cloud path)", () => {
       const captured: { body?: Record<string, unknown> } = {};
       await makeAdapter(captured).sendRequest(makeRequest());
       assert.deepStrictEqual(captured.body?.reasoning, { enabled: false });
+    } finally {
+      if (prev !== undefined) process.env.LLM_REASONING = prev;
+      else delete process.env.LLM_REASONING;
+    }
+  });
+
+  test("LLM_REASONING=disabled + Inception provider → body carries reasoning_effort=instant", async () => {
+    const prev = process.env.LLM_REASONING;
+    process.env.LLM_REASONING = "disabled";
+    try {
+      const captured: { body?: Record<string, unknown> } = {};
+      await makeAdapter(captured, "INCEPTION_API_KEY").sendRequest(
+        makeRequest(),
+      );
+      assert.equal(captured.body?.reasoning_effort, "instant");
+      assert.ok(
+        !("reasoning" in (captured.body ?? {})),
+        "Inception must get the Mercury dialect, not the OpenRouter object",
+      );
     } finally {
       if (prev !== undefined) process.env.LLM_REASONING = prev;
       else delete process.env.LLM_REASONING;

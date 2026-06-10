@@ -8,6 +8,7 @@ import {
   compileStage2Prompt,
 } from "../../../domain/index";
 import { isBannedContextName } from "../../../domain/prompts/architecture-contract";
+import { STAGE2_NDJSON_LINE_SCHEMA } from "../../../domain/prompts/ndjson-line-schemas";
 import type {
   PipelineState,
   ClassificationResult,
@@ -59,7 +60,12 @@ export class ExecuteContextClassificationUseCase {
           { role: "user", content: prompt },
         ],
         z.string(),
-        { stream: true, temperature: 0.1, maxTokens: 800 },
+        {
+          stream: true,
+          temperature: 0.1,
+          maxTokens: 800,
+          ndjsonLineSchema: STAGE2_NDJSON_LINE_SCHEMA,
+        },
       );
       request.signal = abortController.signal;
 
