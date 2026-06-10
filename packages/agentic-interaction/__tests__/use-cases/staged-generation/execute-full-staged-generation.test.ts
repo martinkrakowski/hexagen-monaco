@@ -110,6 +110,7 @@ const happyPathStreamResponses = [
 ];
 
 function createMockTransactionManager(opts?: {
+  failBegin?: boolean;
   failTransition?: boolean;
   nullTransition?: boolean;
 }) {
@@ -117,6 +118,9 @@ function createMockTransactionManager(opts?: {
   const manager = {
     begin: (intentId: string, metadata?: Record<string, unknown>) => {
       calls.push({ method: "begin", args: [intentId, metadata] });
+      if (opts?.failBegin) {
+        throw new Error("begin failed");
+      }
       return { id: "tx-1", intentId, status: "pending" };
     },
     transition: (transactionId: string, status: string) => {
@@ -218,6 +222,10 @@ describe("ExecuteFullStagedGenerationUseCase", () => {
     assert.ok(userContent(captured[2]).includes("Invoice"));
     // Stage 3 prompt carries the stage-2 accepted context
     assert.ok(userContent(captured[3]).includes("invoice-management"));
+    // Stage 4 prompt carries the stage-3 port map
+    assert.ok(userContent(captured[4]).includes("createInvoice"));
+    // Stage 6 prompt carries the stage-4 adapter via the stage-5 manifest
+    assert.ok(userContent(captured[5]).includes("InMemoryInvoiceAdapter"));
   });
 
   test("loading seam (T2b): stage-0 prompt contains a non-empty <architecture> block by default", async () => {
@@ -334,6 +342,59 @@ describe("ExecuteFullStagedGenerationUseCase", () => {
     // Stages 3/4/6 never ran; no transaction was opened
     assert.equal(captured.filter((c) => c.method === "stream").length, 0);
     assert.equal(calls.length, 0);
+  });
+
+  test("zero accepted contexts fails at stage 2 — no LLM burn in stages 3/4/6, no transaction", async () => {
+    // Stage 2 SUCCEEDS but rejects its only candidate → accepted is empty.
+    // Without the guard, stage 4 would burn a real LLM call on a degenerate
+    // prompt and the run would end as an empty speculative transaction.
+    const stage2Rejected = JSON.stringify({
+      status: "rejected",
+      name: "invoice-management",
+      reasoning: "Not a bounded context",
+    });
+    const { port, captured } = createScriptedPort(
+      [stage0Response, stage1Response, stage2Rejected],
+      happyPathStreamResponses,
+    );
+    const { manager, calls } = createMockTransactionManager();
+    const useCase = new ExecuteFullStagedGenerationUseCase(port, manager);
+
+    const errors: Array<[number, string]> = [];
+    const result = await useCase.execute(
+      "Build an invoice management system",
+      undefined,
+      { onError: (stage, error) => errors.push([stage, error]) },
+    );
+
+    assert.equal(result.success, false);
+    assert.deepEqual(errors, [[2, "Stage 2 accepted no bounded contexts"]]);
+    // Stages 3/4/6 never ran; no transaction was opened
+    assert.equal(captured.filter((c) => c.method === "stream").length, 0);
+    assert.equal(calls.length, 0);
+  });
+
+  test("transaction begin failure fails the run without rollback or transition", async () => {
+    const { port } = createScriptedPort(
+      happyPathSendResponses,
+      happyPathStreamResponses,
+    );
+    const { manager, calls } = createMockTransactionManager({
+      failBegin: true,
+    });
+    const useCase = new ExecuteFullStagedGenerationUseCase(port, manager);
+
+    const result = await useCase.execute("Build an invoice management system");
+
+    assert.equal(result.success, false);
+    if (!result.success) {
+      assert.ok(String(result.error).includes("begin failed"));
+    }
+    // No transaction exists, so nothing to roll back or transition
+    assert.deepEqual(
+      calls.map((c) => c.method),
+      ["begin"],
+    );
   });
 
   test("transaction transition failure rolls back and fails the run", async () => {

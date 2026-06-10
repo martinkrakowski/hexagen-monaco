@@ -158,6 +158,24 @@ export class ExecuteFullStagedGenerationUseCase {
       callbacks?.onError?.(2, String(s2.error), s2Duration);
       return { success: false, error: s2.error };
     }
+    // Empty-accepted guard: stage 3 tolerates zero accepted contexts (it
+    // early-returns an empty port map), but stage 4 would still burn a real
+    // LLM call on a degenerate prompt and the run would end as an empty
+    // speculative transaction (contextCount: 0). The blueprint can't hit this
+    // (its config validation requires contexts); this orchestrator is the
+    // first place empty-accepted meets stages 3–6, so fail here, attributed
+    // to the stage where the emptiness arose.
+    if (s2.value.accepted.length === 0) {
+      callbacks?.onError?.(
+        2,
+        "Stage 2 accepted no bounded contexts",
+        s2Duration,
+      );
+      return {
+        success: false,
+        error: new Error("No accepted bounded contexts — nothing to assemble"),
+      };
+    }
     callbacks?.onProgress?.(2, s2Duration);
 
     // Stage 3: Port Mapping
@@ -203,6 +221,7 @@ export class ExecuteFullStagedGenerationUseCase {
     // Stage 5: Manifest Assembly (synchronous, returns AssembledManifest directly)
     const s5Start = Date.now();
     callbacks?.onProgress?.(5, 0);
+    callbacks?.onChunk?.("Stage 5 · Manifest Assembly");
     const assembledManifest = this.stage5.execute({
       stage0: s0.value,
       stage1: s1.value,
@@ -251,6 +270,10 @@ export class ExecuteFullStagedGenerationUseCase {
     // protocol (and metadata shape) as the structured-config orchestrator.
     // Deliberately not extracted into a shared helper in this PR: A1 must not
     // touch the live blueprint file (one concern per PR).
+    // Transaction failures below return {success:false} WITHOUT firing
+    // onError (matches the blueprint): onError's stage param is 0–6 and no
+    // route consumer exists yet to define a post-pipeline stage index.
+    // Revisit with the A4 helper extraction once A3 wires the route.
     const intentId = `desc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     const yaml = assembledManifest.yaml || "";
     const parsed =
