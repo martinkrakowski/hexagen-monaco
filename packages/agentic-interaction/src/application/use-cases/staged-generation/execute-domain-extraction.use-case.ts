@@ -63,7 +63,11 @@ export class ExecuteDomainExtractionUseCase {
           { role: "user", content: prompt },
         ],
         z.string(),
-        { stream: true, temperature: 0.1, maxTokens: 800 },
+        // 1600, not 800: the decomposition requirement in the system prompt
+        // makes a correct Stage 1 answer 3-6 subdomains plus their aggregates,
+        // use cases, and events — probes showed compliant outputs hitting
+        // finish=length at 800 (truncating later subdomains' building blocks).
+        { stream: true, temperature: 0.1, maxTokens: 1600 },
       );
       request.signal = abortController.signal;
 
