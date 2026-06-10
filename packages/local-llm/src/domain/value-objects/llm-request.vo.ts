@@ -18,6 +18,14 @@ export interface LLMRequest {
   signal?: AbortSignal;
   preferredCloudModel?: string;
   guidedJsonSchema?: Record<string, unknown>;
+  /**
+   * JSON Schema describing ONE line of an NDJSON response. Set by stages
+   * whose prompts ask for NDJSON output. Providers that support structured
+   * outputs (currently Inception/Mercury) may use it to enforce the line
+   * shape via `response_format` (wrapped in an array client-side); all other
+   * providers ignore it.
+   */
+  ndjsonLineSchema?: Record<string, unknown>;
 }
 
 export function createLLMRequest(
@@ -35,6 +43,7 @@ export function createLLMRequest(
     metadata?: Record<string, unknown>;
     preferredCloudModel?: string;
     guidedJsonSchema?: Record<string, unknown>;
+    ndjsonLineSchema?: Record<string, unknown>;
   } = {},
 ): LLMRequest {
   return {
