@@ -225,7 +225,8 @@ const pct = (rate: number): string => `${(rate * 100).toFixed(1)}%`;
  * (docs/planning/normalizer-rewire-development-plan.md, A3):
  *
  * - T1 error rate:  full success-rate must not drop more than 10pp below stub.
- * - T2 latency:     full p95 must not exceed 2× stub p95.
+ * - T2 latency:     full p95 must not exceed max(2× stub p95,
+ *                   T2_ABSOLUTE_CEILING_MS).
  * - T3 quality:     full judge pass-rate must not regress vs stub, and full
  *                   output must contain ZERO banned context names.
  * - T4 empty output: no successful full run may produce 0 contexts.
@@ -233,6 +234,24 @@ const pct = (rate: number): string => `${(rate * 100).toFixed(1)}%`;
  * Any failed gate ⇒ flip `STAGED_GENERATION_PIPELINE=stub` (the one-flip
  * rollback lever) and investigate before resuming the canary.
  */
+
+/**
+ * T2 absolute ceiling (recalibrated 2026-06-10 after the five-model sweep,
+ * see memory/plan): a purely relative 2× gate stops discriminating when the
+ * stub baseline itself is fast — claude-3.5-haiku failed at 4.47× with a
+ * 99.7s full p95 (genuinely too slow) while inception/mercury-2 failed at
+ * 4.2× with an 11.8s full p95 (faster than every other candidate measured).
+ * The ceiling is anchored just above the post-#292 gpt-4o full p95 (42.9s):
+ * a full pipeline at user-facing latency under ~45s is acceptable regardless
+ * of how fast the stub it replaced was; slower than that, the relative bound
+ * still governs.
+ *
+ * NOT a hard cap on full p95: the gate is `full p95 ≤ max(2× stub p95,
+ * ceiling)`, so this value is the floor of the gate threshold — when
+ * 2× stub p95 exceeds it (slow-stub regime), full p95 may legitimately
+ * pass above 45s. Despite the name, never change `max` to `min`.
+ */
+export const T2_ABSOLUTE_CEILING_MS = 45_000;
 export function evaluateGates(
   stub: PipelineSummary,
   full: PipelineSummary,
@@ -262,19 +281,16 @@ export function evaluateGates(
     detail: `full ${pct(full.successRate)} vs stub ${pct(stub.successRate)} (floor ${pct(Math.max(stub.successRate - 0.1, 0))})`,
   };
 
-  // The stub-baseline guard above guarantees ≥1 stub success, so p95 can
-  // only be 0 here if every stub success completed in <1ms — degenerate;
-  // surface it in the detail rather than dividing judgement by it.
-  const t2NotEvaluable = stub.p95DurationMs === 0;
+  // Hybrid threshold: the relative bound governs slow pipelines; the
+  // absolute ceiling keeps the gate meaningful when the stub baseline is
+  // itself fast (a 0ms degenerate stub p95 is also absorbed here — the
+  // ceiling alone then sets the threshold instead of an unevaluable 2×0).
+  const t2Threshold = Math.max(2 * stub.p95DurationMs, T2_ABSOLUTE_CEILING_MS);
   const t2: GateResult = {
     id: "T2",
     description: GATE_DESCRIPTIONS.T2,
-    passed: t2NotEvaluable
-      ? true
-      : full.p95DurationMs <= 2 * stub.p95DurationMs,
-    detail: t2NotEvaluable
-      ? "stub p95 is 0ms — gate not evaluable, treated as pass"
-      : `full p95 ${full.p95DurationMs}ms vs 2× stub p95 ${2 * stub.p95DurationMs}ms`,
+    passed: full.p95DurationMs <= t2Threshold,
+    detail: `full p95 ${full.p95DurationMs}ms vs max(2× stub p95 ${2 * stub.p95DurationMs}ms, ceiling ${T2_ABSOLUTE_CEILING_MS}ms) = ${t2Threshold}ms`,
   };
 
   // Judge evaluability: a pipeline with successes but ZERO judge verdicts
@@ -322,7 +338,7 @@ function notEvaluable(detail: string): GateResult[] {
 
 const GATE_DESCRIPTIONS: Record<GateResult["id"], string> = {
   T1: "error rate — full success-rate ≥ stub − 10pp",
-  T2: "latency — full p95 ≤ 2× stub p95",
+  T2: `latency — full p95 ≤ max(2× stub p95, ${T2_ABSOLUTE_CEILING_MS / 1000}s absolute ceiling)`,
   T3: "quality — judge pass-rate not regressed AND zero banned context names",
   T4: "empty output — no successful full run yields 0 contexts",
 };

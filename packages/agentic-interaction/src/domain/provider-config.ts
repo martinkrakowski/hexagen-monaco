@@ -1,4 +1,9 @@
-export type CloudProviderId = "openai" | "anthropic" | "mistral" | "google";
+export type CloudProviderId =
+  | "openai"
+  | "anthropic"
+  | "mistral"
+  | "google"
+  | "inception";
 
 export type CloudModelId =
   | "gpt-4o"

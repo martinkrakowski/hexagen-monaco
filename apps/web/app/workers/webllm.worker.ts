@@ -3,6 +3,13 @@ import type { ChatCompletionMessageParam } from "@mlc-ai/web-llm/lib/openai_api_
 
 interface InitData {
   modelId: string;
+  /**
+   * True when the loaded model emits chain-of-thought by default (Qwen3
+   * family). The worker then sends extra_body.enable_thinking: false on
+   * every generate call — thinking tokens burn maxTokens budgets and
+   * <think> blocks break structured-output parsing (baseline finding F1).
+   */
+  disableThinking?: boolean;
 }
 
 interface GenerateData {
@@ -28,6 +35,9 @@ type WorkerMessage =
   | { type: "delete-cached-model"; data: CacheData };
 
 let engine: MLCEngineInterface | null = null;
+// Set at init from InitData.disableThinking; applies to the lifetime of the
+// loaded model (thinking is a per-model property, not a per-request choice).
+let disableThinking = false;
 
 self.onmessage = async (e: MessageEvent) => {
   const msg = e.data as WorkerMessage;
@@ -38,6 +48,11 @@ self.onmessage = async (e: MessageEvent) => {
     try {
       const { CreateMLCEngine } = await import("@mlc-ai/web-llm");
 
+      // Single-init contract: WebLLMAdapter.initialize() terminates this
+      // worker and spawns a fresh one for every (re)load, so each worker
+      // instance sees at most one "init". Setting the flag before the await
+      // therefore cannot leave a previous engine paired with a new flag.
+      disableThinking = data.disableThinking === true;
       engine = await CreateMLCEngine(data.modelId, {
         initProgressCallback: (mlcProgress: InitProgressReport) => {
           const text = (mlcProgress.text || "").toLowerCase();
@@ -85,6 +100,9 @@ self.onmessage = async (e: MessageEvent) => {
           frequency_penalty: data.frequencyPenalty,
           presence_penalty: data.presencePenalty,
           stream: true as const,
+          ...(disableThinking
+            ? { extra_body: { enable_thinking: false } }
+            : {}),
           ...({
             top_k: data.topK,
             repetition_penalty: data.repetitionPenalty,
@@ -108,6 +126,9 @@ self.onmessage = async (e: MessageEvent) => {
           frequency_penalty: data.frequencyPenalty,
           presence_penalty: data.presencePenalty,
           stream: false as const,
+          ...(disableThinking
+            ? { extra_body: { enable_thinking: false } }
+            : {}),
           ...({
             top_k: data.topK,
             repetition_penalty: data.repetitionPenalty,

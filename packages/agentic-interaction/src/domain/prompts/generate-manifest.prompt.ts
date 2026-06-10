@@ -37,6 +37,7 @@ import type {
   PipelineState,
 } from "../value-objects/pipeline-state.ts";
 import { DEFAULT_MAX_BOUNDED_CONTEXTS } from "../manifest/manifest-draft.schema";
+import { normalizePortName } from "../manifest/normalize-draft";
 import { CONTEXT_NAME_GENERATION_BANS } from "./architecture-contract";
 import { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors";
 import { escapeXml } from "./escape-xml";
@@ -679,6 +680,14 @@ export function compileStage6Prompt(
   // (port types, "implements" bindings) were uncheckable from the judge's
   // input alone — every verdict on them was confabulated. Feed the judge the
   // structured Stage 3/4 outputs it is told to check.
+  //
+  // Port names are rendered through the SAME normalizePortName Stage 5 uses
+  // (Pascal-case + "Port" suffix): the raw Stage 3 names diverge from the
+  // YAML the judge reads side-by-side (stage3 "BookCollectionRepository" vs
+  // YAML "BookCollectionRepositoryPort" — observed in the 2026-06-10 sweep),
+  // and that mismatch alone manufactured grounded R04 "port has no adapter"
+  // errors out of consistent pipelines. Same treatment for the adapters'
+  // `implements` so the bindings keep pointing at the rendered port names.
   const portContexts = state.stage3?.contexts ?? [];
   const portMapSection =
     portContexts.length > 0
@@ -689,12 +698,12 @@ export function compileStage6Prompt(
               JSON.stringify({
                 context: ctx.contextName,
                 in: ctx.in.map((p) => ({
-                  name: p.name,
+                  name: normalizePortName(p.name),
                   type: p.type,
                   ...(p.forAggregate ? { forAggregate: p.forAggregate } : {}),
                 })),
                 out: ctx.out.map((p) => ({
-                  name: p.name,
+                  name: normalizePortName(p.name),
                   type: p.type,
                   ...(p.forAggregate ? { forAggregate: p.forAggregate } : {}),
                 })),
@@ -716,7 +725,7 @@ export function compileStage6Prompt(
                 context: ctx.contextName,
                 adapters: ctx.adapters.map((a) => ({
                   name: a.name,
-                  implements: a.implements,
+                  implements: normalizePortName(a.implements),
                 })),
               }),
             )
