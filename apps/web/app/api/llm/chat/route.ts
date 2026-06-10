@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.js";
 import { HandleServerChatUseCase } from "@hexagen/agentic-interaction";
-import { createLLMProvider } from "@/lib/wire.shared";
+import { createLLMProvider, resolveWebLlmApiKey } from "@/lib/wire.shared";
 import { getProxyRequestUseCase } from "@/lib/byok-wire.js";
 import { SSE_HEADERS } from "@/lib/sse-helpers";
 import type { ChatMessage } from "@hexagen/local-llm";
@@ -68,9 +68,10 @@ export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
 
   // BYOK always requires authentication.
-  // ENV LLM (server-key path) allows unauthenticated access when LLM_API_KEY is
-  // configured — the operator has implicitly opted in by setting the key.
-  if (!session?.user?.sub && (isByokRequest || !process.env.LLM_API_KEY)) {
+  // ENV LLM (server-key path) allows unauthenticated access when a web LLM key
+  // (WEB_LLM_API_KEY, falling back to LLM_API_KEY) is configured — the
+  // operator has implicitly opted in by setting the key.
+  if (!session?.user?.sub && (isByokRequest || !resolveWebLlmApiKey())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

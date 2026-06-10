@@ -38,8 +38,21 @@ export const createEventBus = (): EventBusPort => new InMemoryEventBusAdapter();
 export const createIntentBus = (): IntentBusPort =>
   new InMemoryIntentBusAdapter();
 
+/** API key for the generic direct-LLM web features: the chat route's
+ * server-key path and the governance suggestion routes. WEB_LLM_API_KEY
+ * decouples them from the staged-generation fallback chain: the mercury prod
+ * flip unsets LLM_API_KEY so Inception resolves as the chain's sole provider,
+ * and without a dedicated var that flip would silently take chat + governance
+ * down with it (the same env-var aliasing STAGE1_REFINER_API_KEY solves for
+ * the stage-1 refiner). Falls back to LLM_API_KEY so existing deployments are
+ * unaffected. Server-side only — neither var is NEXT_PUBLIC, so both are
+ * undefined in the client bundle (clients gate on NEXT_PUBLIC_LLM_AVAILABLE,
+ * unchanged). */
+export const resolveWebLlmApiKey = (): string =>
+  process.env.WEB_LLM_API_KEY || process.env.LLM_API_KEY || "";
+
 export const createLLMProvider = (): LLMProviderPort => {
-  const apiKey = process.env.LLM_API_KEY || "";
+  const apiKey = resolveWebLlmApiKey();
   const baseUrl = process.env.LLM_BASE_URL || "https://api.openai.com/v1";
   const model = process.env.LLM_MODEL || "gpt-4o-mini";
 

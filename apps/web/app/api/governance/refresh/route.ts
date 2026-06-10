@@ -8,6 +8,7 @@ import * as yaml from "js-yaml";
 import { GenerateSuggestionUseCase } from "@hexagen/agentic-interaction";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
 import { logger } from "../../../../lib/structured-logger";
+import { resolveWebLlmApiKey } from "@/lib/wire.shared";
 
 const execAsync = promisify(exec);
 
@@ -97,7 +98,9 @@ async function runSuggestions(
   manifestYaml: string,
   openFileContent?: string,
 ): Promise<AISuggestion[]> {
-  const apiKey = process.env.LLM_API_KEY || "";
+  // WEB_LLM_API_KEY ?? LLM_API_KEY — survives the mercury prod flip
+  // (which unsets LLM_API_KEY); see resolveWebLlmApiKey.
+  const apiKey = resolveWebLlmApiKey();
   const baseUrl = process.env.LLM_BASE_URL || "https://api.openai.com/v1";
   const model = process.env.LLM_MODEL || "gpt-4o-mini";
 

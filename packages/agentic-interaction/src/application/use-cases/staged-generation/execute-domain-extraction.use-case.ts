@@ -445,7 +445,9 @@ export class ExecuteDomainExtractionUseCase {
    * Soft by design: refiner error, timeout, unparseable output, or an output
    * that would LOSE subdomains all keep the draft — refinement can only ever
    * improve a successful stage, never fail it. Single attempt, no retries:
-   * the draft is already a valid answer. */
+   * the draft is already a valid answer. Every dispatched-but-not-accepted
+   * outcome carries a telemetry note (the summary suffix) so refine behavior
+   * is observable in prod; only the not-fired `skipped` path stays silent. */
   private async maybeRefineDraft(
     draft: DomainAnalysis,
     draftResponse: string,
@@ -504,7 +506,12 @@ export class ExecuteDomainExtractionUseCase {
       request.signal = abortController.signal;
 
       const responseResult = await this.refinement.port.sendRequest(request);
-      if (!responseResult.success) return keepDraft;
+      if (!responseResult.success) {
+        return {
+          ...keepDraft,
+          note: " (cascade refine failed: provider error)",
+        };
+      }
 
       // The response arrived, so its tokens are billed whether or not the
       // refinement is accepted below.
@@ -512,12 +519,20 @@ export class ExecuteDomainExtractionUseCase {
       const discardRefinement = { ...keepDraft, outputTokens };
 
       const refinedParsed = parseStage1Response(responseResult.value.content);
-      if (!refinedParsed.hasValidLine) return discardRefinement;
+      if (!refinedParsed.hasValidLine) {
+        return {
+          ...discardRefinement,
+          note: " (cascade refine discarded: no valid NDJSON)",
+        };
+      }
       const refinedResult = buildDomainAnalysis(refinedParsed);
       // Never lose decomposition: the refined output must preserve or improve
       // the post-union subdomain count, else the draft stands.
       if (refinedResult.subdomains.length < draft.subdomains.length) {
-        return discardRefinement;
+        return {
+          ...discardRefinement,
+          note: ` (cascade refine discarded: would lose subdomains ${draft.subdomains.length}→${refinedResult.subdomains.length})`,
+        };
       }
 
       return {
@@ -527,7 +542,13 @@ export class ExecuteDomainExtractionUseCase {
         outputTokens,
       };
     } catch {
-      return keepDraft;
+      // signal.aborted distinguishes our own timeout from a genuine throw.
+      return {
+        ...keepDraft,
+        note: abortController.signal.aborted
+          ? ` (cascade refine failed: timeout ${STAGE1_REFINEMENT_TIMEOUT_MS}ms)`
+          : " (cascade refine failed: error)",
+      };
     } finally {
       clearTimeout(timeoutHandle);
     }
