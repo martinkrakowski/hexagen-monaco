@@ -57,6 +57,7 @@ If any assumption flips, only Workstream A's slices A3+ change shape; A1–A2, B
 - Add the now-live use-cases to `agentic-interaction/context.yaml` `use_cases` (the manifest-enumeration finding declined on #277 becomes actionable).
 - **P3 (backlog §2):** consume `complianceCheck` / `errorCorrectionsApplied` into `StageTelemetry` — non-blocking; a blocking HITL gate stays a separate later decision.
 - Decide Option-B relocation of the canonical normalizer into `agentic-interaction` (likely moot once the stub is gone — record the decision either way).
+- **Reasoning-model hardening (found 2026-06-10 during the A3 baseline):** stages 0/1/2/6 cap `maxTokens` at 800 (`classifyContextType` 256); on a reasoning model the invisible reasoning consumes the whole completion budget → `finishReason: "length"`, empty content, 0% pipeline success. Harden the request path (OpenRouter `reasoning` controls and/or `finishReason === "length"`-aware retry with a raised cap) so a model swap can't silently zero the pipeline; until then the runbook precondition pins the baseline to prod's actual model.
 - Update backlog + scope docs to "done"; close the loop in the `ai_manifest_staged_pipeline` memory.
 
 ## Workstream B — independents (parallel anytime; small PRs, can batch as one docs/hygiene PR)
