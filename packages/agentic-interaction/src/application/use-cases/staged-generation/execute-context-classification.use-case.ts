@@ -139,7 +139,7 @@ export class ExecuteContextClassificationUseCase {
             if (isBannedContextName(parsed.name)) {
               rejected.push({
                 name: parsed.name,
-                reasoning: `Safety Filter: Context name contains infrastructure term. Original LLM reasoning: ${parsed.reasoning}`,
+                reasoning: `Safety Filter: Context name contains a banned token (structural/delivery/infrastructure/vendor). Original LLM reasoning: ${parsed.reasoning}`,
               });
               continue;
             }
@@ -195,7 +195,7 @@ export class ExecuteContextClassificationUseCase {
               // bypassed the filter entirely.
               rejected.push({
                 name: parsed.name,
-                reasoning: `Safety Filter: Context name contains infrastructure term. Original LLM reasoning: ${parsed.reasoning}`,
+                reasoning: `Safety Filter: Context name contains a banned token (structural/delivery/infrastructure/vendor). Original LLM reasoning: ${parsed.reasoning}`,
               });
             } else {
               const typeMap: Record<string, ClassifiedContext["type"]> = {

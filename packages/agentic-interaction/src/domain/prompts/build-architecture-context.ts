@@ -14,10 +14,11 @@ import {
  * user input. Pure and deterministic; orchestrators should call it ONCE at
  * construction time, never per execute().
  *
- * Uses CONTEXT_NAME_GENERATION_BANS (the Stage 2 generation-guidance list)
- * because this is generation-side guidance; the known divergence between the
- * three ban lists is documented in architecture-contract.ts and reconciled in
- * its own HITL-gated PR (A2), not here.
+ * Uses CONTEXT_NAME_GENERATION_BANS (the generation-guidance alias of the
+ * canonical unified ban list) because this is generation-side guidance. The
+ * ban policy is UNIFIED since A2 — one membership across all sites, with the
+ * per-site mechanism deltas (and the prose-only carve-out) documented in
+ * architecture-contract.ts.
  */
 export function buildGreenfieldArchitectureContext(): string {
   return [

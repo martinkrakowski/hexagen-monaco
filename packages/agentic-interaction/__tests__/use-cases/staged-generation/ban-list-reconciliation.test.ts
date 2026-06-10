@@ -251,7 +251,7 @@ test("ban-list reconciliation: uncertain→accepted promotion runs the same safe
   );
   assert.ok(
     rejected[0].reasoning.includes(
-      "Safety Filter: Context name contains infrastructure term",
+      "Safety Filter: Context name contains a banned token",
     ),
   );
   // Both names are still recorded as uncertain regardless of promotion outcome.

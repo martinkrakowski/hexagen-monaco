@@ -62,7 +62,7 @@ test("ExecuteContextClassificationUseCase adversarial regression test - blocks i
   );
   assert.ok(
     firstRejected?.reasoning.includes(
-      "Safety Filter: Context name contains infrastructure term",
+      "Safety Filter: Context name contains a banned token",
     ),
     "Must contain safety filter reasoning",
   );
