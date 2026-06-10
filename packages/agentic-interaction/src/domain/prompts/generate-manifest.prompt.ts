@@ -199,6 +199,17 @@ add missing subdomains/aggregates/useCases, remove redundant lines. Re-emit
 the COMPLETE corrected analysis as NDJSON — same line formats as above. Do
 not include commentary.`;
 
+/** Deliberately no sanitization/delimiting of `draftNdjson`: both parts of
+ * this message sit in the SAME trust domain — `originalPrompt` already carries
+ * the user's raw description verbatim, so the draft (derived from nothing but
+ * that description) cannot "steer" the refiner toward anything the user
+ * couldn't request directly. Untrusted-LLM-output handling lives where it
+ * belongs, on the OUTPUT side: the refined response goes through strict
+ * per-line JSON parsing (unknown/malformed lines ignored), the
+ * subdomain-loss guard, and the downstream deterministic validators — any
+ * failure keeps the draft. This exact byte shape is also the cascade-probe
+ * validated config (8/8 valid NDJSON); do not reshape it without re-running
+ * the golden harness. */
 export function compileStage1RefinementUserPrompt(
   originalPrompt: string,
   draftNdjson: string,
