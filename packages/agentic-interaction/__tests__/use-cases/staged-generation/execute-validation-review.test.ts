@@ -8,6 +8,7 @@ import {
   STAGE6_VALIDATION_SYSTEM_PROMPT,
   compileStage6Prompt,
 } from "../../../src/domain/prompts/generate-manifest.prompt.ts";
+import { CONTEXT_NAME_VALIDATION_BANS } from "../../../src/domain/prompts/architecture-contract.ts";
 
 const validValidationNdjson = '{"type":"result","passed":true}\n';
 
@@ -201,8 +202,10 @@ describe("ExecuteValidationReviewUseCase", () => {
   });
 
   test("returns validation failure with errors", async () => {
+    // Fixture rule is R02 (not R01): R01 claims from the LLM are discarded
+    // by design since the judge-grounding fix — see the dedicated describe.
     const ndjson =
-      '{"type":"result","passed":false,"errors":[{"rule":"R01","message":"Context uses technology"}]}\n';
+      '{"type":"result","passed":false,"errors":[{"rule":"R02","message":"Context has no inbound ports"}]}\n';
     const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
 
     const useCase = new ExecuteValidationReviewUseCase(mockLLM);
@@ -214,7 +217,7 @@ describe("ExecuteValidationReviewUseCase", () => {
       assert.strictEqual(result.value.passed, false);
       assert.ok(result.value.errors.length > 0);
       const errorsString = JSON.stringify(result.value.errors);
-      assert.ok(errorsString.includes("R01"));
+      assert.ok(errorsString.includes("R02"));
     }
   });
 
@@ -350,6 +353,156 @@ describe("ExecuteValidationReviewUseCase", () => {
   });
 });
 
+describe("deterministic R01 (judge-grounding fix)", () => {
+  // R01 moved out of the LLM's checklist: on weak models the rule text plus
+  // banned-token list invited exemplar parroting ('Postgres' reported against
+  // every context name in every run — baseline findings F3). The pipeline now
+  // computes R01 via isBannedContextName and discards any LLM R01 claim.
+
+  test("banned accepted context name surfaces as R01 error even when the LLM passes", async () => {
+    const mockLLM = createMockLLMPort(() =>
+      createSuccessStream(validValidationNdjson),
+    );
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const state = {
+      ...createMockPipelineState(),
+      stage2: {
+        accepted: [
+          {
+            name: "payment-gateway",
+            type: "core" as const,
+            reasoning: "Handles payments",
+          },
+        ],
+        rejected: [],
+        uncertain: [],
+      },
+    };
+    const result = await useCase.execute(state);
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.passed, false);
+      const errorsString = JSON.stringify(result.value.errors);
+      assert.ok(
+        errorsString.includes("R01"),
+        `Expected deterministic R01 error, got: ${errorsString}`,
+      );
+      assert.ok(errorsString.includes("payment-gateway"));
+    }
+  });
+
+  test("prose-only 'rest' carve-out does not trip deterministic R01", async () => {
+    const mockLLM = createMockLLMPort(() =>
+      createSuccessStream(validValidationNdjson),
+    );
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const state = {
+      ...createMockPipelineState(),
+      stage2: {
+        accepted: [
+          {
+            name: "driver-rest-periods",
+            type: "core" as const,
+            reasoning: "Tracks mandated driver rest periods",
+          },
+        ],
+        rejected: [],
+        uncertain: [],
+      },
+    };
+    const result = await useCase.execute(state);
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.passed, true);
+      assert.deepStrictEqual(result.value.errors, []);
+    }
+  });
+
+  test("LLM-emitted R01 claims are discarded (line form)", async () => {
+    // The exact hallucination shape observed on gpt-4o-mini: R01 parroted
+    // against a clean name. The deterministic check is the sole R01 source.
+    const ndjson =
+      '{"type":"error","rule":"R01","message":"Context \'invoice-management\' violates R01: name contains technology noun \'Postgres\'."}\n{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const state = createMockPipelineState();
+    const result = await useCase.execute(state);
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.errors, []);
+      // passed is re-derived after the discard — the LLM's own
+      // passed:false verdict must not survive its discarded evidence.
+      assert.strictEqual(result.value.passed, true);
+    }
+  });
+
+  test("LLM-emitted R01 claims are discarded when only the rule field names R01 (qodo bypass)", async () => {
+    // Per the prompt's exemplars, messages do NOT contain the rule token —
+    // the rule id lives in the separate "rule" field. The discard must work
+    // off that field (via parse-time tagging), not off message prose.
+    const ndjson =
+      '{"type":"error","rule":"R01","message":"Context \'invoice-management\' contains technology noun \'Postgres\'."}\n{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const result = await useCase.execute(createMockPipelineState());
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.errors, []);
+      assert.strictEqual(result.value.passed, true);
+    }
+  });
+
+  test("R01 discard is case-insensitive on the rule id", async () => {
+    const ndjson =
+      '{"type":"error","rule":"r01","message":"name contains technology noun"}\n{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const result = await useCase.execute(createMockPipelineState());
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.errors, []);
+      assert.strictEqual(result.value.passed, true);
+    }
+  });
+
+  test("line-form findings are tagged with their rule id (non-R01 survives, tagged)", async () => {
+    const ndjson =
+      '{"type":"error","rule":"R02","message":"Context \'invoice-management\' has no inbound ports."}\n{"type":"warning","rule":"R10","message":"No publisher port."}\n{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const result = await useCase.execute(createMockPipelineState());
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.passed, false);
+      assert.ok(result.value.errors[0].startsWith("[R02] "));
+      assert.ok(result.value.warnings[0].startsWith("[R10] "));
+    }
+  });
+
+  test("LLM-emitted R01 claims are discarded (result-array form)", async () => {
+    const ndjson =
+      '{"type":"result","passed":false,"errors":[{"rule":"R01","message":"Context \'invoice-management\' violates R01: name contains technology noun \'postgres\'."},{"rule":"R02","message":"Context \'invoice-management\' has no inbound ports."}]}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const state = createMockPipelineState();
+    const result = await useCase.execute(state);
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      const errorsString = JSON.stringify(result.value.errors);
+      assert.ok(!errorsString.includes("R01"), `R01 survived: ${errorsString}`);
+      assert.ok(errorsString.includes("R02"), "non-R01 errors must survive");
+      assert.strictEqual(result.value.passed, false);
+    }
+  });
+});
+
 describe("STAGE6_VALIDATION_SYSTEM_PROMPT", () => {
   test("declares R16 (port description quality)", () => {
     assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /R16/);
@@ -367,8 +520,37 @@ describe("STAGE6_VALIDATION_SYSTEM_PROMPT", () => {
     assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /runtime_concerns/);
   });
 
-  test("instructs LLM to run rules R01 through R18", () => {
-    assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /R01 through R18/);
+  test("instructs LLM to run rules R02 through R18 (R01 is deterministic)", () => {
+    assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /R02 through R18/);
+    assert.doesNotMatch(STAGE6_VALIDATION_SYSTEM_PROMPT, /R01 through R18/);
+  });
+
+  test("declares R01 deterministic and does not interpolate the banned-token list", () => {
+    // The joined token list + R01 instructions were the parroting bait
+    // (baseline findings F2/F3): the judge copied 'postgres' from its own
+    // prompt into findings against clean names.
+    assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /R01/);
+    assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /deterministic/i);
+    assert.ok(
+      !STAGE6_VALIDATION_SYSTEM_PROMPT.includes(
+        CONTEXT_NAME_VALIDATION_BANS.join(", "),
+      ),
+      "banned-token list must not be interpolated into the judge prompt",
+    );
+  });
+
+  test("few-shot exemplars do not bait R01 parroting", () => {
+    // 'postgres-repo' was the exemplar weak judges echoed verbatim.
+    assert.doesNotMatch(STAGE6_VALIDATION_SYSTEM_PROMPT, /postgres-repo/);
+    assert.doesNotMatch(STAGE6_VALIDATION_SYSTEM_PROMPT, /"rule": "R01"/);
+  });
+
+  test("grounds R02-R06 in the provided port_map and adapter_bindings sections", () => {
+    // The old rule text ordered checks on `ports.in` / `implements` paths
+    // that the assembled YAML does not contain (name-only lists) — the judge
+    // had to confabulate (baseline findings F3).
+    assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /<port_map>/);
+    assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /<adapter_bindings>/);
   });
 });
 
@@ -400,5 +582,100 @@ describe("compileStage6Prompt", () => {
       stage5: { yaml: "", parsedObject: {} },
     } as any);
     assert.doesNotMatch(prompt, /<runtime_concerns>/);
+  });
+
+  test("includes <port_map> with port names and types when stage3 present", () => {
+    const prompt = compileStage6Prompt({
+      stage0: {
+        intent: "x",
+        explicitTechnologies: [],
+        explicitPatterns: [],
+        ambiguities: [],
+      },
+      stage3: {
+        contexts: [
+          {
+            contextName: "invoice-management",
+            in: [
+              {
+                name: "CreateInvoicePort",
+                type: "command" as const,
+                description: "Creates a new invoice from order data",
+              },
+            ],
+            out: [
+              {
+                name: "InvoiceRepositoryPort",
+                type: "repository" as const,
+                description: "Persists invoice aggregates",
+                forAggregate: "Invoice",
+              },
+            ],
+          },
+        ],
+      },
+      stage5: { yaml: "", parsedObject: {} },
+    } as any);
+    assert.match(prompt, /<port_map>/);
+    assert.match(prompt, /CreateInvoicePort/);
+    assert.match(prompt, /"type":"command"/);
+    assert.match(prompt, /"forAggregate":"Invoice"/);
+  });
+
+  test("includes <adapter_bindings> with implements when stage4 present", () => {
+    const prompt = compileStage6Prompt({
+      stage0: {
+        intent: "x",
+        explicitTechnologies: [],
+        explicitPatterns: [],
+        ambiguities: [],
+      },
+      stage4: {
+        contexts: [
+          {
+            contextName: "invoice-management",
+            adapters: [
+              {
+                name: "InMemoryInvoiceAdapter",
+                implements: "InvoiceRepositoryPort",
+                technology: "in-memory",
+              },
+            ],
+          },
+        ],
+      },
+      stage5: { yaml: "", parsedObject: {} },
+    } as any);
+    assert.match(prompt, /<adapter_bindings>/);
+    assert.match(prompt, /InMemoryInvoiceAdapter/);
+    assert.match(prompt, /"implements":"InvoiceRepositoryPort"/);
+  });
+
+  test("omits <port_map> and <adapter_bindings> when stages 3/4 absent", () => {
+    const prompt = compileStage6Prompt({
+      stage0: {
+        intent: "x",
+        explicitTechnologies: [],
+        explicitPatterns: [],
+        ambiguities: [],
+      },
+      stage5: { yaml: "", parsedObject: {} },
+    } as any);
+    assert.doesNotMatch(prompt, /<port_map>/);
+    assert.doesNotMatch(prompt, /<adapter_bindings>/);
+  });
+
+  test("directs the LLM at R02-R18 (R01 is deterministic)", () => {
+    const prompt = compileStage6Prompt({
+      stage0: {
+        intent: "x",
+        explicitTechnologies: [],
+        explicitPatterns: [],
+        ambiguities: [],
+      },
+      stage5: { yaml: "", parsedObject: {} },
+    } as any);
+    assert.match(prompt, /R02–R18/);
+    assert.doesNotMatch(prompt, /R01–R18/);
   });
 });

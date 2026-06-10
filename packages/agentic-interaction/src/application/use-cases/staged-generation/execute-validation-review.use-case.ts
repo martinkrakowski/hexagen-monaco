@@ -9,6 +9,7 @@ import {
   validatePortQuality,
   normalizeContextName,
 } from "../../../domain/index";
+import { isBannedContextName } from "../../../domain/prompts/architecture-contract";
 import type {
   ValidationReport,
   PipelineState,
@@ -62,7 +63,13 @@ export class ExecuteValidationReviewUseCase {
   async execute(
     state: Pick<
       PipelineState,
-      "stage0" | "stage1" | "stage2" | "stage3" | "stage5" | "contextMappings"
+      | "stage0"
+      | "stage1"
+      | "stage2"
+      | "stage3"
+      | "stage4"
+      | "stage5"
+      | "contextMappings"
     >,
     onChunk?: (chunk: string) => void,
     onStageTelemetry?: (telemetry: StageTelemetry) => void,
@@ -172,25 +179,32 @@ export class ExecuteValidationReviewUseCase {
             parsed.type === "result"
           ) {
             hasValidLine = true;
+            // Tag every finding with its rule id (same `[Rxx] message` shape
+            // as the programmatic port-quality issues): the rule must survive
+            // into the stored string or the R01 discard below can't see it —
+            // per the prompt's exemplars, message text alone rarely names
+            // the rule.
+            const tagWithRule = (rule: unknown, message: string): string =>
+              typeof rule === "string" && rule
+                ? `[${rule}] ${message}`
+                : message;
             if (parsed.type === "error") {
-              errors.push(parsed.message);
+              errors.push(tagWithRule(parsed.rule, parsed.message));
             } else if (parsed.type === "warning") {
-              warnings.push(parsed.message);
+              warnings.push(tagWithRule(parsed.rule, parsed.message));
             } else if (parsed.type === "result") {
               if (Array.isArray(parsed.errors)) {
                 for (const e of parsed.errors) {
                   if (typeof e === "string") errors.push(e);
                   else if (e && typeof e.message === "string")
-                    errors.push(
-                      e.rule ? `[${e.rule}] ${e.message}` : e.message,
-                    );
+                    errors.push(tagWithRule(e.rule, e.message));
                 }
               }
               if (Array.isArray(parsed.warnings)) {
                 for (const w of parsed.warnings) {
                   if (typeof w === "string") warnings.push(w);
                   else if (w && typeof w.message === "string")
-                    warnings.push(w.message);
+                    warnings.push(tagWithRule(w.rule, w.message));
                 }
               }
               passed = errors.length === 0;
@@ -206,26 +220,49 @@ export class ExecuteValidationReviewUseCase {
         : "";
 
       if (!parseError) {
+        // R01 is deterministic (judge-grounding fix, baseline findings F3):
+        // the judge prompt no longer carries the banned-token list, so any
+        // R01 claim the LLM emits is by construction ungrounded — discard it,
+        // then recompute R01 here from the accepted context names. Uses
+        // isBannedContextName, so the prose-only "rest" carve-out applies
+        // (consistent with the Stage 2 deterministic filter). The rule-tagging
+        // above guarantees the rule id is present in the string for all three
+        // finding shapes; case-insensitive in case the model lowercases it.
+        const r01Claim = /\bR01\b/i;
+        const finalErrors = errors.filter((m) => !r01Claim.test(m));
+        const finalWarnings = warnings.filter((m) => !r01Claim.test(m));
+        for (const ctx of state.stage2?.accepted ?? []) {
+          if (isBannedContextName(ctx.name)) {
+            finalErrors.push(
+              `[R01] Context '${ctx.name}' violates R01: name contains a banned technology token.`,
+            );
+          }
+        }
+
         const programmaticIssues = collectPortQualityIssues(state);
         for (const issue of programmaticIssues) {
           const tagged = `[${issue.rule}] ${issue.contextName}/${issue.portName}: ${issue.message}`;
           if (issue.severity === "error") {
-            errors.push(tagged);
+            finalErrors.push(tagged);
           } else {
-            warnings.push(tagged);
+            finalWarnings.push(tagged);
           }
         }
-        passed = errors.length === 0;
+        passed = finalErrors.length === 0;
 
         const durationMs = Date.now() - stageStart;
-        const result: ValidationReport = { errors, warnings, passed };
+        const result: ValidationReport = {
+          errors: finalErrors,
+          warnings: finalWarnings,
+          passed,
+        };
         if (passed) {
           onChunk?.(
-            `Validation passed — ${warnings.length} warning${warnings.length !== 1 ? "s" : ""}`,
+            `Validation passed — ${finalWarnings.length} warning${finalWarnings.length !== 1 ? "s" : ""}`,
           );
         } else {
           onChunk?.(
-            `${errors.length} error${errors.length !== 1 ? "s" : ""} found, ${warnings.length} warning${warnings.length !== 1 ? "s" : ""}`,
+            `${finalErrors.length} error${finalErrors.length !== 1 ? "s" : ""} found, ${finalWarnings.length} warning${finalWarnings.length !== 1 ? "s" : ""}`,
           );
         }
         onStageTelemetry?.({
@@ -237,7 +274,7 @@ export class ExecuteValidationReviewUseCase {
           inputTokensEstimate: estimateTokenCount(prompt),
           outputTokensActual: estimateTokenCount(fullResponse),
           servedFromCache: false,
-          summary: `Validation ${passed ? "passed" : "failed"}: ${errors.length} errors, ${warnings.length} warnings`,
+          summary: `Validation ${passed ? "passed" : "failed"}: ${finalErrors.length} errors, ${finalWarnings.length} warnings`,
         });
         return ok(result);
       }
