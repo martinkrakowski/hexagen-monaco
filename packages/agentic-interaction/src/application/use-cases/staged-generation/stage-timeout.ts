@@ -12,14 +12,14 @@
  * infinite "Converting…" spinner (the prior flat 30-minute value read as a hang
  * on the loose-spec conversion path).
  *
- * Two weight classes, because one value cannot fit both a 800-token call and an
- * 8000-token one: short-output stages get a tight ceiling so a stuck model
+ * Two weight classes, because one value cannot fit both a ≤1600-token call and
+ * an 8000-token one: short-output stages get a tight ceiling so a stuck model
  * surfaces quickly; large-output stages get a generous ceiling so a slow but
  * progressing local model is not killed mid-generation. Fail-fast keeps the
  * generous ceiling safe — it is a one-shot wait, never multiplied.
  */
 
-/** Short-output stages: prompt-normalization, domain-extraction, context-classification, validation-review (≤800 maxTokens). */
+/** Short-output stages: prompt-normalization, context-classification, validation-review (≤800 maxTokens) and domain-extraction (1600 since the decomposition requirement). */
 export const STAGE_ATTEMPT_TIMEOUT_MS = 180_000; // 3 minutes per attempt
 
 /** Large-output stages: loose-spec conversion (8000 maxTokens) and adapter assignment (4096). */
