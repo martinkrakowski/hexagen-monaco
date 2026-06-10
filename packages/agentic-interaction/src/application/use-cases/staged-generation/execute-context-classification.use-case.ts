@@ -7,7 +7,7 @@ import {
   STAGE2_CLASSIFICATION_SYSTEM_PROMPT,
   compileStage2Prompt,
 } from "../../../domain/index";
-import { CONTEXT_NAME_DETERMINISTIC_BLOCKLIST } from "../../../domain/prompts/architecture-contract";
+import { isBannedContextName } from "../../../domain/prompts/architecture-contract";
 import type {
   PipelineState,
   ClassificationResult,
@@ -129,20 +129,17 @@ export class ExecuteContextClassificationUseCase {
       const uncertain: UncertainContext[] = [];
       let hasValidLine = false;
 
-      const infrastructureBlocklist = CONTEXT_NAME_DETERMINISTIC_BLOCKLIST;
-
       for (const line of lines) {
         try {
           const parsed = JSON.parse(line);
           hasValidLine = true;
           if (parsed.status === "accepted") {
-            const isInfra = infrastructureBlocklist.some((term) =>
-              parsed.name.toLowerCase().includes(term),
-            );
-            if (isInfra) {
+            // Token-boundary match (not substring): "user-database" is
+            // rejected, "restaurant-booking" is not. See architecture-contract.
+            if (isBannedContextName(parsed.name)) {
               rejected.push({
                 name: parsed.name,
-                reasoning: `Safety Filter: Context name contains infrastructure term. Original LLM reasoning: ${parsed.reasoning}`,
+                reasoning: `Safety Filter: Context name contains a banned token (structural/delivery/infrastructure/vendor). Original LLM reasoning: ${parsed.reasoning}`,
               });
               continue;
             }
@@ -192,6 +189,14 @@ export class ExecuteContextClassificationUseCase {
             const rec = parsed.recommendation ?? "accept-as-supporting";
             if (rec === "reject") {
               rejected.push({ name: parsed.name, reasoning: parsed.reasoning });
+            } else if (isBannedContextName(parsed.name)) {
+              // The uncertain→accepted promotion path must pass the same
+              // safety filter as directly-accepted contexts; previously it
+              // bypassed the filter entirely.
+              rejected.push({
+                name: parsed.name,
+                reasoning: `Safety Filter: Context name contains a banned token (structural/delivery/infrastructure/vendor). Original LLM reasoning: ${parsed.reasoning}`,
+              });
             } else {
               const typeMap: Record<string, ClassifiedContext["type"]> = {
                 "accept-as-core": "core",
@@ -210,6 +215,11 @@ export class ExecuteContextClassificationUseCase {
                 promotedFromUncertain: true,
               });
             }
+            // Buckets are deliberately NOT disjoint: `uncertain` records model
+            // hesitation regardless of the final verdict (a banned promoted
+            // name appears in both `rejected` and `uncertain`). Verified safe:
+            // `rejected` has no src consumers; `uncertain` only feeds the
+            // <promoted_from_uncertain> prose block in the stage-6 prompt.
             uncertain.push({ name: parsed.name, reasoning: parsed.reasoning });
           }
         } catch {
