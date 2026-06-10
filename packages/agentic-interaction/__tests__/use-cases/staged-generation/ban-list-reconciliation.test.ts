@@ -151,13 +151,21 @@ test("ban-list reconciliation: Stage 2 system prompt interpolates the generation
   );
 });
 
-test("ban-list reconciliation: Stage 6 R01 interpolates the validation bans", () => {
+test("ban-list reconciliation: Stage 6 R01 is deterministic — the judge prompt does NOT interpolate the bans", () => {
+  // Inverted 2026-06-10 (judge-grounding fix): interpolating the token list
+  // into the LLM judge's R01 instructions invited exemplar parroting on weak
+  // models ('Postgres' reported against every clean context name — baseline
+  // findings F2/F3). Stage 6's R01 consumption site is now the deterministic
+  // isBannedContextName check inside ExecuteValidationReviewUseCase; the
+  // prompt only declares that R01 is precomputed.
   assert.ok(
-    STAGE6_VALIDATION_SYSTEM_PROMPT.includes(
+    !STAGE6_VALIDATION_SYSTEM_PROMPT.includes(
       CONTEXT_NAME_VALIDATION_BANS.join(", "),
     ),
-    "Stage 6 prompt must contain the joined validation ban list",
+    "Stage 6 prompt must NOT contain the joined validation ban list",
   );
+  assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /R01/);
+  assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /deterministic/i);
 });
 
 // ── 3. The three contradiction cases (deterministic filter as enforcement) ──

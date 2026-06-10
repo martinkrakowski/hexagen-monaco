@@ -242,6 +242,7 @@ export class ExecuteFullStagedGenerationUseCase {
         stage1: s1.value,
         stage2: s2.value,
         stage3: portMap,
+        stage4: s4.value,
         stage5: assembledManifest,
         contextMappings,
       },

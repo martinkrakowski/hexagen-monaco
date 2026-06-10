@@ -11,8 +11,11 @@
  *   • Stage 0 / Stage 2 generation guidance — the list is interpolated as
  *     prose into the system prompts (steers the model away from banned names
  *     up front; probabilistic).
- *   • Stage 6 R01 validation — the validator LLM is told the same list
- *     (defense in depth; probabilistic).
+ *   • Stage 6 R01 validation — computed deterministically via
+ *     `isBannedContextName()` inside ExecuteValidationReviewUseCase; any R01
+ *     claim the judge LLM emits is discarded. (Previously the list was
+ *     interpolated into the judge prompt — weak models parroted the tokens
+ *     against clean names; see baseline findings F2/F3.)
  *   • Deterministic runtime filter — `isBannedContextName()` is the
  *     enforcement of record: token-boundary matching, NOT substring, so
  *     "restaurant-booking" / "feedback-management" / "rapid-fulfillment" pass
@@ -98,7 +101,10 @@ export const CONTEXT_NAME_BANNED_TOKENS: readonly string[] = [
 export const CONTEXT_NAME_GENERATION_BANS: readonly string[] =
   CONTEXT_NAME_BANNED_TOKENS;
 
-/** Stage 6 R01 validation (prose). Alias of the canonical list. */
+/** Stage 6 R01 validation. Alias of the canonical list. No longer
+ * interpolated into the judge prompt (judge-grounding fix) — R01 is computed
+ * via `isBannedContextName`; the alias is retained so tests can pin
+ * membership and any re-divergence is loud. */
 export const CONTEXT_NAME_VALIDATION_BANS: readonly string[] =
   CONTEXT_NAME_BANNED_TOKENS;
 

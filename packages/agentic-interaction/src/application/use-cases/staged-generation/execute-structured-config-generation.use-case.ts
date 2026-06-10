@@ -1408,6 +1408,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
         stage1: domainAnalysis,
         stage2: classification,
         stage3: mergedPortMap,
+        stage4: mergedAdapterBindings,
         stage5: assembledManifest,
         contextMappings: mergedContextMappings,
       },

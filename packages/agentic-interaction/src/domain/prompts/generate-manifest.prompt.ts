@@ -37,10 +37,7 @@ import type {
   PipelineState,
 } from "../value-objects/pipeline-state.ts";
 import { DEFAULT_MAX_BOUNDED_CONTEXTS } from "../manifest/manifest-draft.schema";
-import {
-  CONTEXT_NAME_GENERATION_BANS,
-  CONTEXT_NAME_VALIDATION_BANS,
-} from "./architecture-contract";
+import { CONTEXT_NAME_GENERATION_BANS } from "./architecture-contract";
 import { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors";
 import { escapeXml } from "./escape-xml";
 import type { BoundedContextType } from "@hexagen/shared";
@@ -544,24 +541,25 @@ SEVERITY LEVELS:
 VALIDATION RULES — check every rule explicitly. Do not skip any.
 
 STRUCTURAL RULES (emit "error" if violated):
-R01: No context name in the manifest contains a technology noun.
-      Banned technology words: ${CONTEXT_NAME_VALIDATION_BANS.join(", ")}.
-      Check: every context name in boundedContexts[*].name must not contain any banned word (case-insensitive).
+R01: RESERVED — enforced deterministically by the pipeline, NOT by you.
+      Context names containing technology nouns are detected by a deterministic
+      check before this review runs. NEVER emit an R01 finding; any R01 line
+      you produce is discarded.
 
 R02: Every non-shared-kernel context has at least one inbound port.
-      Check: for each context where type != "shared-kernel", ports.in must have length >= 1.
+      Check: for each context in <port_map> whose context is not a shared kernel, the "in" array must have length >= 1.
 
 R03: Every non-shared-kernel context has at least one outbound repository port.
-      Check: for each context where type != "shared-kernel", ports.out must contain at least one entry with type "repository".
+      Check: for each context in <port_map> whose context is not a shared kernel, the "out" array must contain at least one entry with "type":"repository".
 
 R04: Every outbound port has exactly one adapter assigned.
-      Check: for each port in ports.out across all contexts, exactly one adapter must list it in "implements".
+      Check: for each port in the "out" arrays of <port_map>, exactly one adapter in <adapter_bindings> must name it in "implements".
 
 R05: Every inbound port has exactly one adapter assigned.
-      Check: for each port in ports.in across all contexts, exactly one adapter must list it in "implements".
+      Check: for each port in the "in" arrays of <port_map>, exactly one adapter in <adapter_bindings> must name it in "implements".
 
 R06: No adapter's "implements" value references a port that belongs to a different context.
-      Check: for each adapter, find its port by name — that port must be in the same context.
+      Check: for each adapter in <adapter_bindings>, the port named by "implements" must appear in the SAME context's entry in <port_map>.
 
 R07: Every dependsOn reference points to an existing context name.
       Check: for each entry in dependsOn arrays, the referenced name must appear in boundedContexts[*].name.
@@ -602,7 +600,7 @@ R18 [error]: Port names must not leak app-level metadata. Two checks:
       (b) name must not contain any token present in <runtime_concerns> (worker responsibilities + deployment platforms). This catches names like \`EmailRetryPort\` and \`OverdueInvoiceDetectionPort\` that escape the regex but still leak \`apps[].responsibilities\`.
 
 CRITICAL OUTPUT FORMAT — NDJSON ONLY.
-{"type": "error", "rule": "R01", "message": "Context 'postgres-repo' violates R01: name contains technology noun 'postgres'."}
+{"type": "error", "rule": "R06", "message": "Adapter 'EmailNotifierAdapter' in context 'billing' implements 'NotificationPort', which belongs to context 'notification-delivery'."}
 {"type": "warning", "rule": "R10", "message": "Context 'notification-delivery' publishes 'NotificationSent' but has no publisher port."}
 {"type": "info", "rule": "R15", "message": "Intent mentions 'payment processing' but no context name or responsibility references payments."}
 {"type": "warning", "rule": "R13", "message": "Context 'drift-analytics' was promoted from uncertain status and requires domain expert review."}
@@ -610,7 +608,7 @@ CRITICAL OUTPUT FORMAT — NDJSON ONLY.
 {"type": "result", "passed": true, "errorCount": 0, "warningCount": 2, "infoCount": 1}
 
 OUTPUT RULES:
-- Check every rule R01 through R18. Do not skip any rule even if you believe it is satisfied.
+- Check every rule R02 through R18. Do not skip any rule even if you believe it is satisfied. (R01 is enforced deterministically by the pipeline — never emit it.)
 - Always emit exactly one "result" object as the final line.
 - "passed" is true only if errorCount is 0.
 - "errorCount" counts objects of type "error".
@@ -622,7 +620,7 @@ OUTPUT RULES:
 export function compileStage6Prompt(
   state: Pick<
     PipelineState,
-    "stage0" | "stage2" | "stage5" | "contextMappings"
+    "stage0" | "stage2" | "stage3" | "stage4" | "stage5" | "contextMappings"
   >,
 ): string {
   const yaml = state.stage5?.yaml ?? "";
@@ -671,6 +669,57 @@ export function compileStage6Prompt(
       ? `<runtime_concerns>\n${runtimeConcerns.join(", ")}\n</runtime_concerns>`
       : "";
 
+  // Judge-grounding sections (baseline findings F3): the assembled YAML
+  // renders ports/adapters as name-only string lists, so rules R02–R06
+  // (port types, "implements" bindings) were uncheckable from the judge's
+  // input alone — every verdict on them was confabulated. Feed the judge the
+  // structured Stage 3/4 outputs it is told to check.
+  const portContexts = state.stage3?.contexts ?? [];
+  const portMapSection =
+    portContexts.length > 0
+      ? [
+          `<port_map>`,
+          portContexts
+            .map((ctx) =>
+              JSON.stringify({
+                context: ctx.contextName,
+                in: ctx.in.map((p) => ({
+                  name: p.name,
+                  type: p.type,
+                  ...(p.forAggregate ? { forAggregate: p.forAggregate } : {}),
+                })),
+                out: ctx.out.map((p) => ({
+                  name: p.name,
+                  type: p.type,
+                  ...(p.forAggregate ? { forAggregate: p.forAggregate } : {}),
+                })),
+              }),
+            )
+            .join("\n"),
+          `</port_map>`,
+        ].join("\n")
+      : "";
+
+  const adapterContexts = state.stage4?.contexts ?? [];
+  const adapterBindingsSection =
+    adapterContexts.length > 0
+      ? [
+          `<adapter_bindings>`,
+          adapterContexts
+            .map((ctx) =>
+              JSON.stringify({
+                context: ctx.contextName,
+                adapters: ctx.adapters.map((a) => ({
+                  name: a.name,
+                  implements: a.implements,
+                })),
+              }),
+            )
+            .join("\n"),
+          `</adapter_bindings>`,
+        ].join("\n")
+      : "";
+
   return [
     `<original_intent>`,
     header,
@@ -680,12 +729,14 @@ export function compileStage6Prompt(
     yaml,
     `</manifest_yaml>`,
     ``,
+    portMapSection,
+    adapterBindingsSection,
     warningsSection,
     promotedSection,
     mappingSection,
     runtimeConcernsSection,
     ``,
-    `Run all rules R01–R18. Output NDJSON:`,
+    `Run all rules R02–R18. Output NDJSON:`,
   ]
     .filter(Boolean)
     .join("\n");

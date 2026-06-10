@@ -201,7 +201,7 @@ test("compileStage6Prompt includes validation rules", () => {
     contextMappings: [],
   };
   const prompt = compileStage6Prompt(state);
-  assert.match(prompt, /R01/);
+  assert.match(prompt, /R02–R18/);
 });
 
 test("compileStage1Prompt includes user description (stage0->stage1)", () => {
@@ -298,7 +298,7 @@ test("compileStage4Prompt includes domain analysis", () => {
   assert.match(prompt, /accepted_contexts/);
 });
 
-test("compileStage6Prompt includes R01 validation rule", () => {
+test("compileStage6Prompt excludes R01 from the LLM's rule range (deterministic)", () => {
   const state0 = {
     intent: "Test",
     projectName: undefined,
@@ -323,7 +323,7 @@ test("compileStage6Prompt includes R01 validation rule", () => {
     contextMappings: [],
   };
   const prompt = compileStage6Prompt(state);
-  assert.match(prompt, /R01/);
+  assert.doesNotMatch(prompt, /R01/);
 });
 
 test("compileTopologyUserPrompt includes contexts", () => {
