@@ -29,16 +29,23 @@ import {
 } from "../../../src/domain/prompts/generate-manifest.prompt";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
 
-/** Run the classification use case with the given names all LLM-"accepted",
- * so the only thing deciding their fate is the deterministic safety filter. */
-async function classify(names: string[]) {
+/** Run the classification use case with the given names all LLM-"accepted"
+ * (or "uncertain" with an accept recommendation), so the only thing deciding
+ * their fate is the deterministic safety filter. */
+async function classify(
+  names: string[],
+  status: "accepted" | "uncertain" = "accepted",
+) {
   const ndjson = names
     .map((name) =>
       JSON.stringify({
-        status: "accepted",
+        status,
         name,
         contextType: "core",
         reasoning: "test fixture",
+        ...(status === "uncertain"
+          ? { recommendation: "accept-as-supporting" }
+          : {}),
       }),
     )
     .join("\n");
@@ -170,6 +177,35 @@ test("ban-list reconciliation: filter accepts business names that merely contain
     "feedback-management",
     "rapid-fulfillment",
     "restaurant-booking",
+  ]);
+});
+
+test("ban-list reconciliation: uncertain→accepted promotion runs the same safety filter", async () => {
+  // Before A2 the promotion path bypassed the filter entirely: an "uncertain"
+  // line with an accept recommendation landed in `accepted` unchecked.
+  const { accepted, rejected, uncertain } = await classify(
+    ["loyalty-program", "user-database"],
+    "uncertain",
+  );
+
+  assert.deepStrictEqual(
+    accepted.map((c) => c.name),
+    ["loyalty-program"],
+  );
+  assert.ok(accepted[0].promotedFromUncertain);
+  assert.deepStrictEqual(
+    rejected.map((r) => r.name),
+    ["user-database"],
+  );
+  assert.ok(
+    rejected[0].reasoning.includes(
+      "Safety Filter: Context name contains infrastructure term",
+    ),
+  );
+  // Both names are still recorded as uncertain regardless of promotion outcome.
+  assert.deepStrictEqual(uncertain.map((u) => u.name).sort(), [
+    "loyalty-program",
+    "user-database",
   ]);
 });
 
