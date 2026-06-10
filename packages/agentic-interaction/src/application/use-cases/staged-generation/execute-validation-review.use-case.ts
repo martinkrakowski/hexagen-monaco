@@ -220,17 +220,44 @@ export class ExecuteValidationReviewUseCase {
         : "";
 
       if (!parseError) {
-        // R01 is deterministic (judge-grounding fix, baseline findings F3):
-        // the judge prompt no longer carries the banned-token list, so any
-        // R01 claim the LLM emits is by construction ungrounded — discard it,
-        // then recompute R01 here from the accepted context names. Uses
-        // isBannedContextName, so the prose-only "rest" carve-out applies
-        // (consistent with the Stage 2 deterministic filter). The rule-tagging
-        // above guarantees the rule id is present in the string for all three
-        // finding shapes; case-insensitive in case the model lowercases it.
-        const r01Claim = /\bR01\b/i;
-        const finalErrors = errors.filter((m) => !r01Claim.test(m));
-        const finalWarnings = warnings.filter((m) => !r01Claim.test(m));
+        // R01 and the port-quality rules R16/R17/R18 are deterministic:
+        // - R01 (judge-grounding fix, baseline findings F3): the judge prompt
+        //   no longer carries the banned-token list, so any R01 claim the LLM
+        //   emits is by construction ungrounded — discard it, then recompute
+        //   R01 here from the accepted context names. Uses isBannedContextName,
+        //   so the prose-only "rest" carve-out applies (consistent with the
+        //   Stage 2 deterministic filter).
+        // - R16/R17/R18: collectPortQualityIssues below recomputes them
+        //   exactly (validatePortQuality, including the runtime-concern leak
+        //   net — runtimeConcerns is passed), so any LLM claim for these
+        //   rules is at best a duplicate that double-counts the finding and
+        //   at worst a contradiction of the deterministic source (observed in
+        //   the 2026-06-10 model sweep: LLM R17s on every model alongside the
+        //   programmatic ones). The deterministic result is the sole source.
+        // Two-tier discard, keyed on the finding's OWN rule:
+        // - Tagged findings (`[Rxx] …` from parse-time tagging) are judged by
+        //   their leading tag alone — an [R02] finding whose message text
+        //   merely *mentions* R17 is not an R17 claim and must survive.
+        // - Untagged findings (the tolerated bare-string shape in
+        //   result.errors/warnings, or objects missing a rule field) have no
+        //   tag to anchor on; there, a deterministic-rule mention anywhere in
+        //   the prose is the best available evidence the claim is one of the
+        //   recomputed rules, so the broad scan applies as fallback. An
+        //   untagged deterministic claim that never names its rule is
+        //   undetectable by construction — bounded harm: it duplicates (or
+        //   contradicts) the programmatic recomputation below, which was the
+        //   universal pre-discard status quo.
+        // Case-insensitive throughout in case the model lowercases rule ids.
+        const leadingRuleTag = /^\[(R\d{2})\]/i;
+        const deterministicRule = /^R(?:01|16|17|18)$/i;
+        const deterministicMention = /\bR(?:01|16|17|18)\b/i;
+        const isDeterministicClaim = (m: string): boolean => {
+          const tag = leadingRuleTag.exec(m);
+          if (tag) return deterministicRule.test(tag[1] as string);
+          return deterministicMention.test(m);
+        };
+        const finalErrors = errors.filter((m) => !isDeterministicClaim(m));
+        const finalWarnings = warnings.filter((m) => !isDeterministicClaim(m));
         for (const ctx of state.stage2?.accepted ?? []) {
           if (isBannedContextName(ctx.name)) {
             finalErrors.push(

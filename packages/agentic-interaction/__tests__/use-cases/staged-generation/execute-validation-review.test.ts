@@ -470,6 +470,56 @@ describe("deterministic R01 (judge-grounding fix)", () => {
     }
   });
 
+  test("a non-deterministic finding that MENTIONS a deterministic rule survives (tag-anchored discard)", async () => {
+    // The discard must key on the finding's own rule tag, not on rule ids
+    // appearing anywhere in free-form message prose — otherwise an R02
+    // finding cross-referencing R17 would be silently dropped.
+    const ndjson =
+      '{"type":"error","rule":"R02","message":"Context has no inbound ports; see also R17 for the trivial descriptions."}\n{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const result = await useCase.execute(createMockPipelineState());
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.errors.length, 1);
+      assert.ok(result.value.errors[0]?.startsWith("[R02]"));
+      assert.strictEqual(result.value.passed, false);
+    }
+  });
+
+  test("untagged string findings naming a deterministic rule are discarded (mention fallback)", async () => {
+    // result.errors may carry bare strings (no rule field → no parse-time
+    // tag). With no tag to anchor on, a deterministic-rule mention anywhere
+    // is treated as a deterministic claim and discarded.
+    const ndjson =
+      '{"type":"result","passed":false,"errors":["R17: port description is trivial."],"warnings":["R01 banned token in context name"]}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const result = await useCase.execute(createMockPipelineState());
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.errors, []);
+      assert.deepStrictEqual(result.value.warnings, []);
+      assert.strictEqual(result.value.passed, true);
+    }
+  });
+
+  test("untagged string findings without deterministic-rule mentions survive", async () => {
+    const ndjson =
+      '{"type":"result","passed":false,"errors":["Context invoice-management has no inbound ports."]}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const result = await useCase.execute(createMockPipelineState());
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.errors.length, 1);
+      assert.strictEqual(result.value.passed, false);
+    }
+  });
+
   test("line-form findings are tagged with their rule id (non-R01 survives, tagged)", async () => {
     const ndjson =
       '{"type":"error","rule":"R02","message":"Context \'invoice-management\' has no inbound ports."}\n{"type":"warning","rule":"R10","message":"No publisher port."}\n{"type":"result","passed":false}\n';
@@ -498,6 +548,98 @@ describe("deterministic R01 (judge-grounding fix)", () => {
       const errorsString = JSON.stringify(result.value.errors);
       assert.ok(!errorsString.includes("R01"), `R01 survived: ${errorsString}`);
       assert.ok(errorsString.includes("R02"), "non-R01 errors must survive");
+      assert.strictEqual(result.value.passed, false);
+    }
+  });
+});
+
+describe("deterministic R16/R17/R18 (LLM-duplicate discard, A4 pull-forward)", () => {
+  // collectPortQualityIssues recomputes the port-quality rules exactly
+  // (validatePortQuality, runtime-concern net included), so LLM claims for
+  // R16/R17/R18 are at best double-counted duplicates of the programmatic
+  // findings — the 2026-06-10 model sweep showed LLM R17s on every model
+  // alongside the programmatic ones. Same policy as R01: the deterministic
+  // result is the sole source.
+
+  test("LLM-emitted R16/R17/R18 claims are discarded (line form)", async () => {
+    const ndjson =
+      '{"type":"warning","rule":"R16","message":"Port description is trivial."}\n' +
+      '{"type":"error","rule":"R17","message":"Port forAggregate \'Ghost\' is not a known aggregate root."}\n' +
+      '{"type":"error","rule":"R18","message":"Port name leaks deployment platform \'Vercel\'."}\n' +
+      '{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    // No stage3 in the mock state → no programmatic issues either, so the
+    // report must come out empty with passed re-derived to true.
+    const result = await useCase.execute(createMockPipelineState());
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.errors, []);
+      assert.deepStrictEqual(result.value.warnings, []);
+      assert.strictEqual(result.value.passed, true);
+    }
+  });
+
+  test("LLM R17 duplicate is discarded while the programmatic R17 survives (no double count)", async () => {
+    const ndjson =
+      '{"type":"error","rule":"R17","message":"Port forAggregate \'NotReal\' is not a known aggregate root."}\n' +
+      '{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const state = {
+      ...createMockPipelineState(),
+      stage3: {
+        contexts: [
+          {
+            contextName: "invoice-management",
+            in: [
+              {
+                name: "CreateInvoicePort",
+                type: "command",
+                description:
+                  "Accepts invoice creation requests from upstream billing flows.",
+                forAggregate: "NotReal",
+              },
+            ],
+            out: [],
+          },
+        ],
+      },
+    };
+    const result = await useCase.execute(state);
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      const r17Errors = result.value.errors.filter((e) => /\bR17\b/.test(e));
+      assert.strictEqual(
+        r17Errors.length,
+        1,
+        `expected exactly one (programmatic) R17, got: ${JSON.stringify(result.value.errors)}`,
+      );
+      // The survivor is the programmatic finding (context/port shape), not
+      // the LLM's prose.
+      assert.ok(r17Errors[0].startsWith("[R17] invoice-management/"));
+      assert.strictEqual(result.value.passed, false);
+    }
+  });
+
+  test("LLM-emitted R16/R18 claims are discarded (result-array form)", async () => {
+    const ndjson =
+      '{"type":"result","passed":false,"errors":[{"rule":"R18","message":"Port name leaks platform."},{"rule":"R02","message":"Context has no inbound ports."}],"warnings":[{"rule":"R16","message":"Port description is trivial."}]}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const result = await useCase.execute(createMockPipelineState());
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      const errorsString = JSON.stringify(result.value.errors);
+      assert.ok(!errorsString.includes("R18"), `R18 survived: ${errorsString}`);
+      assert.ok(
+        errorsString.includes("R02"),
+        "non-deterministic rules survive",
+      );
+      assert.deepStrictEqual(result.value.warnings, []);
       assert.strictEqual(result.value.passed, false);
     }
   });
