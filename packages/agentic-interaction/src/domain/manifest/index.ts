@@ -58,8 +58,6 @@ export {
   extractObjectFromWrapper,
 } from "./extract-json";
 
-export { extractYamlFromResponse } from "../manifest-yaml-extractor";
-
 export {
   coerceRawTopology,
   coerceRawPorts,

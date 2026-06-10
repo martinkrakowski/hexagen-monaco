@@ -33,18 +33,6 @@ export {
   type GenerateManifestFromDescriptionResponse,
 } from "./generate-manifest-types";
 
-// Auto-fix use cases
-export {
-  FixManifestViolationUseCase,
-  type FixManifestViolationRequest,
-  type FixManifestViolationResponse,
-} from "./fix-manifest-violation.use-case";
-
-export {
-  HolisticManifestRepairUseCase,
-  type HolisticManifestRepairRequest,
-  type HolisticManifestRepairResponse,
-} from "./holistic-manifest-repair.use-case";
 export {
   ExecuteLooseSpecConversionUseCase,
   MAX_LOOSE_SPEC_INPUT_CHARS,
