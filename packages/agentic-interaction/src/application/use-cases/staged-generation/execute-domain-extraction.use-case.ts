@@ -1,5 +1,9 @@
 import { ok, err } from "@hexagen/shared";
-import { STAGE_ATTEMPT_TIMEOUT_MS, stageTimeoutError } from "./stage-timeout";
+import {
+  STAGE_ATTEMPT_TIMEOUT_MS,
+  STAGE1_REFINEMENT_TIMEOUT_MS,
+  stageTimeoutError,
+} from "./stage-timeout";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/client";
 import { z } from "zod";
@@ -256,6 +260,9 @@ export class ExecuteDomainExtractionUseCase {
           ...collapsedFallbackTelemetry,
           durationMs: Date.now() - stageStart,
           retryCount,
+          inputTokensEstimate:
+            (collapsedFallbackTelemetry.inputTokensEstimate ?? 0) +
+            refined.inputTokens,
           outputTokensActual:
             (collapsedFallbackTelemetry.outputTokensActual ?? 0) +
             refined.outputTokens,
@@ -405,7 +412,7 @@ export class ExecuteDomainExtractionUseCase {
           durationMs,
           usedLLM: true,
           retryCount,
-          inputTokensEstimate: estimateTokenCount(prompt),
+          inputTokensEstimate: estimateTokenCount(prompt) + refined.inputTokens,
           outputTokensActual:
             estimateTokenCount(fullResponse) + refined.outputTokens,
           servedFromCache: false,
@@ -444,18 +451,36 @@ export class ExecuteDomainExtractionUseCase {
     draftResponse: string,
     initialPrompt: string,
     onChunk?: (chunk: string) => void,
-  ): Promise<{ value: DomainAnalysis; note: string; outputTokens: number }> {
-    const keepDraft = { value: draft, note: "", outputTokens: 0 };
-    if (!this.refinement) return keepDraft;
+  ): Promise<{
+    value: DomainAnalysis;
+    note: string;
+    inputTokens: number;
+    outputTokens: number;
+  }> {
+    // Refinement skipped — no request sent, nothing to bill.
+    const skipped = { value: draft, note: "", inputTokens: 0, outputTokens: 0 };
+    if (!this.refinement) return skipped;
     if (this.refinement.mode === "escalation" && draft.subdomains.length >= 2) {
-      return keepDraft;
+      return skipped;
     }
 
     onChunk?.("Refining domain analysis...");
+    // From here the refine request IS dispatched, so its prompt tokens are
+    // billed even when the draft is kept (error / discard paths) — report
+    // them unconditionally so telemetry tracks actual spend. User prompt
+    // only, matching the draft path's estimateTokenCount(prompt).
+    const refinementPrompt = compileStage1RefinementUserPrompt(
+      initialPrompt,
+      draftResponse,
+    );
+    const inputTokens = estimateTokenCount(refinementPrompt);
+    const keepDraft = { value: draft, note: "", inputTokens, outputTokens: 0 };
     const abortController = new AbortController();
+    // Tight best-effort ceiling, NOT the stage timeout: an aborted refine
+    // keeps the draft, so the only cost of firing early is a lost upgrade.
     const timeoutHandle = setTimeout(
       () => abortController.abort(),
-      STAGE_ATTEMPT_TIMEOUT_MS,
+      STAGE1_REFINEMENT_TIMEOUT_MS,
     );
     try {
       const request = createLLMRequest(
@@ -467,10 +492,7 @@ export class ExecuteDomainExtractionUseCase {
           },
           {
             role: "user",
-            content: compileStage1RefinementUserPrompt(
-              initialPrompt,
-              draftResponse,
-            ),
+            content: refinementPrompt,
           },
         ],
         z.string(),
@@ -484,19 +506,25 @@ export class ExecuteDomainExtractionUseCase {
       const responseResult = await this.refinement.port.sendRequest(request);
       if (!responseResult.success) return keepDraft;
 
+      // The response arrived, so its tokens are billed whether or not the
+      // refinement is accepted below.
+      const outputTokens = estimateTokenCount(responseResult.value.content);
+      const discardRefinement = { ...keepDraft, outputTokens };
+
       const refinedParsed = parseStage1Response(responseResult.value.content);
-      if (!refinedParsed.hasValidLine) return keepDraft;
+      if (!refinedParsed.hasValidLine) return discardRefinement;
       const refinedResult = buildDomainAnalysis(refinedParsed);
       // Never lose decomposition: the refined output must preserve or improve
       // the post-union subdomain count, else the draft stands.
       if (refinedResult.subdomains.length < draft.subdomains.length) {
-        return keepDraft;
+        return discardRefinement;
       }
 
       return {
         value: refinedResult,
         note: ` (cascade refined ${draft.subdomains.length}→${refinedResult.subdomains.length} subdomains)`,
-        outputTokens: estimateTokenCount(responseResult.value.content),
+        inputTokens,
+        outputTokens,
       };
     } catch {
       return keepDraft;

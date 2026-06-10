@@ -5,6 +5,9 @@ import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import type { PipelineState } from "../../../src/domain/value-objects/pipeline-state";
 import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry";
+import { estimateTokenCount } from "../../../src/domain/value-objects/stage-telemetry";
+import { compileStage1Prompt } from "../../../src/domain/index";
+import { compileStage1RefinementUserPrompt } from "../../../src/domain/prompts/generate-manifest.prompt";
 
 const validNdjson = [
   '{"type":"verb","value":"createUser"}',
@@ -384,6 +387,39 @@ describe("ExecuteDomainExtractionUseCase", () => {
         ]);
       }
       assert.ok(telemetryCalls[0].summary.includes("cascade refined 3→4"));
+    });
+
+    test("telemetry counts the refinement request's input and output tokens", async () => {
+      // Baseline: same draft, no refiner configured.
+      const baselineTelemetry: StageTelemetry[] = [];
+      await new ExecuteDomainExtractionUseCase(
+        createSequencedPort([decomposedNdjson]).port,
+      ).execute(mockStage0State, undefined, (t) => baselineTelemetry.push(t));
+
+      const cascadeTelemetry: StageTelemetry[] = [];
+      const useCase = new ExecuteDomainExtractionUseCase(
+        createSequencedPort([decomposedNdjson]).port,
+        { port: createSequencedPort([enrichedNdjson]).port, mode: "always" },
+      );
+      await useCase.execute(mockStage0State, undefined, (t) =>
+        cascadeTelemetry.push(t),
+      );
+
+      const expectedExtraInput = estimateTokenCount(
+        compileStage1RefinementUserPrompt(
+          compileStage1Prompt(mockStage0State),
+          decomposedNdjson,
+        ),
+      );
+      assert.strictEqual(
+        cascadeTelemetry[0].inputTokensEstimate,
+        (baselineTelemetry[0].inputTokensEstimate ?? 0) + expectedExtraInput,
+      );
+      assert.strictEqual(
+        cascadeTelemetry[0].outputTokensActual,
+        (baselineTelemetry[0].outputTokensActual ?? 0) +
+          estimateTokenCount(enrichedNdjson),
+      );
     });
 
     test("rejects a refined output that loses subdomains", async () => {
