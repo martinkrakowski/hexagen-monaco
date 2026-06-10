@@ -22,6 +22,7 @@ import {
   CONTEXT_NAME_GENERATION_BANS,
   CONTEXT_NAME_VALIDATION_BANS,
   CONTEXT_NAME_DETERMINISTIC_BLOCKLIST,
+  PROSE_ONLY_TOKENS,
 } from "../../../src/domain/prompts/architecture-contract";
 import {
   STAGE2_CLASSIFICATION_SYSTEM_PROMPT,
@@ -87,7 +88,7 @@ async function classify(
 
 // ── 1. Unified membership ───────────────────────────────────────────────────
 
-test("ban-list reconciliation: all three exported lists have identical membership", () => {
+test("ban-list reconciliation: one membership, minus the documented prose-only carve-out", () => {
   const generation = new Set(CONTEXT_NAME_GENERATION_BANS);
   const validation = new Set(CONTEXT_NAME_VALIDATION_BANS);
   const blocklist = new Set(CONTEXT_NAME_DETERMINISTIC_BLOCKLIST);
@@ -97,11 +98,28 @@ test("ban-list reconciliation: all three exported lists have identical membershi
     validation,
     "Stage 2 generation bans must match Stage 6 validation bans",
   );
-  assert.deepStrictEqual(
-    validation,
-    blocklist,
-    "Stage 6 validation bans must match the deterministic blocklist",
+
+  // Deterministic blocklist = canonical list minus PROSE_ONLY_TOKENS, exactly.
+  const expectedBlocklist = new Set(
+    [...generation].filter(
+      (t) => !(PROSE_ONLY_TOKENS as readonly string[]).includes(t),
+    ),
   );
+  assert.deepStrictEqual(
+    blocklist,
+    expectedBlocklist,
+    "deterministic blocklist must be the canonical list minus the prose-only carve-out",
+  );
+  for (const token of PROSE_ONLY_TOKENS) {
+    assert.ok(
+      generation.has(token),
+      `prose-only token "${token}" must still appear in prompt guidance`,
+    );
+    assert.ok(
+      !blocklist.has(token),
+      `prose-only token "${token}" must not be enforced deterministically`,
+    );
+  }
 });
 
 test("ban-list reconciliation: unified list covers all four token families", () => {
@@ -178,6 +196,40 @@ test("ban-list reconciliation: filter accepts business names that merely contain
     "rapid-fulfillment",
     "restaurant-booking",
   ]);
+});
+
+test('ban-list reconciliation: prose-only carve-out — "rest" guides prompts but is not hard-rejected', async () => {
+  // HITL decision (PR #285 review round): "rest" is a plain English word;
+  // names like driver-rest-periods must survive the deterministic filter.
+  const { accepted, rejected } = await classify([
+    "driver-rest-periods",
+    "rest-api", // still caught: "api" remains deterministic
+  ]);
+
+  assert.deepStrictEqual(
+    accepted.map((c) => c.name),
+    ["driver-rest-periods"],
+  );
+  assert.deepStrictEqual(
+    rejected.map((r) => r.name),
+    ["rest-api"],
+  );
+});
+
+test("ban-list reconciliation: diacritics are normalized, not treated as separators", async () => {
+  const { accepted, rejected } = await classify([
+    "café-management", // é must not corrupt tokenization ("caf" + "management")
+    "Café-Database", // banned token still detected through the diacritic
+  ]);
+
+  assert.deepStrictEqual(
+    accepted.map((c) => c.name),
+    ["café-management"],
+  );
+  assert.deepStrictEqual(
+    rejected.map((r) => r.name),
+    ["Café-Database"],
+  );
 });
 
 test("ban-list reconciliation: uncertain→accepted promotion runs the same safety filter", async () => {

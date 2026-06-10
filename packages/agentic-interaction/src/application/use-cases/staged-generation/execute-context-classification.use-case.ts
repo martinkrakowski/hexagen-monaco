@@ -215,6 +215,11 @@ export class ExecuteContextClassificationUseCase {
                 promotedFromUncertain: true,
               });
             }
+            // Buckets are deliberately NOT disjoint: `uncertain` records model
+            // hesitation regardless of the final verdict (a banned promoted
+            // name appears in both `rejected` and `uncertain`). Verified safe:
+            // `rejected` has no src consumers; `uncertain` only feeds the
+            // <promoted_from_uncertain> prose block in the stage-6 prompt.
             uncertain.push({ name: parsed.name, reasoning: parsed.reasoning });
           }
         } catch {

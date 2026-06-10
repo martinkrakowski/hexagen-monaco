@@ -23,14 +23,21 @@
  * (silent-drop), "user-database" (validator pass-through). See
  * __tests__/use-cases/staged-generation/ban-list-reconciliation.test.ts.
  *
- * Token-boundary trade-off (accepted deliberately): names with no separator
- * at all ("userdb", "paymentsapi") tokenize to a single unknown token and are
- * NOT caught deterministically — the Stage 2/6 prompt guidance remains the
- * only guard for those. The substring alternative was rejected because it
- * falsely banned real business names ("restaurant-booking" ⊃ "rest").
+ * Token-boundary trade-offs (accepted deliberately): names with no separator
+ * at all ("userdb", "paymentsapi") and digit-fused variants ("123db",
+ * "db123") tokenize to a single unknown token and are NOT caught
+ * deterministically — the Stage 2/6 prompt guidance remains the only guard
+ * for those. The substring alternative was rejected because it falsely
+ * banned real business names ("restaurant-booking" ⊃ "rest").
+ *
+ * PROSE-ONLY carve-out (HITL decision, PR #285 review round): "rest" stays in
+ * the prompt-guidance lists but is excluded from the deterministic filter —
+ * it is a plain English word ("driver-rest-periods", "crew-rest") and the
+ * false-reject cost outweighs the leak risk; "api"/"gateway"/"db" remain
+ * deterministic because names containing them are near-always tech leakage.
  *
  * The per-site exports below are retained as aliases of the canonical list so
- * tests can pin set-equality and any future re-divergence is loud.
+ * tests can pin membership and any future re-divergence is loud.
  */
 
 /** Infra / storage / transport tokens. */
@@ -95,22 +102,34 @@ export const CONTEXT_NAME_GENERATION_BANS: readonly string[] =
 export const CONTEXT_NAME_VALIDATION_BANS: readonly string[] =
   CONTEXT_NAME_BANNED_TOKENS;
 
-/** Deterministic runtime safety filter. Alias of the canonical list; matching
- * is performed by `isBannedContextName`, not by callers iterating this array. */
+/** Tokens kept in prompt guidance but excluded from deterministic
+ * enforcement — plain-English collisions where hard-rejecting costs more
+ * than the leak risk (see PROSE-ONLY carve-out in the header). */
+export const PROSE_ONLY_TOKENS = ["rest"] as const;
+
+/** Deterministic runtime safety filter: the canonical list minus the
+ * prose-only carve-out. Matching is performed by `isBannedContextName`,
+ * not by callers iterating this array. */
 export const CONTEXT_NAME_DETERMINISTIC_BLOCKLIST: readonly string[] =
-  CONTEXT_NAME_BANNED_TOKENS;
+  CONTEXT_NAME_BANNED_TOKENS.filter(
+    (token) => !(PROSE_ONLY_TOKENS as readonly string[]).includes(token),
+  );
 
 const BANNED_TOKEN_SET: ReadonlySet<string> = new Set(
-  CONTEXT_NAME_BANNED_TOKENS,
+  CONTEXT_NAME_DETERMINISTIC_BLOCKLIST,
 );
 
 /** Split a context name into lowercase word tokens. Boundaries: any
  * non-alphanumeric separator (-, _, space, …), camelCase transitions
  * ("PostgresStore" → ["postgres", "store"]), and acronym runs
  * ("APIGateway" → ["api", "gateway"]). Digits stay attached to their word,
- * so "s3" survives as a token. */
+ * so "s3" survives as a token. Diacritics are stripped first (NFD + remove
+ * combining marks) so "Café-Database" tokenizes to ["cafe", "database"]
+ * instead of corrupting to ["caf", "database"]. */
 function tokenizeContextName(name: string): string[] {
   return name
+    .normalize("NFD")
+    .replace(/\p{M}+/gu, "")
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
     .toLowerCase()
