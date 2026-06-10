@@ -20,6 +20,7 @@ import {
   InMemoryLLMSenderAdapter,
   CloudLLMPipelineAdapter,
   createDefaultFallbackChain,
+  resolveFallbackChain,
   EnvironmentSecretVaultAdapter,
 } from "@hexagen/agentic-interaction";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
@@ -52,6 +53,7 @@ import {
 } from "./adapters/wire-adapters";
 import { existsSync } from "fs";
 import { join, dirname } from "path";
+import { logger } from "../../lib/structured-logger";
 
 /**
  * Find the monorepo root by searching upward for .architecture/manifest.yaml
@@ -219,54 +221,66 @@ export const createLLMProviderSelector = (
   config: LLMProviderSelectorConfig,
 ): LLMProviderSelectorAdapter => {
   const secretVault = getEnvironmentVault();
+  const fallbackChain: ProviderFallbackChain = {
+    primary: {
+      providerId: "openai" as const,
+      baseUrl: "https://api.openai.com/v1",
+      model: "gpt-4o",
+      apiKeyEnvVar: "OPENAI_API_KEY",
+      temperature: 0.3,
+      maxTokens: 4000,
+    },
+    fallbacks: [
+      {
+        providerId: "anthropic" as const,
+        baseUrl: "https://api.anthropic.com/v1",
+        model: "claude-3-5-sonnet-20241022",
+        apiKeyEnvVar: "ANTHROPIC_API_KEY",
+        temperature: 0.3,
+        maxTokens: 4000,
+      },
+      // Generic LLM_API_KEY provider — supports any OpenAI-compatible endpoint
+      // configured via LLM_BASE_URL / LLM_MODEL (same vars as the chat route).
+      {
+        providerId: "openai" as const,
+        baseUrl: process.env.LLM_BASE_URL || "https://api.openai.com/v1",
+        model: process.env.LLM_MODEL || "gpt-4o-mini",
+        apiKeyEnvVar: "LLM_API_KEY",
+        temperature: 0.3,
+        maxTokens: 4000,
+      },
+      // Inception Labs (Mercury diffusion models) — OpenAI-compatible chat
+      // completions; activates only when INCEPTION_API_KEY is set. Mercury
+      // reasons by default (reasoning_effort: "medium"), so runs should set
+      // LLM_REASONING=disabled → reasoning_effort: "instant" (see
+      // cloud-llm-reasoning.ts). Never send `diffusing: true` — it streams
+      // noisy intermediate tokens that break structured-output parsing.
+      {
+        providerId: "inception" as const,
+        baseUrl: "https://api.inceptionlabs.ai/v1",
+        model: process.env.INCEPTION_MODEL || "mercury-2",
+        apiKeyEnvVar: "INCEPTION_API_KEY",
+        temperature: 0.3,
+        maxTokens: 4000,
+      },
+    ],
+  };
+
+  // Day-one flip verification: surface which providers actually resolved (an
+  // API key is present for them) using the SAME resolver the adapter runs, so
+  // the log can't drift from selection behavior. Keys themselves are never
+  // logged. After the mercury flip (LLM_API_KEY unset, INCEPTION_API_KEY set)
+  // this should read exactly ["inception:mercury-2"].
+  const resolved = resolveFallbackChain(secretVault, fallbackChain);
+  logger.info("[llm] cloud fallback chain resolved", {
+    providers: resolved.map((p) => `${p.providerId}:${p.model}`),
+  });
+
   return new LLMProviderSelectorAdapter({
     webLlmAdapter: config.webLlmAdapter ?? null,
     preferLocal: config.preferLocal,
     validateLocalLLM: config.validateLocalLLM ?? false,
-    fallbackChain: {
-      primary: {
-        providerId: "openai" as const,
-        baseUrl: "https://api.openai.com/v1",
-        model: "gpt-4o",
-        apiKeyEnvVar: "OPENAI_API_KEY",
-        temperature: 0.3,
-        maxTokens: 4000,
-      },
-      fallbacks: [
-        {
-          providerId: "anthropic" as const,
-          baseUrl: "https://api.anthropic.com/v1",
-          model: "claude-3-5-sonnet-20241022",
-          apiKeyEnvVar: "ANTHROPIC_API_KEY",
-          temperature: 0.3,
-          maxTokens: 4000,
-        },
-        // Generic LLM_API_KEY provider — supports any OpenAI-compatible endpoint
-        // configured via LLM_BASE_URL / LLM_MODEL (same vars as the chat route).
-        {
-          providerId: "openai" as const,
-          baseUrl: process.env.LLM_BASE_URL || "https://api.openai.com/v1",
-          model: process.env.LLM_MODEL || "gpt-4o-mini",
-          apiKeyEnvVar: "LLM_API_KEY",
-          temperature: 0.3,
-          maxTokens: 4000,
-        },
-        // Inception Labs (Mercury diffusion models) — OpenAI-compatible chat
-        // completions; activates only when INCEPTION_API_KEY is set. Mercury
-        // reasons by default (reasoning_effort: "medium"), so runs should set
-        // LLM_REASONING=disabled → reasoning_effort: "instant" (see
-        // cloud-llm-reasoning.ts). Never send `diffusing: true` — it streams
-        // noisy intermediate tokens that break structured-output parsing.
-        {
-          providerId: "inception" as const,
-          baseUrl: "https://api.inceptionlabs.ai/v1",
-          model: process.env.INCEPTION_MODEL || "mercury-2",
-          apiKeyEnvVar: "INCEPTION_API_KEY",
-          temperature: 0.3,
-          maxTokens: 4000,
-        },
-      ],
-    },
+    fallbackChain,
     secretVault,
   });
 };

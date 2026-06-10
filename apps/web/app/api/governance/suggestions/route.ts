@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { GenerateSuggestionUseCase } from "@hexagen/agentic-interaction";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
 import { logger } from "../../../../lib/structured-logger";
+import { resolveWebLlmApiKey } from "@/lib/wire.shared";
 
 interface AISuggestion {
   id: string;
@@ -30,7 +31,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const apiKey = process.env.LLM_API_KEY || "";
+    // WEB_LLM_API_KEY ?? LLM_API_KEY — survives the mercury prod flip
+    // (which unsets LLM_API_KEY); see resolveWebLlmApiKey.
+    const apiKey = resolveWebLlmApiKey();
     const baseUrl = process.env.LLM_BASE_URL || "https://api.openai.com/v1";
     const model = process.env.LLM_MODEL || "gpt-4o-mini";
 

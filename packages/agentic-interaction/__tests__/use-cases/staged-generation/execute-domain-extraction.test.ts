@@ -431,11 +431,14 @@ describe("ExecuteDomainExtractionUseCase", () => {
       ].join("\n");
       const draft = createSequencedPort([decomposedNdjson]);
       const refiner = createSequencedPort([collapsedRefinerOutput]);
+      const telemetryCalls: StageTelemetry[] = [];
       const useCase = new ExecuteDomainExtractionUseCase(draft.port, {
         port: refiner.port,
         mode: "always",
       });
-      const result = await useCase.execute(mockStage0State);
+      const result = await useCase.execute(mockStage0State, undefined, (t) =>
+        telemetryCalls.push(t),
+      );
       assert.strictEqual(refiner.callCount(), 1);
       assert.strictEqual(result.success, true);
       if (result.success) {
@@ -445,6 +448,11 @@ describe("ExecuteDomainExtractionUseCase", () => {
           "Payments",
         ]);
       }
+      assert.ok(
+        telemetryCalls[0].summary.includes(
+          "cascade refine discarded: would lose subdomains 3→1",
+        ),
+      );
     });
 
     test("keeps the draft when the refiner throws", async () => {
@@ -454,11 +462,14 @@ describe("ExecuteDomainExtractionUseCase", () => {
           throw new Error("refiner provider down");
         },
       } as unknown as SendStructuredRequestPort;
+      const telemetryCalls: StageTelemetry[] = [];
       const useCase = new ExecuteDomainExtractionUseCase(draft.port, {
         port: throwingRefiner,
         mode: "always",
       });
-      const result = await useCase.execute(mockStage0State);
+      const result = await useCase.execute(mockStage0State, undefined, (t) =>
+        telemetryCalls.push(t),
+      );
       assert.strictEqual(result.success, true);
       if (result.success) {
         assert.deepStrictEqual(result.value.subdomains, [
@@ -467,16 +478,22 @@ describe("ExecuteDomainExtractionUseCase", () => {
           "Payments",
         ]);
       }
+      assert.ok(
+        telemetryCalls[0].summary.includes("cascade refine failed: error"),
+      );
     });
 
     test("keeps the draft when the refiner returns garbage", async () => {
       const draft = createSequencedPort([decomposedNdjson]);
       const refiner = createSequencedPort(["not ndjson at all"]);
+      const telemetryCalls: StageTelemetry[] = [];
       const useCase = new ExecuteDomainExtractionUseCase(draft.port, {
         port: refiner.port,
         mode: "always",
       });
-      const result = await useCase.execute(mockStage0State);
+      const result = await useCase.execute(mockStage0State, undefined, (t) =>
+        telemetryCalls.push(t),
+      );
       assert.strictEqual(refiner.callCount(), 1);
       assert.strictEqual(result.success, true);
       if (result.success) {
@@ -486,6 +503,11 @@ describe("ExecuteDomainExtractionUseCase", () => {
           "Payments",
         ]);
       }
+      assert.ok(
+        telemetryCalls[0].summary.includes(
+          "cascade refine discarded: no valid NDJSON",
+        ),
+      );
     });
 
     test("escalation mode skips refinement on a multi-subdomain draft", async () => {
