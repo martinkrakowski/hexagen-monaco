@@ -48,6 +48,10 @@ self.onmessage = async (e: MessageEvent) => {
     try {
       const { CreateMLCEngine } = await import("@mlc-ai/web-llm");
 
+      // Single-init contract: WebLLMAdapter.initialize() terminates this
+      // worker and spawns a fresh one for every (re)load, so each worker
+      // instance sees at most one "init". Setting the flag before the await
+      // therefore cannot leave a previous engine paired with a new flag.
       disableThinking = data.disableThinking === true;
       engine = await CreateMLCEngine(data.modelId, {
         initProgressCallback: (mlcProgress: InitProgressReport) => {

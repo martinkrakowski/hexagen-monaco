@@ -51,6 +51,7 @@ describe("model catalog consistency", () => {
       );
     }
     // The Qwen3 refresh dropped these — persisted ids must keep resolving.
+    assert.equal(LEGACY_MODEL_MIGRATION["phi-3-mini"], DomainModelId.QWEN3_4B);
     assert.equal(
       LEGACY_MODEL_MIGRATION["phi-3.5-mini"],
       DomainModelId.QWEN3_4B,
