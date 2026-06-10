@@ -386,6 +386,18 @@ describe("evaluateGates", () => {
     assert.strictEqual(within[0]?.passed, true);
   });
 
+  test("T1 clamped display floor matches the gate verdict when stub < 10%", () => {
+    // Unclamped floor would be −5pp; successRate ≥ 0 makes "≥ −5pp" and
+    // "≥ 0" the same boundary, so the displayed 0.0% floor is the
+    // effective threshold — verdict and detail agree.
+    const gates = evaluateGates(
+      summary({ successCount: 1, successRate: 0.05 }),
+      summary({ pipeline: "full", successCount: 0, successRate: 0 }),
+    );
+    assert.strictEqual(gates[0]?.passed, true);
+    assert.match(gates[0]?.detail ?? "", /floor 0\.0%/);
+  });
+
   test("T2 fails when full p95 exceeds 2× stub p95; 0ms stub p95 is not evaluable (pass)", () => {
     const slow = evaluateGates(
       summary({ p95DurationMs: 1000 }),

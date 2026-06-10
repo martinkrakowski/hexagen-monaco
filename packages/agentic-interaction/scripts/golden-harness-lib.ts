@@ -93,8 +93,13 @@ export interface GateResult {
   detail: string;
 }
 
-/** Extract distinct R-rule IDs (R01–R18 vocabulary) from judge messages.
- * Token-boundary match so "R123" never yields "R12". */
+/** Extract distinct R-rule IDs (live vocabulary: R01–R18) from judge messages.
+ * Token-boundary match so "R123" never yields "R12". Deliberately NOT
+ * range-constrained to 01–18: the vocabulary is owned by the validators (new
+ * rules must surface here without a harness edit), and judge messages are
+ * partly LLM-authored — an out-of-vocabulary ID in the report is judge-
+ * misbehavior signal worth seeing, not noise to drop. Report-only; feeds no
+ * gate. */
 export function extractRuleIds(messages: string[]): string[] {
   const ids = new Set<string>();
   for (const message of messages) {
@@ -250,6 +255,10 @@ export function evaluateGates(
     id: "T1",
     description: GATE_DESCRIPTIONS.T1,
     passed: t1Passed,
+    // The displayed floor is clamped to 0 for honesty, not divergence:
+    // successRate is count/total ∈ [0, 1], so "≥ negative floor" and "≥ 0"
+    // are the same always-true boundary — the clamp prints the EFFECTIVE
+    // threshold instead of a meaningless negative percentage.
     detail: `full ${pct(full.successRate)} vs stub ${pct(stub.successRate)} (floor ${pct(Math.max(stub.successRate - 0.1, 0))})`,
   };
 
