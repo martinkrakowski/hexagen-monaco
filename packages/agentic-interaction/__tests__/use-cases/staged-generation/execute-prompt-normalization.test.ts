@@ -306,9 +306,47 @@ describe("ExecutePromptNormalizationUseCase", () => {
     assert.strictEqual(result.success, true);
     if (result.success) {
       // Non-string / blank projectName and non-`true` isStructuredConfig
-      // must be dropped, leaving the optional fields absent.
-      assert.strictEqual(result.value.projectName, undefined);
-      assert.strictEqual(result.value.isStructuredConfig, undefined);
+      // must be dropped, leaving the optional fields absent — `in` pins the
+      // key-absent shape (strictEqual(undefined) alone would also pass for a
+      // present-undefined key).
+      assert.ok(!("projectName" in result.value));
+      assert.ok(!("isStructuredConfig" in result.value));
+    }
+  });
+
+  test("stores the trimmed projectName, last emission wins on duplicates", async () => {
+    const ndjson = [
+      '{"type": "intent", "value": "build a task management system"}',
+      '{"type": "projectName", "value": "  FirstName  "}',
+      '{"type": "projectName", "value": "  AcmePlatform  "}',
+      '{"type": "isStructuredConfig", "value": true}',
+      '{"type": "isStructuredConfig", "value": true}',
+    ].join("\n");
+    const mockLLMAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: ndjson,
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
+      streamStructuredRequest: async function* () {
+        yield { success: true, value: ndjson };
+      },
+    } as unknown as SendStructuredRequestPort;
+
+    const useCase = new ExecutePromptNormalizationUseCase(mockLLMAdapter);
+    const result = await useCase.execute("Build AcmePlatform");
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      // Last-wins (consistent with `intent`) + stored value is the trimmed
+      // string the guard validated, not the raw emission.
+      assert.strictEqual(result.value.projectName, "AcmePlatform");
+      assert.strictEqual(result.value.isStructuredConfig, true);
     }
   });
 
@@ -336,8 +374,10 @@ describe("ExecutePromptNormalizationUseCase", () => {
 
     assert.strictEqual(result.success, true);
     if (result.success) {
-      assert.strictEqual(result.value.projectName, undefined);
-      assert.strictEqual(result.value.isStructuredConfig, undefined);
+      // Keys must be ABSENT (conditional spread), not present-undefined —
+      // the `in` checks pin the serialization/telemetry shape.
+      assert.ok(!("projectName" in result.value));
+      assert.ok(!("isStructuredConfig" in result.value));
     }
   });
 

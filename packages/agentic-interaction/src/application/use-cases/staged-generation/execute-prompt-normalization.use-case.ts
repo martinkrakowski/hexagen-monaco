@@ -152,8 +152,10 @@ export class ExecutePromptNormalizationUseCase {
           } else if (parsed.type === "projectName") {
             // Zero-or-one per the system prompt; guard the type since the
             // model may emit anything. Blank strings are as useless as none.
+            // Store the trimmed value — it is what the guard validated, and
+            // buildIntentHeader interpolates it verbatim into prompts.
             if (typeof parsed.value === "string" && parsed.value.trim()) {
-              projectName = parsed.value;
+              projectName = parsed.value.trim();
             }
           } else if (parsed.type === "isStructuredConfig") {
             // Only literal `true` is meaningful (the prompt says to omit the
