@@ -238,6 +238,109 @@ describe("ExecutePromptNormalizationUseCase", () => {
     assert.ok(result.error);
   });
 
+  // The stage-0 system prompt instructs the model to emit zero-or-one
+  // "projectName" and "isStructuredConfig" objects, and NormalizedPrompt
+  // carries both — but the parser used to drop them, so projectName was
+  // always undefined (workspace name fell back to extractProjectName(intent))
+  // and isStructuredConfigPipeline() could never return true.
+  test("parses projectName and isStructuredConfig per the system prompt contract", async () => {
+    const ndjson = [
+      '{"type": "intent", "value": "build a task management system"}',
+      '{"type": "projectName", "value": "AcmePlatform"}',
+      '{"type": "isStructuredConfig", "value": true}',
+      '{"type": "technology", "value": "React"}',
+    ].join("\n");
+    const mockLLMAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: ndjson,
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
+      streamStructuredRequest: async function* () {
+        yield { success: true, value: ndjson };
+      },
+    } as unknown as SendStructuredRequestPort;
+
+    const useCase = new ExecutePromptNormalizationUseCase(mockLLMAdapter);
+    const result = await useCase.execute("Build AcmePlatform");
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.projectName, "AcmePlatform");
+      assert.strictEqual(result.value.isStructuredConfig, true);
+    }
+  });
+
+  test("rejects malformed projectName/isStructuredConfig values (type guards)", async () => {
+    const ndjson = [
+      '{"type": "intent", "value": "build a task management system"}',
+      '{"type": "projectName", "value": 42}',
+      '{"type": "projectName", "value": "   "}',
+      '{"type": "isStructuredConfig", "value": "true"}',
+      '{"type": "isStructuredConfig", "value": false}',
+    ].join("\n");
+    const mockLLMAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: ndjson,
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
+      streamStructuredRequest: async function* () {
+        yield { success: true, value: ndjson };
+      },
+    } as unknown as SendStructuredRequestPort;
+
+    const useCase = new ExecutePromptNormalizationUseCase(mockLLMAdapter);
+    const result = await useCase.execute("Build a task management system");
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      // Non-string / blank projectName and non-`true` isStructuredConfig
+      // must be dropped, leaving the optional fields absent.
+      assert.strictEqual(result.value.projectName, undefined);
+      assert.strictEqual(result.value.isStructuredConfig, undefined);
+    }
+  });
+
+  test("omits projectName/isStructuredConfig when the model does not emit them", async () => {
+    const mockLLMAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content: validNDJSONResponse.join("\n"),
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
+      streamStructuredRequest: async function* () {
+        for (const line of validNDJSONResponse) {
+          yield { success: true, value: line };
+        }
+      },
+    } as unknown as SendStructuredRequestPort;
+
+    const useCase = new ExecutePromptNormalizationUseCase(mockLLMAdapter);
+    const result = await useCase.execute("Build a task management system");
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.projectName, undefined);
+      assert.strictEqual(result.value.isStructuredConfig, undefined);
+    }
+  });
+
   test("handles malformed LLM response", async () => {
     const badAdapter = {
       sendRequest: async () => ({
