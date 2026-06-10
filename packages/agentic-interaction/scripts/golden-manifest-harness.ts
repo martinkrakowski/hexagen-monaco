@@ -258,10 +258,18 @@ async function main(): Promise<void> {
   const stubSummary = summarizeRuns(runs, "stub");
   const fullSummary = summarizeRuns(runs, "full");
   const gates = evaluateGates(stubSummary, fullSummary);
-  const report = renderMarkdown([stubSummary, fullSummary], gates, runs);
+  // One clock read: the report's "Generated:" line and the output file
+  // stamps name the same instant (renderMarkdown itself is pure).
+  const generatedAt = new Date().toISOString();
+  const report = renderMarkdown(
+    [stubSummary, fullSummary],
+    gates,
+    runs,
+    generatedAt,
+  );
 
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const stamp = generatedAt.replace(/[:.]/g, "-");
   const ndjsonPath = path.join(OUTPUT_DIR, `run-${stamp}.ndjson`);
   const reportPath = path.join(OUTPUT_DIR, `report-${stamp}.md`);
   fs.writeFileSync(

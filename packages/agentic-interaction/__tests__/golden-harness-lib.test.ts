@@ -553,12 +553,28 @@ describe("renderMarkdown", () => {
       [stub, full],
       evaluateGates(stub, full),
       runs,
+      "2026-06-10T00:00:00.000Z",
     );
+    assert.match(report, /Generated: 2026-06-10T00:00:00\.000Z/);
     assert.match(report, /## Rollback gates \(A3\)/);
     assert.match(report, /\| T1 \|/);
     assert.match(report, /\| stub \| 1 \|/);
     assert.match(report, /stage 2 accepted no contexts/);
     assert.match(report, /❌ FAIL/); // full run failed → at least one gate trips
+  });
+
+  test("is deterministic: identical inputs yield byte-identical reports", () => {
+    const runs: RunRecord[] = [run({ pipeline: "stub" })];
+    const stub = summarizeRuns(runs, "stub");
+    const full = summarizeRuns(runs, "full");
+    const render = () =>
+      renderMarkdown(
+        [stub, full],
+        evaluateGates(stub, full),
+        runs,
+        "2026-06-10T00:00:00.000Z",
+      );
+    assert.strictEqual(render(), render());
   });
 
   test("escapes pipes and newlines in free-text notes so table rows stay intact", () => {
@@ -578,6 +594,7 @@ describe("renderMarkdown", () => {
       [stub, full],
       evaluateGates(stub, full),
       runs,
+      "2026-06-10T00:00:00.000Z",
     );
     assert.match(report, /provider said: a \\\| b second line/);
     // Every line of the Runs table keeps its 11-column shape (12 pipes).

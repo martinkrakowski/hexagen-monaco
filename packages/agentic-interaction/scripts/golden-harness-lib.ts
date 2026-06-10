@@ -328,11 +328,14 @@ export function renderMarkdown(
   summaries: PipelineSummary[],
   gates: GateResult[],
   runs: RunRecord[],
+  /** Injected by the runner (which owns the clock) so this module stays
+   * deterministic — same inputs, same report. */
+  generatedAtIso: string,
 ): string {
   const lines: string[] = [];
   lines.push("# Golden-manifest harness report");
   lines.push("");
-  lines.push(`Generated: ${new Date().toISOString()}`);
+  lines.push(`Generated: ${generatedAtIso}`);
   lines.push("");
 
   lines.push("## Rollback gates (A3)");
