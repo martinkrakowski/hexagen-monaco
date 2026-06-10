@@ -8,6 +8,7 @@ import {
   summarizeRuns,
   evaluateGates,
   renderMarkdown,
+  T2_ABSOLUTE_CEILING_MS,
   type RunRecord,
   type PipelineSummary,
 } from "../scripts/golden-harness-lib";
@@ -398,23 +399,65 @@ describe("evaluateGates", () => {
     assert.match(gates[0]?.detail ?? "", /floor 0\.0%/);
   });
 
-  test("T2 fails when full p95 exceeds 2× stub p95; 0ms stub p95 is not evaluable (pass)", () => {
+  test("T2 fails when full p95 exceeds max(2× stub p95, absolute ceiling)", () => {
+    // Above the ceiling the relative bound governs (stub 30s → 2× = 60s).
     const slow = evaluateGates(
-      summary({ p95DurationMs: 1000 }),
-      summary({ pipeline: "full", p95DurationMs: 2001 }),
+      summary({ p95DurationMs: 30000 }),
+      summary({ pipeline: "full", p95DurationMs: 60001 }),
     );
     assert.strictEqual(slow[1]?.passed, false);
     const boundary = evaluateGates(
-      summary({ p95DurationMs: 1000 }),
-      summary({ pipeline: "full", p95DurationMs: 2000 }),
+      summary({ p95DurationMs: 30000 }),
+      summary({ pipeline: "full", p95DurationMs: 60000 }),
     );
     assert.strictEqual(boundary[1]?.passed, true);
-    const degenerate = evaluateGates(
+  });
+
+  test("T2 absolute ceiling: fast stubs no longer fail fast fulls (2026-06-10 recalibration)", () => {
+    // The model-sweep case: stub p95 2.8s → 2× = 5.6s, but full p95 11.8s
+    // is faster than every other candidate measured. Under the ceiling it
+    // passes; the old relative-only gate failed it.
+    const mercuryShaped = evaluateGates(
+      summary({ p95DurationMs: 2806 }),
+      summary({ pipeline: "full", p95DurationMs: 11778 }),
+    );
+    assert.strictEqual(mercuryShaped[1]?.passed, true);
+    // Exactly at the ceiling passes (≤, not <); 1ms over fails.
+    const atCeiling = evaluateGates(
+      summary({ p95DurationMs: 1000 }),
+      summary({ pipeline: "full", p95DurationMs: T2_ABSOLUTE_CEILING_MS }),
+    );
+    assert.strictEqual(atCeiling[1]?.passed, true);
+    const overCeiling = evaluateGates(
+      summary({ p95DurationMs: 1000 }),
+      summary({
+        pipeline: "full",
+        p95DurationMs: T2_ABSOLUTE_CEILING_MS + 1,
+      }),
+    );
+    assert.strictEqual(overCeiling[1]?.passed, false);
+    // The Haiku-shaped case stays a failure: 99.7s is over BOTH bounds.
+    const haikuShaped = evaluateGates(
+      summary({ p95DurationMs: 22288 }),
+      summary({ pipeline: "full", p95DurationMs: 99667 }),
+    );
+    assert.strictEqual(haikuShaped[1]?.passed, false);
+  });
+
+  test("T2 degenerate 0ms stub p95: ceiling alone governs (no longer unevaluable)", () => {
+    const fastFull = evaluateGates(
       summary({ p95DurationMs: 0 }),
       summary({ pipeline: "full", p95DurationMs: 5000 }),
     );
-    assert.strictEqual(degenerate[1]?.passed, true);
-    assert.match(degenerate[1]?.detail ?? "", /not evaluable/);
+    assert.strictEqual(fastFull[1]?.passed, true);
+    const slowFull = evaluateGates(
+      summary({ p95DurationMs: 0 }),
+      summary({
+        pipeline: "full",
+        p95DurationMs: T2_ABSOLUTE_CEILING_MS + 1,
+      }),
+    );
+    assert.strictEqual(slowFull[1]?.passed, false);
   });
 
   test("T3 fails on judge pass-rate regression OR any banned context name", () => {
