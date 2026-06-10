@@ -6,7 +6,7 @@ import {
   isRetryable,
   type CloudLLMPipelineAdapterConfig,
 } from "./cloud-llm-types";
-import { reasoningBodyField } from "./cloud-llm-reasoning";
+import { reasoningBodyFieldFor } from "./cloud-llm-reasoning";
 
 export { type CloudLLMPipelineAdapterConfig } from "./cloud-llm-types";
 
@@ -106,7 +106,7 @@ async function* streamProvider(
     temperature: request.temperature ?? provider.temperature ?? 0.4,
     max_tokens: request.maxTokens ?? provider.maxTokens ?? 4096,
     stream: true,
-    ...reasoningBodyField(),
+    ...reasoningBodyFieldFor(provider),
   };
 
   if (request.guidedJsonSchema) {

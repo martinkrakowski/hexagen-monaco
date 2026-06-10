@@ -12,7 +12,10 @@
  */
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { reasoningBodyField } from "../../../src/infrastructure/adapters/cloud-llm-reasoning";
+import {
+  reasoningBodyField,
+  reasoningBodyFieldFor,
+} from "../../../src/infrastructure/adapters/cloud-llm-reasoning";
 import { CloudLLMPipelineAdapter } from "../../../src/infrastructure/adapters/cloud-llm-pipeline.adapter";
 import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/client";
 import { z } from "zod";
@@ -54,6 +57,30 @@ describe("reasoningBodyField", () => {
   });
 });
 
+describe("reasoningBodyFieldFor (provider scoping)", () => {
+  // The field is OpenRouter-shaped; direct endpoints (api.openai.com rejects
+  // unknown body args with a non-retryable 400) must never see it, even when
+  // LLM_REASONING is set. Only the LLM_* family's generic endpoint qualifies.
+  test("LLM_API_KEY provider → passthrough", () => {
+    assert.deepStrictEqual(
+      reasoningBodyFieldFor(
+        { apiKeyEnvVar: "LLM_API_KEY" },
+        { LLM_REASONING: "disabled" },
+      ),
+      { reasoning: { enabled: false } },
+    );
+  });
+
+  test("any other provider → omitted even when LLM_REASONING is set", () => {
+    for (const apiKeyEnvVar of ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"]) {
+      assert.deepStrictEqual(
+        reasoningBodyFieldFor({ apiKeyEnvVar }, { LLM_REASONING: "high" }),
+        {},
+      );
+    }
+  });
+});
+
 describe("reasoning passthrough reaches the wire (live cloud path)", () => {
   // Body-capture through CloudLLMPipelineAdapter — the adapter that actually
   // serves the staged pipeline and the golden harness (OpenAICompatibleAdapter
@@ -74,13 +101,18 @@ describe("reasoning passthrough reaches the wire (live cloud path)", () => {
     };
   }
 
-  function makeAdapter(captured: { body?: Record<string, unknown> }) {
+  function makeAdapter(
+    captured: { body?: Record<string, unknown> },
+    // Default to the reasoning-eligible LLM_* generic endpoint; tests for the
+    // provider-scoping gate pass a direct-endpoint env var instead.
+    apiKeyEnvVar = "LLM_API_KEY",
+  ) {
     return new CloudLLMPipelineAdapter({
       fallbackChain: {
         primary: {
           providerId: "test",
           model: "test-model",
-          apiKeyEnvVar: "TEST_API_KEY",
+          apiKeyEnvVar,
           baseUrl: "https://example.com",
         },
         fallbacks: [],
@@ -123,6 +155,23 @@ describe("reasoning passthrough reaches the wire (live cloud path)", () => {
       const captured: { body?: Record<string, unknown> } = {};
       await makeAdapter(captured).sendRequest(makeRequest());
       assert.deepStrictEqual(captured.body?.reasoning, { enabled: false });
+    } finally {
+      if (prev !== undefined) process.env.LLM_REASONING = prev;
+      else delete process.env.LLM_REASONING;
+    }
+  });
+
+  test("LLM_REASONING set + direct provider (OPENAI_API_KEY) → field still omitted", async () => {
+    const prev = process.env.LLM_REASONING;
+    process.env.LLM_REASONING = "disabled";
+    try {
+      const captured: { body?: Record<string, unknown> } = {};
+      await makeAdapter(captured, "OPENAI_API_KEY").sendRequest(makeRequest());
+      assert.ok(captured.body, "request body captured");
+      assert.ok(
+        !("reasoning" in captured.body),
+        "direct endpoints must never receive the OpenRouter reasoning field",
+      );
     } finally {
       if (prev !== undefined) process.env.LLM_REASONING = prev;
       else delete process.env.LLM_REASONING;

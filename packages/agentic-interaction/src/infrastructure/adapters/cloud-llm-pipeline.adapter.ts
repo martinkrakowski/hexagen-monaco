@@ -14,7 +14,7 @@ import {
   type ChatCompletionResponse,
 } from "./cloud-llm-types";
 import { streamStructuredRequest as streamStructuredRequestImpl } from "./cloud-llm-streaming";
-import { reasoningBodyField } from "./cloud-llm-reasoning";
+import { reasoningBodyFieldFor } from "./cloud-llm-reasoning";
 
 export type { CloudLLMPipelineAdapterConfig } from "./cloud-llm-types";
 
@@ -78,7 +78,7 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
       messages,
       temperature: request.temperature ?? provider.temperature ?? 0.4,
       max_tokens: request.maxTokens ?? provider.maxTokens ?? 4096,
-      ...reasoningBodyField(),
+      ...reasoningBodyFieldFor(provider),
     };
 
     const abortController = new AbortController();

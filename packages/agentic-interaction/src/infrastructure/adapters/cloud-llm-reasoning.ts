@@ -13,6 +13,13 @@
  * stages 0/1/2/6) → finishReason "length" with empty content and a 0% run.
  * Disabling (or bounding) reasoning per-run makes such models benchmarkable
  * without touching the caps.
+ *
+ * Provider scoping: the field is attached ONLY to the generic
+ * OpenAI-compatible endpoint configured by the LLM_* env family
+ * (LLM_BASE_URL/LLM_MODEL/LLM_API_KEY) — identified by
+ * `apiKeyEnvVar === "LLM_API_KEY"`. Direct endpoints in the same fallback
+ * chain must not see it: api.openai.com rejects unknown body args with a
+ * non-retryable 400, which would fail the whole request before any fallback.
  */
 export type ReasoningBodyField =
   | { reasoning: { enabled: false } }
@@ -43,4 +50,19 @@ export function reasoningBodyField(
     );
   }
   return {};
+}
+
+/**
+ * Provider-scoped variant for request-body builders: returns the reasoning
+ * field only when `provider` is the generic OpenAI-compatible endpoint that
+ * the LLM_* env family configures (`apiKeyEnvVar === "LLM_API_KEY"`); every
+ * other provider in the fallback chain gets `{}` regardless of LLM_REASONING.
+ * Spread it: `{ ...body, ...reasoningBodyFieldFor(provider) }`.
+ */
+export function reasoningBodyFieldFor(
+  provider: { apiKeyEnvVar: string },
+  env: Record<string, string | undefined> = process.env,
+): ReasoningBodyField {
+  if (provider.apiKeyEnvVar !== "LLM_API_KEY") return {};
+  return reasoningBodyField(env);
 }
