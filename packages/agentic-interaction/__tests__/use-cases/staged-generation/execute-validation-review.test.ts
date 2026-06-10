@@ -439,6 +439,52 @@ describe("deterministic R01 (judge-grounding fix)", () => {
     }
   });
 
+  test("LLM-emitted R01 claims are discarded when only the rule field names R01 (qodo bypass)", async () => {
+    // Per the prompt's exemplars, messages do NOT contain the rule token —
+    // the rule id lives in the separate "rule" field. The discard must work
+    // off that field (via parse-time tagging), not off message prose.
+    const ndjson =
+      '{"type":"error","rule":"R01","message":"Context \'invoice-management\' contains technology noun \'Postgres\'."}\n{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const result = await useCase.execute(createMockPipelineState());
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.errors, []);
+      assert.strictEqual(result.value.passed, true);
+    }
+  });
+
+  test("R01 discard is case-insensitive on the rule id", async () => {
+    const ndjson =
+      '{"type":"error","rule":"r01","message":"name contains technology noun"}\n{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const result = await useCase.execute(createMockPipelineState());
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.errors, []);
+      assert.strictEqual(result.value.passed, true);
+    }
+  });
+
+  test("line-form findings are tagged with their rule id (non-R01 survives, tagged)", async () => {
+    const ndjson =
+      '{"type":"error","rule":"R02","message":"Context \'invoice-management\' has no inbound ports."}\n{"type":"warning","rule":"R10","message":"No publisher port."}\n{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const result = await useCase.execute(createMockPipelineState());
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.passed, false);
+      assert.ok(result.value.errors[0].startsWith("[R02] "));
+      assert.ok(result.value.warnings[0].startsWith("[R10] "));
+    }
+  });
+
   test("LLM-emitted R01 claims are discarded (result-array form)", async () => {
     const ndjson =
       '{"type":"result","passed":false,"errors":[{"rule":"R01","message":"Context \'invoice-management\' violates R01: name contains technology noun \'postgres\'."},{"rule":"R02","message":"Context \'invoice-management\' has no inbound ports."}]}\n';
