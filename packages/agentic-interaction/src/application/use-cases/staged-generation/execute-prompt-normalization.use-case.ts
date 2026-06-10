@@ -14,15 +14,18 @@ import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
 import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
-import { DEFAULT_ESCALATION_CONFIG } from "./retry-with-escalation";
-import type { EscalationConfig } from "./retry-with-escalation";
 
 const STAGE_NUMBER = 0;
 
 export class ExecutePromptNormalizationUseCase {
+  // No escalationConfig here: only Stage 3 (ExecutePortMappingUseCase) reads
+  // its escalation config; the param was a dead copy-paste in stages 0/1/2/4/6.
+  //
+  // architectureContext (T2b): trusted static `<architecture>` content,
+  // constructor-injected so it is built once per pipeline, not per execute().
   constructor(
     private readonly llmPort: SendStructuredRequestPort,
-    private readonly escalationConfig: EscalationConfig = DEFAULT_ESCALATION_CONFIG,
+    private readonly architectureContext?: string,
   ) {}
 
   async execute(
@@ -39,7 +42,10 @@ export class ExecutePromptNormalizationUseCase {
     // Log generation start to generation log
     onChunk?.("Parsing and normalizing specification...");
 
-    let prompt = compileStage0Prompt(variables || { userDescription });
+    let prompt = compileStage0Prompt(
+      variables || { userDescription },
+      this.architectureContext,
+    );
     let lastError = "";
     let retryCount = 0;
 

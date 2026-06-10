@@ -15,6 +15,7 @@ layers:
     - SecureChatDispatchUseCase
     - ExecuteLooseSpecConversionUseCase
     - ClassifyContextTypeUseCase
+    - ExecuteFullStagedGenerationUseCase
     ports:
       in:
       - ArchitectureModificationPort

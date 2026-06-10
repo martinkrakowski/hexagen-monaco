@@ -20,8 +20,6 @@ import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
 import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
-import { DEFAULT_ESCALATION_CONFIG } from "./retry-with-escalation";
-import type { EscalationConfig } from "./retry-with-escalation";
 
 const STAGE_NUMBER = 6;
 
@@ -57,10 +55,9 @@ function collectPortQualityIssues(
 }
 
 export class ExecuteValidationReviewUseCase {
-  constructor(
-    private readonly llmPort: SendStructuredRequestPort,
-    private readonly escalationConfig: EscalationConfig = DEFAULT_ESCALATION_CONFIG,
-  ) {}
+  // No escalationConfig here: only Stage 3 (ExecutePortMappingUseCase) reads
+  // its escalation config; the param was a dead copy-paste in stages 0/1/2/4/6.
+  constructor(private readonly llmPort: SendStructuredRequestPort) {}
 
   async execute(
     state: Pick<

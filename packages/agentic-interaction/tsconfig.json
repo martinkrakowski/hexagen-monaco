@@ -15,6 +15,7 @@
     { "path": "../ai-pipeline" },
     { "path": "../core-domain" },
     { "path": "../local-llm" },
+    { "path": "../project-configuration" },
     { "path": "../prompt-compiler" },
     { "path": "../reconciliation-engine" },
     { "path": "../shared" },

@@ -118,8 +118,19 @@ export function isStructuredConfigPipeline(
   return normalized.isStructuredConfig === true;
 }
 
-export function compileStage0Prompt(variables: PromptVariables): string {
-  return `Raw User Description:\n<user_input>\n${escapeXml(variables.userDescription)}\n</user_input>\n\nOutput NDJSON:`;
+export function compileStage0Prompt(
+  variables: PromptVariables,
+  architectureContext?: string,
+): string {
+  // The architecture block is trusted static content built by
+  // buildGreenfieldArchitectureContext() (T2b) — deliberately NOT escapeXml'd,
+  // unlike the untrusted user input below. Absent (the default), the compiled
+  // prompt is byte-identical to the pre-T2b output, so existing prompt
+  // snapshots stay valid.
+  const architectureBlock = architectureContext
+    ? `<architecture>\n${architectureContext}\n</architecture>\n\n`
+    : "";
+  return `${architectureBlock}Raw User Description:\n<user_input>\n${escapeXml(variables.userDescription)}\n</user_input>\n\nOutput NDJSON:`;
 }
 
 // ==========================================
