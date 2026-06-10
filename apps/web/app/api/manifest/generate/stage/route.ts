@@ -6,7 +6,10 @@ import {
   type StagedGenerationCallbacks,
 } from "@hexagen/agentic-interaction";
 import type { PromptVariables } from "@hexagen/agentic-interaction";
-import { createLLMProviderSelector } from "../../../../lib/wire.server";
+import {
+  createLLMProviderSelector,
+  createStage1RefinerConfig,
+} from "../../../../lib/wire.server";
 import { logger } from "../../../../../lib/structured-logger";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 import {
@@ -92,9 +95,18 @@ export async function POST(request: NextRequest) {
 
         let result;
         if (pipeline === "full") {
+          // Stage-1 draft→refine cascade — null (off) unless
+          // STAGE1_REFINER_API_KEY is set; see createStage1RefinerConfig.
+          const stage1Refinement = createStage1RefinerConfig();
+          if (stage1Refinement) {
+            logger.info("[staged-gen] stage-1 refiner active", {
+              mode: stage1Refinement.mode,
+            });
+          }
           const useCase = new ExecuteFullStagedGenerationUseCase(
             llmAdapter,
             transactionManager,
+            stage1Refinement ? { stage1Refinement } : undefined,
           );
           result = await useCase.execute(
             body.description,

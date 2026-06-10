@@ -103,6 +103,10 @@ export {
 } from "./application/use-cases/index";
 export { ExecutePromptNormalizationUseCase } from "./application/use-cases/staged-generation/execute-prompt-normalization.use-case";
 export { ExecuteDomainExtractionUseCase } from "./application/use-cases/staged-generation/execute-domain-extraction.use-case";
+export type {
+  Stage1RefinementConfig,
+  Stage1RefinementMode,
+} from "./application/use-cases/staged-generation/execute-domain-extraction.use-case";
 export { ExecuteContextClassificationUseCase } from "./application/use-cases/staged-generation/execute-context-classification.use-case";
 export { ExecutePortMappingUseCase } from "./application/use-cases/staged-generation/execute-port-mapping.use-case";
 export type { PortMappingResult } from "./application/use-cases/staged-generation/execute-port-mapping.use-case";

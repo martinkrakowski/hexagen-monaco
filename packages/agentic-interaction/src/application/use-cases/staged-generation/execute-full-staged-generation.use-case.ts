@@ -31,6 +31,7 @@ import type { StageTelemetry } from "../../../domain/value-objects/stage-telemet
 import { buildGreenfieldArchitectureContext } from "../../../domain/prompts/build-architecture-context";
 import { ExecutePromptNormalizationUseCase } from "./execute-prompt-normalization.use-case";
 import { ExecuteDomainExtractionUseCase } from "./execute-domain-extraction.use-case";
+import type { Stage1RefinementConfig } from "./execute-domain-extraction.use-case";
 import { ExecuteContextClassificationUseCase } from "./execute-context-classification.use-case";
 import { ExecutePortMappingUseCase } from "./execute-port-mapping.use-case";
 import { ExecuteAdapterAssignmentUseCase } from "./execute-adapter-assignment.use-case";
@@ -60,6 +61,9 @@ export interface FullStagedGenerationOptions {
    * in `userDescription`, which goes through the XML-wrapping injection
    * protections in generate-manifest.prompt.ts. */
   architectureContext?: string;
+  /** Stage-1 draft→refine cascade (e.g. mercury draft → gpt-4o refine).
+   * Off when omitted — zero behavior change. */
+  stage1Refinement?: Stage1RefinementConfig;
 }
 
 export class ExecuteFullStagedGenerationUseCase {
@@ -84,7 +88,10 @@ export class ExecuteFullStagedGenerationUseCase {
       llmPort,
       architectureContext,
     );
-    this.stage1 = new ExecuteDomainExtractionUseCase(llmPort);
+    this.stage1 = new ExecuteDomainExtractionUseCase(
+      llmPort,
+      options?.stage1Refinement,
+    );
     this.stage2 = new ExecuteContextClassificationUseCase(llmPort);
     const stage3Config = options?.escalationModel
       ? {

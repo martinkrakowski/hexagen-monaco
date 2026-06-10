@@ -39,6 +39,7 @@ import type {
   ModifyArchitectureDeps,
   CloudLLMPipelineAdapterConfig,
   ProviderFallbackChain,
+  Stage1RefinementConfig,
 } from "@hexagen/agentic-interaction";
 import type { LocalLLMProviderPort } from "@hexagen/local-llm";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
@@ -268,6 +269,48 @@ export const createLLMProviderSelector = (
     },
     secretVault,
   });
+};
+
+/**
+ * Stage-1 draft→refine cascade (fast drafting model → stronger refiner; the
+ * validated pairing is mercury-2 draft → gpt-4o refine, ~+3s/run — see
+ * docs/planning/mercury-2-swap-investigation.md §8).
+ *
+ * Activates only when STAGE1_REFINER_API_KEY is set — a DEDICATED key var so
+ * the main fallback chain's ordering is untouched even when the same key
+ * value also exists in LLM_API_KEY (the chain would otherwise pick the
+ * generic provider over Inception). Returns null (cascade off) when unset.
+ *
+ * Env:
+ * - STAGE1_REFINER_API_KEY  — required to activate
+ * - STAGE1_REFINER_BASE_URL — default https://openrouter.ai/api/v1
+ * - STAGE1_REFINER_MODEL    — default openai/gpt-4o
+ * - STAGE1_REFINER_MODE     — "always" (default) | "escalation"
+ */
+export const createStage1RefinerConfig = (): Stage1RefinementConfig | null => {
+  const vault = getEnvironmentVault();
+  if (!vault.getSecret("STAGE1_REFINER_API_KEY")) return null;
+  const mode =
+    process.env.STAGE1_REFINER_MODE === "escalation" ? "escalation" : "always";
+  const port = new LLMProviderSelectorAdapter({
+    webLlmAdapter: null,
+    preferLocal: false,
+    validateLocalLLM: false,
+    fallbackChain: {
+      primary: {
+        providerId: "openai" as const,
+        baseUrl:
+          process.env.STAGE1_REFINER_BASE_URL || "https://openrouter.ai/api/v1",
+        model: process.env.STAGE1_REFINER_MODEL || "openai/gpt-4o",
+        apiKeyEnvVar: "STAGE1_REFINER_API_KEY",
+        temperature: 0.3,
+        maxTokens: 4000,
+      },
+      fallbacks: [],
+    },
+    secretVault: vault,
+  });
+  return { port, mode };
 };
 
 // ============================================================================

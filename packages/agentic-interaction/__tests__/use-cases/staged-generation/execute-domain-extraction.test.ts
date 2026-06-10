@@ -5,6 +5,9 @@ import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import type { PipelineState } from "../../../src/domain/value-objects/pipeline-state";
 import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry";
+import { estimateTokenCount } from "../../../src/domain/value-objects/stage-telemetry";
+import { compileStage1Prompt } from "../../../src/domain/index";
+import { compileStage1RefinementUserPrompt } from "../../../src/domain/prompts/generate-manifest.prompt";
 
 const validNdjson = [
   '{"type":"verb","value":"createUser"}',
@@ -345,6 +348,213 @@ describe("ExecuteDomainExtractionUseCase", () => {
 
     assert.strictEqual(result.success, false);
     assert.ok(result.error);
+  });
+
+  describe("stage-1 refinement cascade", () => {
+    // The refiner's (better) take on the decomposed shop domain — one more
+    // subdomain than the draft.
+    const enrichedNdjson = [
+      '{"type":"subdomain","value":"Catalog"}',
+      '{"type":"subdomain","value":"Ordering"}',
+      '{"type":"subdomain","value":"Payments"}',
+      '{"type":"subdomain","value":"Customer Accounts"}',
+      '{"type":"aggregateRoot","name":"Product","subdomain":"Catalog"}',
+      '{"type":"aggregateRoot","name":"Order","subdomain":"Ordering"}',
+      '{"type":"aggregateRoot","name":"Payment","subdomain":"Payments"}',
+      '{"type":"aggregateRoot","name":"Customer","subdomain":"Customer Accounts"}',
+    ].join("\n");
+
+    test("always mode refines a successful draft", async () => {
+      const draft = createSequencedPort([decomposedNdjson]);
+      const refiner = createSequencedPort([enrichedNdjson]);
+      const telemetryCalls: StageTelemetry[] = [];
+      const useCase = new ExecuteDomainExtractionUseCase(draft.port, {
+        port: refiner.port,
+        mode: "always",
+      });
+      const result = await useCase.execute(mockStage0State, undefined, (t) =>
+        telemetryCalls.push(t),
+      );
+      assert.strictEqual(draft.callCount(), 1);
+      assert.strictEqual(refiner.callCount(), 1);
+      assert.strictEqual(result.success, true);
+      if (result.success) {
+        assert.deepStrictEqual(result.value.subdomains, [
+          "Catalog",
+          "Ordering",
+          "Payments",
+          "Customer Accounts",
+        ]);
+      }
+      assert.ok(telemetryCalls[0].summary.includes("cascade refined 3→4"));
+    });
+
+    test("telemetry counts the refinement request's input and output tokens", async () => {
+      // Baseline: same draft, no refiner configured.
+      const baselineTelemetry: StageTelemetry[] = [];
+      await new ExecuteDomainExtractionUseCase(
+        createSequencedPort([decomposedNdjson]).port,
+      ).execute(mockStage0State, undefined, (t) => baselineTelemetry.push(t));
+
+      const cascadeTelemetry: StageTelemetry[] = [];
+      const useCase = new ExecuteDomainExtractionUseCase(
+        createSequencedPort([decomposedNdjson]).port,
+        { port: createSequencedPort([enrichedNdjson]).port, mode: "always" },
+      );
+      await useCase.execute(mockStage0State, undefined, (t) =>
+        cascadeTelemetry.push(t),
+      );
+
+      const expectedExtraInput = estimateTokenCount(
+        compileStage1RefinementUserPrompt(
+          compileStage1Prompt(mockStage0State),
+          decomposedNdjson,
+        ),
+      );
+      assert.strictEqual(
+        cascadeTelemetry[0].inputTokensEstimate,
+        (baselineTelemetry[0].inputTokensEstimate ?? 0) + expectedExtraInput,
+      );
+      assert.strictEqual(
+        cascadeTelemetry[0].outputTokensActual,
+        (baselineTelemetry[0].outputTokensActual ?? 0) +
+          estimateTokenCount(enrichedNdjson),
+      );
+    });
+
+    test("rejects a refined output that loses subdomains", async () => {
+      // The refiner must never DESTROY decomposition: a refined output with
+      // fewer post-union subdomains than the draft is discarded.
+      const collapsedRefinerOutput = [
+        '{"type":"subdomain","value":"Shop Management"}',
+        '{"type":"aggregateRoot","name":"Shop","subdomain":"Shop Management"}',
+      ].join("\n");
+      const draft = createSequencedPort([decomposedNdjson]);
+      const refiner = createSequencedPort([collapsedRefinerOutput]);
+      const useCase = new ExecuteDomainExtractionUseCase(draft.port, {
+        port: refiner.port,
+        mode: "always",
+      });
+      const result = await useCase.execute(mockStage0State);
+      assert.strictEqual(refiner.callCount(), 1);
+      assert.strictEqual(result.success, true);
+      if (result.success) {
+        assert.deepStrictEqual(result.value.subdomains, [
+          "Catalog",
+          "Ordering",
+          "Payments",
+        ]);
+      }
+    });
+
+    test("keeps the draft when the refiner throws", async () => {
+      const draft = createSequencedPort([decomposedNdjson]);
+      const throwingRefiner = {
+        sendRequest: async () => {
+          throw new Error("refiner provider down");
+        },
+      } as unknown as SendStructuredRequestPort;
+      const useCase = new ExecuteDomainExtractionUseCase(draft.port, {
+        port: throwingRefiner,
+        mode: "always",
+      });
+      const result = await useCase.execute(mockStage0State);
+      assert.strictEqual(result.success, true);
+      if (result.success) {
+        assert.deepStrictEqual(result.value.subdomains, [
+          "Catalog",
+          "Ordering",
+          "Payments",
+        ]);
+      }
+    });
+
+    test("keeps the draft when the refiner returns garbage", async () => {
+      const draft = createSequencedPort([decomposedNdjson]);
+      const refiner = createSequencedPort(["not ndjson at all"]);
+      const useCase = new ExecuteDomainExtractionUseCase(draft.port, {
+        port: refiner.port,
+        mode: "always",
+      });
+      const result = await useCase.execute(mockStage0State);
+      assert.strictEqual(refiner.callCount(), 1);
+      assert.strictEqual(result.success, true);
+      if (result.success) {
+        assert.deepStrictEqual(result.value.subdomains, [
+          "Catalog",
+          "Ordering",
+          "Payments",
+        ]);
+      }
+    });
+
+    test("escalation mode skips refinement on a multi-subdomain draft", async () => {
+      const draft = createSequencedPort([decomposedNdjson]);
+      const refiner = createSequencedPort([enrichedNdjson]);
+      const useCase = new ExecuteDomainExtractionUseCase(draft.port, {
+        port: refiner.port,
+        mode: "escalation",
+      });
+      const result = await useCase.execute(mockStage0State);
+      assert.strictEqual(refiner.callCount(), 0);
+      assert.strictEqual(result.success, true);
+      if (result.success) {
+        assert.deepStrictEqual(result.value.subdomains, [
+          "Catalog",
+          "Ordering",
+          "Payments",
+        ]);
+      }
+    });
+
+    test("escalation mode refines a draft that stays collapsed through soft-retries", async () => {
+      // All 3 attempts collapse → the final attempt is accepted with 1
+      // subdomain → escalation fires the refiner, which rescues it.
+      const draft = createSequencedPort([collapsedRichNdjson]);
+      const refiner = createSequencedPort([decomposedNdjson]);
+      const useCase = new ExecuteDomainExtractionUseCase(draft.port, {
+        port: refiner.port,
+        mode: "escalation",
+      });
+      const result = await useCase.execute(mockStage0State);
+      assert.strictEqual(draft.callCount(), 3);
+      assert.strictEqual(refiner.callCount(), 1);
+      assert.strictEqual(result.success, true);
+      if (result.success) {
+        assert.deepStrictEqual(result.value.subdomains, [
+          "Catalog",
+          "Ordering",
+          "Payments",
+        ]);
+      }
+    });
+
+    test("refines the collapsed fallback on the error path", async () => {
+      // Attempt 1 collapses, attempts 2-3 return garbage: the collapsed
+      // fallback is accepted via the failure path — and a held fallback is by
+      // definition <2 subdomains, so the cascade fires there in BOTH modes.
+      const draft = createSequencedPort([
+        collapsedRichNdjson,
+        "not json at all",
+        "still not json",
+      ]);
+      const refiner = createSequencedPort([decomposedNdjson]);
+      const useCase = new ExecuteDomainExtractionUseCase(draft.port, {
+        port: refiner.port,
+        mode: "escalation",
+      });
+      const result = await useCase.execute(mockStage0State);
+      assert.strictEqual(draft.callCount(), 3);
+      assert.strictEqual(refiner.callCount(), 1);
+      assert.strictEqual(result.success, true);
+      if (result.success) {
+        assert.deepStrictEqual(result.value.subdomains, [
+          "Catalog",
+          "Ordering",
+          "Payments",
+        ]);
+      }
+    });
   });
 
   test("handles malformed LLM response", async () => {

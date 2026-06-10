@@ -186,6 +186,37 @@ export function compileStage1Prompt(
   return `<original_intent>\n${header}${ambiguitySection}\n</original_intent>\n\nExtract Domain Concepts and DDD Building Blocks (NDJSON):`;
 }
 
+/** Appended to STAGE1_DOMAIN_SYSTEM_PROMPT for the draft→refine cascade
+ * (fast drafting model → stronger refiner reviewing the draft). Wording is
+ * exactly what the cascade probes validated — 8/8 valid NDJSON from both
+ * refiners tested (docs/planning/mercury-2-swap-investigation.md §7–8). */
+export const STAGE1_REFINEMENT_MODE_SUFFIX = `
+
+REFINEMENT MODE:
+You will receive a DRAFT domain analysis (NDJSON) produced by another model.
+Review it against the user's description: fix wrong or merged subdomains,
+add missing subdomains/aggregates/useCases, remove redundant lines. Re-emit
+the COMPLETE corrected analysis as NDJSON — same line formats as above. Do
+not include commentary.`;
+
+/** Deliberately no sanitization/delimiting of `draftNdjson`: both parts of
+ * this message sit in the SAME trust domain — `originalPrompt` already carries
+ * the user's raw description verbatim, so the draft (derived from nothing but
+ * that description) cannot "steer" the refiner toward anything the user
+ * couldn't request directly. Untrusted-LLM-output handling lives where it
+ * belongs, on the OUTPUT side: the refined response goes through strict
+ * per-line JSON parsing (unknown/malformed lines ignored), the
+ * subdomain-loss guard, and the downstream deterministic validators — any
+ * failure keeps the draft. This exact byte shape is also the cascade-probe
+ * validated config (8/8 valid NDJSON); do not reshape it without re-running
+ * the golden harness. */
+export function compileStage1RefinementUserPrompt(
+  originalPrompt: string,
+  draftNdjson: string,
+): string {
+  return `${originalPrompt}\n\nDRAFT ANALYSIS (review and correct):\n${draftNdjson}`;
+}
+
 // ==========================================
 // STAGE 2: CONTEXT CLASSIFICATION
 // ==========================================

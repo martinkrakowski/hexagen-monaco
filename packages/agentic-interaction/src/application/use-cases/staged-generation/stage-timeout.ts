@@ -26,6 +26,18 @@ export const STAGE_ATTEMPT_TIMEOUT_MS = 180_000; // 3 minutes per attempt
 export const LARGE_OUTPUT_STAGE_TIMEOUT_MS = 480_000; // 8 minutes per attempt
 
 /**
+ * Stage-1 draft→refine cascade: ceiling for the single best-effort refinement
+ * request. Deliberately much tighter than STAGE_ATTEMPT_TIMEOUT_MS — the draft
+ * is already a valid answer, so every second spent waiting on the refiner is
+ * pure tail latency, and an abort just keeps the draft (maybeRefineDraft is
+ * soft on ALL failure modes). Cascade probes measured ~3s per refine
+ * (docs/planning/mercury-2-swap-investigation.md §8); 15s is 5× that headroom.
+ * This timer aborts the request signal, which the cloud adapter honors, so it
+ * caps the call regardless of the provider's own timeoutMs default (60s).
+ */
+export const STAGE1_REFINEMENT_TIMEOUT_MS = 15_000;
+
+/**
  * Port mapping streams partial output and salvages whatever JSON objects arrived
  * before the deadline (see `runSingleAttempt`), so its ceiling is a "use what you
  * have" cut-off rather than a hard failure — it deliberately keeps a shorter,
