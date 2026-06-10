@@ -15,6 +15,7 @@ import {
 } from "./cloud-llm-types";
 import { streamStructuredRequest as streamStructuredRequestImpl } from "./cloud-llm-streaming";
 import { reasoningBodyFieldFor } from "./cloud-llm-reasoning";
+import { clampTemperatureFor } from "./cloud-llm-temperature";
 
 export type { CloudLLMPipelineAdapterConfig } from "./cloud-llm-types";
 
@@ -76,7 +77,10 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
     const body: Record<string, unknown> = {
       model,
       messages,
-      temperature: request.temperature ?? provider.temperature ?? 0.4,
+      temperature: clampTemperatureFor(
+        provider,
+        request.temperature ?? provider.temperature ?? 0.4,
+      ),
       max_tokens: request.maxTokens ?? provider.maxTokens ?? 4096,
       ...reasoningBodyFieldFor(provider),
     };

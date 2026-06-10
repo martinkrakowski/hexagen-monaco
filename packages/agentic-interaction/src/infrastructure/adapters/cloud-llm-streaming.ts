@@ -7,6 +7,7 @@ import {
   type CloudLLMPipelineAdapterConfig,
 } from "./cloud-llm-types";
 import { reasoningBodyFieldFor } from "./cloud-llm-reasoning";
+import { clampTemperatureFor } from "./cloud-llm-temperature";
 
 export { type CloudLLMPipelineAdapterConfig } from "./cloud-llm-types";
 
@@ -103,7 +104,10 @@ async function* streamProvider(
   const body: Record<string, unknown> = {
     model: request.preferredCloudModel ?? provider.model,
     messages,
-    temperature: request.temperature ?? provider.temperature ?? 0.4,
+    temperature: clampTemperatureFor(
+      provider,
+      request.temperature ?? provider.temperature ?? 0.4,
+    ),
     max_tokens: request.maxTokens ?? provider.maxTokens ?? 4096,
     stream: true,
     ...reasoningBodyFieldFor(provider),
