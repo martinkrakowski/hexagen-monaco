@@ -7,6 +7,7 @@ import {
   STAGE0_NORMALIZATION_SYSTEM_PROMPT,
   compileStage0Prompt,
 } from "../../../domain/index";
+import { STAGE0_NDJSON_LINE_SCHEMA } from "../../../domain/prompts/ndjson-line-schemas";
 import type { NormalizedPrompt } from "../../../domain/value-objects/pipeline-state";
 import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt";
 import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest.prompt";
@@ -67,7 +68,12 @@ export class ExecutePromptNormalizationUseCase {
           { role: "user", content: prompt },
         ],
         z.string(),
-        { stream: true, temperature: 0.1, maxTokens: 800 },
+        {
+          stream: true,
+          temperature: 0.1,
+          maxTokens: 800,
+          ndjsonLineSchema: STAGE0_NDJSON_LINE_SCHEMA,
+        },
       );
       request.signal = abortController.signal;
 

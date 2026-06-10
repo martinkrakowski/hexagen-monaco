@@ -16,6 +16,7 @@ import type {
   DomainEvent,
 } from "../../../domain/value-objects/pipeline-state";
 import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest.prompt";
+import { STAGE1_NDJSON_LINE_SCHEMA } from "../../../domain/prompts/ndjson-line-schemas";
 import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
@@ -63,7 +64,12 @@ export class ExecuteDomainExtractionUseCase {
           { role: "user", content: prompt },
         ],
         z.string(),
-        { stream: true, temperature: 0.1, maxTokens: 800 },
+        {
+          stream: true,
+          temperature: 0.1,
+          maxTokens: 800,
+          ndjsonLineSchema: STAGE1_NDJSON_LINE_SCHEMA,
+        },
       );
       request.signal = abortController.signal;
 
