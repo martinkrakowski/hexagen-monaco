@@ -45,9 +45,15 @@ export const createIntentBus = (): IntentBusPort =>
  * and without a dedicated var that flip would silently take chat + governance
  * down with it (the same env-var aliasing STAGE1_REFINER_API_KEY solves for
  * the stage-1 refiner). Falls back to LLM_API_KEY so existing deployments are
- * unaffected. Server-side only — neither var is NEXT_PUBLIC, so both are
- * undefined in the client bundle (clients gate on NEXT_PUBLIC_LLM_AVAILABLE,
- * unchanged). */
+ * unaffected.
+ *
+ * Secrets are server-side only, though the CODE is not: wire.client.ts's
+ * module-level wireDependencies() reaches this via createLLMProvider, so the
+ * helper does execute in the client bundle — where it returns "" because
+ * Next.js strips non-NEXT_PUBLIC env vars at build time (neither var is
+ * NEXT_PUBLIC; clients gate on NEXT_PUBLIC_LLM_AVAILABLE, unchanged). That is
+ * the same pre-existing exposure createLLMProvider's direct LLM_API_KEY read
+ * always had; do not add Node-only imports or key logging to this chain. */
 export const resolveWebLlmApiKey = (): string =>
   process.env.WEB_LLM_API_KEY || process.env.LLM_API_KEY || "";
 

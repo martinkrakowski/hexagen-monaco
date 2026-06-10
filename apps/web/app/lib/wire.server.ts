@@ -271,6 +271,13 @@ export const createLLMProviderSelector = (
   // the log can't drift from selection behavior. Keys themselves are never
   // logged. After the mercury flip (LLM_API_KEY unset, INCEPTION_API_KEY set)
   // this should read exactly ["inception:mercury-2"].
+  //
+  // Deliberately unconditional and per-request for the flip window: the three
+  // constructing routes are low-traffic staged-generation endpoints that
+  // already emit multiple INFO lines per multi-second request. Post-flip
+  // follow-up: demote to a once-per-process guard (env is static per
+  // container, so the first line is fully representative) — NOT logger.debug,
+  // which is a no-op when NODE_ENV=production (structured-logger.ts).
   const resolved = resolveFallbackChain(secretVault, fallbackChain);
   logger.info("[llm] cloud fallback chain resolved", {
     providers: resolved.map((p) => `${p.providerId}:${p.model}`),
