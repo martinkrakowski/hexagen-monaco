@@ -275,3 +275,18 @@ Ultra as the designated escalation refiner**: if the stage-1 escalation
 fallback is ever wired, the refine hop should be gpt-4o (~3s, no throttling
 risk), not Ultra (~25s, monotonic provider degradation). Ultra remains a
 quality benchmark anchor only.
+
+**Disposition update (2026-06-10, supersedes the paragraph above):** the
+cascade WAS subsequently wired as a feature — PR #300 ships
+`Stage1RefinementConfig { port, mode }` into `ExecuteDomainExtractionUseCase`
+with mode default **`always`** (not the escalation-only shape sketched above).
+The decision drivers: the validated pairing's cost is ~+3s on a ~14s p95
+(mercury-class, unlike Ultra), it repairs declared/implied mismatches at the
+source, and it ships **dark** — the cascade activates only when
+`STAGE1_REFINER_API_KEY` is set, a dedicated var so the refiner's key cannot
+re-order the main fallback chain. A 32-run validation with the refiner active
+passed all gates (p95 17.6s = 14.5s baseline + the expected ~3s, 100%
+success). `escalation` mode remains available as the conservative knob.
+Refine outcomes (accepted / discarded / timed out / errored) are observable
+via stage-1 telemetry summary notes since PR #301. Operational steps for
+enabling this in prod: docs/planning/mercury-2-prod-flip-runbook.md.
