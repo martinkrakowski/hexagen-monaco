@@ -5,8 +5,10 @@ import { createModelDownloadOrchestrator } from "../../src/application/use-cases
 type DomainModelId =
   | "qwen-coder-3b"
   | "llama-3.2-3b"
-  | "phi-3.5-mini"
-  | "gemma-2-2b"
+  | "qwen3-8b"
+  | "qwen3-4b"
+  | "qwen3-1.7b"
+  | "qwen3-0.6b"
   | "qwen-coder-1.5b"
   | "llama-3.2-1b"
   | "qwen-coder-0.5b";

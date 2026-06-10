@@ -98,9 +98,17 @@ export class WebLLMAdapter
         };
 
         this.worker.addEventListener("message", messageHandler);
+        // Reasoning-default models (Qwen3 family) must have thinking
+        // disabled at generation time: thinking tokens are billed against
+        // maxTokens caps and <think> blocks break structured-output
+        // parsing (local analog of baseline finding F1). The worker
+        // applies extra_body.enable_thinking: false to every generate
+        // call for the loaded model.
+        const disableThinking =
+          MODEL_METADATA_MAP[domainModelId]?.reasoningDefault === true;
         this.worker.postMessage({
           type: "init",
-          data: { modelId: mlcModelId },
+          data: { modelId: mlcModelId, disableThinking },
         });
       });
     } catch (error) {

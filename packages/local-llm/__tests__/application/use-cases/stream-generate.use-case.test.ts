@@ -6,7 +6,7 @@ import { DomainModelId } from "../../../src/domain/value-objects/model-id.vo.js"
 import { MODEL_METADATA_MAP } from "../../../src/domain/value-objects/model-metadata.vo.js";
 
 const CHUNKS = ["Hello", " ", "world", "!"];
-const MODEL_ID = DomainModelId.PHI3_MINI;
+const MODEL_ID = DomainModelId.QWEN_CODER_3B;
 
 describe("stream-generate.use-case", () => {
   it("should yield all chunks in order", async () => {
