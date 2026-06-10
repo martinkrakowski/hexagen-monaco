@@ -14,6 +14,11 @@ export { ExecuteManifestAssemblyUseCase } from "./staged-generation/execute-mani
 export { ExecuteValidationReviewUseCase } from "./staged-generation/execute-validation-review.use-case";
 export { ExecuteStagedGenerationUseCase } from "./staged-generation/execute-staged-generation.use-case";
 export type { StagedGenerationCallbacks } from "./staged-generation/execute-staged-generation.use-case";
+export { ExecuteFullStagedGenerationUseCase } from "./staged-generation/execute-full-staged-generation.use-case";
+export type {
+  FullStagedGenerationCallbacks,
+  FullStagedGenerationOptions,
+} from "./staged-generation/execute-full-staged-generation.use-case";
 export { ExecuteStructuredConfigGenerationUseCase } from "./staged-generation/execute-structured-config-generation.use-case";
 export type {
   StructuredConfigGenerationCallbacks,

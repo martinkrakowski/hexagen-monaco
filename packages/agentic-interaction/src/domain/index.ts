@@ -60,6 +60,7 @@ export {
 export {
   STAGE0_NORMALIZATION_SYSTEM_PROMPT,
   compileStage0Prompt,
+  buildGreenfieldArchitectureContext,
   buildIntentHeader,
   isStructuredConfigPipeline,
   STAGE1_DOMAIN_SYSTEM_PROMPT,

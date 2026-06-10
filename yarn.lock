@@ -1610,6 +1610,7 @@ __metadata:
     "@hexagen/ai-pipeline": "workspace:*"
     "@hexagen/core-domain": "workspace:*"
     "@hexagen/local-llm": "workspace:*"
+    "@hexagen/project-configuration": "workspace:*"
     "@hexagen/prompt-compiler": "workspace:*"
     "@hexagen/reconciliation-engine": "workspace:*"
     "@hexagen/shared": "workspace:*"

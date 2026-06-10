@@ -117,6 +117,11 @@ export { ExecuteManifestAssemblyUseCase } from "./application/use-cases/staged-g
 export { ExecuteValidationReviewUseCase } from "./application/use-cases/staged-generation/execute-validation-review.use-case";
 export { ExecuteStagedGenerationUseCase } from "./application/use-cases/staged-generation/execute-staged-generation.use-case";
 export type { StagedGenerationCallbacks } from "./application/use-cases/staged-generation/execute-staged-generation.use-case";
+export { ExecuteFullStagedGenerationUseCase } from "./application/use-cases/staged-generation/execute-full-staged-generation.use-case";
+export type {
+  FullStagedGenerationCallbacks,
+  FullStagedGenerationOptions,
+} from "./application/use-cases/staged-generation/execute-full-staged-generation.use-case";
 export { ExecuteStructuredConfigGenerationUseCase } from "./application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 export type {
   StructuredConfigGenerationCallbacks,
@@ -179,6 +184,7 @@ export { normalizeContextName } from "./domain/index";
 export {
   STAGE0_NORMALIZATION_SYSTEM_PROMPT,
   compileStage0Prompt,
+  buildGreenfieldArchitectureContext,
   buildIntentHeader,
   isStructuredConfigPipeline,
   STAGE1_DOMAIN_SYSTEM_PROMPT,

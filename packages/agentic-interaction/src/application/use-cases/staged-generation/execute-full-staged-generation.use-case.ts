@@ -1,0 +1,297 @@
+/**
+ * Full staged generation orchestrator (A1) — chains the LLM pipeline 0→6:
+ *
+ *   0 Prompt Normalization   (LLM)  userDescription → NormalizedPrompt
+ *   1 Domain Extraction      (LLM)  stage0 → DomainAnalysis
+ *   2 Context Classification (LLM)  stage0+stage1 → ClassificationResult
+ *   3 Port Mapping           (LLM)  stage0..2 → PortMap + contextMappings
+ *   4 Adapter Assignment     (LLM)  stage0,2,3 → AdapterBindings
+ *   5 Manifest Assembly      (sync) stage0..4 → AssembledManifest
+ *   6 Validation Review      (LLM)  stage0..3,5 → ValidationReport
+ *
+ * This is the free-text counterpart of ExecuteStructuredConfigGenerationUseCase
+ * (the blueprint): same callback surface, same per-stage progress/error
+ * protocol, same begin→speculative transaction ending. Where the blueprint
+ * derives stages 0–2 deterministically from a structured config, this
+ * orchestrator runs the per-stage LLM use-cases that were written for the
+ * staged pipeline but never wired (normalizer-rewire dev plan, A1).
+ *
+ * NOT yet routed: the live /api/manifest/generate/stage route still runs the
+ * inline-prompt stub (ExecuteStagedGenerationUseCase). Cutover is A3
+ * (feature flag + canary); this class ships dark in A1.
+ */
+import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
+import type {
+  AssembledManifest,
+  PipelineState,
+} from "../../../domain/value-objects/pipeline-state";
+import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt";
+import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
+import { buildGreenfieldArchitectureContext } from "../../../domain/prompts/build-architecture-context";
+import { ExecutePromptNormalizationUseCase } from "./execute-prompt-normalization.use-case";
+import { ExecuteDomainExtractionUseCase } from "./execute-domain-extraction.use-case";
+import { ExecuteContextClassificationUseCase } from "./execute-context-classification.use-case";
+import { ExecutePortMappingUseCase } from "./execute-port-mapping.use-case";
+import { ExecuteAdapterAssignmentUseCase } from "./execute-adapter-assignment.use-case";
+import { ExecuteManifestAssemblyUseCase } from "./execute-manifest-assembly.use-case";
+import { ExecuteValidationReviewUseCase } from "./execute-validation-review.use-case";
+import { STAGE3_ESCALATION_CONFIG } from "./retry-with-escalation";
+
+/** Same shape as StructuredConfigGenerationCallbacks — kept as its own
+ * interface so the two orchestrators can evolve independently. */
+export interface FullStagedGenerationCallbacks {
+  onProgress?: (stage: number, durationMs: number) => void;
+  onError?: (stage: number, error: string, durationMs?: number) => void;
+  onChunk?: (chunk: string) => void;
+  /** Called at completion of each stage with full telemetry. */
+  onStageTelemetry?: (telemetry: StageTelemetry) => void;
+}
+
+export interface FullStagedGenerationOptions {
+  /** Overrides the Stage 3 escalation model (see STAGE3_ESCALATION_CONFIG). */
+  escalationModel?: string;
+  /** Overrides the `<architecture>` block injected into the Stage 0 prompt.
+   * Defaults to the greenfield static contract (T2b). */
+  architectureContext?: string;
+}
+
+export class ExecuteFullStagedGenerationUseCase {
+  private readonly stage0: ExecutePromptNormalizationUseCase;
+  private readonly stage1: ExecuteDomainExtractionUseCase;
+  private readonly stage2: ExecuteContextClassificationUseCase;
+  private readonly stage3: ExecutePortMappingUseCase;
+  private readonly stage4: ExecuteAdapterAssignmentUseCase;
+  private readonly stage5: ExecuteManifestAssemblyUseCase;
+  private readonly stage6: ExecuteValidationReviewUseCase;
+
+  constructor(
+    llmPort: SendStructuredRequestPort,
+    private readonly transactionManager: TransactionManagerPort,
+    options?: FullStagedGenerationOptions,
+  ) {
+    // T2b: the architecture context is built ONCE here (it is pure/static),
+    // then constructor-injected into Stage 0 — never rebuilt per execute().
+    const architectureContext =
+      options?.architectureContext ?? buildGreenfieldArchitectureContext();
+    this.stage0 = new ExecutePromptNormalizationUseCase(
+      llmPort,
+      architectureContext,
+    );
+    this.stage1 = new ExecuteDomainExtractionUseCase(llmPort);
+    this.stage2 = new ExecuteContextClassificationUseCase(llmPort);
+    const stage3Config = options?.escalationModel
+      ? {
+          ...STAGE3_ESCALATION_CONFIG,
+          escalationModel: options.escalationModel,
+        }
+      : STAGE3_ESCALATION_CONFIG;
+    this.stage3 = new ExecutePortMappingUseCase(llmPort, stage3Config);
+    this.stage4 = new ExecuteAdapterAssignmentUseCase(llmPort);
+    this.stage5 = new ExecuteManifestAssemblyUseCase();
+    this.stage6 = new ExecuteValidationReviewUseCase(llmPort);
+  }
+
+  async execute(
+    userDescription: string,
+    variables?: PromptVariables,
+    callbacks?: FullStagedGenerationCallbacks,
+  ): Promise<
+    | {
+        success: true;
+        value: AssembledManifest;
+        state: PipelineState;
+        transactionId: string;
+      }
+    | { success: false; error: unknown }
+  > {
+    // Stage 0: Prompt Normalization
+    const s0Start = Date.now();
+    callbacks?.onProgress?.(0, 0);
+    callbacks?.onChunk?.("Stage 0 · Prompt Normalization");
+    const s0 = await this.stage0.execute(
+      userDescription,
+      variables,
+      callbacks?.onChunk,
+      callbacks?.onStageTelemetry,
+    );
+    const s0Duration = Date.now() - s0Start;
+    if (!s0.success) {
+      callbacks?.onError?.(0, String(s0.error), s0Duration);
+      return { success: false, error: s0.error };
+    }
+    callbacks?.onProgress?.(0, s0Duration);
+
+    // Stage 1: Domain Extraction
+    const s1Start = Date.now();
+    callbacks?.onProgress?.(1, 0);
+    callbacks?.onChunk?.("Stage 1 · Domain Extraction");
+    const s1 = await this.stage1.execute(
+      { stage0: s0.value },
+      callbacks?.onChunk,
+      callbacks?.onStageTelemetry,
+    );
+    const s1Duration = Date.now() - s1Start;
+    if (!s1.success) {
+      callbacks?.onError?.(1, String(s1.error), s1Duration);
+      return { success: false, error: s1.error };
+    }
+    callbacks?.onProgress?.(1, s1Duration);
+
+    // Stage 2: Context Classification
+    const s2Start = Date.now();
+    callbacks?.onProgress?.(2, 0);
+    callbacks?.onChunk?.("Stage 2 · Context Classification");
+    const s2 = await this.stage2.execute(
+      { stage0: s0.value, stage1: s1.value },
+      callbacks?.onChunk,
+      callbacks?.onStageTelemetry,
+    );
+    const s2Duration = Date.now() - s2Start;
+    if (!s2.success) {
+      callbacks?.onError?.(2, String(s2.error), s2Duration);
+      return { success: false, error: s2.error };
+    }
+    callbacks?.onProgress?.(2, s2Duration);
+
+    // Stage 3: Port Mapping
+    const s3Start = Date.now();
+    callbacks?.onProgress?.(3, 0);
+    callbacks?.onChunk?.("Stage 3 · Port Mapping");
+    const s3 = await this.stage3.execute(
+      { stage0: s0.value, stage1: s1.value, stage2: s2.value },
+      callbacks?.onChunk,
+      callbacks?.onStageTelemetry,
+    );
+    const s3Duration = Date.now() - s3Start;
+    if (!s3.success) {
+      callbacks?.onError?.(3, String(s3.error), s3Duration);
+      return { success: false, error: s3.error };
+    }
+    const portMap = s3.value.portMap;
+    const contextMappings = s3.value.contextMappings ?? [];
+    callbacks?.onProgress?.(3, s3Duration);
+
+    // Stage 4: Adapter Assignment
+    const s4Start = Date.now();
+    callbacks?.onProgress?.(4, 0);
+    callbacks?.onChunk?.("Stage 4 · Adapter Assignment");
+    const s4 = await this.stage4.execute(
+      {
+        stage0: s0.value,
+        stage2: s2.value,
+        stage3: portMap,
+        contextMappings,
+      },
+      variables ?? { userDescription },
+      callbacks?.onChunk,
+      callbacks?.onStageTelemetry,
+    );
+    const s4Duration = Date.now() - s4Start;
+    if (!s4.success) {
+      callbacks?.onError?.(4, String(s4.error), s4Duration);
+      return { success: false, error: s4.error };
+    }
+    callbacks?.onProgress?.(4, s4Duration);
+
+    // Stage 5: Manifest Assembly (synchronous, returns AssembledManifest directly)
+    const s5Start = Date.now();
+    callbacks?.onProgress?.(5, 0);
+    const assembledManifest = this.stage5.execute({
+      stage0: s0.value,
+      stage1: s1.value,
+      stage2: s2.value,
+      stage3: portMap,
+      stage4: s4.value,
+      contextMappings,
+    });
+    callbacks?.onProgress?.(5, Date.now() - s5Start);
+
+    // Stage 6: Validation Review
+    const s6Start = Date.now();
+    callbacks?.onProgress?.(6, 0);
+    callbacks?.onChunk?.("Stage 6 · Validation Review");
+    const s6 = await this.stage6.execute(
+      {
+        stage0: s0.value,
+        stage1: s1.value,
+        stage2: s2.value,
+        stage3: portMap,
+        stage5: assembledManifest,
+        contextMappings,
+      },
+      callbacks?.onChunk,
+      callbacks?.onStageTelemetry,
+    );
+    const s6Duration = Date.now() - s6Start;
+    if (!s6.success) {
+      callbacks?.onError?.(6, String(s6.error), s6Duration);
+      return { success: false, error: s6.error };
+    }
+    callbacks?.onProgress?.(6, s6Duration);
+
+    const state: PipelineState = {
+      stage0: s0.value,
+      stage1: s1.value,
+      stage2: s2.value,
+      stage3: portMap,
+      stage4: s4.value,
+      stage5: assembledManifest,
+      stage6: s6.value,
+      contextMappings,
+    };
+
+    // Create transaction for the generated manifest — same begin→speculative
+    // protocol (and metadata shape) as the structured-config orchestrator.
+    // Deliberately not extracted into a shared helper in this PR: A1 must not
+    // touch the live blueprint file (one concern per PR).
+    const intentId = `desc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    const yaml = assembledManifest.yaml || "";
+    const parsed =
+      (assembledManifest.parsedObject as Record<string, unknown>) || {};
+    const boundedContexts = Array.isArray(parsed.bounded_contexts)
+      ? (parsed.bounded_contexts as Array<{
+          ports?: { in?: unknown[]; out?: unknown[] };
+          adapters?: unknown[];
+        }>)
+      : [];
+
+    let transaction: Awaited<ReturnType<TransactionManagerPort["begin"]>>;
+    try {
+      transaction = await this.transactionManager.begin(intentId, {
+        intentId,
+        origin: "full-staged-generation",
+        yaml,
+        contextCount: boundedContexts.length,
+        portCount: boundedContexts.reduce(
+          (sum, ctx) =>
+            sum +
+            (Array.isArray(ctx.ports?.in) ? ctx.ports.in.length : 0) +
+            (Array.isArray(ctx.ports?.out) ? ctx.ports.out.length : 0),
+          0,
+        ),
+        adapterCount: boundedContexts.reduce(
+          (sum, ctx) =>
+            sum + (Array.isArray(ctx.adapters) ? ctx.adapters.length : 0),
+          0,
+        ),
+      });
+    } catch (beginError) {
+      return { success: false, error: beginError };
+    }
+
+    try {
+      await this.transactionManager.transition(transaction.id, "speculative");
+    } catch (transitionError) {
+      await this.transactionManager.rollback(transaction.id);
+      return { success: false, error: transitionError };
+    }
+
+    return {
+      success: true,
+      value: assembledManifest,
+      state,
+      transactionId: transaction.id,
+    };
+  }
+}
