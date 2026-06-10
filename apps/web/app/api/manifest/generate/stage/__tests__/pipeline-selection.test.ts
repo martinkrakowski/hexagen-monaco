@@ -158,7 +158,11 @@ describe("createFullPipelineEventAdapter", () => {
     ]);
   });
 
-  test("a chunk before any onProgress is attributed to stage 0", () => {
+  test("a chunk before any onProgress is attributed to stage 0 (defensive — the producer cannot emit this ordering)", () => {
+    // The orchestrator ALWAYS calls onProgress(0, 0) before its first
+    // onChunk (see the producer-ordering contract in pipeline-selection.ts).
+    // This pins the fail-safe attribution for that impossible input, NOT an
+    // expected production sequence.
     const { events, adapter } = collect();
     adapter.onChunk?.("early");
     assert.deepStrictEqual(events, [

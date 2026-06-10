@@ -85,7 +85,17 @@ export type StageRouteEvent =
  *   `durationMs === 0` — because the sync stage 5 can complete in 0ms.
  *
  * `onChunk` carries no stage in the full pipeline's callback surface, so
- * chunks are attributed to the most recently started stage (0 before any).
+ * chunks are attributed to the most recently started stage.
+ *
+ * PRODUCER ORDERING CONTRACT: the orchestrator's first callback invocation
+ * is ALWAYS `onProgress(0, 0)` — before any `onChunk` (see
+ * execute-full-staged-generation.use-case.ts, stage 0 block: onProgress
+ * precedes the banner chunk, and every stage repeats the pattern). A chunk
+ * therefore never reaches the wire before its stage-start, so the client
+ * reducer's `chunks: []` reset on stage-start cannot drop data. The
+ * `currentStage = 0` default is fail-safe attribution for an input the
+ * producer cannot generate — deliberately NOT a lazy stage-start emission,
+ * which would synthesize a phase-transition event out of order.
  */
 export function createFullPipelineEventAdapter(
   send: (event: StageRouteEvent) => void,
