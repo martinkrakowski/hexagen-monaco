@@ -24,6 +24,7 @@
 export type ReasoningBodyField =
   | { reasoning: { enabled: false } }
   | { reasoning: { effort: "low" | "medium" | "high" } }
+  | { reasoning_effort: "instant" | "low" | "medium" | "high" }
   | Record<string, never>;
 
 let warnedInvalid = false;
@@ -53,16 +54,46 @@ export function reasoningBodyField(
 }
 
 /**
+ * Inception (Mercury) dialect of the same knob. Mercury models reason BY
+ * DEFAULT (`reasoning_effort` defaults to "medium"), so an Inception
+ * endpoint left unconfigured hits the F1 failure mode out of the box —
+ * LLM_REASONING="disabled" maps to their no-reasoning mode, "instant".
+ * Effort levels pass through unchanged. Unset/invalid → field omitted
+ * (model uses its provider default, i.e. medium).
+ */
+export function inceptionReasoningBodyField(
+  env: Record<string, string | undefined> = process.env,
+): ReasoningBodyField {
+  const raw = env.LLM_REASONING?.trim().toLowerCase();
+  if (!raw) return {};
+  if (raw === "disabled") return { reasoning_effort: "instant" };
+  if (raw === "low" || raw === "medium" || raw === "high") {
+    return { reasoning_effort: raw };
+  }
+  // Invalid values already warn once inside reasoningBodyField; calling it
+  // here would double the warning paths, so just omit silently — the
+  // generic provider's warning covers the misconfiguration.
+  return {};
+}
+
+/**
  * Provider-scoped variant for request-body builders: returns the reasoning
- * field only when `provider` is the generic OpenAI-compatible endpoint that
- * the LLM_* env family configures (`apiKeyEnvVar === "LLM_API_KEY"`); every
- * other provider in the fallback chain gets `{}` regardless of LLM_REASONING.
- * Spread it: `{ ...body, ...reasoningBodyFieldFor(provider) }`.
+ * field only for providers whose dialect we know —
+ * - `apiKeyEnvVar === "LLM_API_KEY"`: the generic OpenAI-compatible endpoint
+ *   (OpenRouter `reasoning` object), and
+ * - `apiKeyEnvVar === "INCEPTION_API_KEY"`: Inception's Mercury endpoint
+ *   (`reasoning_effort` string; reasoning is ON by default there).
+ * Every other provider in the fallback chain gets `{}` regardless of
+ * LLM_REASONING (api.openai.com rejects unknown body args with a
+ * non-retryable 400). Spread it: `{ ...body, ...reasoningBodyFieldFor(provider) }`.
  */
 export function reasoningBodyFieldFor(
   provider: { apiKeyEnvVar: string },
   env: Record<string, string | undefined> = process.env,
 ): ReasoningBodyField {
-  if (provider.apiKeyEnvVar !== "LLM_API_KEY") return {};
-  return reasoningBodyField(env);
+  if (provider.apiKeyEnvVar === "LLM_API_KEY") return reasoningBodyField(env);
+  if (provider.apiKeyEnvVar === "INCEPTION_API_KEY") {
+    return inceptionReasoningBodyField(env);
+  }
+  return {};
 }
