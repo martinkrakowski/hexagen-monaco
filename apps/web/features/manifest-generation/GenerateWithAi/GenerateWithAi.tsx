@@ -90,6 +90,11 @@ export function GenerateWithAi({
   // On success the flow stays parked on the generating screen (telemetry log
   // stays reviewable); the parent footer gets a Next action that hands the
   // completed manifest to /ai/accept. While still in flight, Cancel only.
+  // The truthy check is intentional, not an off-by-"" bug: the hook
+  // guarantees generatedManifest is null or non-blank (empty renders are
+  // normalized into generationError + phase "failed" on both the local and
+  // cloud paths), and a Next that forwards "" could only fail into a parse
+  // error — so an empty string must keep Next hidden, never show it.
   const completedManifest =
     !stagedGen.isGenerating && stagedGen.generatedManifest
       ? stagedGen.generatedManifest
