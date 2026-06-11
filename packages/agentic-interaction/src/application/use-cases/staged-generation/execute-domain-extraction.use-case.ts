@@ -341,6 +341,12 @@ export class ExecuteDomainExtractionUseCase {
         streamError = responseResult.error;
       } else {
         fullResponse = responseResult.value.content;
+        // Last-write-wins across retry attempts: the cloud adapter sets
+        // metadata.model on every successful response, so the winning
+        // attempt always overwrites; `?? modelName` only guards against a
+        // port omitting metadata, where "last known served model" is the
+        // best-effort answer. Telemetry is emitted in the same iteration
+        // as the winning parse below.
         modelName =
           modelNameFromResponseMetadata(responseResult.value.metadata) ??
           modelName;

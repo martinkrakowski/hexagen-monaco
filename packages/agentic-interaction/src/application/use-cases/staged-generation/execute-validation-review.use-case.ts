@@ -107,6 +107,11 @@ export class ExecuteValidationReviewUseCase {
         { stream: true, temperature: 0.1, maxTokens: 800 },
       );
       request.signal = abortController.signal;
+      // Last-write-wins across retry attempts: each attempt builds a fresh
+      // request, and the streaming adapter fires this on the first parsed
+      // frame of whichever provider actually streams — so any attempt that
+      // produced content re-fires it, and the winning attempt's value is
+      // what the success telemetry below reports.
       request.onModelResolved = (info) => {
         modelName = info.model;
       };
