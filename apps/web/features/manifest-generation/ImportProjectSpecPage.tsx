@@ -10,7 +10,7 @@ import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useStagedManifestGeneration } from "./useStagedManifestGeneration";
 import { useLooseSpecConversion } from "./useLooseSpecConversion";
 import { Button } from "@hexagen/ui";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { useLLMReadiness } from "./hooks/useLLMReadiness";
 import { usePendingManifest } from "./store/usePendingManifest";
@@ -62,6 +62,12 @@ export default function ImportProjectSpecPage() {
   // inline on the generating step (there is no preview screen to fall back
   // to; approval happens once, on /projects/new/ai/accept).
   const [acceptError, setAcceptError] = useState<string | null>(null);
+  // The successfully generated manifest, parked while the user reviews the
+  // telemetry log on the generating step. The footer's "Next" button hands
+  // it to acceptManifest.
+  const [completedManifest, setCompletedManifest] = useState<string | null>(
+    null,
+  );
   const { needsSetup, isProbing, preferLocal } = useLLMReadiness();
   const { engine, setEngine } = useExecutionEngine();
   // Which generate action is parked behind the local-override warning dialog.
@@ -148,10 +154,12 @@ export default function ImportProjectSpecPage() {
     }
   };
 
-  // Runs at generation-complete: reconcile the carried project name into the
-  // manifest, stash it for the accept screen, and navigate straight to
-  // /projects/new/ai/accept — the single approval screen. (The page used to
-  // show its own PREVIEW state first, duplicating the accept screen.)
+  // Runs on the footer's "Next" click after generation completes (the page
+  // stays on the generating step so the user can review the telemetry log):
+  // reconcile the carried project name into the manifest, stash it for the
+  // accept screen, and navigate to /projects/new/ai/accept — the single
+  // approval screen. (The page used to show its own PREVIEW state first,
+  // duplicating the accept screen.)
   const acceptManifest = useCallback(
     (manifest: string) => {
       try {
@@ -188,8 +196,10 @@ export default function ImportProjectSpecPage() {
             error: errorMsg,
           });
         }
-        // Stay on the generating step and surface the failure inline; the
-        // footer's "Go Back" (shown once generation settles) is the way out.
+        // Surface the failure inline on the generating step and retire the
+        // Next button (a re-click would fail identically); the footer's
+        // "Go Back" is the way out.
+        setCompletedManifest(null);
         setAcceptError(
           "The generated manifest could not be parsed. Go back and try again.",
         );
@@ -203,6 +213,7 @@ export default function ImportProjectSpecPage() {
       setPreviousState(pageState);
       setPageState("GENERATING");
       setAcceptError(null);
+      setCompletedManifest(null);
       manifestGeneration.reset();
 
       const result = await specGeneration.generateFromSpec(specContent, {
@@ -210,7 +221,9 @@ export default function ImportProjectSpecPage() {
       });
 
       if (result?.generatedManifest) {
-        acceptManifest(result.generatedManifest);
+        // Stay on the generating step (telemetry log stays reviewable);
+        // the footer's "Next" button carries the manifest forward.
+        setCompletedManifest(result.generatedManifest);
       } else if (result?.phase === "failed") {
         const errorMsg = result.stepDetail || "";
         if (errorMsg.includes("No cloud LLM API keys configured")) {
@@ -223,13 +236,7 @@ export default function ImportProjectSpecPage() {
         // when isGenerating=false, so the user can recover.
       }
     },
-    [
-      specContent,
-      specGeneration,
-      manifestGeneration,
-      pageState,
-      acceptManifest,
-    ],
+    [specContent, specGeneration, manifestGeneration, pageState],
   );
 
   const runDescriptionGeneration = useCallback(
@@ -237,6 +244,7 @@ export default function ImportProjectSpecPage() {
       setPreviousState(pageState);
       setPageState("GENERATING");
       setAcceptError(null);
+      setCompletedManifest(null);
       specGeneration.reset();
 
       const result = await manifestGeneration.generateManifest(specContent, {
@@ -244,19 +252,12 @@ export default function ImportProjectSpecPage() {
       });
 
       if (result?.generatedManifest) {
-        acceptManifest(result.generatedManifest);
+        setCompletedManifest(result.generatedManifest);
       } else if (result?.generationError) {
         setPageState("DESCRIPTION_FALLBACK");
       }
     },
-    [
-      specContent,
-      manifestGeneration,
-      specGeneration,
-      pageState,
-      preferLocal,
-      acceptManifest,
-    ],
+    [specContent, manifestGeneration, specGeneration, pageState, preferLocal],
   );
 
   const handleMapPorts = useCallback(() => {
@@ -316,6 +317,7 @@ export default function ImportProjectSpecPage() {
     manifestGeneration.reset();
     resetConversion();
     setAcceptError(null);
+    setCompletedManifest(null);
     setPageState("UPLOAD");
     setSpecContent("");
     setSpecSummary(null);
@@ -417,23 +419,35 @@ export default function ImportProjectSpecPage() {
       );
     }
     if (pageState === "GENERATING") {
+      const isRunning =
+        specGeneration.isGenerating || manifestGeneration.isGenerating;
       return (
         <>
           <span />
-          <Button
-            variant="outline"
-            onClick={() => {
-              specGeneration.reset();
-              manifestGeneration.reset();
-              setAcceptError(null);
-              setPageState(previousState ?? "SPEC_REVIEW");
-              setPreviousState(null);
-            }}
-          >
-            {specGeneration.isGenerating || manifestGeneration.isGenerating
-              ? "Cancel"
-              : "Go Back"}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                specGeneration.reset();
+                manifestGeneration.reset();
+                setAcceptError(null);
+                setCompletedManifest(null);
+                setPageState(previousState ?? "SPEC_REVIEW");
+                setPreviousState(null);
+              }}
+            >
+              {isRunning ? "Cancel" : "Go Back"}
+            </Button>
+            {/* Generation succeeded: let the user review the telemetry log
+                at their own pace; Next carries the manifest to the accept
+                screen. */}
+            {!isRunning && completedManifest && (
+              <Button onClick={() => acceptManifest(completedManifest)}>
+                Next
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            )}
+          </div>
         </>
       );
     }
