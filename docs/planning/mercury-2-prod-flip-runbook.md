@@ -32,18 +32,18 @@ client with all LLM UI disabled regardless of runtime env — this is why
 
 ## Target state
 
-| Env                                    | Before flip                             | After flip                                         |
-| -------------------------------------- | --------------------------------------- | -------------------------------------------------- |
-| `LLM_API_KEY`                          | set (generic chain slot + web fallback) | **unset** (the flip itself)                        |
-| `LLM_BASE_URL` / `LLM_MODEL`           | set                                     | **keep set** — see warning below                   |
-| `WEB_LLM_API_KEY`                      | unset (falls back)                      | **set** — web chat/governance key                  |
-| `INCEPTION_API_KEY`                    | set                                     | set (becomes the chain's only resolved provider)   |
-| `INCEPTION_MODEL`                      | unset (default mercury-2)               | unset                                              |
-| `LLM_REASONING`                        | unset                                   | **`low`** (validated regime — see below)           |
-| `STAGE1_REFINER_API_KEY`               | set                                     | set (cascade active, mode default `always`)        |
-| `STAGE1_REFINER_BASE_URL/_MODEL/_MODE` | unset (defaults)                        | unset                                              |
-| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | unset                                   | unset (set = extra chain entries ahead of mercury) |
-| `LLM_ESCALATION_MODEL`                 | n/a                                     | **not plumbed at all** (see Pins)                  |
+| Env                                    | Before flip                             | After flip                                             |
+| -------------------------------------- | --------------------------------------- | ------------------------------------------------------ |
+| `LLM_API_KEY`                          | set (generic chain slot + web fallback) | **unset** (the flip itself)                            |
+| `LLM_BASE_URL` / `LLM_MODEL`           | set                                     | **keep set** — see warning below                       |
+| `WEB_LLM_API_KEY`                      | unset (falls back)                      | **set** — web chat/governance key                      |
+| `INCEPTION_API_KEY`                    | set                                     | set (becomes the chain's only resolved provider)       |
+| `INCEPTION_MODEL`                      | unset (default mercury-2)               | unset                                                  |
+| `LLM_REASONING`                        | unset                                   | **`low`** (validated regime — see below)               |
+| `STAGE1_REFINER_API_KEY`               | set                                     | set (cascade active, mode default `always`)            |
+| `STAGE1_REFINER_BASE_URL/_MODEL/_MODE` | unset (defaults)                        | unset                                                  |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | not plumbed                             | not plumbed (chain slots can never resolve — see Pins) |
+| `LLM_ESCALATION_MODEL`                 | not plumbed                             | not plumbed (see Pins)                                 |
 
 > **Warning — `WEB_LLM_API_KEY` pairs with `LLM_BASE_URL`/`LLM_MODEL`:** the
 > web routes construct `ServerLLMAdapter(resolveWebLlmApiKey(), LLM_BASE_URL,
@@ -64,7 +64,15 @@ LLM_MODEL)`. Unset only `LLM_API_KEY`; keep `LLM_BASE_URL`/`LLM_MODEL` set,
    provider-unscoped; a foreign model name in an Inception-only chain 404s
    every escalation retry. Its absence from the heredoc makes "unset in prod"
    structural. Do not add it without making the injection provider-scoped
-   first.
+   first. The same structural-absence applies to **`OPENAI_API_KEY` /
+   `ANTHROPIC_API_KEY`**: the fallback chain's openai-primary and anthropic
+   slots exist in code, but neither var is in the deploy heredoc (nor the
+   compose/Dockerfile), so on this deploy path they can never resolve — the
+   prod chain reduces to generic(`LLM_API_KEY`) + inception by construction,
+   and after the flip to inception alone. Setting them as repo secrets does
+   nothing unless someone also plumbs them; if that ever happens, they would
+   resolve **ahead of** mercury and silently un-flip the chain — keep them
+   out of the heredoc.
 3. **Stage 6 is the only NDJSON stage without `response_format` (accepted).**
    The streaming path never attaches `ndjsonResponseFormatFor` (deferred in
    #295). The flip accepts mercury free-text NDJSON at stage 6 on the strength
@@ -86,9 +94,7 @@ LLM_MODEL)`. Unset only `LLM_API_KEY`; keep `LLM_BASE_URL`/`LLM_MODEL` set,
 2. Repo secrets in place: `INCEPTION_API_KEY`, `STAGE1_REFINER_API_KEY`
    (OpenRouter), and `WEB_LLM_API_KEY` (valid at `LLM_BASE_URL`).
 3. Repo variable `LLM_REASONING` = `low`.
-4. `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` repo secrets do not exist (they would
-   resolve ahead of mercury in the chain and the flip would silently not flip).
-5. Canary state checked (`gh variable list`): the staged-generation pipeline
+4. Canary state checked (`gh variable list`): the staged-generation pipeline
    flags are whatever the canary runbook currently prescribes — this flip
    changes the _provider_, not the pipeline selection.
 
