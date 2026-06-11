@@ -3,6 +3,7 @@ import { checkRateLimit } from "../../../../../lib/rate-limiter";
 import {
   ExecuteStructuredConfigGenerationUseCase,
   ClassifyContextTypeUseCase,
+  formatModelChip,
   type StructuredConfigGenerationCallbacks,
 } from "@hexagen/agentic-interaction";
 import { createLLMProviderSelector } from "../../../../lib/wire.server";
@@ -24,6 +25,11 @@ type NDJSONEvent =
       stage: number;
       label?: string;
       durationMs: number;
+    }
+  | {
+      type: "stage-telemetry";
+      stage: number;
+      telemetry: Record<string, unknown>;
     }
   | { type: "chunk"; stage: number; data: string }
   | { type: "validation-error"; stage: number; errors: string[] }
@@ -95,6 +101,37 @@ export async function POST(request: NextRequest) {
         onError: (stage, error) =>
           send({ type: "validation-error", stage, errors: [error] }),
         onChunk: (chunk) => send({ type: "chunk", stage: -1, data: chunk }),
+        onStageTelemetry: (telemetry) => {
+          // Per-stage observability: this route previously forwarded no
+          // telemetry at all (nothing in the server log, nothing on the
+          // wire), which is how a 5-minute client run could hide a 16s
+          // server pipeline. Log it, forward the structured event, and
+          // surface the serving model in the status stream.
+          logger.info("[spec-gen] stage complete", {
+            stage: telemetry.stage,
+            label: telemetry.label,
+            model: telemetry.modelName,
+            refinerModel: telemetry.refinerModelName,
+            durationMs: telemetry.durationMs,
+            retryCount: telemetry.retryCount,
+            inputTokensEstimate: telemetry.inputTokensEstimate,
+            outputTokensActual: telemetry.outputTokensActual,
+          });
+          send({
+            type: "stage-telemetry",
+            stage: telemetry.stage,
+            telemetry: telemetry as unknown as Record<string, unknown>,
+          });
+          const chip = formatModelChip(telemetry);
+          if (chip) {
+            const seconds = (telemetry.durationMs / 1000).toFixed(1);
+            send({
+              type: "chunk",
+              stage: -1,
+              data: `Stage ${telemetry.stage} · ${telemetry.label} — ${chip} · ${seconds}s`,
+            });
+          }
+        },
       };
 
       try {

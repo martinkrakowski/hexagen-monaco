@@ -112,6 +112,33 @@ describe("ExecutePortMappingUseCase", () => {
     assert.strictEqual(telemetry.retryCount, 0);
   });
 
+  test("telemetry reports the model resolved via the streaming side-channel", async () => {
+    // Streaming stages have no in-band metadata channel (bare string chunks),
+    // so the adapter reports the served model through request.onModelResolved
+    // — the use case must wire its capture into every dispatched request.
+    const mockPort = {
+      streamStructuredRequest: (request: {
+        onModelResolved?: (info: { provider: string; model: string }) => void;
+      }) => {
+        request.onModelResolved?.({
+          provider: "inception",
+          model: "mercury-2",
+        });
+        return createSuccessStream(validPortMappingNdjson);
+      },
+    } as unknown as SendStructuredRequestPort;
+
+    const telemetryCalls: StageTelemetry[] = [];
+    const useCase = new ExecutePortMappingUseCase(mockPort);
+    const result = await useCase.execute(mockStageState, undefined, (t) =>
+      telemetryCalls.push(t),
+    );
+
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(telemetryCalls.length, 1);
+    assert.strictEqual(telemetryCalls[0].modelName, "mercury-2");
+  });
+
   test("handles stream error from LLM", async () => {
     const mockPort = createMockLLMPort(() =>
       createErrorStream(new Error("LLM request timeout")),

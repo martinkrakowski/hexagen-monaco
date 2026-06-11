@@ -41,6 +41,7 @@ export {
   DESCRIPTION_MAX_LENGTH,
   GeneratedManifestValidator,
   createGeneratedManifest,
+  formatModelChip,
 } from "./domain/value-objects/index";
 export type {
   NormalizedPrompt,

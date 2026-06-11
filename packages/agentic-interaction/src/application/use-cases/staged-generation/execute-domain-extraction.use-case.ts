@@ -28,7 +28,10 @@ import { STAGE1_NDJSON_LINE_SCHEMA } from "../../../domain/prompts/ndjson-line-s
 import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
-import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
+import {
+  estimateTokenCount,
+  modelNameFromResponseMetadata,
+} from "../../../domain/value-objects/stage-telemetry";
 
 const STAGE_NUMBER = 1;
 
@@ -232,6 +235,7 @@ export class ExecuteDomainExtractionUseCase {
     let prompt = initialPrompt;
     let lastError = "";
     let retryCount = 0;
+    let modelName: string | undefined;
 
     // A collapsed-but-valid earlier attempt (single subdomain despite a
     // multi-capability domain — see the soft-retry below). Pre-retry behavior
@@ -267,6 +271,10 @@ export class ExecuteDomainExtractionUseCase {
             (collapsedFallbackTelemetry.outputTokensActual ?? 0) +
             refined.outputTokens,
           summary: `${collapsedFallbackTelemetry.summary}${refined.note}`,
+          ...(modelName !== undefined ? { modelName } : {}),
+          ...(refined.refinerModelName !== undefined
+            ? { refinerModelName: refined.refinerModelName }
+            : {}),
         });
         return ok(refined.value);
       }
@@ -333,6 +341,15 @@ export class ExecuteDomainExtractionUseCase {
         streamError = responseResult.error;
       } else {
         fullResponse = responseResult.value.content;
+        // Last-write-wins across retry attempts: the cloud adapter sets
+        // metadata.model on every successful response, so the winning
+        // attempt always overwrites; `?? modelName` only guards against a
+        // port omitting metadata, where "last known served model" is the
+        // best-effort answer. Telemetry is emitted in the same iteration
+        // as the winning parse below.
+        modelName =
+          modelNameFromResponseMetadata(responseResult.value.metadata) ??
+          modelName;
         if (onChunk && fullResponse) {
           onChunk(fullResponse);
         }
@@ -417,6 +434,10 @@ export class ExecuteDomainExtractionUseCase {
             estimateTokenCount(fullResponse) + refined.outputTokens,
           servedFromCache: false,
           summary: `Extracted ${verbs.length} verbs, ${nouns.length} nouns, ${subdomains.length} subdomains, ${aggregateRoots.length} aggregates${refined.note}`,
+          ...(modelName !== undefined ? { modelName } : {}),
+          ...(refined.refinerModelName !== undefined
+            ? { refinerModelName: refined.refinerModelName }
+            : {}),
         });
         return ok(refined.value);
       }
@@ -458,6 +479,9 @@ export class ExecuteDomainExtractionUseCase {
     note: string;
     inputTokens: number;
     outputTokens: number;
+    /** Model that served the refine request, when a response arrived —
+     * reported even for discarded refinements (the call was still billed). */
+    refinerModelName?: string;
   }> {
     // Refinement skipped — no request sent, nothing to bill.
     const skipped = { value: draft, note: "", inputTokens: 0, outputTokens: 0 };
@@ -516,7 +540,14 @@ export class ExecuteDomainExtractionUseCase {
       // The response arrived, so its tokens are billed whether or not the
       // refinement is accepted below.
       const outputTokens = estimateTokenCount(responseResult.value.content);
-      const discardRefinement = { ...keepDraft, outputTokens };
+      const refinerModelName = modelNameFromResponseMetadata(
+        responseResult.value.metadata,
+      );
+      const discardRefinement = {
+        ...keepDraft,
+        outputTokens,
+        ...(refinerModelName !== undefined ? { refinerModelName } : {}),
+      };
 
       const refinedParsed = parseStage1Response(responseResult.value.content);
       if (!refinedParsed.hasValidLine) {
@@ -540,6 +571,7 @@ export class ExecuteDomainExtractionUseCase {
         note: ` (cascade refined ${draft.subdomains.length}→${refinedResult.subdomains.length} subdomains)`,
         inputTokens,
         outputTokens,
+        ...(refinerModelName !== undefined ? { refinerModelName } : {}),
       };
     } catch {
       // signal.aborted distinguishes our own timeout from a genuine throw.

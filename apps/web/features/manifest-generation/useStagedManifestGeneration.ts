@@ -8,6 +8,7 @@ import type {
   ClientManifestGenerationAdaptersResult,
 } from "@hexagen/manifest-generation";
 import type { ManifestDraftContext } from "@hexagen/agentic-interaction";
+import { formatModelChip } from "@hexagen/agentic-interaction";
 import { getClientManifestGenerationUseCase } from "../../app/lib/wire.client";
 import type { StagedPhase, StageProgress } from "./staged-generation-types";
 import { useStagedGenerationStream } from "./useStagedGenerationStream";
@@ -81,7 +82,9 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     text: Record<number, string>;
     label: Record<number, string>;
     consumed: Record<number, number>;
-  }>({ text: {}, label: {}, consumed: {} });
+    /** Serving-model chip per stage (e.g. "[mercury-2 / gpt-4o]") */
+    model: Record<number, string>;
+  }>({ text: {}, label: {}, consumed: {}, model: {} });
 
   // Cloud streaming hook
   const cloudStream = useStagedGenerationStream({
@@ -117,13 +120,27 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
       vlog.consumed[key] = chunks.length;
       changed = true;
     }
+    // Model chips arrive via stage-telemetry AFTER the stage's last chunk, so
+    // the chunk-driven `changed` flag alone would never re-render the header
+    // with the chip — track chip changes separately. Only stages that already
+    // have log text get a header, so only those are checked.
+    for (const key of Object.keys(vlog.text).map(Number)) {
+      const telemetry = cloudStream.stageProgress[key]?.telemetry;
+      if (!telemetry) continue;
+      const chip = formatModelChip(telemetry);
+      if (chip && vlog.model[key] !== chip) {
+        vlog.model[key] = chip;
+        changed = true;
+      }
+    }
     if (changed) {
       const entries: string[] = [];
       for (const key of Object.keys(vlog.text)
         .map(Number)
         .sort((a, b) => a - b)) {
         const label = vlog.label[key] ? ` — ${vlog.label[key]}` : "";
-        entries.push(`Stage ${key}${label}`);
+        const chip = vlog.model[key] ? ` ${vlog.model[key]}` : "";
+        entries.push(`Stage ${key}${label}${chip}`);
         entries.push(vlog.text[key]);
       }
       setVerboseLog(entries);
@@ -161,7 +178,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
       setStageProgress({});
       setValidationErrors([]);
       setVerboseLog([]);
-      verboseLogRef.current = { text: {}, label: {}, consumed: {} };
+      verboseLogRef.current = { text: {}, label: {}, consumed: {}, model: {} };
       setContextCount(0);
       setPortCount(0);
       setAdapterCount(0);
@@ -328,7 +345,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     setStageProgress({});
     setValidationErrors([]);
     setVerboseLog([]);
-    verboseLogRef.current = { text: {}, label: {}, consumed: {} };
+    verboseLogRef.current = { text: {}, label: {}, consumed: {}, model: {} };
     setContextCount(0);
     setPortCount(0);
     setAdapterCount(0);
