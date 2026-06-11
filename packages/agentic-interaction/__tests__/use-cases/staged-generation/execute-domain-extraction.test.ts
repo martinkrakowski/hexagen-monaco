@@ -551,6 +551,69 @@ describe("ExecuteDomainExtractionUseCase", () => {
       }
     });
 
+    // PR-2 (model identity in telemetry): port double whose responses carry
+    // the metadata bag the cloud adapters record ({ provider, model }).
+    const portWithModel = (content: string, model: string) =>
+      ({
+        sendRequest: async () => ({
+          success: true as const,
+          value: {
+            id: "test",
+            modelId: "gpt-4o-mini" as any,
+            content,
+            finishReason: "stop" as const,
+            timestamp: Date.now(),
+            metadata: { provider: "test-provider", model },
+          },
+        }),
+      }) as unknown as SendStructuredRequestPort;
+
+    test("telemetry carries draft and refiner model identity from response metadata", async () => {
+      const telemetryCalls: StageTelemetry[] = [];
+      const useCase = new ExecuteDomainExtractionUseCase(
+        portWithModel(decomposedNdjson, "mercury-2"),
+        { port: portWithModel(enrichedNdjson, "gpt-4o"), mode: "always" },
+      );
+      const result = await useCase.execute(mockStage0State, undefined, (t) =>
+        telemetryCalls.push(t),
+      );
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(telemetryCalls[0].modelName, "mercury-2");
+      assert.strictEqual(telemetryCalls[0].refinerModelName, "gpt-4o");
+    });
+
+    test("a discarded refinement still reports the refiner's model (the call was billed)", async () => {
+      const telemetryCalls: StageTelemetry[] = [];
+      const useCase = new ExecuteDomainExtractionUseCase(
+        portWithModel(decomposedNdjson, "mercury-2"),
+        { port: portWithModel("not ndjson at all", "gpt-4o"), mode: "always" },
+      );
+      const result = await useCase.execute(mockStage0State, undefined, (t) =>
+        telemetryCalls.push(t),
+      );
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(telemetryCalls[0].modelName, "mercury-2");
+      assert.strictEqual(telemetryCalls[0].refinerModelName, "gpt-4o");
+      assert.ok(
+        telemetryCalls[0].summary.includes(
+          "cascade refine discarded: no valid NDJSON",
+        ),
+      );
+    });
+
+    test("telemetry omits model identity when responses carry no metadata", async () => {
+      const telemetryCalls: StageTelemetry[] = [];
+      const useCase = new ExecuteDomainExtractionUseCase(
+        createSequencedPort([decomposedNdjson]).port,
+      );
+      const result = await useCase.execute(mockStage0State, undefined, (t) =>
+        telemetryCalls.push(t),
+      );
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(telemetryCalls[0].modelName, undefined);
+      assert.strictEqual(telemetryCalls[0].refinerModelName, undefined);
+    });
+
     test("refines the collapsed fallback on the error path", async () => {
       // Attempt 1 collapses, attempts 2-3 return garbage: the collapsed
       // fallback is accepted via the failure path — and a held fallback is by

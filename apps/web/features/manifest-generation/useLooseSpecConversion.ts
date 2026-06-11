@@ -218,6 +218,9 @@ export function useLooseSpecConversion(
           }
 
           if (hasCloudKeys) {
+            setProgressMessage(
+              "Local conversion did not produce a config — retrying via cloud",
+            );
             const cloudResult = await executeCloudConversion(
               looseSpec,
               controller.signal,
@@ -236,6 +239,7 @@ export function useLooseSpecConversion(
             return { convertedConfig: null, error: "Aborted" };
           }
           if (hasCloudKeys) {
+            setProgressMessage("Local conversion failed — retrying via cloud");
             const cloudResult = await executeCloudConversion(
               looseSpec,
               controller.signal,

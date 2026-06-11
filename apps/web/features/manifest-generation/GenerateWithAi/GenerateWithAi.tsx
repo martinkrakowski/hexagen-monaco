@@ -6,10 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelectionFlowState";
 import { useStagedManifestGeneration } from "../useStagedManifestGeneration";
 import { getModelPreferences } from "../ModelSelectionFlow/modelPreferencesStorage";
-import {
-  assessModelCapability,
-  parseYamlToViewData,
-} from "@hexagen/manifest-generation";
+import { assessModelCapability } from "@hexagen/manifest-generation";
 import { DESCRIPTION_MIN_LENGTH } from "@hexagen/agentic-interaction";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
 import type { LLMEngineStatus, ModelMetadata } from "@hexagen/local-llm";
@@ -25,16 +22,22 @@ import { StateView } from "./StateView";
 import { AiGeneratingStep } from "./AiGeneratingStep";
 import { GenerateWithAiLayout } from "./GenerateWithAiLayout";
 import { useGenerateWithAiForm } from "./hooks/useGenerateWithAiForm";
-import type { GenerateWithAiProps, ViewTab } from "./types";
+import type { GenerateWithAiProps } from "./types";
 import { useLLMReadiness } from "../hooks/useLLMReadiness";
 import { useModelSelectionIntent } from "../store/useModelSelectionIntent";
+import {
+  useExecutionEngine,
+  shouldWarnBeforeGenerate,
+  effectivePreferLocal,
+  type ExecutionEngine,
+} from "../store/useExecutionEngine";
+import { LocalGenerationWarningDialog } from "../LocalGenerationWarningDialog";
 import { useSuppressLLMLoadingModal } from "@/contexts/LLMLoadingModalContext";
 
 export function GenerateWithAi({
   onUseManifest,
   llmContext,
   onGeneratingStateChange,
-  onPreviewStateChange,
 }: GenerateWithAiProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -42,17 +45,17 @@ export function GenerateWithAi({
   useSuppressLLMLoadingModal();
   const [formState, formHandlers] = useGenerateWithAiForm();
   const [mounted, setMounted] = useState(false);
-  const [previewActiveTab, setPreviewActiveTab] =
-    useState<ViewTab>("context-map");
   const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const { hasAnyCloud, isProbing, needsSetup, preferLocal } = useLLMReadiness(
+  const { isProbing, needsSetup, preferLocal, hasAnyCloud } = useLLMReadiness(
     llmContext.engineState,
   );
+  const { engine, setEngine } = useExecutionEngine();
+  const [showLocalWarning, setShowLocalWarning] = useState(false);
 
   const [flowState, actions] = useModelSelectionFlowState(llmContext);
   const stagedGen = useStagedManifestGeneration();
@@ -63,10 +66,12 @@ export function GenerateWithAi({
     (engineStatus === "loading_vram" && !llmContext.engineState.autoLoading);
   const isModelError = engineStatus === "error";
 
-  // Show the dedicated full-height generating screen only while generation is
-  // actively in flight. Fall through to the form on a generation error (its
-  // inline retry / clear UI), and while the local model is still downloading or
-  // loading into VRAM (so the ModelProgressCard modal below stays reachable).
+  // Show the dedicated full-height generating screen while generation is in
+  // flight AND after it completes (the flow parks here so the telemetry log
+  // stays reviewable; the parent footer's Next advances to /ai/accept). Fall
+  // through to the form on a generation error (its inline retry / clear UI),
+  // and while the local model is still downloading or loading into VRAM (so
+  // the ModelProgressCard modal below stays reachable).
   const showGeneratingScreen =
     flowState.state === "generating" &&
     !stagedGen.generationError &&
@@ -79,39 +84,66 @@ export function GenerateWithAi({
     stagedGen.reset();
   };
 
+  const onUseManifestRef = useRef(onUseManifest);
+  onUseManifestRef.current = onUseManifest;
+
+  // On success the flow stays parked on the generating screen (telemetry log
+  // stays reviewable); the parent footer gets a Next action that hands the
+  // completed manifest to /ai/accept. While still in flight, Cancel only.
+  // The truthy check is intentional, not an off-by-"" bug: the hook
+  // guarantees generatedManifest is null or non-blank (empty renders are
+  // normalized into generationError + phase "failed" on both the local and
+  // cloud paths), and a Next that forwards "" could only fail into a parse
+  // error — so an empty string must keep Next hidden, never show it.
+  const completedManifest =
+    !stagedGen.isGenerating && stagedGen.generatedManifest
+      ? stagedGen.generatedManifest
+      : null;
+
   useEffect(() => {
     onGeneratingStateChange?.(
       showGeneratingScreen
-        ? { onCancel: () => cancelGenerationRef.current() }
+        ? {
+            onCancel: () => cancelGenerationRef.current(),
+            onNext: completedManifest
+              ? () => onUseManifestRef.current?.(completedManifest)
+              : undefined,
+          }
         : null,
     );
-  }, [showGeneratingScreen, onGeneratingStateChange]);
+  }, [showGeneratingScreen, onGeneratingStateChange, completedManifest]);
 
   const generateRef = useRef(stagedGen.generateManifest);
   useEffect(() => {
     generateRef.current = stagedGen.generateManifest;
   }, [stagedGen.generateManifest]);
 
+  const stagedGenStatusRef = useRef({ isGenerating: false, hasResult: false });
+  stagedGenStatusRef.current = {
+    isGenerating: stagedGen.isGenerating,
+    hasResult: stagedGen.generatedManifest !== null,
+  };
+
   useEffect(() => {
     if (flowState.state !== "generating") return;
+    // Parked-on-telemetry guard: the flow now stays in "generating" after a
+    // successful run, so a dependency change (e.g. a late readiness probe
+    // flipping preferLocal) must not relaunch generation over a completed or
+    // in-flight run. Retry paths reset stagedGen first, so they pass.
+    const status = stagedGenStatusRef.current;
+    if (status.isGenerating || status.hasResult) return;
     generateRef.current(formState.description, {
       deployment: formState.deployment,
       signal: undefined,
-      preferLocal,
+      preferLocal: effectivePreferLocal(engine, preferLocal),
     });
   }, [
     flowState.state,
     formState.description,
     formState.deployment,
     preferLocal,
+    engine,
   ]);
-
-  useEffect(() => {
-    if (flowState.state !== "generating") return;
-    if (stagedGen.generatedManifest) {
-      actions.saveGenerationResult(stagedGen.generatedManifest);
-    }
-  }, [stagedGen.generatedManifest, flowState.state, actions]);
 
   const loadedModelId = llmContext.engineState.loadedModelId;
   const capability = assessModelCapability(loadedModelId, false);
@@ -138,22 +170,36 @@ export function GenerateWithAi({
     [modelSelectionIntent, router],
   );
 
+  // Kicks off generation for the given strategy. Cloud goes straight to
+  // generating; local first ensures a model is ready (or remembered),
+  // otherwise detours through model selection with auto-generate intent.
+  // For "auto" this preserves the previous hasAnyCloud gate: auto only
+  // resolves local when no cloud keys exist, and reaching here without cloud
+  // keys implies WebLLM hardware (needsSetup blocks canGenerate otherwise).
+  const proceedWithGeneration = (strategy: ExecutionEngine) => {
+    if (!effectivePreferLocal(strategy, preferLocal)) {
+      actions.transitionTo("generating");
+      return;
+    }
+    const prefs = getModelPreferences();
+    if (
+      llmContext.engineState.status === "ready" ||
+      (prefs.rememberChoice && prefs.lastModelId)
+    ) {
+      actions.transitionTo("generating");
+    } else {
+      navigateToModelSelection(true);
+    }
+  };
+
   const handleGenerate = () => {
     if (!canGenerate) return;
 
-    if (hasAnyCloud) {
-      actions.transitionTo("generating");
-    } else {
-      const prefs = getModelPreferences();
-      if (
-        llmContext.engineState.status === "ready" ||
-        (prefs.rememberChoice && prefs.lastModelId)
-      ) {
-        actions.transitionTo("generating");
-      } else {
-        navigateToModelSelection(true);
-      }
+    if (shouldWarnBeforeGenerate(engine)) {
+      setShowLocalWarning(true);
+      return;
     }
+    proceedWithGeneration(engine);
   };
 
   const hasReturnedFromModelSelection = searchParams.get("generate") === "1";
@@ -163,7 +209,7 @@ export function GenerateWithAi({
     if (flowState.state !== "idle") return;
     if (!formHandlers.isValid) return;
 
-    if (hasAnyCloud) {
+    if (!effectivePreferLocal(engine, preferLocal)) {
       actions.transitionTo("generating");
       router.replace("/projects/new/ai");
     } else {
@@ -183,7 +229,8 @@ export function GenerateWithAi({
     llmContext.engineState.status,
     actions,
     router,
-    hasAnyCloud,
+    engine,
+    preferLocal,
   ]);
 
   const handleRetryOrRegenerate = useCallback(() => {
@@ -193,57 +240,13 @@ export function GenerateWithAi({
     actions.regenerateManifest();
   }, [stagedGen, actions, retryCount]);
 
-  const handleRetryRef = useRef(handleRetryOrRegenerate);
-  handleRetryRef.current = handleRetryOrRegenerate;
-
-  const onUseManifestRef = useRef(onUseManifest);
-  onUseManifestRef.current = onUseManifest;
-
-  useEffect(() => {
-    if (!onPreviewStateChange) return;
-    if (flowState.state === "preview" && flowState.manifestContent) {
-      const viewData = parseYamlToViewData(flowState.manifestContent);
-      const hasFailures = viewData.validationItems.some(
-        (v) => v.status === "fail",
-      );
-      onPreviewStateChange({
-        onBack: () => {
-          actions.clearError();
-          stagedGen.reset();
-        },
-        onRegenerate: () => handleRetryRef.current(),
-        onUseManifest: (yaml) => onUseManifestRef.current?.(yaml),
-        manifestYaml: flowState.manifestContent,
-        hasFailures,
-        activeTab: previewActiveTab,
-        onTabChange: setPreviewActiveTab,
-        overallScore: viewData.overallScore,
-        systemLabel: viewData.system,
-        architectureLabel: viewData.architecture,
-        contextCount: viewData.contexts.length,
-      });
-    } else {
-      onPreviewStateChange(null);
-    }
-  }, [
-    flowState.state,
-    flowState.manifestContent,
-    onPreviewStateChange,
-    previewActiveTab,
-  ]);
-
   if (flowState.state !== "idle" && flowState.state !== "generating") {
     return (
       <StateView
         flowState={flowState}
         actions={actions}
-        onUseManifest={onUseManifest}
         onConfirmAndContinue={handleRetryOrRegenerate}
-        onRegenerate={handleRetryOrRegenerate}
         onRetryFromError={handleRetryOrRegenerate}
-        onYamlChange={(yaml) => actions.saveGenerationResult(yaml)}
-        externalActiveTab={previewActiveTab}
-        onTabChange={setPreviewActiveTab}
       />
     );
   }
@@ -361,6 +364,8 @@ export function GenerateWithAi({
         }
         isDisabled={isGenerating}
         onChangeModel={() => navigateToModelSelection(false)}
+        engine={engine}
+        onEngineChange={setEngine}
       />
 
       {!manifestCapable && loadedModelId && (
@@ -429,6 +434,23 @@ export function GenerateWithAi({
           stagedGen.reset();
         }}
         disabledTooltip={disabledTooltip}
+      />
+
+      <LocalGenerationWarningDialog
+        open={showLocalWarning}
+        onOpenChange={setShowLocalWarning}
+        onContinueLocal={() => {
+          setShowLocalWarning(false);
+          proceedWithGeneration("local");
+        }}
+        onSwitchToCloud={() => {
+          setShowLocalWarning(false);
+          // Same-handler setEngine + transition is safe: React batches both,
+          // so the generation effect runs with engine === "cloud".
+          setEngine("cloud");
+          proceedWithGeneration("cloud");
+        }}
+        canSwitchToCloud={hasAnyCloud}
       />
     </GenerateWithAiLayout>
   );

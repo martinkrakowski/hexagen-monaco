@@ -8,6 +8,7 @@ import type {
   ClientManifestGenerationAdaptersResult,
 } from "@hexagen/manifest-generation";
 import type { ManifestDraftContext } from "@hexagen/agentic-interaction";
+import { formatModelChip } from "@hexagen/agentic-interaction";
 import { getClientManifestGenerationUseCase } from "../../app/lib/wire.client";
 import type { StagedPhase, StageProgress } from "./staged-generation-types";
 import { useStagedGenerationStream } from "./useStagedGenerationStream";
@@ -81,7 +82,9 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     text: Record<number, string>;
     label: Record<number, string>;
     consumed: Record<number, number>;
-  }>({ text: {}, label: {}, consumed: {} });
+    /** Serving-model chip per stage (e.g. "[mercury-2 / gpt-4o]") */
+    model: Record<number, string>;
+  }>({ text: {}, label: {}, consumed: {}, model: {} });
 
   // Cloud streaming hook
   const cloudStream = useStagedGenerationStream({
@@ -117,13 +120,27 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
       vlog.consumed[key] = chunks.length;
       changed = true;
     }
+    // Model chips arrive via stage-telemetry AFTER the stage's last chunk, so
+    // the chunk-driven `changed` flag alone would never re-render the header
+    // with the chip — track chip changes separately. Only stages that already
+    // have log text get a header, so only those are checked.
+    for (const key of Object.keys(vlog.text).map(Number)) {
+      const telemetry = cloudStream.stageProgress[key]?.telemetry;
+      if (!telemetry) continue;
+      const chip = formatModelChip(telemetry);
+      if (chip && vlog.model[key] !== chip) {
+        vlog.model[key] = chip;
+        changed = true;
+      }
+    }
     if (changed) {
       const entries: string[] = [];
       for (const key of Object.keys(vlog.text)
         .map(Number)
         .sort((a, b) => a - b)) {
         const label = vlog.label[key] ? ` — ${vlog.label[key]}` : "";
-        entries.push(`Stage ${key}${label}`);
+        const chip = vlog.model[key] ? ` ${vlog.model[key]}` : "";
+        entries.push(`Stage ${key}${label}${chip}`);
         entries.push(vlog.text[key]);
       }
       setVerboseLog(entries);
@@ -161,7 +178,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
       setStageProgress({});
       setValidationErrors([]);
       setVerboseLog([]);
-      verboseLogRef.current = { text: {}, label: {}, consumed: {} };
+      verboseLogRef.current = { text: {}, label: {}, consumed: {}, model: {} };
       setContextCount(0);
       setPortCount(0);
       setAdapterCount(0);
@@ -230,8 +247,17 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
             controller.signal,
           );
 
-          // Success
+          // Success — but an empty render is a failure in disguise: callers
+          // key their success branch on a non-empty manifest, so returning
+          // "" with phase "complete" would strand the flow with neither a
+          // continue action nor an error. Route it through the normal
+          // failure channel (the catch below) instead.
           const yaml = renderResult.yaml || "";
+          if (!yaml.trim()) {
+            throw new Error(
+              "The local model produced an empty manifest. Try again or switch to cloud generation.",
+            );
+          }
           const adapterCount = draft.boundedContexts.reduce(
             (sum: number, c: ManifestDraftContext) =>
               sum + (c.adapters?.length || 0),
@@ -269,6 +295,22 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
             },
             controller.signal,
           );
+
+          // Symmetric with the local path's empty-render guard above: a
+          // server "done" event carrying an empty document must not look
+          // like success — callers key on a non-empty manifest, so phase
+          // "complete" with "" would park them with no continue action and
+          // no error. Normalize it to the failure shape before the state
+          // writes below.
+          if (
+            result.phase === "complete" &&
+            !result.generatedManifest?.trim()
+          ) {
+            result.phase = "failed";
+            result.stepDetail =
+              "Generation finished without producing a manifest.";
+            result.generatedManifest = null;
+          }
 
           // Use returned values from generate() instead of stale closure
           setGeneratedManifest(result.generatedManifest);
@@ -328,7 +370,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     setStageProgress({});
     setValidationErrors([]);
     setVerboseLog([]);
-    verboseLogRef.current = { text: {}, label: {}, consumed: {} };
+    verboseLogRef.current = { text: {}, label: {}, consumed: {}, model: {} };
     setContextCount(0);
     setPortCount(0);
     setAdapterCount(0);

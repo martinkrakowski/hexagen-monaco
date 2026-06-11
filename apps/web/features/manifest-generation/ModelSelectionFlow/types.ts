@@ -19,8 +19,6 @@ export interface ModelSelectionFlowState {
   rememberedChoice?: boolean;
   cloudProvider?: "openai" | "anthropic" | "azure" | "other";
   generationProgress?: number;
-  manifestContent?: string;
-  lastRejectedManifest?: string | null;
   isModelReady?: boolean;
   clarificationTriggers?: Array<{
     type: string;
@@ -49,13 +47,11 @@ export interface ModelSelectionFlowActions {
   setError: (message: string, errorCode?: GenerateWithAiErrorCode) => void;
   clearError: () => void;
   retryGeneration: () => void;
-  saveGenerationResult: (manifest: string) => void;
   restartFromSelection: () => void;
   proceedToWizard: () => void;
   clearStoredApiKey: () => Promise<void>;
   validateApiKey: (provider: string, key: string) => Promise<boolean>;
   loadSavedApiKey: (provider: string) => Promise<string | null>;
-  rejectManifest: () => void;
   regenerateManifest: () => void;
   repairModelDownload: (modelId: DomainModelId) => void;
   setClarificationNeeded: (

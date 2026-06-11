@@ -52,4 +52,8 @@ export type {
 
 // Phase P17: Stage telemetry
 export type { StageTelemetry } from "./stage-telemetry";
-export { estimateTokenCount } from "./stage-telemetry";
+export {
+  estimateTokenCount,
+  formatModelChip,
+  modelNameFromResponseMetadata,
+} from "./stage-telemetry";

@@ -10,6 +10,7 @@ describe("usePendingManifest", () => {
       yaml: null,
       formValues: null,
       projectName: null,
+      originPath: null,
     });
   });
 
@@ -18,9 +19,10 @@ describe("usePendingManifest", () => {
     assert.strictEqual(store.yaml, null);
     assert.strictEqual(store.formValues, null);
     assert.strictEqual(store.projectName, null);
+    assert.strictEqual(store.originPath, null);
   });
 
-  it("should set state with yaml, formValues, and projectName", () => {
+  it("should set state with yaml, formValues, projectName, and originPath", () => {
     const yaml = "test: manifest";
     const formValues: ProjectSpec = {
       boundedContexts: [],
@@ -30,12 +32,15 @@ describe("usePendingManifest", () => {
     };
     const projectName = "Test Project";
 
-    usePendingManifest.getState().set(yaml, formValues, projectName);
+    usePendingManifest
+      .getState()
+      .set(yaml, formValues, projectName, "/projects/new/ai");
 
     const store = usePendingManifest.getState();
     assert.strictEqual(store.yaml, yaml);
     assert.deepStrictEqual(store.formValues, formValues);
     assert.strictEqual(store.projectName, projectName);
+    assert.strictEqual(store.originPath, "/projects/new/ai");
   });
 
   it("should clear state back to null values", () => {
@@ -48,13 +53,16 @@ describe("usePendingManifest", () => {
     };
     const projectName = "Test Project";
 
-    usePendingManifest.getState().set(yaml, formValues, projectName);
+    usePendingManifest
+      .getState()
+      .set(yaml, formValues, projectName, "/projects/new/import/spec");
     usePendingManifest.getState().clear();
 
     const store = usePendingManifest.getState();
     assert.strictEqual(store.yaml, null);
     assert.strictEqual(store.formValues, null);
     assert.strictEqual(store.projectName, null);
+    assert.strictEqual(store.originPath, null);
   });
 
   it("should handle set/clear lifecycle correctly", () => {
@@ -65,7 +73,9 @@ describe("usePendingManifest", () => {
       peerMappings: [],
     };
 
-    usePendingManifest.getState().set("yaml1", formValues1, "Project 1");
+    usePendingManifest
+      .getState()
+      .set("yaml1", formValues1, "Project 1", "/projects/new/ai");
     assert.strictEqual(usePendingManifest.getState().projectName, "Project 1");
 
     usePendingManifest.getState().clear();
@@ -78,8 +88,14 @@ describe("usePendingManifest", () => {
       peerMappings: [],
     };
 
-    usePendingManifest.getState().set("yaml2", formValues2, "Project 2");
+    usePendingManifest
+      .getState()
+      .set("yaml2", formValues2, "Project 2", "/projects/new/import/spec");
     assert.strictEqual(usePendingManifest.getState().projectName, "Project 2");
+    assert.strictEqual(
+      usePendingManifest.getState().originPath,
+      "/projects/new/import/spec",
+    );
   });
 
   it("should store complex ProjectSpec objects", () => {
@@ -127,7 +143,12 @@ describe("usePendingManifest", () => {
 
     usePendingManifest
       .getState()
-      .set("complex-yaml", complexFormValues, "Complex Project");
+      .set(
+        "complex-yaml",
+        complexFormValues,
+        "Complex Project",
+        "/projects/new/ai",
+      );
 
     const store = usePendingManifest.getState();
     assert.deepStrictEqual(store.formValues, complexFormValues);
