@@ -21,9 +21,6 @@ type LocalModeSettingsViewProps = Pick<
   | "onBackFromSettings"
   | "onSwitchToCloud"
   | "onResetConfig"
-  | "onConfigSaved"
-  | "onTandemDisabled"
-  | "tandemDerivedStatus"
 >;
 
 export function LocalModeSettingsView({
@@ -38,9 +35,6 @@ export function LocalModeSettingsView({
   onBackFromSettings,
   onSwitchToCloud,
   onResetConfig,
-  onConfigSaved,
-  onTandemDisabled,
-  tandemDerivedStatus,
 }: LocalModeSettingsViewProps) {
   const [serverModelName, setServerModelName] = useState<string>("");
   const [generationModelName, setGenerationModelName] = useState<
@@ -100,9 +94,6 @@ export function LocalModeSettingsView({
         hasServerApiKey={hasServerLLMAccessKey()}
         serverModelName={serverModelName}
         generationModelName={generationModelName}
-        onConfigSaved={onConfigSaved}
-        onTandemDisabled={onTandemDisabled}
-        tandemStatus={tandemDerivedStatus}
       />
       <PanelFooter showHint={false} />
     </div>
