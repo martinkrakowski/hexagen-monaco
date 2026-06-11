@@ -31,7 +31,6 @@ import { SpecReviewStep } from "./import-project-spec/SpecReviewStep";
 import { SpecConvertingStep } from "./import-project-spec/SpecConvertingStep";
 import { SpecDescriptionFallbackStep } from "./import-project-spec/SpecDescriptionFallbackStep";
 import { ManifestGeneratingStep } from "./import-project-spec/ManifestGeneratingStep";
-import { ManifestPreviewStep } from "./import-project-spec/ManifestPreviewStep";
 import { ModelSetupPrompt } from "./GenerateWithAi/ModelSetupPrompt";
 import {
   extractSpecSummary,
@@ -43,8 +42,7 @@ type SpecPageState =
   | "SPEC_REVIEW"
   | "DESCRIPTION_FALLBACK"
   | "CONVERTING_LOOSE_SPEC"
-  | "GENERATING"
-  | "PREVIEW";
+  | "GENERATING";
 
 export default function ImportProjectSpecPage() {
   const router = useRouter();
@@ -60,9 +58,10 @@ export default function ImportProjectSpecPage() {
   const [specContent, setSpecContent] = useState<string>("");
   const [cameFromConversion, setCameFromConversion] = useState(false);
   const [isJsonDisclosed, setIsJsonDisclosed] = useState(false);
-  const [generatedManifest, setGeneratedManifest] = useState<string | null>(
-    null,
-  );
+  // Set when a generated manifest fails to parse into wizard data — shown
+  // inline on the generating step (there is no preview screen to fall back
+  // to; approval happens once, on /projects/new/ai/accept).
+  const [acceptError, setAcceptError] = useState<string | null>(null);
   const { needsSetup, isProbing, preferLocal } = useLLMReadiness();
   const { engine, setEngine } = useExecutionEngine();
   // Which generate action is parked behind the local-override warning dialog.
@@ -149,11 +148,61 @@ export default function ImportProjectSpecPage() {
     }
   };
 
+  // Runs at generation-complete: reconcile the carried project name into the
+  // manifest, stash it for the accept screen, and navigate straight to
+  // /projects/new/ai/accept — the single approval screen. (The page used to
+  // show its own PREVIEW state first, duplicating the accept screen.)
+  const acceptManifest = useCallback(
+    (manifest: string) => {
+      try {
+        const wizardData = parseManifestToWizardData(manifest);
+        // The user-entered name (from the Project Name step) wins: it becomes the
+        // saved-project name and seeds `governance.workspaceName` so the name is
+        // factored into generated output. Fall back to the manifest-derived name
+        // only if the step was bypassed (e.g. a direct visit to this page).
+        const projectName =
+          carriedName ||
+          wizardData.governance?.workspaceName ||
+          `Imported Project ${new Date().toLocaleTimeString()}`;
+        // Keep the saved manifest string in sync with the carried name:
+        // seed the form's workspaceName/namespacePrefix AND rewrite the manifest's
+        // top-level system/scope so the Approve screen and saved manifestYaml
+        // agree with formState (see manifestIdentity).
+        let manifestYaml = manifest;
+        if (carriedName && wizardData.governance) {
+          const slug = deriveWorkspaceName(carriedName).name;
+          const scope = `@${slug}`;
+          wizardData.governance.workspaceName = slug;
+          wizardData.governance.namespacePrefix = scope;
+          manifestYaml = setManifestIdentity(manifest, {
+            system: slug,
+            scope,
+          });
+        }
+        pendingManifest.set(manifestYaml, wizardData, projectName);
+        router.push("/projects/new/ai/accept");
+      } catch (err) {
+        if (process.env.NODE_ENV !== "production") {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          logger.error("Failed to parse manifest for wizard:", {
+            error: errorMsg,
+          });
+        }
+        // Stay on the generating step and surface the failure inline; the
+        // footer's "Go Back" (shown once generation settles) is the way out.
+        setAcceptError(
+          "The generated manifest could not be parsed. Go back and try again.",
+        );
+      }
+    },
+    [pendingManifest, router, carriedName],
+  );
+
   const runSpecGeneration = useCallback(
     async (strategy: ExecutionEngine) => {
       setPreviousState(pageState);
       setPageState("GENERATING");
-      setGeneratedManifest(null);
+      setAcceptError(null);
       manifestGeneration.reset();
 
       const result = await specGeneration.generateFromSpec(specContent, {
@@ -161,8 +210,7 @@ export default function ImportProjectSpecPage() {
       });
 
       if (result?.generatedManifest) {
-        setGeneratedManifest(result.generatedManifest);
-        setPageState("PREVIEW");
+        acceptManifest(result.generatedManifest);
       } else if (result?.phase === "failed") {
         const errorMsg = result.stepDetail || "";
         if (errorMsg.includes("No cloud LLM API keys configured")) {
@@ -175,14 +223,20 @@ export default function ImportProjectSpecPage() {
         // when isGenerating=false, so the user can recover.
       }
     },
-    [specContent, specGeneration, manifestGeneration, pageState],
+    [
+      specContent,
+      specGeneration,
+      manifestGeneration,
+      pageState,
+      acceptManifest,
+    ],
   );
 
   const runDescriptionGeneration = useCallback(
     async (strategy: ExecutionEngine) => {
       setPreviousState(pageState);
       setPageState("GENERATING");
-      setGeneratedManifest(null);
+      setAcceptError(null);
       specGeneration.reset();
 
       const result = await manifestGeneration.generateManifest(specContent, {
@@ -190,13 +244,19 @@ export default function ImportProjectSpecPage() {
       });
 
       if (result?.generatedManifest) {
-        setGeneratedManifest(result.generatedManifest);
-        setPageState("PREVIEW");
+        acceptManifest(result.generatedManifest);
       } else if (result?.generationError) {
         setPageState("DESCRIPTION_FALLBACK");
       }
     },
-    [specContent, manifestGeneration, specGeneration, pageState, preferLocal],
+    [
+      specContent,
+      manifestGeneration,
+      specGeneration,
+      pageState,
+      preferLocal,
+      acceptManifest,
+    ],
   );
 
   const handleMapPorts = useCallback(() => {
@@ -255,7 +315,7 @@ export default function ImportProjectSpecPage() {
     specGeneration.reset();
     manifestGeneration.reset();
     resetConversion();
-    setGeneratedManifest(null);
+    setAcceptError(null);
     setPageState("UPLOAD");
     setSpecContent("");
     setSpecSummary(null);
@@ -264,49 +324,10 @@ export default function ImportProjectSpecPage() {
     sessionStorage.removeItem("import_spec_content");
   };
 
-  const handleAcceptAndContinue = useCallback(() => {
-    if (!generatedManifest) return;
-    try {
-      const wizardData = parseManifestToWizardData(generatedManifest);
-      // The user-entered name (from the Project Name step) wins: it becomes the
-      // saved-project name and seeds `governance.workspaceName` so the name is
-      // factored into generated output. Fall back to the manifest-derived name
-      // only if the step was bypassed (e.g. a direct visit to this page).
-      const projectName =
-        carriedName ||
-        wizardData.governance?.workspaceName ||
-        `Imported Project ${new Date().toLocaleTimeString()}`;
-      // Keep the previewed/saved manifest string in sync with the carried name:
-      // seed the form's workspaceName/namespacePrefix AND rewrite the manifest's
-      // top-level system/scope so the Approve screen and saved manifestYaml
-      // agree with formState (see manifestIdentity).
-      let manifestYaml = generatedManifest;
-      if (carriedName && wizardData.governance) {
-        const slug = deriveWorkspaceName(carriedName).name;
-        const scope = `@${slug}`;
-        wizardData.governance.workspaceName = slug;
-        wizardData.governance.namespacePrefix = scope;
-        manifestYaml = setManifestIdentity(generatedManifest, {
-          system: slug,
-          scope,
-        });
-      }
-      pendingManifest.set(manifestYaml, wizardData, projectName);
-      router.push("/projects/new/ai/accept");
-    } catch (err) {
-      if (process.env.NODE_ENV !== "production") {
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        logger.error("Failed to parse manifest for wizard:", {
-          error: errorMsg,
-        });
-      }
-      setPageState("PREVIEW");
-      // Don't route away—show error but let user inspect the YAML
-    }
-  }, [generatedManifest, pendingManifest, router, carriedName]);
-
   const generationError =
-    specGeneration.generationError || manifestGeneration.generationError;
+    acceptError ||
+    specGeneration.generationError ||
+    manifestGeneration.generationError;
   const phase =
     specGeneration.phase !== "idle"
       ? specGeneration.phase
@@ -404,6 +425,7 @@ export default function ImportProjectSpecPage() {
             onClick={() => {
               specGeneration.reset();
               manifestGeneration.reset();
+              setAcceptError(null);
               setPageState(previousState ?? "SPEC_REVIEW");
               setPreviousState(null);
             }}
@@ -412,16 +434,6 @@ export default function ImportProjectSpecPage() {
               ? "Cancel"
               : "Go Back"}
           </Button>
-        </>
-      );
-    }
-    if (pageState === "PREVIEW") {
-      return (
-        <>
-          <Button variant="outline" onClick={handleReset}>
-            Start Over
-          </Button>
-          <Button onClick={handleAcceptAndContinue}>Accept & Continue</Button>
         </>
       );
     }
@@ -436,8 +448,7 @@ export default function ImportProjectSpecPage() {
     );
   };
 
-  const isFullHeightState =
-    pageState === "GENERATING" || pageState === "PREVIEW";
+  const isFullHeightState = pageState === "GENERATING";
 
   return (
     <ProjectsShellWithFreeTier
@@ -450,19 +461,13 @@ export default function ImportProjectSpecPage() {
     >
       {isFullHeightState ? (
         <div className="h-full flex flex-col dot-grid bg-ambient p-4">
-          {pageState === "GENERATING" && (
-            <ManifestGeneratingStep
-              generationError={generationError}
-              phase={phase}
-              stepDetail={stepDetail}
-              stageProgress={stageProgress}
-              verboseLog={verboseLog}
-            />
-          )}
-
-          {pageState === "PREVIEW" && (
-            <ManifestPreviewStep generatedManifest={generatedManifest} />
-          )}
+          <ManifestGeneratingStep
+            generationError={generationError}
+            phase={phase}
+            stepDetail={stepDetail}
+            stageProgress={stageProgress}
+            verboseLog={verboseLog}
+          />
         </div>
       ) : (
         <div className="h-full overflow-y-auto dot-grid bg-ambient">
