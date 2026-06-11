@@ -20,7 +20,10 @@ import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest
 import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
-import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
+import {
+  estimateTokenCount,
+  modelNameFromResponseMetadata,
+} from "../../../domain/value-objects/stage-telemetry";
 
 const STAGE_NUMBER = 2;
 
@@ -41,6 +44,7 @@ export class ExecuteContextClassificationUseCase {
     let prompt = compileStage2Prompt(state);
     let lastError = "";
     let retryCount = 0;
+    let modelName: string | undefined;
 
     for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
       retryCount = attempt - 1;
@@ -100,6 +104,15 @@ export class ExecuteContextClassificationUseCase {
         streamError = responseResult.error;
       } else {
         fullResponse = responseResult.value.content;
+        // Last-write-wins across retry attempts: the cloud adapter sets
+        // metadata.model on every successful response, so the winning
+        // attempt always overwrites; `?? modelName` only guards against a
+        // port omitting metadata, where "last known served model" is the
+        // best-effort answer. Telemetry is emitted in the same iteration
+        // as the winning parse below.
+        modelName =
+          modelNameFromResponseMetadata(responseResult.value.metadata) ??
+          modelName;
         if (onChunk && fullResponse) {
           onChunk(fullResponse);
         }
@@ -250,6 +263,7 @@ export class ExecuteContextClassificationUseCase {
           outputTokensActual: estimateTokenCount(fullResponse),
           servedFromCache: false,
           summary: `Classified ${accepted.length} accepted, ${rejected.length} rejected, ${uncertain.length} uncertain contexts`,
+          ...(modelName !== undefined ? { modelName } : {}),
         });
         return ok(result);
       }

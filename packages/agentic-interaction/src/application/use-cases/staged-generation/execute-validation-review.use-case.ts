@@ -81,6 +81,7 @@ export class ExecuteValidationReviewUseCase {
     let prompt = compileStage6Prompt(state);
     let lastError = "";
     let retryCount = 0;
+    let modelName: string | undefined;
     onChunk?.(
       `Reviewing assembled manifest for DDD violations and consistency issues…`,
     );
@@ -106,6 +107,14 @@ export class ExecuteValidationReviewUseCase {
         { stream: true, temperature: 0.1, maxTokens: 800 },
       );
       request.signal = abortController.signal;
+      // Last-write-wins across retry attempts: each attempt builds a fresh
+      // request, and the streaming adapter fires this on the first parsed
+      // frame of whichever provider actually streams — so any attempt that
+      // produced content re-fires it, and the winning attempt's value is
+      // what the success telemetry below reports.
+      request.onModelResolved = (info) => {
+        modelName = info.model;
+      };
 
       let fullResponse = "";
       let streamError: unknown = null;
@@ -302,6 +311,7 @@ export class ExecuteValidationReviewUseCase {
           outputTokensActual: estimateTokenCount(fullResponse),
           servedFromCache: false,
           summary: `Validation ${passed ? "passed" : "failed"}: ${finalErrors.length} errors, ${finalWarnings.length} warnings`,
+          ...(modelName !== undefined ? { modelName } : {}),
         });
         return ok(result);
       }
