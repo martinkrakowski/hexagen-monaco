@@ -5,7 +5,10 @@ import {
   ExecuteFullStagedGenerationUseCase,
   type StagedGenerationCallbacks,
 } from "@hexagen/agentic-interaction";
-import type { PromptVariables } from "@hexagen/agentic-interaction";
+import type {
+  PromptVariables,
+  StageTelemetry,
+} from "@hexagen/agentic-interaction";
 import {
   createLLMProviderSelector,
   createStage1RefinerConfig,
@@ -93,6 +96,21 @@ export async function POST(request: NextRequest) {
         // Canary comparison key: every request logs which pipeline served it.
         logger.info("[staged-gen] pipeline selected", { pipeline });
 
+        // Per-stage server log with model identity — keyed off the same
+        // telemetry the client receives, so the two can be cross-checked.
+        const logStageTelemetry = (telemetry: StageTelemetry) => {
+          logger.info("[staged-gen] stage complete", {
+            stage: telemetry.stage,
+            label: telemetry.label,
+            model: telemetry.modelName,
+            refinerModel: telemetry.refinerModelName,
+            durationMs: telemetry.durationMs,
+            retryCount: telemetry.retryCount,
+            inputTokensEstimate: telemetry.inputTokensEstimate,
+            outputTokensActual: telemetry.outputTokensActual,
+          });
+        };
+
         let result;
         if (pipeline === "full") {
           // Stage-1 draft→refine cascade — null (off) unless
@@ -108,11 +126,14 @@ export async function POST(request: NextRequest) {
             transactionManager,
             stage1Refinement ? { stage1Refinement } : undefined,
           );
-          result = await useCase.execute(
-            body.description,
-            variables,
-            createFullPipelineEventAdapter(send),
-          );
+          const eventAdapter = createFullPipelineEventAdapter(send);
+          result = await useCase.execute(body.description, variables, {
+            ...eventAdapter,
+            onStageTelemetry: (telemetry) => {
+              logStageTelemetry(telemetry);
+              eventAdapter.onStageTelemetry?.(telemetry);
+            },
+          });
         } else {
           const callbacks: StagedGenerationCallbacks = {
             onStageStart: (stage, label) =>
@@ -122,12 +143,14 @@ export async function POST(request: NextRequest) {
             onChunk: (stage, data) => send({ type: "chunk", stage, data }),
             onValidationError: (stage, errors) =>
               send({ type: "validation-error", stage, errors }),
-            onStageTelemetry: (telemetry) =>
+            onStageTelemetry: (telemetry) => {
+              logStageTelemetry(telemetry);
               send({
                 type: "stage-telemetry",
                 stage: telemetry.stage,
                 telemetry: telemetry as unknown as Record<string, unknown>,
-              }),
+              });
+            },
           };
           const useCase = new ExecuteStagedGenerationUseCase(
             llmAdapter,

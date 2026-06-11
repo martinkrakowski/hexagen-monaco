@@ -156,4 +156,108 @@ describe("cloud-llm-streaming multi-chunk delivery", () => {
       else delete process.env.TEST_STREAM_API_KEY;
     }
   });
+
+  it("reports the served model once via onModelResolved, preferring the SSE frame's model", async () => {
+    const original = process.env.TEST_STREAM_API_KEY;
+    process.env.TEST_STREAM_API_KEY = "sk-test";
+
+    try {
+      // Frames carry a "model" field (as OpenAI-compatible providers do) that
+      // DIFFERS from the requested model — the served one must win.
+      const fetchMock = (async () => {
+        return {
+          ok: true,
+          status: 200,
+          body: new ReadableStream({
+            start(controller) {
+              const encoder = new TextEncoder();
+              controller.enqueue(
+                encoder.encode(
+                  'data: {"model":"gpt-4o-mini-2024-07-18","choices":[{"delta":{"content":"chunk1"}}]}\n',
+                ),
+              );
+              controller.enqueue(
+                encoder.encode(
+                  'data: {"model":"gpt-4o-mini-2024-07-18","choices":[{"delta":{"content":"chunk2"}}]}\n',
+                ),
+              );
+              controller.enqueue(encoder.encode("data: [DONE]\n"));
+              controller.close();
+            },
+          }),
+        } as Response;
+      }) as unknown as typeof fetch;
+
+      const config: CloudLLMPipelineAdapterConfig = {
+        fallbackChain: testChain,
+        secretVault: envVault(),
+        fetchFn: fetchMock,
+      };
+
+      const resolved: Array<{ provider: string; model: string }> = [];
+      const request = {
+        ...makeRequest(),
+        onModelResolved: (info: { provider: string; model: string }) =>
+          resolved.push(info),
+      };
+
+      for await (const r of streamStructuredRequest(
+        config,
+        fetchMock,
+        request,
+      )) {
+        assert.ok(r.success);
+      }
+
+      assert.deepStrictEqual(resolved, [
+        { provider: "openai", model: "gpt-4o-mini-2024-07-18" },
+      ]);
+    } finally {
+      if (original !== undefined) process.env.TEST_STREAM_API_KEY = original;
+      else delete process.env.TEST_STREAM_API_KEY;
+    }
+  });
+
+  it("falls back to the requested model when SSE frames omit one", async () => {
+    const original = process.env.TEST_STREAM_API_KEY;
+    process.env.TEST_STREAM_API_KEY = "sk-test";
+
+    try {
+      const fetchMock = (async () => {
+        return {
+          ok: true,
+          status: 200,
+          body: sseStreamFromChunks(["chunk1", "chunk2"]),
+        } as Response;
+      }) as unknown as typeof fetch;
+
+      const config: CloudLLMPipelineAdapterConfig = {
+        fallbackChain: testChain,
+        secretVault: envVault(),
+        fetchFn: fetchMock,
+      };
+
+      const resolved: Array<{ provider: string; model: string }> = [];
+      const request = {
+        ...makeRequest(),
+        onModelResolved: (info: { provider: string; model: string }) =>
+          resolved.push(info),
+      };
+
+      for await (const r of streamStructuredRequest(
+        config,
+        fetchMock,
+        request,
+      )) {
+        assert.ok(r.success);
+      }
+
+      assert.deepStrictEqual(resolved, [
+        { provider: "openai", model: "gpt-4o-mini" },
+      ]);
+    } finally {
+      if (original !== undefined) process.env.TEST_STREAM_API_KEY = original;
+      else delete process.env.TEST_STREAM_API_KEY;
+    }
+  });
 });

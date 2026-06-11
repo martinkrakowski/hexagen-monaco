@@ -138,6 +138,15 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
           : rawContent;
       const finishReason = data.choices?.[0]?.finish_reason ?? "stop";
 
+      // Prefer the model echoed by the provider over the one requested —
+      // the two differ when the endpoint aliases or rewrites model names.
+      const servedModel =
+        typeof data.model === "string" && data.model ? data.model : model;
+      request.onModelResolved?.({
+        provider: provider.providerId,
+        model: servedModel,
+      });
+
       const modelId = model as unknown as DomainModelId;
       const response = createLLMResponse(
         modelId,
@@ -153,7 +162,7 @@ export class CloudLLMPipelineAdapter implements SendStructuredRequestPort {
             : undefined,
           metadata: {
             provider: provider.providerId,
-            model,
+            model: servedModel,
           },
         },
       );

@@ -268,6 +268,13 @@ export class ExecutePortMappingUseCase {
     let totalRetryCount = 0;
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
+    // Last model reported by the provider adapter across the per-context
+    // calls — they all run the same chain, so last-write-wins is the model
+    // that served the stage (escalation retries included).
+    let modelName: string | undefined;
+    const onModelResolved = (info: { provider: string; model: string }) => {
+      modelName = info.model;
+    };
 
     const contexts = state.stage2.accepted;
     if (!contexts || contexts.length === 0) {
@@ -312,7 +319,11 @@ export class ExecutePortMappingUseCase {
         onChunk?.(chunk);
       };
 
-      const result = await this.runLLMWithRetry(prompt, wrappedOnChunk);
+      const result = await this.runLLMWithRetry(
+        prompt,
+        wrappedOnChunk,
+        onModelResolved,
+      );
       totalRetryCount += result.retryCount;
       totalOutputTokens += estimateTokenCount(result.fullResponse);
       const retryNote =
@@ -349,6 +360,7 @@ export class ExecutePortMappingUseCase {
       outputTokensActual: totalOutputTokens,
       servedFromCache: false,
       summary: `Mapped ports for ${contextsArray.length} contexts, ${allContextMappings.length} context mappings`,
+      ...(modelName !== undefined ? { modelName } : {}),
     });
 
     return ok({
@@ -360,6 +372,7 @@ export class ExecutePortMappingUseCase {
   private async runLLMWithRetry(
     initialPrompt: string,
     onChunk?: (chunk: string) => void,
+    onModelResolved?: (info: { provider: string; model: string }) => void,
   ): Promise<{
     objects: Record<string, unknown>[];
     fullResponse: string;
@@ -371,6 +384,7 @@ export class ExecutePortMappingUseCase {
           initialPrompt,
           onChunk,
           preferredCloudModel,
+          onModelResolved,
         );
       },
       this.escalationConfig,
@@ -384,6 +398,7 @@ export class ExecutePortMappingUseCase {
     initialPrompt: string,
     onChunk?: (chunk: string) => void,
     preferredCloudModel?: string,
+    onModelResolved?: (info: { provider: string; model: string }) => void,
   ): Promise<{
     objects: Record<string, unknown>[];
     fullResponse: string;
@@ -418,6 +433,7 @@ export class ExecutePortMappingUseCase {
         },
       );
       request.signal = abortController.signal;
+      request.onModelResolved = onModelResolved;
 
       let fullResponse = "";
       let streamError: unknown = null;

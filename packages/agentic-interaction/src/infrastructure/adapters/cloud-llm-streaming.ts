@@ -101,8 +101,9 @@ async function* streamProvider(
     content: m.content,
   }));
 
+  const requestedModel = request.preferredCloudModel ?? provider.model;
   const body: Record<string, unknown> = {
-    model: request.preferredCloudModel ?? provider.model,
+    model: requestedModel,
     messages,
     temperature: clampTemperatureFor(
       provider,
@@ -186,6 +187,12 @@ async function* streamProvider(
     const reader = httpResponse!.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    // Report model identity once per serving provider, on the first parsed
+    // SSE frame: only a provider that actually streams output counts as the
+    // one that served (a 4xx/5xx attempt above never reaches this point).
+    // OpenAI-compatible frames echo the resolved model; fall back to what we
+    // asked for when the provider omits it.
+    let modelReported = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -203,6 +210,16 @@ async function* streamProvider(
 
         try {
           const parsed = JSON.parse(data);
+          if (!modelReported) {
+            modelReported = true;
+            request.onModelResolved?.({
+              provider: provider.providerId,
+              model:
+                typeof parsed.model === "string" && parsed.model
+                  ? parsed.model
+                  : requestedModel,
+            });
+          }
           const content = parsed.choices?.[0]?.delta?.content;
           if (content) {
             yield { success: true, value: content };

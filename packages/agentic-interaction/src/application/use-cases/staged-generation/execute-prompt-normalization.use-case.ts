@@ -14,7 +14,10 @@ import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest
 import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
-import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
+import {
+  estimateTokenCount,
+  modelNameFromResponseMetadata,
+} from "../../../domain/value-objects/stage-telemetry";
 
 const STAGE_NUMBER = 0;
 
@@ -49,6 +52,7 @@ export class ExecutePromptNormalizationUseCase {
     );
     let lastError = "";
     let retryCount = 0;
+    let modelName: string | undefined;
 
     for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
       retryCount = attempt - 1;
@@ -105,6 +109,9 @@ export class ExecutePromptNormalizationUseCase {
         streamError = responseResult.error;
       } else {
         fullResponse = responseResult.value.content;
+        modelName =
+          modelNameFromResponseMetadata(responseResult.value.metadata) ??
+          modelName;
         if (onChunk && fullResponse) {
           onChunk(fullResponse);
         }
@@ -202,6 +209,7 @@ export class ExecutePromptNormalizationUseCase {
           outputTokensActual: estimateTokenCount(fullResponse),
           servedFromCache: false,
           summary: `Normalized intent: ${intent}, ${explicitTechnologies.length} technologies, ${ambiguities.length} ambiguities`,
+          ...(modelName !== undefined ? { modelName } : {}),
         });
         return ok(result);
       }
