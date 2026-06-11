@@ -18,6 +18,11 @@ interface LocalGenerationWarningDialogProps {
   onContinueLocal: () => void;
   /** Flip the persisted override to cloud and proceed. */
   onSwitchToCloud: () => void;
+  /** Whether cloud generation is actually available (useLLMReadiness'
+   * hasAnyCloud). When false the switch action is hidden — preferLocal=false
+   * routes strictly to the cloud endpoint, so offering it would send the
+   * user into a guaranteed-failing request. */
+  canSwitchToCloud: boolean;
 }
 
 /**
@@ -30,6 +35,7 @@ export function LocalGenerationWarningDialog({
   onOpenChange,
   onContinueLocal,
   onSwitchToCloud,
+  canSwitchToCloud,
 }: LocalGenerationWarningDialogProps) {
   return (
     <Dialog open={open} onClose={() => onOpenChange(false)}>
@@ -43,14 +49,17 @@ export function LocalGenerationWarningDialog({
             <DialogTitle>Generate with local model?</DialogTitle>
           </div>
           <DialogDescription>
-            Some stages may fail with WebLLM models; cloud fallback will be used
-            if available.
+            {canSwitchToCloud
+              ? "Some stages may fail with WebLLM models; cloud fallback will be used if available."
+              : "Some stages may fail with WebLLM models. Cloud generation is not configured, so local is the only available engine."}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" onClick={onSwitchToCloud}>
-            Switch to cloud
-          </Button>
+          {canSwitchToCloud && (
+            <Button variant="outline" onClick={onSwitchToCloud}>
+              Switch to cloud
+            </Button>
+          )}
           <Button onClick={onContinueLocal}>Continue with local</Button>
         </DialogFooter>
       </DialogContent>

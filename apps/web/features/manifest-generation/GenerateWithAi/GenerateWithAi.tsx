@@ -57,7 +57,7 @@ export function GenerateWithAi({
     setMounted(true);
   }, []);
 
-  const { isProbing, needsSetup, preferLocal } = useLLMReadiness(
+  const { isProbing, needsSetup, preferLocal, hasAnyCloud } = useLLMReadiness(
     llmContext.engineState,
   );
   const { engine, setEngine } = useExecutionEngine();
@@ -472,6 +472,7 @@ export function GenerateWithAi({
           setEngine("cloud");
           proceedWithGeneration("cloud");
         }}
+        canSwitchToCloud={hasAnyCloud}
       />
     </GenerateWithAiLayout>
   );
