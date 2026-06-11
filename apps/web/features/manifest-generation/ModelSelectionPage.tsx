@@ -31,6 +31,9 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
   llmRef.current = llmContext;
 
   const [serverModelName, setServerModelName] = useState<string>("gpt-4o-mini");
+  const [generationModelName, setGenerationModelName] = useState<
+    string | undefined
+  >(undefined);
 
   useEffect(() => {
     setMounted(true);
@@ -39,6 +42,7 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
         if (res.activeModelName) {
           setServerModelName(res.activeModelName);
         }
+        setGenerationModelName(res.generationModelName);
       })
       .catch((err) => {
         if (process.env.NODE_ENV !== "production") {
@@ -157,6 +161,7 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
                   requiresModelWarning={false}
                   hasServerApiKey={hasServerApiKey}
                   serverModelName={serverModelName}
+                  generationModelName={generationModelName}
                 />
               ),
               [
@@ -168,6 +173,7 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
                 isLoading,
                 hasServerApiKey,
                 serverModelName,
+                generationModelName,
               ],
             )}
           </div>

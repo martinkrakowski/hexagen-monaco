@@ -40,8 +40,14 @@ interface ModelSettingsViewProps {
   hideHeader?: boolean;
   /** True if server-side LLM is detected and available */
   hasServerApiKey?: boolean;
-  /** The active server LLM model (e.g., "gpt-4o-mini") */
+  /** The server model answering assistant questions (chat/governance). */
   serverModelName?: string;
+  /**
+   * The server model serving manifest GENERATION — may differ from
+   * serverModelName (the two run on separate provider chains). When absent,
+   * the card falls back to the single-model presentation.
+   */
+  generationModelName?: string;
   downloadingModelId?: DomainModelId | null;
   downloadProgress?: number;
   tandemStatus?: "active" | "degraded" | "unavailable" | "off";
@@ -124,6 +130,7 @@ export function ModelSettingsView({
   hideHeader,
   hasServerApiKey = false,
   serverModelName,
+  generationModelName,
   downloadingModelId,
   downloadProgress,
   tandemStatus,
@@ -453,19 +460,40 @@ export function ModelSettingsView({
                   </h3>
                 </div>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  A server-side cloud LLM key is configured in the environment
-                  variables. The application will use this for high-performance
-                  manifest generation.
+                  {generationModelName
+                    ? "Server-side cloud LLMs are configured in the environment. Manifest generation and the assistant's question answering are served by separate models."
+                    : "A server-side cloud LLM key is configured in the environment variables. The application will use this for high-performance manifest generation."}
                 </p>
                 <div className="pt-3 grid grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <span className="text-muted-foreground block font-medium">
-                      Model Name
-                    </span>
-                    <span className="font-mono text-foreground font-semibold">
-                      {serverModelName ?? "Configured by environment"}
-                    </span>
-                  </div>
+                  {generationModelName ? (
+                    <>
+                      <div>
+                        <span className="text-muted-foreground block font-medium">
+                          Manifest Generation
+                        </span>
+                        <span className="font-mono text-foreground font-semibold">
+                          {generationModelName}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block font-medium">
+                          Assistant Q&amp;A
+                        </span>
+                        <span className="font-mono text-foreground font-semibold">
+                          {serverModelName ?? "Configured by environment"}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <span className="text-muted-foreground block font-medium">
+                        Model Name
+                      </span>
+                      <span className="font-mono text-foreground font-semibold">
+                        {serverModelName ?? "Configured by environment"}
+                      </span>
+                    </div>
+                  )}
                   <div>
                     <span className="text-muted-foreground block font-medium">
                       Status
