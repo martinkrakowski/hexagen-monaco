@@ -247,8 +247,17 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
             controller.signal,
           );
 
-          // Success
+          // Success — but an empty render is a failure in disguise: callers
+          // key their success branch on a non-empty manifest, so returning
+          // "" with phase "complete" would strand the flow with neither a
+          // continue action nor an error. Route it through the normal
+          // failure channel (the catch below) instead.
           const yaml = renderResult.yaml || "";
+          if (!yaml.trim()) {
+            throw new Error(
+              "The local model produced an empty manifest. Try again or switch to cloud generation.",
+            );
+          }
           const adapterCount = draft.boundedContexts.reduce(
             (sum: number, c: ManifestDraftContext) =>
               sum + (c.adapters?.length || 0),

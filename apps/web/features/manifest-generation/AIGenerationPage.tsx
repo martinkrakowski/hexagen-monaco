@@ -75,7 +75,12 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
           wizardData.governance.namespacePrefix = scope;
           manifestYaml = setManifestIdentity(yaml, { system: slug, scope });
         }
-        setPendingManifest(manifestYaml, wizardData, projectName);
+        setPendingManifest(
+          manifestYaml,
+          wizardData,
+          projectName,
+          "/projects/new/ai",
+        );
         router.push("/projects/new/ai/accept");
       } catch (error) {
         const message =
