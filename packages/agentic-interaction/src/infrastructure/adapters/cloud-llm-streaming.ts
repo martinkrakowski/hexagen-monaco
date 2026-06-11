@@ -191,7 +191,9 @@ async function* streamProvider(
     // SSE frame: only a provider that actually streams output counts as the
     // one that served (a 4xx/5xx attempt above never reaches this point).
     // OpenAI-compatible frames echo the resolved model; fall back to what we
-    // asked for when the provider omits it.
+    // asked for when the provider omits it. Fire-once means a model field
+    // appearing only on LATER frames is ignored — accepted trade-off, since
+    // OpenAI-compatible providers echo it on every frame.
     let modelReported = false;
 
     while (true) {

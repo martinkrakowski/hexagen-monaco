@@ -290,7 +290,11 @@ describe.skip("cloud-llm-pipeline", () => {
     process.env.TEST_OPENAI_API_KEY = "sk-primary";
 
     try {
-      const fetchMock = makeFetchMock([{ body: validResponseBody }]);
+      // The body echoes a DATED model variant, distinct from the requested
+      // alias — pins that metadata records the SERVED model, not the request.
+      const fetchMock = makeFetchMock([
+        { body: { ...validResponseBody, model: "gpt-4o-mini-2024-07-18" } },
+      ]);
       const config: CloudLLMPipelineAdapterConfig = {
         fallbackChain: testChain,
         secretVault: envVault(),
@@ -309,8 +313,8 @@ describe.skip("cloud-llm-pipeline", () => {
         );
         assert.strictEqual(
           (result.value.metadata as Record<string, unknown>).model,
-          "gpt-4o-mini",
-          "Metadata should contain model name",
+          "gpt-4o-mini-2024-07-18",
+          "Metadata should contain the model the provider SERVED, not the requested alias",
         );
       }
     } finally {
