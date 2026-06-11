@@ -251,10 +251,13 @@ export const createLLMProviderSelector = (
       },
       // Inception Labs (Mercury diffusion models) — OpenAI-compatible chat
       // completions; activates only when INCEPTION_API_KEY is set. Mercury
-      // reasons by default (reasoning_effort: "medium"), so runs should set
-      // LLM_REASONING=disabled → reasoning_effort: "instant" (see
-      // cloud-llm-reasoning.ts). Never send `diffusing: true` — it streams
-      // noisy intermediate tokens that break structured-output parsing.
+      // reasons by default (reasoning_effort: "medium"). The VALIDATED prod
+      // regime is LLM_REASONING=low — the model-sweep parity numbers were
+      // measured @low, while "disabled" (Inception's "instant") dropped to
+      // 62.5% success with NDJSON failures (see cloud-llm-reasoning.ts and
+      // docs/planning/mercury-2-prod-flip-runbook.md). Never send
+      // `diffusing: true` — it streams noisy intermediate tokens that break
+      // structured-output parsing.
       {
         providerId: "inception" as const,
         baseUrl: "https://api.inceptionlabs.ai/v1",

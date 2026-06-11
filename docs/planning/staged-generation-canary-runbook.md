@@ -32,7 +32,7 @@ Fail-closed by construction: an unset variable becomes an empty string in `.env`
 
 ## Preconditions (before any nonzero percent)
 
-1. This runbook's env plumbing is merged and has been deployed at least once (the heredoc guard expects 10 lines — an old workflow run with new variables, or vice versa, fails the deploy loudly, by design).
+1. This runbook's env plumbing is merged and has been deployed at least once (the heredoc has a line-count guard — an old workflow run with new variables, or vice versa, fails the deploy loudly, by design; the expected count lives next to the heredoc in deploy.yml).
 2. A green local baseline: `yarn workspace @hexagen/agentic-interaction golden-harness` exits 0 — all gates T1–T4 pass against a measured stub baseline (the harness fails closed if the baseline or judge verdicts are missing).
 3. `STAGED_GENERATION_PIPELINE` is unset/empty (a leftover `stub` pin silently defeats the percent; a `full` pin skips the canary entirely).
 4. **The baseline ran against the model prod actually serves** (the `LLM_MODEL` repo secret), and that model is NOT a reasoning model. Found 2026-06-10: the full pipeline's short-output stages (0/1/2/6) cap `maxTokens` at 800; on a reasoning model (e.g. OpenRouter `z-ai/glm-5.1`) the invisible reasoning is billed as completion tokens and consumes the whole budget — `finishReason: "length"`, empty content, 0% full-pipeline success while the stub (2000-token passes) keeps working. If prod's model changes, re-run the baseline before trusting any earlier green. Reasoning-aware request handling is an A4 hardening item.

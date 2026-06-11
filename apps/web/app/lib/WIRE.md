@@ -37,7 +37,7 @@ export const createWebLogger = (): LoggerPort => ({
 export const createEventBus = (): EventBusPort => new InMemoryEventBusAdapter();
 
 export const createLLMProvider = (): LLMProviderPort => {
-  const apiKey = process.env.LLM_API_KEY || "";
+  const apiKey = resolveWebLlmApiKey(); // WEB_LLM_API_KEY ?? LLM_API_KEY ?? ""
   return new ServerLLMAdapter(apiKey, baseUrl, model);
 };
 ```
@@ -331,8 +331,8 @@ When executing LLM queries or checking UI capabilities, the system resolves LLM 
 
 1. **Tier 1: Host Environment (Primary / Preferred)**
    - **Context**: Server-side.
-   - **Resolution**: Reads `LLM_API_KEY` (and optional `LLM_BASE_URL` / `LLM_MODEL`) from the host's server-side environment (`.env` or hosting provider configuration).
-   - **Client Visibility**: The client bundle does NOT see the raw key. Instead, the deployment build process computes a non-sensitive build-time boolean flag `NEXT_PUBLIC_LLM_AVAILABLE` (`true` if `LLM_API_KEY` is configured in CI, `false` otherwise), which enables the primary cloud-based AI actions in the UI.
+   - **Resolution**: Reads `WEB_LLM_API_KEY`, falling back to `LLM_API_KEY` (`resolveWebLlmApiKey` in `wire.shared.ts`; the dedicated var decouples web features from the staged-generation fallback chain — see PR #301), plus optional `LLM_BASE_URL` / `LLM_MODEL`, from the host's server-side environment (`.env` or hosting provider configuration).
+   - **Client Visibility**: The client bundle does NOT see the raw key. Instead, the deployment build process computes a non-sensitive build-time boolean flag `NEXT_PUBLIC_LLM_AVAILABLE` (`true` if `WEB_LLM_API_KEY` **or** `LLM_API_KEY` is configured in CI, `false` otherwise — mirroring the runtime fallback), which enables the primary cloud-based AI actions in the UI.
 
 2. **Tier 2: Client Bring-Your-Own-Key (BYOK) Fallback**
    - **Context**: Client-side (in-browser).

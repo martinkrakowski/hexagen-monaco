@@ -22,7 +22,7 @@ jobs:
       - name: Build Docker Image
         run: |
           docker build \
-            --build-arg NEXT_PUBLIC_LLM_AVAILABLE=${{ secrets.LLM_API_KEY != '' }} \
+            --build-arg NEXT_PUBLIC_LLM_AVAILABLE=${{ secrets.WEB_LLM_API_KEY != '' || secrets.LLM_API_KEY != '' }} \
             --build-arg NEXT_PUBLIC_LLM_MODEL=${{ secrets.LLM_MODEL }} \
             --build-arg NEXT_PUBLIC_FREE_TIER_MODEL=${{ secrets.NEXT_PUBLIC_FREE_TIER_MODEL }} \
             -f apps/web/Dockerfile -t hexagen-monaco-web:prod .
@@ -65,6 +65,29 @@ jobs:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          # Web-feature LLM key: chat server-key path + governance suggestion
+          # routes resolve WEB_LLM_API_KEY ?? LLM_API_KEY (resolveWebLlmApiKey,
+          # PR #301). MUST be set before the mercury flip unsets LLM_API_KEY,
+          # or chat degrades to auth/BYOK-only and governance returns empty.
+          WEB_LLM_API_KEY: ${{ secrets.WEB_LLM_API_KEY }}
+          # Mercury provider family + stage-1 refine cascade. Keys are repo
+          # SECRETS; non-sensitive knobs are repo VARIABLES (same split as the
+          # canary flags above). Unset → empty string → every consumer treats
+          # it as unset (provider skipped / default model / reasoning field
+          # omitted / cascade off). Flip runbook:
+          # docs/planning/mercury-2-prod-flip-runbook.md
+          # NOTE: LLM_ESCALATION_MODEL is deliberately NOT plumbed — the
+          # stage-3 escalation model injection is provider-unscoped, and a
+          # foreign model name in an Inception-only chain 404s every
+          # escalation retry. Keeping it out of the heredoc makes "unset in
+          # prod" structural.
+          INCEPTION_API_KEY: ${{ secrets.INCEPTION_API_KEY }}
+          INCEPTION_MODEL: ${{ vars.INCEPTION_MODEL }}
+          LLM_REASONING: ${{ vars.LLM_REASONING }}
+          STAGE1_REFINER_API_KEY: ${{ secrets.STAGE1_REFINER_API_KEY }}
+          STAGE1_REFINER_BASE_URL: ${{ vars.STAGE1_REFINER_BASE_URL }}
+          STAGE1_REFINER_MODEL: ${{ vars.STAGE1_REFINER_MODEL }}
+          STAGE1_REFINER_MODE: ${{ vars.STAGE1_REFINER_MODE }}
           # A3 staged-generation canary (repo VARIABLES, not secrets — they are
           # not sensitive, and `gh variable set` + a deploy re-run is the whole
           # flip). Unset variables become empty strings, which `selectPipeline`
@@ -77,7 +100,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: AUTH_SECRET, NEXTAUTH_URL, GH_OAUTH_ID, GH_OAUTH_SECRET, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, STAGED_GENERATION_PIPELINE, STAGED_GENERATION_FULL_PERCENT
+          envs: AUTH_SECRET, NEXTAUTH_URL, GH_OAUTH_ID, GH_OAUTH_SECRET, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, WEB_LLM_API_KEY, INCEPTION_API_KEY, INCEPTION_MODEL, LLM_REASONING, STAGE1_REFINER_API_KEY, STAGE1_REFINER_BASE_URL, STAGE1_REFINER_MODEL, STAGE1_REFINER_MODE, STAGED_GENERATION_PIPELINE, STAGED_GENERATION_FULL_PERCENT
           # set -eu (POSIX-safe; appleboy/ssh-action has no `set -e` by default)
           # so a failed `docker load` aborts instead of silently leaving the old
           # container up. pipefail is omitted intentionally — the remote /bin/sh
@@ -107,11 +130,19 @@ jobs:
             LLM_API_KEY=\"$LLM_API_KEY\"\n\
             LLM_BASE_URL=\"$LLM_BASE_URL\"\n\
             LLM_MODEL=\"$LLM_MODEL\"\n\
+            WEB_LLM_API_KEY=\"$WEB_LLM_API_KEY\"\n\
+            INCEPTION_API_KEY=\"$INCEPTION_API_KEY\"\n\
+            INCEPTION_MODEL=\"$INCEPTION_MODEL\"\n\
+            LLM_REASONING=\"$LLM_REASONING\"\n\
+            STAGE1_REFINER_API_KEY=\"$STAGE1_REFINER_API_KEY\"\n\
+            STAGE1_REFINER_BASE_URL=\"$STAGE1_REFINER_BASE_URL\"\n\
+            STAGE1_REFINER_MODEL=\"$STAGE1_REFINER_MODEL\"\n\
+            STAGE1_REFINER_MODE=\"$STAGE1_REFINER_MODE\"\n\
             STAGED_GENERATION_PIPELINE=\"$STAGED_GENERATION_PIPELINE\"\n\
             STAGED_GENERATION_FULL_PERCENT=\"$STAGED_GENERATION_FULL_PERCENT\"\n\
             EOF\n\
             chmod 600 .env\n\
-            [ \"$(wc -l < .env)\" -eq 10 ] || { echo 'FATAL: .env line count != 10 — keep this in sync with the heredoc keys above (embedded newline in a secret?)' >&2; exit 1; }\n\
+            [ \"$(wc -l < .env)\" -eq 18 ] || { echo 'FATAL: .env line count != 18 — keep this in sync with the heredoc keys above (embedded newline in a secret?)' >&2; exit 1; }\n\
             docker load < hexagen-web.tar.gz\n\
             docker image inspect hexagen-monaco-web:prod >/dev/null\n\
             docker compose -f docker-compose.prod.yml up -d --force-recreate --wait --wait-timeout 90\n\
