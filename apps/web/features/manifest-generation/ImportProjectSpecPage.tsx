@@ -46,6 +46,11 @@ type SpecPageState =
   | "GENERATING"
   | "PREVIEW";
 
+/** Model-selection flow with a return hop back to this page (same URL the
+ * ModelSetupPrompt below uses). */
+const MODEL_SETUP_URL =
+  "/projects/new/ai/models?returnUrl=/projects/new/import/spec";
+
 export default function ImportProjectSpecPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -63,7 +68,8 @@ export default function ImportProjectSpecPage() {
   const [generatedManifest, setGeneratedManifest] = useState<string | null>(
     null,
   );
-  const { needsSetup, isProbing, preferLocal } = useLLMReadiness();
+  const { needsSetup, isProbing, preferLocal, isWebLLMReady, hasAnyCloud } =
+    useLLMReadiness();
   const { engine, setEngine } = useExecutionEngine();
   // Which generate action is parked behind the local-override warning dialog.
   const [pendingGenerate, setPendingGenerate] = useState<
@@ -205,8 +211,22 @@ export default function ImportProjectSpecPage() {
       setPendingGenerate("spec");
       return;
     }
+    // Auto-resolved local with no model loaded would resolve the strategy to
+    // "none" and fail; detour through model selection instead (explicit local
+    // gets the same detour from the warning dialog's Continue action).
+    if (effectivePreferLocal(engine, preferLocal) && !isWebLLMReady) {
+      router.push(MODEL_SETUP_URL);
+      return;
+    }
     void runSpecGeneration(engine);
-  }, [needsSetup, engine, runSpecGeneration]);
+  }, [
+    needsSetup,
+    engine,
+    preferLocal,
+    isWebLLMReady,
+    router,
+    runSpecGeneration,
+  ]);
 
   const handleContinue = useCallback(() => {
     if (needsSetup) return;
@@ -214,8 +234,19 @@ export default function ImportProjectSpecPage() {
       setPendingGenerate("description");
       return;
     }
+    if (effectivePreferLocal(engine, preferLocal) && !isWebLLMReady) {
+      router.push(MODEL_SETUP_URL);
+      return;
+    }
     void runDescriptionGeneration(engine);
-  }, [needsSetup, engine, runDescriptionGeneration]);
+  }, [
+    needsSetup,
+    engine,
+    preferLocal,
+    isWebLLMReady,
+    router,
+    runDescriptionGeneration,
+  ]);
 
   // Warning-dialog actions. The run functions take the strategy explicitly
   // because "Switch to cloud" must run with the freshly chosen engine — the
@@ -232,8 +263,16 @@ export default function ImportProjectSpecPage() {
   );
 
   const handleContinueLocal = useCallback(() => {
+    // Explicit local with no model loaded: generating would resolve the
+    // strategy to "none" and fail. Mirror GenerateWithAi's detour through
+    // model selection (returnUrl brings the user back here to re-trigger).
+    if (!isWebLLMReady) {
+      setPendingGenerate(null);
+      router.push(MODEL_SETUP_URL);
+      return;
+    }
     resolvePendingGenerate("local");
-  }, [resolvePendingGenerate]);
+  }, [isWebLLMReady, router, resolvePendingGenerate]);
 
   const handleSwitchToCloud = useCallback(() => {
     setEngine("cloud");
@@ -473,11 +512,7 @@ export default function ImportProjectSpecPage() {
               !isProbing && (
                 <div className="mb-6">
                   <ModelSetupPrompt
-                    onSetupModel={() =>
-                      router.push(
-                        "/projects/new/ai/models?returnUrl=/projects/new/import/spec",
-                      )
-                    }
+                    onSetupModel={() => router.push(MODEL_SETUP_URL)}
                   />
                 </div>
               )}
@@ -529,6 +564,7 @@ export default function ImportProjectSpecPage() {
         }}
         onContinueLocal={handleContinueLocal}
         onSwitchToCloud={handleSwitchToCloud}
+        canSwitchToCloud={hasAnyCloud}
       />
     </ProjectsShellWithFreeTier>
   );
