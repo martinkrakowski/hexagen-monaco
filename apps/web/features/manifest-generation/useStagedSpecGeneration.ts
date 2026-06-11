@@ -27,8 +27,13 @@ export function resolveExecutionStrategy(
 ): "local" | "cloud" | "none" {
   if (strategy === "local") return hasLocalLLM ? "local" : "none";
   if (strategy === "cloud") return hasCloudKeys ? "cloud" : "none";
-  if (hasLocalLLM) return "local";
+  // auto: prefer cloud. The server pipeline completes a multi-context spec in
+  // seconds; a loaded WebLLM model used to win here and could burn minutes
+  // before failing stage 3/4 structured output and silently falling back.
+  // Local remains the auto choice only when no cloud key is configured;
+  // explicitly choosing local is the "local" strategy (PR-3 adds the UI).
   if (hasCloudKeys) return "cloud";
+  if (hasLocalLLM) return "local";
   return "none";
 }
 
@@ -99,6 +104,15 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
 
   const abortRef = useRef(false);
   const generatingLockRef = useRef(false);
+  // Engine-selection banner lines (which engine is generating, fallback
+  // notices). Kept in a ref because the cloud-stream mirror effect below
+  // replaces verboseLog wholesale with the stream's chunk list — these lines
+  // must survive that replacement.
+  const engineLogRef = useRef<string[]>([]);
+  const logEngineLine = (line: string) => {
+    engineLogRef.current = [...engineLogRef.current, line];
+    setVerboseLog((prev) => [...prev, line]);
+  };
   useEffect(() => {
     abortRef.current = false;
     return () => {
@@ -123,7 +137,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
   useEffect(() => {
     const { [-1]: chunkStage, ...numberedStages } = stream.stageProgress;
     if (chunkStage?.chunks?.length) {
-      setVerboseLog(chunkStage.chunks);
+      setVerboseLog([...engineLogRef.current, ...chunkStage.chunks]);
     }
 
     if (!stream.isGenerating) return;
@@ -150,6 +164,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
   const reset = () => {
     stream.reset();
     generatingLockRef.current = false;
+    engineLogRef.current = [];
     setIsGenerating(false);
     setGenerationError(null);
     setGeneratedManifest(null);
@@ -180,6 +195,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     setStepDetail("Starting config generation...");
     setStageProgress({});
     setValidationErrors([]);
+    engineLogRef.current = [];
     setVerboseLog([]);
     setContextCount(0);
     setPortCount(0);
@@ -243,6 +259,12 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
       hasLocalLLM,
       hasCloudKeys,
     );
+
+    if (resolved === "cloud") {
+      logEngineLine("Engine: cloud generation");
+    } else if (resolved === "local") {
+      logEngineLine("Engine: local generation (WebLLM model in this browser)");
+    }
 
     try {
       if (resolved === "none") {
@@ -399,6 +421,9 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
           }
 
           if (hasCloudKeys) {
+            logEngineLine(
+              "Local generation did not produce a manifest — retrying via cloud",
+            );
             return await executeCloudGeneration();
           }
 
@@ -418,6 +443,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
             };
           }
           if (hasCloudKeys) {
+            logEngineLine("Local generation failed — retrying via cloud");
             return await executeCloudGeneration();
           }
           throw localError;

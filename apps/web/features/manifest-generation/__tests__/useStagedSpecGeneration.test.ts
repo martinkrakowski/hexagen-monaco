@@ -19,8 +19,14 @@ describe("resolveExecutionStrategy", () => {
     assert.strictEqual(resolveExecutionStrategy("cloud", true, false), "none");
   });
 
-  test("auto: prioritizes local when both capabilities present", () => {
-    assert.strictEqual(resolveExecutionStrategy("auto", true, true), "local");
+  test("auto: prioritizes cloud when both capabilities present", () => {
+    // Cloud-first: the server pipeline finishes in seconds; a loaded WebLLM
+    // model must not silently win and burn minutes before falling back.
+    assert.strictEqual(resolveExecutionStrategy("auto", true, true), "cloud");
+  });
+
+  test("explicit local strategy still wins over available cloud keys", () => {
+    assert.strictEqual(resolveExecutionStrategy("local", true, true), "local");
   });
 
   test("auto: returns local when only local LLM available", () => {

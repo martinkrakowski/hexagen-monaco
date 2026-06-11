@@ -192,12 +192,75 @@ describe("useLooseSpecConversion", () => {
 
     let convertResult;
     await act(async () => {
-      convertResult = await result.current.convert("fallback spec");
+      // Explicit local strategy: under cloud-first "auto" this scenario would
+      // route straight to cloud and never exercise the local→cloud fallback.
+      convertResult = await result.current.convert("fallback spec", {
+        executionStrategy: "local",
+      });
     });
 
     assert.strictEqual(mockUseCase.execute.mock.calls.length, 1);
     assert.strictEqual(mockFetch.mock.calls.length, 1);
     assert.strictEqual(convertResult?.convertedConfig, '{"fallback": true}');
+    assert.strictEqual(convertResult?.error, null);
+    // The fallback must be visible, not silent.
+    assert.strictEqual(
+      result.current.progressMessage,
+      "Local conversion did not produce a config — retrying via cloud",
+    );
+  });
+
+  it("Auto strategy prefers cloud even with a local model loaded", async () => {
+    const mockUseCase = {
+      execute: mock.fn(async () => {
+        throw new Error("Local use case must not run under cloud-first auto");
+      }),
+    };
+
+    const mockFetch = mock.fn(async () => {
+      return {
+        ok: true,
+        body: {
+          getReader: () => {
+            let done = false;
+            return {
+              read: async () => {
+                if (done) return { done: true, value: undefined };
+                done = true;
+                return {
+                  done: false,
+                  value: new TextEncoder().encode(
+                    '{"type":"done","configJson":"{\\"cloud\\": true}"}\n',
+                  ),
+                };
+              },
+              cancel: mock.fn(),
+            };
+          },
+        },
+      };
+    });
+
+    const deps = {
+      getClientUseCase: () =>
+        mockUseCase as unknown as ReturnType<
+          typeof getClientLooseSpecConversionUseCase
+        >,
+      isLocalLLMReady: () => true, // local model IS loaded
+      hasServerLLMAccessKey: () => true,
+      fetchClient: mockFetch as unknown as typeof fetch,
+    };
+
+    const { result } = renderHook(() => useLooseSpecConversion(deps));
+
+    let convertResult;
+    await act(async () => {
+      convertResult = await result.current.convert("auto spec");
+    });
+
+    assert.strictEqual(mockUseCase.execute.mock.calls.length, 0);
+    assert.strictEqual(mockFetch.mock.calls.length, 1);
+    assert.strictEqual(convertResult?.convertedConfig, '{"cloud": true}');
     assert.strictEqual(convertResult?.error, null);
   });
 
