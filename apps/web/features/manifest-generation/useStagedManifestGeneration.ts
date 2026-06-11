@@ -296,6 +296,22 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
             controller.signal,
           );
 
+          // Symmetric with the local path's empty-render guard above: a
+          // server "done" event carrying an empty document must not look
+          // like success — callers key on a non-empty manifest, so phase
+          // "complete" with "" would park them with no continue action and
+          // no error. Normalize it to the failure shape before the state
+          // writes below.
+          if (
+            result.phase === "complete" &&
+            !result.generatedManifest?.trim()
+          ) {
+            result.phase = "failed";
+            result.stepDetail =
+              "Generation finished without producing a manifest.";
+            result.generatedManifest = null;
+          }
+
           // Use returned values from generate() instead of stale closure
           setGeneratedManifest(result.generatedManifest);
           setContextCount(result.contextCount);

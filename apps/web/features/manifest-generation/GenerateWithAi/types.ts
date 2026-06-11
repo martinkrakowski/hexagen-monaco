@@ -3,34 +3,23 @@ import type {
   ModelSelectionFlowState,
   ModelSelectionFlowActions,
 } from "../ModelSelectionFlow/useModelSelectionFlowState";
-import type { ViewTab } from "../ManifestPreview";
 
 export type { ModelSelectionFlowState };
-export type { ViewTab };
 
 export interface GenerateWithAiProps {
   onUseManifest?: (manifest: string) => void;
   llmContext: LocalLLMContext;
   onGeneratingStateChange?: (actions: GeneratingFooterActions | null) => void;
-  onPreviewStateChange?: (actions: PreviewFooterActions | null) => void;
 }
 
 export interface GeneratingFooterActions {
   onCancel: () => void;
-}
-
-export interface PreviewFooterActions {
-  onBack: () => void;
-  onRegenerate: () => void;
-  onUseManifest: (yaml: string) => void;
-  manifestYaml: string;
-  hasFailures: boolean;
-  activeTab: ViewTab;
-  onTabChange: (tab: ViewTab) => void;
-  overallScore: number;
-  systemLabel: string;
-  architectureLabel: string;
-  contextCount: number;
+  /**
+   * Present once generation has completed successfully: the manifest is
+   * parked on the telemetry screen and this advances to /ai/accept. Absent
+   * while generation is still in flight.
+   */
+  onNext?: () => void;
 }
 
 export interface EntryPointsSectionProps {
@@ -64,11 +53,6 @@ export interface ClientManifestGenerationResult {
 export interface StateViewProps {
   flowState: ModelSelectionFlowState;
   actions: ModelSelectionFlowActions;
-  onUseManifest?: (manifest: string) => void;
   onConfirmAndContinue: () => void;
-  onRegenerate: () => void;
   onRetryFromError: () => void;
-  onYamlChange?: (yaml: string) => void;
-  externalActiveTab?: ViewTab;
-  onTabChange?: (tab: ViewTab) => void;
 }

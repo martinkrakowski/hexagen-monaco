@@ -9,30 +9,13 @@ import { deriveWorkspaceName } from "@hexagen/manifest-generation";
 import { setManifestIdentity } from "./manifestIdentity";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { Button } from "@hexagen/ui";
-import {
-  ArrowLeft,
-  ArrowRight,
-  RefreshCw,
-  Network,
-  Component,
-  ShieldCheck,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { LocalLLMContext } from "../../lib/llm-interfaces";
-import type {
-  GeneratingFooterActions,
-  PreviewFooterActions,
-  ViewTab,
-} from "./GenerateWithAi/types";
+import type { GeneratingFooterActions } from "./GenerateWithAi/types";
 
 interface AIGenerationPageProps {
   llmContext: LocalLLMContext;
 }
-
-const TAB_CONFIG: { id: ViewTab; icon: typeof Network; label: string }[] = [
-  { id: "context-map", icon: Network, label: "Context Map" },
-  { id: "mermaid", icon: Component, label: "Mermaid" },
-  { id: "validation", icon: ShieldCheck, label: "Validation" },
-];
 
 export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
   const router = useRouter();
@@ -45,8 +28,6 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
   const carriedName = searchParams.get("name")?.trim() || null;
 
   const [parseError, setParseError] = useState<string | null>(null);
-  const [previewActions, setPreviewActions] =
-    useState<PreviewFooterActions | null>(null);
   const [generatingActions, setGeneratingActions] =
     useState<GeneratingFooterActions | null>(null);
 
@@ -93,91 +74,32 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
     [setPendingManifest, router, carriedName],
   );
 
-  const renderHeaderContent = () => {
-    if (!previewActions) {
-      return (
-        <span className="font-semibold text-sm truncate">Generate with AI</span>
-      );
-    }
-
-    const scoreColor =
-      previewActions.overallScore >= 80
-        ? "bg-success/10 text-success border-success/20"
-        : previewActions.overallScore >= 50
-          ? "bg-warning/10 text-warning border-warning/20"
-          : "bg-destructive/10 text-destructive border-destructive/20";
-
-    return (
-      <>
-        <div className="flex items-center gap-3">
-          <span className="font-semibold text-sm truncate">
-            Generated Manifest
-          </span>
-          <span
-            className={`text-xs px-2 py-0.5 rounded font-mono border ${scoreColor}`}
-          >
-            {previewActions.overallScore}% Score
-          </span>
-          <span className="text-xs text-muted-foreground font-mono hidden md:inline">
-            {previewActions.systemLabel} · {previewActions.architectureLabel} ·{" "}
-            {previewActions.contextCount} contexts
-          </span>
-        </div>
-        <div className="flex items-center gap-1 overflow-x-auto shrink-0">
-          {TAB_CONFIG.map(({ id, icon: Icon, label }) => (
-            <button
-              key={id}
-              onClick={() => previewActions.onTabChange(id)}
-              aria-label={label}
-              className={`flex items-center px-2 py-1 rounded-md text-xs transition-colors shrink-0 ${
-                previewActions.activeTab === id
-                  ? "bg-accent text-accent-foreground border border-accent"
-                  : "text-muted-foreground hover:bg-card hover:text-foreground border border-transparent"
-              }`}
-            >
-              <Icon className="w-3 h-3 sm:mr-1" />{" "}
-              <span className="hidden sm:inline">{label}</span>
-            </button>
-          ))}
-        </div>
-      </>
-    );
-  };
-
   const renderFooter = () => {
-    if (previewActions) {
-      return (
-        <>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={previewActions.onBack}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
-            </Button>
-            <Button variant="secondary" onClick={previewActions.onRegenerate}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Regenerate
-            </Button>
-          </div>
-          <Button
-            onClick={() =>
-              previewActions.onUseManifest(previewActions.manifestYaml)
-            }
-            disabled={previewActions.hasFailures}
-          >
-            Use This Manifest
-            <ArrowRight className="h-4 w-4 ml-2" />
-          </Button>
-        </>
-      );
-    }
-
     if (generatingActions) {
+      // Once generation completes, GenerateWithAi supplies onNext and the
+      // flow parks on the telemetry screen; a parse failure on Next retires
+      // the button (the inline parseError above the content explains why).
+      const isComplete = Boolean(generatingActions.onNext);
       return (
         <>
           <span />
-          <Button variant="secondary" onClick={generatingActions.onCancel}>
-            Cancel
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setParseError(null);
+                generatingActions.onCancel();
+              }}
+            >
+              {isComplete ? "Go Back" : "Cancel"}
+            </Button>
+            {isComplete && !parseError && (
+              <Button onClick={generatingActions.onNext}>
+                Next
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            )}
+          </div>
         </>
       );
     }
@@ -198,7 +120,9 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
 
   return (
     <ProjectsShellWithFreeTier
-      headerContent={renderHeaderContent()}
+      headerContent={
+        <span className="font-semibold text-sm truncate">Generate with AI</span>
+      }
       footer={renderFooter()}
     >
       <div className="h-full flex flex-col">
@@ -212,7 +136,6 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
             onUseManifest={handleUseManifest}
             llmContext={llmContext}
             onGeneratingStateChange={setGeneratingActions}
-            onPreviewStateChange={setPreviewActions}
           />
         </div>
       </div>

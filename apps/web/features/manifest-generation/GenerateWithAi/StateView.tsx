@@ -1,5 +1,4 @@
 import { Button, Badge, Spinner } from "@hexagen/ui";
-import { ManifestPreview } from "../ManifestPreview";
 import type { ClarificationTrigger } from "@hexagen/agentic-interaction";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
 import { GENERATE_WITH_AI_ERROR_MESSAGES } from "./GenerateWithAiError";
@@ -14,13 +13,8 @@ const TRIGGER_TYPE_LABELS: Record<ClarificationTrigger["type"], string> = {
 export function StateView({
   flowState,
   actions,
-  onUseManifest,
   onConfirmAndContinue,
-  onRegenerate,
   onRetryFromError,
-  onYamlChange,
-  externalActiveTab,
-  onTabChange,
 }: StateViewProps) {
   // Clarification needed
   if (flowState.state === "clarification_needed") {
@@ -68,24 +62,6 @@ export function StateView({
           <Button onClick={onConfirmAndContinue}>Continue Anyway</Button>
         </div>
       </div>
-    );
-  }
-
-  // Preview state
-  if (flowState.state === "preview" && flowState.manifestContent) {
-    return (
-      <ManifestPreview
-        manifestYaml={flowState.manifestContent}
-        onApprove={(yaml) => onUseManifest?.(yaml)}
-        onRegenerate={onRegenerate}
-        onStartOver={actions.rejectManifest}
-        onYamlChange={onYamlChange}
-        hideActions
-        hideHeader
-        embedded
-        activeTab={externalActiveTab}
-        onTabChange={onTabChange}
-      />
     );
   }
 
