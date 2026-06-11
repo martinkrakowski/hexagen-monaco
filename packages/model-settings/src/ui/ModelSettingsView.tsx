@@ -40,8 +40,14 @@ interface ModelSettingsViewProps {
   hideHeader?: boolean;
   /** True if server-side LLM is detected and available */
   hasServerApiKey?: boolean;
-  /** The active server LLM model (e.g., "gpt-4o-mini") */
+  /** The server model answering assistant questions (chat/governance). */
   serverModelName?: string;
+  /**
+   * The server model serving manifest GENERATION — may differ from
+   * serverModelName (the two run on separate provider chains). When absent,
+   * the card falls back to the single-model presentation.
+   */
+  generationModelName?: string;
   downloadingModelId?: DomainModelId | null;
   downloadProgress?: number;
   tandemStatus?: "active" | "degraded" | "unavailable" | "off";
@@ -124,6 +130,7 @@ export function ModelSettingsView({
   hideHeader,
   hasServerApiKey = false,
   serverModelName,
+  generationModelName,
   downloadingModelId,
   downloadProgress,
   tandemStatus,
@@ -429,6 +436,12 @@ export function ModelSettingsView({
     ? (downloadProgress ?? 0)
     : (simulatedDownload?.progress ?? 0);
 
+  // Only render the two-column generation/Q&A split when the models actually
+  // differ — when the staged chain head equals the chat model, a split layout
+  // would name the same model twice.
+  const showSplit =
+    Boolean(generationModelName) && generationModelName !== serverModelName;
+
   return (
     <div className="h-full flex flex-col bg-card">
       {!hideHeader && <ModelSettingsHeader onBack={onBack} />}
@@ -453,20 +466,43 @@ export function ModelSettingsView({
                   </h3>
                 </div>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  A server-side cloud LLM key is configured in the environment
-                  variables. The application will use this for high-performance
-                  manifest generation.
+                  {showSplit
+                    ? "Server-side cloud LLMs are configured in the environment. Manifest generation and the assistant's question answering are served by separate models."
+                    : "A server-side cloud LLM key is configured in the environment variables. The application will use this for high-performance manifest generation."}
                 </p>
                 <div className="pt-3 grid grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <span className="text-muted-foreground block font-medium">
-                      Model Name
-                    </span>
-                    <span className="font-mono text-foreground font-semibold">
-                      {serverModelName ?? "Configured by environment"}
-                    </span>
-                  </div>
-                  <div>
+                  {showSplit ? (
+                    <>
+                      <div>
+                        <span className="text-muted-foreground block font-medium">
+                          Manifest Generation
+                        </span>
+                        <span className="font-mono text-foreground font-semibold">
+                          {generationModelName}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block font-medium">
+                          Assistant Q&amp;A
+                        </span>
+                        <span className="font-mono text-foreground font-semibold">
+                          {serverModelName ?? "Configured by environment"}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <span className="text-muted-foreground block font-medium">
+                        Model Name
+                      </span>
+                      <span className="font-mono text-foreground font-semibold">
+                        {serverModelName ?? "Configured by environment"}
+                      </span>
+                    </div>
+                  )}
+                  {/* In split mode this is the 3rd cell of a 2-col grid —
+                      span the full row so it doesn't sit as an orphan. */}
+                  <div className={showSplit ? "col-span-2" : undefined}>
                     <span className="text-muted-foreground block font-medium">
                       Status
                     </span>

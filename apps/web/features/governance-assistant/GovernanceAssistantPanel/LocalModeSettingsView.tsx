@@ -43,6 +43,9 @@ export function LocalModeSettingsView({
   tandemDerivedStatus,
 }: LocalModeSettingsViewProps) {
   const [serverModelName, setServerModelName] = useState<string>("");
+  const [generationModelName, setGenerationModelName] = useState<
+    string | undefined
+  >(undefined);
 
   useEffect(() => {
     getCapabilities()
@@ -50,6 +53,9 @@ export function LocalModeSettingsView({
         if (res.activeModelName) {
           setServerModelName(res.activeModelName);
         }
+        // Manifest generation may run on a different chain than the
+        // assistant's Q&A model — surface both in the settings card.
+        setGenerationModelName(res.generationModelName);
       })
       .catch((err) => {
         if (process.env.NODE_ENV !== "production") {
@@ -93,6 +99,7 @@ export function LocalModeSettingsView({
         onResetConfig={onResetConfig}
         hasServerApiKey={hasServerLLMAccessKey()}
         serverModelName={serverModelName}
+        generationModelName={generationModelName}
         onConfigSaved={onConfigSaved}
         onTandemDisabled={onTandemDisabled}
         tandemStatus={tandemDerivedStatus}
