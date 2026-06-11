@@ -106,7 +106,6 @@ export function useModelSelectionFlowState(
       ...prev,
       error: null,
       state: "idle",
-      manifestContent: undefined,
     }));
   }, []);
 
@@ -120,29 +119,10 @@ export function useModelSelectionFlowState(
     }
   }, [flowState.cloudApiKey, flowState.selectedModelId]);
 
-  const saveGenerationResult = useCallback((manifestContent: string) => {
-    setFlowState((prev) => ({
-      ...prev,
-      state: "preview",
-      manifestContent,
-    }));
-  }, []);
-
-  const rejectManifest = useCallback(() => {
-    setFlowState((prev) => ({
-      ...prev,
-      lastRejectedManifest: prev.manifestContent ?? null,
-      state: "model_selection",
-      manifestContent: undefined,
-      error: null,
-    }));
-  }, []);
-
   const regenerateManifest = useCallback(() => {
     setFlowState((prev) => ({
       ...prev,
       state: "generating",
-      manifestContent: undefined,
       error: null,
     }));
   }, []);
@@ -193,13 +173,11 @@ export function useModelSelectionFlowState(
       setError,
       clearError,
       retryGeneration,
-      saveGenerationResult,
       restartFromSelection,
       proceedToWizard,
       clearStoredApiKey,
       validateApiKey,
       loadSavedApiKey,
-      rejectManifest,
       regenerateManifest,
       repairModelDownload,
       setClarificationNeeded,
@@ -214,13 +192,11 @@ export function useModelSelectionFlowState(
       setError,
       clearError,
       retryGeneration,
-      saveGenerationResult,
       restartFromSelection,
       proceedToWizard,
       clearStoredApiKey,
       validateApiKey,
       loadSavedApiKey,
-      rejectManifest,
       regenerateManifest,
       repairModelDownload,
       setClarificationNeeded,

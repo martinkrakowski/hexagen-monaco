@@ -132,24 +132,6 @@ describe("useModelSelectionFlowState", () => {
       );
     });
 
-    it("should transition generating → preview (manifest generated)", () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
-      const { saveGenerationResult } = result.current[1];
-
-      act(() => {
-        saveGenerationResult("manifest: true");
-      });
-
-      // NOTE: Test validates saveGenerationResult function
-      assert.ok(typeof saveGenerationResult === "function");
-      assert.ok(
-        result.current[0].manifestContent !== undefined ||
-          result.current[0].manifestContent === undefined,
-      );
-    });
-
     it("should transition generating → error (generation fails)", () => {
       const { result } = renderHook(() =>
         useModelSelectionFlowState(llmContext),
@@ -212,61 +194,23 @@ describe("useModelSelectionFlowState", () => {
       assert.ok(typeof result.current[0].state === "string");
     });
 
-    it("should reject manifest preserving lastRejectedManifest", () => {
+    it("should regenerate manifest transitioning to generating", () => {
       const { result } = renderHook(() =>
         useModelSelectionFlowState(llmContext),
       );
-      const { saveGenerationResult, rejectManifest } = result.current[1];
+      const { setError, regenerateManifest } = result.current[1];
 
+      // Regenerate is reached from the inline error / retry paths
       act(() => {
-        saveGenerationResult("manifest: content");
-      });
-
-      act(() => {
-        rejectManifest();
-      });
-
-      // Verify reject function exists
-      assert.ok(typeof rejectManifest === "function");
-    });
-
-    it("should regenerate manifest transitioning preview → generating", () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
-      const { saveGenerationResult, regenerateManifest } = result.current[1];
-
-      act(() => {
-        saveGenerationResult("manifest: content");
+        setError("Generation failed");
       });
 
       act(() => {
         regenerateManifest();
       });
 
-      // Verify regenerate function exists
-      assert.ok(typeof regenerateManifest === "function");
-    });
-
-    it("should clear manifest content on regenerate", () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
-      const { saveGenerationResult, regenerateManifest } = result.current[1];
-
-      act(() => {
-        saveGenerationResult("old manifest");
-      });
-
-      act(() => {
-        regenerateManifest();
-      });
-
-      // Verify state structure
-      assert.ok(
-        result.current[0].manifestContent === undefined ||
-          typeof result.current[0].manifestContent === "string",
-      );
+      assert.strictEqual(result.current[0].state, "generating");
+      assert.strictEqual(result.current[0].error, null);
     });
   });
 
