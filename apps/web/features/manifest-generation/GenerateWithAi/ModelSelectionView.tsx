@@ -24,6 +24,9 @@ export function ModelSelectionView({
   onModelReady,
 }: ModelSelectionViewProps) {
   const [serverModelName, setServerModelName] = useState<string>("gpt-4o-mini");
+  const [generationModelName, setGenerationModelName] = useState<
+    string | undefined
+  >(undefined);
 
   useEffect(() => {
     getCapabilities()
@@ -31,6 +34,7 @@ export function ModelSelectionView({
         if (res.activeModelName) {
           setServerModelName(res.activeModelName);
         }
+        setGenerationModelName(res.generationModelName);
       })
       .catch((err) => {
         if (process.env.NODE_ENV !== "production") {
@@ -70,6 +74,7 @@ export function ModelSelectionView({
         requiresModelWarning={false}
         hasServerApiKey={hasServerLLMAccessKey()}
         serverModelName={serverModelName}
+        generationModelName={generationModelName}
       />
 
       {(flowState.isModelReady || hasServerLLMAccessKey()) && (
