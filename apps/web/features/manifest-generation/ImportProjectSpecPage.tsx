@@ -10,7 +10,7 @@ import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useStagedManifestGeneration } from "./useStagedManifestGeneration";
 import { useLooseSpecConversion } from "./useLooseSpecConversion";
 import { Button } from "@hexagen/ui";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { useLLMReadiness } from "./hooks/useLLMReadiness";
 import { usePendingManifest } from "./store/usePendingManifest";
@@ -31,7 +31,6 @@ import { SpecReviewStep } from "./import-project-spec/SpecReviewStep";
 import { SpecConvertingStep } from "./import-project-spec/SpecConvertingStep";
 import { SpecDescriptionFallbackStep } from "./import-project-spec/SpecDescriptionFallbackStep";
 import { ManifestGeneratingStep } from "./import-project-spec/ManifestGeneratingStep";
-import { ManifestPreviewStep } from "./import-project-spec/ManifestPreviewStep";
 import { ModelSetupPrompt } from "./GenerateWithAi/ModelSetupPrompt";
 import {
   extractSpecSummary,
@@ -43,8 +42,7 @@ type SpecPageState =
   | "SPEC_REVIEW"
   | "DESCRIPTION_FALLBACK"
   | "CONVERTING_LOOSE_SPEC"
-  | "GENERATING"
-  | "PREVIEW";
+  | "GENERATING";
 
 /** Model-selection flow with a return hop back to this page (same URL the
  * ModelSetupPrompt below uses). */
@@ -65,7 +63,14 @@ export default function ImportProjectSpecPage() {
   const [specContent, setSpecContent] = useState<string>("");
   const [cameFromConversion, setCameFromConversion] = useState(false);
   const [isJsonDisclosed, setIsJsonDisclosed] = useState(false);
-  const [generatedManifest, setGeneratedManifest] = useState<string | null>(
+  // Set when a generated manifest fails to parse into wizard data — shown
+  // inline on the generating step (there is no preview screen to fall back
+  // to; approval happens once, on /projects/new/ai/accept).
+  const [acceptError, setAcceptError] = useState<string | null>(null);
+  // The successfully generated manifest, parked while the user reviews the
+  // telemetry log on the generating step. The footer's "Next" button hands
+  // it to acceptManifest.
+  const [completedManifest, setCompletedManifest] = useState<string | null>(
     null,
   );
   const { needsSetup, isProbing, preferLocal, isWebLLMReady, hasAnyCloud } =
@@ -155,20 +160,83 @@ export default function ImportProjectSpecPage() {
     }
   };
 
+  // Runs on the footer's "Next" click after generation completes (the page
+  // stays on the generating step so the user can review the telemetry log):
+  // reconcile the carried project name into the manifest, stash it for the
+  // accept screen, and navigate to /projects/new/ai/accept — the single
+  // approval screen. (The page used to show its own PREVIEW state first,
+  // duplicating the accept screen.)
+  const acceptManifest = useCallback(
+    (manifest: string) => {
+      try {
+        const wizardData = parseManifestToWizardData(manifest);
+        // The user-entered name (from the Project Name step) wins: it becomes the
+        // saved-project name and seeds `governance.workspaceName` so the name is
+        // factored into generated output. Fall back to the manifest-derived name
+        // only if the step was bypassed (e.g. a direct visit to this page).
+        const projectName =
+          carriedName ||
+          wizardData.governance?.workspaceName ||
+          `Imported Project ${new Date().toLocaleTimeString()}`;
+        // Keep the saved manifest string in sync with the carried name:
+        // seed the form's workspaceName/namespacePrefix AND rewrite the manifest's
+        // top-level system/scope so the Approve screen and saved manifestYaml
+        // agree with formState (see manifestIdentity).
+        let manifestYaml = manifest;
+        if (carriedName && wizardData.governance) {
+          const slug = deriveWorkspaceName(carriedName).name;
+          const scope = `@${slug}`;
+          wizardData.governance.workspaceName = slug;
+          wizardData.governance.namespacePrefix = scope;
+          manifestYaml = setManifestIdentity(manifest, {
+            system: slug,
+            scope,
+          });
+        }
+        // originPath lets the accept screen's Back/Regenerate return to THIS
+        // flow (the spec survives in sessionStorage) instead of the prompt flow.
+        pendingManifest.set(
+          manifestYaml,
+          wizardData,
+          projectName,
+          "/projects/new/import/spec",
+        );
+        router.push("/projects/new/ai/accept");
+      } catch (err) {
+        if (process.env.NODE_ENV !== "production") {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          logger.error("Failed to parse manifest for wizard:", {
+            error: errorMsg,
+          });
+        }
+        // Surface the failure inline on the generating step and retire the
+        // Next button (a re-click would fail identically); the footer's
+        // "Go Back" is the way out.
+        setCompletedManifest(null);
+        setAcceptError(
+          "The generated manifest could not be parsed. Go back and try again.",
+        );
+      }
+    },
+    [pendingManifest, router, carriedName],
+  );
+
   const runSpecGeneration = useCallback(
     async (strategy: ExecutionEngine) => {
       setPreviousState(pageState);
       setPageState("GENERATING");
-      setGeneratedManifest(null);
+      setAcceptError(null);
+      setCompletedManifest(null);
       manifestGeneration.reset();
 
       const result = await specGeneration.generateFromSpec(specContent, {
         executionStrategy: strategy,
       });
 
-      if (result?.generatedManifest) {
-        setGeneratedManifest(result.generatedManifest);
-        setPageState("PREVIEW");
+      if (result?.generatedManifest?.trim()) {
+        // Stay on the generating step (telemetry log stays reviewable);
+        // the footer's "Next" button carries the manifest forward.
+        setCompletedManifest(result.generatedManifest);
       } else if (result?.phase === "failed") {
         const errorMsg = result.stepDetail || "";
         if (errorMsg.includes("No cloud LLM API keys configured")) {
@@ -179,6 +247,14 @@ export default function ImportProjectSpecPage() {
         // Other failures: specGeneration.generationError is set by executeCloudGeneration,
         // so ManifestGeneratingStep will display the error. The "Go Back" button is shown
         // when isGenerating=false, so the user can recover.
+      } else if (result) {
+        // Completed without a manifest (e.g. the endpoint reported success but
+        // streamed an empty document): without this branch the page would park
+        // on GENERATING with neither a Next button nor an error. `undefined`
+        // result = user abort, which keeps the silent "Go Back" exit.
+        setAcceptError(
+          "Generation finished without producing a manifest. Go back and try again.",
+        );
       }
     },
     [specContent, specGeneration, manifestGeneration, pageState],
@@ -188,18 +264,25 @@ export default function ImportProjectSpecPage() {
     async (strategy: ExecutionEngine) => {
       setPreviousState(pageState);
       setPageState("GENERATING");
-      setGeneratedManifest(null);
+      setAcceptError(null);
+      setCompletedManifest(null);
       specGeneration.reset();
 
       const result = await manifestGeneration.generateManifest(specContent, {
         preferLocal: effectivePreferLocal(strategy, preferLocal),
       });
 
-      if (result?.generatedManifest) {
-        setGeneratedManifest(result.generatedManifest);
-        setPageState("PREVIEW");
+      if (result?.generatedManifest?.trim()) {
+        setCompletedManifest(result.generatedManifest);
       } else if (result?.generationError) {
         setPageState("DESCRIPTION_FALLBACK");
+      } else if (result) {
+        // Same no-manifest/no-error guard as runSpecGeneration above. The
+        // hook now converts an empty local render into generationError (the
+        // branch above), so this is the cloud-path backstop.
+        setAcceptError(
+          "Generation finished without producing a manifest. Go back and try again.",
+        );
       }
     },
     [specContent, manifestGeneration, specGeneration, pageState, preferLocal],
@@ -294,7 +377,8 @@ export default function ImportProjectSpecPage() {
     specGeneration.reset();
     manifestGeneration.reset();
     resetConversion();
-    setGeneratedManifest(null);
+    setAcceptError(null);
+    setCompletedManifest(null);
     setPageState("UPLOAD");
     setSpecContent("");
     setSpecSummary(null);
@@ -303,49 +387,10 @@ export default function ImportProjectSpecPage() {
     sessionStorage.removeItem("import_spec_content");
   };
 
-  const handleAcceptAndContinue = useCallback(() => {
-    if (!generatedManifest) return;
-    try {
-      const wizardData = parseManifestToWizardData(generatedManifest);
-      // The user-entered name (from the Project Name step) wins: it becomes the
-      // saved-project name and seeds `governance.workspaceName` so the name is
-      // factored into generated output. Fall back to the manifest-derived name
-      // only if the step was bypassed (e.g. a direct visit to this page).
-      const projectName =
-        carriedName ||
-        wizardData.governance?.workspaceName ||
-        `Imported Project ${new Date().toLocaleTimeString()}`;
-      // Keep the previewed/saved manifest string in sync with the carried name:
-      // seed the form's workspaceName/namespacePrefix AND rewrite the manifest's
-      // top-level system/scope so the Approve screen and saved manifestYaml
-      // agree with formState (see manifestIdentity).
-      let manifestYaml = generatedManifest;
-      if (carriedName && wizardData.governance) {
-        const slug = deriveWorkspaceName(carriedName).name;
-        const scope = `@${slug}`;
-        wizardData.governance.workspaceName = slug;
-        wizardData.governance.namespacePrefix = scope;
-        manifestYaml = setManifestIdentity(generatedManifest, {
-          system: slug,
-          scope,
-        });
-      }
-      pendingManifest.set(manifestYaml, wizardData, projectName);
-      router.push("/projects/new/ai/accept");
-    } catch (err) {
-      if (process.env.NODE_ENV !== "production") {
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        logger.error("Failed to parse manifest for wizard:", {
-          error: errorMsg,
-        });
-      }
-      setPageState("PREVIEW");
-      // Don't route away—show error but let user inspect the YAML
-    }
-  }, [generatedManifest, pendingManifest, router, carriedName]);
-
   const generationError =
-    specGeneration.generationError || manifestGeneration.generationError;
+    acceptError ||
+    specGeneration.generationError ||
+    manifestGeneration.generationError;
   const phase =
     specGeneration.phase !== "idle"
       ? specGeneration.phase
@@ -435,32 +480,35 @@ export default function ImportProjectSpecPage() {
       );
     }
     if (pageState === "GENERATING") {
+      const isRunning =
+        specGeneration.isGenerating || manifestGeneration.isGenerating;
       return (
         <>
           <span />
-          <Button
-            variant="outline"
-            onClick={() => {
-              specGeneration.reset();
-              manifestGeneration.reset();
-              setPageState(previousState ?? "SPEC_REVIEW");
-              setPreviousState(null);
-            }}
-          >
-            {specGeneration.isGenerating || manifestGeneration.isGenerating
-              ? "Cancel"
-              : "Go Back"}
-          </Button>
-        </>
-      );
-    }
-    if (pageState === "PREVIEW") {
-      return (
-        <>
-          <Button variant="outline" onClick={handleReset}>
-            Start Over
-          </Button>
-          <Button onClick={handleAcceptAndContinue}>Accept & Continue</Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                specGeneration.reset();
+                manifestGeneration.reset();
+                setAcceptError(null);
+                setCompletedManifest(null);
+                setPageState(previousState ?? "SPEC_REVIEW");
+                setPreviousState(null);
+              }}
+            >
+              {isRunning ? "Cancel" : "Go Back"}
+            </Button>
+            {/* Generation succeeded: let the user review the telemetry log
+                at their own pace; Next carries the manifest to the accept
+                screen. */}
+            {!isRunning && completedManifest && (
+              <Button onClick={() => acceptManifest(completedManifest)}>
+                Next
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            )}
+          </div>
         </>
       );
     }
@@ -475,8 +523,7 @@ export default function ImportProjectSpecPage() {
     );
   };
 
-  const isFullHeightState =
-    pageState === "GENERATING" || pageState === "PREVIEW";
+  const isFullHeightState = pageState === "GENERATING";
 
   return (
     <ProjectsShellWithFreeTier
@@ -489,19 +536,13 @@ export default function ImportProjectSpecPage() {
     >
       {isFullHeightState ? (
         <div className="h-full flex flex-col dot-grid bg-ambient p-4">
-          {pageState === "GENERATING" && (
-            <ManifestGeneratingStep
-              generationError={generationError}
-              phase={phase}
-              stepDetail={stepDetail}
-              stageProgress={stageProgress}
-              verboseLog={verboseLog}
-            />
-          )}
-
-          {pageState === "PREVIEW" && (
-            <ManifestPreviewStep generatedManifest={generatedManifest} />
-          )}
+          <ManifestGeneratingStep
+            generationError={generationError}
+            phase={phase}
+            stepDetail={stepDetail}
+            stageProgress={stageProgress}
+            verboseLog={verboseLog}
+          />
         </div>
       ) : (
         <div className="h-full overflow-y-auto dot-grid bg-ambient">
