@@ -214,13 +214,20 @@ async function* streamProvider(
           const parsed = JSON.parse(data);
           if (!modelReported) {
             modelReported = true;
-            request.onModelResolved?.({
-              provider: provider.providerId,
-              model:
-                typeof parsed.model === "string" && parsed.model
-                  ? parsed.model
-                  : requestedModel,
-            });
+            // Observability side-channel: a throwing caller callback must
+            // not affect delivery — unisolated it would be swallowed by the
+            // JSON catch below and silently drop this frame's content.
+            try {
+              request.onModelResolved?.({
+                provider: provider.providerId,
+                model:
+                  typeof parsed.model === "string" && parsed.model
+                    ? parsed.model
+                    : requestedModel,
+              });
+            } catch {
+              // Ignore callback errors.
+            }
           }
           const content = parsed.choices?.[0]?.delta?.content;
           if (content) {

@@ -310,6 +310,51 @@ describe("cloud-llm-streaming multi-chunk delivery", () => {
     }
   });
 
+  it("delivers all chunks even when the onModelResolved callback throws", async () => {
+    const original = process.env.TEST_STREAM_API_KEY;
+    process.env.TEST_STREAM_API_KEY = "sk-test";
+
+    try {
+      const fetchMock = (async () => {
+        return {
+          ok: true,
+          status: 200,
+          body: sseStreamFromChunks(["chunk1", "chunk2"]),
+        } as Response;
+      }) as unknown as typeof fetch;
+
+      const config: CloudLLMPipelineAdapterConfig = {
+        fallbackChain: testChain,
+        secretVault: envVault(),
+        fetchFn: fetchMock,
+      };
+
+      const request = {
+        ...makeRequest(),
+        onModelResolved: () => {
+          throw new Error("observability callback exploded");
+        },
+      };
+
+      // Unisolated, the throw is swallowed by the frame-level JSON catch and
+      // silently drops the FIRST frame's content.
+      const chunks: string[] = [];
+      for await (const r of streamStructuredRequest(
+        config,
+        fetchMock,
+        request,
+      )) {
+        assert.ok(r.success);
+        chunks.push(r.value);
+      }
+
+      assert.deepStrictEqual(chunks, ["chunk1", "chunk2"]);
+    } finally {
+      if (original !== undefined) process.env.TEST_STREAM_API_KEY = original;
+      else delete process.env.TEST_STREAM_API_KEY;
+    }
+  });
+
   it("falls back to the requested model when SSE frames omit one", async () => {
     const original = process.env.TEST_STREAM_API_KEY;
     process.env.TEST_STREAM_API_KEY = "sk-test";

@@ -89,7 +89,7 @@ const testChain: ProviderFallbackChain = {
   ],
 };
 
-describe.skip("cloud-llm-pipeline", () => {
+describe("cloud-llm-pipeline", () => {
   it("should succeed with valid response", async () => {
     const originalEnv = process.env.TEST_OPENAI_API_KEY;
     process.env.TEST_OPENAI_API_KEY = "sk-test-key-123";
@@ -127,6 +127,8 @@ describe.skip("cloud-llm-pipeline", () => {
     delete process.env.TEST_OPENAI_API_KEY;
     delete process.env.TEST_OPENAI_FALLBACK_API_KEY;
 
+    // No provider resolves, so fetch must never be called.
+    const fetchMock = makeFetchMock([]);
     const config: CloudLLMPipelineAdapterConfig = {
       fallbackChain: testChain,
       secretVault: envVault(),
@@ -317,6 +319,39 @@ describe.skip("cloud-llm-pipeline", () => {
           "Metadata should contain the model the provider SERVED, not the requested alias",
         );
       }
+    } finally {
+      if (originalPrimary !== undefined)
+        process.env.TEST_OPENAI_API_KEY = originalPrimary;
+      else delete process.env.TEST_OPENAI_API_KEY;
+    }
+  });
+
+  it("succeeds even when the onModelResolved callback throws", async () => {
+    const originalPrimary = process.env.TEST_OPENAI_API_KEY;
+    process.env.TEST_OPENAI_API_KEY = "sk-primary";
+
+    try {
+      const fetchMock = makeFetchMock([{ body: validResponseBody }]);
+      const config: CloudLLMPipelineAdapterConfig = {
+        fallbackChain: testChain,
+        secretVault: envVault(),
+        fetchFn: fetchMock as typeof fetch,
+      };
+      const adapter = new CloudLLMPipelineAdapter(config);
+
+      // Unisolated, the throw propagates into the provider try/catch and
+      // fails a perfectly valid response.
+      const result = await adapter.sendRequest({
+        ...makeRequest(),
+        onModelResolved: () => {
+          throw new Error("observability callback exploded");
+        },
+      });
+
+      assert.ok(
+        result.success,
+        "A throwing observability callback must not fail the request",
+      );
     } finally {
       if (originalPrimary !== undefined)
         process.env.TEST_OPENAI_API_KEY = originalPrimary;
