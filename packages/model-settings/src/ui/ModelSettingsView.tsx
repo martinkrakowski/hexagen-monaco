@@ -350,6 +350,12 @@ export function ModelSettingsView({
     ? (downloadProgress ?? 0)
     : (simulatedDownload?.progress ?? 0);
 
+  // Only render the two-column generation/Q&A split when the models actually
+  // differ — when the staged chain head equals the chat model, a split layout
+  // would name the same model twice.
+  const showSplit =
+    Boolean(generationModelName) && generationModelName !== serverModelName;
+
   return (
     <div className="h-full flex flex-col bg-card">
       {!hideHeader && <ModelSettingsHeader onBack={onBack} />}
@@ -374,12 +380,12 @@ export function ModelSettingsView({
                   </h3>
                 </div>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  {generationModelName
+                  {showSplit
                     ? "Server-side cloud LLMs are configured in the environment. Manifest generation and the assistant's question answering are served by separate models."
                     : "A server-side cloud LLM key is configured in the environment variables. The application will use this for high-performance manifest generation."}
                 </p>
                 <div className="pt-3 grid grid-cols-2 gap-4 text-xs">
-                  {generationModelName ? (
+                  {showSplit ? (
                     <>
                       <div>
                         <span className="text-muted-foreground block font-medium">
@@ -408,7 +414,9 @@ export function ModelSettingsView({
                       </span>
                     </div>
                   )}
-                  <div>
+                  {/* In split mode this is the 3rd cell of a 2-col grid —
+                      span the full row so it doesn't sit as an orphan. */}
+                  <div className={showSplit ? "col-span-2" : undefined}>
                     <span className="text-muted-foreground block font-medium">
                       Status
                     </span>
