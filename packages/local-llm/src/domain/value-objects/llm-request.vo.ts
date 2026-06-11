@@ -26,6 +26,15 @@ export interface LLMRequest {
    * providers ignore it.
    */
   ndjsonLineSchema?: Record<string, unknown>;
+  /**
+   * Invoked by adapters once the provider/model actually serving this request
+   * is known (after fallback-chain resolution). A side-channel by necessity:
+   * `streamStructuredRequest` yields bare string chunks, so the streaming
+   * path has no in-band place to carry model identity. Fired at most once
+   * per provider that produces output; callers use it to attribute stage
+   * telemetry to the real model rather than the configured chain head.
+   */
+  onModelResolved?: (info: { provider: string; model: string }) => void;
 }
 
 export function createLLMRequest(

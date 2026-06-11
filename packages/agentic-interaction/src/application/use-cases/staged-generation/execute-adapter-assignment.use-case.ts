@@ -100,6 +100,7 @@ export class ExecuteAdapterAssignmentUseCase {
     let prompt = compileStage4Prompt(state, variables);
     let lastError = "";
     let retryCount = 0;
+    let modelName: string | undefined;
     const contextCount = state.stage2?.accepted?.length ?? 0;
     onChunk?.(
       `Assigning concrete adapters across ${contextCount} bounded contexts…`,
@@ -126,6 +127,14 @@ export class ExecuteAdapterAssignmentUseCase {
         { stream: true, temperature: 0.1, maxTokens: 4096 },
       );
       request.signal = abortController.signal;
+      // Last-write-wins across retry attempts: each attempt builds a fresh
+      // request, and the streaming adapter fires this on the first parsed
+      // frame of whichever provider actually streams — so any attempt that
+      // produced content re-fires it, and the winning attempt's value is
+      // what the success telemetry below reports.
+      request.onModelResolved = (info) => {
+        modelName = info.model;
+      };
 
       let fullResponse = "";
       let streamError: unknown = null;
@@ -278,6 +287,7 @@ export class ExecuteAdapterAssignmentUseCase {
           outputTokensActual: estimateTokenCount(fullResponse),
           servedFromCache: false,
           summary: `Assigned adapters for ${contexts.length} contexts`,
+          ...(modelName !== undefined ? { modelName } : {}),
         });
         return ok(result);
       }

@@ -11,6 +11,7 @@ import {
   hasServerLLMAccessKey,
 } from "../../app/lib/wire.client";
 import type { StageTelemetry } from "@hexagen/agentic-interaction";
+import { formatModelChip } from "@hexagen/agentic-interaction";
 
 export interface SpecGenerationOptions {
   platform?: string;
@@ -351,6 +352,16 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
             },
             onStageTelemetry: (telemetry: StageTelemetry) => {
               if (isCancelled()) return;
+              // Cloud runs get the model line from the server (stage -1
+              // chunk); the local path emits its own equivalent here.
+              const chip = formatModelChip(telemetry);
+              if (chip) {
+                const seconds = (telemetry.durationMs / 1000).toFixed(1);
+                setVerboseLog((prev) => [
+                  ...prev,
+                  `Stage ${telemetry.stage} · ${telemetry.label} — ${chip} · ${seconds}s`,
+                ]);
+              }
               setStageProgress((prev) => ({
                 ...prev,
                 [telemetry.stage]: {
