@@ -193,7 +193,14 @@ export default function ImportProjectSpecPage() {
             scope,
           });
         }
-        pendingManifest.set(manifestYaml, wizardData, projectName);
+        // originPath lets the accept screen's Back/Regenerate return to THIS
+        // flow (the spec survives in sessionStorage) instead of the prompt flow.
+        pendingManifest.set(
+          manifestYaml,
+          wizardData,
+          projectName,
+          "/projects/new/import/spec",
+        );
         router.push("/projects/new/ai/accept");
       } catch (err) {
         if (process.env.NODE_ENV !== "production") {
@@ -226,7 +233,7 @@ export default function ImportProjectSpecPage() {
         executionStrategy: strategy,
       });
 
-      if (result?.generatedManifest) {
+      if (result?.generatedManifest?.trim()) {
         // Stay on the generating step (telemetry log stays reviewable);
         // the footer's "Next" button carries the manifest forward.
         setCompletedManifest(result.generatedManifest);
@@ -240,6 +247,14 @@ export default function ImportProjectSpecPage() {
         // Other failures: specGeneration.generationError is set by executeCloudGeneration,
         // so ManifestGeneratingStep will display the error. The "Go Back" button is shown
         // when isGenerating=false, so the user can recover.
+      } else if (result) {
+        // Completed without a manifest (e.g. the endpoint reported success but
+        // streamed an empty document): without this branch the page would park
+        // on GENERATING with neither a Next button nor an error. `undefined`
+        // result = user abort, which keeps the silent "Go Back" exit.
+        setAcceptError(
+          "Generation finished without producing a manifest. Go back and try again.",
+        );
       }
     },
     [specContent, specGeneration, manifestGeneration, pageState],
@@ -257,10 +272,17 @@ export default function ImportProjectSpecPage() {
         preferLocal: effectivePreferLocal(strategy, preferLocal),
       });
 
-      if (result?.generatedManifest) {
+      if (result?.generatedManifest?.trim()) {
         setCompletedManifest(result.generatedManifest);
       } else if (result?.generationError) {
         setPageState("DESCRIPTION_FALLBACK");
+      } else if (result) {
+        // Same no-manifest/no-error guard as runSpecGeneration above. The
+        // hook now converts an empty local render into generationError (the
+        // branch above), so this is the cloud-path backstop.
+        setAcceptError(
+          "Generation finished without producing a manifest. Go back and try again.",
+        );
       }
     },
     [specContent, manifestGeneration, specGeneration, pageState, preferLocal],

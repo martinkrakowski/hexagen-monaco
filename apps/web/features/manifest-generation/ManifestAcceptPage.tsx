@@ -129,22 +129,31 @@ export function ManifestAcceptPage() {
     ? `name=${encodeURIComponent(pendingManifest.projectName)}`
     : "";
 
+  // Back/Regenerate return to whichever generation flow produced the manifest
+  // (prompt flow or spec import) — both push here, so a hardcoded
+  // "/projects/new/ai" stranded import-flow users in the wrong flow. Captured
+  // during render for the same reason as nameQuery above. The fallback only
+  // applies to a store populated before this field existed (impossible —
+  // the store isn't persisted) or future setters that miss it.
+  const originPath = pendingManifest.originPath || "/projects/new/ai";
+
   const handleBack = useCallback(() => {
     // Block the auto-redirect effect: clearing the store nulls `yaml`, which
     // would otherwise fire the parameterless `router.replace("/projects/new/ai")`
     // above and race away our `?name=` push.
     isNavigatingAway.current = true;
     pendingManifest.clear();
-    router.push(`/projects/new/ai${nameQuery ? `?${nameQuery}` : ""}`);
-  }, [pendingManifest, router, nameQuery]);
+    router.push(`${originPath}${nameQuery ? `?${nameQuery}` : ""}`);
+  }, [pendingManifest, router, nameQuery, originPath]);
 
   const handleRegenerate = useCallback(() => {
     isNavigatingAway.current = true;
     pendingManifest.clear();
-    router.push(
-      `/projects/new/ai?generate=1${nameQuery ? `&${nameQuery}` : ""}`,
-    );
-  }, [pendingManifest, router, nameQuery]);
+    // `generate=1` auto-starts the prompt flow; the import page ignores it
+    // (the spec is restored from sessionStorage there and the user re-runs
+    // generation explicitly).
+    router.push(`${originPath}?generate=1${nameQuery ? `&${nameQuery}` : ""}`);
+  }, [pendingManifest, router, nameQuery, originPath]);
 
   const renderHeaderContent = () => {
     if (!viewData) {
