@@ -132,7 +132,6 @@ package_rules:
       - '@hexagen/prompt-compiler'
       - '@hexagen/reconciliation-engine'
       - '@hexagen/transaction-system'
-      - '@hexagen/tandem-execution'
 
   - name: 'wizard-orchestration'
     allowed_imports:
@@ -151,7 +150,6 @@ package_rules:
       - '@hexagen/shared'
       - '@hexagen/ui'
       - '@hexagen/local-llm'
-      - '@hexagen/tandem-execution'
 
   - name: 'manifest-generation'
     allowed_imports:
@@ -159,7 +157,6 @@ package_rules:
       - '@hexagen/core-domain'
       - '@hexagen/agentic-interaction'
       - '@hexagen/local-llm'
-      - '@hexagen/tandem-execution'
 
   - name: 'llm-driver'
     allowed_imports:
@@ -168,12 +165,3 @@ package_rules:
       - '@hexagen/local-llm'
       - '@hexagen/byok'
       - '@hexagen/agentic-interaction'
-      - '@hexagen/tandem-execution'
-
-  - name: 'tandem-execution'
-    allowed_imports:
-      - '@hexagen/shared'
-      - '@hexagen/core-domain'
-      - '@hexagen/local-llm'
-      - '@hexagen/agentic-interaction'
-      - '@hexagen/messaging'

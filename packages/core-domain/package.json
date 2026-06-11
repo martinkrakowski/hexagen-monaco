@@ -25,6 +25,5 @@
     "typescript": "^5.5.4"
   },
   "private": true,
-  "type": "module",
-  "dependencies": {}
+  "type": "module"
 }

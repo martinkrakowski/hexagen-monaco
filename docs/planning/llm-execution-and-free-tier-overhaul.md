@@ -1,6 +1,6 @@
 # LLM Execution & Free-Tier UX Overhaul
 
-**Status:** PR-1 in progress · **Created:** 2026-06-10 · **Owner:** Martin
+**Status:** PR-1–PR-5 shipped · PR-6 next · **Created:** 2026-06-10 · **Owner:** Martin
 
 ## Motivation
 
@@ -25,15 +25,15 @@ endpoint as implicit throttle), and a duplicated manifest-approval screen.
 
 ## PR sequence
 
-| PR   | Title                                          | Size         | Depends on           | Status      |
-| ---- | ---------------------------------------------- | ------------ | -------------------- | ----------- |
-| PR-1 | Cloud-first `auto` strategy + honest fallback  | S            | —                    | in progress |
-| PR-2 | Model identity in generation telemetry         | M            | —                    | planned     |
-| PR-3 | Explicit local override + pre-generate warning | M            | PR-1                 | planned     |
-| PR-4 | Remove the first approve-manifest screen       | M            | —                    | planned     |
-| PR-5 | Tandem mode removal                            | L (deletion) | #303 merge           | planned     |
-| PR-6 | Free-tier provider swap + in-app quotas        | L            | decisions below      | planned     |
-| PR-7 | FreeTierModal UI refactor                      | M            | PR-6 + HTML template | blocked     |
+| PR   | Title                                          | Size         | Depends on           | Status            |
+| ---- | ---------------------------------------------- | ------------ | -------------------- | ----------------- |
+| PR-1 | Cloud-first `auto` strategy + honest fallback  | S            | —                    | done (#305)       |
+| PR-2 | Model identity in generation telemetry         | M            | —                    | done (#306)       |
+| PR-3 | Explicit local override + pre-generate warning | M            | PR-1                 | done (#307)       |
+| PR-4 | Remove the first approve-manifest screen       | M            | —                    | done (#308, #309) |
+| PR-5 | Tandem mode removal                            | L (deletion) | #303 merge           | done (#310, #311) |
+| PR-6 | Free-tier provider swap + in-app quotas        | L            | decisions below      | planned           |
+| PR-7 | FreeTierModal UI refactor                      | M            | PR-6 + HTML template | blocked           |
 
 PR-1 → PR-3 are one arc (strategy semantics, then override UX). PR-2, PR-4,
 PR-5 are independent and can interleave. PR-6 → PR-7 are the free-tier arc.

@@ -149,7 +149,7 @@ Mutation tools write to the manifest directly, behind deterministic fail-closed 
 
 ## Architecture Topology
 
-Hexagen-Monaco is a modular monolith. Thirty-five bounded contexts live across five planes; the manifest at `.architecture/manifest.yaml` is the single source of truth.
+Hexagen-Monaco is a modular monolith. Thirty-four bounded contexts live across five planes; the manifest at `.architecture/manifest.yaml` is the single source of truth.
 
 | Plane              | Context                   | Responsibility                                                                                 |
 | ------------------ | ------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -174,7 +174,6 @@ Hexagen-Monaco is a modular monolith. Thirty-five bounded contexts live across f
 | **Probabilistic**  | mcp-server                | Stdio MCP server; 7 governance reads, 19 tools (mutations behind deterministic write gates)    |
 | **Probabilistic**  | local-llm                 | WebGPU/WebLLM inference, IndexedDB model + chat persistence                                    |
 | **Probabilistic**  | reconciliation-engine     | Reconciles agent proposals against current manifest state                                      |
-| **Probabilistic**  | tandem-execution          | Tandem LLM execution — multi-tiered local + cloud inference                                    |
 | **Projection**     | web-driver                | Next.js application shell; HITL canvas host                                                    |
 | **Projection**     | ui                        | Shared React components for projection planes                                                  |
 | **Projection**     | visualization             | Architecture graph rendering (React Flow)                                                      |

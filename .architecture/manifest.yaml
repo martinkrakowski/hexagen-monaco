@@ -21,7 +21,6 @@ planes:
     - agentic-interaction
     - reconciliation-engine
     - mcp-server
-    - tandem-execution
   infrastructure:
     - persistence
     - messaging
@@ -131,11 +130,6 @@ bounded_contexts:
     plane: probabilistic
     status: active
     file: contexts/probabilistic/local-llm/context.yaml
-  - name: tandem-execution
-    type: core
-    plane: probabilistic
-    status: active
-    file: contexts/probabilistic/tandem-execution/context.yaml
   - name: ui
     type: supporting
     plane: projection
