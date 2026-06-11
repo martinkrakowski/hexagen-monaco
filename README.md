@@ -149,7 +149,7 @@ Mutation tools write to the manifest directly, behind deterministic fail-closed 
 
 ## Architecture Topology
 
-Hexagen-Monaco is a modular monolith. Thirty-seven bounded contexts live across five planes; the manifest at `.architecture/manifest.yaml` is the single source of truth.
+Hexagen-Monaco is a modular monolith. Thirty-four bounded contexts live across five planes; the manifest at `.architecture/manifest.yaml` is the single source of truth.
 
 | Plane              | Context                   | Responsibility                                                                                 |
 | ------------------ | ------------------------- | ---------------------------------------------------------------------------------------------- |
