@@ -17,21 +17,9 @@ import type {
   CloudModelConfig,
   DomainModelId,
 } from "@hexagen/local-llm";
-import {
-  LocalStorageTandemConfigAdapter,
-  TandemTriggerDetectionUseCase,
-  DEFAULT_TANDEM_CONFIG,
-} from "@hexagen/tandem-execution";
-import type {
-  LocalModelState,
-  ConnectionHealthState,
-} from "@hexagen/tandem-execution";
-import { TandemInterceptionModal } from "@hexagen/model-settings";
 import { StepPills, PanelFooter } from "../governance";
 import { hasServerLLMAccessKey } from "../../../app/lib/wire";
 import { getCapabilities } from "@/lib/manifest-generation";
-import { useTandemLlm } from "../hooks/useTandemLlm";
-import { writeTandemConfigSentinel } from "../hooks/useTandemLostConfig";
 
 import { StatusSection } from "./StatusSection";
 import { ViolationsSection } from "./ViolationsSection";
@@ -88,27 +76,6 @@ export function GovernanceAssistantPanel({
   const [panelView, setPanelView] = useState<PanelView>("main");
   const [serverModelName, setServerModelName] = useState<string>("gpt-4o-mini");
 
-  // ── Tandem infrastructure ──────────────────────────────────────────────────
-  const triggerDetection = useMemo(
-    () => new TandemTriggerDetectionUseCase(),
-    [],
-  );
-  const configAdapter = useMemo(
-    () => new LocalStorageTandemConfigAdapter(),
-    [],
-  );
-
-  const [tandemModalOpen, setTandemModalOpen] = useState(false);
-  const [isFirstTimeTandem, setIsFirstTimeTandem] = useState(() => {
-    const result = new LocalStorageTandemConfigAdapter().read();
-    return result.success ? !result.value.firstTimeExperienceDismissed : true;
-  });
-
-  const prevCloudStateRef = useRef<ConnectionHealthState>("UNVALIDATED");
-  const prevLocalStatusRef = useRef<string | null>(null);
-
-  const tandemLlm = useTandemLlm();
-
   useEffect(() => {
     getCapabilities()
       .then((res) => {
@@ -137,170 +104,6 @@ export function GovernanceAssistantPanel({
   useEffect(() => {
     cloudLLM.setVault(vault);
   }, [cloudLLM, vault]);
-
-  // ── State mappers ──────────────────────────────────────────────────────────
-  const mapToLocalModelState = useCallback((s: string): LocalModelState => {
-    switch (s) {
-      case "ready":
-        return "ACTIVE";
-      case "loading_vram":
-        return "LOADING";
-      case "downloading":
-        return "DOWNLOADING";
-      case "requires_model":
-      case "unavailable":
-      case "no_webgpu":
-      case "unsupported_browser":
-      case "opt_in":
-        return "NOT_DOWNLOADED";
-      case "error":
-        return "ERROR";
-      default:
-        return "NOT_DOWNLOADED";
-    }
-  }, []);
-
-  const mapToCloudHealthState = useCallback(
-    (s: string): ConnectionHealthState => {
-      switch (s) {
-        case "connected":
-          return "VALID";
-        case "error":
-          return "UNAVAILABLE";
-        case "connecting":
-        case "idle":
-        default:
-          return "UNVALIDATED";
-      }
-    },
-    [],
-  );
-
-  const mappedLocalState = mapToLocalModelState(llmEngineState.status);
-  const mappedCloudState = mapToCloudHealthState(cloudConnection.state);
-
-  // ── Forward trigger: watch local model state transitions ──────────────────
-  useEffect(() => {
-    const prev = prevLocalStatusRef.current;
-    const curr = llmEngineState.status;
-    prevLocalStatusRef.current = curr;
-    if (tandemModalOpen) return;
-
-    // "downloading" → "ready" is the only observable download-completion edge.
-    const justDownloaded = prev === "downloading" && curr === "ready";
-    if (!justDownloaded) return;
-
-    const cloudMapped = mapToCloudHealthState(cloudConnection.state);
-    if (triggerDetection.checkForwardTrigger("DOWNLOADED", cloudMapped)) {
-      setTandemModalOpen(true);
-    }
-  }, [
-    llmEngineState.status,
-    cloudConnection.state,
-    tandemModalOpen,
-    triggerDetection,
-    mapToCloudHealthState,
-  ]);
-
-  // ── Reverse trigger: watch cloud connection state transitions ─────────────
-  useEffect(() => {
-    const currentCloudState = mapToCloudHealthState(cloudConnection.state);
-    const prevCloudState = prevCloudStateRef.current;
-    const localMapped = mapToLocalModelState(llmEngineState.status);
-
-    if (
-      !tandemModalOpen &&
-      triggerDetection.checkReverseTrigger(
-        localMapped,
-        prevCloudState,
-        currentCloudState,
-      )
-    ) {
-      setTandemModalOpen(true);
-    }
-
-    prevCloudStateRef.current = currentCloudState;
-  }, [cloudConnection.state]); // intentional: only re-run on state change
-
-  // ── Tandem modal handlers ─────────────────────────────────────────────────
-  const handleTandemPathSelect = useCallback(
-    (path: "local-only" | "tandem" | "keep-current") => {
-      const configResult = configAdapter.read();
-      const config = configResult.success
-        ? configResult.value
-        : DEFAULT_TANDEM_CONFIG;
-      const result = triggerDetection.commitActivation(
-        path,
-        config,
-        configAdapter,
-      );
-
-      if (!result.success) {
-        // Keep modal open; mode unchanged — caller may retry or dismiss
-        return;
-      }
-
-      if (path === "tandem") {
-        setMode("tandem");
-      } else if (path === "local-only") {
-        setMode("local");
-      }
-      setTandemModalOpen(false);
-    },
-    [triggerDetection, configAdapter],
-  );
-
-  const handleFirstTimeDismiss = useCallback(() => {
-    const configResult = configAdapter.read();
-    const config = configResult.success
-      ? configResult.value
-      : DEFAULT_TANDEM_CONFIG;
-    configAdapter.write({ ...config, firstTimeExperienceDismissed: true });
-    setIsFirstTimeTandem(false);
-  }, [configAdapter]);
-
-  // ── Startup validation: derive tandem status ──────────────────────────────
-  const derivedTandemStatus = useMemo(():
-    | "active"
-    | "degraded"
-    | "unavailable"
-    | "off" => {
-    const configResult = configAdapter.read();
-    if (!configResult.success || !configResult.value.enabled) return "off";
-    // Stage 3 always routes through /api/llm/chat — independent of cloudConnection.
-    // When a server-side API key is present the cloud leg is always reachable.
-    const effectiveCloudState: ConnectionHealthState = hasServerLLMAccessKey()
-      ? "VALID"
-      : mappedCloudState;
-    if (mappedLocalState === "ACTIVE" && effectiveCloudState === "VALID")
-      return "active";
-    if (effectiveCloudState === "UNAVAILABLE" || mappedLocalState === "ERROR")
-      return "unavailable";
-    if (effectiveCloudState === "DEGRADED") return "degraded";
-    return "off";
-  }, [configAdapter, mappedLocalState, mappedCloudState]);
-
-  // ── onTandemDisabled: switch mode back when tandem config reset ───────────
-  const handleTandemDisabled = useCallback(() => {
-    if (cloudConnection.state === "connected") {
-      setMode("cloud");
-    } else {
-      setMode("local");
-    }
-  }, [cloudConnection.state]);
-
-  // ── Tandem sendMessage wrapper ────────────────────────────────────────────
-  const handleSendTandemMessage = useCallback(
-    async (content: string) => {
-      await tandemLlm.sendMessage({
-        content,
-        conversationId: "governance-tandem",
-        localModelState: mappedLocalState,
-        cloudHealthState: mappedCloudState,
-      });
-    },
-    [tandemLlm, mappedLocalState, mappedCloudState],
-  );
 
   const { status, autoLoading } = llmEngineState;
 
@@ -449,8 +252,7 @@ export function GovernanceAssistantPanel({
     showProgress ||
     showError ||
     panelView === "model-settings" ||
-    mode === "cloud" ||
-    mode === "tandem"
+    mode === "cloud"
   ) {
     const providers = getClientProviders();
     const modelName =
@@ -464,96 +266,48 @@ export function GovernanceAssistantPanel({
       cloudConnection.config?.model ??
       "Unknown Model";
 
-    const isByok =
-      !hasServerLLMAccessKey() && cloudConnection.state === "connected";
-
-    const cloudProviderName =
-      getClientProviders().find(
-        (p: ClientProviderInfo) => p.id === cloudConnection.config?.provider,
-      )?.displayName ??
-      cloudConnection.config?.provider ??
-      "Cloud";
-
     return (
-      <>
-        <ModeWrapper
-          mode={mode}
-          panelView={panelView}
-          onModeChange={setMode}
-          cloudConnectionState={cloudConnection.state as ConnectionState}
-          cloudConnectionError={cloudConnection.error}
-          onCloudConnect={handleCloudConnect}
-          onCloudDisconnect={handleCloudDisconnect}
-          onRetryConnection={handleRetryConnection}
-          cloudMessages={cloudLLM.messages as CloudChatMessage[]}
-          cloudLLMStatus={cloudLLM.status}
-          cloudLLMError={cloudLLM.errorMessage}
-          onSendMessage={handleSendMessage}
-          onAbort={cloudLLM.abort}
-          onClear={cloudLLM.clearMessages}
-          modelName={modelName}
-          llmEngineState={llmEngineState}
-          showBootSpinner={showBootSpinner}
-          showUnavailable={showUnavailable}
-          showWakingUp={showWakingUp}
-          showProgress={showProgress}
-          showError={showError}
-          showRequiresModel={showRequiresModel}
-          onRefresh={onRefresh}
-          isLoading={isLoading}
-          onCancelDownload={cancelDownload}
-          onOpenSettings={handleOpenSettings}
-          onBackFromSettings={handleBackFromSettings}
-          onSwitchToCloud={handleSwitchToCloud}
-          loadedModel={loadedModel}
-          messagesLength={messages.length}
-          onSwitchModel={
-            switchModel as (modelId: DomainModelId) => Promise<void>
-          }
-          onDeleteModel={
-            deleteCachedModel as (modelId: DomainModelId) => Promise<void>
-          }
-          hasModelInCache={
-            hasModelInCache as (modelId: DomainModelId) => Promise<boolean>
-          }
-          onInitModel={initializeModel}
-          onResetConfig={handleResetConfig}
-          onConfigSaved={writeTandemConfigSentinel}
-          onTandemDisabled={handleTandemDisabled}
-          tandemDerivedStatus={derivedTandemStatus}
-          tandemMessages={tandemLlm.messages}
-          tandemStatus={tandemLlm.status}
-          onSendTandemMessage={handleSendTandemMessage}
-          onAbortTandem={tandemLlm.abort}
-          onClearTandem={tandemLlm.clear}
-          tandemCurrentStage={tandemLlm.currentStage}
-          onStageAwareAbortTandem={tandemLlm.stageAwareAbort}
-          tandemCanRetry={tandemLlm.canRetry}
-          onRetryCloudRefinement={tandemLlm.retryCloudRefinement}
-          tandemLastBypassReason={tandemLlm.lastBypassReason}
-          tandemLastResponseWasPartial={tandemLlm.lastResponseWasPartial}
-          tandemLastErrorType={tandemLlm.lastErrorType}
-          tandemHasOomEvent={tandemLlm.hasOomEvent}
-          onClearBypassReason={tandemLlm.clearBypassReason}
-          tandemLocalModelName={loadedModel?.name}
-          tandemCloudModelName={modelName}
-        />
-        <TandemInterceptionModal
-          isOpen={tandemModalOpen}
-          localModelName={loadedModel?.name ?? "Local Model"}
-          cloudProviderName={cloudProviderName}
-          isByok={isByok}
-          isFirstTime={isFirstTimeTandem}
-          currentSetupDescription={
-            mode === "cloud"
-              ? "Continue using Cloud Only"
-              : "Continue using Local Only"
-          }
-          onSelectPath={handleTandemPathSelect}
-          onCancel={() => setTandemModalOpen(false)}
-          onFirstTimeDismiss={handleFirstTimeDismiss}
-        />
-      </>
+      <ModeWrapper
+        mode={mode}
+        panelView={panelView}
+        onModeChange={setMode}
+        cloudConnectionState={cloudConnection.state as ConnectionState}
+        cloudConnectionError={cloudConnection.error}
+        onCloudConnect={handleCloudConnect}
+        onCloudDisconnect={handleCloudDisconnect}
+        onRetryConnection={handleRetryConnection}
+        cloudMessages={cloudLLM.messages as CloudChatMessage[]}
+        cloudLLMStatus={cloudLLM.status}
+        cloudLLMError={cloudLLM.errorMessage}
+        onSendMessage={handleSendMessage}
+        onAbort={cloudLLM.abort}
+        onClear={cloudLLM.clearMessages}
+        modelName={modelName}
+        llmEngineState={llmEngineState}
+        showBootSpinner={showBootSpinner}
+        showUnavailable={showUnavailable}
+        showWakingUp={showWakingUp}
+        showProgress={showProgress}
+        showError={showError}
+        showRequiresModel={showRequiresModel}
+        onRefresh={onRefresh}
+        isLoading={isLoading}
+        onCancelDownload={cancelDownload}
+        onOpenSettings={handleOpenSettings}
+        onBackFromSettings={handleBackFromSettings}
+        onSwitchToCloud={handleSwitchToCloud}
+        loadedModel={loadedModel}
+        messagesLength={messages.length}
+        onSwitchModel={switchModel as (modelId: DomainModelId) => Promise<void>}
+        onDeleteModel={
+          deleteCachedModel as (modelId: DomainModelId) => Promise<void>
+        }
+        hasModelInCache={
+          hasModelInCache as (modelId: DomainModelId) => Promise<boolean>
+        }
+        onInitModel={initializeModel}
+        onResetConfig={handleResetConfig}
+      />
     );
   }
 

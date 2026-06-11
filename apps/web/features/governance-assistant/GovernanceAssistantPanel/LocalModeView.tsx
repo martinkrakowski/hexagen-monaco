@@ -28,9 +28,6 @@ type LocalModeViewProps = Pick<
   | "hasModelInCache"
   | "panelView"
   | "onResetConfig"
-  | "onConfigSaved"
-  | "onTandemDisabled"
-  | "tandemDerivedStatus"
 >;
 
 export function LocalModeView(props: LocalModeViewProps) {
@@ -76,9 +73,6 @@ export function LocalModeView(props: LocalModeViewProps) {
       onBackFromSettings={props.onBackFromSettings}
       onSwitchToCloud={props.onSwitchToCloud}
       onResetConfig={props.onResetConfig}
-      onConfigSaved={props.onConfigSaved}
-      onTandemDisabled={props.onTandemDisabled}
-      tandemDerivedStatus={props.tandemDerivedStatus}
     />
   );
 }
