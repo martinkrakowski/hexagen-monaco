@@ -18,7 +18,6 @@
   },
   "dependencies": {
     "@hexagen/local-llm": "workspace:*",
-    "@hexagen/tandem-execution": "workspace:*",
     "@hexagen/ui": "workspace:*",
     "lucide-react": "^1.11.0"
   },

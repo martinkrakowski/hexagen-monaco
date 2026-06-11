@@ -41,9 +41,6 @@
   ],
   "references": [
     {
-      "path": "../../packages/tandem-execution"
-    },
-    {
       "path": "../../packages/governance"
     },
     {
