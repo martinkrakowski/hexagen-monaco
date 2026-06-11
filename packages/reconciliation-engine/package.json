@@ -1,6 +1,6 @@
 {
   "name": "@hexagen/reconciliation-engine",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Reconciliation Engine — parses LLM responses and merges them with deterministic DomainAST",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
