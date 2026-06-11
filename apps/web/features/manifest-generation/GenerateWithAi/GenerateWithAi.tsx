@@ -28,6 +28,13 @@ import { useGenerateWithAiForm } from "./hooks/useGenerateWithAiForm";
 import type { GenerateWithAiProps, ViewTab } from "./types";
 import { useLLMReadiness } from "../hooks/useLLMReadiness";
 import { useModelSelectionIntent } from "../store/useModelSelectionIntent";
+import {
+  useExecutionEngine,
+  shouldWarnBeforeGenerate,
+  effectivePreferLocal,
+  type ExecutionEngine,
+} from "../store/useExecutionEngine";
+import { LocalGenerationWarningDialog } from "../LocalGenerationWarningDialog";
 import { useSuppressLLMLoadingModal } from "@/contexts/LLMLoadingModalContext";
 
 export function GenerateWithAi({
@@ -50,9 +57,11 @@ export function GenerateWithAi({
     setMounted(true);
   }, []);
 
-  const { hasAnyCloud, isProbing, needsSetup, preferLocal } = useLLMReadiness(
+  const { isProbing, needsSetup, preferLocal } = useLLMReadiness(
     llmContext.engineState,
   );
+  const { engine, setEngine } = useExecutionEngine();
+  const [showLocalWarning, setShowLocalWarning] = useState(false);
 
   const [flowState, actions] = useModelSelectionFlowState(llmContext);
   const stagedGen = useStagedManifestGeneration();
@@ -97,13 +106,14 @@ export function GenerateWithAi({
     generateRef.current(formState.description, {
       deployment: formState.deployment,
       signal: undefined,
-      preferLocal,
+      preferLocal: effectivePreferLocal(engine, preferLocal),
     });
   }, [
     flowState.state,
     formState.description,
     formState.deployment,
     preferLocal,
+    engine,
   ]);
 
   useEffect(() => {
@@ -138,22 +148,36 @@ export function GenerateWithAi({
     [modelSelectionIntent, router],
   );
 
+  // Kicks off generation for the given strategy. Cloud goes straight to
+  // generating; local first ensures a model is ready (or remembered),
+  // otherwise detours through model selection with auto-generate intent.
+  // For "auto" this preserves the previous hasAnyCloud gate: auto only
+  // resolves local when no cloud keys exist, and reaching here without cloud
+  // keys implies WebLLM hardware (needsSetup blocks canGenerate otherwise).
+  const proceedWithGeneration = (strategy: ExecutionEngine) => {
+    if (!effectivePreferLocal(strategy, preferLocal)) {
+      actions.transitionTo("generating");
+      return;
+    }
+    const prefs = getModelPreferences();
+    if (
+      llmContext.engineState.status === "ready" ||
+      (prefs.rememberChoice && prefs.lastModelId)
+    ) {
+      actions.transitionTo("generating");
+    } else {
+      navigateToModelSelection(true);
+    }
+  };
+
   const handleGenerate = () => {
     if (!canGenerate) return;
 
-    if (hasAnyCloud) {
-      actions.transitionTo("generating");
-    } else {
-      const prefs = getModelPreferences();
-      if (
-        llmContext.engineState.status === "ready" ||
-        (prefs.rememberChoice && prefs.lastModelId)
-      ) {
-        actions.transitionTo("generating");
-      } else {
-        navigateToModelSelection(true);
-      }
+    if (shouldWarnBeforeGenerate(engine)) {
+      setShowLocalWarning(true);
+      return;
     }
+    proceedWithGeneration(engine);
   };
 
   const hasReturnedFromModelSelection = searchParams.get("generate") === "1";
@@ -163,7 +187,7 @@ export function GenerateWithAi({
     if (flowState.state !== "idle") return;
     if (!formHandlers.isValid) return;
 
-    if (hasAnyCloud) {
+    if (!effectivePreferLocal(engine, preferLocal)) {
       actions.transitionTo("generating");
       router.replace("/projects/new/ai");
     } else {
@@ -183,7 +207,8 @@ export function GenerateWithAi({
     llmContext.engineState.status,
     actions,
     router,
-    hasAnyCloud,
+    engine,
+    preferLocal,
   ]);
 
   const handleRetryOrRegenerate = useCallback(() => {
@@ -361,6 +386,8 @@ export function GenerateWithAi({
         }
         isDisabled={isGenerating}
         onChangeModel={() => navigateToModelSelection(false)}
+        engine={engine}
+        onEngineChange={setEngine}
       />
 
       {!manifestCapable && loadedModelId && (
@@ -429,6 +456,22 @@ export function GenerateWithAi({
           stagedGen.reset();
         }}
         disabledTooltip={disabledTooltip}
+      />
+
+      <LocalGenerationWarningDialog
+        open={showLocalWarning}
+        onOpenChange={setShowLocalWarning}
+        onContinueLocal={() => {
+          setShowLocalWarning(false);
+          proceedWithGeneration("local");
+        }}
+        onSwitchToCloud={() => {
+          setShowLocalWarning(false);
+          // Same-handler setEngine + transition is safe: React batches both,
+          // so the generation effect runs with engine === "cloud".
+          setEngine("cloud");
+          proceedWithGeneration("cloud");
+        }}
       />
     </GenerateWithAiLayout>
   );
