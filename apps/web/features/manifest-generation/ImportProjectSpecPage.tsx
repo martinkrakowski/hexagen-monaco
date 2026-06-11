@@ -14,6 +14,14 @@ import { ArrowLeft } from "lucide-react";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { useLLMReadiness } from "./hooks/useLLMReadiness";
 import { usePendingManifest } from "./store/usePendingManifest";
+import {
+  useExecutionEngine,
+  shouldWarnBeforeGenerate,
+  effectivePreferLocal,
+  type ExecutionEngine,
+} from "./store/useExecutionEngine";
+import { ExecutionEngineSelector } from "./ExecutionEngineSelector";
+import { LocalGenerationWarningDialog } from "./LocalGenerationWarningDialog";
 import { parseManifestToWizardData } from "@hexagen/wizard-orchestration";
 import { deriveWorkspaceName } from "@hexagen/manifest-generation";
 import { setManifestIdentity } from "./manifestIdentity";
@@ -38,6 +46,11 @@ type SpecPageState =
   | "GENERATING"
   | "PREVIEW";
 
+/** Model-selection flow with a return hop back to this page (same URL the
+ * ModelSetupPrompt below uses). */
+const MODEL_SETUP_URL =
+  "/projects/new/ai/models?returnUrl=/projects/new/import/spec";
+
 export default function ImportProjectSpecPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -55,7 +68,13 @@ export default function ImportProjectSpecPage() {
   const [generatedManifest, setGeneratedManifest] = useState<string | null>(
     null,
   );
-  const { needsSetup, isProbing } = useLLMReadiness();
+  const { needsSetup, isProbing, preferLocal, isWebLLMReady, hasAnyCloud } =
+    useLLMReadiness();
+  const { engine, setEngine } = useExecutionEngine();
+  // Which generate action is parked behind the local-override warning dialog.
+  const [pendingGenerate, setPendingGenerate] = useState<
+    "spec" | "description" | null
+  >(null);
 
   // Hook for spec path (structured config)
   const specGeneration = useStagedSpecGeneration();
@@ -83,7 +102,7 @@ export default function ImportProjectSpecPage() {
       setCameFromConversion(true);
       setPageState("CONVERTING_LOOSE_SPEC");
       resetConversion();
-      const result = await convert(rawContent);
+      const result = await convert(rawContent, { executionStrategy: engine });
       if (!result.convertedConfig) {
         // Stay in CONVERTING_LOOSE_SPEC; the error UI offers Retry / Continue.
         return;
@@ -101,7 +120,7 @@ export default function ImportProjectSpecPage() {
         setPageState("DESCRIPTION_FALLBACK");
       }
     },
-    [convert, resetConversion],
+    [convert, resetConversion, engine],
   );
 
   const handleFileLoaded = (content: string) => {
@@ -136,51 +155,129 @@ export default function ImportProjectSpecPage() {
     }
   };
 
-  const handleMapPorts = useCallback(async () => {
-    if (needsSetup) return;
+  const runSpecGeneration = useCallback(
+    async (strategy: ExecutionEngine) => {
+      setPreviousState(pageState);
+      setPageState("GENERATING");
+      setGeneratedManifest(null);
+      manifestGeneration.reset();
 
-    setPreviousState(pageState);
-    setPageState("GENERATING");
-    setGeneratedManifest(null);
-    manifestGeneration.reset();
+      const result = await specGeneration.generateFromSpec(specContent, {
+        executionStrategy: strategy,
+      });
 
-    const result = await specGeneration.generateFromSpec(specContent, {
-      executionStrategy: "auto",
-    });
+      if (result?.generatedManifest) {
+        setGeneratedManifest(result.generatedManifest);
+        setPageState("PREVIEW");
+      } else if (result?.phase === "failed") {
+        const errorMsg = result.stepDetail || "";
+        if (errorMsg.includes("No cloud LLM API keys configured")) {
+          // Spec generation cannot run locally via WebLLM on the backend.
+          // Fallback to the description mode which uses the local-capable useStagedManifestGeneration.
+          setPageState("DESCRIPTION_FALLBACK");
+        }
+        // Other failures: specGeneration.generationError is set by executeCloudGeneration,
+        // so ManifestGeneratingStep will display the error. The "Go Back" button is shown
+        // when isGenerating=false, so the user can recover.
+      }
+    },
+    [specContent, specGeneration, manifestGeneration, pageState],
+  );
 
-    if (result?.generatedManifest) {
-      setGeneratedManifest(result.generatedManifest);
-      setPageState("PREVIEW");
-    } else if (result?.phase === "failed") {
-      const errorMsg = result.stepDetail || "";
-      if (errorMsg.includes("No cloud LLM API keys configured")) {
-        // Spec generation cannot run locally via WebLLM on the backend.
-        // Fallback to the description mode which uses the local-capable useStagedManifestGeneration.
+  const runDescriptionGeneration = useCallback(
+    async (strategy: ExecutionEngine) => {
+      setPreviousState(pageState);
+      setPageState("GENERATING");
+      setGeneratedManifest(null);
+      specGeneration.reset();
+
+      const result = await manifestGeneration.generateManifest(specContent, {
+        preferLocal: effectivePreferLocal(strategy, preferLocal),
+      });
+
+      if (result?.generatedManifest) {
+        setGeneratedManifest(result.generatedManifest);
+        setPageState("PREVIEW");
+      } else if (result?.generationError) {
         setPageState("DESCRIPTION_FALLBACK");
       }
-      // Other failures: specGeneration.generationError is set by executeCloudGeneration,
-      // so ManifestGeneratingStep will display the error. The "Go Back" button is shown
-      // when isGenerating=false, so the user can recover.
-    }
-  }, [needsSetup, specContent, specGeneration, manifestGeneration, pageState]);
+    },
+    [specContent, manifestGeneration, specGeneration, pageState, preferLocal],
+  );
 
-  const handleContinue = useCallback(async () => {
+  const handleMapPorts = useCallback(() => {
     if (needsSetup) return;
-
-    setPreviousState(pageState);
-    setPageState("GENERATING");
-    setGeneratedManifest(null);
-    specGeneration.reset();
-
-    const result = await manifestGeneration.generateManifest(specContent);
-
-    if (result?.generatedManifest) {
-      setGeneratedManifest(result.generatedManifest);
-      setPageState("PREVIEW");
-    } else if (result?.generationError) {
-      setPageState("DESCRIPTION_FALLBACK");
+    if (shouldWarnBeforeGenerate(engine)) {
+      setPendingGenerate("spec");
+      return;
     }
-  }, [needsSetup, specContent, manifestGeneration, specGeneration, pageState]);
+    // Auto-resolved local with no model loaded would resolve the strategy to
+    // "none" and fail; detour through model selection instead (explicit local
+    // gets the same detour from the warning dialog's Continue action).
+    if (effectivePreferLocal(engine, preferLocal) && !isWebLLMReady) {
+      router.push(MODEL_SETUP_URL);
+      return;
+    }
+    void runSpecGeneration(engine);
+  }, [
+    needsSetup,
+    engine,
+    preferLocal,
+    isWebLLMReady,
+    router,
+    runSpecGeneration,
+  ]);
+
+  const handleContinue = useCallback(() => {
+    if (needsSetup) return;
+    if (shouldWarnBeforeGenerate(engine)) {
+      setPendingGenerate("description");
+      return;
+    }
+    if (effectivePreferLocal(engine, preferLocal) && !isWebLLMReady) {
+      router.push(MODEL_SETUP_URL);
+      return;
+    }
+    void runDescriptionGeneration(engine);
+  }, [
+    needsSetup,
+    engine,
+    preferLocal,
+    isWebLLMReady,
+    router,
+    runDescriptionGeneration,
+  ]);
+
+  // Warning-dialog actions. The run functions take the strategy explicitly
+  // because "Switch to cloud" must run with the freshly chosen engine — the
+  // `engine` value captured in this render is still "local".
+  const resolvePendingGenerate = useCallback(
+    (strategy: ExecutionEngine) => {
+      const pending = pendingGenerate;
+      setPendingGenerate(null);
+      if (pending === "spec") void runSpecGeneration(strategy);
+      else if (pending === "description")
+        void runDescriptionGeneration(strategy);
+    },
+    [pendingGenerate, runSpecGeneration, runDescriptionGeneration],
+  );
+
+  const handleContinueLocal = useCallback(() => {
+    // Explicit local with no model loaded: generating would resolve the
+    // strategy to "none" and fail. Mirror GenerateWithAi's detour through
+    // model selection (returnUrl brings the user back here to re-trigger).
+    if (!isWebLLMReady) {
+      setPendingGenerate(null);
+      router.push(MODEL_SETUP_URL);
+      return;
+    }
+    resolvePendingGenerate("local");
+  }, [isWebLLMReady, router, resolvePendingGenerate]);
+
+  const handleSwitchToCloud = useCallback(() => {
+    setEngine("cloud");
+    resolvePendingGenerate("cloud");
+  }, [setEngine, resolvePendingGenerate]);
 
   const handleBack = () => {
     if (pageState === "SPEC_REVIEW" || pageState === "DESCRIPTION_FALLBACK") {
@@ -415,11 +512,7 @@ export default function ImportProjectSpecPage() {
               !isProbing && (
                 <div className="mb-6">
                   <ModelSetupPrompt
-                    onSetupModel={() =>
-                      router.push(
-                        "/projects/new/ai/models?returnUrl=/projects/new/import/spec",
-                      )
-                    }
+                    onSetupModel={() => router.push(MODEL_SETUP_URL)}
                   />
                 </div>
               )}
@@ -429,13 +522,19 @@ export default function ImportProjectSpecPage() {
             )}
 
             {pageState === "SPEC_REVIEW" && (
-              <SpecReviewStep
-                specSummary={specSummary}
-                specContent={specContent}
-                cameFromConversion={cameFromConversion}
-                isJsonDisclosed={isJsonDisclosed}
-                onToggleJsonDisclosed={setIsJsonDisclosed}
-              />
+              <div className="space-y-6">
+                <SpecReviewStep
+                  specSummary={specSummary}
+                  specContent={specContent}
+                  cameFromConversion={cameFromConversion}
+                  isJsonDisclosed={isJsonDisclosed}
+                  onToggleJsonDisclosed={setIsJsonDisclosed}
+                />
+                <ExecutionEngineSelector
+                  engine={engine}
+                  onEngineChange={setEngine}
+                />
+              </div>
             )}
 
             {pageState === "CONVERTING_LOOSE_SPEC" && (
@@ -446,11 +545,27 @@ export default function ImportProjectSpecPage() {
             )}
 
             {pageState === "DESCRIPTION_FALLBACK" && (
-              <SpecDescriptionFallbackStep />
+              <div className="space-y-6">
+                <SpecDescriptionFallbackStep />
+                <ExecutionEngineSelector
+                  engine={engine}
+                  onEngineChange={setEngine}
+                />
+              </div>
             )}
           </div>
         </div>
       )}
+
+      <LocalGenerationWarningDialog
+        open={pendingGenerate !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingGenerate(null);
+        }}
+        onContinueLocal={handleContinueLocal}
+        onSwitchToCloud={handleSwitchToCloud}
+        canSwitchToCloud={hasAnyCloud}
+      />
     </ProjectsShellWithFreeTier>
   );
 }

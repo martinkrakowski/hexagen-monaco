@@ -1,6 +1,8 @@
 import { Label, Input, Button } from "@hexagen/ui";
 import { DEFAULT_MAX_BOUNDED_CONTEXTS } from "@hexagen/agentic-interaction";
 import { Cpu } from "lucide-react";
+import type { ExecutionEngine } from "../store/useExecutionEngine";
+import { ExecutionEngineSelector } from "../ExecutionEngineSelector";
 
 const MIN_CONTEXTS = 1;
 const MAX_CONTEXTS = 25;
@@ -12,6 +14,8 @@ interface AdvancedOptionsSectionProps {
   onMaxContextsChange: (value: number) => void;
   isDisabled: boolean;
   onChangeModel?: () => void;
+  engine?: ExecutionEngine;
+  onEngineChange?: (engine: ExecutionEngine) => void;
 }
 
 export function AdvancedOptionsSection({
@@ -21,6 +25,8 @@ export function AdvancedOptionsSection({
   onMaxContextsChange,
   isDisabled,
   onChangeModel,
+  engine,
+  onEngineChange,
 }: AdvancedOptionsSectionProps) {
   return (
     <section className="border-t border-border pt-4">
@@ -76,6 +82,13 @@ export function AdvancedOptionsSection({
               <span>{MAX_CONTEXTS}</span>
             </div>
           </div>
+          {engine !== undefined && onEngineChange && (
+            <ExecutionEngineSelector
+              engine={engine}
+              onEngineChange={onEngineChange}
+              isDisabled={isDisabled}
+            />
+          )}
           {onChangeModel && (
             <Button
               variant="outline"
