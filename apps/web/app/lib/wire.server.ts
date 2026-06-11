@@ -217,11 +217,11 @@ export interface LLMProviderSelectorConfig {
   validateLocalLLM?: boolean;
 }
 
-export const createLLMProviderSelector = (
-  config: LLMProviderSelectorConfig,
-): LLMProviderSelectorAdapter => {
-  const secretVault = getEnvironmentVault();
-  const fallbackChain: ProviderFallbackChain = {
+// Built per call (not a module-level const) so the env-derived entries
+// (LLM_BASE_URL / LLM_MODEL / INCEPTION_MODEL) are read at request time —
+// same behavior as when this object lived inline in the selector factory.
+const buildStagedGenerationFallbackChain = (): ProviderFallbackChain => {
+  return {
     primary: {
       providerId: "openai" as const,
       baseUrl: "https://api.openai.com/v1",
@@ -268,6 +268,32 @@ export const createLLMProviderSelector = (
       },
     ],
   };
+};
+
+/**
+ * The model that actually serves staged manifest generation: the head of the
+ * RESOLVED fallback chain — same chain definition and same resolver the
+ * selector adapter runs, so this cannot drift from selection behavior.
+ * Returns null when no provider resolves (no keys configured).
+ *
+ * Consumed by /api/manifest/capabilities so UI surfaces report the generation
+ * model truthfully. Deliberately distinct from `activeModelName` (LLM_MODEL),
+ * which is what the web chat/governance routes use — after the mercury flip
+ * these are different models (see docs/planning/mercury-2-prod-flip-runbook.md).
+ */
+export const resolveActiveGenerationModel = (): string | null => {
+  const resolved = resolveFallbackChain(
+    getEnvironmentVault(),
+    buildStagedGenerationFallbackChain(),
+  );
+  return resolved[0]?.model ?? null;
+};
+
+export const createLLMProviderSelector = (
+  config: LLMProviderSelectorConfig,
+): LLMProviderSelectorAdapter => {
+  const secretVault = getEnvironmentVault();
+  const fallbackChain = buildStagedGenerationFallbackChain();
 
   // Day-one flip verification: surface which providers actually resolved (an
   // API key is present for them) using the SAME resolver the adapter runs, so

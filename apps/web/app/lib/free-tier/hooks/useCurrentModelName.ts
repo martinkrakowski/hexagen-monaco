@@ -36,11 +36,16 @@ export function useCurrentModelName(): string | null {
       // Clear stale name immediately before the async fetch
       if (active) setModelName(null);
 
-      // Otherwise, get the cloud model name
+      // Otherwise, get the cloud model name. This hook feeds the projects
+      // shell badge (e.g. /projects/new), where the truthful model is the one
+      // serving manifest GENERATION — not activeModelName (LLM_MODEL), which
+      // is the chat/governance model and may differ post-mercury-flip.
       try {
         const capabilities = await getCapabilities();
-        if (active && capabilities.activeModelName) {
-          setModelName(capabilities.activeModelName);
+        const cloudModelName =
+          capabilities.generationModelName ?? capabilities.activeModelName;
+        if (active && cloudModelName) {
+          setModelName(cloudModelName);
           return;
         }
       } catch {
