@@ -1,6 +1,6 @@
 {
   "name": "@hexagen/arch-linter",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "HexaGen architecture linter and manifest validation",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
