@@ -62,14 +62,21 @@ export async function GET() {
       },
     );
 
+    const generationModelName = resolveActiveGenerationModel() ?? undefined;
+
     return NextResponse.json({
       capabilities,
-      canGenerate: capabilities.some((c) => c.status !== "no_keys_configured"),
+      // Generation is possible when a BYOK-probe provider has a key OR the
+      // staged-generation fallback chain resolves (e.g. INCEPTION_API_KEY /
+      // LLM_API_KEY deployments, which the per-provider probe can't see).
+      canGenerate:
+        capabilities.some((c) => c.status !== "no_keys_configured") ||
+        generationModelName !== undefined,
       // Web chat/governance model (LLM_MODEL) — NOT what serves manifest
       // generation; that's generationModelName below. Kept under its
       // historical name for existing consumers (governance panel badge).
       activeModelName: process.env.LLM_MODEL || "gpt-4o-mini",
-      generationModelName: resolveActiveGenerationModel() ?? undefined,
+      generationModelName,
     });
   }
 
@@ -112,12 +119,16 @@ export async function GET() {
     },
   );
 
+  const generationModelName = resolveActiveGenerationModel() ?? undefined;
+
   return NextResponse.json({
     capabilities,
-    canGenerate: capabilities.some((c) => c.status !== "no_keys_configured"),
-    // See the unauthenticated branch above for the activeModelName /
-    // generationModelName distinction.
+    // See the unauthenticated branch above for the canGenerate widening and
+    // the activeModelName / generationModelName distinction.
+    canGenerate:
+      capabilities.some((c) => c.status !== "no_keys_configured") ||
+      generationModelName !== undefined,
     activeModelName: process.env.LLM_MODEL || "gpt-4o-mini",
-    generationModelName: resolveActiveGenerationModel() ?? undefined,
+    generationModelName,
   });
 }
