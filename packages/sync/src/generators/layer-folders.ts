@@ -2,6 +2,7 @@ import path from "node:path";
 import yaml from "js-yaml";
 import fs from "node:fs/promises";
 import { SyncConfig } from "../config.js";
+import type { ReportRecorder } from "../domain/types.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
 import { safeWriteFileAtomic, isInScope } from "../fs-utils.js";
 
@@ -81,7 +82,7 @@ export async function ensureLayerFolders(
   moduleDir: string,
   layers: Record<string, LayerConfig>,
   config: SyncConfig,
-  report?: { record: (type: string, target: string, message?: string) => void },
+  report?: ReportRecorder,
 ): Promise<GeneratorResult> {
   const result = createEmptyResult();
   const { logger } = config;

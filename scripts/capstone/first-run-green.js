@@ -22,6 +22,9 @@
  *      generated project (not the monorepo) — the issue #179 regression guard —
  *      AND that the dry-run left the git-committed scaffold byte-identical:
  *      porcelain-clean + tree-snapshot-equal + no report file (PR-A2, RCA #3).
+ *      Then materialize for real (6b), prove broken-manifest exit codes (6c,
+ *      PR-A1), and prove a failed sync under --allow-dirty never rolls back
+ *      and unaffected untracked files survive (6d, PR-B1 RCA #4).
  *   7. Assert no stray `@hexagen/` (private scope) leaked into project files.
  *
  * Usage: node scripts/capstone/first-run-green.js   (or: yarn capstone)
@@ -34,6 +37,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readdirSync,
+  renameSync,
   rmSync,
   writeFileSync,
   readFileSync,
@@ -372,6 +376,115 @@ try {
   }
   writeFileSync(manifestPath, MANIFEST_YAML);
   step("Broken manifest → installed bins exit non-zero ✅");
+
+  // 6d. Scoped-rollback guard (plan PR-B1, RCA #4): a mid-run failure under
+  //     --allow-dirty must NOT roll anything back — pre-B1 the engine ran
+  //     `git reset --hard HEAD && git clean -fd` against the whole project,
+  //     which would delete BOTH untracked seeds below (the scratch file and
+  //     the package.json backup).
+  //
+  //     Two ingredients, because the converged project journals nothing on
+  //     its own (every regenerated file is identical → skipped, and this
+  //     manifest has no generator.sync.layers, so there are no barrels):
+  //       1. shared's package.json is deleted → its recreation is the
+  //          journaled write (generateBarrels writes nothing before it);
+  //       2. a second context `omega` (6c's corrupt-then-restore manifest
+  //          pattern) whose package.json is a DIRECTORY →
+  //          generatePackageJson's pre-read throws EISDIR raw — AFTER
+  //          shared's recreation, since modules run in manifest order.
+  //     The failure must sit on generatePackageJson specifically: it throws;
+  //     several other generators (e.g. tsconfig) catch into result.error
+  //     instead, which the engine does not treat as fatal.
+  const OMEGA_CONTEXT =
+    "  - name: omega\n    type: core\n" +
+    "    description: Rollback-phase sabotage context\n" +
+    "    layers:\n      domain: {}\n";
+  const sharedPkgJson = path.join(proj, "packages/shared/package.json");
+  const sharedPkgBak = sharedPkgJson + ".capstone-bak";
+  const omegaPkgJson = path.join(proj, "packages/omega/package.json");
+  const scratchPath = path.join(proj, "capstone-scratch.txt");
+  const SCRATCH_CONTENT = "capstone scratch - must survive a failed sync\n";
+  writeFileSync(manifestPath, MANIFEST_YAML + OMEGA_CONTEXT);
+  writeFileSync(scratchPath, SCRATCH_CONTENT);
+  renameSync(sharedPkgJson, sharedPkgBak);
+  mkdirSync(omegaPkgJson, { recursive: true });
+  writeFileSync(path.join(omegaPkgJson, "placeholder"), "");
+  let sabotagedFailed = false;
+  let sabotagedOut = "";
+  try {
+    sabotagedOut = projSh("node_modules/.bin/hexagen sync --allow-dirty");
+  } catch (e) {
+    sabotagedFailed = true;
+    sabotagedOut = String(e.stdout || "") + String(e.stderr || "");
+  }
+  if (!sabotagedFailed) {
+    fail(
+      "`hexagen sync` exited 0 despite the package.json-as-directory sabotage",
+      sabotagedOut,
+    );
+  }
+  if (!/EISDIR|illegal operation on a directory/.test(sabotagedOut)) {
+    fail(
+      "sabotaged sync failed, but not with the expected EISDIR",
+      sabotagedOut,
+    );
+  }
+  if (!sabotagedOut.includes("NO rollback under --allow-dirty")) {
+    fail(
+      "failed sync under --allow-dirty did not state the deliberate no-rollback (PR-B1)",
+      sabotagedOut,
+    );
+  }
+  if (!sabotagedOut.includes("packages/shared/package.json")) {
+    fail(
+      "journal print did not name the recreated package.json (PR-B1)",
+      sabotagedOut,
+    );
+  }
+  if (!existsSync(scratchPath)) {
+    fail(
+      "untracked scratch file was DELETED by a failed sync (RCA #4 `git clean -fd` regression)",
+      sabotagedOut,
+    );
+  }
+  if (readFileSync(scratchPath, "utf8") !== SCRATCH_CONTENT) {
+    fail("untracked scratch file content changed across a failed sync");
+  }
+  if (!existsSync(sharedPkgBak)) {
+    fail(
+      "untracked package.json backup was DELETED by a failed sync (RCA #4 `git clean -fd` regression)",
+      sabotagedOut,
+    );
+  }
+  if (!existsSync(sharedPkgJson)) {
+    fail(
+      "recreated package.json missing after the failed run — under --allow-dirty sync's own writes must stay too",
+      sabotagedOut,
+    );
+  }
+  // Restore: undo the sabotage (omega dir, manifest, package.json, scratch) —
+  // the backup IS the restore — then prove coherence with a dry-run of the
+  // installed CLI. Dry-run (not real): a second real sync would hit the
+  // preflight `turbo run build`, which fails on this minimal scaffold for
+  // pre-existing reasons unrelated to PR-B1 (packages/shared materialized
+  // after `yarn install`, so it's absent from the lockfile, and its `tsc`
+  // build has no src/ inputs under a layer-less manifest).
+  rmSync(path.join(proj, "packages/omega"), { recursive: true, force: true });
+  rmSync(sharedPkgJson, { recursive: true, force: true });
+  renameSync(sharedPkgBak, sharedPkgJson);
+  rmSync(scratchPath);
+  writeFileSync(manifestPath, MANIFEST_YAML);
+  try {
+    projSh("node_modules/.bin/hexagen sync --dry-run --allow-dirty");
+  } catch (e) {
+    fail(
+      "dry-run after un-sabotaging failed — project did not reconverge",
+      String(e.stdout || "") + String(e.stderr || e),
+    );
+  }
+  step(
+    "Failed sync under --allow-dirty: no rollback, journal printed, untracked files survived ✅",
+  );
 
   // 7. No private @hexagen/ scope in emitted project files (tooling is
   //    @hexagen-monaco). package.json is the highest-risk file (devDeps,

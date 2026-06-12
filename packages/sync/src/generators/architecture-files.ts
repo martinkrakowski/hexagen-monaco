@@ -179,6 +179,10 @@ async function writeManifestIfFreshExternal(
   }
 
   const content = yaml.dump(config.manifest);
+  // PR-B1 (RCA #4): this is a deliberate raw write (not safeWriteFileAtomic),
+  // so it must journal itself. The exists-check above guarantees the file is
+  // fresh — pre-image is null (a create), rolled back by unlinking.
+  config.journal?.recordWrite(manifestPath, null);
   await fs.mkdir(archDir, { recursive: true });
   await fs.writeFile(manifestPath, content, { encoding: "utf8" });
 

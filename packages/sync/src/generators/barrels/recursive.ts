@@ -3,6 +3,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import type { SyncConfig } from "../../config.js";
+import type { ReportRecorder } from "../../domain/types.js";
 import { createEmptyResult, type GeneratorResult } from "../../results.js";
 import { safeWriteFileAtomic } from "../../fs-utils.js";
 import { isExcludedDirectory } from "../../config/barrel-exclusions.js";
@@ -71,7 +72,7 @@ interface PendingBarrelWrite {
 export async function generateRecursiveBarrels(
   moduleDir: string,
   config: SyncConfig,
-  report?: { record: (type: string, target: string, message?: string) => void },
+  report?: ReportRecorder,
 ): Promise<GeneratorResult> {
   const result = createEmptyResult();
   const srcDir = path.join(moduleDir, "src");
@@ -169,6 +170,12 @@ export async function generateRecursiveBarrels(
         continue;
       }
       try {
+        // PR-B1 (RCA #4): journal the pre-image before the unlink so a failed
+        // run can restore the deleted barrel. The read-first also keeps the
+        // ENOENT semantics identical to the bare unlink: a file that is
+        // already gone short-circuits to the catch below either way.
+        const preContent = await fs.readFile(pending.filePath, "utf8");
+        config.journal?.recordDelete(pending.filePath, preContent);
         await fs.unlink(pending.filePath);
         result.deleted.push(pending.filePath);
         result.totalOps++;

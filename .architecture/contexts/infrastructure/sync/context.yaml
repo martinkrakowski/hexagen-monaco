@@ -6,6 +6,7 @@ layers:
     entities:
       - GeneratorResult
       - SyncReport
+      - SyncJournal
   application:
     use_cases:
       - GetArchitectureGraphUseCase

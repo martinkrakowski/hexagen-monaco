@@ -1,4 +1,5 @@
 import type { Manifest } from "./types/manifest.js";
+import type { SyncJournal } from "./journal.js";
 import { LogLevel, type LoggerPort, type LoggerConfig } from "@hexagen/shared";
 
 export type { LoggerPort, LoggerConfig };
@@ -95,6 +96,14 @@ export interface SyncFlags {
 export interface SyncConfig extends SyncFlags {
   manifest: Manifest;
   workspaceRoot: string;
+  /**
+   * Per-run mutation journal (PR-B1, RCA #4). Set by the engine; every site
+   * that actually mutates a file records its pre-image here BEFORE writing or
+   * deleting, so a failed run can restore exactly what sync touched — never a
+   * git-wide reset. Optional so hand-built test configs (and the journal-less
+   * call paths in tests) keep working; sites use `config.journal?.record…`.
+   */
+  journal?: SyncJournal;
 }
 
 export function parseArgs(rawArgs: string[]): SyncFlags {

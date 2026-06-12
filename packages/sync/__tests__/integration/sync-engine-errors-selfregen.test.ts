@@ -13,6 +13,7 @@ import {
 } from "../helpers/fixture-factory.js";
 import { pathExists } from "../helpers/fs-helpers.js";
 import { makeSelfRegenFlags } from "../helpers/test-config.js";
+import { SKIP_NON_POSIX } from "../helpers/published-layout.js";
 
 function locateHostRepoRoot(): string {
   let dir = path.dirname(new URL(import.meta.url).pathname);
@@ -300,7 +301,13 @@ describe("SyncEngine — self-regen rollback + process.exit (fixture-only)", () 
     );
   });
 
-  it("#9 rollback runs 'git reset --hard HEAD && git clean -fd' against the FIXTURE, not the host", async () => {
+  it("#9 NEVER rolls back under --allow-dirty — uncommitted changes survive a failed run (PR-B1, RCA #4)", async () => {
+    // Pre-B1 this exact scenario pinned the data-loss bug: the engine ran
+    // `git reset --hard HEAD && git clean -fd` against the whole tree even
+    // under --allow-dirty and even when the failure happened BEFORE any
+    // write, wiping .gitkeep's uncommitted content. B1 inverts it: the
+    // failure here (validateManifest) fires pre-write, so the journal is
+    // empty and the tree must be left byte-identical.
     fixtureRoot = await fs.mkdtemp(
       path.join(os.tmpdir(), "hexagen-sync-errors-rollback-"),
     );
@@ -345,8 +352,8 @@ describe("SyncEngine — self-regen rollback + process.exit (fixture-only)", () 
     });
     assert.equal(
       fixtureStatusAfter,
-      "",
-      "rollback must have wiped the fixture's uncommitted changes",
+      fixtureDirtyBefore,
+      "the fixture's git status must be untouched — no reset, no clean",
     );
     const keepContent = await fs.readFile(
       path.join(fixtureRoot, ".gitkeep"),
@@ -354,12 +361,18 @@ describe("SyncEngine — self-regen rollback + process.exit (fixture-only)", () 
     );
     assert.equal(
       keepContent,
-      "",
-      "rollback must have restored .gitkeep to its HEAD (empty) state",
+      "UNCOMMITTED_CHANGE_PATTERN",
+      "the user's uncommitted change must SURVIVE the failed run",
     );
     assert.ok(
-      messagesAt(logger, "info").some((m) => m.includes("Rollback completed")),
-      "engine must log 'Rollback completed' after a successful rollback",
+      messagesAt(logger, "info").some((m) =>
+        m.includes("No files were touched before the failure"),
+      ),
+      "pre-write failure must report an empty journal",
+    );
+    assert.ok(
+      !messagesAt(logger, "info").some((m) => m.includes("Rollback completed")),
+      "no rollback may run when nothing was journaled",
     );
   });
 
@@ -396,7 +409,7 @@ describe("SyncEngine — self-regen rollback + process.exit (fixture-only)", () 
     });
   });
 
-  it("#14 throws in non-dry-run when manifest file is absent (ENOENT → rollback)", async () => {
+  it("#14 throws in non-dry-run when manifest file is absent (ENOENT → empty journal, nothing to roll back)", async () => {
     fixtureRoot = await fs.mkdtemp(
       path.join(os.tmpdir(), "hexagen-sync-errors-nomanifest-"),
     );
@@ -426,9 +439,272 @@ describe("SyncEngine — self-regen rollback + process.exit (fixture-only)", () 
       ),
       "engine must log the ENOENT failure on missing manifest",
     );
+    // loadManifest fails before any write — the journal is empty, so there
+    // is nothing to roll back (and under --allow-dirty we never would).
     assert.ok(
-      messagesAt(logger, "info").some((m) => m.includes("Rollback completed")),
-      "rollback must complete against the fixture on ENOENT failure",
+      messagesAt(logger, "info").some((m) =>
+        m.includes("No files were touched before the failure"),
+      ),
+      "ENOENT fires pre-write — the engine must report an empty journal",
+    );
+    assert.ok(
+      !messagesAt(logger, "info").some((m) => m.includes("Rollback completed")),
+      "no rollback may run when nothing was journaled",
     );
   });
 });
+
+/**
+ * Stale-but-parseable seed for `packages/alpha/package.json` (committed by
+ * the fixture). generatePackageJson MERGES it (protected keys kept, missing
+ * keys injected) and writes via safeWriteFileAtomic with skipGeneratedCheck,
+ * so mid-run the file is OVERWRITTEN and its pre-image journaled. Rollback
+ * must restore these exact bytes. Without an overwrite entry every arc in
+ * these fixtures is create→unlink, and a regression that journals null
+ * pre-images for updates — which makes rollback DELETE the user's file —
+ * passes the whole suite (proven by mutation test, PR-B1 review).
+ */
+const STALE_ALPHA_PKG =
+  '{\n  "name": "@acme/alpha",\n  "version": "0.0.1"\n}\n';
+
+/**
+ * Fixture for mid-run failure: the engine must get PAST the early gates
+ * (git check, lock, preflight) and write real files before failing, so the
+ * journal is non-empty.
+ *
+ * - Sabotage: `packages/beta/package.json` is a committed DIRECTORY, so
+ *   generatePackageJson's pre-read throws EISDIR deterministically — and
+ *   only after alpha's artifacts have all landed (modules are processed
+ *   sequentially in manifest order).
+ * - Seeded overwrite: alpha's committed stale package.json (above) makes the
+ *   journal carry an UPDATE entry with a real pre-image, not just creates.
+ * - Preflight: self-regen real runs exec `npx turbo run build` with
+ *   cwd=workspaceRoot; npx resolves the local node_modules/.bin first, so a
+ *   stub `turbo` keeps the run offline and instant. node_modules/ is in the
+ *   committed .gitignore so the stub stays porcelain-invisible.
+ * - `.architecture/` exists (the lock file lives there) but is an EMPTY,
+ *   uncommitted dir — invisible to porcelain, so the clean-tree check
+ *   still passes for the no-allow-dirty case.
+ */
+async function makeMidRunFailureFixture(tmpDir: string): Promise<void> {
+  execSync("git init --quiet", { cwd: tmpDir });
+  execSync('git config user.name "test"', { cwd: tmpDir });
+  execSync('git config user.email "test@test"', { cwd: tmpDir });
+  execSync("git checkout -b main --quiet 2>/dev/null || true", {
+    cwd: tmpDir,
+  });
+  await fs.writeFile(path.join(tmpDir, ".gitkeep"), "");
+  await fs.writeFile(path.join(tmpDir, ".gitignore"), "node_modules/\n");
+  await fs.mkdir(path.join(tmpDir, "packages", "beta", "package.json"), {
+    recursive: true,
+  });
+  await fs.writeFile(
+    path.join(tmpDir, "packages", "beta", "package.json", "placeholder"),
+    "",
+  );
+  await fs.mkdir(path.join(tmpDir, "packages", "alpha"), { recursive: true });
+  await fs.writeFile(
+    path.join(tmpDir, "packages", "alpha", "package.json"),
+    STALE_ALPHA_PKG,
+  );
+  execSync("git add .", { cwd: tmpDir });
+  execSync('git commit -m "init" --quiet', { cwd: tmpDir });
+
+  const binDir = path.join(tmpDir, "node_modules", ".bin");
+  await fs.mkdir(binDir, { recursive: true });
+  await fs.writeFile(path.join(binDir, "turbo"), "#!/bin/sh\nexit 0\n", {
+    mode: 0o755,
+  });
+  await fs.mkdir(path.join(tmpDir, ".architecture"), { recursive: true });
+}
+
+// POSIX-only, like the contract suites and for the same reason: the fixture's
+// preflight stub is a sh-shebang script that cannot exec on win32 — there the
+// run would die at preflight, before any journal entry, so nothing this
+// describe asserts (EISDIR arc, journal prints, POSIX-separator paths from
+// path.relative) is reachable. Declaring that beats separator-tolerant
+// regexes that would pretend at a Windows support the stub forecloses.
+describe(
+  "SyncEngine — journaled rollback after mid-run writes (PR-B1, RCA #4, fixture-only)",
+  { skip: SKIP_NON_POSIX },
+  () => {
+    let fixtureRoot: string | null = null;
+    let hostStatusBefore = "";
+
+    afterEach(async () => {
+      const hostStatusAfter = hostRepoGitStatus();
+      await removeFixture(fixtureRoot);
+      fixtureRoot = null;
+      assert.equal(
+        hostStatusAfter,
+        hostStatusBefore,
+        "host repo git status must be byte-identical after test",
+      );
+    });
+
+    it("#15 rolls back ONLY journaled paths via inverse ops on a clean tree (no --allow-dirty)", async () => {
+      fixtureRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), "hexagen-sync-rollback-clean-"),
+      );
+      await makeMidRunFailureFixture(fixtureRoot);
+
+      const cleanBefore = execSync("git status --porcelain", {
+        cwd: fixtureRoot,
+        encoding: "utf8",
+      });
+      assert.equal(
+        cleanBefore,
+        "",
+        "fixture must be porcelain-clean before the run (precondition: the git check must pass)",
+      );
+
+      hostStatusBefore = hostRepoGitStatus();
+
+      const logger = createSpyLogger();
+      const engine = new SyncEngine(
+        makeSelfRegenFlags({ logger, allowDirty: false, dryRun: false }),
+        {
+          targetRoot: fixtureRoot,
+          manifest: makeValidManifest([
+            { name: "alpha", type: "core" },
+            { name: "beta", type: "core" },
+          ]),
+        },
+      );
+
+      await withProcessExitSpy(async (exitCalls) => {
+        // macOS and Linux both phrase it "EISDIR: illegal operation on a directory".
+        await assert.rejects(
+          () => engine.run(),
+          /EISDIR|illegal operation on a directory/,
+        );
+        assert.deepEqual(exitCalls, []);
+      });
+
+      // Every file mutation was journaled and inverted; what remains is only
+      // empty directories, which porcelain cannot see.
+      const statusAfter = execSync("git status --porcelain", {
+        cwd: fixtureRoot,
+        encoding: "utf8",
+      });
+      assert.equal(
+        statusAfter,
+        "",
+        "after rollback the tree must be porcelain-clean — every journaled write inverted",
+      );
+      // The seeded OVERWRITE must be restored byte-identically — this is the
+      // assertion that dies if recordWrite ever journals null pre-images for
+      // updates (rollback would unlink the user's file instead of restoring it).
+      assert.equal(
+        await fs.readFile(
+          path.join(fixtureRoot, "packages", "alpha", "package.json"),
+          "utf8",
+        ),
+        STALE_ALPHA_PKG,
+        "alpha's seeded package.json must be restored to its exact pre-sync bytes",
+      );
+      assert.equal(
+        await pathExists(
+          path.join(fixtureRoot, "packages", "alpha", "tsconfig.json"),
+        ),
+        false,
+        "alpha's freshly created tsconfig.json must be unlinked by the rollback",
+      );
+      assert.ok(
+        messagesAt(logger, "info").some((m) =>
+          /Rolling back [1-9]\d* journaled path/.test(m),
+        ),
+        "engine must announce a non-empty journaled rollback",
+      );
+      assert.ok(
+        // Back-reference pins restored === attempted, not just any N/M.
+        messagesAt(logger, "info").some((m) =>
+          /Rollback completed: (\d+)\/\1 path\(s\) restored/.test(m),
+        ),
+        "rollback must complete with zero failures (the completed line only prints on the no-failure branch)",
+      );
+    });
+
+    it("#16 NEVER rolls back under --allow-dirty after mid-run writes — journal printed, tree left as-is", async () => {
+      fixtureRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), "hexagen-sync-rollback-dirty-"),
+      );
+      await makeMidRunFailureFixture(fixtureRoot);
+
+      // The user's in-flight work: a dirty tracked file and an untracked
+      // scratch file. Pre-B1, `git reset --hard && git clean -fd` destroyed
+      // BOTH (clean -fd deletes untracked files sync never touched).
+      await fs.writeFile(
+        path.join(fixtureRoot, ".gitkeep"),
+        "UNCOMMITTED_CHANGE_PATTERN",
+      );
+      await fs.writeFile(
+        path.join(fixtureRoot, "scratch.txt"),
+        "user scratch — must survive\n",
+      );
+
+      hostStatusBefore = hostRepoGitStatus();
+
+      const logger = createSpyLogger();
+      const engine = new SyncEngine(
+        makeSelfRegenFlags({ logger, allowDirty: true, dryRun: false }),
+        {
+          targetRoot: fixtureRoot,
+          manifest: makeValidManifest([
+            { name: "alpha", type: "core" },
+            { name: "beta", type: "core" },
+          ]),
+        },
+      );
+
+      await withProcessExitSpy(async (exitCalls) => {
+        await assert.rejects(
+          () => engine.run(),
+          /EISDIR|illegal operation on a directory/,
+        );
+        assert.deepEqual(exitCalls, []);
+      });
+
+      assert.equal(
+        await fs.readFile(path.join(fixtureRoot, "scratch.txt"), "utf8"),
+        "user scratch — must survive\n",
+        "the untracked scratch file must survive byte-identically (clean -fd would have deleted it)",
+      );
+      assert.equal(
+        await fs.readFile(path.join(fixtureRoot, ".gitkeep"), "utf8"),
+        "UNCOMMITTED_CHANGE_PATTERN",
+        "the dirty tracked file must keep the user's uncommitted content",
+      );
+      assert.notEqual(
+        await fs.readFile(
+          path.join(fixtureRoot, "packages", "alpha", "package.json"),
+          "utf8",
+        ),
+        STALE_ALPHA_PKG,
+        "sync's own overwrite stays in place too — under --allow-dirty NOTHING is reverted, not even back to the seed",
+      );
+      assert.ok(
+        // Pins the non-empty-journal branch: a non-zero touched count must be
+        // reported (the empty-journal branch says "nothing to roll back" instead).
+        messagesAt(logger, "warn").some((m) =>
+          /Sync failed after touching [1-9]\d* path\(s\) — NO rollback under --allow-dirty/.test(
+            m,
+          ),
+        ),
+        "engine must state that it deliberately did not roll back, with a non-zero touched count",
+      );
+      assert.ok(
+        messagesAt(logger, "warn").some((m) =>
+          /packages\/alpha\/package\.json/.test(m),
+        ),
+        "the printed journal must name the touched paths (alpha's package.json)",
+      );
+      assert.ok(
+        messagesAt(logger, "warn").some((m) =>
+          /packages\/alpha\/tsconfig\.json/.test(m),
+        ),
+        "the printed journal must name alpha's created tsconfig — #15's unlink assert relies on this being a real create→unlink arc",
+      );
+    });
+  },
+);
