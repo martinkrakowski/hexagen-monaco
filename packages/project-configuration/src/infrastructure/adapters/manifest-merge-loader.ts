@@ -16,6 +16,7 @@ import type {
   App,
 } from "../../domain/model/manifest-schema/manifest-schema.js";
 import { isIndexManifest } from "../../domain/model/manifest-schema/index.js";
+import { assertSupportedSchemaVersion } from "../../domain/model/manifest-schema/manifest-schema-version.js";
 
 export { isIndexManifest };
 
@@ -101,6 +102,17 @@ export async function mergeSplitManifest(
     throw new Error("Manifest file is empty");
   }
 
+  // Version gate BEFORE any zod parse, on the RAW yaml — both schema forms
+  // are `.strict()`, so a manifest written by a newer toolchain (likely
+  // carrying keys this version doesn't know) would otherwise fail as
+  // "unrecognized key": misdiagnosed as malformed instead of too new. The
+  // ROOT manifest carries the version; context/app files inherit it. This is
+  // the single seam every reader shares — the `hexagen` commands consume it
+  // via @hexagen/sync's loader re-export, and the arch-linter bundles this
+  // module (ADR-0009) and surfaces this message verbatim from its top-level
+  // catch.
+  assertSupportedSchemaVersion(parsed);
+
   if (!isIndexManifest(parsed)) {
     const manifestData = {
       ...parsed,
@@ -120,6 +132,9 @@ export async function mergeSplitManifest(
 
   const index = indexResult.data as IndexManifest;
   const result: Manifest = {
+    // Carry the (already-validated) stamp into the merged form so consumers
+    // of the merge see the same version the root file declares.
+    schemaVersion: index.schemaVersion,
     description: index.description ?? "Auto-generated manifest",
     system: index.system,
     scope: index.scope,

@@ -5,6 +5,7 @@ import type {
 import {
   getWorkspaceTemplate,
   FALLBACK_RULES,
+  CURRENT_MANIFEST_SCHEMA_VERSION,
 } from "@hexagen/project-configuration";
 import type { Manifest } from "@hexagen/sync";
 
@@ -298,6 +299,10 @@ export function wizardToManifest(
   );
 
   return {
+    // Every newly scaffolded manifest is stamped at birth (PR-C1) so readers
+    // can tell "written by a newer toolchain" from "malformed". First key →
+    // first line of the dumped YAML.
+    schemaVersion: CURRENT_MANIFEST_SCHEMA_VERSION,
     system: systemName,
     scope: namespace,
     architecture: template,

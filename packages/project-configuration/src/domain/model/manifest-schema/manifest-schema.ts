@@ -152,6 +152,10 @@ export const AppSchema = z
 
 export const IndexManifestSchema = z
   .object({
+    // Toolchain-compatibility stamp (see manifest-schema-version.ts). Note
+    // `version` below is a DIFFERENT field — its `"2.0"` string is the
+    // index-form discriminator (`isIndexManifest`), not a compatibility gate.
+    schemaVersion: z.number().int().positive().optional(),
     version: z.string().optional(),
     description: z.string(),
     system: z.string().optional(),
@@ -231,6 +235,12 @@ export const CrossContextEdgeSchema = z.object({
 
 export const ManifestSchema = z
   .object({
+    // Toolchain-compatibility stamp (positive int; absent = legacy). NOT the
+    // freeform `version` string below. Compatibility is asserted against the
+    // RAW yaml BEFORE this `.strict()` parse (assertSupportedSchemaVersion in
+    // manifest-schema-version.ts) — this entry only keeps strict mode from
+    // rejecting stamped manifests as carrying an unknown key.
+    schemaVersion: z.number().int().positive().optional(),
     version: z.string().optional(),
     description: z.string().optional(),
     system: z.string().optional(),

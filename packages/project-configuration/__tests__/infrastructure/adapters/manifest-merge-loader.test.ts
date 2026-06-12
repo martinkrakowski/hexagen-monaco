@@ -132,6 +132,7 @@ describe("mergeSplitManifest", () => {
 
     const indexYaml = [
       `version: '2.0'`,
+      `description: merge fixture`,
       `system: merge-system`,
       `scope: merge-scope`,
       `bounded_contexts:`,
@@ -206,6 +207,7 @@ describe("mergeSplitManifest", () => {
 
     const indexYaml = [
       `version: '2.0'`,
+      `description: missing-context fixture`,
       `system: test-system`,
       `bounded_contexts:`,
       `  - name: missing`,
@@ -233,6 +235,7 @@ describe("mergeSplitManifest", () => {
 
     const indexYaml = [
       `version: '2.0'`,
+      `description: bad-context fixture`,
       `system: test-system`,
       `bounded_contexts:`,
       `  - name: bad-ctx`,
@@ -269,6 +272,7 @@ describe("mergeSplitManifest", () => {
 
     const indexYaml = [
       `version: '2.0'`,
+      `description: app-merge fixture`,
       `system: app-system`,
       `bounded_contexts:`,
       `  - name: my-context`,
@@ -319,6 +323,7 @@ describe("mergeSplitManifest", () => {
 
     const indexYaml = [
       `version: '2.0'`,
+      `description: traversal fixture`,
       `system: traversal-test`,
       `bounded_contexts:`,
       `  - name: evil`,
@@ -346,6 +351,7 @@ describe("mergeSplitManifest", () => {
 
     const indexYaml = [
       `version: '2.0'`,
+      `description: app-traversal fixture`,
       `system: traversal-test`,
       `bounded_contexts:`,
       `  - name: my-context`,
@@ -389,6 +395,7 @@ describe("mergeSplitManifest", () => {
 
     const indexYaml = [
       `version: '2.0'`,
+      `description: bad-app fixture`,
       `system: bad-app-test`,
       `bounded_contexts:`,
       `  - name: my-context`,
@@ -420,6 +427,157 @@ describe("mergeSplitManifest", () => {
       (err: unknown) => {
         assert.ok(err instanceof Error);
         assert.match(err.message, /App file.*validation failed/);
+        return true;
+      },
+    );
+  });
+});
+
+// PR-C1 (RCA #6): the schemaVersion gate runs on the RAW yaml BEFORE any
+// `.strict()` zod parse — a future-toolchain manifest must fail with the
+// guided message, never with zod's "unrecognized key" misdiagnosis. The
+// legacy case (no schemaVersion at all) is pinned by the passthrough test
+// above. This seam is shared by every reader: the `hexagen` commands via
+// @hexagen/sync's loader re-export, the arch-linter via its ADR-0009 bundle.
+describe("mergeSplitManifest schemaVersion gate (PR-C1)", () => {
+  let tmpDir: string;
+
+  afterEach(async () => {
+    if (tmpDir) {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  async function writeManifest(yamlText: string): Promise<string> {
+    tmpDir = await mkdtemp(join(tmpdir(), "mml-version-test-"));
+    const archDir = join(tmpDir, ".architecture");
+    await mkdir(archDir, { recursive: true });
+    const manifestPath = join(archDir, "manifest.yaml");
+    await writeFile(manifestPath, yamlText, "utf-8");
+    return manifestPath;
+  }
+
+  it("a flat manifest stamped with the current version parses (strict schema knows the key)", async () => {
+    const manifestPath = await writeManifest(
+      [
+        `schemaVersion: 1`,
+        `system: stamped-system`,
+        `bounded_contexts:`,
+        `  - name: my-context`,
+        `    type: core`,
+      ].join("\n"),
+    );
+
+    const result = await mergeSplitManifest(tmpDir, manifestPath);
+    assert.strictEqual(result.schemaVersion, 1);
+    assert.strictEqual(result.system, "stamped-system");
+  });
+
+  it("an index manifest stamped with the current version parses and the merge carries the stamp", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "mml-version-test-"));
+    const archDir = join(tmpDir, ".architecture");
+    const ctxDir = join(archDir, "contexts", "core", "ctx-a");
+    await mkdir(ctxDir, { recursive: true });
+    await writeFile(
+      join(archDir, "manifest.yaml"),
+      [
+        `schemaVersion: 1`,
+        `version: '2.0'`,
+        `description: stamped index`,
+        `system: stamped-index`,
+        `bounded_contexts:`,
+        `  - name: ctx-a`,
+        `    type: core`,
+        `    file: contexts/core/ctx-a/context.yaml`,
+      ].join("\n"),
+      "utf-8",
+    );
+    await writeFile(
+      join(ctxDir, "context.yaml"),
+      [`name: ctx-a`, `type: core`, `description: Context A`].join("\n"),
+      "utf-8",
+    );
+
+    const result = await mergeSplitManifest(
+      tmpDir,
+      join(archDir, "manifest.yaml"),
+    );
+    assert.strictEqual(result.schemaVersion, 1);
+    assert.strictEqual(result.bounded_contexts!.length, 1);
+  });
+
+  it("a future-version FLAT manifest fails with the guided message, not a zod unrecognized-key error", async () => {
+    // The unknown key is the point: without the raw-yaml gate, `.strict()`
+    // would reject `some_future_key` first and misreport "too new" as
+    // "malformed".
+    const manifestPath = await writeManifest(
+      [
+        `schemaVersion: 99`,
+        `some_future_key: from-a-newer-toolchain`,
+        `system: future-system`,
+        `bounded_contexts:`,
+        `  - name: my-context`,
+        `    type: core`,
+      ].join("\n"),
+    );
+
+    await assert.rejects(
+      () => mergeSplitManifest(tmpDir, manifestPath),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(
+          err.message,
+          /schemaVersion 99 is newer than this toolchain supports/,
+        );
+        assert.match(err.message, /@hexagen-monaco\/sync/);
+        assert.doesNotMatch(err.message, /[Uu]nrecognized key/);
+        return true;
+      },
+    );
+  });
+
+  it("a future-version INDEX manifest fails the same way (gate precedes IndexManifestSchema too)", async () => {
+    const manifestPath = await writeManifest(
+      [
+        `schemaVersion: 99`,
+        `some_future_key: from-a-newer-toolchain`,
+        `version: '2.0'`,
+        `description: future index`,
+        `bounded_contexts:`,
+        `  - name: ctx-a`,
+        `    type: core`,
+        `    file: contexts/core/ctx-a/context.yaml`,
+      ].join("\n"),
+    );
+
+    await assert.rejects(
+      () => mergeSplitManifest(tmpDir, manifestPath),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(
+          err.message,
+          /schemaVersion 99 is newer than this toolchain supports/,
+        );
+        assert.doesNotMatch(err.message, /[Uu]nrecognized key/);
+        return true;
+      },
+    );
+  });
+
+  it("a corrupted stamp is a hard error naming the expectation", async () => {
+    const manifestPath = await writeManifest(
+      [
+        `schemaVersion: "two"`,
+        `system: corrupt-system`,
+        `bounded_contexts: []`,
+      ].join("\n"),
+    );
+
+    await assert.rejects(
+      () => mergeSplitManifest(tmpDir, manifestPath),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /expected a positive integer/);
         return true;
       },
     );
