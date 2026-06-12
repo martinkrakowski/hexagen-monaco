@@ -17,7 +17,11 @@ import { generateEslintConfig } from "./generators/eslint.js";
 import { generateStubs } from "./generators/stubs.js";
 import { generateCrossContext } from "./generators/cross-context.js";
 import { generateSharedKernel } from "./generators/shared-kernel.js";
-import { createEmptyResult, type GeneratorResult } from "./results.js";
+import {
+  createEmptyResult,
+  type GeneratorResult,
+  type SyncRunSummary,
+} from "./results.js";
 import type { Manifest } from "./types/manifest.js";
 import { ensureDependenciesBuilt } from "./preflight.js";
 import { exec } from "node:child_process";
@@ -99,16 +103,10 @@ export class SyncEngine {
         `Ensuring directories for module: ${mod.name} at ${moduleDir}`,
       );
 
-      const layerResult = await ensureLayerFolders(
-        moduleDir,
-        layers,
-        config,
-        this.report,
-      );
-      result.created.push(...layerResult.created);
-      result.skipped.push(...layerResult.skipped);
-      result.updated.push(...layerResult.updated);
-      result.totalOps += layerResult.totalOps;
+      // Directories only — barrels are single-owned by the recursive pass
+      // (see ensureLayerFolders' doc; PR-B2 RCA #5), so no report recorder.
+      const layerResult = await ensureLayerFolders(moduleDir, layers, config);
+      mergeResult(result, layerResult);
     }
 
     return result;
@@ -201,7 +199,7 @@ export class SyncEngine {
     };
   }
 
-  async run(): Promise<void> {
+  async run(): Promise<SyncRunSummary> {
     const { logger, dryRun, allowDirty, mode } = this.partialConfig;
     const start = Date.now();
     let lockFile: LockFile | null = null;
@@ -345,18 +343,40 @@ export class SyncEngine {
       }
       const barrels = mergeBarrelPasses(firstPassBarrels, secondPassBarrels);
 
-      const totalOps =
-        rootFilesResult.totalOps +
-        archFilesResult.totalOps +
-        layerResult.totalOps +
-        barrels.totalOps +
-        pkgs.totalOps +
-        tsconfigs.totalOps +
-        eslint.totalOps +
-        stubs.totalOps +
-        appsResult.totalOps +
-        crossContextResult.totalOps +
-        sharedKernelResult.totalOps;
+      // Ordered rows for the per-generator summary below — also the single
+      // source for the run-level aggregate (PR-B2): adding a generator here
+      // keeps the printed table, the Total-ops line and the returned
+      // SyncRunSummary in lockstep.
+      const rows: ReadonlyArray<readonly [string, GeneratorResult]> = [
+        ["RootFiles", rootFilesResult],
+        ["ArchFiles", archFilesResult],
+        ["Layers", layerResult],
+        ["Barrels", barrels],
+        ["CrossContext", crossContextResult],
+        ["SharedKernel", sharedKernelResult],
+        ["package.json", pkgs],
+        ["tsconfig.json", tsconfigs],
+        ["ESLint", eslint],
+        ["Stubs", stubs],
+        ["Apps", appsResult],
+      ];
+      const runSummary: SyncRunSummary = {
+        created: 0,
+        updated: 0,
+        deleted: 0,
+        unchanged: 0,
+        skipped: 0,
+        totalOps: 0,
+        durationMs: 0,
+      };
+      for (const [, r] of rows) {
+        runSummary.created += r.created.length;
+        runSummary.updated += r.updated.length;
+        runSummary.deleted += r.deleted.length;
+        runSummary.unchanged += r.unchanged.length;
+        runSummary.skipped += r.skipped.length;
+        runSummary.totalOps += r.totalOps;
+      }
 
       if (mode === "self-regen") {
         await runArchLinter(this.fullConfig);
@@ -366,46 +386,24 @@ export class SyncEngine {
       }
 
       const duration = Date.now() - start;
+      runSummary.durationMs = duration;
 
       logger.info("\nSync completed successfully.");
       logger.info(
         `Processed ${this.manifest.bounded_contexts?.length ?? 0} modules in ${duration}ms`,
       );
       logger.info(`\n=== Generator Summary ===`);
-      logger.info(
-        `• RootFiles : ${rootFilesResult.created.length} created, ${rootFilesResult.updated.length} updated, ${rootFilesResult.skipped.length} skipped`,
-      );
-      logger.info(
-        `• ArchFiles : ${archFilesResult.created.length} created, ${archFilesResult.updated.length} updated, ${archFilesResult.skipped.length} skipped`,
-      );
-      logger.info(
-        `• Layers : ${layerResult.created.length} created, ${layerResult.updated.length} updated, ${layerResult.skipped.length} skipped`,
-      );
-      logger.info(
-        `• Barrels : ${barrels.created.length} created, ${barrels.updated.length} updated, ${barrels.skipped.length} skipped`,
-      );
-      logger.info(
-        `• CrossContext : ${crossContextResult.created.length} created, ${crossContextResult.updated.length} updated, ${crossContextResult.skipped.length} skipped`,
-      );
-      logger.info(
-        `• SharedKernel : ${sharedKernelResult.created.length} created, ${sharedKernelResult.updated.length} updated, ${sharedKernelResult.skipped.length} skipped`,
-      );
-      logger.info(
-        `• package.json : ${pkgs.created.length} created, ${pkgs.updated.length} updated, ${pkgs.skipped.length} skipped`,
-      );
-      logger.info(
-        `• tsconfig.json : ${tsconfigs.created.length} created, ${tsconfigs.updated.length} updated, ${tsconfigs.skipped.length} skipped`,
-      );
-      logger.info(
-        `• ESLint : ${eslint.created.length} created, ${eslint.updated.length} updated, ${eslint.skipped.length} skipped`,
-      );
-      logger.info(
-        `• Stubs : ${stubs.created.length} created, ${stubs.updated.length} updated, ${stubs.skipped.length} skipped`,
-      );
-      logger.info(
-        `• Apps : ${appsResult.created.length} created, ${appsResult.updated.length} updated, ${appsResult.skipped.length} skipped`,
-      );
-      logger.info(`• Total ops : ${totalOps}`);
+      // PR-B2 (RCA #5): the table now carries all five buckets. `created`/
+      // `updated`/`deleted` are actual (or dry-run-planned) mutations;
+      // `unchanged` is content already converged; `skipped` is deliberately
+      // left alone (protected / out of scope / preserve-if-exists).
+      for (const [label, r] of rows) {
+        logger.info(
+          `• ${label} : ${r.created.length} created, ${r.updated.length} updated, ${r.deleted.length} deleted, ${r.unchanged.length} unchanged, ${r.skipped.length} skipped`,
+        );
+      }
+      logger.info(`• Total ops : ${runSummary.totalOps}`);
+      return runSummary;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown sync error";
       logger.error(`Sync failed: ${message}`);

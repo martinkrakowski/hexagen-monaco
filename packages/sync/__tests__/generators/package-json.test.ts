@@ -128,6 +128,50 @@ describe("package json", () => {
     });
   });
 
+  it("omits the dependencies block for a dependency-less package (yarn-install churn guard)", async () => {
+    await withTempWorkspace(
+      "no-deps-pkg",
+      async ({ workspaceRoot, modulePath, pkgPath }) => {
+        const manifest: Manifest = {
+          scope: "acme",
+          bounded_contexts: [{ name: "no-deps-pkg", type: "shared-kernel" }],
+        };
+        const config = makeConfig(workspaceRoot, manifest);
+
+        await generatePackageJson(modulePath, "no-deps-pkg", config);
+
+        const pkg = await readJson(pkgPath);
+        // Yarn 4 deletes an empty `"dependencies": {}` from workspace
+        // manifests during install. If generation emitted one, every
+        // consumer sync → yarn install → sync cycle would re-add and
+        // re-strip it forever — the capstone idempotence row (6f) caught
+        // exactly this churn. No deps → no block (yarn's normalized form).
+        assert.strictEqual(
+          "dependencies" in pkg,
+          false,
+          "a dependency-less package must not carry an empty dependencies block",
+        );
+
+        // Regeneration over the emitted (= yarn-normalized) form converges.
+        const second = await generatePackageJson(
+          modulePath,
+          "no-deps-pkg",
+          config,
+        );
+        assert.strictEqual(
+          second.unchanged.length,
+          1,
+          "second generation must report the file unchanged",
+        );
+        assert.strictEqual(
+          second.totalOps,
+          0,
+          "second generation must plan zero ops",
+        );
+      },
+    );
+  });
+
   it("should preserve existing dependencies and not merge depends_on", async () => {
     await withTempWorkspace(
       "existing-pkg",

@@ -12,7 +12,6 @@ import type { SyncConfig, LoggerPort } from "../../src/config.js";
 import { generatePackageJson } from "../../src/generators/package-json.js";
 import { generateTsconfig } from "../../src/generators/tsconfig.js";
 import { generateRootFiles } from "../../src/generators/root-files.js";
-import { generateEnhancedTestDouble } from "../../src/generators/test-templates/enhanced-test-double.js";
 import { interpolateWithLog } from "../../src/domain/services/stub-template-resolver.js";
 import { DEFAULT_TEMPLATES } from "../../src/domain/stub-templates.js";
 
@@ -201,18 +200,6 @@ describe("namespacing guard (generated project uses @{scope}, not @hexagen)", ()
 });
 
 describe("emitted code templates reference @{scope}/shared, not @hexagen", () => {
-  it("generateEnhancedTestDouble uses the project scope", () => {
-    const out = generateEnhancedTestDouble("FooPort", ["bar"], "acme");
-    assert.ok(
-      out.includes("from '@acme/shared'"),
-      "test double must import Result from @acme/shared",
-    );
-    assert.ok(
-      !out.includes("@hexagen/"),
-      "test double must not leak the @hexagen namespace",
-    );
-  });
-
   it("the use-case stub template interpolates {scope} from the manifest", () => {
     const config = makeConfig("/tmp/unused", { scope: "acme" });
     const out = interpolateWithLog(

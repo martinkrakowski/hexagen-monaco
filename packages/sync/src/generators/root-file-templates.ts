@@ -21,6 +21,7 @@ const BUILTIN_PACKAGE_JSON_TEMPLATE = `{
     "sync": "hexagen sync",
     "sync:dry": "hexagen sync --dry-run",
     "sync:force": "hexagen sync --force",
+    "sync:check": "hexagen sync --check",
     "lint:arch": "hexagen arch validate",
     "templates:add": "hexagen add",
     "templates:validate": "hexagen validate-templates",

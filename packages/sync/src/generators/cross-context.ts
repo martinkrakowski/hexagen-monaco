@@ -1,7 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { SyncConfig } from "../config.js";
-import { createEmptyResult, type GeneratorResult } from "../results.js";
+import {
+  createEmptyResult,
+  recordWriteStatus,
+  type GeneratorResult,
+} from "../results.js";
 import { safeWriteFileAtomic, isInScope } from "../fs-utils.js";
 import { resolveScope } from "../types/manifest.js";
 import {
@@ -58,18 +62,6 @@ const OHS_NOTE =
 const ACL_NOTE =
   "\n *\n * Anti-Corruption Layer (acl): translate the upstream contract into this " +
   "context's own domain model; do not leak provider types inward.";
-
-function recordStatus(
-  result: GeneratorResult,
-  filePath: string,
-  status: "created" | "updated" | "unchanged" | "skipped" | "protected",
-): void {
-  if (status === "created") result.created.push(filePath);
-  else if (status === "updated") result.updated.push(filePath);
-  else if (status === "skipped" || status === "protected")
-    result.skipped.push(filePath);
-  if (status === "created" || status === "updated") result.totalOps += 1;
-}
 
 function addAll(
   map: Map<string, Set<string>>,
@@ -250,7 +242,7 @@ async function emitPortAndAdapter(
   if (!config.dryRun) {
     await fs.mkdir(portDir, { recursive: true });
   }
-  recordStatus(
+  recordWriteStatus(
     result,
     portPath,
     await safeWriteFileAtomic(
@@ -295,7 +287,7 @@ async function emitPortAndAdapter(
   const adapterClassName = `${toPascalCase(spec.portBase)}Adapter`;
   // The adapter must import the port interface it implements (relative to itself).
   const portSpecifier = relativeImportSpecifier(adapterPath, portPath);
-  recordStatus(
+  recordWriteStatus(
     result,
     adapterPath,
     await safeWriteFileAtomic(
@@ -341,7 +333,7 @@ async function writeSharedContract(
   if (!config.dryRun) {
     await fs.mkdir(path.dirname(contractPath), { recursive: true });
   }
-  recordStatus(
+  recordWriteStatus(
     result,
     contractPath,
     await safeWriteFileAtomic(contractPath, content, config, report),

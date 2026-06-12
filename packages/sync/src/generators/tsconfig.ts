@@ -1,6 +1,10 @@
 import path from "node:path";
 import { SyncConfig } from "../config.js";
-import { createEmptyResult, type GeneratorResult } from "../results.js";
+import {
+  createEmptyResult,
+  recordWriteStatus,
+  type GeneratorResult,
+} from "../results.js";
 import { MigrationReport } from "../migration-report.js";
 import { safeWriteFileAtomic } from "../fs-utils.js";
 import {
@@ -188,11 +192,7 @@ export async function generateTsconfig(
       config,
       report as ReportRecorder | undefined,
     );
-    if (status === "created") result.created.push(filePath);
-    if (status === "updated") result.updated.push(filePath);
-    if (status === "skipped" || status === "protected")
-      result.skipped.push(filePath);
-    result.totalOps += status === "created" || status === "updated" ? 1 : 0;
+    recordWriteStatus(result, filePath, status);
 
     return result;
   } catch (err) {
@@ -234,10 +234,6 @@ export async function generateTsconfigTest(
     config,
     report as ReportRecorder | undefined,
   );
-  if (status === "created") result.created.push(filePath);
-  if (status === "updated") result.updated.push(filePath);
-  if (status === "skipped" || status === "protected")
-    result.skipped.push(filePath);
-  result.totalOps += status === "created" || status === "updated" ? 1 : 0;
+  recordWriteStatus(result, filePath, status);
   return result;
 }

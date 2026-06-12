@@ -1,6 +1,10 @@
 import path from "node:path";
 import { SyncConfig } from "../config.js";
-import { createEmptyResult, type GeneratorResult } from "../results.js";
+import {
+  createEmptyResult,
+  recordWriteStatus,
+  type GeneratorResult,
+} from "../results.js";
 import { safeWriteFileAtomic } from "../fs-utils.js";
 import { interpolate } from "../template-engine.js";
 import { resolveScope, type Manifest } from "../types/manifest.js";
@@ -93,11 +97,7 @@ async function writeRootFile(
     report,
     true,
   );
-  if (status === "created") result.created.push(filePath);
-  if (status === "updated") result.updated.push(filePath);
-  if (status === "skipped" || status === "protected")
-    result.skipped.push(filePath);
-  if (status === "created" || status === "updated") result.totalOps += 1;
+  recordWriteStatus(result, filePath, status);
 }
 
 export async function generateRootFiles(

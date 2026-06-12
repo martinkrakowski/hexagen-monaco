@@ -1,7 +1,11 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import type { SyncConfig } from "../config.js";
-import { createEmptyResult, type GeneratorResult } from "../results.js";
+import {
+  createEmptyResult,
+  recordWriteStatus,
+  type GeneratorResult,
+} from "../results.js";
 import { safeWriteFileAtomic, isInScope } from "../fs-utils.js";
 import type { ReportRecorder } from "../domain/types.js";
 
@@ -98,11 +102,6 @@ export async function generateSharedKernel(
     report,
     false,
   );
-  if (status === "created" || status === "updated") {
-    result.created.push(kernelPath);
-    result.totalOps += 1;
-  } else {
-    result.skipped.push(kernelPath);
-  }
+  recordWriteStatus(result, kernelPath, status);
   return result;
 }

@@ -2,7 +2,11 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { SyncConfig } from "../config.js";
 import type { ReportRecorder } from "../domain/types.js";
-import { createEmptyResult, type GeneratorResult } from "../results.js";
+import {
+  createEmptyResult,
+  recordWriteStatus,
+  type GeneratorResult,
+} from "../results.js";
 import { safeWriteFileAtomic } from "../fs-utils.js";
 import {
   expandDependsOn,
@@ -38,6 +42,12 @@ export async function generatePackageJson(
 
   const pkgPath = path.join(modulePath, "package.json");
 
+  const dependencies: Record<string, string> = {
+    ...dependsOnDeps,
+    ...((defaults.dependencies as Record<string, string>) ?? {}),
+    ...((moduleOverrides.dependencies as Record<string, string>) ?? {}),
+  };
+
   const desiredPkg: Record<string, unknown> = {
     name: `@${scope}/${moduleName}`,
     version: "0.1.0",
@@ -58,11 +68,17 @@ export async function generatePackageJson(
       ...((defaults.scripts as Record<string, string>) ?? {}),
       ...((moduleOverrides.scripts as Record<string, string>) ?? {}),
     },
-    dependencies: {
-      ...dependsOnDeps,
-      ...((defaults.dependencies as Record<string, string>) ?? {}),
-      ...((moduleOverrides.dependencies as Record<string, string>) ?? {}),
-    },
+    // Emitted only when non-empty (PR-B2, capstone 6f): Yarn 4 deletes an
+    // empty `"dependencies": {}` from workspace manifests during install, so
+    // emitting one creates a permanent install↔sync churn loop — install
+    // strips the key, the next sync re-injects it (`dependencies` is
+    // protected, but a protected key MISSING from the current file is
+    // re-added), and the tree never converges across the consumer's
+    // sync → install → sync workflow. A dependency-less package carries no
+    // block at all, matching yarn's normalized form. Existing trees that
+    // still carry `{}` on disk stay untouched via the protected-key merge.
+    // devDependencies/scripts can't go empty (both have built-in entries).
+    ...(Object.keys(dependencies).length > 0 ? { dependencies } : {}),
     devDependencies: {
       typescript: "^5.0.0",
       ...((defaults.devDependencies as Record<string, string>) ?? {}),
@@ -122,11 +138,7 @@ export async function generatePackageJson(
     true,
   );
 
-  if (status === "created") result.created.push(pkgPath);
-  if (status === "updated") result.updated.push(pkgPath);
-  if (status === "skipped" || status === "protected")
-    result.skipped.push(pkgPath);
-  result.totalOps += status === "created" || status === "updated" ? 1 : 0;
+  recordWriteStatus(result, pkgPath, status);
 
   return result;
 }

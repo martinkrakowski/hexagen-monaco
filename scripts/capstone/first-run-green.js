@@ -24,7 +24,10 @@
  *      porcelain-clean + tree-snapshot-equal + no report file (PR-A2, RCA #3).
  *      Then materialize for real (6b), prove broken-manifest exit codes (6c,
  *      PR-A1), and prove a failed sync under --allow-dirty never rolls back
- *      and unaffected untracked files survive (6d, PR-B1 RCA #4).
+ *      and unaffected untracked files survive (6d, PR-B1 RCA #4). Finally the
+ *      convergence rows (PR-B2, RCA #5): `sync --check` exits 0 with
+ *      `Total ops : 0` on the materialized tree (6e), and a second REAL sync
+ *      — live preflight build included — is byte-level idempotent (6f).
  *   7. Assert no stray `@hexagen/` (private scope) leaked into project files.
  *
  * Usage: node scripts/capstone/first-run-green.js   (or: yarn capstone)
@@ -33,6 +36,7 @@
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  appendFileSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -88,13 +92,17 @@ const step = (msg) => console.log(`• ${msg}`);
 // Directory-aware tree snapshot (dirs + file hashes, sorted). Complements
 // `git status --porcelain` in the PR-A2 purity check: porcelain cannot see
 // empty directories, which is exactly what the pre-A2 ungated mkdirs created.
-const snapshotTreeWithDirs = (root) => {
+const snapshotTreeWithDirs = (root, extraSkip = []) => {
   const out = [];
   // Skip set is deliberately minimal (review #315): nothing runs between the
   // before/after snapshots except `sync --dry-run`, so ANY diff — .yarn
   // included — is signal, and the scaffold sans node_modules is small enough
   // that hashing it is trivial. Narrowing the walk would blind the oracle.
-  const skip = new Set(["node_modules", ".git"]);
+  // `extraSkip` (entry NAMES, matched at any depth) exists for the 6f
+  // idempotence row, where a real preflight build runs between the snapshots
+  // and its outputs (dist/, .turbo/) plus the run-log report are expected,
+  // documented churn — see 6f for why each name is excluded.
+  const skip = new Set(["node_modules", ".git", ...extraSkip]);
   const walk = (dir, rel) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (skip.has(entry.name)) continue;
@@ -161,8 +169,21 @@ try {
   }
   // A manifest with one bounded context, so the installed CLI has work to do.
   // Kept in a const: phase 6c corrupts and then restores this exact content.
+  // generator.sync.layers is ARMED (PR-B2, RCA #5): the layer-dir mkdir
+  // accounting and the recursive-barrels ownership are exactly the surfaces
+  // the convergence rows (6e/6f) gate, and a layer-less manifest would leave
+  // them unexercised. It sits BEFORE bounded_contexts on purpose — 6c/6d
+  // append to this string, so bounded_contexts must stay the last top-level
+  // key for "  - name: omega…" to extend the context list.
   const MANIFEST_YAML =
     "system: acme-app\nscope: acme\narchitecture: modular-monolith\n" +
+    "generator:\n  sync:\n    layers:\n" +
+    "      domain:\n        folder: src/domain\n" +
+    "      application:\n        folder: src/application\n" +
+    "        subfolders:\n          - ports/in\n          - ports/out\n" +
+    "          - use-cases\n" +
+    "      infrastructure:\n        folder: src/infrastructure\n" +
+    "        subfolders:\n          - adapters\n" +
     "bounded_contexts:\n  - name: shared\n    type: shared-kernel\n" +
     "    description: Shared primitives\n    layers:\n      domain: {}\n";
   const manifestPath = path.join(proj, ".architecture/manifest.yaml");
@@ -383,11 +404,16 @@ try {
   //     which would delete BOTH untracked seeds below (the scratch file and
   //     the package.json backup).
   //
-  //     Two ingredients, because the converged project journals nothing on
-  //     its own (every regenerated file is identical → skipped, and this
-  //     manifest has no generator.sync.layers, so there are no barrels):
+  //     Two ingredients. The converged project journals nothing on its own
+  //     (every regenerated file is identical → unchanged, every layer dir
+  //     already exists → probe-skipped); the fresh `omega` context WOULD
+  //     journal its own dirs/barrels now that generator.sync.layers is armed
+  //     (PR-B2), but the deleted-package.json ingredient is kept so the
+  //     journal-print assertion pins a CROSS-module write — a pre-existing
+  //     context's file recreated before the failing module — not just the
+  //     sabotaged module's own scaffolding:
   //       1. shared's package.json is deleted → its recreation is the
-  //          journaled write (generateBarrels writes nothing before it);
+  //          journaled write asserted below;
   //       2. a second context `omega` (6c's corrupt-then-restore manifest
   //          pattern) whose package.json is a DIRECTORY →
   //          generatePackageJson's pre-read throws EISDIR raw — AFTER
@@ -464,11 +490,11 @@ try {
   }
   // Restore: undo the sabotage (omega dir, manifest, package.json, scratch) —
   // the backup IS the restore — then prove coherence with a dry-run of the
-  // installed CLI. Dry-run (not real): a second real sync would hit the
-  // preflight `turbo run build`, which fails on this minimal scaffold for
-  // pre-existing reasons unrelated to PR-B1 (packages/shared materialized
-  // after `yarn install`, so it's absent from the lockfile, and its `tsc`
-  // build has no src/ inputs under a layer-less manifest).
+  // installed CLI. Dry-run (not real): at this point packages/shared is still
+  // absent from the lockfile (it materialized after `yarn install`), so a
+  // real sync's preflight `turbo run build` would fail for reasons unrelated
+  // to PR-B1. The real-sync path, preflight included, is proven in 6f after
+  // the lockfile refresh; here only plan-level reconvergence is the claim.
   rmSync(path.join(proj, "packages/omega"), { recursive: true, force: true });
   rmSync(sharedPkgJson, { recursive: true, force: true });
   renameSync(sharedPkgBak, sharedPkgJson);
@@ -485,6 +511,146 @@ try {
   step(
     "Failed sync under --allow-dirty: no rollback, journal printed, untracked files survived ✅",
   );
+
+  // 6e. Convergence gate row (PR-B2, RCA #5 — plan gate row 2): on the
+  //     materialized project, `sync --check` must exit 0 and the counts must
+  //     be truthful zeros. Pre-B2 this exact run reported a constant "67–70
+  //     created" (every-run mkdir counting, plus the layer-folders↔recursive
+  //     barrel churn) — a drift gate over lying counts would gate nothing.
+  //     Running it after 6c/6d also gates THEIR restore paths: any residue
+  //     either left behind shows up as pending ops here. --check implies
+  //     --dry-run (so no preflight, no lockfile requirement); the tree is
+  //     deliberately dirty (6b's materialization is uncommitted), hence
+  //     --allow-dirty — the exact invocation the generated scaffold ships as
+  //     its `sync:check` script, minus the dirt.
+  let checkOut = "";
+  try {
+    checkOut = projSh("node_modules/.bin/hexagen sync --check --allow-dirty");
+  } catch (e) {
+    fail(
+      "`hexagen sync --check` exited non-zero on the converged project (RCA #5 drift-gate regression)",
+      String(e.stdout || "") + String(e.stderr || ""),
+    );
+  }
+  if (!checkOut.includes("Total ops : 0")) {
+    fail(
+      "`sync --check` on the converged project did not report `Total ops : 0` (truthful-counts regression)",
+      checkOut,
+    );
+  }
+  step("Converged project: `sync --check` exits 0 with `Total ops : 0` ✅");
+
+  // 6f. Idempotence row (PR-B2, RCA #5 — plan gate row 3): a SECOND real sync
+  //     on the materialized project must be byte-level idempotent, live
+  //     preflight build (real turbo + tsc) included. Three preparations, each
+  //     load-bearing:
+  //       1. Re-pin the tarball resolutions: 6b ran --force-root, which
+  //          regenerates the root package.json from the template (correct —
+  //          root files are generated deliverables under forced root), and
+  //          that rewrite dropped the hermetic file: resolutions from 4b. A
+  //          real consumer's second sync resolves the pins from the registry;
+  //          the capstone re-pins to the packed tarballs to stay
+  //          registry-free. The re-pin then SURVIVES the second sync because
+  //          root files are root-protected without --force-root — exactly the
+  //          documented consumer workflow (you own root files after
+  //          generation).
+  //       2. `yarn install` refresh: packages/shared materialized AFTER the
+  //          first install, so the lockfile doesn't know the @acme/shared
+  //          workspace yet and the preflight `turbo run build` would fail —
+  //          the pre-existing limitation 6d documents. The refresh is what a
+  //          consumer's post-sync `yarn install` does anyway.
+  //       3. Warm `turbo run build` once: proves the generated project
+  //          actually COMPILES with the real toolchain (the
+  //          generated-output-compiles guarantee, enforced at the capstone
+  //          layer for the first time) and materializes dist/ + .turbo/
+  //          before the baseline commit, so the second sync's preflight is a
+  //          byte-stable cache replay instead of a first build mid-oracle.
+  const pkg2 = JSON.parse(readFileSync(pkgPath, "utf8"));
+  pkg2.resolutions = {
+    "@hexagen-monaco/sync": `file:${tarball.sync}`,
+    "@hexagen-monaco/arch-linter": `file:${tarball["arch-linter"]}`,
+  };
+  writeFileSync(pkgPath, JSON.stringify(pkg2, null, 2));
+  try {
+    projSh("yarn install");
+  } catch (e) {
+    fail(
+      "yarn install refresh (with @acme/shared materialized) failed",
+      String(e.stdout || e),
+    );
+  }
+  try {
+    projSh("yarn turbo run build");
+  } catch (e) {
+    fail(
+      "generated project does not build with the real toolchain (turbo + tsc)",
+      String(e.stdout || "") + String(e.stderr || ""),
+    );
+  }
+  step("Generated project builds with the real toolchain ✅");
+
+  // The migration report is a per-run audit log (D5 keeps real runs writing
+  // it — asserted after 6b), not part of the converged tree: its entries
+  // legitimately differ between a first and a second run. Exclude it from
+  // the fixture's git view via info/exclude — NOT the generated .gitignore,
+  // which is itself a deliverable under test here.
+  appendFileSync(
+    path.join(proj, ".git", "info", "exclude"),
+    "SYNC-MIGRATION-REPORT.md\n",
+  );
+  projSh("git add -A");
+  projSh(
+    'git -c user.email=capstone@test.invalid -c user.name="Capstone" commit -q -m materialized',
+  );
+  // dist/ + .turbo/ are build outputs the preflight replay owns; the report
+  // is per-run (above). Everything else must be byte-identical — including
+  // git-invisible EMPTY DIRS: armed subfolders like ports/in carry no barrel
+  // by design (single barrel owner, PR-B2), so only this snapshot — not
+  // porcelain — would catch a regression that deletes or re-creates them.
+  const idemSkip = ["SYNC-MIGRATION-REPORT.md", "dist", ".turbo"];
+  const beforeIdem = snapshotTreeWithDirs(proj, idemSkip);
+  let secondOut = "";
+  try {
+    // No --allow-dirty: the tree is committed, so this also exercises the
+    // engine's git-clean gate on the consumer path. No --force/--force-root:
+    // a consumer's routine re-sync, the flags row 3 is a contract for.
+    secondOut = projSh("node_modules/.bin/hexagen sync");
+  } catch (e) {
+    fail(
+      "second real `hexagen sync` failed (preflight or generation)",
+      String(e.stdout || "") + String(e.stderr || ""),
+    );
+  }
+  // The hyphen in "Pre‑flight" is U+2011 in the engine's log — match loosely.
+  if (!/Pre.?flight build completed/.test(secondOut)) {
+    fail(
+      "second real sync did not run the live preflight build — the idempotence row would prove less than it claims",
+      secondOut,
+    );
+  }
+  if (!secondOut.includes("Total ops : 0")) {
+    fail(
+      "second real sync reported nonzero ops on a converged tree (truthful-counts regression on the real path)",
+      secondOut,
+    );
+  }
+  const idemPorcelain = projSh("git status --porcelain");
+  if (idemPorcelain.trim() !== "") {
+    fail(
+      "second real sync is not byte-idempotent (RCA #5 gate row 3)",
+      idemPorcelain,
+    );
+  }
+  const afterIdem = snapshotTreeWithDirs(proj, idemSkip);
+  if (JSON.stringify(afterIdem) !== JSON.stringify(beforeIdem)) {
+    const beforeSet = new Set(beforeIdem);
+    const afterSet = new Set(afterIdem);
+    fail(
+      "second real sync changed the tree outside build outputs",
+      `added:\n${afterIdem.filter((e) => !beforeSet.has(e)).join("\n") || "(none)"}\nremoved:\n${beforeIdem.filter((e) => !afterSet.has(e)).join("\n") || "(none)"}`,
+    );
+  }
+  step("Second real sync byte-idempotent (porcelain + tree snapshot) ✅");
 
   // 7. No private @hexagen/ scope in emitted project files (tooling is
   //    @hexagen-monaco). package.json is the highest-risk file (devDeps,
