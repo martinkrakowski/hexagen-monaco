@@ -23,10 +23,15 @@
  * `hexagen-lint` resolves its root from process.cwd() instead, so a .bin shim
  * that exec's the repo's built linter is faithful for it.
  *
- * Not covered here (by design): the real-sync post-lock failure path needs a
- * failing preflight build — that lives in the capstone's broken-manifest
- * phase (scripts/capstone/first-run-green.js), which exercises the full
- * pack→install→run pipeline.
+ * Known gap: NO test anywhere exercises a failure AFTER lock acquisition —
+ * every failure inducible here (manifest parse, validation) fires before the
+ * engine takes .sync.lock (sync-engine.ts: loadManifest at ~244, acquire at
+ * ~258), so the "leaves no lock file" assertion below also passed pre-A1.
+ * The post-acquire path (e.g. failing preflight build → finally releases the
+ * lock) is correct by inspection and owner-checked (lock.ts); its test rides
+ * the A2/B1 rollback work. The capstone's broken-manifest phase
+ * (scripts/capstone/first-run-green.js) covers the pack→install→run pipeline
+ * for the parse-failure case only.
  *
  * POSIX-only: the .bin shim is a shell script. Dev and CI are darwin/linux;
  * win32 would need a .cmd shim, so the suite skips there instead of lying.
@@ -124,6 +129,14 @@ async function createPublishedLayoutFixture(
   const pkgDir = path.join(root, "node_modules", "@hexagen-monaco", "sync");
   await fs.mkdir(pkgDir, { recursive: true });
   await fs.cp(SYNC_DIST, path.join(pkgDir, "dist"), { recursive: true });
+  // Guard the copy-not-symlink invariant: a symlinked dist realpaths back
+  // into the repo, and findWorkspaceRoot would resolve the HOST as workspace
+  // root (see header). lstat does not follow links, so isDirectory() is
+  // false for a symlink.
+  assert.ok(
+    (await fs.lstat(path.join(pkgDir, "dist"))).isDirectory(),
+    "fixture dist must be a physical copy, not a symlink",
+  );
   // "type": "module" mirrors the published package.json — without it the
   // copied .js bundle would be loaded as CJS and top-level await would throw.
   await fs.writeFile(
@@ -187,6 +200,16 @@ function describeResult(r: RunResult): string {
   return `exit=${r.code}\n--- stdout ---\n${r.stdout}\n--- stderr ---\n${r.stderr}`;
 }
 
+// finally-safe cleanup: a throwing fs.rm (EBUSY under CI, etc.) must never
+// replace the test's own assertion error. Worst case is an orphaned tmp dir.
+async function cleanupFixture(root: string): Promise<void> {
+  try {
+    await removeFixture(root);
+  } catch (err) {
+    console.warn(`fixture cleanup failed (${root}):`, err);
+  }
+}
+
 describe(
   "exit-code contract — built dist in published layout",
   { skip: SKIP },
@@ -212,7 +235,7 @@ describe(
           assert.equal(r.code, 0, describeResult(r));
           assert.match(r.stdout, /\d+\.\d+\.\d+/, describeResult(r));
         } finally {
-          await removeFixture(fix.root);
+          await cleanupFixture(fix.root);
         }
       });
 
@@ -230,7 +253,7 @@ describe(
             describeResult(r),
           );
         } finally {
-          await removeFixture(fix.root);
+          await cleanupFixture(fix.root);
         }
       });
 
@@ -250,13 +273,29 @@ describe(
           // The CLI layer (not the engine) must surface the failure.
           assert.ok(r.stderr.includes("Fatal sync error"), describeResult(r));
         } finally {
-          await removeFixture(fix.root);
+          await cleanupFixture(fix.root);
         }
       });
 
       it("real sync on a broken manifest exits non-zero and leaves no lock file", async () => {
         const fix = await createPublishedLayoutFixture(BROKEN_MANIFEST);
         try {
+          // Root-resolution canary: if findWorkspaceRoot ever resolved the
+          // HOST repo instead of the fixture (dist symlinked rather than
+          // copied, or the walk-up logic changed), the host's VALID manifest
+          // would make this dry-run exit 0. Abort before the real sync below
+          // can mutate the host repo.
+          const canary = await runHexagen(fix, [
+            "sync",
+            "--dry-run",
+            "--allow-dirty",
+          ]);
+          assert.notEqual(
+            canary.code,
+            0,
+            `root-resolution canary: dry-run on the broken fixture exited 0 — refusing to run a real sync that may target the host repo\n${describeResult(canary)}`,
+          );
+
           const r = await runHexagen(fix, ["sync", "--allow-dirty"]);
           assert.notEqual(r.code, 0, describeResult(r));
           assert.equal(
@@ -267,7 +306,7 @@ describe(
             "a failed sync must not leave .sync.lock behind",
           );
         } finally {
-          await removeFixture(fix.root);
+          await cleanupFixture(fix.root);
         }
       });
 
@@ -277,7 +316,7 @@ describe(
           const r = await runHexagen(fix, ["arch", "validate"]);
           assert.notEqual(r.code, 0, describeResult(r));
         } finally {
-          await removeFixture(fix.root);
+          await cleanupFixture(fix.root);
         }
       });
     });
@@ -289,7 +328,7 @@ describe(
           const r = await runLint(fix);
           assert.notEqual(r.code, 0, describeResult(r));
         } finally {
-          await removeFixture(fix.root);
+          await cleanupFixture(fix.root);
         }
       });
 
@@ -348,7 +387,7 @@ bounded_contexts:
           assert.notEqual(r.code, 0, describeResult(r));
           assert.match(r.stdout + r.stderr, /violation/i, describeResult(r));
         } finally {
-          await removeFixture(fix.root);
+          await cleanupFixture(fix.root);
         }
       });
     });
