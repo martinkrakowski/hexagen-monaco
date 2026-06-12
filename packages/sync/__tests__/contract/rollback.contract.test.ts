@@ -111,6 +111,10 @@ async function prepareRollbackFixture(): Promise<ContractFixture> {
   );
 
   // Preflight stub (self-regen real runs exec `npx turbo run build`).
+  // node_modules/.bin is guaranteed by createPublishedLayoutFixture — it
+  // installs the hexagen-lint shim there (published-layout.ts) — so no
+  // defensive mkdir here: a missing dir would mean the fixture contract
+  // broke, and THAT should fail loudly.
   await fs.writeFile(
     path.join(fix.root, "node_modules", ".bin", "turbo"),
     "#!/bin/sh\nexit 0\n",
