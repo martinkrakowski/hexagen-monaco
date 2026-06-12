@@ -53,7 +53,7 @@ describe("SyncEngine — invalid manifest", () => {
     fixtureRoot = null;
   });
 
-  it("logs the duplicate-context error and does NOT run rollback in dry-run", async () => {
+  it("logs the duplicate-context error, rejects, and does NOT run rollback in dry-run", async () => {
     fixtureRoot = await createFixture(["shared"]);
     const logger = createSpyLogger();
 
@@ -65,7 +65,9 @@ describe("SyncEngine — invalid manifest", () => {
       ]),
     });
 
-    await engine.run();
+    // Pre-A1 this resolved (the swallow); the wizard adapter relies on the
+    // rejection to map failures into a Result.
+    await assert.rejects(() => engine.run(), /duplicate bounded context names/);
 
     const errors = messagesAt(logger, "error");
     assert.ok(
@@ -246,7 +248,10 @@ describe("SyncEngine — dry-run failure does NOT invoke rollback", () => {
         ]),
       });
 
-      await engine.run();
+      await assert.rejects(
+        () => engine.run(),
+        /duplicate bounded context names/,
+      );
 
       assert.deepEqual(
         exitCalls,

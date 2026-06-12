@@ -68,6 +68,20 @@
       "outputs": [],
       "cache": false
     },
+    "@hexagen/sync#test": {
+      "dependsOn": ["^build", "build", "@hexagen/arch-linter#build"],
+      "inputs": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "__tests__/**/*.ts",
+        "__tests__/**/*.tsx",
+        "tests/**/*.ts",
+        "tsconfig*.json",
+        "package.json"
+      ],
+      "outputs": [],
+      "cache": false
+    },
     "typecheck:test": {
       "dependsOn": ["^build"],
       "inputs": [
