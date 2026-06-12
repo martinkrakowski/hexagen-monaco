@@ -88,5 +88,20 @@ export function mergeBarrelPasses(
   // the table and the total stay one source.
   combined.totalOps =
     combined.created.length + combined.updated.length + combined.deleted.length;
+  // Same first-error-wins propagation as mergeResult above (B-1). NOT
+  // exit-path-load-bearing: the engine counts failures at the production
+  // sites (noteFailure on every per-module pass result) BEFORE this merge
+  // runs, and the barrel generators don't fail-soft today (no catch-into-
+  // result.error — they throw, which is the A1 hard-fail path). This keeps
+  // the field from being silently lost at the ONE merge seam that rebuilds
+  // its result from scratch, so a future fail-soft barrel pass stays visible
+  // on the merged row without anyone remembering this function.
+  if (firstPass.error) {
+    combined.error = firstPass.error;
+    combined.summary = firstPass.summary;
+  } else if (secondPass.error) {
+    combined.error = secondPass.error;
+    combined.summary = secondPass.summary;
+  }
   return combined;
 }
