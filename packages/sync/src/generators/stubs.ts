@@ -76,7 +76,12 @@ async function writeStubFile(
     }
   }
 
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  // PR-A2: gate the mkdir under dry-run (it ran even with --dry-run). Real
+  // runs keep it even though safeWriteFileAtomic mkdirs too — every mutation
+  // site stays explicit for the B1 write-journal sweep.
+  if (!config.dryRun) {
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+  }
   return safeWriteFileAtomic(filePath, content, config, report, false);
 }
 

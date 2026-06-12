@@ -128,7 +128,8 @@ async function emitAppFile(
   }
   // Skip the parent-dir mkdir for out-of-scope targets so no empty directory is
   // left behind (the write below self-skips out-of-scope via safeWriteFileAtomic).
-  if (isInScope(target, config)) {
+  // PR-A2: also skip it under --dry-run — it mutated the tree despite the flag.
+  if (!config.dryRun && isInScope(target, config)) {
     try {
       await fs.mkdir(path.dirname(target), { recursive: true });
     } catch (err) {
@@ -256,7 +257,8 @@ export async function generateApps(
       // Skip the (redundant) app-dir mkdir when the app is outside --only — the
       // per-file writes below self-skip and create their own parents, so a
       // scoped run leaves no empty apps/<name> directory behind.
-      if (isInScope(appDir, config)) {
+      // PR-A2: also skip it under --dry-run — it mutated the tree despite the flag.
+      if (!config.dryRun && isInScope(appDir, config)) {
         try {
           await fs.mkdir(appDir, { recursive: true });
           await fs.mkdir(srcDir, { recursive: true });

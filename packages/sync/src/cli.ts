@@ -83,6 +83,10 @@ function buildProgram(): Command {
       "--only <pattern...>",
       "Limit writes to workspace-relative paths/globs (e.g. packages/shared, 'packages/*/tsconfig.json'). Direct targets only — no dependency fan-out; run a full sync for cross-package changes.",
     )
+    .option(
+      "--report <path>",
+      "Migration-report destination (relative to the workspace root). Real runs default to SYNC-MIGRATION-REPORT.md; --dry-run writes no report unless this is set.",
+    )
     .action(async (options) => {
       const flags = {
         dryRun: options.dryRun ?? false,
@@ -91,6 +95,7 @@ function buildProgram(): Command {
         allowDirty: options.allowDirty ?? false,
         strict: options.strict ?? false,
         only: options.only as string[] | undefined,
+        report: options.report as string | undefined,
         mode: "self-regen" as const,
         logger,
       };
