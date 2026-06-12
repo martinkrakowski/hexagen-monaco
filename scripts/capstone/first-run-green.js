@@ -10,7 +10,13 @@
  *   2. Stage + `npm pack` both → @hexagen-monaco/* tarballs.
  *   3. Generate a bare scaffold (scope `acme`) via the real generator — NOT the
  *      self-regen CLI (which targets the package it lives in; see issue #179).
- *   4. Point the scaffold's tooling devDeps at the tarballs via `resolutions`.
+ *   4. Pin gate (PR-A3, RCA #1): assert the scaffold's emitted tooling ranges
+ *      are satisfied by the packed tarball versions, THEN point them at the
+ *      tarballs via `resolutions`. Resolutions exist for hermeticity (the
+ *      registry has no unpublished version) but would also mask a
+ *      scaffold/engine version skew — so the contract is asserted, not
+ *      bypassed. (Registry availability itself stays a runbook invariant:
+ *      publish v<version> before/with any wizard deploy that bumps it.)
  *   5. `corepack enable` + `yarn install` — assert it resolves + installs.
  *   6. Run the INSTALLED `hexagen` bin (--dry-run) and assert it resolves the
  *      generated project (not the monorepo) — the issue #179 regression guard —
@@ -36,6 +42,10 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+// Default-import the CJS module (its named exports aren't statically
+// analyzable); declared in the ROOT devDependencies — capstone is a root
+// script (PR-A3 pin gate).
+import semver from "semver";
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -117,8 +127,10 @@ try {
   const packDir = mkdtempSync(path.join(tmpdir(), "capstone-pack-"));
   cleanup.push(() => rmSync(packDir, { recursive: true, force: true }));
   const tarball = {};
+  const packedVersion = {}; // short → version, for the PR-A3 pin gate below
   for (const { short, dir } of PACKAGES) {
     const version = pkgVersion(dir);
+    packedVersion[short] = version;
     // prepare-publish always creates <dir>/publish; remove it in `finally` so a
     // pack (or prepare) failure never leaves staging dirs mutating the repo.
     const publishDir = path.join(REPO, dir, "publish");
@@ -154,9 +166,38 @@ try {
   writeFileSync(manifestPath, MANIFEST_YAML);
   step("Generated scaffold (scope: acme)");
 
-  // 4. resolutions → packed tarballs (stands in for the unpublished registry).
+  // 4a. Pin gate (PR-A3, RCA #1): the scaffold's emitted ranges must be
+  //     satisfied by what we're about to install — BEFORE resolutions force
+  //     the tarballs regardless. This is what caught nothing for two
+  //     releases: the template hardcoded ^0.4.0 while the engine shipped
+  //     0.6.0, and resolutions papered over the skew. Proves
+  //     self-consistency only (emitted range ↔ packed version); cross-version
+  //     compatibility is PR-C1's job.
   const pkgPath = path.join(proj, "package.json");
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+  for (const { short } of PACKAGES) {
+    const name = `@hexagen-monaco/${short}`;
+    const emittedRange = pkg.devDependencies?.[name];
+    if (!emittedRange) {
+      fail(`scaffold package.json is missing the ${name} devDependency`);
+    }
+    if (!semver.satisfies(packedVersion[short], emittedRange)) {
+      fail(
+        `scaffold pins ${name}@${emittedRange} but the packed tarball is ` +
+          `${packedVersion[short]} — version-derived pins are broken (RCA #1)`,
+      );
+    }
+  }
+  step(
+    `Pin gate: scaffold ranges satisfied by packed versions (` +
+      PACKAGES.map(
+        ({ short }) =>
+          `${short}@${pkg.devDependencies[`@hexagen-monaco/${short}`]}←${packedVersion[short]}`,
+      ).join(", ") +
+      `)`,
+  );
+
+  // 4b. resolutions → packed tarballs (stands in for the unpublished registry).
   pkg.resolutions = {
     "@hexagen-monaco/sync": `file:${tarball.sync}`,
     "@hexagen-monaco/arch-linter": `file:${tarball["arch-linter"]}`,

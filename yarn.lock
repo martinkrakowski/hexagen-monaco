@@ -9170,6 +9170,7 @@ __metadata:
     lint-staged: "npm:^16.4.0"
     lru-cache: "npm:^7.18.3"
     prettier: "npm:^3.2.5"
+    semver: "npm:^7.8.4"
     tsx: "npm:^4.21.0"
     turbo: "npm:^1.13.3"
     typescript: "npm:^5.4.5"
@@ -13816,6 +13817,15 @@ __metadata:
   bin:
     semver: bin/semver.js
   checksum: 10c0/8f096ca9b80ffd47b308d03f9ce8c873e27e2983f36023c559cdc92c51e8433fc23ebbfe57ec9623fc155636a6961ee989501099841ae4bb1babc8d2b3f048cd
+  languageName: node
+  linkType: hard
+
+"semver@npm:^7.8.4":
+  version: 7.8.4
+  resolution: "semver@npm:7.8.4"
+  bin:
+    semver: bin/semver.js
+  checksum: 10c0/81b7c296fd7927b80f67fa516b75fa1017caac8167795320de28e76ccbc6f7f01763c30ecd10d6a0d8fd089708ab0548a5aebb94b0870e99c2a2b4600a46389b
   languageName: node
   linkType: hard
 
