@@ -239,6 +239,14 @@ try {
   if (!brokenLintFailed) {
     fail("`hexagen-lint` exited 0 on a broken manifest", brokenLintOut);
   }
+  // Same specific-reason guard as the dry-run probe above: a broken shim or
+  // startup crash also exits non-zero — only the manifest-load failure counts.
+  if (!brokenLintOut.includes("Could not load architecture manifest")) {
+    fail(
+      "broken-manifest lint failed, but not with the expected manifest load error",
+      brokenLintOut,
+    );
+  }
   writeFileSync(manifestPath, MANIFEST_YAML);
   step("Broken manifest → installed bins exit non-zero ✅");
 
