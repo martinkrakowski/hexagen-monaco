@@ -1,6 +1,10 @@
 import path from "node:path";
 import { SyncConfig } from "../config.js";
-import { createEmptyResult, type GeneratorResult } from "../results.js";
+import {
+  createEmptyResult,
+  recordWriteStatus,
+  type GeneratorResult,
+} from "../results.js";
 import { MigrationReport } from "../migration-report.js";
 import { safeWriteFileAtomic } from "../fs-utils.js";
 import {
@@ -188,11 +192,7 @@ export async function generateTsconfig(
       config,
       report as ReportRecorder | undefined,
     );
-    if (status === "created") result.created.push(filePath);
-    if (status === "updated") result.updated.push(filePath);
-    if (status === "skipped" || status === "protected")
-      result.skipped.push(filePath);
-    result.totalOps += status === "created" || status === "updated" ? 1 : 0;
+    recordWriteStatus(result, filePath, status);
 
     return result;
   } catch (err) {
@@ -203,6 +203,12 @@ export async function generateTsconfig(
         ? err
         : new Error(`tsconfig generation failed for ${moduleName}: ${message}`);
     result.summary = `tsconfig generation failed for ${moduleName}: ${message}`;
+    // B-1 (PR-B2 review): the swallow was TOTAL — no log, no report entry, no
+    // exit-code effect; a run that failed here still printed `Total ops : 0`
+    // and exited 0. Mirror eslint.ts's catch: say it, record it; the engine
+    // counts it into SyncRunSummary.errors and cli.ts exits non-zero.
+    config.logger.error(result.summary);
+    if (report) report.record("error", filePath, result.summary);
     return result;
   }
 }
@@ -234,10 +240,6 @@ export async function generateTsconfigTest(
     config,
     report as ReportRecorder | undefined,
   );
-  if (status === "created") result.created.push(filePath);
-  if (status === "updated") result.updated.push(filePath);
-  if (status === "skipped" || status === "protected")
-    result.skipped.push(filePath);
-  result.totalOps += status === "created" || status === "updated" ? 1 : 0;
+  recordWriteStatus(result, filePath, status);
   return result;
 }

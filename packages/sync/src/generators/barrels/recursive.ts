@@ -4,7 +4,11 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import type { SyncConfig } from "../../config.js";
 import type { ReportRecorder } from "../../domain/types.js";
-import { createEmptyResult, type GeneratorResult } from "../../results.js";
+import {
+  createEmptyResult,
+  recordWriteStatus,
+  type GeneratorResult,
+} from "../../results.js";
 import { safeWriteFileAtomic } from "../../fs-utils.js";
 import { isExcludedDirectory } from "../../config/barrel-exclusions.js";
 import {
@@ -200,16 +204,7 @@ export async function generateRecursiveBarrels(
       config,
       report,
     );
-
-    if (status === "created") {
-      result.created.push(pending.filePath);
-      result.totalOps++;
-    } else if (status === "updated") {
-      result.updated.push(pending.filePath);
-      result.totalOps++;
-    } else if (status === "skipped" || status === "protected") {
-      result.skipped.push(pending.filePath);
-    }
+    recordWriteStatus(result, pending.filePath, status);
   }
 
   // Add preserved files to skipped (they were intentionally not modified)

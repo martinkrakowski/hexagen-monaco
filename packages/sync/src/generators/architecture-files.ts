@@ -3,7 +3,11 @@ import path from "node:path";
 import yaml from "js-yaml";
 import type { SyncConfig } from "../config.js";
 import { safeWriteFileAtomic, isInScope } from "../fs-utils.js";
-import { createEmptyResult, type GeneratorResult } from "../results.js";
+import {
+  createEmptyResult,
+  recordWriteStatus,
+  type GeneratorResult,
+} from "../results.js";
 import { interpolate } from "../template-engine.js";
 import type {
   ArchInvariantsConfig,
@@ -121,18 +125,6 @@ function interpolateWithLogging(
   return output;
 }
 
-function recordStatus(
-  result: GeneratorResult,
-  filePath: string,
-  status: "created" | "updated" | "unchanged" | "skipped" | "protected",
-): void {
-  if (status === "created") result.created.push(filePath);
-  else if (status === "updated") result.updated.push(filePath);
-  else if (status === "skipped" || status === "protected")
-    result.skipped.push(filePath);
-  if (status === "created" || status === "updated") result.totalOps += 1;
-}
-
 async function writeManifestIfFreshExternal(
   config: SyncConfig,
   result: GeneratorResult,
@@ -232,7 +224,7 @@ export async function generateArchitectureFiles(
     report,
     true,
   );
-  recordStatus(result, layerRulesPath, layerRulesStatus);
+  recordWriteStatus(result, layerRulesPath, layerRulesStatus);
 
   const linterConfigPath = path.join(
     archRoot,
@@ -256,7 +248,7 @@ export async function generateArchitectureFiles(
     report,
     true,
   );
-  recordStatus(result, linterConfigPath, linterConfigStatus);
+  recordWriteStatus(result, linterConfigPath, linterConfigStatus);
 
   const generatorConfigPath = path.join(archRoot, "generator.config.yaml");
   const generatorConfigTemplate = resolveTemplate(
@@ -276,7 +268,7 @@ export async function generateArchitectureFiles(
     report,
     true,
   );
-  recordStatus(result, generatorConfigPath, generatorConfigStatus);
+  recordWriteStatus(result, generatorConfigPath, generatorConfigStatus);
 
   return result;
 }

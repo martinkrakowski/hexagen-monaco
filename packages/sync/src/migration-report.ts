@@ -9,10 +9,10 @@ import type { SyncConfig } from "./config.js";
  * generator may record, enforced at the call sites through ReportRecorder
  * (domain/types.ts) and at the sink through `record()` below. The previous
  * shape was an honest-but-open `string` after review #315 showed a
- * five-member union silently laundering the rest through a cast. "warn" and
- * "warning" both stay for now — both exist in the wild, and unifying them
- * changes report OUTPUT; the dead generators owning some of these tags are
- * deleted in PR-B2 (D6), which is the right moment to shrink the set.
+ * five-member union silently laundering the rest through a cast. PR-B2 (D6)
+ * deleted the dead generator family (wiring, test-generator, the migration-*
+ * trio) that owned every "info" recorder, and "warn" had no recorder at all —
+ * both dropped here as promised; "warning" is the live spelling (eslint.ts).
  */
 export type ReportEntryType =
   | "created"
@@ -20,8 +20,6 @@ export type ReportEntryType =
   | "deleted"
   | "skipped"
   | "blocked"
-  | "info"
-  | "warn"
   | "warning"
   | "error";
 

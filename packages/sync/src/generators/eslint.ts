@@ -1,6 +1,10 @@
 import path from "node:path";
 import type { SyncConfig } from "../config.js";
-import { createEmptyResult, type GeneratorResult } from "../results.js";
+import {
+  createEmptyResult,
+  recordWriteStatus,
+  type GeneratorResult,
+} from "../results.js";
 import { safeWriteFileAtomic } from "../fs-utils.js";
 import { interpolate } from "../template-engine.js";
 import {
@@ -211,11 +215,7 @@ export async function generateEslintConfig(
       false,
     );
 
-    if (status === "created") result.created.push(filePath);
-    if (status === "updated") result.updated.push(filePath);
-    if (status === "skipped" || status === "protected")
-      result.skipped.push(filePath);
-    result.totalOps += status === "created" || status === "updated" ? 1 : 0;
+    recordWriteStatus(result, filePath, status);
 
     return result;
   } catch (err) {

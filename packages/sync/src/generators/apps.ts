@@ -1,7 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { SyncConfig } from "../config.js";
-import { createEmptyResult, type GeneratorResult } from "../results.js";
+import {
+  createEmptyResult,
+  recordWriteStatus,
+  type GeneratorResult,
+} from "../results.js";
 import { safeWriteFileAtomic, isInScope } from "../fs-utils.js";
 import { interpolate } from "../template-engine.js";
 import {
@@ -12,8 +16,6 @@ import {
 import { BUILTIN_FRAMEWORK_TEMPLATES } from "./apps-framework-templates.js";
 import { generateEslintConfig } from "./eslint.js";
 import type { ReportRecorder } from "../domain/types.js";
-
-type WriteStatus = Awaited<ReturnType<typeof safeWriteFileAtomic>>;
 
 function resolveFrameworkConfig(
   framework: AppFramework,
@@ -49,22 +51,6 @@ function interpolateWithLogging(
   return output;
 }
 
-function recordStatus(
-  result: GeneratorResult,
-  filePath: string,
-  status: WriteStatus,
-): void {
-  if (status === "created") {
-    result.created.push(filePath);
-    result.totalOps += 1;
-  } else if (status === "updated") {
-    result.updated.push(filePath);
-    result.totalOps += 1;
-  } else {
-    result.skipped.push(filePath);
-  }
-}
-
 /**
  * Fold a sub-generator's result (e.g. the shared eslint emitter) into the apps
  * result: concatenate the path buckets, sum totalOps, and surface the first
@@ -74,6 +60,8 @@ function mergeResult(result: GeneratorResult, sub: GeneratorResult): void {
   result.created.push(...sub.created);
   result.updated.push(...sub.updated);
   result.skipped.push(...sub.skipped);
+  result.deleted.push(...sub.deleted);
+  result.unchanged.push(...sub.unchanged);
   result.totalOps += sub.totalOps;
   if (sub.error && !result.error) {
     result.error = sub.error;
@@ -141,7 +129,7 @@ async function emitAppFile(
       return "error";
     }
   }
-  recordStatus(
+  recordWriteStatus(
     result,
     target,
     await safeWriteFileAtomic(target, content, config, report),
@@ -287,7 +275,7 @@ export async function generateApps(
           config,
           report,
         );
-        recordStatus(result, pkgPath, status);
+        recordWriteStatus(result, pkgPath, status);
       } else {
         config.logger.warn(
           `[apps] framework "${framework}" has no package.json template — skipping package.json for "${app.name}"`,
@@ -304,7 +292,7 @@ export async function generateApps(
           config,
           report,
         );
-        recordStatus(result, tsPath, status);
+        recordWriteStatus(result, tsPath, status);
       } else {
         config.logger.warn(
           `[apps] framework "${framework}" has no tsConfig — skipping tsconfig.json for "${app.name}"`,
@@ -382,6 +370,10 @@ export async function generateApps(
         ? err
         : new Error(`apps generation failed: ${message}`);
     result.summary = `apps generation failed: ${message}`;
+    // B-1 (PR-B2 review): same as the tsconfig/eslint catches — a silent
+    // swallow here left the run looking converged (exit 0, zero ops).
+    config.logger.error(result.summary);
+    if (report) report.record("error", "apps", result.summary);
     return result;
   }
 }

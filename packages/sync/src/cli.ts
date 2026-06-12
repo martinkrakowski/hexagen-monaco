@@ -58,6 +58,10 @@ function buildProgram(): Command {
     .command("sync")
     .description("Run the HexaGen sync engine to generate artifacts")
     .option("--dry-run", "Preview changes without writing files")
+    .option(
+      "--check",
+      "CI drift gate: implies --dry-run and exits non-zero iff any change would be made (created/updated/deleted). A converged tree exits 0.",
+    )
     .option("--force", "Overwrite non-generated files in packages")
     .option(
       "--force-root",
@@ -74,8 +78,13 @@ function buildProgram(): Command {
       "Migration-report destination, resolved against the workspace root (absolute paths allowed; parent dirs are created). Real runs default to SYNC-MIGRATION-REPORT.md; --dry-run writes no report unless this is set.",
     )
     .action(async (options) => {
+      // --check is resolved here at the CLI boundary (PR-B2, RCA #5): it is
+      // exactly a --dry-run whose totalOps drives the exit code, so the engine
+      // never learns about it — `run()` reports, the CLI decides (A1 doctrine,
+      // same as the Fatal-error path below).
+      const check = options.check ?? false;
       const flags = {
-        dryRun: options.dryRun ?? false,
+        dryRun: (options.dryRun || options.check) ?? false,
         force: options.force ?? false,
         forceRoot: options.forceRoot ?? false,
         allowDirty: options.allowDirty ?? false,
@@ -88,7 +97,26 @@ function buildProgram(): Command {
 
       try {
         const engine = new SyncEngine(flags);
-        await engine.run();
+        const summary = await engine.run();
+        // B-1 (PR-B2 review): a failed-soft generator (caught into
+        // result.error, Wave-2e contract) plans zero ops, so it is invisible
+        // to the drift branch below — without this check a run that could not
+        // even plan a file exited 0 with `Total ops : 0`, on real runs,
+        // --dry-run and --check alike. Errors are a failure, not drift: this
+        // branch applies to EVERY mode (A1 honest-exit doctrine), while the
+        // drift branch stays --check-only.
+        if (summary.errors > 0) {
+          console.error(
+            `Sync incomplete: ${summary.errors} generator failure(s) — see the FAILED row(s) above.`,
+          );
+          process.exitCode = 1;
+        }
+        if (check && summary.totalOps > 0) {
+          console.error(
+            `Drift detected: ${summary.totalOps} pending change(s) (${summary.created} to create, ${summary.updated} to update, ${summary.deleted} to delete). Run \`hexagen sync\` to converge.`,
+          );
+          process.exitCode = 1;
+        }
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Unknown fatal error";

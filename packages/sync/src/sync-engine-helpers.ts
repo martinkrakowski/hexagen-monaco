@@ -17,7 +17,17 @@ export function mergeResult(dest: GeneratorResult, src: GeneratorResult): void {
   dest.updated.push(...src.updated);
   dest.skipped.push(...src.skipped);
   dest.deleted.push(...src.deleted);
+  dest.unchanged.push(...src.unchanged);
   dest.totalOps += src.totalOps;
+  // Surface a failed-soft sub-result instead of dropping it (B-1): before this,
+  // a per-module `result.error` vanished in the merge and the run looked
+  // converged. First error wins (same rule as apps.ts's local merge); the
+  // engine counts failures exactly at the production sites, so this field is
+  // visibility, not arithmetic.
+  if (src.error && !dest.error) {
+    dest.error = src.error;
+    dest.summary = src.summary;
+  }
 }
 
 export function mergeBarrelPasses(
@@ -25,11 +35,22 @@ export function mergeBarrelPasses(
   secondPass: GeneratorResult,
 ): GeneratorResult {
   const combined = createEmptyResult();
+  // Pass-2 records that may evict a pass-1 record for the same path: actual or
+  // planned mutations, plus preserve/scope skips. A pass-2 `unchanged` is
+  // deliberately NOT in this set — if pass 1 created/updated a barrel and pass 2
+  // then found nothing more to do, the run still mutated the file, and the
+  // mutation record (which backs totalOps and `sync --check`) must survive.
   const secondPaths = new Set<string>([
     ...secondPass.created,
     ...secondPass.updated,
     ...secondPass.skipped,
     ...secondPass.deleted,
+  ]);
+  const secondAll = new Set<string>([...secondPaths, ...secondPass.unchanged]);
+  const firstMutations = new Set<string>([
+    ...firstPass.created,
+    ...firstPass.updated,
+    ...firstPass.deleted,
   ]);
   for (const p of firstPass.created) {
     if (!secondPaths.has(p)) combined.created.push(p);
@@ -38,15 +59,49 @@ export function mergeBarrelPasses(
     if (!secondPaths.has(p)) combined.updated.push(p);
   }
   for (const p of firstPass.skipped) {
-    if (!secondPaths.has(p)) combined.skipped.push(p);
+    if (!secondAll.has(p)) combined.skipped.push(p);
   }
   for (const p of firstPass.deleted) {
     if (!secondPaths.has(p)) combined.deleted.push(p);
+  }
+  for (const p of firstPass.unchanged) {
+    if (!secondAll.has(p)) combined.unchanged.push(p);
   }
   combined.created.push(...secondPass.created);
   combined.updated.push(...secondPass.updated);
   combined.skipped.push(...secondPass.skipped);
   combined.deleted.push(...secondPass.deleted);
-  combined.totalOps = firstPass.totalOps + secondPass.totalOps;
+  // Mirror of the eviction rule above: drop a pass-2 `unchanged` when pass 1
+  // already recorded a mutation for the same path.
+  for (const p of secondPass.unchanged) {
+    if (!firstMutations.has(p)) combined.unchanged.push(p);
+  }
+  // Recompute rather than sum the pass totals: under dry-run nothing is
+  // written between the passes, so pass 2 re-plans the SAME mutations pass 1
+  // planned (e.g. one absent barrel = two planned creates). The buckets above
+  // dedup those by path; a summed total would disagree with the table —
+  // "Drift detected: 2 pending" over one [DRY-RUN] line — exactly where
+  // `sync --check` reads it. Every totalOps increment in the barrel pass is
+  // bucket-paired (recordWriteStatus, and the explicit deleted pushes in
+  // recursive.ts), so the merged mutation buckets ARE the op count. In a real
+  // run the rare created-then-updated path collapses to its net record too —
+  // the table and the total stay one source.
+  combined.totalOps =
+    combined.created.length + combined.updated.length + combined.deleted.length;
+  // Same first-error-wins propagation as mergeResult above (B-1). NOT
+  // exit-path-load-bearing: the engine counts failures at the production
+  // sites (noteFailure on every per-module pass result) BEFORE this merge
+  // runs, and the barrel generators don't fail-soft today (no catch-into-
+  // result.error — they throw, which is the A1 hard-fail path). This keeps
+  // the field from being silently lost at the ONE merge seam that rebuilds
+  // its result from scratch, so a future fail-soft barrel pass stays visible
+  // on the merged row without anyone remembering this function.
+  if (firstPass.error) {
+    combined.error = firstPass.error;
+    combined.summary = firstPass.summary;
+  } else if (secondPass.error) {
+    combined.error = secondPass.error;
+    combined.summary = secondPass.summary;
+  }
   return combined;
 }
