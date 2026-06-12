@@ -98,6 +98,12 @@ server.get('/', async () => {
 export default server;
 `;
 
+// No empty `"dependencies": {}` block (PR-B2 review): yarn 4 strips one from
+// workspace manifests during install, and the emitter doctrine since the
+// package-json churn fix is to emit yarn's normalized form. App package.jsons
+// are create-once-then-preserved (JSON can't carry the @generated marker), so
+// the old block couldn't churn — but it diverged from this template on the
+// consumer's first install.
 const PLAIN_TS_PACKAGE_JSON_TEMPLATE = `{
   "name": "@{scope}/{appName}",
   "version": "0.0.0",
@@ -109,7 +115,6 @@ const PLAIN_TS_PACKAGE_JSON_TEMPLATE = `{
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {},
   "devDependencies": {
     "typescript": "^5.5.4",
     "eslint": "^9.0.0",

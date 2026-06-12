@@ -203,6 +203,12 @@ export async function generateTsconfig(
         ? err
         : new Error(`tsconfig generation failed for ${moduleName}: ${message}`);
     result.summary = `tsconfig generation failed for ${moduleName}: ${message}`;
+    // B-1 (PR-B2 review): the swallow was TOTAL — no log, no report entry, no
+    // exit-code effect; a run that failed here still printed `Total ops : 0`
+    // and exited 0. Mirror eslint.ts's catch: say it, record it; the engine
+    // counts it into SyncRunSummary.errors and cli.ts exits non-zero.
+    config.logger.error(result.summary);
+    if (report) report.record("error", filePath, result.summary);
     return result;
   }
 }

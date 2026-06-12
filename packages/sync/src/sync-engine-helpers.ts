@@ -19,6 +19,15 @@ export function mergeResult(dest: GeneratorResult, src: GeneratorResult): void {
   dest.deleted.push(...src.deleted);
   dest.unchanged.push(...src.unchanged);
   dest.totalOps += src.totalOps;
+  // Surface a failed-soft sub-result instead of dropping it (B-1): before this,
+  // a per-module `result.error` vanished in the merge and the run looked
+  // converged. First error wins (same rule as apps.ts's local merge); the
+  // engine counts failures exactly at the production sites, so this field is
+  // visibility, not arithmetic.
+  if (src.error && !dest.error) {
+    dest.error = src.error;
+    dest.summary = src.summary;
+  }
 }
 
 export function mergeBarrelPasses(

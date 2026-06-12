@@ -43,7 +43,20 @@ export class ExternalSyncEngineAdapter implements ExternalProjectGeneratorPort {
         },
         { targetRoot, manifest },
       );
-      await engine.run();
+      const summary = await engine.run();
+      // Failed-soft generators (caught into result.error, e.g. tsconfig/apps)
+      // do not throw — run() RESOLVES with summary.errors > 0 (sync PR-B2
+      // review, B-1). Without this check the wizard returned success over a
+      // partial tree; the catch below only sees thrown failures.
+      if (summary.errors > 0) {
+        return {
+          success: false,
+          error: {
+            code: "GENERATION_FAILED",
+            message: `external sync completed with ${summary.errors} generator failure(s) — generated tree is incomplete`,
+          },
+        };
+      }
 
       const files = await this.collectFileTree(targetRoot);
       const projectName = (manifest.system as string) ?? "generated-project";

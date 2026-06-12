@@ -125,13 +125,24 @@ export async function ensureLayerFolders(
   for (const [, layerConfig] of Object.entries(layers)) {
     const layerPath = path.join(moduleDir, layerConfig.folder);
 
-    // Under --only, skip out-of-scope layers. The guard matches the DIRECTORY
-    // path — the deliverable — so a plain `--only packages/billing` pattern
-    // prefix-matches it exactly as it matched the old barrel path; the mkdir
-    // is a counted op, so guarding it also keeps an out-of-scope run from
-    // inflating created/totalOps. A barrel or stub that is itself in scope
-    // still gets its directory created by its own atomic write.
-    if (!isInScope(layerPath, config)) {
+    // Under --only, a layer is in scope when EITHER its directory path
+    // matches (plain `--only packages/billing` prefix patterns) OR its barrel
+    // path does. The barrel-path arm is load-bearing, not legacy courtesy
+    // (review fix): pre-B2 this guard matched the barrel path, and file-deep
+    // patterns like `--only packages/billing/src/domain/index.ts` relied on
+    // it — the recursive-barrels owner can only plan a barrel inside a
+    // directory that EXISTS on disk (it skips missing layer dirs), so a
+    // directory-only guard silently disabled those patterns: no dir, no
+    // barrel, exit 0. The mkdir stays a counted op, so out-of-scope runs
+    // still contribute zero ops. Known preview limit: with a file-deep
+    // pattern on a missing dir, --dry-run plans the dir create but cannot
+    // plan the barrel the real run will then produce (the dry-run never
+    // materializes the dir for the recursive pass to walk) — the real run
+    // converges, and a follow-up --check reports zero.
+    if (
+      !isInScope(layerPath, config) &&
+      !isInScope(path.join(layerPath, "index.ts"), config)
+    ) {
       continue;
     }
 
@@ -145,8 +156,11 @@ export async function ensureLayerFolders(
     for (const sub of subfolders) {
       const subPath = path.join(layerPath, sub);
 
-      // Same scope guard as the parent layer (counted mkdir).
-      if (!isInScope(subPath, config)) {
+      // Same two-arm scope guard as the parent layer (counted mkdir).
+      if (
+        !isInScope(subPath, config) &&
+        !isInScope(path.join(subPath, "index.ts"), config)
+      ) {
         continue;
       }
 

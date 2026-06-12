@@ -247,6 +247,67 @@ describe(
       }
     });
 
+    it("generator failure is NOT convergence: --check and a real sync both exit 1 and name the failure (review B-1)", async () => {
+      const fix = await createConvergedFixture("hexagen-check-genfail-");
+      try {
+        // Sabotage one generator's target so its catch-into-result.error path
+        // fires: tsconfig.json as a DIRECTORY makes safeWriteFileAtomic's
+        // pre-read throw EISDIR (not ENOENT), which generateTsconfig catches
+        // into result.error — the Wave-2e failed-soft contract. Pre-B-1 this
+        // run printed `Sync completed successfully` + `Total ops : 0` and
+        // exited 0 with no trace of the failure anywhere in the output.
+        const tsRel = path.join("packages", "billing", "tsconfig.json");
+        await fs.rm(path.join(fix.root, tsRel));
+        await fs.mkdir(path.join(fix.root, tsRel));
+        await fs.writeFile(path.join(fix.root, tsRel, ".keep"), "");
+        await gitCommitAll(fix.root, "sabotage: tsconfig.json is a directory");
+
+        const check = await runHexagen(fix, ["sync", "--check"]);
+        assert.equal(
+          check.code,
+          1,
+          `--check must exit 1 when a generator failed-soft:\n${describeResult(check)}`,
+        );
+        // The failure must be NAMED, module included — pre-B-1 the catch was
+        // a total swallow (no log line, no report entry, no exit effect).
+        assert.ok(
+          check.stderr.includes("tsconfig generation failed for billing"),
+          `expected the failed generator to be named:\n${describeResult(check)}`,
+        );
+        assert.ok(
+          check.stderr.includes("Sync incomplete: 1 generator failure(s)"),
+          `expected the CLI failure verdict:\n${describeResult(check)}`,
+        );
+        assert.ok(
+          check.stderr.includes("FAILED"),
+          `expected a FAILED summary row:\n${describeResult(check)}`,
+        );
+        // Errors are a failure, not drift: the drift message must not fire
+        // for them (zero ops were planned).
+        assert.ok(
+          !check.stderr.includes("Drift detected"),
+          `generator failure must not masquerade as drift:\n${describeResult(check)}`,
+        );
+
+        // The REAL path is equally honest (the errors branch in cli.ts is
+        // mode-independent per the A1 doctrine) — and failed-soft generators
+        // do NOT trigger the journal rollback: the run completes, the tree
+        // keeps its converged files, only the exit code says incomplete.
+        const real = await runHexagen(fix, ["sync"]);
+        assert.equal(
+          real.code,
+          1,
+          `a real sync with a failed generator must exit 1:\n${describeResult(real)}`,
+        );
+        assert.ok(
+          real.stderr.includes("tsconfig generation failed for billing"),
+          `real run must name the failure too:\n${describeResult(real)}`,
+        );
+      } finally {
+        await cleanupFixture(fix.root);
+      }
+    });
+
     it("deleted layer barrel: --check exits 1 with exactly one pending change (single barrel owner + two-pass dedup)", async () => {
       const fix = await createConvergedFixture("hexagen-check-drift-barrel-");
       try {

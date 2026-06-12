@@ -98,6 +98,19 @@ function buildProgram(): Command {
       try {
         const engine = new SyncEngine(flags);
         const summary = await engine.run();
+        // B-1 (PR-B2 review): a failed-soft generator (caught into
+        // result.error, Wave-2e contract) plans zero ops, so it is invisible
+        // to the drift branch below — without this check a run that could not
+        // even plan a file exited 0 with `Total ops : 0`, on real runs,
+        // --dry-run and --check alike. Errors are a failure, not drift: this
+        // branch applies to EVERY mode (A1 honest-exit doctrine), while the
+        // drift branch stays --check-only.
+        if (summary.errors > 0) {
+          console.error(
+            `Sync incomplete: ${summary.errors} generator failure(s) — see the FAILED row(s) above.`,
+          );
+          process.exitCode = 1;
+        }
         if (check && summary.totalOps > 0) {
           console.error(
             `Drift detected: ${summary.totalOps} pending change(s) (${summary.created} to create, ${summary.updated} to update, ${summary.deleted} to delete). Run \`hexagen sync\` to converge.`,

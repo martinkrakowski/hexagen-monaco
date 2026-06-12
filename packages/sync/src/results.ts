@@ -1,8 +1,9 @@
 /**
  * Outcome vocabulary of `safeWriteFileAtomic` (fs-utils.ts). Declared here so
  * every generator routes the same closed set through `recordWriteStatus`
- * below instead of re-spelling the union (pre-B2, three generators carried
- * private copies and two of them miscounted — see the helper's doc).
+ * below instead of re-spelling the union (pre-B2, every generator hand-rolled
+ * its own copy of the routing if-chain and two of them miscounted — see the
+ * helper's doc).
  */
 export type WriteStatus =
   | "created"
@@ -58,6 +59,16 @@ export function createEmptyResult(): GeneratorResult {
  * reports `totalOps: 0`, which is exactly what `sync --check` gates on (the
  * CLI exits non-zero iff `totalOps > 0`; the exit-code decision stays in
  * cli.ts per the A1 doctrine — the engine only reports).
+ *
+ * `errors` counts generators that failed-soft — caught their own exception
+ * into `result.error` (the Wave-2e "skip this package, do not abort" contract:
+ * tsconfig, eslint, apps, root-files) instead of throwing. A failed generator
+ * contributes ZERO ops, so without this count a run that could not even plan a
+ * file still printed `Total ops : 0` and exited 0 — errors masqueraded as
+ * convergence (PR-B2 review, B-1). The CLI exits non-zero whenever
+ * `errors > 0`, on real runs and previews alike; `totalOps` deliberately does
+ * NOT include errors (it means "planned mutations", and a failure plans
+ * nothing — the two are separate facts and separate exit reasons).
  */
 export interface SyncRunSummary {
   created: number;
@@ -66,6 +77,8 @@ export interface SyncRunSummary {
   unchanged: number;
   skipped: number;
   totalOps: number;
+  /** Generators that caught a failure into `result.error` this run. */
+  errors: number;
   durationMs: number;
 }
 

@@ -219,6 +219,10 @@ export async function generateRootFiles(
         ? err
         : new Error(`root-files generation failed: ${message}`);
     result.summary = `root-files generation failed: ${message}`;
+    // B-1 (PR-B2 review): same as the tsconfig/eslint catches — a silent
+    // swallow here left the run looking converged (exit 0, zero ops).
+    config.logger.error(result.summary);
+    if (report) report.record("error", "root-files", result.summary);
     return result;
   }
 }

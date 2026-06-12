@@ -52,6 +52,18 @@ export class SyncEngine {
   // one RUN, not one instance: run() re-news it on entry, so a reused engine
   // can never replay a previous run's pre-images into a later rollback.
   private journal = new SyncJournal();
+  // B-1 (PR-B2 review): generators that failed-soft this run. Four generators
+  // catch their own exceptions into `result.error` by contract (Wave-2e: skip
+  // the package, do not abort the run) — but a swallowed failure plans zero
+  // ops, so a run that could not even read a target still summarized as
+  // `Total ops : 0` and the CLI exited 0: errors masqueraded as convergence,
+  // silently breaking `--check`'s "exit 0 ⇒ converged" promise. Failures are
+  // recorded at each production site (NOT off the merged rows — mergeResult
+  // keeps only the first error, so row-level counting would under-report
+  // multi-module failures), printed as FAILED rows under the summary, and
+  // surfaced as `SyncRunSummary.errors` for cli.ts to turn into exit ≠ 0.
+  // Per-run lifetime, same reset discipline as the journal.
+  private failures: Array<{ row: string; message: string }> = [];
   private partialConfig: SyncFlags;
   private fullConfig: SyncConfig | null = null;
   private manifest: Manifest = {};
@@ -75,6 +87,20 @@ export class SyncEngine {
       throw new Error("SyncEngine config not initialized. Call run() first.");
     }
     return this.fullConfig;
+  }
+
+  /**
+   * Record a failed-soft generator result (B-1). Called at every site that
+   * receives a GeneratorResult, including the ones that never set `error`
+   * today — the check is one truthy test, and a future generator adopting the
+   * catch-into-result contract is then surfaced without anyone remembering
+   * this seam. `row` matches the summary-table label so the FAILED line and
+   * the table read as one report.
+   */
+  private noteFailure(row: string, result: GeneratorResult): void {
+    if (result.error) {
+      this.failures.push({ row, message: result.error.message });
+    }
   }
 
   private async ensureDirectories(): Promise<GeneratorResult> {
@@ -170,6 +196,16 @@ export class SyncEngine {
         this.report,
       );
 
+      // B-1: collect failures per module, BEFORE mergeResult folds them into
+      // the row aggregates (the merge keeps only the first error — counting
+      // here keeps two failing modules = two failures, each with its module
+      // named in the message).
+      this.noteFailure("Barrels", barrelResult);
+      this.noteFailure("package.json", pkgResult);
+      this.noteFailure("tsconfig.json", tsResult);
+      this.noteFailure("ESLint", eslintResult);
+      this.noteFailure("Stubs", stubResult);
+
       if (this.partialConfig.mode === "self-regen") {
         await reapLegacyFolders(moduleDir, config, this.report);
       }
@@ -209,6 +245,9 @@ export class SyncEngine {
     // a second run() on a reused instance would otherwise replay run-1
     // pre-images into run-2's rollback, restoring pre-run-1 state.
     this.journal = new SyncJournal();
+    // Same structural reset for the failure list (B-1): a reused engine must
+    // not carry run-1 failures into run-2's summary.
+    this.failures = [];
 
     logger.info(
       dryRun ? "[DRY-RUN MODE] Starting sync..." : "Starting sync...",
@@ -296,16 +335,20 @@ export class SyncEngine {
         this.fullConfig,
         this.report,
       );
+      this.noteFailure("RootFiles", rootFilesResult);
       const archFilesResult = await generateArchitectureFiles(
         this.fullConfig,
         this.report,
       );
+      this.noteFailure("ArchFiles", archFilesResult);
       const layerResult = await this.ensureDirectories();
+      this.noteFailure("Layers", layerResult);
 
       const coreResults = await this.generateCoreArtifacts();
       const { pkgs, tsconfigs, eslint, stubs } = coreResults;
       const firstPassBarrels = coreResults.barrels;
       const appsResult = await generateApps(this.fullConfig, this.report);
+      this.noteFailure("Apps", appsResult);
       // Cross-context transport (Phase 3a): bespoke event-bus ports + adapters +
       // shared contracts. Runs after apps and before the pass-2 barrels (disk-based,
       // so they re-export the emitted files). Sole writer of these files — they are
@@ -314,12 +357,14 @@ export class SyncEngine {
         this.fullConfig,
         this.report,
       );
+      this.noteFailure("CrossContext", crossContextResult);
       // Shared Result kernel (#246): ensure `@{scope}/shared` exports `Result`
       // for the generic use-case stub. Before pass-2 barrels so they re-export it.
       const sharedKernelResult = await generateSharedKernel(
         this.fullConfig,
         this.report,
       );
+      this.noteFailure("SharedKernel", sharedKernelResult);
 
       const secondPassBarrels = createEmptyResult();
       const modules = this.fullConfig.manifest.bounded_contexts ?? [];
@@ -339,6 +384,7 @@ export class SyncEngine {
           this.fullConfig,
           this.report,
         );
+        this.noteFailure("Barrels", pass2);
         mergeResult(secondPassBarrels, pass2);
       }
       const barrels = mergeBarrelPasses(firstPassBarrels, secondPassBarrels);
@@ -367,6 +413,7 @@ export class SyncEngine {
         unchanged: 0,
         skipped: 0,
         totalOps: 0,
+        errors: this.failures.length,
         durationMs: 0,
       };
       for (const [, r] of rows) {
@@ -388,7 +435,16 @@ export class SyncEngine {
       const duration = Date.now() - start;
       runSummary.durationMs = duration;
 
-      logger.info("\nSync completed successfully.");
+      if (this.failures.length === 0) {
+        logger.info("\nSync completed successfully.");
+      } else {
+        // B-1: a run with failed-soft generators must not read as a success —
+        // pre-review this line printed "successfully" over a tree that was
+        // never fully planned.
+        logger.error(
+          `\nSync completed with ${this.failures.length} generator failure(s) — see the FAILED row(s) below.`,
+        );
+      }
       logger.info(
         `Processed ${this.manifest.bounded_contexts?.length ?? 0} modules in ${duration}ms`,
       );
@@ -401,6 +457,13 @@ export class SyncEngine {
         logger.info(
           `• ${label} : ${r.created.length} created, ${r.updated.length} updated, ${r.deleted.length} deleted, ${r.unchanged.length} unchanged, ${r.skipped.length} skipped`,
         );
+      }
+      // B-1: failed-soft generators get a FAILED line right under the table
+      // they are missing from — a failed generator contributes no buckets and
+      // no ops, so these lines plus `errors` in the returned summary are the
+      // only trace (cli.ts turns `errors > 0` into a non-zero exit).
+      for (const f of this.failures) {
+        logger.error(`• ${f.row} : FAILED — ${f.message}`);
       }
       logger.info(`• Total ops : ${runSummary.totalOps}`);
       return runSummary;

@@ -370,6 +370,10 @@ export async function generateApps(
         ? err
         : new Error(`apps generation failed: ${message}`);
     result.summary = `apps generation failed: ${message}`;
+    // B-1 (PR-B2 review): same as the tsconfig/eslint catches — a silent
+    // swallow here left the run looking converged (exit 0, zero ops).
+    config.logger.error(result.summary);
+    if (report) report.record("error", "apps", result.summary);
     return result;
   }
 }
