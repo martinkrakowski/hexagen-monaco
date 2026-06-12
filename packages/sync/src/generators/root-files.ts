@@ -13,8 +13,12 @@ import {
   BUILTIN_SETUP_MD_TEMPLATE,
 } from "./root-file-templates.js";
 import type { ReportRecorder } from "../domain/types.js";
+import { resolveToolchainVersion } from "../toolchain-version.js";
 
-function buildVars(manifest: Manifest): Record<string, string> {
+function buildVars(
+  manifest: Manifest,
+  toolchainVersion: string,
+): Record<string, string> {
   const system =
     typeof manifest.system === "string" && manifest.system.length > 0
       ? manifest.system
@@ -40,7 +44,11 @@ function buildVars(manifest: Manifest): Record<string, string> {
     workspacesArray.map((w) => `    ${JSON.stringify(w)}`).join(",\n") +
     "\n  ]";
 
-  return { system, scope, packageManager, workspaces };
+  // toolchainVersion: the workspace package is `@hexagen/sync` but the pins
+  // are emitted under the public `@hexagen-monaco/*` scope — same version
+  // number by the co-release invariant (publish staging rewrites only the
+  // scope; publish.yml releases both packages at this version together).
+  return { system, scope, packageManager, workspaces, toolchainVersion };
 }
 
 function resolveTemplate(
@@ -98,9 +106,17 @@ export async function generateRootFiles(
 ): Promise<GeneratorResult> {
   const result = createEmptyResult();
 
+  // PR-A3 (RCA #1): resolved OUTSIDE the try below on purpose. The engine
+  // treats `result.error` as a summary statistic, not a run failure — caught
+  // here, a degenerate version would be swallowed into a green exit. Thrown
+  // here, it propagates to the engine's catch, which always rethrows (PR-A1
+  // honest exits): a scaffold that cannot know its own version must abort,
+  // never emit `"^0.0.0"` pins.
+  const toolchainVersion = resolveToolchainVersion();
+
   try {
     const rootFiles = config.manifest.monorepo?.rootFiles;
-    const vars = buildVars(config.manifest);
+    const vars = buildVars(config.manifest, toolchainVersion);
 
     const packageJsonTemplate = resolveTemplate(
       rootFiles?.packageJson?.template,

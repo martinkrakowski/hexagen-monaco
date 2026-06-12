@@ -1,4 +1,30 @@
 import { defineConfig } from "tsup";
+import { readFileSync } from "node:fs";
+
+/**
+ * PR-A3 (RCA #1): bake the package's own version into the bundle so the
+ * scaffold's `@hexagen-monaco/*` pins are derived from the engine version by
+ * construction (see src/toolchain-version.ts). Resolved relative to this
+ * config file, not cwd, so the guard can't be fooled by where tsup is run
+ * from. Fail the BUILD on a missing/degenerate version — a broken define
+ * must never reach dist.
+ */
+const pkgVersion = (
+  JSON.parse(
+    readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+  ) as { version?: unknown }
+).version;
+if (
+  typeof pkgVersion !== "string" ||
+  !/^\d+\.\d+\.\d+/.test(pkgVersion) ||
+  /^0\.0\.0(?:$|[-+])/.test(pkgVersion)
+) {
+  throw new Error(
+    `packages/sync/package.json has a missing or degenerate version ` +
+      `(${JSON.stringify(pkgVersion)}) — the build would bake broken ` +
+      `scaffold pins (RCA #1).`,
+  );
+}
 
 export default defineConfig({
   /**
@@ -105,6 +131,20 @@ export default defineConfig({
    * depends on tsup's "dependencies are external by default" behaviour.
    */
   external: ["commander", "js-yaml", "ts-morph"],
+
+  /**
+   * Build-time constants (PR-A3, RCA #1).
+   *
+   * `__HEXAGEN_TOOLCHAIN_VERSION__` becomes a string literal in BOTH entries
+   * (cli.js and index.js), so every production consumer — the published CLI
+   * and the wizard's Next.js server bundle, which resolves `@hexagen/sync`
+   * to dist via the package `main`/`exports` — sees the engine's version
+   * without any runtime `../package.json` lookup (the lookup that silently
+   * yielded "0.0.0" inside server bundles).
+   */
+  define: {
+    __HEXAGEN_TOOLCHAIN_VERSION__: JSON.stringify(pkgVersion),
+  },
 
   /**
    * esbuild options: Configure resolution

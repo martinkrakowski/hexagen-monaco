@@ -3,9 +3,16 @@ import assert from "node:assert";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { generateRootFiles } from "../../src/generators/root-files.js";
 import type { Manifest } from "../../src/types/manifest.js";
 import type { SyncConfig, LoggerPort } from "../../src/config.js";
+
+const PACKAGE_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+);
 
 const silentLogger: LoggerPort = {
   error: () => {},
@@ -560,6 +567,114 @@ describe("root files", () => {
           "SETUP.md edits must survive a re-sync",
         );
       });
+    });
+
+    it("self-regen guard (PR-A3): an existing root package.json is never rewritten with template pins", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        // The hexagen-monaco shape: a hand-maintained root package.json that a
+        // self-regen sync must leave alone. The guard is root-file PROTECTION
+        // (mode-agnostic, blocks create AND update without --force-root) — not
+        // a mode check; this pins it for package.json specifically, since A3
+        // makes the template emit version-derived pins that must never land in
+        // the repo's own root.
+        const handWritten = `{"name":"hexagen-monaco","devDependencies":{"turbo":"^2.0.0"}}`;
+        const pkgPath = path.join(workspaceRoot, "package.json");
+        await fs.writeFile(pkgPath, handWritten, "utf8");
+
+        const manifest: Manifest = { system: "hexagen-monaco" };
+        const result = await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { mode: "self-regen" }),
+        );
+
+        assert.strictEqual(
+          await readFile(pkgPath),
+          handWritten,
+          "self-regen must leave an existing root package.json byte-identical",
+        );
+        assert.ok(
+          result.skipped.includes(pkgPath),
+          "the protected root package.json must be reported as skipped",
+        );
+        assert.strictEqual(
+          result.created.length,
+          0,
+          "a self-regen run without --force-root must create no root files",
+        );
+      });
+    });
+
+    it("pins both @hexagen-monaco/* devDependencies at the engine's own version (PR-A3, RCA #1)", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const engineVersion = (
+          JSON.parse(
+            await readFile(path.join(PACKAGE_ROOT, "package.json")),
+          ) as { version: string }
+        ).version;
+        assert.notStrictEqual(
+          engineVersion,
+          "0.0.0",
+          "sanity: the workspace version must not itself be degenerate",
+        );
+
+        const manifest: Manifest = { system: "pinned-app", scope: "pinned" };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+
+        const pkg = JSON.parse(
+          await readFile(path.join(workspaceRoot, "package.json")),
+        ) as { devDependencies?: Record<string, string> };
+        // Workspace name is @hexagen/sync, pins are the public scope — same
+        // version number by the co-release invariant (publish.yml).
+        assert.strictEqual(
+          pkg.devDependencies?.["@hexagen-monaco/sync"],
+          `^${engineVersion}`,
+          "scaffold must pin @hexagen-monaco/sync at the engine's own version",
+        );
+        assert.strictEqual(
+          pkg.devDependencies?.["@hexagen-monaco/arch-linter"],
+          `^${engineVersion}`,
+          "scaffold must pin @hexagen-monaco/arch-linter at the engine's own version",
+        );
+      });
+    });
+
+    it("no hardcoded 0.4.0 pin survives anywhere in src/generators/ (PR-A3 regression sweep)", async () => {
+      // The RCA #1 bug class: a literal version in a template silently going
+      // stale across releases. Sweep the whole generators tree so a hardcode
+      // can't come back in ANY emitter, not just root-file-templates.ts.
+      const generatorsDir = path.join(PACKAGE_ROOT, "src", "generators");
+      const offenders: string[] = [];
+      async function walk(dir: string): Promise<void> {
+        for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+          const abs = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            await walk(abs);
+          } else if (entry.isFile() && entry.name.endsWith(".ts")) {
+            if ((await readFile(abs)).includes("0.4.0")) {
+              offenders.push(path.relative(generatorsDir, abs));
+            }
+          }
+        }
+      }
+      await walk(generatorsDir);
+      assert.deepStrictEqual(
+        offenders,
+        [],
+        "literal 0.4.0 found in generators — toolchain pins must derive from resolveToolchainVersion()",
+      );
+
+      // And the template must carry the placeholder on both tooling pins.
+      const template = await readFile(
+        path.join(generatorsDir, "root-file-templates.ts"),
+      );
+      assert.ok(
+        template.includes(`"@hexagen-monaco/sync": "^{toolchainVersion}"`) &&
+          template.includes(
+            `"@hexagen-monaco/arch-linter": "^{toolchainVersion}"`,
+          ),
+        "built-in package.json template must pin both tooling packages via {toolchainVersion}",
+      );
     });
 
     it("does NOT recreate a deleted SETUP.md on a normal re-sync", async () => {

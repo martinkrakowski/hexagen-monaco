@@ -1,3 +1,10 @@
+// {toolchainVersion} is the engine's OWN version (resolveToolchainVersion,
+// PR-A3 RCA #1) — the scaffold and the pins it emits are the same code
+// generation by construction. Never hardcode a version here: the previous
+// hardcoded pin survived two co-releases (0.4 → 0.6) and had consumers
+// installing a stale toolchain. (A test sweeps generators/ for the old
+// literal — prose included, which is why this comment spells it obliquely.)
+// Manifest-supplied packageJson templates may use the same placeholder.
 const BUILTIN_PACKAGE_JSON_TEMPLATE = `{
   "name": "{system}",
   "private": true,
@@ -24,8 +31,8 @@ const BUILTIN_PACKAGE_JSON_TEMPLATE = `{
     "typescript": "^5.5.4",
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
-    "@hexagen-monaco/sync": "^0.4.0",
-    "@hexagen-monaco/arch-linter": "^0.4.0"
+    "@hexagen-monaco/sync": "^{toolchainVersion}",
+    "@hexagen-monaco/arch-linter": "^{toolchainVersion}"
   }
 }`;
 
