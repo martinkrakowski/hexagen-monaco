@@ -26,7 +26,7 @@ The RCA was verified against the **published** artifacts (0.4.2 / 0.6.0). Before
 | **A1** | #2  | Honest exit codes across both CLIs + built-dist contract tests    | P0 → v0.7.0  | —                         |
 | **A2** | #3  | `--dry-run` never mutates the consumer tree                       | P0 → v0.7.0  | A1 (tests)                |
 | **A3** | #1  | Scaffold pins derived from the engine version + capstone pin gate | P0 → v0.7.0  | A1 (tests)                |
-| **B1** | #4  | Scoped, journaled rollback; never rollback under `--allow-dirty`  | P1 → 0.7.x   | A1                        |
+| **B1** | #4  | Scoped, journaled rollback; never rollback under `--allow-dirty`  | P1 → 0.7.x   | A1, A2 (sweep table)      |
 | **B2** | #5  | Truthful change reporting + `--check` drift gate                  | P1 → 0.7.x   | A2                        |
 | **C1** | #6  | Manifest `schemaVersion` + `hexagen manifest migrate`             | P2           | A3                        |
 | **C2** | #7  | Root-resolution error names the npx/global footgun                | P2 (trivial) | —                         |
