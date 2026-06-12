@@ -76,6 +76,10 @@ const step = (msg) => console.log(`• ${msg}`);
 // empty directories, which is exactly what the pre-A2 ungated mkdirs created.
 const snapshotTreeWithDirs = (root) => {
   const out = [];
+  // Skip set is deliberately minimal (review #315): nothing runs between the
+  // before/after snapshots except `sync --dry-run`, so ANY diff — .yarn
+  // included — is signal, and the scaffold sans node_modules is small enough
+  // that hashing it is trivial. Narrowing the walk would blind the oracle.
   const skip = new Set(["node_modules", ".git"]);
   const walk = (dir, rel) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {

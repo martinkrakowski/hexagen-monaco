@@ -14,13 +14,22 @@
  *   - a directory-tree snapshot (dirs + file hashes) — catches the empty
  *     directories the pre-A2 mkdirs created.
  *
- * The fixture deliberately ARMS every gated mutation path so the asserts
- * prove the gates, not an idle run:
+ * The fixture arms every mutation path this self-regen run can reach, so the
+ * asserts prove the gates, not an idle run:
  *   - a `export {};` barrel in a NON-layer dir with zero sibling sources →
  *     queued for unlink (the exact campaign-foundry shape);
  *   - manifest `generator.sync.layers` with subfolders + a context whose
- *     package dir is missing → layer-folder + stub + kernel mkdir paths;
+ *     layer dirs are missing → the layer-folder mkdirs + stub/barrel planning;
  *   - self-regen mode → the migration-report write path runs.
+ *
+ * NOT armed here (review #315): the shared-kernel mkdir (generateSharedKernel
+ * early-returns unless mode === "external" — and the report path above only
+ * runs in self-regen, so one fixture cannot arm both) and the apps ×2 /
+ * cross-context ×3 mkdirs (PURITY_MANIFEST has no apps or cross-context
+ * relationships). Those gates share the exact `if (!config.dryRun)` shape of
+ * the armed ones; this suite pins the incident's reachable surface, and the
+ * differential run against the pre-A2 dist is the evidence the gates were the
+ * only change.
  *
  * Output asserts (`would delete empty barrel`, `would create`) pin that the
  * engine actually PLANNED those mutations; without them an engine that
@@ -275,6 +284,49 @@ describe(
           status.trim(),
           "?? preview-report.md",
           `expected the opt-in report to be the only tree change:\n${status}`,
+        );
+      } finally {
+        await cleanupFixture(fix.root);
+      }
+    });
+
+    it("sync --dry-run --report <nested/path> creates the parent dirs and writes the report", async () => {
+      const fix = await createPublishedLayoutFixture(
+        PURITY_MANIFEST,
+        "hexagen-dryrun-nested-report-",
+      );
+      try {
+        await gitBaseline(fix.root);
+
+        // Nested destination: writeReport must mkdir the parent (review #315
+        // finding — createWriteStream does not create directories; pre-fix
+        // this aborted the run with a stream ENOENT under A1's honest exits).
+        const r = await runHexagen(fix, [
+          "sync",
+          "--dry-run",
+          "--allow-dirty",
+          "--report",
+          "reports/nested/preview.md",
+        ]);
+        assert.equal(r.code, 0, describeResult(r));
+
+        const reportPath = path.join(
+          fix.root,
+          "reports",
+          "nested",
+          "preview.md",
+        );
+        assert.ok(
+          await pathExists(reportPath),
+          `nested --report destination must be created\n${describeResult(r)}`,
+        );
+        // The opted-in report (with its parent dirs — git collapses untracked
+        // dirs to the topmost entry) must be the ONLY change to the tree.
+        const status = await runGitOrThrow(["status", "--porcelain"], fix.root);
+        assert.equal(
+          status.trim(),
+          "?? reports/",
+          `expected only the nested report dir as a tree change:\n${status}`,
         );
       } finally {
         await cleanupFixture(fix.root);

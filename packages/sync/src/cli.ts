@@ -85,7 +85,7 @@ function buildProgram(): Command {
     )
     .option(
       "--report <path>",
-      "Migration-report destination (relative to the workspace root). Real runs default to SYNC-MIGRATION-REPORT.md; --dry-run writes no report unless this is set.",
+      "Migration-report destination, resolved against the workspace root (absolute paths allowed; parent dirs are created). Real runs default to SYNC-MIGRATION-REPORT.md; --dry-run writes no report unless this is set.",
     )
     .action(async (options) => {
       const flags = {
