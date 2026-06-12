@@ -14,7 +14,16 @@
  * Failure injection: `packages/beta/package.json` is a committed DIRECTORY,
  * so generatePackageJson's pre-read throws EISDIR deterministically — after
  * alpha's artifacts have all landed (modules are processed sequentially in
- * manifest order), so the journal is non-empty. Self-regen real runs exec
+ * manifest order), so the journal is non-empty.
+ *
+ * Second differential (PR-B1 review, proven by mutation test): the fixture
+ * also commits a STALE alpha/package.json, so the journal carries an UPDATE
+ * entry with a real pre-image, not just creates. Case B asserts the restore
+ * is byte-identical to the seed. Without this, regressing the
+ * safeWriteFileAtomic hook to `recordWrite(filePath, null)` — which makes
+ * rollback DELETE the user's file instead of restoring it — passed every
+ * suite, because create→unlink arcs and porcelain-clean checks cannot
+ * distinguish "restored pre-image" from "never had a pre-image". Self-regen real runs exec
  * `npx turbo run build` (preflight) with cwd=workspaceRoot; npx resolves the
  * local node_modules/.bin first, so a stub `turbo` keeps the run offline.
  *
@@ -46,6 +55,13 @@ import {
 import { pathExists } from "../helpers/fs-helpers.js";
 
 const FIXTURE_PREFIX = "hexagen-rollback-contract-";
+
+// Stale-but-parseable seed for alpha's COMMITTED package.json — see header.
+// generatePackageJson merges (protected keys kept, missing keys injected) and
+// overwrites via safeWriteFileAtomic(skipGeneratedCheck), journaling these
+// exact bytes as the pre-image.
+const STALE_ALPHA_PKG =
+  '{\n  "name": "@acme/alpha",\n  "version": "0.0.1"\n}\n';
 
 // alpha generates fully; beta's committed package.json DIRECTORY then makes
 // generatePackageJson's pre-read throw EISDIR mid-run.
@@ -84,6 +100,14 @@ async function prepareRollbackFixture(): Promise<ContractFixture> {
   await fs.writeFile(
     path.join(fix.root, "packages", "beta", "package.json", "placeholder"),
     "",
+  );
+
+  // Seeded overwrite: alpha's stale package.json (committed below) gives the
+  // journal an UPDATE entry with a real pre-image — see header.
+  await fs.mkdir(path.join(fix.root, "packages", "alpha"), { recursive: true });
+  await fs.writeFile(
+    path.join(fix.root, "packages", "alpha", "package.json"),
+    STALE_ALPHA_PKG,
   );
 
   // Preflight stub (self-regen real runs exec `npx turbo run build`).
@@ -170,24 +194,33 @@ describe(
           "UNCOMMITTED_CHANGE_PATTERN",
           `dirty tracked file must keep the user's uncommitted content\n${describeResult(r)}`,
         );
-        assert.equal(
-          await pathExists(
+        assert.notEqual(
+          await fs.readFile(
             path.join(fix.root, "packages", "alpha", "package.json"),
+            "utf8",
           ),
-          true,
-          `under --allow-dirty NOTHING is reverted — sync's own writes stay too\n${describeResult(r)}`,
+          STALE_ALPHA_PKG,
+          `under --allow-dirty NOTHING is reverted — sync's own overwrite stays too, not even restored to the seed\n${describeResult(r)}`,
         );
 
         // logger.warn → stderr: the deliberate no-rollback notice plus the
-        // journal of touched paths.
-        assert.ok(
-          r.stderr.includes("NO rollback under --allow-dirty"),
+        // journal of touched paths. The non-zero count pins the
+        // non-empty-journal branch (the empty branch says "nothing to roll
+        // back" instead).
+        assert.match(
+          r.stderr,
+          /Sync failed after touching [1-9]\d* path\(s\) — NO rollback under --allow-dirty/,
           describeResult(r),
         );
         assert.match(
           r.stderr,
           /packages\/alpha\/package\.json/,
           `journal print must name the touched paths\n${describeResult(r)}`,
+        );
+        assert.match(
+          r.stderr,
+          /packages\/alpha\/tsconfig\.json/,
+          `journal print must name alpha's created tsconfig — Case B's unlink assert relies on this being a real create→unlink arc\n${describeResult(r)}`,
         );
         assert.ok(!r.stdout.includes("Rollback completed"), describeResult(r));
       } finally {
@@ -222,15 +255,26 @@ describe(
           "",
           `after rollback the tree must be porcelain-clean\n${describeResult(r)}`,
         );
+        // The seeded OVERWRITE restored byte-identically — the assertion that
+        // dies if recordWrite ever journals null pre-images for updates
+        // (rollback would unlink the user's file instead). See header.
+        assert.equal(
+          await fs.readFile(
+            path.join(fix.root, "packages", "alpha", "package.json"),
+            "utf8",
+          ),
+          STALE_ALPHA_PKG,
+          `alpha's seeded package.json must be restored to its exact pre-sync bytes\n${describeResult(r)}`,
+        );
         assert.equal(
           await pathExists(
-            path.join(fix.root, "packages", "alpha", "package.json"),
+            path.join(fix.root, "packages", "alpha", "tsconfig.json"),
           ),
           false,
-          `alpha's freshly created package.json must be unlinked by the rollback\n${describeResult(r)}`,
+          `alpha's freshly created tsconfig.json must be unlinked by the rollback\n${describeResult(r)}`,
         );
 
-        // logger.info → stdout.
+        // logger.info → stdout. Back-reference pins restored === attempted.
         assert.match(
           r.stdout,
           /Rolling back [1-9]\d* journaled path/,
@@ -238,7 +282,7 @@ describe(
         );
         assert.match(
           r.stdout,
-          /Rollback completed: \d+\/\d+ path\(s\) restored/,
+          /Rollback completed: (\d+)\/\1 path\(s\) restored/,
           describeResult(r),
         );
       } finally {

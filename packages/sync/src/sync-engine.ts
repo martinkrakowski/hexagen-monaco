@@ -44,9 +44,9 @@ export interface SyncEngineOptions {
 export class SyncEngine {
   private report = new MigrationReport();
   // PR-B1 (RCA #4): per-run mutation journal — pre-images of every file sync
-  // touches, replayed in reverse on failure (see journal.ts). One journal per
-  // engine instance, mirroring MigrationReport; both CLI and the external
-  // adapter construct a fresh engine per run.
+  // touches, replayed in reverse on failure (see journal.ts). The lifetime is
+  // one RUN, not one instance: run() re-news it on entry, so a reused engine
+  // can never replay a previous run's pre-images into a later rollback.
   private journal = new SyncJournal();
   private partialConfig: SyncFlags;
   private fullConfig: SyncConfig | null = null;
@@ -205,6 +205,12 @@ export class SyncEngine {
     const { logger, dryRun, allowDirty, mode } = this.partialConfig;
     const start = Date.now();
     let lockFile: LockFile | null = null;
+
+    // Fresh journal per run (PR-B1 review): both live callers construct a
+    // fresh engine per invocation, but only this reset makes that structural —
+    // a second run() on a reused instance would otherwise replay run-1
+    // pre-images into run-2's rollback, restoring pre-run-1 state.
+    this.journal = new SyncJournal();
 
     logger.info(
       dryRun ? "[DRY-RUN MODE] Starting sync..." : "Starting sync...",

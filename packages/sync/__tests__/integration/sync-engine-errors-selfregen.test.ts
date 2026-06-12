@@ -454,6 +454,19 @@ describe("SyncEngine — self-regen rollback + process.exit (fixture-only)", () 
 });
 
 /**
+ * Stale-but-parseable seed for `packages/alpha/package.json` (committed by
+ * the fixture). generatePackageJson MERGES it (protected keys kept, missing
+ * keys injected) and writes via safeWriteFileAtomic with skipGeneratedCheck,
+ * so mid-run the file is OVERWRITTEN and its pre-image journaled. Rollback
+ * must restore these exact bytes. Without an overwrite entry every arc in
+ * these fixtures is create→unlink, and a regression that journals null
+ * pre-images for updates — which makes rollback DELETE the user's file —
+ * passes the whole suite (proven by mutation test, PR-B1 review).
+ */
+const STALE_ALPHA_PKG =
+  '{\n  "name": "@acme/alpha",\n  "version": "0.0.1"\n}\n';
+
+/**
  * Fixture for mid-run failure: the engine must get PAST the early gates
  * (git check, lock, preflight) and write real files before failing, so the
  * journal is non-empty.
@@ -462,6 +475,8 @@ describe("SyncEngine — self-regen rollback + process.exit (fixture-only)", () 
  *   generatePackageJson's pre-read throws EISDIR deterministically — and
  *   only after alpha's artifacts have all landed (modules are processed
  *   sequentially in manifest order).
+ * - Seeded overwrite: alpha's committed stale package.json (above) makes the
+ *   journal carry an UPDATE entry with a real pre-image, not just creates.
  * - Preflight: self-regen real runs exec `npx turbo run build` with
  *   cwd=workspaceRoot; npx resolves the local node_modules/.bin first, so a
  *   stub `turbo` keeps the run offline and instant. node_modules/ is in the
@@ -485,6 +500,11 @@ async function makeMidRunFailureFixture(tmpDir: string): Promise<void> {
   await fs.writeFile(
     path.join(tmpDir, "packages", "beta", "package.json", "placeholder"),
     "",
+  );
+  await fs.mkdir(path.join(tmpDir, "packages", "alpha"), { recursive: true });
+  await fs.writeFile(
+    path.join(tmpDir, "packages", "alpha", "package.json"),
+    STALE_ALPHA_PKG,
   );
   execSync("git add .", { cwd: tmpDir });
   execSync('git commit -m "init" --quiet', { cwd: tmpDir });
@@ -562,12 +582,23 @@ describe("SyncEngine — journaled rollback after mid-run writes (PR-B1, RCA #4,
       "",
       "after rollback the tree must be porcelain-clean — every journaled write inverted",
     );
+    // The seeded OVERWRITE must be restored byte-identically — this is the
+    // assertion that dies if recordWrite ever journals null pre-images for
+    // updates (rollback would unlink the user's file instead of restoring it).
+    assert.equal(
+      await fs.readFile(
+        path.join(fixtureRoot, "packages", "alpha", "package.json"),
+        "utf8",
+      ),
+      STALE_ALPHA_PKG,
+      "alpha's seeded package.json must be restored to its exact pre-sync bytes",
+    );
     assert.equal(
       await pathExists(
-        path.join(fixtureRoot, "packages", "alpha", "package.json"),
+        path.join(fixtureRoot, "packages", "alpha", "tsconfig.json"),
       ),
       false,
-      "alpha's freshly created package.json must be unlinked by the rollback",
+      "alpha's freshly created tsconfig.json must be unlinked by the rollback",
     );
     assert.ok(
       messagesAt(logger, "info").some((m) =>
@@ -576,8 +607,9 @@ describe("SyncEngine — journaled rollback after mid-run writes (PR-B1, RCA #4,
       "engine must announce a non-empty journaled rollback",
     );
     assert.ok(
+      // Back-reference pins restored === attempted, not just any N/M.
       messagesAt(logger, "info").some((m) =>
-        /Rollback completed: \d+\/\d+ path\(s\) restored/.test(m),
+        /Rollback completed: (\d+)\/\1 path\(s\) restored/.test(m),
       ),
       "rollback must complete with zero failures (the completed line only prints on the no-failure branch)",
     );
@@ -633,24 +665,35 @@ describe("SyncEngine — journaled rollback after mid-run writes (PR-B1, RCA #4,
       "UNCOMMITTED_CHANGE_PATTERN",
       "the dirty tracked file must keep the user's uncommitted content",
     );
-    assert.equal(
-      await pathExists(
+    assert.notEqual(
+      await fs.readFile(
         path.join(fixtureRoot, "packages", "alpha", "package.json"),
+        "utf8",
       ),
-      true,
-      "sync's own writes stay in place too — under --allow-dirty NOTHING is reverted",
+      STALE_ALPHA_PKG,
+      "sync's own overwrite stays in place too — under --allow-dirty NOTHING is reverted, not even back to the seed",
     );
     assert.ok(
+      // Pins the non-empty-journal branch: a non-zero touched count must be
+      // reported (the empty-journal branch says "nothing to roll back" instead).
       messagesAt(logger, "warn").some((m) =>
-        m.includes("NO rollback under --allow-dirty"),
+        /Sync failed after touching [1-9]\d* path\(s\) — NO rollback under --allow-dirty/.test(
+          m,
+        ),
       ),
-      "engine must state that it deliberately did not roll back",
+      "engine must state that it deliberately did not roll back, with a non-zero touched count",
     );
     assert.ok(
       messagesAt(logger, "warn").some((m) =>
         /packages\/alpha\/package\.json/.test(m),
       ),
       "the printed journal must name the touched paths (alpha's package.json)",
+    );
+    assert.ok(
+      messagesAt(logger, "warn").some((m) =>
+        /packages\/alpha\/tsconfig\.json/.test(m),
+      ),
+      "the printed journal must name alpha's created tsconfig — #15's unlink assert relies on this being a real create→unlink arc",
     );
   });
 });

@@ -181,6 +181,12 @@ export async function safeWriteFileAtomic(
   // write that never landed restores identical content, or unlinks a file
   // that is not there); under-recording loses user data. Dry-run returned
   // above, so only real mutations reach this line.
+  //
+  // The `exists ? currentContent : null` ternary is what decides "restore the
+  // user's file" vs "delete the user's file" on rollback. It is pinned
+  // byte-identically by the seeded-overwrite arcs in integration #15 and
+  // contract Case B (mutation-tested: regressing this to `null` turns both
+  // red — see the rollback contract suite header).
   config.journal?.recordWrite(filePath, exists ? currentContent : null);
 
   await fs.mkdir(path.dirname(filePath), { recursive: true });
