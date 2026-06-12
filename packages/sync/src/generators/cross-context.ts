@@ -246,7 +246,10 @@ async function emitPortAndAdapter(
   if (!isInScope(portPath, config)) {
     return;
   }
-  await fs.mkdir(portDir, { recursive: true });
+  // PR-A2: dry-run gate — this mkdir mutated the tree despite the flag.
+  if (!config.dryRun) {
+    await fs.mkdir(portDir, { recursive: true });
+  }
   recordStatus(
     result,
     portPath,
@@ -279,7 +282,10 @@ async function emitPortAndAdapter(
   if (!isInScope(adapterPath, config)) {
     return;
   }
-  await fs.mkdir(adapterDir, { recursive: true });
+  // PR-A2: dry-run gate — this mkdir mutated the tree despite the flag.
+  if (!config.dryRun) {
+    await fs.mkdir(adapterDir, { recursive: true });
+  }
   // The adapter CLASS name must be a valid TS identifier — `generateAdapterFromPort`
   // emits it verbatim as `export class <name>`. The file base stays kebab
   // (`message-publisher.adapter.ts`) but the class is PascalCased with the `Adapter`
@@ -331,7 +337,10 @@ async function writeSharedContract(
     "src",
     ...relSegments,
   );
-  await fs.mkdir(path.dirname(contractPath), { recursive: true });
+  // PR-A2: dry-run gate — this mkdir mutated the tree despite the flag.
+  if (!config.dryRun) {
+    await fs.mkdir(path.dirname(contractPath), { recursive: true });
+  }
   recordStatus(
     result,
     contractPath,

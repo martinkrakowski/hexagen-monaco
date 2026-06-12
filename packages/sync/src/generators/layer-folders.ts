@@ -113,8 +113,15 @@ export async function ensureLayerFolders(
       continue;
     }
 
+    // RCA #3 (PR-A2): this mkdir ran even under --dry-run. Counting is
+    // deliberately unchanged: with recursive:true the EEXIST→skipped branch
+    // only fires when the path exists as a *file*, so every normal run counts
+    // `created` here whether or not the directory already existed — dry-run
+    // pushing `created` unconditionally mirrors that (truthful counts = PR-B2).
     try {
-      await fs.mkdir(layerPath, { recursive: true });
+      if (!config.dryRun) {
+        await fs.mkdir(layerPath, { recursive: true });
+      }
       result.created.push(layerPath);
       result.totalOps += 1;
     } catch (e) {
@@ -152,8 +159,11 @@ export async function ensureLayerFolders(
         continue;
       }
 
+      // Same dry-run gate + unchanged counting as the parent layer mkdir above.
       try {
-        await fs.mkdir(subPath, { recursive: true });
+        if (!config.dryRun) {
+          await fs.mkdir(subPath, { recursive: true });
+        }
         result.created.push(subPath);
         result.totalOps += 1;
       } catch (e) {

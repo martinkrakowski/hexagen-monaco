@@ -157,9 +157,20 @@ export async function generateRecursiveBarrels(
   for (const pending of pendingWrites) {
     // Empty content signals deletion of empty barrel
     if (pending.content === "") {
+      // RCA #3 (PR-A2): this unlink ran even under --dry-run, and the path
+      // was miscounted into `created`. Dry-run now only records the intent;
+      // both paths land in the `deleted` bucket.
+      if (config.dryRun) {
+        config.logger.info(
+          `[DRY-RUN] would delete empty barrel ${pending.filePath}`,
+        );
+        result.deleted.push(pending.filePath);
+        result.totalOps++;
+        continue;
+      }
       try {
         await fs.unlink(pending.filePath);
-        result.created.push(pending.filePath);
+        result.deleted.push(pending.filePath);
         result.totalOps++;
         continue;
       } catch (err: unknown) {

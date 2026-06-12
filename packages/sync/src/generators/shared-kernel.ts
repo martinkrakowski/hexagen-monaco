@@ -86,7 +86,11 @@ export async function generateSharedKernel(
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
 
-  await fs.mkdir(path.dirname(kernelPath), { recursive: true });
+  // PR-A2: gate the mkdir under dry-run (it ran even with --dry-run; fires
+  // whenever the kernel file is absent, i.e. every dry-run on a fresh target).
+  if (!config.dryRun) {
+    await fs.mkdir(path.dirname(kernelPath), { recursive: true });
+  }
   const status = await safeWriteFileAtomic(
     kernelPath,
     RESULT_KERNEL,

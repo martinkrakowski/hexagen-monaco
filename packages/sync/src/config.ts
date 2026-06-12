@@ -80,6 +80,14 @@ export interface SyncFlags {
    * semantics — no dependency fan-out. Undefined/empty means "no filter".
    */
   only?: string[];
+  /**
+   * Optional migration-report destination, resolved against the workspace
+   * root (absolute paths allowed; parent dirs are created on write). Real
+   * runs default to SYNC-MIGRATION-REPORT.md when unset; under --dry-run the
+   * report file is skipped entirely UNLESS this is set — `--report <path>` is
+   * the explicit opt-in to write a preview report.
+   */
+  report?: string;
   logger: LoggerPort;
 }
 
@@ -127,6 +135,20 @@ export function parseArgs(rawArgs: string[]): SyncFlags {
       case "--allow-dirty":
         flags.allowDirty = true;
         break;
+
+      // Lenient on a missing value (warn + skip) where the commander front
+      // door hard-errors on `--report <path>` — deliberate divergence:
+      // parseArgs serves programmatic/test callers that shouldn't die on a
+      // malformed optional flag (review #315).
+      case "--report": {
+        const next = args[i + 1];
+        if (next !== undefined && !next.startsWith("-")) {
+          flags.report = args[++i];
+        } else {
+          flags.logger.warn("--report requires a path argument — ignored");
+        }
+        break;
+      }
 
       case "--only": {
         // Collect following non-flag tokens as scope patterns (supports both

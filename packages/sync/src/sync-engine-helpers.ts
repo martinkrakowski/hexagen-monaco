@@ -16,6 +16,7 @@ export function mergeResult(dest: GeneratorResult, src: GeneratorResult): void {
   dest.created.push(...src.created);
   dest.updated.push(...src.updated);
   dest.skipped.push(...src.skipped);
+  dest.deleted.push(...src.deleted);
   dest.totalOps += src.totalOps;
 }
 
@@ -28,6 +29,7 @@ export function mergeBarrelPasses(
     ...secondPass.created,
     ...secondPass.updated,
     ...secondPass.skipped,
+    ...secondPass.deleted,
   ]);
   for (const p of firstPass.created) {
     if (!secondPaths.has(p)) combined.created.push(p);
@@ -38,9 +40,13 @@ export function mergeBarrelPasses(
   for (const p of firstPass.skipped) {
     if (!secondPaths.has(p)) combined.skipped.push(p);
   }
+  for (const p of firstPass.deleted) {
+    if (!secondPaths.has(p)) combined.deleted.push(p);
+  }
   combined.created.push(...secondPass.created);
   combined.updated.push(...secondPass.updated);
   combined.skipped.push(...secondPass.skipped);
+  combined.deleted.push(...secondPass.deleted);
   combined.totalOps = firstPass.totalOps + secondPass.totalOps;
   return combined;
 }

@@ -13,16 +13,21 @@
  *   4. Point the scaffold's tooling devDeps at the tarballs via `resolutions`.
  *   5. `corepack enable` + `yarn install` — assert it resolves + installs.
  *   6. Run the INSTALLED `hexagen` bin (--dry-run) and assert it resolves the
- *      generated project (not the monorepo) — the issue #179 regression guard.
+ *      generated project (not the monorepo) — the issue #179 regression guard —
+ *      AND that the dry-run left the git-committed scaffold byte-identical:
+ *      porcelain-clean + tree-snapshot-equal + no report file (PR-A2, RCA #3).
  *   7. Assert no stray `@hexagen/` (private scope) leaked into project files.
  *
  * Usage: node scripts/capstone/first-run-green.js   (or: yarn capstone)
  * Exits non-zero on any failure.
  */
 import { execSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
+  readdirSync,
   rmSync,
   writeFileSync,
   readFileSync,
@@ -65,6 +70,37 @@ const fail = (msg, detail = "") => {
   process.exit(1);
 };
 const step = (msg) => console.log(`• ${msg}`);
+
+// Directory-aware tree snapshot (dirs + file hashes, sorted). Complements
+// `git status --porcelain` in the PR-A2 purity check: porcelain cannot see
+// empty directories, which is exactly what the pre-A2 ungated mkdirs created.
+const snapshotTreeWithDirs = (root) => {
+  const out = [];
+  // Skip set is deliberately minimal (review #315): nothing runs between the
+  // before/after snapshots except `sync --dry-run`, so ANY diff — .yarn
+  // included — is signal, and the scaffold sans node_modules is small enough
+  // that hashing it is trivial. Narrowing the walk would blind the oracle.
+  const skip = new Set(["node_modules", ".git"]);
+  const walk = (dir, rel) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (skip.has(entry.name)) continue;
+      const relPath = rel ? `${rel}/${entry.name}` : entry.name;
+      const abs = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        out.push(`${relPath}/`);
+        walk(abs, relPath);
+      } else if (entry.isFile()) {
+        out.push(
+          `${relPath} sha256:${createHash("sha256").update(readFileSync(abs)).digest("hex")}`,
+        );
+      } else {
+        out.push(`${relPath} (symlink)`);
+      }
+    }
+  };
+  walk(root, "");
+  return out.sort();
+};
 
 try {
   // 1. Build the two tooling packages AND their workspace deps. Use turbo
@@ -162,6 +198,18 @@ try {
   }
   step("yarn install succeeded ✅");
 
+  // PR-A2 (RCA #3) purity baseline: commit the scaffold so the dry-run below
+  // can be checked for byte-identity two ways — `git status --porcelain`
+  // (content changes / additions / deletions) and a tree snapshot (empty
+  // dirs, which porcelain cannot see). The generated .gitignore already
+  // excludes node_modules and yarn install state, so the commit stays small.
+  projSh("git init -q");
+  projSh("git add -A");
+  projSh(
+    'git -c user.email=capstone@test.invalid -c user.name="Capstone" commit -q -m baseline',
+  );
+  const beforeSnap = snapshotTreeWithDirs(proj);
+
   // 6. Issue #179 guard: the INSTALLED bin must resolve the generated project.
   let dry;
   try {
@@ -186,6 +234,31 @@ try {
   }
   step("Installed CLI resolves the generated project, not the monorepo ✅");
 
+  // 6-purity (PR-A2, RCA #3): the dry-run above must not have changed one
+  // byte of the committed scaffold. Pre-A2 it unlinked legacy empty barrels,
+  // mkdir'd layer folders, and wrote SYNC-MIGRATION-REPORT.md.
+  const porcelain = projSh("git status --porcelain");
+  if (porcelain.trim() !== "") {
+    fail("dry-run mutated the scaffold (RCA #3 purity regression)", porcelain);
+  }
+  const afterSnap = snapshotTreeWithDirs(proj);
+  if (JSON.stringify(afterSnap) !== JSON.stringify(beforeSnap)) {
+    const beforeSet = new Set(beforeSnap);
+    const afterSet = new Set(afterSnap);
+    const added = afterSnap.filter((e) => !beforeSet.has(e));
+    const removed = beforeSnap.filter((e) => !afterSet.has(e));
+    fail(
+      "dry-run changed the scaffold tree (git-invisible empty dirs?)",
+      `added:\n${added.join("\n") || "(none)"}\nremoved:\n${removed.join("\n") || "(none)"}`,
+    );
+  }
+  if (existsSync(path.join(proj, "SYNC-MIGRATION-REPORT.md"))) {
+    fail(
+      "dry-run wrote SYNC-MIGRATION-REPORT.md (PR-A2 report gate regression)",
+    );
+  }
+  step("Dry-run left the scaffold byte-identical ✅");
+
   // 6b. Materialize for real with the installed CLI. This generates the
   //     .architecture/invariants + module scaffolding AND runs the installed
   //     arch-linter (hexagen-lint) internally — exercising BOTH published bins
@@ -201,6 +274,15 @@ try {
   step(
     "Installed `hexagen sync` materialized the project + ran arch-linter ✅",
   );
+
+  // Decision D5: REAL runs keep writing the default migration report — only
+  // dry-run suppresses it (PR-A2). Guards the inverse of the purity check.
+  if (!existsSync(path.join(proj, "SYNC-MIGRATION-REPORT.md"))) {
+    fail(
+      "real sync did not write SYNC-MIGRATION-REPORT.md (decision D5 default)",
+    );
+  }
+  step("Real sync wrote the default migration report (D5) ✅");
 
   // 6c. Honest-exit-codes guard (plan PR-A1, RCA #2): a broken manifest must
   //     make the INSTALLED bins exit non-zero. Pre-A1, `sync --dry-run` logged
