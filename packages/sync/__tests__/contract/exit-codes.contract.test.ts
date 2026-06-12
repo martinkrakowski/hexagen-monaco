@@ -77,9 +77,43 @@ const BROKEN_MANIFEST = `${VALID_MANIFEST}bogus_unknown_key: 1
 `;
 
 interface RunResult {
-  code: number | null;
+  code: number;
   stdout: string;
   stderr: string;
+}
+
+function runProcess(
+  file: string,
+  args: string[],
+  cwd: string,
+): Promise<RunResult> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      file,
+      args,
+      { cwd, timeout: 120_000, maxBuffer: 10 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        // A numeric code means the binary ran to completion and chose its own
+        // exit. Anything else (ENOENT/EACCES spawn failure, timeout, signal
+        // kill) REJECTS instead of masquerading as exit≠0: most cases below
+        // expect failure, and a binary that never ran would otherwise satisfy
+        // `assert.notEqual(code, 0)` without proving any CLI behaviour.
+        if (error && typeof error.code !== "number") {
+          reject(
+            new Error(
+              `${file} did not exit on its own (${error.code ?? error.signal ?? error.message})\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`,
+            ),
+          );
+          return;
+        }
+        resolve({
+          code: typeof error?.code === "number" ? error.code : 0,
+          stdout,
+          stderr,
+        });
+      },
+    );
+  });
 }
 
 function runNode(
@@ -87,22 +121,7 @@ function runNode(
   args: string[],
   cwd: string,
 ): Promise<RunResult> {
-  return new Promise((resolve) => {
-    execFile(
-      process.execPath,
-      [scriptPath, ...args],
-      { cwd, timeout: 120_000, maxBuffer: 10 * 1024 * 1024 },
-      (error, stdout, stderr) => {
-        const code =
-          error && typeof error.code === "number"
-            ? error.code
-            : error
-              ? null // killed by signal / spawn failure — still a non-zero outcome
-              : 0;
-        resolve({ code, stdout, stderr });
-      },
-    );
-  });
+  return runProcess(process.execPath, [scriptPath, ...args], cwd);
 }
 
 interface ContractFixture {
@@ -178,22 +197,7 @@ function runHexagen(fix: ContractFixture, args: string[]): Promise<RunResult> {
 }
 
 function runLint(fix: ContractFixture): Promise<RunResult> {
-  return new Promise((resolve) => {
-    execFile(
-      fix.lintBin,
-      [],
-      { cwd: fix.root, timeout: 120_000, maxBuffer: 10 * 1024 * 1024 },
-      (error, stdout, stderr) => {
-        const code =
-          error && typeof error.code === "number"
-            ? error.code
-            : error
-              ? null
-              : 0;
-        resolve({ code, stdout, stderr });
-      },
-    );
-  });
+  return runProcess(fix.lintBin, [], fix.root);
 }
 
 function describeResult(r: RunResult): string {
@@ -298,6 +302,12 @@ describe(
 
           const r = await runHexagen(fix, ["sync", "--allow-dirty"]);
           assert.notEqual(r.code, 0, describeResult(r));
+          // Same two-layer check as the dry-run case: the failure must be the
+          // manifest parse error, surfaced by the CLI — not something incidental.
+          assert.ok(
+            r.stderr.includes("Failed to parse manifest"),
+            describeResult(r),
+          );
           assert.equal(
             await pathExists(
               path.join(fix.root, ".architecture", ".sync.lock"),
@@ -315,6 +325,18 @@ describe(
         try {
           const r = await runHexagen(fix, ["arch", "validate"]);
           assert.notEqual(r.code, 0, describeResult(r));
+          // Pins that validate actually REACHED the linter (shim resolved via
+          // node_modules/.bin walk-up) and failed on the manifest — without
+          // these, a missing shim ("arch-linter not found") also exits 1 and
+          // the test would pass while validating nothing.
+          assert.ok(
+            r.stderr.includes("Architecture violations detected"),
+            describeResult(r),
+          );
+          assert.ok(
+            r.stderr.includes("Could not load architecture manifest"),
+            describeResult(r),
+          );
         } finally {
           await cleanupFixture(fix.root);
         }
@@ -327,6 +349,12 @@ describe(
         try {
           const r = await runLint(fix);
           assert.notEqual(r.code, 0, describeResult(r));
+          // The linter's own diagnostic — proves it ran and failed on the
+          // manifest, not on something environmental.
+          assert.ok(
+            r.stderr.includes("Could not load architecture manifest"),
+            describeResult(r),
+          );
         } finally {
           await cleanupFixture(fix.root);
         }
