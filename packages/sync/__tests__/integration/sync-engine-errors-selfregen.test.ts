@@ -113,7 +113,7 @@ describe("SyncEngine — self-regen git-check (fixture-only)", () => {
     );
   });
 
-  it("#2 with allowDirty:true skips git check and proceeds to a synthetic mid-flight failure", async () => {
+  it("#2 with allowDirty:true skips git check; a synthetic mid-flight failure rejects (dry-run must not swallow)", async () => {
     fixtureRoot = await fs.mkdtemp(
       path.join(os.tmpdir(), "hexagen-sync-errors-git-"),
     );
@@ -134,7 +134,8 @@ describe("SyncEngine — self-regen git-check (fixture-only)", () => {
       },
     );
 
-    await engine.run();
+    // Pre-A1 the engine resolved here and the CLI exited 0 — the RCA #2 bug.
+    await assert.rejects(() => engine.run(), /duplicate bounded context names/);
 
     assert.ok(
       messagesAt(logger, "warn").some((m) =>
@@ -221,11 +222,11 @@ describe("SyncEngine — self-regen lock behaviour (fixture-only)", () => {
       );
 
       await withProcessExitSpy(async (exitCalls) => {
-        await assert.rejects(() => engine.run(), /__process_exit_spy__\(1\)/);
+        await assert.rejects(() => engine.run(), /another sync is in progress/);
         assert.deepEqual(
           exitCalls,
-          [1],
-          "engine must terminate with process.exit(1) after contention",
+          [],
+          "engine must NOT call process.exit — exit codes belong to the CLI layer",
         );
       });
 
@@ -264,11 +265,14 @@ describe("SyncEngine — self-regen lock behaviour (fixture-only)", () => {
     );
 
     await withProcessExitSpy(async (exitCalls) => {
-      await assert.rejects(() => engine.run(), /__process_exit_spy__\(1\)/);
+      await assert.rejects(
+        () => engine.run(),
+        /duplicate bounded context names/,
+      );
       assert.deepEqual(
         exitCalls,
-        [1],
-        "engine must exit(1) after invalid-manifest failure in non-dry-run",
+        [],
+        "invalid-manifest failure must rethrow, not exit in-engine",
       );
     });
 
@@ -329,7 +333,10 @@ describe("SyncEngine — self-regen rollback + process.exit (fixture-only)", () 
     );
 
     await withProcessExitSpy(async () => {
-      await assert.rejects(() => engine.run(), /__process_exit_spy__\(1\)/);
+      await assert.rejects(
+        () => engine.run(),
+        /duplicate bounded context names/,
+      );
     });
 
     const fixtureStatusAfter = execSync("git status --porcelain", {
@@ -356,7 +363,7 @@ describe("SyncEngine — self-regen rollback + process.exit (fixture-only)", () 
     );
   });
 
-  it("#10 calls process.exit(1) on non-dry-run failure", async () => {
+  it("#10 rethrows on non-dry-run failure without calling process.exit (exit codes belong to the CLI layer)", async () => {
     fixtureRoot = await fs.mkdtemp(
       path.join(os.tmpdir(), "hexagen-sync-errors-exit-"),
     );
@@ -377,11 +384,14 @@ describe("SyncEngine — self-regen rollback + process.exit (fixture-only)", () 
     );
 
     await withProcessExitSpy(async (exitCalls) => {
-      await assert.rejects(() => engine.run(), /__process_exit_spy__\(1\)/);
+      await assert.rejects(
+        () => engine.run(),
+        /duplicate bounded context names/,
+      );
       assert.deepEqual(
         exitCalls,
-        [1],
-        "process.exit must be called exactly once with code 1",
+        [],
+        "process.exit must never be called by the engine",
       );
     });
   });
@@ -403,8 +413,11 @@ describe("SyncEngine — self-regen rollback + process.exit (fixture-only)", () 
     );
 
     await withProcessExitSpy(async (exitCalls) => {
-      await assert.rejects(() => engine.run(), /__process_exit_spy__\(1\)/);
-      assert.deepEqual(exitCalls, [1]);
+      await assert.rejects(
+        () => engine.run(),
+        /Failed to parse manifest: ENOENT/,
+      );
+      assert.deepEqual(exitCalls, []);
     });
 
     assert.ok(

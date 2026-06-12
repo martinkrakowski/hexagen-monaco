@@ -407,8 +407,13 @@ export class SyncEngine {
             `Rollback failed: ${rollbackErr instanceof Error ? rollbackErr.message : rollbackErr}`,
           );
         }
-        process.exit(1);
       }
+      // Always rethrow — exit-code decisions belong to the caller (cli.ts sets
+      // process.exitCode; the wizard's external-sync-engine adapter maps the
+      // throw to a Result). The previous in-engine process.exit(1) skipped the
+      // finally-block lock release, killed the host process in external mode,
+      // and silently swallowed dry-run failures (exit 0).
+      throw err;
     } finally {
       if (lockFile) {
         try {

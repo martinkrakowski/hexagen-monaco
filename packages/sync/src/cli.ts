@@ -102,7 +102,9 @@ function buildProgram(): Command {
         const message =
           err instanceof Error ? err.message : "Unknown fatal error";
         console.error(`Fatal sync error: ${message}`);
-        process.exit(1);
+        // exitCode (not process.exit) lets stdio flush and the event loop
+        // drain; the process exits non-zero once teardown completes.
+        process.exitCode = 1;
       }
     });
 
@@ -176,10 +178,13 @@ function buildProgram(): Command {
 
 const program = buildProgram();
 
+// parseAsync (not parse): every subcommand action is async, and parse() does
+// not await them — a rejected action became an unhandled rejection instead of
+// landing in this catch. Top-level await is safe here (ESM, es2022).
 try {
-  program.parse(process.argv);
+  await program.parseAsync(process.argv);
 } catch (err) {
   const message = err instanceof Error ? err.message : "Unknown CLI error";
   console.error(`CLI error: ${message}`);
-  process.exit(1);
+  process.exitCode = 1;
 }

@@ -32,7 +32,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const REPO = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
 
 // The two tooling packages, each with its OWN version — they're co-released at
 // the same version today, but read each independently so a divergence doesn't
@@ -42,7 +45,8 @@ const PACKAGES = [
   { short: "arch-linter", dir: "tools/arch-linter" },
 ];
 const pkgVersion = (dir) =>
-  JSON.parse(readFileSync(path.join(REPO, dir, "package.json"), "utf8")).version;
+  JSON.parse(readFileSync(path.join(REPO, dir, "package.json"), "utf8"))
+    .version;
 
 const sh = (cmd, opts = {}) =>
   execSync(cmd, { cwd: REPO, stdio: "pipe", encoding: "utf8", ...opts });
@@ -104,13 +108,14 @@ try {
     fail("scaffold generation failed", String(e.stdout || e.stderr || e));
   }
   // A manifest with one bounded context, so the installed CLI has work to do.
-  mkdirSync(path.join(proj, ".architecture"), { recursive: true });
-  writeFileSync(
-    path.join(proj, ".architecture/manifest.yaml"),
+  // Kept in a const: phase 6c corrupts and then restores this exact content.
+  const MANIFEST_YAML =
     "system: acme-app\nscope: acme\narchitecture: modular-monolith\n" +
-      "bounded_contexts:\n  - name: shared\n    type: shared-kernel\n" +
-      "    description: Shared primitives\n    layers:\n      domain: {}\n",
-  );
+    "bounded_contexts:\n  - name: shared\n    type: shared-kernel\n" +
+    "    description: Shared primitives\n    layers:\n      domain: {}\n";
+  const manifestPath = path.join(proj, ".architecture/manifest.yaml");
+  mkdirSync(path.join(proj, ".architecture"), { recursive: true });
+  writeFileSync(manifestPath, MANIFEST_YAML);
   step("Generated scaffold (scope: acme)");
 
   // 4. resolutions → packed tarballs (stands in for the unpublished registry).
@@ -150,7 +155,10 @@ try {
   try {
     projSh("yarn install");
   } catch (e) {
-    fail("yarn install of the generated scaffold failed", String(e.stdout || e));
+    fail(
+      "yarn install of the generated scaffold failed",
+      String(e.stdout || e),
+    );
   }
   step("yarn install succeeded ✅");
 
@@ -171,7 +179,10 @@ try {
     );
   }
   if (dry.includes(REPO) || dry.includes(realpathSync(REPO))) {
-    fail("installed hexagen CLI resolved the MONOREPO (issue #179 regression)", dry);
+    fail(
+      "installed hexagen CLI resolved the MONOREPO (issue #179 regression)",
+      dry,
+    );
   }
   step("Installed CLI resolves the generated project, not the monorepo ✅");
 
@@ -187,7 +198,49 @@ try {
       String(e.stdout || e),
     );
   }
-  step("Installed `hexagen sync` materialized the project + ran arch-linter ✅");
+  step(
+    "Installed `hexagen sync` materialized the project + ran arch-linter ✅",
+  );
+
+  // 6c. Honest-exit-codes guard (plan PR-A1, RCA #2): a broken manifest must
+  //     make the INSTALLED bins exit non-zero. Pre-A1, `sync --dry-run` logged
+  //     "Sync failed" but exited 0 — this capstone would have stayed green.
+  writeFileSync(manifestPath, MANIFEST_YAML + "bogus_unknown_key: 1\n");
+  let brokenDryFailed = false;
+  let brokenDryOut = "";
+  try {
+    brokenDryOut = projSh(
+      "node_modules/.bin/hexagen sync --dry-run --allow-dirty",
+    );
+  } catch (e) {
+    brokenDryFailed = true;
+    brokenDryOut = String(e.stdout || "") + String(e.stderr || "");
+  }
+  if (!brokenDryFailed) {
+    fail(
+      "`hexagen sync --dry-run` exited 0 on a broken manifest (RCA #2 exit-code swallow regression)",
+      brokenDryOut,
+    );
+  }
+  if (!brokenDryOut.includes("Failed to parse manifest")) {
+    fail(
+      "broken-manifest dry-run failed, but not with the expected manifest parse error",
+      brokenDryOut,
+    );
+  }
+  let brokenLintFailed = false;
+  let brokenLintOut = "";
+  try {
+    brokenLintOut = projSh("node_modules/.bin/hexagen-lint");
+  } catch (e) {
+    brokenLintFailed = true;
+    brokenLintOut = String(e.stdout || "") + String(e.stderr || "");
+  }
+  if (!brokenLintFailed) {
+    fail("`hexagen-lint` exited 0 on a broken manifest", brokenLintOut);
+  }
+  writeFileSync(manifestPath, MANIFEST_YAML);
+  step("Broken manifest → installed bins exit non-zero ✅");
 
   // 7. No private @hexagen/ scope in emitted project files (tooling is
   //    @hexagen-monaco). package.json is the highest-risk file (devDeps,
@@ -215,8 +268,12 @@ try {
       /* best effort */
     }
   }
-  console.log("\n✅ CAPSTONE PASSED — first-run-green: the generated project installs the");
-  console.log("   @hexagen-monaco tooling and the installed CLI targets it correctly.");
+  console.log(
+    "\n✅ CAPSTONE PASSED — first-run-green: the generated project installs the",
+  );
+  console.log(
+    "   @hexagen-monaco tooling and the installed CLI targets it correctly.",
+  );
 } catch (err) {
   fail("unexpected error", err?.stack || String(err));
 }
