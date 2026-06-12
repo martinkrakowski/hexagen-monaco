@@ -12,6 +12,7 @@ import {
   protectedFiles,
 } from "../src/fs-utils.js";
 import type { SyncConfig } from "../src/config.js";
+import type { ReportEntryType } from "../src/migration-report.js";
 import { createSpyLogger } from "./helpers/spy-logger.js";
 import { makeTmpWorkspace, pathExists } from "./helpers/fs-helpers.js";
 import { makeConfig } from "./helpers/test-config.js";
@@ -24,15 +25,17 @@ interface RecordedOp {
   message: string;
 }
 
+// Signature mirrors ReportRecorder (domain/types.ts): the type parameter is
+// the closed ReportEntryType vocabulary and message is optional (PR-B1).
 function createSpyReport(): {
-  record: (t: string, target: string, msg: string) => void;
+  record: (t: ReportEntryType, target: string, msg?: string) => void;
   entries: RecordedOp[];
 } {
   const entries: RecordedOp[] = [];
   return {
     entries,
     record: (type, target, message) => {
-      entries.push({ type, target, message });
+      entries.push({ type, target, message: message ?? "" });
     },
   };
 }

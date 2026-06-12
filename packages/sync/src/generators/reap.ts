@@ -2,17 +2,22 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { SyncConfig } from "../config.js";
+import type { ReportRecorder } from "../domain/types.js";
 
 /**
  * Removes legacy layer directories (domain, application, infrastructure) if they are empty.
  * Accepts an optional report to log deletions.
  *
  * IMPORTANT: Respects dry-run mode — will only log, not delete.
+ *
+ * NOT journaled (PR-B1): the rm below is guarded to directories verified
+ * EMPTY — no file content is involved, so there is nothing for the rollback
+ * journal to restore (the journal tracks file content, not directory shape).
  */
 export async function reapLegacyFolders(
   moduleDir: string,
   config: SyncConfig,
-  report?: { record: (type: string, target: string, message?: string) => void },
+  report?: ReportRecorder,
 ): Promise<void> {
   const { dryRun, logger } = config;
   const legacyLayers = ["domain", "application", "infrastructure"];

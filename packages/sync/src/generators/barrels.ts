@@ -9,6 +9,7 @@
  */
 
 import type { SyncConfig } from "../config.js";
+import type { ReportRecorder } from "../domain/types.js";
 import type { GeneratorResult } from "../results.js";
 import { generateRecursiveBarrels } from "./barrels/index.js";
 
@@ -34,7 +35,7 @@ export { CircularExportError } from "./barrels/index.js";
 export async function generateBarrels(
   moduleDir: string,
   config: SyncConfig,
-  report?: { record: (type: string, target: string, message?: string) => void },
+  report?: ReportRecorder,
 ): Promise<GeneratorResult> {
   return generateRecursiveBarrels(moduleDir, config, report);
 }

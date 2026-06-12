@@ -1,6 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { SyncConfig } from "../config.js";
+import type { ReportRecorder } from "../domain/types.js";
 import { createEmptyResult, type GeneratorResult } from "../results.js";
 import { safeWriteFileAtomic } from "../fs-utils.js";
 import {
@@ -18,7 +19,7 @@ export async function generatePackageJson(
   modulePath: string,
   moduleName: string,
   config: SyncConfig,
-  report?: { record: (type: string, target: string, message?: string) => void },
+  report?: ReportRecorder,
 ): Promise<GeneratorResult> {
   const result = createEmptyResult();
 

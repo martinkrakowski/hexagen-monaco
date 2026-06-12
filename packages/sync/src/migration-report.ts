@@ -4,21 +4,36 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { SyncConfig } from "./config.js";
 
+/**
+ * Closed audit vocabulary (PR-B1, promised in the PR-A2 review): every tag a
+ * generator may record, enforced at the call sites through ReportRecorder
+ * (domain/types.ts) and at the sink through `record()` below. The previous
+ * shape was an honest-but-open `string` after review #315 showed a
+ * five-member union silently laundering the rest through a cast. "warn" and
+ * "warning" both stay for now — both exist in the wild, and unifying them
+ * changes report OUTPUT; the dead generators owning some of these tags are
+ * deleted in PR-B2 (D6), which is the right moment to shrink the set.
+ */
+export type ReportEntryType =
+  | "created"
+  | "updated"
+  | "deleted"
+  | "skipped"
+  | "blocked"
+  | "info"
+  | "warn"
+  | "warning"
+  | "error";
+
 export interface ReportEntry {
-  // Open-ended audit tag, deliberately NOT a closed union (review #315):
-  // generators currently record created | updated | skipped | blocked |
-  // deleted | info | warn | warning | error, and the previous five-member
-  // union silently laundered the rest through a cast in record(). A closed
-  // vocabulary enforced at the call sites (via ReportRecorder) lands with
-  // PR-B1's write journal, which reworks this interface anyway.
-  type: string;
+  type: ReportEntryType;
   target: string;
   message?: string;
 }
 
 export class MigrationReport {
   private entries: ReportEntry[] = [];
-  record(type: string, target: string, message?: string) {
+  record(type: ReportEntryType, target: string, message?: string) {
     this.entries.push({ type, target, message });
   }
   async writeReport(config: SyncConfig) {
@@ -57,6 +72,25 @@ export class MigrationReport {
     // on purpose: this line is only reached when a write was requested (real
     // run, or explicit --report opt-in under dry-run).
     await fs.mkdir(path.dirname(reportPath), { recursive: true });
+    // PR-B1 (RCA #4): `flags: "w"` truncates a previous run's report, so this
+    // is a mutation site like any other — journal the pre-image first. Only
+    // replayed if THIS write fails mid-stream (the report is the run's last
+    // op); a dry-run --report opt-in records too but is never replayed
+    // (rollback is gated on !dryRun in the engine).
+    let preContent: string | null = null;
+    try {
+      preContent = await fs.readFile(reportPath, "utf8");
+    } catch (e: unknown) {
+      if (
+        !(
+          e instanceof Error &&
+          "code" in e &&
+          (e as { code?: string }).code === "ENOENT"
+        )
+      )
+        throw e;
+    }
+    config.journal?.recordWrite(reportPath, preContent);
     const stream = createWriteStream(reportPath, { flags: "w" });
     // PR-A2: previously this fired stream.end() and returned — the process (or
     // a test assertion) could outrun the flush. The error handler is attached

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { SyncFlags, SyncConfig } from "./config.js";
 import { MigrationReport } from "./migration-report.js";
+import { SyncJournal } from "./journal.js";
 import { LockFile } from "./lock.js";
 
 import { runArchLinter } from "./linter.js";
@@ -42,6 +43,11 @@ export interface SyncEngineOptions {
 
 export class SyncEngine {
   private report = new MigrationReport();
+  // PR-B1 (RCA #4): per-run mutation journal — pre-images of every file sync
+  // touches, replayed in reverse on failure (see journal.ts). One journal per
+  // engine instance, mirroring MigrationReport; both CLI and the external
+  // adapter construct a fresh engine per run.
+  private journal = new SyncJournal();
   private partialConfig: SyncFlags;
   private fullConfig: SyncConfig | null = null;
   private manifest: Manifest = {};
@@ -252,6 +258,7 @@ export class SyncEngine {
         ...this.partialConfig,
         workspaceRoot: this.workspaceRoot,
         manifest: this.manifest,
+        journal: this.journal,
       } as const;
 
       if (!dryRun && mode === "self-regen") {
@@ -396,16 +403,54 @@ export class SyncEngine {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown sync error";
       logger.error(`Sync failed: ${message}`);
+      // PR-B1 (RCA #4): scoped, journaled rollback. The old handler ran
+      // `git reset --hard HEAD && git clean -fd` against the WHOLE workspace
+      // root — destroying the user's uncommitted work and every untracked
+      // file in the tree (including files sync never touched), in both modes,
+      // even under --allow-dirty. The journal replay below restores exactly
+      // the files sync mutated, and nothing else, with no git dependency at
+      // all (external targets need not be git repositories).
       if (!dryRun) {
-        try {
-          await execAsync("git reset --hard HEAD && git clean -fd", {
-            cwd: this.workspaceRoot,
-          });
-          logger.info("Rollback completed after failure.");
-        } catch (rollbackErr) {
-          logger.warn(
-            `Rollback failed: ${rollbackErr instanceof Error ? rollbackErr.message : rollbackErr}`,
+        if (this.journal.size === 0) {
+          logger.info(
+            "No files were touched before the failure — nothing to roll back.",
           );
+        } else if (allowDirty) {
+          // Never mutate a tree we were told was dirty: the failure may stem
+          // from the dirty state itself, and an automated "fix" on top of
+          // uncommitted user work compounds unpredictability. Report what was
+          // touched and leave the tree as-is (exit ≠0 via the rethrow below).
+          logger.warn(
+            `Sync failed after touching ${this.journal.size} path(s) — NO rollback under --allow-dirty; the tree is left as-is:`,
+          );
+          for (const line of this.journal.describeEntries(this.workspaceRoot)) {
+            logger.warn(`  ${line}`);
+          }
+        } else {
+          logger.info(
+            `Rolling back ${this.journal.size} journaled path(s) (inverse-ops; never git reset/clean)...`,
+          );
+          const outcome = await this.journal.rollback(
+            logger,
+            this.workspaceRoot,
+          );
+          if (outcome.failures.length === 0) {
+            logger.info(
+              `Rollback completed: ${outcome.restored}/${outcome.attempted} path(s) restored.`,
+            );
+          } else {
+            // Best-effort replay already restored what it could; report the
+            // rest path-by-path. Deliberately NOT escalating to a git-wide
+            // reset — that is the data-loss class this journal removes.
+            for (const f of outcome.failures) {
+              logger.error(
+                `Rollback failed for ${path.relative(this.workspaceRoot, f.path)}: intended to ${f.intended} — ${f.error}`,
+              );
+            }
+            logger.error(
+              `Rollback incomplete: ${outcome.failures.length} of ${outcome.attempted} path(s) NOT restored — inspect the paths above.`,
+            );
+          }
         }
       }
       // Always rethrow — exit-code decisions belong to the caller (cli.ts sets
