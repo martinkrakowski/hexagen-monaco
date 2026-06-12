@@ -1,10 +1,16 @@
 /**
- * ensureLayerFolders contract (PR-B2 + review fixes).
+ * ensureLayerFolders contract (PR-B2 + review fixes + Wave-C keeps).
  *
- * Directories are this generator's ONLY deliverable since PR-B2 (barrels are
- * single-owned by the recursive pass), and the counting is probe-first: an
- * absent directory is created and counted, an existing one contributes
- * NOTHING — the converged-tree zero that `sync --check` gates on.
+ * Deliverables: layer DIRECTORIES (barrels are single-owned by the recursive
+ * pass since PR-B2) plus a `.gitkeep` in each LEAF directory (Wave-C — git
+ * cannot track an empty dir, so a scaffold without keeps exists in every
+ * working copy but in no fresh checkout; the first consumer wiring
+ * `sync --check` into CI hit 22 pending dir-creates on a locally converged
+ * tree). Leaf = configured dir with no configured subfolders; the rule is
+ * CONFIG-derived, which is what makes dry-run plan byte-identically to a real
+ * run. Counting stays probe-first: an absent dir/keep is created and counted,
+ * an existing dir contributes NOTHING, a keep-only dir records `unchanged` —
+ * the converged-tree zero that `sync --check` gates on.
  *
  * The --only cases pin the review fix: the scope guard matches the layer
  * DIRECTORY path or its BARREL path. The barrel arm is load-bearing — the
@@ -12,7 +18,8 @@
  * file-deep pattern (`--only packages/billing/src/domain/index.ts`) on a
  * missing directory produced literally nothing when the guard was
  * directory-only: no dir from this generator, hence no barrel from recursive,
- * exit 0.
+ * exit 0. The keep path itself fails such a file-deep pattern and lands in
+ * `skipped` — the documented scoped-run convergence limit.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert";
@@ -31,7 +38,8 @@ const silentLogger: LoggerPort = {
 };
 
 // Same layers shape the contract fixtures arm: 3 layers + 4 subfolders = 7
-// directories per module.
+// directories per module, of which 5 are leaves (domain + the 4 subfolders)
+// and therefore carry a .gitkeep — 12 created paths on a fresh module.
 const LAYERS = {
   domain: { folder: "src/domain" },
   application: {
@@ -82,17 +90,37 @@ async function dirExists(p: string): Promise<boolean> {
   }
 }
 
-describe("ensureLayerFolders (directories only, probe-first counting)", () => {
-  it("creates and counts absent dirs once; a converged tree contributes zero ops (RCA #5)", async () => {
+describe("ensureLayerFolders (directories + leaf keeps, probe-first counting)", () => {
+  it("creates and counts absent dirs + leaf keeps once; a converged tree contributes zero ops (RCA #5)", async () => {
     await withTempWorkspace(async ({ workspaceRoot, moduleDir }) => {
       const config = makeConfig(workspaceRoot);
 
       const first = await ensureLayerFolders(moduleDir, LAYERS, config);
-      assert.strictEqual(first.created.length, 7, "7 dirs created on run 1");
-      assert.strictEqual(first.totalOps, 7, "each created dir is one op");
+      assert.strictEqual(
+        first.created.length,
+        12,
+        "7 dirs + 5 leaf keeps created on run 1",
+      );
+      assert.strictEqual(first.totalOps, 12, "each created path is one op");
       assert.ok(
         await dirExists(path.join(moduleDir, "src/application/ports/in")),
         "subfolder materialized",
+      );
+      assert.strictEqual(
+        await fs.readFile(
+          path.join(moduleDir, "src/application/ports/in/.gitkeep"),
+          "utf8",
+        ),
+        "",
+        "leaf subfolder carries an empty .gitkeep",
+      );
+      assert.strictEqual(
+        await fs
+          .stat(path.join(moduleDir, "src/application/.gitkeep"))
+          .then(() => true)
+          .catch(() => false),
+        false,
+        "a layer dir WITH configured subfolders is not a leaf — no keep (kept transitively)",
       );
 
       const second = await ensureLayerFolders(moduleDir, LAYERS, config);
@@ -102,6 +130,11 @@ describe("ensureLayerFolders (directories only, probe-first counting)", () => {
         "second run must plan zero ops — the pre-B2 every-run mkdir counting",
       );
       assert.strictEqual(second.created.length, 0, "nothing newly created");
+      assert.strictEqual(
+        second.unchanged.length,
+        5,
+        "the 5 keep-only leaves report `unchanged` (byte-converged, not an op)",
+      );
       assert.strictEqual(
         second.skipped.length,
         0,
@@ -128,6 +161,22 @@ describe("ensureLayerFolders (directories only, probe-first counting)", () => {
         "exactly the targeted layer's dir is created",
       );
       assert.strictEqual(result.totalOps, 1, "one counted op");
+      // The keep path itself fails the file-deep pattern: safeWriteFileAtomic
+      // routes it to `skipped` (not an op) and writes nothing — the documented
+      // scoped-run convergence limit, mirroring the dir/barrel preview note.
+      assert.deepStrictEqual(
+        result.skipped,
+        [path.join(domainDir, ".gitkeep")],
+        "the leaf keep is out of the file-deep scope — skipped, never written",
+      );
+      assert.strictEqual(
+        await fs
+          .stat(path.join(domainDir, ".gitkeep"))
+          .then(() => true)
+          .catch(() => false),
+        false,
+        "no keep on disk under a file-deep --only",
+      );
       assert.strictEqual(
         await dirExists(path.join(moduleDir, "src/application")),
         false,
@@ -153,16 +202,78 @@ describe("ensureLayerFolders (directories only, probe-first counting)", () => {
     });
   });
 
-  it("dry-run plans the same dirs it would create and touches nothing (PR-A2)", async () => {
+  it("dry-run plans the same dirs + keeps it would create and touches nothing (PR-A2)", async () => {
     await withTempWorkspace(async ({ workspaceRoot, moduleDir }) => {
       const config = makeConfig(workspaceRoot, { dryRun: true });
 
       const result = await ensureLayerFolders(moduleDir, LAYERS, config);
-      assert.strictEqual(result.totalOps, 7, "plans all 7 dir creates");
+      assert.strictEqual(
+        result.totalOps,
+        12,
+        "plans all 7 dir creates + 5 leaf keeps — byte-identical to a real run",
+      );
+      assert.strictEqual(result.created.length, 12, "all planned as creates");
       assert.strictEqual(
         await dirExists(path.join(moduleDir, "src/domain")),
         false,
         "dry-run materializes nothing",
+      );
+    });
+  });
+
+  it("a leaf with real content gets no keep and no record (git already tracks it)", async () => {
+    await withTempWorkspace(async ({ workspaceRoot, moduleDir }) => {
+      const domainDir = path.join(moduleDir, "src/domain");
+      await fs.mkdir(domainDir, { recursive: true });
+      await fs.writeFile(path.join(domainDir, "money.ts"), "export {};\n");
+
+      const config = makeConfig(workspaceRoot);
+      const result = await ensureLayerFolders(moduleDir, LAYERS, config);
+
+      assert.strictEqual(
+        await fs
+          .stat(path.join(domainDir, ".gitkeep"))
+          .then(() => true)
+          .catch(() => false),
+        false,
+        "no keep is written next to real content",
+      );
+      assert.strictEqual(
+        result.created.length,
+        10,
+        "the other 6 dirs + 4 leaf keeps — domain (dir and keep) is silent",
+      );
+      assert.strictEqual(result.unchanged.length, 0, "nothing recorded for it");
+      assert.strictEqual(result.totalOps, 10, "counts match the created set");
+    });
+  });
+
+  it("a hand-written keep (non-empty content) is preserved byte-for-byte and unrecorded", async () => {
+    await withTempWorkspace(async ({ workspaceRoot, moduleDir }) => {
+      const domainDir = path.join(moduleDir, "src/domain");
+      const keepPath = path.join(domainDir, ".gitkeep");
+      await fs.mkdir(domainDir, { recursive: true });
+      await fs.writeFile(keepPath, "placeholder — do not remove\n");
+
+      const config = makeConfig(workspaceRoot);
+      const result = await ensureLayerFolders(moduleDir, LAYERS, config);
+
+      assert.strictEqual(
+        await fs.readFile(keepPath, "utf8"),
+        "placeholder — do not remove\n",
+        "hand-written keep content must never be rewritten to '' — that would plan a phantom update on every --check forever",
+      );
+      assert.ok(
+        !result.created.includes(keepPath) &&
+          !result.updated.includes(keepPath) &&
+          !result.unchanged.includes(keepPath) &&
+          !result.skipped.includes(keepPath),
+        "a content-bearing keep is doing its one job already — no record in any bucket",
+      );
+      assert.strictEqual(
+        result.totalOps,
+        10,
+        "the other 6 dirs + 4 leaf keeps; the pre-existing domain contributes zero ops",
       );
     });
   });
