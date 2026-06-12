@@ -32,27 +32,36 @@ import { dirname, join } from "node:path";
 // must only ever be touched behind a `typeof` guard.
 declare const __HEXAGEN_TOOLCHAIN_VERSION__: string | undefined;
 
+// The official SemVer 2.0.0 regex, verbatim from semver.org (review #316: a
+// prefix check accepted "1.2.3junk"). Anchored full-string match; the allowed
+// charset ([0-9A-Za-z.+-]) also guarantees the value cannot break the JSON
+// string it is interpolated into in the scaffold's package.json. Kept
+// dependency-free on purpose: `semver` is not a dependency of the published
+// CLI, and this module runs inside every consumer bundle.
+const SEMVER_2_0_0 =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
+
 /**
- * Validate a candidate toolchain version: must be a plain `major.minor.patch`
- * (optionally with semver suffixes) and must not be the degenerate `0.0.0`
- * that the old silent fallback produced. Returns the version on success,
- * throws with the offending source on failure.
+ * Validate a candidate toolchain version: must be a FULL SemVer 2.0.0 version
+ * string and must not be the degenerate `0.0.0` that the old silent fallback
+ * produced. Returns the version on success, throws with the offending source
+ * on failure. Shared by the runtime resolver below AND the tsup build gate
+ * (tsup.config.ts imports it), so the two cannot drift apart.
  */
 export function assertValidToolchainVersion(
   version: unknown,
   source: string,
 ): string {
-  const degenerate =
+  const invalid =
     typeof version !== "string" ||
-    !/^\d+\.\d+\.\d+/.test(version) ||
+    !SEMVER_2_0_0.test(version) ||
     /^0\.0\.0(?:$|[-+])/.test(version);
-  if (degenerate) {
+  if (invalid) {
     throw new Error(
-      `Toolchain version unavailable or degenerate (${source} → ${JSON.stringify(
-        version,
-      )}). Refusing to continue: the scaffold would pin ` +
-        `@hexagen-monaco/* devDependencies to a version that does not exist ` +
-        `(RCA #1 — never emit a degenerate pin).`,
+      `Toolchain version unavailable, malformed, or degenerate (${source} → ` +
+        `${JSON.stringify(version)}). Refusing to continue: the scaffold ` +
+        `would pin @hexagen-monaco/* devDependencies to a version that does ` +
+        `not exist (RCA #1 — never emit a degenerate pin).`,
     );
   }
   return version;

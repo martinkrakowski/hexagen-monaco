@@ -1,30 +1,25 @@
 import { defineConfig } from "tsup";
 import { readFileSync } from "node:fs";
+import { assertValidToolchainVersion } from "./src/toolchain-version.js";
 
 /**
  * PR-A3 (RCA #1): bake the package's own version into the bundle so the
  * scaffold's `@hexagen-monaco/*` pins are derived from the engine version by
  * construction (see src/toolchain-version.ts). Resolved relative to this
  * config file, not cwd, so the guard can't be fooled by where tsup is run
- * from. Fail the BUILD on a missing/degenerate version — a broken define
- * must never reach dist.
+ * from. Fail the BUILD on a missing/malformed/degenerate version — a broken
+ * define must never reach dist. The check IS the runtime validator (review
+ * #316): importing it here means the build gate and the resolver can't
+ * drift apart.
  */
-const pkgVersion = (
-  JSON.parse(
-    readFileSync(new URL("./package.json", import.meta.url), "utf8"),
-  ) as { version?: unknown }
-).version;
-if (
-  typeof pkgVersion !== "string" ||
-  !/^\d+\.\d+\.\d+/.test(pkgVersion) ||
-  /^0\.0\.0(?:$|[-+])/.test(pkgVersion)
-) {
-  throw new Error(
-    `packages/sync/package.json has a missing or degenerate version ` +
-      `(${JSON.stringify(pkgVersion)}) — the build would bake broken ` +
-      `scaffold pins (RCA #1).`,
-  );
-}
+const pkgVersion = assertValidToolchainVersion(
+  (
+    JSON.parse(
+      readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+    ) as { version?: unknown }
+  ).version,
+  "packages/sync/package.json (tsup build gate)",
+);
 
 export default defineConfig({
   /**

@@ -42,6 +42,34 @@ describe("toolchain version (PR-A3, RCA #1)", () => {
       assertValidToolchainVersion("0.8.0-rc.1", "test"),
       "0.8.0-rc.1",
     );
+    assert.equal(
+      assertValidToolchainVersion("1.2.3-alpha.1+build.5", "test"),
+      "1.2.3-alpha.1+build.5",
+    );
+  });
+
+  it("rejects non-semver strings that merely START with a version (review #316)", () => {
+    // The first cut used a prefix regex — "1.2.3junk" passed and would have
+    // been interpolated into the scaffold as the range "^1.2.3junk". The
+    // anchored SemVer 2.0.0 regex rejects all of these full-string; its
+    // charset also keeps quotes/whitespace out of the emitted JSON.
+    const malformed = [
+      "1.2.3junk",
+      "0.8.0 ", // trailing whitespace
+      " 0.8.0", // leading whitespace
+      '1.2.3"', // would break the JSON string it lands in
+      "1.2.3-rc..1", // empty prerelease identifier
+      "01.2.3", // leading zero (SemVer §2)
+      "1.2.3.4",
+      "1.2.3 || 2.0.0", // a RANGE is not a version
+    ];
+    for (const bad of malformed) {
+      assert.throws(
+        () => assertValidToolchainVersion(bad, "test"),
+        /malformed/,
+        `expected rejection of ${JSON.stringify(bad)}`,
+      );
+    }
   });
 
   it("rejects the degenerate 0.0.0 (the old silent-fallback value)", () => {
