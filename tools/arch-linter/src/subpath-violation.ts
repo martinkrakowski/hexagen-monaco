@@ -21,6 +21,8 @@ export interface LinterConfig {
     name: string;
     restricted_to?: string[];
     cannot_import?: string[];
+    /** Config grants beyond the manifest (ADR-0043 ladder step 6). Honored at runtime since the closures era; the type previously omitted it. */
+    allowed_imports?: string[];
   }[];
   test_double_rules?: {
     paths?: string[];
