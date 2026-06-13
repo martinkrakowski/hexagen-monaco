@@ -35,11 +35,11 @@ library, to avoid hallucinated dependencies.
 
 ## Conventions
 
-- **Logging:** use the structured logger (`src/infrastructure/logging/logger.ts`, from the
-  `observability` template) — e.g. `logger.info({ userId }, "user.created")`. **Never `console.log`**
-  — it has no level, correlation id, or redaction and becomes technical debt. The `eslint-no-console`
-  template enforces this in lint/CI; the only exempt sites are the logger transport, server startup,
-  scripts, and config files.
+- **Logging:** prefer structured, leveled logging over bare `console.log` in
+  application code. If the `observability` template is installed, its logger is
+  the required interface and `.agents/logging.md` is the binding spec; if the
+  `eslint-no-console` template is installed, lint/CI enforces the ban. Without
+  those templates, keep logging consistent with the surrounding code.
 
 ## Commands After Edits
 
@@ -93,5 +93,7 @@ Deeper guidance lives in `.agents/`:
 - `testing.md` — runner, assertions, file naming
 - `git.md` — commit/branch/PR rules
 - `tech-stack.md` — exact tools, with negative examples
+- `logging.md` — the binding logging spec (present when the `observability`
+  template is installed)
 - `session-log.md` — running log of AI-assisted sessions (present when session
   logging is enabled)

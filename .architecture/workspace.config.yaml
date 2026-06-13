@@ -330,7 +330,7 @@ monorepo:
         generator:
           version: "1.0"
           description: "Global invariants and safety rules"
-          workspace_template: "{workspaceTemplate}"
+          workspaceTemplate: "{workspaceTemplate}"
 
           invariants:
             - name: composite-safety

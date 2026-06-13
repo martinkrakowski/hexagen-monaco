@@ -46,9 +46,31 @@ function toPascalCase(stem: string): string {
     .join("");
 }
 
-function buildOwnershipBlock(manifest: Manifest): string {
+function buildOwnershipBlock(manifest: Manifest): {
+  block: string;
+  collisions: string[];
+} {
   const contexts = manifest.bounded_contexts ?? [];
-  const entries: string[] = [];
+
+  // Pass 1 — collect (name, context) pairs in declaration order. Same-context
+  // repeats (an in/out port pair sharing a stem is one ownership fact, not
+  // two) dedupe to a single entry.
+  const entries: Array<{ name: string; context: string }> = [];
+  const seen = new Set<string>();
+  const owners = new Map<string, Set<string>>();
+
+  const add = (name: string, context: string): void => {
+    const key = JSON.stringify([name, context]);
+    if (seen.has(key)) return;
+    seen.add(key);
+    entries.push({ name, context });
+    let contextsForName = owners.get(name);
+    if (!contextsForName) {
+      contextsForName = new Set();
+      owners.set(name, contextsForName);
+    }
+    contextsForName.add(context);
+  };
 
   for (const bc of contexts) {
     if (bc.name === "shared") continue;
@@ -56,31 +78,61 @@ function buildOwnershipBlock(manifest: Manifest): string {
     const infrastructure = bc.layers?.infrastructure;
 
     for (const p of application?.ports?.in ?? []) {
-      const name = toPascalCase(portName(p).replace(/\.in-port\.ts$/, ""));
-      entries.push(`      ${name}: ${bc.name}`);
+      add(toPascalCase(portName(p).replace(/\.in-port\.ts$/, "")), bc.name);
     }
     for (const p of application?.ports?.out ?? []) {
-      const name = toPascalCase(portName(p).replace(/\.out-port\.ts$/, ""));
-      entries.push(`      ${name}: ${bc.name}`);
+      add(toPascalCase(portName(p).replace(/\.out-port\.ts$/, "")), bc.name);
     }
     for (const a of infrastructure?.adapters ?? []) {
-      const name = toPascalCase(a.replace(/\.adapter\.ts$/, ""));
-      entries.push(`      ${name}: ${bc.name}`);
+      add(toPascalCase(a.replace(/\.adapter\.ts$/, "")), bc.name);
     }
   }
 
-  return entries.length > 0 ? entries.join("\n") : "      # No ports declared";
+  // Pass 2 — emit. A name claimed by two contexts would be a duplicate YAML
+  // mapping key (strict loaders throw on it) inside the same document whose
+  // port-single-ownership invariant promises exactly one owner. Qualify ONLY
+  // the contested names so collision-free manifests stay byte-identical. The
+  // qualifier is the RAW context name in a double-quoted key (JSON string
+  // escaping is valid YAML double-quote syntax): entries are unique
+  // (name, context) pairs after the pass-1 dedupe and names never contain a
+  // dot (toPascalCase strips them), so the emitted keys are unique by
+  // construction — a normalized qualifier would be lossy ("api2"/"api-2"
+  // both PascalCase to "Api2") and could reintroduce the duplicate-key
+  // failure. Bare keys never contain a dot; qualified keys always do — the
+  // namespaces stay disjoint.
+  const collisions = [...owners.entries()]
+    .filter(([, contextsForName]) => contextsForName.size > 1)
+    .map(([name]) => name);
+  const contested = new Set(collisions);
+
+  const lines = entries.map(({ name, context }) =>
+    contested.has(name)
+      ? `      ${JSON.stringify(`${context}.${name}`)}: ${context}`
+      : `      ${name}: ${context}`,
+  );
+
+  return {
+    block: lines.length > 0 ? lines.join("\n") : "      # No ports declared",
+    collisions,
+  };
 }
 
-function buildInterpolationVars(manifest: Manifest): Record<string, string> {
+function buildInterpolationVars(manifest: Manifest): {
+  vars: Record<string, string>;
+  ownershipCollisions: string[];
+} {
   const scope = resolveScope(manifest);
   const workspaceTemplate = resolveWorkspaceTemplate(manifest);
+  const { block, collisions } = buildOwnershipBlock(manifest);
   return {
-    scope,
-    template: workspaceTemplate,
-    workspaceTemplate,
-    system: typeof manifest.system === "string" ? manifest.system : "",
-    ownershipBlock: buildOwnershipBlock(manifest),
+    vars: {
+      scope,
+      template: workspaceTemplate,
+      workspaceTemplate,
+      system: typeof manifest.system === "string" ? manifest.system : "",
+      ownershipBlock: block,
+    },
+    ownershipCollisions: collisions,
   };
 }
 
@@ -201,8 +253,16 @@ export async function generateArchitectureFiles(
   const archInvariants: ArchInvariantsConfig | undefined =
     manifest.monorepo?.archInvariants;
 
-  const vars = buildInterpolationVars(manifest);
+  const { vars, ownershipCollisions } = buildInterpolationVars(manifest);
   const workspaceTemplate = vars.workspaceTemplate ?? "modular-monolith";
+
+  if (ownershipCollisions.length > 0) {
+    config.logger.warn(
+      `architecture-files: ownership-registry name collision${ownershipCollisions.length === 1 ? "" : "s"} — ` +
+        `${ownershipCollisions.join(", ")} declared by more than one context; ` +
+        `emitted with context-qualified keys (the port-single-ownership invariant expects exactly one owner).`,
+    );
+  }
 
   await writeManifestIfFreshExternal(config, result, report);
 

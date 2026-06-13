@@ -52,9 +52,10 @@ async function freshProject(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), "hexagen-agents-test-"));
 }
 
-async function install(
+async function installTemplates(
   projectRoot: string,
-  answers?: AnswerMap,
+  templateIds: string[],
+  overrideAnswers?: Record<string, AnswerMap>,
 ): Promise<{ warnings: string[] }> {
   const useCase = new AddTemplateUseCase(
     new FileSystemTemplateRegistry(TEMPLATES_DIR),
@@ -63,11 +64,22 @@ async function install(
     new FileSystemTemplateConfigStore(),
   );
   const result = await useCase.execute({
-    templateIds: ["agents-md"],
+    templateIds,
     projectRoot,
-    ...(answers ? { overrideAnswers: { "agents-md": answers } } : {}),
+    ...(overrideAnswers ? { overrideAnswers } : {}),
   });
   return { warnings: result.warnings };
+}
+
+async function install(
+  projectRoot: string,
+  answers?: AnswerMap,
+): Promise<{ warnings: string[] }> {
+  return installTemplates(
+    projectRoot,
+    ["agents-md"],
+    answers ? { "agents-md": answers } : undefined,
+  );
 }
 
 async function read(projectRoot: string, rel: string): Promise<string> {
@@ -126,6 +138,101 @@ describe("agents-md template — emit shape", () => {
       assert.ok(arch.includes("Style: **layered**"));
       assert.ok(!agents.includes("{project_description}"));
       assert.ok(!arch.includes("{architecture_style}"));
+    });
+
+    it("only mandates what the scaffold installed (RCA #9 — governance truth)", async () => {
+      const agents = await read(projectRoot, "AGENTS.md");
+      // agents-md alone: no logger was installed, so AGENTS.md must not
+      // reference the observability logger path or carry the hard no-console
+      // mandate — both live in .agents/logging.md, which ships WITH the
+      // logger (observability template).
+      assert.ok(
+        !agents.includes("src/infrastructure/logging/logger.ts"),
+        "must not reference a logger path nothing installed",
+      );
+      assert.ok(
+        !agents.includes("Never `console.log`"),
+        "the hard mandate belongs to .agents/logging.md (observability)",
+      );
+      assert.ok(
+        agents.includes("If the `observability` template is installed"),
+        "logging guidance must be conditional on the template being present",
+      );
+      assert.ok(
+        agents.includes(
+          "`eslint-no-console` template is installed, lint/CI enforces the ban",
+        ),
+        "enforcement claim must be conditional on the lint template being present",
+      );
+      assert.equal(
+        await exists(path.join(projectRoot, ".agents/logging.md")),
+        false,
+        ".agents/logging.md belongs to observability, not agents-md",
+      );
+    });
+  });
+
+  describe("logging-spec ownership (RCA #9) — the mandate ships with the logger", () => {
+    describe("observability alone", () => {
+      let projectRoot: string;
+
+      before(async () => {
+        projectRoot = await freshProject();
+        await installTemplates(projectRoot, ["observability"]);
+      });
+
+      after(async () => {
+        await fs.rm(projectRoot, { recursive: true, force: true });
+      });
+
+      it("ships the binding logging spec alongside the logger it mandates", async () => {
+        const spec = await read(projectRoot, ".agents/logging.md");
+        assert.ok(spec.includes("src/infrastructure/logging/logger.ts"));
+        assert.ok(spec.includes("Never `console.log`"));
+        assert.ok(
+          await exists(
+            path.join(projectRoot, "src/infrastructure/logging/logger.ts"),
+          ),
+          "the spec and the logger it mandates install together",
+        );
+      });
+
+      it("conditions the lint-enforcement claim on eslint-no-console being installed", async () => {
+        const spec = await read(projectRoot, ".agents/logging.md");
+        assert.ok(
+          spec.includes(
+            "If the `eslint-no-console` template is also installed",
+          ),
+        );
+      });
+    });
+
+    describe("agents-md + observability together", () => {
+      let projectRoot: string;
+
+      before(async () => {
+        projectRoot = await freshProject();
+        await installTemplates(projectRoot, ["agents-md", "observability"], {
+          "agents-md": {
+            project_description: "A widget factory API",
+            architecture_style: "hexagonal",
+            session_logging: false,
+          },
+        });
+      });
+
+      after(async () => {
+        await fs.rm(projectRoot, { recursive: true, force: true });
+      });
+
+      it("the AGENTS.md pointer resolves — .agents/logging.md exists", async () => {
+        const agents = await read(projectRoot, "AGENTS.md");
+        assert.ok(agents.includes(".agents/logging.md"));
+        assert.ok(
+          await exists(path.join(projectRoot, ".agents/logging.md")),
+          "with observability installed the pointer must not dangle",
+        );
+      });
     });
   });
 

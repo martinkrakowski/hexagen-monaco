@@ -501,6 +501,260 @@ describe("architecture files", () => {
     });
   });
 
+  it("qualifies cross-context ownership collisions and keeps the YAML loadable", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const archDir = path.join(workspaceRoot, ".architecture");
+      // The campaign-foundry shape (RCA #9): two contexts declare the same
+      // port/adapter stem. Bare keys would be a duplicate YAML mapping key —
+      // js-yaml load() throws on it — inside the very document whose
+      // port-single-ownership invariant promises exactly one owner.
+      const manifest: Manifest = {
+        scope: "col",
+        system: "collision-demo",
+        architecture: "modular-monolith",
+        bounded_contexts: [
+          {
+            name: "catalog",
+            layers: {
+              infrastructure: {
+                adapters: ["external-service-client.adapter.ts"],
+              },
+            },
+          },
+          {
+            name: "search-api",
+            layers: {
+              application: {
+                ports: { out: ["external-service-client.out-port.ts"] },
+              },
+            },
+          },
+        ],
+      };
+      const capture = makeCapturingLogger();
+      const config = makeConfig(workspaceRoot, manifest, {
+        mode: "external",
+        forceRoot: true,
+        logger: capture.logger,
+      });
+
+      await generateArchitectureFiles(config);
+
+      const genCfg = await readText(
+        path.join(archDir, "generator.config.yaml"),
+      );
+
+      assert.ok(
+        genCfg.includes('      "catalog.ExternalServiceClient": catalog'),
+        "first claimant should get a raw-context-qualified key",
+      );
+      assert.ok(
+        genCfg.includes('      "search-api.ExternalServiceClient": search-api'),
+        "second claimant should get a raw-context-qualified key",
+      );
+      assert.ok(
+        !/^\s+ExternalServiceClient:/m.test(genCfg),
+        "the contested name must not also appear as a bare key",
+      );
+
+      // Full-document round-trip through the strict loader — this is the
+      // actual consumer-facing contract (duplicate keys would throw here).
+      const parsed = yaml.load(genCfg) as {
+        generator: {
+          "ownership-registry": { ports: Record<string, string> };
+        };
+      };
+      assert.strictEqual(
+        parsed.generator["ownership-registry"].ports[
+          "catalog.ExternalServiceClient"
+        ],
+        "catalog",
+        "qualified key must survive a YAML round-trip with its owner intact",
+      );
+      assert.strictEqual(
+        parsed.generator["ownership-registry"].ports[
+          "search-api.ExternalServiceClient"
+        ],
+        "search-api",
+        "qualified key must survive a YAML round-trip with its owner intact",
+      );
+
+      const hasCollisionWarning = capture.logs.some(
+        (w) =>
+          w.level === "warn" &&
+          w.message.includes("ownership-registry name collision") &&
+          w.message.includes("ExternalServiceClient"),
+      );
+      assert.ok(
+        hasCollisionWarning,
+        "a cross-context collision should surface as a logger.warn naming the contested stem",
+      );
+    });
+  });
+
+  it("keeps qualified keys distinct when context names normalize identically", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const archDir = path.join(workspaceRoot, ".architecture");
+      // `api2` and `api-2` both PascalCase to `Api2` — a normalized qualifier
+      // would collapse them back into a duplicate YAML key. The raw-context
+      // qualifier must keep them distinct.
+      const manifest: Manifest = {
+        scope: "nrm",
+        system: "normalize-demo",
+        architecture: "modular-monolith",
+        bounded_contexts: [
+          {
+            name: "api2",
+            layers: {
+              application: {
+                ports: { out: ["widget-sync.out-port.ts"] },
+              },
+            },
+          },
+          {
+            name: "api-2",
+            layers: {
+              infrastructure: {
+                adapters: ["widget-sync.adapter.ts"],
+              },
+            },
+          },
+        ],
+      };
+      const capture = makeCapturingLogger();
+      const config = makeConfig(workspaceRoot, manifest, {
+        mode: "external",
+        forceRoot: true,
+        logger: capture.logger,
+      });
+
+      await generateArchitectureFiles(config);
+
+      const genCfg = await readText(
+        path.join(archDir, "generator.config.yaml"),
+      );
+
+      const parsed = yaml.load(genCfg) as {
+        generator: {
+          "ownership-registry": { ports: Record<string, string> };
+        };
+      };
+      const ports = parsed.generator["ownership-registry"].ports;
+      assert.strictEqual(
+        ports["api2.WidgetSync"],
+        "api2",
+        "raw-context qualifier must keep the first claimant distinct",
+      );
+      assert.strictEqual(
+        ports["api-2.WidgetSync"],
+        "api-2",
+        "raw-context qualifier must keep the second claimant distinct",
+      );
+      assert.ok(
+        capture.logs.some(
+          (w) =>
+            w.level === "warn" &&
+            w.message.includes("ownership-registry name collision") &&
+            w.message.includes("WidgetSync"),
+        ),
+        "the collision warning still fires for identically-normalizing contexts",
+      );
+    });
+  });
+
+  it("dedupes a same-context in/out port stem pair to one ownership entry", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const archDir = path.join(workspaceRoot, ".architecture");
+      // payment.in-port.ts + payment.out-port.ts both PascalCase to `Payment`.
+      // Same context, one ownership fact — emitting it twice was a duplicate
+      // YAML key even with identical values (js-yaml throws regardless).
+      const manifest: Manifest = {
+        scope: "dd",
+        system: "dedupe-demo",
+        architecture: "modular-monolith",
+        bounded_contexts: [
+          {
+            name: "orders",
+            layers: {
+              application: {
+                ports: {
+                  in: ["payment.in-port.ts"],
+                  out: ["payment.out-port.ts"],
+                },
+              },
+            },
+          },
+        ],
+      };
+      const capture = makeCapturingLogger();
+      const config = makeConfig(workspaceRoot, manifest, {
+        mode: "external",
+        forceRoot: true,
+        logger: capture.logger,
+      });
+
+      await generateArchitectureFiles(config);
+
+      const genCfg = await readText(
+        path.join(archDir, "generator.config.yaml"),
+      );
+
+      const occurrences = genCfg.split("      Payment: orders").length - 1;
+      assert.strictEqual(
+        occurrences,
+        1,
+        "an in/out stem pair in the same context must emit exactly one entry",
+      );
+      assert.doesNotThrow(
+        () => yaml.load(genCfg),
+        "the emitted document must satisfy the strict loader",
+      );
+      assert.ok(
+        !capture.logs.some(
+          (w) =>
+            w.level === "warn" &&
+            w.message.includes("ownership-registry name collision"),
+        ),
+        "a same-context stem pair is not a collision — no warning expected",
+      );
+    });
+  });
+
+  it("emits the camelCase workspaceTemplate key (matches the manifest spelling)", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const archDir = path.join(workspaceRoot, ".architecture");
+      const manifest: Manifest = {
+        scope: "case",
+        system: "case-demo",
+        architecture: "modular-monolith",
+        bounded_contexts: [{ name: "shared" }],
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        mode: "external",
+        forceRoot: true,
+      });
+
+      await generateArchitectureFiles(config);
+
+      const genCfg = await readText(
+        path.join(archDir, "generator.config.yaml"),
+      );
+
+      assert.ok(
+        !genCfg.includes("workspace_template"),
+        "the snake_case key (matched nothing in the toolchain) must be gone",
+      );
+      const parsed = yaml.load(genCfg) as {
+        generator: { workspaceTemplate: string };
+      };
+      assert.strictEqual(
+        parsed.generator.workspaceTemplate,
+        "modular-monolith",
+        "generator.workspaceTemplate should carry the resolved workspace template",
+      );
+    });
+  });
+
   it("should warn on unresolved template placeholders", async () => {
     await withTempWorkspace(async ({ workspaceRoot }) => {
       const manifest: Manifest = {
