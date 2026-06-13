@@ -783,5 +783,5 @@ Report findings in the following structure:
 ## 9. Document Maintenance
 
 - This document is **authoritative but not immutable**. It evolves with the project.
-- Any change to a token value, component contract, or stack decision requires a version bump and a changelog entry at the top of this file.
+- Any change to a token value, component contract, or stack decision requires a version bump and a changelog entry at the top of this file. (This is the **design-contract** changelog — what changed in _this document_; it is distinct from the root `CHANGELOG.md`, which holds **package release notes** for the published `@hexagen-monaco/sync` / `arch-linter`.)
 - All AI sessions must ingest the current version header to prevent stale-contract conflicts.

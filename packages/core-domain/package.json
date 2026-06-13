@@ -1,6 +1,6 @@
 {
   "name": "@hexagen/core-domain",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Deterministic semantic kernel - MVK contracts and rule execution manifests",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
