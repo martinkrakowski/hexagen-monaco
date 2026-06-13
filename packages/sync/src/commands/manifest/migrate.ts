@@ -65,7 +65,17 @@ export const manifestMigrateCommander = new Command("migrate")
       await fs.copyFile(manifestPath, backupPath);
       console.log(`\nBackup created at ${backupPath}`);
 
-      await fs.writeFile(manifestPath, result.content, "utf-8");
+      // Atomic replace (house idiom — cf. yaml-service.saveManifest and
+      // fs-utils.safeWriteFileAtomic): write to a temp file, rename into
+      // place. A crash mid-write can then never leave a truncated manifest.
+      const tempPath = manifestPath + ".tmp";
+      try {
+        await fs.writeFile(tempPath, result.content, "utf-8");
+        await fs.rename(tempPath, manifestPath);
+      } catch (writeErr) {
+        await fs.rm(tempPath, { force: true });
+        throw writeErr;
+      }
       console.log("✅ Manifest migrated successfully.");
     } catch (err) {
       console.error(
