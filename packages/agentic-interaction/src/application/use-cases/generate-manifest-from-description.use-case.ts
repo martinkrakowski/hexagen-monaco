@@ -14,6 +14,7 @@ import {
 } from "./generate-manifest-types";
 import { ExecuteFullStagedGenerationUseCase } from "./staged-generation/execute-full-staged-generation.use-case";
 import type { PromptVariables } from "../../domain/prompts/generate-manifest.prompt";
+import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
 
 export { ManifestWarningCategory } from "./generate-manifest-types";
@@ -22,16 +23,19 @@ export class GenerateManifestFromDescriptionUseCase {
   // A4: the full 0→6 pipeline is now the only pipeline. This non-streaming
   // entry runs it without callbacks and collects the final state.
   private readonly stagedUseCase: ExecuteFullStagedGenerationUseCase;
-  private readonly transactionManager?: TransactionManagerPort;
 
   constructor(
     private readonly llmPipeline: SendStructuredRequestPort,
     transactionManager?: TransactionManagerPort,
   ) {
-    this.transactionManager = transactionManager;
+    // A4: the full pipeline requires a transaction manager (begin→transition),
+    // unlike the old stub which guarded an optional one. Non-web callers
+    // (scripts, tests) may omit it, so default to a throwaway in-memory manager
+    // rather than crash on `undefined.begin()`. This non-streaming entry never
+    // surfaces the transactionId, so an ephemeral manager is correct.
     this.stagedUseCase = new ExecuteFullStagedGenerationUseCase(
       llmPipeline,
-      transactionManager!,
+      transactionManager ?? new InMemoryTransactionManager(),
     );
   }
 
