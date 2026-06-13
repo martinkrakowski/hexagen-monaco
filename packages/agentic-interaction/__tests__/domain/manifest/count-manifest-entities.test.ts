@@ -82,4 +82,27 @@ describe("countManifestEntities", () => {
       { contextCount: 1, portCount: 0, adapterCount: 0 },
     );
   });
+
+  test("null / undefined / primitive context elements are skipped, not thrown on", () => {
+    // A malformed manifest can carry null list items (an empty YAML `-`). The
+    // loop derefs ctx.layers, so an unfiltered null element would throw —
+    // violating the "never throws" contract above.
+    const zero = { contextCount: 0, portCount: 0, adapterCount: 0 };
+    assert.deepEqual(countManifestEntities({ bounded_contexts: [null] }), zero);
+    assert.deepEqual(
+      countManifestEntities({ bounded_contexts: [undefined] }),
+      zero,
+    );
+    // Null / primitive elements are skipped; valid object contexts still count.
+    assert.deepEqual(
+      countManifestEntities({
+        bounded_contexts: [
+          null,
+          { layers: { application: { ports: { in: [{}, {}], out: [] } } } },
+          "garbage",
+        ],
+      }),
+      { contextCount: 1, portCount: 2, adapterCount: 0 },
+    );
+  });
 });

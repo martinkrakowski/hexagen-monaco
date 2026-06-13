@@ -17,14 +17,22 @@ export interface ManifestEntityCounts {
  */
 export function countManifestEntities(parsed: unknown): ManifestEntityCounts {
   const root = (parsed ?? {}) as { bounded_contexts?: unknown };
-  const contexts = Array.isArray(root.bounded_contexts)
-    ? (root.bounded_contexts as Array<{
-        layers?: {
-          application?: { ports?: { in?: unknown[]; out?: unknown[] } };
-          infrastructure?: { adapters?: unknown[] };
-        };
-      }>)
+  const rawContexts = Array.isArray(root.bounded_contexts)
+    ? root.bounded_contexts
     : [];
+  // A malformed manifest can carry null / primitive list items (an empty YAML
+  // `-` parses to null); count only real object contexts so the helper honours
+  // its "never throws" contract and contextCount stays meaningful.
+  const contexts = rawContexts.filter(
+    (
+      c,
+    ): c is {
+      layers?: {
+        application?: { ports?: { in?: unknown[]; out?: unknown[] } };
+        infrastructure?: { adapters?: unknown[] };
+      };
+    } => c != null && typeof c === "object",
+  );
 
   let portCount = 0;
   let adapterCount = 0;
