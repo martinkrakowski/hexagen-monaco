@@ -167,6 +167,33 @@ describe("SyncEngine — manifest-on-disk absent", () => {
       "an absent manifest synthesized under dry-run must be reported so a --check gate can refuse to certify it",
     );
   });
+
+  it("reports manifestMissing false when a manifest is present on disk (the --check false-FAIL guard)", async () => {
+    fixtureRoot = await createFixture([]);
+    const archDir = path.join(fixtureRoot, ".architecture");
+    await fs.mkdir(archDir, { recursive: true });
+    await fs.writeFile(
+      path.join(archDir, "manifest.yaml"),
+      "system: present-demo\nscope: pd\narchitecture: modular-monolith\nbounded_contexts:\n  - name: alpha\n    type: core\n",
+      "utf8",
+    );
+    const logger = createSpyLogger();
+
+    const engine = new SyncEngine(makeExternalDryRunFlags({ logger }), {
+      targetRoot: fixtureRoot,
+    });
+
+    const summary = await engine.run();
+
+    // The inverse of the bug B1 fixes: a present tree must NEVER trip the
+    // --check missing-manifest gate. manifestMissing is true on exactly one
+    // path (absent + dry-run); a real on-disk manifest loads to false.
+    assert.equal(
+      summary.manifestMissing,
+      false,
+      "a manifest loaded from disk must report manifestMissing:false",
+    );
+  });
 });
 
 describe("SyncEngine — path-traversal defense (dry-run)", () => {

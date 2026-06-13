@@ -192,4 +192,32 @@ describe("findWorkspaceRoot (cwd-first probe order, RCA #7)", () => {
       });
     });
   });
+
+  it("recovers a valid root above a malformed package.json (a low obstacle doesn't blind the walk)", async () => {
+    await withTempTree(async (base) => {
+      // A real workspaces root HIGH, a malformed package.json LOW. The walk
+      // records the obstacle (B4) but must keep ascending and return the root
+      // above it — a non-ENOENT error must never blind the resolver to a valid
+      // root higher up, or a single unreadable nested package.json would break
+      // resolution for the whole tree.
+      const root = path.join(base, "ws");
+      await makeWorkspaceRoot(root);
+      const broken = path.join(root, "packages", "broken");
+      await fs.mkdir(broken, { recursive: true });
+      await fs.writeFile(
+        path.join(broken, "package.json"),
+        "{ not: valid json",
+        "utf8",
+      );
+      const deep = path.join(broken, "src", "app");
+      await fs.mkdir(deep, { recursive: true });
+
+      const resolved = await findWorkspaceRoot({}, [deep]);
+      assert.strictEqual(
+        resolved,
+        root,
+        "the walk must bypass the malformed package.json and return the valid root above it",
+      );
+    });
+  });
 });
