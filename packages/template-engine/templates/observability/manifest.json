@@ -39,6 +39,7 @@
     "server/middleware/request-logger.ts",
     "app/api/health/route.ts",
     ".env.observability.example",
+    ".agents/logging.md",
     {
       "path": "instrumentation.ts",
       "when": {

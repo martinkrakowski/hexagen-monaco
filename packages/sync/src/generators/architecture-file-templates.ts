@@ -74,7 +74,7 @@ test_double_rules:
 const GENERATOR_CONFIG_TEMPLATE = `generator:
   version: "1.0"
   description: "Global invariants and safety rules"
-  workspace_template: "{workspaceTemplate}"
+  workspaceTemplate: "{workspaceTemplate}"
 
   invariants:
     - name: composite-safety

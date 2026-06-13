@@ -5,9 +5,10 @@
 #   cat .gitignore.hexagen >> .gitignore
 #
 # Keep this file — it's the committed reference for the env-ignore rules (like
-# .env.example), and `hexagen validate-templates` expects every template output
-# to stay present. The leading blank line above keeps these rules from merging
-# onto the last line of a .gitignore with no trailing newline. Ignores your
+# .env.example). If this template is registered in the project's template
+# config, `hexagen validate-templates` will flag this file when it goes
+# missing. The leading blank line above keeps these rules from merging onto
+# the last line of a .gitignore with no trailing newline. Ignores your
 # local/secret env files but keeps the committed *.example references tracked.
 
 .env
