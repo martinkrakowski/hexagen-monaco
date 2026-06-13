@@ -90,6 +90,40 @@ describe("reapLegacyFolders – happy path", () => {
     });
   });
 
+  it("preserves a legacy folder that contains only a leaf .gitkeep (PR-C2 keep, plan B2)", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const modulePath = path.join(workspaceRoot, "packages", "reap-target");
+      await fs.mkdir(modulePath, { recursive: true });
+      const domainDir = path.join(modulePath, "domain");
+      await fs.mkdir(domainDir, { recursive: true });
+      const keep = path.join(domainDir, ".gitkeep");
+      await fs.writeFile(keep, "", "utf8");
+
+      const { logger } = makeCapturingLogger();
+      const { report, calls } = makeReportSpy();
+      const config = makeConfig(workspaceRoot, EMPTY_MANIFEST, { logger });
+
+      await reapLegacyFolders(modulePath, config, report);
+
+      // A leaf .gitkeep makes the dir non-empty, so reap preserves it. reap
+      // can't tell a configured-leaf keep from a de-configured orphan, and
+      // deleting a freshly-emitted keep would re-open the delete-recreate cycle
+      // (the documented B2 limitation). This pins that preservation so a future
+      // "treat a lone .gitkeep as empty" change fails loudly.
+      assert.equal(await exists(domainDir), true, "domain folder must remain");
+      assert.equal(
+        await exists(keep),
+        true,
+        "the leaf .gitkeep must remain untouched",
+      );
+      assert.equal(
+        calls.length,
+        0,
+        "no report.record call expected when a keep-only folder is preserved",
+      );
+    });
+  });
+
   it("preserves a legacy folder that contains a nested sub-directory", async () => {
     await withTempWorkspace(async ({ workspaceRoot }) => {
       const modulePath = path.join(workspaceRoot, "packages", "reap-target");
