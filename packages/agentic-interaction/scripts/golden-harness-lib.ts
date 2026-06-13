@@ -1,14 +1,16 @@
 /**
- * Pure helpers for the golden-manifest comparison harness (A3 slice 2).
+ * Pure helpers for the golden-manifest harness.
  *
- * The harness runs the same golden prompts through BOTH staged-generation
- * pipelines (stub and full), judges each result with the same Stage-6
- * validation review, and evaluates the quantitative rollback gates T1–T4
- * defined in docs/planning/normalizer-rewire-development-plan.md (A3).
+ * The harness runs the golden prompts through the full 0→6 staged-generation
+ * pipeline (the only pipeline since A4 deleted the 4-pass stub), judges each
+ * result with the Stage-6 validation review, and evaluates absolute quality
+ * gates G1–G4. The stub-relative A3 canary gates (full-vs-stub success,
+ * latency and judge comparisons) retired with the stub — every gate here is
+ * an absolute bound on the full pipeline's own output.
  *
  * Everything in this module is deterministic and side-effect free so it can
- * be unit-tested without an LLM; the runner
- * (golden-manifest-harness.ts) owns I/O and provider wiring.
+ * be unit-tested without an LLM; the runner (golden-manifest-harness.ts) owns
+ * I/O and provider wiring.
  */
 
 import yaml from "js-yaml";
@@ -19,8 +21,6 @@ import type {
 import { isBannedContextName } from "../src/domain/prompts/architecture-contract";
 import { normalizeContextName } from "../src/domain/manifest/normalize-draft";
 
-export type HarnessPipeline = "stub" | "full";
-
 export interface GoldenPrompt {
   id: string;
   description: string;
@@ -29,10 +29,9 @@ export interface GoldenPrompt {
   additionalContext?: string;
 }
 
-/** Symmetric-judge outcome: the SAME ExecuteValidationReviewUseCase run over
- * each pipeline's final state. The stub never executes Stage 6 itself, so
- * judging both states with one judge is the only apples-to-apples quality
- * signal — never compare the full pipeline's own stage6 against nothing. */
+/** Stage-6 review outcome over a run's final state. The review is the only
+ * absolute quality signal the harness has, so G2 requires it to have
+ * certified every successful run. */
 export interface JudgeResult {
   passed: boolean;
   errorCount: number;
@@ -57,7 +56,6 @@ export interface StateMetrics {
 
 export interface RunRecord {
   promptId: string;
-  pipeline: HarnessPipeline;
   success: boolean;
   durationMs: number;
   error?: string;
@@ -65,16 +63,14 @@ export interface RunRecord {
   judge?: JudgeResult;
 }
 
-export interface PipelineSummary {
-  pipeline: HarnessPipeline;
+export interface HarnessSummary {
   total: number;
   successCount: number;
   /** successCount / total; 0 when there are no runs. */
   successRate: number;
-  /** Percentiles over SUCCESSFUL runs only — T2 asks "how long does a
-   * delivered manifest take?"; failure cost (including slow timeouts) is
-   * T1's signal and stays visible per-run in the report. 0 when there are
-   * no successes. */
+  /** Percentiles over SUCCESSFUL runs only — G1 asks "how long does a
+   * delivered manifest take?"; failure cost (including slow timeouts) stays
+   * visible per-run in the report. 0 when there are no successes. */
   p50DurationMs: number;
   p95DurationMs: number;
   judgedCount: number;
@@ -82,12 +78,12 @@ export interface PipelineSummary {
   /** judgePassCount / judgedCount; 0 when nothing was judged. */
   judgePassRate: number;
   bannedNameCount: number;
-  /** Successful runs that produced zero accepted contexts (gate T4). */
+  /** Successful runs that produced zero accepted contexts (gate G4). */
   zeroContextSuccesses: number;
 }
 
 export interface GateResult {
-  id: "T1" | "T2" | "T3" | "T4";
+  id: "G1" | "G2" | "G3" | "G4";
   description: string;
   passed: boolean;
   detail: string;
@@ -186,28 +182,21 @@ export function percentile(values: number[], p: number): number {
   return sorted[index] as number;
 }
 
-export function summarizeRuns(
-  runs: RunRecord[],
-  pipeline: HarnessPipeline,
-): PipelineSummary {
-  const own = runs.filter((run) => run.pipeline === pipeline);
-  const successes = own.filter((run) => run.success);
+export function summarize(runs: RunRecord[]): HarnessSummary {
+  const successes = runs.filter((run) => run.success);
   const judged = successes.filter((run) => run.judge !== undefined);
   const durations = successes.map((run) => run.durationMs);
+  const judgePassCount = judged.filter((run) => run.judge?.passed).length;
 
   return {
-    pipeline,
-    total: own.length,
+    total: runs.length,
     successCount: successes.length,
-    successRate: own.length === 0 ? 0 : successes.length / own.length,
+    successRate: runs.length === 0 ? 0 : successes.length / runs.length,
     p50DurationMs: percentile(durations, 50),
     p95DurationMs: percentile(durations, 95),
     judgedCount: judged.length,
-    judgePassCount: judged.filter((run) => run.judge?.passed).length,
-    judgePassRate:
-      judged.length === 0
-        ? 0
-        : judged.filter((run) => run.judge?.passed).length / judged.length,
+    judgePassCount,
+    judgePassRate: judged.length === 0 ? 0 : judgePassCount / judged.length,
     bannedNameCount: successes.reduce(
       (sum, run) => sum + (run.metrics?.bannedContextNames.length ?? 0),
       0,
@@ -221,127 +210,94 @@ export function summarizeRuns(
 const pct = (rate: number): string => `${(rate * 100).toFixed(1)}%`;
 
 /**
- * Quantitative rollback gates for the A3 canary
- * (docs/planning/normalizer-rewire-development-plan.md, A3):
- *
- * - T1 error rate:  full success-rate must not drop more than 10pp below stub.
- * - T2 latency:     full p95 must not exceed max(2× stub p95,
- *                   T2_ABSOLUTE_CEILING_MS).
- * - T3 quality:     full judge pass-rate must not regress vs stub, and full
- *                   output must contain ZERO banned context names.
- * - T4 empty output: no successful full run may produce 0 contexts.
- *
- * Any failed gate ⇒ flip `STAGED_GENERATION_PIPELINE=stub` (the one-flip
- * rollback lever) and investigate before resuming the canary.
+ * G1 latency ceiling (recalibrated 2026-06-10 after the five-model sweep,
+ * carried over from the retired A3 T2 gate): a full pipeline at user-facing
+ * latency under ~45s is acceptable. The ceiling is anchored just above the
+ * post-#292 gpt-4o full p95 (42.9s). With the stub gone the gate is now a
+ * pure absolute bound — the old `max(2× stub p95, ceiling)` hybrid had no
+ * baseline to compare against once the stub was deleted.
  */
+export const LATENCY_CEILING_MS = 45_000;
+
+const GATE_DESCRIPTIONS: Record<GateResult["id"], string> = {
+  G1: `latency — p95 ≤ ${LATENCY_CEILING_MS / 1000}s`,
+  G2: "quality — every successful run judged AND all pass Stage-6 review",
+  G3: "naming — zero banned context names in output",
+  G4: "empty output — no successful run yields 0 contexts",
+};
 
 /**
- * T2 absolute ceiling (recalibrated 2026-06-10 after the five-model sweep,
- * see memory/plan): a purely relative 2× gate stops discriminating when the
- * stub baseline itself is fast — claude-3.5-haiku failed at 4.47× with a
- * 99.7s full p95 (genuinely too slow) while inception/mercury-2 failed at
- * 4.2× with an 11.8s full p95 (faster than every other candidate measured).
- * The ceiling is anchored just above the post-#292 gpt-4o full p95 (42.9s):
- * a full pipeline at user-facing latency under ~45s is acceptable regardless
- * of how fast the stub it replaced was; slower than that, the relative bound
- * still governs.
+ * Absolute quality gates for the full pipeline. Any failed gate is a
+ * regression worth investigating before the next release.
  *
- * NOT a hard cap on full p95: the gate is `full p95 ≤ max(2× stub p95,
- * ceiling)`, so this value is the floor of the gate threshold — when
- * 2× stub p95 exceeds it (slow-stub regime), full p95 may legitimately
- * pass above 45s. Despite the name, never change `max` to `min`.
+ * - G1 latency:  p95 of successful runs ≤ LATENCY_CEILING_MS.
+ * - G2 quality:  every successful run was judged (no judge-provider gaps) AND
+ *                all judged runs pass the Stage-6 review.
+ * - G3 naming:   zero banned context names across successful runs.
+ * - G4 empty:    no successful run yields 0 accepted contexts.
+ *
+ * Preconditions (fail every gate, never pass vacuously): at least one run,
+ * and at least one SUCCESSFUL run — a run set with no successes (e.g. an
+ * invalid API key erroring every call) cannot certify anything.
  */
-export const T2_ABSOLUTE_CEILING_MS = 45_000;
-export function evaluateGates(
-  stub: PipelineSummary,
-  full: PipelineSummary,
-): GateResult[] {
+export function evaluateGates(full: HarnessSummary): GateResult[] {
   if (full.total === 0) {
-    return notEvaluable("no full-pipeline runs — gates not evaluable");
+    return notEvaluable("no pipeline runs — gates not evaluable");
   }
-  // A measured stub baseline is a precondition for every gate: with zero
-  // stub runs (--pipelines=full) or zero stub successes (e.g. an invalid
-  // API key erroring every run), T1's floor collapses to −10pp and T2/T3
-  // compare against empty aggregates — all four gates would pass vacuously.
-  if (stub.total === 0 || stub.successCount === 0) {
+  if (full.successCount === 0) {
     return notEvaluable(
-      `no stub baseline — gates not evaluable (stub runs: ${stub.total}, successes: ${stub.successCount})`,
+      `no successful runs to certify — gates not evaluable (runs: ${full.total})`,
     );
   }
 
-  const t1Passed = full.successRate >= stub.successRate - 0.1;
-  const t1: GateResult = {
-    id: "T1",
-    description: GATE_DESCRIPTIONS.T1,
-    passed: t1Passed,
-    // The displayed floor is clamped to 0 for honesty, not divergence:
-    // successRate is count/total ∈ [0, 1], so "≥ negative floor" and "≥ 0"
-    // are the same always-true boundary — the clamp prints the EFFECTIVE
-    // threshold instead of a meaningless negative percentage.
-    detail: `full ${pct(full.successRate)} vs stub ${pct(stub.successRate)} (floor ${pct(Math.max(stub.successRate - 0.1, 0))})`,
+  const g1: GateResult = {
+    id: "G1",
+    description: GATE_DESCRIPTIONS.G1,
+    passed: full.p95DurationMs <= LATENCY_CEILING_MS,
+    detail: `p95 ${full.p95DurationMs}ms vs ceiling ${LATENCY_CEILING_MS}ms`,
   };
 
-  // Hybrid threshold: the relative bound governs slow pipelines; the
-  // absolute ceiling keeps the gate meaningful when the stub baseline is
-  // itself fast (a 0ms degenerate stub p95 is also absorbed here — the
-  // ceiling alone then sets the threshold instead of an unevaluable 2×0).
-  const t2Threshold = Math.max(2 * stub.p95DurationMs, T2_ABSOLUTE_CEILING_MS);
-  const t2: GateResult = {
-    id: "T2",
-    description: GATE_DESCRIPTIONS.T2,
-    passed: full.p95DurationMs <= t2Threshold,
-    detail: `full p95 ${full.p95DurationMs}ms vs max(2× stub p95 ${2 * stub.p95DurationMs}ms, ceiling ${T2_ABSOLUTE_CEILING_MS}ms) = ${t2Threshold}ms`,
+  // The judge must have certified EVERY success: a success whose judge errored
+  // (judgedCount < successCount) leaves an uncertified manifest, so the quality
+  // gate cannot pass on partial coverage — it fails as not-evaluable rather
+  // than passing vacuously on the runs that happened to be judged.
+  const judgeComplete = full.judgedCount === full.successCount;
+  const g2: GateResult = {
+    id: "G2",
+    description: GATE_DESCRIPTIONS.G2,
+    passed: judgeComplete && full.judgePassRate === 1,
+    detail: judgeComplete
+      ? `judge pass-rate ${pct(full.judgePassRate)} (${full.judgePassCount}/${full.judgedCount})`
+      : `judge certified only ${full.judgedCount}/${full.successCount} successes — gate not evaluable`,
   };
 
-  // Judge evaluability: a pipeline with successes but ZERO judge verdicts
-  // (judge provider erroring on every run) has judgePassRate 0/0 → 0, and
-  // the rate comparison would pass vacuously (0 ≥ 0). No verdicts where
-  // verdicts were due means the quality gate cannot certify anything.
-  const judgeBrokenFor = [
-    ...(stub.successCount > 0 && stub.judgedCount === 0 ? ["stub"] : []),
-    ...(full.successCount > 0 && full.judgedCount === 0 ? ["full"] : []),
-  ];
-  const t3Passed =
-    judgeBrokenFor.length === 0 &&
-    full.judgePassRate >= stub.judgePassRate &&
-    full.bannedNameCount === 0;
-  const t3: GateResult = {
-    id: "T3",
-    description: GATE_DESCRIPTIONS.T3,
-    passed: t3Passed,
-    detail:
-      judgeBrokenFor.length > 0
-        ? `judge produced no verdicts for ${judgeBrokenFor.join(" and ")} successes — gate not evaluable`
-        : `judge pass-rate full ${pct(full.judgePassRate)} vs stub ${pct(stub.judgePassRate)}; banned names in full output: ${full.bannedNameCount}`,
+  const g3: GateResult = {
+    id: "G3",
+    description: GATE_DESCRIPTIONS.G3,
+    passed: full.bannedNameCount === 0,
+    detail: `banned context names in output: ${full.bannedNameCount}`,
   };
 
-  const t4: GateResult = {
-    id: "T4",
-    description: GATE_DESCRIPTIONS.T4,
+  const g4: GateResult = {
+    id: "G4",
+    description: GATE_DESCRIPTIONS.G4,
     passed: full.zeroContextSuccesses === 0,
-    detail: `zero-context successes in full pipeline: ${full.zeroContextSuccesses}`,
+    detail: `zero-context successes: ${full.zeroContextSuccesses}`,
   };
 
-  return [t1, t2, t3, t4];
+  return [g1, g2, g3, g4];
 }
 
-/** All four gates fail with one shared detail when the run set cannot
- * support a verdict at all (missing pipeline or missing stub baseline). */
+/** All gates fail with one shared detail when the run set cannot support a
+ * verdict at all (no runs, or no successful runs). */
 function notEvaluable(detail: string): GateResult[] {
-  return (["T1", "T2", "T3", "T4"] as const).map((id) => ({
+  return (["G1", "G2", "G3", "G4"] as const).map((id) => ({
     id,
     description: GATE_DESCRIPTIONS[id],
     passed: false,
     detail,
   }));
 }
-
-const GATE_DESCRIPTIONS: Record<GateResult["id"], string> = {
-  T1: "error rate — full success-rate ≥ stub − 10pp",
-  T2: `latency — full p95 ≤ max(2× stub p95, ${T2_ABSOLUTE_CEILING_MS / 1000}s absolute ceiling)`,
-  T3: "quality — judge pass-rate not regressed AND zero banned context names",
-  T4: "empty output — no successful full run yields 0 contexts",
-};
 
 /** Free text destined for a markdown table cell (provider error messages,
  * model-produced names) may contain pipes or newlines that would break the
@@ -350,7 +306,7 @@ const mdCell = (text: string): string =>
   text.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 
 export function renderMarkdown(
-  summaries: PipelineSummary[],
+  summary: HarnessSummary,
   gates: GateResult[],
   runs: RunRecord[],
   /** Injected by the runner (which owns the clock) so this module stays
@@ -363,7 +319,7 @@ export function renderMarkdown(
   lines.push(`Generated: ${generatedAtIso}`);
   lines.push("");
 
-  lines.push("## Rollback gates (A3)");
+  lines.push("## Quality gates (full pipeline)");
   lines.push("");
   lines.push("| Gate | Description | Verdict | Detail |");
   lines.push("| --- | --- | --- | --- |");
@@ -374,27 +330,23 @@ export function renderMarkdown(
   }
   lines.push("");
 
-  lines.push("## Pipeline summaries");
+  lines.push("## Summary");
   lines.push("");
   lines.push(
-    "| Pipeline | Runs | Success | p50 | p95 | Judge pass | Banned names | Zero-context |",
+    "| Runs | Success | p50 | p95 | Judge pass | Banned names | Zero-context |",
   );
-  lines.push("| --- | --- | --- | --- | --- | --- | --- | --- |");
-  for (const s of summaries) {
-    lines.push(
-      `| ${s.pipeline} | ${s.total} | ${s.successCount} (${pct(s.successRate)}) | ${s.p50DurationMs}ms | ${s.p95DurationMs}ms | ${s.judgePassCount}/${s.judgedCount} (${pct(s.judgePassRate)}) | ${s.bannedNameCount} | ${s.zeroContextSuccesses} |`,
-    );
-  }
+  lines.push("| --- | --- | --- | --- | --- | --- | --- |");
+  lines.push(
+    `| ${summary.total} | ${summary.successCount} (${pct(summary.successRate)}) | ${summary.p50DurationMs}ms | ${summary.p95DurationMs}ms | ${summary.judgePassCount}/${summary.judgedCount} (${pct(summary.judgePassRate)}) | ${summary.bannedNameCount} | ${summary.zeroContextSuccesses} |`,
+  );
   lines.push("");
 
   lines.push("## Runs");
   lines.push("");
   lines.push(
-    "| Prompt | Pipeline | Outcome | Duration | Contexts | Ports | Adapters | YAML | Judge | Rules | Notes |",
+    "| Prompt | Outcome | Duration | Contexts | Ports | Adapters | YAML | Judge | Rules | Notes |",
   );
-  lines.push(
-    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-  );
+  lines.push("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
   for (const run of runs) {
     const m = run.metrics;
     const judge = run.judge
@@ -410,7 +362,7 @@ export function renderMarkdown(
       ...(run.error ? [run.error] : []),
     ].join("; ");
     lines.push(
-      `| ${run.promptId} | ${run.pipeline} | ${run.success ? "ok" : "ERROR"} | ${run.durationMs}ms | ${m?.contextCount ?? "—"} | ${m?.portCount ?? "—"} | ${m?.adapterCount ?? "—"} | ${m ? (m.yamlParses ? "parses" : "INVALID") : "—"} | ${judge} | ${run.judge?.ruleIds.join(" ") || "—"} | ${mdCell(notes)} |`,
+      `| ${run.promptId} | ${run.success ? "ok" : "ERROR"} | ${run.durationMs}ms | ${m?.contextCount ?? "—"} | ${m?.portCount ?? "—"} | ${m?.adapterCount ?? "—"} | ${m ? (m.yamlParses ? "parses" : "INVALID") : "—"} | ${judge} | ${run.judge?.ruleIds.join(" ") || "—"} | ${mdCell(notes)} |`,
     );
   }
   lines.push("");

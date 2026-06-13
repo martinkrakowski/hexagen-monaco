@@ -1,9 +1,5 @@
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
-import type {
-  ProjectDescription,
-  GeneratedManifest,
-  GenerationMetadata,
-} from "../../domain/value-objects/index";
+import type { GenerationMetadata } from "../../domain/value-objects/index";
 import { ProjectDescriptionValidator } from "../../domain/value-objects/index";
 import { createGeneratedManifest } from "../../domain/value-objects/index";
 import {
@@ -16,24 +12,30 @@ import {
   type GenerateManifestFromDescriptionRequest,
   type GenerateManifestFromDescriptionResponse,
 } from "./generate-manifest-types";
-import { ExecuteStagedGenerationUseCase } from "./staged-generation/execute-staged-generation.use-case";
+import { ExecuteFullStagedGenerationUseCase } from "./staged-generation/execute-full-staged-generation.use-case";
 import type { PromptVariables } from "../../domain/prompts/generate-manifest.prompt";
+import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
 
 export { ManifestWarningCategory } from "./generate-manifest-types";
 
 export class GenerateManifestFromDescriptionUseCase {
-  private readonly stagedUseCase: ExecuteStagedGenerationUseCase;
-  private readonly transactionManager?: TransactionManagerPort;
+  // A4: the full 0→6 pipeline is now the only pipeline. This non-streaming
+  // entry runs it without callbacks and collects the final state.
+  private readonly stagedUseCase: ExecuteFullStagedGenerationUseCase;
 
   constructor(
     private readonly llmPipeline: SendStructuredRequestPort,
     transactionManager?: TransactionManagerPort,
   ) {
-    this.transactionManager = transactionManager;
-    this.stagedUseCase = new ExecuteStagedGenerationUseCase(
+    // A4: the full pipeline requires a transaction manager (begin→transition),
+    // unlike the old stub which guarded an optional one. Non-web callers
+    // (scripts, tests) may omit it, so default to a throwaway in-memory manager
+    // rather than crash on `undefined.begin()`. This non-streaming entry never
+    // surfaces the transactionId, so an ephemeral manager is correct.
+    this.stagedUseCase = new ExecuteFullStagedGenerationUseCase(
       llmPipeline,
-      transactionManager!,
+      transactionManager ?? new InMemoryTransactionManager(),
     );
   }
 
@@ -71,7 +73,10 @@ export class GenerateManifestFromDescriptionUseCase {
         };
       }
 
-      const { state, validation } = result;
+      const { state } = result;
+      // A4: the full pipeline reports validation in state.stage6 (the Stage-6
+      // review), not as a top-level field like the old stub did.
+      const validation = state.stage6 ?? { errors: [], warnings: [] };
       const manifestYaml = state.stage5?.yaml || "";
 
       if (validation.errors.length > 0) {

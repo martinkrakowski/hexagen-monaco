@@ -193,5 +193,5 @@ copy describes the free-tier model/limits PR-6 redefines).
 
 - Mercury-2 prod flip runbook: `docs/deploy/` (#302)
 - Truthful model badges: PR #303
-- Staged-pipeline cleanup (A4: stub deletion, `selectPipeline` flag removal)
-  is tracked separately and not part of this plan.
+- Staged-pipeline cleanup (A4: stub deletion + `selectPipeline` flag removal) —
+  **done**; tracked in `post-wave-c-remaining-work.md` (C3). Not part of this plan.

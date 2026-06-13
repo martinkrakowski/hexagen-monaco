@@ -5,12 +5,12 @@ import {
   judgeFromReport,
   computeStateMetrics,
   percentile,
-  summarizeRuns,
+  summarize,
   evaluateGates,
   renderMarkdown,
-  T2_ABSOLUTE_CEILING_MS,
+  LATENCY_CEILING_MS,
   type RunRecord,
-  type PipelineSummary,
+  type HarnessSummary,
 } from "../scripts/golden-harness-lib";
 import type { PipelineState } from "../src/domain/value-objects/pipeline-state";
 
@@ -114,7 +114,7 @@ describe("computeStateMetrics", () => {
     assert.deepStrictEqual(metrics.unmatchedAdapterImplements, []);
   });
 
-  test("empty state (stub failure shape) degrades to zeros, not throws", () => {
+  test("empty state degrades to zeros, not throws", () => {
     const metrics = computeStateMetrics({});
     assert.deepStrictEqual(metrics, {
       contextCount: 0,
@@ -247,9 +247,7 @@ describe("percentile", () => {
   });
 });
 
-function run(
-  partial: Partial<RunRecord> & { pipeline: "stub" | "full" },
-): RunRecord {
+function run(partial: Partial<RunRecord>): RunRecord {
   return {
     promptId: "p",
     success: true,
@@ -268,36 +266,33 @@ function run(
   };
 }
 
-describe("summarizeRuns", () => {
-  test("computes rates and percentiles from one pipeline's runs only", () => {
+describe("summarize", () => {
+  test("computes rates and percentiles over the run set", () => {
     const runs: RunRecord[] = [
-      run({ pipeline: "full", durationMs: 100 }),
-      run({ pipeline: "full", durationMs: 300 }),
+      run({ durationMs: 100 }),
+      run({ durationMs: 300 }),
       run({
-        pipeline: "full",
         success: false,
         durationMs: 5,
         error: "boom",
         metrics: undefined,
         judge: undefined,
       }),
-      run({ pipeline: "stub", durationMs: 9999 }), // must be excluded
     ];
-    const summary = summarizeRuns(runs, "full");
-    assert.strictEqual(summary.total, 3);
-    assert.strictEqual(summary.successCount, 2);
-    assert.ok(Math.abs(summary.successRate - 2 / 3) < 1e-9);
+    const s = summarize(runs);
+    assert.strictEqual(s.total, 3);
+    assert.strictEqual(s.successCount, 2);
+    assert.ok(Math.abs(s.successRate - 2 / 3) < 1e-9);
     // Failure durations are excluded from latency percentiles.
-    assert.strictEqual(summary.p50DurationMs, 100);
-    assert.strictEqual(summary.p95DurationMs, 300);
-    assert.strictEqual(summary.judgedCount, 2);
-    assert.strictEqual(summary.judgePassRate, 1);
+    assert.strictEqual(s.p50DurationMs, 100);
+    assert.strictEqual(s.p95DurationMs, 300);
+    assert.strictEqual(s.judgedCount, 2);
+    assert.strictEqual(s.judgePassRate, 1);
   });
 
   test("counts banned names and zero-context successes for the gates", () => {
     const runs: RunRecord[] = [
       run({
-        pipeline: "full",
         metrics: {
           contextCount: 0,
           portCount: 0,
@@ -309,17 +304,17 @@ describe("summarizeRuns", () => {
         },
       }),
     ];
-    const summary = summarizeRuns(runs, "full");
-    assert.strictEqual(summary.bannedNameCount, 1);
-    assert.strictEqual(summary.zeroContextSuccesses, 1);
+    const s = summarize(runs);
+    assert.strictEqual(s.bannedNameCount, 1);
+    assert.strictEqual(s.zeroContextSuccesses, 1);
   });
 
   test("a success whose judge errored is excluded from judgedCount, not counted as a fail", () => {
     const runs: RunRecord[] = [
-      run({ pipeline: "full" }), // judged, passed
-      run({ pipeline: "full", judge: undefined }), // success, judge errored
+      run({}), // judged, passed
+      run({ judge: undefined }), // success, judge errored
     ];
-    const s = summarizeRuns(runs, "full");
+    const s = summarize(runs);
     assert.strictEqual(s.successCount, 2);
     assert.strictEqual(s.judgedCount, 1);
     assert.strictEqual(s.judgePassCount, 1);
@@ -327,26 +322,25 @@ describe("summarizeRuns", () => {
     assert.strictEqual(s.judgePassRate, 1);
   });
 
-  test("empty pipeline yields all-zero summary (no NaN division)", () => {
-    const summary = summarizeRuns([], "full");
-    assert.strictEqual(summary.total, 0);
-    assert.strictEqual(summary.successRate, 0);
-    assert.strictEqual(summary.judgePassRate, 0);
-    assert.strictEqual(summary.p95DurationMs, 0);
+  test("empty run set yields all-zero summary (no NaN division)", () => {
+    const s = summarize([]);
+    assert.strictEqual(s.total, 0);
+    assert.strictEqual(s.successRate, 0);
+    assert.strictEqual(s.judgePassRate, 0);
+    assert.strictEqual(s.p95DurationMs, 0);
   });
 });
 
-function summary(partial: Partial<PipelineSummary>): PipelineSummary {
+function summary(partial: Partial<HarnessSummary>): HarnessSummary {
   return {
-    pipeline: "stub",
     total: 10,
     successCount: 10,
     successRate: 1,
     p50DurationMs: 1000,
     p95DurationMs: 2000,
     judgedCount: 10,
-    judgePassCount: 9,
-    judgePassRate: 0.9,
+    judgePassCount: 10,
+    judgePassRate: 1,
     bannedNameCount: 0,
     zeroContextSuccesses: 0,
     ...partial,
@@ -354,213 +348,79 @@ function summary(partial: Partial<PipelineSummary>): PipelineSummary {
 }
 
 describe("evaluateGates", () => {
-  test("all gates pass when full matches stub", () => {
-    const gates = evaluateGates(summary({}), summary({ pipeline: "full" }));
+  test("all gates pass for a clean full run set", () => {
+    const gates = evaluateGates(summary({}));
     assert.deepStrictEqual(
       gates.map((g) => [g.id, g.passed]),
       [
-        ["T1", true],
-        ["T2", true],
-        ["T3", true],
-        ["T4", true],
+        ["G1", true],
+        ["G2", true],
+        ["G3", true],
+        ["G4", true],
       ],
     );
   });
 
-  test("T1 fails when full success-rate drops more than 10pp below stub", () => {
-    const gates = evaluateGates(
-      summary({ successRate: 0.9 }),
-      summary({ pipeline: "full", successRate: 0.79 }),
-    );
-    assert.strictEqual(gates[0]?.passed, false);
-    // Exactly at the floor passes (≥, not >).
-    const atFloor = evaluateGates(
-      summary({ successRate: 0.9 }),
-      summary({ pipeline: "full", successRate: 0.8 }),
-    );
-    assert.strictEqual(atFloor[0]?.passed, true);
-    // Interior of the tolerance band (−5pp) passes too.
-    const within = evaluateGates(
-      summary({ successRate: 0.9 }),
-      summary({ pipeline: "full", successRate: 0.85 }),
-    );
-    assert.strictEqual(within[0]?.passed, true);
-  });
-
-  test("T1 clamped display floor matches the gate verdict when stub < 10%", () => {
-    // Unclamped floor would be −5pp; successRate ≥ 0 makes "≥ −5pp" and
-    // "≥ 0" the same boundary, so the displayed 0.0% floor is the
-    // effective threshold — verdict and detail agree.
-    const gates = evaluateGates(
-      summary({ successCount: 1, successRate: 0.05 }),
-      summary({ pipeline: "full", successCount: 0, successRate: 0 }),
-    );
-    assert.strictEqual(gates[0]?.passed, true);
-    assert.match(gates[0]?.detail ?? "", /floor 0\.0%/);
-  });
-
-  test("T2 fails when full p95 exceeds max(2× stub p95, absolute ceiling)", () => {
-    // Above the ceiling the relative bound governs (stub 30s → 2× = 60s).
-    const slow = evaluateGates(
-      summary({ p95DurationMs: 30000 }),
-      summary({ pipeline: "full", p95DurationMs: 60001 }),
-    );
-    assert.strictEqual(slow[1]?.passed, false);
-    const boundary = evaluateGates(
-      summary({ p95DurationMs: 30000 }),
-      summary({ pipeline: "full", p95DurationMs: 60000 }),
-    );
-    assert.strictEqual(boundary[1]?.passed, true);
-  });
-
-  test("T2 absolute ceiling: fast stubs no longer fail fast fulls (2026-06-10 recalibration)", () => {
-    // The model-sweep case: stub p95 2.8s → 2× = 5.6s, but full p95 11.8s
-    // is faster than every other candidate measured. Under the ceiling it
-    // passes; the old relative-only gate failed it.
-    const mercuryShaped = evaluateGates(
-      summary({ p95DurationMs: 2806 }),
-      summary({ pipeline: "full", p95DurationMs: 11778 }),
-    );
-    assert.strictEqual(mercuryShaped[1]?.passed, true);
-    // Exactly at the ceiling passes (≤, not <); 1ms over fails.
+  test("G1 latency passes at the ceiling (≤, not <) and fails 1ms over", () => {
     const atCeiling = evaluateGates(
-      summary({ p95DurationMs: 1000 }),
-      summary({ pipeline: "full", p95DurationMs: T2_ABSOLUTE_CEILING_MS }),
+      summary({ p95DurationMs: LATENCY_CEILING_MS }),
     );
-    assert.strictEqual(atCeiling[1]?.passed, true);
+    assert.strictEqual(atCeiling[0]?.passed, true);
     const overCeiling = evaluateGates(
-      summary({ p95DurationMs: 1000 }),
-      summary({
-        pipeline: "full",
-        p95DurationMs: T2_ABSOLUTE_CEILING_MS + 1,
-      }),
+      summary({ p95DurationMs: LATENCY_CEILING_MS + 1 }),
     );
-    assert.strictEqual(overCeiling[1]?.passed, false);
-    // The Haiku-shaped case stays a failure: 99.7s is over BOTH bounds.
-    const haikuShaped = evaluateGates(
-      summary({ p95DurationMs: 22288 }),
-      summary({ pipeline: "full", p95DurationMs: 99667 }),
-    );
-    assert.strictEqual(haikuShaped[1]?.passed, false);
+    assert.strictEqual(overCeiling[0]?.passed, false);
   });
 
-  test("T2 degenerate 0ms stub p95: ceiling alone governs (no longer unevaluable)", () => {
-    const fastFull = evaluateGates(
-      summary({ p95DurationMs: 0 }),
-      summary({ pipeline: "full", p95DurationMs: 5000 }),
-    );
-    assert.strictEqual(fastFull[1]?.passed, true);
-    const slowFull = evaluateGates(
-      summary({ p95DurationMs: 0 }),
-      summary({
-        pipeline: "full",
-        p95DurationMs: T2_ABSOLUTE_CEILING_MS + 1,
-      }),
-    );
-    assert.strictEqual(slowFull[1]?.passed, false);
-  });
-
-  test("T3 fails on judge pass-rate regression OR any banned context name", () => {
-    const regressed = evaluateGates(
-      summary({ judgePassRate: 0.9 }),
-      summary({ pipeline: "full", judgePassRate: 0.85 }),
-    );
-    assert.strictEqual(regressed[2]?.passed, false);
-    const banned = evaluateGates(
-      summary({}),
-      summary({ pipeline: "full", judgePassRate: 1, bannedNameCount: 1 }),
-    );
-    assert.strictEqual(banned[2]?.passed, false);
-  });
-
-  test("T3 passes when full STRICTLY exceeds stub (≥, not ===)", () => {
+  test("G2 quality fails on any judge failure (rate < 100%)", () => {
     const gates = evaluateGates(
-      summary({ judgePassRate: 0.9 }),
+      summary({ judgePassCount: 9, judgePassRate: 0.9 }),
+    );
+    assert.strictEqual(gates[1]?.passed, false);
+  });
+
+  test("G2 fails (not evaluable) when a success went unjudged", () => {
+    // judgedCount < successCount: a success whose judge errored leaves an
+    // uncertified manifest, so the gate cannot pass on partial coverage — it
+    // fails as not-evaluable rather than passing on the runs that were judged.
+    const gates = evaluateGates(
       summary({
-        pipeline: "full",
-        judgePassCount: 10,
+        successCount: 10,
+        judgedCount: 9,
+        judgePassCount: 9,
         judgePassRate: 1,
-        bannedNameCount: 0,
       }),
     );
-    assert.strictEqual(gates[2]?.passed, true);
+    assert.strictEqual(gates[1]?.passed, false);
+    assert.match(gates[1]?.detail ?? "", /certified only 9\/10/);
+    assert.match(gates[1]?.detail ?? "", /not evaluable/);
   });
 
-  test("T3 fails (not vacuously passes) when a pipeline has successes but zero judge verdicts", () => {
-    // Both judges broken: judgePassRate is 0/0 → 0 on both sides, so the
-    // bare rate comparison would pass 0 ≥ 0. The evaluability clause must
-    // fail it instead.
-    const bothBroken = evaluateGates(
-      summary({ judgedCount: 0, judgePassCount: 0, judgePassRate: 0 }),
-      summary({
-        pipeline: "full",
-        judgedCount: 0,
-        judgePassCount: 0,
-        judgePassRate: 0,
-      }),
-    );
-    assert.strictEqual(bothBroken[2]?.passed, false);
-    assert.match(bothBroken[2]?.detail ?? "", /stub and full/);
-    assert.match(bothBroken[2]?.detail ?? "", /not evaluable/);
-
-    // Only the full-side judge broken.
-    const fullBroken = evaluateGates(
-      summary({}),
-      summary({
-        pipeline: "full",
-        judgedCount: 0,
-        judgePassCount: 0,
-        judgePassRate: 0,
-      }),
-    );
-    assert.strictEqual(fullBroken[2]?.passed, false);
-    assert.match(fullBroken[2]?.detail ?? "", /full successes/);
-
-    // Only the stub-side judge broken — full could not prove non-regression.
-    const stubBroken = evaluateGates(
-      summary({ judgedCount: 0, judgePassCount: 0, judgePassRate: 0 }),
-      summary({ pipeline: "full" }),
-    );
-    assert.strictEqual(stubBroken[2]?.passed, false);
-    assert.match(stubBroken[2]?.detail ?? "", /stub successes/);
+  test("G3 naming fails on any banned context name", () => {
+    const gates = evaluateGates(summary({ bannedNameCount: 1 }));
+    assert.strictEqual(gates[2]?.passed, false);
   });
 
-  test("T4 fails on any zero-context full success", () => {
-    const gates = evaluateGates(
-      summary({}),
-      summary({ pipeline: "full", zeroContextSuccesses: 1 }),
-    );
+  test("G4 empty fails on any zero-context success", () => {
+    const gates = evaluateGates(summary({ zeroContextSuccesses: 1 }));
     assert.strictEqual(gates[3]?.passed, false);
   });
 
-  test("no full runs at all fails every gate explicitly", () => {
-    const gates = evaluateGates(
-      summary({}),
-      summary({ pipeline: "full", total: 0 }),
-    );
-    assert.strictEqual(gates.length, 4);
-    for (const gate of gates) {
-      assert.strictEqual(gate.passed, false);
-      assert.match(gate.detail, /no full-pipeline runs/);
-    }
-  });
-
-  test("no stub runs at all (--pipelines=full) fails every gate explicitly", () => {
+  test("no runs at all fails every gate explicitly", () => {
     const gates = evaluateGates(
       summary({ total: 0, successCount: 0, successRate: 0 }),
-      summary({ pipeline: "full" }),
     );
     assert.strictEqual(gates.length, 4);
     for (const gate of gates) {
       assert.strictEqual(gate.passed, false);
-      assert.match(gate.detail, /no stub baseline/);
+      assert.match(gate.detail, /no pipeline runs/);
     }
   });
 
-  test("stub baseline with ZERO successes (e.g. invalid API key) fails every gate", () => {
-    // Without the guard: stub successRate 0 → T1 floor −10pp → trivially
-    // passes; stub p95 0 → T2 "not evaluable, pass"; judge 0/0 → T3 0 ≥ 0.
-    // An all-error run set must never exit green.
+  test("runs but ZERO successes (e.g. invalid API key) fails every gate", () => {
+    // Without the precondition: p95 0 → G1 trivially passes, judge 0/0 → G2
+    // vacuous, banned 0 → G3 passes, zero-context 0 → G4 passes. An all-error
+    // run set must never exit green.
     const gates = evaluateGates(
       summary({
         successCount: 0,
@@ -571,30 +431,20 @@ describe("evaluateGates", () => {
         judgePassCount: 0,
         judgePassRate: 0,
       }),
-      summary({
-        pipeline: "full",
-        successCount: 0,
-        successRate: 0,
-        p50DurationMs: 0,
-        p95DurationMs: 0,
-        judgedCount: 0,
-        judgePassCount: 0,
-        judgePassRate: 0,
-      }),
     );
+    assert.strictEqual(gates.length, 4);
     for (const gate of gates) {
       assert.strictEqual(gate.passed, false);
-      assert.match(gate.detail, /no stub baseline/);
+      assert.match(gate.detail, /no successful runs to certify/);
     }
   });
 });
 
 describe("renderMarkdown", () => {
-  test("renders gates, summaries and per-run rows", () => {
+  test("renders gates, summary and per-run rows", () => {
     const runs: RunRecord[] = [
-      run({ pipeline: "stub", promptId: "ecommerce" }),
+      run({ promptId: "ecommerce" }),
       run({
-        pipeline: "full",
         promptId: "ecommerce",
         success: false,
         error: "stage 2 accepted no contexts",
@@ -602,63 +452,53 @@ describe("renderMarkdown", () => {
         judge: undefined,
       }),
     ];
-    const stub = summarizeRuns(runs, "stub");
-    const full = summarizeRuns(runs, "full");
+    const s = summarize(runs);
     const report = renderMarkdown(
-      [stub, full],
-      evaluateGates(stub, full),
+      s,
+      evaluateGates(s),
       runs,
       "2026-06-10T00:00:00.000Z",
     );
     assert.match(report, /Generated: 2026-06-10T00:00:00\.000Z/);
-    assert.match(report, /## Rollback gates \(A3\)/);
-    assert.match(report, /\| T1 \|/);
-    assert.match(report, /\| stub \| 1 \|/);
+    assert.match(report, /## Quality gates \(full pipeline\)/);
+    assert.match(report, /\| G1 \|/);
+    assert.match(report, /\| ecommerce \| ERROR \|/); // failed run row
     assert.match(report, /stage 2 accepted no contexts/);
-    assert.match(report, /❌ FAIL/); // full run failed → at least one gate trips
   });
 
   test("is deterministic: identical inputs yield byte-identical reports", () => {
-    const runs: RunRecord[] = [run({ pipeline: "stub" })];
-    const stub = summarizeRuns(runs, "stub");
-    const full = summarizeRuns(runs, "full");
+    const runs: RunRecord[] = [run({})];
+    const s = summarize(runs);
     const render = () =>
-      renderMarkdown(
-        [stub, full],
-        evaluateGates(stub, full),
-        runs,
-        "2026-06-10T00:00:00.000Z",
-      );
+      renderMarkdown(s, evaluateGates(s), runs, "2026-06-10T00:00:00.000Z");
     assert.strictEqual(render(), render());
   });
 
   test("escapes pipes and newlines in free-text notes so table rows stay intact", () => {
     const runs: RunRecord[] = [
-      run({ pipeline: "stub" }),
+      run({}),
       run({
-        pipeline: "full",
         success: false,
         error: "provider said: a | b\nsecond line",
         metrics: undefined,
         judge: undefined,
       }),
     ];
-    const stub = summarizeRuns(runs, "stub");
-    const full = summarizeRuns(runs, "full");
+    const s = summarize(runs);
     const report = renderMarkdown(
-      [stub, full],
-      evaluateGates(stub, full),
+      s,
+      evaluateGates(s),
       runs,
       "2026-06-10T00:00:00.000Z",
     );
     assert.match(report, /provider said: a \\\| b second line/);
-    // Every line of the Runs table keeps its 11-column shape (12 pipes).
+    // Every line of the Runs table keeps its 10-column shape (11 pipes).
     const runRows = report
       .split("\n")
       .filter((line) => line.startsWith("| p |"));
     assert.strictEqual(runRows.length, 2);
     for (const row of runRows) {
-      assert.strictEqual((row.match(/(?<!\\)\|/g) ?? []).length, 12);
+      assert.strictEqual((row.match(/(?<!\\)\|/g) ?? []).length, 11);
     }
   });
 });

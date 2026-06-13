@@ -8,7 +8,6 @@ export * from "./execute-loose-spec-conversion.use-case.js";
 export * from "./execute-manifest-assembly.use-case.js";
 export * from "./execute-port-mapping.use-case.js";
 export * from "./execute-prompt-normalization.use-case.js";
-export * from "./execute-staged-generation.use-case.js";
 export * from "./execute-structured-config-generation.use-case.js";
 export * from "./execute-validation-review.use-case.js";
 export * from "./retry-with-escalation.js";

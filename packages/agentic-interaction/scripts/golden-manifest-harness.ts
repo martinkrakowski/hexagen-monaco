@@ -1,20 +1,17 @@
 /* eslint-disable no-console */
 /**
- * Golden-manifest comparison harness (A3 slice 2).
+ * Golden-manifest harness.
  *
- * Runs the golden prompts (scripts/golden-prompts.json) through BOTH
- * staged-generation pipelines — the 4-pass stub (ExecuteStagedGenerationUseCase)
- * and the full 0→6 pipeline (ExecuteFullStagedGenerationUseCase) — against the
- * real cloud provider chain, judges every successful result with the SAME
- * Stage-6 validation review (the stub never runs Stage 6 itself, so a shared
- * judge is the only apples-to-apples quality signal), and evaluates the
- * quantitative rollback gates T1–T4 from
- * docs/planning/normalizer-rewire-development-plan.md (A3).
+ * Runs the golden prompts (scripts/golden-prompts.json) through the full 0→6
+ * staged-generation pipeline (ExecuteFullStagedGenerationUseCase — the only
+ * pipeline since A4 deleted the 4-pass stub) against the real cloud provider
+ * chain, judges every successful result with the Stage-6 validation review,
+ * and evaluates the absolute quality gates G1–G4 (see golden-harness-lib.ts).
  *
  * Run manually (needs OPENAI_API_KEY, ANTHROPIC_API_KEY, LLM_API_KEY, or
  * INCEPTION_API_KEY):
  *   yarn workspace @hexagen/agentic-interaction golden-harness
- *   npx tsx scripts/golden-manifest-harness.ts [--repeat=N] [--only=id] [--pipelines=stub,full]
+ *   npx tsx scripts/golden-manifest-harness.ts [--repeat=N] [--only=id]
  *
  * Writes NDJSON run records and a markdown report to
  * golden-harness-results/ (gitignored). Exits 1 if any gate fails.
@@ -24,7 +21,6 @@ import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
-import { ExecuteStagedGenerationUseCase } from "../src/application/use-cases/staged-generation/execute-staged-generation.use-case";
 import { ExecuteFullStagedGenerationUseCase } from "../src/application/use-cases/staged-generation/execute-full-staged-generation.use-case";
 import type { Stage1RefinementConfig } from "../src/application/use-cases/staged-generation/execute-domain-extraction.use-case";
 import { ExecuteValidationReviewUseCase } from "../src/application/use-cases/staged-generation/execute-validation-review.use-case";
@@ -35,11 +31,10 @@ import type { PipelineState } from "../src/domain/value-objects/pipeline-state";
 import {
   computeStateMetrics,
   judgeFromReport,
-  summarizeRuns,
+  summarize,
   evaluateGates,
   renderMarkdown,
   type GoldenPrompt,
-  type HarnessPipeline,
   type RunRecord,
 } from "./golden-harness-lib";
 
@@ -50,11 +45,10 @@ const OUTPUT_DIR = path.resolve(SCRIPT_DIR, "..", "golden-harness-results");
 interface CliOptions {
   repeat: number;
   only?: string;
-  pipelines: HarnessPipeline[];
 }
 
 function parseCli(argv: string[]): CliOptions {
-  const options: CliOptions = { repeat: 1, pipelines: ["stub", "full"] };
+  const options: CliOptions = { repeat: 1 };
   for (const arg of argv) {
     if (arg.startsWith("--repeat=")) {
       // Number(), not parseInt(): "2.5" and "3abc" must be rejected, not
@@ -68,14 +62,6 @@ function parseCli(argv: string[]): CliOptions {
       options.repeat = n;
     } else if (arg.startsWith("--only=")) {
       options.only = arg.slice("--only=".length);
-    } else if (arg.startsWith("--pipelines=")) {
-      const parts = arg.slice("--pipelines=".length).split(",");
-      for (const part of parts) {
-        if (part !== "stub" && part !== "full") {
-          throw new Error(`Unknown pipeline: ${part} (expected stub or full)`);
-        }
-      }
-      options.pipelines = parts as HarnessPipeline[];
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -183,7 +169,6 @@ async function runOne(
   llm: LLMProviderSelectorAdapter,
   judge: ExecuteValidationReviewUseCase,
   prompt: GoldenPrompt,
-  pipeline: HarnessPipeline,
   stage1Refinement: Stage1RefinementConfig | null,
 ): Promise<RunRecord> {
   const variables: PromptVariables = {
@@ -202,34 +187,19 @@ async function runOne(
   let error: string | undefined;
 
   try {
-    if (pipeline === "full") {
-      const useCase = new ExecuteFullStagedGenerationUseCase(
-        llm,
-        transactionManager,
-        stage1Refinement ? { stage1Refinement } : undefined,
-      );
-      const result = await useCase.execute(prompt.description, variables);
-      success = result.success;
-      if (result.success) state = result.state;
-      else
-        error =
-          result.error instanceof Error
-            ? result.error.message
-            : String(result.error);
-    } else {
-      const useCase = new ExecuteStagedGenerationUseCase(
-        llm,
-        transactionManager,
-      );
-      const result = await useCase.execute(prompt.description, variables);
-      success = result.success;
-      if (result.success) state = result.state;
-      else
-        error =
-          result.error instanceof Error
-            ? result.error.message
-            : String(result.error);
-    }
+    const useCase = new ExecuteFullStagedGenerationUseCase(
+      llm,
+      transactionManager,
+      stage1Refinement ? { stage1Refinement } : undefined,
+    );
+    const result = await useCase.execute(prompt.description, variables);
+    success = result.success;
+    if (result.success) state = result.state;
+    else
+      error =
+        result.error instanceof Error
+          ? result.error.message
+          : String(result.error);
   } catch (thrown) {
     error = thrown instanceof Error ? thrown.message : String(thrown);
   }
@@ -237,7 +207,6 @@ async function runOne(
 
   const record: RunRecord = {
     promptId: prompt.id,
-    pipeline,
     success,
     durationMs,
     ...(error !== undefined ? { error } : {}),
@@ -245,15 +214,14 @@ async function runOne(
 
   if (success && state) {
     record.metrics = computeStateMetrics(state);
-    // Symmetric judge: the same Stage-6 review over either pipeline's state.
-    // Judging time is deliberately NOT part of durationMs — it is measurement
-    // apparatus, not pipeline cost.
+    // The Stage-6 review judges the final state. Judging time is deliberately
+    // NOT part of durationMs — it is measurement apparatus, not pipeline cost.
     const verdict = await judge.execute(state);
     if (verdict.success) {
       record.judge = judgeFromReport(verdict.value);
     } else {
       console.warn(
-        `  judge failed for ${prompt.id}/${pipeline}: ${verdict.error instanceof Error ? verdict.error.message : String(verdict.error)}`,
+        `  judge failed for ${prompt.id}: ${verdict.error instanceof Error ? verdict.error.message : String(verdict.error)}`,
       );
     }
   }
@@ -281,9 +249,9 @@ async function main(): Promise<void> {
   const llm = createLLMAdapter();
   const judge = new ExecuteValidationReviewUseCase(llm);
   const stage1Refinement = createStage1Refinement();
-  const totalRuns = selected.length * options.repeat * options.pipelines.length;
+  const totalRuns = selected.length * options.repeat;
   console.log(
-    `Golden harness: ${selected.length} prompt(s) × ${options.repeat} repeat(s) × [${options.pipelines.join(", ")}] = ${totalRuns} run(s)\n`,
+    `Golden harness: ${selected.length} prompt(s) × ${options.repeat} repeat(s) = ${totalRuns} run(s)\n`,
   );
 
   // Sequential on purpose: keeps provider rate limits calm and timings clean.
@@ -291,40 +259,24 @@ async function main(): Promise<void> {
   let runNumber = 0;
   for (const prompt of selected) {
     for (let i = 0; i < options.repeat; i++) {
-      for (const pipeline of options.pipelines) {
-        runNumber++;
-        process.stdout.write(
-          `[${runNumber}/${totalRuns}] ${prompt.id} × ${pipeline} … `,
-        );
-        const record = await runOne(
-          llm,
-          judge,
-          prompt,
-          pipeline,
-          stage1Refinement,
-        );
-        runs.push(record);
-        console.log(
-          record.success
-            ? `ok ${record.durationMs}ms (${record.metrics?.contextCount ?? 0} ctx, judge ${record.judge ? (record.judge.passed ? "pass" : "fail") : "n/a"})`
-            : `ERROR ${record.durationMs}ms — ${record.error}`,
-        );
-      }
+      runNumber++;
+      process.stdout.write(`[${runNumber}/${totalRuns}] ${prompt.id} … `);
+      const record = await runOne(llm, judge, prompt, stage1Refinement);
+      runs.push(record);
+      console.log(
+        record.success
+          ? `ok ${record.durationMs}ms (${record.metrics?.contextCount ?? 0} ctx, judge ${record.judge ? (record.judge.passed ? "pass" : "fail") : "n/a"})`
+          : `ERROR ${record.durationMs}ms — ${record.error}`,
+      );
     }
   }
 
-  const stubSummary = summarizeRuns(runs, "stub");
-  const fullSummary = summarizeRuns(runs, "full");
-  const gates = evaluateGates(stubSummary, fullSummary);
+  const summaryData = summarize(runs);
+  const gates = evaluateGates(summaryData);
   // One clock read: the report's "Generated:" line and the output file
   // stamps name the same instant (renderMarkdown itself is pure).
   const generatedAt = new Date().toISOString();
-  const report = renderMarkdown(
-    [stubSummary, fullSummary],
-    gates,
-    runs,
-    generatedAt,
-  );
+  const report = renderMarkdown(summaryData, gates, runs, generatedAt);
 
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const stamp = generatedAt.replace(/[:.]/g, "-");
@@ -336,7 +288,7 @@ async function main(): Promise<void> {
   );
   fs.writeFileSync(reportPath, report);
 
-  console.log(`\n=== Rollback gates (A3) ===`);
+  console.log(`\n=== Quality gates (full pipeline) ===`);
   for (const gate of gates) {
     console.log(
       `${gate.passed ? "✅" : "❌"} ${gate.id} ${gate.description} — ${gate.detail}`,
@@ -346,9 +298,7 @@ async function main(): Promise<void> {
   console.log(`Report:      ${reportPath}`);
 
   if (gates.some((gate) => !gate.passed)) {
-    console.error(
-      `\nGate failure ⇒ rollback lever: STAGED_GENERATION_PIPELINE=stub`,
-    );
+    console.error(`\nGate failure ⇒ investigate before the next release.`);
     process.exit(1);
   }
 }

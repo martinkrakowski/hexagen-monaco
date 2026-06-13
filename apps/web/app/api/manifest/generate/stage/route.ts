@@ -1,10 +1,6 @@
 import { NextRequest } from "next/server";
 import { checkRateLimit } from "../../../../../lib/rate-limiter";
-import {
-  ExecuteStagedGenerationUseCase,
-  ExecuteFullStagedGenerationUseCase,
-  type StagedGenerationCallbacks,
-} from "@hexagen/agentic-interaction";
+import { ExecuteFullStagedGenerationUseCase } from "@hexagen/agentic-interaction";
 import type {
   PromptVariables,
   StageTelemetry,
@@ -16,7 +12,6 @@ import {
 import { logger } from "../../../../../lib/structured-logger";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 import {
-  selectPipeline,
   createFullPipelineEventAdapter,
   type StageRouteEvent,
 } from "./pipeline-selection";
@@ -63,13 +58,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // A3 cutover seam: stub (default) vs full 0→6 pipeline, selected per
-  // request via STAGED_GENERATION_PIPELINE / STAGED_GENERATION_FULL_PERCENT.
-  const pipeline = selectPipeline({
-    STAGED_GENERATION_PIPELINE: process.env.STAGED_GENERATION_PIPELINE,
-    STAGED_GENERATION_FULL_PERCENT: process.env.STAGED_GENERATION_FULL_PERCENT,
-  });
-
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -93,9 +81,6 @@ export async function POST(request: NextRequest) {
           additionalContext: body.additionalContext,
         };
 
-        // Canary comparison key: every request logs which pipeline served it.
-        logger.info("[staged-gen] pipeline selected", { pipeline });
-
         // Per-stage server log with model identity — keyed off the same
         // telemetry the client receives, so the two can be cross-checked.
         const logStageTelemetry = (telemetry: StageTelemetry) => {
@@ -111,57 +96,29 @@ export async function POST(request: NextRequest) {
           });
         };
 
-        let result;
-        if (pipeline === "full") {
-          // Stage-1 draft→refine cascade — null (off) unless
-          // STAGE1_REFINER_API_KEY is set; see createStage1RefinerConfig.
-          const stage1Refinement = createStage1RefinerConfig();
-          if (stage1Refinement) {
-            logger.info("[staged-gen] stage-1 refiner active", {
-              mode: stage1Refinement.mode,
-            });
-          }
-          const useCase = new ExecuteFullStagedGenerationUseCase(
-            llmAdapter,
-            transactionManager,
-            stage1Refinement ? { stage1Refinement } : undefined,
-          );
-          const eventAdapter = createFullPipelineEventAdapter(send);
-          result = await useCase.execute(body.description, variables, {
-            ...eventAdapter,
-            onStageTelemetry: (telemetry) => {
-              logStageTelemetry(telemetry);
-              eventAdapter.onStageTelemetry?.(telemetry);
-            },
+        // A4: the full 0→6 pipeline is the only pipeline (the stub + the
+        // STAGED_GENERATION_PIPELINE/FULL_PERCENT selection seam are gone).
+        // Stage-1 draft→refine cascade — null (off) unless
+        // STAGE1_REFINER_API_KEY is set; see createStage1RefinerConfig.
+        const stage1Refinement = createStage1RefinerConfig();
+        if (stage1Refinement) {
+          logger.info("[staged-gen] stage-1 refiner active", {
+            mode: stage1Refinement.mode,
           });
-        } else {
-          const callbacks: StagedGenerationCallbacks = {
-            onStageStart: (stage, label) =>
-              send({ type: "stage-start", stage, label }),
-            onStageComplete: (stage, label, durationMs) =>
-              send({ type: "stage-complete", stage, label, durationMs }),
-            onChunk: (stage, data) => send({ type: "chunk", stage, data }),
-            onValidationError: (stage, errors) =>
-              send({ type: "validation-error", stage, errors }),
-            onStageTelemetry: (telemetry) => {
-              logStageTelemetry(telemetry);
-              send({
-                type: "stage-telemetry",
-                stage: telemetry.stage,
-                telemetry: telemetry as unknown as Record<string, unknown>,
-              });
-            },
-          };
-          const useCase = new ExecuteStagedGenerationUseCase(
-            llmAdapter,
-            transactionManager,
-          );
-          result = await useCase.execute(
-            body.description,
-            variables,
-            callbacks,
-          );
         }
+        const useCase = new ExecuteFullStagedGenerationUseCase(
+          llmAdapter,
+          transactionManager,
+          stage1Refinement ? { stage1Refinement } : undefined,
+        );
+        const eventAdapter = createFullPipelineEventAdapter(send);
+        const result = await useCase.execute(body.description, variables, {
+          ...eventAdapter,
+          onStageTelemetry: (telemetry) => {
+            logStageTelemetry(telemetry);
+            eventAdapter.onStageTelemetry?.(telemetry);
+          },
+        });
 
         if (result.success) {
           const yaml = result.state.stage5?.yaml || "";
@@ -184,7 +141,6 @@ export async function POST(request: NextRequest) {
             portCount,
             adapterCount,
             transactionId: result.transactionId,
-            pipeline,
           });
         } else {
           const msg =
