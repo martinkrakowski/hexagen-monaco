@@ -8,6 +8,11 @@ import type {
   AddOnMaterializerPort,
 } from "./ports/out/add-on-materializer.port.js";
 import type { Project } from "../domain/entities/project.js";
+import {
+  SYNC_INTEGRITY_WORKFLOW,
+  SYNC_INTEGRITY_WORKFLOW_PATH,
+  shouldInjectSyncIntegrityWorkflow,
+} from "../domain/sync-integrity-workflow.js";
 import type { Manifest } from "@hexagen/sync";
 import type { Result } from "@hexagen/shared";
 import fs from "node:fs/promises";
@@ -119,6 +124,25 @@ export class GenerateProjectUseCase {
       const warnings: string[] = [];
       let errors: string[] = [];
 
+      // Auto-inject the architectural-integrity workflow (`yarn sync:check`) so a
+      // generated project keeps its hexagonal structure enforced in CI. Re-wires
+      // the feature dropped when generation moved to the new ports. Written as a
+      // core file BEFORE add-ons, so an add-on may override it (with a warning).
+      if (
+        shouldInjectSyncIntegrityWorkflow(
+          input.manifest.monorepo?.packageManager,
+        )
+      ) {
+        await this.writeCoreFile(
+          tempDir,
+          SYNC_INTEGRITY_WORKFLOW_PATH,
+          SYNC_INTEGRITY_WORKFLOW,
+        );
+        project = project.withAdditionalFiles(
+          new Map([[SYNC_INTEGRITY_WORKFLOW_PATH, SYNC_INTEGRITY_WORKFLOW]]),
+        );
+      }
+
       const addOnsAnswers = input.addOnsAnswers;
       if (
         this.materializer &&
@@ -211,6 +235,22 @@ export class GenerateProjectUseCase {
         // Best effort cleanup
       }
     }
+  }
+
+  /**
+   * Write a trusted core file (a fixed, compiled-in relative path) into the
+   * temp dir so the ZIP / GitHub export captures it. Unlike
+   * `mergeAddOnFilesIntoTempDir`, this needs no traversal/symlink guards — the
+   * path is a constant, not request-derived.
+   */
+  private async writeCoreFile(
+    tempDir: string,
+    rel: string,
+    content: string,
+  ): Promise<void> {
+    const dest = path.join(tempDir, rel);
+    await fs.mkdir(path.dirname(dest), { recursive: true });
+    await fs.writeFile(dest, content, "utf-8");
   }
 
   /**

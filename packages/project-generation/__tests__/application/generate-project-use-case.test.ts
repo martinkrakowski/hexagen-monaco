@@ -8,6 +8,10 @@ import { InMemoryAddOnMaterializerDouble } from "../doubles/in-memory-add-on-mat
 import { RecordingExporterDouble } from "../doubles/recording-exporter.double.js";
 import type { Manifest } from "@hexagen/sync";
 import type { ExportConfig } from "../../src/application/ports/out/project-exporter.port.js";
+import {
+  SYNC_INTEGRITY_WORKFLOW,
+  SYNC_INTEGRITY_WORKFLOW_PATH,
+} from "../../src/domain/sync-integrity-workflow.js";
 
 describe("GenerateProjectUseCase", () => {
   let generator: InMemoryProjectGeneratorDouble;
@@ -386,6 +390,100 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
           addOnsAnswers: { "rate-limiting": {} },
         }),
       /escapes project root/,
+    );
+  });
+});
+
+describe("GenerateProjectUseCase — sync-integrity workflow injection", () => {
+  let generator: InMemoryProjectGeneratorDouble;
+  let recorder: RecordingExporterDouble;
+  const archive: ExportConfig = { destination: "archive" };
+
+  beforeEach(() => {
+    generator = new InMemoryProjectGeneratorDouble();
+    recorder = new RecordingExporterDouble();
+  });
+
+  it("auto-injects the workflow into project.files AND the export for a yarn project", async () => {
+    const useCase = new GenerateProjectUseCase(generator, recorder);
+    const result = await useCase.execute({
+      manifest: { system: "test-system" }, // no packageManager → yarn default
+      exportConfig: archive,
+    });
+
+    assert.strictEqual(result.success, true);
+    if (!result.success) return;
+
+    // Code view (project.files).
+    assert.strictEqual(
+      result.value.project.files.get(SYNC_INTEGRITY_WORKFLOW_PATH),
+      SYNC_INTEGRITY_WORKFLOW,
+    );
+    // On disk (what ZIP / GitHub capture).
+    assert.strictEqual(
+      recorder.getCapturedFiles().get(SYNC_INTEGRITY_WORKFLOW_PATH),
+      SYNC_INTEGRITY_WORKFLOW,
+    );
+    // Injection is silent — no warnings/errors.
+    assert.strictEqual(result.value.warnings, undefined);
+    assert.strictEqual(result.value.errors, undefined);
+  });
+
+  it("does NOT inject for a pnpm project", async () => {
+    const useCase = new GenerateProjectUseCase(generator, recorder);
+    const result = await useCase.execute({
+      manifest: {
+        system: "test-system",
+        monorepo: { packageManager: "pnpm@9.0.0" },
+      },
+      exportConfig: archive,
+    });
+
+    assert.strictEqual(result.success, true);
+    if (!result.success) return;
+    assert.strictEqual(
+      result.value.project.files.has(SYNC_INTEGRITY_WORKFLOW_PATH),
+      false,
+    );
+    assert.strictEqual(
+      recorder.getCapturedFiles().has(SYNC_INTEGRITY_WORKFLOW_PATH),
+      false,
+    );
+  });
+
+  it("lets an add-on override the injected workflow (template-overrides-core, with a warning)", async () => {
+    const materializer = new InMemoryAddOnMaterializerDouble();
+    materializer.setResult({
+      files: new Map([[SYNC_INTEGRITY_WORKFLOW_PATH, "name: custom\n"]]),
+    });
+    const useCase = new GenerateProjectUseCase(
+      generator,
+      recorder,
+      materializer,
+    );
+    const result = await useCase.execute({
+      manifest: { system: "test-system" },
+      exportConfig: archive,
+      addOnsAnswers: { "custom-ci": {} },
+    });
+
+    assert.strictEqual(result.success, true);
+    if (!result.success) return;
+    // The add-on wins, on disk too.
+    assert.strictEqual(
+      result.value.project.files.get(SYNC_INTEGRITY_WORKFLOW_PATH),
+      "name: custom\n",
+    );
+    assert.strictEqual(
+      recorder.getCapturedFiles().get(SYNC_INTEGRITY_WORKFLOW_PATH),
+      "name: custom\n",
+    );
+    // The override of the injected core file is reported as a warning.
+    assert.ok(
+      result.value.warnings?.some((w) =>
+        w.includes(SYNC_INTEGRITY_WORKFLOW_PATH),
+      ),
+      "expected an override warning naming the workflow path",
     );
   });
 });

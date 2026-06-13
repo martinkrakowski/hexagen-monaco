@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Deploy to Railway
         # Pinned to a commit SHA (not @main) so an upstream change can't alter
