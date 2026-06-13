@@ -545,12 +545,12 @@ describe("architecture files", () => {
       );
 
       assert.ok(
-        genCfg.includes("      Catalog.ExternalServiceClient: catalog"),
-        "first claimant should get a context-qualified key",
+        genCfg.includes('      "catalog.ExternalServiceClient": catalog'),
+        "first claimant should get a raw-context-qualified key",
       );
       assert.ok(
-        genCfg.includes("      SearchApi.ExternalServiceClient: search-api"),
-        "second claimant should get a context-qualified key",
+        genCfg.includes('      "search-api.ExternalServiceClient": search-api'),
+        "second claimant should get a raw-context-qualified key",
       );
       assert.ok(
         !/^\s+ExternalServiceClient:/m.test(genCfg),
@@ -566,14 +566,14 @@ describe("architecture files", () => {
       };
       assert.strictEqual(
         parsed.generator["ownership-registry"].ports[
-          "Catalog.ExternalServiceClient"
+          "catalog.ExternalServiceClient"
         ],
         "catalog",
         "qualified key must survive a YAML round-trip with its owner intact",
       );
       assert.strictEqual(
         parsed.generator["ownership-registry"].ports[
-          "SearchApi.ExternalServiceClient"
+          "search-api.ExternalServiceClient"
         ],
         "search-api",
         "qualified key must survive a YAML round-trip with its owner intact",
@@ -588,6 +588,76 @@ describe("architecture files", () => {
       assert.ok(
         hasCollisionWarning,
         "a cross-context collision should surface as a logger.warn naming the contested stem",
+      );
+    });
+  });
+
+  it("keeps qualified keys distinct when context names normalize identically", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const archDir = path.join(workspaceRoot, ".architecture");
+      // `api2` and `api-2` both PascalCase to `Api2` — a normalized qualifier
+      // would collapse them back into a duplicate YAML key. The raw-context
+      // qualifier must keep them distinct.
+      const manifest: Manifest = {
+        scope: "nrm",
+        system: "normalize-demo",
+        architecture: "modular-monolith",
+        bounded_contexts: [
+          {
+            name: "api2",
+            layers: {
+              application: {
+                ports: { out: ["widget-sync.out-port.ts"] },
+              },
+            },
+          },
+          {
+            name: "api-2",
+            layers: {
+              infrastructure: {
+                adapters: ["widget-sync.adapter.ts"],
+              },
+            },
+          },
+        ],
+      };
+      const capture = makeCapturingLogger();
+      const config = makeConfig(workspaceRoot, manifest, {
+        mode: "external",
+        forceRoot: true,
+        logger: capture.logger,
+      });
+
+      await generateArchitectureFiles(config);
+
+      const genCfg = await readText(
+        path.join(archDir, "generator.config.yaml"),
+      );
+
+      const parsed = yaml.load(genCfg) as {
+        generator: {
+          "ownership-registry": { ports: Record<string, string> };
+        };
+      };
+      const ports = parsed.generator["ownership-registry"].ports;
+      assert.strictEqual(
+        ports["api2.WidgetSync"],
+        "api2",
+        "raw-context qualifier must keep the first claimant distinct",
+      );
+      assert.strictEqual(
+        ports["api-2.WidgetSync"],
+        "api-2",
+        "raw-context qualifier must keep the second claimant distinct",
+      );
+      assert.ok(
+        capture.logs.some(
+          (w) =>
+            w.level === "warn" &&
+            w.message.includes("ownership-registry name collision") &&
+            w.message.includes("WidgetSync"),
+        ),
+        "the collision warning still fires for identically-normalizing contexts",
       );
     });
   });
