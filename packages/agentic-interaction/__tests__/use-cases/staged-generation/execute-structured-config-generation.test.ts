@@ -163,6 +163,44 @@ test("valid config → returns { success: true, value: AssembledManifest }", asy
   }
 });
 
+test("records non-zero context/port/adapter counts in begin() metadata (A2 counts-helper)", async () => {
+  // Directly pins the structured-config always-0 fix on THIS path. Before the
+  // shared countManifestEntities, this pipeline read ctx.ports/ctx.adapters at
+  // the context root (always 0); it now reads the layers.* shape assembly emits.
+  // The "Payment" config produces 1 context, 1 in + 1 out port, and 1 adapter.
+  const config: StructuredConfig = {
+    bounded_contexts: [{ name: "Payment" }],
+    use_cases: { Payment: [{ name: "Process Payment" }] },
+    context_mappings: [],
+  };
+
+  let beginMetadata: Record<string, unknown> | undefined;
+  const capturingTxManager = {
+    begin: (intentId: string, metadata?: Record<string, unknown>) => {
+      beginMetadata = metadata;
+      return { id: `txn-${intentId}`, intentId, status: "pending" };
+    },
+    transition: (txId: string, status: string) => ({ id: txId, status }),
+  } as unknown as TransactionManagerPort;
+
+  const useCase = new ExecuteStructuredConfigGenerationUseCase(
+    createMockLLMPort(),
+    capturingTxManager,
+  );
+  const result = await useCase.execute(JSON.stringify(config));
+
+  assert.equal(result.success, true);
+  assert.ok(beginMetadata, "begin() should have been called with metadata");
+  // The load-bearing proof of the fix: the assembled manifest nests these ports
+  // under layers.application.ports.{in,out}, so the old context-root read
+  // (ctx.ports) recorded portCount 0 here. The shared helper reads the nested
+  // path → 2. (adapterCount stays 0: this shared mock's streaming stage-4 emits
+  // no adapter into the manifest — the adapter-counting path is covered by the
+  // helper's own unit test.)
+  assert.equal(beginMetadata.contextCount, 1);
+  assert.equal(beginMetadata.portCount, 2);
+});
+
 test("stage 3 (port mapping) failure → returns { success: false }", async () => {
   const config: StructuredConfig = {
     bounded_contexts: [{ name: "Payment" }],
