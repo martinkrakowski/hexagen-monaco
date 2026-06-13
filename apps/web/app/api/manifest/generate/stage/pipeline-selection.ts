@@ -4,45 +4,15 @@ import type {
 } from "@hexagen/agentic-interaction";
 
 /**
- * A3 cutover seam: stub vs full pipeline selection + the event adapter that
- * lets `ExecuteFullStagedGenerationUseCase` speak the route's NDJSON dialect.
- *
- * Flag semantics (see docs/planning/normalizer-rewire-development-plan.md, A3):
- * - `STAGED_GENERATION_PIPELINE=full`  → hard-pin the full pipeline.
- * - `STAGED_GENERATION_PIPELINE=stub`  → hard-pin the stub. This OVERRIDES the
- *   canary percent — it is the one-flip rollback lever.
- * - unset (or any other value)         → canary: `STAGED_GENERATION_FULL_PERCENT`
- *   (0–100) of requests go to the full pipeline. Defaults to 0 = ship dark.
- *   Malformed or negative percents fail closed to the stub.
+ * NDJSON event vocabulary for the stage route + the adapter that lets
+ * `ExecuteFullStagedGenerationUseCase` speak it. A4 removed the stub and the
+ * `selectPipeline` (STAGED_GENERATION_PIPELINE / FULL_PERCENT) cutover seam —
+ * the full 0→6 pipeline is the only pipeline now.
  */
-
-export type PipelineChoice = "full" | "stub";
-
-export interface PipelineSelectionEnv {
-  STAGED_GENERATION_PIPELINE?: string;
-  STAGED_GENERATION_FULL_PERCENT?: string;
-}
-
-export function selectPipeline(
-  env: PipelineSelectionEnv,
-  random: () => number = Math.random,
-): PipelineChoice {
-  if (env.STAGED_GENERATION_PIPELINE === "full") return "full";
-  if (env.STAGED_GENERATION_PIPELINE === "stub") return "stub";
-
-  const raw = env.STAGED_GENERATION_FULL_PERCENT;
-  const parsed = raw === undefined || raw === "" ? 0 : Number(raw);
-  // Fail closed: NaN / negative → 0; >100 clamps to 100.
-  const percent = Number.isFinite(parsed)
-    ? Math.min(Math.max(parsed, 0), 100)
-    : 0;
-
-  return random() * 100 < percent ? "full" : "stub";
-}
 
 /** Stage labels for the full pipeline — must match the client hook's
  * `STAGE_LABELS` in `useStagedManifestGeneration.ts` (the client was built
- * for this 7-stage vocabulary; the stub's 4 passes reuse a subset). */
+ * for this 7-stage vocabulary). */
 export const STAGE_LABELS: Record<number, string> = {
   0: "Prompt Normalization",
   1: "Domain Extraction",
@@ -53,7 +23,7 @@ export const STAGE_LABELS: Record<number, string> = {
   6: "Validation Review",
 };
 
-/** The stage route's NDJSON event vocabulary (shared by both pipelines). */
+/** The stage route's NDJSON event vocabulary. */
 export type StageRouteEvent =
   | { type: "stage-start"; stage: number; label: string }
   | { type: "stage-complete"; stage: number; label: string; durationMs: number }
@@ -71,8 +41,6 @@ export type StageRouteEvent =
       portCount: number;
       adapterCount: number;
       transactionId: string;
-      /** Which pipeline served this request — canary comparison key. */
-      pipeline: PipelineChoice;
     }
   | { type: "error"; message: string };
 

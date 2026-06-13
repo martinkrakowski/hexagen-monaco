@@ -1,9 +1,5 @@
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
-import type {
-  ProjectDescription,
-  GeneratedManifest,
-  GenerationMetadata,
-} from "../../domain/value-objects/index";
+import type { GenerationMetadata } from "../../domain/value-objects/index";
 import { ProjectDescriptionValidator } from "../../domain/value-objects/index";
 import { createGeneratedManifest } from "../../domain/value-objects/index";
 import {
@@ -16,14 +12,16 @@ import {
   type GenerateManifestFromDescriptionRequest,
   type GenerateManifestFromDescriptionResponse,
 } from "./generate-manifest-types";
-import { ExecuteStagedGenerationUseCase } from "./staged-generation/execute-staged-generation.use-case";
+import { ExecuteFullStagedGenerationUseCase } from "./staged-generation/execute-full-staged-generation.use-case";
 import type { PromptVariables } from "../../domain/prompts/generate-manifest.prompt";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
 
 export { ManifestWarningCategory } from "./generate-manifest-types";
 
 export class GenerateManifestFromDescriptionUseCase {
-  private readonly stagedUseCase: ExecuteStagedGenerationUseCase;
+  // A4: the full 0→6 pipeline is now the only pipeline. This non-streaming
+  // entry runs it without callbacks and collects the final state.
+  private readonly stagedUseCase: ExecuteFullStagedGenerationUseCase;
   private readonly transactionManager?: TransactionManagerPort;
 
   constructor(
@@ -31,7 +29,7 @@ export class GenerateManifestFromDescriptionUseCase {
     transactionManager?: TransactionManagerPort,
   ) {
     this.transactionManager = transactionManager;
-    this.stagedUseCase = new ExecuteStagedGenerationUseCase(
+    this.stagedUseCase = new ExecuteFullStagedGenerationUseCase(
       llmPipeline,
       transactionManager!,
     );
@@ -71,7 +69,10 @@ export class GenerateManifestFromDescriptionUseCase {
         };
       }
 
-      const { state, validation } = result;
+      const { state } = result;
+      // A4: the full pipeline reports validation in state.stage6 (the Stage-6
+      // review), not as a top-level field like the old stub did.
+      const validation = state.stage6 ?? { errors: [], warnings: [] };
       const manifestYaml = state.stage5?.yaml || "";
 
       if (validation.errors.length > 0) {

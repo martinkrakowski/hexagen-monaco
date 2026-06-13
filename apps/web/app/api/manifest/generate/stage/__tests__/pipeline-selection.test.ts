@@ -1,108 +1,10 @@
 import { test, describe } from "node:test";
 import assert from "node:assert";
 import {
-  selectPipeline,
   createFullPipelineEventAdapter,
   STAGE_LABELS,
   type StageRouteEvent,
 } from "../pipeline-selection";
-
-describe("selectPipeline", () => {
-  test("defaults to stub when nothing is configured", () => {
-    assert.strictEqual(selectPipeline({}), "stub");
-  });
-
-  test("STAGED_GENERATION_PIPELINE=full hard-pins full", () => {
-    assert.strictEqual(
-      selectPipeline({ STAGED_GENERATION_PIPELINE: "full" }),
-      "full",
-    );
-  });
-
-  test("STAGED_GENERATION_PIPELINE=stub hard-pins stub, overriding the canary percent (rollback lever)", () => {
-    assert.strictEqual(
-      selectPipeline(
-        {
-          STAGED_GENERATION_PIPELINE: "stub",
-          STAGED_GENERATION_FULL_PERCENT: "100",
-        },
-        () => 0,
-      ),
-      "stub",
-    );
-  });
-
-  test("canary percent routes the configured fraction to full", () => {
-    const env = { STAGED_GENERATION_FULL_PERCENT: "25" };
-    // random() < percent/100 → full
-    assert.strictEqual(
-      selectPipeline(env, () => 0.1),
-      "full",
-    );
-    assert.strictEqual(
-      selectPipeline(env, () => 0.249),
-      "full",
-    );
-    assert.strictEqual(
-      selectPipeline(env, () => 0.25),
-      "stub",
-    );
-    assert.strictEqual(
-      selectPipeline(env, () => 0.9),
-      "stub",
-    );
-  });
-
-  test("percent 0 (or unset) never routes to full", () => {
-    assert.strictEqual(
-      selectPipeline({ STAGED_GENERATION_FULL_PERCENT: "0" }, () => 0),
-      "stub",
-    );
-    assert.strictEqual(
-      selectPipeline({}, () => 0),
-      "stub",
-    );
-  });
-
-  test("percent 100 always routes to full", () => {
-    assert.strictEqual(
-      selectPipeline({ STAGED_GENERATION_FULL_PERCENT: "100" }, () => 0.999),
-      "full",
-    );
-  });
-
-  test("malformed / out-of-range percent values fail closed to stub", () => {
-    for (const bad of ["abc", "-5", "NaN", ""]) {
-      assert.strictEqual(
-        selectPipeline({ STAGED_GENERATION_FULL_PERCENT: bad }, () => 0),
-        "stub",
-        `percent=${JSON.stringify(bad)} must fail closed`,
-      );
-    }
-    // >100 clamps to 100 (always full), not to garbage behavior
-    assert.strictEqual(
-      selectPipeline({ STAGED_GENERATION_FULL_PERCENT: "150" }, () => 0.999),
-      "full",
-    );
-  });
-
-  test("unknown flag values are ignored (fall through to canary percent)", () => {
-    assert.strictEqual(
-      selectPipeline(
-        {
-          STAGED_GENERATION_PIPELINE: "fulll",
-          STAGED_GENERATION_FULL_PERCENT: "100",
-        },
-        () => 0,
-      ),
-      "full",
-    );
-    assert.strictEqual(
-      selectPipeline({ STAGED_GENERATION_PIPELINE: "fulll" }, () => 0),
-      "stub",
-    );
-  });
-});
 
 describe("createFullPipelineEventAdapter", () => {
   // The orchestrator's emission contract per successful stage is:

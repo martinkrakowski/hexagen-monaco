@@ -1,8 +1,15 @@
 # Staged-Generation Canary Runbook (A3 §4)
 
-**Status:** Active runbook.
+> **SUPERSEDED (A4, 2026-06-13).** Historical record only — do not follow the
+> steps below. The canary completed (full 0→6 pipeline reached 100% in prod on
+> 2026-06-11) and **A4 then deleted the 4-pass stub and the `selectPipeline`
+> selection seam**. `STAGED_GENERATION_PIPELINE` / `STAGED_GENERATION_FULL_PERCENT`
+> no longer exist and the one-flip rollback lever is gone: the full pipeline is
+> the only pipeline.
+
+**Status:** Superseded by A4 (stub + selection seam deleted).
 **Date:** 2026-06-10
-**Parent:** [normalizer-rewire-development-plan.md](./normalizer-rewire-development-plan.md) (A3). Flag semantics: `apps/web/app/api/manifest/generate/stage/pipeline-selection.ts`. Gates: `packages/agentic-interaction/scripts/golden-harness-lib.ts`.
+**Parent:** [normalizer-rewire-development-plan.md](./normalizer-rewire-development-plan.md) (A3). Gates (now full-only, G1–G4): `packages/agentic-interaction/scripts/golden-harness-lib.ts`.
 
 Cuts cloud "Generate manifest" over from the 4-pass stub (`ExecuteStagedGenerationUseCase`) to the full 0→6 pipeline (`ExecuteFullStagedGenerationUseCase`) behind the #288 seam, gated on the #289 harness.
 

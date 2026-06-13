@@ -104,9 +104,10 @@ These came out of the #319–#322 review rounds. Two are substantive (B1, B6); t
 
 ### C3 · A4 — delete the staged-generation stub
 
-- **What:** now that the full 0→6 staged pipeline has been **100% in prod since 2026-06-11**, remove the stub path + the `selectPipeline` flag, brand `ArchitectureContext`, add the counts-helper. (The C1 migrate registry's `workspace_template→workspaceTemplate` example migration is currently a deliberate _fake_; A4-adjacent cleanup could revisit it.)
-- **Caution:** `STAGED_GENERATION_PIPELINE=stub` is the **current prod rollback lever** — deleting the stub removes it. Land A4 only once the full pipeline is trusted enough to drop the lever (Martin's call on how long 100% must hold).
-- **Size:** M · **Risk:** Med (removes rollback lever; branded type may ripple) · **Deps:** confidence in the full pipeline.
+- **Done (this release):** the stub path (`ExecuteStagedGenerationUseCase`) and the `selectPipeline` selection seam (`STAGED_GENERATION_PIPELINE` / `_FULL_PERCENT`) are **deleted** — the full 0→6 pipeline (100% in prod since 2026-06-11) is the only pipeline now. Non-streaming callers were rewired to `ExecuteFullStagedGenerationUseCase`; the golden harness went full-only (absolute gates G1–G4); the dead env levers were stripped from `deploy/.env.example` + `deploy.yml`, and the canary runbook is marked superseded.
+- **Follow-up (separate PR, same 0.7.2 batch):** brand `ArchitectureContext`; extract the A2 counts-helper (`countManifestEntities` — also fixes the blueprint's always-0 count in `execute-structured-config-generation`). (The C1 migrate registry's `workspace_template→workspaceTemplate` example migration is currently a deliberate _fake_; A4-adjacent cleanup could revisit it.)
+- **Note:** `STAGED_GENERATION_PIPELINE=stub` was the prod rollback lever and is now gone — the full pipeline is trusted at 100%.
+- **Size:** M · **Risk:** Med (removed the rollback lever) · **Deps:** none remaining.
 
 ---
 

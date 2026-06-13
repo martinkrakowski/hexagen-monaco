@@ -114,8 +114,6 @@ export type { PortMappingResult } from "./application/use-cases/staged-generatio
 export { ExecuteAdapterAssignmentUseCase } from "./application/use-cases/staged-generation/execute-adapter-assignment.use-case";
 export { ExecuteManifestAssemblyUseCase } from "./application/use-cases/staged-generation/execute-manifest-assembly.use-case";
 export { ExecuteValidationReviewUseCase } from "./application/use-cases/staged-generation/execute-validation-review.use-case";
-export { ExecuteStagedGenerationUseCase } from "./application/use-cases/staged-generation/execute-staged-generation.use-case";
-export type { StagedGenerationCallbacks } from "./application/use-cases/staged-generation/execute-staged-generation.use-case";
 export { ExecuteFullStagedGenerationUseCase } from "./application/use-cases/staged-generation/execute-full-staged-generation.use-case";
 export type {
   FullStagedGenerationCallbacks,
