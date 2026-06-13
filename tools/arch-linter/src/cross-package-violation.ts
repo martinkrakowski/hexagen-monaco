@@ -106,7 +106,10 @@ export function isCrossPackageViolation(
   config: LinterConfig,
   grants: ManifestImportGrants,
 ): boolean {
-  if (!moduleSpecifier.startsWith(scope)) return false;
+  // Slash boundary: a prefix-sibling scope (e.g. @hexagen-monaco/* under scope
+  // @hexagen, or @hexagenic/*) is NOT in-scope — same doctrine as the tooling
+  // allowlist in namespacing.test.ts and the subpath rule's `^${scope}/` anchor.
+  if (!moduleSpecifier.startsWith(scope + "/")) return false;
   if (isGlobalWhitelisted(moduleSpecifier, scope, config)) return false;
 
   const importedPkg = moduleSpecifier.split("/")[1];

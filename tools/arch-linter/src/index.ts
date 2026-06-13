@@ -325,7 +325,7 @@ function checkArchitecturalIntegrity() {
           return;
         }
 
-        if (moduleSpecifier.startsWith(SCOPE)) {
+        if (moduleSpecifier.startsWith(SCOPE + "/")) {
           const importedPkg = moduleSpecifier.split("/")[1];
           if (importedPkg && importedPkg !== moduleName) {
             if (

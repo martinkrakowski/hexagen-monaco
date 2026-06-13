@@ -246,6 +246,22 @@ describe("isCrossPackageViolation — non-cross-package cases", () => {
     );
   });
 
+  it("a prefix-sibling scope is not in-scope (slash boundary)", () => {
+    // @acme-monaco shares the "@acme" prefix but is a DIFFERENT scope — the
+    // published-tooling situation (@hexagen vs @hexagen-monaco). Doctrine:
+    // namespacing.test.ts TOOLING_SCOPES match with the "/" boundary.
+    assert.equal(
+      isCrossPackageViolation(
+        "billing",
+        "@acme-monaco/foo",
+        SCOPE,
+        NO_CONFIG,
+        NO_GRANTS,
+      ),
+      false,
+    );
+  });
+
   it("the default whitelist (no config) still admits the shared kernel", () => {
     assert.equal(
       isCrossPackageViolation(
