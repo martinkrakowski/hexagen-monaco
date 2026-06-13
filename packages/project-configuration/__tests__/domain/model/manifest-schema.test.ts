@@ -4,7 +4,7 @@ import {
   ManifestSchema,
   PLANE_NAMES,
   PlaneTypeSchema,
-} from "../../src/domain/model/manifest-schema/manifest-schema";
+} from "../../../src/domain/model/manifest-schema/manifest-schema";
 
 describe("ManifestSchema", () => {
   it("should validate a manifest document", () => {

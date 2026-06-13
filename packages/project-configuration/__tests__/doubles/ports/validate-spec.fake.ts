@@ -7,7 +7,7 @@ import type {
 /**
  * In‑memory fake for `ValidateSpecPort`.
  * Allows tests to optionally provide a custom implementation for `execute`.
- * Default behavior simply echoes the input unchanged.
+ * Default behavior returns a successful validation response.
  */
 export class FakeValidateSpecPort implements ValidateSpecPort {
   private behavior:

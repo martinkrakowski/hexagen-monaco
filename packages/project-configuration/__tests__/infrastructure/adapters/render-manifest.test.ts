@@ -3,29 +3,32 @@ import assert from "node:assert";
 import { FakeRenderManifestPort } from "../../doubles/ports/render-manifest.fake";
 
 describe("render-manifest", () => {
-  it("should return input unchanged with default behavior", async () => {
+  it("returns the default rendered manifest when no behavior is set", async () => {
     const defaultFake = new FakeRenderManifestPort();
-    const defaultInput = { foo: "bar" };
-    const defaultResult = await defaultFake.execute(defaultInput);
+    const defaultResult = await defaultFake.execute({ bounded_contexts: [] });
     assert.deepStrictEqual(
       defaultResult,
-      defaultInput,
-      "Default fake should return the input unchanged",
+      {
+        yaml: "system: test-system\nscope: test\narchitecture: hexagonal\n",
+        diagnostics: [],
+        token: "test-token",
+      },
+      "the default fake should return its canned rendered manifest",
     );
   });
 
-  it("should apply transformation with custom behavior", async () => {
+  it("applies a custom behavior when one is set", async () => {
     const customFake = new FakeRenderManifestPort();
-    customFake.setBehavior(async (data) => ({
-      transformed: true,
-      original: data,
+    customFake.setBehavior(async () => ({
+      yaml: "custom: true\n",
+      diagnostics: [],
+      token: "custom-token",
     }));
-    const customInput = { baz: 42 };
-    const customResult = await customFake.execute(customInput);
+    const customResult = await customFake.execute({ bounded_contexts: [] });
     assert.deepStrictEqual(
       customResult,
-      { transformed: true, original: customInput },
-      "Custom fake should apply transformation",
+      { yaml: "custom: true\n", diagnostics: [], token: "custom-token" },
+      "a custom behavior should override the default rendered manifest",
     );
   });
 });

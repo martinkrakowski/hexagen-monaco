@@ -3,29 +3,31 @@ import assert from "node:assert";
 import { FakeValidateSpecPort } from "../../doubles/ports/validate-spec.fake";
 
 describe("validate-spec", () => {
-  it("should return input unchanged with default behavior", async () => {
+  it("returns the default success response when no behavior is set", async () => {
     const defaultFake = new FakeValidateSpecPort();
-    const defaultInput = { foo: "bar" };
-    const defaultResult = await defaultFake.execute(defaultInput);
+    const defaultResult = await defaultFake.execute({
+      spec: { id: "test", name: "test" },
+    });
     assert.deepStrictEqual(
       defaultResult,
-      defaultInput,
-      "Default fake should return the input unchanged",
+      { success: true },
+      "the default fake should report a successful validation",
     );
   });
 
-  it("should apply transformation with custom behavior", async () => {
+  it("applies a custom behavior when one is set", async () => {
     const customFake = new FakeValidateSpecPort();
-    customFake.setBehavior(async (data) => ({
-      transformed: true,
-      original: data,
+    customFake.setBehavior(async () => ({
+      success: false,
+      errors: ["custom"],
     }));
-    const customInput = { baz: 42 };
-    const customResult = await customFake.execute(customInput);
+    const customResult = await customFake.execute({
+      spec: { id: "c", name: "c" },
+    });
     assert.deepStrictEqual(
       customResult,
-      { transformed: true, original: customInput },
-      "Custom fake should apply transformation",
+      { success: false, errors: ["custom"] },
+      "a custom behavior should override the default response",
     );
   });
 });
