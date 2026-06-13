@@ -163,4 +163,61 @@ describe("findWorkspaceRoot (cwd-first probe order, RCA #7)", () => {
       });
     });
   });
+
+  it("threads a non-ENOENT obstacle (malformed package.json) into the exhausted-walk error", async () => {
+    await withTempTree(async (base) => {
+      const broken = path.join(base, "broken");
+      await fs.mkdir(broken, { recursive: true });
+      // A package.json that EXISTS but cannot be parsed: the pre-fix blanket
+      // catch swallowed this, so the walk died saying only "no workspaces
+      // array" — misdirecting the user away from the real cause. ENOENT (no
+      // package.json) still stays silent; this obstacle must now surface.
+      await fs.writeFile(
+        path.join(broken, "package.json"),
+        "{ not: valid json",
+        "utf8",
+      );
+
+      await assert.rejects(findWorkspaceRoot({}, [broken]), (err: Error) => {
+        assert.match(
+          err.message,
+          /could not be read or parsed/,
+          "the exhausted-walk error must report the real obstacle",
+        );
+        assert.ok(
+          err.message.includes(path.join(broken, "package.json")),
+          "the failing package.json path must be named",
+        );
+        return true;
+      });
+    });
+  });
+
+  it("recovers a valid root above a malformed package.json (a low obstacle doesn't blind the walk)", async () => {
+    await withTempTree(async (base) => {
+      // A real workspaces root HIGH, a malformed package.json LOW. The walk
+      // records the obstacle (B4) but must keep ascending and return the root
+      // above it — a non-ENOENT error must never blind the resolver to a valid
+      // root higher up, or a single unreadable nested package.json would break
+      // resolution for the whole tree.
+      const root = path.join(base, "ws");
+      await makeWorkspaceRoot(root);
+      const broken = path.join(root, "packages", "broken");
+      await fs.mkdir(broken, { recursive: true });
+      await fs.writeFile(
+        path.join(broken, "package.json"),
+        "{ not: valid json",
+        "utf8",
+      );
+      const deep = path.join(broken, "src", "app");
+      await fs.mkdir(deep, { recursive: true });
+
+      const resolved = await findWorkspaceRoot({}, [deep]);
+      assert.strictEqual(
+        resolved,
+        root,
+        "the walk must bypass the malformed package.json and return the valid root above it",
+      );
+    });
+  });
 });

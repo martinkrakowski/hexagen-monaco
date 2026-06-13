@@ -79,6 +79,14 @@ export interface SyncRunSummary {
   totalOps: number;
   /** Generators that caught a failure into `result.error` this run. */
   errors: number;
+  /**
+   * The root manifest.yaml was absent and the engine synthesized an empty one
+   * (the dry-run fallback). A fact, not an op: a plain `--dry-run` preview
+   * tolerates it, but a verification gate (`--check`) treats it as a failure —
+   * you cannot certify a tree drift-free against a manifest that does not
+   * exist. The engine only reports it; the CLI decides the exit code (A1).
+   */
+  manifestMissing: boolean;
   durationMs: number;
 }
 

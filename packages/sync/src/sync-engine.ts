@@ -67,6 +67,7 @@ export class SyncEngine {
   private partialConfig: SyncFlags;
   private fullConfig: SyncConfig | null = null;
   private manifest: Manifest = {};
+  private manifestMissing = false;
   private workspaceRoot: string = "";
   private readonly options?: SyncEngineOptions;
 
@@ -248,6 +249,7 @@ export class SyncEngine {
     // Same structural reset for the failure list (B-1): a reused engine must
     // not carry run-1 failures into run-2's summary.
     this.failures = [];
+    this.manifestMissing = false;
 
     logger.info(
       dryRun ? "[DRY-RUN MODE] Starting sync..." : "Starting sync...",
@@ -290,11 +292,13 @@ export class SyncEngine {
     try {
       const initOptions = this.getInitOptions();
       this.workspaceRoot = await findWorkspaceRoot(initOptions);
-      this.manifest = await loadManifest(
+      const loaded = await loadManifest(
         this.workspaceRoot,
         this.partialConfig,
         initOptions,
       );
+      this.manifest = loaded.manifest;
+      this.manifestMissing = loaded.manifestMissing;
       validateManifest(this.manifest, this.partialConfig);
 
       this.fullConfig = {
@@ -414,6 +418,7 @@ export class SyncEngine {
         skipped: 0,
         totalOps: 0,
         errors: this.failures.length,
+        manifestMissing: this.manifestMissing,
         durationMs: 0,
       };
       for (const [, r] of rows) {
