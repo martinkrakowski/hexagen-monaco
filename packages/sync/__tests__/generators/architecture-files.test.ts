@@ -803,6 +803,60 @@ describe("architecture files", () => {
     });
   });
 
+  it("round-trips a contested name whose context is hostile (quoted key AND quoted value)", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const archDir = path.join(workspaceRoot, ".architecture");
+      // A hostile context (`a"b`, embedded double-quote) AND a safe one both
+      // claim the same stem → contested. For the hostile one BOTH the qualified
+      // KEY (JSON.stringify) and the VALUE (yamlScalar → JSON.stringify) carry a
+      // JSON escape; this pins that the two quoting paths compose and the whole
+      // document still loads — the combination the *billing-svc test (a single,
+      // non-contested context) leaves only reasoned.
+      const manifest: Manifest = {
+        scope: "ch",
+        system: "contested-hostile",
+        architecture: "modular-monolith",
+        bounded_contexts: [
+          {
+            name: 'a"b',
+            layers: { application: { ports: { out: ["widget.out-port.ts"] } } },
+          },
+          {
+            name: "catalog",
+            layers: { infrastructure: { adapters: ["widget.adapter.ts"] } },
+          },
+        ],
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        mode: "external",
+        forceRoot: true,
+      });
+
+      await generateArchitectureFiles(config);
+
+      const genCfg = await readText(
+        path.join(archDir, "generator.config.yaml"),
+      );
+
+      const parsed = yaml.load(genCfg) as {
+        generator: {
+          "ownership-registry": { ports: Record<string, string> };
+        };
+      };
+      const ports = parsed.generator["ownership-registry"].ports;
+      assert.strictEqual(
+        ports['a"b.Widget'],
+        'a"b',
+        "the hostile context's qualified key AND value must both round-trip through JSON/YAML escaping",
+      );
+      assert.strictEqual(
+        ports["catalog.Widget"],
+        "catalog",
+        "the safe contested entry stays alongside, keys distinct",
+      );
+    });
+  });
+
   it("should warn on unresolved template placeholders", async () => {
     await withTempWorkspace(async ({ workspaceRoot }) => {
       const manifest: Manifest = {
