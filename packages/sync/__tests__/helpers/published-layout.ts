@@ -13,9 +13,13 @@
  *
  * Two reasons the copy stays load-bearing: it pins the ARTIFACT a consumer
  * actually runs (a bundled dist, not the repo's TS sources), and it keeps the
- * __dirname FALLBACK honest — if cwd resolution ever regressed, a symlinked
- * dist would silently re-point the fallback at the HOST repo and the suites
- * would sync *it* (the exit-codes suite carries a canary for exactly that).
+ * __dirname FALLBACK honest. With cwd-first resolution working, the copy is
+ * the front line: the lstat copy-not-symlink assertion in
+ * createPublishedLayoutFixture is what stops a symlinked dist from silently
+ * re-pointing the fallback at the HOST repo. The exit-codes suite's canary
+ * still catches a host-leak end-to-end, but only if cwd resolution ALSO
+ * regresses (both probes failing) — it no longer demonstrates a __dirname-only
+ * regression on its own.
  *
  * A copy, not a symlink: the ESM loader realpaths import.meta.url, so a
  * symlinked dist would walk up from the repo again. The tsup bundle keeps

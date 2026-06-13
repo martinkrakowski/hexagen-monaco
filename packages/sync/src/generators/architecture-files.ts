@@ -91,8 +91,11 @@ function buildOwnershipBlock(manifest: Manifest): {
   // Pass 2 — emit. A name claimed by two contexts would be a duplicate YAML
   // mapping key (strict loaders throw on it) inside the same document whose
   // port-single-ownership invariant promises exactly one owner. Qualify ONLY
-  // the contested names so collision-free manifests stay byte-identical. The
-  // qualifier is the RAW context name in a double-quoted key (JSON string
+  // the contested names so every PREVIOUSLY-LOADABLE manifest stays
+  // byte-identical: this and the pass-1 dedupe are the two divergences from
+  // the old single-pass emission, and each only ever rewrites a document that
+  // was already an unloadable duplicate-key crash. The qualifier is the RAW
+  // context name in a double-quoted key (JSON string
   // escaping is valid YAML double-quote syntax): entries are unique
   // (name, context) pairs after the pass-1 dedupe and names never contain a
   // dot (toPascalCase strips them), so the emitted keys are unique by

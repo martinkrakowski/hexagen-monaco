@@ -39,7 +39,10 @@ iff it survives this ladder (highest precedence first):
    never violations (unchanged).
 2. **`global_whitelist`** (linter-config; defaults to `@scope/shared`) —
    grant (unchanged, including its historical precedence over
-   `cannot_import`).
+   `cannot_import`). Patterns match exactly unless they end in `/**`: the bare
+   default `@scope/shared` whitelists only the package root, not its subpaths —
+   a project importing `@scope/shared/domain` needs an explicit
+   `@scope/shared/**` entry.
 3. **`cannot_import`** (linter-config `package_rules`) — explicit per-edge
    **denial**. This is how invariants remain _additional constraints_: a
    config denial beats a manifest grant.
@@ -60,6 +63,18 @@ explicit `cannot_import` denial. The alternative (intersection — requiring
 both documents to agree) would resurrect exactly the RCA #8 complaint:
 declaring a dependency in the manifest would still change nothing until the
 invariants file is edited too.
+
+**Trust model — `shared-kernel` is self-asserted.** Nothing gates the
+`type: shared-kernel` designation: any context that declares it in the manifest
+becomes importable from everywhere (step 4), with no cross-check against
+`linter-config.yaml` or an approver list. This is deliberate — the manifest is
+the architecture's source of truth, the same trust the linter already extends to
+`depends_on`, `global_whitelist`, and `allowed_imports`. The blast radius is
+bounded and asymmetric: a self-declared shared kernel becomes an importable
+_target_ everywhere but gains no new right to import anything itself, and
+`cannot_import` (step 3) still vetoes any specific edge. A misspelled `type:`
+fails closed (the match is exact). The backstop for a wrongly-declared kernel is
+manifest review, not the linter.
 
 The success messages stop overclaiming: the linter (and the `arch validate` /
 sync wrappers that relay it) now name what was actually checked instead of
