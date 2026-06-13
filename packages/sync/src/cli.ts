@@ -111,6 +111,20 @@ function buildProgram(): Command {
           );
           process.exitCode = 1;
         }
+        // A missing manifest is a precondition failure, not drift (it plans
+        // zero ops, so the drift branch below would silently pass it). cwd-first
+        // root resolution (Wave C) makes a wrong-root, manifest-less run
+        // reachable just by standing in the wrong directory — a verification
+        // gate must refuse to certify a tree it never measured. --check only;
+        // plain --dry-run keeps its empty-manifest preview tolerance.
+        if (check && summary.manifestMissing) {
+          console.error(
+            "Manifest not found — `--check` cannot verify drift without a manifest at " +
+              "`.architecture/manifest.yaml`. Check you are running from inside the intended " +
+              "workspace (cwd is resolved first).",
+          );
+          process.exitCode = 1;
+        }
         if (check && summary.totalOps > 0) {
           console.error(
             `Drift detected: ${summary.totalOps} pending change(s) (${summary.created} to create, ${summary.updated} to update, ${summary.deleted} to delete). Run \`hexagen sync\` to converge.`,

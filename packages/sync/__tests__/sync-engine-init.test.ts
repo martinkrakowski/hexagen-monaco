@@ -163,4 +163,33 @@ describe("findWorkspaceRoot (cwd-first probe order, RCA #7)", () => {
       });
     });
   });
+
+  it("threads a non-ENOENT obstacle (malformed package.json) into the exhausted-walk error", async () => {
+    await withTempTree(async (base) => {
+      const broken = path.join(base, "broken");
+      await fs.mkdir(broken, { recursive: true });
+      // A package.json that EXISTS but cannot be parsed: the pre-fix blanket
+      // catch swallowed this, so the walk died saying only "no workspaces
+      // array" — misdirecting the user away from the real cause. ENOENT (no
+      // package.json) still stays silent; this obstacle must now surface.
+      await fs.writeFile(
+        path.join(broken, "package.json"),
+        "{ not: valid json",
+        "utf8",
+      );
+
+      await assert.rejects(findWorkspaceRoot({}, [broken]), (err: Error) => {
+        assert.match(
+          err.message,
+          /could not be read or parsed/,
+          "the exhausted-walk error must report the real obstacle",
+        );
+        assert.ok(
+          err.message.includes(path.join(broken, "package.json")),
+          "the failing package.json path must be named",
+        );
+        return true;
+      });
+    });
+  });
 });

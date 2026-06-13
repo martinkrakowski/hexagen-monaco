@@ -150,6 +150,23 @@ describe("SyncEngine — manifest-on-disk absent", () => {
       "missing manifest in dry-run must not produce error-level logs",
     );
   });
+
+  it("reports manifestMissing in the run summary when it synthesizes empty", async () => {
+    fixtureRoot = await createFixture([]);
+    const logger = createSpyLogger();
+
+    const engine = new SyncEngine(makeExternalDryRunFlags({ logger }), {
+      targetRoot: fixtureRoot,
+    });
+
+    const summary = await engine.run();
+
+    assert.equal(
+      summary.manifestMissing,
+      true,
+      "an absent manifest synthesized under dry-run must be reported so a --check gate can refuse to certify it",
+    );
+  });
 });
 
 describe("SyncEngine — path-traversal defense (dry-run)", () => {

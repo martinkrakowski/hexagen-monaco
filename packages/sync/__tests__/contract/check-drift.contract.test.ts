@@ -198,6 +198,41 @@ describe(
       }
     });
 
+    it("missing manifest: --check exits 1 naming the precondition; plain --dry-run still previews (exit 0)", async () => {
+      const fix = await createConvergedFixture("hexagen-check-no-manifest-");
+      try {
+        // cwd-first resolution (Wave C) makes a manifest-less run reachable by
+        // standing in the wrong directory. Remove the manifest, commit the
+        // clean tree: a verification gate must REFUSE to certify a tree it
+        // never measured, rather than synthesize empty and green-light it.
+        await fs.rm(path.join(fix.root, ".architecture", "manifest.yaml"));
+        await gitCommitAll(fix.root, "drift: remove the manifest");
+
+        const check = await runHexagen(fix, ["sync", "--check"]);
+        assert.equal(
+          check.code,
+          1,
+          `--check without a manifest must exit 1:\n${describeResult(check)}`,
+        );
+        assert.ok(
+          check.stderr.includes("Manifest not found") &&
+            check.stderr.includes("--check"),
+          `expected a manifest-missing failure naming --check:\n${describeResult(check)}`,
+        );
+
+        // Decision D3 unchanged: plain --dry-run keeps preview semantics and
+        // tolerates the absent manifest (exit 0) — only the gate is strict.
+        const preview = await runHexagen(fix, ["sync", "--dry-run"]);
+        assert.equal(
+          preview.code,
+          0,
+          `plain --dry-run must tolerate a missing manifest (preview):\n${describeResult(preview)}`,
+        );
+      } finally {
+        await cleanupFixture(fix.root);
+      }
+    });
+
     it("deleted generated package.json: --check exits 1 with exactly one pending change; plain --dry-run still exits 0", async () => {
       const fix = await createConvergedFixture("hexagen-check-drift-pkg-");
       try {
