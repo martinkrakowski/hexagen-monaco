@@ -12,6 +12,7 @@ layers:
       - GetArchitectureGraphUseCase
       - GetLinterReportUseCase
       - GetManifestResourceUseCase
+      - MigrateManifestUseCase
     ports:
       in:
         - GeneratorPort

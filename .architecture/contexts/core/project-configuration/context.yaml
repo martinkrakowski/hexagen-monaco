@@ -12,7 +12,8 @@ layers:
       - UseCase
       - Adapter
       - Driver
-    value_objects: []
+    value_objects:
+      - ManifestSchemaVersion
   application:
     use_cases:
       - GenerateProjectUseCase

@@ -53,6 +53,11 @@ export type {
   App,
 } from "./domain/model/manifest-schema/manifest-schema";
 export { AppSchema } from "./domain/model/manifest-schema/manifest-schema";
+export {
+  CURRENT_MANIFEST_SCHEMA_VERSION,
+  readManifestSchemaVersion,
+  assertSupportedSchemaVersion,
+} from "./domain/model/manifest-schema/manifest-schema-version.js";
 export { WorkspaceConfigSchema } from "./domain/model/workspace-config/workspace-config.schema";
 export type { WorkspaceConfig } from "./domain/model/workspace-config/workspace-config.schema";
 export { isIndexManifest } from "./domain/model/manifest-schema/index.js";
