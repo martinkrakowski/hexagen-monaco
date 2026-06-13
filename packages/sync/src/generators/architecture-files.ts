@@ -46,6 +46,25 @@ function toPascalCase(stem: string): string {
     .join("");
 }
 
+/**
+ * Render `value` for the VALUE side of a `key: value` ownership line. Real
+ * bounded-context names (kebab/alnum, e.g. `catalog`, `search-api`) are plain
+ * YAML scalars and emit bare, so collision-free manifests stay byte-identical.
+ * A name that is NOT plain-safe — a leading YAML indicator (`@`, `*`, `&`, `!`,
+ * `?`, `-`, `:` …), an embedded special, or a coercing word — is double-quoted
+ * via JSON (JSON string escaping is a subset of YAML double-quote syntax), so
+ * the document still parses and the value round-trips to the same string. On the
+ * reserved list: `true`/`false`/`null` are what this repo's js-yaml v4 (YAML 1.2
+ * core) actually coerces; `yes`/`no`/`on`/`off` are defensive cover for a
+ * YAML-1.1 reader (v4 itself leaves them strings). C4 hardened the key side;
+ * this does the same for the value, which was still a bare scalar.
+ */
+function yamlScalar(value: string): string {
+  const plainSafe = /^[A-Za-z][A-Za-z0-9._-]*$/.test(value);
+  const reserved = /^(?:true|false|null|yes|no|on|off)$/i.test(value);
+  return plainSafe && !reserved ? value : JSON.stringify(value);
+}
+
 function buildOwnershipBlock(manifest: Manifest): {
   block: string;
   collisions: string[];
@@ -110,8 +129,8 @@ function buildOwnershipBlock(manifest: Manifest): {
 
   const lines = entries.map(({ name, context }) =>
     contested.has(name)
-      ? `      ${JSON.stringify(`${context}.${name}`)}: ${context}`
-      : `      ${name}: ${context}`,
+      ? `      ${JSON.stringify(`${context}.${name}`)}: ${yamlScalar(context)}`
+      : `      ${name}: ${yamlScalar(context)}`,
   );
 
   return {
