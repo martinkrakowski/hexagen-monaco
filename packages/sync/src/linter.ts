@@ -38,7 +38,9 @@ export async function runArchLinter(config: SyncConfig): Promise<void> {
     if (stdout) logger.info(stdout.trim());
     if (stderr) logger.error(stderr.trim());
 
-    logger.info("✅ Architecture is compliant with manifest.yaml.");
+    // The linter's own stdout (relayed above) names what was checked
+    // (ADR-0043); this line only marks the sync stage as passed.
+    logger.info("✅ Architecture check passed (arch-linter).");
   } catch (error: unknown) {
     const message =
       (error instanceof Error &&

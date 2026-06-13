@@ -24,5 +24,10 @@ export async function validateCommand(): Promise<void> {
     return;
   }
 
-  console.log("✅ Architecture is compliant with manifest.yaml");
+  // validateManifest swallows the linter's stdout (it only surfaces failures),
+  // so this summary line carries the truth itself: what arch-linter checked
+  // (ADR-0043) rather than the old blanket "compliant with manifest.yaml".
+  console.log(
+    "✅ Architecture is compliant (arch-linter: cross-context imports via manifest depends_on + linter-config, layer rules, subpath conventions, server markers, required communication).",
+  );
 }

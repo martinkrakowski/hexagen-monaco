@@ -14,6 +14,10 @@ import { mergeSplitManifest } from "@hexagen/project-configuration/server";
 import type { Manifest } from "@hexagen/sync";
 import type { LinterConfig } from "./subpath-violation.js";
 import { isSubpathViolation } from "./subpath-violation.js";
+import {
+  buildManifestImportGrants,
+  isCrossPackageViolation,
+} from "./cross-package-violation.js";
 import { resolveLintScope } from "./resolve-scope.js";
 import {
   checkUnexpectedMarker,
@@ -218,79 +222,6 @@ function isTestDoubleOrTest(filePath: string): boolean {
   return filePath.includes("__tests__/") || filePath.includes("__tests__\\");
 }
 
-function isGlobalWhitelisted(moduleSpecifier: string): boolean {
-  const whitelist = linterConfig.global_whitelist ?? [`${SCOPE}/shared`];
-  return whitelist.some((pattern: string) => {
-    if (pattern.endsWith("/**")) {
-      const prefix = pattern.slice(0, -2);
-      return moduleSpecifier.startsWith(prefix);
-    }
-    return moduleSpecifier === pattern;
-  });
-}
-
-function getPackageRestrictions(packageName: string): {
-  restrictedTo: string[];
-  cannotImport: string[];
-  allowedImports: string[];
-} {
-  const pkgRule = linterConfig.package_rules?.find(
-    (r: NonNullable<LinterConfig["package_rules"]>[number]) =>
-      r.name === packageName,
-  );
-  return {
-    restrictedTo: pkgRule?.restricted_to ?? [],
-    cannotImport: pkgRule?.cannot_import ?? [],
-    allowedImports:
-      (pkgRule as { allowed_imports?: string[] })?.allowed_imports ?? [],
-  };
-}
-
-function isCrossPackageViolation(
-  fromPackage: string,
-  moduleSpecifier: string,
-): boolean {
-  if (!moduleSpecifier.startsWith(SCOPE)) return false;
-  if (isGlobalWhitelisted(moduleSpecifier)) return false;
-
-  const importedPkg = moduleSpecifier.split("/")[1];
-  if (!importedPkg || importedPkg === fromPackage) return false;
-
-  const { cannotImport, allowedImports } = getPackageRestrictions(fromPackage);
-  if (cannotImport.includes(importedPkg)) return true;
-
-  if (allowedImports.length > 0) {
-    const isAllowed = allowedImports.some((allowed) => {
-      if (allowed.endsWith("/**")) {
-        return moduleSpecifier.startsWith(allowed.slice(0, -2));
-      }
-      return (
-        moduleSpecifier === allowed || moduleSpecifier.startsWith(allowed + "/")
-      );
-    });
-    if (isAllowed) return false;
-  }
-
-  if (
-    linterConfig.package_rules?.some(
-      (r: NonNullable<LinterConfig["package_rules"]>[number]) =>
-        r.name === fromPackage && r.restricted_to && r.restricted_to.length > 0,
-    )
-  ) {
-    const { restrictedTo } = getPackageRestrictions(fromPackage);
-    return !restrictedTo.some((allowed) => {
-      if (allowed.endsWith("/**")) {
-        return moduleSpecifier.startsWith(allowed.slice(0, -2));
-      }
-      return (
-        moduleSpecifier === allowed || moduleSpecifier.startsWith(allowed + "/")
-      );
-    });
-  }
-
-  return true;
-}
-
 function getLayerAllowedImports(filePath: string): string[] {
   const layers = layerRules?.layers;
   if (!layers) return ["domain", SCOPE];
@@ -323,6 +254,12 @@ function isSharedKernelAllowed(): boolean {
 }
 
 export { isSubpathViolation } from "./subpath-violation.js";
+export {
+  buildManifestImportGrants,
+  isCrossPackageViolation,
+  isGlobalWhitelisted,
+} from "./cross-package-violation.js";
+export type { ManifestImportGrants } from "./cross-package-violation.js";
 
 // ─── Main Lint Check ────────────────────────────────────────────────────────
 
@@ -330,6 +267,12 @@ function checkArchitecturalIntegrity() {
   const errors: string[] = [];
   const warnings: string[] = [];
   const modules = manifest.bounded_contexts ?? [];
+
+  // Manifest-derived import grants (ADR-0043): each context's `depends_on`
+  // plus every `type: shared-kernel` context. Built once per run; the
+  // invariants config remains operative as additional constraints inside
+  // isCrossPackageViolation.
+  const manifestGrants = buildManifestImportGrants(modules);
 
   modules.forEach((moduleInfo) => {
     const moduleName = moduleInfo.name;
@@ -385,11 +328,20 @@ function checkArchitecturalIntegrity() {
         if (moduleSpecifier.startsWith(SCOPE)) {
           const importedPkg = moduleSpecifier.split("/")[1];
           if (importedPkg && importedPkg !== moduleName) {
-            if (isCrossPackageViolation(moduleName, moduleSpecifier)) {
+            if (
+              isCrossPackageViolation(
+                moduleName,
+                moduleSpecifier,
+                SCOPE,
+                linterConfig,
+                manifestGrants,
+              )
+            ) {
               errors.push(
                 `Boundary Violation in [${moduleName}]:
   File: ${path.relative(ROOT_DIR, filePath)}
   Illegal import from another module: '${moduleSpecifier}'
+  Not declared in '${moduleName}' depends_on (manifest) nor allowed by linter-config (global_whitelist / package_rules).
               `.trim(),
               );
             }
@@ -557,7 +509,11 @@ function checkArchitecturalIntegrity() {
     errors.forEach((e) => logger.error(` - ${e}`));
     process.exit(1);
   } else {
-    logger.info("Architecture is compliant with manifest.yaml.");
+    // Name what was actually checked (RCA #8: the old blanket "compliant
+    // with manifest.yaml" claimed manifest governance the linter didn't do).
+    logger.info(
+      "Architecture is compliant. Checked: cross-context imports (manifest depends_on + shared-kernel types + linter-config), layer rules, subpath conventions, server markers, required communication.",
+    );
   }
 }
 
