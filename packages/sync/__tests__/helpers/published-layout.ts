@@ -3,12 +3,19 @@
  * (exit-codes PR-A1, dry-run purity PR-A2). Extracted from
  * exit-codes.contract.test.ts so both suites pin the SAME consumer layout.
  *
- * Layout matters: `findWorkspaceRoot` (sync-engine-init.ts) walks up from the
- * module's own __dirname — NOT from cwd. Spawning the repo's dist directly
- * would therefore resolve the HOST repo as workspace root and sync *it*. The
- * fixture must replicate the published layout instead:
+ * Layout matters: `findWorkspaceRoot` (sync-engine-init.ts) probes cwd first
+ * (Wave-C, the npx/global fix), then falls back to the module's own
+ * __dirname. The suites spawn with cwd = fixture root, so cwd resolution
+ * already lands on the fixture — but the fixture still replicates the
+ * published layout:
  *
  *   <fixture>/node_modules/@hexagen-monaco/sync/dist/   ← physical COPY
+ *
+ * Two reasons the copy stays load-bearing: it pins the ARTIFACT a consumer
+ * actually runs (a bundled dist, not the repo's TS sources), and it keeps the
+ * __dirname FALLBACK honest — if cwd resolution ever regressed, a symlinked
+ * dist would silently re-point the fallback at the HOST repo and the suites
+ * would sync *it* (the exit-codes suite carries a canary for exactly that).
  *
  * A copy, not a symlink: the ESM loader realpaths import.meta.url, so a
  * symlinked dist would walk up from the repo again. The tsup bundle keeps
@@ -130,9 +137,9 @@ export async function createPublishedLayoutFixture(
   await fs.mkdir(pkgDir, { recursive: true });
   await fs.cp(SYNC_DIST, path.join(pkgDir, "dist"), { recursive: true });
   // Guard the copy-not-symlink invariant: a symlinked dist realpaths back
-  // into the repo, and findWorkspaceRoot would resolve the HOST as workspace
-  // root (see header). lstat does not follow links, so isDirectory() is
-  // false for a symlink.
+  // into the repo, and findWorkspaceRoot's __dirname FALLBACK would resolve
+  // the HOST as workspace root (see header). lstat does not follow links, so
+  // isDirectory() is false for a symlink.
   assert.ok(
     (await fs.lstat(path.join(pkgDir, "dist"))).isDirectory(),
     "fixture dist must be a physical copy, not a symlink",

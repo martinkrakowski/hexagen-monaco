@@ -16,12 +16,14 @@ export interface InitOptions {
   manifest?: Manifest;
 }
 
-export async function findWorkspaceRoot(options: InitOptions): Promise<string> {
-  if (options.targetRoot) {
-    return options.targetRoot;
-  }
-
-  let currentDir = __dirname;
+/**
+ * Walk up from `startDir` looking for a package.json with a `workspaces`
+ * array. Returns the containing directory, or null when the walk reaches the
+ * filesystem root without a hit. (The filesystem root itself is deliberately
+ * not probed — same bound as the pre-refactor walk.)
+ */
+async function findRootFrom(startDir: string): Promise<string | null> {
+  let currentDir = startDir;
   while (currentDir !== path.parse(currentDir).root) {
     try {
       const pkgPath = path.join(currentDir, "package.json");
@@ -35,8 +37,50 @@ export async function findWorkspaceRoot(options: InitOptions): Promise<string> {
     }
     currentDir = path.dirname(currentDir);
   }
+  return null;
+}
+
+/**
+ * Resolve the workspace root (Wave-C consumer experience, RCA #7):
+ * `options.targetRoot` wins (programmatic callers — the wizard's external
+ * mode, tests); otherwise walk up from each probe start in order and return
+ * the first directory whose package.json declares a `workspaces` array.
+ *
+ * Probe order is cwd FIRST, install location second:
+ *  - cwd-first is the CLI convention (git/npm/turbo all operate on where you
+ *    are), and it is the only start that works for a global or `npx` install,
+ *    where __dirname lives in a cache directory whose walk-up finds nothing —
+ *    the old __dirname-only walk hard-failed there with a terse error that
+ *    never named the real problem.
+ *  - The __dirname fallback preserves every previously-working setup: a
+ *    locally installed CLI invoked from OUTSIDE its workspace (cwd resolves
+ *    nothing) still finds the workspace it is installed in.
+ *
+ * `probeStarts` is parameterized for tests only; production callers use the
+ * default.
+ */
+export async function findWorkspaceRoot(
+  options: InitOptions,
+  probeStarts: readonly string[] = [process.cwd(), __dirname],
+): Promise<string> {
+  if (options.targetRoot) {
+    return options.targetRoot;
+  }
+
+  for (const start of probeStarts) {
+    const root = await findRootFrom(start);
+    if (root !== null) {
+      return root;
+    }
+  }
+
   throw new Error(
-    'Could not locate monorepo root. No package.json with "workspaces" field found.',
+    'Could not locate monorepo root: no package.json with a "workspaces" array ' +
+      `found walking up from ${probeStarts.join(" or ")}. ` +
+      "Run the command from inside your workspace (any subdirectory works), " +
+      'and check that the root package.json declares "workspaces". Note: a ' +
+      "globally- or npx-installed CLI can only resolve the root from your " +
+      "current directory.",
   );
 }
 

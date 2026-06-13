@@ -2,8 +2,12 @@ import path from "node:path";
 import yaml from "js-yaml";
 import fs from "node:fs/promises";
 import { SyncConfig } from "../config.js";
-import { createEmptyResult, type GeneratorResult } from "../results.js";
-import { isInScope } from "../fs-utils.js";
+import {
+  createEmptyResult,
+  recordWriteStatus,
+  type GeneratorResult,
+} from "../results.js";
+import { isInScope, safeWriteFileAtomic } from "../fs-utils.js";
 
 // Typed shape for layers from .architecture/manifest.yaml
 interface LayerConfig {
@@ -63,6 +67,78 @@ async function ensureDirectoryCounted(
 }
 
 /**
+ * Keep a LEAF layer directory trackable by git (Wave-C consumer experience —
+ * the campaign-foundry CI incident): git cannot represent an empty directory,
+ * so a freshly scaffolded layer skeleton existed in every working copy but in
+ * no fresh checkout. The first consumer to wire `sync --check` into CI got
+ * "Drift detected: 22 pending change(s)" — all `would create directory` — on
+ * a tree that was fully converged locally. Emitting `.gitkeep` makes the
+ * scaffold commit-able, so working copy and fresh checkout agree.
+ *
+ * UNCONDITIONAL in both modes, deliberately against the external-only-gate
+ * precedent (package-root barrel, shared Result kernel): the consumer CLI
+ * runs in self-regen mode (config.ts's default), so an external-only gate
+ * would miss the actual victim. Self-regen on a mature repo is unaffected in
+ * practice — a directory with real entries is silent below.
+ *
+ * Conservative rules (each refusal avoids a permanent phantom op or litter):
+ *  - a dir with real entries gets NO record at all — git already tracks it
+ *    via its content (same silence as ensureDirectoryCounted on an existing
+ *    dir, and same reason: nothing was or would be done);
+ *  - an existing keep with hand-written content is left byte-untouched and
+ *    unrecorded — its one job (keeping the dir) is done, and rewriting it to
+ *    "" would plan a phantom `update` on every `--check` forever;
+ *  - stale keeps (real files arrived later) are never deleted.
+ *
+ * Dry-run parity: an absent dir (only reachable under --dry-run — the real
+ * run materialized it in ensureDirectoryCounted first) plans the keep through
+ * the same `safeWriteFileAtomic` the real run uses, so preview and real run
+ * count identically. Under a file-deep `--only` pattern the keep path itself
+ * is out of scope and lands in `skipped` — same documented convergence limit
+ * as the dir/barrel preview note in `ensureLayerFolders`.
+ */
+async function ensureGitkeepCounted(
+  dirPath: string,
+  config: SyncConfig,
+  result: GeneratorResult,
+): Promise<void> {
+  const keepPath = path.join(dirPath, ".gitkeep");
+
+  let entries: string[] | null = null;
+  if (await directoryExists(dirPath)) {
+    entries = await fs.readdir(dirPath);
+  }
+
+  if (entries !== null) {
+    const keepIsOnlyEntry = entries.length === 1 && entries[0] === ".gitkeep";
+    if (entries.length > 0 && !keepIsOnlyEntry) {
+      // Real content tracks the dir — silent, like an existing dir.
+      return;
+    }
+    if (keepIsOnlyEntry) {
+      const existing = await fs.readFile(keepPath, "utf8").catch(() => null);
+      if (existing !== null && existing !== "") {
+        // Hand-written keep content — leave untouched, unrecorded.
+        return;
+      }
+    }
+  }
+
+  // skipGeneratedCheck: an empty file cannot carry the @generated marker, so
+  // the hand-written-preserve check must never adjudicate it. Every path that
+  // reaches this write is absent-or-empty (content-bearing keeps returned
+  // above), so the flag is belt-and-braces, not a clobber license.
+  const status = await safeWriteFileAtomic(
+    keepPath,
+    "",
+    config,
+    undefined,
+    true,
+  );
+  recordWriteStatus(result, keepPath, status);
+}
+
+/**
  * Safely load a YAML file, returning null if the file doesn't exist.
  */
 async function loadYamlSafe<T>(filePath: string): Promise<T | null> {
@@ -83,8 +159,13 @@ async function loadYamlSafe<T>(filePath: string): Promise<T | null> {
 
 /**
  * Ensures layer DIRECTORIES exist for a module (domain, application,
- * infrastructure, plus configured subfolders). Directories are this
- * generator's ONLY deliverable.
+ * infrastructure, plus configured subfolders), and a `.gitkeep` in each LEAF
+ * directory so the scaffold survives a git checkout (see
+ * ensureGitkeepCounted). Leaf-only and config-derived: a configured dir with
+ * NO configured subfolders gets the keep; a parent layer dir is materialized
+ * transitively by its subfolders' keeps. Deriving leaves from the CONFIG
+ * (not from what's on disk) is what guarantees dry-run parity — an absent
+ * tree plans exactly the keeps a real run writes.
  *
  * Barrel single-ownership (PR-B2, the second half of RCA #5): this generator
  * used to also write barrels — a naive re-export-everything index.ts per
@@ -151,8 +232,15 @@ export async function ensureLayerFolders(
     // (see ensureDirectoryCounted — the old dead-EEXIST counting lived here).
     await ensureDirectoryCounted(layerPath, config, result);
 
-    // Recurse into subfolders
     const subfolders = layerConfig.subfolders ?? [];
+
+    // Leaf rule: only dirs at the bottom of the CONFIGURED tree get a keep —
+    // a layer dir with subfolders is kept transitively by their keeps.
+    if (subfolders.length === 0) {
+      await ensureGitkeepCounted(layerPath, config, result);
+    }
+
+    // Recurse into subfolders
     for (const sub of subfolders) {
       const subPath = path.join(layerPath, sub);
 
@@ -166,6 +254,9 @@ export async function ensureLayerFolders(
 
       // Same probe-first create-and-count as the parent layer above (PR-B2).
       await ensureDirectoryCounted(subPath, config, result);
+
+      // Every configured subfolder is a leaf (LayerConfig nests one level).
+      await ensureGitkeepCounted(subPath, config, result);
     }
   }
 
