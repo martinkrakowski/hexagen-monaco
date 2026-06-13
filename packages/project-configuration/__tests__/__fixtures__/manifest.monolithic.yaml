@@ -1,6 +1,7 @@
 system: test-system
 scope: test
 architecture: modular-monolith
+description: A monolithic test manifest for the split round-trip fixture
 
 planes:
   core:

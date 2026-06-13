@@ -129,6 +129,9 @@ async function writeSplitFiles(
     scope: raw.scope,
     architecture: raw.architecture,
   };
+  // IndexManifestSchema requires `description` — the split index is a real
+  // manifest form. Carry it through like the production splitter does.
+  if (raw.description) index.description = raw.description;
   if (raw.planes) index.planes = raw.planes;
   if (indexContexts.length > 0) index.bounded_contexts = indexContexts;
   if (indexApps.length > 0) index.apps = indexApps;

@@ -3,14 +3,18 @@ import assert from "node:assert";
 import { FakeRenderManifestPort } from "../../doubles/ports/render-manifest.fake";
 
 describe("render-manifest", () => {
-  it("should return input unchanged with default behavior", async () => {
+  it("returns the default rendered manifest when no behavior is set", async () => {
     const defaultFake = new FakeRenderManifestPort();
     const defaultInput = { foo: "bar" };
     const defaultResult = await defaultFake.execute(defaultInput);
     assert.deepStrictEqual(
       defaultResult,
-      defaultInput,
-      "Default fake should return the input unchanged",
+      {
+        yaml: "system: test-system\nscope: test\narchitecture: hexagonal\n",
+        diagnostics: [],
+        token: "test-token",
+      },
+      "the default fake should return its canned rendered manifest",
     );
   });
 

@@ -7,7 +7,7 @@ import type { Manifest } from "../../../src/domain/model/manifest-schema/manifes
 /**
  * In‑memory fake for `RenderManifestPort`.
  * Allows tests to optionally provide a custom implementation for `execute`.
- * Default behavior simply echoes the input unchanged.
+ * Default behavior returns a minimal rendered manifest.
  */
 export class FakeRenderManifestPort implements RenderManifestPort {
   private behavior: ((input: Manifest) => Promise<RenderedManifest>) | null =
