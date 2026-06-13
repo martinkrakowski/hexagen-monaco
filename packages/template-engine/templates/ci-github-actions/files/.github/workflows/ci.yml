@@ -31,9 +31,9 @@ jobs:
     name: Build, Typecheck, Lint & Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "{node_version}"
           # No `cache: yarn` here. setup-node's yarn cache runs the runner's
@@ -66,7 +66,7 @@ jobs:
       # skipped on warm runs (cache_strategy = {cache_strategy}). Set TURBO_TOKEN
       # and TURBO_TEAM below for the cross-run remote cache.
       - name: Restore Turbo cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .turbo
           key: ${{ runner.os }}-turbo-${{ github.sha }}
