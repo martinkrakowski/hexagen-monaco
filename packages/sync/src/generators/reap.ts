@@ -30,8 +30,9 @@ export async function reapLegacyFolders(
     try {
       const entries = await fs.readdir(layerPath);
 
-      // Only consider truly empty directories for deletion
-      // A folder with just index.ts is NOT empty — it's a valid barrel
+      // Only consider TRULY empty directories for deletion. A folder holding
+      // just a barrel (index.ts) or a leaf `.gitkeep` is not empty — see the
+      // preservation note below.
       if (entries.length === 0) {
         if (dryRun) {
           logger.info(`[DRY-RUN] would delete empty folder ${relativePath}`);
@@ -45,9 +46,20 @@ export async function reapLegacyFolders(
           if (report) report.record("deleted", layerPath);
         }
       }
-      // Note: Folders containing only index.ts are now preserved.
-      // The sync engine maintains these barrels, so deleting them
-      // creates a delete-recreate cycle.
+      // Folders containing only a generated barrel (index.ts) or a leaf
+      // `.gitkeep` (PR-C2, the keep that makes an empty layer dir trackable)
+      // are preserved. reap iterates the FIXED legacy layer names and has no
+      // view of the live config, so it cannot distinguish a currently-
+      // configured leaf — whose keep/barrel the very same sync just emitted —
+      // from a layer DROPPED from the manifest, whose keep is now an orphan:
+      // both look identical on disk, and removing a freshly-emitted one would
+      // recreate the delete-recreate cycle this guard exists to prevent.
+      //
+      // KNOWN LIMITATION (plan B2): a de-configured layer dir keeps its
+      // `.gitkeep`/barrel until removed by hand. This is harmless — the keep
+      // is committed and no generator touches it, so it is NOT `--check` drift.
+      // A safe auto-cleanup would require reap to consult the live layer
+      // config (to tell orphan from configured-leaf); it deliberately does not.
     } catch (e: unknown) {
       if (
         !(
