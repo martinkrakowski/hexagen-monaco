@@ -29,6 +29,7 @@ import type {
 import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
 import { buildGreenfieldArchitectureContext } from "../../../domain/prompts/build-architecture-context";
+import { countManifestEntities } from "../../../domain/manifest/count-manifest-entities";
 import { ExecutePromptNormalizationUseCase } from "./execute-prompt-normalization.use-case";
 import { ExecuteDomainExtractionUseCase } from "./execute-domain-extraction.use-case";
 import type { Stage1RefinementConfig } from "./execute-domain-extraction.use-case";
@@ -286,18 +287,12 @@ export class ExecuteFullStagedGenerationUseCase {
     const yaml = assembledManifest.yaml || "";
     const parsed =
       (assembledManifest.parsedObject as Record<string, unknown>) || {};
-    // The assembled manifest (draftToManifest output) nests ports under
-    // layers.application.ports and adapters under layers.infrastructure.adapters
-    // — NOT at the context root. (The blueprint reads ctx.ports/ctx.adapters
-    // and therefore always records 0; fixed here, blueprint fix deferred to A4.)
-    const boundedContexts = Array.isArray(parsed.bounded_contexts)
-      ? (parsed.bounded_contexts as Array<{
-          layers?: {
-            application?: { ports?: { in?: unknown[]; out?: unknown[] } };
-            infrastructure?: { adapters?: unknown[] };
-          };
-        }>)
-      : [];
+    // Ports/adapters are nested under layers.application.ports /
+    // layers.infrastructure.adapters; countManifestEntities reads that path —
+    // the shared counter, so this and the structured-config pipeline can't drift
+    // (see its doc for the always-0 context-root-read trap).
+    const { contextCount, portCount, adapterCount } =
+      countManifestEntities(parsed);
 
     let transaction: Awaited<ReturnType<TransactionManagerPort["begin"]>>;
     try {
@@ -305,19 +300,9 @@ export class ExecuteFullStagedGenerationUseCase {
         intentId,
         origin: "full-staged-generation",
         yaml,
-        contextCount: boundedContexts.length,
-        portCount: boundedContexts.reduce((sum, ctx) => {
-          const ports = ctx.layers?.application?.ports;
-          return (
-            sum +
-            (Array.isArray(ports?.in) ? ports.in.length : 0) +
-            (Array.isArray(ports?.out) ? ports.out.length : 0)
-          );
-        }, 0),
-        adapterCount: boundedContexts.reduce((sum, ctx) => {
-          const adapters = ctx.layers?.infrastructure?.adapters;
-          return sum + (Array.isArray(adapters) ? adapters.length : 0);
-        }, 0),
+        contextCount,
+        portCount,
+        adapterCount,
       });
     } catch (beginError) {
       return { success: false, error: beginError };

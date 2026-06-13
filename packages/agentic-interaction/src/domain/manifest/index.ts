@@ -67,3 +67,6 @@ export {
 } from "./coerce-raw-topology";
 
 export type { BoundedContextType } from "./coerce-raw-topology";
+
+export { countManifestEntities } from "./count-manifest-entities";
+export type { ManifestEntityCounts } from "./count-manifest-entities";
