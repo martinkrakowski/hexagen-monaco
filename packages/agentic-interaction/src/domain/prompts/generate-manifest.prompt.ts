@@ -825,8 +825,8 @@ export function compileStage7Prompt(
   report: { errors: string[]; warnings: string[] },
 ): string {
   const findings = [
-    ...report.errors.map((e) => `- [error] ${e}`),
-    ...report.warnings.map((w) => `- [warning] ${w}`),
+    ...report.errors.map((e) => `- [error] ${escapeXml(e)}`),
+    ...report.warnings.map((w) => `- [warning] ${escapeXml(w)}`),
   ].join("\n");
   return [
     `<findings>`,
@@ -834,7 +834,11 @@ export function compileStage7Prompt(
     `</findings>`,
     ``,
     `<configuration>`,
-    rawConfig,
+    // rawConfig is the raw user import — the direct injection vector. Escape it
+    // (and the findings) so a payload containing `</configuration>` can't break
+    // the delimiters and inject instructions into Stage 7. Same convention as
+    // the other prompts in this file.
+    escapeXml(rawConfig),
     `</configuration>`,
     ``,
     `Emit the corrected configuration now. Resolve every [error] finding; resolve [warning] findings where you can do so without guessing. Output only the configuration.`,

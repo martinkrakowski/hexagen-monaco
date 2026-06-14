@@ -65,6 +65,14 @@ export class ExecuteManifestRepairUseCase {
       }, STAGE_ATTEMPT_TIMEOUT_MS);
 
       const request = createLLMRequest(
+        // Placeholder DomainModelId (a required positional arg of
+        // createLLMRequest). The SERVED model is resolved by the reviewer
+        // port's fallback chain, NOT by this id: createStage6ReviewerConfig
+        // wires gpt-4o with preferLocal:false + webLlmAdapter:null, so the
+        // LLMProviderSelectorAdapter routes straight to its cloud chain and the
+        // id is never consulted. Same placeholder convention as Stage 6
+        // (ExecuteValidationReviewUseCase), which serves mercury-2 in prod
+        // despite passing this exact id.
         DomainModelId.QWEN_CODER_3B,
         [
           { role: "system", content: STAGE7_REPAIR_SYSTEM_PROMPT },
