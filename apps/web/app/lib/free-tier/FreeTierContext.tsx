@@ -45,6 +45,7 @@ export function FreeTierProvider({ children }: { children: ReactNode }) {
     <FreeTierModelModal
       open={freeTierModalOpen}
       onOpenChange={setFreeTierModalOpen}
+      modelName={currentModelName}
     />
   ) : null;
 
