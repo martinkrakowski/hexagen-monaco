@@ -11,6 +11,7 @@ import { STAGE0_NDJSON_LINE_SCHEMA } from "../../../domain/prompts/ndjson-line-s
 import type { NormalizedPrompt } from "../../../domain/value-objects/pipeline-state";
 import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt";
 import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest.prompt";
+import type { ArchitectureContext } from "../../../domain/prompts/build-architecture-context";
 import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
@@ -29,7 +30,7 @@ export class ExecutePromptNormalizationUseCase {
   // constructor-injected so it is built once per pipeline, not per execute().
   constructor(
     private readonly llmPort: SendStructuredRequestPort,
-    private readonly architectureContext?: string,
+    private readonly architectureContext?: ArchitectureContext,
   ) {}
 
   async execute(

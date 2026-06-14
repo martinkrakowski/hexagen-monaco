@@ -28,7 +28,10 @@ import type {
 } from "../../../domain/value-objects/pipeline-state";
 import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
-import { buildGreenfieldArchitectureContext } from "../../../domain/prompts/build-architecture-context";
+import {
+  buildGreenfieldArchitectureContext,
+  type ArchitectureContext,
+} from "../../../domain/prompts/build-architecture-context";
 import { countManifestEntities } from "../../../domain/manifest/count-manifest-entities";
 import { ExecutePromptNormalizationUseCase } from "./execute-prompt-normalization.use-case";
 import { ExecuteDomainExtractionUseCase } from "./execute-domain-extraction.use-case";
@@ -61,7 +64,7 @@ export interface FullStagedGenerationOptions {
    * input or other untrusted data through this option — user text belongs
    * in `userDescription`, which goes through the XML-wrapping injection
    * protections in generate-manifest.prompt.ts. */
-  architectureContext?: string;
+  architectureContext?: ArchitectureContext;
   /** Stage-1 draft→refine cascade (e.g. mercury draft → gpt-4o refine).
    * Off when omitted — zero behavior change. */
   stage1Refinement?: Stage1RefinementConfig;

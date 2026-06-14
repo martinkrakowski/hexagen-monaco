@@ -196,7 +196,11 @@ export {
   PORTS_LIST_SYSTEM_PROMPT,
   compilePortsPrompt,
 } from "./domain/index";
-export type { PromptVariables, RetryResult } from "./domain/index";
+export type {
+  PromptVariables,
+  RetryResult,
+  ArchitectureContext,
+} from "./domain/index";
 
 // Topology/adapters prompt exports (from domain)
 export {

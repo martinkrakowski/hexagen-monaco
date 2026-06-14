@@ -2,6 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { ExecuteFullStagedGenerationUseCase } from "../../../src/application/use-cases/staged-generation/execute-full-staged-generation.use-case.ts";
 import { compileStage0Prompt } from "../../../src/domain/prompts/generate-manifest.prompt.ts";
+import type { ArchitectureContext } from "../../../src/domain/prompts/build-architecture-context";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
 
@@ -268,7 +269,9 @@ describe("ExecuteFullStagedGenerationUseCase", () => {
     );
     const { manager } = createMockTransactionManager();
     const useCase = new ExecuteFullStagedGenerationUseCase(port, manager, {
-      architectureContext: "custom brownfield contract",
+      // A custom (brownfield) context must be vouched for with an explicit
+      // cast — the sanctioned escape hatch from the ArchitectureContext brand.
+      architectureContext: "custom brownfield contract" as ArchitectureContext,
     });
 
     await useCase.execute("Build an invoice management system");
