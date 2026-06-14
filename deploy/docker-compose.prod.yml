@@ -22,6 +22,12 @@ services:
       - .env
     environment:
       - NODE_ENV=production
+      # Free-tier quota SQLite DB, on the durable named volume below.
+      - QUOTA_DB_PATH=/data/quota.db
+    # The quota DB persists across redeploys here: image reload + `up -d`
+    # recreate the container, not the named volume.
+    volumes:
+      - quota-data:/data
     # Liveness check used by the deploy (`up -d --wait`) to fail a broken boot
     # instead of reporting a green deploy over a down site. Next.js standalone
     # binds to $HOSTNAME (the container id), NOT 0.0.0.0/loopback, so the probe
@@ -37,3 +43,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+
+volumes:
+  quota-data:
