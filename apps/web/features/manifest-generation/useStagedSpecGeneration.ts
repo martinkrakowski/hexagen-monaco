@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useRef } from "react";
 import type { StagedPhase, StageProgress } from "./staged-generation-types";
-import { useStagedGenerationStream } from "./useStagedGenerationStream";
+import {
+  useStagedGenerationStream,
+  type StageValidationReport,
+} from "./useStagedGenerationStream";
 import type { PullRequestMetadata } from "@hexagen/external-integration";
 import type { AssembledManifest } from "@hexagen/shared";
 import {
@@ -63,6 +66,7 @@ export interface UseStagedSpecGenerationReturn {
   stageProgress: Record<number, StageProgress>;
   verboseLog: string[];
   validationErrors: string[];
+  validationReport: StageValidationReport | null;
   contextCount: number;
   portCount: number;
   adapterCount: number;
@@ -549,6 +553,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     stageProgress,
     verboseLog,
     validationErrors,
+    validationReport: stream.validationReport,
     contextCount,
     portCount,
     adapterCount,

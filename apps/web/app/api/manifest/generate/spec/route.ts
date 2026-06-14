@@ -41,6 +41,9 @@ type NDJSONEvent =
       portCount: number;
       adapterCount: number;
       transactionId: string;
+      // Stage-6 review findings on the (successfully produced) manifest —
+      // advisory, surfaced so the UI can show them instead of just a count.
+      validation: { errors: string[]; warnings: string[]; passed: boolean };
     }
   | { type: "error"; message: string };
 
@@ -203,6 +206,7 @@ export async function POST(request: NextRequest) {
             portCount,
             adapterCount,
             transactionId: result.transactionId,
+            validation: result.validation,
           });
         } else {
           const msg =

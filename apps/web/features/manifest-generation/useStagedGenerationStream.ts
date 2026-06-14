@@ -4,6 +4,13 @@ import { useState, useCallback, useRef } from "react";
 import { logger } from "../../lib/structured-logger";
 import type { StagedPhase, StageProgress } from "./staged-generation-types";
 
+/** Stage-6 review findings on the produced manifest — advisory, not a failure. */
+export interface StageValidationReport {
+  errors: string[];
+  warnings: string[];
+  passed: boolean;
+}
+
 export interface StagedGenerationStreamOptions {
   endpoint: string;
   stageLabels: Record<number, string>;
@@ -17,6 +24,7 @@ export interface StagedGenerationStreamReturn {
   stepDetail: string;
   stageProgress: Record<number, StageProgress>;
   validationErrors: string[];
+  validationReport: StageValidationReport | null;
   contextCount: number;
   portCount: number;
   adapterCount: number;
@@ -59,6 +67,8 @@ export function useStagedGenerationStream(
     Record<number, StageProgress>
   >({});
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [validationReport, setValidationReport] =
+    useState<StageValidationReport | null>(null);
   const [contextCount, setContextCount] = useState(0);
   const [portCount, setPortCount] = useState(0);
   const [adapterCount, setAdapterCount] = useState(0);
@@ -74,6 +84,7 @@ export function useStagedGenerationStream(
       setStepDetail("Starting generation...");
       setStageProgress({});
       setValidationErrors([]);
+      setValidationReport(null);
       setContextCount(0);
       setPortCount(0);
       setAdapterCount(0);
@@ -246,6 +257,11 @@ export function useStagedGenerationStream(
                     setContextCount(result.contextCount);
                     setPortCount(result.portCount);
                     setAdapterCount(result.adapterCount);
+                    if (event.validation) {
+                      setValidationReport(
+                        event.validation as StageValidationReport,
+                      );
+                    }
                     setPhase(result.phase);
                     setStepDetail(result.stepDetail);
                     setIsGenerating(false);
@@ -328,6 +344,7 @@ export function useStagedGenerationStream(
     setStepDetail("");
     setStageProgress({});
     setValidationErrors([]);
+    setValidationReport(null);
     setContextCount(0);
     setPortCount(0);
     setAdapterCount(0);
@@ -341,6 +358,7 @@ export function useStagedGenerationStream(
     stepDetail,
     stageProgress,
     validationErrors,
+    validationReport,
     contextCount,
     portCount,
     adapterCount,
