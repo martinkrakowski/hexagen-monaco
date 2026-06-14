@@ -67,6 +67,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 # Copy static assets to the mirrored path
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 
+# Mount point for the free-tier quota SQLite DB (a named volume in
+# docker-compose.prod.yml). Pre-create + own it as root so the volume
+# initialises writable for the non-root runtime user.
+RUN mkdir -p /data && chown nextjs:nodejs /data
+
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
