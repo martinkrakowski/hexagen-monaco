@@ -1,7 +1,10 @@
 import { Suspense } from "react";
 import { Skeleton } from "@hexagen/ui";
 import type { StagedPhase, StageProgress } from "../staged-generation-types";
-import type { StageValidationReport } from "../useStagedGenerationStream";
+import type {
+  StageValidationReport,
+  StageRepairSummary,
+} from "../useStagedGenerationStream";
 import { ThinkingBlock } from "../GenerateWithAi/ThinkingBlock";
 import { SPEC_STAGE_LABELS, describeFindings } from "./utils";
 
@@ -13,6 +16,8 @@ interface ManifestGeneratingStepProps {
   verboseLog?: string[];
   /** Stage-6 advisory review findings on the produced manifest. */
   validationReport?: StageValidationReport | null;
+  /** Stage-7 verify-and-repair outcome, when the reviewer model ran. */
+  repairSummary?: StageRepairSummary | null;
 }
 
 export function ManifestGeneratingStep({
@@ -22,6 +27,7 @@ export function ManifestGeneratingStep({
   stageProgress,
   verboseLog,
   validationReport,
+  repairSummary,
 }: ManifestGeneratingStepProps) {
   return (
     <>
@@ -61,6 +67,17 @@ export function ManifestGeneratingStep({
             aria-live="polite"
             className="mt-3 shrink-0 rounded-md border border-warning/30 bg-warning/5 p-4 text-sm"
           >
+            {repairSummary?.attempted && (
+              <p className="mb-2 font-medium text-foreground">
+                {repairSummary.applied
+                  ? `The reviewer model repaired ${
+                      repairSummary.errorsBefore - repairSummary.errorsAfter
+                    } of ${repairSummary.errorsBefore} error${
+                      repairSummary.errorsBefore !== 1 ? "s" : ""
+                    } — ${repairSummary.errorsAfter} remain.`
+                  : "The reviewer model attempted a repair but couldn't reduce the errors; showing the original manifest."}
+              </p>
+            )}
             <p className="font-medium text-foreground">
               Manifest generated — the review found{" "}
               {describeFindings(

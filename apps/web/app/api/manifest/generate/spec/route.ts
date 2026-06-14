@@ -7,7 +7,10 @@ import {
   formatModelChip,
   type StructuredConfigGenerationCallbacks,
 } from "@hexagen/agentic-interaction";
-import { createLLMProviderSelector } from "../../../../lib/wire.server";
+import {
+  createLLMProviderSelector,
+  createStage6ReviewerConfig,
+} from "../../../../lib/wire.server";
 import { logger } from "../../../../../lib/structured-logger";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 
@@ -44,6 +47,17 @@ type NDJSONEvent =
       // Stage-6 review findings on the (successfully produced) manifest —
       // advisory, surfaced so the UI can show them instead of just a count.
       validation: { errors: string[]; warnings: string[]; passed: boolean };
+      // Stage-7 verify-and-repair outcome — present only when the reviewer was
+      // configured AND Stage 6 found errors. Counts let the UI report
+      // "repaired K of N" honestly.
+      repair?: {
+        attempted: boolean;
+        applied: boolean;
+        errorsBefore: number;
+        errorsAfter: number;
+        warningsBefore: number;
+        warningsAfter: number;
+      };
     }
   | { type: "error"; message: string };
 
@@ -170,11 +184,16 @@ export async function POST(request: NextRequest) {
         // configured provider (LLM_BASE_URL) hosts the named model. Setting
         // "gpt-4o" against a non-OpenAI endpoint produces 404s on retry.
         const escalationModel = process.env.LLM_ESCALATION_MODEL || undefined;
+        // Stage-7 verify-and-repair reviewer (gpt-4o). Null unless
+        // STAGE6_REVIEWER_API_KEY is set — a Martin-gated prod secret; when
+        // absent the orchestrator skips repair and behaves exactly as before.
+        const reviewerPort = createStage6ReviewerConfig();
         const useCase = new ExecuteStructuredConfigGenerationUseCase(
           llmAdapter,
           transactionManager,
           classifyUseCase,
           escalationModel,
+          reviewerPort ?? undefined,
         );
 
         const result = await useCase.execute(body.config, callbacks);
@@ -207,6 +226,7 @@ export async function POST(request: NextRequest) {
             adapterCount,
             transactionId: result.transactionId,
             validation: result.validation,
+            ...(result.repair ? { repair: result.repair } : {}),
           });
         } else {
           const msg =

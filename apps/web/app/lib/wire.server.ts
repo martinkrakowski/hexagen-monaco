@@ -363,6 +363,46 @@ export const createStage1RefinerConfig = (): Stage1RefinementConfig | null => {
   return { port, mode };
 };
 
+/**
+ * Stage-7 verify-and-repair reviewer (gpt-4o by default). Mirrors the Stage-1
+ * refiner's gating exactly: a DEDICATED key var so the main staged-generation
+ * fallback chain is untouched even if the same key value also lives in
+ * LLM_API_KEY. Returns null (repair OFF) when unset — the orchestrator then
+ * skips Stage 7 and the post-Stage-6 path is byte-identical to report-only.
+ *
+ * Activating this in prod is a Martin-gated secret change, like the Stage-1
+ * refiner — see docs/planning/mercury-2-prod-flip-runbook.md.
+ *
+ * Env:
+ * - STAGE6_REVIEWER_API_KEY  — required to activate
+ * - STAGE6_REVIEWER_BASE_URL — default https://openrouter.ai/api/v1
+ * - STAGE6_REVIEWER_MODEL    — default openai/gpt-4o
+ */
+export const createStage6ReviewerConfig =
+  (): LLMProviderSelectorAdapter | null => {
+    const vault = getEnvironmentVault();
+    if (!vault.getSecret("STAGE6_REVIEWER_API_KEY")) return null;
+    return new LLMProviderSelectorAdapter({
+      webLlmAdapter: null,
+      preferLocal: false,
+      validateLocalLLM: false,
+      fallbackChain: {
+        primary: {
+          providerId: "openai" as const,
+          baseUrl:
+            process.env.STAGE6_REVIEWER_BASE_URL ||
+            "https://openrouter.ai/api/v1",
+          model: process.env.STAGE6_REVIEWER_MODEL || "openai/gpt-4o",
+          apiKeyEnvVar: "STAGE6_REVIEWER_API_KEY",
+          temperature: 0.2,
+          maxTokens: 8000,
+        },
+        fallbacks: [],
+      },
+      secretVault: vault,
+    });
+  };
+
 // ============================================================================
 // Adapter Singletons
 // ============================================================================

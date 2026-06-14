@@ -31,6 +31,30 @@ function isStageValidationReport(
   );
 }
 
+/** Stage-7 verify-and-repair outcome — advisory context for the findings panel. */
+export interface StageRepairSummary {
+  attempted: boolean;
+  applied: boolean;
+  errorsBefore: number;
+  errorsAfter: number;
+  warningsBefore: number;
+  warningsAfter: number;
+}
+
+/** Boundary guard for the Stage-7 summary, same rationale as the report guard. */
+function isStageRepairSummary(value: unknown): value is StageRepairSummary {
+  if (typeof value !== "object" || value === null) return false;
+  const r = value as Record<string, unknown>;
+  return (
+    typeof r.attempted === "boolean" &&
+    typeof r.applied === "boolean" &&
+    typeof r.errorsBefore === "number" &&
+    typeof r.errorsAfter === "number" &&
+    typeof r.warningsBefore === "number" &&
+    typeof r.warningsAfter === "number"
+  );
+}
+
 export interface StagedGenerationStreamOptions {
   endpoint: string;
   stageLabels: Record<number, string>;
@@ -45,6 +69,7 @@ export interface StagedGenerationStreamReturn {
   stageProgress: Record<number, StageProgress>;
   validationErrors: string[];
   validationReport: StageValidationReport | null;
+  repairSummary: StageRepairSummary | null;
   contextCount: number;
   portCount: number;
   adapterCount: number;
@@ -58,6 +83,7 @@ export interface StagedGenerationStreamReturn {
     stageProgress: Record<number, StageProgress>;
     validationErrors: string[];
     validationReport: StageValidationReport | null;
+    repairSummary: StageRepairSummary | null;
     contextCount: number;
     portCount: number;
     adapterCount: number;
@@ -90,6 +116,9 @@ export function useStagedGenerationStream(
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [validationReport, setValidationReport] =
     useState<StageValidationReport | null>(null);
+  const [repairSummary, setRepairSummary] = useState<StageRepairSummary | null>(
+    null,
+  );
   const [contextCount, setContextCount] = useState(0);
   const [portCount, setPortCount] = useState(0);
   const [adapterCount, setAdapterCount] = useState(0);
@@ -106,6 +135,7 @@ export function useStagedGenerationStream(
       setStageProgress({});
       setValidationErrors([]);
       setValidationReport(null);
+      setRepairSummary(null);
       setContextCount(0);
       setPortCount(0);
       setAdapterCount(0);
@@ -132,6 +162,7 @@ export function useStagedGenerationStream(
         stageProgress: {} as Record<number, StageProgress>,
         validationErrors: [] as string[],
         validationReport: null as StageValidationReport | null,
+        repairSummary: null as StageRepairSummary | null,
         contextCount: 0,
         portCount: 0,
         adapterCount: 0,
@@ -287,6 +318,10 @@ export function useStagedGenerationStream(
                         "[staged-gen] Ignoring malformed Stage-6 validation payload",
                       );
                     }
+                    if (isStageRepairSummary(event.repair)) {
+                      result.repairSummary = event.repair;
+                      setRepairSummary(result.repairSummary);
+                    }
                     setPhase(result.phase);
                     setStepDetail(result.stepDetail);
                     setIsGenerating(false);
@@ -335,6 +370,9 @@ export function useStagedGenerationStream(
                   "[staged-gen] Ignoring malformed Stage-6 validation payload",
                 );
               }
+              if (isStageRepairSummary(event.repair)) {
+                result.repairSummary = event.repair;
+              }
               result.phase = "complete";
               result.stepDetail = "Manifest generation complete";
             }
@@ -377,6 +415,7 @@ export function useStagedGenerationStream(
     setStageProgress({});
     setValidationErrors([]);
     setValidationReport(null);
+    setRepairSummary(null);
     setContextCount(0);
     setPortCount(0);
     setAdapterCount(0);
@@ -391,6 +430,7 @@ export function useStagedGenerationStream(
     stageProgress,
     validationErrors,
     validationReport,
+    repairSummary,
     contextCount,
     portCount,
     adapterCount,

@@ -16,6 +16,7 @@ export type { PortMappingResult } from "./staged-generation/execute-port-mapping
 export { ExecuteAdapterAssignmentUseCase } from "./staged-generation/execute-adapter-assignment.use-case";
 export { ExecuteManifestAssemblyUseCase } from "./staged-generation/execute-manifest-assembly.use-case";
 export { ExecuteValidationReviewUseCase } from "./staged-generation/execute-validation-review.use-case";
+export { ExecuteManifestRepairUseCase } from "./staged-generation/execute-manifest-repair.use-case";
 export { ExecuteFullStagedGenerationUseCase } from "./staged-generation/execute-full-staged-generation.use-case";
 export type {
   FullStagedGenerationCallbacks,
