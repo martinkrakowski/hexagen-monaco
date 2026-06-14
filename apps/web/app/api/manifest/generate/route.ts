@@ -85,14 +85,6 @@ export async function POST(
     );
   }
 
-  // Free-tier daily quota (per anonymous session). The per-IP check above is the
-  // burst backstop; this is the durable daily cap.
-  const quota = enforceDailyQuota(request, "generation");
-  // The 429 body is success:false (+ quota fields) — structurally a valid
-  // error response for this route's typed shape.
-  if (!quota.ok)
-    return quota.response as NextResponse<GenerateManifestResponse>;
-
   let body: GenerateManifestRequestBody;
   try {
     body = await request.json();
@@ -106,19 +98,26 @@ export async function POST(
     );
   }
 
-  try {
-    // Validate required fields
-    if (!body.description || typeof body.description !== "string") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Missing or invalid description field",
-          details: 'Request body must include a "description" string field',
-        },
-        { status: 400 },
-      );
-    }
+  // Validate required fields before consuming quota — a malformed request must
+  // not burn a unit or mint an orphan session.
+  if (!body.description || typeof body.description !== "string") {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Missing or invalid description field",
+        details: 'Request body must include a "description" string field',
+      },
+      { status: 400 },
+    );
+  }
 
+  // Free-tier daily quota (per anonymous session). The per-IP check above is the
+  // burst backstop; this is the durable daily cap.
+  const quota = enforceDailyQuota(request, "generation");
+  if (!quota.ok)
+    return quota.response as NextResponse<GenerateManifestResponse>;
+
+  try {
     // Create project description value object
     let projectDescription: ProjectDescription;
     try {
@@ -208,7 +207,7 @@ export async function POST(
           details:
             "The LLM was unable to generate a valid manifest from the description",
         },
-        { status: 500 },
+        { status: 500, headers: quota.headers },
       );
     }
 
@@ -251,7 +250,7 @@ export async function POST(
             ? error.message
             : "An unexpected error occurred",
       },
-      { status: 500 },
+      { status: 500, headers: quota.headers },
     );
   }
 }

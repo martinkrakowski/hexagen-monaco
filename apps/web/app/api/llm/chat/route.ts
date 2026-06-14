@@ -181,6 +181,9 @@ export async function POST(request: NextRequest) {
       error instanceof Error ? error.message : "An unexpected error occurred.";
     // eslint-disable-next-line no-console -- intentional: route-level fallback diagnostic before returning 500
     console.error("[Server Chat] Error handling request:", error);
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: 500, headers: quotaHeaders },
+    );
   }
 }
