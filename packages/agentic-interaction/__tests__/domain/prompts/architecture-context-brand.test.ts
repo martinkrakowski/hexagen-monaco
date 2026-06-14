@@ -18,11 +18,12 @@ import {
 // external API, so no production caller can pass a raw string to the seam. This
 // file is a local / documentation guard, NOT a CI gate: it runs via tsx (which
 // strips the @ts-expect-error below), and `typecheck:test` — the only command
-// that honours the directive — is run by no workflow. Imports are kept
-// extensionless and minimal so the directive resolves the REAL branded type:
-// a `.ts` extension adds TS5097 noise, and pulling the heavy use-case modules
-// in can make the symbol resolve to `any` under tsconfig.test.json's bundler
-// resolution — either defeats the directive (it would pass vacuously).
+// that honours the directive — is run by no workflow.
+//
+// Imports are extensionless only to keep this file free of TS5097 noise under
+// tsconfig.test.json (a `.ts` extension still FIRES the brand — it just adds a
+// TS5097 per import). The @ts-expect-error below goes vacuous (TS2578) only if
+// the brand itself is weakened; no import shape defeats it.
 
 test("the sanctioned builder produces an ArchitectureContext that compileStage0Prompt injects", () => {
   const ctx: ArchitectureContext = buildGreenfieldArchitectureContext();
