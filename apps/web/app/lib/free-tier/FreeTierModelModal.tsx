@@ -12,6 +12,7 @@ import {
 import { X, Zap, Cpu, KeyRound, ChevronRight } from "lucide-react";
 import { usePreferredLLM } from "./store/usePreferredLLM";
 import { useLocalLLM } from "@/llm-driver/useLocalLlm";
+import { useFreeTierQuota, type FreeTierQuota } from "./hooks/useFreeTierQuota";
 
 /**
  * Pure presentation for the Free Tier modal — all data and actions arrive as
@@ -27,6 +28,8 @@ export interface FreeTierModelModalViewProps {
   hasLocalModel: boolean;
   /** Whether that local model is loaded and ready. */
   webLLMReady: boolean;
+  /** Today's free-tier usage (from /api/free-tier/quota); null while loading. */
+  quota?: FreeTierQuota | null;
   onClose: () => void;
   onUseWebLLM: () => void;
   onUseFreeTier: () => void;
@@ -38,6 +41,7 @@ export function FreeTierModelModalView({
   modelName,
   hasLocalModel,
   webLLMReady,
+  quota,
   onClose,
   onUseWebLLM,
   onUseFreeTier,
@@ -75,15 +79,37 @@ export function FreeTierModelModalView({
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Fair-use note — it's a shared service, not a slow one. */}
-            <p className="rounded-md bg-muted/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-              It&apos;s a shared service, so generation is fair-use limited to
-              roughly{" "}
-              <span className="font-medium text-foreground">
-                10 requests per minute
-              </span>
-              . No daily caps, no sign-in.
-            </p>
+            {/* Free-tier daily limits + live remaining (PR-6). */}
+            <div className="rounded-md bg-muted/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+              {quota && quota.generation.remaining === 0 ? (
+                <span>
+                  You&apos;ve used today&apos;s{" "}
+                  <span className="font-medium text-foreground">
+                    {quota.generation.limit} free generations
+                  </span>
+                  . Switch to a local model or your own key below to keep
+                  building — the free tier resets at midnight UTC.
+                </span>
+              ) : (
+                <span>
+                  Free tier is shared, so it&apos;s capped per day — no API key,
+                  no sign-in.
+                  {quota && (
+                    <span className="text-foreground">
+                      {" "}
+                      <span className="font-medium">
+                        {quota.generation.remaining} of {quota.generation.limit}
+                      </span>{" "}
+                      generations and{" "}
+                      <span className="font-medium">
+                        {quota.chat.remaining} of {quota.chat.limit}
+                      </span>{" "}
+                      chat messages left today.
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
 
             <div className="space-y-3">
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -204,6 +230,7 @@ export function FreeTierModelModal({
   const { preferredLocalModel, clearPreferredLocalModel } = usePreferredLLM();
   const llmContext = useLocalLLM();
   const webLLMReady = llmContext.loadedModel !== null;
+  const quota = useFreeTierQuota();
 
   const onOpenModels = () => {
     // Current path for the return URL — read at click time (not via
@@ -246,6 +273,7 @@ export function FreeTierModelModal({
       modelName={modelName}
       hasLocalModel={preferredLocalModel !== null}
       webLLMReady={webLLMReady}
+      quota={quota}
       onClose={() => onOpenChange(false)}
       onUseWebLLM={onUseWebLLM}
       onUseFreeTier={onUseFreeTier}
