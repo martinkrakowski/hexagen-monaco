@@ -168,6 +168,20 @@ export function useStagedGenerationStream(
         adapterCount: 0,
       };
 
+      // Stages normally get a StageProgress entry on `stage-start`; Stage 7
+      // (repair) emits telemetry with no stage-start, so ensure a well-formed
+      // entry exists before merging telemetry/duration/chunks onto it (else the
+      // spread of `undefined` yields an entry missing stage/label/chunks).
+      const ensureStageEntry = (
+        stage: number,
+        labelHint?: string,
+      ): StageProgress =>
+        result.stageProgress[stage] ?? {
+          stage,
+          label: labelHint ?? stageLabels[stage] ?? `Stage ${stage}`,
+          chunks: [],
+        };
+
       try {
         const MAX_RECONNECT_ATTEMPTS = 3;
         const BASE_DELAY_MS = 1000;
@@ -269,7 +283,7 @@ export function useStagedGenerationStream(
                     const durationMs = event.durationMs as number;
                     result.stageProgress = {
                       ...result.stageProgress,
-                      [stage]: { ...result.stageProgress[stage], durationMs },
+                      [stage]: { ...ensureStageEntry(stage), durationMs },
                     };
                     setStageProgress(result.stageProgress);
                   } else if (type === "stage-telemetry") {
@@ -278,20 +292,21 @@ export function useStagedGenerationStream(
                       event.telemetry as StageProgress["telemetry"];
                     result.stageProgress = {
                       ...result.stageProgress,
-                      [stage]: { ...result.stageProgress[stage], telemetry },
+                      [stage]: {
+                        ...ensureStageEntry(stage, telemetry?.label),
+                        telemetry,
+                      },
                     };
                     setStageProgress(result.stageProgress);
                   } else if (type === "chunk") {
                     const stage = event.stage as number;
                     const data = event.data as string;
+                    const entry = ensureStageEntry(stage);
                     result.stageProgress = {
                       ...result.stageProgress,
                       [stage]: {
-                        ...result.stageProgress[stage],
-                        chunks: [
-                          ...(result.stageProgress[stage]?.chunks || []),
-                          data,
-                        ],
+                        ...entry,
+                        chunks: [...entry.chunks, data],
                       },
                     };
                     setStageProgress(result.stageProgress);

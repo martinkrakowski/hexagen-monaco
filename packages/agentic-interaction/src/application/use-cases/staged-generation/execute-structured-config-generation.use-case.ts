@@ -1504,32 +1504,49 @@ export class ExecuteStructuredConfigGenerationUseCase {
             repair = keepOriginal();
           } else {
             const errorsAfter = revalidated.report.errors.length;
-            if (errorsAfter < errorsBefore) {
+            // Integrity gate. Accept-on-fewer-errors ALONE is gameable: a model
+            // could drop the offending context/ports to shed the finding rather
+            // than fix it. The in-scope repairs (R01 rename, R16/17/18 port
+            // edits) are all in-place, so also require the structural counts to
+            // be unchanged — countManifestEntities is the same counter the
+            // transaction below uses.
+            const beforeCounts = countManifestEntities(
+              (assembledManifest.parsedObject as Record<string, unknown>) ?? {},
+            );
+            const afterCounts = countManifestEntities(
+              (revalidated.manifest.parsedObject as Record<string, unknown>) ??
+                {},
+            );
+            const structurePreserved =
+              beforeCounts.contextCount === afterCounts.contextCount &&
+              beforeCounts.portCount === afterCounts.portCount &&
+              beforeCounts.adapterCount === afterCounts.adapterCount;
+            const reducedErrors = errorsAfter < errorsBefore;
+            const applied = reducedErrors && structurePreserved;
+
+            repair = {
+              attempted: true,
+              applied,
+              errorsBefore,
+              errorsAfter,
+              warningsBefore,
+              warningsAfter: revalidated.report.warnings.length,
+            };
+
+            if (applied) {
               finalManifest = revalidated.manifest;
               finalReport = revalidated.report;
-              repair = {
-                attempted: true,
-                applied: true,
-                errorsBefore,
-                errorsAfter,
-                warningsBefore,
-                warningsAfter: revalidated.report.warnings.length,
-              };
               callbacks?.onChunk?.(
                 `Stage 7 · Repaired ${errorsBefore - errorsAfter} of ${errorsBefore} error${errorsBefore !== 1 ? "s" : ""} — ${errorsAfter} remain`,
+              );
+            } else if (reducedErrors) {
+              callbacks?.onChunk?.(
+                "Stage 7 · Repair altered the manifest structure (contexts/ports/adapters) — keeping the original",
               );
             } else {
               callbacks?.onChunk?.(
                 `Stage 7 · Repair did not reduce errors (${errorsAfter} vs ${errorsBefore}) — keeping the original manifest`,
               );
-              repair = {
-                attempted: true,
-                applied: false,
-                errorsBefore,
-                errorsAfter,
-                warningsBefore,
-                warningsAfter: revalidated.report.warnings.length,
-              };
             }
           }
         } catch {

@@ -142,4 +142,69 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair
       assert.ok(result.validation.errors.some((e) => e.includes("R01")));
     }
   });
+
+  it("rejects a repair that sheds errors by dropping a context (structure gate)", async () => {
+    // A 2-context spec, one banned. The reviewer "fixes" R01 by DELETING the
+    // banned context — fewer errors, but a materially trimmed manifest. errors
+    // drop yet contextCount falls, so the integrity gate keeps the original.
+    const twoContextBanned = [
+      "bounded_contexts:",
+      "  - name: payment-gateway",
+      "    layers:",
+      "      application:",
+      "        ports:",
+      "          in: [CreatePaymentPort]",
+      "          out: [PaymentRepositoryPort]",
+      "      infrastructure:",
+      "        adapters: [InMemoryPaymentAdapter]",
+      "  - name: billing",
+      "    layers:",
+      "      application:",
+      "        ports:",
+      "          in: [CreateInvoicePort]",
+      "          out: [InvoiceRepositoryPort]",
+      "      infrastructure:",
+      "        adapters: [InMemoryInvoiceAdapter]",
+      "use_cases: {}",
+      "context_mappings: []",
+      "",
+    ].join("\n");
+    const billingOnly = [
+      "bounded_contexts:",
+      "  - name: billing",
+      "    layers:",
+      "      application:",
+      "        ports:",
+      "          in: [CreateInvoicePort]",
+      "          out: [InvoiceRepositoryPort]",
+      "      infrastructure:",
+      "        adapters: [InMemoryInvoiceAdapter]",
+      "use_cases: {}",
+      "context_mappings: []",
+      "",
+    ].join("\n");
+
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(
+      passingStage6Port(),
+      mockTransactionManager,
+      undefined,
+      undefined,
+      reviewerPortReturning(billingOnly),
+    );
+    const result = await useCase.execute(twoContextBanned, {
+      onProgress: () => {},
+    });
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.ok(result.repair);
+      // errors DID drop (R01 gone) — proving the gate rejected for STRUCTURE,
+      // not for failing to reduce errors.
+      assert.ok(
+        (result.repair?.errorsAfter ?? 1) < (result.repair?.errorsBefore ?? 0),
+      );
+      assert.strictEqual(result.repair?.applied, false);
+      assert.ok(result.validation.errors.some((e) => e.includes("R01")));
+    }
+  });
 });
