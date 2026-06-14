@@ -7,6 +7,13 @@ RUN corepack enable && corepack prepare yarn@4.12.0 --activate
 FROM base AS builder
 WORKDIR /app
 
+# better-sqlite3 (the free-tier quota store) has no Alpine/musl prebuilt binary,
+# so it compiles from source during `yarn install` — which needs python3 + a C++
+# toolchain that node:alpine doesn't ship. (esbuild/sharp/etc. use prebuilds,
+# which is why only better-sqlite3 failed without this.) Its own layer so it
+# caches independently of source changes.
+RUN apk add --no-cache python3 make g++
+
 # Copy the entire repository (respecting .dockerignore)
 COPY . .
 
