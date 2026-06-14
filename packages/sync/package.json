@@ -1,6 +1,6 @@
 {
   "name": "@hexagen/sync",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "type": "module",
   "description": "HexaGen Sync Engine — Generate and sync modular monorepos",
   "license": "SEE LICENSE IN LICENSE",
