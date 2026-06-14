@@ -5,6 +5,7 @@ import { HandleServerChatUseCase } from "@hexagen/agentic-interaction";
 import { createLLMProvider, resolveWebLlmApiKey } from "@/lib/wire.shared";
 import { getProxyRequestUseCase } from "@/lib/byok-wire.js";
 import { SSE_HEADERS } from "@/lib/sse-helpers";
+import { enforceDailyQuota } from "../../../../lib/enforce-quota";
 import type { ChatMessage } from "@hexagen/local-llm";
 import type { ByokProvider } from "@hexagen/byok";
 
@@ -153,6 +154,15 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Free-tier (unauthenticated) chat: enforce the daily chat quota per anonymous
+  // session. Signed-in users aren't on the free tier; BYOK returned above.
+  let quotaHeaders: Record<string, string> = {};
+  if (!session?.user?.sub) {
+    const quota = enforceDailyQuota(request, "chat");
+    if (!quota.ok) return quota.response;
+    quotaHeaders = quota.headers;
+  }
+
   try {
     const port = new HandleServerChatUseCase(
       createLLMProvider(),
@@ -164,13 +174,16 @@ export async function POST(request: NextRequest) {
     );
 
     return new Response(stream, {
-      headers: { ...SSE_HEADERS },
+      headers: { ...SSE_HEADERS, ...quotaHeaders },
     });
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "An unexpected error occurred.";
     // eslint-disable-next-line no-console -- intentional: route-level fallback diagnostic before returning 500
     console.error("[Server Chat] Error handling request:", error);
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: 500, headers: quotaHeaders },
+    );
   }
 }

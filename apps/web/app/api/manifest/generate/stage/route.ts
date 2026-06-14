@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { checkRateLimit } from "../../../../../lib/rate-limiter";
+import { enforceDailyQuota } from "../../../../../lib/enforce-quota";
 import { ExecuteFullStagedGenerationUseCase } from "@hexagen/agentic-interaction";
 import type {
   PromptVariables,
@@ -55,6 +56,25 @@ export async function POST(request: NextRequest) {
     return new Response(
       JSON.stringify({ type: "error", message: "Missing description" }),
       { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  // Free-tier daily quota (per anonymous session) — consumed only after the
+  // request is known valid, so malformed requests neither burn a unit nor mint
+  // an orphan session. Per-IP check above is the burst backstop. Emitted in this
+  // route's native ndjson error channel.
+  const quota = enforceDailyQuota(request, "generation");
+  if (!quota.ok) {
+    return new Response(
+      JSON.stringify({ type: "error", message: quota.message }) + "\n",
+      {
+        status: 429,
+        headers: {
+          "Content-Type": "application/x-ndjson",
+          "Retry-After": String(quota.retryAfterSeconds),
+          ...quota.headers,
+        },
+      },
     );
   }
 
@@ -169,6 +189,7 @@ export async function POST(request: NextRequest) {
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
       "Access-Control-Allow-Origin": "*",
+      ...quota.headers,
     },
   });
 }

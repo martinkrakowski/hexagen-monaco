@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { checkRateLimit } from "../../../../../../lib/rate-limiter";
+import { enforceDailyQuota } from "../../../../../../lib/enforce-quota";
 import {
   ExecuteLooseSpecConversionUseCase,
   MAX_LOOSE_SPEC_INPUT_CHARS,
@@ -86,6 +87,26 @@ export async function POST(request: NextRequest) {
   // Extract validated values so narrowing survives across the stream closure.
   const looseSpec = body.looseSpec;
 
+  // Free-tier daily quota (per anonymous session) — consumed only after the
+  // request is known valid, so malformed requests neither burn a unit nor mint
+  // an orphan session. Per-IP check above is the burst backstop. Loose-spec
+  // conversion is a cloud call, so it counts as a generation. Emitted in this
+  // route's native ndjson error channel.
+  const quota = enforceDailyQuota(request, "generation");
+  if (!quota.ok) {
+    return new Response(
+      JSON.stringify({ type: "error", message: quota.message }) + "\n",
+      {
+        status: 429,
+        headers: {
+          "Content-Type": "application/x-ndjson",
+          "Retry-After": String(quota.retryAfterSeconds),
+          ...quota.headers,
+        },
+      },
+    );
+  }
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -163,6 +184,7 @@ export async function POST(request: NextRequest) {
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
       "Access-Control-Allow-Origin": "*",
+      ...quota.headers,
     },
   });
 }

@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "../../../../lib/rate-limiter";
+import { enforceDailyQuota } from "../../../../lib/enforce-quota";
 import { GenerateManifestFromDescriptionUseCase } from "@hexagen/agentic-interaction";
 import {
   createProjectDescription,
@@ -75,15 +76,15 @@ export async function POST(
   if (!rateCheck.allowed) {
     return NextResponse.json(
       { success: false, error: "Rate limit exceeded" },
-      { 
+      {
         status: 429,
         headers: {
           "Retry-After": Math.ceil(rateCheck.retryAfter! / 1000).toString(),
         },
-      }
+      },
     );
   }
-  
+
   let body: GenerateManifestRequestBody;
   try {
     body = await request.json();
@@ -97,19 +98,26 @@ export async function POST(
     );
   }
 
-  try {
-    // Validate required fields
-    if (!body.description || typeof body.description !== "string") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Missing or invalid description field",
-          details: 'Request body must include a "description" string field',
-        },
-        { status: 400 },
-      );
-    }
+  // Validate required fields before consuming quota — a malformed request must
+  // not burn a unit or mint an orphan session.
+  if (!body.description || typeof body.description !== "string") {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Missing or invalid description field",
+        details: 'Request body must include a "description" string field',
+      },
+      { status: 400 },
+    );
+  }
 
+  // Free-tier daily quota (per anonymous session). The per-IP check above is the
+  // burst backstop; this is the durable daily cap.
+  const quota = enforceDailyQuota(request, "generation");
+  if (!quota.ok)
+    return quota.response as NextResponse<GenerateManifestResponse>;
+
+  try {
     // Create project description value object
     let projectDescription: ProjectDescription;
     try {
@@ -199,7 +207,7 @@ export async function POST(
           details:
             "The LLM was unable to generate a valid manifest from the description",
         },
-        { status: 500 },
+        { status: 500, headers: quota.headers },
       );
     }
 
@@ -225,7 +233,7 @@ export async function POST(
           provider: result.manifest.metadata.provider || "unknown",
         },
       },
-      { status: 200 },
+      { status: 200, headers: quota.headers },
     );
   } catch (error) {
     // Error logging (not for production)
@@ -242,7 +250,7 @@ export async function POST(
             ? error.message
             : "An unexpected error occurred",
       },
-      { status: 500 },
+      { status: 500, headers: quota.headers },
     );
   }
 }
