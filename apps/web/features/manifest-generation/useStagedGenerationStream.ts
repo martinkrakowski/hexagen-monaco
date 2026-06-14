@@ -11,6 +11,26 @@ export interface StageValidationReport {
   passed: boolean;
 }
 
+/**
+ * Runtime guard for the Stage-6 report at the NDJSON boundary. `event.validation`
+ * is untrusted input (proxy/corrupt stream/server-contract drift), yet the UI
+ * dereferences `.errors`/`.warnings` as arrays — so a malformed payload must be
+ * rejected here rather than thrown during render. A bare `as` cast cannot do that.
+ */
+function isStageValidationReport(
+  value: unknown,
+): value is StageValidationReport {
+  if (typeof value !== "object" || value === null) return false;
+  const r = value as Record<string, unknown>;
+  return (
+    Array.isArray(r.errors) &&
+    r.errors.every((e) => typeof e === "string") &&
+    Array.isArray(r.warnings) &&
+    r.warnings.every((w) => typeof w === "string") &&
+    typeof r.passed === "boolean"
+  );
+}
+
 export interface StagedGenerationStreamOptions {
   endpoint: string;
   stageLabels: Record<number, string>;
@@ -259,10 +279,13 @@ export function useStagedGenerationStream(
                     setContextCount(result.contextCount);
                     setPortCount(result.portCount);
                     setAdapterCount(result.adapterCount);
-                    if (event.validation) {
-                      result.validationReport =
-                        event.validation as StageValidationReport;
+                    if (isStageValidationReport(event.validation)) {
+                      result.validationReport = event.validation;
                       setValidationReport(result.validationReport);
+                    } else if (event.validation != null) {
+                      logger.warn(
+                        "[staged-gen] Ignoring malformed Stage-6 validation payload",
+                      );
                     }
                     setPhase(result.phase);
                     setStepDetail(result.stepDetail);
@@ -305,9 +328,12 @@ export function useStagedGenerationStream(
               result.contextCount = event.contextCount as number;
               result.portCount = event.portCount as number;
               result.adapterCount = event.adapterCount as number;
-              if (event.validation) {
-                result.validationReport =
-                  event.validation as StageValidationReport;
+              if (isStageValidationReport(event.validation)) {
+                result.validationReport = event.validation;
+              } else if (event.validation != null) {
+                logger.warn(
+                  "[staged-gen] Ignoring malformed Stage-6 validation payload",
+                );
               }
               result.phase = "complete";
               result.stepDetail = "Manifest generation complete";
