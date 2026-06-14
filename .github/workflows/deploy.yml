@@ -105,6 +105,14 @@ jobs:
           # image would otherwise keep the old env); `--wait` fails the deploy if the
           # new container doesn't become healthy (see the compose healthcheck).
           #
+          # After the container is healthy, a writability probe asserts the
+          # free-tier quota volume (`quota-data:/data`) is writable by the app
+          # user (uid 1001 `nextjs`). The store is fail-open, so a mis-seeded
+          # volume would silently disable enforcement behind a green healthcheck;
+          # `exec -T -u nextjs web sh -c 'test -w /data'` runs access(W_OK) as
+          # that user and fails the deploy if not. It is a deploy-time gate only
+          # and does NOT change the runtime fail-open behaviour.
+          #
           # Cleanup is `docker image prune -f` (dangling images only — reclaims the
           # old :prod layers `docker load` just orphaned). It is deliberately NOT
           # `docker system prune -a --volumes`: this VPS is multi-tenant, and the
@@ -136,5 +144,6 @@ jobs:
             docker load < hexagen-web.tar.gz\n\
             docker image inspect hexagen-monaco-web:prod >/dev/null\n\
             docker compose -f docker-compose.prod.yml up -d --force-recreate --wait --wait-timeout 90\n\
+            docker compose -f docker-compose.prod.yml exec -T -u nextjs web sh -c 'test -w /data' || { echo 'FATAL: /data is not writable by the app user (uid 1001) - free-tier quota would silently fail-open with no enforcement; check the quota-data volume ownership.' >&2; exit 1; }\n\
             rm hexagen-web.tar.gz\n\
             docker image prune -f"
