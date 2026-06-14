@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { checkRateLimit } from "../../../../../lib/rate-limiter";
+import { enforceDailyQuota } from "../../../../../lib/enforce-quota";
 import {
   ExecuteStructuredConfigGenerationUseCase,
   ClassifyContextTypeUseCase,
@@ -55,6 +56,23 @@ export async function POST(request: NextRequest) {
         headers: {
           "Content-Type": "application/x-ndjson",
           "Retry-After": retryAfter.toString(),
+        },
+      },
+    );
+  }
+
+  // Free-tier daily quota (per anonymous session); the per-IP check above is the
+  // burst backstop. Formatted in this route's native ndjson error channel.
+  const quota = enforceDailyQuota(request, "generation");
+  if (!quota.ok) {
+    return new Response(
+      JSON.stringify({ type: "error", message: quota.message }) + "\n",
+      {
+        status: 429,
+        headers: {
+          "Content-Type": "application/x-ndjson",
+          "Retry-After": String(quota.retryAfterSeconds),
+          ...quota.headers,
         },
       },
     );
@@ -214,6 +232,7 @@ export async function POST(request: NextRequest) {
       // Rate limit info for clients to understand endpoint constraints
       "X-RateLimit-Limit": process.env.LLM_RATE_LIMIT || "unlimited",
       "X-RateLimit-Window": "60s",
+      ...quota.headers,
     },
   });
 }

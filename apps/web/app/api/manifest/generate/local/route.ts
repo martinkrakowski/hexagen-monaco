@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "../../../../../lib/rate-limiter";
+import { enforceDailyQuota } from "../../../../../lib/enforce-quota";
 import { GenerateManifestFromDescriptionUseCase } from "@hexagen/agentic-interaction";
 import {
   createProjectDescription,
@@ -75,15 +76,24 @@ export async function POST(
   if (!rateCheck.allowed) {
     return NextResponse.json(
       { success: false, error: "Rate limit exceeded" },
-      { 
+      {
         status: 429,
         headers: {
           "Retry-After": Math.ceil(rateCheck.retryAfter! / 1000).toString(),
         },
-      }
+      },
     );
   }
-  
+
+  // Free-tier daily quota (per anonymous session). preferLocal can't run WebLLM
+  // server-side, so this route falls back to the cloud chain — i.e. it consumes
+  // the free-tier model and counts like any other generation.
+  const quota = enforceDailyQuota(request, "generation");
+  // The 429 body is success:false (+ quota fields) — structurally a valid
+  // error response for this route's typed shape.
+  if (!quota.ok)
+    return quota.response as NextResponse<GenerateManifestResponse>;
+
   let body: GenerateManifestRequestBody;
   try {
     body = await request.json();
@@ -221,7 +231,7 @@ export async function POST(
           provider: result.manifest.metadata.provider || "unknown",
         },
       },
-      { status: 200 },
+      { status: 200, headers: quota.headers },
     );
   } catch (error) {
     // Error logging (not for production)

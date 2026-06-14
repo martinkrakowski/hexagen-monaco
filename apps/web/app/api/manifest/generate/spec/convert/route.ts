@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { checkRateLimit } from "../../../../../../lib/rate-limiter";
+import { enforceDailyQuota } from "../../../../../../lib/enforce-quota";
 import {
   ExecuteLooseSpecConversionUseCase,
   MAX_LOOSE_SPEC_INPUT_CHARS,
@@ -36,6 +37,24 @@ export async function POST(request: NextRequest) {
         headers: {
           "Content-Type": "application/x-ndjson",
           "Retry-After": retryAfter.toString(),
+        },
+      },
+    );
+  }
+
+  // Free-tier daily quota (per anonymous session); the per-IP check above is the
+  // burst backstop. Loose-spec conversion is a cloud call, so it counts as a
+  // generation. Formatted in this route's native ndjson error channel.
+  const quota = enforceDailyQuota(request, "generation");
+  if (!quota.ok) {
+    return new Response(
+      JSON.stringify({ type: "error", message: quota.message }) + "\n",
+      {
+        status: 429,
+        headers: {
+          "Content-Type": "application/x-ndjson",
+          "Retry-After": String(quota.retryAfterSeconds),
+          ...quota.headers,
         },
       },
     );
@@ -163,6 +182,7 @@ export async function POST(request: NextRequest) {
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
       "Access-Control-Allow-Origin": "*",
+      ...quota.headers,
     },
   });
 }
