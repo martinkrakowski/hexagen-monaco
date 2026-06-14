@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter, usePathname } from "next/navigation";
 import {
   Dialog,
   DialogContent,
@@ -14,54 +13,40 @@ import { X, Zap, Cpu, KeyRound, ChevronRight } from "lucide-react";
 import { usePreferredLLM } from "./store/usePreferredLLM";
 import { useLocalLLM } from "@/llm-driver/useLocalLlm";
 
-interface FreeTierModelModalProps {
+/**
+ * Pure presentation for the Free Tier modal — all data and actions arrive as
+ * props, so it renders with zero hooks and is unit-testable directly (the
+ * hook-bound container below isn't, since neither next/navigation nor the local
+ * hook modules can be mocked under the test runner — see the test file).
+ */
+export interface FreeTierModelModalViewProps {
   open: boolean;
-  onOpenChange: (open: boolean) => void;
-  /** The actual model serving generation (e.g. mercury-2), shown in the lead
-   * copy. Falls back to a generic phrase when unknown. */
+  /** The model serving generation (e.g. mercury-2); generic fallback when null. */
   modelName?: string | null;
+  /** Whether the user has chosen a local (WebLLM) model. */
+  hasLocalModel: boolean;
+  /** Whether that local model is loaded and ready. */
+  webLLMReady: boolean;
+  onClose: () => void;
+  onUseWebLLM: () => void;
+  onUseFreeTier: () => void;
+  onOpenModels: () => void;
 }
 
-export function FreeTierModelModal({
+export function FreeTierModelModalView({
   open,
-  onOpenChange,
   modelName,
-}: FreeTierModelModalProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const { preferredLocalModel, clearPreferredLocalModel } = usePreferredLLM();
-  const llmContext = useLocalLLM();
-  const webLLMReady = llmContext.loadedModel !== null;
-
-  const goToModelSelection = () => {
-    router.push(
-      `/projects/new/ai/models?returnUrl=${encodeURIComponent(pathname)}`,
-    );
-    onOpenChange(false);
-  };
-
-  // Use WebLLM: switch to the already-chosen local model if it's loaded,
-  // otherwise send the user to pick/download one.
-  const handleUseWebLLM = async () => {
-    if (preferredLocalModel) {
-      if (llmContext.switchModel && webLLMReady) {
-        await llmContext.switchModel(preferredLocalModel);
-      }
-      onOpenChange(false);
-      return;
-    }
-    goToModelSelection();
-  };
-
-  const handleUseFreeTier = () => {
-    clearPreferredLocalModel();
-    onOpenChange(false);
-  };
-
+  hasLocalModel,
+  webLLMReady,
+  onClose,
+  onUseWebLLM,
+  onUseFreeTier,
+  onOpenModels,
+}: FreeTierModelModalViewProps) {
   const modelLabel = modelName ?? "our hosted model";
 
   return (
-    <Dialog open={open} onClose={() => onOpenChange(false)}>
+    <Dialog open={open} onClose={onClose}>
       {open && (
         <DialogContent>
           <DialogHeader>
@@ -80,7 +65,7 @@ export function FreeTierModelModal({
                 </DialogDescription>
               </div>
               <button
-                onClick={() => onOpenChange(false)}
+                onClick={onClose}
                 className="-mr-1 -mt-1 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 aria-label="Close modal"
               >
@@ -107,7 +92,7 @@ export function FreeTierModelModal({
 
               {/* WebLLM (local) */}
               <button
-                onClick={handleUseWebLLM}
+                onClick={onUseWebLLM}
                 className="group flex w-full items-start gap-3 rounded-md border border-border bg-card p-4 text-left transition-colors hover:bg-accent/40"
               >
                 <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-success/10">
@@ -126,7 +111,7 @@ export function FreeTierModelModal({
                     Runs entirely in your browser via WebAssembly — private,
                     offline, and never rate-limited. Needs a one-time model
                     download; best for small-to-medium projects.
-                    {preferredLocalModel
+                    {hasLocalModel
                       ? webLLMReady
                         ? " Your model is ready now."
                         : " Your model is selected — activate to load it."
@@ -138,7 +123,7 @@ export function FreeTierModelModal({
 
               {/* BYOK */}
               <button
-                onClick={goToModelSelection}
+                onClick={onOpenModels}
                 className="group flex w-full items-start gap-3 rounded-md border border-border bg-card p-4 text-left transition-colors hover:bg-accent/40"
               >
                 <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-info/10">
@@ -170,19 +155,19 @@ export function FreeTierModelModal({
           </div>
 
           <DialogFooter>
-            <Button onClick={handleUseWebLLM}>
-              {preferredLocalModel
+            <Button onClick={onUseWebLLM}>
+              {hasLocalModel
                 ? webLLMReady
                   ? "Switch to WebLLM"
                   : "Activate local model"
                 : "Choose a local model"}
             </Button>
-            {preferredLocalModel ? (
-              <Button variant="outline" onClick={handleUseFreeTier}>
+            {hasLocalModel ? (
+              <Button variant="outline" onClick={onUseFreeTier}>
                 Use Free Tier instead
               </Button>
             ) : (
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
+              <Button variant="outline" onClick={onClose}>
                 Continue on Free Tier
               </Button>
             )}
@@ -190,5 +175,75 @@ export function FreeTierModelModal({
         </DialogContent>
       )}
     </Dialog>
+  );
+}
+
+interface FreeTierModelModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** The actual model serving generation (e.g. mercury-2), shown in the lead
+   * copy. Falls back to a generic phrase when unknown. */
+  modelName?: string | null;
+  /** App router, injected by the caller (FreeTierContext) rather than read via
+   * useRouter() — next/navigation's exports are non-configurable, so this keeps
+   * the navigation path injectable (the ADR-0038 router-injection pattern). */
+  router: { push: (href: string) => void };
+}
+
+/**
+ * Hook-bound container. Reads the local-LLM hooks here (mounted on demand by
+ * FreeTierContext, never on every shell render) and delegates rendering to the
+ * pure view above.
+ */
+export function FreeTierModelModal({
+  open,
+  onOpenChange,
+  modelName,
+  router,
+}: FreeTierModelModalProps) {
+  const { preferredLocalModel, clearPreferredLocalModel } = usePreferredLLM();
+  const llmContext = useLocalLLM();
+  const webLLMReady = llmContext.loadedModel !== null;
+
+  const onOpenModels = () => {
+    // Current path for the return URL — read at click time (not via
+    // usePathname, which would re-add a next/navigation hook to this seam).
+    const returnUrl =
+      typeof window !== "undefined" ? window.location.pathname : "/";
+    router.push(
+      `/projects/new/ai/models?returnUrl=${encodeURIComponent(returnUrl)}`,
+    );
+    onOpenChange(false);
+  };
+
+  // Use WebLLM: switch to the already-chosen local model if it's loaded,
+  // otherwise send the user to pick/download one.
+  const onUseWebLLM = async () => {
+    if (preferredLocalModel) {
+      if (llmContext.switchModel && webLLMReady) {
+        await llmContext.switchModel(preferredLocalModel);
+      }
+      onOpenChange(false);
+      return;
+    }
+    onOpenModels();
+  };
+
+  const onUseFreeTier = () => {
+    clearPreferredLocalModel();
+    onOpenChange(false);
+  };
+
+  return (
+    <FreeTierModelModalView
+      open={open}
+      modelName={modelName}
+      hasLocalModel={preferredLocalModel !== null}
+      webLLMReady={webLLMReady}
+      onClose={() => onOpenChange(false)}
+      onUseWebLLM={onUseWebLLM}
+      onUseFreeTier={onUseFreeTier}
+      onOpenModels={onOpenModels}
+    />
   );
 }

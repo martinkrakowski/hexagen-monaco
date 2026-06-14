@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { FreeTierModelModal } from "./FreeTierModelModal";
 import { useCurrentModelName } from "./hooks/useCurrentModelName";
 import { isFreeTierModel } from "../wire.client";
@@ -33,6 +34,7 @@ export function useFreeTier(): FreeTierContextValue {
 export function FreeTierProvider({ children }: { children: ReactNode }) {
   const [freeTierModalOpen, setFreeTierModalOpen] = useState(false);
   const currentModelName = useCurrentModelName();
+  const router = useRouter();
   const showFreeTierBadge = isFreeTierModel();
   const { preferredLocalModel } = usePreferredLLM();
   const usingWebLLM = preferredLocalModel !== null;
@@ -46,6 +48,7 @@ export function FreeTierProvider({ children }: { children: ReactNode }) {
       open={freeTierModalOpen}
       onOpenChange={setFreeTierModalOpen}
       modelName={currentModelName}
+      router={router}
     />
   ) : null;
 
