@@ -3,6 +3,14 @@
 Release notes for the co-published `@hexagen-monaco/sync` and
 `@hexagen-monaco/arch-linter` packages (they share one version, tagged `vX.Y.Z`).
 
+## 0.8.0
+
+Lock-step version bump — **no functional changes** to `@hexagen-monaco/sync` or
+`@hexagen-monaco/arch-linter` this cycle. The release carries web-app work that
+ships via the VPS deploy (not npm): free-tier **daily quotas** (per-anonymous-
+session generation/chat caps on a durable SQLite store) and the
+`tencent/hy3-preview` chat model.
+
 ## 0.7.1
 
 The sync-toolchain remediation **Wave C** plus its review fix-forwards. All
