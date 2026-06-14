@@ -20,7 +20,9 @@ describe("GET /api/free-tier/quota", () => {
     assert.strictEqual(body.generation.used, 0);
     assert.strictEqual(body.generation.limit, QUOTA_LIMITS.generation);
     assert.strictEqual(body.generation.remaining, QUOTA_LIMITS.generation);
+    assert.strictEqual(body.chat.used, 0);
     assert.strictEqual(body.chat.limit, QUOTA_LIMITS.chat);
+    assert.strictEqual(body.chat.remaining, QUOTA_LIMITS.chat);
   });
 
   it("reflects consumed quota for a known session without consuming again", async () => {
