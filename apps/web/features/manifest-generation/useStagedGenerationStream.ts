@@ -37,6 +37,7 @@ export interface StagedGenerationStreamReturn {
     stepDetail: string;
     stageProgress: Record<number, StageProgress>;
     validationErrors: string[];
+    validationReport: StageValidationReport | null;
     contextCount: number;
     portCount: number;
     adapterCount: number;
@@ -110,6 +111,7 @@ export function useStagedGenerationStream(
         stepDetail: "",
         stageProgress: {} as Record<number, StageProgress>,
         validationErrors: [] as string[],
+        validationReport: null as StageValidationReport | null,
         contextCount: 0,
         portCount: 0,
         adapterCount: 0,
@@ -258,9 +260,9 @@ export function useStagedGenerationStream(
                     setPortCount(result.portCount);
                     setAdapterCount(result.adapterCount);
                     if (event.validation) {
-                      setValidationReport(
-                        event.validation as StageValidationReport,
-                      );
+                      result.validationReport =
+                        event.validation as StageValidationReport;
+                      setValidationReport(result.validationReport);
                     }
                     setPhase(result.phase);
                     setStepDetail(result.stepDetail);
@@ -303,6 +305,10 @@ export function useStagedGenerationStream(
               result.contextCount = event.contextCount as number;
               result.portCount = event.portCount as number;
               result.adapterCount = event.adapterCount as number;
+              if (event.validation) {
+                result.validationReport =
+                  event.validation as StageValidationReport;
+              }
               result.phase = "complete";
               result.stepDetail = "Manifest generation complete";
             }
