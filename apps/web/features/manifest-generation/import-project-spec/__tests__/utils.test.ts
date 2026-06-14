@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { extractSpecSummary } from "../utils";
+import { extractSpecSummary, describeFindings } from "../utils";
 
 describe("extractSpecSummary", () => {
   test("happy path with valid spec data and structures", () => {
@@ -105,5 +105,22 @@ describe("extractSpecSummary", () => {
       mappingCount: 0,
       eventBusSubscriptionCount: 0,
     });
+  });
+});
+
+describe("describeFindings", () => {
+  test("errors only — pluralizes, omits warnings", () => {
+    assert.equal(describeFindings(3, 0), "3 issues");
+    assert.equal(describeFindings(1, 0), "1 issue");
+  });
+
+  test("warnings only — no '0 issues' prefix (the 6a copy edge)", () => {
+    assert.equal(describeFindings(0, 2), "2 warnings");
+    assert.equal(describeFindings(0, 1), "1 warning");
+  });
+
+  test("both — joined with 'and', each pluralized independently", () => {
+    assert.equal(describeFindings(3, 2), "3 issues and 2 warnings");
+    assert.equal(describeFindings(1, 1), "1 issue and 1 warning");
   });
 });

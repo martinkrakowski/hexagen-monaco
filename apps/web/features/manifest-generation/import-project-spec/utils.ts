@@ -145,3 +145,24 @@ export const SPEC_STAGE_LABELS: Partial<Record<StagedPhase, string>> = {
   "stage-5": "Assembling Manifest",
   "stage-6": "Validating",
 };
+
+/**
+ * Human-readable summary of Stage-6 review findings for the advisory panel —
+ * e.g. "3 issues and 1 warning", "2 warnings", "1 issue". A zero count is
+ * omitted entirely so the errors-0 / warnings-N case never reads
+ * "0 issues and N warnings". Callers render the panel only when there is at
+ * least one finding, so the result is non-empty in practice; (0, 0) yields "".
+ */
+export function describeFindings(
+  errorCount: number,
+  warningCount: number,
+): string {
+  const parts: string[] = [];
+  if (errorCount > 0) {
+    parts.push(`${errorCount} issue${errorCount === 1 ? "" : "s"}`);
+  }
+  if (warningCount > 0) {
+    parts.push(`${warningCount} warning${warningCount === 1 ? "" : "s"}`);
+  }
+  return parts.join(" and ");
+}

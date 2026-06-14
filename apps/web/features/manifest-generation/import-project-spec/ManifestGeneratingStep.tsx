@@ -3,7 +3,7 @@ import { Skeleton } from "@hexagen/ui";
 import type { StagedPhase, StageProgress } from "../staged-generation-types";
 import type { StageValidationReport } from "../useStagedGenerationStream";
 import { ThinkingBlock } from "../GenerateWithAi/ThinkingBlock";
-import { SPEC_STAGE_LABELS } from "./utils";
+import { SPEC_STAGE_LABELS, describeFindings } from "./utils";
 
 interface ManifestGeneratingStepProps {
   generationError: string | null;
@@ -56,16 +56,17 @@ export function ManifestGeneratingStep({
         validationReport &&
         (validationReport.errors.length > 0 ||
           validationReport.warnings.length > 0) && (
-          <div className="mt-3 shrink-0 rounded-md border border-warning/30 bg-warning/5 p-4 text-sm">
+          <div
+            role="status"
+            aria-live="polite"
+            className="mt-3 shrink-0 rounded-md border border-warning/30 bg-warning/5 p-4 text-sm"
+          >
             <p className="font-medium text-foreground">
               Manifest generated — the review found{" "}
-              {validationReport.errors.length} issue
-              {validationReport.errors.length !== 1 ? "s" : ""}
-              {validationReport.warnings.length > 0
-                ? ` and ${validationReport.warnings.length} warning${
-                    validationReport.warnings.length !== 1 ? "s" : ""
-                  }`
-                : ""}{" "}
+              {describeFindings(
+                validationReport.errors.length,
+                validationReport.warnings.length,
+              )}{" "}
               to address.
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
