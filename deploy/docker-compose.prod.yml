@@ -46,3 +46,7 @@ services:
 
 volumes:
   quota-data:
+    # Pinned global name so the volume identity is decoupled from the Compose
+    # project name (the basename of the deploy cwd) — survives a cwd change or a
+    # future `-p`, instead of silently creating a fresh, empty volume.
+    name: hexagen-monaco-quota-data
