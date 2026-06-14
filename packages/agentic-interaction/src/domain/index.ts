@@ -82,6 +82,7 @@ export {
   compileTopologyUserPrompt,
 } from "./prompts/index";
 export type { TopologyPromptVariables } from "./prompts/index";
+export type { ArchitectureContext } from "./prompts/index";
 export {
   ADAPTER_SYSTEM_PROMPT,
   compileAdapterUserPrompt,

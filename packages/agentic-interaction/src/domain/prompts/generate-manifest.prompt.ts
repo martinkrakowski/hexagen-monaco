@@ -41,6 +41,7 @@ import { normalizePortName } from "../manifest/normalize-draft";
 import { CONTEXT_NAME_GENERATION_BANS } from "./architecture-contract";
 import { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors";
 import { escapeXml } from "./escape-xml";
+import type { ArchitectureContext } from "./build-architecture-context";
 import type { BoundedContextType } from "@hexagen/shared";
 export { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors";
 
@@ -118,7 +119,7 @@ export function isStructuredConfigPipeline(
 
 export function compileStage0Prompt(
   variables: PromptVariables,
-  architectureContext?: string,
+  architectureContext?: ArchitectureContext,
 ): string {
   // The architecture block is trusted static content built by
   // buildGreenfieldArchitectureContext() (T2b) — deliberately NOT escapeXml'd,
