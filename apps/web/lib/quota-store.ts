@@ -162,6 +162,18 @@ export function createQuotaStore(dbPath: string): QuotaStore {
   };
 }
 
+/** A "nothing used yet" snapshot for every kind — the fail-open fallback for the
+ * status endpoint when the store can't be read. */
+export function fullQuotaSnapshot(
+  now: number = Date.now(),
+): Record<QuotaKind, QuotaResult> {
+  const out = {} as Record<QuotaKind, QuotaResult>;
+  for (const kind of KINDS) {
+    out[kind] = toResult(kind, 0, true, now);
+  }
+  return out;
+}
+
 /** Where the durable DB lives in prod; in-memory elsewhere so dev/test leave no
  * file behind. Overridable via `QUOTA_DB_PATH` (the prod volume mount). */
 const DEFAULT_DB_PATH =
