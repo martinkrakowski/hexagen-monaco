@@ -67,14 +67,65 @@ describe("FreeTierModelModalView", () => {
     assert.match(bodyText(), /mercury-2/);
   });
 
-  it("states the fair-use cap and drops the stale slowness copy", () => {
+  it("states the daily-cap copy and drops the stale slowness + no-daily-caps copy", () => {
     setup();
     const text = bodyText();
-    assert.match(text, /10 requests per minute/);
-    // The regression this PR fixes: pre-mercury-flip slowness copy must be gone.
+    assert.match(text, /capped per day/i);
+    // PR-6 introduced daily caps, so the old "No daily caps" line is now false.
+    assert.doesNotMatch(text, /no daily caps/i);
+    // Pre-mercury-flip slowness copy must also stay gone.
     assert.doesNotMatch(text, /40 tokens/i);
     assert.doesNotMatch(text, /tokens per second/i);
     assert.doesNotMatch(text, /5.?10 minutes/i);
+  });
+
+  it("shows the live remaining counts when quota is loaded", () => {
+    setup({
+      quota: {
+        generation: {
+          allowed: true,
+          used: 3,
+          limit: 10,
+          remaining: 7,
+          resetAt: 0,
+        },
+        chat: {
+          allowed: true,
+          used: 10,
+          limit: 100,
+          remaining: 90,
+          resetAt: 0,
+        },
+      },
+    });
+    const text = bodyText();
+    assert.match(text, /7 of 10/);
+    assert.match(text, /90 of 100/);
+    assert.match(text, /left today/i);
+  });
+
+  it("shows an exhaustion message when generations are used up", () => {
+    setup({
+      quota: {
+        generation: {
+          allowed: false,
+          used: 10,
+          limit: 10,
+          remaining: 0,
+          resetAt: 0,
+        },
+        chat: {
+          allowed: true,
+          used: 0,
+          limit: 100,
+          remaining: 100,
+          resetAt: 0,
+        },
+      },
+    });
+    const text = bodyText();
+    assert.match(text, /used today.s 10 free generations/i);
+    assert.match(text, /resets at midnight utc/i);
   });
 
   it("offers WebLLM (local) and BYOK (frontier) as alternatives", () => {

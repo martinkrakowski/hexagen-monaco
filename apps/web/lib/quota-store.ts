@@ -103,8 +103,8 @@ export function createQuotaStore(dbPath: string): QuotaStore {
   );
   const pruneStmt = db.prepare("DELETE FROM quota_usage WHERE day < ?");
 
-  // Drop stale buckets the first time we see a new day — bounds table growth
-  // without a DELETE on every request.
+  // Drop stale buckets the first time any read or write sees a new day — bounds
+  // table growth (incl. read-only status traffic) without a DELETE per request.
   let lastPrunedDay = "";
   function pruneIfNewDay(day: string): void {
     if (day !== lastPrunedDay) {
@@ -144,11 +144,13 @@ export function createQuotaStore(dbPath: string): QuotaStore {
     },
     peek(sessionId, kind, now = Date.now()) {
       const day = utcDay(now);
+      pruneIfNewDay(day);
       const used = currentCount(sessionId, day, kind);
       return toResult(kind, used, used < QUOTA_LIMITS[kind], now);
     },
     snapshot(sessionId, now = Date.now()) {
       const day = utcDay(now);
+      pruneIfNewDay(day);
       const out = {} as Record<QuotaKind, QuotaResult>;
       for (const kind of KINDS) {
         const used = currentCount(sessionId, day, kind);
@@ -160,6 +162,18 @@ export function createQuotaStore(dbPath: string): QuotaStore {
       db.close();
     },
   };
+}
+
+/** A "nothing used yet" snapshot for every kind — the fail-open fallback for the
+ * status endpoint when the store can't be read. */
+export function fullQuotaSnapshot(
+  now: number = Date.now(),
+): Record<QuotaKind, QuotaResult> {
+  const out = {} as Record<QuotaKind, QuotaResult>;
+  for (const kind of KINDS) {
+    out[kind] = toResult(kind, 0, true, now);
+  }
+  return out;
 }
 
 /** Where the durable DB lives in prod; in-memory elsewhere so dev/test leave no
