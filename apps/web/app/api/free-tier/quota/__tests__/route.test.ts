@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it, mock, beforeEach, afterEach } from "node:test";
 import assert from "node:assert";
 import { NextRequest } from "next/server";
 import { GET } from "../route";
@@ -12,9 +12,21 @@ function get(sid?: string): NextRequest {
 }
 
 describe("GET /api/free-tier/quota", () => {
+  // Freeze time at a mid-day UTC instant so consume() and the route's snapshot()
+  // bucket to the same day — a run straddling UTC midnight would otherwise read a
+  // fresh day and flake.
+  beforeEach(() =>
+    mock.timers.enable({
+      apis: ["Date"],
+      now: Date.UTC(2026, 5, 14, 12, 0, 0),
+    }),
+  );
+  afterEach(() => mock.timers.reset());
+
   it("returns a full snapshot and mints a cookie for a fresh visitor", async () => {
     const res = await GET(get());
     assert.strictEqual(res.status, 200);
+    assert.match(res.headers.get("cache-control") ?? "", /no-store/);
     assert.ok(res.headers.get("set-cookie")?.includes(ANON_SESSION_COOKIE));
     const body = await res.json();
     assert.strictEqual(body.generation.used, 0);

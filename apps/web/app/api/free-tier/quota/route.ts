@@ -5,6 +5,9 @@ import { logger } from "../../../../lib/structured-logger";
 
 // Reads SQLite (better-sqlite3) — must run on the Node runtime, not edge.
 export const runtime = "nodejs";
+// Per-session (varies by hxg_sid) and may mint a cookie — never statically
+// optimize or cache it.
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/free-tier/quota
@@ -18,9 +21,13 @@ export const runtime = "nodejs";
  */
 export async function GET(request: NextRequest) {
   const { sessionId, setCookie } = resolveAnonSession(request);
-  const headers: Record<string, string> = setCookie
-    ? { "Set-Cookie": setCookie }
-    : {};
+  // Session-scoped + cookie-minting: forbid shared/proxy caching and vary on the
+  // cookie — applied to both the success and fail-open responses below.
+  const headers: Record<string, string> = {
+    "Cache-Control": "private, no-store",
+    Vary: "Cookie",
+    ...(setCookie ? { "Set-Cookie": setCookie } : {}),
+  };
 
   try {
     return NextResponse.json(getQuotaStore().snapshot(sessionId), { headers });
