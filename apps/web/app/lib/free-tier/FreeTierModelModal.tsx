@@ -216,13 +216,19 @@ export function FreeTierModelModal({
     onOpenChange(false);
   };
 
-  // Use WebLLM: switch to the already-chosen local model if it's loaded,
-  // otherwise send the user to pick/download one.
-  const onUseWebLLM = async () => {
+  // Use WebLLM: activate the already-chosen local model. switchModel cold-loads
+  // when nothing is active yet — it disposes any current adapter, resets engine
+  // state, then awaits initializeModel(modelId) — so this also covers the
+  // "selected but not loaded" state whose CTA reads "Activate local model".
+  // (Gating the call on webLLMReady, as before, skipped activation in exactly
+  // that state, so the button just closed the modal.) Fire-and-forget: every
+  // surface that opens this modal sits under the /projects/new layout, which
+  // renders a global ModelProgressCard for download/VRAM progress; and
+  // initializeModel captures its own errors into engine state (it never
+  // rejects), so the floating promise is safe.
+  const onUseWebLLM = () => {
     if (preferredLocalModel) {
-      if (llmContext.switchModel && webLLMReady) {
-        await llmContext.switchModel(preferredLocalModel);
-      }
+      void llmContext.switchModel(preferredLocalModel);
       onOpenChange(false);
       return;
     }
