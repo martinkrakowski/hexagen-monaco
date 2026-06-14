@@ -85,6 +85,61 @@ test("parses done event with manifest", async () => {
   }
 });
 
+test("captures the Stage-6 validation report from the done event", async () => {
+  const lines = [
+    '{"type":"done","yaml":"m","contextCount":1,"portCount":1,"adapterCount":1,"validation":{"errors":["[R17] Foo/BarPort: weak"],"warnings":["[R02] heads up"],"passed":false}}',
+  ];
+  global.fetch = mockFetchWithSSE(lines);
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+
+    await act(async () => {
+      await result.current.generate({ description: "test" });
+    });
+
+    assert.deepStrictEqual(result.current.validationReport, {
+      errors: ["[R17] Foo/BarPort: weak"],
+      warnings: ["[R02] heads up"],
+      passed: false,
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("ignores a malformed Stage-6 validation payload (keeps it null)", async () => {
+  // `validation` is present + truthy but the wrong shape (errors is not an
+  // array). The boundary guard must reject it so the UI never dereferences a
+  // non-array `.errors`/`.warnings` and throws during render.
+  const lines = [
+    '{"type":"done","yaml":"m","contextCount":1,"portCount":1,"adapterCount":1,"validation":{"errors":"oops"}}',
+  ];
+  global.fetch = mockFetchWithSSE(lines);
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+    let generateResult:
+      | Awaited<ReturnType<typeof result.current.generate>>
+      | undefined;
+
+    await act(async () => {
+      generateResult = await result.current.generate({ description: "test" });
+    });
+
+    assert.strictEqual(result.current.validationReport, null);
+    assert.strictEqual(generateResult?.validationReport, null);
+    // The manifest still completes — a bad report is advisory, not fatal.
+    assert.strictEqual(generateResult?.phase, "complete");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("handles SSE error event", async () => {
   const lines = ['{"type":"error","message":"LLM generation failed"}'];
   global.fetch = mockFetchWithSSE(lines);

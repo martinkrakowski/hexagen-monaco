@@ -1,8 +1,9 @@
 import { Suspense } from "react";
 import { Skeleton } from "@hexagen/ui";
 import type { StagedPhase, StageProgress } from "../staged-generation-types";
+import type { StageValidationReport } from "../useStagedGenerationStream";
 import { ThinkingBlock } from "../GenerateWithAi/ThinkingBlock";
-import { SPEC_STAGE_LABELS } from "./utils";
+import { SPEC_STAGE_LABELS, describeFindings } from "./utils";
 
 interface ManifestGeneratingStepProps {
   generationError: string | null;
@@ -10,6 +11,8 @@ interface ManifestGeneratingStepProps {
   stepDetail: string;
   stageProgress: Record<number, StageProgress>;
   verboseLog?: string[];
+  /** Stage-6 advisory review findings on the produced manifest. */
+  validationReport?: StageValidationReport | null;
 }
 
 export function ManifestGeneratingStep({
@@ -18,6 +21,7 @@ export function ManifestGeneratingStep({
   stepDetail,
   stageProgress,
   verboseLog,
+  validationReport,
 }: ManifestGeneratingStepProps) {
   return (
     <>
@@ -48,6 +52,42 @@ export function ManifestGeneratingStep({
           />
         </Suspense>
       </div>
+      {phase === "complete" &&
+        validationReport &&
+        (validationReport.errors.length > 0 ||
+          validationReport.warnings.length > 0) && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mt-3 shrink-0 rounded-md border border-warning/30 bg-warning/5 p-4 text-sm"
+          >
+            <p className="font-medium text-foreground">
+              Manifest generated — the review found{" "}
+              {describeFindings(
+                validationReport.errors.length,
+                validationReport.warnings.length,
+              )}{" "}
+              to address.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              These are advisory — the manifest is produced and usable.
+              Structural findings (port quality, naming) won&apos;t change if
+              you re-generate; edit the spec or the manifest to resolve them.
+            </p>
+            <ul className="mt-3 max-h-48 space-y-1 overflow-auto font-mono text-xs">
+              {validationReport.errors.map((e, i) => (
+                <li key={`e-${i}`} className="text-destructive">
+                  • {e}
+                </li>
+              ))}
+              {validationReport.warnings.map((w, i) => (
+                <li key={`w-${i}`} className="text-warning">
+                  • {w}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
     </>
   );
 }

@@ -3,6 +3,7 @@ import type {
   DomainAnalysis,
   ClassificationResult,
   AssembledManifest,
+  ValidationReport,
   NormalizedPrompt,
   ContextMappingEntry,
   AggregateRoot,
@@ -1113,7 +1114,12 @@ export class ExecuteStructuredConfigGenerationUseCase {
     rawConfig: string,
     callbacks?: StructuredConfigGenerationCallbacks,
   ): Promise<
-    | { success: true; value: AssembledManifest; transactionId: string }
+    | {
+        success: true;
+        value: AssembledManifest;
+        validation: ValidationReport;
+        transactionId: string;
+      }
     | { success: false; error: unknown }
   > {
     // Stage 0: Parse config + build NormalizedPrompt (synchronous, deterministic)
@@ -1459,6 +1465,10 @@ export class ExecuteStructuredConfigGenerationUseCase {
     return {
       success: true,
       value: assembledManifest,
+      // Surface the Stage-6 findings (previously discarded) so the route/UI can
+      // show them as an advisory review of a successfully-produced manifest —
+      // not a failure to retry.
+      validation: s6.value,
       transactionId: transaction.id,
     };
   }

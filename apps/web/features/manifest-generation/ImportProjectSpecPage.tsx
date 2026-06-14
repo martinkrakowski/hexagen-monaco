@@ -542,6 +542,7 @@ export default function ImportProjectSpecPage() {
             stepDetail={stepDetail}
             stageProgress={stageProgress}
             verboseLog={verboseLog}
+            validationReport={specGeneration.validationReport}
           />
         </div>
       ) : (

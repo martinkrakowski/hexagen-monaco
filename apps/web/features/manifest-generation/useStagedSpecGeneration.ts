@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useRef } from "react";
 import type { StagedPhase, StageProgress } from "./staged-generation-types";
-import { useStagedGenerationStream } from "./useStagedGenerationStream";
+import {
+  useStagedGenerationStream,
+  type StageValidationReport,
+} from "./useStagedGenerationStream";
 import type { PullRequestMetadata } from "@hexagen/external-integration";
 import type { AssembledManifest } from "@hexagen/shared";
 import {
@@ -63,6 +66,7 @@ export interface UseStagedSpecGenerationReturn {
   stageProgress: Record<number, StageProgress>;
   verboseLog: string[];
   validationErrors: string[];
+  validationReport: StageValidationReport | null;
   contextCount: number;
   portCount: number;
   adapterCount: number;
@@ -102,6 +106,10 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
   const [contextCount, setContextCount] = useState(0);
   const [portCount, setPortCount] = useState(0);
   const [adapterCount, setAdapterCount] = useState(0);
+  // Owned here (not passed through from the cloud stream) so the local path can
+  // set it from its own result and neither path inherits a stale prior report.
+  const [validationReport, setValidationReport] =
+    useState<StageValidationReport | null>(null);
 
   const abortRef = useRef(false);
   const generatingLockRef = useRef(false);
@@ -174,6 +182,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     setStageProgress({});
     setValidationErrors([]);
     setVerboseLog([]);
+    setValidationReport(null);
     setContextCount(0);
     setPortCount(0);
     setAdapterCount(0);
@@ -196,6 +205,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     setStepDetail("Starting config generation...");
     setStageProgress({});
     setValidationErrors([]);
+    setValidationReport(null);
     engineLogRef.current = [];
     setVerboseLog([]);
     setContextCount(0);
@@ -245,6 +255,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
       setStepDetail(result.stepDetail);
       setStageProgress(result.stageProgress);
       setValidationErrors(result.validationErrors);
+      setValidationReport(result.validationReport);
       if (result.phase === "failed") {
         setGenerationError(result.stepDetail || "Generation failed");
       }
@@ -418,6 +429,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
             setAdapterCount(adpCount);
             setPhase("complete");
             setStepDetail("Manifest generation complete");
+            setValidationReport(result.validation ?? null);
 
             return {
               phase: "complete" as StagedPhase,
@@ -549,6 +561,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     stageProgress,
     verboseLog,
     validationErrors,
+    validationReport,
     contextCount,
     portCount,
     adapterCount,
