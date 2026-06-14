@@ -18,11 +18,18 @@ export interface AnonSession {
   setCookie?: string;
 }
 
+// We only ever mint randomUUID() values, so a cookie that isn't UUID-shaped is
+// either absent or attacker-supplied. Rejecting it (the anchored regex also caps
+// length) bounds session_id — a quota_usage primary-key component — to 36 chars,
+// closing a cookie-driven DB-bloat vector (oversized / high-cardinality values).
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Read the anonymous session from the request, minting (and returning a
- * `Set-Cookie` for) a new one when absent. */
+ * `Set-Cookie` for) a new one when absent or malformed. */
 export function resolveAnonSession(request: NextRequest): AnonSession {
   const existing = request.cookies.get(ANON_SESSION_COOKIE)?.value;
-  if (existing) return { sessionId: existing };
+  if (existing && UUID_RE.test(existing)) return { sessionId: existing };
 
   const sessionId = randomUUID();
   const attrs = [

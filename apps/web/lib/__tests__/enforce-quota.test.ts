@@ -15,6 +15,10 @@ function req(sid?: string): NextRequest {
   return new NextRequest("http://localhost/api/manifest/generate", { headers });
 }
 
+// resolveAnonSession now rejects non-UUID cookies, so tests must use a real
+// session id for quota to accumulate across requests.
+const SID = "11111111-1111-4111-8111-111111111111";
+
 describe("enforceDailyQuota", () => {
   it("mints an HttpOnly session cookie on the first (cookieless) request", () => {
     const store = createQuotaStore(":memory:");
@@ -29,7 +33,7 @@ describe("enforceDailyQuota", () => {
 
   it("reuses an existing session — no new Set-Cookie", () => {
     const store = createQuotaStore(":memory:");
-    const gate = enforceDailyQuota(req("sess-1"), "generation", store);
+    const gate = enforceDailyQuota(req(SID), "generation", store);
     assert.strictEqual(gate.ok, true);
     assert.strictEqual(gate.headers["Set-Cookie"], undefined);
     store.close();
@@ -39,11 +43,11 @@ describe("enforceDailyQuota", () => {
     const store = createQuotaStore(":memory:");
     for (let i = 0; i < QUOTA_LIMITS.generation; i++) {
       assert.strictEqual(
-        enforceDailyQuota(req("s"), "generation", store).ok,
+        enforceDailyQuota(req(SID), "generation", store).ok,
         true,
       );
     }
-    const gate = enforceDailyQuota(req("s"), "generation", store);
+    const gate = enforceDailyQuota(req(SID), "generation", store);
     assert.strictEqual(gate.ok, false);
     if (gate.ok) throw new Error("unreachable"); // narrow the union
     assert.strictEqual(gate.response.status, 429);
@@ -62,13 +66,13 @@ describe("enforceDailyQuota", () => {
   it("meters chat and generation independently for one session", () => {
     const store = createQuotaStore(":memory:");
     for (let i = 0; i < QUOTA_LIMITS.generation; i++) {
-      enforceDailyQuota(req("s"), "generation", store);
+      enforceDailyQuota(req(SID), "generation", store);
     }
     assert.strictEqual(
-      enforceDailyQuota(req("s"), "generation", store).ok,
+      enforceDailyQuota(req(SID), "generation", store).ok,
       false,
     );
-    assert.strictEqual(enforceDailyQuota(req("s"), "chat", store).ok, true);
+    assert.strictEqual(enforceDailyQuota(req(SID), "chat", store).ok, true);
     store.close();
   });
 
@@ -78,7 +82,7 @@ describe("enforceDailyQuota", () => {
         throw new Error("db unavailable");
       },
     } as unknown as QuotaStore;
-    const gate = enforceDailyQuota(req("s"), "generation", broken);
+    const gate = enforceDailyQuota(req(SID), "generation", broken);
     assert.strictEqual(gate.ok, true);
   });
 });
