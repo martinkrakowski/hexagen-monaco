@@ -907,7 +907,12 @@ function lookupUseCases(
   return [];
 }
 
-function inferInboundPortType(name: string): InboundPortType {
+// Exported for direct unit testing: the Stage-7 manifest-repair re-validation
+// (B1a in docs/planning/stage7-repair-rca-and-remediation.md) rebuilds the port
+// map from a name-only manifest, so these name→type inferences become
+// load-bearing — an R03 "add a repository port" fix works only if a `…Repository`
+// name classifies as `repository` here.
+export function inferInboundPortType(name: string): InboundPortType {
   const l = name.toLowerCase();
   if (l.includes("event") || l.endsWith("eventport")) return "event";
   if (
@@ -920,10 +925,13 @@ function inferInboundPortType(name: string): InboundPortType {
   return "command";
 }
 
-function inferOutboundPortType(name: string): OutboundPortType {
+export function inferOutboundPortType(name: string): OutboundPortType {
   const l = name.toLowerCase();
-  if (l.includes("reposit") || l.includes("repo")) return "repository";
-  if (l.includes("publish") || l.includes("publisher")) return "publisher";
+  // "reposit" can't false-match "report"; the bare "repo" shorthand is matched
+  // only as a TRAILING token (…Repo / …RepoPort) so e.g. ReportPublisherPort
+  // classifies as a publisher, not a repository (PR #344 review).
+  if (l.includes("reposit") || /repo(port)?$/.test(l)) return "repository";
+  if (l.includes("publish")) return "publisher";
   if (l.includes("notif")) return "notifier";
   return "external-client";
 }
@@ -1099,6 +1107,253 @@ export interface ManifestRepairSummary {
   errorsAfter: number;
   warningsBefore: number;
   warningsAfter: number;
+}
+
+interface EntityCounts {
+  contextCount: number;
+  portCount: number;
+  adapterCount: number;
+  domainEntityCount: number;
+  /** Sorted, normalized bounded-context names — lets the gate reject a
+   * count-preserving SWAP (delete A, add C) that count equality alone misses. */
+  contextNames: string[];
+}
+
+/**
+ * Count domain members (aggregate roots / child entities + value objects) across
+ * an assembled manifest's `layers.domain`. The gate uses this so a repair that
+ * drops a context's domain model — e.g. a rename whose new context ships an EMPTY
+ * `layers.domain` because the reviewer didn't carry the members over — is caught
+ * even though contexts/ports/adapters are preserved (PR #344 review). Never throws.
+ */
+function countDomainMembers(parsed: unknown): number {
+  const root = (parsed ?? {}) as { bounded_contexts?: unknown };
+  const contexts = Array.isArray(root.bounded_contexts)
+    ? root.bounded_contexts
+    : [];
+  let count = 0;
+  for (const ctx of contexts) {
+    if (ctx == null || typeof ctx !== "object") continue;
+    const domain = (
+      ctx as {
+        layers?: { domain?: { entities?: unknown; value_objects?: unknown } };
+      }
+    ).layers?.domain;
+    if (Array.isArray(domain?.entities)) count += domain.entities.length;
+    if (Array.isArray(domain?.value_objects))
+      count += domain.value_objects.length;
+  }
+  return count;
+}
+
+/**
+ * Sorted, normalized bounded-context names from an assembled manifest. The gate
+ * compares the before/after set so a count-preserving SWAP (delete one context,
+ * add another) is rejected — `contextCount` equality alone can't see it. Never throws.
+ */
+function manifestContextNames(parsed: unknown): string[] {
+  const root = (parsed ?? {}) as { bounded_contexts?: unknown };
+  const contexts = Array.isArray(root.bounded_contexts)
+    ? root.bounded_contexts
+    : [];
+  const names: string[] = [];
+  for (const ctx of contexts) {
+    if (ctx == null || typeof ctx !== "object") continue;
+    const name = (ctx as { name?: unknown }).name;
+    if (typeof name === "string") names.push(normalizeContextName(name));
+  }
+  return names.sort();
+}
+
+/**
+ * Stage-7 integrity gate (pure). A repaired manifest is accepted only when it
+ * strictly reduces the (R16/R17-excluded) error count AND does not shrink the
+ * structure or drift the context set:
+ *   - context count must be EXACT — no inventing or deleting bounded contexts;
+ *   - the context-name SET must be identical UNLESS the baseline carried a
+ *     renamable (R01) finding — count equality alone admits a SWAP (delete A,
+ *     add C), so when no rename is warranted the names must match exactly; an
+ *     R01 baseline opts into renames (the only repair that changes a name);
+ *   - port/adapter counts may GROW (legitimate R03/R05 additive fixes) but never
+ *     shrink (blocks "delete the offending port to shed its finding");
+ *   - domain-member count must not shrink — a swap or a rename that drops the
+ *     renamed context's domain keeps contexts/ports exact but loses members.
+ * Counts are taken against the ORIGINAL Stage-6 manifest, never a reconstruction.
+ * See docs/planning/stage7-repair-rca-and-remediation.md §4-B3.
+ */
+export function evaluateRepairGate(input: {
+  errorsBefore: number;
+  errorsAfter: number;
+  before: EntityCounts;
+  after: EntityCounts;
+  /** The baseline had a renamable (R01) finding, so a context-name change is a
+   * legitimate repair. Defaults to false ⇒ the name set must be preserved. */
+  allowContextRename?: boolean;
+}): {
+  applied: boolean;
+  reason:
+    | "applied"
+    | "no-error-reduction"
+    | "structure-shrunk-or-context-drift";
+} {
+  if (input.errorsAfter >= input.errorsBefore) {
+    return { applied: false, reason: "no-error-reduction" };
+  }
+  const contextExact = input.before.contextCount === input.after.contextCount;
+  // contextNames are pre-sorted, so element-wise equality compares the sets.
+  const contextSetEqual =
+    input.before.contextNames.length === input.after.contextNames.length &&
+    input.before.contextNames.every(
+      (n, i) => n === input.after.contextNames[i],
+    );
+  const contextOk =
+    contextExact && (input.allowContextRename === true || contextSetEqual);
+  const noShrink =
+    input.after.portCount >= input.before.portCount &&
+    input.after.adapterCount >= input.before.adapterCount &&
+    input.after.domainEntityCount >= input.before.domainEntityCount;
+  if (!contextOk || !noShrink) {
+    return { applied: false, reason: "structure-shrunk-or-context-drift" };
+  }
+  return { applied: true, reason: "applied" };
+}
+
+/**
+ * R16 (description quality) and R17 (forAggregate validity) are computed from
+ * Stage-3 state a name-only manifest cannot carry, so a manifest-level repair can
+ * neither move them nor have them faithfully reconstructed. Drop them from the
+ * gate's error comparison and the post-repair report so the gate judges only the
+ * rules a manifest repair can act on (R18/R03/R05/R01). The suppression is a
+ * UNIFORM reconstruction artifact (every port, not just synthesized ones), so it
+ * conceals no asymmetric deficit. See the RCA doc §4-B2.
+ */
+export function stripReconstructionArtifacts(
+  report: ValidationReport,
+): ValidationReport {
+  // Tag-anchored (findings are always `[Rxx] …`) so an R03/R18 finding whose
+  // message merely mentions R16/R17 isn't dropped (PR #344 review).
+  const keep = (finding: string): boolean => !/^\[R1[67]\]/.test(finding);
+  const errors = report.errors.filter(keep);
+  return {
+    errors,
+    warnings: report.warnings.filter(keep),
+    passed: errors.length === 0,
+  };
+}
+
+/**
+ * Re-key the reused stage-1 domain analysis to the REPAIRED context names so a
+ * renamed context's members re-attach under their new name during Stage-5's
+ * subdomain-match enrichment (assembly:115) instead of orphaning to an EMPTY
+ * `layers.domain` (silent domain-model loss; the gate counts contexts/ports/
+ * adapters, not domain members, so it can't catch it). Caught in PR #344 review.
+ *
+ * The re-key is keyed on each member's OLD SUBDOMAIN, never on its NAME: a flat
+ * member-name → context map collapses shared value-object names (e.g. `Address`
+ * legitimately owned by two contexts) onto one entry — last-write-wins — which
+ * drops one context's domain and duplicates it in the other, on ANY applied
+ * repair (not only renames). Keying on the old subdomain keeps same-named members
+ * in different contexts independent. An additive (no-rename) repair is a strict
+ * no-op. (PR #344 collision blocker.)
+ */
+export function rekeyDomainAnalysisToManifest(
+  stage1: DomainAnalysis,
+  manifest: StructuredConfig,
+): DomainAnalysis {
+  // OLD domain members grouped by their current stage-1 subdomain.
+  const oldByNorm = new Map<string, { name: string; members: Set<string> }>();
+  for (const item of [
+    ...(stage1.aggregateRoots ?? []),
+    ...(stage1.entities ?? []),
+    ...(stage1.valueObjects ?? []),
+  ]) {
+    if (!item.subdomain) continue;
+    const key = normalizeContextName(item.subdomain);
+    let entry = oldByNorm.get(key);
+    if (!entry)
+      oldByNorm.set(
+        key,
+        (entry = { name: item.subdomain, members: new Set() }),
+      );
+    entry.members.add(item.name);
+  }
+
+  // NEW context names + their (name-only) domain members from the repaired manifest.
+  const newByNorm = new Map<string, { name: string; members: Set<string> }>();
+  for (const ctx of manifest.bounded_contexts) {
+    const domain = ctx.layers?.domain as
+      | { entities?: unknown; value_objects?: unknown }
+      | undefined;
+    const members = new Set<string>();
+    for (const n of [
+      ...(Array.isArray(domain?.entities) ? domain.entities : []),
+      ...(Array.isArray(domain?.value_objects) ? domain.value_objects : []),
+    ]) {
+      if (typeof n === "string") members.add(n);
+    }
+    newByNorm.set(normalizeContextName(ctx.name), { name: ctx.name, members });
+  }
+
+  // Only old contexts whose name no longer exists in the manifest were renamed
+  // away; an unchanged name keeps its subdomain untouched. No disappearance ⇒
+  // nothing to re-key ⇒ no-op (the additive-repair fast path).
+  const renamedOldNorms = [...oldByNorm.keys()].filter(
+    (k) => !newByNorm.has(k),
+  );
+  if (renamedOldNorms.length === 0) return stage1;
+
+  // Candidate new names = manifest contexts that aren't an unchanged old name.
+  const candidateNewNorms = [...newByNorm.keys()].filter(
+    (k) => !oldByNorm.has(k),
+  );
+
+  // Greedily pair each renamed-away old context to the new context sharing the
+  // most domain members (a rename preserves the member set). Deterministic:
+  // process old names sorted, break overlap ties by the smaller new name.
+  const oldNormToNewName = new Map<string, string>();
+  const taken = new Set<string>();
+  for (const oldNorm of [...renamedOldNorms].sort()) {
+    const oldMembers = oldByNorm.get(oldNorm)!.members;
+    let best: { norm: string; overlap: number } | undefined;
+    for (const newNorm of candidateNewNorms) {
+      if (taken.has(newNorm)) continue;
+      let overlap = 0;
+      for (const m of newByNorm.get(newNorm)!.members) {
+        if (oldMembers.has(m)) overlap++;
+      }
+      if (
+        overlap > 0 &&
+        (best === undefined ||
+          overlap > best.overlap ||
+          (overlap === best.overlap && newNorm < best.norm))
+      ) {
+        best = { norm: newNorm, overlap };
+      }
+    }
+    if (best) {
+      oldNormToNewName.set(oldNorm, newByNorm.get(best.norm)!.name);
+      taken.add(best.norm);
+    }
+  }
+  if (oldNormToNewName.size === 0) return stage1;
+
+  const rekey = <T extends { name: string; subdomain?: string }>(
+    item: T,
+  ): T => {
+    if (!item.subdomain) return item;
+    const newName = oldNormToNewName.get(normalizeContextName(item.subdomain));
+    return newName !== undefined ? { ...item, subdomain: newName } : item;
+  };
+  return {
+    ...stage1,
+    ...(stage1.aggregateRoots
+      ? { aggregateRoots: stage1.aggregateRoots.map(rekey) }
+      : {}),
+    ...(stage1.entities ? { entities: stage1.entities.map(rekey) } : {}),
+    ...(stage1.valueObjects
+      ? { valueObjects: stage1.valueObjects.map(rekey) }
+      : {}),
+  };
 }
 
 export class ExecuteStructuredConfigGenerationUseCase {
@@ -1465,9 +1720,29 @@ export class ExecuteStructuredConfigGenerationUseCase {
     let finalReport: ValidationReport = s6.value;
     let repair: ManifestRepairSummary | undefined;
 
-    if (this.stage7 && s6.value.errors.length > 0) {
-      const errorsBefore = s6.value.errors.length;
-      const warningsBefore = s6.value.warnings.length;
+    // R16/R17 are unrepairable by a manifest-level repair and can't be
+    // reconstructed from a name-only manifest, so compare like for like — and
+    // only engage the reviewer when a REPAIRABLE error actually remains. Gating
+    // on the RAW count would burn a reviewer call on an all-R16/R17 report whose
+    // stripped count is already 0 and the gate could never reduce. PR #344 review.
+    const baselineReport = stripReconstructionArtifacts(s6.value);
+    if (this.stage7 && baselineReport.errors.length > 0) {
+      const errorsBefore = baselineReport.errors.length;
+      const warningsBefore = baselineReport.warnings.length;
+      const beforeParsed =
+        (assembledManifest.parsedObject as Record<string, unknown>) ?? {};
+      const beforeCounts: EntityCounts = {
+        ...countManifestEntities(beforeParsed),
+        domainEntityCount: countDomainMembers(beforeParsed),
+        contextNames: manifestContextNames(beforeParsed),
+      };
+      // A context-name change is only a legitimate repair when the baseline had
+      // an R01 (banned-name) finding — the one rule whose fix renames a context.
+      // Otherwise the gate requires the context-name SET preserved, rejecting a
+      // count-preserving swap (delete A, add C). PR #344 review (qodo).
+      const allowContextRename = baselineReport.errors.some((e) =>
+        /^\[R01\]/.test(e),
+      );
       const keepOriginal = (): ManifestRepairSummary => ({
         attempted: true,
         applied: false,
@@ -1480,9 +1755,13 @@ export class ExecuteStructuredConfigGenerationUseCase {
       callbacks?.onChunk?.(
         `Stage 6 found ${errorsBefore} error${errorsBefore !== 1 ? "s" : ""} — handing off to the reviewer model for Stage 7 verify-and-repair`,
       );
+      // Repair operates on the assembled MANIFEST (which carries the ports), NOT
+      // the raw config — for AI-generated-port specs the config has no ports, so
+      // a config-level repair reconstructs to an empty manifest and is always
+      // rejected. See docs/planning/stage7-repair-rca-and-remediation.md.
       const repaired = await this.stage7.execute(
-        rawConfig,
-        s6.value,
+        assembledManifest.yaml || "",
+        baselineReport,
         callbacks?.onChunk,
         callbacks?.onStageTelemetry,
       );
@@ -1495,63 +1774,65 @@ export class ExecuteStructuredConfigGenerationUseCase {
       } else {
         callbacks?.onChunk?.("Stage 7 · Re-validating the repaired manifest…");
         try {
-          const repairedConfig = parseStructuredConfig(repaired.value);
-          const revalidated = await this.reconstructAndValidate(repairedConfig);
+          const repairedManifest = parseStructuredConfig(repaired.value);
+          const revalidated = await this.revalidateRepairedManifest(
+            repairedManifest,
+            { stage0: normalizedPrompt, stage1: domainAnalysis },
+          );
           if (!revalidated.success) {
             callbacks?.onChunk?.(
               "Stage 7 · Re-validation failed — keeping the original manifest",
             );
             repair = keepOriginal();
           } else {
-            const errorsAfter = revalidated.report.errors.length;
-            // Integrity gate. Accept-on-fewer-errors ALONE is gameable: a model
-            // could drop the offending context/ports to shed the finding rather
-            // than fix it. The in-scope repairs (R01 rename, R16/17/18 port
-            // edits) are all in-place, so also require the structural counts to
-            // be unchanged — countManifestEntities is the same counter the
-            // transaction below uses.
-            const beforeCounts = countManifestEntities(
-              (assembledManifest.parsedObject as Record<string, unknown>) ?? {},
+            const cleanReport = stripReconstructionArtifacts(
+              revalidated.report,
             );
-            const afterCounts = countManifestEntities(
+            const errorsAfter = cleanReport.errors.length;
+            const afterParsed =
               (revalidated.manifest.parsedObject as Record<string, unknown>) ??
-                {},
-            );
-            const structurePreserved =
-              beforeCounts.contextCount === afterCounts.contextCount &&
-              beforeCounts.portCount === afterCounts.portCount &&
-              beforeCounts.adapterCount === afterCounts.adapterCount;
-            const reducedErrors = errorsAfter < errorsBefore;
-            const applied = reducedErrors && structurePreserved;
+              {};
+            const afterCounts: EntityCounts = {
+              ...countManifestEntities(afterParsed),
+              domainEntityCount: countDomainMembers(afterParsed),
+              contextNames: manifestContextNames(afterParsed),
+            };
+            const gate = evaluateRepairGate({
+              errorsBefore,
+              errorsAfter,
+              before: beforeCounts,
+              after: afterCounts,
+              allowContextRename,
+            });
 
             repair = {
               attempted: true,
-              applied,
+              applied: gate.applied,
               errorsBefore,
               errorsAfter,
               warningsBefore,
-              warningsAfter: revalidated.report.warnings.length,
+              warningsAfter: cleanReport.warnings.length,
             };
 
-            if (applied) {
+            if (gate.applied) {
               finalManifest = revalidated.manifest;
-              finalReport = revalidated.report;
+              finalReport = cleanReport;
               callbacks?.onChunk?.(
                 `Stage 7 · Repaired ${errorsBefore - errorsAfter} of ${errorsBefore} error${errorsBefore !== 1 ? "s" : ""} — ${errorsAfter} remain`,
               );
-            } else if (reducedErrors) {
+            } else if (gate.reason === "no-error-reduction") {
               callbacks?.onChunk?.(
-                "Stage 7 · Repair altered the manifest structure (contexts/ports/adapters) — keeping the original",
+                `Stage 7 · Repair did not reduce errors (${errorsAfter} vs ${errorsBefore}) — keeping the original manifest`,
               );
             } else {
               callbacks?.onChunk?.(
-                `Stage 7 · Repair did not reduce errors (${errorsAfter} vs ${errorsBefore}) — keeping the original manifest`,
+                "Stage 7 · Repair shrank or restructured the manifest (contexts/ports/adapters) — keeping the original",
               );
             }
           }
         } catch {
           callbacks?.onChunk?.(
-            "Stage 7 · Repair output was not a valid config — keeping the original manifest",
+            "Stage 7 · Repair output was not a valid manifest — keeping the original manifest",
           );
           repair = keepOriginal();
         }
@@ -1604,40 +1885,71 @@ export class ExecuteStructuredConfigGenerationUseCase {
   }
 
   /**
-   * Deterministic re-validation for Stage 7: rebuild the pipeline state from a
-   * (repaired) config using only the deterministic helpers — no LLM port
-   * mapping / adapter assignment / classification refinement — then re-run
-   * Stage 6. Used to score a repaired config against the original error count.
-   * Intentionally silent (no onChunk / onStageTelemetry) so it doesn't
-   * double-emit a Stage-6 chip; the caller narrates the before/after around it.
+   * Re-validate a repaired MANIFEST for Stage 7. The manifest carries
+   * `layers.application.ports` as string names (see draft-to-manifest.transform),
+   * so buildPreDefinedPortMap reconstructs the real ports — unlike the raw
+   * config, which for AI-generated-port specs has none. Classification (stage2),
+   * context mappings and apps are all REBUILT from the repaired manifest so a
+   * repair that renamed a context is validated faithfully and the re-assembled
+   * manifest doesn't carry stale mapping endpoints from the original inputs
+   * (PR #344 review). Only stage0 (intent / runtime concerns) and stage1 (domain
+   * analysis, re-keyed to the repaired names) are reused, since a name-only
+   * manifest can't reconstruct the domain model. Silent (no onChunk /
+   * onStageTelemetry) so it doesn't double-emit a chip.
    */
-  private async reconstructAndValidate(
-    config: StructuredConfig,
+  private async revalidateRepairedManifest(
+    repairedManifest: StructuredConfig,
+    base: {
+      stage0: NormalizedPrompt;
+      stage1: DomainAnalysis;
+    },
   ): Promise<
     | { success: true; manifest: AssembledManifest; report: ValidationReport }
     | { success: false; error: unknown }
   > {
-    const normalizedPrompt = buildNormalizedPromptFromConfig(config);
-    const domainAnalysis = buildDomainAnalysisFromConfig(config);
+    // Track context renames so Stage-5 re-attaches each context's domain model
+    // (a rename otherwise orphans it — see rekeyDomainAnalysisToManifest).
+    const stage1 = rekeyDomainAnalysisToManifest(base.stage1, repairedManifest);
     const classification = buildClassificationFromConfig(
-      config,
-      domainAnalysis,
+      repairedManifest,
+      stage1,
     );
-    const contextMappings = buildContextMappingsFromConfig(config);
-    const portMap = buildPreDefinedPortMap(config);
-    const adapterBindings = buildPreDefinedAdapterBindings(config, portMap);
+    const portMap = buildPreDefinedPortMap(repairedManifest);
+    const adapterBindings = buildPreDefinedAdapterBindings(
+      repairedManifest,
+      portMap,
+    );
+    // Derive mappings + apps from the REPAIRED manifest (not the original inputs)
+    // so a renamed context doesn't leave the re-assembled manifest with mapping
+    // endpoints pointing at the old name. Filter mappings to the repaired
+    // manifest's own contexts, mirroring the first assembly pass's guard.
+    const knownContextNorms = new Set(
+      repairedManifest.bounded_contexts.flatMap((ctx) => {
+        const names = [normalizeContextName(ctx.name)];
+        if (ctx.short) names.push(normalizeContextName(ctx.short));
+        return names;
+      }),
+    );
+    const contextMappings = buildContextMappingsFromConfig(
+      repairedManifest,
+    ).filter(
+      (m) =>
+        knownContextNorms.has(normalizeContextName(m.upstream)) &&
+        knownContextNorms.has(normalizeContextName(m.downstream)),
+    );
+    const apps = repairedManifest.apps ?? [];
     const manifest = this.stage5.execute({
-      stage0: normalizedPrompt,
-      stage1: domainAnalysis,
+      stage0: base.stage0,
+      stage1,
       stage2: classification,
       stage3: portMap,
       stage4: adapterBindings,
       contextMappings,
-      apps: config.apps ?? [],
+      apps,
     });
     const revalidation = await this.stage6.execute({
-      stage0: normalizedPrompt,
-      stage1: domainAnalysis,
+      stage0: base.stage0,
+      stage1,
       stage2: classification,
       stage3: portMap,
       stage4: adapterBindings,
