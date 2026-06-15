@@ -4,8 +4,8 @@ import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import { createLLMRequest, DomainModelId } from "@hexagen/local-llm/client";
 import { z } from "zod";
 import {
-  STAGE7_REPAIR_SYSTEM_PROMPT,
-  compileStage7Prompt,
+  STAGE7_REPAIR_OPS_SYSTEM_PROMPT,
+  compileStage7OpsPrompt,
 } from "../../../domain/index";
 import type { ValidationReport } from "../../../domain/value-objects/pipeline-state";
 import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
@@ -15,7 +15,7 @@ import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetr
 
 const STAGE_NUMBER = 7;
 
-/** Drop markdown code fences if the model wrapped the config in them. */
+/** Drop markdown code fences if the model wrapped the op-list in them. */
 function stripCodeFences(text: string): string {
   return text
     .split("\n")
@@ -26,11 +26,13 @@ function stripCodeFences(text: string): string {
 /**
  * Stage 7 — GPT-4o verify-and-repair. Optional, gated on the reviewer port
  * (STAGE6_REVIEWER_API_KEY) being wired. Given the assembled MANIFEST and
- * Stage-6 findings, a stronger model emits a CORRECTED manifest (bare-name
- * port/adapter lists — see STAGE7_REPAIR_SYSTEM_PROMPT). The orchestrator re-runs
- * the deterministic rebuild + Stage 6 on the output to produce a genuine
- * before/after finding count; this use case only produces the corrected manifest
- * text and never mutates pipeline state itself.
+ * Stage-6 findings, a stronger model emits a small JSON OP-LIST of edits (see
+ * STAGE7_REPAIR_OPS_SYSTEM_PROMPT) — NOT a rewritten manifest. The orchestrator
+ * applies the ops deterministically (apply-repair-ops) then re-runs the rebuild +
+ * Stage 6 for a genuine before/after count; this use case only produces the
+ * op-list text and never mutates pipeline state itself. (Follow-up C — see
+ * docs/planning/stage7-repair-rca-and-remediation.md §8 — removes the
+ * whole-manifest-regeneration failure mode that PR #346 could only soften.)
  *
  * Mirrors ExecuteValidationReviewUseCase's streaming / retry / timeout / abort
  * shape so it inherits the same operational behavior.
@@ -47,7 +49,7 @@ export class ExecuteManifestRepairUseCase {
     { success: true; value: string } | { success: false; error: unknown }
   > {
     const stageStart = Date.now();
-    const prompt = compileStage7Prompt(manifestYaml, report);
+    const prompt = compileStage7OpsPrompt(manifestYaml, report);
     let modelName: string | undefined;
     const errorCount = report.errors.length;
     onChunk?.(
@@ -76,14 +78,14 @@ export class ExecuteManifestRepairUseCase {
         // despite passing this exact id.
         DomainModelId.QWEN_CODER_3B,
         [
-          { role: "system", content: STAGE7_REPAIR_SYSTEM_PROMPT },
+          { role: "system", content: STAGE7_REPAIR_OPS_SYSTEM_PROMPT },
           { role: "user", content: prompt },
         ],
         z.string(),
-        // A full config is much larger than the Stage-6 findings list, hence a
-        // far higher token ceiling. Low temperature: this is a faithful repair,
+        // The output is a small JSON op-list (a handful of edits), not a whole
+        // manifest — a modest ceiling suffices. Low temperature: faithful repair,
         // not a creative rewrite.
-        { stream: true, temperature: 0.2, maxTokens: 8000 },
+        { stream: true, temperature: 0.2, maxTokens: 2000 },
       );
       request.signal = abortController.signal;
       request.onModelResolved = (info) => {
@@ -104,7 +106,7 @@ export class ExecuteManifestRepairUseCase {
           fullResponse += result.value;
           chunkCount++;
           if (chunkCount % 50 === 0) {
-            onChunk?.(`   Rewriting manifest… (${chunkCount} tokens)`);
+            onChunk?.(`   Planning repair edits… (${chunkCount} tokens)`);
           }
         }
       } catch (thrownError) {
@@ -162,7 +164,7 @@ export class ExecuteManifestRepairUseCase {
         inputTokensEstimate: estimateTokenCount(prompt),
         outputTokensActual: estimateTokenCount(fullResponse),
         servedFromCache: false,
-        summary: `Repaired manifest emitted (${errorCount} error${errorCount !== 1 ? "s" : ""} targeted)`,
+        summary: `Repair edits emitted (${errorCount} finding${errorCount !== 1 ? "s" : ""} targeted)`,
         ...(modelName !== undefined ? { modelName } : {}),
       });
       return ok(cleaned);

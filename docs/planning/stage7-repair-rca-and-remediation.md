@@ -1,6 +1,6 @@
 # Stage-6 validation & Stage-7 repair — RCA and remediation
 
-**Status:** Issues A & B shipped (#344, merged to main + deployed 2026-06-14). A second prod run then surfaced **RCA-4** — the Stage-7 rebuild crashed on the repair model's output shape and the crash was swallowed — remediated in **PR #346** (`fix/stage7-repair-robustness`, open); see §8.
+**Status:** Issues A & B shipped (#344). RCA-4 (Stage-7 rebuild crashed on the model's output shape, swallowed) remediated in **#346** (merged + deployed). A 2nd prod run confirmed RCA-1 & RCA-4 fixed but revealed **semantic ineffectiveness** (the model drops the edits when re-emitting the whole manifest) — cured by **follow-up C** (structured-edit contract, branch `feat/stage7-structured-edits`); see §8-9.
 **Date:** 2026-06-15
 **Trigger:** First real prod test of Stage-7 verify-and-repair (shipped in #343, live 2026-06-15) against a 7-context structured spec (`Architectural project configuration.md`).
 
@@ -229,10 +229,51 @@ Suite **684/684**, typecheck + lint clean.
 
 ### Status & honest caveat
 
-PR #346 open (mergeable once the Sync Engine CI check goes green); gated by `STAGE6_REVIEWER_API_KEY` (unset ⇒ byte-identical, off). This remediation is **tolerance + observability**: the swallowed error meant the _exact_ prod cause couldn't be confirmed (typed-object ports is a strong, reproduced hypothesis, not a proof). The deploy is therefore the confirmation; the new log resolves it into one of **three** outcomes:
+PR #346 **merged + deployed**; gated by `STAGE6_REVIEWER_API_KEY` (unset ⇒ byte-identical, off). That remediation was **tolerance + observability**: the swallowed error meant the _exact_ prod cause couldn't be confirmed (typed-object ports a strong, reproduced hypothesis, not a proof). The deploy was the confirmation — a re-run of the same spec resolved it into one of:
 
 1. _"Repaired X of N findings"_ with **zero discards** → fixed cleanly. ✓
 2. The parse/rebuild error + output snippet → a **residual cause**, no longer hidden — chase it.
-3. _"Repaired …"_ with a **non-zero discard count** → the gate passed but the manifest is quietly **incomplete** (the model emitted entries we couldn't ingest). A success _with a coverage gap_ — and the clearest signal that **follow-up C is worth scheduling, not just deferring**.
+3. _"Repaired …"_ with a **non-zero discard count** → gate passed but the manifest is quietly **incomplete**.
+4. **What actually happened (2nd prod run):** the crash _and_ the R18 false positives were **both gone** (3 real findings, no R18; clean rebuild, zero discards) — **RCA-1 and RCA-4 confirmed fixed in prod**. But the repair _ran cleanly and changed nothing_: gpt-4o faithfully reproduced the ~2k-token manifest and **dropped the 3 small additive edits**, so the gate kept the original (_"3 of 3 remain"_). A NEW outcome — **semantic ineffectiveness**, not a structural crash — and the decisive trigger for follow-up C.
 
-**Follow-up C** — a structured-edit contract (the model emits a small, typed, homogeneous op-list `[{ op, ctx, name }]` applied deterministically, instead of re-emitting the manifest's heterogeneous slot structure) — is the eventual cure for the RCA-4 conflation. It dissolves this **entire class** of shape ambiguity (no slots to mis-shape, no entries to mis-type, no whole-artifact regeneration), so the `coercePortName` / `toEntryArray` tolerance becomes unnecessary rather than load-bearing. Deferred until this confirms the diagnosis live — outcome (3) above is its scheduling trigger.
+---
+
+## 9. Follow-up C — structured-edit contract (as built)
+
+Branch `feat/stage7-structured-edits`. The conflation RCA-4 named — _semantic repair_ (a model job) vs _structural reconstruction_ (deterministic code) — is dissolved by shrinking the model's job from "re-emit the whole manifest" to "emit a few typed edits", applied deterministically.
+
+**The contract.** The reviewer emits ONLY a small JSON op-list, e.g.:
+
+```json
+[
+  {
+    "op": "add-out-port",
+    "context": "identity-access",
+    "name": "UserRepositoryPort"
+  },
+  {
+    "op": "add-adapter",
+    "context": "identity-access",
+    "name": "RegisterUserAdapter"
+  }
+]
+```
+
+Five ops cover every rule a manifest-level repair can act on: `add-out-port` / `add-in-port` (R03/R10), `add-adapter` (R05), `rename-port` (R18), `rename-context` (R01).
+
+**Why it removes the failure class (not just softens it):**
+
+- The model never reproduces the 2k-token artifact, so it can't "drop" edits amid faithful reproduction (outcome 4) and can't mis-shape a slot/entry — the PR #346 tolerance work (`coercePortName` / `toEntryArray`) is no longer load-bearing on this path.
+- The op set is **add/rename only** — it _cannot_ delete a context or shrink ports, so the "drop a context to shed R01" gaming vector is impossible **by construction**; the gate's shrink checks become pure defense-in-depth.
+- Ops apply to a **deep copy** of the original (the fail-safe is never mutated); re-validation + the integrity gate are unchanged downstream.
+
+**Files:**
+
+- NEW `domain/manifest/apply-repair-ops.ts` — `RepairOp` union, `parseRepairOps` (tolerates a prose/fence wrapper around the array; reports unrecognised ops), `applyManifestOps` (applies on a clone; reports skips: unknown context, duplicate add, missing rename target). Pure, unit-tested.
+- `generate-manifest.prompt.ts` — `STAGE7_REPAIR_OPS_SYSTEM_PROMPT` + `compileStage7OpsPrompt`; the whole-manifest `STAGE7_REPAIR_SYSTEM_PROMPT` / `compileStage7Prompt` are **deleted**.
+- `execute-manifest-repair.use-case.ts` — emits the op-list (smaller token ceiling; "Planning repair edits" telemetry).
+- `execute-structured-config-generation.use-case.ts` — parse ops → `applyManifestOps` on the original → revalidate → gate. The no-reduction path now logs before/after port/adapter counts (the bundled outcome-4 observability) plus applied/skipped/ignored op counts.
+
+**Tests:** apply-engine units (each op, skip cases, clone-isolation), `parseRepairOps` (clean / prose / fenced / mixed-invalid), e2e repair rewritten to emit ops (rename clears R01 + domain survives; an applied edit that doesn't reduce findings is kept; an op for an unknown context is skipped). Suite 694/694, typecheck + lint clean.
+
+**Honest caveat (still).** C removes the _structural_ failure mode. Whether gpt-4o emits the _right_ ops (semantic correctness) is the remaining variable — but the op-list is small enough to inspect, and the before/after + skip logging makes a wrong/no-op edit visible. The deploy re-test is, again, the confirmation.

@@ -791,62 +791,51 @@ export function compileStage6Prompt(
 // ============================================================================
 // Stage 7 — GPT-4o verify-and-repair (optional, gated on STAGE6_REVIEWER_API_KEY)
 // ============================================================================
-//
-// Stage 6 is report-only; Stage 7 takes its findings and a stronger model
-// (gpt-4o) and emits a CORRECTED MANIFEST. We repair the assembled manifest —
-// NOT the raw config, which for AI-generated-port specs carries no ports (so a
-// config-level repair reconstructs to an empty manifest and is always rejected;
-// see PR #344). The orchestrator rebuilds + re-runs Stage 6 on the output for a
-// genuine before/after finding count. Ports/adapters are bare-name lists — see
-// the shape contract below.
-export const STAGE7_REPAIR_SYSTEM_PROMPT = `You are an assembled-MANIFEST repair specialist for hexagonal DDD projects.
 
-You are given (1) an assembled project MANIFEST and (2) validation findings from an architectural review of it. Emit a CORRECTED manifest that resolves the findings while preserving everything already valid.
+// ── Stage 7 structured-edit contract (follow-up C) ──────────────────────────
+// Instead of re-emitting the whole manifest (where the model faithfully
+// reproduces ~2k tokens but drops the few small edits the findings call for —
+// RCA §8), the reviewer emits a tiny typed op-list we apply deterministically.
+export const STAGE7_REPAIR_OPS_SYSTEM_PROMPT = `You are an architectural-repair planner for hexagonal DDD manifests.
 
-MANIFEST SHAPE (match it exactly):
-- Top level: \`system\`, \`scope\`, \`architecture\`, \`bounded_contexts\`, optional \`apps\`, optional \`context_mappings\`.
-- Each bounded context has \`name\` and \`layers\`; ports live at \`layers.application.ports.in\` and \`layers.application.ports.out\`, adapters at \`layers.infrastructure.adapters\`, domain members at \`layers.domain.entities\` and \`layers.domain.value_objects\`.
-- Ports and adapters are BARE NAME STRINGS, never objects. A port's TYPE is inferred from its NAME, so DO NOT add \`type:\` fields and DO NOT turn a name into a map: emit \`- UserRepositoryPort\`, never \`- { name: UserRepositoryPort, type: repository }\`.
+You are given (1) an assembled project MANIFEST and (2) validation findings from a review of it. Do NOT rewrite the manifest. Emit a small JSON array of EDIT OPERATIONS that resolve the findings - nothing else.
+
+Each operation is exactly one of:
+- {"op":"add-out-port","context":"<ctx>","name":"<PortName>"}     add an outbound port (bare name)
+- {"op":"add-in-port","context":"<ctx>","name":"<PortName>"}      add an inbound port (bare name)
+- {"op":"add-adapter","context":"<ctx>","name":"<AdapterName>"}   add an adapter (bare name)
+- {"op":"rename-port","context":"<ctx>","from":"<OldPort>","to":"<NewPort>"}
+- {"op":"rename-context","from":"<OldCtx>","to":"<NewCtx>"}
+
+A port/adapter TYPE is inferred from its NAME, so naming matters:
+- repository port -> name ends in "RepositoryPort"
+- publisher port  -> name ends in "PublisherPort"
+- adapter binding -> adapter shares the inbound port's stem (port "RegisterUserPort" -> adapter "RegisterUserAdapter")
+
+Map each finding to the minimal op(s), keyed on its [Rxx] tag:
+- [R01] context name contains a banned technology token -> rename-context (to a domain-meaningful name)
+- [R03] context has no outbound repository port -> add-out-port "<AggregateRoot>RepositoryPort"
+- [R05] inbound port '<X>' has no adapter -> add-adapter named after that port's stem
+- [R10] context publishes events but has no publisher port -> add-out-port "<AggregateRoot>EventPublisherPort"
+- [R18] port name leaks a deployment/runtime token -> rename-port to a domain term (keep the "Port" suffix)
 
 RULES:
-- Output the FULL corrected manifest in the SAME YAML shape and key structure as the input.
-- Change ONLY what the findings require. Preserve every context, aggregate, value object, use case, port, adapter, mapping and app that no finding implicates — keep their names, order and fields unchanged.
-- Ports live under each context's \`layers.application.ports.{in,out}\` as NAME lists; adapters under \`layers.infrastructure.adapters\` as a NAME list. Repairs are name-level edits to these lists — a port's TYPE is inferred from its name, so the naming conventions below are REQUIRED for an added port to be recognised correctly.
-- Common repairs, keyed on the finding's [Rxx] tag:
-  • [R01] context name contains a banned technology/infrastructure token → rename the context to a domain-meaningful name, and update EVERY reference to it (context_mappings, dependsOn, ports/adapters that embed the name).
-  • [R03] context has no outbound repository port → add ONE outbound port named \`<AggregateRoot>RepositoryPort\` (the \`…Repository\` suffix is REQUIRED — it is how the port is recognised as a repository).
-  • [R05] an inbound port has no adapter → add ONE adapter to that context named after the port it serves, e.g. port \`RegisterUserPort\` → adapter \`RegisterUserAdapter\` (the adapter name must share the port's stem so it binds to that port).
-  • [R18] port name leaks a deployment/runtime token → rename the port to a domain term without the leaked token; keep the \`…Port\` suffix.
-- Never invent contexts, ports or adapters that the findings do not call for.
-- If a finding cannot be resolved without guessing the author's intent, leave that part unchanged rather than fabricate.
+- Use the EXACT context and port names shown in the manifest.
+- Emit ONLY operations the findings call for. If a finding cannot be resolved without guessing the author's intent, omit it.
+- Output ONLY the JSON array. No prose, no markdown, no manifest.
 
-EXAMPLE (resolving [R03] "no repository port" on context \`billing\` by adding ONE bare-name out-port):
-  before:
-    - name: billing
-      layers:
-        application:
-          ports:
-            in:
-              - SubmitInvoicePort
-            out: []
-  after:
-    - name: billing
-      layers:
-        application:
-          ports:
-            in:
-              - SubmitInvoicePort
-            out:
-              - InvoiceRepositoryPort
-
-CRITICAL OUTPUT FORMAT: output ONLY the corrected manifest YAML, same shape as the input, ports and adapters as bare name strings. No prose, no explanation, no markdown code fences.`;
+EXAMPLE - findings on context "identity-access" (no repository port; RegisterUserPort lacks an adapter):
+[
+  {"op":"add-out-port","context":"identity-access","name":"UserRepositoryPort"},
+  {"op":"add-adapter","context":"identity-access","name":"RegisterUserAdapter"}
+]`;
 
 /**
- * Compile the Stage-7 repair user prompt from the assembled manifest YAML and the
- * Stage-6 findings. Errors are the repair target; warnings are included as
- * lower-priority context.
+ * Compile the Stage-7 structured-edit user prompt from the assembled manifest
+ * YAML and the Stage-6 findings. The model sees the manifest (to use exact
+ * context/port names) and emits a JSON op-list, not a rewritten manifest.
  */
-export function compileStage7Prompt(
+export function compileStage7OpsPrompt(
   manifestYaml: string,
   report: { errors: string[]; warnings: string[] },
 ): string {
@@ -861,13 +850,12 @@ export function compileStage7Prompt(
     ``,
     `<manifest>`,
     // manifestYaml derives from the raw user import (the injection vector); escape
-    // it (and the findings) so a payload containing `</manifest>` can't break the
-    // delimiters and inject instructions into Stage 7. Same convention as the
-    // other prompts in this file.
+    // it (and the findings) so a payload containing the closing tag can't break the
+    // delimiters and inject instructions into Stage 7.
     escapeXml(manifestYaml),
     `</manifest>`,
     ``,
-    `Emit the corrected manifest YAML now. Resolve every [error] finding; resolve [warning] findings where you can do so without guessing. Output only the manifest YAML, same shape as the input, ports and adapters as bare name strings.`,
+    `Emit the JSON array of edit operations now. Resolve every [error] finding; resolve [warning] findings where you can without guessing. Output ONLY the JSON array.`,
   ].join("\n");
 }
 // Retry prompts (Fallback if NDJSON is malformed)
