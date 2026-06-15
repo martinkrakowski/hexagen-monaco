@@ -39,8 +39,10 @@ describe("coercePortName — salvage a name from either shape", () => {
   });
 });
 
+// `out` is intentionally `unknown` so a test can pass a non-array slot (scalar /
+// object) — the very shapes a repair model emits that used to throw the rebuild.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const manifest = (out: unknown[]): any => ({
+const manifest = (out: unknown): any => ({
   bounded_contexts: [
     {
       name: "billing",
@@ -79,6 +81,19 @@ describe("buildPreDefinedPortMap — tolerant rebuild", () => {
       ["UserRepositoryPort"],
     );
   });
+
+  test("a scalar (non-list) port slot is salvaged as a single-element list, not thrown on", () => {
+    const portMap = buildPreDefinedPortMap(manifest("InvoiceRepositoryPort"));
+    assert.deepStrictEqual(
+      portMap.contexts[0].out.map((p) => p.name),
+      ["InvoiceRepositoryPort"],
+    );
+  });
+
+  test("an object (wrong-shape) port slot yields no out-ports instead of throwing", () => {
+    const portMap = buildPreDefinedPortMap(manifest({ weird: 1 }));
+    assert.deepStrictEqual(portMap.contexts[0].out, []);
+  });
 });
 
 describe("collectMalformedManifestEntries — report, don't silently drop", () => {
@@ -100,5 +115,19 @@ describe("collectMalformedManifestEntries — report, don't silently drop", () =
       manifest(["UserRepositoryPort"]),
     );
     assert.deepStrictEqual(malformed, []);
+  });
+
+  test("a wrong-shape (object) port slot is REPORTED, not thrown on (for…of safety)", () => {
+    const malformed = collectMalformedManifestEntries(manifest({ weird: 1 }));
+    assert.strictEqual(malformed.length, 1);
+    assert.strictEqual(malformed[0].context, "billing");
+    assert.strictEqual(malformed[0].kind, "out-port");
+  });
+
+  test("a scalar (recoverable) port slot is NOT reported", () => {
+    assert.deepStrictEqual(
+      collectMalformedManifestEntries(manifest("InvoiceRepositoryPort")),
+      [],
+    );
   });
 });

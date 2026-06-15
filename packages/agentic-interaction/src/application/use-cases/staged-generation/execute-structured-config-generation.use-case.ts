@@ -1068,6 +1068,20 @@ export function coercePortName(entry: unknown): string | null {
 }
 
 /**
+ * Coerce a ports/adapters list SLOT to an array. A manifest carries these as YAML
+ * lists, but a repair model may emit a single item as a scalar (`out: FooPort`)
+ * or, less recoverably, an object. Salvage a scalar as a one-element list;
+ * anything else (object, number) yields [] — and is reported by
+ * collectMalformedManifestEntries, never silently dropped. Without this the bare
+ * `.map` / `for…of` over the slot would throw and discard the whole repair (PR #346).
+ */
+function toEntryArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) return [value];
+  return [];
+}
+
+/**
  * Port/adapter entries a repair model emitted that aren't a usable bare name —
  * collected so the orchestrator can REPORT them. A silently-dropped port the
  * model was trying to add would make an applied repair quietly incomplete, which
@@ -1077,8 +1091,19 @@ export function collectMalformedManifestEntries(
   manifest: StructuredConfig,
 ): Array<{ context: string; kind: string; raw: unknown }> {
   const malformed: Array<{ context: string; kind: string; raw: unknown }> = [];
-  const scan = (ctx: string, kind: string, entries: unknown[] | undefined) => {
-    for (const entry of entries ?? []) {
+  const scan = (ctx: string, kind: string, value: unknown) => {
+    // A present-but-wrong-shape slot (an object/number, not a list or a scalar
+    // name) can't be salvaged — report the slot itself rather than throw on
+    // `for…of` over a non-iterable.
+    if (
+      value != null &&
+      !Array.isArray(value) &&
+      !(typeof value === "string" && value.trim().length > 0)
+    ) {
+      malformed.push({ context: ctx, kind, raw: value });
+      return;
+    }
+    for (const entry of toEntryArray(value)) {
       if (coercePortName(entry) === null)
         malformed.push({ context: ctx, kind, raw: entry });
     }
@@ -1094,8 +1119,10 @@ export function collectMalformedManifestEntries(
 export function buildPreDefinedPortMap(config: StructuredConfig): PortMap {
   // Coerce + drop un-nameable entries so a typed-object port doesn't throw the
   // whole rebuild; discards are reported separately (collectMalformedManifestEntries).
-  const names = (entries: unknown[] | undefined): string[] =>
-    (entries ?? []).map(coercePortName).filter((n): n is string => n !== null);
+  const names = (entries: unknown): string[] =>
+    toEntryArray(entries)
+      .map(coercePortName)
+      .filter((n): n is string => n !== null);
   return {
     contexts: config.bounded_contexts
       .filter(ctxHasPreDefinedPorts)
@@ -1132,7 +1159,7 @@ function buildPreDefinedAdapterBindings(
         ];
         return {
           contextName: ctx.name,
-          adapters: (ctx.layers?.infrastructure?.adapters ?? [])
+          adapters: toEntryArray(ctx.layers?.infrastructure?.adapters)
             .map(coercePortName)
             .filter((name): name is string => name !== null)
             .map((name) => {
