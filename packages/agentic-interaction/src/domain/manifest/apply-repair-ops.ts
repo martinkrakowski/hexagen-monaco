@@ -81,28 +81,66 @@ function validateOp(item: unknown): RepairOp | null {
  * the array, but a stray "Here are the edits:" must not break parsing). Anything
  * that isn't a recognised op is collected in `rejected` for reporting.
  */
+/**
+ * Every top-level balanced `[...]` span in the text, string-literal-aware (a `]`
+ * inside a JSON string doesn't close the span). A naive first-`[`/last-`]` slice
+ * swallows the real op-array whenever the model narrates with brackets — and the
+ * prompt itself tells it about the `[R01]`/`[R03]` finding tags, so that prose is
+ * a likely shape. Scanning all balanced spans lets us pick the array that parses.
+ */
+function extractBracketArrays(text: string): string[] {
+  const spans: string[] = [];
+  let depth = 0;
+  let startIdx = -1;
+  let inStr = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === "[") {
+      if (depth === 0) startIdx = i;
+      depth++;
+    } else if (ch === "]" && depth > 0) {
+      depth--;
+      if (depth === 0 && startIdx !== -1) {
+        spans.push(text.slice(startIdx, i + 1));
+        startIdx = -1;
+      }
+    }
+  }
+  return spans;
+}
+
 export function parseRepairOps(text: string): {
   ops: RepairOp[];
   rejected: unknown[];
 } {
   const ops: RepairOp[] = [];
   const rejected: unknown[] = [];
-  const start = text.indexOf("[");
-  const end = text.lastIndexOf("]");
-  if (start === -1 || end <= start) {
-    return { ops, rejected: text.trim() ? [text.trim().slice(0, 200)] : [] };
+  let sawArray = false;
+  for (const span of extractBracketArrays(text)) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(span);
+    } catch {
+      continue; // not the JSON op-array (e.g. an `[R03]` tag in prose)
+    }
+    if (!Array.isArray(parsed)) continue;
+    sawArray = true;
+    for (const item of parsed) {
+      const op = validateOp(item);
+      if (op) ops.push(op);
+      else rejected.push(item);
+    }
   }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text.slice(start, end + 1));
-  } catch {
-    return { ops, rejected: [text.slice(start, end + 1).slice(0, 200)] };
-  }
-  if (!Array.isArray(parsed)) return { ops, rejected: [parsed] };
-  for (const item of parsed) {
-    const op = validateOp(item);
-    if (op) ops.push(op);
-    else rejected.push(item);
+  if (!sawArray && text.trim().length > 0) {
+    rejected.push(text.trim().slice(0, 200));
   }
   return { ops, rejected };
 }
@@ -162,6 +200,11 @@ export function applyManifestOps(
       }
       const fromNorm = normalizeContextName(op.from);
       ctx.name = op.to;
+      // `short` is an alternate context key (lookupUseCases / known-context
+      // filtering); rename it too so it can't dangle on the old name. Assembled
+      // manifests omit `short`, so this is a no-op on the prod path — defensive.
+      if (ctx.short != null && normalizeContextName(ctx.short) === fromNorm)
+        ctx.short = op.to;
       for (const m of Array.isArray(next.context_mappings)
         ? next.context_mappings
         : []) {

@@ -71,6 +71,39 @@ describe("parseRepairOps", () => {
     assert.strictEqual(parseRepairOps('{"op":"x"}').ops.length, 0);
     assert.strictEqual(parseRepairOps("[not json]").ops.length, 0);
   });
+
+  test("finds the op-array even when prose carries [Rxx] tags (the real fragility)", () => {
+    // The prompt tells the model about [R01]/[R03] tags, so a narrating model
+    // emits them in prose — a first-[/last-] slice would swallow the op-array.
+    assert.strictEqual(
+      parseRepairOps(
+        'The edits for [R01] are: [{"op":"rename-context","from":"x","to":"y"}]',
+      ).ops.length,
+      1,
+    );
+    assert.strictEqual(
+      parseRepairOps(
+        '[{"op":"add-adapter","context":"x","name":"A"}] Note: see [R03] above.',
+      ).ops.length,
+      1,
+    );
+  });
+
+  test("a `]` inside a string value doesn't truncate the span", () => {
+    assert.strictEqual(
+      parseRepairOps('[{"op":"add-out-port","context":"x","name":"Foo]Bar"}]')
+        .ops.length,
+      1,
+    );
+  });
+
+  test("a truncated (unclosed) array → no ops, reported (fail-safe)", () => {
+    const { ops, rejected } = parseRepairOps(
+      '[{"op":"add-out-port","context":"x","name":"Foo',
+    );
+    assert.strictEqual(ops.length, 0);
+    assert.ok(rejected.length >= 1);
+  });
 });
 
 describe("applyManifestOps", () => {
@@ -140,6 +173,20 @@ describe("applyManifestOps", () => {
     assert.deepStrictEqual(ctxOf(r.manifest, "identity-access")?.depends_on, [
       "billing",
     ]);
+  });
+
+  test("rename-context also rewrites a matching ctx.short alias", () => {
+    const m: ManifestObject = {
+      bounded_contexts: [
+        { name: "payment-gateway", short: "payment-gateway", layers: {} },
+      ],
+    };
+    const r = applyManifestOps(m, [
+      { op: "rename-context", from: "payment-gateway", to: "billing" },
+    ]);
+    const ctx = r.manifest.bounded_contexts?.[0];
+    assert.strictEqual(ctx?.name, "billing");
+    assert.strictEqual(ctx?.short, "billing");
   });
 
   test("does NOT mutate the input manifest (the fail-safe original)", () => {

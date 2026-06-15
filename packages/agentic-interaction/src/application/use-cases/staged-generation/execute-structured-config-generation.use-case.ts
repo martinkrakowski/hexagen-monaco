@@ -1866,12 +1866,26 @@ export class ExecuteStructuredConfigGenerationUseCase {
           .replace(/\s+/g, " ")
           .trim()
           .slice(0, 200);
-        const { ops, rejected } = parseRepairOps(repaired.value);
-        if (rejected.length > 0) {
-          callbacks?.onChunk?.(
-            `Stage 7 · ⚠ ignored ${rejected.length} unrecognized edit op${rejected.length !== 1 ? "s" : ""} from the repair output`,
-          );
+        const parsedOps = parseRepairOps(repaired.value);
+        const rejected = parsedOps.rejected;
+        let ops = parsedOps.ops;
+
+        // Drop unjustified rename-context ops BEFORE applying. The gate would
+        // reject an unjustified rename anyway — but applying it alongside good
+        // additive ops makes the gate reject the WHOLE batch, so one gratuitous
+        // rename (common LLM behavior) would zero out the legitimate fixes.
+        if (!allowContextRename) {
+          const renameCount = ops.filter(
+            (o) => o.op === "rename-context",
+          ).length;
+          if (renameCount > 0) {
+            ops = ops.filter((o) => o.op !== "rename-context");
+            callbacks?.onChunk?.(
+              `Stage 7 · ⚠ dropped ${renameCount} unjustified rename-context op${renameCount !== 1 ? "s" : ""} (no R01 finding warrants a rename)`,
+            );
+          }
         }
+
         if (ops.length === 0) {
           callbacks?.onChunk?.(
             "Stage 7 · Repair proposed no actionable edits — keeping the original manifest",
@@ -1881,6 +1895,13 @@ export class ExecuteStructuredConfigGenerationUseCase {
           );
           repair = keepOriginal();
         } else {
+          // Only meaningful once we have a usable op-list: invalid items inside a
+          // parsed array (a fully unparseable blob is covered by the snippet above).
+          if (rejected.length > 0) {
+            callbacks?.onChunk?.(
+              `Stage 7 · ⚠ ignored ${rejected.length} unrecognized item${rejected.length !== 1 ? "s" : ""} in the op-list`,
+            );
+          }
           callbacks?.onChunk?.("Stage 7 · Applying repair edits…");
           try {
             const applyResult = applyManifestOps(

@@ -83,9 +83,11 @@ export class ExecuteManifestRepairUseCase {
         ],
         z.string(),
         // The output is a small JSON op-list (a handful of edits), not a whole
-        // manifest — a modest ceiling suffices. Low temperature: faithful repair,
-        // not a creative rewrite.
-        { stream: true, temperature: 0.2, maxTokens: 2000 },
+        // manifest. Truncation is all-or-nothing (a cut-off array fails to parse
+        // → 0 ops, original kept), so the ceiling is sized for a worst-case
+        // many-finding spec (pretty-printed) with margin. Low temperature:
+        // faithful repair, not a creative rewrite.
+        { stream: true, temperature: 0.2, maxTokens: 4000 },
       );
       request.signal = abortController.signal;
       request.onModelResolved = (info) => {
