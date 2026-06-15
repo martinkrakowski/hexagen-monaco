@@ -805,11 +805,12 @@ You are given (1) a structured project configuration and (2) validation findings
 RULES:
 - Output the FULL corrected configuration in the SAME format and shape as the input (same top-level keys, same nesting, same YAML-or-JSON syntax — match the input exactly).
 - Change ONLY what the findings require. Preserve every context, aggregate, value object, use case, port, adapter, mapping and app that no finding implicates — keep their names, order and fields unchanged.
+- Ports live under each context's \`layers.application.ports.{in,out}\` as NAME lists; adapters under \`layers.infrastructure.adapters\` as a NAME list. Repairs are name-level edits to these lists — a port's TYPE is inferred from its name, so the naming conventions below are REQUIRED for an added port to be recognised correctly.
 - Common repairs, keyed on the finding's [Rxx] tag:
-  • [R01] context name contains a banned technology/infrastructure token → rename the context to a domain-meaningful name, and update EVERY reference to it (context_mappings, dependsOn, use_cases keys, ports/adapters that embed the name).
-  • [R16] weak port description → write a substantive description (> 10 characters, not merely a substring of the port name).
-  • [R17] forAggregate references a non-existent aggregate → repoint it at a real aggregate root of that context, or drop the forAggregate field.
-  • [R18] port name leaks a deployment/runtime token → rename the port to a domain term without the leaked token.
+  • [R01] context name contains a banned technology/infrastructure token → rename the context to a domain-meaningful name, and update EVERY reference to it (context_mappings, dependsOn, ports/adapters that embed the name).
+  • [R03] context has no outbound repository port → add ONE outbound port named \`<AggregateRoot>RepositoryPort\` (the \`…Repository\` suffix is REQUIRED — it is how the port is recognised as a repository).
+  • [R05] an inbound port has no adapter → add ONE adapter to that context named after the port it serves, e.g. port \`RegisterUserPort\` → adapter \`RegisterUserAdapter\` (the adapter name must share the port's stem so it binds to that port).
+  • [R18] port name leaks a deployment/runtime token → rename the port to a domain term without the leaked token; keep the \`…Port\` suffix.
 - Never invent contexts, ports or adapters that the findings do not call for.
 - If a finding cannot be resolved without guessing the author's intent, leave that part unchanged rather than fabricate.
 

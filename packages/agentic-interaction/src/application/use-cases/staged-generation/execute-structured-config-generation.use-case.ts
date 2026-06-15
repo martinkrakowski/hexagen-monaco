@@ -907,7 +907,12 @@ function lookupUseCases(
   return [];
 }
 
-function inferInboundPortType(name: string): InboundPortType {
+// Exported for direct unit testing: the Stage-7 manifest-repair re-validation
+// (B1a in docs/planning/stage7-repair-rca-and-remediation.md) rebuilds the port
+// map from a name-only manifest, so these name→type inferences become
+// load-bearing — an R03 "add a repository port" fix works only if a `…Repository`
+// name classifies as `repository` here.
+export function inferInboundPortType(name: string): InboundPortType {
   const l = name.toLowerCase();
   if (l.includes("event") || l.endsWith("eventport")) return "event";
   if (
@@ -920,7 +925,7 @@ function inferInboundPortType(name: string): InboundPortType {
   return "command";
 }
 
-function inferOutboundPortType(name: string): OutboundPortType {
+export function inferOutboundPortType(name: string): OutboundPortType {
   const l = name.toLowerCase();
   if (l.includes("reposit") || l.includes("repo")) return "repository";
   if (l.includes("publish") || l.includes("publisher")) return "publisher";
@@ -1099,6 +1104,69 @@ export interface ManifestRepairSummary {
   errorsAfter: number;
   warningsBefore: number;
   warningsAfter: number;
+}
+
+interface EntityCounts {
+  contextCount: number;
+  portCount: number;
+  adapterCount: number;
+}
+
+/**
+ * Stage-7 integrity gate (pure). A repaired manifest is accepted only when it
+ * strictly reduces the (R16/R17-excluded) error count AND does not shrink the
+ * structure or drift the context set:
+ *   - context count must be EXACT — no inventing or deleting bounded contexts
+ *     (the primary gaming vector, e.g. deleting a banned context to shed R01);
+ *   - port/adapter counts may GROW (legitimate R03/R05 additive fixes) but never
+ *     shrink (blocks "delete the offending port to shed its finding").
+ * Counts are taken against the ORIGINAL Stage-6 manifest, never a reconstruction.
+ * See docs/planning/stage7-repair-rca-and-remediation.md §4-B3.
+ */
+export function evaluateRepairGate(input: {
+  errorsBefore: number;
+  errorsAfter: number;
+  before: EntityCounts;
+  after: EntityCounts;
+}): {
+  applied: boolean;
+  reason:
+    | "applied"
+    | "no-error-reduction"
+    | "structure-shrunk-or-context-drift";
+} {
+  if (input.errorsAfter >= input.errorsBefore) {
+    return { applied: false, reason: "no-error-reduction" };
+  }
+  const contextExact = input.before.contextCount === input.after.contextCount;
+  const noShrink =
+    input.after.portCount >= input.before.portCount &&
+    input.after.adapterCount >= input.before.adapterCount;
+  if (!contextExact || !noShrink) {
+    return { applied: false, reason: "structure-shrunk-or-context-drift" };
+  }
+  return { applied: true, reason: "applied" };
+}
+
+/**
+ * R16 (description quality) and R17 (forAggregate validity) are computed from
+ * Stage-3 state a name-only manifest cannot carry, so a manifest-level repair can
+ * neither move them nor have them faithfully reconstructed. Drop them from the
+ * gate's error comparison and the post-repair report so the gate judges only the
+ * rules a manifest repair can act on (R18/R03/R05/R01). The suppression is a
+ * UNIFORM reconstruction artifact (every port, not just synthesized ones), so it
+ * conceals no asymmetric deficit. See the RCA doc §4-B2.
+ */
+export function stripReconstructionArtifacts(
+  report: ValidationReport,
+): ValidationReport {
+  const keep = (finding: string): boolean => !/\bR1[67]\b/.test(finding);
+  const errors = report.errors.filter(keep);
+  return {
+    errors,
+    warnings: report.warnings.filter(keep),
+    passed: errors.length === 0,
+  };
 }
 
 export class ExecuteStructuredConfigGenerationUseCase {
@@ -1466,8 +1534,14 @@ export class ExecuteStructuredConfigGenerationUseCase {
     let repair: ManifestRepairSummary | undefined;
 
     if (this.stage7 && s6.value.errors.length > 0) {
-      const errorsBefore = s6.value.errors.length;
-      const warningsBefore = s6.value.warnings.length;
+      // R16/R17 are unrepairable by a manifest-level repair and can't be
+      // reconstructed from a name-only manifest, so compare like for like.
+      const baselineReport = stripReconstructionArtifacts(s6.value);
+      const errorsBefore = baselineReport.errors.length;
+      const warningsBefore = baselineReport.warnings.length;
+      const beforeCounts = countManifestEntities(
+        (assembledManifest.parsedObject as Record<string, unknown>) ?? {},
+      );
       const keepOriginal = (): ManifestRepairSummary => ({
         attempted: true,
         applied: false,
@@ -1480,9 +1554,13 @@ export class ExecuteStructuredConfigGenerationUseCase {
       callbacks?.onChunk?.(
         `Stage 6 found ${errorsBefore} error${errorsBefore !== 1 ? "s" : ""} — handing off to the reviewer model for Stage 7 verify-and-repair`,
       );
+      // Repair operates on the assembled MANIFEST (which carries the ports), NOT
+      // the raw config — for AI-generated-port specs the config has no ports, so
+      // a config-level repair reconstructs to an empty manifest and is always
+      // rejected. See docs/planning/stage7-repair-rca-and-remediation.md.
       const repaired = await this.stage7.execute(
-        rawConfig,
-        s6.value,
+        assembledManifest.yaml || "",
+        baselineReport,
         callbacks?.onChunk,
         callbacks?.onStageTelemetry,
       );
@@ -1495,63 +1573,65 @@ export class ExecuteStructuredConfigGenerationUseCase {
       } else {
         callbacks?.onChunk?.("Stage 7 · Re-validating the repaired manifest…");
         try {
-          const repairedConfig = parseStructuredConfig(repaired.value);
-          const revalidated = await this.reconstructAndValidate(repairedConfig);
+          const repairedManifest = parseStructuredConfig(repaired.value);
+          const revalidated = await this.revalidateRepairedManifest(
+            repairedManifest,
+            {
+              stage0: normalizedPrompt,
+              stage1: domainAnalysis,
+              contextMappings: mergedContextMappings,
+              apps: config.apps ?? [],
+            },
+          );
           if (!revalidated.success) {
             callbacks?.onChunk?.(
               "Stage 7 · Re-validation failed — keeping the original manifest",
             );
             repair = keepOriginal();
           } else {
-            const errorsAfter = revalidated.report.errors.length;
-            // Integrity gate. Accept-on-fewer-errors ALONE is gameable: a model
-            // could drop the offending context/ports to shed the finding rather
-            // than fix it. The in-scope repairs (R01 rename, R16/17/18 port
-            // edits) are all in-place, so also require the structural counts to
-            // be unchanged — countManifestEntities is the same counter the
-            // transaction below uses.
-            const beforeCounts = countManifestEntities(
-              (assembledManifest.parsedObject as Record<string, unknown>) ?? {},
+            const cleanReport = stripReconstructionArtifacts(
+              revalidated.report,
             );
+            const errorsAfter = cleanReport.errors.length;
             const afterCounts = countManifestEntities(
               (revalidated.manifest.parsedObject as Record<string, unknown>) ??
                 {},
             );
-            const structurePreserved =
-              beforeCounts.contextCount === afterCounts.contextCount &&
-              beforeCounts.portCount === afterCounts.portCount &&
-              beforeCounts.adapterCount === afterCounts.adapterCount;
-            const reducedErrors = errorsAfter < errorsBefore;
-            const applied = reducedErrors && structurePreserved;
+            const gate = evaluateRepairGate({
+              errorsBefore,
+              errorsAfter,
+              before: beforeCounts,
+              after: afterCounts,
+            });
 
             repair = {
               attempted: true,
-              applied,
+              applied: gate.applied,
               errorsBefore,
               errorsAfter,
               warningsBefore,
-              warningsAfter: revalidated.report.warnings.length,
+              warningsAfter: cleanReport.warnings.length,
             };
 
-            if (applied) {
+            if (gate.applied) {
               finalManifest = revalidated.manifest;
-              finalReport = revalidated.report;
+              finalReport = cleanReport;
               callbacks?.onChunk?.(
                 `Stage 7 · Repaired ${errorsBefore - errorsAfter} of ${errorsBefore} error${errorsBefore !== 1 ? "s" : ""} — ${errorsAfter} remain`,
               );
-            } else if (reducedErrors) {
+            } else if (gate.reason === "no-error-reduction") {
               callbacks?.onChunk?.(
-                "Stage 7 · Repair altered the manifest structure (contexts/ports/adapters) — keeping the original",
+                `Stage 7 · Repair did not reduce errors (${errorsAfter} vs ${errorsBefore}) — keeping the original manifest`,
               );
             } else {
               callbacks?.onChunk?.(
-                `Stage 7 · Repair did not reduce errors (${errorsAfter} vs ${errorsBefore}) — keeping the original manifest`,
+                "Stage 7 · Repair shrank or restructured the manifest (contexts/ports/adapters) — keeping the original",
               );
             }
           }
         } catch {
           callbacks?.onChunk?.(
-            "Stage 7 · Repair output was not a valid config — keeping the original manifest",
+            "Stage 7 · Repair output was not a valid manifest — keeping the original manifest",
           );
           repair = keepOriginal();
         }
@@ -1604,45 +1684,53 @@ export class ExecuteStructuredConfigGenerationUseCase {
   }
 
   /**
-   * Deterministic re-validation for Stage 7: rebuild the pipeline state from a
-   * (repaired) config using only the deterministic helpers — no LLM port
-   * mapping / adapter assignment / classification refinement — then re-run
-   * Stage 6. Used to score a repaired config against the original error count.
-   * Intentionally silent (no onChunk / onStageTelemetry) so it doesn't
-   * double-emit a Stage-6 chip; the caller narrates the before/after around it.
+   * Re-validate a repaired MANIFEST for Stage 7. The manifest carries
+   * `layers.application.ports` as string names (see draft-to-manifest.transform),
+   * so buildPreDefinedPortMap reconstructs the real ports — unlike the raw
+   * config, which for AI-generated-port specs has none. Classification (stage2)
+   * is REBUILT from the repaired manifest so R01's banned-context check sees the
+   * repaired context names; stage0 (intent / runtime concerns) and stage1
+   * (aggregate roots) are unchanged by a port/name repair, so they're reused.
+   * Silent (no onChunk / onStageTelemetry) so it doesn't double-emit a chip.
    */
-  private async reconstructAndValidate(
-    config: StructuredConfig,
+  private async revalidateRepairedManifest(
+    repairedManifest: StructuredConfig,
+    base: {
+      stage0: NormalizedPrompt;
+      stage1: DomainAnalysis;
+      contextMappings: ContextMappingEntry[];
+      apps: StructuredConfigApp[];
+    },
   ): Promise<
     | { success: true; manifest: AssembledManifest; report: ValidationReport }
     | { success: false; error: unknown }
   > {
-    const normalizedPrompt = buildNormalizedPromptFromConfig(config);
-    const domainAnalysis = buildDomainAnalysisFromConfig(config);
     const classification = buildClassificationFromConfig(
-      config,
-      domainAnalysis,
+      repairedManifest,
+      base.stage1,
     );
-    const contextMappings = buildContextMappingsFromConfig(config);
-    const portMap = buildPreDefinedPortMap(config);
-    const adapterBindings = buildPreDefinedAdapterBindings(config, portMap);
+    const portMap = buildPreDefinedPortMap(repairedManifest);
+    const adapterBindings = buildPreDefinedAdapterBindings(
+      repairedManifest,
+      portMap,
+    );
     const manifest = this.stage5.execute({
-      stage0: normalizedPrompt,
-      stage1: domainAnalysis,
+      stage0: base.stage0,
+      stage1: base.stage1,
       stage2: classification,
       stage3: portMap,
       stage4: adapterBindings,
-      contextMappings,
-      apps: config.apps ?? [],
+      contextMappings: base.contextMappings,
+      apps: base.apps,
     });
     const revalidation = await this.stage6.execute({
-      stage0: normalizedPrompt,
-      stage1: domainAnalysis,
+      stage0: base.stage0,
+      stage1: base.stage1,
       stage2: classification,
       stage3: portMap,
       stage4: adapterBindings,
       stage5: manifest,
-      contextMappings,
+      contextMappings: base.contextMappings,
     });
     if (!revalidation.success) {
       return { success: false, error: revalidation.error };
