@@ -99,7 +99,7 @@ To modify a protected file: state reason → get human confirmation → use `yar
 
 **Triggers:** "delegate", "orchestrate", "work plan", or any request spanning \>1 Hexagonal layer or \>1 package.
 
-**Full spec:** [`.agents/ORCHESTRATOR.md`](https://www.google.com/search?q=.agents/ORCHESTRATOR.md)
+**Full spec:** [`.agents/ORCHESTRATOR.md`](.agents/ORCHESTRATOR.md)
 
 **Rule:** Never write implementation code in this mode. Decompose → emit Work Plan → delegate → gate.
 
@@ -129,7 +129,7 @@ Ends with: **Ready to move to Develop mode when you say `develop [feature]`.**
 
 **Triggers:** "develop [feature]", "implement", "code", "next step", "batch phase".
 
-**Full spec:** [`.agents/TESTING.md`](https://www.google.com/search?q=.agents/TESTING.md)
+**Full spec:** [`.agents/TESTING.md`](.agents/TESTING.md)
 
 1.  Verify clean build before writing anything.
 2.  Print a numbered ToC of all files to create/modify first.
@@ -146,7 +146,7 @@ Ends with: **Ready to move to Develop mode when you say `develop [feature]`.**
 
 **Triggers:** "review", "analyze", "critique", "check this code", "why was this added", "history of", "verify and validate [PR] comments".
 
-**Full spec:** [`.agents/REVIEW.md`](https://www.google.com/search?q=.agents/REVIEW.md) — dispositioning CodeRabbit / qodo review-bot comments.
+**Full spec:** [`.agents/REVIEW.md`](.agents/REVIEW.md) — dispositioning CodeRabbit / qodo review-bot comments.
 
 **Rule:** Read-only — no edits, no code generation.
 **Output:** Structured critique: **Critical Violations** and **Architectural Smells**.
@@ -164,7 +164,7 @@ Ends with: **Ready to move to Develop mode when you say `develop [feature]`.**
 
 ## YAML Editing Discipline
 
-**Full spec:** [`.agents/yaml-editing-disciplines.md`](https://www.google.com/search?q=.agents/yaml-editing-disciplines.md)
+**Full spec:** [`.agents/yaml-editing-disciplines.md`](.agents/yaml-editing-disciplines.md)
 
 When editing `.architecture/manifest.yaml` or `.architecture/invariants/linter-config.yaml`:
 
