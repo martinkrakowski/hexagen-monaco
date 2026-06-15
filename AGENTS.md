@@ -144,7 +144,10 @@ Ends with: **Ready to move to Develop mode when you say `develop [feature]`.**
 
 ### 🔍 Review & Archeology Mode
 
-**Triggers:** "review", "analyze", "critique", "check this code", "why was this added", "history of".
+**Triggers:** "review", "analyze", "critique", "check this code", "why was this added", "history of", "verify and validate [PR] comments".
+
+**Full spec:** [`.agents/REVIEW.md`](https://www.google.com/search?q=.agents/REVIEW.md) — dispositioning CodeRabbit / qodo review-bot comments.
+
 **Rule:** Read-only — no edits, no code generation.
 **Output:** Structured critique: **Critical Violations** and **Architectural Smells**.
 **Archeology:** Trace origin commit → cross-reference ADRs in `.architecture/decisions/` → classify as Bug-fix Invariant or Legacy Debt.
