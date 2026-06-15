@@ -25,11 +25,12 @@ function stripCodeFences(text: string): string {
 
 /**
  * Stage 7 — GPT-4o verify-and-repair. Optional, gated on the reviewer port
- * (STAGE6_REVIEWER_API_KEY) being wired. Given the original structured config
- * and Stage-6 findings, a stronger model emits a CORRECTED config (same import
- * format). The orchestrator re-runs the deterministic pipeline + Stage 6 on the
- * output to produce a genuine before/after finding count; this use case only
- * produces the corrected config text and never mutates pipeline state itself.
+ * (STAGE6_REVIEWER_API_KEY) being wired. Given the assembled MANIFEST and
+ * Stage-6 findings, a stronger model emits a CORRECTED manifest (bare-name
+ * port/adapter lists — see STAGE7_REPAIR_SYSTEM_PROMPT). The orchestrator re-runs
+ * the deterministic rebuild + Stage 6 on the output to produce a genuine
+ * before/after finding count; this use case only produces the corrected manifest
+ * text and never mutates pipeline state itself.
  *
  * Mirrors ExecuteValidationReviewUseCase's streaming / retry / timeout / abort
  * shape so it inherits the same operational behavior.
@@ -38,7 +39,7 @@ export class ExecuteManifestRepairUseCase {
   constructor(private readonly reviewerPort: SendStructuredRequestPort) {}
 
   async execute(
-    rawConfig: string,
+    manifestYaml: string,
     report: Pick<ValidationReport, "errors" | "warnings">,
     onChunk?: (chunk: string) => void,
     onStageTelemetry?: (telemetry: StageTelemetry) => void,
@@ -46,7 +47,7 @@ export class ExecuteManifestRepairUseCase {
     { success: true; value: string } | { success: false; error: unknown }
   > {
     const stageStart = Date.now();
-    const prompt = compileStage7Prompt(rawConfig, report);
+    const prompt = compileStage7Prompt(manifestYaml, report);
     let modelName: string | undefined;
     const errorCount = report.errors.length;
     onChunk?.(
@@ -103,7 +104,7 @@ export class ExecuteManifestRepairUseCase {
           fullResponse += result.value;
           chunkCount++;
           if (chunkCount % 50 === 0) {
-            onChunk?.(`   Rewriting configuration… (${chunkCount} tokens)`);
+            onChunk?.(`   Rewriting manifest… (${chunkCount} tokens)`);
           }
         }
       } catch (thrownError) {
@@ -161,7 +162,7 @@ export class ExecuteManifestRepairUseCase {
         inputTokensEstimate: estimateTokenCount(prompt),
         outputTokensActual: estimateTokenCount(fullResponse),
         servedFromCache: false,
-        summary: `Repaired configuration emitted (${errorCount} error${errorCount !== 1 ? "s" : ""} targeted)`,
+        summary: `Repaired manifest emitted (${errorCount} error${errorCount !== 1 ? "s" : ""} targeted)`,
         ...(modelName !== undefined ? { modelName } : {}),
       });
       return ok(cleaned);
