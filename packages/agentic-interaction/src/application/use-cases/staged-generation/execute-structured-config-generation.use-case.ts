@@ -32,6 +32,11 @@ import type { ClassifyContextTypeUseCase } from "./classify-context-type.use-cas
 import { STAGE3_ESCALATION_CONFIG } from "./retry-with-escalation";
 import { sanitizePseudoYaml } from "../../../domain/utils/sanitize-pseudo-yaml";
 import { countManifestEntities } from "../../../domain/manifest/count-manifest-entities";
+import {
+  parseRepairOps,
+  applyManifestOps,
+  type ManifestObject,
+} from "../../../domain/manifest/apply-repair-ops";
 import * as yaml from "js-yaml";
 
 export interface StructuredConfigGenerationCallbacks {
@@ -1854,103 +1859,134 @@ export class ExecuteStructuredConfigGenerationUseCase {
         );
         repair = keepOriginal();
       } else {
-        callbacks?.onChunk?.("Stage 7 · Re-validating the repaired manifest…");
-        // First ~200 chars of the raw model output, surfaced on failure so a
-        // swallowed parse/rebuild error is diagnosable from the log alone.
+        // The reviewer emits a small JSON OP-LIST (follow-up C), not a manifest.
+        // We apply the ops DETERMINISTICALLY to the original manifest — no whole
+        // artifact to mis-shape, no small edits to "drop". See RCA doc §8.
         const outputSnippet = repaired.value
           .replace(/\s+/g, " ")
           .trim()
           .slice(0, 200);
+        const parsedOps = parseRepairOps(repaired.value);
+        const rejected = parsedOps.rejected;
+        let ops = parsedOps.ops;
 
-        let repairedManifest: StructuredConfig | undefined;
-        try {
-          repairedManifest = parseStructuredConfig(repaired.value);
-        } catch (parseError) {
+        // Drop unjustified rename-context ops BEFORE applying. The gate would
+        // reject an unjustified rename anyway — but applying it alongside good
+        // additive ops makes the gate reject the WHOLE batch, so one gratuitous
+        // rename (common LLM behavior) would zero out the legitimate fixes.
+        if (!allowContextRename) {
+          const renameCount = ops.filter(
+            (o) => o.op === "rename-context",
+          ).length;
+          if (renameCount > 0) {
+            ops = ops.filter((o) => o.op !== "rename-context");
+            callbacks?.onChunk?.(
+              `Stage 7 · ⚠ dropped ${renameCount} unjustified rename-context op${renameCount !== 1 ? "s" : ""} (no R01 finding warrants a rename)`,
+            );
+          }
+        }
+
+        if (ops.length === 0) {
           callbacks?.onChunk?.(
-            `Stage 7 · Repair output did not parse as a manifest — keeping the original (${summarizeError(parseError)})`,
+            "Stage 7 · Repair proposed no actionable edits — keeping the original manifest",
           );
           callbacks?.onChunk?.(
             `Stage 7 · (diagnostic) output began: ${outputSnippet}`,
           );
           repair = keepOriginal();
-        }
-
-        if (repairedManifest) {
-          try {
-            const revalidated = await this.revalidateRepairedManifest(
-              repairedManifest,
-              { stage0: normalizedPrompt, stage1: domainAnalysis },
+        } else {
+          // Only meaningful once we have a usable op-list: invalid items inside a
+          // parsed array (a fully unparseable blob is covered by the snippet above).
+          if (rejected.length > 0) {
+            callbacks?.onChunk?.(
+              `Stage 7 · ⚠ ignored ${rejected.length} unrecognized item${rejected.length !== 1 ? "s" : ""} in the op-list`,
             );
-            if (!revalidated.success) {
+          }
+          callbacks?.onChunk?.("Stage 7 · Applying repair edits…");
+          try {
+            const applyResult = applyManifestOps(
+              (assembledManifest.parsedObject as ManifestObject) ?? {},
+              ops,
+            );
+            if (applyResult.skipped.length > 0) {
+              const sample = applyResult.skipped
+                .slice(0, 3)
+                .map((s) => `${s.op.op} (${s.reason})`)
+                .join("; ");
               callbacks?.onChunk?.(
-                `Stage 7 · Re-validation failed — keeping the original manifest (${summarizeError(revalidated.error)})`,
+                `Stage 7 · ⚠ ${applyResult.skipped.length} edit${applyResult.skipped.length !== 1 ? "s" : ""} not applied: ${sample}`,
+              );
+            }
+            if (applyResult.applied === 0) {
+              callbacks?.onChunk?.(
+                `Stage 7 · No edits applied (all ${ops.length} skipped) — keeping the original manifest`,
               );
               repair = keepOriginal();
             } else {
-              // Repair coverage: report entries the model emitted that weren't
-              // usable bare names. A silently-dropped port it tried to add would
-              // make an applied repair quietly incomplete (harder to notice than
-              // a hard failure) — so surface it even when the gate later applies.
-              const discardCount = revalidated.discarded.length;
-              if (discardCount > 0) {
-                const sample = revalidated.discarded
-                  .slice(0, 3)
-                  .map((d) => `${d.context}/${d.kind}`)
-                  .join(", ");
-                callbacks?.onChunk?.(
-                  `Stage 7 · ⚠ discarded ${discardCount} malformed port/adapter ${discardCount !== 1 ? "entries" : "entry"} from the repair output (not bare-name lists: ${sample}) — an applied repair may be missing them`,
-                );
-              }
-              const cleanReport = stripReconstructionArtifacts(
-                revalidated.report,
+              const revalidated = await this.revalidateRepairedManifest(
+                applyResult.manifest as unknown as StructuredConfig,
+                { stage0: normalizedPrompt, stage1: domainAnalysis },
               );
-              const errorsAfter = cleanReport.errors.length;
-              const afterParsed =
-                (revalidated.manifest.parsedObject as Record<
-                  string,
-                  unknown
-                >) ?? {};
-              const afterCounts: EntityCounts = {
-                ...countManifestEntities(afterParsed),
-                domainEntityCount: countDomainMembers(afterParsed),
-                contextNames: manifestContextNames(afterParsed),
-              };
-              const gate = evaluateRepairGate({
-                errorsBefore,
-                errorsAfter,
-                before: beforeCounts,
-                after: afterCounts,
-                allowContextRename,
-              });
-
-              repair = {
-                attempted: true,
-                applied: gate.applied,
-                errorsBefore,
-                errorsAfter,
-                warningsBefore,
-                warningsAfter: cleanReport.warnings.length,
-              };
-
-              if (gate.applied) {
-                finalManifest = revalidated.manifest;
-                finalReport = cleanReport;
+              if (!revalidated.success) {
                 callbacks?.onChunk?.(
-                  `Stage 7 · Repaired ${errorsBefore - errorsAfter} of ${errorsBefore} finding${errorsBefore !== 1 ? "s" : ""} — ${errorsAfter} remain${discardCount > 0 ? ` (${discardCount} entr${discardCount !== 1 ? "ies" : "y"} discarded)` : ""}`,
+                  `Stage 7 · Re-validation failed — keeping the original manifest (${summarizeError(revalidated.error)})`,
                 );
-              } else if (gate.reason === "no-error-reduction") {
-                callbacks?.onChunk?.(
-                  `Stage 7 · Repair did not reduce findings (${errorsAfter} of ${errorsBefore} remain) — keeping the original manifest`,
-                );
+                repair = keepOriginal();
               } else {
-                callbacks?.onChunk?.(
-                  "Stage 7 · Repair shrank or restructured the manifest (contexts/ports/adapters) — keeping the original",
+                const cleanReport = stripReconstructionArtifacts(
+                  revalidated.report,
                 );
+                const errorsAfter = cleanReport.errors.length;
+                const afterParsed =
+                  (revalidated.manifest.parsedObject as Record<
+                    string,
+                    unknown
+                  >) ?? {};
+                const afterCounts: EntityCounts = {
+                  ...countManifestEntities(afterParsed),
+                  domainEntityCount: countDomainMembers(afterParsed),
+                  contextNames: manifestContextNames(afterParsed),
+                };
+                const gate = evaluateRepairGate({
+                  errorsBefore,
+                  errorsAfter,
+                  before: beforeCounts,
+                  after: afterCounts,
+                  allowContextRename,
+                });
+
+                repair = {
+                  attempted: true,
+                  applied: gate.applied,
+                  errorsBefore,
+                  errorsAfter,
+                  warningsBefore,
+                  warningsAfter: cleanReport.warnings.length,
+                };
+
+                if (gate.applied) {
+                  finalManifest = revalidated.manifest;
+                  finalReport = cleanReport;
+                  callbacks?.onChunk?.(
+                    `Stage 7 · Applied ${applyResult.applied} edit${applyResult.applied !== 1 ? "s" : ""} · repaired ${errorsBefore - errorsAfter} of ${errorsBefore} finding${errorsBefore !== 1 ? "s" : ""} — ${errorsAfter} remain`,
+                  );
+                } else if (gate.reason === "no-error-reduction") {
+                  // RCA §8 outcome (4): edits applied cleanly but didn't move the
+                  // findings. Surface before/after structure so it's diagnosable
+                  // (a no-op edit vs an applied-but-wrong one).
+                  callbacks?.onChunk?.(
+                    `Stage 7 · ${applyResult.applied} edit${applyResult.applied !== 1 ? "s" : ""} applied but findings unchanged (${errorsAfter} of ${errorsBefore} remain) — keeping the original. before ${beforeCounts.portCount}p/${beforeCounts.adapterCount}a, after ${afterCounts.portCount}p/${afterCounts.adapterCount}a`,
+                  );
+                } else {
+                  callbacks?.onChunk?.(
+                    "Stage 7 · Repaired manifest shrank or drifted (contexts/ports/adapters) — keeping the original",
+                  );
+                }
               }
             }
-          } catch (rebuildError) {
+          } catch (applyError) {
             callbacks?.onChunk?.(
-              `Stage 7 · Could not rebuild the repaired manifest — keeping the original (${summarizeError(rebuildError)})`,
+              `Stage 7 · Could not apply the repair edits — keeping the original (${summarizeError(applyError)})`,
             );
             callbacks?.onChunk?.(
               `Stage 7 · (diagnostic) output began: ${outputSnippet}`,

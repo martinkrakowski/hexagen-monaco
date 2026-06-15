@@ -28,11 +28,10 @@ const mockTransactionManager = {
   rollback: mock.fn(() => null),
 };
 
-// Stages 3/4 get a non-port response → 0 ports/adapters parsed, so the
+// Stages 3/4 get a non-port response -> 0 ports/adapters parsed, so the
 // orchestrator's DETERMINISTIC fallback derives ports from the spec's aggregates
 // (repository) + use_cases (inbound). Stage 6 reads it as a passing LLM verdict,
-// so the only error is the DETERMINISTIC R01 (banned context name) — no LLM
-// findings needed.
+// so the only error is the DETERMINISTIC R01 (banned context name).
 function llmPortPassingValidation(): SendStructuredRequestPort {
   return {
     sendRequest: async () => ({ success: true, value: { content: "" } }),
@@ -45,36 +44,24 @@ function llmPortPassingValidation(): SendStructuredRequestPort {
   } as unknown as SendStructuredRequestPort;
 }
 
-const unescapeXml = (s: string): string =>
-  s
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, "&");
-
-// A faithful gpt-4o stand-in: it ECHOES the artifact it was actually fed (the
-// <manifest>…</manifest> block), with the banned context renamed.
-// This is what makes the test fail PRE-FIX: pre-fix Stage 7 was fed the raw
-// config (no ports) → the reviewer echoes a port-less config → reconstruction is
-// empty → the gate rejects. POST-FIX it is fed the assembled MANIFEST (which
-// carries the fallback-derived ports) → it echoes a ported manifest → the rename
-// applies.
+// Stage 7 now emits a JSON OP-LIST (follow-up C), not a manifest. A rename-context
+// op is applied DETERMINISTICALLY to the assembled manifest — which for this
+// AI-generated-port spec carries the fallback-derived ports AND the Payment
+// aggregate under payment-gateway's layers.domain, so the rename moves them to
+// `billing` intact.
 function renamingReviewer(): SendStructuredRequestPort {
   return {
     sendRequest: async () => ({ success: true, value: { content: "" } }),
     streamStructuredRequest: (request: {
-      messages?: Array<{ content: string }>;
       onModelResolved?: (i: unknown) => void;
     }) => {
       request?.onModelResolved?.({ model: "openai/gpt-4o" });
-      const userPrompt = request?.messages?.[1]?.content ?? "";
-      const match = userPrompt.match(/<manifest>\n([\s\S]*?)\n<\/manifest>/);
-      const fed = match ? unescapeXml(match[1]) : "";
-      const repaired = fed.replace(/payment-gateway/g, "billing");
       async function* gen() {
-        yield { success: true, value: repaired };
+        yield {
+          success: true,
+          value:
+            '[{"op":"rename-context","from":"payment-gateway","to":"billing"}]',
+        };
       }
       return gen();
     },
@@ -97,7 +84,7 @@ const airportSpec = [
 ].join("\n");
 
 describe("ExecuteStructuredConfigGenerationUseCase — Stage-7 repair for an AI-generated-port spec", () => {
-  it("applies a rename repair even though the spec pre-defines NO ports (impossible pre-fix: config-feed reconstructed to 0 ports and the gate always rejected — RCA-2)", async () => {
+  it("applies a rename-context op (impossible pre-fix) and the renamed context keeps its domain", async () => {
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
       llmPortPassingValidation(),
       mockTransactionManager,
@@ -113,7 +100,7 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage-7 repair for an AI-
       assert.strictEqual(
         result.repair?.applied,
         true,
-        "the rename repair must APPLY (the manifest carries the fallback-derived ports)",
+        "the rename op must APPLY (the manifest carries the fallback-derived ports)",
       );
       assert.ok(
         (result.repair?.errorsAfter ?? 1) < (result.repair?.errorsBefore ?? 0),
@@ -122,11 +109,9 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage-7 repair for an AI-
       assert.ok(!result.validation.errors.some((e) => e.includes("R01")));
 
       // Domain-survival guard (PR #344 review): an applied RENAME must not drop
-      // the renamed context's domain model. Re-validation reuses stage1, whose
-      // aggregate `subdomain` keys still hold the OLD name — without re-keying,
-      // Stage-5's subdomain match misses the renamed context and ships an empty
-      // layers.domain. countManifestEntities doesn't count domain entities, so
-      // the gate can't catch this; only an explicit assertion can.
+      // the renamed context's domain model. apply-repair-ops renames only the
+      // context name; re-validation re-keys stage1 (rekeyDomainAnalysisToManifest)
+      // so Stage-5's subdomain match still attaches Payment under the new name.
       const parsed = result.value.parsedObject as {
         bounded_contexts?: Array<{
           name: string;

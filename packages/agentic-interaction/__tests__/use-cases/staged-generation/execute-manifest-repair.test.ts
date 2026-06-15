@@ -37,11 +37,12 @@ const report = {
   errors: ["[R01] Context 'payment-gateway' violates R01: banned token."],
   warnings: ["[R16] billing/ChargePort: weak description"],
 };
-const correctedConfig = "bounded_contexts:\n  - name: billing\n";
+const opsOutput =
+  '[{"op":"rename-context","from":"payment-gateway","to":"billing"}]';
 
 describe("ExecuteManifestRepairUseCase", () => {
-  test("returns the corrected config text from the reviewer stream", async () => {
-    const port = createMockReviewerPort(() => successStream(correctedConfig));
+  test("returns the op-list text from the reviewer stream", async () => {
+    const port = createMockReviewerPort(() => successStream(opsOutput));
     const useCase = new ExecuteManifestRepairUseCase(port);
     const result = await useCase.execute(
       "bounded_contexts:\n  - name: payment-gateway\n",
@@ -49,26 +50,26 @@ describe("ExecuteManifestRepairUseCase", () => {
     );
     assert.strictEqual(result.success, true);
     if (result.success) {
-      assert.strictEqual(result.value, correctedConfig.trim());
+      assert.strictEqual(result.value, opsOutput.trim());
     }
   });
 
-  test("strips markdown code fences the model may wrap the config in", async () => {
-    const fenced = "```yaml\n" + correctedConfig + "```\n";
+  test("strips markdown code fences the model may wrap the op-list in", async () => {
+    const fenced = "```json\n" + opsOutput + "\n```\n";
     const port = createMockReviewerPort(() => successStream(fenced));
     const useCase = new ExecuteManifestRepairUseCase(port);
     const result = await useCase.execute("x", report);
     assert.strictEqual(result.success, true);
     if (result.success) {
       assert.ok(!result.value.includes("```"));
-      assert.match(result.value, /bounded_contexts/);
+      assert.match(result.value, /rename-context/);
     }
   });
 
   test("emits Stage-7 telemetry carrying the served model name", async () => {
     const telemetry: StageTelemetry[] = [];
     const port = createMockReviewerPort(
-      () => successStream(correctedConfig),
+      () => successStream(opsOutput),
       "openai/gpt-4o",
     );
     const useCase = new ExecuteManifestRepairUseCase(port);

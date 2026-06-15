@@ -42,8 +42,10 @@ function passingStage6Port(): SendStructuredRequestPort {
   } as unknown as SendStructuredRequestPort;
 }
 
-// Reviewer streams back a (corrected) config verbatim.
-function reviewerPortReturning(config: string): SendStructuredRequestPort {
+// Stage 7 now emits a JSON OP-LIST (follow-up C), not a manifest. The reviewer
+// streams the op-list text back verbatim; the orchestrator parses it and applies
+// the ops deterministically to the assembled manifest.
+function reviewerEmittingOps(opsJson: string): SendStructuredRequestPort {
   return {
     sendRequest: async () => ({ success: true, value: { content: "" } }),
     streamStructuredRequest: (request: {
@@ -51,7 +53,7 @@ function reviewerPortReturning(config: string): SendStructuredRequestPort {
     }) => {
       request?.onModelResolved?.({ model: "openai/gpt-4o" });
       async function* gen() {
-        yield { success: true, value: config };
+        yield { success: true, value: opsJson };
       }
       return gen();
     },
@@ -76,16 +78,122 @@ const bannedConfig = [
   "",
 ].join("\n");
 
-const repairedConfig = bannedConfig.replace("payment-gateway", "billing");
+// A call-aware Stage-6 port: emits an [R05] finding on the FIRST validation
+// (errorsBefore), then passes on the re-validation — so an additive op that
+// "clears" it is exercisable end-to-end. R03/R05/R10 are LLM-judged (only
+// R01/R16/R17/R18 are deterministic), hence the two-response mock.
+function stage6R05ThenClear(): SendStructuredRequestPort {
+  let call = 0;
+  return {
+    sendRequest: async () => ({ success: true, value: { content: "" } }),
+    streamStructuredRequest: () => {
+      call += 1;
+      const first = call === 1;
+      async function* gen() {
+        yield first
+          ? {
+              success: true,
+              value:
+                '{"type":"error","rule":"R05","message":"Inbound port lacks an adapter"}\n{"type":"result","passed":false}\n',
+            }
+          : { success: true, value: '{"type":"result","passed":true}\n' };
+      }
+      return gen();
+    },
+  } as unknown as SendStructuredRequestPort;
+}
+
+// Clean manifest-shaped spec with pre-defined ports + adapters → Stages 3/4 skip
+// the LLM, so the only LLM calls are the two Stage-6 validations (call 1 / call 2).
+const cleanSpec = [
+  "bounded_contexts:",
+  "  - name: orders",
+  "    layers:",
+  "      application:",
+  "        ports:",
+  "          in: [PlaceOrderPort]",
+  "          out: [OrderRepositoryPort]",
+  "      infrastructure:",
+  "        adapters: [PlaceOrderAdapter]",
+  "use_cases: {}",
+  "context_mappings: []",
+  "",
+].join("\n");
 
 describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair", () => {
-  it("repairs a banned-context error and re-validates to fewer errors", async () => {
+  it("applies an ADDITIVE op that clears a finding (R05) — the add/apply path", async () => {
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(
+      stage6R05ThenClear(),
+      mockTransactionManager,
+      undefined,
+      undefined,
+      reviewerEmittingOps(
+        '[{"op":"add-adapter","context":"orders","name":"ShipOrderAdapter"}]',
+      ),
+    );
+    const result = await useCase.execute(cleanSpec, { onProgress: () => {} });
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.repair?.applied, true);
+      assert.ok(
+        (result.repair?.errorsAfter ?? 1) < (result.repair?.errorsBefore ?? 0),
+      );
+      assert.strictEqual(result.repair?.errorsAfter, 0);
+      const parsed = result.value.parsedObject as {
+        bounded_contexts?: Array<{
+          name: string;
+          layers?: { infrastructure?: { adapters?: string[] } };
+        }>;
+      };
+      const orders = parsed.bounded_contexts?.find((c) => c.name === "orders");
+      assert.ok(
+        orders?.layers?.infrastructure?.adapters?.includes("ShipOrderAdapter"),
+        "the added adapter must be in the applied manifest",
+      );
+    }
+  });
+
+  it("drops an unjustified rename-context but still applies the legit additive op", async () => {
+    // No R01 in the baseline → allowContextRename is false. The model emits a
+    // gratuitous rename alongside a good add. Without dropping the rename, the
+    // gate would reject the WHOLE batch (context drift) and lose the fix.
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(
+      stage6R05ThenClear(),
+      mockTransactionManager,
+      undefined,
+      undefined,
+      reviewerEmittingOps(
+        '[{"op":"rename-context","from":"orders","to":"order-management"},{"op":"add-adapter","context":"orders","name":"ShipOrderAdapter"}]',
+      ),
+    );
+    const result = await useCase.execute(cleanSpec, { onProgress: () => {} });
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.repair?.applied, true);
+      const parsed = result.value.parsedObject as {
+        bounded_contexts?: Array<{ name: string }>;
+      };
+      assert.ok(
+        parsed.bounded_contexts?.some((c) => c.name === "orders"),
+        "the unjustified rename must be dropped — context keeps its name",
+      );
+      assert.ok(
+        !parsed.bounded_contexts?.some((c) => c.name === "order-management"),
+      );
+    }
+  });
+
+  it("applies a rename-context op that clears the banned-name R01", async () => {
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
       passingStage6Port(),
       mockTransactionManager,
       undefined,
       undefined,
-      reviewerPortReturning(repairedConfig),
+      reviewerEmittingOps(
+        '[{"op":"rename-context","from":"payment-gateway","to":"billing"}]',
+      ),
     );
     const result = await useCase.execute(bannedConfig, {
       onProgress: () => {},
@@ -121,15 +229,17 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair
     }
   });
 
-  it("keeps the original manifest when the repair does not reduce errors", async () => {
-    // Reviewer returns a config that STILL has the banned name → re-validation
-    // finds the same error → repair attempted but not applied.
+  it("keeps the original when an applied edit does not reduce findings", async () => {
+    // The op applies cleanly (adds a port) but doesn't touch the banned name →
+    // re-validation finds the same R01 → gate's no-error-reduction keeps original.
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
       passingStage6Port(),
       mockTransactionManager,
       undefined,
       undefined,
-      reviewerPortReturning(bannedConfig),
+      reviewerEmittingOps(
+        '[{"op":"add-out-port","context":"payment-gateway","name":"AuditRepositoryPort"}]',
+      ),
     );
     const result = await useCase.execute(bannedConfig, {
       onProgress: () => {},
@@ -143,66 +253,27 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair
     }
   });
 
-  it("rejects a repair that sheds errors by dropping a context (structure gate)", async () => {
-    // A 2-context spec, one banned. The reviewer "fixes" R01 by DELETING the
-    // banned context — fewer errors, but a materially trimmed manifest. errors
-    // drop yet contextCount falls, so the integrity gate keeps the original.
-    const twoContextBanned = [
-      "bounded_contexts:",
-      "  - name: payment-gateway",
-      "    layers:",
-      "      application:",
-      "        ports:",
-      "          in: [CreatePaymentPort]",
-      "          out: [PaymentRepositoryPort]",
-      "      infrastructure:",
-      "        adapters: [InMemoryPaymentAdapter]",
-      "  - name: billing",
-      "    layers:",
-      "      application:",
-      "        ports:",
-      "          in: [CreateInvoicePort]",
-      "          out: [InvoiceRepositoryPort]",
-      "      infrastructure:",
-      "        adapters: [InMemoryInvoiceAdapter]",
-      "use_cases: {}",
-      "context_mappings: []",
-      "",
-    ].join("\n");
-    const billingOnly = [
-      "bounded_contexts:",
-      "  - name: billing",
-      "    layers:",
-      "      application:",
-      "        ports:",
-      "          in: [CreateInvoicePort]",
-      "          out: [InvoiceRepositoryPort]",
-      "      infrastructure:",
-      "        adapters: [InMemoryInvoiceAdapter]",
-      "use_cases: {}",
-      "context_mappings: []",
-      "",
-    ].join("\n");
-
+  it("keeps the original when every op targets an unknown context (all skipped)", async () => {
+    // The op set can only add/rename — it cannot delete a context or shrink the
+    // structure (the old "drop a context to shed R01" gaming vector is impossible
+    // by construction). An op for a non-existent context is skipped → no edits
+    // applied → the original is kept untouched.
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
       passingStage6Port(),
       mockTransactionManager,
       undefined,
       undefined,
-      reviewerPortReturning(billingOnly),
+      reviewerEmittingOps(
+        '[{"op":"add-adapter","context":"ghost-context","name":"GhostAdapter"}]',
+      ),
     );
-    const result = await useCase.execute(twoContextBanned, {
+    const result = await useCase.execute(bannedConfig, {
       onProgress: () => {},
     });
 
     assert.strictEqual(result.success, true);
     if (result.success) {
       assert.ok(result.repair);
-      // errors DID drop (R01 gone) — proving the gate rejected for STRUCTURE,
-      // not for failing to reduce errors.
-      assert.ok(
-        (result.repair?.errorsAfter ?? 1) < (result.repair?.errorsBefore ?? 0),
-      );
       assert.strictEqual(result.repair?.applied, false);
       assert.ok(result.validation.errors.some((e) => e.includes("R01")));
     }
