@@ -163,6 +163,36 @@ describe("applyManifestOps", () => {
     assert.ok(!inPorts?.includes("RegisterUserPort"));
   });
 
+  test("rename-port onto an existing port name is skipped (would duplicate)", () => {
+    const r = applyManifestOps(base(), [
+      {
+        op: "rename-port",
+        context: "identity-access",
+        from: "RegisterUserPort",
+        to: "AuthenticateUserPort", // already present in identity-access.in
+      },
+    ]);
+    assert.strictEqual(r.applied, 0);
+    assert.match(r.skipped[0].reason, /already present/);
+    assert.deepStrictEqual(
+      ctxOf(r.manifest, "identity-access")?.layers?.application?.ports?.in,
+      ["RegisterUserPort", "AuthenticateUserPort"],
+    );
+  });
+
+  test("a no-op rename-port (from === to) is skipped, not counted as applied", () => {
+    const r = applyManifestOps(base(), [
+      {
+        op: "rename-port",
+        context: "identity-access",
+        from: "RegisterUserPort",
+        to: "RegisterUserPort",
+      },
+    ]);
+    assert.strictEqual(r.applied, 0);
+    assert.match(r.skipped[0].reason, /no-op/);
+  });
+
   test("rename-context renames the context AND its mapping + depends_on references", () => {
     const r = applyManifestOps(base(), [
       { op: "rename-context", from: "payment-gateway", to: "billing" },

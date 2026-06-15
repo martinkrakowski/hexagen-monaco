@@ -248,7 +248,22 @@ export function applyManifestOps(
       list.push(op.name);
       applied++;
     } else if (op.op === "rename-port") {
+      if (op.from === op.to) {
+        skip(op, "no-op rename (from === to)");
+        continue;
+      }
       const ports = ctx.layers?.application?.ports;
+      // Refuse to rename onto a name already in the context — it would create a
+      // duplicate port, which checkDuplicatePortNames flags and which would fail
+      // (or be undone by) re-validation, discarding the whole repair.
+      const collides = (["in", "out"] as const).some((slot) => {
+        const list = ports?.[slot];
+        return Array.isArray(list) && list.includes(op.to);
+      });
+      if (collides) {
+        skip(op, `target port '${op.to}' already present`);
+        continue;
+      }
       let found = false;
       for (const slot of ["in", "out"] as const) {
         const list = ports?.[slot];
