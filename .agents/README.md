@@ -7,11 +7,12 @@ Agents should not directly edit these files — they are generated from `AGENTS.
 
 ## Files
 
-| File                          | Purpose                                     | Referenced By                  |
-| ----------------------------- | ------------------------------------------- | ------------------------------ |
-| `ORCHESTRATOR.md`             | Full Orchestrator Mode protocol             | `AGENTS.md` §Orchestrator Mode |
-| `TESTING.md`                  | Testing protocol for Develop Mode           | `AGENTS.md` §Develop Mode      |
-| `yaml-editing-disciplines.md` | YAML editing rules for .architecture/ files | `AGENTS.md` §YAML editing      |
+| File                          | Purpose                                                   | Referenced By                         |
+| ----------------------------- | --------------------------------------------------------- | ------------------------------------- |
+| `ORCHESTRATOR.md`             | Full Orchestrator Mode protocol                           | `AGENTS.md` §Orchestrator Mode        |
+| `TESTING.md`                  | Testing protocol for Develop Mode                         | `AGENTS.md` §Develop Mode             |
+| `REVIEW.md`                   | Review-bot (CodeRabbit/qodo) comment disposition protocol | `AGENTS.md` §Review & Archeology Mode |
+| `yaml-editing-disciplines.md` | YAML editing rules for .architecture/ files               | `AGENTS.md` §YAML editing             |
 
 ---
 
