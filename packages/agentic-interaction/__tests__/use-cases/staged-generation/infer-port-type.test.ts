@@ -33,6 +33,22 @@ describe("inferOutboundPortType (name-only)", () => {
     assert.strictEqual(inferOutboundPortType("EmailNotifierPort"), "notifier");
   });
 
+  test("a `Report…` name is NOT misread as a repository (the bare 'repo' shorthand must be a trailing token)", () => {
+    // "report".includes("repo") was the over-match: ReportPublisherPort wrongly
+    // classified as repository because the repo check ran (and won) before the
+    // publisher check (PR #344 review).
+    assert.strictEqual(
+      inferOutboundPortType("ReportPublisherPort"),
+      "publisher",
+    );
+    assert.strictEqual(
+      inferOutboundPortType("ReportingClientPort"),
+      "external-client",
+    );
+    // …but a genuine trailing Repo shorthand still classifies as a repository.
+    assert.strictEqual(inferOutboundPortType("OrderRepoPort"), "repository");
+  });
+
   test("anything else → external-client (default)", () => {
     assert.strictEqual(
       inferOutboundPortType("StripeClientPort"),

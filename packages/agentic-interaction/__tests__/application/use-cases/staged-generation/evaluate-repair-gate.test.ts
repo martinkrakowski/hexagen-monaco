@@ -13,10 +13,12 @@ const counts = (
   contextCount: number,
   portCount: number,
   adapterCount: number,
+  domainEntityCount = 0,
 ) => ({
   contextCount,
   portCount,
   adapterCount,
+  domainEntityCount,
 });
 
 describe("evaluateRepairGate — Stage-7 decision surface", () => {
@@ -86,6 +88,30 @@ describe("evaluateRepairGate — Stage-7 decision surface", () => {
     });
     assert.strictEqual(g.applied, false);
   });
+
+  test("count-preserving swap that drops a context's domain (contexts/ports/adapters exact, domain members fell) → REJECTED", () => {
+    // A delete-A/add-C swap or a rename whose new context ships an EMPTY
+    // layers.domain keeps the structural counts identical; only the domain-member
+    // count moves. This is the silent-domain-loss class the gate must catch.
+    const g = evaluateRepairGate({
+      errorsBefore: 5,
+      errorsAfter: 3,
+      before: counts(7, 65, 57, 40),
+      after: counts(7, 65, 57, 33),
+    });
+    assert.strictEqual(g.applied, false);
+    assert.strictEqual(g.reason, "structure-shrunk-or-context-drift");
+  });
+
+  test("a clean rename preserves every domain member → APPLIED (domain no-shrink must not reject legit renames)", () => {
+    const g = evaluateRepairGate({
+      errorsBefore: 5,
+      errorsAfter: 3,
+      before: counts(7, 65, 57, 40),
+      after: counts(7, 65, 57, 40),
+    });
+    assert.deepStrictEqual(g, { applied: true, reason: "applied" });
+  });
 });
 
 describe("stripReconstructionArtifacts — R16/R17 exclusion", () => {
@@ -108,5 +134,25 @@ describe("stripReconstructionArtifacts — R16/R17 exclusion", () => {
     });
     assert.deepStrictEqual(r.errors, []);
     assert.strictEqual(r.passed, true);
+  });
+
+  test("KEEPS a non-R16/17 finding whose prose merely mentions R16/R17 (tag-anchored, not substring)", () => {
+    // The reason the strip is tag-anchored (`^[R1[67]]`) and not a loose
+    // `\bR1[67]\b`: an R03/R18 finding that references R16/R17 in its message must
+    // survive. A revert to the broad regex would drop these and fail here.
+    const r = stripReconstructionArtifacts({
+      errors: [
+        "[R03] missing repository port (resembles an R17 forAggregate gap)",
+      ],
+      warnings: ["[R18] leak that reads like an R16 description nit"],
+      passed: false,
+    });
+    assert.deepStrictEqual(r.errors, [
+      "[R03] missing repository port (resembles an R17 forAggregate gap)",
+    ]);
+    assert.deepStrictEqual(r.warnings, [
+      "[R18] leak that reads like an R16 description nit",
+    ]);
+    assert.strictEqual(r.passed, false);
   });
 });
