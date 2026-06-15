@@ -793,11 +793,12 @@ export function compileStage6Prompt(
 // ============================================================================
 //
 // Stage 6 is report-only; Stage 7 takes its findings and a stronger model
-// (gpt-4o) and emits a CORRECTED structured configuration. We repair the
-// *configuration* (the import format), not the assembled manifest, so the
-// orchestrator can re-run the same deterministic pipeline + Stage 6 on the
-// output and get a genuine before/after finding count — no manifest↔config
-// shape-guessing.
+// (gpt-4o) and emits a CORRECTED MANIFEST. We repair the assembled manifest —
+// NOT the raw config, which for AI-generated-port specs carries no ports (so a
+// config-level repair reconstructs to an empty manifest and is always rejected;
+// see PR #344). The orchestrator rebuilds + re-runs Stage 6 on the output for a
+// genuine before/after finding count. Ports/adapters are bare-name lists — see
+// the shape contract below.
 export const STAGE7_REPAIR_SYSTEM_PROMPT = `You are an assembled-MANIFEST repair specialist for hexagonal DDD projects.
 
 You are given (1) an assembled project MANIFEST and (2) validation findings from an architectural review of it. Emit a CORRECTED manifest that resolves the findings while preserving everything already valid.
@@ -841,12 +842,12 @@ EXAMPLE (resolving [R03] "no repository port" on context \`billing\` by adding O
 CRITICAL OUTPUT FORMAT: output ONLY the corrected manifest YAML, same shape as the input, ports and adapters as bare name strings. No prose, no explanation, no markdown code fences.`;
 
 /**
- * Compile the Stage-7 repair user prompt from the original config text and the
+ * Compile the Stage-7 repair user prompt from the assembled manifest YAML and the
  * Stage-6 findings. Errors are the repair target; warnings are included as
  * lower-priority context.
  */
 export function compileStage7Prompt(
-  rawConfig: string,
+  manifestYaml: string,
   report: { errors: string[]; warnings: string[] },
 ): string {
   const findings = [
@@ -858,15 +859,15 @@ export function compileStage7Prompt(
     findings || "(none)",
     `</findings>`,
     ``,
-    `<configuration>`,
-    // rawConfig is the raw user import — the direct injection vector. Escape it
-    // (and the findings) so a payload containing `</configuration>` can't break
-    // the delimiters and inject instructions into Stage 7. Same convention as
-    // the other prompts in this file.
-    escapeXml(rawConfig),
-    `</configuration>`,
+    `<manifest>`,
+    // manifestYaml derives from the raw user import (the injection vector); escape
+    // it (and the findings) so a payload containing `</manifest>` can't break the
+    // delimiters and inject instructions into Stage 7. Same convention as the
+    // other prompts in this file.
+    escapeXml(manifestYaml),
+    `</manifest>`,
     ``,
-    `Emit the corrected configuration now. Resolve every [error] finding; resolve [warning] findings where you can do so without guessing. Output only the configuration.`,
+    `Emit the corrected manifest YAML now. Resolve every [error] finding; resolve [warning] findings where you can do so without guessing. Output only the manifest YAML, same shape as the input, ports and adapters as bare name strings.`,
   ].join("\n");
 }
 // Retry prompts (Fallback if NDJSON is malformed)

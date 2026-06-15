@@ -55,7 +55,7 @@ const unescapeXml = (s: string): string =>
     .replace(/&amp;/g, "&");
 
 // A faithful gpt-4o stand-in: it ECHOES the artifact it was actually fed (the
-// <configuration>…</configuration> block), with the banned context renamed.
+// <manifest>…</manifest> block), with the banned context renamed.
 // This is what makes the test fail PRE-FIX: pre-fix Stage 7 was fed the raw
 // config (no ports) → the reviewer echoes a port-less config → reconstruction is
 // empty → the gate rejects. POST-FIX it is fed the assembled MANIFEST (which
@@ -70,9 +70,7 @@ function renamingReviewer(): SendStructuredRequestPort {
     }) => {
       request?.onModelResolved?.({ model: "openai/gpt-4o" });
       const userPrompt = request?.messages?.[1]?.content ?? "";
-      const match = userPrompt.match(
-        /<configuration>\n([\s\S]*?)\n<\/configuration>/,
-      );
+      const match = userPrompt.match(/<manifest>\n([\s\S]*?)\n<\/manifest>/);
       const fed = match ? unescapeXml(match[1]) : "";
       const repaired = fed.replace(/payment-gateway/g, "billing");
       async function* gen() {
