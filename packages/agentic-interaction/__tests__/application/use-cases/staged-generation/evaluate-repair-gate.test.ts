@@ -14,11 +14,13 @@ const counts = (
   portCount: number,
   adapterCount: number,
   domainEntityCount = 0,
+  contextNames: string[] = [],
 ) => ({
   contextCount,
   portCount,
   adapterCount,
   domainEntityCount,
+  contextNames,
 });
 
 describe("evaluateRepairGate — Stage-7 decision surface", () => {
@@ -109,6 +111,31 @@ describe("evaluateRepairGate — Stage-7 decision surface", () => {
       errorsAfter: 3,
       before: counts(7, 65, 57, 40),
       after: counts(7, 65, 57, 40),
+    });
+    assert.deepStrictEqual(g, { applied: true, reason: "applied" });
+  });
+
+  test("count-preserving SWAP (delete A, add C) with no renamable baseline → REJECTED even though errors drop", () => {
+    // contextCount stays 2 and every count is preserved, but the name SET drifts
+    // [a,b] → [b,c]; without an R01 baseline a name change is never legitimate.
+    const g = evaluateRepairGate({
+      errorsBefore: 5,
+      errorsAfter: 3,
+      before: counts(2, 10, 8, 4, ["a", "b"]),
+      after: counts(2, 10, 8, 4, ["b", "c"]),
+      // allowContextRename omitted ⇒ false
+    });
+    assert.strictEqual(g.applied, false);
+    assert.strictEqual(g.reason, "structure-shrunk-or-context-drift");
+  });
+
+  test("the SAME name change IS allowed when the baseline had an R01 (rename) finding", () => {
+    const g = evaluateRepairGate({
+      errorsBefore: 5,
+      errorsAfter: 3,
+      before: counts(2, 10, 8, 4, ["b", "payment-gateway"]),
+      after: counts(2, 10, 8, 4, ["b", "billing"]),
+      allowContextRename: true,
     });
     assert.deepStrictEqual(g, { applied: true, reason: "applied" });
   });

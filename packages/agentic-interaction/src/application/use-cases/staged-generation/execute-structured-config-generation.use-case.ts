@@ -1114,6 +1114,9 @@ interface EntityCounts {
   portCount: number;
   adapterCount: number;
   domainEntityCount: number;
+  /** Sorted, normalized bounded-context names — lets the gate reject a
+   * count-preserving SWAP (delete A, add C) that count equality alone misses. */
+  contextNames: string[];
 }
 
 /**
@@ -1144,16 +1147,37 @@ function countDomainMembers(parsed: unknown): number {
 }
 
 /**
+ * Sorted, normalized bounded-context names from an assembled manifest. The gate
+ * compares the before/after set so a count-preserving SWAP (delete one context,
+ * add another) is rejected — `contextCount` equality alone can't see it. Never throws.
+ */
+function manifestContextNames(parsed: unknown): string[] {
+  const root = (parsed ?? {}) as { bounded_contexts?: unknown };
+  const contexts = Array.isArray(root.bounded_contexts)
+    ? root.bounded_contexts
+    : [];
+  const names: string[] = [];
+  for (const ctx of contexts) {
+    if (ctx == null || typeof ctx !== "object") continue;
+    const name = (ctx as { name?: unknown }).name;
+    if (typeof name === "string") names.push(normalizeContextName(name));
+  }
+  return names.sort();
+}
+
+/**
  * Stage-7 integrity gate (pure). A repaired manifest is accepted only when it
  * strictly reduces the (R16/R17-excluded) error count AND does not shrink the
  * structure or drift the context set:
- *   - context count must be EXACT — no inventing or deleting bounded contexts
- *     (the primary gaming vector, e.g. deleting a banned context to shed R01);
+ *   - context count must be EXACT — no inventing or deleting bounded contexts;
+ *   - the context-name SET must be identical UNLESS the baseline carried a
+ *     renamable (R01) finding — count equality alone admits a SWAP (delete A,
+ *     add C), so when no rename is warranted the names must match exactly; an
+ *     R01 baseline opts into renames (the only repair that changes a name);
  *   - port/adapter counts may GROW (legitimate R03/R05 additive fixes) but never
  *     shrink (blocks "delete the offending port to shed its finding");
- *   - domain-member count must not shrink — a count-preserving context SWAP or a
- *     rename that drops the renamed context's domain both keep contexts/ports
- *     exact but lose domain members, which only this check catches (PR #344).
+ *   - domain-member count must not shrink — a swap or a rename that drops the
+ *     renamed context's domain keeps contexts/ports exact but loses members.
  * Counts are taken against the ORIGINAL Stage-6 manifest, never a reconstruction.
  * See docs/planning/stage7-repair-rca-and-remediation.md §4-B3.
  */
@@ -1162,6 +1186,9 @@ export function evaluateRepairGate(input: {
   errorsAfter: number;
   before: EntityCounts;
   after: EntityCounts;
+  /** The baseline had a renamable (R01) finding, so a context-name change is a
+   * legitimate repair. Defaults to false ⇒ the name set must be preserved. */
+  allowContextRename?: boolean;
 }): {
   applied: boolean;
   reason:
@@ -1173,11 +1200,19 @@ export function evaluateRepairGate(input: {
     return { applied: false, reason: "no-error-reduction" };
   }
   const contextExact = input.before.contextCount === input.after.contextCount;
+  // contextNames are pre-sorted, so element-wise equality compares the sets.
+  const contextSetEqual =
+    input.before.contextNames.length === input.after.contextNames.length &&
+    input.before.contextNames.every(
+      (n, i) => n === input.after.contextNames[i],
+    );
+  const contextOk =
+    contextExact && (input.allowContextRename === true || contextSetEqual);
   const noShrink =
     input.after.portCount >= input.before.portCount &&
     input.after.adapterCount >= input.before.adapterCount &&
     input.after.domainEntityCount >= input.before.domainEntityCount;
-  if (!contextExact || !noShrink) {
+  if (!contextOk || !noShrink) {
     return { applied: false, reason: "structure-shrunk-or-context-drift" };
   }
   return { applied: true, reason: "applied" };
@@ -1699,7 +1734,15 @@ export class ExecuteStructuredConfigGenerationUseCase {
       const beforeCounts: EntityCounts = {
         ...countManifestEntities(beforeParsed),
         domainEntityCount: countDomainMembers(beforeParsed),
+        contextNames: manifestContextNames(beforeParsed),
       };
+      // A context-name change is only a legitimate repair when the baseline had
+      // an R01 (banned-name) finding — the one rule whose fix renames a context.
+      // Otherwise the gate requires the context-name SET preserved, rejecting a
+      // count-preserving swap (delete A, add C). PR #344 review (qodo).
+      const allowContextRename = baselineReport.errors.some((e) =>
+        /^\[R01\]/.test(e),
+      );
       const keepOriginal = (): ManifestRepairSummary => ({
         attempted: true,
         applied: false,
@@ -1752,12 +1795,14 @@ export class ExecuteStructuredConfigGenerationUseCase {
             const afterCounts: EntityCounts = {
               ...countManifestEntities(afterParsed),
               domainEntityCount: countDomainMembers(afterParsed),
+              contextNames: manifestContextNames(afterParsed),
             };
             const gate = evaluateRepairGate({
               errorsBefore,
               errorsAfter,
               before: beforeCounts,
               after: afterCounts,
+              allowContextRename,
             });
 
             repair = {
