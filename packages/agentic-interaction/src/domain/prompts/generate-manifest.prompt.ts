@@ -787,6 +787,63 @@ export function compileStage6Prompt(
     .filter(Boolean)
     .join("\n");
 }
+
+// ============================================================================
+// Stage 7 — GPT-4o verify-and-repair (optional, gated on STAGE6_REVIEWER_API_KEY)
+// ============================================================================
+//
+// Stage 6 is report-only; Stage 7 takes its findings and a stronger model
+// (gpt-4o) and emits a CORRECTED structured configuration. We repair the
+// *configuration* (the import format), not the assembled manifest, so the
+// orchestrator can re-run the same deterministic pipeline + Stage 6 on the
+// output and get a genuine before/after finding count — no manifest↔config
+// shape-guessing.
+export const STAGE7_REPAIR_SYSTEM_PROMPT = `You are a structured-configuration repair specialist for hexagonal DDD projects.
+
+You are given (1) a structured project configuration and (2) validation findings produced by an architectural review of the manifest assembled from it. Emit a CORRECTED configuration that resolves the findings while preserving everything already valid.
+
+RULES:
+- Output the FULL corrected configuration in the SAME format and shape as the input (same top-level keys, same nesting, same YAML-or-JSON syntax — match the input exactly).
+- Change ONLY what the findings require. Preserve every context, aggregate, value object, use case, port, adapter, mapping and app that no finding implicates — keep their names, order and fields unchanged.
+- Common repairs, keyed on the finding's [Rxx] tag:
+  • [R01] context name contains a banned technology/infrastructure token → rename the context to a domain-meaningful name, and update EVERY reference to it (context_mappings, dependsOn, use_cases keys, ports/adapters that embed the name).
+  • [R16] weak port description → write a substantive description (> 10 characters, not merely a substring of the port name).
+  • [R17] forAggregate references a non-existent aggregate → repoint it at a real aggregate root of that context, or drop the forAggregate field.
+  • [R18] port name leaks a deployment/runtime token → rename the port to a domain term without the leaked token.
+- Never invent contexts, ports or adapters that the findings do not call for.
+- If a finding cannot be resolved without guessing the author's intent, leave that part unchanged rather than fabricate.
+
+CRITICAL OUTPUT FORMAT: output ONLY the corrected configuration. No prose, no explanation, no markdown code fences.`;
+
+/**
+ * Compile the Stage-7 repair user prompt from the original config text and the
+ * Stage-6 findings. Errors are the repair target; warnings are included as
+ * lower-priority context.
+ */
+export function compileStage7Prompt(
+  rawConfig: string,
+  report: { errors: string[]; warnings: string[] },
+): string {
+  const findings = [
+    ...report.errors.map((e) => `- [error] ${escapeXml(e)}`),
+    ...report.warnings.map((w) => `- [warning] ${escapeXml(w)}`),
+  ].join("\n");
+  return [
+    `<findings>`,
+    findings || "(none)",
+    `</findings>`,
+    ``,
+    `<configuration>`,
+    // rawConfig is the raw user import — the direct injection vector. Escape it
+    // (and the findings) so a payload containing `</configuration>` can't break
+    // the delimiters and inject instructions into Stage 7. Same convention as
+    // the other prompts in this file.
+    escapeXml(rawConfig),
+    `</configuration>`,
+    ``,
+    `Emit the corrected configuration now. Resolve every [error] finding; resolve [warning] findings where you can do so without guessing. Output only the configuration.`,
+  ].join("\n");
+}
 // Retry prompts (Fallback if NDJSON is malformed)
 export interface StageRetryContext {
   /** Stage number 0–6 */

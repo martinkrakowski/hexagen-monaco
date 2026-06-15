@@ -5,6 +5,7 @@ import type { StagedPhase, StageProgress } from "./staged-generation-types";
 import {
   useStagedGenerationStream,
   type StageValidationReport,
+  type StageRepairSummary,
 } from "./useStagedGenerationStream";
 import type { PullRequestMetadata } from "@hexagen/external-integration";
 import type { AssembledManifest } from "@hexagen/shared";
@@ -67,6 +68,7 @@ export interface UseStagedSpecGenerationReturn {
   verboseLog: string[];
   validationErrors: string[];
   validationReport: StageValidationReport | null;
+  repairSummary: StageRepairSummary | null;
   contextCount: number;
   portCount: number;
   adapterCount: number;
@@ -110,6 +112,9 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
   // set it from its own result and neither path inherits a stale prior report.
   const [validationReport, setValidationReport] =
     useState<StageValidationReport | null>(null);
+  const [repairSummary, setRepairSummary] = useState<StageRepairSummary | null>(
+    null,
+  );
 
   const abortRef = useRef(false);
   const generatingLockRef = useRef(false);
@@ -183,6 +188,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     setValidationErrors([]);
     setVerboseLog([]);
     setValidationReport(null);
+    setRepairSummary(null);
     setContextCount(0);
     setPortCount(0);
     setAdapterCount(0);
@@ -206,6 +212,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     setStageProgress({});
     setValidationErrors([]);
     setValidationReport(null);
+    setRepairSummary(null);
     engineLogRef.current = [];
     setVerboseLog([]);
     setContextCount(0);
@@ -256,6 +263,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
       setStageProgress(result.stageProgress);
       setValidationErrors(result.validationErrors);
       setValidationReport(result.validationReport);
+      setRepairSummary(result.repairSummary);
       if (result.phase === "failed") {
         setGenerationError(result.stepDetail || "Generation failed");
       }
@@ -430,6 +438,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
             setPhase("complete");
             setStepDetail("Manifest generation complete");
             setValidationReport(result.validation ?? null);
+            setRepairSummary(result.repair ?? null);
 
             return {
               phase: "complete" as StagedPhase,
@@ -562,6 +571,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     verboseLog,
     validationErrors,
     validationReport,
+    repairSummary,
     contextCount,
     portCount,
     adapterCount,

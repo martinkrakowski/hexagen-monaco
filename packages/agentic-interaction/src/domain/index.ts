@@ -69,6 +69,8 @@ export {
   compileStage4Prompt,
   STAGE6_VALIDATION_SYSTEM_PROMPT,
   compileStage6Prompt,
+  STAGE7_REPAIR_SYSTEM_PROMPT,
+  compileStage7Prompt,
   RETRY_PROMPTS,
   CONTEXT_LIST_SYSTEM_PROMPT,
   compileContextListPrompt,

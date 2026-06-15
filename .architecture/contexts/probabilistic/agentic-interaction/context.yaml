@@ -16,6 +16,7 @@ layers:
     - ExecuteLooseSpecConversionUseCase
     - ClassifyContextTypeUseCase
     - ExecuteFullStagedGenerationUseCase
+    - ExecuteManifestRepairUseCase
     ports:
       in:
       - ArchitectureModificationPort

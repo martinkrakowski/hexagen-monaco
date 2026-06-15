@@ -23,16 +23,31 @@ export interface StageTelemetry {
   refinerModelName?: string;
 }
 
+/** Normalize a served model id to a stable display alias so the SAME model
+ * reads identically across stages. The serving infra reports a stage's model
+ * inconsistently — Stage 3 surfaced `mercury-2` (alias) while Stages 4/6
+ * surfaced `inception/mercury-2-prod-h100` (provider-prefixed served id with a
+ * deployment suffix) for one and the same model, which looked like two. Strip
+ * the provider prefix and any `-prod-…` deployment/build suffix. */
+export function normalizeModelName(model: string): string {
+  const afterSlash = model.includes("/")
+    ? model.slice(model.lastIndexOf("/") + 1)
+    : model;
+  return afterSlash.replace(/-prod-.*$/i, "");
+}
+
 /** Renders the model identity chip for telemetry display, e.g.
  * `[mercury-2]` or `[mercury-2 / gpt-4o]` for a draft→refine cascade.
+ * Names are normalized so the alias and the served id read the same.
  * Returns null when no model was resolved (deterministic stage, local run). */
 export function formatModelChip(
   telemetry: Pick<StageTelemetry, "modelName" | "refinerModelName">,
 ): string | null {
   if (!telemetry.modelName) return null;
+  const primary = normalizeModelName(telemetry.modelName);
   return telemetry.refinerModelName
-    ? `[${telemetry.modelName} / ${telemetry.refinerModelName}]`
-    : `[${telemetry.modelName}]`;
+    ? `[${primary} / ${normalizeModelName(telemetry.refinerModelName)}]`
+    : `[${primary}]`;
 }
 
 /** Extracts the serving model name from an LLM response's metadata bag

@@ -543,6 +543,7 @@ export default function ImportProjectSpecPage() {
             stageProgress={stageProgress}
             verboseLog={verboseLog}
             validationReport={specGeneration.validationReport}
+            repairSummary={specGeneration.repairSummary}
           />
         </div>
       ) : (

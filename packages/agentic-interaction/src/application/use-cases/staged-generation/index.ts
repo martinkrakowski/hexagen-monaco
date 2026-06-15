@@ -10,5 +10,6 @@ export * from "./execute-port-mapping.use-case.js";
 export * from "./execute-prompt-normalization.use-case.js";
 export * from "./execute-structured-config-generation.use-case.js";
 export * from "./execute-validation-review.use-case.js";
+export * from "./execute-manifest-repair.use-case.js";
 export * from "./retry-with-escalation.js";
 export * from "./stage-timeout.js";

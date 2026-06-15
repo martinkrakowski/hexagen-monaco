@@ -24,6 +24,7 @@ import { ExecutePortMappingUseCase } from "./execute-port-mapping.use-case";
 import { ExecuteAdapterAssignmentUseCase } from "./execute-adapter-assignment.use-case";
 import { ExecuteManifestAssemblyUseCase } from "./execute-manifest-assembly.use-case";
 import { ExecuteValidationReviewUseCase } from "./execute-validation-review.use-case";
+import { ExecuteManifestRepairUseCase } from "./execute-manifest-repair.use-case";
 import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
@@ -1085,11 +1086,30 @@ function buildPreDefinedAdapterBindings(
   };
 }
 
+/**
+ * Summary of the optional Stage-7 verify-and-repair pass. Present on the result
+ * only when a reviewer port was configured AND Stage 6 found errors (i.e. a
+ * repair was attempted). `applied` is true only when the repaired manifest
+ * strictly reduced the error count and replaced the original.
+ */
+export interface ManifestRepairSummary {
+  attempted: boolean;
+  applied: boolean;
+  errorsBefore: number;
+  errorsAfter: number;
+  warningsBefore: number;
+  warningsAfter: number;
+}
+
 export class ExecuteStructuredConfigGenerationUseCase {
   private readonly stage3: ExecutePortMappingUseCase;
   private readonly stage4: ExecuteAdapterAssignmentUseCase;
   private readonly stage5: ExecuteManifestAssemblyUseCase;
   private readonly stage6: ExecuteValidationReviewUseCase;
+  // Stage 7 (optional): GPT-4o verify-and-repair, wired only when a reviewer
+  // port is provided (STAGE6_REVIEWER_API_KEY). Undefined ⇒ repair disabled and
+  // the post-Stage-6 path is byte-identical to before.
+  private readonly stage7?: ExecuteManifestRepairUseCase;
   private readonly transactionManager: TransactionManagerPort;
   private readonly classifyUseCase?: ClassifyContextTypeUseCase;
 
@@ -1098,6 +1118,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
     transactionManager: TransactionManagerPort,
     classifyUseCase?: ClassifyContextTypeUseCase,
     escalationModel?: string,
+    reviewerPort?: SendStructuredRequestPort,
   ) {
     const stage3Config = escalationModel
       ? { ...STAGE3_ESCALATION_CONFIG, escalationModel }
@@ -1106,6 +1127,9 @@ export class ExecuteStructuredConfigGenerationUseCase {
     this.stage4 = new ExecuteAdapterAssignmentUseCase(llmPort);
     this.stage5 = new ExecuteManifestAssemblyUseCase();
     this.stage6 = new ExecuteValidationReviewUseCase(llmPort);
+    this.stage7 = reviewerPort
+      ? new ExecuteManifestRepairUseCase(reviewerPort)
+      : undefined;
     this.transactionManager = transactionManager;
     this.classifyUseCase = classifyUseCase;
   }
@@ -1118,6 +1142,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
         success: true;
         value: AssembledManifest;
         validation: ValidationReport;
+        repair?: ManifestRepairSummary;
         transactionId: string;
       }
     | { success: false; error: unknown }
@@ -1429,11 +1454,115 @@ export class ExecuteStructuredConfigGenerationUseCase {
     }
     callbacks?.onProgress?.(6, s6Duration);
 
-    // Create transaction for the generated manifest
+    // Stage 7 — optional GPT-4o verify-and-repair. Runs only when a reviewer
+    // port is wired (STAGE6_REVIEWER_API_KEY) AND Stage 6 found errors. The
+    // reviewer repairs the *config*; we re-run the deterministic pipeline +
+    // Stage 6 on its output and accept the repair only if it STRICTLY reduces
+    // the error count — so a repair can never regress the user's manifest.
+    // Every failure mode (model error, unparseable output, no improvement)
+    // falls back to the original manifest + report.
+    let finalManifest = assembledManifest;
+    let finalReport: ValidationReport = s6.value;
+    let repair: ManifestRepairSummary | undefined;
+
+    if (this.stage7 && s6.value.errors.length > 0) {
+      const errorsBefore = s6.value.errors.length;
+      const warningsBefore = s6.value.warnings.length;
+      const keepOriginal = (): ManifestRepairSummary => ({
+        attempted: true,
+        applied: false,
+        errorsBefore,
+        errorsAfter: errorsBefore,
+        warningsBefore,
+        warningsAfter: warningsBefore,
+      });
+
+      callbacks?.onChunk?.(
+        `Stage 6 found ${errorsBefore} error${errorsBefore !== 1 ? "s" : ""} — handing off to the reviewer model for Stage 7 verify-and-repair`,
+      );
+      const repaired = await this.stage7.execute(
+        rawConfig,
+        s6.value,
+        callbacks?.onChunk,
+        callbacks?.onStageTelemetry,
+      );
+
+      if (!repaired.success) {
+        callbacks?.onChunk?.(
+          "Stage 7 · Repair model call failed — keeping the original manifest",
+        );
+        repair = keepOriginal();
+      } else {
+        callbacks?.onChunk?.("Stage 7 · Re-validating the repaired manifest…");
+        try {
+          const repairedConfig = parseStructuredConfig(repaired.value);
+          const revalidated = await this.reconstructAndValidate(repairedConfig);
+          if (!revalidated.success) {
+            callbacks?.onChunk?.(
+              "Stage 7 · Re-validation failed — keeping the original manifest",
+            );
+            repair = keepOriginal();
+          } else {
+            const errorsAfter = revalidated.report.errors.length;
+            // Integrity gate. Accept-on-fewer-errors ALONE is gameable: a model
+            // could drop the offending context/ports to shed the finding rather
+            // than fix it. The in-scope repairs (R01 rename, R16/17/18 port
+            // edits) are all in-place, so also require the structural counts to
+            // be unchanged — countManifestEntities is the same counter the
+            // transaction below uses.
+            const beforeCounts = countManifestEntities(
+              (assembledManifest.parsedObject as Record<string, unknown>) ?? {},
+            );
+            const afterCounts = countManifestEntities(
+              (revalidated.manifest.parsedObject as Record<string, unknown>) ??
+                {},
+            );
+            const structurePreserved =
+              beforeCounts.contextCount === afterCounts.contextCount &&
+              beforeCounts.portCount === afterCounts.portCount &&
+              beforeCounts.adapterCount === afterCounts.adapterCount;
+            const reducedErrors = errorsAfter < errorsBefore;
+            const applied = reducedErrors && structurePreserved;
+
+            repair = {
+              attempted: true,
+              applied,
+              errorsBefore,
+              errorsAfter,
+              warningsBefore,
+              warningsAfter: revalidated.report.warnings.length,
+            };
+
+            if (applied) {
+              finalManifest = revalidated.manifest;
+              finalReport = revalidated.report;
+              callbacks?.onChunk?.(
+                `Stage 7 · Repaired ${errorsBefore - errorsAfter} of ${errorsBefore} error${errorsBefore !== 1 ? "s" : ""} — ${errorsAfter} remain`,
+              );
+            } else if (reducedErrors) {
+              callbacks?.onChunk?.(
+                "Stage 7 · Repair altered the manifest structure (contexts/ports/adapters) — keeping the original",
+              );
+            } else {
+              callbacks?.onChunk?.(
+                `Stage 7 · Repair did not reduce errors (${errorsAfter} vs ${errorsBefore}) — keeping the original manifest`,
+              );
+            }
+          }
+        } catch {
+          callbacks?.onChunk?.(
+            "Stage 7 · Repair output was not a valid config — keeping the original manifest",
+          );
+          repair = keepOriginal();
+        }
+      }
+    }
+
+    // Create transaction for the (possibly repaired) manifest
     const intentId = `spec-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-    const yaml = assembledManifest.yaml || "";
+    const yaml = finalManifest.yaml || "";
     const parsed =
-      (assembledManifest.parsedObject as Record<string, unknown>) || {};
+      (finalManifest.parsedObject as Record<string, unknown>) || {};
 
     // Shared A2/A4 counter — reads the nested layers.* path. The previous inline
     // version read ctx.ports/ctx.adapters at the context root, so this path's
@@ -1464,12 +1593,60 @@ export class ExecuteStructuredConfigGenerationUseCase {
 
     return {
       success: true,
-      value: assembledManifest,
-      // Surface the Stage-6 findings (previously discarded) so the route/UI can
-      // show them as an advisory review of a successfully-produced manifest —
-      // not a failure to retry.
-      validation: s6.value,
+      value: finalManifest,
+      // Surface the Stage-6 findings (re-validated when Stage 7 repaired the
+      // manifest) so the route/UI can show them as an advisory review — not a
+      // failure to retry.
+      validation: finalReport,
+      ...(repair ? { repair } : {}),
       transactionId: transaction.id,
     };
+  }
+
+  /**
+   * Deterministic re-validation for Stage 7: rebuild the pipeline state from a
+   * (repaired) config using only the deterministic helpers — no LLM port
+   * mapping / adapter assignment / classification refinement — then re-run
+   * Stage 6. Used to score a repaired config against the original error count.
+   * Intentionally silent (no onChunk / onStageTelemetry) so it doesn't
+   * double-emit a Stage-6 chip; the caller narrates the before/after around it.
+   */
+  private async reconstructAndValidate(
+    config: StructuredConfig,
+  ): Promise<
+    | { success: true; manifest: AssembledManifest; report: ValidationReport }
+    | { success: false; error: unknown }
+  > {
+    const normalizedPrompt = buildNormalizedPromptFromConfig(config);
+    const domainAnalysis = buildDomainAnalysisFromConfig(config);
+    const classification = buildClassificationFromConfig(
+      config,
+      domainAnalysis,
+    );
+    const contextMappings = buildContextMappingsFromConfig(config);
+    const portMap = buildPreDefinedPortMap(config);
+    const adapterBindings = buildPreDefinedAdapterBindings(config, portMap);
+    const manifest = this.stage5.execute({
+      stage0: normalizedPrompt,
+      stage1: domainAnalysis,
+      stage2: classification,
+      stage3: portMap,
+      stage4: adapterBindings,
+      contextMappings,
+      apps: config.apps ?? [],
+    });
+    const revalidation = await this.stage6.execute({
+      stage0: normalizedPrompt,
+      stage1: domainAnalysis,
+      stage2: classification,
+      stage3: portMap,
+      stage4: adapterBindings,
+      stage5: manifest,
+      contextMappings,
+    });
+    if (!revalidation.success) {
+      return { success: false, error: revalidation.error };
+    }
+    return { success: true, manifest, report: revalidation.value };
   }
 }

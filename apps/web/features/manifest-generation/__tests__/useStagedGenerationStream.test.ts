@@ -110,6 +110,36 @@ test("captures the Stage-6 validation report from the done event", async () => {
   }
 });
 
+test("a stage-telemetry event without a prior stage-start yields a well-formed entry", async () => {
+  // Stage 7 (repair) emits telemetry with no stage-start — the entry must still
+  // carry stage/label/chunks (not a bare { telemetry }) so generic consumers of
+  // stageProgress don't hit undefined.
+  const lines = [
+    '{"type":"stage-telemetry","stage":7,"telemetry":{"stage":7,"label":"Manifest Repair","durationMs":5,"usedLLM":true,"retryCount":0,"inputTokensEstimate":1,"outputTokensActual":1,"servedFromCache":false,"summary":"x","modelName":"openai/gpt-4o"}}',
+    '{"type":"done","yaml":"m","contextCount":1,"portCount":1,"adapterCount":1}',
+  ];
+  global.fetch = mockFetchWithSSE(lines);
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+
+    await act(async () => {
+      await result.current.generate({ description: "test" });
+    });
+
+    const entry = result.current.stageProgress[7];
+    assert.ok(entry, "stage 7 progress entry exists");
+    assert.strictEqual(entry.stage, 7);
+    assert.strictEqual(entry.label, "Manifest Repair");
+    assert.ok(Array.isArray(entry.chunks));
+    assert.strictEqual(entry.telemetry?.modelName, "openai/gpt-4o");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("ignores a malformed Stage-6 validation payload (keeps it null)", async () => {
   // `validation` is present + truthy but the wrong shape (errors is not an
   // array). The boundary guard must reject it so the UI never dereferences a
