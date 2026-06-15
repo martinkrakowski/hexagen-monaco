@@ -1,6 +1,6 @@
 # Stage-6 validation & Stage-7 repair — RCA and remediation
 
-**Status:** Issue A shipped (`296c6a85`, branch `fix/stage7-airport-revalidation`); Issue B designed, pending build.
+**Status:** Issues A & B shipped (#344, merged to main + deployed 2026-06-14). A second prod run then surfaced **RCA-4** — the Stage-7 rebuild crashed on the repair model's output shape and the crash was swallowed — remediated in **PR #346** (`fix/stage7-repair-robustness`, open); see §8.
 **Date:** 2026-06-15
 **Trigger:** First real prod test of Stage-7 verify-and-repair (shipped in #343, live 2026-06-15) against a 7-context structured spec (`Architectural project configuration.md`).
 
@@ -17,6 +17,8 @@ Investigation found **two independent defects** (one pre-existing, one introduce
 | **RCA-1** | R18 runtime-concern leak check matches on a single shared token                                                   | Pre-existing (Stage 6)          | 22 of 26 "errors" are false positives — domain ports flagged for sharing one noun with a multi-word infra concern                   |
 | **RCA-2** | Stage-7 re-validation reconstructs ports via `buildPreDefinedPortMap`, which is empty for AI-generated-port specs | Introduced by #343              | Repair can **never apply** for specs whose ports the AI generated (the common case); always rejected, always wastes the gpt-4o call |
 | **RCA-3** | The counts-_preservation_ integrity gate blocks legitimate _additive_ repairs                                     | Introduced by #343 review round | Even once RCA-2 is fixed, repairs that fix R03/R05 by **adding** ports/adapters are rejected                                        |
+
+**Follow-up (RCA-4).** After A & B shipped and deployed, a _second_ prod run surfaced a distinct failure: Stage 7 **always** discarding on error because the deterministic rebuild **crashed** on the model's output shape (typed-object ports) and the crash was **swallowed** by a bare `catch {}`. RCA-1/2/3 above are the gate _rejecting_ a repair; RCA-4 is the rebuild _crashing_ before the gate can judge. See **RCA-4** (§3) and the as-built remediation (**§8**).
 
 ---
 
@@ -101,6 +103,14 @@ The integrity gate **as first implemented in the #343 review round** required **
 
 So even after RCA-2 is fixed, the **original** count-_preservation_ gate rejects every additive repair → repair still delivers nothing for this spec (whose only real findings, post-RCA-1, are R03/R05). B3 is therefore an **optimization** of the gate (admit growth, still block shrink), not a reversal of it.
 
+### RCA-4 — Stage-7 rebuild crashes on the model's output shape, swallowed (surfaced post-#344 deploy)
+
+After Issues A & B shipped (#344) and deployed, a _second_ prod run (3 Stage-6 errors) showed Stage 7 **always** falling back to _"Repair output was not a valid manifest"_ — the repair never applied when there was anything to fix.
+
+**Root cause — a conflation of two responsibilities.** Stage 7 mixes _semantic repair_ (deciding what to fix — needs a model) with _structural reconstruction_ (producing a strictly-shaped artifact — needs deterministic code against a validated schema) by asking the model to re-emit the **whole** manifest. Told to fix port **types** (R03/R10), gpt-4o emitted ports as typed objects (`{ name, type }`) instead of the manifest's **bare name strings**; the deterministic rebuild called `name.toLowerCase()` on each entry → **threw** → and a bare `catch {}` **discarded the reason**, so the failure was a black box in prod.
+
+**Reproduced.** `parseStructuredConfig` is robust to prose / indentation / leaked entities (all parse), so the throw is in the **rebuild**, not the parse — and the swallowed error meant the exact failing step was unobservable. (A first instinct — "fragile YAML reproduction" — was disproved by a throwaway probe before any fix.) RCA-1/2/3 are the gate _rejecting_ a repair; RCA-4 is the rebuild _crashing_ before the gate can judge.
+
 ---
 
 ## 4. Remediation
@@ -172,3 +182,57 @@ Single-token concerns (e.g. `fly.io` → `[fly]`) keep matching on the single to
 
 - **2026-06-15** — `Fix R18 matcher` + `Invest: make repair work for AI-port specs` (user, AskUserQuestion). Issue A shipped same day; Issue B per §4 (gate softening flagged for confirmation).
 - **2026-06-15 (review pass)** — incorporated review feedback: **B1a** field-synthesis answer (name-level repair, deterministic type inference, naming-convention prompt — no metadata synthesis required, so the manifest-feed path stands); **B2** "by construction" justification + uniform-artifact nuance; **B3** floor anchored to the original Stage-6 manifest; alternative decoupled from the normalizer rewire; the AI-port orchestrator test elevated to the acceptance gate (write first). Rich-port remains the escalation for metadata-level (R16/R17) repair only.
+- **2026-06-15 (follow-up, RCA-4)** — post-#344-deploy prod run showed Stage-7 always discarding on error. Chose **option B** (tolerant rebuild + observability + prompt realignment) over option A (instrument-only) and option C (structured-edit redesign, deferred) via AskUserQuestion. Shipped in PR #346 (§8); two review rounds folded in (qodo prompt-contradiction, CodeRabbit non-array slots).
+
+---
+
+## 8. Applied remediation — PR #346 (as built)
+
+Remediation for **RCA-4**, on branch `fix/stage7-repair-robustness` (off main), three commits. Four pillars: **(a)** stop swallowing the error; **(b)** make ingestion tolerant of the model's common deviations; **(c)** report — never silently drop — what it can't ingest; **(d)** align the prompt so the drift stops at the source.
+
+### Commit progression
+
+| Commit     | Driver                             | Why separate                                                                                                      |
+| ---------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `0e188d92` | RCA-4 (option B)                   | Core: observability + entry-level tolerance + discard reporting + prompt realignment.                             |
+| `4bbe9611` | qodo "prompt contradicts manifest" | The `<configuration>` user-prompt tag (kept to avoid test churn) contradicted the manifest-framed system prompt.  |
+| `21d4cd72` | CodeRabbit "guard non-array slots" | Entry-level tolerance didn't cover the container shape; a scalar/object **slot** still threw before coercion ran. |
+
+The scope grew across review rounds **legitimately, not by creep**: each round caught a distinct layer of the same shape-tolerance problem (entry → container) or a coherence gap (system vs user prompt) the original commit left.
+
+### `execute-structured-config-generation.use-case.ts` (orchestrator — locus of the bug)
+
+- **`summarizeError(e)`** _(pillar a)_ — first line of an error, truncated. Turns the discarded exception into a readable reason; the bare `catch {}` was itself the worst defect — a 100%-failing path with zero diagnostics.
+- **`coercePortName(entry)`** _(pillar b)_ — salvages a name from a string OR a `{ name, … }` object; `null` for un-nameable. The direct fix for the reproduced crash; the port's type is still inferred from the coerced name.
+- **`toEntryArray(value)`** _(pillar b, commit 3 — the easily-missed second layer)_ — normalizes a list **slot**: array → as-is; non-empty scalar → one-element list; else `[]`. Entry-level coercion is necessary **but not sufficient**: a scalar (`out: FooPort`) or object-shaped container blows up at the **iteration site** (`.map` / `for…of`) _before_ `coercePortName` ever runs. Salvaging a scalar (vs a blunt `Array.isArray ? : []`) avoids silently dropping a single-item port.
+- **`collectMalformedManifestEntries(manifest)`** _(pillar c, exported)_ — reports entries/slots it can't salvage, so a silently-dropped port the model tried to add is **visible** (a passing-but-incomplete repair is harder to notice than a failure). Its slot guard also stops `for…of` throwing on an object slot — and it runs first in revalidation, so without the guard it would crash before the builders.
+- **`buildPreDefinedPortMap` / `buildPreDefinedAdapterBindings`** _(pillar b)_ — route every entry through `toEntryArray → coercePortName → filter`. This is the reconstruction path; tolerance here is what lets a _fixable_ repair apply instead of being discarded. `buildPreDefinedPortMap` exported for unit testing.
+- **Repair block** _(pillars a, c)_ — the single swallowing `try/catch` split into parse-phase and rebuild-phase handling, each surfacing `summarizeError` + a 200-char snippet of the raw output. `revalidateRepairedManifest` now returns `discarded`; the block logs the discard count **before** the gate, and the success line became repair **coverage**: _"Repaired X of N findings — Z remain (W discarded)."_
+
+### `execute-manifest-repair.use-case.ts` (Stage-7 streaming wrapper)
+
+- Doc comment + `execute(rawConfig)` → `execute(manifestYaml)` + telemetry `summary` ("Repaired configuration emitted" → "manifest") + streamed "Rewriting configuration…" → "manifest". The value **is** the manifest now (post-#344 B1); honestly-named variables/labels prevent the exact config-vs-manifest confusion that caused the bug.
+
+### `generate-manifest.prompt.ts` (prompt contract — pillar d)
+
+- **`STAGE7_REPAIR_SYSTEM_PROMPT`** realigned to manifest repair: a MANIFEST SHAPE section (`layers.*`), a bare-name-strings mandate, an explicit "DO NOT add `type:` / DO NOT turn a name into a map" rule with the bad pattern, and a one-shot before/after example (R03 adds `InvoiceRepositoryPort` as a bare list item). Without this the tolerant rebuild merely **absorbs** drift that would keep recurring; the example is the strongest lever against typed-object output.
+- **`compileStage7Prompt`** _(commit 2, qodo)_ — `<configuration>` → `<manifest>` delimiters; closing line → "Emit the corrected manifest YAML … bare name strings"; param `rawConfig` → `manifestYaml`. The system and user prompts had been contradicting each other.
+- A stale comment asserting _"we repair the configuration, **not** the assembled manifest"_ — the inverse of the current design — corrected with the #344 rationale.
+
+### Tests
+
+- **NEW `stage7-rebuild-robustness.test.ts`** — `coercePortName` (string / object / un-nameable); `buildPreDefinedPortMap` (typed-object coerced — _the regression_; un-nameable dropped; scalar slot salvaged; object slot → no ports, no throw); `collectMalformedManifestEntries` (salvageable not reported; un-nameable reported; object slot reported with **no `for…of` throw**; scalar not reported).
+- **`generate-manifest.prompt.test.ts`** — injection-escape test retargeted to `<manifest>`.
+- **`execute-structured-config-airport-repair.test.ts`** — the mock reviewer's extraction regex retargeted to `<manifest>`. **Load-bearing in a non-obvious way:** the mock extracts the fed manifest from the delimiter, so a missed rename would feed Stage 7 an **empty string** and the test would pass **vacuously** (the gate rejects an empty manifest — "correct" behavior for the wrong reason). _Checklist item for any future prompt-delimiter rename: confirm the extracting mock and the prompt move together, and that the test still exercises a non-empty path._
+
+Suite **684/684**, typecheck + lint clean.
+
+### Status & honest caveat
+
+PR #346 open (mergeable once the Sync Engine CI check goes green); gated by `STAGE6_REVIEWER_API_KEY` (unset ⇒ byte-identical, off). This remediation is **tolerance + observability**: the swallowed error meant the _exact_ prod cause couldn't be confirmed (typed-object ports is a strong, reproduced hypothesis, not a proof). The deploy is therefore the confirmation; the new log resolves it into one of **three** outcomes:
+
+1. _"Repaired X of N findings"_ with **zero discards** → fixed cleanly. ✓
+2. The parse/rebuild error + output snippet → a **residual cause**, no longer hidden — chase it.
+3. _"Repaired …"_ with a **non-zero discard count** → the gate passed but the manifest is quietly **incomplete** (the model emitted entries we couldn't ingest). A success _with a coverage gap_ — and the clearest signal that **follow-up C is worth scheduling, not just deferring**.
+
+**Follow-up C** — a structured-edit contract (the model emits a small, typed, homogeneous op-list `[{ op, ctx, name }]` applied deterministically, instead of re-emitting the manifest's heterogeneous slot structure) — is the eventual cure for the RCA-4 conflation. It dissolves this **entire class** of shape ambiguity (no slots to mis-shape, no entries to mis-type, no whole-artifact regeneration), so the `coercePortName` / `toEntryArray` tolerance becomes unnecessary rather than load-bearing. Deferred until this confirms the diagnosis live — outcome (3) above is its scheduling trigger.
