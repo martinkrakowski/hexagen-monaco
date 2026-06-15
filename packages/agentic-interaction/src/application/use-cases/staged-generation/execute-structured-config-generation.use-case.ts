@@ -1160,7 +1160,9 @@ export function evaluateRepairGate(input: {
 export function stripReconstructionArtifacts(
   report: ValidationReport,
 ): ValidationReport {
-  const keep = (finding: string): boolean => !/\bR1[67]\b/.test(finding);
+  // Tag-anchored (findings are always `[Rxx] …`) so an R03/R18 finding whose
+  // message merely mentions R16/R17 isn't dropped (PR #344 review).
+  const keep = (finding: string): boolean => !/^\[R1[67]\]/.test(finding);
   const errors = report.errors.filter(keep);
   return {
     errors,
