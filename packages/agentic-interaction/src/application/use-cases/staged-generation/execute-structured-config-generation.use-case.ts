@@ -1043,18 +1043,70 @@ function inferAdapterImplements(
   return portNames[0] ?? "";
 }
 
-function buildPreDefinedPortMap(config: StructuredConfig): PortMap {
+/** First line of an error, truncated — surfaces a previously-swallowed reason. */
+function summarizeError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  return msg.split("\n")[0].slice(0, 160);
+}
+
+/**
+ * Coerce one port/adapter entry to its NAME. A manifest carries these as bare
+ * name STRINGS, but a repair model often "helpfully" emits a typed object
+ * (`{ name, type }`) because the findings talk about port types — that used to
+ * throw `name.toLowerCase is not a function` deep in the rebuild and was swallowed
+ * as "not a valid manifest". Salvage the name from either shape; return null for a
+ * genuinely un-nameable entry so the caller can DISCARD it (and report it) instead
+ * of crashing or silently keeping garbage. (Stage-7 robustness.)
+ */
+export function coercePortName(entry: unknown): string | null {
+  if (typeof entry === "string") return entry.trim() || null;
+  if (entry && typeof entry === "object") {
+    const name = (entry as { name?: unknown }).name;
+    if (typeof name === "string" && name.trim()) return name.trim();
+  }
+  return null;
+}
+
+/**
+ * Port/adapter entries a repair model emitted that aren't a usable bare name —
+ * collected so the orchestrator can REPORT them. A silently-dropped port the
+ * model was trying to add would make an applied repair quietly incomplete, which
+ * is harder to notice than an outright failure (PR #344 review follow-up).
+ */
+export function collectMalformedManifestEntries(
+  manifest: StructuredConfig,
+): Array<{ context: string; kind: string; raw: unknown }> {
+  const malformed: Array<{ context: string; kind: string; raw: unknown }> = [];
+  const scan = (ctx: string, kind: string, entries: unknown[] | undefined) => {
+    for (const entry of entries ?? []) {
+      if (coercePortName(entry) === null)
+        malformed.push({ context: ctx, kind, raw: entry });
+    }
+  };
+  for (const ctx of manifest.bounded_contexts) {
+    scan(ctx.name, "in-port", ctx.layers?.application?.ports?.in);
+    scan(ctx.name, "out-port", ctx.layers?.application?.ports?.out);
+    scan(ctx.name, "adapter", ctx.layers?.infrastructure?.adapters);
+  }
+  return malformed;
+}
+
+export function buildPreDefinedPortMap(config: StructuredConfig): PortMap {
+  // Coerce + drop un-nameable entries so a typed-object port doesn't throw the
+  // whole rebuild; discards are reported separately (collectMalformedManifestEntries).
+  const names = (entries: unknown[] | undefined): string[] =>
+    (entries ?? []).map(coercePortName).filter((n): n is string => n !== null);
   return {
     contexts: config.bounded_contexts
       .filter(ctxHasPreDefinedPorts)
       .map((ctx) => ({
         contextName: ctx.name,
-        in: (ctx.layers?.application?.ports?.in ?? []).map((name) => ({
+        in: names(ctx.layers?.application?.ports?.in).map((name) => ({
           name,
           type: inferInboundPortType(name),
           description: name.replace(/Port$/, ""),
         })),
-        out: (ctx.layers?.application?.ports?.out ?? []).map((name) => ({
+        out: names(ctx.layers?.application?.ports?.out).map((name) => ({
           name,
           type: inferOutboundPortType(name),
           description: name.replace(/Port$/, ""),
@@ -1080,15 +1132,18 @@ function buildPreDefinedAdapterBindings(
         ];
         return {
           contextName: ctx.name,
-          adapters: (ctx.layers?.infrastructure?.adapters ?? []).map((name) => {
-            const adapterType = inferAdapterType(name);
-            return {
-              name,
-              type: adapterType ?? "adapter",
-              implements: inferAdapterImplements(name, portNames),
-              adapterType,
-            };
-          }),
+          adapters: (ctx.layers?.infrastructure?.adapters ?? [])
+            .map(coercePortName)
+            .filter((name): name is string => name !== null)
+            .map((name) => {
+              const adapterType = inferAdapterType(name);
+              return {
+                name,
+                type: adapterType ?? "adapter",
+                implements: inferAdapterImplements(name, portNames),
+                adapterType,
+              };
+            }),
         };
       }),
   };
@@ -1773,68 +1828,108 @@ export class ExecuteStructuredConfigGenerationUseCase {
         repair = keepOriginal();
       } else {
         callbacks?.onChunk?.("Stage 7 · Re-validating the repaired manifest…");
+        // First ~200 chars of the raw model output, surfaced on failure so a
+        // swallowed parse/rebuild error is diagnosable from the log alone.
+        const outputSnippet = repaired.value
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 200);
+
+        let repairedManifest: StructuredConfig | undefined;
         try {
-          const repairedManifest = parseStructuredConfig(repaired.value);
-          const revalidated = await this.revalidateRepairedManifest(
-            repairedManifest,
-            { stage0: normalizedPrompt, stage1: domainAnalysis },
-          );
-          if (!revalidated.success) {
-            callbacks?.onChunk?.(
-              "Stage 7 · Re-validation failed — keeping the original manifest",
-            );
-            repair = keepOriginal();
-          } else {
-            const cleanReport = stripReconstructionArtifacts(
-              revalidated.report,
-            );
-            const errorsAfter = cleanReport.errors.length;
-            const afterParsed =
-              (revalidated.manifest.parsedObject as Record<string, unknown>) ??
-              {};
-            const afterCounts: EntityCounts = {
-              ...countManifestEntities(afterParsed),
-              domainEntityCount: countDomainMembers(afterParsed),
-              contextNames: manifestContextNames(afterParsed),
-            };
-            const gate = evaluateRepairGate({
-              errorsBefore,
-              errorsAfter,
-              before: beforeCounts,
-              after: afterCounts,
-              allowContextRename,
-            });
-
-            repair = {
-              attempted: true,
-              applied: gate.applied,
-              errorsBefore,
-              errorsAfter,
-              warningsBefore,
-              warningsAfter: cleanReport.warnings.length,
-            };
-
-            if (gate.applied) {
-              finalManifest = revalidated.manifest;
-              finalReport = cleanReport;
-              callbacks?.onChunk?.(
-                `Stage 7 · Repaired ${errorsBefore - errorsAfter} of ${errorsBefore} error${errorsBefore !== 1 ? "s" : ""} — ${errorsAfter} remain`,
-              );
-            } else if (gate.reason === "no-error-reduction") {
-              callbacks?.onChunk?.(
-                `Stage 7 · Repair did not reduce errors (${errorsAfter} vs ${errorsBefore}) — keeping the original manifest`,
-              );
-            } else {
-              callbacks?.onChunk?.(
-                "Stage 7 · Repair shrank or restructured the manifest (contexts/ports/adapters) — keeping the original",
-              );
-            }
-          }
-        } catch {
+          repairedManifest = parseStructuredConfig(repaired.value);
+        } catch (parseError) {
           callbacks?.onChunk?.(
-            "Stage 7 · Repair output was not a valid manifest — keeping the original manifest",
+            `Stage 7 · Repair output did not parse as a manifest — keeping the original (${summarizeError(parseError)})`,
+          );
+          callbacks?.onChunk?.(
+            `Stage 7 · (diagnostic) output began: ${outputSnippet}`,
           );
           repair = keepOriginal();
+        }
+
+        if (repairedManifest) {
+          try {
+            const revalidated = await this.revalidateRepairedManifest(
+              repairedManifest,
+              { stage0: normalizedPrompt, stage1: domainAnalysis },
+            );
+            if (!revalidated.success) {
+              callbacks?.onChunk?.(
+                `Stage 7 · Re-validation failed — keeping the original manifest (${summarizeError(revalidated.error)})`,
+              );
+              repair = keepOriginal();
+            } else {
+              // Repair coverage: report entries the model emitted that weren't
+              // usable bare names. A silently-dropped port it tried to add would
+              // make an applied repair quietly incomplete (harder to notice than
+              // a hard failure) — so surface it even when the gate later applies.
+              const discardCount = revalidated.discarded.length;
+              if (discardCount > 0) {
+                const sample = revalidated.discarded
+                  .slice(0, 3)
+                  .map((d) => `${d.context}/${d.kind}`)
+                  .join(", ");
+                callbacks?.onChunk?.(
+                  `Stage 7 · ⚠ discarded ${discardCount} malformed port/adapter ${discardCount !== 1 ? "entries" : "entry"} from the repair output (not bare-name lists: ${sample}) — an applied repair may be missing them`,
+                );
+              }
+              const cleanReport = stripReconstructionArtifacts(
+                revalidated.report,
+              );
+              const errorsAfter = cleanReport.errors.length;
+              const afterParsed =
+                (revalidated.manifest.parsedObject as Record<
+                  string,
+                  unknown
+                >) ?? {};
+              const afterCounts: EntityCounts = {
+                ...countManifestEntities(afterParsed),
+                domainEntityCount: countDomainMembers(afterParsed),
+                contextNames: manifestContextNames(afterParsed),
+              };
+              const gate = evaluateRepairGate({
+                errorsBefore,
+                errorsAfter,
+                before: beforeCounts,
+                after: afterCounts,
+                allowContextRename,
+              });
+
+              repair = {
+                attempted: true,
+                applied: gate.applied,
+                errorsBefore,
+                errorsAfter,
+                warningsBefore,
+                warningsAfter: cleanReport.warnings.length,
+              };
+
+              if (gate.applied) {
+                finalManifest = revalidated.manifest;
+                finalReport = cleanReport;
+                callbacks?.onChunk?.(
+                  `Stage 7 · Repaired ${errorsBefore - errorsAfter} of ${errorsBefore} finding${errorsBefore !== 1 ? "s" : ""} — ${errorsAfter} remain${discardCount > 0 ? ` (${discardCount} entr${discardCount !== 1 ? "ies" : "y"} discarded)` : ""}`,
+                );
+              } else if (gate.reason === "no-error-reduction") {
+                callbacks?.onChunk?.(
+                  `Stage 7 · Repair did not reduce findings (${errorsAfter} of ${errorsBefore} remain) — keeping the original manifest`,
+                );
+              } else {
+                callbacks?.onChunk?.(
+                  "Stage 7 · Repair shrank or restructured the manifest (contexts/ports/adapters) — keeping the original",
+                );
+              }
+            }
+          } catch (rebuildError) {
+            callbacks?.onChunk?.(
+              `Stage 7 · Could not rebuild the repaired manifest — keeping the original (${summarizeError(rebuildError)})`,
+            );
+            callbacks?.onChunk?.(
+              `Stage 7 · (diagnostic) output began: ${outputSnippet}`,
+            );
+            repair = keepOriginal();
+          }
         }
       }
     }
@@ -1904,9 +1999,17 @@ export class ExecuteStructuredConfigGenerationUseCase {
       stage1: DomainAnalysis;
     },
   ): Promise<
-    | { success: true; manifest: AssembledManifest; report: ValidationReport }
+    | {
+        success: true;
+        manifest: AssembledManifest;
+        report: ValidationReport;
+        discarded: Array<{ context: string; kind: string; raw: unknown }>;
+      }
     | { success: false; error: unknown }
   > {
+    // Port/adapter entries the repair model emitted in a shape we couldn't turn
+    // into a name (reported by the caller; the builders below skip them).
+    const discarded = collectMalformedManifestEntries(repairedManifest);
     // Track context renames so Stage-5 re-attaches each context's domain model
     // (a rename otherwise orphans it — see rekeyDomainAnalysisToManifest).
     const stage1 = rekeyDomainAnalysisToManifest(base.stage1, repairedManifest);
@@ -1959,6 +2062,6 @@ export class ExecuteStructuredConfigGenerationUseCase {
     if (!revalidation.success) {
       return { success: false, error: revalidation.error };
     }
-    return { success: true, manifest, report: revalidation.value };
+    return { success: true, manifest, report: revalidation.value, discarded };
   }
 }

@@ -798,12 +798,17 @@ export function compileStage6Prompt(
 // orchestrator can re-run the same deterministic pipeline + Stage 6 on the
 // output and get a genuine before/after finding count — no manifest↔config
 // shape-guessing.
-export const STAGE7_REPAIR_SYSTEM_PROMPT = `You are a structured-configuration repair specialist for hexagonal DDD projects.
+export const STAGE7_REPAIR_SYSTEM_PROMPT = `You are an assembled-MANIFEST repair specialist for hexagonal DDD projects.
 
-You are given (1) a structured project configuration and (2) validation findings produced by an architectural review of the manifest assembled from it. Emit a CORRECTED configuration that resolves the findings while preserving everything already valid.
+You are given (1) an assembled project MANIFEST and (2) validation findings from an architectural review of it. Emit a CORRECTED manifest that resolves the findings while preserving everything already valid.
+
+MANIFEST SHAPE (match it exactly):
+- Top level: \`system\`, \`scope\`, \`architecture\`, \`bounded_contexts\`, optional \`apps\`, optional \`context_mappings\`.
+- Each bounded context has \`name\` and \`layers\`; ports live at \`layers.application.ports.in\` and \`layers.application.ports.out\`, adapters at \`layers.infrastructure.adapters\`, domain members at \`layers.domain.entities\` and \`layers.domain.value_objects\`.
+- Ports and adapters are BARE NAME STRINGS, never objects. A port's TYPE is inferred from its NAME, so DO NOT add \`type:\` fields and DO NOT turn a name into a map: emit \`- UserRepositoryPort\`, never \`- { name: UserRepositoryPort, type: repository }\`.
 
 RULES:
-- Output the FULL corrected configuration in the SAME format and shape as the input (same top-level keys, same nesting, same YAML-or-JSON syntax — match the input exactly).
+- Output the FULL corrected manifest in the SAME YAML shape and key structure as the input.
 - Change ONLY what the findings require. Preserve every context, aggregate, value object, use case, port, adapter, mapping and app that no finding implicates — keep their names, order and fields unchanged.
 - Ports live under each context's \`layers.application.ports.{in,out}\` as NAME lists; adapters under \`layers.infrastructure.adapters\` as a NAME list. Repairs are name-level edits to these lists — a port's TYPE is inferred from its name, so the naming conventions below are REQUIRED for an added port to be recognised correctly.
 - Common repairs, keyed on the finding's [Rxx] tag:
@@ -814,7 +819,26 @@ RULES:
 - Never invent contexts, ports or adapters that the findings do not call for.
 - If a finding cannot be resolved without guessing the author's intent, leave that part unchanged rather than fabricate.
 
-CRITICAL OUTPUT FORMAT: output ONLY the corrected configuration. No prose, no explanation, no markdown code fences.`;
+EXAMPLE (resolving [R03] "no repository port" on context \`billing\` by adding ONE bare-name out-port):
+  before:
+    - name: billing
+      layers:
+        application:
+          ports:
+            in:
+              - SubmitInvoicePort
+            out: []
+  after:
+    - name: billing
+      layers:
+        application:
+          ports:
+            in:
+              - SubmitInvoicePort
+            out:
+              - InvoiceRepositoryPort
+
+CRITICAL OUTPUT FORMAT: output ONLY the corrected manifest YAML, same shape as the input, ports and adapters as bare name strings. No prose, no explanation, no markdown code fences.`;
 
 /**
  * Compile the Stage-7 repair user prompt from the original config text and the
