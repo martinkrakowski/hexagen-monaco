@@ -129,6 +129,34 @@ describe("validatePortQuality", () => {
     assert.ok(issues.some((i) => i.rule === "R18" && i.severity === "error"));
   });
 
+  test("domain ports sharing ONE noun with a multi-word concern are NOT flagged (R18 false-positive guard)", () => {
+    // The bug: 'invoice'/'event'/'email' are domain nouns that ALSO appear as
+    // single tokens inside 'overdue-invoice-detection'/'event-bus'/'email-retry'.
+    // The old "any single shared token" rule flagged every domain port; the fix
+    // requires the port to be NAMED AFTER the concern (>=2 contiguous tokens).
+    const cases: Array<[string, string]> = [
+      ["CreateInvoicePort", "overdue-invoice-detection"],
+      ["InvoiceRepository", "overdue-invoice-detection"],
+      ["UserEventPublisher", "event-bus"],
+      ["EmailNotifierPort", "email-retry"],
+    ];
+    for (const [name, concern] of cases) {
+      const port: PortDefinition = {
+        name,
+        type: "command",
+        description:
+          "Accepts requests from upstream and coordinates the domain workflow",
+      };
+      const issues = validatePortQuality([port], "Ctx", aggregateRoots, [
+        concern,
+      ]);
+      assert.ok(
+        !issues.some((i) => i.rule === "R18"),
+        `${name} must NOT be R18 for "${concern}" (shares only one token)`,
+      );
+    }
+  });
+
   test("runtime concern leak: FlyIO in deployment concerns → error R18", () => {
     const port: PortDefinition = {
       name: "FlyIOClientPort",

@@ -121,6 +121,46 @@ function checkInfrastructureName(
   return null;
 }
 
+/** True iff `needle` appears as a contiguous, in-order run within `haystack`. */
+function containsContiguousRun(haystack: string[], needle: string[]): boolean {
+  if (needle.length === 0 || needle.length > haystack.length) return false;
+  for (let i = 0; i + needle.length <= haystack.length; i++) {
+    let matched = true;
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) return true;
+  }
+  return false;
+}
+
+/**
+ * A port "leaks" a runtime concern only when it is NAMED AFTER it: a contiguous,
+ * in-order run of at least min(2, |concern|) of the concern's tokens appears in
+ * the port-name tokens. This flags ports named after a worker responsibility
+ * (`EmailRetryPort` ← email-retry, `OverdueInvoiceDetectionPort` ←
+ * overdue-invoice-detection) while NOT flagging domain ports that merely share a
+ * single noun with a MULTI-WORD concern (`CreateInvoicePort` vs
+ * "overdue-invoice-detection", every `*EventPublisher` vs "event-bus") — the
+ * old "any single shared token" rule produced those false positives.
+ */
+function portNamedAfterConcern(
+  portTokens: string[],
+  concernTokens: string[],
+): boolean {
+  const windowSize = Math.min(2, concernTokens.length);
+  for (let s = 0; s + windowSize <= concernTokens.length; s++) {
+    if (
+      containsContiguousRun(portTokens, concernTokens.slice(s, s + windowSize))
+    )
+      return true;
+  }
+  return false;
+}
+
 function checkRuntimeConcernLeak(
   port: PortDefinition,
   contextName: string,
@@ -131,11 +171,9 @@ function checkRuntimeConcernLeak(
     const concernTokens = concern
       .toLowerCase()
       .split(/[-_\s.]+/)
-      .filter(Boolean);
-    const match = concernTokens.some(
-      (ct) => ct.length >= 3 && portTokens.some((pt) => pt === ct),
-    );
-    if (match) {
+      .filter((t) => t.length >= 3);
+    if (concernTokens.length === 0) continue;
+    if (portNamedAfterConcern(portTokens, concernTokens)) {
       return {
         portName: port.name,
         contextName,
