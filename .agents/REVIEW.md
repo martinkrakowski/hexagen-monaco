@@ -14,12 +14,14 @@ A bot comment asserts a cause and proposes a fix. Two failure modes follow from 
 
 Both are avoided by treating every comment as a claim to **verify against the current code**, then dispositioning it explicitly.
 
+**Mode boundary.** Review & Archeology mode is **read-only** (`AGENTS.md` §Review & Archeology Mode — no edits, no code generation). Everything through the disposition stays read-only; **implementing** the accepted fixes is Develop mode, reached with `develop [feature]`.
+
 ---
 
 ## The Loop (per comment)
 
 1. **Verify against the current code.** Read the actual lines the comment targets — and the relevant git history. Bots frequently flag against a stale commit or conflate historical-vs-current code. If a comment measures a doc/code against the wrong version, the "contradiction" can be an artifact of that mismatch, not a real defect.
-2. **Reproduce before you fix.** For a claimed bug, write a throwaway probe that exercises the _real_ exported function with the _real_ inputs, confirm the failure, then delete the probe. Never change behavior on a cause you have not reproduced.
+2. **Pin the cause by reading, not editing.** Confirm a claimed bug by tracing the code path, its git history, and the existing tests/usage — review mode is read-only. Where only execution can settle it, the empirical reproduction is the **failing-first test** written at fix time (Develop mode), which proves the cause and then stays as the regression pin. Never disposition on a cause you haven't substantiated.
 3. **Refute with in-repo evidence.** When you push back, cite `file:line` from the repo's own working usage (what a helper actually reads, what a rule actually emits). Prefer that over version-ambiguous external docs.
 4. **Classify severity.** Separate **Blocker** (silent data loss, wrong output, security, a shipped regression) from **Advisory / Backlog** (valid but proportionate to defer). State which, and why a deferral is proportionate + where it's tracked.
 5. **Disposition explicitly.** Mark each comment **valid / partially valid / refuted**, each with the verified reason, and post the disposition as a PR comment.
@@ -35,9 +37,12 @@ Both are avoided by treating every comment as a claim to **verify against the cu
 
 ---
 
-## After Dispositioning
+## Handoff to Develop Mode
 
-1. Implement the valid fixes with a test that **pins the change** — it must fail on the old behavior and pass on the new (a fix without a regression test is unproven).
-2. Re-run the gate (`yarn build && yarn typecheck && yarn lint`, then `yarn test`). Note the suite count.
-3. Post a **reviewer's-guide** summary on the PR (in addition to the per-comment dispositions): what changed, what was refuted, what was deferred.
-4. Do not merge on a bot's say-so — merge is a human gate.
+The disposition is review mode's deliverable. **Implementing** the accepted fixes is **Develop mode** — switch with `develop [feature]` (Review & Archeology mode ends on exactly this hand-off; full spec `.agents/TESTING.md`). There:
+
+1. Write the **failing-first test** before the fix — it must fail on the old behavior and pass on the new. It is both the empirical reproduction of the bug and its regression pin (a fix without one is unproven).
+2. Re-run the gate (`yarn build && yarn typecheck && yarn lint`, then `yarn test`); note the suite count.
+3. Commit per Develop mode (never push without explicit instruction), then post a **reviewer's-guide** summary on the PR: what changed, what was refuted, what was deferred.
+
+Do not merge on a bot's say-so — merge is a human gate.
