@@ -88,11 +88,18 @@ jobs:
           STAGE1_REFINER_BASE_URL: ${{ vars.STAGE1_REFINER_BASE_URL }}
           STAGE1_REFINER_MODEL: ${{ vars.STAGE1_REFINER_MODEL }}
           STAGE1_REFINER_MODE: ${{ vars.STAGE1_REFINER_MODE }}
+          # Stage-7 verify-and-repair reviewer (gpt-4o), PR #343. The API key is
+          # the gate (a repo SECRET); BASE_URL/MODEL are repo VARIABLES that
+          # default in code (OpenRouter + openai/gpt-4o) when empty. Unset key ⇒
+          # repair off — Stage 6 stays report-only.
+          STAGE6_REVIEWER_API_KEY: ${{ secrets.STAGE6_REVIEWER_API_KEY }}
+          STAGE6_REVIEWER_BASE_URL: ${{ vars.STAGE6_REVIEWER_BASE_URL }}
+          STAGE6_REVIEWER_MODEL: ${{ vars.STAGE6_REVIEWER_MODEL }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: AUTH_SECRET, NEXTAUTH_URL, GH_OAUTH_ID, GH_OAUTH_SECRET, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, WEB_LLM_API_KEY, INCEPTION_API_KEY, INCEPTION_MODEL, LLM_REASONING, STAGE1_REFINER_API_KEY, STAGE1_REFINER_BASE_URL, STAGE1_REFINER_MODEL, STAGE1_REFINER_MODE
+          envs: AUTH_SECRET, NEXTAUTH_URL, GH_OAUTH_ID, GH_OAUTH_SECRET, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, WEB_LLM_API_KEY, INCEPTION_API_KEY, INCEPTION_MODEL, LLM_REASONING, STAGE1_REFINER_API_KEY, STAGE1_REFINER_BASE_URL, STAGE1_REFINER_MODEL, STAGE1_REFINER_MODE, STAGE6_REVIEWER_API_KEY, STAGE6_REVIEWER_BASE_URL, STAGE6_REVIEWER_MODEL
           # set -eu (POSIX-safe; appleboy/ssh-action has no `set -e` by default)
           # so a failed `docker load` aborts instead of silently leaving the old
           # container up. pipefail is omitted intentionally — the remote /bin/sh
@@ -138,9 +145,12 @@ jobs:
             STAGE1_REFINER_BASE_URL=\"$STAGE1_REFINER_BASE_URL\"\n\
             STAGE1_REFINER_MODEL=\"$STAGE1_REFINER_MODEL\"\n\
             STAGE1_REFINER_MODE=\"$STAGE1_REFINER_MODE\"\n\
+            STAGE6_REVIEWER_API_KEY=\"$STAGE6_REVIEWER_API_KEY\"\n\
+            STAGE6_REVIEWER_BASE_URL=\"$STAGE6_REVIEWER_BASE_URL\"\n\
+            STAGE6_REVIEWER_MODEL=\"$STAGE6_REVIEWER_MODEL\"\n\
             EOF\n\
             chmod 600 .env\n\
-            [ \"$(wc -l < .env)\" -eq 16 ] || { echo 'FATAL: .env line count != 16 — keep this in sync with the heredoc keys above (embedded newline in a secret?)' >&2; exit 1; }\n\
+            [ \"$(wc -l < .env)\" -eq 19 ] || { echo 'FATAL: .env line count != 19 — keep this in sync with the heredoc keys above (embedded newline in a secret?)' >&2; exit 1; }\n\
             docker load < hexagen-web.tar.gz\n\
             docker image inspect hexagen-monaco-web:prod >/dev/null\n\
             docker compose -f docker-compose.prod.yml up -d --force-recreate --wait --wait-timeout 90\n\
