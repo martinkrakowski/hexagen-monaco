@@ -1169,6 +1169,53 @@ export function stripReconstructionArtifacts(
   };
 }
 
+/**
+ * Re-key the reused stage-1 domain analysis to the REPAIRED context names. The
+ * repaired manifest preserves each context's domain members under
+ * `layers.domain.{entities, value_objects}` keyed by its CURRENT name, so map
+ * member-name → new-context-name and rewrite each aggregate root / entity /
+ * value object's `subdomain`. Without this, a renamed context's members keep the
+ * OLD subdomain, Stage-5's subdomain-match enrichment (assembly:115) misses
+ * them, and the context ships with an EMPTY `layers.domain` — silent domain-model
+ * loss on applied R01 renames (the gate counts contexts/ports/adapters, not
+ * domain entities, so it doesn't catch it). Caught in PR #344 review.
+ */
+export function rekeyDomainAnalysisToManifest(
+  stage1: DomainAnalysis,
+  manifest: StructuredConfig,
+): DomainAnalysis {
+  const memberToContext = new Map<string, string>();
+  for (const ctx of manifest.bounded_contexts) {
+    const domain = ctx.layers?.domain as
+      | { entities?: unknown; value_objects?: unknown }
+      | undefined;
+    const names = [
+      ...(Array.isArray(domain?.entities) ? domain.entities : []),
+      ...(Array.isArray(domain?.value_objects) ? domain.value_objects : []),
+    ];
+    for (const name of names) {
+      if (typeof name === "string") memberToContext.set(name, ctx.name);
+    }
+  }
+  if (memberToContext.size === 0) return stage1;
+  const rekey = <T extends { name: string; subdomain?: string }>(
+    item: T,
+  ): T => {
+    const ctx = memberToContext.get(item.name);
+    return ctx !== undefined ? { ...item, subdomain: ctx } : item;
+  };
+  return {
+    ...stage1,
+    ...(stage1.aggregateRoots
+      ? { aggregateRoots: stage1.aggregateRoots.map(rekey) }
+      : {}),
+    ...(stage1.entities ? { entities: stage1.entities.map(rekey) } : {}),
+    ...(stage1.valueObjects
+      ? { valueObjects: stage1.valueObjects.map(rekey) }
+      : {}),
+  };
+}
+
 export class ExecuteStructuredConfigGenerationUseCase {
   private readonly stage3: ExecutePortMappingUseCase;
   private readonly stage4: ExecuteAdapterAssignmentUseCase;
@@ -1705,9 +1752,12 @@ export class ExecuteStructuredConfigGenerationUseCase {
     | { success: true; manifest: AssembledManifest; report: ValidationReport }
     | { success: false; error: unknown }
   > {
+    // Track context renames so Stage-5 re-attaches each context's domain model
+    // (a rename otherwise orphans it — see rekeyDomainAnalysisToManifest).
+    const stage1 = rekeyDomainAnalysisToManifest(base.stage1, repairedManifest);
     const classification = buildClassificationFromConfig(
       repairedManifest,
-      base.stage1,
+      stage1,
     );
     const portMap = buildPreDefinedPortMap(repairedManifest);
     const adapterBindings = buildPreDefinedAdapterBindings(
@@ -1716,7 +1766,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
     );
     const manifest = this.stage5.execute({
       stage0: base.stage0,
-      stage1: base.stage1,
+      stage1,
       stage2: classification,
       stage3: portMap,
       stage4: adapterBindings,
@@ -1725,7 +1775,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
     });
     const revalidation = await this.stage6.execute({
       stage0: base.stage0,
-      stage1: base.stage1,
+      stage1,
       stage2: classification,
       stage3: portMap,
       stage4: adapterBindings,

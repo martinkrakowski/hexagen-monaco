@@ -122,6 +122,27 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage-7 repair for an AI-
       );
       // The surfaced manifest + report are the repaired ones: R01 is gone.
       assert.ok(!result.validation.errors.some((e) => e.includes("R01")));
+
+      // Domain-survival guard (PR #344 review): an applied RENAME must not drop
+      // the renamed context's domain model. Re-validation reuses stage1, whose
+      // aggregate `subdomain` keys still hold the OLD name — without re-keying,
+      // Stage-5's subdomain match misses the renamed context and ships an empty
+      // layers.domain. countManifestEntities doesn't count domain entities, so
+      // the gate can't catch this; only an explicit assertion can.
+      const parsed = result.value.parsedObject as {
+        bounded_contexts?: Array<{
+          name: string;
+          layers?: { domain?: { entities?: string[] } };
+        }>;
+      };
+      const billing = parsed.bounded_contexts?.find(
+        (c) => c.name === "billing",
+      );
+      assert.ok(billing, "renamed context 'billing' must be present");
+      assert.ok(
+        billing?.layers?.domain?.entities?.includes("Payment"),
+        "the Payment aggregate must SURVIVE the rename, not be dropped from layers.domain",
+      );
     }
   });
 });
