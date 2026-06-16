@@ -40,7 +40,10 @@ import { ExecuteContextClassificationUseCase } from "./execute-context-classific
 import { ExecutePortMappingUseCase } from "./execute-port-mapping.use-case";
 import { ExecuteAdapterAssignmentUseCase } from "./execute-adapter-assignment.use-case";
 import { ExecuteManifestAssemblyUseCase } from "./execute-manifest-assembly.use-case";
-import { ExecuteValidationReviewUseCase } from "./execute-validation-review.use-case";
+import {
+  ExecuteValidationReviewUseCase,
+  type Stage6ReviewerConfig,
+} from "./execute-validation-review.use-case";
 import { STAGE3_ESCALATION_CONFIG } from "./retry-with-escalation";
 
 /** Same shape as StructuredConfigGenerationCallbacks — kept as its own
@@ -68,6 +71,10 @@ export interface FullStagedGenerationOptions {
   /** Stage-1 draft→refine cascade (e.g. mercury draft → gpt-4o refine).
    * Off when omitted — zero behavior change. */
   stage1Refinement?: Stage1RefinementConfig;
+  /** Dedicated Stage-6 validation reviewer — a separate model + token budget
+   * from the main pipeline LLM (e.g. nemotron-3-ultra via OpenRouter). Off when
+   * omitted ⇒ Stage 6 runs on the main pipeline model at 800, unchanged. */
+  stage6Reviewer?: Stage6ReviewerConfig;
 }
 
 export class ExecuteFullStagedGenerationUseCase {
@@ -106,7 +113,12 @@ export class ExecuteFullStagedGenerationUseCase {
     this.stage3 = new ExecutePortMappingUseCase(llmPort, stage3Config);
     this.stage4 = new ExecuteAdapterAssignmentUseCase(llmPort);
     this.stage5 = new ExecuteManifestAssemblyUseCase();
-    this.stage6 = new ExecuteValidationReviewUseCase(llmPort);
+    this.stage6 = options?.stage6Reviewer
+      ? new ExecuteValidationReviewUseCase(
+          options.stage6Reviewer.port,
+          options.stage6Reviewer.maxTokens,
+        )
+      : new ExecuteValidationReviewUseCase(llmPort);
   }
 
   async execute(

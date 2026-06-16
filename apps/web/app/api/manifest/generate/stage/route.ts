@@ -9,6 +9,7 @@ import type {
 import {
   createLLMProviderSelector,
   createStage1RefinerConfig,
+  createStage6ValidatorConfig,
 } from "../../../../lib/wire.server";
 import { logger } from "../../../../../lib/structured-logger";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
@@ -126,10 +127,17 @@ export async function POST(request: NextRequest) {
             mode: stage1Refinement.mode,
           });
         }
+        // Dedicated Stage-6 validation reviewer (e.g. nemotron-3-ultra). Null
+        // unless STAGE6_VALIDATOR_API_KEY is set — review stays on the main
+        // pipeline model at 800, unchanged.
+        const stage6Reviewer = createStage6ValidatorConfig();
         const useCase = new ExecuteFullStagedGenerationUseCase(
           llmAdapter,
           transactionManager,
-          stage1Refinement ? { stage1Refinement } : undefined,
+          {
+            ...(stage1Refinement ? { stage1Refinement } : {}),
+            ...(stage6Reviewer ? { stage6Reviewer } : {}),
+          },
         );
         const eventAdapter = createFullPipelineEventAdapter(send);
         const result = await useCase.execute(body.description, variables, {

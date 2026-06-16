@@ -23,7 +23,10 @@ import { normalizeContextName } from "../../../domain/index";
 import { ExecutePortMappingUseCase } from "./execute-port-mapping.use-case";
 import { ExecuteAdapterAssignmentUseCase } from "./execute-adapter-assignment.use-case";
 import { ExecuteManifestAssemblyUseCase } from "./execute-manifest-assembly.use-case";
-import { ExecuteValidationReviewUseCase } from "./execute-validation-review.use-case";
+import {
+  ExecuteValidationReviewUseCase,
+  type Stage6ReviewerConfig,
+} from "./execute-validation-review.use-case";
 import { ExecuteManifestRepairUseCase } from "./execute-manifest-repair.use-case";
 import type { PromptVariables } from "../../../domain/prompts/generate-manifest.prompt";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
@@ -1461,6 +1464,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
     classifyUseCase?: ClassifyContextTypeUseCase,
     escalationModel?: string,
     reviewerPort?: SendStructuredRequestPort,
+    stage6Reviewer?: Stage6ReviewerConfig,
   ) {
     const stage3Config = escalationModel
       ? { ...STAGE3_ESCALATION_CONFIG, escalationModel }
@@ -1468,7 +1472,12 @@ export class ExecuteStructuredConfigGenerationUseCase {
     this.stage3 = new ExecutePortMappingUseCase(llmPort, stage3Config);
     this.stage4 = new ExecuteAdapterAssignmentUseCase(llmPort);
     this.stage5 = new ExecuteManifestAssemblyUseCase();
-    this.stage6 = new ExecuteValidationReviewUseCase(llmPort);
+    this.stage6 = stage6Reviewer
+      ? new ExecuteValidationReviewUseCase(
+          stage6Reviewer.port,
+          stage6Reviewer.maxTokens,
+        )
+      : new ExecuteValidationReviewUseCase(llmPort);
     this.stage7 = reviewerPort
       ? new ExecuteManifestRepairUseCase(reviewerPort)
       : undefined;

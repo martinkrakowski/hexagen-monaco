@@ -403,6 +403,55 @@ export const createStage6ReviewerConfig =
     });
   };
 
+/**
+ * Stage-6 validation reviewer — a DEDICATED model for the Stage-6 adversarial
+ * review itself (and its re-validation after a Stage-7 repair), separate from
+ * the main pipeline model (mercury-2) AND from the Stage-7 repair reviewer
+ * above. Lets a stronger reviewer (e.g. nemotron-3-ultra) run only the review
+ * without touching generation. Returns null (review stays on the main model at
+ * its 800-token default) when unset — byte-identical to today. Martin-gated
+ * secret change, like the Stage-1 refiner / Stage-7 reviewer.
+ *
+ * A reasoning reviewer needs a large budget: its reasoning tokens count against
+ * the completion budget, so STAGE6_VALIDATOR_MAX_TOKENS defaults to 4000 (at 800
+ * a reasoning model truncates before the NDJSON result line — measured).
+ *
+ * Env:
+ * - STAGE6_VALIDATOR_API_KEY    — required to activate
+ * - STAGE6_VALIDATOR_BASE_URL   — default https://openrouter.ai/api/v1
+ * - STAGE6_VALIDATOR_MODEL      — default openai/gpt-4o
+ * - STAGE6_VALIDATOR_MAX_TOKENS — default 4000
+ */
+export const createStage6ValidatorConfig = (): {
+  port: LLMProviderSelectorAdapter;
+  maxTokens: number;
+} | null => {
+  const vault = getEnvironmentVault();
+  if (!vault.getSecret("STAGE6_VALIDATOR_API_KEY")) return null;
+  const parsed = Number(process.env.STAGE6_VALIDATOR_MAX_TOKENS);
+  const maxTokens = Number.isFinite(parsed) && parsed > 0 ? parsed : 4000;
+  const port = new LLMProviderSelectorAdapter({
+    webLlmAdapter: null,
+    preferLocal: false,
+    validateLocalLLM: false,
+    fallbackChain: {
+      primary: {
+        providerId: "openai" as const,
+        baseUrl:
+          process.env.STAGE6_VALIDATOR_BASE_URL ||
+          "https://openrouter.ai/api/v1",
+        model: process.env.STAGE6_VALIDATOR_MODEL || "openai/gpt-4o",
+        apiKeyEnvVar: "STAGE6_VALIDATOR_API_KEY",
+        temperature: 0.1,
+        maxTokens,
+      },
+      fallbacks: [],
+    },
+    secretVault: vault,
+  });
+  return { port, maxTokens };
+};
+
 // ============================================================================
 // Adapter Singletons
 // ============================================================================

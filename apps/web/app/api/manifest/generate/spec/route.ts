@@ -10,6 +10,7 @@ import {
 import {
   createLLMProviderSelector,
   createStage6ReviewerConfig,
+  createStage6ValidatorConfig,
 } from "../../../../lib/wire.server";
 import { logger } from "../../../../../lib/structured-logger";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
@@ -188,12 +189,17 @@ export async function POST(request: NextRequest) {
         // STAGE6_REVIEWER_API_KEY is set — a Martin-gated prod secret; when
         // absent the orchestrator skips repair and behaves exactly as before.
         const reviewerPort = createStage6ReviewerConfig();
+        // Dedicated Stage-6 validation reviewer (e.g. nemotron-3-ultra). Null
+        // unless STAGE6_VALIDATOR_API_KEY is set — review then stays on the main
+        // pipeline model at 800, unchanged.
+        const stage6Reviewer = createStage6ValidatorConfig();
         const useCase = new ExecuteStructuredConfigGenerationUseCase(
           llmAdapter,
           transactionManager,
           classifyUseCase,
           escalationModel,
           reviewerPort ?? undefined,
+          stage6Reviewer ?? undefined,
         );
 
         const result = await useCase.execute(body.config, callbacks);
