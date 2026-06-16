@@ -1,9 +1,22 @@
 import React from "react";
-import { test, describe, afterEach } from "node:test";
+import { test, describe, afterEach, beforeEach } from "node:test";
 import assert from "node:assert";
 import { render, screen, cleanup } from "@testing-library/react";
 import { ManifestPreview } from "../ManifestPreview";
 
+// The desktop YAML column is now a react-resizable-panels `PanelGroup`, which
+// can't mount under this repo's jsdom (its resize-handle registration trips a
+// jsdom addEventListener/AbortSignal incompatibility). The panel layout + the
+// resize handle are desktop-only, so force the mobile (non-panel) branch here to
+// keep these render/interaction tests isolated; the desktop resizable column and
+// its drag handle are verified manually.
+beforeEach(() => {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    writable: true,
+    value: 600,
+  });
+});
 afterEach(cleanup);
 
 describe("ManifestPreview", () => {
