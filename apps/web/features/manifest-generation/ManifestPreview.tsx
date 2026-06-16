@@ -13,6 +13,9 @@ import {
 } from "lucide-react";
 import { Button } from "@hexagen/ui";
 import { ManifestYamlSidebar } from "./ManifestYamlSidebar";
+import { ManifestResizeHandle } from "./ManifestResizeHandle";
+import { Panel, PanelGroup } from "react-resizable-panels";
+import { useIsDesktop } from "./useIsDesktop";
 import { ContextMapView } from "./ContextMapView";
 import { MermaidDiagramView } from "./MermaidDiagramView";
 import { ValidationReportView } from "./ValidationReportView";
@@ -60,6 +63,9 @@ export function ManifestPreview({
   const setActiveTab = onTabChange ?? setInternalActiveTab;
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showYamlMobile, setShowYamlMobile] = useState(false);
+  // Desktop (md+) shows the resizable YAML column; below md it's hidden and the
+  // YAML lives in the mobile overlay, so the PanelGroup is desktop-only.
+  const isDesktop = useIsDesktop();
 
   // Local state for manifest to allow inline auto-fixes
   const [localManifestYaml, setLocalManifestYaml] = useState(manifestYaml);
@@ -106,6 +112,36 @@ export function ManifestPreview({
   );
 
   const hasFailures = viewData.validationItems.some((v) => v.status === "fail");
+
+  // Tab content, extracted so it mounts once whether or not the desktop
+  // resizable-panel layout wraps it.
+  const content = (
+    <div
+      className="flex-1 relative bg-background overflow-hidden h-full"
+      style={{
+        backgroundImage:
+          "radial-gradient(circle, hsl(var(--border)) 1px, transparent 1px)",
+        backgroundSize: "20px 20px",
+      }}
+    >
+      {activeTab === "context-map" && (
+        <div className="absolute inset-0 overflow-auto custom-scrollbar">
+          <ContextMapView viewData={viewData} isFullScreen={isFullScreen} />
+        </div>
+      )}
+      {activeTab === "mermaid" && (
+        <MermaidDiagramView mermaidCode={mermaidCode} />
+      )}
+      {activeTab === "validation" && (
+        <div className="absolute inset-0 overflow-auto custom-scrollbar">
+          <ValidationReportView
+            viewData={viewData}
+            onRequestFix={(v) => setActiveFixViolation(v)}
+          />
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div
@@ -182,37 +218,38 @@ export function ManifestPreview({
         </header>
       )}
 
-      <main className="relative z-10 flex flex-col md:flex-row flex-1 overflow-hidden">
-        <ManifestYamlSidebar
-          yamlString={localManifestYaml}
-          viewData={viewData}
-        />
-
-        <div
-          className="flex-1 relative bg-background overflow-hidden"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle, hsl(var(--border)) 1px, transparent 1px)",
-            backgroundSize: "20px 20px",
-          }}
-        >
-          {activeTab === "context-map" && (
-            <div className="absolute inset-0 overflow-auto custom-scrollbar">
-              <ContextMapView viewData={viewData} isFullScreen={isFullScreen} />
-            </div>
-          )}
-          {activeTab === "mermaid" && (
-            <MermaidDiagramView mermaidCode={mermaidCode} />
-          )}
-          {activeTab === "validation" && (
-            <div className="absolute inset-0 overflow-auto custom-scrollbar">
-              <ValidationReportView
+      <main className="relative z-10 flex flex-1 overflow-hidden">
+        {isDesktop ? (
+          <PanelGroup
+            direction="horizontal"
+            autoSaveId="manifest-preview-layout"
+            className="flex flex-1"
+          >
+            <Panel
+              id="manifest-yaml"
+              order={1}
+              defaultSize={30}
+              minSize={25}
+              maxSize={60}
+            >
+              <ManifestYamlSidebar
+                yamlString={localManifestYaml}
                 viewData={viewData}
-                onRequestFix={(v) => setActiveFixViolation(v)}
               />
-            </div>
-          )}
-        </div>
+            </Panel>
+            <ManifestResizeHandle />
+            <Panel
+              id="manifest-content"
+              order={2}
+              defaultSize={70}
+              minSize={40}
+            >
+              {content}
+            </Panel>
+          </PanelGroup>
+        ) : (
+          content
+        )}
       </main>
 
       <button
