@@ -55,14 +55,16 @@ function collectPortQualityIssues(
   return issues;
 }
 
-/** Optional dedicated reviewer for Stage 6 — a separate model (and token
- * budget) from the main pipeline LLM. A reasoning reviewer (e.g.
- * nemotron-3-ultra) measured 0 false positives where mercury-2 returns empty,
- * but needs a larger budget than mercury's 800. Off ⇒ Stage 6 runs on the main
- * pipeline model at 800, byte-identical to before. */
+/** Dedicated reviewer for Stage 6 — a separate model AND token budget from the
+ * main pipeline LLM. A reasoning reviewer (e.g. nemotron-3-ultra) measured 0
+ * false positives where mercury-2 returns empty, but needs a larger budget than
+ * mercury's 800. `maxTokens` is REQUIRED: a dedicated reasoning reviewer left at
+ * the 800 default would truncate before the NDJSON result line — the exact
+ * failure this reviewer exists to prevent — so configuring one means stating its
+ * budget. Off ⇒ Stage 6 runs on the main pipeline model at 800, unchanged. */
 export interface Stage6ReviewerConfig {
   port: SendStructuredRequestPort;
-  maxTokens?: number;
+  maxTokens: number;
 }
 
 export class ExecuteValidationReviewUseCase {

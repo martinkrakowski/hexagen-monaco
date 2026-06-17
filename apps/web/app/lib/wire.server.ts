@@ -373,6 +373,9 @@ export const createStage1RefinerConfig = (): Stage1RefinementConfig | null => {
  * Activating this in prod is a Martin-gated secret change, like the Stage-1
  * refiner — see docs/planning/mercury-2-prod-flip-runbook.md.
  *
+ * NOTE: despite the STAGE6_ prefix, these vars wire STAGE 7 (repair) — NOT the
+ * Stage-6 review. The Stage-6 review model is STAGE6_VALIDATOR_* (below).
+ *
  * Env:
  * - STAGE6_REVIEWER_API_KEY  — required to activate
  * - STAGE6_REVIEWER_BASE_URL — default https://openrouter.ai/api/v1
@@ -415,7 +418,7 @@ function warnInvalidStage6MaxTokensOnce(raw: string): void {
   warnedInvalidStage6MaxTokens = true;
   // eslint-disable-next-line no-console -- operator-facing misconfiguration warning; no logger port at this layer
   console.warn(
-    `STAGE6_VALIDATOR_MAX_TOKENS="${raw}" is not a positive number — ` +
+    `STAGE6_VALIDATOR_MAX_TOKENS="${raw}" is not a positive integer — ` +
       `ignoring it (Stage-6 reviewer uses the default 4000).`,
   );
 }
@@ -447,7 +450,9 @@ export const createStage6ValidatorConfig = (): {
   if (!vault.getSecret("STAGE6_VALIDATOR_API_KEY")) return null;
   const rawMaxTokens = process.env.STAGE6_VALIDATOR_MAX_TOKENS;
   const parsed = Number(rawMaxTokens);
-  const validMaxTokens = Number.isFinite(parsed) && parsed > 0;
+  // Require a positive INTEGER — max_tokens is sent verbatim to the provider,
+  // which 400s on a fractional value; isInteger also rejects NaN/Infinity.
+  const validMaxTokens = Number.isInteger(parsed) && parsed > 0;
   // Warn only when the var is non-empty but invalid; empty/unset ⇒ silent default.
   if (!validMaxTokens && rawMaxTokens != null && rawMaxTokens.trim() !== "") {
     warnInvalidStage6MaxTokensOnce(rawMaxTokens);

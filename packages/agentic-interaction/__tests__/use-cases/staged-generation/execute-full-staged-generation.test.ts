@@ -144,6 +144,40 @@ function createMockTransactionManager(opts?: {
 }
 
 describe("ExecuteFullStagedGenerationUseCase", () => {
+  test("threads a configured stage6Reviewer (separate port + budget) into Stage 6", async () => {
+    // Main port serves stages 0-5 only (3 send + 2 stream); Stage 6 must route
+    // to the dedicated reviewer port, at the configured maxTokens.
+    const { port: mainPort, captured } = createScriptedPort(
+      happyPathSendResponses,
+      [stage3Response, stage4Response],
+    );
+    let reviewerStage6Calls = 0;
+    let reviewerMaxTokens: number | undefined;
+    const reviewerPort = {
+      sendRequest: async () => ({ success: true as const, value: {} }),
+      streamStructuredRequest: (request: { maxTokens?: number }) => {
+        reviewerStage6Calls++;
+        reviewerMaxTokens = request.maxTokens;
+        return (async function* () {
+          yield { success: true, value: stage6Response };
+        })();
+      },
+    } as unknown as SendStructuredRequestPort;
+    const { manager } = createMockTransactionManager();
+
+    const useCase = new ExecuteFullStagedGenerationUseCase(mainPort, manager, {
+      stage6Reviewer: { port: reviewerPort, maxTokens: 4000 },
+    });
+    const result = await useCase.execute("Build an invoice management system");
+
+    assert.equal(result.success, true);
+    // Stage 6 hit the dedicated reviewer exactly once, at the configured budget…
+    assert.equal(reviewerStage6Calls, 1);
+    assert.equal(reviewerMaxTokens, 4000);
+    // …and the main port served only stages 3/4 (Stage 6 no longer reaches it).
+    assert.equal(captured.filter((c) => c.method === "stream").length, 2);
+  });
+
   test("happy path: chains stages 0→6 and returns manifest + state + transactionId", async () => {
     const { port, captured } = createScriptedPort(
       happyPathSendResponses,
