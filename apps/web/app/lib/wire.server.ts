@@ -403,6 +403,23 @@ export const createStage6ReviewerConfig =
     });
   };
 
+let warnedInvalidStage6MaxTokens = false;
+/** Loud once: a SET-but-unparseable STAGE6_VALIDATOR_MAX_TOKENS silently reverts
+ * to the 4000 default. Because Stage 6 sends request.maxTokens as the operative
+ * ceiling, a bad value would quietly change the reviewer's budget — and a
+ * reasoning reviewer truncates below ~4k — with no operator-visible signal.
+ * Mirrors warnInvalidReasoningOnce (cloud-llm-reasoning.ts). The unset case is
+ * intentional and stays silent. */
+function warnInvalidStage6MaxTokensOnce(raw: string): void {
+  if (warnedInvalidStage6MaxTokens) return;
+  warnedInvalidStage6MaxTokens = true;
+  // eslint-disable-next-line no-console -- operator-facing misconfiguration warning; no logger port at this layer
+  console.warn(
+    `STAGE6_VALIDATOR_MAX_TOKENS="${raw}" is not a positive number — ` +
+      `ignoring it (Stage-6 reviewer uses the default 4000).`,
+  );
+}
+
 /**
  * Stage-6 validation reviewer — a DEDICATED model for the Stage-6 adversarial
  * review itself (and its re-validation after a Stage-7 repair), separate from
@@ -428,8 +445,14 @@ export const createStage6ValidatorConfig = (): {
 } | null => {
   const vault = getEnvironmentVault();
   if (!vault.getSecret("STAGE6_VALIDATOR_API_KEY")) return null;
-  const parsed = Number(process.env.STAGE6_VALIDATOR_MAX_TOKENS);
-  const maxTokens = Number.isFinite(parsed) && parsed > 0 ? parsed : 4000;
+  const rawMaxTokens = process.env.STAGE6_VALIDATOR_MAX_TOKENS;
+  const parsed = Number(rawMaxTokens);
+  const validMaxTokens = Number.isFinite(parsed) && parsed > 0;
+  // Warn only when the var is non-empty but invalid; empty/unset ⇒ silent default.
+  if (!validMaxTokens && rawMaxTokens != null && rawMaxTokens.trim() !== "") {
+    warnInvalidStage6MaxTokensOnce(rawMaxTokens);
+  }
+  const maxTokens = validMaxTokens ? parsed : 4000;
   const port = new LLMProviderSelectorAdapter({
     webLlmAdapter: null,
     preferLocal: false,
