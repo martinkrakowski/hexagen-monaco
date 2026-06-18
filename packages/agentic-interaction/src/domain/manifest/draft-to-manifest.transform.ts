@@ -20,6 +20,15 @@ export interface ManifestContextOutput {
 }
 
 export interface ManifestOutput {
+  // Workspace metadata mirroring the manifest schema's `workspace:` block.
+  // Optional so existing `ManifestOutput` literals (e.g. render-yaml fixtures)
+  // stay valid, but `draftToManifest` always emits it. `system`/`scope` below
+  // are name-derived only; this is the sole carrier of the human-readable
+  // description, whose loss made the Stage-6 R08 rule fire on every run.
+  workspace?: {
+    name: string;
+    description: string;
+  };
   system: string;
   scope: string;
   architecture: string;
@@ -71,8 +80,16 @@ function transformContext(
 }
 
 export function draftToManifest(draft: ManifestDraft): ManifestOutput {
+  const system = toKebabCase(draft.workspace.name);
   return {
-    system: toKebabCase(draft.workspace.name),
+    // Emitted first so the rendered YAML leads with the `workspace:` block
+    // (matching the few-shot canonical shape). `name` reuses the kebab `system`
+    // for consistency; `description` is the one field system/scope dropped.
+    workspace: {
+      name: system,
+      description: draft.workspace.description,
+    },
+    system,
     scope: extractScope(draft.workspace.name),
     architecture: "modular-monolith",
     bounded_contexts: draft.boundedContexts.map(transformContext),

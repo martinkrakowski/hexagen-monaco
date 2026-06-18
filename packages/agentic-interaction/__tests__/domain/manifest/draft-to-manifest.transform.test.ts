@@ -70,6 +70,20 @@ describe("draftToManifest", () => {
     assert.strictEqual(result.scope, "acme");
   });
 
+  it("preserves the workspace description in a workspace object", () => {
+    const result = draftToManifest(makeDraft());
+    assert.deepStrictEqual(result.workspace, {
+      name: "my-project",
+      description: "A test project",
+    });
+  });
+
+  it("keeps workspace.name kebab-case and consistent with system", () => {
+    const result = draftToManifest(makeDraft());
+    assert.strictEqual(result.workspace?.name, result.system);
+    assert.strictEqual(result.workspace?.name, "my-project");
+  });
+
   it("sets architecture to modular-monolith", () => {
     const result = draftToManifest(makeDraft());
     assert.strictEqual(result.architecture, "modular-monolith");
