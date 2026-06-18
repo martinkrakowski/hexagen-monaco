@@ -37,7 +37,10 @@ import type {
   PipelineState,
 } from "../value-objects/pipeline-state.ts";
 import { DEFAULT_MAX_BOUNDED_CONTEXTS } from "../manifest/manifest-draft.schema";
-import { normalizePortName } from "../manifest/normalize-draft";
+import {
+  normalizePortName,
+  normalizeContextName,
+} from "../manifest/normalize-draft";
 import { CONTEXT_NAME_GENERATION_BANS } from "./architecture-contract";
 import { MAX_RETRY_ATTEMPTS } from "../errors/stage-errors";
 import { escapeXml } from "./escape-xml";
@@ -720,6 +723,14 @@ export function compileStage6Prompt(
   // and that mismatch alone manufactured grounded R04 "port has no adapter"
   // errors out of consistent pipelines. Same treatment for the adapters'
   // `implements` so the bindings keep pointing at the rendered port names.
+  //
+  // Context names get the SAME treatment via normalizeContextName: Stage 3
+  // emits Pascal-case contextNames ("IdentityAccess") while the assembled YAML
+  // is kebab ("identity-access"). Left raw, the casing split manufactured a
+  // grounded false R03 "identity-access has no outbound repository port" in
+  // prod (2026-06-18 nemotron run) — the reviewer could not reconcile the two
+  // spellings against a correct manifest. Now all three sections key contexts
+  // identically.
   const portContexts = state.stage3?.contexts ?? [];
   const portMapSection =
     portContexts.length > 0
@@ -728,7 +739,7 @@ export function compileStage6Prompt(
           portContexts
             .map((ctx) =>
               JSON.stringify({
-                context: ctx.contextName,
+                context: normalizeContextName(ctx.contextName),
                 in: ctx.in.map((p) => ({
                   name: normalizePortName(p.name),
                   type: p.type,
@@ -754,7 +765,7 @@ export function compileStage6Prompt(
           adapterContexts
             .map((ctx) =>
               JSON.stringify({
-                context: ctx.contextName,
+                context: normalizeContextName(ctx.contextName),
                 adapters: ctx.adapters.map((a) => ({
                   name: a.name,
                   implements: normalizePortName(a.implements),

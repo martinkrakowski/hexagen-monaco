@@ -764,6 +764,60 @@ describe("compileStage6Prompt", () => {
     assert.match(prompt, /"forAggregate":"Invoice"/);
   });
 
+  test("normalizes Pascal-case stage-3/4 contextName to kebab (matches the YAML)", () => {
+    // Stage 3 emits Pascal-case contextNames while the assembled YAML is kebab.
+    // Rendering them raw split the casing and manufactured a grounded false R03
+    // ("identity-access has no repository port") the reviewer couldn't reconcile.
+    const prompt = compileStage6Prompt({
+      stage0: {
+        intent: "x",
+        explicitTechnologies: [],
+        explicitPatterns: [],
+        ambiguities: [],
+      },
+      stage3: {
+        contexts: [
+          {
+            contextName: "IdentityAccess",
+            in: [
+              {
+                name: "RegisterUserPort",
+                type: "command" as const,
+                description: "Registers a new user account",
+              },
+            ],
+            out: [
+              {
+                name: "UserRepositoryPort",
+                type: "repository" as const,
+                description: "Persists user aggregates",
+              },
+            ],
+          },
+        ],
+      },
+      stage4: {
+        contexts: [
+          {
+            contextName: "IdentityAccess",
+            adapters: [
+              {
+                name: "PostgresUserRepositoryAdapter",
+                type: "Repository",
+                implements: "UserRepositoryPort",
+              },
+            ],
+          },
+        ],
+      },
+      stage5: { yaml: "", parsedObject: {} },
+    } as any);
+    // port_map + adapter_bindings now key the context the same way the YAML
+    // does — kebab, never the raw Pascal-case spelling.
+    assert.match(prompt, /"context":"identity-access"/);
+    assert.doesNotMatch(prompt, /"context":"IdentityAccess"/);
+  });
+
   test("includes <adapter_bindings> with implements when stage4 present", () => {
     const prompt = compileStage6Prompt({
       stage0: {
