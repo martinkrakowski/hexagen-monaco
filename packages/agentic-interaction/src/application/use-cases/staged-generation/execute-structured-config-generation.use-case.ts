@@ -1547,7 +1547,9 @@ export function structuralManifestErrors(
     ]
       .filter(Boolean)
       .join(" and ");
-    errors.push(`[R08] Workspace is incomplete — ${missing} is empty.`);
+    // "are" for the compound subject when both fields are missing.
+    const verb = !system && !scope ? "are" : "is";
+    errors.push(`[R08] Workspace is incomplete — ${missing} ${verb} empty.`);
   }
 
   return errors;

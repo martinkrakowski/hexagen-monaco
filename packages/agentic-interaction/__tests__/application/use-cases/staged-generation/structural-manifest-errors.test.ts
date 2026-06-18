@@ -483,6 +483,7 @@ describe("structuralManifestErrors — R08 workspace name/description", () => {
     assert.ok(r08);
     assert.match(r08!, /system name/);
     assert.match(r08!, /scope/);
+    assert.match(r08!, /are empty/); // compound subject → "are", not "is"
   });
 
   it("no R08 when both system and scope are non-empty", () => {
