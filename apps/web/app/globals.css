@@ -307,10 +307,10 @@ dialog::backdrop {
 
 @keyframes dotPulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 hsl(var(--accent) / 0.4);
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
   }
   50% {
-    box-shadow: 0 0 0 4px hsl(var(--accent) / 0.1);
+    box-shadow: 0 0 0 4px hsl(var(--primary) / 0.1);
   }
 }
 
