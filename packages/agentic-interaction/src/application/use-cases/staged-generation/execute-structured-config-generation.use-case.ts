@@ -20,6 +20,7 @@ import type {
   AdapterBinding,
 } from "../../../domain/value-objects/pipeline-state";
 import { normalizeContextName } from "../../../domain/index";
+import { isBannedContextName } from "../../../domain/prompts/architecture-contract";
 import { ExecutePortMappingUseCase } from "./execute-port-mapping.use-case";
 import { ExecuteAdapterAssignmentUseCase } from "./execute-adapter-assignment.use-case";
 import { ExecuteManifestAssemblyUseCase } from "./execute-manifest-assembly.use-case";
@@ -1332,6 +1333,176 @@ export function stripReconstructionArtifacts(
 }
 
 /**
+ * Deterministic structural gate — checks R01–R09 against the assembled
+ * stage-3/4 data. Used by the Stage-7 repair gate in place of a second LLM
+ * Stage-6 call so the before/after error counts are stable across runs.
+ *
+ * Covers every rule a manifest-level repair op can touch:
+ *   R01 banned context name · R02 no inbound port · R03 no repository port
+ *   R04/R05 port lacks exactly-one adapter · R06 cross-context implements
+ *   R07 dangling depends_on · R08 empty workspace · R09 shared-kernel has ports
+ *
+ * NOT a full validation: semantic / fidelity rules (R10–R15 including
+ * event-pairing and intent reflection) require LLM context and are left to the
+ * user-facing Stage-6 pass. R16/R17/R18 are handled by collectPortQualityIssues
+ * inside Stage-6 and are not re-checked here (they survive stripReconstructionArtifacts).
+ */
+export function structuralManifestErrors(
+  portMap: PortMap,
+  adapterBindings: AdapterBindings,
+  parsedManifest: Record<string, unknown>,
+): string[] {
+  const errors: string[] = [];
+
+  // Typed view of the assembled manifest's bounded contexts (R07/R08/R09 type lookup).
+  const rawContexts = Array.isArray(parsedManifest.bounded_contexts)
+    ? (parsedManifest.bounded_contexts as Array<{
+        name?: unknown;
+        type?: unknown;
+        depends_on?: unknown;
+      }>)
+    : [];
+
+  // name → type lookup (normalized) for shared-kernel detection in R02/R03/R09.
+  const contextTypeByNorm = new Map<string, string>();
+  for (const ctx of rawContexts) {
+    if (typeof ctx.name === "string") {
+      contextTypeByNorm.set(
+        normalizeContextName(ctx.name),
+        typeof ctx.type === "string" ? ctx.type : "",
+      );
+    }
+  }
+
+  // All known context names (normalized) for R07 dangling-dependency check.
+  const knownContextNorms = new Set(contextTypeByNorm.keys());
+
+  // Per-context adapter counts: contextNorm → portName → # adapters implementing it.
+  const portAdapterCount = new Map<string, Map<string, number>>();
+  for (const ctxAdapters of adapterBindings.contexts) {
+    const ctxNorm = normalizeContextName(ctxAdapters.contextName);
+    if (!portAdapterCount.has(ctxNorm))
+      portAdapterCount.set(ctxNorm, new Map());
+    const countMap = portAdapterCount.get(ctxNorm)!;
+    for (const adapter of ctxAdapters.adapters) {
+      if (adapter.implements) {
+        countMap.set(
+          adapter.implements,
+          (countMap.get(adapter.implements) ?? 0) + 1,
+        );
+      }
+    }
+  }
+
+  // Global portName → ownerContextNorm for R06 cross-context implements check.
+  const portOwnerByName = new Map<string, string>();
+  for (const ctx of portMap.contexts) {
+    const ctxNorm = normalizeContextName(ctx.contextName);
+    for (const p of [...ctx.in, ...ctx.out]) {
+      portOwnerByName.set(p.name, ctxNorm);
+    }
+  }
+
+  // Per-context checks (R01–R05, R09).
+  for (const ctx of portMap.contexts) {
+    const ctxNorm = normalizeContextName(ctx.contextName);
+    const isSharedKernel = contextTypeByNorm.get(ctxNorm) === "shared-kernel";
+
+    // R01: banned context name.
+    if (isBannedContextName(ctx.contextName)) {
+      errors.push(
+        `[R01] Context '${ctx.contextName}' contains a banned technology token.`,
+      );
+    }
+
+    if (isSharedKernel) {
+      // R09: shared-kernel contexts must have no ports.
+      if (ctx.in.length > 0 || ctx.out.length > 0) {
+        errors.push(
+          `[R09] Context '${ctx.contextName}' is a shared-kernel but has ${ctx.in.length} inbound and ${ctx.out.length} outbound ports.`,
+        );
+      }
+      continue; // R02/R03/R04/R05 do not apply to shared-kernels.
+    }
+
+    // R02: at least one inbound port.
+    if (ctx.in.length === 0) {
+      errors.push(`[R02] Context '${ctx.contextName}' has no inbound ports.`);
+    }
+
+    // R03: at least one outbound repository port.
+    if (!ctx.out.some((p) => p.type === "repository")) {
+      errors.push(
+        `[R03] Context '${ctx.contextName}' has no outbound repository port.`,
+      );
+    }
+
+    // R04/R05: each port must have exactly one adapter implementing it.
+    const countMap = portAdapterCount.get(ctxNorm) ?? new Map<string, number>();
+    for (const port of ctx.out) {
+      const n = countMap.get(port.name) ?? 0;
+      if (n !== 1) {
+        errors.push(
+          `[R04] Outbound port '${port.name}' in '${ctx.contextName}' has ${n} adapter${n !== 1 ? "s" : ""} (expected 1).`,
+        );
+      }
+    }
+    for (const port of ctx.in) {
+      const n = countMap.get(port.name) ?? 0;
+      if (n !== 1) {
+        errors.push(
+          `[R05] Inbound port '${port.name}' in '${ctx.contextName}' has ${n} adapter${n !== 1 ? "s" : ""} (expected 1).`,
+        );
+      }
+    }
+  }
+
+  // R06: no adapter implements a port that belongs to a different context.
+  for (const ctxAdapters of adapterBindings.contexts) {
+    const ctxNorm = normalizeContextName(ctxAdapters.contextName);
+    for (const adapter of ctxAdapters.adapters) {
+      const ownerNorm = portOwnerByName.get(adapter.implements);
+      if (ownerNorm !== undefined && ownerNorm !== ctxNorm) {
+        errors.push(
+          `[R06] Adapter '${adapter.name}' in '${ctxAdapters.contextName}' implements '${adapter.implements}' which belongs to a different context.`,
+        );
+      }
+    }
+  }
+
+  // R07: every depends_on reference must point to an existing context name.
+  for (const ctx of rawContexts) {
+    const deps = Array.isArray(ctx.depends_on) ? ctx.depends_on : [];
+    for (const dep of deps) {
+      if (
+        typeof dep === "string" &&
+        !knownContextNorms.has(normalizeContextName(dep))
+      ) {
+        errors.push(
+          `[R07] Context '${ctx.name}' depends_on '${dep}' which does not exist.`,
+        );
+      }
+    }
+  }
+
+  // R08: workspace name (system) and description (scope) must be non-empty.
+  const system =
+    typeof parsedManifest.system === "string"
+      ? parsedManifest.system.trim()
+      : "";
+  const scope =
+    typeof parsedManifest.scope === "string" ? parsedManifest.scope.trim() : "";
+  if (!system || !scope) {
+    const what = !system
+      ? "system name (workspace.name)"
+      : "scope (workspace.description)";
+    errors.push(`[R08] Workspace is incomplete — ${what} is empty.`);
+  }
+
+  return errors;
+}
+
+/**
  * Re-key the reused stage-1 domain analysis to the REPAIRED context names so a
  * renamed context's members re-attach under their new name during Stage-5's
  * subdomain-match enrichment (assembly:115) instead of orphaning to an EMPTY
@@ -1807,9 +1978,10 @@ export class ExecuteStructuredConfigGenerationUseCase {
 
     // Stage 7 — optional GPT-4o verify-and-repair. Runs only when a reviewer
     // port is wired (STAGE6_REVIEWER_API_KEY) AND Stage 6 found errors. The
-    // reviewer repairs the *config*; we re-run the deterministic pipeline +
-    // Stage 6 on its output and accept the repair only if it STRICTLY reduces
-    // the error count — so a repair can never regress the user's manifest.
+    // reviewer repairs the *manifest*; we re-assemble (stages 2–5) and accept
+    // the repair only if a DETERMINISTIC structural re-count strictly reduces
+    // the error count — so a repair can never regress the user's manifest and
+    // the gate is immune to non-deterministic LLM noise. No second Stage-6 call.
     // Every failure mode (model error, unparseable output, no improvement)
     // falls back to the original manifest + report.
     let finalManifest = assembledManifest;
@@ -1823,7 +1995,10 @@ export class ExecuteStructuredConfigGenerationUseCase {
     // stripped count is already 0 and the gate could never reduce. PR #344 review.
     const baselineReport = stripReconstructionArtifacts(s6.value);
     if (this.stage7 && baselineReport.errors.length > 0) {
-      const errorsBefore = baselineReport.errors.length;
+      // neMotronBefore: the reviewer-visible error count (used only for the
+      // "Stage 6 found N errors" chip — NOT for the gate, which uses the
+      // deterministic count below to avoid LLM non-determinism).
+      const neMotronBefore = baselineReport.errors.length;
       const warningsBefore = baselineReport.warnings.length;
       const beforeParsed =
         (assembledManifest.parsedObject as Record<string, unknown>) ?? {};
@@ -1832,6 +2007,15 @@ export class ExecuteStructuredConfigGenerationUseCase {
         domainEntityCount: countDomainMembers(beforeParsed),
         contextNames: manifestContextNames(beforeParsed),
       };
+      // Deterministic baseline: R01–R09 structural errors on the same portMap/
+      // adapterBindings Stage-6 just reviewed. Apples-to-apples with the
+      // post-repair count computed below.
+      const deterministicBefore = structuralManifestErrors(
+        mergedPortMap,
+        mergedAdapterBindings,
+        beforeParsed,
+      ).length;
+
       // A context-name change is only a legitimate repair when the baseline had
       // an R01 (banned-name) finding — the one rule whose fix renames a context.
       // Otherwise the gate requires the context-name SET preserved, rejecting a
@@ -1842,14 +2026,14 @@ export class ExecuteStructuredConfigGenerationUseCase {
       const keepOriginal = (): ManifestRepairSummary => ({
         attempted: true,
         applied: false,
-        errorsBefore,
-        errorsAfter: errorsBefore,
+        errorsBefore: deterministicBefore,
+        errorsAfter: deterministicBefore,
         warningsBefore,
         warningsAfter: warningsBefore,
       });
 
       callbacks?.onChunk?.(
-        `Stage 6 found ${errorsBefore} error${errorsBefore !== 1 ? "s" : ""} — handing off to the reviewer model for Stage 7 verify-and-repair`,
+        `Stage 6 found ${neMotronBefore} error${neMotronBefore !== 1 ? "s" : ""} — handing off to the reviewer model for Stage 7 verify-and-repair`,
       );
       // Repair operates on the assembled MANIFEST (which carries the ports), NOT
       // the raw config — for AI-generated-port specs the config has no ports, so
@@ -1932,33 +2116,40 @@ export class ExecuteStructuredConfigGenerationUseCase {
               );
               repair = keepOriginal();
             } else {
-              const revalidated = await this.revalidateRepairedManifest(
+              // Re-assemble the repaired manifest (stages 2–5 only; no second
+              // LLM Stage-6 call — the gate uses structuralManifestErrors instead).
+              const reassembled = this.reassembleRepairedManifest(
                 applyResult.manifest as unknown as StructuredConfig,
                 { stage0: normalizedPrompt, stage1: domainAnalysis },
               );
-              if (!revalidated.success) {
+              if (!reassembled.success) {
                 callbacks?.onChunk?.(
-                  `Stage 7 · Re-validation failed — keeping the original manifest (${summarizeError(revalidated.error)})`,
+                  `Stage 7 · Re-assembly failed — keeping the original manifest (${summarizeError(reassembled.error)})`,
                 );
                 repair = keepOriginal();
               } else {
-                const cleanReport = stripReconstructionArtifacts(
-                  revalidated.report,
-                );
-                const errorsAfter = cleanReport.errors.length;
                 const afterParsed =
-                  (revalidated.manifest.parsedObject as Record<
+                  (reassembled.manifest.parsedObject as Record<
                     string,
                     unknown
                   >) ?? {};
+                // Deterministic structural re-count (R01–R09). Replaces the
+                // previous second Stage-6 LLM call, removing the non-determinism
+                // that caused 2→11 swings and the hidden ~53s latency.
+                const afterStructuralErrors = structuralManifestErrors(
+                  reassembled.portMap,
+                  reassembled.adapterBindings,
+                  afterParsed,
+                );
+                const deterministicAfter = afterStructuralErrors.length;
                 const afterCounts: EntityCounts = {
                   ...countManifestEntities(afterParsed),
                   domainEntityCount: countDomainMembers(afterParsed),
                   contextNames: manifestContextNames(afterParsed),
                 };
                 const gate = evaluateRepairGate({
-                  errorsBefore,
-                  errorsAfter,
+                  errorsBefore: deterministicBefore,
+                  errorsAfter: deterministicAfter,
                   before: beforeCounts,
                   after: afterCounts,
                   allowContextRename,
@@ -1967,24 +2158,30 @@ export class ExecuteStructuredConfigGenerationUseCase {
                 repair = {
                   attempted: true,
                   applied: gate.applied,
-                  errorsBefore,
-                  errorsAfter,
+                  errorsBefore: deterministicBefore,
+                  errorsAfter: deterministicAfter,
                   warningsBefore,
-                  warningsAfter: cleanReport.warnings.length,
+                  warningsAfter: warningsBefore,
                 };
 
                 if (gate.applied) {
-                  finalManifest = revalidated.manifest;
-                  finalReport = cleanReport;
+                  finalManifest = reassembled.manifest;
+                  // Report reflects the deterministic structural state after
+                  // repair (not a stale pre-repair nemotron report).
+                  finalReport = {
+                    errors: afterStructuralErrors,
+                    warnings: [],
+                    passed: afterStructuralErrors.length === 0,
+                  };
                   callbacks?.onChunk?.(
-                    `Stage 7 · Applied ${applyResult.applied} edit${applyResult.applied !== 1 ? "s" : ""} · repaired ${errorsBefore - errorsAfter} of ${errorsBefore} finding${errorsBefore !== 1 ? "s" : ""} — ${errorsAfter} remain`,
+                    `Stage 7 · Applied ${applyResult.applied} edit${applyResult.applied !== 1 ? "s" : ""} · repaired ${deterministicBefore - deterministicAfter} of ${deterministicBefore} structural finding${deterministicBefore !== 1 ? "s" : ""} — ${deterministicAfter} remain`,
                   );
                 } else if (gate.reason === "no-error-reduction") {
                   // RCA §8 outcome (4): edits applied cleanly but didn't move the
                   // findings. Surface before/after structure so it's diagnosable
                   // (a no-op edit vs an applied-but-wrong one).
                   callbacks?.onChunk?.(
-                    `Stage 7 · ${applyResult.applied} edit${applyResult.applied !== 1 ? "s" : ""} applied but findings unchanged (${errorsAfter} of ${errorsBefore} remain) — keeping the original. before ${beforeCounts.portCount}p/${beforeCounts.adapterCount}a, after ${afterCounts.portCount}p/${afterCounts.adapterCount}a`,
+                    `Stage 7 · ${applyResult.applied} edit${applyResult.applied !== 1 ? "s" : ""} applied but findings not reduced (${deterministicAfter} after vs ${deterministicBefore} before) — keeping the original. before ${beforeCounts.portCount}p/${beforeCounts.adapterCount}a, after ${afterCounts.portCount}p/${afterCounts.adapterCount}a`,
                   );
                 } else {
                   callbacks?.onChunk?.(
@@ -2052,7 +2249,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
   }
 
   /**
-   * Re-validate a repaired MANIFEST for Stage 7. The manifest carries
+   * Re-assemble a repaired MANIFEST for Stage 7. The manifest carries
    * `layers.application.ports` as string names (see draft-to-manifest.transform),
    * so buildPreDefinedPortMap reconstructs the real ports — unlike the raw
    * config, which for AI-generated-port specs has none. Classification (stage2),
@@ -2061,79 +2258,78 @@ export class ExecuteStructuredConfigGenerationUseCase {
    * manifest doesn't carry stale mapping endpoints from the original inputs
    * (PR #344 review). Only stage0 (intent / runtime concerns) and stage1 (domain
    * analysis, re-keyed to the repaired names) are reused, since a name-only
-   * manifest can't reconstruct the domain model. Silent (no onChunk /
-   * onStageTelemetry) so it doesn't double-emit a chip.
+   * manifest can't reconstruct the domain model.
+   *
+   * Returns the assembled manifest plus the intermediate portMap/adapterBindings
+   * so the DETERMINISTIC gate can check structural errors without a second LLM
+   * call (the previous Stage-6 re-validation here caused the 2→11 non-determinism
+   * swing and ~53s hidden latency — see docs/planning/stage7-deterministic-repair-gate.md).
    */
-  private async revalidateRepairedManifest(
+  private reassembleRepairedManifest(
     repairedManifest: StructuredConfig,
     base: {
       stage0: NormalizedPrompt;
       stage1: DomainAnalysis;
     },
-  ): Promise<
+  ):
     | {
         success: true;
         manifest: AssembledManifest;
-        report: ValidationReport;
+        portMap: PortMap;
+        adapterBindings: AdapterBindings;
         discarded: Array<{ context: string; kind: string; raw: unknown }>;
       }
-    | { success: false; error: unknown }
-  > {
-    // Port/adapter entries the repair model emitted in a shape we couldn't turn
-    // into a name (reported by the caller; the builders below skip them).
-    const discarded = collectMalformedManifestEntries(repairedManifest);
-    // Track context renames so Stage-5 re-attaches each context's domain model
-    // (a rename otherwise orphans it — see rekeyDomainAnalysisToManifest).
-    const stage1 = rekeyDomainAnalysisToManifest(base.stage1, repairedManifest);
-    const classification = buildClassificationFromConfig(
-      repairedManifest,
-      stage1,
-    );
-    const portMap = buildPreDefinedPortMap(repairedManifest);
-    const adapterBindings = buildPreDefinedAdapterBindings(
-      repairedManifest,
-      portMap,
-    );
-    // Derive mappings + apps from the REPAIRED manifest (not the original inputs)
-    // so a renamed context doesn't leave the re-assembled manifest with mapping
-    // endpoints pointing at the old name. Filter mappings to the repaired
-    // manifest's own contexts, mirroring the first assembly pass's guard.
-    const knownContextNorms = new Set(
-      repairedManifest.bounded_contexts.flatMap((ctx) => {
-        const names = [normalizeContextName(ctx.name)];
-        if (ctx.short) names.push(normalizeContextName(ctx.short));
-        return names;
-      }),
-    );
-    const contextMappings = buildContextMappingsFromConfig(
-      repairedManifest,
-    ).filter(
-      (m) =>
-        knownContextNorms.has(normalizeContextName(m.upstream)) &&
-        knownContextNorms.has(normalizeContextName(m.downstream)),
-    );
-    const apps = repairedManifest.apps ?? [];
-    const manifest = this.stage5.execute({
-      stage0: base.stage0,
-      stage1,
-      stage2: classification,
-      stage3: portMap,
-      stage4: adapterBindings,
-      contextMappings,
-      apps,
-    });
-    const revalidation = await this.stage6.execute({
-      stage0: base.stage0,
-      stage1,
-      stage2: classification,
-      stage3: portMap,
-      stage4: adapterBindings,
-      stage5: manifest,
-      contextMappings,
-    });
-    if (!revalidation.success) {
-      return { success: false, error: revalidation.error };
+    | { success: false; error: unknown } {
+    try {
+      // Port/adapter entries the repair model emitted in a shape we couldn't turn
+      // into a name (reported by the caller; the builders below skip them).
+      const discarded = collectMalformedManifestEntries(repairedManifest);
+      // Track context renames so Stage-5 re-attaches each context's domain model
+      // (a rename otherwise orphans it — see rekeyDomainAnalysisToManifest).
+      const stage1 = rekeyDomainAnalysisToManifest(
+        base.stage1,
+        repairedManifest,
+      );
+      const classification = buildClassificationFromConfig(
+        repairedManifest,
+        stage1,
+      );
+      const portMap = buildPreDefinedPortMap(repairedManifest);
+      const adapterBindings = buildPreDefinedAdapterBindings(
+        repairedManifest,
+        portMap,
+      );
+      // Derive mappings + apps from the REPAIRED manifest (not the original inputs)
+      // so a renamed context doesn't leave the re-assembled manifest with mapping
+      // endpoints pointing at the old name. Filter mappings to the repaired
+      // manifest's own contexts, mirroring the first assembly pass's guard.
+      const knownContextNorms = new Set(
+        repairedManifest.bounded_contexts.flatMap((ctx) => {
+          const names = [normalizeContextName(ctx.name)];
+          if (ctx.short) names.push(normalizeContextName(ctx.short));
+          return names;
+        }),
+      );
+      const contextMappings = buildContextMappingsFromConfig(
+        repairedManifest,
+      ).filter(
+        (m) =>
+          knownContextNorms.has(normalizeContextName(m.upstream)) &&
+          knownContextNorms.has(normalizeContextName(m.downstream)),
+      );
+      const apps = repairedManifest.apps ?? [];
+      const manifest = this.stage5.execute({
+        stage0: base.stage0,
+        stage1,
+        stage2: classification,
+        stage3: portMap,
+        stage4: adapterBindings,
+        contextMappings,
+        apps,
+      });
+      return { success: true, manifest, portMap, adapterBindings, discarded };
+    } catch (e) {
+      return { success: false, error: e };
     }
-    return { success: true, manifest, report: revalidation.value, discarded };
   }
 }

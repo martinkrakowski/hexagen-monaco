@@ -29,7 +29,7 @@ const mockTransactionManager = {
 };
 
 // Stage-6 LLM judge always "passes" — the deterministic R01 (banned context
-// name) is what drives errorsBefore. The same port backs the re-validation.
+// name) is what drives errorsBefore for the banned-config tests.
 function passingStage6Port(): SendStructuredRequestPort {
   return {
     sendRequest: async () => ({ success: true, value: { content: "" } }),
@@ -42,7 +42,26 @@ function passingStage6Port(): SendStructuredRequestPort {
   } as unknown as SendStructuredRequestPort;
 }
 
-// Stage 7 now emits a JSON OP-LIST (follow-up C), not a manifest. The reviewer
+// Stage-6 that emits one R05 error — used for the additive-op tests so that
+// Stage-7 activates. The deterministic gate now owns the before/after count;
+// Stage-6 is only called once (initial review), never for re-validation.
+function stage6WithOneError(): SendStructuredRequestPort {
+  return {
+    sendRequest: async () => ({ success: true, value: { content: "" } }),
+    streamStructuredRequest: () => {
+      async function* gen() {
+        yield {
+          success: true,
+          value:
+            '{"type":"error","rule":"R05","message":"Inbound port lacks an adapter"}\n{"type":"result","passed":false}\n',
+        };
+      }
+      return gen();
+    },
+  } as unknown as SendStructuredRequestPort;
+}
+
+// Stage 7 emits a JSON OP-LIST (follow-up C), not a manifest. The reviewer
 // streams the op-list text back verbatim; the orchestrator parses it and applies
 // the ops deterministically to the assembled manifest.
 function reviewerEmittingOps(opsJson: string): SendStructuredRequestPort {
@@ -60,9 +79,14 @@ function reviewerEmittingOps(opsJson: string): SendStructuredRequestPort {
   } as unknown as SendStructuredRequestPort;
 }
 
-// Pre-defined ports/adapters so Stages 3/4 skip the LLM — only Stage 6 (and the
-// re-validation) touch the mocked port. "payment-gateway" trips the
-// deterministic R01 banned-context rule.
+// Pre-defined ports/adapters so Stages 3/4 skip the LLM. `payment-gateway`
+// trips the deterministic R01 banned-context rule ("gateway" is a delivery token).
+// Adapters are chosen so that the name-stemming heuristic (inferAdapterImplements)
+// unambiguously maps each adapter to its port — keeping R01 as the SOLE structural
+// error before the rename repair. Verified manually:
+//   CreatePaymentControllerAdapter  → core "createpayment" → CreatePaymentPort ✓
+//   PaymentPersistenceRepositoryAdapter → strip "(Repository)?Adapter" → "PaymentPersistence"
+//                                       → core "paymentpersistence" → PaymentPersistenceRepositoryPort ✓
 const bannedConfig = [
   "bounded_contexts:",
   "  - name: payment-gateway",
@@ -70,41 +94,20 @@ const bannedConfig = [
   "      application:",
   "        ports:",
   "          in: [CreatePaymentPort]",
-  "          out: [PaymentRepositoryPort]",
+  "          out: [PaymentPersistenceRepositoryPort]",
   "      infrastructure:",
-  "        adapters: [InMemoryPaymentAdapter]",
+  "        adapters: [CreatePaymentControllerAdapter, PaymentPersistenceRepositoryAdapter]",
   "use_cases: {}",
   "context_mappings: []",
   "",
 ].join("\n");
 
-// A call-aware Stage-6 port: emits an [R05] finding on the FIRST validation
-// (errorsBefore), then passes on the re-validation — so an additive op that
-// "clears" it is exercisable end-to-end. R03/R05/R10 are LLM-judged (only
-// R01/R16/R17/R18 are deterministic), hence the two-response mock.
-function stage6R05ThenClear(): SendStructuredRequestPort {
-  let call = 0;
-  return {
-    sendRequest: async () => ({ success: true, value: { content: "" } }),
-    streamStructuredRequest: () => {
-      call += 1;
-      const first = call === 1;
-      async function* gen() {
-        yield first
-          ? {
-              success: true,
-              value:
-                '{"type":"error","rule":"R05","message":"Inbound port lacks an adapter"}\n{"type":"result","passed":false}\n',
-            }
-          : { success: true, value: '{"type":"result","passed":true}\n' };
-      }
-      return gen();
-    },
-  } as unknown as SendStructuredRequestPort;
-}
-
-// Clean manifest-shaped spec with pre-defined ports + adapters → Stages 3/4 skip
-// the LLM, so the only LLM calls are the two Stage-6 validations (call 1 / call 2).
+// Pre-defined ports/adapters where PlaceOrderPort (inbound) has NO adapter →
+// deterministic R05 error. StockAdapter unambiguously implements StockRepositoryPort:
+//   StockAdapter → core "stock" → StockRepositoryPort (portCore "stockrepository" ⊇ "stock")
+//   PlaceOrderPort → 0 adapters → R05 error (deterministicBefore = 1)
+// After adding PlaceOrderAdapter:
+//   PlaceOrderAdapter → core "placeorder" → PlaceOrderPort ✓ → R05 gone (deterministicAfter = 0)
 const cleanSpec = [
   "bounded_contexts:",
   "  - name: orders",
@@ -112,9 +115,9 @@ const cleanSpec = [
   "      application:",
   "        ports:",
   "          in: [PlaceOrderPort]",
-  "          out: [OrderRepositoryPort]",
+  "          out: [StockRepositoryPort]",
   "      infrastructure:",
-  "        adapters: [PlaceOrderAdapter]",
+  "        adapters: [StockAdapter]",
   "use_cases: {}",
   "context_mappings: []",
   "",
@@ -123,12 +126,12 @@ const cleanSpec = [
 describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair", () => {
   it("applies an ADDITIVE op that clears a finding (R05) — the add/apply path", async () => {
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
-      stage6R05ThenClear(),
+      stage6WithOneError(),
       mockTransactionManager,
       undefined,
       undefined,
       reviewerEmittingOps(
-        '[{"op":"add-adapter","context":"orders","name":"ShipOrderAdapter"}]',
+        '[{"op":"add-adapter","context":"orders","name":"PlaceOrderAdapter"}]',
       ),
     );
     const result = await useCase.execute(cleanSpec, { onProgress: () => {} });
@@ -148,7 +151,7 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair
       };
       const orders = parsed.bounded_contexts?.find((c) => c.name === "orders");
       assert.ok(
-        orders?.layers?.infrastructure?.adapters?.includes("ShipOrderAdapter"),
+        orders?.layers?.infrastructure?.adapters?.includes("PlaceOrderAdapter"),
         "the added adapter must be in the applied manifest",
       );
     }
@@ -159,12 +162,12 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair
     // gratuitous rename alongside a good add. Without dropping the rename, the
     // gate would reject the WHOLE batch (context drift) and lose the fix.
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
-      stage6R05ThenClear(),
+      stage6WithOneError(),
       mockTransactionManager,
       undefined,
       undefined,
       reviewerEmittingOps(
-        '[{"op":"rename-context","from":"orders","to":"order-management"},{"op":"add-adapter","context":"orders","name":"ShipOrderAdapter"}]',
+        '[{"op":"rename-context","from":"orders","to":"order-management"},{"op":"add-adapter","context":"orders","name":"PlaceOrderAdapter"}]',
       ),
     );
     const result = await useCase.execute(cleanSpec, { onProgress: () => {} });
@@ -207,7 +210,7 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair
         (result.repair?.errorsAfter ?? 1) < (result.repair?.errorsBefore ?? 0),
       );
       assert.strictEqual(result.repair?.errorsAfter, 0);
-      // The surfaced report is the RE-VALIDATED one.
+      // The surfaced report is the deterministic structural report post-repair.
       assert.strictEqual(result.validation.errors.length, 0);
     }
   });
@@ -230,8 +233,9 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair
   });
 
   it("keeps the original when an applied edit does not reduce findings", async () => {
-    // The op applies cleanly (adds a port) but doesn't touch the banned name →
-    // re-validation finds the same R01 → gate's no-error-reduction keeps original.
+    // The op applies cleanly (adds an out-port) but doesn't fix the R01 →
+    // deterministic gate: adding a port with no adapter actually ADDS an R04 error
+    // → errorsAfter (2) > errorsBefore (1) → no-error-reduction keeps original.
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
       passingStage6Port(),
       mockTransactionManager,
