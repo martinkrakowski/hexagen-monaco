@@ -1049,7 +1049,12 @@ function inferAdapterImplements(
     });
     if (match) return match;
   }
-  return portNames[0] ?? "";
+  // No name match → leave UNBOUND ("") rather than misattributing to the first
+  // port: a false `implements` hides the real R04/R05 on the intended port and
+  // manufactures a double-coverage error on portNames[0]. An empty implements is
+  // skipped by the R04/R05 adapter-count loop, so the unmatched port correctly
+  // surfaces as uncovered — the safer failure mode for the deterministic gate.
+  return "";
 }
 
 /** First line of an error, truncated — surfaces a previously-swallowed reason. */
@@ -1412,6 +1417,11 @@ export function structuralManifestErrors(
 
   // Per-context checks (R01–R05, R09).
   for (const ctx of portMap.contexts) {
+    // A malformed/partial repaired manifest can yield contextName: undefined
+    // (buildPreDefinedPortMap maps ctx.name verbatim). Skip it — isBannedContextName
+    // tokenizes the name and would throw, crashing the gate instead of failing
+    // safe to keepOriginal().
+    if (typeof ctx.contextName !== "string") continue;
     const ctxNorm = normalizeContextName(ctx.contextName);
     const isSharedKernel = contextTypeByNorm.get(ctxNorm) === "shared-kernel";
 
@@ -2217,8 +2227,15 @@ export class ExecuteStructuredConfigGenerationUseCase {
                   // (R16–R18 on a newly added/renamed port can be marginally stale;
                   // acceptable vs a total drop — recompute via
                   // collectPortQualityIssues if that becomes a problem.)
+                  // Strip the structural rules the deterministic recount
+                  // RE-PRODUCES (R01–R07, R09) and replace them with
+                  // afterStructuralErrors. R08 is NOT stripped: the assembler
+                  // always fills system/scope (extractScope + the workspaceName
+                  // fallback), so deterministic R08 never fires post-assembly —
+                  // stripping the LLM's R08 would silently drop it and flip
+                  // passed→true. Preserve it (with R10–R18 + warnings).
                   const preservedErrors = finalReport.errors.filter(
-                    (e) => !/^\[R0[1-9]\]/.test(e),
+                    (e) => !/^\[R0[1-7]\]|^\[R09\]/.test(e),
                   );
                   finalReport = {
                     errors: [...afterStructuralErrors, ...preservedErrors],

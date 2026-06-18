@@ -204,6 +204,47 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair
     }
   });
 
+  it("preserves the LLM's R08 on an accepted repair (deterministic R08 is masked)", async () => {
+    // The assembler always fills system/scope, so the deterministic recount never
+    // re-fires R08; stripping R01–R09 would drop the LLM's R08 and flip
+    // passed→true. R08 must survive an accepted repair.
+    const stage6 = {
+      sendRequest: async () => ({ success: true, value: { content: "" } }),
+      streamStructuredRequest: () => {
+        async function* gen() {
+          yield {
+            success: true,
+            value:
+              '{"type":"error","rule":"R05","message":"Inbound port lacks an adapter"}\n' +
+              '{"type":"error","rule":"R08","message":"Workspace name is not meaningful"}\n' +
+              '{"type":"result","passed":false}\n',
+          };
+        }
+        return gen();
+      },
+    } as unknown as SendStructuredRequestPort;
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(
+      stage6,
+      mockTransactionManager,
+      undefined,
+      undefined,
+      reviewerEmittingOps(
+        '[{"op":"add-adapter","context":"orders","name":"PlaceOrderAdapter"}]',
+      ),
+    );
+    const result = await useCase.execute(cleanSpec, { onProgress: () => {} });
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.repair?.applied, true);
+      assert.ok(
+        result.validation.errors.some((e) => e.includes("R08")),
+        "accepted repair must preserve the LLM's R08, not strip it",
+      );
+      assert.strictEqual(result.validation.passed, false);
+    }
+  });
+
   it("drops an unjustified rename-context but still applies the legit additive op", async () => {
     // No R01 in the baseline → allowContextRename is false. The model emits a
     // gratuitous rename alongside a good add. Without dropping the rename, the
