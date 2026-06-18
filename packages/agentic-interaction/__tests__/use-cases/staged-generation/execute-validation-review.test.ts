@@ -7,6 +7,7 @@ import type { StageTelemetry } from "../../../src/domain/value-objects/stage-tel
 import {
   STAGE6_VALIDATION_SYSTEM_PROMPT,
   compileStage6Prompt,
+  buildStage6RetryPrompt,
 } from "../../../src/domain/prompts/generate-manifest.prompt.ts";
 import { CONTEXT_NAME_VALIDATION_BANS } from "../../../src/domain/prompts/architecture-contract.ts";
 
@@ -142,6 +143,63 @@ describe("ExecuteValidationReviewUseCase", () => {
 
     assert.strictEqual(result.success, true);
     assert.strictEqual(attemptCount, 3);
+  });
+
+  test("retry re-sends the full manifest (guards the manifest-less false pass)", async () => {
+    const prompts: string[] = [];
+    let attempt = 0;
+    const mockLLM = {
+      sendRequest: async () => ({ success: true as const, value: {} }),
+      streamStructuredRequest: (req: {
+        messages: { role: string; content: string }[];
+      }) => {
+        prompts.push(req.messages[1]?.content ?? "");
+        attempt++;
+        return attempt === 1
+          ? createMalformedStream()
+          : createSuccessStream(validValidationNdjson);
+      },
+    } as unknown as SendStructuredRequestPort;
+
+    const state = {
+      ...createMockPipelineState(),
+      stage3: {
+        contexts: [
+          {
+            contextName: "invoice-management",
+            in: [
+              {
+                name: "CreateInvoicePort",
+                type: "command" as const,
+                description: "Creates a new invoice from order data",
+              },
+            ],
+            out: [
+              {
+                name: "InvoiceRepositoryPort",
+                type: "repository" as const,
+                description: "Persists invoice aggregates",
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const result = await new ExecuteValidationReviewUseCase(mockLLM).execute(
+      state,
+    );
+
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(attempt, 2);
+    // The bug: the retry prompt was truncated to 1000 chars, stripping the
+    // manifest, so a retry "passed" without reviewing anything. The retry must
+    // still carry the port_map (here: InvoiceRepositoryPort).
+    assert.ok(
+      prompts[1].includes("InvoiceRepositoryPort"),
+      "retry prompt must re-send the manifest, not a truncated snippet",
+    );
+    assert.match(prompts[1], /CORRECTION REQUIRED/);
   });
 
   test("max retries exceeded: returns error", async () => {
@@ -908,5 +966,29 @@ describe("compileStage6Prompt", () => {
     } as any);
     assert.match(prompt, /R02–R18/);
     assert.doesNotMatch(prompt, /R01–R18/);
+  });
+});
+
+describe("buildStage6RetryPrompt", () => {
+  test("preserves the full original review prompt (not a 1000-char slice)", () => {
+    const original =
+      "RULES PREAMBLE ".repeat(80) + "UNIQUE_MANIFEST_MARKER_AT_THE_END";
+    const retry = buildStage6RetryPrompt(
+      original,
+      "garbled output",
+      "line 2 was not valid JSON",
+    );
+    assert.ok(retry.includes(original), "full original prompt must be present");
+    assert.ok(
+      retry.includes("UNIQUE_MANIFEST_MARKER_AT_THE_END"),
+      "content past the first 1000 chars must survive",
+    );
+    assert.match(retry, /CORRECTION REQUIRED/);
+    assert.match(retry, /line 2 was not valid JSON/);
+  });
+
+  test("omits the previous-output block when the failed output is empty", () => {
+    const retry = buildStage6RetryPrompt("manifest", "", "empty response");
+    assert.doesNotMatch(retry, /your_previous_output/);
   });
 });
