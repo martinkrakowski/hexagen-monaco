@@ -7,6 +7,7 @@ import {
   toKebabCase,
   ensurePortSuffix,
   normalizePortName,
+  normalizeContextName,
 } from "../../../src/domain/manifest/normalize-draft";
 import type {
   ManifestDraft,
@@ -102,6 +103,54 @@ describe("normalizePortName", () => {
       normalizePortName("  PostRepositoryPort  "),
       "PostRepositoryPort",
     );
+  });
+});
+
+describe("normalizeContextName", () => {
+  it("kebab-cases PascalCase / camelCase names", () => {
+    assert.strictEqual(
+      normalizeContextName("IdentityAccess"),
+      "identity-access",
+    );
+    assert.strictEqual(
+      normalizeContextName("orderManagement"),
+      "order-management",
+    );
+  });
+
+  it("splits leading/embedded acronyms so they match the kebab YAML", () => {
+    // The camel rule only fires on lower→UPPER, so a run of capitals would
+    // collapse to "iamservice" and diverge from the assembler's "iam-service".
+    assert.strictEqual(normalizeContextName("IAMService"), "iam-service");
+    assert.strictEqual(normalizeContextName("APIGateway"), "api-gateway");
+    assert.strictEqual(normalizeContextName("HTTPServer"), "http-server");
+  });
+
+  it("is idempotent on already-kebab names", () => {
+    assert.strictEqual(
+      normalizeContextName("identity-access"),
+      "identity-access",
+    );
+    assert.strictEqual(normalizeContextName("iam-service"), "iam-service");
+  });
+
+  it("normalizes spaces and underscores", () => {
+    assert.strictEqual(
+      normalizeContextName("Identity Access"),
+      "identity-access",
+    );
+    assert.strictEqual(
+      normalizeContextName("identity_access"),
+      "identity-access",
+    );
+  });
+
+  it("returns '' for non-string input instead of throwing", () => {
+    assert.strictEqual(
+      normalizeContextName(undefined as unknown as string),
+      "",
+    );
+    assert.strictEqual(normalizeContextName(null as unknown as string), "");
   });
 });
 

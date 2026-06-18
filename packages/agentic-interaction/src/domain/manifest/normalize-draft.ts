@@ -35,12 +35,21 @@ function normalizePortName(name: string): string {
 }
 
 export function normalizeContextName(name: string): string {
-  return name
-    .trim()
-    .replace(/([a-z])([A-Z])/g, "$1-$2")
-    .replace(/[\s_]+/g, "-")
-    .replace(/-+/g, "-")
-    .toLowerCase();
+  // safeTrim (not name.trim()) so a non-string from a partial LLM object
+  // (e.g. an undefined context_mappings.upstream) coerces to "" instead of
+  // throwing — matches normalizePortName's defensiveness.
+  return (
+    safeTrim(name)
+      // Acronym boundary FIRST (IAMService → IAM-Service, APIGateway →
+      // API-Gateway): the camel rule below only fires on lower→UPPER, so a run
+      // of capitals would otherwise collapse (IAMService → "iamservice") and
+      // diverge from the kebab the assembler and Stage 2 emit ("iam-service").
+      .replace(/([A-Z]+)([A-Z][a-z])/g, "$1-$2")
+      .replace(/([a-z])([A-Z])/g, "$1-$2")
+      .replace(/[\s_]+/g, "-")
+      .replace(/-+/g, "-")
+      .toLowerCase()
+  );
 }
 
 function safeTrim(value: unknown): string {
