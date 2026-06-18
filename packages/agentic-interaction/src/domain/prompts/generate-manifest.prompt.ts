@@ -965,11 +965,20 @@ export function buildStage6RetryPrompt(
       : failedOutput;
   return [
     `CORRECTION REQUIRED — your previous review output could not be parsed.`,
+    // Escape the interpolated values so a payload containing a closing tag can't
+    // break the delimiters and inject instructions — same guard the Stage-7
+    // builder applies to its <manifest>/<findings> sections. `failedOutput` is
+    // the model's prior output (which can echo user-spec content); `errorDetail`
+    // is currently a fixed string but escaped too, defensively.
     `<rejection_reason>`,
-    errorDetail,
+    escapeXml(errorDetail),
     `</rejection_reason>`,
     ...(failedOutput.trim()
-      ? [`<your_previous_output>`, snippet, `</your_previous_output>`]
+      ? [
+          `<your_previous_output>`,
+          escapeXml(snippet),
+          `</your_previous_output>`,
+        ]
       : []),
     ``,
     `Re-review the SAME manifest below and output ONLY valid NDJSON — one JSON`,
