@@ -459,6 +459,32 @@ describe("structuralManifestErrors — R08 workspace name/description", () => {
     assert.ok(errs.some((e) => e.startsWith("[R08]")));
   });
 
+  it("R08 names BOTH fields when system and scope are both empty", () => {
+    const errs = structuralManifestErrors(
+      portMap([
+        {
+          name: "orders",
+          in: ["PlaceOrderPort"],
+          out: ["OrderRepositoryPort"],
+        },
+      ]),
+      adapterBindings([
+        {
+          name: "orders",
+          adapters: [
+            { name: "A", implements: "PlaceOrderPort" },
+            { name: "B", implements: "OrderRepositoryPort" },
+          ],
+        },
+      ]),
+      parsedManifest({ system: "", scope: "" }),
+    );
+    const r08 = errs.find((e) => e.startsWith("[R08]"));
+    assert.ok(r08);
+    assert.match(r08!, /system name/);
+    assert.match(r08!, /scope/);
+  });
+
   it("no R08 when both system and scope are non-empty", () => {
     const errs = structuralManifestErrors(
       portMap([
@@ -520,6 +546,44 @@ describe("structuralManifestErrors — R09 shared-kernel has ports", () => {
     );
     assert.ok(!errs.some((e) => e.startsWith("[R02]")));
     assert.ok(!errs.some((e) => e.startsWith("[R03]")));
+  });
+});
+
+// ── Portless contexts (present in the manifest, absent from portMap) ──────────
+
+describe("structuralManifestErrors — portless contexts", () => {
+  it("R02 + R03 for a non-shared-kernel context with no ports", () => {
+    // buildPreDefinedPortMap drops portless contexts; the checker must still
+    // flag them (a portless context has no inbound port and no repository port).
+    const errs = structuralManifestErrors(
+      portMap([]), // portless → absent from portMap
+      adapterBindings([]),
+      parsedManifest({ contexts: [{ name: "orphaned" }] }),
+    );
+    assert.ok(errs.some((e) => e.startsWith("[R02]")));
+    assert.ok(errs.some((e) => e.startsWith("[R03]")));
+  });
+
+  it("R01 for a portless context with a banned name", () => {
+    const errs = structuralManifestErrors(
+      portMap([]),
+      adapterBindings([]),
+      parsedManifest({ contexts: [{ name: "payment-gateway" }] }),
+    );
+    assert.ok(errs.some((e) => e.startsWith("[R01]")));
+  });
+
+  it("no R02/R03/R09 for a portless shared-kernel (valid)", () => {
+    const errs = structuralManifestErrors(
+      portMap([]),
+      adapterBindings([]),
+      parsedManifest({
+        contexts: [{ name: "shared-types", type: "shared-kernel" }],
+      }),
+    );
+    assert.ok(!errs.some((e) => e.startsWith("[R02]")));
+    assert.ok(!errs.some((e) => e.startsWith("[R03]")));
+    assert.ok(!errs.some((e) => e.startsWith("[R09]")));
   });
 });
 

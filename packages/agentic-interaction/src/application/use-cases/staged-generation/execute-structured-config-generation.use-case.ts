@@ -1464,6 +1464,28 @@ export function structuralManifestErrors(
     }
   }
 
+  // Portless contexts: buildPreDefinedPortMap drops contexts with no ports, so a
+  // context present in the manifest but ABSENT from portMap is portless and
+  // still violates R02/R03 (and R01 if its name is banned). Catch them here —
+  // otherwise a repair could make a context's R02/R03 "disappear" by orphaning
+  // its ports and the gate would accept a still-broken manifest.
+  const portMapNorms = new Set(
+    portMap.contexts.map((c) => normalizeContextName(c.contextName)),
+  );
+  for (const ctx of rawContexts) {
+    if (typeof ctx.name !== "string") continue;
+    const ctxNorm = normalizeContextName(ctx.name);
+    if (portMapNorms.has(ctxNorm)) continue; // handled by the per-context loop
+    if (contextTypeByNorm.get(ctxNorm) === "shared-kernel") continue; // portless shared-kernel is valid
+    if (isBannedContextName(ctx.name)) {
+      errors.push(
+        `[R01] Context '${ctx.name}' contains a banned technology token.`,
+      );
+    }
+    errors.push(`[R02] Context '${ctx.name}' has no inbound ports.`);
+    errors.push(`[R03] Context '${ctx.name}' has no outbound repository port.`);
+  }
+
   // R06: no adapter implements a port that belongs to a DIFFERENT context. An
   // adapter is fine when its OWN context owns the port (even if another context
   // also has a port by that name), so check own-context membership — fire only
@@ -1507,10 +1529,15 @@ export function structuralManifestErrors(
   const scope =
     typeof parsedManifest.scope === "string" ? parsedManifest.scope.trim() : "";
   if (!system || !scope) {
-    const what = !system
-      ? "system name (workspace.name)"
-      : "scope (workspace.description)";
-    errors.push(`[R08] Workspace is incomplete — ${what} is empty.`);
+    // Name BOTH empty fields, not just the first — when system and scope are
+    // both empty the single-field message hid the second (qodo #351).
+    const missing = [
+      !system && "system name (workspace.name)",
+      !scope && "scope (workspace.description)",
+    ]
+      .filter(Boolean)
+      .join(" and ");
+    errors.push(`[R08] Workspace is incomplete — ${missing} is empty.`);
   }
 
   return errors;
