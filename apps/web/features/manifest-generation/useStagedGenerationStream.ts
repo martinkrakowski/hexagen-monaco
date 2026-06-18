@@ -55,6 +55,32 @@ function isStageRepairSummary(value: unknown): value is StageRepairSummary {
   );
 }
 
+/**
+ * Boundary guard for the per-stage telemetry payload — same untrusted-NDJSON
+ * rationale as the report/summary guards above (proxy/corrupt stream/server-
+ * contract drift). The telemetry UI formats the numeric fields
+ * (`toLocaleString()`, arithmetic), so a malformed payload must be rejected
+ * here rather than throwing during render. Validates every required field so
+ * the narrow to `StageTelemetry` is sound; optional model names are tolerated.
+ */
+function isStageTelemetry(
+  value: unknown,
+): value is NonNullable<StageProgress["telemetry"]> {
+  if (typeof value !== "object" || value === null) return false;
+  const t = value as Record<string, unknown>;
+  return (
+    typeof t.stage === "number" &&
+    typeof t.label === "string" &&
+    typeof t.durationMs === "number" &&
+    typeof t.usedLLM === "boolean" &&
+    typeof t.retryCount === "number" &&
+    typeof t.inputTokensEstimate === "number" &&
+    typeof t.outputTokensActual === "number" &&
+    typeof t.servedFromCache === "boolean" &&
+    typeof t.summary === "string"
+  );
+}
+
 export interface StagedGenerationStreamOptions {
   endpoint: string;
   stageLabels: Record<number, string>;
@@ -288,16 +314,21 @@ export function useStagedGenerationStream(
                     setStageProgress(result.stageProgress);
                   } else if (type === "stage-telemetry") {
                     const stage = event.stage as number;
-                    const telemetry =
-                      event.telemetry as StageProgress["telemetry"];
-                    result.stageProgress = {
-                      ...result.stageProgress,
-                      [stage]: {
-                        ...ensureStageEntry(stage, telemetry?.label),
-                        telemetry,
-                      },
-                    };
-                    setStageProgress(result.stageProgress);
+                    if (isStageTelemetry(event.telemetry)) {
+                      const telemetry = event.telemetry;
+                      result.stageProgress = {
+                        ...result.stageProgress,
+                        [stage]: {
+                          ...ensureStageEntry(stage, telemetry.label),
+                          telemetry,
+                        },
+                      };
+                      setStageProgress(result.stageProgress);
+                    } else if (event.telemetry != null) {
+                      logger.warn(
+                        "[staged-gen] Ignoring malformed stage-telemetry payload",
+                      );
+                    }
                   } else if (type === "chunk") {
                     const stage = event.stage as number;
                     const data = event.data as string;
