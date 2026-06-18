@@ -20,6 +20,7 @@ import type {
   AdapterBinding,
 } from "../../../domain/value-objects/pipeline-state";
 import { normalizeContextName } from "../../../domain/index";
+import { synthesizeMissingRepositoryPorts } from "../../../domain/manifest/synthesize-repository-ports";
 import { isBannedContextName } from "../../../domain/prompts/architecture-contract";
 import { ExecutePortMappingUseCase } from "./execute-port-mapping.use-case";
 import { ExecuteAdapterAssignmentUseCase } from "./execute-adapter-assignment.use-case";
@@ -1990,6 +1991,28 @@ export class ExecuteStructuredConfigGenerationUseCase {
     }
     callbacks?.onProgress?.(4, Date.now() - s4Start);
 
+    // R03 invariant satisfaction at the source: a non-shared-kernel context that
+    // Stage 3 left with no outbound repository port gets a default
+    // <Aggregate>RepositoryPort + matching adapter (explicit type/implements).
+    // Done on the merged structures Stage 6 + the Stage-7 gate actually read, so
+    // R03 never reaches the reviewer and the gate never burns a self-defeating
+    // add-out-port repair. Stage 5 consumes the same structures, so the port +
+    // adapter also land in the rendered manifest.
+    const repoSynthesis = synthesizeMissingRepositoryPorts(
+      mergedPortMap,
+      mergedAdapterBindings,
+      classification.accepted,
+    );
+    mergedPortMap = repoSynthesis.portMap;
+    mergedAdapterBindings = repoSynthesis.adapterBindings;
+    const repositorySynthesisWarnings = repoSynthesis.synthesized.map(
+      (s) =>
+        `Auto-added a default repository port '${s.portName}' and adapter '${s.adapterName}' to context '${s.contextName}' — Stage 3 produced no outbound repository port (R03). Review and rename to fit your domain.`,
+    );
+    for (const warning of repositorySynthesisWarnings) {
+      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
+    }
+
     // Stage 5: Manifest Assembly (synchronous, returns AssembledManifest directly)
     const s5Start = Date.now();
     callbacks?.onProgress?.(5, 0);
@@ -2040,6 +2063,17 @@ export class ExecuteStructuredConfigGenerationUseCase {
     let finalManifest = assembledManifest;
     let finalReport: ValidationReport = s6.value;
     let repair: ManifestRepairSummary | undefined;
+
+    // Surface the auto-added repository ports as advisory warnings. Done before
+    // Stage 7 so the accept path (which preserves `finalReport.warnings`) and the
+    // reject path both carry them. They are warnings, not errors, so `passed` and
+    // the deterministic gate are unaffected.
+    if (repositorySynthesisWarnings.length > 0) {
+      finalReport = {
+        ...finalReport,
+        warnings: [...finalReport.warnings, ...repositorySynthesisWarnings],
+      };
+    }
 
     // R16/R17 are unrepairable by a manifest-level repair and can't be
     // reconstructed from a name-only manifest, so compare like for like — and
