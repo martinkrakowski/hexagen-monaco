@@ -16,6 +16,7 @@ import { EnvironmentSecretVaultAdapter } from "@hexagen/agentic-interaction";
 import type { WebLLMAdapter, DomainModelId } from "@hexagen/local-llm";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 import { logger } from "../../../../../lib/structured-logger";
+import { createStage6ValidatorConfig } from "../../../../lib/wire.server";
 
 interface GenerateManifestRequestBody {
   description: string;
@@ -187,9 +188,14 @@ export async function POST(
     logger.info(
       `[manifest-gen] API route: executing use case with model ${body.modelId || "default"}`,
     );
+    // Dedicated Stage-6 reviewer (e.g. nemotron-3-ultra) — same as the
+    // streaming routes, so this route isn't left on the main model when
+    // STAGE6_VALIDATOR_API_KEY is set. Null ⇒ unchanged.
+    const stage6Reviewer = createStage6ValidatorConfig();
     const useCase = new GenerateManifestFromDescriptionUseCase(
       selectorAdapter,
       transactionManager,
+      stage6Reviewer ?? undefined,
     );
     const result = await useCase.execute({
       description: projectDescription,

@@ -91,6 +91,41 @@ describe("ExecuteValidationReviewUseCase", () => {
     }
   });
 
+  // The review request's maxTokens is the operative ceiling (the streaming
+  // adapter sends request.maxTokens). A reasoning reviewer must raise it above
+  // mercury's 800 or it truncates before the NDJSON result line.
+  test("defaults the review token budget to 800", async () => {
+    let captured: { maxTokens?: number } | undefined;
+    const mockLLM = {
+      sendRequest: async () => ({ success: true as const, value: {} }),
+      streamStructuredRequest: (req: { maxTokens?: number }) => {
+        captured = req;
+        return createSuccessStream(validValidationNdjson);
+      },
+    } as unknown as SendStructuredRequestPort;
+
+    await new ExecuteValidationReviewUseCase(mockLLM).execute(
+      createMockPipelineState(),
+    );
+    assert.strictEqual(captured?.maxTokens, 800);
+  });
+
+  test("honours a custom reviewer token budget (reasoning models need ~4k)", async () => {
+    let captured: { maxTokens?: number } | undefined;
+    const mockLLM = {
+      sendRequest: async () => ({ success: true as const, value: {} }),
+      streamStructuredRequest: (req: { maxTokens?: number }) => {
+        captured = req;
+        return createSuccessStream(validValidationNdjson);
+      },
+    } as unknown as SendStructuredRequestPort;
+
+    await new ExecuteValidationReviewUseCase(mockLLM, 4000).execute(
+      createMockPipelineState(),
+    );
+    assert.strictEqual(captured?.maxTokens, 4000);
+  });
+
   test("retry path: fails 2x then succeeds", async () => {
     let attemptCount = 0;
     const mockLLM = createMockLLMPort(() => {

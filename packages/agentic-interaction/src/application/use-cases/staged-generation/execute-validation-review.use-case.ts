@@ -55,10 +55,29 @@ function collectPortQualityIssues(
   return issues;
 }
 
+/** Dedicated reviewer for Stage 6 — a separate model AND token budget from the
+ * main pipeline LLM. A reasoning reviewer (e.g. nemotron-3-ultra) measured 0
+ * false positives where mercury-2 returns empty, but needs a larger budget than
+ * mercury's 800. `maxTokens` is REQUIRED: a dedicated reasoning reviewer left at
+ * the 800 default would truncate before the NDJSON result line — the exact
+ * failure this reviewer exists to prevent — so configuring one means stating its
+ * budget. Off ⇒ Stage 6 runs on the main pipeline model at 800, unchanged. */
+export interface Stage6ReviewerConfig {
+  port: SendStructuredRequestPort;
+  maxTokens: number;
+}
+
 export class ExecuteValidationReviewUseCase {
   // No escalationConfig here: only Stage 3 (ExecutePortMappingUseCase) reads
   // its escalation config; the param was a dead copy-paste in stages 0/1/2/4/6.
-  constructor(private readonly llmPort: SendStructuredRequestPort) {}
+  constructor(
+    private readonly llmPort: SendStructuredRequestPort,
+    /** Output-token ceiling for the review request. Default 800 (mercury's
+     * working budget). A reasoning reviewer MUST raise this: its reasoning
+     * tokens count against the completion budget, so at 800 it truncates before
+     * the NDJSON result line (measured — nemotron needs ~3–4k). */
+    private readonly maxTokens: number = 800,
+  ) {}
 
   async execute(
     state: Pick<
@@ -104,7 +123,7 @@ export class ExecuteValidationReviewUseCase {
           { role: "user", content: prompt },
         ],
         z.string(),
-        { stream: true, temperature: 0.1, maxTokens: 800 },
+        { stream: true, temperature: 0.1, maxTokens: this.maxTokens },
       );
       request.signal = abortController.signal;
       // Last-write-wins across retry attempts: each attempt builds a fresh

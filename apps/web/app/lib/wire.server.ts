@@ -373,6 +373,9 @@ export const createStage1RefinerConfig = (): Stage1RefinementConfig | null => {
  * Activating this in prod is a Martin-gated secret change, like the Stage-1
  * refiner — see docs/planning/mercury-2-prod-flip-runbook.md.
  *
+ * NOTE: despite the STAGE6_ prefix, these vars wire STAGE 7 (repair) — NOT the
+ * Stage-6 review. The Stage-6 review model is STAGE6_VALIDATOR_* (below).
+ *
  * Env:
  * - STAGE6_REVIEWER_API_KEY  — required to activate
  * - STAGE6_REVIEWER_BASE_URL — default https://openrouter.ai/api/v1
@@ -402,6 +405,80 @@ export const createStage6ReviewerConfig =
       secretVault: vault,
     });
   };
+
+let warnedInvalidStage6MaxTokens = false;
+/** Loud once: a SET-but-unparseable STAGE6_VALIDATOR_MAX_TOKENS silently reverts
+ * to the 4000 default. Because Stage 6 sends request.maxTokens as the operative
+ * ceiling, a bad value would quietly change the reviewer's budget — and a
+ * reasoning reviewer truncates below ~4k — with no operator-visible signal.
+ * Mirrors warnInvalidReasoningOnce (cloud-llm-reasoning.ts). The unset case is
+ * intentional and stays silent. */
+function warnInvalidStage6MaxTokensOnce(raw: string): void {
+  if (warnedInvalidStage6MaxTokens) return;
+  warnedInvalidStage6MaxTokens = true;
+  // eslint-disable-next-line no-console -- operator-facing misconfiguration warning; no logger port at this layer
+  console.warn(
+    `STAGE6_VALIDATOR_MAX_TOKENS="${raw}" is not a positive integer — ` +
+      `ignoring it (Stage-6 reviewer uses the default 4000).`,
+  );
+}
+
+/**
+ * Stage-6 validation reviewer — a DEDICATED model for the Stage-6 adversarial
+ * review itself (and its re-validation after a Stage-7 repair), separate from
+ * the main pipeline model (mercury-2) AND from the Stage-7 repair reviewer
+ * above. Lets a stronger reviewer (e.g. nemotron-3-ultra) run only the review
+ * without touching generation. Returns null (review stays on the main model at
+ * its 800-token default) when unset — byte-identical to today. Martin-gated
+ * secret change, like the Stage-1 refiner / Stage-7 reviewer.
+ *
+ * A reasoning reviewer needs a large budget: its reasoning tokens count against
+ * the completion budget, so STAGE6_VALIDATOR_MAX_TOKENS defaults to 4000 (at 800
+ * a reasoning model truncates before the NDJSON result line — measured).
+ *
+ * Env:
+ * - STAGE6_VALIDATOR_API_KEY    — required to activate
+ * - STAGE6_VALIDATOR_BASE_URL   — default https://openrouter.ai/api/v1
+ * - STAGE6_VALIDATOR_MODEL      — default openai/gpt-4o
+ * - STAGE6_VALIDATOR_MAX_TOKENS — default 4000
+ */
+export const createStage6ValidatorConfig = (): {
+  port: LLMProviderSelectorAdapter;
+  maxTokens: number;
+} | null => {
+  const vault = getEnvironmentVault();
+  if (!vault.getSecret("STAGE6_VALIDATOR_API_KEY")) return null;
+  const rawMaxTokens = process.env.STAGE6_VALIDATOR_MAX_TOKENS;
+  const parsed = Number(rawMaxTokens);
+  // Require a positive INTEGER — max_tokens is sent verbatim to the provider,
+  // which 400s on a fractional value; isInteger also rejects NaN/Infinity.
+  const validMaxTokens = Number.isInteger(parsed) && parsed > 0;
+  // Warn only when the var is non-empty but invalid; empty/unset ⇒ silent default.
+  if (!validMaxTokens && rawMaxTokens != null && rawMaxTokens.trim() !== "") {
+    warnInvalidStage6MaxTokensOnce(rawMaxTokens);
+  }
+  const maxTokens = validMaxTokens ? parsed : 4000;
+  const port = new LLMProviderSelectorAdapter({
+    webLlmAdapter: null,
+    preferLocal: false,
+    validateLocalLLM: false,
+    fallbackChain: {
+      primary: {
+        providerId: "openai" as const,
+        baseUrl:
+          process.env.STAGE6_VALIDATOR_BASE_URL ||
+          "https://openrouter.ai/api/v1",
+        model: process.env.STAGE6_VALIDATOR_MODEL || "openai/gpt-4o",
+        apiKeyEnvVar: "STAGE6_VALIDATOR_API_KEY",
+        temperature: 0.1,
+        maxTokens,
+      },
+      fallbacks: [],
+    },
+    secretVault: vault,
+  });
+  return { port, maxTokens };
+};
 
 // ============================================================================
 // Adapter Singletons

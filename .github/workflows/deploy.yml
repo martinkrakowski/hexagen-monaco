@@ -95,11 +95,21 @@ jobs:
           STAGE6_REVIEWER_API_KEY: ${{ secrets.STAGE6_REVIEWER_API_KEY }}
           STAGE6_REVIEWER_BASE_URL: ${{ vars.STAGE6_REVIEWER_BASE_URL }}
           STAGE6_REVIEWER_MODEL: ${{ vars.STAGE6_REVIEWER_MODEL }}
+          # Stage-6 VALIDATION reviewer (e.g. nemotron-3-ultra) — the Stage-6
+          # review model itself, distinct from STAGE6_REVIEWER_* (Stage 7 repair)
+          # above. API key is the gate (a repo SECRET); MODEL/BASE_URL/MAX_TOKENS
+          # accept a secret OR a repo var (`secrets || vars`) and default in code
+          # (OpenRouter / openai/gpt-4o / 4000) when both are empty. Unset key ⇒
+          # the review stays on the main pipeline model at 800, unchanged.
+          STAGE6_VALIDATOR_API_KEY: ${{ secrets.STAGE6_VALIDATOR_API_KEY }}
+          STAGE6_VALIDATOR_BASE_URL: ${{ secrets.STAGE6_VALIDATOR_BASE_URL || vars.STAGE6_VALIDATOR_BASE_URL }}
+          STAGE6_VALIDATOR_MODEL: ${{ secrets.STAGE6_VALIDATOR_MODEL || vars.STAGE6_VALIDATOR_MODEL }}
+          STAGE6_VALIDATOR_MAX_TOKENS: ${{ secrets.STAGE6_VALIDATOR_MAX_TOKENS || vars.STAGE6_VALIDATOR_MAX_TOKENS }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: AUTH_SECRET, NEXTAUTH_URL, GH_OAUTH_ID, GH_OAUTH_SECRET, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, WEB_LLM_API_KEY, INCEPTION_API_KEY, INCEPTION_MODEL, LLM_REASONING, STAGE1_REFINER_API_KEY, STAGE1_REFINER_BASE_URL, STAGE1_REFINER_MODEL, STAGE1_REFINER_MODE, STAGE6_REVIEWER_API_KEY, STAGE6_REVIEWER_BASE_URL, STAGE6_REVIEWER_MODEL
+          envs: AUTH_SECRET, NEXTAUTH_URL, GH_OAUTH_ID, GH_OAUTH_SECRET, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, WEB_LLM_API_KEY, INCEPTION_API_KEY, INCEPTION_MODEL, LLM_REASONING, STAGE1_REFINER_API_KEY, STAGE1_REFINER_BASE_URL, STAGE1_REFINER_MODEL, STAGE1_REFINER_MODE, STAGE6_REVIEWER_API_KEY, STAGE6_REVIEWER_BASE_URL, STAGE6_REVIEWER_MODEL, STAGE6_VALIDATOR_API_KEY, STAGE6_VALIDATOR_BASE_URL, STAGE6_VALIDATOR_MODEL, STAGE6_VALIDATOR_MAX_TOKENS
           # set -eu (POSIX-safe; appleboy/ssh-action has no `set -e` by default)
           # so a failed `docker load` aborts instead of silently leaving the old
           # container up. pipefail is omitted intentionally — the remote /bin/sh
@@ -148,9 +158,13 @@ jobs:
             STAGE6_REVIEWER_API_KEY=\"$STAGE6_REVIEWER_API_KEY\"\n\
             STAGE6_REVIEWER_BASE_URL=\"$STAGE6_REVIEWER_BASE_URL\"\n\
             STAGE6_REVIEWER_MODEL=\"$STAGE6_REVIEWER_MODEL\"\n\
+            STAGE6_VALIDATOR_API_KEY=\"$STAGE6_VALIDATOR_API_KEY\"\n\
+            STAGE6_VALIDATOR_BASE_URL=\"$STAGE6_VALIDATOR_BASE_URL\"\n\
+            STAGE6_VALIDATOR_MODEL=\"$STAGE6_VALIDATOR_MODEL\"\n\
+            STAGE6_VALIDATOR_MAX_TOKENS=\"$STAGE6_VALIDATOR_MAX_TOKENS\"\n\
             EOF\n\
             chmod 600 .env\n\
-            [ \"$(wc -l < .env)\" -eq 19 ] || { echo 'FATAL: .env line count != 19 — keep this in sync with the heredoc keys above (embedded newline in a secret?)' >&2; exit 1; }\n\
+            [ \"$(wc -l < .env)\" -eq 23 ] || { echo 'FATAL: .env line count != 23 — keep this in sync with the heredoc keys above (embedded newline in a secret?)' >&2; exit 1; }\n\
             docker load < hexagen-web.tar.gz\n\
             docker image inspect hexagen-monaco-web:prod >/dev/null\n\
             docker compose -f docker-compose.prod.yml up -d --force-recreate --wait --wait-timeout 90\n\
