@@ -56,7 +56,9 @@ export function synthesizeMissingRepositoryPorts(
   for (const ctx of contexts) {
     const key = normalizeContextName(ctx.name);
     typeByContext.set(key, ctx.type);
-    const aggregate = ctx.aggregateRoots?.find((a) => a.trim().length > 0);
+    const aggregate = ctx.aggregateRoots
+      ?.map((a) => a.trim())
+      .find((a) => a.length > 0);
     if (aggregate) aggregateByContext.set(key, aggregate);
   }
 
@@ -68,13 +70,26 @@ export function synthesizeMissingRepositoryPorts(
     if (typeByContext.get(key) === "shared-kernel") return ctx;
     if (ctx.out.some((port) => port.type === "repository")) return ctx;
 
-    const aggregate =
-      aggregateByContext.get(key) ?? toPascalCase(ctx.contextName);
+    // Normalize the aggregate (Stage-1 root or context name) through toPascalCase
+    // so casing / whitespace artifacts can't leak into the port + adapter names.
+    const aggregate = toPascalCase(
+      aggregateByContext.get(key) ?? ctx.contextName,
+    );
     // Guard against a `…Repository` aggregate yielding `…RepositoryRepositoryPort`.
     const base =
       aggregate.replace(/Repository$/i, "") || toPascalCase(ctx.contextName);
     const portName = `${base}RepositoryPort`;
     const adapterName = `${base}RepositoryAdapter`;
+
+    // Defensive: a port already carries this exact name (e.g. Stage 3 emitted it
+    // with a non-repository type, so the guard above didn't catch it) — don't
+    // create a duplicate; leave R03 to surface as an advisory finding instead.
+    if (
+      ctx.out.some((p) => p.name === portName) ||
+      ctx.in.some((p) => p.name === portName)
+    ) {
+      return ctx;
+    }
 
     synthesized.push({ contextName: ctx.contextName, portName, adapterName });
 
@@ -82,7 +97,11 @@ export function synthesizeMissingRepositoryPorts(
       name: portName,
       type: "repository",
       description: `Persistence for ${base}`,
-      forAggregate: base,
+      // `forAggregate` is intentionally omitted: Stage 6's R17 check (an ERROR)
+      // rejects a forAggregate that is not one of the context's Stage-1
+      // aggregate roots, and the fallback base is a context name — so setting it
+      // would trade the R03 finding for an R17 error. Leaving it unset keeps the
+      // synthesized port out of R17 entirely.
       justification:
         "Auto-added to satisfy the outbound-repository-port invariant (R03); Stage 3 produced none.",
     };
@@ -102,6 +121,10 @@ export function synthesizeMissingRepositoryPorts(
     adapterContextKeys.add(key);
     const entry = synthByContext.get(key);
     if (!entry) return ctx;
+    // A pre-existing adapter (e.g. a Stage-4 binding to a port Stage 3 never
+    // emitted) may already implement the synthesized port — adding a second
+    // would deterministically trip R04. Leave the existing one to cover it.
+    if (ctx.adapters.some((a) => a.implements === entry.portName)) return ctx;
     const adapter: AdapterBinding = {
       name: entry.adapterName,
       implements: entry.portName,

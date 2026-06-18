@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { synthesizeMissingRepositoryPorts } from "../../../src/domain/manifest/synthesize-repository-ports";
 import { structuralManifestErrors } from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
+import { validatePortQuality } from "../../../src/domain/services/port-quality-validator";
 import type {
   PortMap,
   AdapterBindings,
@@ -171,5 +172,89 @@ describe("synthesizeMissingRepositoryPorts", () => {
       [context({ aggregateRoots: ["InvoiceRepository"] })],
     );
     assert.strictEqual(result.synthesized[0].portName, "InvoiceRepositoryPort");
+  });
+
+  it("does not set forAggregate, so it cannot introduce an R17 error", () => {
+    // Fallback path: no known aggregate root for the context.
+    const result = synthesizeMissingRepositoryPorts(
+      portMapWithInboundOnly(),
+      adapterBindingsForInbound(),
+      [context({ aggregateRoots: [] })],
+    );
+    const port = result.portMap.contexts[0].out[0];
+    assert.strictEqual(port.forAggregate, undefined);
+    // R17 fires only on a forAggregate that is not a known root — verify the
+    // synthesized port is clean even when the context has NO known roots.
+    const issues = validatePortQuality(
+      result.portMap.contexts[0].out,
+      "InvoicingBilling",
+      [],
+    );
+    assert.ok(!issues.some((i) => i.rule === "R17"));
+  });
+
+  it("reuses a pre-existing adapter that implements the port (no duplicate → no R04)", () => {
+    const bindings: AdapterBindings = {
+      contexts: [
+        {
+          contextName: "InvoicingBilling",
+          adapters: [
+            {
+              name: "CreateInvoiceController",
+              type: "Controller",
+              implements: "CreateInvoicePort",
+            },
+            {
+              // A Stage-4 adapter dangling on a port Stage 3 never emitted.
+              name: "InvoicePersistenceAdapter",
+              type: "Repository",
+              implements: "InvoiceRepositoryPort",
+            },
+          ],
+        },
+      ],
+    };
+    const result = synthesizeMissingRepositoryPorts(
+      portMapWithInboundOnly(),
+      bindings,
+      [context()],
+    );
+    const implementers = result.adapterBindings.contexts[0].adapters.filter(
+      (a) => a.implements === "InvoiceRepositoryPort",
+    );
+    assert.strictEqual(implementers.length, 1);
+  });
+
+  it("normalizes a whitespace / lowercase aggregate into a clean name", () => {
+    const result = synthesizeMissingRepositoryPorts(
+      portMapWithInboundOnly(),
+      adapterBindingsForInbound(),
+      [context({ aggregateRoots: ["  invoice  "] })],
+    );
+    assert.strictEqual(result.synthesized[0].portName, "InvoiceRepositoryPort");
+  });
+
+  it("skips when a port with the synthesized name already exists", () => {
+    const result = synthesizeMissingRepositoryPorts(
+      {
+        contexts: [
+          {
+            contextName: "InvoicingBilling",
+            in: [],
+            // Same name but a mislabeled type, so the repository guard misses it.
+            out: [
+              {
+                name: "InvoiceRepositoryPort",
+                type: "publisher",
+                description: "x",
+              },
+            ],
+          },
+        ],
+      },
+      { contexts: [] },
+      [context()],
+    );
+    assert.strictEqual(result.synthesized.length, 0);
   });
 });
