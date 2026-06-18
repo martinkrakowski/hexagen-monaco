@@ -678,7 +678,7 @@ export function compileStage6Prompt(
           assemblyWarnings
             .map(
               (w) =>
-                `{"severity": "${w.severity}", "context": "${w.contextName}", "message": "${w.message}"}`,
+                `{"severity": "${w.severity}", "context": "${normalizeContextName(w.contextName)}", "message": "${w.message}"}`,
             )
             .join("\n"),
           `</assembly_warnings>`,
@@ -697,7 +697,7 @@ export function compileStage6Prompt(
           contextMappings
             .map(
               (m) =>
-                `${m.upstream} → ${m.downstream} (${m.pattern ?? "unspecified"} via ${m.mechanism ?? "unspecified"})`,
+                `${normalizeContextName(m.upstream)} → ${normalizeContextName(m.downstream)} (${m.pattern ?? "unspecified"} via ${m.mechanism ?? "unspecified"})`,
             )
             .join("\n"),
           `</context_mappings>`,
@@ -729,8 +729,9 @@ export function compileStage6Prompt(
   // is kebab ("identity-access"). Left raw, the casing split manufactured a
   // grounded false R03 "identity-access has no outbound repository port" in
   // prod (2026-06-18 nemotron run) — the reviewer could not reconcile the two
-  // spellings against a correct manifest. Now all three sections key contexts
-  // identically.
+  // spellings against a correct manifest. Now EVERY context-naming section —
+  // port_map, adapter_bindings, assembly_warnings, and context_mappings — keys
+  // contexts identically (all through normalizeContextName).
   const portContexts = state.stage3?.contexts ?? [];
   const portMapSection =
     portContexts.length > 0
