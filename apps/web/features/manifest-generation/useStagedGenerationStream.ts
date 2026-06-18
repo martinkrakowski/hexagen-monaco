@@ -313,9 +313,14 @@ export function useStagedGenerationStream(
                     };
                     setStageProgress(result.stageProgress);
                   } else if (type === "stage-telemetry") {
-                    const stage = event.stage as number;
                     if (isStageTelemetry(event.telemetry)) {
                       const telemetry = event.telemetry;
+                      // Key by the guard-validated `telemetry.stage` rather than
+                      // an unchecked `event.stage as number` cast: the server
+                      // emits `event.stage = telemetry.stage` (pipeline-selection
+                      // `onStageTelemetry`), so it's the same value and is already
+                      // proven to be a number by isStageTelemetry.
+                      const stage = telemetry.stage;
                       result.stageProgress = {
                         ...result.stageProgress,
                         [stage]: {
