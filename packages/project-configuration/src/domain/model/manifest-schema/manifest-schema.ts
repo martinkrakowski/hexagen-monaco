@@ -245,6 +245,18 @@ export const ManifestSchema = z
     description: z.string().optional(),
     system: z.string().optional(),
     scope: z.string().optional(),
+    // Structured workspace metadata (the canonical `workspace:` block, also the
+    // first block in the few-shot examples). `system`/`scope` above are derived
+    // from `workspace.name`; `workspace.description` is the only carrier of the
+    // human-readable intent. Emitted by `draftToManifest` so the generated
+    // manifest survives `parseManifestToWizardData`'s strict parse on the
+    // "Use this manifest" path. Optional — legacy/hand-written manifests omit it.
+    workspace: z
+      .object({
+        name: z.string(),
+        description: z.string(),
+      })
+      .optional(),
     architecture: z.string().optional(),
     // The wizard records the chosen workspace template (e.g. "strict-enterprise")
     // alongside `architecture`; persisted into .architecture/manifest.yaml.
