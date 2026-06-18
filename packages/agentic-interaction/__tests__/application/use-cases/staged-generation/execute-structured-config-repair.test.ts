@@ -61,6 +61,27 @@ function stage6WithOneError(): SendStructuredRequestPort {
   } as unknown as SendStructuredRequestPort;
 }
 
+// Stage-6 emitting a structural error (engages Stage 7, and the manifest has a
+// matching deterministic R05) PLUS a non-deterministic warning (R10) that must
+// survive an accepted repair — guards the accept-path report merge.
+function stage6WithErrorAndWarning(): SendStructuredRequestPort {
+  return {
+    sendRequest: async () => ({ success: true, value: { content: "" } }),
+    streamStructuredRequest: () => {
+      async function* gen() {
+        yield {
+          success: true,
+          value:
+            '{"type":"error","rule":"R05","message":"Inbound port lacks an adapter"}\n' +
+            '{"type":"warning","rule":"R10","message":"Publishes events but has no publisher port"}\n' +
+            '{"type":"result","passed":false}\n',
+        };
+      }
+      return gen();
+    },
+  } as unknown as SendStructuredRequestPort;
+}
+
 // Stage 7 emits a JSON OP-LIST (follow-up C), not a manifest. The reviewer
 // streams the op-list text back verbatim; the orchestrator parses it and applies
 // the ops deterministically to the assembled manifest.
@@ -153,6 +174,32 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair
       assert.ok(
         orders?.layers?.infrastructure?.adapters?.includes("PlaceOrderAdapter"),
         "the added adapter must be in the applied manifest",
+      );
+    }
+  });
+
+  it("preserves the review's warnings + non-structural findings on an accepted repair", async () => {
+    // Regression guard: replacing finalReport with structural-only on accept
+    // dropped the reviewer's warnings (and R10–R18). The repair clears the
+    // deterministic R05; the R10 warning must survive into the final report.
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(
+      stage6WithErrorAndWarning(),
+      mockTransactionManager,
+      undefined,
+      undefined,
+      reviewerEmittingOps(
+        '[{"op":"add-adapter","context":"orders","name":"PlaceOrderAdapter"}]',
+      ),
+    );
+    const result = await useCase.execute(cleanSpec, { onProgress: () => {} });
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.repair?.applied, true);
+      assert.strictEqual(result.repair?.errorsAfter, 0); // structural R05 cleared
+      assert.ok(
+        result.validation.warnings.some((w) => w.includes("R10")),
+        "accepted repair must preserve the review's R10 warning, not wipe warnings",
       );
     }
   });

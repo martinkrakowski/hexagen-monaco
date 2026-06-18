@@ -1394,13 +1394,20 @@ export function structuralManifestErrors(
     }
   }
 
-  // Global portName → ownerContextNorm for R06 cross-context implements check.
-  const portOwnerByName = new Map<string, string>();
+  // Per-context port-name sets for the R06 cross-context check. A single global
+  // name→owner map mis-attributes a port name that two contexts both define
+  // (last writer wins), producing a false R06 for the other context's own
+  // adapter; per-context membership is collision-safe.
+  const portsByContext = new Map<string, Set<string>>();
+  const allPortNames = new Set<string>();
   for (const ctx of portMap.contexts) {
     const ctxNorm = normalizeContextName(ctx.contextName);
+    const set = portsByContext.get(ctxNorm) ?? new Set<string>();
     for (const p of [...ctx.in, ...ctx.out]) {
-      portOwnerByName.set(p.name, ctxNorm);
+      set.add(p.name);
+      allPortNames.add(p.name);
     }
+    portsByContext.set(ctxNorm, set);
   }
 
   // Per-context checks (R01–R05, R09).
@@ -1457,12 +1464,19 @@ export function structuralManifestErrors(
     }
   }
 
-  // R06: no adapter implements a port that belongs to a different context.
+  // R06: no adapter implements a port that belongs to a DIFFERENT context. An
+  // adapter is fine when its OWN context owns the port (even if another context
+  // also has a port by that name), so check own-context membership — fire only
+  // when the port is absent from the adapter's context but owned elsewhere.
   for (const ctxAdapters of adapterBindings.contexts) {
     const ctxNorm = normalizeContextName(ctxAdapters.contextName);
+    const ownPorts = portsByContext.get(ctxNorm) ?? new Set<string>();
     for (const adapter of ctxAdapters.adapters) {
-      const ownerNorm = portOwnerByName.get(adapter.implements);
-      if (ownerNorm !== undefined && ownerNorm !== ctxNorm) {
+      if (!adapter.implements) continue;
+      if (
+        !ownPorts.has(adapter.implements) &&
+        allPortNames.has(adapter.implements)
+      ) {
         errors.push(
           `[R06] Adapter '${adapter.name}' in '${ctxAdapters.contextName}' implements '${adapter.implements}' which belongs to a different context.`,
         );
@@ -2166,12 +2180,25 @@ export class ExecuteStructuredConfigGenerationUseCase {
 
                 if (gate.applied) {
                   finalManifest = reassembled.manifest;
-                  // Report reflects the deterministic structural state after
-                  // repair (not a stale pre-repair nemotron report).
+                  // Report = deterministic R01–R09 on the REPAIRED manifest, MERGED
+                  // with the original review's NON-structural findings (R10–R18
+                  // errors + all warnings). The repair only changed structure, so
+                  // those are not stale; only the R01–R09 errors are superseded by
+                  // the recount. Replacing the whole report with structural-only
+                  // dropped the reviewer's warnings + semantic findings on accept —
+                  // an accept-vs-reject regression (reject keeps the full report).
+                  // (R16–R18 on a newly added/renamed port can be marginally stale;
+                  // acceptable vs a total drop — recompute via
+                  // collectPortQualityIssues if that becomes a problem.)
+                  const preservedErrors = finalReport.errors.filter(
+                    (e) => !/^\[R0[1-9]\]/.test(e),
+                  );
                   finalReport = {
-                    errors: afterStructuralErrors,
-                    warnings: [],
-                    passed: afterStructuralErrors.length === 0,
+                    errors: [...afterStructuralErrors, ...preservedErrors],
+                    warnings: finalReport.warnings,
+                    passed:
+                      afterStructuralErrors.length === 0 &&
+                      preservedErrors.length === 0,
                   };
                   callbacks?.onChunk?.(
                     `Stage 7 · Applied ${applyResult.applied} edit${applyResult.applied !== 1 ? "s" : ""} · repaired ${deterministicBefore - deterministicAfter} of ${deterministicBefore} structural finding${deterministicBefore !== 1 ? "s" : ""} — ${deterministicAfter} remain`,
