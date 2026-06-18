@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { Fragment, useRef, useEffect, useState } from "react";
 import { Loader2, Check, Terminal, AlertCircle, Clock } from "lucide-react";
 import { CopyButton } from "@hexagen/ui";
 import type { StagedPhase, StageProgress } from "../staged-generation-types";
@@ -153,9 +153,11 @@ function LogEntryIcon({ type }: { type: LogEntryParsed["icon"] }) {
 
 function VerboseLogPanel({
   entries,
+  stageProgress,
   className,
 }: {
   entries: string[];
+  stageProgress?: Record<number, StageProgress>;
   className?: string;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -196,31 +198,39 @@ function VerboseLogPanel({
       >
         {entries.map((entry, i) => {
           const parsed = parseLogEntry(entry);
-          const isHeader = /^Stage \d/.test(entry);
+          const headerMatch = entry.match(/^Stage (\d+)/);
+          const isHeader = headerMatch !== null;
+          const stageNum = headerMatch ? Number(headerMatch[1]) : undefined;
           return (
-            <div
-              key={i}
-              className={[
-                "font-mono text-xs leading-relaxed",
-                isHeader ? "mt-2 first:mt-0" : "",
-                parsed.color,
-              ]
-                .filter(Boolean)
-                .join(" ")}
-            >
-              {parsed.icon ? (
-                <div className="flex items-start gap-1.5">
-                  <LogEntryIcon type={parsed.icon} />
-                  <span className="whitespace-pre">{parsed.text}</span>
-                </div>
-              ) : (
-                <span
-                  className={`whitespace-pre ${isHeader ? "font-semibold" : ""}`}
-                >
-                  {parsed.text}
-                </span>
+            <Fragment key={i}>
+              <div
+                className={[
+                  "font-mono text-xs leading-relaxed",
+                  isHeader ? "mt-2 first:mt-0" : "",
+                  parsed.color,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                {parsed.icon ? (
+                  <div className="flex items-start gap-1.5">
+                    <LogEntryIcon type={parsed.icon} />
+                    <span className="whitespace-pre">{parsed.text}</span>
+                  </div>
+                ) : (
+                  <span
+                    className={`whitespace-pre ${isHeader ? "font-semibold" : ""}`}
+                  >
+                    {parsed.text}
+                  </span>
+                )}
+              </div>
+              {stageNum !== undefined && (
+                <StageTelemetryLine
+                  telemetry={stageProgress?.[stageNum]?.telemetry}
+                />
               )}
-            </div>
+            </Fragment>
           );
         })}
       </div>
@@ -235,15 +245,15 @@ function StepIndicator({
 }) {
   if (state === "completed") {
     return (
-      <div className="w-4 h-4 rounded-full bg-accent/20 flex items-center justify-center shrink-0">
-        <Check className="w-3 h-3 text-accent" />
+      <div className="w-4 h-4 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+        <Check className="w-3 h-3 text-primary" />
       </div>
     );
   }
   if (state === "active") {
     return (
-      <div className="w-4 h-4 rounded-full bg-accent flex items-center justify-center shrink-0 step-dot-active">
-        <div className="w-1.5 h-1.5 rounded-full bg-accent-foreground" />
+      <div className="w-4 h-4 rounded-full bg-primary flex items-center justify-center shrink-0 step-dot-active">
+        <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground" />
       </div>
     );
   }
@@ -267,23 +277,83 @@ function DetailLine({ text }: { text: string }) {
     <div className="relative overflow-hidden h-5">
       {isTransitioning && prevText !== undefined && (
         <div className="detail-rolodex-exit absolute inset-x-0 top-0">
-          <span className="text-sm text-muted-foreground">{prevText}</span>
+          <span className="text-sm text-foreground/70">{prevText}</span>
         </div>
       )}
       <div className={isTransitioning ? "detail-rolodex-enter" : ""}>
-        <span className="text-sm text-muted-foreground">{text}</span>
+        <span className="text-sm text-foreground/70">{text}</span>
       </div>
     </div>
   );
 }
 
+function formatDuration(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
+}
+
 function DurationBadge({ ms }: { ms?: number }) {
   if (ms === undefined) return null;
-  const label = ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
   return (
     <span className="text-xs text-muted-foreground/60 tabular-nums">
-      {label}
+      {formatDuration(ms)}
     </span>
+  );
+}
+
+/**
+ * Live, per-stage elapsed-time counter. Owns its own interval + state so only
+ * this leaf re-renders on each tick (the surrounding log is left untouched).
+ * Resets whenever `resetKey` (the active phase) changes, so it reads as the
+ * time spent in the *current* stage; completed stages keep their final
+ * `DurationBadge` in the step row.
+ */
+function LiveTimer({ resetKey }: { resetKey: string }) {
+  const [elapsedMs, setElapsedMs] = useState(0);
+  useEffect(() => {
+    const start = Date.now();
+    setElapsedMs(0);
+    const id = setInterval(() => setElapsedMs(Date.now() - start), 100);
+    return () => clearInterval(id);
+  }, [resetKey]);
+  return (
+    <span className="text-sm font-medium text-foreground/70 tabular-nums">
+      {(elapsedMs / 1000).toFixed(1)}s
+    </span>
+  );
+}
+
+/**
+ * Compact per-stage telemetry line for the generation log: duration, token
+ * usage (in/out), retry count, and cache status. The structured StageTelemetry
+ * already streams to the client on `stage-telemetry`; previously only
+ * `durationMs` was surfaced (in the step row), so the rest is shown here to
+ * raise the log's granularity without any extra network payload.
+ */
+function StageTelemetryLine({
+  telemetry,
+}: {
+  telemetry?: StageProgress["telemetry"];
+}) {
+  if (!telemetry) return null;
+  const parts: string[] = [formatDuration(telemetry.durationMs)];
+  if (
+    telemetry.usedLLM &&
+    (telemetry.inputTokensEstimate > 0 || telemetry.outputTokensActual > 0)
+  ) {
+    parts.push(
+      `${telemetry.inputTokensEstimate.toLocaleString()} in / ${telemetry.outputTokensActual.toLocaleString()} out tok`,
+    );
+  }
+  if (telemetry.retryCount > 0) {
+    parts.push(
+      `${telemetry.retryCount} ${telemetry.retryCount === 1 ? "retry" : "retries"}`,
+    );
+  }
+  if (telemetry.servedFromCache) parts.push("cached");
+  return (
+    <div className="font-mono text-xs text-muted-foreground/70 tabular-nums pl-0.5 pb-1">
+      {parts.join("  ·  ")}
+    </div>
   );
 }
 
@@ -300,13 +370,17 @@ export function ThinkingBlock({
     return (
       <div className="flex flex-col gap-2 py-3 w-full h-full">
         <div className="flex items-center gap-2 shrink-0">
-          <Check className="h-4 w-4 text-accent" />
+          <Check className="h-4 w-4 text-primary" />
           <span className="text-base font-semibold text-foreground">
             Generation Complete
           </span>
         </div>
         {verboseLog && verboseLog.length > 0 && (
-          <VerboseLogPanel entries={verboseLog} className="flex-1 min-h-0" />
+          <VerboseLogPanel
+            entries={verboseLog}
+            stageProgress={stageProgress}
+            className="flex-1 min-h-0"
+          />
         )}
       </div>
     );
@@ -340,18 +414,24 @@ export function ThinkingBlock({
         })}
       </div>
 
-      <div className="flex flex-col items-center justify-center gap-1.5 shrink-0">
-        <div className="flex items-center gap-2">
-          <Loader2 className="h-4 w-4 text-accent animate-spin" />
+      <div className="flex flex-col items-center justify-center gap-2 shrink-0">
+        <div className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/50 px-4 py-2 shadow-sm">
+          <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" />
           <span className="text-base font-semibold text-foreground">
             {label}
           </span>
+          <span aria-hidden className="h-4 w-px bg-border" />
+          <LiveTimer resetKey={phase} />
         </div>
         <DetailLine text={stepDetail} />
       </div>
 
       {verboseLog && verboseLog.length > 0 && (
-        <VerboseLogPanel entries={verboseLog} className="flex-1 min-h-0" />
+        <VerboseLogPanel
+          entries={verboseLog}
+          stageProgress={stageProgress}
+          className="flex-1 min-h-0"
+        />
       )}
     </div>
   );
