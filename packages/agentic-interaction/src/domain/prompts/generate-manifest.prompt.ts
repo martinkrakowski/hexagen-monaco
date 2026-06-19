@@ -678,7 +678,7 @@ export function compileStage6Prompt(
           assemblyWarnings
             .map(
               (w) =>
-                `{"severity": "${w.severity}", "context": "${normalizeContextName(w.contextName)}", "message": "${w.message}"}`,
+                `{"severity": "${w.severity}", "context": "${escapeXml(normalizeContextName(w.contextName))}", "message": "${escapeXml(w.message)}"}`,
             )
             .join("\n"),
           `</assembly_warnings>`,
@@ -687,7 +687,7 @@ export function compileStage6Prompt(
 
   const promotedSection =
     promotedContexts.length > 0
-      ? `<promoted_from_uncertain>\n${promotedContexts.join(", ")}\n</promoted_from_uncertain>`
+      ? `<promoted_from_uncertain>\n${escapeXml(promotedContexts.join(", "))}\n</promoted_from_uncertain>`
       : "";
 
   const mappingSection =
@@ -697,7 +697,7 @@ export function compileStage6Prompt(
           contextMappings
             .map(
               (m) =>
-                `${normalizeContextName(m.upstream)} → ${normalizeContextName(m.downstream)} (${m.pattern ?? "unspecified"} via ${m.mechanism ?? "unspecified"})`,
+                `${escapeXml(normalizeContextName(m.upstream))} → ${escapeXml(normalizeContextName(m.downstream))} (${escapeXml(m.pattern ?? "unspecified")} via ${escapeXml(m.mechanism ?? "unspecified")})`,
             )
             .join("\n"),
           `</context_mappings>`,
@@ -707,7 +707,7 @@ export function compileStage6Prompt(
   const runtimeConcerns = normalized?.runtimeConcerns ?? [];
   const runtimeConcernsSection =
     runtimeConcerns.length > 0
-      ? `<runtime_concerns>\n${runtimeConcerns.join(", ")}\n</runtime_concerns>`
+      ? `<runtime_concerns>\n${escapeXml(runtimeConcerns.join(", "))}\n</runtime_concerns>`
       : "";
 
   // Judge-grounding sections (baseline findings F3): the assembled YAML
@@ -740,16 +740,20 @@ export function compileStage6Prompt(
           portContexts
             .map((ctx) =>
               JSON.stringify({
-                context: normalizeContextName(ctx.contextName),
+                context: escapeXml(normalizeContextName(ctx.contextName)),
                 in: ctx.in.map((p) => ({
-                  name: normalizePortName(p.name),
+                  name: escapeXml(normalizePortName(p.name)),
                   type: p.type,
-                  ...(p.forAggregate ? { forAggregate: p.forAggregate } : {}),
+                  ...(p.forAggregate
+                    ? { forAggregate: escapeXml(p.forAggregate) }
+                    : {}),
                 })),
                 out: ctx.out.map((p) => ({
-                  name: normalizePortName(p.name),
+                  name: escapeXml(normalizePortName(p.name)),
                   type: p.type,
-                  ...(p.forAggregate ? { forAggregate: p.forAggregate } : {}),
+                  ...(p.forAggregate
+                    ? { forAggregate: escapeXml(p.forAggregate) }
+                    : {}),
                 })),
               }),
             )
@@ -766,10 +770,10 @@ export function compileStage6Prompt(
           adapterContexts
             .map((ctx) =>
               JSON.stringify({
-                context: normalizeContextName(ctx.contextName),
+                context: escapeXml(normalizeContextName(ctx.contextName)),
                 adapters: ctx.adapters.map((a) => ({
-                  name: a.name,
-                  implements: normalizePortName(a.implements),
+                  name: escapeXml(a.name),
+                  implements: escapeXml(normalizePortName(a.implements)),
                 })),
               }),
             )
@@ -779,12 +783,22 @@ export function compileStage6Prompt(
       : "";
 
   return [
+    // User-derived content is escaped before going inside its XML delimiters so
+    // a payload containing a closing tag can't break out and inject instructions
+    // — the same guard compileStage7OpsPrompt applies to its <manifest>/<findings>.
+    // This covers the freeform sections here (intent header, manifest YAML) AND
+    // the identifiers in port_map/adapter_bindings/assembly_warnings/
+    // context_mappings (escaped at their build sites above): normalizeContextName
+    // /normalizePortName don't strip '<'/'>', and adapter names / forAggregate
+    // aren't normalized at all. Escaping — not stripping — is used so identifiers
+    // stay byte-identical to the now-escaped manifest_yaml, keeping the reviewer's
+    // port/adapter cross-referencing exact.
     `<original_intent>`,
-    header,
+    escapeXml(header),
     `</original_intent>`,
     ``,
     `<manifest_yaml>`,
-    yaml,
+    escapeXml(yaml),
     `</manifest_yaml>`,
     ``,
     portMapSection,
