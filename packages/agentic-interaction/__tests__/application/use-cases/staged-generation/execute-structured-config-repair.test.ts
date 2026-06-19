@@ -144,6 +144,36 @@ const cleanSpec = [
   "",
 ].join("\n");
 
+// Two contexts where the repair RE-INTRODUCES an adapter-name collision:
+//   - orders.PlaceOrderPort has no adapter → R05 (deterministicBefore = 1).
+//   - fulfillment already declares a PlaceOrderAdapter (unbound — none of its
+//     ports stem-match, so it's harmless and adds no error).
+// The repair adds PlaceOrderAdapter to orders to clear R05 → the repaired
+// manifest now has PlaceOrderAdapter in BOTH contexts. The repair-path dedupe
+// must make them globally unique.
+const collisionSpec = [
+  "bounded_contexts:",
+  "  - name: orders",
+  "    layers:",
+  "      application:",
+  "        ports:",
+  "          in: [PlaceOrderPort]",
+  "          out: [OrdersRepositoryPort]",
+  "      infrastructure:",
+  "        adapters: [OrdersRepositoryAdapter]",
+  "  - name: fulfillment",
+  "    layers:",
+  "      application:",
+  "        ports:",
+  "          in: [ShipOrderPort]",
+  "          out: [ShipmentRepositoryPort]",
+  "      infrastructure:",
+  "        adapters: [ShipOrderAdapter, ShipmentRepositoryAdapter, PlaceOrderAdapter]",
+  "use_cases: {}",
+  "context_mappings: []",
+  "",
+].join("\n");
+
 describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair", () => {
   it("applies an ADDITIVE op that clears a finding (R05) — the add/apply path", async () => {
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
@@ -174,6 +204,47 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair
       assert.ok(
         orders?.layers?.infrastructure?.adapters?.includes("PlaceOrderAdapter"),
         "the added adapter must be in the applied manifest",
+      );
+    }
+  });
+
+  it("dedupes an adapter name a repair re-introduces across contexts (R12 on the repaired manifest)", async () => {
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(
+      stage6WithOneError(),
+      mockTransactionManager,
+      undefined,
+      undefined,
+      reviewerEmittingOps(
+        '[{"op":"add-adapter","context":"orders","name":"PlaceOrderAdapter"}]',
+      ),
+    );
+    const result = await useCase.execute(collisionSpec, {
+      onProgress: () => {},
+    });
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.repair?.applied, true);
+      const parsed = result.value.parsedObject as {
+        bounded_contexts?: Array<{
+          layers?: { infrastructure?: { adapters?: string[] } };
+        }>;
+      };
+      const allAdapters = (parsed.bounded_contexts ?? []).flatMap(
+        (c) => c.layers?.infrastructure?.adapters ?? [],
+      );
+      // The collision the repair re-introduced must be resolved.
+      assert.strictEqual(
+        new Set(allAdapters).size,
+        allAdapters.length,
+        `adapter names must be globally unique after an accepted repair, got: ${allAdapters.join(", ")}`,
+      );
+      // …and the repair-path rename is surfaced as an advisory.
+      assert.ok(
+        result.validation.warnings.some((w) =>
+          /Renamed adapter .* \(R12\)/.test(w),
+        ),
+        "repair-path adapter rename should be surfaced as an advisory",
       );
     }
   });

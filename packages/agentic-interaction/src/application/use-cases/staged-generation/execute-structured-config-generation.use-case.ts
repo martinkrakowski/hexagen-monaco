@@ -21,7 +21,10 @@ import type {
 } from "../../../domain/value-objects/pipeline-state";
 import { normalizeContextName } from "../../../domain/index";
 import { synthesizeMissingRepositoryPorts } from "../../../domain/manifest/synthesize-repository-ports";
-import { dedupeAdapterNames } from "../../../domain/manifest/dedupe-adapter-names";
+import {
+  dedupeAdapterNames,
+  type RenamedAdapter,
+} from "../../../domain/manifest/dedupe-adapter-names";
 import { isBannedContextName } from "../../../domain/prompts/architecture-contract";
 import { ExecutePortMappingUseCase } from "./execute-port-mapping.use-case";
 import { ExecuteAdapterAssignmentUseCase } from "./execute-adapter-assignment.use-case";
@@ -2295,13 +2298,26 @@ export class ExecuteStructuredConfigGenerationUseCase {
                   const preservedErrors = finalReport.errors.filter(
                     (e) => !/^\[R0[1-7]\]|^\[R09\]/.test(e),
                   );
+                  // Surface any adapter renames the repair-path dedupe made, the
+                  // same way the initial Stage-5 pass does — so an accepted repair
+                  // that introduced (and we resolved) a collision is visible.
+                  const repairRenameWarnings = reassembled.adapterRenames.map(
+                    (r) =>
+                      `Renamed adapter '${r.from}' in context '${r.contextName}' to '${r.to}' to keep adapter names globally unique (R12).`,
+                  );
                   finalReport = {
                     errors: [...afterStructuralErrors, ...preservedErrors],
-                    warnings: finalReport.warnings,
+                    warnings: [
+                      ...finalReport.warnings,
+                      ...repairRenameWarnings,
+                    ],
                     passed:
                       afterStructuralErrors.length === 0 &&
                       preservedErrors.length === 0,
                   };
+                  for (const warning of repairRenameWarnings) {
+                    callbacks?.onChunk?.(`Stage 7 · ${warning}`);
+                  }
                   callbacks?.onChunk?.(
                     `Stage 7 · Applied ${applyResult.applied} edit${applyResult.applied !== 1 ? "s" : ""} · repaired ${deterministicBefore - deterministicAfter} of ${deterministicBefore} structural finding${deterministicBefore !== 1 ? "s" : ""} — ${deterministicAfter} remain`,
                   );
@@ -2406,6 +2422,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
         manifest: AssembledManifest;
         portMap: PortMap;
         adapterBindings: AdapterBindings;
+        adapterRenames: RenamedAdapter[];
         discarded: Array<{ context: string; kind: string; raw: unknown }>;
       }
     | { success: false; error: unknown } {
@@ -2424,10 +2441,16 @@ export class ExecuteStructuredConfigGenerationUseCase {
         stage1,
       );
       const portMap = buildPreDefinedPortMap(repairedManifest);
-      const adapterBindings = buildPreDefinedAdapterBindings(
-        repairedManifest,
-        portMap,
+      // Dedupe again on the repaired bindings: a repair can add adapters
+      // (add-adapter ops) whose names collide with existing ones, and the
+      // deterministic gate (R01–R09) does NOT enforce R12 — so without this an
+      // accepted repair could re-introduce the adapter-name collision the
+      // pre-Stage-5 dedupe removed. Same helper, same guarantee, on the repaired
+      // assembly path.
+      const adapterDedup = dedupeAdapterNames(
+        buildPreDefinedAdapterBindings(repairedManifest, portMap),
       );
+      const adapterBindings = adapterDedup.adapterBindings;
       // Derive mappings + apps from the REPAIRED manifest (not the original inputs)
       // so a renamed context doesn't leave the re-assembled manifest with mapping
       // endpoints pointing at the old name. Filter mappings to the repaired
@@ -2456,7 +2479,14 @@ export class ExecuteStructuredConfigGenerationUseCase {
         contextMappings,
         apps,
       });
-      return { success: true, manifest, portMap, adapterBindings, discarded };
+      return {
+        success: true,
+        manifest,
+        portMap,
+        adapterBindings,
+        adapterRenames: adapterDedup.renamed,
+        discarded,
+      };
     } catch (e) {
       return { success: false, error: e };
     }
