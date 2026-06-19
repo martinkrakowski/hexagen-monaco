@@ -8,7 +8,7 @@
  * 3. Concurrent Exports: 5 concurrent, all <5s p95
  */
 
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 
 describe("Export Pipeline — Performance SLA (Phase 6D)", () => {

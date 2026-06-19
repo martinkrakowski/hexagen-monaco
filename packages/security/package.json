@@ -5,7 +5,7 @@
   "main": "src/index.ts",
   "scripts": {
     "build": "tsc",
-    "test": "tsx --test __tests__/**/*.test.ts",
+    "test": "vitest run",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit"
   },

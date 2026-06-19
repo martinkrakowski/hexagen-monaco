@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import rule from "../../src/rules/rhf-stable-array-keys.js";
 
 describe("rhf-stable-array-keys", () => {

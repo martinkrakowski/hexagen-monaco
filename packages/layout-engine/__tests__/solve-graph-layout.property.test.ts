@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { SolveGraphLayoutUseCase } from "../src/application/use-cases/solve-graph-layout.use-case.js";
 import { GraphLayoutPortFake } from "./doubles/graph-layout.port.fake.js";

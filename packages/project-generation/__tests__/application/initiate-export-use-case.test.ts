@@ -1,4 +1,4 @@
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach } from "vitest";
 import assert from "node:assert";
 import { GenerateProjectUseCase } from "../../src/application/generate-project-use-case.js";
 import { InitiateExportUseCase } from "../../src/application/use-cases/initiate-export.use-case.js";

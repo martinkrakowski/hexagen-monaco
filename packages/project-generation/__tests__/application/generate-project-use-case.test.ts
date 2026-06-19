@@ -1,4 +1,4 @@
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach } from "vitest";
 import assert from "node:assert";
 import { GenerateProjectUseCase } from "../../src/application/generate-project-use-case.js";
 import { InMemoryProjectGeneratorDouble } from "../doubles/in-memory-project-generator.double.js";

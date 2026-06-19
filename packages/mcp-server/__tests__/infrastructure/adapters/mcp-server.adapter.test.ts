@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import type { EventBusPort } from "@hexagen/messaging";
 import { MCPServerAdapter } from "../../../src/infrastructure/adapters/mcp-server.adapter.js";
 import { AddDependencyToolUseCase } from "../../../src/application/use-cases/add-dependency-tool.use-case.js";

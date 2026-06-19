@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import type { EventBusPort } from "@hexagen/messaging";
 import type { ManifestWritePort } from "../../src/application/ports/out/manifest-write.port.js";

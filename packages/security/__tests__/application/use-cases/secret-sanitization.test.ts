@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import type { ISecretScanner } from "../../../src/application/ports/in/secret-scanner.port.js";
 import type { SanitizedConfig } from "../../../src/domain/value-objects/sanitized-config.js";

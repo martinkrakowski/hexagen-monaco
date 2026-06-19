@@ -6,7 +6,7 @@
  * Verifies that governance can end-to-end validate a manifest and report compliance.
  */
 
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach } from "vitest";
 import assert from "node:assert/strict";
 import {
   createMockRegistry,

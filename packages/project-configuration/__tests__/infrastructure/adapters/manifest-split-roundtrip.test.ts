@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
@@ -189,7 +189,7 @@ describe("Manifest Split Round-Trip", () => {
   let rawWorkspaceConfig: RawRecord;
   let indexData: RawRecord;
 
-  before(async () => {
+  beforeAll(async () => {
     const rawContent = await fs.readFile(FIXTURE_PATH, "utf-8");
     rawManifest = yaml.load(rawContent) as RawRecord;
 
@@ -219,7 +219,7 @@ describe("Manifest Split Round-Trip", () => {
     indexData = yaml.load(indexContent) as RawRecord;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (tmpDir) {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }

@@ -15,7 +15,7 @@
     "build": "tsc",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx/esm --test \"src/__tests__/**/*.test.ts\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@hexagen/project-generation": "workspace:*",

@@ -27,7 +27,7 @@
     "build": "tsc -p tsconfig.build.json && node ../../scripts/fix-esm-barrels.js dist",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test \"__tests__/**/*.test.ts\"",
+    "test": "vitest run",
     "test:watch": "tsx --test --watch __tests__/**/*.test.ts __tests__/**/*.spec.ts"
   },
   "dependencies": {
