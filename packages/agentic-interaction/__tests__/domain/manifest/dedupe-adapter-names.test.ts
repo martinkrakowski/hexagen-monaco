@@ -89,6 +89,36 @@ describe("dedupeAdapterNames", () => {
     );
   });
 
+  it("walks the integer suffix past further collisions (…2 taken → …3)", () => {
+    const input: AdapterBindings = {
+      contexts: [
+        {
+          contextName: "billing",
+          adapters: [adapter("StripeClientAdapter", "P1")],
+        },
+        // The prefixed form AND its …2 are both already taken, so the loop body
+        // (n += 1) must run to reach the next free suffix.
+        {
+          contextName: "x",
+          adapters: [adapter("BillingStripeClientAdapter", "P2")],
+        },
+        {
+          contextName: "y",
+          adapters: [adapter("BillingStripeClientAdapter2", "P3")],
+        },
+        {
+          contextName: "billing",
+          adapters: [adapter("StripeClientAdapter", "P4")],
+        },
+      ],
+    };
+    const result = dedupeAdapterNames(input);
+    assert.strictEqual(
+      result.adapterBindings.contexts[3].adapters[0].name,
+      "BillingStripeClientAdapter3",
+    );
+  });
+
   it("disambiguates a within-context duplicate (degenerate Stage-4 output)", () => {
     const input: AdapterBindings = {
       contexts: [

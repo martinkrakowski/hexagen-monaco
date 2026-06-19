@@ -62,6 +62,9 @@ export function dedupeAdapterNames(adapterBindings: AdapterBindings): {
  * append the smallest free integer to the prefixed form. `used` holds names
  * already claimed earlier in the walk; the loop terminates because `used` is
  * finite and `n` strictly increases.
+ *
+ * Read-only on `used` — the caller MUST `used.add()` the returned name before the
+ * next call, or two adapters could be handed the same "unique" name.
  */
 function claimUniqueName(
   name: string,
