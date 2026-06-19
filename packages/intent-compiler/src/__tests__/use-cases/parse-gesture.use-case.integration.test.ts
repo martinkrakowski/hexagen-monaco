@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach, mock } from "node:test";
+import { describe, it, beforeEach, afterEach, vi } from "vitest";
 import assert from "node:assert/strict";
 import { ParseGestureUseCase } from "../../application/use-cases/parse-gesture.use-case.js";
 import { Gesture } from "../../domain/gesture.js";
@@ -11,7 +11,7 @@ import type { DomainAST } from "@hexagen/core-domain";
 
 describe("ParseGestureUseCase Integration", () => {
   let useCase: ParseGestureUseCase;
-  let errorSpy: ReturnType<typeof mock.method>;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     const parser = new ManifestAwareGestureParserAdapter();
@@ -26,11 +26,11 @@ describe("ParseGestureUseCase Integration", () => {
       rejectEmitter,
     );
 
-    errorSpy = mock.method(console, "error", () => {});
+    errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   afterEach(() => {
-    errorSpy.mock.restore();
+    errorSpy.mockRestore();
   });
 
   describe("valid gesture parsing", () => {
@@ -161,7 +161,7 @@ describe("ParseGestureUseCase Integration", () => {
 
       assert.throws(() => useCase.execute(gesture));
       assert.ok(errorSpy.mock.calls.length > 0);
-      const message = errorSpy.mock.calls[0].arguments[0] as string;
+      const message = errorSpy.mock.calls[0][0] as string;
       assert.ok(message.includes("Topology validation failed"));
     });
 
@@ -231,7 +231,7 @@ describe("ParseGestureUseCase Integration", () => {
 
       assert.throws(() => useCase.execute(gesture));
       assert.ok(errorSpy.mock.calls.length > 0);
-      const message = errorSpy.mock.calls[0].arguments[0] as string;
+      const message = errorSpy.mock.calls[0][0] as string;
       assert.ok(message.includes("Cardinality validation failed"));
     });
   });
