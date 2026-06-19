@@ -33,6 +33,7 @@ import {
   type ArchitectureContext,
 } from "../../../domain/prompts/build-architecture-context";
 import { countManifestEntities } from "../../../domain/manifest/count-manifest-entities";
+import { dedupeAdapterNames } from "../../../domain/manifest/dedupe-adapter-names";
 import { ExecutePromptNormalizationUseCase } from "./execute-prompt-normalization.use-case";
 import { ExecuteDomainExtractionUseCase } from "./execute-domain-extraction.use-case";
 import type { Stage1RefinementConfig } from "./execute-domain-extraction.use-case";
@@ -241,6 +242,21 @@ export class ExecuteFullStagedGenerationUseCase {
     }
     callbacks?.onProgress?.(4, s4Duration);
 
+    // R12: make adapter names globally unique before assembly (Stage 4 can give
+    // the same generic name to multiple contexts that share a technology). Only
+    // `.name` changes — `implements` is untouched, so the bindings still ground
+    // R04/R05/R06. Mirrors the structured-config orchestrator. (The R03
+    // repository-port synthesis net is the separate /stage fast-follow.)
+    const adapterDedup = dedupeAdapterNames(s4.value);
+    const dedupedAdapters = adapterDedup.adapterBindings;
+    const adapterRenameWarnings = adapterDedup.renamed.map(
+      (r) =>
+        `Renamed adapter '${r.from}' in context '${r.contextName}' to '${r.to}' to keep adapter names globally unique (R12).`,
+    );
+    for (const warning of adapterRenameWarnings) {
+      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
+    }
+
     // Stage 5: Manifest Assembly (synchronous, returns AssembledManifest directly)
     const s5Start = Date.now();
     callbacks?.onProgress?.(5, 0);
@@ -250,7 +266,7 @@ export class ExecuteFullStagedGenerationUseCase {
       stage1: s1.value,
       stage2: s2.value,
       stage3: portMap,
-      stage4: s4.value,
+      stage4: dedupedAdapters,
       contextMappings,
     });
     callbacks?.onProgress?.(5, Date.now() - s5Start);
@@ -265,7 +281,7 @@ export class ExecuteFullStagedGenerationUseCase {
         stage1: s1.value,
         stage2: s2.value,
         stage3: portMap,
-        stage4: s4.value,
+        stage4: dedupedAdapters,
         stage5: assembledManifest,
         contextMappings,
       },
@@ -284,9 +300,15 @@ export class ExecuteFullStagedGenerationUseCase {
       stage1: s1.value,
       stage2: s2.value,
       stage3: portMap,
-      stage4: s4.value,
+      stage4: dedupedAdapters,
       stage5: assembledManifest,
-      stage6: s6.value,
+      stage6:
+        adapterRenameWarnings.length > 0
+          ? {
+              ...s6.value,
+              warnings: [...s6.value.warnings, ...adapterRenameWarnings],
+            }
+          : s6.value,
       contextMappings,
     };
 
