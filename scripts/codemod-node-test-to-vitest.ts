@@ -117,7 +117,13 @@ function flipTestScript(packageDir: string): boolean {
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as {
     scripts?: Record<string, string>;
   };
-  if (!pkg.scripts || pkg.scripts.test === "vitest run") return false;
+  const current = pkg.scripts?.test;
+  if (!current || current === "vitest run") return false;
+  // Only flip a script that is actually an OLD-runner invocation (node:test /
+  // tsx). A package with *.test.ts files but no node:test (already vitest, a
+  // jest script, or something custom) must not be clobbered just because the
+  // flip gate is satisfied.
+  if (!/node --test|node:test|--test|\btsx\b/.test(current)) return false;
   pkg.scripts.test = "vitest run";
   writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
   return true;

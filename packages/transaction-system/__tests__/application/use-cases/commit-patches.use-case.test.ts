@@ -7,18 +7,13 @@ import type { LintValidationPort } from "../../../src/application/ports/out/lint
 import type { Patch, IntentLineage } from "@hexagen/core-domain";
 import { CommitPatchesUseCase } from "../../../src/application/use-cases/commit-patches.use-case.js";
 
+// Vitest mock shape: `.mock.calls` is an array of arg tuples (accessed as
+// `calls[i][j]`), and `mockImplementationOnce` lives on the fn itself.
 type Mocked<T> = {
   [K in keyof T]: T[K] extends (...args: infer A) => infer R
     ? ((...args: A) => R) & {
-        mock: {
-          calls: Array<{ arguments: A }>;
-          callCount(): number;
-          mockImplementationOnce(
-            impl: (...args: A) => R,
-            onCall?: number,
-          ): void;
-          restore(): void;
-        };
+        mock: { calls: A[] };
+        mockImplementationOnce(impl: (...args: A) => R): void;
       }
     : T[K];
 };
