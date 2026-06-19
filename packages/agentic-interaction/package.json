@@ -23,7 +23,7 @@
     "build": "tsc && node ../../scripts/fix-esm-barrels.js dist",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test __tests__/**/*.test.ts",
+    "test": "vitest run",
     "golden-harness": "tsx scripts/golden-manifest-harness.ts",
     "test:review": "tsx --test __tests__/**/*.test.ts",
     "test:jest": "jest --config jest.config.cjs",

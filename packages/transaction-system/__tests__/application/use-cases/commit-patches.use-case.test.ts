@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it, beforeEach, mock } from "node:test";
+import { describe, it, beforeEach, vi } from "vitest";
 import type { Transaction } from "../../../src/domain/transaction.js";
 import type { TransactionManagerPort } from "../../../src/application/ports/in/transaction-manager.port.js";
 import type { ManifestMutationPort } from "../../../src/application/ports/out/manifest-mutation.port.js";
@@ -54,25 +54,25 @@ describe("CommitPatchesUseCase", () => {
 
   beforeEach(() => {
     transactionManager = {
-      begin: mock.fn(() => makeTransaction()),
-      transition: mock.fn(() => makeTransaction({ status: "speculative" })),
-      get: mock.fn(() => makeTransaction()),
-      list: mock.fn(() => []),
-      commit: mock.fn(() => makeTransaction({ status: "committed" })),
-      rollback: mock.fn(() => makeTransaction({ status: "rolled_back" })),
+      begin: vi.fn(() => makeTransaction()),
+      transition: vi.fn(() => makeTransaction({ status: "speculative" })),
+      get: vi.fn(() => makeTransaction()),
+      list: vi.fn(() => []),
+      commit: vi.fn(() => makeTransaction({ status: "committed" })),
+      rollback: vi.fn(() => makeTransaction({ status: "rolled_back" })),
     } as unknown as Mocked<TransactionManagerPort>;
 
     manifestMutation = {
-      applyPatches: mock.fn(() =>
+      applyPatches: vi.fn(() =>
         Promise.resolve({ success: true, value: undefined }),
       ),
-      restoreFromGit: mock.fn(() =>
+      restoreFromGit: vi.fn(() =>
         Promise.resolve({ success: true, value: undefined }),
       ),
     } as unknown as Mocked<ManifestMutationPort>;
 
     lintValidation = {
-      validateManifest: mock.fn(() =>
+      validateManifest: vi.fn(() =>
         Promise.resolve({
           success: true,
           value: { valid: true, errors: [] },
@@ -110,36 +110,33 @@ describe("CommitPatchesUseCase", () => {
         assert.strictEqual(result.value.status, "committed");
       }
 
-      assert.strictEqual(
-        transactionManager.begin.mock.calls[0].arguments[0],
-        "intent-1",
-      );
+      assert.strictEqual(transactionManager.begin.mock.calls[0][0], "intent-1");
       assert.strictEqual(
         (
-          transactionManager.begin.mock.calls[0].arguments[1] as {
+          transactionManager.begin.mock.calls[0][1] as {
             intentId: string;
           }
         ).intentId,
         "intent-1",
       );
       assert.strictEqual(
-        transactionManager.transition.mock.calls[0].arguments[0],
+        transactionManager.transition.mock.calls[0][0],
         "txn-test-1",
       );
       assert.strictEqual(
-        transactionManager.transition.mock.calls[0].arguments[1],
+        transactionManager.transition.mock.calls[0][1],
         "speculative",
       );
-      assert.deepStrictEqual(
-        manifestMutation.applyPatches.mock.calls[0].arguments,
-        [patches, "/path/to/manifest.yaml"],
-      );
+      assert.deepStrictEqual(manifestMutation.applyPatches.mock.calls[0], [
+        patches,
+        "/path/to/manifest.yaml",
+      ]);
       assert.strictEqual(
-        lintValidation.validateManifest.mock.calls[0].arguments[0],
+        lintValidation.validateManifest.mock.calls[0][0],
         "/path/to/manifest.yaml",
       );
       assert.strictEqual(
-        transactionManager.commit.mock.calls[0].arguments[0],
+        transactionManager.commit.mock.calls[0][0],
         "txn-test-1",
       );
     });
@@ -147,7 +144,7 @@ describe("CommitPatchesUseCase", () => {
 
   describe("patch application failure", () => {
     it("should rollback and restore from git when applyPatches fails", async () => {
-      manifestMutation.applyPatches.mock.mockImplementationOnce(async () => ({
+      manifestMutation.applyPatches.mockImplementationOnce(async () => ({
         success: false,
         error: new Error("disk full"),
       }));
@@ -164,17 +161,17 @@ describe("CommitPatchesUseCase", () => {
       }
 
       assert.strictEqual(
-        manifestMutation.restoreFromGit.mock.calls[0].arguments[0],
+        manifestMutation.restoreFromGit.mock.calls[0][0],
         "/path/to/manifest.yaml",
       );
       assert.strictEqual(
-        transactionManager.rollback.mock.calls[0].arguments[0],
+        transactionManager.rollback.mock.calls[0][0],
         "txn-test-1",
       );
       assert.ok(
-        (
-          transactionManager.rollback.mock.calls[0].arguments[1] as string
-        ).includes("Patch application failed"),
+        (transactionManager.rollback.mock.calls[0][1] as string).includes(
+          "Patch application failed",
+        ),
       );
       assert.strictEqual(transactionManager.commit.mock.calls.length, 0);
     });
@@ -182,7 +179,7 @@ describe("CommitPatchesUseCase", () => {
 
   describe("lint validation failure", () => {
     it("should rollback and restore from git when lint returns invalid", async () => {
-      lintValidation.validateManifest.mock.mockImplementationOnce(async () => ({
+      lintValidation.validateManifest.mockImplementationOnce(async () => ({
         success: true,
         value: {
           valid: false,
@@ -202,17 +199,17 @@ describe("CommitPatchesUseCase", () => {
       }
 
       assert.strictEqual(
-        manifestMutation.restoreFromGit.mock.calls[0].arguments[0],
+        manifestMutation.restoreFromGit.mock.calls[0][0],
         "/path/to/manifest.yaml",
       );
       assert.strictEqual(
-        transactionManager.rollback.mock.calls[0].arguments[0],
+        transactionManager.rollback.mock.calls[0][0],
         "txn-test-1",
       );
       assert.ok(
-        (
-          transactionManager.rollback.mock.calls[0].arguments[1] as string
-        ).includes("Lint validation failed"),
+        (transactionManager.rollback.mock.calls[0][1] as string).includes(
+          "Lint validation failed",
+        ),
       );
       assert.strictEqual(transactionManager.commit.mock.calls.length, 0);
     });
@@ -220,7 +217,7 @@ describe("CommitPatchesUseCase", () => {
 
   describe("lint validation error", () => {
     it("should rollback when lint throws an error", async () => {
-      lintValidation.validateManifest.mock.mockImplementationOnce(async () => ({
+      lintValidation.validateManifest.mockImplementationOnce(async () => ({
         success: false,
         error: new Error("linter crashed"),
       }));
@@ -237,7 +234,7 @@ describe("CommitPatchesUseCase", () => {
       }
 
       assert.strictEqual(
-        manifestMutation.restoreFromGit.mock.calls[0].arguments[0],
+        manifestMutation.restoreFromGit.mock.calls[0][0],
         "/path/to/manifest.yaml",
       );
       assert.ok(transactionManager.rollback.mock.calls.length > 0);
@@ -246,7 +243,7 @@ describe("CommitPatchesUseCase", () => {
 
   describe("begin transaction failure", () => {
     it("should return error when begin returns null", async () => {
-      transactionManager.begin.mock.mockImplementationOnce(
+      transactionManager.begin.mockImplementationOnce(
         () => null as unknown as Transaction,
       );
 
@@ -265,7 +262,7 @@ describe("CommitPatchesUseCase", () => {
 
   describe("commit failure", () => {
     it("should return error when commit returns null", async () => {
-      transactionManager.commit.mock.mockImplementationOnce(
+      transactionManager.commit.mockImplementationOnce(
         () => null as unknown as Transaction,
       );
 

@@ -10,7 +10,7 @@
  * the stage maxTokens caps → finishReason "length", empty content, 0% runs
  * (baseline findings F1). This knob makes such models benchmarkable per-run.
  */
-import { describe, test } from "node:test";
+import { describe, test } from "vitest";
 import assert from "node:assert/strict";
 import {
   reasoningBodyField,

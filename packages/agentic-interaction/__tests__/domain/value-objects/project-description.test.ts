@@ -2,7 +2,7 @@
  * Unit tests for ProjectDescription value object
  */
 
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import {
   createProjectDescription,

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { draftToManifest } from "../../../src/domain/manifest/draft-to-manifest.transform";
 import type { ManifestDraft } from "../../../src/domain/manifest/manifest-draft.types";
 

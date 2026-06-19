@@ -1,4 +1,4 @@
-import { test, describe, mock } from "node:test";
+import { test, describe, vi } from "vitest";
 import assert from "node:assert";
 import {
   STAGE_ATTEMPT_TIMEOUT_MS,
@@ -56,11 +56,11 @@ describe("ExecuteLooseSpecConversionUseCase — fail-fast on timeout", () => {
       },
     } as unknown as SendStructuredRequestPort;
 
-    mock.timers.enable({ apis: ["setTimeout"] });
+    vi.useFakeTimers();
     try {
       const useCase = new ExecuteLooseSpecConversionUseCase(mockLLMAdapter);
       const promise = useCase.execute("Build a core domain");
-      mock.timers.tick(LARGE_OUTPUT_STAGE_TIMEOUT_MS);
+      vi.advanceTimersByTime(LARGE_OUTPUT_STAGE_TIMEOUT_MS);
       const result = await promise;
 
       assert.strictEqual(result.success, false);
@@ -69,7 +69,7 @@ describe("ExecuteLooseSpecConversionUseCase — fail-fast on timeout", () => {
       }
       assert.strictEqual(callCount, 1, "must not retry a timeout");
     } finally {
-      mock.timers.reset();
+      vi.useRealTimers();
     }
   });
 
@@ -92,11 +92,11 @@ describe("ExecuteLooseSpecConversionUseCase — fail-fast on timeout", () => {
       },
     } as unknown as SendStructuredRequestPort;
 
-    mock.timers.enable({ apis: ["setTimeout"] });
+    vi.useFakeTimers();
     try {
       const useCase = new ExecuteLooseSpecConversionUseCase(mockLLMAdapter);
       const promise = useCase.execute("Build a core domain");
-      mock.timers.tick(LARGE_OUTPUT_STAGE_TIMEOUT_MS);
+      vi.advanceTimersByTime(LARGE_OUTPUT_STAGE_TIMEOUT_MS);
       const result = await promise;
 
       assert.strictEqual(result.success, false);
@@ -107,7 +107,7 @@ describe("ExecuteLooseSpecConversionUseCase — fail-fast on timeout", () => {
       }
       assert.strictEqual(callCount, 1, "must not retry a timeout");
     } finally {
-      mock.timers.reset();
+      vi.useRealTimers();
     }
   });
 });

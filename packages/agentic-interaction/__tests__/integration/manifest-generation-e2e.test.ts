@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { GenerateManifestFromDescriptionUseCase } from "../../src/application/use-cases/generate-manifest-from-description.use-case";
 import { createProjectDescription } from "../../src/domain/value-objects/project-description";

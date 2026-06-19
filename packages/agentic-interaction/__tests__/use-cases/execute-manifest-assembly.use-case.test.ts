@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { ExecuteManifestAssemblyUseCase } from "../../src/application/use-cases/staged-generation/execute-manifest-assembly.use-case";
 import type { PipelineState } from "../../src/domain/value-objects/pipeline-state";

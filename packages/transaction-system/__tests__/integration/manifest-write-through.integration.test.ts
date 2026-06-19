@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it, beforeEach, mock } from "node:test";
+import { describe, it, beforeEach, vi } from "vitest";
 import type { Patch } from "@hexagen/core-domain";
 import type { ManifestMutationPort } from "../../src/application/ports/out/manifest-mutation.port.js";
 import type { Manifest } from "@hexagen/sync";
@@ -9,12 +9,12 @@ const createMockSync = () => {
   const saved: Array<{ workspaceRoot: string; manifest: unknown }> = [];
   let currentManifest: Record<string, unknown> = { bounded_contexts: [] };
 
-  const loadManifest = mock.fn(async (_workspaceRoot: string) => ({
+  const loadManifest = vi.fn(async (_workspaceRoot: string) => ({
     success: true,
     value: JSON.parse(JSON.stringify(currentManifest)) as Manifest,
   }));
 
-  const saveManifest = mock.fn(
+  const saveManifest = vi.fn(
     async (workspaceRoot: string, manifest: unknown) => {
       saved.push({ workspaceRoot, manifest });
       currentManifest = JSON.parse(JSON.stringify(manifest)) as Record<
@@ -66,15 +66,17 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       assert.strictEqual(result.success, true);
       assert.strictEqual(
-        mockSync.loadManifest.mock.calls[0].arguments[0],
+        mockSync.loadManifest.mock.calls[0][0],
         "/tmp/test-workspace",
       );
       assert.strictEqual(
-        mockSync.saveManifest.mock.calls[0].arguments[0],
+        mockSync.saveManifest.mock.calls[0][0],
         "/tmp/test-workspace",
       );
-      const savedArg = mockSync.saveManifest.mock.calls[0]
-        .arguments[1] as Record<string, unknown>;
+      const savedArg = mockSync.saveManifest.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
       const boundedContexts = savedArg.bounded_contexts as Array<
         Record<string, unknown>
       >;
@@ -93,8 +95,10 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       await adapter.applyPatches(patches, ".architecture/manifest.yaml");
 
-      const savedManifest = mockSync.saveManifest.mock.calls[0]
-        .arguments[1] as Record<string, unknown>;
+      const savedManifest = mockSync.saveManifest.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
       const contexts = savedManifest.bounded_contexts as Array<
         Record<string, unknown>
       >;
@@ -125,8 +129,10 @@ describe("Manifest Write-Through - Integration Tests", () => {
       assert.strictEqual(mockSync.loadManifest.mock.calls.length, 1);
       assert.strictEqual(mockSync.saveManifest.mock.calls.length, 1);
 
-      const savedManifest = mockSync.saveManifest.mock.calls[0]
-        .arguments[1] as Record<string, unknown>;
+      const savedManifest = mockSync.saveManifest.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
       const contexts = savedManifest.bounded_contexts as Array<
         Record<string, unknown>
       >;
@@ -136,7 +142,7 @@ describe("Manifest Write-Through - Integration Tests", () => {
     });
 
     it("should reject duplicate bounded context names without calling saveManifest", async () => {
-      mockSync.loadManifest.mock.mockImplementationOnce(async () => ({
+      mockSync.loadManifest.mockImplementationOnce(async () => ({
         success: true,
         value: {
           bounded_contexts: [
@@ -165,7 +171,7 @@ describe("Manifest Write-Through - Integration Tests", () => {
     });
 
     it("should propagate loadManifest failure without calling saveManifest", async () => {
-      mockSync.loadManifest.mock.mockImplementationOnce(async () => ({
+      mockSync.loadManifest.mockImplementationOnce(async () => ({
         success: false,
         error: new Error(".architecture/manifest.yaml not found"),
       }));
@@ -192,7 +198,7 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
   describe("Patch Type Coverage", () => {
     it("should apply remove_node patch through save cycle", async () => {
-      mockSync.loadManifest.mock.mockImplementationOnce(async () => ({
+      mockSync.loadManifest.mockImplementationOnce(async () => ({
         success: true,
         value: {
           bounded_contexts: [
@@ -213,8 +219,10 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       await adapter.applyPatches(patches, ".architecture/manifest.yaml");
 
-      const savedManifest = mockSync.saveManifest.mock.calls[0]
-        .arguments[1] as Record<string, unknown>;
+      const savedManifest = mockSync.saveManifest.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
       const contexts = savedManifest.bounded_contexts as Array<
         Record<string, unknown>
       >;
@@ -223,7 +231,7 @@ describe("Manifest Write-Through - Integration Tests", () => {
     });
 
     it("should apply update_node patch through save cycle", async () => {
-      mockSync.loadManifest.mock.mockImplementationOnce(async () => ({
+      mockSync.loadManifest.mockImplementationOnce(async () => ({
         success: true,
         value: {
           bounded_contexts: [
@@ -243,8 +251,10 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       await adapter.applyPatches(patches, ".architecture/manifest.yaml");
 
-      const savedManifest = mockSync.saveManifest.mock.calls[0]
-        .arguments[1] as Record<string, unknown>;
+      const savedManifest = mockSync.saveManifest.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
       const contexts = savedManifest.bounded_contexts as Array<
         Record<string, unknown>
       >;
@@ -252,7 +262,7 @@ describe("Manifest Write-Through - Integration Tests", () => {
     });
 
     it("should apply add_edge patch through save cycle", async () => {
-      mockSync.loadManifest.mock.mockImplementationOnce(async () => ({
+      mockSync.loadManifest.mockImplementationOnce(async () => ({
         success: true,
         value: {
           bounded_contexts: [
@@ -277,8 +287,10 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
       await adapter.applyPatches(patches, ".architecture/manifest.yaml");
 
-      const savedManifest = mockSync.saveManifest.mock.calls[0]
-        .arguments[1] as Record<string, unknown>;
+      const savedManifest = mockSync.saveManifest.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
       const contexts = savedManifest.bounded_contexts as Array<
         Record<string, unknown>
       >;
@@ -321,7 +333,7 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
   describe("Error Propagation", () => {
     it("should propagate saveManifest failure as error result", async () => {
-      mockSync.saveManifest.mock.mockImplementationOnce(async () => ({
+      mockSync.saveManifest.mockImplementationOnce(async () => ({
         success: false,
         error: new Error("disk full"),
       }));
@@ -345,7 +357,7 @@ describe("Manifest Write-Through - Integration Tests", () => {
     });
 
     it("should catch unexpected exceptions and return error result", async () => {
-      mockSync.loadManifest.mock.mockImplementationOnce(async () => {
+      mockSync.loadManifest.mockImplementationOnce(async () => {
         throw new Error("unexpected crash");
       });
 

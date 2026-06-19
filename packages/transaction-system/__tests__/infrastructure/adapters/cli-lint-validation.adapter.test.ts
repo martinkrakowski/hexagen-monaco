@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it, beforeEach, mock } from "node:test";
+import { describe, it, beforeEach, vi } from "vitest";
 import { CliLintValidationAdapter } from "../../../src/infrastructure/adapters/cli-lint-validation.adapter.js";
 
 type ExecFileAsyncFn = (
@@ -10,10 +10,10 @@ type ExecFileAsyncFn = (
 
 describe("CliLintValidationAdapter", () => {
   let adapter: CliLintValidationAdapter;
-  let mockExecFileAsync: ReturnType<typeof mock.fn<ExecFileAsyncFn>>;
+  let mockExecFileAsync: ReturnType<typeof vi.fn<ExecFileAsyncFn>>;
 
   beforeEach(() => {
-    mockExecFileAsync = mock.fn<ExecFileAsyncFn>(async () => ({
+    mockExecFileAsync = vi.fn<ExecFileAsyncFn>(async () => ({
       stdout: "",
       stderr: "",
     }));
@@ -31,13 +31,10 @@ describe("CliLintValidationAdapter", () => {
       assert.strictEqual(result.value.errors.length, 0);
     }
 
-    assert.strictEqual(mockExecFileAsync.mock.calls[0].arguments[0], "yarn");
-    assert.deepStrictEqual(mockExecFileAsync.mock.calls[0].arguments[1], [
-      "lint:arch",
-    ]);
+    assert.strictEqual(mockExecFileAsync.mock.calls[0][0], "yarn");
+    assert.deepStrictEqual(mockExecFileAsync.mock.calls[0][1], ["lint:arch"]);
     assert.strictEqual(
-      (mockExecFileAsync.mock.calls[0].arguments[2] as Record<string, unknown>)
-        .cwd,
+      (mockExecFileAsync.mock.calls[0][2] as Record<string, unknown>).cwd,
       "/workspace",
     );
   });
@@ -46,7 +43,7 @@ describe("CliLintValidationAdapter", () => {
     const errorOutput =
       "port 'FooPort' declared in 2 contexts\nmissing adapter for 'BarAdapter'";
 
-    mockExecFileAsync = mock.fn<ExecFileAsyncFn>(async () => {
+    mockExecFileAsync = vi.fn<ExecFileAsyncFn>(async () => {
       const err = new Error("Command failed") as Error & { stderr: string };
       err.stderr = errorOutput;
       throw err;
@@ -65,7 +62,7 @@ describe("CliLintValidationAdapter", () => {
   });
 
   it("should handle error without stderr", async () => {
-    mockExecFileAsync = mock.fn<ExecFileAsyncFn>(async () => {
+    mockExecFileAsync = vi.fn<ExecFileAsyncFn>(async () => {
       throw new Error("timeout exceeded");
     });
     adapter = new CliLintValidationAdapter("/workspace", mockExecFileAsync);

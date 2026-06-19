@@ -1,4 +1,4 @@
-import { test, describe } from "node:test";
+import { test, describe } from "vitest";
 import assert from "node:assert";
 import { ExecuteLooseSpecConversionUseCase } from "../../../src/application/use-cases/staged-generation/execute-loose-spec-conversion.use-case";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";

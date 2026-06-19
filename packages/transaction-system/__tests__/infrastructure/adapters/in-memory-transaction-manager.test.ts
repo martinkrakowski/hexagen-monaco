@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it, beforeEach, mock } from "node:test";
+import { describe, it, beforeEach, vi } from "vitest";
 import { InMemoryTransactionManager } from "../../../src/infrastructure/adapters/in-memory-transaction-manager.adapter.js";
 import { InMemoryBackpressureController } from "../../../src/infrastructure/adapters/in-memory-backpressure-controller.adapter.js";
 import { InMemorySpeculativeStateMachine } from "../../../src/infrastructure/adapters/in-memory-speculative-state-machine.adapter.js";
@@ -82,30 +82,30 @@ describe("InMemoryTransactionManager", () => {
     });
 
     it("should warn when lineage references non-existent prior intent", () => {
-      const consoleSpy = mock.method(console, "warn", () => {});
+      const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const lineage = ["non-existent-intent"];
       manager.begin("intent-1", {}, undefined, lineage);
 
       assert.ok(
         consoleSpy.mock.calls.some(
           (call) =>
-            typeof call.arguments[0] === "string" &&
-            call.arguments[0].includes(
+            typeof call[0] === "string" &&
+            call[0].includes(
               "[Lineage] Prior intent non-existent-intent not found",
             ),
         ),
       );
-      consoleSpy.mock.restore();
+      consoleSpy.mockRestore();
     });
 
     it("should validate lineage chain correctly", () => {
-      const consoleSpy = mock.method(console, "warn", () => {});
+      const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const tx1 = manager.begin("intent-0");
       const tx2 = manager.begin("intent-1", {}, undefined, [tx1.intentId]);
 
       assert.strictEqual(consoleSpy.mock.calls.length, 0);
       assert.deepStrictEqual(tx2.metadata.lineage, [tx1.intentId]);
-      consoleSpy.mock.restore();
+      consoleSpy.mockRestore();
     });
   });
 

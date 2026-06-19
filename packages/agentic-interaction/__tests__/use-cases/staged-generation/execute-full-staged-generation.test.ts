@@ -1,4 +1,4 @@
-import { test, describe } from "node:test";
+import { test, describe } from "vitest";
 import assert from "node:assert/strict";
 import { ExecuteFullStagedGenerationUseCase } from "../../../src/application/use-cases/staged-generation/execute-full-staged-generation.use-case.ts";
 import { compileStage0Prompt } from "../../../src/domain/prompts/generate-manifest.prompt.ts";

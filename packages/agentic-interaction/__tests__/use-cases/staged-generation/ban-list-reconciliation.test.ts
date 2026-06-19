@@ -15,7 +15,7 @@
  *      substring false positives ("restaurant-booking" ⊃ "rest",
  *      "feedback-management" ⊃ "db", "rapid-fulfillment" ⊃ "api").
  */
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { ExecuteContextClassificationUseCase } from "../../../src/application/use-cases/staged-generation/execute-context-classification.use-case";
 import {

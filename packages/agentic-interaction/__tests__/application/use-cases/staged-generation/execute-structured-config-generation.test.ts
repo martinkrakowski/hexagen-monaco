@@ -1,10 +1,10 @@
-import { describe, it, mock } from "node:test";
+import { describe, it, vi } from "vitest";
 import assert from "node:assert";
 import { ExecuteStructuredConfigGenerationUseCase } from "../../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 
 // Mock TransactionManagerPort
 const mockTransactionManager = {
-  begin: mock.fn(() => ({
+  begin: vi.fn(() => ({
     id: "mock-transaction-id",
     status: "pending",
     intentId: "mock-intent",
@@ -13,7 +13,7 @@ const mockTransactionManager = {
     createdAt: new Date(),
     updatedAt: new Date(),
   })),
-  transition: mock.fn((id, status) => ({
+  transition: vi.fn((id, status) => ({
     id,
     status,
     intentId: "mock-intent",
@@ -22,14 +22,14 @@ const mockTransactionManager = {
     createdAt: new Date(),
     updatedAt: new Date(),
   })),
-  get: mock.fn(() => null),
-  list: mock.fn(() => []),
-  commit: mock.fn(() => null),
-  rollback: mock.fn(() => null),
+  get: vi.fn(() => null),
+  list: vi.fn(() => []),
+  commit: vi.fn(() => null),
+  rollback: vi.fn(() => null),
 };
 
 // Mock the LLM port (implements SendStructuredRequestPort)
-const mockStreamStructuredRequest = mock.fn(() => {
+const mockStreamStructuredRequest = vi.fn(() => {
   async function* mockGenerator() {
     yield {
       success: true,
@@ -38,7 +38,7 @@ const mockStreamStructuredRequest = mock.fn(() => {
   }
   return mockGenerator();
 });
-const mockSendRequest = mock.fn(() =>
+const mockSendRequest = vi.fn(() =>
   Promise.resolve({
     success: true as const,
     value: {
@@ -100,8 +100,8 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
 
   it("returns error result on LLM failure", async () => {
     const failingPort = {
-      sendRequest: mock.fn(() => Promise.reject(new Error("LLM API error"))),
-      streamStructuredRequest: mock.fn(() => {
+      sendRequest: vi.fn(() => Promise.reject(new Error("LLM API error"))),
+      streamStructuredRequest: vi.fn(() => {
         async function* gen() {
           yield { success: false, error: new Error("LLM API error") };
         }

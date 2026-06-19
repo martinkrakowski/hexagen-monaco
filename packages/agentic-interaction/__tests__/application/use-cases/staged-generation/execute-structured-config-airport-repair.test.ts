@@ -1,10 +1,10 @@
-import { describe, it, mock } from "node:test";
+import { describe, it, vi } from "vitest";
 import assert from "node:assert";
 import { ExecuteStructuredConfigGenerationUseCase } from "../../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 
 const mockTransactionManager = {
-  begin: mock.fn(() => ({
+  begin: vi.fn(() => ({
     id: "tx",
     status: "pending",
     intentId: "i",
@@ -13,7 +13,7 @@ const mockTransactionManager = {
     createdAt: new Date(),
     updatedAt: new Date(),
   })),
-  transition: mock.fn((id, status) => ({
+  transition: vi.fn((id, status) => ({
     id,
     status,
     intentId: "i",
@@ -22,10 +22,10 @@ const mockTransactionManager = {
     createdAt: new Date(),
     updatedAt: new Date(),
   })),
-  get: mock.fn(() => null),
-  list: mock.fn(() => []),
-  commit: mock.fn(() => null),
-  rollback: mock.fn(() => null),
+  get: vi.fn(() => null),
+  list: vi.fn(() => []),
+  commit: vi.fn(() => null),
+  rollback: vi.fn(() => null),
 };
 
 // Stages 3/4 get a non-port response -> 0 ports/adapters parsed, so the

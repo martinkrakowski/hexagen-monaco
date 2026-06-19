@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import { ClassifyContextTypeUseCase } from "../../src/application/use-cases/staged-generation/classify-context-type.use-case";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";

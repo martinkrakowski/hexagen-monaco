@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach } from "vitest";
 import { NodeKind, EdgeKind } from "@hexagen/core-domain";
 import type {
   DomainCommand,

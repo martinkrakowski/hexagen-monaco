@@ -1,4 +1,4 @@
-import { test, describe } from "node:test";
+import { test, describe } from "vitest";
 import assert from "node:assert";
 import { ExecutePortMappingUseCase } from "../../../src/application/use-cases/staged-generation/execute-port-mapping.use-case.ts";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";

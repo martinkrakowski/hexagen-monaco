@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import {
   CONTEXT_LIST_SYSTEM_PROMPT,

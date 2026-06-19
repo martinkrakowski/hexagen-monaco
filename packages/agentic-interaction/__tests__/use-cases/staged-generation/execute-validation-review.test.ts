@@ -1,4 +1,4 @@
-import { test, describe } from "node:test";
+import { test, describe } from "vitest";
 import assert from "node:assert";
 import { ExecuteValidationReviewUseCase } from "../../../src/application/use-cases/staged-generation/execute-validation-review.use-case.ts";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";

@@ -8,7 +8,7 @@
  * array is converted back to NDJSON text so the stages' line parsers work
  * unchanged. Every other provider's bodies stay byte-identical.
  */
-import { test, describe } from "node:test";
+import { test, describe } from "vitest";
 import assert from "node:assert";
 import { z } from "zod";
 import {

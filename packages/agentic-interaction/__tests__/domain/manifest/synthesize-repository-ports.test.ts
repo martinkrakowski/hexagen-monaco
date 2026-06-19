@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { synthesizeMissingRepositoryPorts } from "../../../src/domain/manifest/synthesize-repository-ports";
 import { structuralManifestErrors } from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 import { validatePortQuality } from "../../../src/domain/services/port-quality-validator";
