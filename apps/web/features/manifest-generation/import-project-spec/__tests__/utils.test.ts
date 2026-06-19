@@ -162,4 +162,22 @@ describe("isAutoAppliedNotice", () => {
       false,
     );
   });
+
+  test("requires the rule marker, not just the prefix — a prefix-only lookalike stays actionable", () => {
+    // Defends the actionable count: a (hypothetical) reviewer finding that merely
+    // opens with the same words but lacks the backend's (R12)/(R03) marker must
+    // not be misfiled as an auto-applied notice and dropped from the count.
+    assert.equal(
+      isAutoAppliedNotice(
+        "Renamed adapter 'PaymentAdapter' should follow the naming convention.",
+      ),
+      false,
+    );
+    assert.equal(
+      isAutoAppliedNotice(
+        "Auto-added a default repository port would simplify this context.",
+      ),
+      false,
+    );
+  });
 });
