@@ -678,7 +678,7 @@ export function compileStage6Prompt(
           assemblyWarnings
             .map(
               (w) =>
-                `{"severity": "${w.severity}", "context": "${normalizeContextName(w.contextName)}", "message": "${w.message}"}`,
+                `{"severity": "${w.severity}", "context": "${normalizeContextName(w.contextName)}", "message": "${escapeXml(w.message)}"}`,
             )
             .join("\n"),
           `</assembly_warnings>`,
@@ -687,7 +687,7 @@ export function compileStage6Prompt(
 
   const promotedSection =
     promotedContexts.length > 0
-      ? `<promoted_from_uncertain>\n${promotedContexts.join(", ")}\n</promoted_from_uncertain>`
+      ? `<promoted_from_uncertain>\n${escapeXml(promotedContexts.join(", "))}\n</promoted_from_uncertain>`
       : "";
 
   const mappingSection =
@@ -697,7 +697,7 @@ export function compileStage6Prompt(
           contextMappings
             .map(
               (m) =>
-                `${normalizeContextName(m.upstream)} → ${normalizeContextName(m.downstream)} (${m.pattern ?? "unspecified"} via ${m.mechanism ?? "unspecified"})`,
+                `${normalizeContextName(m.upstream)} → ${normalizeContextName(m.downstream)} (${escapeXml(m.pattern ?? "unspecified")} via ${escapeXml(m.mechanism ?? "unspecified")})`,
             )
             .join("\n"),
           `</context_mappings>`,
@@ -707,7 +707,7 @@ export function compileStage6Prompt(
   const runtimeConcerns = normalized?.runtimeConcerns ?? [];
   const runtimeConcernsSection =
     runtimeConcerns.length > 0
-      ? `<runtime_concerns>\n${runtimeConcerns.join(", ")}\n</runtime_concerns>`
+      ? `<runtime_concerns>\n${escapeXml(runtimeConcerns.join(", "))}\n</runtime_concerns>`
       : "";
 
   // Judge-grounding sections (baseline findings F3): the assembled YAML
@@ -779,12 +779,18 @@ export function compileStage6Prompt(
       : "";
 
   return [
+    // User-derived content (the intent header and the assembled manifest YAML,
+    // both of which carry spec text) is escaped before going inside its XML
+    // delimiters so a payload containing a closing tag can't break out and
+    // inject instructions — the same guard compileStage7OpsPrompt applies to
+    // its <manifest>/<findings>. The port_map/adapter_bindings below are
+    // JSON-serialized with normalized names, a separate (lower-risk) shape.
     `<original_intent>`,
-    header,
+    escapeXml(header),
     `</original_intent>`,
     ``,
     `<manifest_yaml>`,
-    yaml,
+    escapeXml(yaml),
     `</manifest_yaml>`,
     ``,
     portMapSection,
