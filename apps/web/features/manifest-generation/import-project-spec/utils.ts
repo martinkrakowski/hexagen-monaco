@@ -166,3 +166,23 @@ export function describeFindings(
   }
   return parts.join(" and ");
 }
+
+/**
+ * Distinguishes the pipeline's auto-applied advisories (deterministic fixes the
+ * assembler made — e.g. an R12 adapter rename or an R03 repository-port synthesis,
+ * surfaced in the Stage-6 report's `warnings`) from the reviewer's actual
+ * findings. An auto-applied notice describes a change ALREADY made, so the panel
+ * frames it as informational ("no action needed") rather than a warning "to
+ * address".
+ *
+ * Anchored on the backend advisory message prefixes — the only stable signal
+ * absent a structured field on the report. Keep in sync with the advisory copy in
+ * `synthesizeMissingRepositoryPorts` / `dedupeAdapterNames`
+ * (@hexagen/agentic-interaction). A cleaner long-term fix is a dedicated
+ * `notices` field on the validation report.
+ */
+export function isAutoAppliedNotice(message: string): boolean {
+  return /^(Renamed adapter |Auto-added a default repository port )/.test(
+    message,
+  );
+}

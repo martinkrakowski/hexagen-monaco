@@ -1,6 +1,10 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { extractSpecSummary, describeFindings } from "../utils";
+import {
+  extractSpecSummary,
+  describeFindings,
+  isAutoAppliedNotice,
+} from "../utils";
 
 describe("extractSpecSummary", () => {
   test("happy path with valid spec data and structures", () => {
@@ -122,5 +126,40 @@ describe("describeFindings", () => {
   test("both — joined with 'and', each pluralized independently", () => {
     assert.equal(describeFindings(3, 2), "3 issues and 2 warnings");
     assert.equal(describeFindings(1, 1), "1 issue and 1 warning");
+  });
+});
+
+describe("isAutoAppliedNotice", () => {
+  test("matches the R12 adapter-rename advisory", () => {
+    assert.equal(
+      isAutoAppliedNotice(
+        "Renamed adapter 'StripeClientAdapter' in context 'InvoicingBilling' to 'InvoicingBillingStripeClientAdapter' to keep adapter names globally unique (R12).",
+      ),
+      true,
+    );
+  });
+
+  test("matches the R03 repository-port synthesis advisory", () => {
+    assert.equal(
+      isAutoAppliedNotice(
+        "Auto-added a default repository port 'InvoiceRepositoryPort' and adapter 'InvoiceRepositoryAdapter' to context 'invoicing-billing' — Stage 3 produced no outbound repository port (R03). Review and rename to fit your domain.",
+      ),
+      true,
+    );
+  });
+
+  test("does NOT match a real reviewer finding (even one mentioning a rule)", () => {
+    assert.equal(
+      isAutoAppliedNotice(
+        "[R16] Port 'CreateInvoicePort' description is trivial.",
+      ),
+      false,
+    );
+    assert.equal(
+      isAutoAppliedNotice(
+        "Context 'invoicing-billing' publishes events but has no publisher port.",
+      ),
+      false,
+    );
   });
 });
