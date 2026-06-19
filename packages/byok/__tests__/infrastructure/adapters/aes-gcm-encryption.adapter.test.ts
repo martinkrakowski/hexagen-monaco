@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import { AesGcmEncryptionAdapter } from "../../../src/infrastructure/adapters/aes-gcm-encryption.adapter.js";
 import { constructAAD } from "../../../src/domain/value-objects/aad.vo.js";
 
@@ -9,14 +9,14 @@ describe("AesGcmEncryptionAdapter", () => {
   let originalSecret: string | undefined;
   let originalVersion: string | undefined;
 
-  before(() => {
+  beforeAll(() => {
     originalSecret = process.env.SERVER_ENCRYPTION_SECRET;
     originalVersion = process.env.ACTIVE_KEY_VERSION;
     process.env.SERVER_ENCRYPTION_SECRET = TEST_SECRET;
     delete process.env.ACTIVE_KEY_VERSION;
   });
 
-  after(() => {
+  afterAll(() => {
     if (originalSecret !== undefined) {
       process.env.SERVER_ENCRYPTION_SECRET = originalSecret;
     } else {

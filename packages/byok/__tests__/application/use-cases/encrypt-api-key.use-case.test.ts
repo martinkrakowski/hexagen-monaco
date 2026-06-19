@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { EncryptApiKeyUseCase } from "../../../src/application/use-cases/encrypt-api-key.use-case.js";
 import { StubEncryptionAdapter } from "../../doubles/stub-encryption.adapter.js";
 import { StubKeyMetadataAdapter } from "../../doubles/stub-key-metadata.adapter.js";

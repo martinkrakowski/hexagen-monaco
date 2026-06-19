@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { isByokProvider } from "../../src/domain/value-objects/provider.vo.js";
 
 describe("isByokProvider", () => {
