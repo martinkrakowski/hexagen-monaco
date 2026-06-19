@@ -16,7 +16,7 @@ import type {
   PortDefinition,
 } from "../../../domain/value-objects/pipeline-state";
 import type { PortQualityIssue } from "../../../domain/services/port-quality-validator";
-import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest.prompt";
+import { buildStage6RetryPrompt } from "../../../domain/prompts/generate-manifest.prompt";
 import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
@@ -97,7 +97,8 @@ export class ExecuteValidationReviewUseCase {
     | { success: false; error: unknown }
   > {
     const stageStart = Date.now();
-    let prompt = compileStage6Prompt(state);
+    const originalPrompt = compileStage6Prompt(state);
+    let prompt = originalPrompt;
     let lastError = "";
     let retryCount = 0;
     let modelName: string | undefined;
@@ -342,14 +343,12 @@ export class ExecuteValidationReviewUseCase {
         );
       }
 
-      // Build retry prompt
-      prompt = buildStageRetryPrompt({
-        stage: STAGE_NUMBER,
-        attempt: attempt + 1,
-        failedOutput: fullResponse,
-        errorDetail: parseError,
-        originalPrompt: prompt,
-      }).content;
+      // Build the retry prompt from the ORIGINAL review prompt (not the
+      // previous, possibly-already-truncated `prompt`). Stage 6 must re-review
+      // the full manifest; the generic buildStageRetryPrompt truncates to 1000
+      // chars and strips the manifest, which made a retry trivially "pass"
+      // without reviewing anything.
+      prompt = buildStage6RetryPrompt(originalPrompt, fullResponse, parseError);
     }
 
     throw new Error("Unreachable: all retry paths return within loop");

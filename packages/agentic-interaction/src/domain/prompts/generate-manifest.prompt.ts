@@ -943,6 +943,51 @@ export function buildStageRetryPrompt(ctx: StageRetryContext): RetryResult {
   return { kind: "prompt", content };
 }
 
+/**
+ * Retry prompt for Stage 6 (validation review) specifically.
+ *
+ * Unlike the generic {@link buildStageRetryPrompt}, which truncates the original
+ * prompt to 1000 chars to keep *generation* retries small, a *validation* retry
+ * MUST re-review the full manifest — so this re-sends the complete original
+ * review prompt with a terse format-correction preamble. Truncating here dropped
+ * the entire port_map / adapter_bindings / manifest_yaml, so a retry "reviewed"
+ * nothing and trivially reported a pass (the prod Stage-6 false-pass: a parse
+ * failure on attempt 1 → a manifest-less retry → "validation passed").
+ */
+export function buildStage6RetryPrompt(
+  originalPrompt: string,
+  failedOutput: string,
+  errorDetail: string,
+): string {
+  const snippet =
+    failedOutput.length > 400
+      ? failedOutput.slice(0, 400) + "\n... [truncated]"
+      : failedOutput;
+  return [
+    `CORRECTION REQUIRED — your previous review output could not be parsed.`,
+    // Escape the interpolated values so a payload containing a closing tag can't
+    // break the delimiters and inject instructions — same guard the Stage-7
+    // builder applies to its <manifest>/<findings> sections. `failedOutput` is
+    // the model's prior output (which can echo user-spec content); `errorDetail`
+    // is currently a fixed string but escaped too, defensively.
+    `<rejection_reason>`,
+    escapeXml(errorDetail),
+    `</rejection_reason>`,
+    ...(failedOutput.trim()
+      ? [
+          `<your_previous_output>`,
+          escapeXml(snippet),
+          `</your_previous_output>`,
+        ]
+      : []),
+    ``,
+    `Re-review the SAME manifest below and output ONLY valid NDJSON — one JSON`,
+    `object per line, no prose, no markdown, and no reasoning text.`,
+    ``,
+    originalPrompt,
+  ].join("\n");
+}
+
 /** @deprecated Use buildStageRetryPrompt instead */
 export const RETRY_PROMPTS = {
   generalNDJSON: (attempt: number): RetryResult => ({
