@@ -22,7 +22,7 @@
     "./infrastructure/adapters/model-preferences.adapter": "./src/infrastructure/adapters/model-preferences.adapter.ts"
   },
   "scripts": {
-    "test": "node --import tsx/esm --test \"__tests__/**/*.test.ts\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@hexagen/agentic-interaction": "workspace:*",

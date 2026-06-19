@@ -158,9 +158,13 @@ function main(): void {
     }
     project.saveSync();
 
-    // Only flip the package over when nothing still imports node:test.
+    // Flip the package over once no file is left on node:test — i.e. nothing was
+    // deferred as manual. Gated on `files.length` (not `transformed`) so a re-run
+    // AFTER the manual files are hand-converted still completes the flip (that
+    // run transforms 0 but now has 0 manual). Idempotent: config-write and
+    // script-flip both no-op if already done.
     let flipped = false;
-    if (manual.length === 0 && transformed > 0) {
+    if (manual.length === 0 && files.length > 0) {
       const wroteConfig = writeVitestConfig(dir);
       const flippedScript = flipTestScript(dir);
       flipped = wroteConfig || flippedScript;

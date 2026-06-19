@@ -1,4 +1,4 @@
-import { describe, it, mock } from "node:test";
+import { describe, it, vi } from "vitest";
 import assert from "node:assert/strict";
 import { ReconcileUseCase } from "../../src/application/use-cases/reconcile.use-case.js";
 import type {
@@ -9,13 +9,13 @@ import { createVerdict } from "../../src/domain/verdict.js";
 
 function createMockReconciliationPort(result: ReconciliationResult) {
   return {
-    reconcile: mock.fn(() => Promise.resolve(result)),
+    reconcile: vi.fn(() => Promise.resolve(result)),
   };
 }
 
 function createMockCompareVerdictsPort() {
   return {
-    compareVerdicts: mock.fn((a: any, b: any) => {
+    compareVerdicts: vi.fn((a: any, b: any) => {
       if (a.accepted && !b.accepted) return -1;
       if (!a.accepted && b.accepted) return 1;
       return 0;
@@ -25,22 +25,20 @@ function createMockCompareVerdictsPort() {
 
 function createMockResolveConflictPort() {
   return {
-    resolve: mock.fn(),
+    resolve: vi.fn(),
   };
 }
 
 function createMockManifestPatchPort() {
   return {
-    validatePatches: mock.fn(() =>
-      Promise.resolve({ success: true, value: [] }),
-    ),
-    applyPatches: mock.fn(() => Promise.resolve({ success: true })),
+    validatePatches: vi.fn(() => Promise.resolve({ success: true, value: [] })),
+    applyPatches: vi.fn(() => Promise.resolve({ success: true })),
   };
 }
 
 function createMockLintFilterPort(shouldAccept = true) {
   return {
-    shouldAccept: mock.fn(() => shouldAccept),
+    shouldAccept: vi.fn(() => shouldAccept),
   };
 }
 
