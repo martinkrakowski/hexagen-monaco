@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import path from "node:path";
 import { generateCrossContext } from "../../src/generators/cross-context.js";

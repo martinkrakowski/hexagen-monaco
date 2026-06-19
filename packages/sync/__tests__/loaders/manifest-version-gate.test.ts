@@ -10,7 +10,7 @@
  * test that fails. (It exercises project-configuration's built dist, exactly
  * like the production CLI.)
  */
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import { promises as fs } from "node:fs";
 import os from "node:os";

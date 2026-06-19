@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach } from "vitest";
 import type { Manifest } from "@hexagen/sync";
 import { PortRemovalFake } from "./port-fake.js";
 

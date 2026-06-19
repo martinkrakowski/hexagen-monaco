@@ -20,7 +20,7 @@
  * for the parse-failure case only.
  */
 import assert from "node:assert/strict";
-import { describe, it, before } from "node:test";
+import { describe, it, beforeAll } from "vitest";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
@@ -46,7 +46,7 @@ describe(
   "exit-code contract — built dist in published layout",
   { skip: SKIP_NON_POSIX },
   () => {
-    before(assertBuiltArtifactsPresent);
+    beforeAll(assertBuiltArtifactsPresent);
 
     describe("hexagen (sync CLI)", () => {
       it("--version exits 0 (bundle loads, parseAsync tail intact)", async () => {

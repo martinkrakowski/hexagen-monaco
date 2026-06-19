@@ -21,7 +21,7 @@
  * exit 0. The keep path itself fails such a file-deep pattern and lands in
  * `skipped` — the documented scoped-run convergence limit.
  */
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import { promises as fs } from "node:fs";
 import os from "node:os";

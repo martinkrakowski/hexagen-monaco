@@ -43,7 +43,7 @@
  * POSIX-only (shell shims), like the other contract suites.
  */
 import assert from "node:assert/strict";
-import { describe, it, before } from "node:test";
+import { describe, it, beforeAll } from "vitest";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
@@ -165,7 +165,7 @@ describe(
   "sync --check drift-gate contract — built dist in published layout",
   { skip: SKIP_NON_POSIX },
   () => {
-    before(assertBuiltArtifactsPresent);
+    beforeAll(assertBuiltArtifactsPresent);
 
     it("converged tree: --check exits 0 and the counts are truthful zeros (RCA #5)", async () => {
       const fix = await createConvergedFixture("hexagen-check-converged-");

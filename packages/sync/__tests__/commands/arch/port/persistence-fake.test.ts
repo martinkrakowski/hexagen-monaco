@@ -1,7 +1,7 @@
 import assert from "node:assert";
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it, beforeEach, afterEach } from "vitest";
 import type { Manifest } from "@hexagen/sync";
-import { PersistenceFake, FakeSaveResult } from "./persistence-fake.js";
+import { PersistenceFake } from "./persistence-fake.js";
 
 describe("PersistenceFake", () => {
   let fake: PersistenceFake;

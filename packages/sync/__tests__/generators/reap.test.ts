@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { reapLegacyFolders } from "../../src/generators/reap.js";
 import type { Manifest } from "../../src/types/manifest.js";
 import { makeCapturingLogger } from "../helpers/spy-logger.js";

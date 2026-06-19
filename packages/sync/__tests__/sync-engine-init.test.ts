@@ -14,7 +14,7 @@
  * The contract suites pin the spawned-CLI behaviour end-to-end (published
  * layout, cwd = fixture root); these unit cases pin the walk itself.
  */
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import { promises as fs } from "node:fs";
 import os from "node:os";

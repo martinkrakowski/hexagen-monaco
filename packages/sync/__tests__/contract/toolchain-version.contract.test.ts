@@ -19,7 +19,7 @@
  * installed-tarball end of the same contract by the capstone pin gate.
  */
 import assert from "node:assert/strict";
-import { describe, it, before } from "node:test";
+import { describe, it, beforeAll } from "vitest";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
@@ -37,7 +37,7 @@ describe(
   "toolchain-version contract — built dist in published layout",
   { skip: SKIP_NON_POSIX },
   () => {
-    before(assertBuiltArtifactsPresent);
+    beforeAll(assertBuiltArtifactsPresent);
 
     it("hexagen --version reports the build-injected engine version, not the adjacent package.json", async () => {
       const fix = await createPublishedLayoutFixture(

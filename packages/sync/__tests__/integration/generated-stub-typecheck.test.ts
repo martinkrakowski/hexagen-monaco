@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { describe, it, afterEach } from "node:test";
+import { describe, it, afterEach } from "vitest";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
