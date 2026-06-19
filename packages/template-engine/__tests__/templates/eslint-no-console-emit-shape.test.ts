@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -73,11 +73,11 @@ describe("eslint-no-console template — emit shape", () => {
   let root: string;
   let warnings: string[];
 
-  before(async () => {
+  beforeAll(async () => {
     ({ root, warnings } = await install());
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (root) await fs.rm(root, { recursive: true, force: true });
   });
 

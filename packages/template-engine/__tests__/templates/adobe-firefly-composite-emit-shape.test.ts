@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -56,7 +56,7 @@ describe("adobe-firefly-composite template — emit shape", () => {
   let root: string;
   let warnings: string[];
 
-  before(async () => {
+  beforeAll(async () => {
     root = await fs.mkdtemp(
       path.join(os.tmpdir(), "hexagen-firefly-composite-"),
     );
@@ -74,7 +74,7 @@ describe("adobe-firefly-composite template — emit shape", () => {
     warnings = result.warnings;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (root) await fs.rm(root, { recursive: true, force: true });
   });
 

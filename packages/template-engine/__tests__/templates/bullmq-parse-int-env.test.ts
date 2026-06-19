@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 
 // Loads parseIntEnv from the emitted bullmq template file. The helper lives

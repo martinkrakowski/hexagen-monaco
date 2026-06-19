@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -89,12 +89,12 @@ describe("docker template — emit shape", () => {
     let projectRoot: string;
     let warnings: string[];
 
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       ({ warnings } = await install(projectRoot));
     });
 
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
@@ -178,7 +178,7 @@ describe("docker template — emit shape", () => {
   describe("non-default answers (node_version=20, services=[redis,postgres])", () => {
     let projectRoot: string;
 
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       await install(projectRoot, {
         node_version: "20",
@@ -188,7 +188,7 @@ describe("docker template — emit shape", () => {
       });
     });
 
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 

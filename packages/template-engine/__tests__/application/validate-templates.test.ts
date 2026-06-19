@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -41,13 +41,13 @@ describe("ValidateTemplatesUseCase — conflict detection", () => {
   let tmpDir: string;
   let projectRoot: string;
 
-  before(async () => {
+  beforeAll(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-validate-test-"));
     projectRoot = path.join(tmpDir, "project");
     await fs.mkdir(projectRoot, { recursive: true });
   });
 
-  after(async () => {
+  afterAll(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 

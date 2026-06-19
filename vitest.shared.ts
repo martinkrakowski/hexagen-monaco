@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig, configDefaults } from "vitest/config";
 
 /**
  * Shared Vitest base for migrated workspaces (ADR-0044).
@@ -22,6 +22,11 @@ export const baseConfig = defineConfig({
     // so packages with mixed locations don't silently drop files. Vitest's
     // default `exclude` already covers `node_modules` and `dist`.
     include: ["**/*.test.ts"],
+    // Never RUN scaffold data as tests: a package-root `templates/` holds
+    // `.test.ts` files that are content for generated projects (e.g.
+    // template-engine). Anchored, so real tests under `__tests__/templates/`
+    // still run. Extends — not replaces — Vitest's defaults (node_modules, dist…).
+    exclude: [...configDefaults.exclude, "templates/**"],
   },
   resolve: {
     // NodeNext barrels import `./x/index.js` against `.ts` sources; mirror the

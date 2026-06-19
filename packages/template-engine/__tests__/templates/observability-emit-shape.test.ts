@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
@@ -104,12 +104,12 @@ describe("observability template — emit shape", () => {
     let projectRoot: string;
     let warnings: string[];
 
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       ({ warnings } = await install(projectRoot));
     });
 
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
@@ -158,11 +158,11 @@ describe("observability template — emit shape", () => {
 
   describe("otel=true", () => {
     let projectRoot: string;
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       await install(projectRoot, { otel: true });
     });
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
@@ -212,7 +212,7 @@ describe("observability template — emit shape", () => {
       healthBody: { status: string; checks: Array<{ name: string }> };
     };
 
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       await install(projectRoot);
       // Mark the temp project ESM so the driver's top-level await (the async
@@ -290,7 +290,7 @@ describe("observability template — emit shape", () => {
       out = JSON.parse(stdout);
     });
 
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 

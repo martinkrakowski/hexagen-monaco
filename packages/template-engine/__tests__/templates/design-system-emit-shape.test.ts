@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -99,12 +99,12 @@ describe("design-system template — emit shape", () => {
     let projectRoot: string;
     let warnings: string[];
 
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       ({ warnings } = await install(projectRoot));
     });
 
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
@@ -149,7 +149,7 @@ describe("design-system template — emit shape", () => {
   describe("storybook=true + custom brand/typography", () => {
     let projectRoot: string;
 
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       await install(projectRoot, {
         primary_color: "#ff0066",
@@ -160,7 +160,7 @@ describe("design-system template — emit shape", () => {
       });
     });
 
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 

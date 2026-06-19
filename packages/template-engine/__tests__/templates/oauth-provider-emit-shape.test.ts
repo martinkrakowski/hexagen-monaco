@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -72,13 +72,13 @@ describe("oauth provider templates — user DTO lives in infrastructure", () => 
   for (const { id, dir, file } of PROVIDERS) {
     describe(id, () => {
       let root: string;
-      before(async () => {
+      beforeAll(async () => {
         // Create the temp dir first so `root` is assigned before the throwable
         // install — the `after` hook then cleans up even if installation fails.
         root = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-oauth-test-"));
         await install(id, root);
       });
-      after(async () => {
+      afterAll(async () => {
         // `root` is unset if `before` failed before install — guard so cleanup
         // can't throw a confusing TypeError that masks the real failure.
         if (root) await fs.rm(root, { recursive: true, force: true });

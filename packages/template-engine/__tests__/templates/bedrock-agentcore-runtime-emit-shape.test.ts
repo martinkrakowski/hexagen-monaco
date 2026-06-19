@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -77,12 +77,12 @@ describe("bedrock-agentcore-runtime template — emit shape (defaults)", () => {
   let root: string;
   let warnings: string[];
 
-  before(async () => {
+  beforeAll(async () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-agentcore-test-"));
     warnings = await install(root);
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (root) await fs.rm(root, { recursive: true, force: true });
   });
 
@@ -214,12 +214,12 @@ describe("bedrock-agentcore-runtime template — emit shape (defaults)", () => {
 describe("bedrock-agentcore-runtime template — gating (cdk, no CI)", () => {
   let root: string;
 
-  before(async () => {
+  beforeAll(async () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-agentcore-cdk-"));
     await install(root, { provision: "cdk", deploy_ci: false });
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (root) await fs.rm(root, { recursive: true, force: true });
   });
 

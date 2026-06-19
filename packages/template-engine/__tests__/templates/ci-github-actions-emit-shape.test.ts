@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -82,12 +82,12 @@ describe("ci-github-actions template — emit shape", () => {
     let projectRoot: string;
     let warnings: string[];
 
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       ({ warnings } = await install(projectRoot));
     });
 
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
@@ -221,11 +221,11 @@ describe("ci-github-actions template — emit shape", () => {
 
   describe("deploy_target=railway", () => {
     let projectRoot: string;
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       await install(projectRoot, { deploy_target: "railway" });
     });
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
@@ -246,11 +246,11 @@ describe("ci-github-actions template — emit shape", () => {
 
   describe("deploy_target=fly-io", () => {
     let projectRoot: string;
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       await install(projectRoot, { deploy_target: "fly-io" });
     });
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
@@ -269,11 +269,11 @@ describe("ci-github-actions template — emit shape", () => {
 
   describe("deploy_target=vps-ssh", () => {
     let projectRoot: string;
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       await install(projectRoot, { deploy_target: "vps-ssh" });
     });
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
@@ -287,14 +287,14 @@ describe("ci-github-actions template — emit shape", () => {
 
   describe("deploy_target=none, preview_deploys=false", () => {
     let projectRoot: string;
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       await install(projectRoot, {
         deploy_target: "none",
         preview_deploys: false,
       });
     });
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
@@ -320,11 +320,11 @@ describe("ci-github-actions template — emit shape", () => {
 
   describe("node_version=20", () => {
     let projectRoot: string;
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       await install(projectRoot, { node_version: "20" });
     });
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
@@ -337,11 +337,11 @@ describe("ci-github-actions template — emit shape", () => {
 
   describe("preview workflow hardening", () => {
     let projectRoot: string;
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       await install(projectRoot, { preview_deploys: true });
     });
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 

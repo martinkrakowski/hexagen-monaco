@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -77,12 +77,12 @@ describe("adobe-firefly-core template — emit shape (defaults: polling)", () =>
   let root: string;
   let warnings: string[];
 
-  before(async () => {
+  beforeAll(async () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-firefly-core-"));
     warnings = await install(root);
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (root) await fs.rm(root, { recursive: true, force: true });
   });
 
@@ -302,12 +302,12 @@ describe("adobe-firefly-core template — emit shape (defaults: polling)", () =>
 describe("adobe-firefly-core template — gating (webhook mode)", () => {
   let root: string;
 
-  before(async () => {
+  beforeAll(async () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-firefly-core-wh-"));
     await install(root, { job_mode: "webhook" });
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (root) await fs.rm(root, { recursive: true, force: true });
   });
 

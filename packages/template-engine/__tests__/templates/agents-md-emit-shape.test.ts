@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -100,7 +100,7 @@ describe("agents-md template — emit shape", () => {
     let projectRoot: string;
     let warnings: string[];
 
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       ({ warnings } = await install(projectRoot, {
         project_description: "A widget factory API",
@@ -109,7 +109,7 @@ describe("agents-md template — emit shape", () => {
       }));
     });
 
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
@@ -176,12 +176,12 @@ describe("agents-md template — emit shape", () => {
     describe("observability alone", () => {
       let projectRoot: string;
 
-      before(async () => {
+      beforeAll(async () => {
         projectRoot = await freshProject();
         await installTemplates(projectRoot, ["observability"]);
       });
 
-      after(async () => {
+      afterAll(async () => {
         await fs.rm(projectRoot, { recursive: true, force: true });
       });
 
@@ -210,7 +210,7 @@ describe("agents-md template — emit shape", () => {
     describe("agents-md + observability together", () => {
       let projectRoot: string;
 
-      before(async () => {
+      beforeAll(async () => {
         projectRoot = await freshProject();
         await installTemplates(projectRoot, ["agents-md", "observability"], {
           "agents-md": {
@@ -221,7 +221,7 @@ describe("agents-md template — emit shape", () => {
         });
       });
 
-      after(async () => {
+      afterAll(async () => {
         await fs.rm(projectRoot, { recursive: true, force: true });
       });
 
@@ -239,7 +239,7 @@ describe("agents-md template — emit shape", () => {
   describe("session_logging=false", () => {
     let projectRoot: string;
 
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       await install(projectRoot, {
         project_description: "x",
@@ -248,7 +248,7 @@ describe("agents-md template — emit shape", () => {
       });
     });
 
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 

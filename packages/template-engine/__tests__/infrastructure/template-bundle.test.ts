@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { buildTemplateBundle } from "../../src/infrastructure/build-template-bundle.js";
 import {
