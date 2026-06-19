@@ -240,12 +240,10 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair
         `adapter names must be globally unique after an accepted repair, got: ${allAdapters.join(", ")}`,
       );
       // …and the repair-path rename is surfaced as an advisory.
-      assert.ok(
-        result.validation.warnings.some((w) =>
-          /Renamed adapter .* \(R12\)/.test(w),
-        ),
-        "repair-path adapter rename should be surfaced as an advisory",
-      );
+      const renameWarning =
+        result.validation.warnings.find((w) => w.includes("Renamed adapter")) ??
+        "(no repair-path rename advisory found)";
+      assert.match(renameWarning, /Renamed adapter .* \(R12\)/);
     }
   });
 
