@@ -21,6 +21,7 @@ import type {
 } from "../../../domain/value-objects/pipeline-state";
 import { normalizeContextName } from "../../../domain/index";
 import { synthesizeMissingRepositoryPorts } from "../../../domain/manifest/synthesize-repository-ports";
+import { dedupeAdapterNames } from "../../../domain/manifest/dedupe-adapter-names";
 import { isBannedContextName } from "../../../domain/prompts/architecture-contract";
 import { ExecutePortMappingUseCase } from "./execute-port-mapping.use-case";
 import { ExecuteAdapterAssignmentUseCase } from "./execute-adapter-assignment.use-case";
@@ -2013,6 +2014,23 @@ export class ExecuteStructuredConfigGenerationUseCase {
       callbacks?.onChunk?.(`Stage 5 · ${warning}`);
     }
 
+    // R12 satisfaction at the source: Stage 4 can give the same generic adapter
+    // name to multiple contexts that share a technology (e.g. StripeClientAdapter
+    // in two contexts) — a real codegen collision. Dedupe AFTER the R03 synthesis
+    // (so the synthesized repository adapters are covered too) and on the same
+    // mergedAdapterBindings Stage 5/6 read, so the reviewer never sees a duplicate
+    // and the manifest carries globally-unique names. Only the adapter NAME
+    // changes; `implements` (the port reference the gate keys on) is untouched.
+    const adapterDedup = dedupeAdapterNames(mergedAdapterBindings);
+    mergedAdapterBindings = adapterDedup.adapterBindings;
+    const adapterRenameWarnings = adapterDedup.renamed.map(
+      (r) =>
+        `Renamed adapter '${r.from}' in context '${r.contextName}' to '${r.to}' to keep adapter names globally unique (R12).`,
+    );
+    for (const warning of adapterRenameWarnings) {
+      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
+    }
+
     // Stage 5: Manifest Assembly (synchronous, returns AssembledManifest directly)
     const s5Start = Date.now();
     callbacks?.onProgress?.(5, 0);
@@ -2068,10 +2086,14 @@ export class ExecuteStructuredConfigGenerationUseCase {
     // Stage 7 so the accept path (which preserves `finalReport.warnings`) and the
     // reject path both carry them. They are warnings, not errors, so `passed` and
     // the deterministic gate are unaffected.
-    if (repositorySynthesisWarnings.length > 0) {
+    const assemblyAdvisories = [
+      ...repositorySynthesisWarnings,
+      ...adapterRenameWarnings,
+    ];
+    if (assemblyAdvisories.length > 0) {
       finalReport = {
         ...finalReport,
-        warnings: [...finalReport.warnings, ...repositorySynthesisWarnings],
+        warnings: [...finalReport.warnings, ...assemblyAdvisories],
       };
     }
 
