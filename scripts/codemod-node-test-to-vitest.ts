@@ -68,24 +68,32 @@ function transformFile(sf: SourceFile): FileOutcome {
   }
 
   importDecl.setModuleSpecifier("vitest");
+  // Track which hooks THIS file actually imported from node:test, so the
+  // call-site rename below is scoped to them — a local/unrelated `before` or
+  // `after` (one the file never imported as a hook) is left alone.
+  const importedHookRenames: Record<string, string> = {};
   for (const spec of importDecl.getNamedImports()) {
     const renamed = HOOK_RENAMES[spec.getName()];
-    if (renamed) spec.setName(renamed);
+    if (renamed) {
+      importedHookRenames[spec.getName()] = renamed;
+      spec.setName(renamed);
+    }
   }
 
-  // Rename hook CALL SITES (the import specifier is already renamed above, so it
-  // is excluded here). AST-scoped to call callees, so strings/comments and any
-  // unrelated identifier are never touched.
+  // Rename hook CALL SITES — only for hooks imported above (the specifier is
+  // already renamed, so it's excluded), and only at call callees (AST-scoped), so
+  // strings/comments and any identifier that isn't an imported hook are untouched.
   const callees = sf
     .getDescendantsOfKind(SyntaxKind.Identifier)
     .filter((id) => {
-      if (!HOOK_RENAMES[id.getText()]) return false;
+      if (!importedHookRenames[id.getText()]) return false;
       const parent = id.getParent();
       return Node.isCallExpression(parent) && parent.getExpression() === id;
     })
     // Replace last-to-first so earlier nodes' positions stay valid.
     .sort((a, b) => b.getStart() - a.getStart());
-  for (const id of callees) id.replaceWithText(HOOK_RENAMES[id.getText()]);
+  for (const id of callees)
+    id.replaceWithText(importedHookRenames[id.getText()]);
 
   return "transformed";
 }
