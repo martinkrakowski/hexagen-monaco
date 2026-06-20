@@ -53,6 +53,20 @@ function transformFile(sf: SourceFile): FileOutcome {
   if (!importDecl) return "skip";
   if (needsManualConversion(sf, importDecl)) return "manual";
 
+  // `node:test`'s DEFAULT export is the `test` function, so `import test from
+  // "node:test"` is valid. Vitest has no default export — `test` is a NAMED
+  // export. Rewrite the default import to a named one (preserving any alias)
+  // before swapping the source, or the file fails to load under vitest
+  // (`default is not a function`).
+  const defaultImport = importDecl.getDefaultImport();
+  if (defaultImport) {
+    const localName = defaultImport.getText();
+    importDecl.removeDefaultImport();
+    importDecl.addNamedImport(
+      localName === "test" ? "test" : { name: "test", alias: localName },
+    );
+  }
+
   importDecl.setModuleSpecifier("vitest");
   for (const spec of importDecl.getNamedImports()) {
     const renamed = HOOK_RENAMES[spec.getName()];
