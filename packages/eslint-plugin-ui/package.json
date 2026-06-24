@@ -14,7 +14,7 @@
   "scripts": {
     "build": "tsc",
     "lint": "eslint .",
-    "test": "node --import tsx/esm --test \"__tests__/**/*.test.ts\"",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

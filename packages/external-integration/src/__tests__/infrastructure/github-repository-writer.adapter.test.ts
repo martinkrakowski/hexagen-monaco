@@ -1,4 +1,4 @@
-import { describe, it, afterEach } from "node:test";
+import { describe, it, afterEach } from "vitest";
 import assert from "node:assert";
 import { GitHubRepositoryWriterAdapter } from "../../infrastructure/adapters/github-repository-writer.adapter.js";
 

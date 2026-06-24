@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import { InitializeFeatureWorktreeUseCase } from "../../../src/application/use-cases/initialize-feature-worktree.use-case.js";
 import { createFeatureId } from "../../../src/domain/value-objects/feature-id.js";

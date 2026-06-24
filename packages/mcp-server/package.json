@@ -18,7 +18,7 @@
     "build": "tsc",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test __tests__/**/*.test.ts",
+    "test": "vitest run",
     "start": "node dist/cli.js --workspace-root ../.."
   },
   "dependencies": {

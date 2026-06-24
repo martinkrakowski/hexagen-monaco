@@ -6,7 +6,7 @@
  * refuses with guidance (naming the package and `hexagen manifest migrate`)
  * instead of letting the strict schemas misdiagnose "too new" as "malformed".
  */
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import {
   CURRENT_MANIFEST_SCHEMA_VERSION,

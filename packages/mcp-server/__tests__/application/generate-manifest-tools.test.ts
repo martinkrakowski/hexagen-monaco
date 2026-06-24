@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { GenerateTopologyToolUseCase } from "../../src/application/use-cases/generate-topology-tool.use-case.js";
 import { GenerateAdaptersToolUseCase } from "../../src/application/use-cases/generate-adapters-tool.use-case.js";

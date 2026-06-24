@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import { BrowserHardwareProfilerAdapter } from "../../../src/infrastructure/adapters/browser-hardware-profiler.adapter.js";
 

@@ -8,7 +8,7 @@
  * 3. Violation Scanning: <1.5s p95 (violation count invariant)
  */
 
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 
 describe("Governance Assistant — Performance SLA (Phase 6D)", () => {

@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import { BOUNDED_CONTEXT_TYPES } from "@hexagen/shared";
 import { createContextTool } from "../../src/infrastructure/adapters/tools/create-context.js";

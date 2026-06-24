@@ -1,4 +1,4 @@
-import { describe, it, afterEach } from "node:test";
+import { describe, it, afterEach } from "vitest";
 import assert from "node:assert";
 import { OpenAIManifestGenerationAdapter } from "../../../src/infrastructure/adapters/manifest-generation.adapter.js";
 import type {

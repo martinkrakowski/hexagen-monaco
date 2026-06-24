@@ -6,7 +6,7 @@
  * Verifies that export can end-to-end process and emit events correctly.
  */
 
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach } from "vitest";
 import assert from "node:assert/strict";
 import {
   createMockRegistry,

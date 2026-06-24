@@ -8,7 +8,7 @@
  * are billed against maxTokens caps and <think> blocks break
  * structured-output JSON parsing.
  */
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { WebLLMAdapter } from "../../../src/infrastructure/adapters/webllm.adapter.js";
 import { DomainModelId } from "../../../src/domain/value-objects/model-id.vo.js";

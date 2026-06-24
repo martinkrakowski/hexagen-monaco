@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import { FakeLocalLLMProviderPort } from "../../doubles/ports/local-llm-provider.fake.js";
 import { StreamGenerateUseCase } from "../../../src/application/use-cases/stream-generate.use-case.js";

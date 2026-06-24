@@ -7,7 +7,7 @@
  * DeepSeek-R1-Distill-class models, whose thinking cannot be disabled,
  * must never appear).
  */
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { LOCAL_MODELS } from "../../src/domain/model-catalog.js";
 import {
