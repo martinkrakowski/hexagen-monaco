@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { validateApiKeyFormat } from "../../src/domain/services/api-key-format-validator.js";
 
 describe("validateApiKeyFormat", () => {

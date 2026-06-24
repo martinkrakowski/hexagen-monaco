@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { RevokeKeyUseCase } from "../../../src/application/use-cases/revoke-key.use-case.js";
 import { StubRevocationAdapter } from "../../doubles/stub-revocation.adapter.js";
 import { StubKeyMetadataAdapter } from "../../doubles/stub-key-metadata.adapter.js";

@@ -17,7 +17,7 @@
     "build": "tsc",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx/esm --test \"__tests__/**/*.test.ts\"",
+    "test": "vitest run",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
   },
   "devDependencies": {

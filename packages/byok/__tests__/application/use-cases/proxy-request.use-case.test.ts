@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { ProxyRequestUseCase } from "../../../src/application/use-cases/proxy-request.use-case.js";
 import { StubEncryptionAdapter } from "../../doubles/stub-encryption.adapter.js";
 import { StubRevocationAdapter } from "../../doubles/stub-revocation.adapter.js";
