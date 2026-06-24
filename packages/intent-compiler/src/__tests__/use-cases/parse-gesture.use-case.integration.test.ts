@@ -199,7 +199,7 @@ describe("ParseGestureUseCase Integration", () => {
 
       try {
         useCase.execute(gesture);
-        fail("should have thrown");
+        assert.fail("should have thrown");
       } catch (e) {
         const error = e as Error;
         assert.ok(error.message.includes("Topology validation failed"));
@@ -338,7 +338,7 @@ describe("ParseGestureUseCase Integration", () => {
 
       try {
         useCase.execute(gesture);
-        fail("should have thrown");
+        assert.fail("should have thrown");
       } catch (e) {
         const rejection = e as Rejection;
         assert.ok(rejection.reason.includes("Topology validation failed"));

@@ -28,7 +28,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "tsx --test --watch __tests__/**/*.test.ts __tests__/**/*.spec.ts"
+    "test:watch": "vitest watch"
   },
   "dependencies": {
     "@hexagen/governance": "workspace:*",
