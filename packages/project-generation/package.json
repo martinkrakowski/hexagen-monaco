@@ -15,7 +15,7 @@
     "build": "tsc --build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "tsx --test --watch \"__tests__/**/*.test.ts\"",
+    "test:watch": "vitest watch",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
