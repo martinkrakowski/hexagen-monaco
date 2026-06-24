@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig, configDefaults } from "vitest/config";
 
 /**
  * Shared Vitest base for migrated workspaces (ADR-0044).
@@ -19,9 +19,12 @@ export const baseConfig = defineConfig({
     environment: "node",
     // Relative to the package dir (the config root). Matches every layout in the
     // repo — `src/__tests__/`, a root `__tests__/`, and colocated `*.test.ts` —
-    // so packages with mixed locations don't silently drop files. Vitest's
-    // default `exclude` already covers `node_modules` and `dist`.
+    // so packages with mixed locations don't silently drop files.
     include: ["**/*.test.ts"],
+    // Vitest 4's default `exclude` is only `node_modules` + `.git` (NOT `dist`),
+    // so be explicit: never treat built output (`dist` — e.g. sync's emitted
+    // scaffold `.test.ts`) or package-root `templates/` scaffold data as tests.
+    exclude: [...configDefaults.exclude, "**/dist/**", "templates/**"],
   },
   resolve: {
     // NodeNext barrels import `./x/index.js` against `.ts` sources; mirror the
