@@ -1,21 +1,8 @@
-import { describe, it, before, afterEach } from "node:test";
+import { describe, it, afterEach } from "vitest";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
 import React from "react";
 import { render, cleanup } from "@testing-library/react";
 import { Label } from "../../src/elements/Label.js";
-
-let dom: JSDOM;
-
-before(() => {
-  dom = new JSDOM("<!DOCTYPE html><html><body></body></html>");
-  global.window = dom.window;
-  global.document = dom.window.document;
-  Object.defineProperty(global, "navigator", {
-    value: dom.window.navigator,
-    writable: true,
-  });
-});
 
 afterEach(() => {
   cleanup();
@@ -27,13 +14,13 @@ describe("Label component", () => {
       React.createElement(Label, null, "Test Label"),
     );
     const label = container.querySelector("label");
-    assert.ok(label instanceof dom.window.HTMLLabelElement);
+    assert.ok(label instanceof HTMLLabelElement);
   });
 
   it("forwards ref to underlying label element", () => {
     const ref = React.createRef<HTMLLabelElement>();
     render(React.createElement(Label, { ref }, "Label"));
-    assert.ok(ref.current instanceof dom.window.HTMLLabelElement);
+    assert.ok(ref.current instanceof HTMLLabelElement);
   });
 
   it("renders label text", () => {

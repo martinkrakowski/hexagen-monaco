@@ -1,21 +1,8 @@
-import { describe, it, before, afterEach } from "node:test";
+import { describe, it, afterEach } from "vitest";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
 import React from "react";
 import { render, cleanup } from "@testing-library/react";
 import { Button } from "../../src/elements/Button.js";
-
-let dom: JSDOM;
-
-before(() => {
-  dom = new JSDOM("<!DOCTYPE html><html><body></body></html>");
-  global.window = dom.window;
-  global.document = dom.window.document;
-  Object.defineProperty(global, "navigator", {
-    value: dom.window.navigator,
-    writable: true,
-  });
-});
 
 afterEach(() => {
   cleanup();
@@ -25,13 +12,13 @@ describe("Button component", () => {
   it("renders a button element with correct text", () => {
     const { getByRole } = render(React.createElement(Button, null, "Click me"));
     const button = getByRole("button", { name: "Click me" });
-    assert.ok(button instanceof dom.window.HTMLButtonElement);
+    assert.ok(button instanceof HTMLButtonElement);
   });
 
   it("forwards ref to underlying button element", () => {
     const ref = React.createRef();
     render(React.createElement(Button, { ref }, "Test"));
-    assert.ok(ref.current instanceof dom.window.HTMLButtonElement);
+    assert.ok(ref.current instanceof HTMLButtonElement);
     assert.strictEqual(ref.current?.textContent, "Test");
   });
 

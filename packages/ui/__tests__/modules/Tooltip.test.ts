@@ -1,21 +1,8 @@
-import { describe, it, before, afterEach } from "node:test";
+import { describe, it, afterEach } from "vitest";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
 import React from "react";
 import { render, cleanup, fireEvent } from "@testing-library/react";
 import { Tooltip } from "../../src/modules/Tooltip.js";
-
-let dom: JSDOM;
-
-before(() => {
-  dom = new JSDOM("<!DOCTYPE html><html><body></body></html>");
-  global.window = dom.window;
-  global.document = dom.window.document;
-  Object.defineProperty(global, "navigator", {
-    value: dom.window.navigator,
-    writable: true,
-  });
-});
 
 afterEach(() => {
   cleanup();
@@ -65,6 +52,6 @@ describe("Tooltip component", () => {
   it("forwards ref to the wrapper span", () => {
     const ref = React.createRef<HTMLSpanElement>();
     render(React.createElement(Tooltip, { ref, content: "x" }, "y"));
-    assert.ok(ref.current instanceof dom.window.HTMLSpanElement);
+    assert.ok(ref.current instanceof HTMLSpanElement);
   });
 });

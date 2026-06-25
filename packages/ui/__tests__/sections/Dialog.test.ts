@@ -1,6 +1,5 @@
-import { describe, it, before, after, afterEach } from "node:test";
+import { describe, it, beforeAll, afterAll, afterEach } from "vitest";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
 import React from "react";
 import { render, cleanup, fireEvent } from "@testing-library/react";
 import {
@@ -12,26 +11,22 @@ import {
   DialogFooter,
 } from "../../src/sections/Dialog.js";
 
-let dom: JSDOM;
-let originalCreateElement: typeof dom.window.document.createElement;
+let originalCreateElement: typeof document.createElement;
 
-before(() => {
-  dom = new JSDOM("<!DOCTYPE html><html><body></body></html>");
-  global.window = dom.window;
-  global.document = dom.window.document;
-  Object.defineProperty(global, "navigator", {
-    value: dom.window.navigator,
-    writable: true,
-  });
+beforeAll(() => {
+  // jsdom doesn't implement HTMLDialogElement.showModal/close — stub them on any
+  // <dialog> the component creates.
   const mockDialog = {
-    showModal: () => {},
-    close: () => {},
+    showModal(this: HTMLDialogElement) {
+      this.open = true;
+    },
+    close(this: HTMLDialogElement) {
+      this.open = false;
+    },
     open: false,
   };
-  originalCreateElement = dom.window.document.createElement.bind(
-    dom.window.document,
-  );
-  dom.window.document.createElement = (tagName: string) => {
+  originalCreateElement = document.createElement.bind(document);
+  document.createElement = (tagName: string) => {
     const el = originalCreateElement(tagName);
     if (tagName === "dialog") {
       Object.assign(el, mockDialog);
@@ -40,8 +35,8 @@ before(() => {
   };
 });
 
-after(() => {
-  dom.window.document.createElement = originalCreateElement;
+afterAll(() => {
+  document.createElement = originalCreateElement;
 });
 
 afterEach(() => {
@@ -139,7 +134,7 @@ describe("Dialog component", () => {
         ),
       );
       const dialog = container.querySelector("dialog") as HTMLDialogElement;
-      const cancelEvent = new dom.window.Event("cancel", { cancelable: true });
+      const cancelEvent = new Event("cancel", { cancelable: true });
       fireEvent(dialog, cancelEvent);
       assert.strictEqual(cancelEvent.defaultPrevented, true);
       assert.strictEqual(closed, false);
@@ -154,9 +149,32 @@ describe("Dialog component", () => {
         ),
       );
       const dialog = container.querySelector("dialog") as HTMLDialogElement;
-      const cancelEvent = new dom.window.Event("cancel", { cancelable: true });
+      const cancelEvent = new Event("cancel", { cancelable: true });
       fireEvent(dialog, cancelEvent);
       assert.strictEqual(cancelEvent.defaultPrevented, false);
+    });
+
+    it("swallows the echo from a programmatic close but still forwards a user close", () => {
+      let closeCount = 0;
+      const onClose = () => {
+        closeCount += 1;
+      };
+      const { container, rerender } = render(
+        React.createElement(Dialog, { open: true, onClose }, "Content"),
+      );
+      // open:true -> false drives the effect's `dialog.close()` branch, which
+      // sets closingRef so the native `close` event it triggers must NOT echo
+      // back into onClose (otherwise every programmatic close double-fires).
+      rerender(
+        React.createElement(Dialog, { open: false, onClose }, "Content"),
+      );
+      const dialog = container.querySelector("dialog") as HTMLDialogElement;
+      fireEvent(dialog, new Event("close"));
+      assert.strictEqual(closeCount, 0);
+      // closingRef is now cleared, so a `close` the component did NOT initiate
+      // still reaches onClose — proving the event is wired, not merely ignored.
+      fireEvent(dialog, new Event("close"));
+      assert.strictEqual(closeCount, 1);
     });
   });
 

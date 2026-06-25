@@ -1,21 +1,8 @@
-import { describe, it, before, afterEach } from "node:test";
+import { describe, it, afterEach } from "vitest";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
 import React from "react";
 import { render, cleanup, fireEvent } from "@testing-library/react";
 import { ViewToggle } from "../../src/modules/ViewToggle.js";
-
-let dom: JSDOM;
-
-before(() => {
-  dom = new JSDOM("<!DOCTYPE html><html><body></body></html>");
-  global.window = dom.window;
-  global.document = dom.window.document;
-  Object.defineProperty(global, "navigator", {
-    value: dom.window.navigator,
-    writable: true,
-  });
-});
 
 afterEach(() => {
   cleanup();
@@ -80,7 +67,7 @@ describe("ViewToggle component", () => {
   it("forwards ref", () => {
     const ref = React.createRef<HTMLDivElement>();
     render(React.createElement(ViewToggle, { ...defaultProps, ref }));
-    assert.ok(ref.current instanceof dom.window.HTMLDivElement);
+    assert.ok(ref.current instanceof HTMLDivElement);
   });
 
   it("renders custom icons when iconA and iconB are provided", () => {
