@@ -37,7 +37,7 @@
  */
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { describe, it, before } from "node:test";
+import { describe, it, beforeAll } from "vitest";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
@@ -184,7 +184,7 @@ describe(
   "dry-run purity contract — built dist in published layout",
   { skip: SKIP_NON_POSIX },
   () => {
-    before(assertBuiltArtifactsPresent);
+    beforeAll(assertBuiltArtifactsPresent);
 
     it("sync --dry-run leaves the tree byte-identical (incl. empty dirs) and writes no report", async () => {
       const fix = await createPublishedLayoutFixture(

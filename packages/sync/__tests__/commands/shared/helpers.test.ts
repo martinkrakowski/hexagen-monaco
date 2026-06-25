@@ -4,7 +4,7 @@
 // inside shared/prompt-service.ts; this test mutates them transiently and
 // restores originals. Not a turbo task input.
 import assert from "node:assert/strict";
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it, beforeEach, afterEach } from "vitest";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";

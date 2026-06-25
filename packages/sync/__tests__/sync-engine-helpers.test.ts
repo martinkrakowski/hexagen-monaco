@@ -11,7 +11,7 @@
  * arithmetic: SyncRunSummary.errors is counted at the production sites
  * (noteFailure per pass result) BEFORE either merge runs.
  */
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import { createEmptyResult } from "../src/results.js";
 import { mergeBarrelPasses, mergeResult } from "../src/sync-engine-helpers.js";

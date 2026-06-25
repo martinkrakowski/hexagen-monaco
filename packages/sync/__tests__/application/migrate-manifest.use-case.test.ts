@@ -15,7 +15,7 @@
  * replace-stamp arms are pinned via the constructor-injected
  * currentVersion/migrations test seam (production callers use the defaults).
  */
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import {
   MigrateManifestUseCase,

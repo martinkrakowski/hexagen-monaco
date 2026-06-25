@@ -39,7 +39,7 @@
  * contract suites.
  */
 import assert from "node:assert/strict";
-import { describe, it, before } from "node:test";
+import { describe, it, beforeAll } from "vitest";
 import { execSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -161,7 +161,7 @@ describe(
   "rollback contract — built dist in published layout (PR-B1, RCA #4)",
   { skip: SKIP_NON_POSIX },
   () => {
-    before(assertBuiltArtifactsPresent);
+    beforeAll(assertBuiltArtifactsPresent);
 
     it("Case A: failed `sync --allow-dirty` NEVER rolls back — untracked + dirty files survive, journal printed", async () => {
       const fix = await prepareRollbackFixture();
