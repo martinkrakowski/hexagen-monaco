@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 import { detectInputMode } from "../detect-input-mode.js";
 import fs from "node:fs";

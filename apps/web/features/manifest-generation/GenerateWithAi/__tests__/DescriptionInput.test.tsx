@@ -1,14 +1,8 @@
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach } from "vitest";
 import assert from "node:assert";
-import { JSDOM } from "jsdom";
 import React from "react";
 import { render, cleanup } from "@testing-library/react";
 import { DescriptionInput } from "../DescriptionInput";
-
-const dom = new JSDOM();
-global.window = dom.window as unknown as Window & typeof globalThis;
-global.document = dom.window.document;
-
 beforeEach(() => {
   cleanup();
 });

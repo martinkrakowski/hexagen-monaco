@@ -1,31 +1,4 @@
-import { JSDOM } from "jsdom";
-
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost/",
-});
-
-Object.defineProperties(globalThis, {
-  window: { value: dom.window, configurable: true, writable: true },
-  document: { value: dom.window.document, configurable: true, writable: true },
-  localStorage: {
-    value: dom.window.localStorage,
-    configurable: true,
-    writable: true,
-  },
-  navigator: {
-    value: dom.window.navigator,
-    configurable: true,
-    writable: true,
-  },
-  Event: { value: dom.window.Event, configurable: true, writable: true },
-  CustomEvent: {
-    value: dom.window.CustomEvent,
-    configurable: true,
-    writable: true,
-  },
-});
-
-import { describe, it, beforeEach, afterEach } from "node:test";
+import { describe, it, beforeEach, afterEach } from "vitest";
 import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
 

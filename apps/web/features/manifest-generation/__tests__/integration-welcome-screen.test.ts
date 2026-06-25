@@ -1,41 +1,4 @@
-/**
- * Integration tests for Welcome Screen manifest generation data flow.
- *
- * These tests verify:
- * 1. Port data format handling (string, object, mixed)
- * 2. Error handling and recovery
- * 3. State management during generation
- * 4. End-to-end flow from form → API → manifest
- */
-
-import { JSDOM } from "jsdom";
-
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost/",
-});
-
-Object.defineProperties(globalThis, {
-  window: { value: dom.window, configurable: true, writable: true },
-  document: { value: dom.window.document, configurable: true, writable: true },
-  localStorage: {
-    value: dom.window.localStorage,
-    configurable: true,
-    writable: true,
-  },
-  navigator: {
-    value: dom.window.navigator,
-    configurable: true,
-    writable: true,
-  },
-  Event: { value: dom.window.Event, configurable: true, writable: true },
-  CustomEvent: {
-    value: dom.window.CustomEvent,
-    configurable: true,
-    writable: true,
-  },
-});
-
-import { describe, it, beforeEach, afterEach, mock } from "node:test";
+import { describe, it, beforeEach, afterEach, vi } from "vitest";
 import assert from "assert";
 import { renderHook, act } from "@testing-library/react";
 
@@ -58,15 +21,15 @@ function createMockContext(
       errorMessage: null,
       autoLoading: false,
     },
-    initializeModel: mock.fn(async () => {}),
-    cancelDownload: mock.fn(),
-    hasAnyCachedModel: mock.fn(async () => false),
-    hasModelInCache: mock.fn(async () => false),
-    switchModel: mock.fn(async () => {}),
-    deleteCachedModel: mock.fn(async () => {}),
+    initializeModel: vi.fn(async () => {}),
+    cancelDownload: vi.fn(),
+    hasAnyCachedModel: vi.fn(async () => false),
+    hasModelInCache: vi.fn(async () => false),
+    switchModel: vi.fn(async () => {}),
+    deleteCachedModel: vi.fn(async () => {}),
     loadedModel: null,
-    sendStructuredPrompt: mock.fn(sendFn ?? defaultSend) as never,
-    sendGovernanceMessage: mock.fn(async () => {}),
+    sendStructuredPrompt: vi.fn(sendFn ?? defaultSend) as never,
+    sendGovernanceMessage: vi.fn(async () => {}),
     messages: [],
   };
 }

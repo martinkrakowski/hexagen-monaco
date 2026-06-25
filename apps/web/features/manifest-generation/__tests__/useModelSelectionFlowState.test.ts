@@ -1,12 +1,4 @@
-import { JSDOM } from "jsdom";
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost/",
-});
-global.window = dom.window as unknown as Window & typeof globalThis;
-global.document = dom.window.document as unknown as Document;
-global.localStorage = dom.window.localStorage;
-
-import { describe, it, beforeEach, afterEach, mock } from "node:test";
+import { describe, it, beforeEach, afterEach, vi, type Mock } from "vitest";
 import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
 import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelectionFlowState";
@@ -17,18 +9,18 @@ import type {
 
 describe("useModelSelectionFlowState", () => {
   let mockEngineState: LocalLLMState;
-  let mockInitializeModel: mock.Mock<(modelId: string) => Promise<void>>;
-  let mockCancelDownload: mock.Mock<() => void>;
-  let mockHasAnyCachedModel: mock.Mock<() => Promise<boolean>>;
-  let mockHasModelInCache: mock.Mock<(modelId: string) => Promise<boolean>>;
+  let mockInitializeModel: Mock<(modelId: string) => Promise<void>>;
+  let mockCancelDownload: Mock<() => void>;
+  let mockHasAnyCachedModel: Mock<() => Promise<boolean>>;
+  let mockHasModelInCache: Mock<(modelId: string) => Promise<boolean>>;
   let llmContext: LocalLLMContext;
 
   beforeEach(() => {
     mockEngineState = { status: "idle", progress: 0 };
-    mockInitializeModel = mock.fn();
-    mockCancelDownload = mock.fn();
-    mockHasAnyCachedModel = mock.fn(async () => false);
-    mockHasModelInCache = mock.fn(async () => false);
+    mockInitializeModel = vi.fn();
+    mockCancelDownload = vi.fn();
+    mockHasAnyCachedModel = vi.fn(async () => false);
+    mockHasModelInCache = vi.fn(async () => false);
 
     llmContext = {
       engineState: mockEngineState,
@@ -40,7 +32,7 @@ describe("useModelSelectionFlowState", () => {
   });
 
   afterEach(() => {
-    mock.reset();
+    vi.restoreAllMocks();
   });
 
   describe("Initial State", () => {

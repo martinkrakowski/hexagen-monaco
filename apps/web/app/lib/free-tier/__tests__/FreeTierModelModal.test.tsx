@@ -1,20 +1,4 @@
-import { JSDOM } from "jsdom";
-
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost/",
-});
-global.window = dom.window as unknown as Window & typeof globalThis;
-global.document = dom.window.document as unknown as Document;
-// jsdom doesn't implement the native <dialog> modal API the @hexagen/ui Dialog
-// calls (dialog.showModal()) — stub it so the panel mounts.
-dom.window.HTMLDialogElement.prototype.showModal = function () {
-  this.setAttribute("open", "");
-};
-dom.window.HTMLDialogElement.prototype.close = function () {
-  this.removeAttribute("open");
-};
-
-import { describe, it, mock, beforeEach } from "node:test";
+import { describe, it, vi, beforeEach } from "vitest";
 import assert from "node:assert";
 import React from "react";
 import { render, cleanup } from "@testing-library/react";
@@ -22,6 +6,16 @@ import {
   FreeTierModelModalView,
   type FreeTierModelModalViewProps,
 } from "../FreeTierModelModal";
+
+// jsdom doesn't implement the native <dialog> modal API the @hexagen/ui Dialog
+// calls (dialog.showModal()/close()) — stub it so the panel mounts. (Vitest's
+// jsdom environment exposes HTMLDialogElement as a global.)
+HTMLDialogElement.prototype.showModal = function () {
+  this.setAttribute("open", "");
+};
+HTMLDialogElement.prototype.close = function () {
+  this.removeAttribute("open");
+};
 
 // The pure view takes everything as props, so no hook/router mocking is needed
 // (neither next/navigation nor the local hook modules can be redefined under
@@ -34,10 +28,10 @@ function setup(overrides: Partial<FreeTierModelModalViewProps> = {}) {
     modelName: "mercury-2",
     hasLocalModel: false,
     webLLMReady: false,
-    onClose: mock.fn(),
-    onUseWebLLM: mock.fn(),
-    onUseFreeTier: mock.fn(),
-    onOpenModels: mock.fn(),
+    onClose: vi.fn(),
+    onUseWebLLM: vi.fn(),
+    onUseFreeTier: vi.fn(),
+    onOpenModels: vi.fn(),
     ...overrides,
   };
   render(<FreeTierModelModalView {...props} />);
@@ -56,7 +50,7 @@ function clickButton(label: RegExp) {
 
 const calls = (
   fn: FreeTierModelModalViewProps[keyof FreeTierModelModalViewProps],
-) => (fn as ReturnType<typeof mock.fn>).mock.calls.length;
+) => (fn as ReturnType<typeof vi.fn>).mock.calls.length;
 
 describe("FreeTierModelModalView", () => {
   beforeEach(() => cleanup());

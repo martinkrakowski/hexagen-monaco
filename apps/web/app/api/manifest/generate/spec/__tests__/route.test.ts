@@ -1,4 +1,4 @@
-import test from "node:test";
+import { test } from "vitest";
 import assert from "node:assert/strict";
 
 test("POST /api/manifest/generate/spec returns NDJSON stream", async () => {

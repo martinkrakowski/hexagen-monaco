@@ -1,4 +1,4 @@
-import { describe, it, afterEach, mock } from "node:test";
+import { describe, it, afterEach, vi } from "vitest";
 import assert from "node:assert/strict";
 import * as React from "react";
 import { render, screen, cleanup, act } from "@testing-library/react";
@@ -10,12 +10,12 @@ const h = React.createElement;
 
 describe("SpecConvertingStep", () => {
   afterEach(() => {
-    mock.timers.reset();
+    vi.useRealTimers();
     cleanup();
   });
 
   it("ticks an elapsed clock so a multi-minute wait does not read as a crash", () => {
-    mock.timers.enable({ apis: ["setInterval", "Date"] });
+    vi.useFakeTimers();
     render(h(SpecConvertingStep, { conversionError: null }));
 
     assert.match(
@@ -26,7 +26,7 @@ describe("SpecConvertingStep", () => {
     assert.match(document.body.textContent ?? "", /hasn.t frozen/);
 
     act(() => {
-      mock.timers.tick(3000);
+      vi.advanceTimersByTime(3000);
     });
 
     assert.match(

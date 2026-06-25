@@ -1,13 +1,7 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
-import { JSDOM } from "jsdom";
 import { renderHook, act } from "@testing-library/react";
 import { useGenerateWithAiForm } from "../hooks/useGenerateWithAiForm";
-
-const dom = new JSDOM();
-global.window = dom.window as unknown as Window & typeof globalThis;
-global.document = dom.window.document;
-
 describe("useGenerateWithAiForm", () => {
   it("Module exports useGenerateWithAiForm as a function", () => {
     assert.strictEqual(typeof useGenerateWithAiForm, "function");

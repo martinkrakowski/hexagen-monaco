@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 
 describe("CloudModelSettingsView", () => {
@@ -11,7 +11,10 @@ describe("CloudModelSettingsView", () => {
   it("should export component types correctly", async () => {
     const module = await import("../types");
     assert.strictEqual(typeof module, "object");
-    assert.strictEqual(module.CLOUD_MODEL_SETTINGS_VIEW_PROPS !== undefined, true);
+    assert.strictEqual(
+      module.CLOUD_MODEL_SETTINGS_VIEW_PROPS !== undefined,
+      true,
+    );
   });
 
   it("should compose all required hooks and components", async () => {
