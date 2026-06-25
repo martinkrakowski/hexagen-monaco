@@ -2,7 +2,10 @@ import { describe, it, vi } from "vitest";
 import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
 
-import { EditorGuardProvider, useEditorGuard } from "../EditorGuardContext";
+import {
+  EditorGuardProvider,
+  useEditorGuard,
+} from "@/contexts/EditorGuardContext";
 
 describe("EditorGuardContext", () => {
   it("defaults to no unsaved changes", () => {

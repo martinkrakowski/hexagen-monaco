@@ -1,5 +1,4 @@
 import { mergeConfig, defineConfig } from "vitest/config";
-import tsconfigPaths from "vite-tsconfig-paths";
 import baseConfig from "../../vitest.shared";
 
 // apps/web renders React (incl. Next.js client components) via @testing-library,
@@ -14,14 +13,17 @@ import baseConfig from "../../vitest.shared";
 export default mergeConfig(
   baseConfig,
   defineConfig({
-    // `@/*` and friends are tsconfig path aliases; resolve them from tsconfig
-    // (they map to several fallback roots, which a plain resolve.alias can't do).
-    plugins: [tsconfigPaths()],
     // Vite 8 transforms with Oxc and honors apps/web's tsconfig `jsx: "preserve"`
     // (Next.js compiles JSX itself), which would leave JSX untransformed here. The
     // old `tsx` runner forced the automatic runtime; mirror it so component suites
     // and the .tsx sources they import transform under Vitest too.
     oxc: { jsx: { runtime: "automatic", importSource: "react" } },
+    // `@/*` path aliases resolved via Vite 8's native tsconfig-paths support
+    // (they map to several fallback roots a plain resolve.alias can't express).
+    // Unlike the vite-tsconfig-paths plugin, native resolution also applies to
+    // test files, so `@/` *value* imports resolve in tests (the plugin only
+    // mapped files inside the tsconfig program, which excludes `**/*.test.ts(x)`).
+    resolve: { tsconfigPaths: true },
     test: {
       environment: "jsdom",
       environmentOptions: {

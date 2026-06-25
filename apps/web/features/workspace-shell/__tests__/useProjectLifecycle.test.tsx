@@ -1,20 +1,6 @@
-const store: Record<string, string> = {};
-global.localStorage = {
-  getItem: (key: string) => store[key] ?? null,
-  setItem: (key: string, value: string) => {
-    store[key] = value;
-  },
-  removeItem: (key: string) => {
-    delete store[key];
-  },
-  clear: () => {
-    for (const k of Object.keys(store)) delete store[k];
-  },
-  length: 0,
-  key: () => null,
-} as unknown as Storage;
-// crypto is a getter-only global in Node, so assign it via stubGlobal rather
-// than `global.crypto = …` (which throws "has only a getter" under Vitest).
+// crypto is a getter-only global in Node, so stub it via vi.stubGlobal (a plain
+// `global.crypto =` throws "has only a getter"). localStorage/sessionStorage come
+// from vitest.setup.ts's in-memory stub — no per-file Storage override needed.
 vi.stubGlobal("crypto", {
   randomUUID: () => "test-uuid",
 } as unknown as Crypto);
@@ -172,7 +158,7 @@ describe("useProjectLifecycle - Manifest Integration", () => {
   });
 
   it.skip("should update URL with project ID when loading project from within wizard", async () => {
-    for (const k of Object.keys(store)) delete store[k];
+    localStorage.clear();
 
     const testProject = {
       id: "project-123",
@@ -182,7 +168,10 @@ describe("useProjectLifecycle - Manifest Integration", () => {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    store["hexagen-saved-projects"] = JSON.stringify([testProject]);
+    localStorage.setItem(
+      "hexagen-saved-projects",
+      JSON.stringify([testProject]),
+    );
 
     const mockForm = {
       getValues: vi.fn(() => emptyFormValues),
