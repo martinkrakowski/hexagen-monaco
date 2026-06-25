@@ -17,8 +17,12 @@ beforeAll(() => {
   // jsdom doesn't implement HTMLDialogElement.showModal/close — stub them on any
   // <dialog> the component creates.
   const mockDialog = {
-    showModal: () => {},
-    close: () => {},
+    showModal(this: HTMLDialogElement) {
+      this.open = true;
+    },
+    close(this: HTMLDialogElement) {
+      this.open = false;
+    },
     open: false,
   };
   originalCreateElement = document.createElement.bind(document);
@@ -148,6 +152,29 @@ describe("Dialog component", () => {
       const cancelEvent = new Event("cancel", { cancelable: true });
       fireEvent(dialog, cancelEvent);
       assert.strictEqual(cancelEvent.defaultPrevented, false);
+    });
+
+    it("swallows the echo from a programmatic close but still forwards a user close", () => {
+      let closeCount = 0;
+      const onClose = () => {
+        closeCount += 1;
+      };
+      const { container, rerender } = render(
+        React.createElement(Dialog, { open: true, onClose }, "Content"),
+      );
+      // open:true -> false drives the effect's `dialog.close()` branch, which
+      // sets closingRef so the native `close` event it triggers must NOT echo
+      // back into onClose (otherwise every programmatic close double-fires).
+      rerender(
+        React.createElement(Dialog, { open: false, onClose }, "Content"),
+      );
+      const dialog = container.querySelector("dialog") as HTMLDialogElement;
+      fireEvent(dialog, new Event("close"));
+      assert.strictEqual(closeCount, 0);
+      // closingRef is now cleared, so a `close` the component did NOT initiate
+      // still reaches onClose — proving the event is wired, not merely ignored.
+      fireEvent(dialog, new Event("close"));
+      assert.strictEqual(closeCount, 1);
     });
   });
 
