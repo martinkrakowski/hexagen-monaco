@@ -5,8 +5,8 @@
  *   yarn tsx scripts/codemod-node-test-to-vitest.ts <packageDir> [<packageDir> ...]
  *   yarn tsx scripts/codemod-node-test-to-vitest.ts packages/byok
  *
- * Per `*.test.ts` that imports from `node:test`, it performs ONLY the safe,
- * mechanical transforms:
+ * Per `*.test.ts`/`*.test.tsx` that imports from `node:test`, it performs ONLY
+ * the safe, mechanical transforms:
  *   - import source `"node:test"` → `"vitest"`
  *   - hook renames `before` → `beforeAll`, `after` → `afterAll` (import
  *     specifier AND call sites; `beforeEach`/`afterEach` keep their names)
@@ -169,6 +169,11 @@ function main(): void {
     const project = new Project({ skipAddingFilesFromTsConfig: true });
     const files = project.addSourceFilesAtPaths([
       `${dir}/**/*.test.ts`,
+      // React component suites (apps/web) live in `.test.tsx`. ts-morph parses
+      // JSX from the extension, and the transforms here (import swap + hook
+      // rename) are JSX-agnostic. NOTE: `.spec.ts(x)` is intentionally excluded
+      // — those are Playwright e2e specs, not unit tests on this runner.
+      `${dir}/**/*.test.tsx`,
       `!${dir}/**/node_modules/**`,
       `!${dir}/**/dist/**`,
       // Scaffold DATA: a package-root `templates/` holds `.test.ts` files that
