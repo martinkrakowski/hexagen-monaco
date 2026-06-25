@@ -1,30 +1,41 @@
-import { describe, it, beforeAll, afterEach } from "vitest";
+import { describe, it, beforeAll, afterAll, afterEach, vi } from "vitest";
 import assert from "node:assert/strict";
 import React from "react";
 import { render, cleanup, fireEvent } from "@testing-library/react";
 import { FileDropZone } from "../../src/modules/FileDropZone.js";
 
 beforeAll(() => {
-  // Mock FileReader
-  global.FileReader = class {
-    onload: ((e: any) => void) | null = null;
-    onerror: (() => void) | null = null;
-    result: string | null = null;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    readAsText(_file: File) {
-      this.result = "mock file content";
-      if (this.onload) this.onload({ target: { result: this.result } });
-    }
-  } as unknown as typeof FileReader;
-  // Mock File
-  global.File = class {
-    name: string;
-    type: string;
-    constructor(parts: string[], name: string, options?: { type?: string }) {
-      this.name = name;
-      this.type = options?.type || "";
-    }
-  } as unknown as typeof File;
+  // jsdom's FileReader/File don't fit here: the test needs readAsText to
+  // synchronously yield known content and a trivial File constructor. Stub via
+  // vi.stubGlobal so they're restored after this suite (no cross-file leak).
+  vi.stubGlobal(
+    "FileReader",
+    class {
+      onload: ((e: any) => void) | null = null;
+      onerror: (() => void) | null = null;
+      result: string | null = null;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      readAsText(_file: File) {
+        this.result = "mock file content";
+        if (this.onload) this.onload({ target: { result: this.result } });
+      }
+    },
+  );
+  vi.stubGlobal(
+    "File",
+    class {
+      name: string;
+      type: string;
+      constructor(parts: string[], name: string, options?: { type?: string }) {
+        this.name = name;
+        this.type = options?.type || "";
+      }
+    },
+  );
+});
+
+afterAll(() => {
+  vi.unstubAllGlobals();
 });
 
 afterEach(() => {
