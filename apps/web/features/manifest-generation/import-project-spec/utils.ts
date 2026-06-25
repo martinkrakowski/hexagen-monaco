@@ -166,3 +166,33 @@ export function describeFindings(
   }
   return parts.join(" and ");
 }
+
+/**
+ * Distinguishes the pipeline's auto-applied advisories (deterministic fixes the
+ * assembler made — e.g. an R12 adapter rename or an R03 repository-port synthesis,
+ * surfaced in the Stage-6 report's `warnings`) from the reviewer's actual
+ * findings. An auto-applied notice describes a change ALREADY made, so the panel
+ * frames it as informational ("no action needed") rather than a warning "to
+ * address".
+ *
+ * Anchored on the backend advisory signature — both the message prefix AND the
+ * rule marker it carries (`(R12)` / `(R03)`) — the only stable signal absent a
+ * structured field on the report. Requiring the marker as well as the prefix keeps
+ * the classifier no broader than the backend strings: a future reviewer finding
+ * that merely happens to open with the same words can't be misfiled as a notice
+ * (and thereby dropped from the actionable count). Keep in sync with the advisory
+ * copy in `synthesizeMissingRepositoryPorts` / `dedupeAdapterNames`
+ * (@hexagen/agentic-interaction). A cleaner long-term fix is a dedicated `notices`
+ * field on the validation report.
+ */
+const AUTO_APPLIED_ADVISORIES: ReadonlyArray<{ prefix: string; rule: string }> =
+  [
+    { prefix: "Renamed adapter ", rule: "(R12)" },
+    { prefix: "Auto-added a default repository port ", rule: "(R03)" },
+  ];
+
+export function isAutoAppliedNotice(message: string): boolean {
+  return AUTO_APPLIED_ADVISORIES.some(
+    ({ prefix, rule }) => message.startsWith(prefix) && message.includes(rule),
+  );
+}
