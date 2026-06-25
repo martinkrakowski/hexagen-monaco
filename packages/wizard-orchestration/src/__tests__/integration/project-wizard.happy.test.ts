@@ -6,7 +6,7 @@
  * Verifies that the wizard can end-to-end process user input and produce valid output.
  */
 
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach } from "vitest";
 import assert from "node:assert/strict";
 import {
   createMockRegistry,
