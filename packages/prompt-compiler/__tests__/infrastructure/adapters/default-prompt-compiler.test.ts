@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach } from "vitest";
 import { DefaultPromptCompilerAdapter } from "../../../src/infrastructure/adapters/default-prompt-compiler.adapter";
 import type { ProjectSpec } from "@hexagen/project-configuration";
 import type { ArchitectureGraph } from "@hexagen/visualization";

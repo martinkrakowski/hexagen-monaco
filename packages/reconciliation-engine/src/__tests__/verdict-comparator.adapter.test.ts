@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach } from "vitest";
 import { VerdictComparatorAdapter } from "../infrastructure/adapters/verdict-comparator.adapter.js";
 import { createVerdict } from "../domain/verdict.js";
 

@@ -1,4 +1,4 @@
-import { describe, it, mock } from "node:test";
+import { describe, it, vi } from "vitest";
 import assert from "node:assert";
 import {
   GenerateWithAiFlowUseCase,
@@ -20,7 +20,7 @@ function createMockUseCase(
   }>,
 ): ClientManifestGenerationUseCase {
   return {
-    generateTopology: mock.fn(
+    generateTopology: vi.fn(
       async () =>
         overrides.generateTopologyResult ?? {
           ok: true,
@@ -30,7 +30,7 @@ function createMockUseCase(
           },
         },
     ),
-    extractAdapters: mock.fn(
+    extractAdapters: vi.fn(
       async () =>
         overrides.extractAdaptersResult ?? {
           ok: true,
@@ -38,14 +38,14 @@ function createMockUseCase(
           diagnostics: [],
         },
     ),
-    renderManifest: mock.fn(
+    renderManifest: vi.fn(
       async () =>
         overrides.renderManifestResult ?? {
           yaml: "test: yaml",
           diagnostics: [],
         },
     ),
-    checkClarificationTriggers: mock.fn(
+    checkClarificationTriggers: vi.fn(
       () => overrides.checkClarificationTriggersResult ?? [],
     ),
   } satisfies ClientManifestGenerationUseCase;

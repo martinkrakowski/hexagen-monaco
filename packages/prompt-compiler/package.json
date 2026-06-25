@@ -14,7 +14,7 @@
     "build": "tsc -p tsconfig.build.json && node ../../scripts/fix-esm-barrels.js dist",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx/esm --test \"__tests__/**/*.test.ts\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@hexagen/core-domain": "workspace:*",

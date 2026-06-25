@@ -125,7 +125,15 @@ function flipTestScript(packageDir: string): boolean {
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as {
     scripts?: Record<string, string>;
   };
-  if (!pkg.scripts || pkg.scripts.test === "vitest run") return false;
+  const current = pkg.scripts?.test;
+  if (!current || current === "vitest run") return false;
+  // Only flip a script that is actually an OLD-runner invocation (node:test /
+  // tsx). A package with *.test.ts files but no node:test (already vitest, a
+  // jest script, or something custom) must not be clobbered just because the
+  // flip gate is satisfied.
+  // Match only explicit legacy-runner forms — a bare `--test` would also catch
+  // other tools' flags (e.g. `jest --testPathPattern`) and wrongly clobber them.
+  if (!/\bnode\s+--test\b|\bnode:test\b|\btsx\b/.test(current)) return false;
   pkg.scripts.test = "vitest run";
   writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
   return true;
@@ -180,9 +188,13 @@ function main(): void {
     }
     project.saveSync();
 
-    // Only flip the package over when nothing still imports node:test.
+    // Flip the package over once no file is left on node:test — i.e. nothing was
+    // deferred as manual. Gated on `files.length` (not `transformed`) so a re-run
+    // AFTER the manual files are hand-converted still completes the flip (that
+    // run transforms 0 but now has 0 manual). Idempotent: config-write and
+    // script-flip both no-op if already done.
     let flipped = false;
-    if (manual.length === 0 && transformed > 0) {
+    if (manual.length === 0 && files.length > 0) {
       const wroteConfig = writeVitestConfig(dir);
       const flippedScript = flipTestScript(dir);
       flipped = wroteConfig || flippedScript;

@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import { assessModelCapability } from "../../../src/application/services/manifest-capability-assessor.service";
 import { DomainModelId } from "@hexagen/local-llm/client";
