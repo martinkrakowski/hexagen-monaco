@@ -1,6 +1,5 @@
-import { describe, it, before, after, afterEach } from "node:test";
+import { describe, it, beforeAll, afterAll, afterEach } from "vitest";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
 import React from "react";
 import { render, cleanup, fireEvent } from "@testing-library/react";
 import {
@@ -12,26 +11,18 @@ import {
   DialogFooter,
 } from "../../src/sections/Dialog.js";
 
-let dom: JSDOM;
-let originalCreateElement: typeof dom.window.document.createElement;
+let originalCreateElement: typeof document.createElement;
 
-before(() => {
-  dom = new JSDOM("<!DOCTYPE html><html><body></body></html>");
-  global.window = dom.window;
-  global.document = dom.window.document;
-  Object.defineProperty(global, "navigator", {
-    value: dom.window.navigator,
-    writable: true,
-  });
+beforeAll(() => {
+  // jsdom doesn't implement HTMLDialogElement.showModal/close — stub them on any
+  // <dialog> the component creates.
   const mockDialog = {
     showModal: () => {},
     close: () => {},
     open: false,
   };
-  originalCreateElement = dom.window.document.createElement.bind(
-    dom.window.document,
-  );
-  dom.window.document.createElement = (tagName: string) => {
+  originalCreateElement = document.createElement.bind(document);
+  document.createElement = (tagName: string) => {
     const el = originalCreateElement(tagName);
     if (tagName === "dialog") {
       Object.assign(el, mockDialog);
@@ -40,8 +31,8 @@ before(() => {
   };
 });
 
-after(() => {
-  dom.window.document.createElement = originalCreateElement;
+afterAll(() => {
+  document.createElement = originalCreateElement;
 });
 
 afterEach(() => {
@@ -139,7 +130,7 @@ describe("Dialog component", () => {
         ),
       );
       const dialog = container.querySelector("dialog") as HTMLDialogElement;
-      const cancelEvent = new dom.window.Event("cancel", { cancelable: true });
+      const cancelEvent = new Event("cancel", { cancelable: true });
       fireEvent(dialog, cancelEvent);
       assert.strictEqual(cancelEvent.defaultPrevented, true);
       assert.strictEqual(closed, false);
@@ -154,7 +145,7 @@ describe("Dialog component", () => {
         ),
       );
       const dialog = container.querySelector("dialog") as HTMLDialogElement;
-      const cancelEvent = new dom.window.Event("cancel", { cancelable: true });
+      const cancelEvent = new Event("cancel", { cancelable: true });
       fireEvent(dialog, cancelEvent);
       assert.strictEqual(cancelEvent.defaultPrevented, false);
     });

@@ -1,6 +1,5 @@
-import { describe, it, before, afterEach } from "node:test";
+import { describe, it, afterEach } from "vitest";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
 import React from "react";
 import { render, cleanup } from "@testing-library/react";
 import {
@@ -9,18 +8,6 @@ import {
   CardTitle,
   CardContent,
 } from "../../src/elements/Card.js";
-
-let dom: JSDOM;
-
-before(() => {
-  dom = new JSDOM("<!DOCTYPE html><html><body></body></html>");
-  global.window = dom.window;
-  global.document = dom.window.document;
-  Object.defineProperty(global, "navigator", {
-    value: dom.window.navigator,
-    writable: true,
-  });
-});
 
 afterEach(() => {
   cleanup();
@@ -31,13 +18,13 @@ describe("Card components", () => {
     it("renders card div element", () => {
       const { container } = render(React.createElement(Card, null));
       const card = container.querySelector("div");
-      assert.ok(card instanceof dom.window.HTMLDivElement);
+      assert.ok(card instanceof HTMLDivElement);
     });
 
     it("forwards ref to underlying div", () => {
       const ref = React.createRef();
       render(React.createElement(Card, { ref }));
-      assert.ok(ref.current instanceof dom.window.HTMLDivElement);
+      assert.ok(ref.current instanceof HTMLDivElement);
     });
 
     it("applies card styling classes", () => {
@@ -62,7 +49,7 @@ describe("Card components", () => {
     it("renders header div", () => {
       const { container } = render(React.createElement(CardHeader, null));
       const header = container.querySelector("div");
-      assert.ok(header instanceof dom.window.HTMLDivElement);
+      assert.ok(header instanceof HTMLDivElement);
     });
 
     it("applies header styling classes", () => {
@@ -78,7 +65,7 @@ describe("Card components", () => {
     it("forwards ref", () => {
       const ref = React.createRef();
       render(React.createElement(CardHeader, { ref }));
-      assert.ok(ref.current instanceof dom.window.HTMLDivElement);
+      assert.ok(ref.current instanceof HTMLDivElement);
     });
   });
 
@@ -112,7 +99,7 @@ describe("Card components", () => {
     it("forwards ref", () => {
       const ref = React.createRef<HTMLHeadingElement>();
       render(React.createElement(CardTitle, { ref }, "Title"));
-      assert.ok(ref.current instanceof dom.window.HTMLHeadingElement);
+      assert.ok(ref.current instanceof HTMLHeadingElement);
     });
   });
 
@@ -122,7 +109,7 @@ describe("Card components", () => {
         React.createElement(CardContent, null, "Content"),
       );
       const content = container.querySelector("div");
-      assert.ok(content instanceof dom.window.HTMLDivElement);
+      assert.ok(content instanceof HTMLDivElement);
     });
 
     it("applies content styling", () => {
@@ -134,7 +121,7 @@ describe("Card components", () => {
     it("forwards ref", () => {
       const ref = React.createRef();
       render(React.createElement(CardContent, { ref }));
-      assert.ok(ref.current instanceof dom.window.HTMLDivElement);
+      assert.ok(ref.current instanceof HTMLDivElement);
     });
   });
 });

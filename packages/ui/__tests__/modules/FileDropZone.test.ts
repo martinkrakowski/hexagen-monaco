@@ -1,20 +1,10 @@
-import { describe, it, before, afterEach } from "node:test";
+import { describe, it, beforeAll, afterEach } from "vitest";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
 import React from "react";
 import { render, cleanup, fireEvent } from "@testing-library/react";
 import { FileDropZone } from "../../src/modules/FileDropZone.js";
 
-let dom: JSDOM;
-
-before(() => {
-  dom = new JSDOM("<!DOCTYPE html><html><body></body></html>");
-  global.window = dom.window;
-  global.document = dom.window.document;
-  Object.defineProperty(global, "navigator", {
-    value: dom.window.navigator,
-    writable: true,
-  });
+beforeAll(() => {
   // Mock FileReader
   global.FileReader = class {
     onload: ((e: any) => void) | null = null;

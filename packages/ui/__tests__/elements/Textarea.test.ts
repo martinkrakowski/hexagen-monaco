@@ -1,21 +1,8 @@
-import { describe, it, before, afterEach } from "node:test";
+import { describe, it, afterEach } from "vitest";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
 import React from "react";
 import { render, cleanup } from "@testing-library/react";
 import { Textarea } from "../../src/elements/Textarea.js";
-
-let dom: JSDOM;
-
-before(() => {
-  dom = new JSDOM("<!DOCTYPE html><html><body></body></html>");
-  global.window = dom.window;
-  global.document = dom.window.document;
-  Object.defineProperty(global, "navigator", {
-    value: dom.window.navigator,
-    writable: true,
-  });
-});
 
 afterEach(() => {
   cleanup();
@@ -25,13 +12,13 @@ describe("Textarea component", () => {
   it("renders a textarea element", () => {
     const { container } = render(React.createElement(Textarea, null));
     const textarea = container.querySelector("textarea");
-    assert.ok(textarea instanceof dom.window.HTMLTextAreaElement);
+    assert.ok(textarea instanceof HTMLTextAreaElement);
   });
 
   it("forwards ref to underlying textarea element", () => {
     const ref = React.createRef();
     render(React.createElement(Textarea, { ref }));
-    assert.ok(ref.current instanceof dom.window.HTMLTextAreaElement);
+    assert.ok(ref.current instanceof HTMLTextAreaElement);
   });
 
   it("applies default classes", () => {

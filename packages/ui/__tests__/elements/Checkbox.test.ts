@@ -1,21 +1,8 @@
-import { describe, it, before, afterEach } from "node:test";
+import { describe, it, afterEach } from "vitest";
 import assert from "node:assert/strict";
-import { JSDOM } from "jsdom";
 import React from "react";
 import { render, cleanup, fireEvent } from "@testing-library/react";
 import { Checkbox } from "../../src/elements/Checkbox.js";
-
-let dom: JSDOM;
-
-before(() => {
-  dom = new JSDOM("<!DOCTYPE html><html><body></body></html>");
-  global.window = dom.window;
-  global.document = dom.window.document;
-  Object.defineProperty(global, "navigator", {
-    value: dom.window.navigator,
-    writable: true,
-  });
-});
 
 afterEach(() => {
   cleanup();
@@ -25,13 +12,13 @@ describe("Checkbox component", () => {
   it("renders checkbox input", () => {
     const { container } = render(React.createElement(Checkbox, {}));
     const input = container.querySelector('input[type="checkbox"]');
-    assert.ok(input instanceof dom.window.HTMLInputElement);
+    assert.ok(input instanceof HTMLInputElement);
   });
 
   it("forwards ref to underlying input element", () => {
     const ref = React.createRef();
     render(React.createElement(Checkbox, { ref }));
-    assert.ok(ref.current instanceof dom.window.HTMLInputElement);
+    assert.ok(ref.current instanceof HTMLInputElement);
   });
 
   it("applies checked state", () => {
