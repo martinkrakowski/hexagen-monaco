@@ -54,4 +54,14 @@ vi.mock("next/navigation", () => ({
 // declared themselves.
 afterEach(() => {
   cleanup();
+  // The in-memory storages live for the file's lifecycle; clear them between
+  // tests so persisted keys can't bleed across tests in the same file. Guarded
+  // with a clear()-presence check because some suites install their own minimal
+  // localStorage mock (getItem/setItem/removeItem only) and manage their own reset.
+  if (typeof globalThis.localStorage?.clear === "function") {
+    globalThis.localStorage.clear();
+  }
+  if (typeof globalThis.sessionStorage?.clear === "function") {
+    globalThis.sessionStorage.clear();
+  }
 });
