@@ -31,7 +31,7 @@
     "cli": "node dist/cli.js",
     "pack:prepare": "node ../../scripts/prepare-publish-package.js .",
     "test": "vitest run",
-    "test:watch": "tsx --test --watch \"__tests__/**/*.test.ts\" \"__tests__/**/*.spec.ts\"",
+    "test:watch": "vitest watch",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
   },
   "keywords": [
