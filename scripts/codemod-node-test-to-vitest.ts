@@ -131,7 +131,9 @@ function flipTestScript(packageDir: string): boolean {
   // tsx). A package with *.test.ts files but no node:test (already vitest, a
   // jest script, or something custom) must not be clobbered just because the
   // flip gate is satisfied.
-  if (!/node --test|node:test|--test|\btsx\b/.test(current)) return false;
+  // Match only explicit legacy-runner forms — a bare `--test` would also catch
+  // other tools' flags (e.g. `jest --testPathPattern`) and wrongly clobber them.
+  if (!/\bnode\s+--test\b|\bnode:test\b|\btsx\b/.test(current)) return false;
   pkg.scripts.test = "vitest run";
   writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
   return true;
