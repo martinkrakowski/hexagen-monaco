@@ -1,4 +1,4 @@
-import { test, describe } from "node:test";
+import { test, describe } from "vitest";
 import assert from "node:assert";
 import { ExecuteManifestRepairUseCase } from "../../../src/application/use-cases/staged-generation/execute-manifest-repair.use-case.ts";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";

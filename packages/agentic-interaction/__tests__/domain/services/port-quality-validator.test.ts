@@ -1,4 +1,4 @@
-import { test, describe } from "node:test";
+import { test, describe } from "vitest";
 import assert from "node:assert";
 import { validatePortQuality } from "../../../src/domain/services/port-quality-validator.ts";
 import type { PortDefinition } from "../../../src/domain/value-objects/pipeline-state";

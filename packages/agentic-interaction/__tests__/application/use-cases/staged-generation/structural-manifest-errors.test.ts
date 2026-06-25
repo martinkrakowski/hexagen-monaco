@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import { structuralManifestErrors } from "../../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 import type {

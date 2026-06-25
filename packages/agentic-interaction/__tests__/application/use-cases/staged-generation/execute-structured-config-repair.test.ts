@@ -1,10 +1,10 @@
-import { describe, it, mock } from "node:test";
+import { describe, it, vi } from "vitest";
 import assert from "node:assert";
 import { ExecuteStructuredConfigGenerationUseCase } from "../../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 
 const mockTransactionManager = {
-  begin: mock.fn(() => ({
+  begin: vi.fn(() => ({
     id: "mock-transaction-id",
     status: "pending",
     intentId: "mock-intent",
@@ -13,7 +13,7 @@ const mockTransactionManager = {
     createdAt: new Date(),
     updatedAt: new Date(),
   })),
-  transition: mock.fn((id, status) => ({
+  transition: vi.fn((id, status) => ({
     id,
     status,
     intentId: "mock-intent",
@@ -22,10 +22,10 @@ const mockTransactionManager = {
     createdAt: new Date(),
     updatedAt: new Date(),
   })),
-  get: mock.fn(() => null),
-  list: mock.fn(() => []),
-  commit: mock.fn(() => null),
-  rollback: mock.fn(() => null),
+  get: vi.fn(() => null),
+  list: vi.fn(() => []),
+  commit: vi.fn(() => null),
+  rollback: vi.fn(() => null),
 };
 
 // Stage-6 LLM judge always "passes" — the deterministic R01 (banned context

@@ -1,4 +1,4 @@
-import { test, describe } from "node:test";
+import { test, describe } from "vitest";
 import * as assert from "node:assert/strict";
 import {
   formatModelChip,
