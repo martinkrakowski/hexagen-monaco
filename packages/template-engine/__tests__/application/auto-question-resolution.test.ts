@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -18,7 +18,7 @@ describe("AddTemplateUseCase — auto/derivedFrom answer resolution", () => {
   let tmpDir: string;
   let templatesDir: string;
 
-  before(async () => {
+  beforeAll(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-auto-test-"));
     templatesDir = path.join(tmpDir, "templates");
 
@@ -40,7 +40,7 @@ describe("AddTemplateUseCase — auto/derivedFrom answer resolution", () => {
     );
   });
 
-  after(async () => {
+  afterAll(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 

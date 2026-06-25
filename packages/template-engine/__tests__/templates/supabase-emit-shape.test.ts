@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -69,7 +69,7 @@ async function exists(p: string): Promise<boolean> {
 describe("supabase template — storage-only emit shape (regression guard)", () => {
   let projectRoot: string;
 
-  before(async () => {
+  beforeAll(async () => {
     projectRoot = await freshProject();
     const useCase = new AddTemplateUseCase(
       new FileSystemTemplateRegistry(TEMPLATES_DIR),
@@ -96,7 +96,7 @@ describe("supabase template — storage-only emit shape (regression guard)", () 
     });
   });
 
-  after(async () => {
+  afterAll(async () => {
     await fs.rm(projectRoot, { recursive: true, force: true });
   });
 
@@ -148,7 +148,7 @@ describe("supabase template — storage-only emit shape (regression guard)", () 
 describe("supabase-auth template — full-stack emit", () => {
   let projectRoot: string;
 
-  before(async () => {
+  beforeAll(async () => {
     projectRoot = await freshProject();
     const useCase = new AddTemplateUseCase(
       new FileSystemTemplateRegistry(TEMPLATES_DIR),
@@ -174,7 +174,7 @@ describe("supabase-auth template — full-stack emit", () => {
     });
   });
 
-  after(async () => {
+  afterAll(async () => {
     await fs.rm(projectRoot, { recursive: true, force: true });
   });
 

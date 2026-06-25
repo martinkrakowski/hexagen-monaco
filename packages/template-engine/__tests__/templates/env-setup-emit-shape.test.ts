@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
@@ -105,12 +105,12 @@ describe("env-setup template — emit shape", () => {
     let projectRoot: string;
     let warnings: string[];
 
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       ({ warnings } = await install(projectRoot));
     });
 
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
@@ -182,7 +182,7 @@ describe("env-setup template — emit shape", () => {
   describe("strict_validation=false, framework=express", () => {
     let projectRoot: string;
 
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       await install(projectRoot, {
         framework: "express",
@@ -190,7 +190,7 @@ describe("env-setup template — emit shape", () => {
       });
     });
 
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
@@ -286,7 +286,7 @@ describe("env-setup template — emit shape", () => {
       }
     }
 
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       await install(projectRoot);
       // A per-template example file: one annotated-required key (with an inline
@@ -298,7 +298,7 @@ describe("env-setup template — emit shape", () => {
       );
     });
 
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 

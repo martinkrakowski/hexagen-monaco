@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -56,7 +56,7 @@ describe("bullmq template — gated outputs reflect the install answers", () => 
   describe("minimal install (defaults: bull_board=true, no job_examples, same-process)", () => {
     let projectRoot: string;
 
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       const useCase = new AddTemplateUseCase(
         new FileSystemTemplateRegistry(TEMPLATES_DIR),
@@ -67,7 +67,7 @@ describe("bullmq template — gated outputs reflect the install answers", () => 
       await useCase.execute({ templateIds: ["bullmq"], projectRoot });
     });
 
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
@@ -125,7 +125,7 @@ describe("bullmq template — gated outputs reflect the install answers", () => 
   describe("full install (separate-service, all jobs, bull_board=false)", () => {
     let projectRoot: string;
 
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       const useCase = new AddTemplateUseCase(
         new FileSystemTemplateRegistry(TEMPLATES_DIR),
@@ -155,7 +155,7 @@ describe("bullmq template — gated outputs reflect the install answers", () => 
       });
     });
 
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 

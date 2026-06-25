@@ -23,8 +23,8 @@
   "scripts": {
     "build": "tsc --build",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test \"__tests__/**/*.test.ts\"",
-    "test:watch": "tsx --test --watch \"__tests__/**/*.test.ts\"",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "gen:bundle": "tsx scripts/generate-template-bundle.ts"
   },

@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -102,7 +102,7 @@ describe("emit-shape coverage — previously untested templates", () => {
       let warnings: string[];
       let expectedOutputs: string[];
 
-      before(async () => {
+      beforeAll(async () => {
         // Create the temp dir first so `root` is assigned before any throwable
         // work — the `after` hook then cleans up even if installation fails.
         root = await fs.mkdtemp(path.join(os.tmpdir(), `hexagen-${id}-test-`));
@@ -121,7 +121,7 @@ describe("emit-shape coverage — previously untested templates", () => {
         warnings = await install(id, root);
       });
 
-      after(async () => {
+      afterAll(async () => {
         if (root) await fs.rm(root, { recursive: true, force: true });
       });
 

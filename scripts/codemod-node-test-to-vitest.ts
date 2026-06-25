@@ -163,6 +163,11 @@ function main(): void {
       `${dir}/**/*.test.ts`,
       `!${dir}/**/node_modules/**`,
       `!${dir}/**/dist/**`,
+      // Scaffold DATA: a package-root `templates/` holds `.test.ts` files that
+      // are *content* generated projects receive, not this package's own tests.
+      // Anchored (not `**/templates/**`) so real tests under `__tests__/templates/`
+      // are still converted. The shared base also excludes this dir from runs.
+      `!${dir}/templates/**`,
     ]);
 
     let transformed = 0;

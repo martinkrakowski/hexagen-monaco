@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
@@ -115,12 +115,12 @@ describe("error-handling template — emit shape", () => {
     let projectRoot: string;
     let warnings: string[];
 
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       ({ warnings } = await install(projectRoot));
     });
 
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
@@ -176,11 +176,11 @@ describe("error-handling template — emit shape", () => {
 
   describe("react_boundary=false", () => {
     let projectRoot: string;
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       await install(projectRoot, { react_boundary: false });
     });
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
@@ -193,11 +193,11 @@ describe("error-handling template — emit shape", () => {
 
   describe("sentry=true", () => {
     let projectRoot: string;
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       await install(projectRoot, { sentry: true });
     });
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
@@ -224,7 +224,7 @@ describe("error-handling template — emit shape", () => {
       errWorks: boolean;
     };
 
-    before(async () => {
+    beforeAll(async () => {
       projectRoot = await freshProject();
       await install(projectRoot);
       const driver = [
@@ -252,7 +252,7 @@ describe("error-handling template — emit shape", () => {
       out = JSON.parse(stdout);
     });
 
-    after(async () => {
+    afterAll(async () => {
       await fs.rm(projectRoot, { recursive: true, force: true });
     });
 
