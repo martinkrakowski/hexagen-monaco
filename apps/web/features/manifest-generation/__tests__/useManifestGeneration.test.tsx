@@ -1,4 +1,4 @@
-import { describe, it, vi, Mock, test } from "vitest";
+import { describe, it, vi, beforeEach, afterEach, type Mock } from "vitest";
 import assert from "node:assert";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { useManifestGeneration } from "../useManifestGeneration";
@@ -10,13 +10,13 @@ describe.skip("useManifestGeneration", () => {
   let originalFetch: typeof global.fetch;
   let fetchMock: Mock<typeof global.fetch>;
 
-  test.beforeEach(() => {
+  beforeEach(() => {
     originalFetch = global.fetch;
     fetchMock = vi.fn();
     global.fetch = fetchMock;
   });
 
-  test.afterEach(() => {
+  afterEach(() => {
     global.fetch = originalFetch;
     vi.restoreAllMocks();
   });
@@ -172,7 +172,7 @@ describe.skip("useManifestGeneration", () => {
     });
 
     const fetchCall = (global.fetch as Mock<typeof global.fetch>).mock.calls[0];
-    assert.strictEqual(fetchCall.arguments[0], "/api/manifest/generate/local");
+    assert.strictEqual(fetchCall[0], "/api/manifest/generate/local");
 
     // Verify provider is included in result
     assert.strictEqual(result.current.result?.metadata.provider, "local");
