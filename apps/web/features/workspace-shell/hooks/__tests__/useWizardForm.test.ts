@@ -1,13 +1,5 @@
 // JSDOM globals must exist before @testing-library/react is imported.
-import { JSDOM } from "jsdom";
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost/",
-});
-global.window = dom.window as unknown as Window & typeof globalThis;
-global.document = dom.window.document as unknown as Document;
-global.localStorage = dom.window.localStorage;
-
-import { describe, it, afterEach } from "node:test";
+import { describe, it, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import { renderHook, act, cleanup } from "@testing-library/react";
 import { useWizardForm } from "../useWizardForm";

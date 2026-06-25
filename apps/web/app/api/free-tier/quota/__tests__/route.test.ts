@@ -1,4 +1,4 @@
-import { describe, it, mock, beforeEach, afterEach } from "node:test";
+import { describe, it, vi, beforeEach, afterEach } from "vitest";
 import assert from "node:assert";
 import { NextRequest } from "next/server";
 import { GET } from "../route";
@@ -16,12 +16,12 @@ describe("GET /api/free-tier/quota", () => {
   // bucket to the same day — a run straddling UTC midnight would otherwise read a
   // fresh day and flake.
   beforeEach(() =>
-    mock.timers.enable({
-      apis: ["Date"],
+    vi.useFakeTimers({
       now: Date.UTC(2026, 5, 14, 12, 0, 0),
+      toFake: ["Date"],
     }),
   );
-  afterEach(() => mock.timers.reset());
+  afterEach(() => vi.useRealTimers());
 
   it("returns a full snapshot and mints a cookie for a fresh visitor", async () => {
     const res = await GET(get());

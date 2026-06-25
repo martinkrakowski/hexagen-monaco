@@ -1,4 +1,4 @@
-import { test, describe, beforeEach } from "node:test";
+import { test, describe, beforeEach } from "vitest";
 import assert from "node:assert";
 import {
   useExecutionEngine,
@@ -30,12 +30,15 @@ describe("useExecutionEngine store", () => {
   });
 
   test("store is configured for persistence under execution-engine-storage", () => {
-    // zustand attaches the persist API when the middleware is wired in;
-    // the storage name is what localStorage keys the override across visits.
-    assert.strictEqual(
-      useExecutionEngine.persist.getOptions().name,
+    // Assert the persistence behavior (the override is written under the
+    // configured localStorage key) rather than zustand's internal `.persist`
+    // handle, which is brittle to the bundler's module interop.
+    useExecutionEngine.getState().setEngine("local");
+    const persisted = globalThis.localStorage.getItem(
       "execution-engine-storage",
     );
+    assert.ok(persisted, "expected the override to be written to localStorage");
+    assert.match(persisted, /"engine":"local"/);
   });
 });
 

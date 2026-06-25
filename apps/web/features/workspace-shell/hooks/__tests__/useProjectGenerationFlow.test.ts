@@ -1,13 +1,4 @@
-// JSDOM globals must exist before @testing-library/react is imported.
-import { JSDOM } from "jsdom";
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost/",
-});
-global.window = dom.window as unknown as Window & typeof globalThis;
-global.document = dom.window.document as unknown as Document;
-global.localStorage = dom.window.localStorage;
-
-import { describe, it, afterEach, mock } from "node:test";
+import { describe, it, afterEach, vi } from "vitest";
 import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
 import type { ProjectConfig } from "@hexagen/project-configuration";
@@ -52,7 +43,7 @@ const config: ProjectConfig = {
 } as unknown as ProjectConfig;
 
 function mockGenerateOk() {
-  globalThis.fetch = mock.fn(
+  globalThis.fetch = vi.fn(
     async () =>
       new Response(
         JSON.stringify({
@@ -68,7 +59,7 @@ describe("useProjectGenerationFlow", () => {
   const originalFetch = globalThis.fetch;
   afterEach(() => {
     globalThis.fetch = originalFetch;
-    mock.reset();
+    vi.restoreAllMocks();
   });
 
   it("sets the active workspace only after the project is persisted", async () => {
@@ -76,12 +67,12 @@ describe("useProjectGenerationFlow", () => {
     const order: string[] = [];
     // Resolve on a later microtask so a missing `await` would let
     // setActiveWorkspace run first.
-    const saveProject = mock.fn(async () => {
+    const saveProject = vi.fn(async () => {
       await Promise.resolve();
       order.push("save");
       return "proj-1";
     });
-    const setActiveWorkspace = mock.fn(() => {
+    const setActiveWorkspace = vi.fn(() => {
       order.push("setWs");
     });
 
@@ -89,7 +80,7 @@ describe("useProjectGenerationFlow", () => {
       useProjectGenerationFlow({
         saveProject,
         setActiveWorkspace,
-        setEditorSessionId: mock.fn(),
+        setEditorSessionId: vi.fn(),
       }),
     );
 
@@ -105,14 +96,14 @@ describe("useProjectGenerationFlow", () => {
 
   it("returns an error and skips the workspace when persistence fails", async () => {
     mockGenerateOk();
-    const saveProject = mock.fn(async () => null);
-    const setActiveWorkspace = mock.fn();
+    const saveProject = vi.fn(async () => null);
+    const setActiveWorkspace = vi.fn();
 
     const { result } = renderHook(() =>
       useProjectGenerationFlow({
         saveProject,
         setActiveWorkspace,
-        setEditorSessionId: mock.fn(),
+        setEditorSessionId: vi.fn(),
       }),
     );
 
@@ -127,16 +118,16 @@ describe("useProjectGenerationFlow", () => {
 
   it("returns an error when persistence throws", async () => {
     mockGenerateOk();
-    const saveProject = mock.fn(async () => {
+    const saveProject = vi.fn(async () => {
       throw new Error("IDB corrupted");
     });
-    const setActiveWorkspace = mock.fn();
+    const setActiveWorkspace = vi.fn();
 
     const { result } = renderHook(() =>
       useProjectGenerationFlow({
         saveProject,
         setActiveWorkspace,
-        setEditorSessionId: mock.fn(),
+        setEditorSessionId: vi.fn(),
       }),
     );
 

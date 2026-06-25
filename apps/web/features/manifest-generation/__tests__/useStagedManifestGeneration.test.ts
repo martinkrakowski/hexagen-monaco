@@ -1,13 +1,4 @@
-// JSDOM globals must exist before @testing-library/react is imported.
-import { JSDOM } from "jsdom";
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost/",
-});
-global.window = dom.window as unknown as Window & typeof globalThis;
-global.document = dom.window.document as unknown as Document;
-global.localStorage = dom.window.localStorage;
-
-import { describe, it, afterEach, mock } from "node:test";
+import { describe, it, afterEach, vi } from "vitest";
 import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
 import { useStagedManifestGeneration } from "../useStagedManifestGeneration";
@@ -36,7 +27,7 @@ function ndjsonResponse(events: StreamEvent[]): Response {
 }
 
 function mockFetchWith(events: StreamEvent[]) {
-  globalThis.fetch = mock.fn(async () =>
+  globalThis.fetch = vi.fn(async () =>
     ndjsonResponse(events),
   ) as unknown as typeof fetch;
 }
@@ -46,7 +37,7 @@ describe("useStagedManifestGeneration (cloud path)", () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
-    mock.reset();
+    vi.restoreAllMocks();
   });
 
   it("mirrors an in-stream failure into generationError", async () => {

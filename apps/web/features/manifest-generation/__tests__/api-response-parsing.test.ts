@@ -1,41 +1,4 @@
-/**
- * Tests for API Response Parsing and Port Normalization
- *
- * These tests verify:
- * 1. Valid manifest response parsing
- * 2. Malformed response handling
- * 3. Port normalization from various formats
- * 4. Error recovery and validation
- */
-
-import { JSDOM } from "jsdom";
-
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost/",
-});
-
-Object.defineProperties(globalThis, {
-  window: { value: dom.window, configurable: true, writable: true },
-  document: { value: dom.window.document, configurable: true, writable: true },
-  localStorage: {
-    value: dom.window.localStorage,
-    configurable: true,
-    writable: true,
-  },
-  navigator: {
-    value: dom.window.navigator,
-    configurable: true,
-    writable: true,
-  },
-  Event: { value: dom.window.Event, configurable: true, writable: true },
-  CustomEvent: {
-    value: dom.window.CustomEvent,
-    configurable: true,
-    writable: true,
-  },
-});
-
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "assert";
 
 describe("API Response Parsing and Port Normalization", () => {

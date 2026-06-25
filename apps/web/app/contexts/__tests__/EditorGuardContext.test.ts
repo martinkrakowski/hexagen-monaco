@@ -1,11 +1,8 @@
-import { describe, it, mock } from "node:test";
+import { describe, it, vi } from "vitest";
 import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
 
-import {
-  EditorGuardProvider,
-  useEditorGuard,
-} from "@/contexts/EditorGuardContext";
+import { EditorGuardProvider, useEditorGuard } from "../EditorGuardContext";
 
 describe("EditorGuardContext", () => {
   it("defaults to no unsaved changes", () => {
@@ -38,8 +35,8 @@ describe("EditorGuardContext", () => {
     const { result } = renderHook(() => useEditorGuard(), {
       wrapper: EditorGuardProvider,
     });
-    const save = mock.fn(async () => {});
-    const discard = mock.fn(() => {});
+    const save = vi.fn(async () => {});
+    const discard = vi.fn(() => {});
 
     act(() => {
       result.current.register(true, { save, discard });
@@ -52,8 +49,8 @@ describe("EditorGuardContext", () => {
       result.current.discard();
     });
 
-    assert.strictEqual(save.mock.callCount(), 1);
-    assert.strictEqual(discard.mock.callCount(), 1);
+    assert.strictEqual(save.mock.calls.length, 1);
+    assert.strictEqual(discard.mock.calls.length, 1);
   });
 
   it("save()/discard() are safe no-ops when no editor is registered", async () => {

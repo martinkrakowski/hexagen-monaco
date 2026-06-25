@@ -1,21 +1,4 @@
-import { JSDOM } from "jsdom";
-
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost/",
-});
-
-Object.defineProperties(globalThis, {
-  window: { value: dom.window, configurable: true, writable: true },
-  document: { value: dom.window.document, configurable: true, writable: true },
-  Event: { value: dom.window.Event, configurable: true, writable: true },
-  CustomEvent: {
-    value: dom.window.CustomEvent,
-    configurable: true,
-    writable: true,
-  },
-});
-
-import { describe, it, mock } from "node:test";
+import { describe, it, vi } from "vitest";
 import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
 
@@ -24,7 +7,7 @@ import { useLooseSpecConversion } from "../useLooseSpecConversion.ts";
 describe("useLooseSpecConversion", () => {
   it("Local path success", async () => {
     const mockUseCase = {
-      execute: mock.fn(async () => {
+      execute: vi.fn(async () => {
         return { success: true, value: { configJson: '{"local": true}' } };
       }),
     };
@@ -36,7 +19,7 @@ describe("useLooseSpecConversion", () => {
         >,
       isLocalLLMReady: () => true,
       hasServerLLMAccessKey: () => false,
-      fetchClient: mock.fn(),
+      fetchClient: vi.fn(),
     };
 
     const { result } = renderHook(() => useLooseSpecConversion(deps));
@@ -56,7 +39,7 @@ describe("useLooseSpecConversion", () => {
   });
 
   it("Cloud path success", async () => {
-    const mockFetch = mock.fn(async () => {
+    const mockFetch = vi.fn(async () => {
       return {
         ok: true,
         body: {
@@ -73,7 +56,7 @@ describe("useLooseSpecConversion", () => {
                   ),
                 };
               },
-              cancel: mock.fn(),
+              cancel: vi.fn(),
             };
           },
         },
@@ -107,7 +90,7 @@ describe("useLooseSpecConversion", () => {
       '{"type":"done","configJson":"{\\"cloud\\": true}"}\n',
     ];
     let i = 0;
-    const mockFetch = mock.fn(async () => {
+    const mockFetch = vi.fn(async () => {
       return {
         ok: true,
         body: {
@@ -118,7 +101,7 @@ describe("useLooseSpecConversion", () => {
               i++;
               return { done: false, value };
             },
-            cancel: mock.fn(),
+            cancel: vi.fn(),
           }),
         },
       };
@@ -149,12 +132,12 @@ describe("useLooseSpecConversion", () => {
 
   it("Local failure with cloud fallback", async () => {
     const mockUseCase = {
-      execute: mock.fn(async () => {
+      execute: vi.fn(async () => {
         return { success: false, error: new Error("Local LLM failed") };
       }),
     };
 
-    const mockFetch = mock.fn(async () => {
+    const mockFetch = vi.fn(async () => {
       return {
         ok: true,
         body: {
@@ -171,7 +154,7 @@ describe("useLooseSpecConversion", () => {
                   ),
                 };
               },
-              cancel: mock.fn(),
+              cancel: vi.fn(),
             };
           },
         },
@@ -212,12 +195,12 @@ describe("useLooseSpecConversion", () => {
 
   it("Auto strategy prefers cloud even with a local model loaded", async () => {
     const mockUseCase = {
-      execute: mock.fn(async () => {
+      execute: vi.fn(async () => {
         throw new Error("Local use case must not run under cloud-first auto");
       }),
     };
 
-    const mockFetch = mock.fn(async () => {
+    const mockFetch = vi.fn(async () => {
       return {
         ok: true,
         body: {
@@ -234,7 +217,7 @@ describe("useLooseSpecConversion", () => {
                   ),
                 };
               },
-              cancel: mock.fn(),
+              cancel: vi.fn(),
             };
           },
         },
@@ -268,7 +251,7 @@ describe("useLooseSpecConversion", () => {
     const controller = new AbortController();
 
     const mockUseCase = {
-      execute: mock.fn(async () => {
+      execute: vi.fn(async () => {
         // simulate long task
         await new Promise((r) => setTimeout(r, 100));
         return { success: true, value: { configJson: '{"never": true}' } };
@@ -282,7 +265,7 @@ describe("useLooseSpecConversion", () => {
         >,
       isLocalLLMReady: () => true,
       hasServerLLMAccessKey: () => false,
-      fetchClient: mock.fn(),
+      fetchClient: vi.fn(),
     };
 
     const { result } = renderHook(() => useLooseSpecConversion(deps));

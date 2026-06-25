@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { toProjectListItem, sortItems } from "./project-list.js";
 import type { ProjectListItem, SortState } from "./project-list.js";

@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 import { NextRequest } from "next/server";
 import { resolveAnonSession, ANON_SESSION_COOKIE } from "../anon-session";

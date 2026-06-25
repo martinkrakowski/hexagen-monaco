@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test } from "vitest";
 import assert from "node:assert";
 import { analyzeManifestCompleteness } from "./analyzeManifestCompleteness";
 import { emptyFormValues } from "../config";

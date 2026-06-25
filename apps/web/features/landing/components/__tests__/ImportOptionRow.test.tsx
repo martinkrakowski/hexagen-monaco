@@ -1,26 +1,16 @@
-import { describe, it } from "node:test";
+import { describe, it, vi } from "vitest";
 import assert from "node:assert";
-import { jest } from "jest-mock";
 import React from "react";
-import { JSDOM } from "jsdom";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ImportOptionRow } from "../ImportOptionRow";
 import { IMPORT_SUB_OPTIONS } from "../../domain/creation-path";
-
-// Setup DOM environment
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>");
-globalThis.document = dom.window.document;
-(globalThis as unknown as Window & typeof globalThis).window = dom.window;
-
-// TODO: ADR-0038 — Using jest-mock jest.fn() due to Node.js v25 mock.module() restriction
-// Once Node.js stabilizes experimental module mocking, migrate back to node:test + mock.module()
 
 const mockAvailableOption = IMPORT_SUB_OPTIONS[0]; // manifest - available
 const mockComingSoonOption = IMPORT_SUB_OPTIONS[2]; // github - not available
 
 describe("ImportOptionRow", () => {
   it("renders available row as button", () => {
-    const mockPush = jest.fn();
+    const mockPush = vi.fn();
     render(
       <ImportOptionRow
         option={mockAvailableOption}
@@ -32,7 +22,7 @@ describe("ImportOptionRow", () => {
   });
 
   it("shows label for available row", () => {
-    const mockPush = jest.fn();
+    const mockPush = vi.fn();
     render(
       <ImportOptionRow
         option={mockAvailableOption}
@@ -43,18 +33,20 @@ describe("ImportOptionRow", () => {
   });
 
   it("shows description for available row", () => {
-    const mockPush = jest.fn();
+    const mockPush = vi.fn();
     render(
       <ImportOptionRow
         option={mockAvailableOption}
         router={{ push: mockPush }}
       />,
     );
-    assert(screen.getByText(/Upload an existing manifest/i) !== null);
+    assert(
+      screen.getByText(/Resume or adapt a previously generated/i) !== null,
+    );
   });
 
   it("renders coming-soon row as div with role=presentation", () => {
-    const mockPush = jest.fn();
+    const mockPush = vi.fn();
     render(
       <ImportOptionRow
         option={mockComingSoonOption}
@@ -66,7 +58,7 @@ describe("ImportOptionRow", () => {
   });
 
   it("coming-soon row is not clickable (no onClick)", () => {
-    const mockPush = jest.fn();
+    const mockPush = vi.fn();
     render(
       <ImportOptionRow
         option={mockComingSoonOption}
@@ -79,7 +71,7 @@ describe("ImportOptionRow", () => {
   });
 
   it("coming-soon row has cursor-not-allowed class", () => {
-    const mockPush = jest.fn();
+    const mockPush = vi.fn();
     render(
       <ImportOptionRow
         option={mockComingSoonOption}
@@ -91,7 +83,7 @@ describe("ImportOptionRow", () => {
   });
 
   it("shows Coming soon badge for unavailable option", () => {
-    const mockPush = jest.fn();
+    const mockPush = vi.fn();
     render(
       <ImportOptionRow
         option={mockComingSoonOption}
@@ -102,7 +94,7 @@ describe("ImportOptionRow", () => {
   });
 
   it("clicking available row calls router.push with correct href", () => {
-    const mockPush = jest.fn();
+    const mockPush = vi.fn();
     render(
       <ImportOptionRow
         option={mockAvailableOption}

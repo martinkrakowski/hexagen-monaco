@@ -1,6 +1,6 @@
 import React from "react";
 import { fileURLToPath } from "node:url";
-import { describe, it, before, after, beforeEach } from "node:test";
+import { describe, it, beforeAll, afterAll, beforeEach } from "vitest";
 import assert from "node:assert";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -44,8 +44,8 @@ const server = setupServer(
   }),
 );
 
-before(() => server.listen());
-after(() => server.close());
+beforeAll(() => server.listen());
+afterAll(() => server.close());
 beforeEach(() => server.resetHandlers());
 
 describe("ImportProjectSpecPage", () => {

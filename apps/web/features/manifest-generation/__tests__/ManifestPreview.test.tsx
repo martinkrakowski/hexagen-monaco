@@ -1,5 +1,5 @@
 import React from "react";
-import { test, describe, afterEach, beforeEach } from "node:test";
+import { test, describe, afterEach, beforeEach } from "vitest";
 import assert from "node:assert";
 import { render, screen, cleanup } from "@testing-library/react";
 import { ManifestPreview } from "../ManifestPreview";

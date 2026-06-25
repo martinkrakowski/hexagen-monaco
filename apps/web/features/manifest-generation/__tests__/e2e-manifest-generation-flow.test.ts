@@ -9,7 +9,7 @@
  * Runtime execution requires Node.js mock.module support which is environment-specific.
  */
 
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "assert";
 
 describe("E2E: Manifest Generation Complete Flow - Specification", () => {

@@ -1,9 +1,15 @@
-import test from "node:test";
+import { test, afterEach, vi } from "vitest";
 import assert from "node:assert/strict";
 import { POST } from "../route.ts";
 import { NextRequest } from "next/server";
 import { ExecuteLooseSpecConversionUseCase } from "@hexagen/agentic-interaction";
 import { ok } from "@hexagen/shared";
+
+// node:test's `t.mock` auto-restored at test end; Vitest spies do not, so undo
+// the prototype spy below after each test.
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 test("POST /api/manifest/generate/spec/convert returns 400 for oversized input", async () => {
   const req = new NextRequest("http://localhost/api", {
@@ -40,19 +46,18 @@ test("POST /api/manifest/generate/spec/convert rate limits", async () => {
   assert.ok(res.headers.has("Retry-After"));
 });
 
-test("POST /api/manifest/generate/spec/convert happy path with mock", async (t) => {
+test("POST /api/manifest/generate/spec/convert happy path with mock", async () => {
   // Mock the execute method
-  t.mock.method(
+  vi.spyOn(
     ExecuteLooseSpecConversionUseCase.prototype,
     "execute",
-    async (_spec, callbacks) => {
-      callbacks?.onChunk?.("mock chunk");
-      return ok({
-        configJson: "{}",
-        config: { mock: true },
-      });
-    },
-  );
+  ).mockImplementation(async (_spec, callbacks) => {
+    callbacks?.onChunk?.("mock chunk");
+    return ok({
+      configJson: "{}",
+      config: { mock: true },
+    });
+  });
 
   const req = new NextRequest("http://localhost/api", {
     method: "POST",

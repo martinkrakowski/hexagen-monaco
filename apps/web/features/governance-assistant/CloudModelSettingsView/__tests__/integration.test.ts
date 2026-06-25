@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert";
 
 /**
@@ -52,7 +52,10 @@ describe("CloudModelSettingsView - Vault Integration", () => {
   it("should have type definitions for CloudModelSettingsViewProps", async () => {
     const types = await import("../types");
     assert.strictEqual(typeof types, "object");
-    assert.strictEqual(types.CLOUD_MODEL_SETTINGS_VIEW_PROPS !== undefined, true);
+    assert.strictEqual(
+      types.CLOUD_MODEL_SETTINGS_VIEW_PROPS !== undefined,
+      true,
+    );
   });
 
   it("should compose all features correctly", async () => {

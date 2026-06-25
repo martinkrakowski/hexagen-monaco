@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import type { WizardData } from "@hexagen/project-configuration";
 import { canvasRedrawKey } from "./canvas-redraw-key";
