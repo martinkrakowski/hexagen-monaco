@@ -3,7 +3,7 @@
  * tests. By default `execute` echoes its input unchanged; `setBehavior`
  * registers a custom async implementation.
  */
-export class FakeValidateSpecPort {
+export class FakeGenerateProjectPort {
   private behavior: ((input: unknown) => Promise<unknown>) | null = null;
 
   /** Register a custom async implementation for `execute`. */
