@@ -17,6 +17,12 @@ import { defineConfig, configDefaults } from "vitest/config";
 export const baseConfig = defineConfig({
   test: {
     environment: "node",
+    // node:test had no per-test timeout; Vitest 4 defaults to 5s, which
+    // spuriously fails this repo's heavier integration/contract suites (real fs
+    // I/O, full sync runs, dist builds) on slower CI runners. Give them generous
+    // room — enough for genuine integration work, still finite to catch a real hang.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
     // Relative to the package dir (the config root). Matches every layout in the
     // repo — `src/__tests__/`, a root `__tests__/`, and colocated `*.test.ts` —
     // so packages with mixed locations don't silently drop files.
