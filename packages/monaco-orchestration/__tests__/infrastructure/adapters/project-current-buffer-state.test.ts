@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { FakeProjectCurrentBufferStatePort } from "../../doubles/ports/project-current-buffer-state.fake";
 
 describe("project-current-buffer-state", () => {
