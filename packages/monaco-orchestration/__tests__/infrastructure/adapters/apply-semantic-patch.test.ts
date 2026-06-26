@@ -1,5 +1,5 @@
 import assert from "assert";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { FakeSemanticPatchPort } from "../../doubles/ports/apply-semantic-patch.fake";
 
 describe("apply-semantic-patch", () => {

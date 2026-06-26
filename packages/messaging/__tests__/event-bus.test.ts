@@ -1,6 +1,6 @@
 import assert from "node:assert";
-import { describe, it } from "node:test";
-import { InMemoryEventBusAdapter } from "../../infrastructure/adapters/in-memory-event-bus.adapter";
+import { describe, it } from "vitest";
+import { InMemoryEventBusAdapter } from "../src/infrastructure/adapters/in-memory-event-bus.adapter";
 
 describe("event-bus", () => {
   it("should subscribe and receive events", () => {

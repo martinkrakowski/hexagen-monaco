@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { createBoundaryViolatedEvent } from "../../../src/domain/events/boundary-violated.event";
 import { createDependencyAddedEvent } from "../../../src/domain/events/dependency-added.event";
 import { createModuleScaffoldedEvent } from "../../../src/domain/events/module-scaffolded.event";
