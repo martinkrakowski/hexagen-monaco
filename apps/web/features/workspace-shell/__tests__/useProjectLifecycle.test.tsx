@@ -192,7 +192,9 @@ describe("useProjectLifecycle - Manifest Integration", () => {
         id: "project-123",
         name: "Test Project",
         schemaVersion: 3,
-        formState: { ...emptyFormValues },
+        // Deep clone so the seeded fixture can't share nested refs with the
+        // module-level emptyFormValues (isolation against downstream mutation).
+        formState: structuredClone(emptyFormValues),
         manifestYaml: "boundedContexts: []\n",
         createdAt: Date.now(),
         updatedAt: Date.now(),
