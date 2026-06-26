@@ -192,9 +192,21 @@ function buildProgram(): Command {
     .command("add <ids...>")
     .description("Apply one or more add-on templates to the current project")
     .option("--force", "Re-apply already-installed templates")
-    .action(async (ids: string[], options: { force?: boolean }) => {
-      await addTemplateCommand(ids, { force: options.force });
-    });
+    .option(
+      "--with-tests",
+      "Also emit each template's test scaffolds (skipped by default)",
+    )
+    .action(
+      async (
+        ids: string[],
+        options: { force?: boolean; withTests?: boolean },
+      ) => {
+        await addTemplateCommand(ids, {
+          force: options.force,
+          withTests: options.withTests,
+        });
+      },
+    );
 
   // hexagen validate templates
   program

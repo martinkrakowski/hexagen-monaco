@@ -20,6 +20,12 @@ export interface AddCommandOptions {
   force?: boolean;
   /** Pre-supplied answers in "key=value" format, per template: templateId.questionId=value */
   answers?: string[];
+  /**
+   * Also emit each template's `*.test.*` / `*.spec.*` scaffolds. Off by default
+   * — matches the web (in-memory) emit path, so `hexagen add` doesn't drop test
+   * files (which import the project's test runner) into a project unasked.
+   */
+  withTests?: boolean;
 }
 
 export async function addTemplateCommand(
@@ -36,7 +42,9 @@ export async function addTemplateCommand(
   const templatesDir = resolveTemplatesDir();
   const registry = new FileSystemTemplateRegistry(templatesDir);
   const questionEngine = new InteractiveQuestionEngine();
-  const fileEmitter = new FileSystemFileEmitter(templatesDir);
+  const fileEmitter = new FileSystemFileEmitter(templatesDir, {
+    withTests: options.withTests ?? false,
+  });
   const configStore = new FileSystemTemplateConfigStore();
 
   let skipInstalled = !options.force;
