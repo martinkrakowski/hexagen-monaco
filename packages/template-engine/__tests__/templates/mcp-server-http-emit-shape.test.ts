@@ -136,8 +136,8 @@ describe("mcp-server-http template — emit shape", () => {
     );
     assert.match(
       withTests.files.get("src/infrastructure/mcp/guard.test.ts") ?? "",
-      /from "node:test"/,
-      "test scaffolds target the generated core's runner (node:test)",
+      /from "vitest"/,
+      "test scaffolds target the generated project's runner (Vitest, ADR-0044)",
     );
   });
 
