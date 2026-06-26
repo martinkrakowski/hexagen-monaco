@@ -5,7 +5,7 @@ vi.stubGlobal("crypto", {
   randomUUID: () => "test-uuid",
 } as unknown as Crypto);
 
-import { describe, it, vi } from "vitest";
+import { describe, it, vi, beforeEach } from "vitest";
 import assert from "node:assert";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { ActiveWorkspaceProvider } from "../../../app/contexts/ActiveWorkspaceContext";
@@ -22,6 +22,26 @@ vi.mock("../../../app/lib/wire", async (importOriginal) => ({
   })),
 }));
 
+// useSavedProjects (a transitive dep of useProjectLifecycle) loads projects from
+// the persistence PORT on mount (async), and loadProject(id) reads that loaded
+// state — NOT raw localStorage. Mock the port so a test can seed projects and
+// the "load project" path resolves. getSavedProjectsPersistence MUST return a
+// stable reference: it feeds a useEffect dep, so a fresh object per call would
+// re-run the load every render.
+const persistencePort = vi.hoisted(() => {
+  const state: { projects: Array<Record<string, unknown>> } = { projects: [] };
+  const port = {
+    loadProjects: async () => ({ success: true, value: state.projects }),
+    saveProjects: async () => ({ success: true, value: undefined }),
+  };
+  return { state, port };
+});
+vi.mock("../../../app/lib/wire.client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../app/lib/wire.client")>()),
+  getMigrationReady: vi.fn(async () => {}),
+  getSavedProjectsPersistence: vi.fn(() => persistencePort.port),
+}));
+
 import type { UseFormReturn } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 import type { UseWorkspaceShellUiReturn } from "../hooks/useWorkspaceShellUi";
@@ -31,6 +51,12 @@ import { useProjectLifecycle } from "../hooks/useProjectLifecycle";
 import { emptyFormValues } from "../../project-wizard/config";
 
 describe("useProjectLifecycle - Manifest Integration", () => {
+  beforeEach(() => {
+    persistencePort.state.projects = [];
+    // Reset jsdom's URL so the URL-update test starts from a clean location.
+    window.history.replaceState(null, "", "/");
+  });
+
   it("should save and start new project in edit mode", async () => {
     const mockForm = {
       getValues: vi.fn(() => emptyFormValues),
@@ -90,11 +116,10 @@ describe("useProjectLifecycle - Manifest Integration", () => {
     assert.deepStrictEqual(mockOnGoToStep.mock.calls[0], [0]);
   });
 
-  // QUARANTINED (issue #335): these two never ran under the old `**/*.test.ts`
-  // glob and assert unvalidated behavior — the genesis-mode navigation target
-  // (which step onGoToStep receives) and a jsdom window.location URL update. They
-  // need a behavior review (test vs. hook) before being un-skipped.
-  it.skip("should load manifest directly when in genesis mode", async () => {
+  // Un-quarantined (issue #335) after a behaviour review against the current
+  // hook. `handleManifestLoaded` navigates to the manifest's first INCOMPLETE
+  // step (analyzeManifestCompleteness), not a hardcoded step 0.
+  it("should load manifest directly when in genesis mode", async () => {
     const mockForm = {
       getValues: vi.fn(() => emptyFormValues),
       reset: vi.fn(),
@@ -154,24 +179,27 @@ describe("useProjectLifecycle - Manifest Integration", () => {
     assert.deepStrictEqual(resetArgs.boundedContexts, []);
     assert.strictEqual(mockUi.closeDialog.mock.calls.length, 1);
     assert.strictEqual(mockOnGoToStep.mock.calls.length, 1);
-    assert.deepStrictEqual(mockOnGoToStep.mock.calls[0], [0]);
+    // First incomplete step for an empty-boundedContexts manifest = step 1
+    // (step 0, the describe/genesis step, is satisfied once a manifest loads).
+    assert.deepStrictEqual(mockOnGoToStep.mock.calls[0], [1]);
   });
 
-  it.skip("should update URL with project ID when loading project from within wizard", async () => {
-    localStorage.clear();
-
-    const testProject = {
-      id: "project-123",
-      name: "Test Project",
-      formState: { ...emptyFormValues },
-      manifestYaml: "boundedContexts: []\n",
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    localStorage.setItem(
-      "hexagen-saved-projects",
-      JSON.stringify([testProject]),
-    );
+  it("should update URL with project ID when loading project from within wizard", async () => {
+    // Seed the mocked persistence port — useSavedProjects loads it on mount, and
+    // loadProject(id) (which handleLoadProject calls) reads that loaded state.
+    persistencePort.state.projects = [
+      {
+        id: "project-123",
+        name: "Test Project",
+        schemaVersion: 3,
+        // Deep clone so the seeded fixture can't share nested refs with the
+        // module-level emptyFormValues (isolation against downstream mutation).
+        formState: structuredClone(emptyFormValues),
+        manifestYaml: "boundedContexts: []\n",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    ];
 
     const mockForm = {
       getValues: vi.fn(() => emptyFormValues),
@@ -217,6 +245,12 @@ describe("useProjectLifecycle - Manifest Integration", () => {
         }),
       { wrapper: ActiveWorkspaceProvider },
     );
+
+    // The mount-load is async; loadProject(id) returns undefined until it lands,
+    // so wait for the seeded project to surface before driving handleLoadProject.
+    await waitFor(() => {
+      assert.strictEqual(result.current.projects.length, 1);
+    });
 
     const initialUrl = window.location.href;
     assert.strictEqual(initialUrl, "http://localhost/");

@@ -5,7 +5,6 @@
 export { GenerateWithAi } from "./GenerateWithAi/GenerateWithAi";
 export { ManifestPreview } from "./ManifestPreview";
 export { ExampleCard } from "./ExampleCard";
-export { useManifestGeneration } from "./useManifestGeneration";
 export { useModelSelectionFlowState } from "./ModelSelectionFlow/useModelSelectionFlowState";
 export { ModelSelectionContainer } from "./ModelSelectionFlow/ModelSelectionContainer";
 export { ManifestAcceptPage } from "./ManifestAcceptPage";
