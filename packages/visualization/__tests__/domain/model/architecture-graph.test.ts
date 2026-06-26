@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { ArchitectureGraphSchema } from "../../src/domain/model/architecture-graph/architecture-graph";
+import { describe, it } from "vitest";
+import { ArchitectureGraphSchema } from "../../../src/domain/model/architecture-graph/architecture-graph";
 
 describe("ArchitectureGraphSchema", () => {
   it("should validate graph data", () => {
