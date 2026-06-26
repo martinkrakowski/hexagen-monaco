@@ -65,10 +65,6 @@ export async function generatePackageJson(
       build: "tsc",
       lint: "eslint . --ext .ts,.tsx",
       typecheck: "tsc --noEmit",
-      // Vitest is the runner (ADR-0044). `--passWithNoTests` so a freshly
-      // scaffolded module passes before any test is written; it runs real tests
-      // once they exist.
-      test: "vitest run --passWithNoTests",
       ...((defaults.scripts as Record<string, string>) ?? {}),
       ...((moduleOverrides.scripts as Record<string, string>) ?? {}),
     },
@@ -85,7 +81,6 @@ export async function generatePackageJson(
     ...(Object.keys(dependencies).length > 0 ? { dependencies } : {}),
     devDependencies: {
       typescript: "^5.0.0",
-      vitest: "^4.1.9",
       ...((defaults.devDependencies as Record<string, string>) ?? {}),
       ...((moduleOverrides.devDependencies as Record<string, string>) ?? {}),
     },

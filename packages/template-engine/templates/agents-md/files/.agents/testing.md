@@ -26,5 +26,5 @@
 
 ## Before You Commit
 
-Run the full suite (`npm test`, i.e. `vitest run`). A red suite blocks the
+Run the full suite (`yarn test`, i.e. `vitest run`). A red suite blocks the
 commit — diagnose, do not skip or delete the failing test to make it pass.
