@@ -75,7 +75,7 @@ describe("mcp-server template — emit shape", () => {
     );
   });
 
-  it("emits node:test scaffolds only under --with-tests", async () => {
+  it("emits Vitest scaffolds only under --with-tests", async () => {
     const { files } = await materializer.materialize(
       { "mcp-server": {} },
       { projectName: "acme", withTests: true },
@@ -88,8 +88,8 @@ describe("mcp-server template — emit shape", () => {
     }
     assert.match(
       files.get(TEST_SCAFFOLDS[0]) ?? "",
-      /from "node:test"/,
-      "scaffolds target the generated core's runner (node:test)",
+      /from "vitest"/,
+      "scaffolds target the generated project's runner (Vitest, ADR-0044)",
     );
   });
 
