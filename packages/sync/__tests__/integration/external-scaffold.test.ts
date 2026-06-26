@@ -399,6 +399,13 @@ describe("SyncEngine end-to-end external scaffold", () => {
         await exists(path.join(bcRoot, "eslint.config.js")),
         `packages/${bc}/eslint.config.js must exist`,
       );
+      // External projects are born on Vitest (ADR-0044): every package
+      // carries its own vitest.config.ts (scaffolded write-if-absent by the
+      // package.json generator).
+      assert.ok(
+        await exists(path.join(bcRoot, "vitest.config.ts")),
+        `packages/${bc}/vitest.config.ts must exist (external projects are born-on-Vitest, ADR-0044)`,
+      );
       for (const layer of ["domain", "application", "infrastructure"]) {
         assert.ok(
           await exists(path.join(bcRoot, "src", layer, "index.ts")),
@@ -406,6 +413,40 @@ describe("SyncEngine end-to-end external scaffold", () => {
         );
       }
     }
+
+    // Pin the Vitest wiring on one BC: a `test` script, a `vitest` devDep,
+    // and a vitest.config.ts that excludes dist/** (Vitest 4's default
+    // exclude is only node_modules/.git, so a bare `vitest run` would also
+    // run the compiled tests in dist/). This asserts the package.json
+    // generator's external-only Vitest scaffolding survives the FULL engine
+    // pipeline (merge + protected-keys + atomic write), not just an isolated
+    // generator call — the unit coverage lives in generators/package-json.test.ts.
+    const ordersPkg = JSON.parse(
+      await readUtf8(path.join(target, "packages/orders/package.json")),
+    ) as {
+      scripts?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    assert.strictEqual(
+      ordersPkg.scripts?.test,
+      "vitest run --passWithNoTests",
+      "external package.json must carry the Vitest test script",
+    );
+    assert.ok(
+      ordersPkg.devDependencies?.vitest,
+      "external package.json must carry a vitest devDep",
+    );
+    const ordersVitestConfig = await readUtf8(
+      path.join(target, "packages/orders/vitest.config.ts"),
+    );
+    assert.ok(
+      ordersVitestConfig.includes('from "vitest/config"'),
+      "vitest.config.ts must import from vitest/config",
+    );
+    assert.ok(
+      ordersVitestConfig.includes("**/dist/**"),
+      "vitest.config.ts must exclude dist/** (the Vitest-4 default-exclude gotcha)",
+    );
 
     // -------------------------------------------------------------------
     // 4. Stub files — exact paths per DEFAULT_NAMING (stubs.ts)
@@ -590,18 +631,19 @@ describe("SyncEngine end-to-end external scaffold", () => {
     //                + invariants/linter-config.yaml
     //                + generator.config.yaml                              =  4
     //   packages/shared   : package.json + tsconfig.json + eslint.config.js
-    //                     + 3 layer barrels                               =  6
+    //                     + vitest.config.ts + 3 layer barrels             =  7
     //   packages/orders   : package.json + tsconfig.json + eslint.config.js
-    //                     + 3 layer barrels + 6 stubs + at least 5 inner
-    //                     barrels (entities, value-objects, ports,
-    //                     ports/out, use-cases, ports/in, adapters)       = 20+
-    //   packages/billing  : same shape as orders                          = 20+
+    //                     + vitest.config.ts + 3 layer barrels + 6 stubs
+    //                     + at least 5 inner barrels (entities,
+    //                     value-objects, ports, ports/out, use-cases,
+    //                     ports/in, adapters)                              = 21+
+    //   packages/billing  : same shape as orders                          = 21+
     //   apps/web          : package.json + tsconfig.json + page.tsx       =  3
     //   apps/api          : package.json + tsconfig.json + index.ts       =  3
     //
-    // Lower bound: 59. We assert ≥55 for a small safety margin against
-    // minor ordering changes in the barrel generator's empty-dir
-    // policy.
+    // Lower bound: 62 (each external package also carries a born-on-Vitest
+    // vitest.config.ts). We assert ≥55 for a safety margin against minor
+    // ordering changes in the barrel generator's empty-dir policy.
     const total = await countFiles(target);
     assert.ok(
       total >= 55,
