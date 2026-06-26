@@ -205,6 +205,42 @@ describe("package json", () => {
     );
   });
 
+  it("preserves an existing vitest.config.ts under forceRoot (write-once)", async () => {
+    await withTempWorkspace(
+      "vitest-keep-pkg",
+      async ({ workspaceRoot, modulePath }) => {
+        const manifest: Manifest = {
+          scope: "acme",
+          bounded_contexts: [{ name: "vitest-keep-pkg" }],
+        };
+        // Production external flag set: forceRoot bypasses
+        // safeWriteFileAtomic's hand-written-file guard, so the explicit
+        // existence check in the generator — NOT the guard — is what keeps an
+        // owner-customized config from being clobbered on regeneration. If the
+        // generator dropped that check and leaned on the guard, this would
+        // overwrite the file. Pins write-once across re-runs.
+        const config: SyncConfig = {
+          ...makeConfig(workspaceRoot, manifest),
+          force: true,
+          forceRoot: true,
+        };
+        const vitestConfigPath = path.join(modulePath, "vitest.config.ts");
+        const custom =
+          "// owner-customized — must survive sync\nexport default {};\n";
+        await fs.writeFile(vitestConfigPath, custom, "utf8");
+
+        await generatePackageJson(modulePath, "vitest-keep-pkg", config);
+
+        const after = await fs.readFile(vitestConfigPath, "utf8");
+        assert.strictEqual(
+          after,
+          custom,
+          "an existing vitest.config.ts must be preserved verbatim (write-once, even under forceRoot)",
+        );
+      },
+    );
+  });
+
   it("omits the dependencies block for a dependency-less package (yarn-install churn guard)", async () => {
     await withTempWorkspace(
       "no-deps-pkg",
