@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { RenderHexagonCanvasUseCase } from "../../src/application/use-cases/index.js";
 import { createCanvasViewport } from "../../src/domain/index.js";
 

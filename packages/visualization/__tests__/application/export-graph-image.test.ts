@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { ExportGraphImageUseCase } from "../../src/application/use-cases/index.js";
 
 describe("ExportGraphImageUseCase", () => {

@@ -32,7 +32,7 @@
     "build": "tsc",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --test 'src/**/*.test.ts' 2>/dev/null || true"
+    "test": "vitest run"
   },
   "dependencies": {
     "@hexagen/agentic-interaction": "workspace:*",
