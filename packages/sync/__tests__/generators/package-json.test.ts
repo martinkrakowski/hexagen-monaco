@@ -109,8 +109,8 @@ describe("package json", () => {
 
       assert.strictEqual(
         result.created.length,
-        1,
-        "generatePackageJson should report one created file for a new package",
+        2,
+        "a new external package gets package.json + a scaffolded vitest.config.ts",
       );
 
       const pkg = await readJson(pkgPath);
@@ -126,6 +126,119 @@ describe("package json", () => {
         "new package.json should include @acme/shared from depends_on",
       );
     });
+  });
+
+  it("scaffolds the Vitest test script + vitest.config.ts for an external package", async () => {
+    await withTempWorkspace(
+      "vitest-pkg",
+      async ({ workspaceRoot, modulePath, pkgPath }) => {
+        const manifest: Manifest = {
+          scope: "acme",
+          bounded_contexts: [{ name: "vitest-pkg" }],
+        };
+        await generatePackageJson(
+          modulePath,
+          "vitest-pkg",
+          makeConfig(workspaceRoot, manifest),
+        );
+
+        const pkg = await readJson(pkgPath);
+        const scripts = pkg.scripts as Record<string, string>;
+        assert.strictEqual(scripts.test, "vitest run --passWithNoTests");
+        const devDeps = pkg.devDependencies as Record<string, string>;
+        assert.ok(
+          devDeps.vitest,
+          "external package.json should include vitest",
+        );
+
+        const vitestConfig = await fs.readFile(
+          path.join(modulePath, "vitest.config.ts"),
+          "utf8",
+        );
+        assert.match(vitestConfig, /from "vitest\/config"/);
+        assert.match(
+          vitestConfig,
+          /\*\*\/dist\/\*\*/,
+          "config must exclude dist/** (the Vitest-4 default-exclude gotcha)",
+        );
+      },
+    );
+  });
+
+  it("does NOT scaffold Vitest in self-regen mode", async () => {
+    await withTempWorkspace(
+      "selfregen-pkg",
+      async ({ workspaceRoot, modulePath, pkgPath }) => {
+        const manifest: Manifest = {
+          scope: "acme",
+          bounded_contexts: [{ name: "selfregen-pkg" }],
+        };
+        const config: SyncConfig = {
+          ...makeConfig(workspaceRoot, manifest),
+          mode: "self-regen",
+        };
+        await generatePackageJson(modulePath, "selfregen-pkg", config);
+
+        const pkg = await readJson(pkgPath);
+        assert.strictEqual(
+          (pkg.scripts as Record<string, string>).test,
+          undefined,
+          "self-regen must not inject a test script",
+        );
+        assert.strictEqual(
+          (pkg.devDependencies as Record<string, string>).vitest,
+          undefined,
+          "self-regen must not inject vitest",
+        );
+        const vitestConfigExists = await fs
+          .access(path.join(modulePath, "vitest.config.ts"))
+          .then(
+            () => true,
+            () => false,
+          );
+        assert.strictEqual(
+          vitestConfigExists,
+          false,
+          "self-regen must not scaffold a vitest.config.ts",
+        );
+      },
+    );
+  });
+
+  it("preserves an existing vitest.config.ts under forceRoot (write-once)", async () => {
+    await withTempWorkspace(
+      "vitest-keep-pkg",
+      async ({ workspaceRoot, modulePath }) => {
+        const manifest: Manifest = {
+          scope: "acme",
+          bounded_contexts: [{ name: "vitest-keep-pkg" }],
+        };
+        // Production external flag set: forceRoot bypasses
+        // safeWriteFileAtomic's hand-written-file guard, so the explicit
+        // existence check in the generator — NOT the guard — is what keeps an
+        // owner-customized config from being clobbered on regeneration. If the
+        // generator dropped that check and leaned on the guard, this would
+        // overwrite the file. Pins write-once across re-runs.
+        const config: SyncConfig = {
+          ...makeConfig(workspaceRoot, manifest),
+          force: true,
+          forceRoot: true,
+        };
+        const vitestConfigPath = path.join(modulePath, "vitest.config.ts");
+        const custom =
+          "// owner-customized — must survive sync\nexport default {};\n";
+        await fs.writeFile(vitestConfigPath, custom, "utf8");
+
+        await generatePackageJson(modulePath, "vitest-keep-pkg", config);
+
+        const after = await fs.readFile(vitestConfigPath, "utf8");
+        assert.strictEqual(
+          after,
+          custom,
+          "an existing vitest.config.ts must be preserved verbatim (write-once, even under forceRoot)",
+        );
+      },
+    );
   });
 
   it("omits the dependencies block for a dependency-less package (yarn-install churn guard)", async () => {

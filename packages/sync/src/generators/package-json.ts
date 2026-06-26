@@ -7,7 +7,7 @@ import {
   recordWriteStatus,
   type GeneratorResult,
 } from "../results.js";
-import { safeWriteFileAtomic } from "../fs-utils.js";
+import { isInScope, safeWriteFileAtomic } from "../fs-utils.js";
 import {
   expandDependsOn,
   resolveScope,
@@ -65,6 +65,14 @@ export async function generatePackageJson(
       build: "tsc",
       lint: "eslint . --ext .ts,.tsx",
       typecheck: "tsc --noEmit",
+      // Vitest runner (ADR-0044), scaffolded only for *external* (generated)
+      // projects — paired with the vitest.config.ts emitted below. This repo's
+      // own packages (self-regen) keep their shared-base setup untouched.
+      // `--passWithNoTests` so a freshly scaffolded module passes before any test
+      // is written.
+      ...(config.mode === "external"
+        ? { test: "vitest run --passWithNoTests" }
+        : {}),
       ...((defaults.scripts as Record<string, string>) ?? {}),
       ...((moduleOverrides.scripts as Record<string, string>) ?? {}),
     },
@@ -81,6 +89,7 @@ export async function generatePackageJson(
     ...(Object.keys(dependencies).length > 0 ? { dependencies } : {}),
     devDependencies: {
       typescript: "^5.0.0",
+      ...(config.mode === "external" ? { vitest: "^4.1.9" } : {}),
       ...((defaults.devDependencies as Record<string, string>) ?? {}),
       ...((moduleOverrides.devDependencies as Record<string, string>) ?? {}),
     },
@@ -139,6 +148,60 @@ export async function generatePackageJson(
   );
 
   recordWriteStatus(result, pkgPath, status);
+
+  // Scaffold a per-package vitest.config.ts for *external* (generated) projects,
+  // written once (never overwritten — it becomes the project owner's file after
+  // creation). Generated projects use moduleResolution:bundler, so no `.js`→`.ts`
+  // extensionAlias is needed; the critical setting is excluding dist/** — Vitest
+  // 4's default exclude is only node_modules/.git, so without it a bare
+  // `vitest run` would also run the compiled tests in dist/. This repo's own
+  // packages (self-regen) keep their shared-base configs and are never touched.
+  //
+  // Mirrors writeStubFile (stubs.ts) — the same write-once-under-scope idiom:
+  //   1. isInScope BEFORE any disk read, so an out-of-scope `--only` target
+  //      produces zero filesystem side effects (the contract isInScope exists
+  //      to honour; safeWriteFileAtomic re-checks it for the write itself).
+  //   2. An explicit stat that PRESERVES an existing file. This is load-bearing,
+  //      not redundant: external mode runs with forceRoot, which *bypasses*
+  //      safeWriteFileAtomic's hand-written-file guard — so the stat, not the
+  //      guard, is what makes this write-once across regenerations.
+  //   3. skipGeneratedCheck=false (vitest.config.ts is the owner's hand-written
+  //      file, not a marker-bearing managed one like package.json).
+  if (config.mode === "external") {
+    const vitestConfigPath = path.join(modulePath, "vitest.config.ts");
+    if (isInScope(vitestConfigPath, config)) {
+      let vitestConfigExists = false;
+      try {
+        await fs.stat(vitestConfigPath);
+        vitestConfigExists = true;
+      } catch (e) {
+        // ENOENT = absent (the write-if-absent happy path). Any other error
+        // (EACCES, ELOOP, …) is a real fault — surface it rather than silently
+        // scaffolding over an unreadable path.
+        if (!(e instanceof Error && "code" in e && e.code === "ENOENT")) {
+          throw e;
+        }
+      }
+      if (!vitestConfigExists) {
+        const vitestConfigContent =
+          `import { defineConfig } from "vitest/config";\n\n` +
+          `export default defineConfig({\n` +
+          `  test: {\n` +
+          `    environment: "node",\n` +
+          `    exclude: ["**/node_modules/**", "**/dist/**"],\n` +
+          `  },\n` +
+          `});\n`;
+        const vitestStatus = await safeWriteFileAtomic(
+          vitestConfigPath,
+          vitestConfigContent,
+          config,
+          report,
+          false,
+        );
+        recordWriteStatus(result, vitestConfigPath, vitestStatus);
+      }
+    }
+  }
 
   return result;
 }
