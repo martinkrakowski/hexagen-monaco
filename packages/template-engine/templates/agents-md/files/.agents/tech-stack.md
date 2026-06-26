@@ -10,8 +10,8 @@ if it is not here (or is in "Never Suggest"), do not introduce it without asking
 | Next.js       | Web framework | App Router. Do not add Pages Router.               |
 | React         | UI            | Function components + hooks; no class components.   |
 | TypeScript    | Language      | `strict: true`. No `any` — narrow or use `unknown`. |
-| node:test     | Test runner   | Built-in; `import { test } from "node:test"`.       |
-| node:assert   | Assertions    | `node:assert/strict`; never `expect()`.            |
+| Vitest        | Test runner   | `vitest run`; `import { describe, it } from "vitest"`. |
+| node:assert / `expect()` | Assertions | `node:assert/strict` or Vitest's `expect()` — either is fine. |
 
 > Keep this table accurate. When you add a dependency (or a Hexagen template
 > adds one), add its row here in the same change — a stale stack reference is
@@ -19,8 +19,7 @@ if it is not here (or is in "Never Suggest"), do not introduce it without asking
 
 ## Never Suggest
 
-- **Jest / Vitest / Mocha / Chai** — this project uses `node:test` + `node:assert`.
-- **The `expect()` API** — use `assert.*`.
+- **Jest / Mocha / Chai** — this project uses Vitest.
 - **Pages Router** — App Router only.
 - **`any`** — use a precise type, a generic, or `unknown` with narrowing.
 - A new HTTP client, date library, or state manager **before checking** whether
