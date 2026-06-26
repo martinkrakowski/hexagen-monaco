@@ -78,6 +78,89 @@ describe("FileSystemFileEmitter", () => {
     assert.equal(content, "Hello World!");
   });
 
+  it("skips *.test.* / *.spec.* outputs by default — the --with-tests gate", async () => {
+    // Author a source file plus a test + spec scaffold in the template.
+    const filesDir = path.join(templatesDir, "__test__", "files", "gated");
+    await fs.mkdir(filesDir, { recursive: true });
+    await fs.writeFile(
+      path.join(filesDir, "feature.ts"),
+      "export const x = 1;\n",
+      "utf-8",
+    );
+    await fs.writeFile(
+      path.join(filesDir, "feature.test.ts"),
+      "// vitest scaffold\n",
+      "utf-8",
+    );
+    await fs.writeFile(
+      path.join(filesDir, "feature.spec.ts"),
+      "// spec scaffold\n",
+      "utf-8",
+    );
+    const outputs: ManifestOutput[] = [
+      "gated/feature.ts",
+      "gated/feature.test.ts",
+      "gated/feature.spec.ts",
+    ];
+
+    // Default (withTests off): only the non-test source is emitted — mirrors
+    // InMemoryFileEmitter, so the CLI doesn't drop test files into a project.
+    const offProject = await freshProject();
+    const off = await new FileSystemFileEmitter(templatesDir).emit(
+      testManifest(outputs),
+      {},
+      offProject,
+      emptyConfig(),
+    );
+    assert.deepEqual(
+      off.generatedFiles.map((f) => f.path),
+      ["gated/feature.ts"],
+      "default emit must skip *.test.* and *.spec.* outputs",
+    );
+    await assert.rejects(
+      fs.access(path.join(offProject, "gated/feature.test.ts")),
+      "*.test.* must not be written to disk by default",
+    );
+    await assert.rejects(
+      fs.access(path.join(offProject, "gated/feature.spec.ts")),
+      "*.spec.* must not be written to disk by default",
+    );
+  });
+
+  it("emits *.test.* / *.spec.* scaffolds when withTests is true", async () => {
+    const filesDir = path.join(templatesDir, "__test__", "files", "gated-on");
+    await fs.mkdir(filesDir, { recursive: true });
+    await fs.writeFile(
+      path.join(filesDir, "feature.ts"),
+      "export const x = 1;\n",
+      "utf-8",
+    );
+    await fs.writeFile(
+      path.join(filesDir, "feature.test.ts"),
+      "// vitest scaffold\n",
+      "utf-8",
+    );
+    const outputs: ManifestOutput[] = [
+      "gated-on/feature.ts",
+      "gated-on/feature.test.ts",
+    ];
+
+    const projectRoot = await freshProject();
+    const result = await new FileSystemFileEmitter(templatesDir, {
+      withTests: true,
+    }).emit(testManifest(outputs), {}, projectRoot, emptyConfig());
+
+    assert.deepEqual(
+      result.generatedFiles.map((f) => f.path).sort(),
+      ["gated-on/feature.test.ts", "gated-on/feature.ts"],
+      "withTests must emit the test scaffold alongside the source",
+    );
+    await assert.doesNotReject(
+      fs.access(path.join(projectRoot, "gated-on/feature.test.ts")),
+      "*.test.* must be written to disk under --with-tests",
+    );
+  });
+
   it("overwrites silently when file matches stored hash (idempotent)", async () => {
     const projectRoot = await freshProject();
     const emitter = new FileSystemFileEmitter(templatesDir);

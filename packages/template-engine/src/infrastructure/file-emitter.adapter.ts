@@ -16,6 +16,7 @@ import type {
 import {
   conflictFilePath,
   isOutputEnabled,
+  isTestOutput,
   outputPath,
 } from "../domain/index.js";
 
@@ -25,11 +26,31 @@ const PACKAGE_ROOT = path.resolve(
   "..",
 );
 
+/**
+ * Run-level options for the filesystem emitter. Mirrors
+ * `InMemoryFileEmitterOptions.withTests` so the CLI (`hexagen add`) and the web
+ * (in-memory) emit paths gate test scaffolds identically.
+ */
+export interface FileSystemFileEmitterOptions {
+  /**
+   * When false (default), `*.test.*` / `*.spec.*` outputs are skipped — the
+   * pattern-based `--with-tests` gate (99-gap-analysis.md). Matches
+   * `InMemoryFileEmitter`'s default so both emit paths produce the same files
+   * for the same template until tests are explicitly requested.
+   */
+  withTests?: boolean;
+}
+
 export class FileSystemFileEmitter implements FileEmitterPort {
   private readonly templatesDir: string;
+  private readonly withTests: boolean;
 
-  constructor(templatesDir?: string) {
+  constructor(
+    templatesDir?: string,
+    options: FileSystemFileEmitterOptions = {},
+  ) {
     this.templatesDir = templatesDir ?? path.join(PACKAGE_ROOT, "templates");
+    this.withTests = options.withTests ?? false;
   }
 
   async emit(
@@ -46,6 +67,10 @@ export class FileSystemFileEmitter implements FileEmitterPort {
     for (const out of manifest.outputs) {
       if (!isOutputEnabled(out, answers)) continue;
       const outputRelPath = outputPath(out);
+      // Pattern-based --with-tests gate: skip `*.test.*` / `*.spec.*` scaffolds
+      // unless requested. Mirrors InMemoryFileEmitter so the CLI (`hexagen add`)
+      // and the web path emit the same files for a given template.
+      if (!this.withTests && isTestOutput(outputRelPath)) continue;
       const destFile = path.resolve(projectRoot, outputRelPath);
       if (
         !destFile.startsWith(resolvedRoot + path.sep) &&
