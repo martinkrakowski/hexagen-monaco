@@ -220,14 +220,20 @@ describe("wizardToManifest — api framework from infrastructureTarget", () => {
     assert.equal(apiFrameworkOf(m), "nitro");
   });
 
-  it("non-nitro infrastructureTargets fall back to plain-ts (unchanged)", () => {
-    for (const target of ["nestjs", "express", "serverless", "plain-ts"]) {
+  it("each backend infrastructureTarget maps to its own app framework", () => {
+    const cases: ReadonlyArray<readonly [string, string]> = [
+      ["nestjs", "nestjs"],
+      ["express", "express"],
+      ["serverless", "serverless"],
+      ["plain-ts", "plain-ts"],
+    ];
+    for (const [target, framework] of cases) {
       const m = wizardToManifest(
         wizardWith([{ name: "orders", infrastructureTarget: target }]),
       );
       assert.equal(
         apiFrameworkOf(m),
-        "plain-ts",
+        framework,
         `infrastructureTarget=${target}`,
       );
     }
@@ -264,7 +270,7 @@ describe("wizardToManifest — api framework from infrastructureTarget", () => {
         },
       ]),
     );
-    assert.equal(apiFrameworkOf(m), "plain-ts");
+    assert.equal(apiFrameworkOf(m), "nestjs");
   });
 
   it("infrastructureTarget 'none' emits NO api app (UI-only project)", () => {

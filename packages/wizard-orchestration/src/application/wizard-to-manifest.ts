@@ -29,22 +29,30 @@ function mapUiFramework(ui: BoundedContext["uiFramework"]): AppEntryFramework {
 
 /**
  * The API app framework for a bounded context. The step-1 `infrastructureTarget`
- * selector wins — `"nitro"` is the first value with a real generator template, so
- * choosing Nitro now materializes a Nitro app (Phase 2). The other
- * `infrastructureTarget` values (nestjs/express/serverless/plain-ts) have no
- * template yet → `"plain-ts"`. For legacy/imported manifests that only set the
- * older `apiFramework` field, `"Fastify"` still maps to the fastify template.
+ * selector wins — each value with a built-in generator template
+ * (nitro/nestjs/express/serverless) maps straight to it; `"plain-ts"` (and any
+ * future value without a template) falls through to the plain-ts scaffold. For
+ * legacy/imported manifests that only set the older `apiFramework` field,
+ * `"Fastify"` still maps to the fastify template.
  *
- * Before this, `deriveApps` read only the legacy `apiFramework` and never
- * `infrastructureTarget`, so the main selector was inert. This is the seam that
- * lets it drive generation for every backend — Nitro is simply the first to land
- * a real template behind it.
+ * `deriveApps` reads `infrastructureTarget` (the live selector); the legacy
+ * `apiFramework` is only a fallback for manifests that predate it.
  */
 function frameworkForContext(bc: BoundedContext): AppEntryFramework {
-  if (bc.infrastructureTarget === "nitro") return "nitro";
-  // infrastructureTarget wins when set: a non-nitro value has no template yet →
-  // plain-ts (it must NOT be silently overridden by a legacy apiFramework).
-  if (bc.infrastructureTarget) return "plain-ts";
+  // infrastructureTarget wins when set. A value MUST NOT be silently overridden
+  // by a legacy apiFramework — unknown/"none" values fall through to plain-ts.
+  switch (bc.infrastructureTarget) {
+    case "nitro":
+      return "nitro";
+    case "nestjs":
+      return "nestjs";
+    case "express":
+      return "express";
+    case "serverless":
+      return "serverless";
+    case "plain-ts":
+      return "plain-ts";
+  }
   // Fallback for legacy/imported manifests that predate infrastructureTarget
   // (it's absent there) and only carry the older apiFramework field.
   if (bc.apiFramework === "Fastify") return "fastify";
@@ -528,7 +536,7 @@ function deriveApps(
           name: "api",
           framework: pickPreferredFramework(
             apiBearing.map(frameworkForContext),
-            ["nitro", "fastify", "plain-ts"],
+            ["nitro", "nestjs", "fastify", "express", "serverless", "plain-ts"],
           ),
           depends_on: dependsOn,
         }
