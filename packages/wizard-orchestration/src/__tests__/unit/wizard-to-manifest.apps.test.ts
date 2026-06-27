@@ -59,6 +59,23 @@ describe("wizardToManifest — allowSharedUi shapes apps[]", () => {
     assert.ok(web[0].depends_on?.includes("billing"));
   });
 
+  it("maps each UI framework selection to its web app framework", () => {
+    const cases: ReadonlyArray<readonly [string, string]> = [
+      ["Next.js", "next.js"],
+      ["Vue.js", "vue"],
+      ["React Router", "react-router"],
+      ["Remix", "remix"],
+      ["Angular", "angular"],
+    ];
+    for (const [ui, framework] of cases) {
+      const manifest = wizardToManifest(
+        wizard("modular-monolith", [{ name: "orders", uiFramework: ui }]),
+      );
+      const web = appsOf(manifest).find((a) => a.name === "web");
+      assert.equal(web?.framework, framework, `uiFramework=${ui}`);
+    }
+  });
+
   it("strict template (strict-enterprise) emits one isolated web app per UI-bearing context", () => {
     const manifest = wizardToManifest(
       wizard("strict-enterprise", [{ name: "orders" }, { name: "billing" }]),

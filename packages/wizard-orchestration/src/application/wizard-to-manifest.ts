@@ -15,16 +15,29 @@ const getAdapterName = (type: string) => `${type}.adapter.ts`;
 
 // Framework derivation for the manifest `apps[]` section.
 //
-// Only `"next.js"`, `"fastify"`, `"nitro"`, and `"plain-ts"` have built-in
-// generator templates (`packages/sync/src/generators/apps.ts`
-// `BUILTIN_FRAMEWORK_TEMPLATES`); other choices have none, so they map to
-// `"plain-ts"` and the generator still emits a buildable scaffold.
+// Each wizard selection maps to a framework with a built-in generator template
+// (`packages/sync/src/generators/apps-framework-templates.ts`
+// `BUILTIN_FRAMEWORK_TEMPLATES`); an unrecognised value maps to `"plain-ts"` so
+// the generator still emits a buildable scaffold.
 type AppEntryFramework = NonNullable<
   NonNullable<Manifest["apps"]>[number]["framework"]
 >;
 
 function mapUiFramework(ui: BoundedContext["uiFramework"]): AppEntryFramework {
-  return ui === "Next.js" ? "next.js" : "plain-ts";
+  switch (ui) {
+    case "Next.js":
+      return "next.js";
+    case "Vue.js":
+      return "vue";
+    case "React Router":
+      return "react-router";
+    case "Remix":
+      return "remix";
+    case "Angular":
+      return "angular";
+    default:
+      return "plain-ts";
+  }
 }
 
 /**
@@ -591,7 +604,14 @@ function deriveApps(
   const uiFrameworks = nonShared.map((bc) => mapUiFramework(bc.uiFramework));
   const webApp = {
     name: "web",
-    framework: pickPreferredFramework(uiFrameworks, ["next.js", "plain-ts"]),
+    framework: pickPreferredFramework(uiFrameworks, [
+      "next.js",
+      "react-router",
+      "remix",
+      "vue",
+      "angular",
+      "plain-ts",
+    ]),
     depends_on: dependsOn,
   };
   return apiApp ? [webApp, apiApp] : [webApp];

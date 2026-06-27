@@ -317,6 +317,165 @@ describe("apps", () => {
     });
   });
 
+  it("should create a Vue app with App.vue, index.html, and vite.config.ts", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const manifest: Manifest = {
+        system: "myorg",
+        apps: [{ name: "web", framework: "vue" }],
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        logger: createSpyLogger(),
+        enableApps: true,
+      });
+
+      const result = await generateApps(config);
+      assert.strictEqual(result.error, undefined, "no error on vue app");
+
+      const appDir = path.join(workspaceRoot, "apps", "web");
+      for (const rel of [
+        "src/main.ts",
+        "src/App.vue",
+        "index.html",
+        "vite.config.ts",
+      ]) {
+        assert.ok(await pathExists(path.join(appDir, rel)), `vue emits ${rel}`);
+      }
+      const pkg = await readJson(path.join(appDir, "package.json"));
+      assert.ok(
+        (pkg.dependencies as Record<string, string>).vue,
+        "vue dependency present",
+      );
+      assert.ok(
+        !(pkg.scripts as Record<string, string>).lint.includes(".vue"),
+        "lint stays TS-only — the generated eslint config can't parse .vue SFCs",
+      );
+    });
+  });
+
+  it("should create a React Router app with App.tsx and a data router entry", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const manifest: Manifest = {
+        system: "myorg",
+        apps: [{ name: "web", framework: "react-router" }],
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        logger: createSpyLogger(),
+        enableApps: true,
+      });
+
+      const result = await generateApps(config);
+      assert.strictEqual(
+        result.error,
+        undefined,
+        "no error on react-router app",
+      );
+
+      const appDir = path.join(workspaceRoot, "apps", "web");
+      const entryPath = path.join(appDir, "src", "main.tsx");
+      assert.ok(
+        await pathExists(entryPath),
+        "react-router entry at src/main.tsx",
+      );
+      assert.ok(
+        await pathExists(path.join(appDir, "src", "App.tsx")),
+        "react-router App.tsx emitted",
+      );
+      const deps = (await readJson(path.join(appDir, "package.json")))
+        .dependencies as Record<string, string>;
+      assert.ok(
+        deps["react-router-dom"],
+        "react-router-dom dependency present",
+      );
+      assert.ok(
+        (await readText(entryPath)).includes("createBrowserRouter"),
+        "entry sets up a data router",
+      );
+    });
+  });
+
+  it("should create a Remix app with app/root.tsx and a route", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const manifest: Manifest = {
+        system: "myorg",
+        apps: [{ name: "web", framework: "remix" }],
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        logger: createSpyLogger(),
+        enableApps: true,
+      });
+
+      const result = await generateApps(config);
+      assert.strictEqual(result.error, undefined, "no error on remix app");
+
+      const appDir = path.join(workspaceRoot, "apps", "web");
+      assert.ok(
+        await pathExists(path.join(appDir, "app", "root.tsx")),
+        "remix app/root.tsx emitted",
+      );
+      assert.ok(
+        await pathExists(path.join(appDir, "app", "routes", "_index.tsx")),
+        "remix index route emitted",
+      );
+      const deps = (await readJson(path.join(appDir, "package.json")))
+        .dependencies as Record<string, string>;
+      assert.ok(
+        deps["@remix-run/react"],
+        "@remix-run/react dependency present",
+      );
+    });
+  });
+
+  it("should create an Angular app with a component, angular.json, and tsconfig.app.json", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const manifest: Manifest = {
+        system: "myorg",
+        apps: [{ name: "web", framework: "angular" }],
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        logger: createSpyLogger(),
+        enableApps: true,
+      });
+
+      const result = await generateApps(config);
+      assert.strictEqual(result.error, undefined, "no error on angular app");
+
+      const appDir = path.join(workspaceRoot, "apps", "web");
+      for (const rel of [
+        "src/main.ts",
+        "src/app/app.component.ts",
+        "src/index.html",
+        "angular.json",
+        "tsconfig.app.json",
+      ]) {
+        assert.ok(
+          await pathExists(path.join(appDir, rel)),
+          `angular emits ${rel}`,
+        );
+      }
+      const pkg = await readJson(path.join(appDir, "package.json"));
+      assert.ok(
+        (pkg.dependencies as Record<string, string>)["@angular/core"],
+        "@angular/core dependency present",
+      );
+      assert.ok(
+        (pkg.devDependencies as Record<string, string>).eslint,
+        "angular devDeps include eslint so the lint script runs",
+      );
+      assert.ok(
+        (
+          await readText(path.join(appDir, "src", "app", "app.component.ts"))
+        ).includes("@Component"),
+        "component uses the @Component decorator",
+      );
+      assert.ok(
+        (await readText(path.join(appDir, "src", "main.ts"))).includes(
+          'import "zone.js"',
+        ),
+        "main.ts loads the zone.js polyfill for change detection",
+      );
+    });
+  });
+
   it("app eslint.config.js ignores a same-named bounded-context override (#264 review)", async () => {
     // An app and a bounded context can share a name (different namespaces). The
     // app must NOT inherit the BC's package-intended eslint override — it gets
@@ -631,7 +790,7 @@ describe("apps", () => {
       const manifest: Manifest = {
         system: "myorg",
         apps: [
-          { name: "legacy", framework: "remix" as AppFramework },
+          { name: "legacy", framework: "svelte" as AppFramework },
           { name: "api", framework: "fastify" },
         ],
       };
@@ -674,7 +833,7 @@ describe("apps", () => {
 
       const errors = messagesAt(logger, "error");
       const errorFired = errors.some(
-        (m) => m.includes("legacy") && m.includes("remix"),
+        (m) => m.includes("legacy") && m.includes("svelte"),
       );
       assert.strictEqual(
         errorFired,

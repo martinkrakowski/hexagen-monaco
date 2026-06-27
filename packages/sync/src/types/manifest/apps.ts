@@ -7,7 +7,11 @@ export type AppFramework =
   | "nestjs"
   | "serverless"
   | "plain-ts"
-  | "nitro";
+  | "nitro"
+  | "vue"
+  | "react-router"
+  | "remix"
+  | "angular";
 
 export interface App {
   name: string;
