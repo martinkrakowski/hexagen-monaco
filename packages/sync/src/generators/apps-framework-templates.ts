@@ -226,7 +226,7 @@ const VUE_PACKAGE_JSON_TEMPLATE = `{
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "eslint src --ext .ts,.vue",
+    "lint": "eslint src --ext .ts",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
@@ -480,7 +480,10 @@ const ANGULAR_PACKAGE_JSON_TEMPLATE = `{
     "@angular/cli": "^19.0.0",
     "@angular/compiler-cli": "^19.0.0",
     "@angular-devkit/build-angular": "^19.0.0",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "eslint": "^9.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0"
   }
 }
 `;
@@ -500,7 +503,10 @@ const ANGULAR_TSCONFIG: TsConfigTemplate = {
   references: [{ path: "./tsconfig.app.json" }],
 };
 
-const ANGULAR_MAIN_TEMPLATE = `import { bootstrapApplication } from "@angular/platform-browser";
+const ANGULAR_MAIN_TEMPLATE = `// zone.js powers Angular's default (zone-based) change detection — it must be
+// imported before bootstrap or async updates won't trigger a re-render.
+import "zone.js";
+import { bootstrapApplication } from "@angular/platform-browser";
 import { AppComponent } from "./app/app.component";
 
 bootstrapApplication(AppComponent).catch((err) => console.error(err));

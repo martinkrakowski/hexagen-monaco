@@ -221,9 +221,15 @@ describe("apps", () => {
       ]) {
         assert.ok(await pathExists(path.join(appDir, rel)), `vue emits ${rel}`);
       }
-      const deps = (await readJson(path.join(appDir, "package.json")))
-        .dependencies as Record<string, string>;
-      assert.ok(deps.vue, "vue dependency present");
+      const pkg = await readJson(path.join(appDir, "package.json"));
+      assert.ok(
+        (pkg.dependencies as Record<string, string>).vue,
+        "vue dependency present",
+      );
+      assert.ok(
+        !(pkg.scripts as Record<string, string>).lint.includes(".vue"),
+        "lint stays TS-only — the generated eslint config can't parse .vue SFCs",
+      );
     });
   });
 
@@ -327,14 +333,26 @@ describe("apps", () => {
           `angular emits ${rel}`,
         );
       }
-      const deps = (await readJson(path.join(appDir, "package.json")))
-        .dependencies as Record<string, string>;
-      assert.ok(deps["@angular/core"], "@angular/core dependency present");
+      const pkg = await readJson(path.join(appDir, "package.json"));
+      assert.ok(
+        (pkg.dependencies as Record<string, string>)["@angular/core"],
+        "@angular/core dependency present",
+      );
+      assert.ok(
+        (pkg.devDependencies as Record<string, string>).eslint,
+        "angular devDeps include eslint so the lint script runs",
+      );
       assert.ok(
         (
           await readText(path.join(appDir, "src", "app", "app.component.ts"))
         ).includes("@Component"),
         "component uses the @Component decorator",
+      );
+      assert.ok(
+        (await readText(path.join(appDir, "src", "main.ts"))).includes(
+          'import "zone.js"',
+        ),
+        "main.ts loads the zone.js polyfill for change detection",
       );
     });
   });
