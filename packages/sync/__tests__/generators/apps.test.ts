@@ -508,11 +508,12 @@ describe("apps", () => {
       );
       // Build-verify regression: @remix-run/* v2 declares a `react@^18` peer, so
       // any range that admits React 19 reintroduces the install-time ERESOLVE.
-      // Assert every react package (runtime + types) is pinned to the 18 major —
-      // a `.includes("18")` substring would also pass loosened ranges like
-      // "^18 || ^19" or ">=18", so match the major explicitly and reject 19.
+      // Assert every react package (runtime + types) sits on the React 18 major
+      // line — accept the whole major (`18`, `^18`, `~18`, `18.2.0`, …) but, via
+      // the end anchor, reject loosened ranges like "^18 || ^19" / ">=18" that a
+      // `.includes("18")` substring would let through.
       const on18 = (range: string | undefined): boolean =>
-        !!range && /^[~^]?18\./.test(range) && !range.includes("19");
+        !!range && /^[~^]?18(?:\.\d+(?:\.\d+)?)?$/.test(range);
       for (const [name, range] of [
         ["react", deps.react],
         ["react-dom", deps["react-dom"]],
