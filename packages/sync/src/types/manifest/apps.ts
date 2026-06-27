@@ -4,6 +4,8 @@ export type AppFramework =
   | "next.js"
   | "fastify"
   | "express"
+  | "nestjs"
+  | "serverless"
   | "plain-ts"
   | "nitro"
   | "vue"

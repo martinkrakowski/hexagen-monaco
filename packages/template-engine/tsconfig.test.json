@@ -4,6 +4,10 @@
     "rootDir": ".",
     "noEmit": true
   },
-  "include": ["src/**/*", "__tests__/**/*"],
+  "include": [
+    "src/**/*",
+    "__tests__/**/*",
+    "templates/bullmq/files/src/infrastructure/queue/parse-int-env.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }

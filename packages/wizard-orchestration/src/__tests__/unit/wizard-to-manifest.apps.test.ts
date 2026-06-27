@@ -237,24 +237,56 @@ describe("wizardToManifest — api framework from infrastructureTarget", () => {
     assert.equal(apiFrameworkOf(m), "nitro");
   });
 
-  it("non-nitro infrastructureTargets fall back to plain-ts (unchanged)", () => {
-    for (const target of ["nestjs", "express", "serverless", "plain-ts"]) {
+  it("each backend infrastructureTarget maps to its own app framework", () => {
+    const cases: ReadonlyArray<readonly [string, string]> = [
+      ["nestjs", "nestjs"],
+      ["express", "express"],
+      ["serverless", "serverless"],
+      ["plain-ts", "plain-ts"],
+    ];
+    for (const [target, framework] of cases) {
       const m = wizardToManifest(
         wizardWith([{ name: "orders", infrastructureTarget: target }]),
       );
       assert.equal(
         apiFrameworkOf(m),
-        "plain-ts",
+        framework,
         `infrastructureTarget=${target}`,
       );
     }
   });
 
-  it("honors legacy apiFramework=Fastify only when infrastructureTarget is absent", () => {
+  it("maps each legacy apiFramework to its framework when infrastructureTarget is absent", () => {
+    const cases: ReadonlyArray<readonly [string, string]> = [
+      ["Fastify", "fastify"],
+      ["Express", "express"],
+      ["NestJS", "nestjs"],
+    ];
+    for (const [apiFramework, framework] of cases) {
+      const m = wizardToManifest(
+        wizardWith([{ name: "orders", apiFramework }]),
+      );
+      assert.equal(
+        apiFrameworkOf(m),
+        framework,
+        `apiFramework=${apiFramework}`,
+      );
+    }
+  });
+
+  it("an unrecognised infrastructureTarget falls back to plain-ts, not a legacy apiFramework", () => {
+    // Wizard input is shape-filtered, not enum-validated; a corrupt value must
+    // NOT be silently overridden by a legacy apiFramework — it stays plain-ts.
     const m = wizardToManifest(
-      wizardWith([{ name: "orders", apiFramework: "Fastify" }]),
+      wizardWith([
+        {
+          name: "orders",
+          infrastructureTarget: "bogus",
+          apiFramework: "Fastify",
+        },
+      ]),
     );
-    assert.equal(apiFrameworkOf(m), "fastify");
+    assert.equal(apiFrameworkOf(m), "plain-ts");
   });
 
   it("infrastructureTarget=nitro wins over a legacy apiFramework=Fastify", () => {
@@ -281,7 +313,7 @@ describe("wizardToManifest — api framework from infrastructureTarget", () => {
         },
       ]),
     );
-    assert.equal(apiFrameworkOf(m), "plain-ts");
+    assert.equal(apiFrameworkOf(m), "nestjs");
   });
 
   it("infrastructureTarget 'none' emits NO api app (UI-only project)", () => {
