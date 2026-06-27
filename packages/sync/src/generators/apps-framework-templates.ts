@@ -441,7 +441,7 @@ const VUE_PACKAGE_JSON_TEMPLATE = `{
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint src --ext .ts,.vue",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
@@ -453,6 +453,8 @@ const VUE_PACKAGE_JSON_TEMPLATE = `{
     "vue-tsc": "^2.1.0",
     "typescript": "^5.5.4",
     "eslint": "^9.0.0",
+    "eslint-plugin-vue": "^9.30.0",
+    "vue-eslint-parser": "^9.4.3",
     "@typescript-eslint/parser": "^8.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0"
   }
