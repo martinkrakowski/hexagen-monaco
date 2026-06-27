@@ -5,7 +5,11 @@ export type AppFramework =
   | "fastify"
   | "express"
   | "plain-ts"
-  | "nitro";
+  | "nitro"
+  | "vue"
+  | "react-router"
+  | "remix"
+  | "angular";
 
 export interface App {
   name: string;
