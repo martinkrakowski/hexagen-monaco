@@ -73,8 +73,20 @@ const server = setupServer(
   }),
 );
 
-beforeAll(() => server.listen());
-afterAll(() => server.close());
+beforeAll(() => {
+  server.listen();
+  // The page's generation/conversion hooks resolve their execution strategy via
+  // resolveExecutionStrategy(hasLocalLLM, hasCloudKeys). In the test env no
+  // WebLLM model is loaded (hasLocalLLM=false) and the cloud flag is unset, so
+  // "auto" resolves to "none" and the flow errors *before* any fetch — the msw
+  // mocks below are never reached. hasServerLLMAccessKey() reads this build-time
+  // flag, so stub it "true" to exercise the cloud path the mocks serve.
+  vi.stubEnv("NEXT_PUBLIC_LLM_AVAILABLE", "true");
+});
+afterAll(() => {
+  server.close();
+  vi.unstubAllEnvs();
+});
 beforeEach(() => {
   server.resetHandlers();
   routerPush.mockClear();
@@ -224,13 +236,19 @@ describe("ImportProjectSpecPage", () => {
 
   // The remaining three drive the cloud generation / loose-spec conversion flow,
   // which streams the response via `response.body.getReader()`
-  // (useLooseSpecConversion / runSpecGeneration). Under the jsdom test env an
-  // msw-v2 mocked response exposes no readable `body`, so the stream read throws
-  // "Response body is empty" before the flow can settle. They assert the CURRENT
-  // behaviour (the generation case navigates to /projects/new/ai/accept via the
-  // footer "Next" → acceptManifest — there is no inline preview screen) and stay
-  // skipped only until the streaming env is solved.
-  it.skip("navigates to the accept screen after generating from spec", async () => {
+  // (useLooseSpecConversion / runSpecGeneration). They were skipped on the
+  // premise that jsdom exposes no readable `body` ("Response body is empty") —
+  // that is NO LONGER true under Vitest 4 (undici's `Response.body` is a real
+  // ReadableStream here; a probe confirmed `getReader()` works). The actual
+  // blocker was provider gating: these flows call resolveExecutionStrategy(),
+  // which returns "none" when neither a local model is loaded nor a cloud key is
+  // present — erroring out before any fetch, so the msw mocks never ran. The
+  // beforeAll stubs NEXT_PUBLIC_LLM_AVAILABLE="true" (what hasServerLLMAccessKey
+  // reads) so "auto" resolves to "cloud" and exercises the mocked stream.
+  // They assert the CURRENT behaviour: the generation case navigates to
+  // /projects/new/ai/accept via the footer "Next" → acceptManifest (there is no
+  // inline preview screen).
+  it("navigates to the accept screen after generating from spec", async () => {
     const user = userEvent.setup();
     render(<ImportProjectSpecPage />);
     const yamlContent = fs.readFileSync(yamlPath, "utf-8");
@@ -262,7 +280,7 @@ describe("ImportProjectSpecPage", () => {
     });
   });
 
-  it.skip("shows error on invalid config during generation", async () => {
+  it("shows error on invalid config during generation", async () => {
     server.use(
       http.post("/api/manifest/generate/spec", () => {
         return HttpResponse.json(
@@ -294,7 +312,27 @@ describe("ImportProjectSpecPage", () => {
     });
   });
 
-  it.skip("Upload semi-structured spec: transitions to CONVERTING_LOOSE_SPEC then SPEC_REVIEW", async () => {
+  it("Upload semi-structured spec: transitions to CONVERTING_LOOSE_SPEC then SPEC_REVIEW", async () => {
+    // Hold the convert response open until the test has observed the transient
+    // CONVERTING_LOOSE_SPEC screen, then release it. This is deterministic with
+    // no timing dependence: an instant mock races straight past CONVERTING, and
+    // a fixed delay only papers over that race (a short one is flaky, a long one
+    // is a wasted sleep). The page sets CONVERTING_LOOSE_SPEC *before* it awaits
+    // convert(), so the screen stays up for as long as the gated fetch is pending.
+    let releaseConvert!: () => void;
+    const convertGate = new Promise<void>((resolve) => {
+      releaseConvert = resolve;
+    });
+    server.use(
+      http.post("/api/manifest/generate/spec/convert", async () => {
+        await convertGate;
+        return new HttpResponse(
+          '{"type":"done","configJson":"{\\"bounded_contexts\\":[{\\"name\\":\\"test\\"}]}"}\n',
+          { status: 200 },
+        );
+      }),
+    );
+
     const user = userEvent.setup();
     render(<ImportProjectSpecPage />);
     const looseContent =
@@ -311,6 +349,9 @@ describe("ImportProjectSpecPage", () => {
         ),
       );
     });
+
+    // Release the gated conversion → the flow advances to SPEC_REVIEW.
+    releaseConvert();
 
     await waitFor(() => {
       assert.ok(screen.getByText(/spec review/i));
