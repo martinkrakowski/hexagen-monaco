@@ -21,31 +21,66 @@ const NEXTJS_PACKAGE_JSON_TEMPLATE = `{
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "typescript": "^5.5.4",
     "eslint": "^9.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0"
+    "@eslint/js": "^9.0.0",
+    "typescript-eslint": "^8.0.0"
   }
 }
 `;
 
+// Next compiles/bundles itself (`next build`) and type-checks with `noEmit`, so
+// this overrides the monorepo base's composite/emit/rootDir defaults rather than
+// inheriting them: composite+declaration would trip `next build`, and a
+// `rootDir: "src"` excludes Next's generated `.next/types/**` ("not under
+// rootDir"). `jsx: "preserve"` hands JSX to Next's compiler. The include covers
+// the generated `next-env.d.ts` + `.next/types` (absent until the first build —
+// harmless when unmatched) so Next doesn't rewrite the file on build.
 const NEXTJS_TSCONFIG: TsConfigTemplate = {
   extends: "../../tsconfig.base.json",
   compilerOptions: {
-    rootDir: "src",
-    outDir: "dist",
-    composite: true,
-    declaration: true,
-    emitDeclarationOnly: true,
-    jsx: "react-jsx",
+    rootDir: ".",
+    composite: false,
+    declaration: false,
+    emitDeclarationOnly: false,
+    noEmit: true,
+    jsx: "preserve",
+    plugins: [{ name: "next" }],
   },
-  include: ["src/**/*"],
+  include: [
+    "next-env.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    ".next/types/**/*.ts",
+  ],
+  // NOT excluding `.next` — `exclude` filters the `include` matches, so listing
+  // `.next` here would cancel the `.next/types/**` include above (the generated
+  // route types). `include` is already an allowlist, so the rest of `.next/`
+  // (cache/server/static) never enters the program regardless.
   exclude: ["node_modules", "dist"],
 };
 
 const NEXTJS_ENTRY_TEMPLATE = `// Auto-generated Next.js application
 export default function HomePage() {
   return <div>Welcome to {system}</div>;
+}
+`;
+
+// App Router requires a root layout (`app/layout.tsx`) rendering <html>/<body>,
+// or `next build` fails: "page.tsx doesn't have a root layout".
+// `{{children}}` is the template-engine escape for a literal `{children}` (a
+// bare `{children}` would be read as an interpolation variable); the `{ children }`
+// param/type braces carry spaces, so the engine leaves them untouched.
+const NEXTJS_LAYOUT_TEMPLATE = `import type { ReactNode } from "react";
+
+export default function RootLayout({ children }: { children: ReactNode }) {
+  return (
+    <html lang="en">
+      <body>{{children}}</body>
+    </html>
+  );
 }
 `;
 
@@ -66,8 +101,8 @@ const FASTIFY_PACKAGE_JSON_TEMPLATE = `{
   "devDependencies": {
     "typescript": "^5.5.4",
     "eslint": "^9.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0"
+    "@eslint/js": "^9.0.0",
+    "typescript-eslint": "^8.0.0"
   }
 }
 `;
@@ -118,8 +153,8 @@ const PLAIN_TS_PACKAGE_JSON_TEMPLATE = `{
   "devDependencies": {
     "typescript": "^5.5.4",
     "eslint": "^9.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0"
+    "@eslint/js": "^9.0.0",
+    "typescript-eslint": "^8.0.0"
   }
 }
 `;
@@ -170,8 +205,8 @@ const NITRO_PACKAGE_JSON_TEMPLATE = `{
   "devDependencies": {
     "typescript": "^5.5.4",
     "eslint": "^9.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0"
+    "@eslint/js": "^9.0.0",
+    "typescript-eslint": "^8.0.0"
   }
 }
 `;
@@ -231,8 +266,8 @@ const EXPRESS_PACKAGE_JSON_TEMPLATE = `{
     "@types/express": "^5.0.0",
     "typescript": "^5.5.4",
     "eslint": "^9.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0"
+    "@eslint/js": "^9.0.0",
+    "typescript-eslint": "^8.0.0"
   }
 }
 `;
@@ -292,8 +327,8 @@ const NESTJS_PACKAGE_JSON_TEMPLATE = `{
     "@types/node": "^22.0.0",
     "typescript": "^5.5.4",
     "eslint": "^9.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0"
+    "@eslint/js": "^9.0.0",
+    "typescript-eslint": "^8.0.0"
   }
 }
 `;
@@ -374,8 +409,8 @@ const SERVERLESS_PACKAGE_JSON_TEMPLATE = `{
     "serverless": "^4.0.0",
     "typescript": "^5.5.4",
     "eslint": "^9.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0"
+    "@eslint/js": "^9.0.0",
+    "typescript-eslint": "^8.0.0"
   }
 }
 `;
@@ -455,8 +490,8 @@ const VUE_PACKAGE_JSON_TEMPLATE = `{
     "eslint": "^9.0.0",
     "eslint-plugin-vue": "^9.30.0",
     "vue-eslint-parser": "^9.4.3",
-    "@typescript-eslint/parser": "^8.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0"
+    "@eslint/js": "^9.0.0",
+    "typescript-eslint": "^8.0.0"
   }
 }
 `;
@@ -532,8 +567,8 @@ const REACT_ROUTER_PACKAGE_JSON_TEMPLATE = `{
     "@types/react-dom": "^19.0.0",
     "typescript": "^5.5.4",
     "eslint": "^9.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0"
+    "@eslint/js": "^9.0.0",
+    "typescript-eslint": "^8.0.0"
   }
 }
 `;
@@ -609,18 +644,18 @@ const REMIX_PACKAGE_JSON_TEMPLATE = `{
     "@remix-run/react": "^2.15.0",
     "@remix-run/serve": "^2.15.0",
     "isbot": "^5.1.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@remix-run/dev": "^2.15.0",
     "vite": "^6.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
     "typescript": "^5.5.4",
     "eslint": "^9.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0"
+    "@eslint/js": "^9.0.0",
+    "typescript-eslint": "^8.0.0"
   }
 }
 `;
@@ -699,8 +734,8 @@ const ANGULAR_PACKAGE_JSON_TEMPLATE = `{
     "@angular-devkit/build-angular": "^19.0.0",
     "typescript": "^5.5.4",
     "eslint": "^9.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0"
+    "@eslint/js": "^9.0.0",
+    "typescript-eslint": "^8.0.0"
   }
 }
 `;
@@ -708,6 +743,11 @@ const ANGULAR_PACKAGE_JSON_TEMPLATE = `{
 const ANGULAR_TSCONFIG: TsConfigTemplate = {
   extends: "../../tsconfig.base.json",
   compilerOptions: {
+    // `rootDir: "src"` mirrors every other app template. Without it the app
+    // inherits the monorepo base's `rootDir` (the repo root's `src`), and
+    // `tsc -p tsconfig.app.json --noEmit` fails with "src/main.ts is not under
+    // rootDir". tsconfig.app.json extends this file, so it inherits the override.
+    rootDir: "src",
     outDir: "dist",
     experimentalDecorators: true,
     emitDecoratorMetadata: true,
@@ -755,6 +795,8 @@ const ANGULAR_APP_TSCONFIG_TEMPLATE = `{
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist/app",
+    "composite": false,
+    "declaration": false,
     "types": []
   },
   "files": ["src/main.ts"],
@@ -810,6 +852,9 @@ const BUILTIN_FRAMEWORK_TEMPLATES: Partial<
       path: "src/app/page.tsx",
       template: NEXTJS_ENTRY_TEMPLATE,
     },
+    extraFiles: [
+      { path: "src/app/layout.tsx", template: NEXTJS_LAYOUT_TEMPLATE },
+    ],
   },
   fastify: {
     packageJson: { template: FASTIFY_PACKAGE_JSON_TEMPLATE },

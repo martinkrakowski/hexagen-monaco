@@ -91,8 +91,8 @@ describe("apps", () => {
       assert.strictEqual(result.error, undefined, "no error on happy path");
       assert.strictEqual(
         result.created.length,
-        4,
-        "next.js app produces 4 files (package.json, tsconfig, entry, eslint.config.js)",
+        5,
+        "next.js app produces 5 files (package.json, tsconfig, page, layout, eslint.config.js)",
       );
 
       const appDir = path.join(workspaceRoot, "apps", "web");
@@ -140,6 +140,48 @@ describe("apps", () => {
       const deps = pkg.dependencies as Record<string, string>;
       assert.ok(deps.next, "next.js dependency present");
       assert.ok(deps.react, "react dependency present");
+      // Build-verify regression: without the React type defs the template's own
+      // `tsc --noEmit` typecheck fails ("Could not find a declaration file for
+      // module 'react/jsx-runtime'").
+      const nextDevDeps = pkg.devDependencies as Record<string, string>;
+      assert.ok(
+        nextDevDeps["@types/react"],
+        "@types/react devDep present (else tsc --noEmit fails on JSX)",
+      );
+      assert.ok(
+        nextDevDeps["@types/react-dom"],
+        "@types/react-dom devDep present",
+      );
+
+      // Build-verify regression: `next build` fails without a root layout
+      // ("page.tsx doesn't have a root layout").
+      const layout = await readText(
+        path.join(appDir, "src", "app", "layout.tsx"),
+      );
+      assert.ok(
+        layout.includes("<html") && layout.includes("<body"),
+        "root layout.tsx renders <html>/<body> (required by the App Router)",
+      );
+      // Build-verify regression: the Next tsconfig must type-check with noEmit
+      // (Next bundles) and not pin rootDir to src — else `next build` fails on
+      // its generated `.next/types` ("not under rootDir").
+      const nextTs = await readJson(tsPath);
+      const nextCo = nextTs.compilerOptions as Record<string, unknown>;
+      assert.strictEqual(nextCo.noEmit, true, "next tsconfig sets noEmit");
+      assert.notStrictEqual(
+        nextCo.rootDir,
+        "src",
+        "next tsconfig must not pin rootDir to src (.next/types lives outside it)",
+      );
+
+      // Build-verify regression: the emitted eslint.config.js imports
+      // `@eslint/js` + the `typescript-eslint` meta-package, so every app must
+      // depend on them — otherwise `eslint`/`next build` fails to load the
+      // config ("Cannot find package 'typescript-eslint'").
+      assert.ok(
+        nextDevDeps["typescript-eslint"] && nextDevDeps["@eslint/js"],
+        "eslint config deps present (typescript-eslint + @eslint/js)",
+      );
     });
   });
 
@@ -457,12 +499,32 @@ describe("apps", () => {
         await pathExists(path.join(appDir, "app", "routes", "_index.tsx")),
         "remix index route emitted",
       );
-      const deps = (await readJson(path.join(appDir, "package.json")))
-        .dependencies as Record<string, string>;
+      const remixPkg = await readJson(path.join(appDir, "package.json"));
+      const deps = remixPkg.dependencies as Record<string, string>;
+      const devDeps = remixPkg.devDependencies as Record<string, string>;
       assert.ok(
         deps["@remix-run/react"],
         "@remix-run/react dependency present",
       );
+      // Build-verify regression: @remix-run/* v2 declares a `react@^18` peer, so
+      // any range that admits React 19 reintroduces the install-time ERESOLVE.
+      // Assert every react package (runtime + types) sits on the React 18 major
+      // line — accept the whole major (`18`, `^18`, `~18`, `18.2.0`, …) but, via
+      // the end anchor, reject loosened ranges like "^18 || ^19" / ">=18" that a
+      // `.includes("18")` substring would let through.
+      const on18 = (range: string | undefined): boolean =>
+        !!range && /^[~^]?18(?:\.\d+(?:\.\d+)?)?$/.test(range);
+      for (const [name, range] of [
+        ["react", deps.react],
+        ["react-dom", deps["react-dom"]],
+        ["@types/react", devDeps["@types/react"]],
+        ["@types/react-dom", devDeps["@types/react-dom"]],
+      ] as const) {
+        assert.ok(
+          on18(range),
+          `remix ${name} must stay on the React 18 line Remix 2 peers to (got ${range})`,
+        );
+      }
     });
   });
 
@@ -513,6 +575,27 @@ describe("apps", () => {
           'import "zone.js"',
         ),
         "main.ts loads the zone.js polyfill for change detection",
+      );
+      // Build-verify regression: the Angular tsconfig must set its own rootDir.
+      // Without it the app inherits the monorepo base's rootDir (repo-root
+      // `src`) and `tsc -p tsconfig.app.json --noEmit` fails with
+      // "src/main.ts is not under rootDir". Every sibling app template sets it.
+      const ngTsconfig = await readJson(path.join(appDir, "tsconfig.json"));
+      assert.strictEqual(
+        (ngTsconfig.compilerOptions as Record<string, unknown>).rootDir,
+        "src",
+        "angular tsconfig pins rootDir to its own src (not the inherited base)",
+      );
+      // Build-verify regression: `ng build` fails TS6304 ("Composite projects
+      // may not disable declaration emit") when the app inherits the monorepo
+      // base's composite:true — the Angular bundler build disables declaration.
+      const ngAppTsconfig = await readJson(
+        path.join(appDir, "tsconfig.app.json"),
+      );
+      assert.strictEqual(
+        (ngAppTsconfig.compilerOptions as Record<string, unknown>).composite,
+        false,
+        "angular tsconfig.app overrides composite:false for the bundler build",
       );
     });
   });
@@ -1218,7 +1301,7 @@ describe("apps", () => {
       >;
       assert.strictEqual(
         compilerOptions.jsx,
-        "react-jsx",
+        "preserve",
         "non-overridden tsConfig fields fall through to the Next.js built-in",
       );
       const builtInEntryExists = await pathExists(
@@ -1475,17 +1558,17 @@ describe("apps", () => {
       const compilerOptions = parsed.compilerOptions as Record<string, unknown>;
       assert.strictEqual(
         compilerOptions.jsx,
-        "react-jsx",
+        "preserve",
         "compilerOptions.jsx preserved as a real JSON string",
       );
       assert.strictEqual(
         compilerOptions.composite,
-        true,
+        false,
         "compilerOptions.composite preserved as a real JSON boolean (not stringified)",
       );
       assert.deepStrictEqual(
         parsed.include,
-        ["src/**/*"],
+        ["next-env.d.ts", "src/**/*.ts", "src/**/*.tsx", ".next/types/**/*.ts"],
         "include array preserved as real JSON array",
       );
 
