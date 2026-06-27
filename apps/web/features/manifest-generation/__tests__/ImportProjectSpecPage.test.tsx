@@ -7,7 +7,7 @@ import userEvent from "@testing-library/user-event";
 import ImportProjectSpecPage from "../ImportProjectSpecPage";
 import fs from "node:fs";
 import path from "node:path";
-import { http, HttpResponse, delay } from "msw";
+import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 
 // Override the global next/navigation stub (vitest.setup) with a STABLE `push`
@@ -313,12 +313,19 @@ describe("ImportProjectSpecPage", () => {
   });
 
   it("Upload semi-structured spec: transitions to CONVERTING_LOOSE_SPEC then SPEC_REVIEW", async () => {
-    // Delay the convert stream so the transient CONVERTING_LOOSE_SPEC state is
-    // observable — with an instant mock the flow races straight to SPEC_REVIEW
-    // before waitFor can catch the converting screen.
+    // Hold the convert response open until the test has observed the transient
+    // CONVERTING_LOOSE_SPEC screen, then release it. This is deterministic with
+    // no timing dependence: an instant mock races straight past CONVERTING, and
+    // a fixed delay only papers over that race (a short one is flaky, a long one
+    // is a wasted sleep). The page sets CONVERTING_LOOSE_SPEC *before* it awaits
+    // convert(), so the screen stays up for as long as the gated fetch is pending.
+    let releaseConvert!: () => void;
+    const convertGate = new Promise<void>((resolve) => {
+      releaseConvert = resolve;
+    });
     server.use(
       http.post("/api/manifest/generate/spec/convert", async () => {
-        await delay(60);
+        await convertGate;
         return new HttpResponse(
           '{"type":"done","configJson":"{\\"bounded_contexts\\":[{\\"name\\":\\"test\\"}]}"}\n',
           { status: 200 },
@@ -342,6 +349,9 @@ describe("ImportProjectSpecPage", () => {
         ),
       );
     });
+
+    // Release the gated conversion → the flow advances to SPEC_REVIEW.
+    releaseConvert();
 
     await waitFor(() => {
       assert.ok(screen.getByText(/spec review/i));
