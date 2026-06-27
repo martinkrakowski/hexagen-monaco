@@ -297,6 +297,21 @@ describe("apps", () => {
         ),
         "serverless.yml declares a node runtime",
       );
+      // The handler must point at the BUILT artifact (dist), and the tsconfig
+      // must emit runnable JS (not declaration-only) so `tsc` produces it.
+      assert.ok(
+        (await readText(path.join(appDir, "serverless.yml"))).includes(
+          "dist/handler.handler",
+        ),
+        "serverless.yml targets the built dist handler",
+      );
+      const tsconfig = await readJson(path.join(appDir, "tsconfig.json"));
+      assert.strictEqual(
+        (tsconfig.compilerOptions as Record<string, unknown>)
+          .emitDeclarationOnly,
+        undefined,
+        "serverless tsconfig must emit runnable JS, not declaration-only",
+      );
     });
   });
 

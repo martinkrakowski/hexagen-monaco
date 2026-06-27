@@ -242,9 +242,10 @@ const EXPRESS_TSCONFIG: TsConfigTemplate = {
   compilerOptions: {
     rootDir: "src",
     outDir: "dist",
+    // Emit runnable JS (declaration alongside) — the app's `build: tsc` must
+    // produce dist/*.js to run; NOT declaration-only.
     composite: true,
     declaration: true,
-    emitDeclarationOnly: true,
   },
   include: ["src/**/*"],
   exclude: ["node_modules", "dist"],
@@ -302,9 +303,10 @@ const NESTJS_TSCONFIG: TsConfigTemplate = {
   compilerOptions: {
     rootDir: "src",
     outDir: "dist",
+    // Emit runnable JS (not declaration-only): `nest build` falls back to this
+    // tsconfig when there's no tsconfig.build.json, so it must produce dist/*.js.
     composite: true,
     declaration: true,
-    emitDeclarationOnly: true,
     // NestJS relies on decorator metadata for dependency injection.
     experimentalDecorators: true,
     emitDecoratorMetadata: true,
@@ -363,7 +365,7 @@ const SERVERLESS_PACKAGE_JSON_TEMPLATE = `{
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "deploy": "serverless deploy",
+    "deploy": "tsc && serverless deploy",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit"
   },
@@ -383,9 +385,10 @@ const SERVERLESS_TSCONFIG: TsConfigTemplate = {
   compilerOptions: {
     rootDir: "src",
     outDir: "dist",
+    // Emit runnable JS to dist/ — the Lambda handler must exist as JS for deploy
+    // (serverless.yml points at dist/handler.handler).
     composite: true,
     declaration: true,
-    emitDeclarationOnly: true,
   },
   include: ["src/**/*"],
   exclude: ["node_modules", "dist"],
@@ -416,7 +419,7 @@ provider:
 
 functions:
   api:
-    handler: src/handler.handler
+    handler: dist/handler.handler
     events:
       - httpApi:
           path: /

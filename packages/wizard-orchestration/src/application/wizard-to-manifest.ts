@@ -53,8 +53,12 @@ function frameworkForContext(bc: BoundedContext): AppEntryFramework {
     case "plain-ts":
       return "plain-ts";
   }
-  // Fallback for legacy/imported manifests that predate infrastructureTarget
-  // (it's absent there) and only carry the older apiFramework field.
+  // infrastructureTarget is SET but unrecognised (wizard input is shape-filtered,
+  // not enum-validated) → plain-ts; it must NOT be overridden by a legacy
+  // apiFramework. The apiFramework fallback applies only when infra is ABSENT.
+  if (bc.infrastructureTarget) return "plain-ts";
+  // Legacy/imported manifests that predate infrastructureTarget carry only the
+  // older apiFramework field.
   if (bc.apiFramework === "Fastify") return "fastify";
   return "plain-ts";
 }

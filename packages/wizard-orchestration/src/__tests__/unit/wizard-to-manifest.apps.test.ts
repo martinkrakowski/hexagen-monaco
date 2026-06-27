@@ -246,6 +246,21 @@ describe("wizardToManifest — api framework from infrastructureTarget", () => {
     assert.equal(apiFrameworkOf(m), "fastify");
   });
 
+  it("an unrecognised infrastructureTarget falls back to plain-ts, not a legacy apiFramework", () => {
+    // Wizard input is shape-filtered, not enum-validated; a corrupt value must
+    // NOT be silently overridden by a legacy apiFramework — it stays plain-ts.
+    const m = wizardToManifest(
+      wizardWith([
+        {
+          name: "orders",
+          infrastructureTarget: "bogus",
+          apiFramework: "Fastify",
+        },
+      ]),
+    );
+    assert.equal(apiFrameworkOf(m), "plain-ts");
+  });
+
   it("infrastructureTarget=nitro wins over a legacy apiFramework=Fastify", () => {
     const m = wizardToManifest(
       wizardWith([

@@ -76,7 +76,12 @@ export function parseManifestToWizardData(yamlString: string): WizardData {
           id: validatedBc.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
           name: validatedBc.name,
           description: validatedBc.description || "",
-          infrastructureTarget: "nestjs",
+          // Imported manifests don't carry the wizard-only `infrastructureTarget`;
+          // default to the neutral plain-ts API app. (This was effectively the
+          // prior behaviour — "nestjs" used to fall back to plain-ts; once it maps
+          // to a real NestJS template, hard-coding it would force NestJS on every
+          // imported project.)
+          infrastructureTarget: "plain-ts",
           coreDomainEntities: validatedBc.layers?.domain?.entities ?? [],
           valueObjects: validatedBc.layers?.domain?.value_objects ?? [],
           domainEvents: [],
