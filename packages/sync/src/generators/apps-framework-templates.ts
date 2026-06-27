@@ -21,6 +21,8 @@ const NEXTJS_PACKAGE_JSON_TEMPLATE = `{
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "typescript": "^5.5.4",
     "eslint": "^9.0.0",
     "@typescript-eslint/parser": "^8.0.0",
@@ -607,14 +609,14 @@ const REMIX_PACKAGE_JSON_TEMPLATE = `{
     "@remix-run/react": "^2.15.0",
     "@remix-run/serve": "^2.15.0",
     "isbot": "^5.1.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@remix-run/dev": "^2.15.0",
     "vite": "^6.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
     "typescript": "^5.5.4",
     "eslint": "^9.0.0",
     "@typescript-eslint/parser": "^8.0.0",
@@ -706,6 +708,11 @@ const ANGULAR_PACKAGE_JSON_TEMPLATE = `{
 const ANGULAR_TSCONFIG: TsConfigTemplate = {
   extends: "../../tsconfig.base.json",
   compilerOptions: {
+    // `rootDir: "src"` mirrors every other app template. Without it the app
+    // inherits the monorepo base's `rootDir` (the repo root's `src`), and
+    // `tsc -p tsconfig.app.json --noEmit` fails with "src/main.ts is not under
+    // rootDir". tsconfig.app.json extends this file, so it inherits the override.
+    rootDir: "src",
     outDir: "dist",
     experimentalDecorators: true,
     emitDecoratorMetadata: true,

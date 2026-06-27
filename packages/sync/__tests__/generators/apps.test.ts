@@ -140,6 +140,18 @@ describe("apps", () => {
       const deps = pkg.dependencies as Record<string, string>;
       assert.ok(deps.next, "next.js dependency present");
       assert.ok(deps.react, "react dependency present");
+      // Build-verify regression: without the React type defs the template's own
+      // `tsc --noEmit` typecheck fails ("Could not find a declaration file for
+      // module 'react/jsx-runtime'").
+      const nextDevDeps = pkg.devDependencies as Record<string, string>;
+      assert.ok(
+        nextDevDeps["@types/react"],
+        "@types/react devDep present (else tsc --noEmit fails on JSX)",
+      );
+      assert.ok(
+        nextDevDeps["@types/react-dom"],
+        "@types/react-dom devDep present",
+      );
     });
   });
 
@@ -422,6 +434,13 @@ describe("apps", () => {
         deps["@remix-run/react"],
         "@remix-run/react dependency present",
       );
+      // Build-verify regression: @remix-run/* v2 declares a `react@^18` peer, so
+      // pinning react ^19 makes `npm install` fail with ERESOLVE. Keep react on
+      // the v18 line that Remix v2 supports.
+      assert.ok(
+        deps.react?.includes("18"),
+        `remix react must stay on the v18 line Remix 2 peers to (got ${deps.react})`,
+      );
     });
   });
 
@@ -472,6 +491,16 @@ describe("apps", () => {
           'import "zone.js"',
         ),
         "main.ts loads the zone.js polyfill for change detection",
+      );
+      // Build-verify regression: the Angular tsconfig must set its own rootDir.
+      // Without it the app inherits the monorepo base's rootDir (repo-root
+      // `src`) and `tsc -p tsconfig.app.json --noEmit` fails with
+      // "src/main.ts is not under rootDir". Every sibling app template sets it.
+      const ngTsconfig = await readJson(path.join(appDir, "tsconfig.json"));
+      assert.strictEqual(
+        (ngTsconfig.compilerOptions as Record<string, unknown>).rootDir,
+        "src",
+        "angular tsconfig pins rootDir to its own src (not the inherited base)",
       );
     });
   });
