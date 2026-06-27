@@ -458,19 +458,31 @@ describe("apps", () => {
         await pathExists(path.join(appDir, "app", "routes", "_index.tsx")),
         "remix index route emitted",
       );
-      const deps = (await readJson(path.join(appDir, "package.json")))
-        .dependencies as Record<string, string>;
+      const remixPkg = await readJson(path.join(appDir, "package.json"));
+      const deps = remixPkg.dependencies as Record<string, string>;
+      const devDeps = remixPkg.devDependencies as Record<string, string>;
       assert.ok(
         deps["@remix-run/react"],
         "@remix-run/react dependency present",
       );
       // Build-verify regression: @remix-run/* v2 declares a `react@^18` peer, so
-      // pinning react ^19 makes `npm install` fail with ERESOLVE. Keep react on
-      // the v18 line that Remix v2 supports.
-      assert.ok(
-        deps.react?.includes("18"),
-        `remix react must stay on the v18 line Remix 2 peers to (got ${deps.react})`,
-      );
+      // any range that admits React 19 reintroduces the install-time ERESOLVE.
+      // Assert every react package (runtime + types) is pinned to the 18 major —
+      // a `.includes("18")` substring would also pass loosened ranges like
+      // "^18 || ^19" or ">=18", so match the major explicitly and reject 19.
+      const on18 = (range: string | undefined): boolean =>
+        !!range && /^[~^]?18\./.test(range) && !range.includes("19");
+      for (const [name, range] of [
+        ["react", deps.react],
+        ["react-dom", deps["react-dom"]],
+        ["@types/react", devDeps["@types/react"]],
+        ["@types/react-dom", devDeps["@types/react-dom"]],
+      ] as const) {
+        assert.ok(
+          on18(range),
+          `remix ${name} must stay on the React 18 line Remix 2 peers to (got ${range})`,
+        );
+      }
     });
   });
 

@@ -55,7 +55,11 @@ const NEXTJS_TSCONFIG: TsConfigTemplate = {
     "src/**/*.tsx",
     ".next/types/**/*.ts",
   ],
-  exclude: ["node_modules", "dist", ".next"],
+  // NOT excluding `.next` — `exclude` filters the `include` matches, so listing
+  // `.next` here would cancel the `.next/types/**` include above (the generated
+  // route types). `include` is already an allowlist, so the rest of `.next/`
+  // (cache/server/static) never enters the program regardless.
+  exclude: ["node_modules", "dist"],
 };
 
 const NEXTJS_ENTRY_TEMPLATE = `// Auto-generated Next.js application
