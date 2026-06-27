@@ -198,6 +198,125 @@ describe("apps", () => {
     });
   });
 
+  it("should create an Express app with package.json and src/index.ts", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const manifest: Manifest = {
+        system: "myorg",
+        apps: [{ name: "api", framework: "express" }],
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        logger: createSpyLogger(),
+        enableApps: true,
+      });
+
+      const result = await generateApps(config);
+      assert.strictEqual(result.error, undefined, "no error on express app");
+
+      const appDir = path.join(workspaceRoot, "apps", "api");
+      const entryPath = path.join(appDir, "src", "index.ts");
+      assert.ok(await pathExists(entryPath), "express entry at src/index.ts");
+      const deps = (await readJson(path.join(appDir, "package.json")))
+        .dependencies as Record<string, string>;
+      assert.ok(deps.express, "express dependency present");
+      assert.ok(
+        (await readText(entryPath)).includes("express"),
+        "express entry imports the express module",
+      );
+    });
+  });
+
+  it("should create a NestJS app with module, controller, and nest-cli.json", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const manifest: Manifest = {
+        system: "myorg",
+        apps: [{ name: "api", framework: "nestjs" }],
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        logger: createSpyLogger(),
+        enableApps: true,
+      });
+
+      const result = await generateApps(config);
+      assert.strictEqual(result.error, undefined, "no error on nestjs app");
+
+      const appDir = path.join(workspaceRoot, "apps", "api");
+      for (const rel of [
+        "src/main.ts",
+        "src/app.module.ts",
+        "src/app.controller.ts",
+        "nest-cli.json",
+      ]) {
+        assert.ok(
+          await pathExists(path.join(appDir, rel)),
+          `nestjs emits ${rel}`,
+        );
+      }
+      const deps = (await readJson(path.join(appDir, "package.json")))
+        .dependencies as Record<string, string>;
+      assert.ok(deps["@nestjs/core"], "@nestjs/core dependency present");
+      assert.ok(
+        (
+          await readText(path.join(appDir, "src", "app.controller.ts"))
+        ).includes("@Controller"),
+        "controller uses the @Controller decorator",
+      );
+    });
+  });
+
+  it("should create a Serverless app with handler.ts and serverless.yml", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const manifest: Manifest = {
+        system: "myorg",
+        apps: [{ name: "api", framework: "serverless" }],
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        logger: createSpyLogger(),
+        enableApps: true,
+      });
+
+      const result = await generateApps(config);
+      assert.strictEqual(result.error, undefined, "no error on serverless app");
+
+      const appDir = path.join(workspaceRoot, "apps", "api");
+      const handlerPath = path.join(appDir, "src", "handler.ts");
+      assert.ok(
+        await pathExists(handlerPath),
+        "lambda handler at src/handler.ts",
+      );
+      assert.ok(
+        await pathExists(path.join(appDir, "serverless.yml")),
+        "serverless.yml emitted",
+      );
+      assert.ok(
+        (await readText(handlerPath)).includes("export const handler"),
+        "handler exports `handler`",
+      );
+      assert.ok(
+        (await readText(path.join(appDir, "serverless.yml"))).includes(
+          "runtime: nodejs",
+        ),
+        "serverless.yml declares a node runtime",
+      );
+      // The handler must point at the BUILT artifact (dist), and the tsconfig
+      // must emit runnable JS (not declaration-only) so `tsc` produces it.
+      assert.ok(
+        (await readText(path.join(appDir, "serverless.yml"))).includes(
+          "dist/handler.handler",
+        ),
+        "serverless.yml targets the built dist handler",
+      );
+      const tsconfig = await readJson(path.join(appDir, "tsconfig.json"));
+      // Must not be declaration-only; `false` (explicit) is equally fine, so
+      // assert "not true" rather than a specific absent/false shape.
+      assert.notStrictEqual(
+        (tsconfig.compilerOptions as Record<string, unknown>)
+          .emitDeclarationOnly,
+        true,
+        "serverless tsconfig must emit runnable JS, not declaration-only",
+      );
+    });
+  });
+
   it("app eslint.config.js ignores a same-named bounded-context override (#264 review)", async () => {
     // An app and a bounded context can share a name (different namespaces). The
     // app must NOT inherit the BC's package-intended eslint override — it gets
