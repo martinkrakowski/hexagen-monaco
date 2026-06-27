@@ -58,8 +58,16 @@ function frameworkForContext(bc: BoundedContext): AppEntryFramework {
   // apiFramework. The apiFramework fallback applies only when infra is ABSENT.
   if (bc.infrastructureTarget) return "plain-ts";
   // Legacy/imported manifests that predate infrastructureTarget carry only the
-  // older apiFramework field.
-  if (bc.apiFramework === "Fastify") return "fastify";
+  // older apiFramework field (enum: Fastify | Express | NestJS) — map each to its
+  // now-first-class framework so saved data doesn't degrade to plain-ts.
+  switch (bc.apiFramework) {
+    case "Fastify":
+      return "fastify";
+    case "Express":
+      return "express";
+    case "NestJS":
+      return "nestjs";
+  }
   return "plain-ts";
 }
 

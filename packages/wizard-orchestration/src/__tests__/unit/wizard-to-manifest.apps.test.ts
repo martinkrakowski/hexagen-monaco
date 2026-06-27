@@ -239,11 +239,22 @@ describe("wizardToManifest — api framework from infrastructureTarget", () => {
     }
   });
 
-  it("honors legacy apiFramework=Fastify only when infrastructureTarget is absent", () => {
-    const m = wizardToManifest(
-      wizardWith([{ name: "orders", apiFramework: "Fastify" }]),
-    );
-    assert.equal(apiFrameworkOf(m), "fastify");
+  it("maps each legacy apiFramework to its framework when infrastructureTarget is absent", () => {
+    const cases: ReadonlyArray<readonly [string, string]> = [
+      ["Fastify", "fastify"],
+      ["Express", "express"],
+      ["NestJS", "nestjs"],
+    ];
+    for (const [apiFramework, framework] of cases) {
+      const m = wizardToManifest(
+        wizardWith([{ name: "orders", apiFramework }]),
+      );
+      assert.equal(
+        apiFrameworkOf(m),
+        framework,
+        `apiFramework=${apiFramework}`,
+      );
+    }
   });
 
   it("an unrecognised infrastructureTarget falls back to plain-ts, not a legacy apiFramework", () => {

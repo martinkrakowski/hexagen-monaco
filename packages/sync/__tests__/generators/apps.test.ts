@@ -306,10 +306,12 @@ describe("apps", () => {
         "serverless.yml targets the built dist handler",
       );
       const tsconfig = await readJson(path.join(appDir, "tsconfig.json"));
-      assert.strictEqual(
+      // Must not be declaration-only; `false` (explicit) is equally fine, so
+      // assert "not true" rather than a specific absent/false shape.
+      assert.notStrictEqual(
         (tsconfig.compilerOptions as Record<string, unknown>)
           .emitDeclarationOnly,
-        undefined,
+        true,
         "serverless tsconfig must emit runnable JS, not declaration-only",
       );
     });
