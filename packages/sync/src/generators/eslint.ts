@@ -9,6 +9,7 @@ import { safeWriteFileAtomic } from "../fs-utils.js";
 import { interpolate } from "../template-engine.js";
 import {
   resolveScope,
+  type AppFramework,
   type EslintConfig,
   type Manifest,
 } from "../types/manifest.js";
@@ -59,6 +60,52 @@ export default tseslint.config(
 `;
 
 /**
+ * Vue-aware fallback used in place of {@link BUILTIN_FALLBACK_TEMPLATE} when an
+ * app is generated with `framework: "vue"` and no per-context / workspace
+ * eslint override is declared.
+ *
+ * The plain {@link BUILTIN_FALLBACK_TEMPLATE} only knows `.ts` — pointing a Vue
+ * app's `eslint src --ext .ts,.vue` at an `App.vue` would explode with
+ * "parsing error" because no parser is registered for `.vue` single-file
+ * components. This template layers `eslint-plugin-vue`'s flat `recommended`
+ * preset (which registers `vue-eslint-parser` for `.vue` files) and delegates
+ * the `<script lang="ts">` block to the TypeScript parser via
+ * `languageOptions.parserOptions.parser`, so both the SFC template and its
+ * typed script are linted.
+ *
+ * Requires `eslint-plugin-vue` + `vue-eslint-parser` in the app's
+ * devDependencies — emitted by the Vue package.json template in
+ * `apps-framework-templates.ts`. As with the built-in fallback, every brace is
+ * a spaced object/array literal (`{ k: v }`), so the template engine's
+ * `{token}` interpolation is a no-op and raises zero warnings.
+ */
+const VUE_FALLBACK_TEMPLATE = `import eslint from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import pluginVue from 'eslint-plugin-vue';
+
+export default tseslint.config(
+  eslint.configs.recommended,
+  ...tseslint.configs.recommended,
+  ...pluginVue.configs['flat/recommended'],
+  {
+    files: ['**/*.vue'],
+    languageOptions: {
+      parserOptions: { parser: tseslint.parser },
+    },
+  },
+  {
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    ignores: ['dist/**', 'node_modules/**'],
+  },
+);
+`;
+
+/**
  * Resolve the eslint template body for a given bounded context using the
  * three-level merge cascade (mirrors {@link generateTsconfig} in
  * `packages/sync/src/generators/tsconfig.ts`):
@@ -69,11 +116,17 @@ export default tseslint.config(
  * "merge" degenerates to "first populated wins" — we never splice partial
  * templates together. If a future structured form is added to
  * {@link EslintConfig}, this function is the sole point of change.
+ *
+ * `framework` only steers the built-in fallback (a Vue app gets the
+ * vue-eslint-parser-backed {@link VUE_FALLBACK_TEMPLATE} so its `.vue` SFCs
+ * lint instead of erroring). An explicit per-context / workspace template still
+ * wins — framework selection never overrides a declared template.
  */
 function resolveTemplate(
   manifest: Manifest,
   moduleName: string,
   usePerContextOverride: boolean,
+  framework?: AppFramework,
 ): { template: string; source: "per-context" | "workspace" | "fallback" } {
   // Per-context overrides are keyed by bounded-context name. Apps live in a
   // different namespace, so an app whose name happens to collide with a bounded
@@ -100,6 +153,14 @@ function resolveTemplate(
     manifest.monorepo?.workspaceDefaults?.eslint;
   if (monorepoLevel?.template !== undefined) {
     return { template: monorepoLevel.template, source: "workspace" };
+  }
+
+  // Framework-aware fallback: a Vue app needs a vue-eslint-parser-backed config
+  // so `.vue` SFCs lint instead of erroring. An explicit per-context / workspace
+  // template (handled above) still wins — the framework only steers the
+  // built-in default.
+  if (framework === "vue") {
+    return { template: VUE_FALLBACK_TEMPLATE, source: "fallback" };
   }
 
   return { template: BUILTIN_FALLBACK_TEMPLATE, source: "fallback" };
@@ -167,7 +228,7 @@ export async function generateEslintConfig(
   moduleName: string,
   config: SyncConfig,
   report?: ReportRecorder,
-  options: { usePerContextOverride?: boolean } = {},
+  options: { usePerContextOverride?: boolean; framework?: AppFramework } = {},
 ): Promise<GeneratorResult> {
   const result = createEmptyResult();
   const filePath = path.join(moduleDir, "eslint.config.js");
@@ -177,6 +238,7 @@ export async function generateEslintConfig(
       config.manifest,
       moduleName,
       options.usePerContextOverride ?? true,
+      options.framework,
     );
 
     // Defensive check: the built-in fallback is a static non-empty string, so
