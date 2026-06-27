@@ -3,6 +3,47 @@
 Release notes for the co-published `@hexagen-monaco/sync` and
 `@hexagen-monaco/arch-linter` packages (they share one version, tagged `vX.Y.Z`).
 
+## 0.8.1
+
+Generated-project **app scaffolding** gains real, build-verified starter
+templates for seven more frameworks, generated Vue apps lint their SFCs, and
+generated projects scaffold their tests on Vitest. No functional changes to
+`@hexagen-monaco/arch-linter` (lock-step bump).
+
+### Sync engine (`@hexagen-monaco/sync`)
+
+- **Real app framework templates.** `hexagen sync` now emits proper starter apps
+  for **Express, NestJS, Serverless (AWS Lambda), Vue, React Router, Remix, and
+  Angular**. Previously only Nitro and Next.js were real — every other wizard
+  framework selection silently fell back to a bare plain-TypeScript app. Each
+  scaffold is minimal-but-real: framework `package.json`, `tsconfig`, entry
+  point, and any required config files (e.g. `angular.json`, `vite.config.ts`,
+  `serverless.yml`).
+- **Build-verified end-to-end.** Every framework scaffold was generated and run
+  through `npm install` + its own typecheck **and full build** (`tsc` /
+  `nest build` / `nitro build` / `vite build` / `ng build` / `next build` /
+  `remix vite:build`). Fixes from that pass:
+  - Remix is pinned to the **React 18** line its v2 peer dependencies require (a
+    React 19 pin failed `npm install` with `ERESOLVE`).
+  - Next.js scaffolds gain a root `app/layout.tsx`, a Next-shaped `tsconfig`
+    (`noEmit`, `jsx: "preserve"`, `.next/types` in `include`), and the
+    `@types/react` / `@types/react-dom` its `tsc --noEmit` needs.
+  - Angular's `tsconfig` pins its own `rootDir` / `composite` so it doesn't
+    inherit incompatible monorepo-base settings.
+  - Every generated app now ships the `@eslint/js` + `typescript-eslint`
+    packages its `eslint.config.js` imports, so `npm run lint` actually runs.
+- **Vue SFC linting.** A generated Vue app's `eslint.config.js` is now Vue-aware
+  (eslint-plugin-vue flat config + a `vue-eslint-parser` → TypeScript-parser
+  handoff), so it lints `.vue` single-file components instead of erroring.
+- **Vitest test scaffolding (ADR-0044).** Generated projects scaffold their
+  tests on Vitest: the `--with-tests` path emits a per-package `vitest.config.ts`
+  (with a `dist/**` exclude), a `test` script, and a `vitest` devDependency, and
+  `hexagen add` emits test scaffolds only when `--with-tests` is passed.
+
+### Architecture linter (`@hexagen-monaco/arch-linter`)
+
+No functional changes — lock-step version bump.
+
 ## 0.8.0
 
 Lock-step version bump — **no functional changes** to `@hexagen-monaco/sync` or
