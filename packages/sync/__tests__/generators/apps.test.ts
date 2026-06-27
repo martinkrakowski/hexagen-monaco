@@ -372,6 +372,13 @@ describe("apps", () => {
         eslintContent.includes("flat/recommended"),
         "vue-aware config layers eslint-plugin-vue's flat/recommended preset",
       );
+      // The preset alone isn't enough — the `**/*.vue` override must hand the
+      // `<script lang="ts">` block to tseslint.parser, or typed SFC scripts
+      // fail to parse. Assert the delegation so it can't silently regress.
+      assert.ok(
+        eslintContent.includes("parserOptions: { parser: tseslint.parser }"),
+        'vue-aware config delegates <script lang="ts"> to tseslint.parser',
+      );
     });
   });
 
