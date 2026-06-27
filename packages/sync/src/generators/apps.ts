@@ -346,13 +346,15 @@ export async function generateApps(
       // usePerContextOverride:false — an app name must never inherit a
       // bounded-context eslint override (different namespace; collisions would
       // apply a package-intended template to the app). Workspace default +
-      // fallback only.
+      // fallback only. `framework` steers the built-in fallback: a Vue app gets
+      // a vue-eslint-parser-backed config so its `.vue` SFCs lint (a workspace
+      // override still wins).
       const eslintResult = await generateEslintConfig(
         appDir,
         app.name,
         config,
         report,
-        { usePerContextOverride: false },
+        { usePerContextOverride: false, framework },
       );
       mergeResult(result, eslintResult);
     }

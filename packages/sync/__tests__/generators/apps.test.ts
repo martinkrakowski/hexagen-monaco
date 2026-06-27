@@ -345,9 +345,32 @@ describe("apps", () => {
         (pkg.dependencies as Record<string, string>).vue,
         "vue dependency present",
       );
+
+      // #85: the Vue app lints its `.vue` SFCs. The lint script must scope
+      // `.vue`, the devDeps must carry the parser/plugin, and the emitted
+      // eslint.config.js must be the vue-aware fallback (not the TS-only one).
+      const scripts = pkg.scripts as Record<string, string>;
+      assert.ok(scripts.lint.includes(".vue"), "lint script scopes .vue SFCs");
+      const devDeps = pkg.devDependencies as Record<string, string>;
       assert.ok(
-        !(pkg.scripts as Record<string, string>).lint.includes(".vue"),
-        "lint stays TS-only — the generated eslint config can't parse .vue SFCs",
+        devDeps["eslint-plugin-vue"],
+        "eslint-plugin-vue devDep present (registers vue-eslint-parser for .vue)",
+      );
+      assert.ok(
+        devDeps["vue-eslint-parser"],
+        "vue-eslint-parser devDep present",
+      );
+      const eslintContent = await fs.readFile(
+        path.join(appDir, "eslint.config.js"),
+        "utf8",
+      );
+      assert.ok(
+        eslintContent.includes("eslint-plugin-vue"),
+        "Vue app gets the vue-aware eslint flat config (imports eslint-plugin-vue)",
+      );
+      assert.ok(
+        eslintContent.includes("flat/recommended"),
+        "vue-aware config layers eslint-plugin-vue's flat/recommended preset",
       );
     });
   });
@@ -389,6 +412,17 @@ describe("apps", () => {
       assert.ok(
         (await readText(entryPath)).includes("createBrowserRouter"),
         "entry sets up a data router",
+      );
+
+      // #85: the vue-aware fallback must NOT leak to non-Vue apps — the
+      // `framework === "vue"` branch is exact, so a React app keeps the
+      // TS-only flat config.
+      const eslintContent = await readText(
+        path.join(appDir, "eslint.config.js"),
+      );
+      assert.ok(
+        !eslintContent.includes("eslint-plugin-vue"),
+        "non-Vue app keeps the TS-only eslint config (no eslint-plugin-vue)",
       );
     });
   });
