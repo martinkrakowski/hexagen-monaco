@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { ManifestPreview } from "./ManifestPreview";
 import type { ViewTab } from "./ManifestPreview";
+import { ContextGovernanceChatDrawer } from "./ContextGovernanceChatDrawer";
+import { useContextChatPanel } from "./store/useContextChatPanel";
 import { useSavedProjects } from "../../app/hooks/useSavedProjects";
 import { usePendingManifest } from "./store/usePendingManifest";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
@@ -34,6 +36,15 @@ export function ManifestAcceptPage() {
   const [redirecting, setRedirecting] = useState(false);
   const [activeTab, setActiveTab] = useState<ViewTab>("context-map");
   const isNavigatingAway = useRef(false);
+
+  // The AI drawer's store is a module singleton that outlives this page. Clear
+  // it on mount and unmount so a remount (e.g. a different generated manifest)
+  // can't reopen or auto-seed a context left over from a previous visit.
+  useEffect(() => {
+    const reset = useContextChatPanel.getState().reset;
+    reset();
+    return reset;
+  }, []);
 
   useEffect(() => {
     if (isNavigatingAway.current) return;
@@ -302,6 +313,9 @@ export function ManifestAcceptPage() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
+      {/* Right slide-in AI panel: opens when a Context Map card is clicked
+          (self-managed via useContextChatPanel; fixed-positioned overlay). */}
+      <ContextGovernanceChatDrawer />
     </ProjectsShellWithFreeTier>
   );
 }
