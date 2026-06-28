@@ -84,16 +84,20 @@ export function useGovernanceChat() {
         content: "",
       };
 
-      // Wire-facing history: optional system prompt, prior non-system turns, the
-      // new user message.
+      // Wire-facing history: prior non-system turns, then the new user message
+      // with the grounding folded in. We deliberately do NOT send a separate
+      // `system` message: the cloud chat model (mercury) returns an empty
+      // completion far more often for a [system, user] pair than for a single
+      // grounded user turn, so folding the grounding into the user message
+      // markedly cuts the empty-output rate (the server still retries on empty).
+      const groundedContent = systemPrompt
+        ? `${systemPrompt}\n\n${content}`
+        : content;
       const wireMessages = [
-        ...(systemPrompt
-          ? [{ role: "system" as const, content: systemPrompt }]
-          : []),
         ...priorMessages
           .filter((m) => m.role !== "system")
           .map((m) => ({ role: m.role, content: m.content })),
-        { role: "user" as const, content },
+        { role: "user" as const, content: groundedContent },
       ];
 
       isStreamingRef.current = true;

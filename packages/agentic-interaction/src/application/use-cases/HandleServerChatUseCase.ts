@@ -16,22 +16,32 @@ import type {
  * unhandled, the route streams only `data: {type:"done"}` and the client renders
  * an empty assistant bubble — the "text is sent but no response comes back" bug.
  *
- * We retry a few times on an empty completion before giving up, mirroring the
+ * We retry on an empty completion before giving up, mirroring the
  * staged-generation pipeline's `emptyResponse → retry` guard (see
  * `llm-retry.ts`). Retrying is only safe *before* any content reaches the client;
  * once a chunk is streamed we commit to that attempt (the transcript can't be
- * un-sent). The prod edge tolerates long requests (Apache `Timeout 300`), so a
- * handful of sequential attempts stays well within budget.
+ * un-sent). Because the empties stall for tens of seconds, the retry count is
+ * also bounded by a wall-clock budget so a slow streak can't exceed the prod
+ * edge's request timeout (Apache `Timeout 300`).
  */
-const DEFAULT_MAX_ATTEMPTS = 3;
+const DEFAULT_MAX_ATTEMPTS = 5;
+
+/**
+ * Stop retrying once this much wall-clock has elapsed, even if attempts remain —
+ * each empty attempt stalls ~45s, so an unbounded count could blow the ~300s
+ * edge timeout (which would drop the connection before we can emit an error).
+ */
+const DEFAULT_RETRY_BUDGET_MS = 240_000;
 
 export class HandleServerChatUseCase implements ServerLLMRequestPort {
   private readonly maxAttempts: number;
+  private readonly retryBudgetMs: number;
 
   constructor(
     private readonly llmProvider: LLMProviderPort,
     private readonly defaultModel: string,
     maxAttempts: number = DEFAULT_MAX_ATTEMPTS,
+    retryBudgetMs: number = DEFAULT_RETRY_BUDGET_MS,
   ) {
     // Always make at least one attempt; coerce a misconfigured value (NaN,
     // Infinity, fractional, 0/negative) to a finite sane integer rather than
@@ -40,6 +50,9 @@ export class HandleServerChatUseCase implements ServerLLMRequestPort {
     this.maxAttempts = Number.isFinite(maxAttempts)
       ? Math.max(1, Math.floor(maxAttempts))
       : DEFAULT_MAX_ATTEMPTS;
+    this.retryBudgetMs = Number.isFinite(retryBudgetMs)
+      ? Math.max(0, retryBudgetMs)
+      : DEFAULT_RETRY_BUDGET_MS;
   }
 
   async handleRequest(
@@ -56,6 +69,7 @@ export class HandleServerChatUseCase implements ServerLLMRequestPort {
 
     const provider = this.llmProvider;
     const maxAttempts = this.maxAttempts;
+    const retryBudgetMs = this.retryBudgetMs;
     const encoder = new TextEncoder();
 
     const readableStream = new ReadableStream({
@@ -64,6 +78,8 @@ export class HandleServerChatUseCase implements ServerLLMRequestPort {
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify(frame)}\n\n`),
           );
+
+        const startedAt = Date.now();
 
         try {
           // `pendingError` carries the single error frame to emit before `done`:
@@ -112,6 +128,11 @@ export class HandleServerChatUseCase implements ServerLLMRequestPort {
             pendingError = `The model returned an empty response after ${attempt} ${
               attempt === 1 ? "attempt" : "attempts"
             }. Please try again.`;
+
+            // Stop early if another (~tens-of-seconds) attempt would risk
+            // exceeding the edge timeout — better to emit our error than have the
+            // proxy drop the connection mid-retry.
+            if (Date.now() - startedAt >= retryBudgetMs) break;
           }
 
           if (pendingError) send({ type: "error", message: pendingError });

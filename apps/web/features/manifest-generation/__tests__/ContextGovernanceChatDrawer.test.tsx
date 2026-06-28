@@ -74,16 +74,17 @@ describe("ContextGovernanceChatDrawer", () => {
     );
 
     // Contract check: the optimistic transcript could pass even on a broken
-    // request shape, so assert the *posted* payload — the governance grounding
-    // (system, including this context's shape) + the orders user turn.
+    // request shape, so assert the *posted* payload. The grounding is folded
+    // into a single user turn (no separate system message) — mercury empties
+    // far less often for one grounded user message.
     const messages = lastBody?.messages ?? [];
     assert.deepStrictEqual(
       messages.map((m) => m.role),
-      ["system", "user"],
+      ["user"],
     );
     assert.match(messages[0].content, /hexagonal-architecture governance/i);
     assert.match(messages[0].content, /Name: orders/);
-    assert.match(messages[1].content, /review the "orders" bounded context/i);
+    assert.match(messages[0].content, /review the "orders" bounded context/i);
   });
 
   it("closes when the close button is clicked", async () => {
