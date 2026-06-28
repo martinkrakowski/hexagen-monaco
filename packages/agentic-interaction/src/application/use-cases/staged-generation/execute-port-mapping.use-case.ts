@@ -289,6 +289,17 @@ export class ExecutePortMappingUseCase {
     const acceptedContextNames = new Map(contexts.map((c) => [c.name, c.name]));
 
     for (const [idx, context] of contexts.entries()) {
+      // Shared-kernel contexts are type-only contracts (shared schemas / types);
+      // R09 forbids them from owning ports, so there is nothing for Stage 3 to
+      // map. Skipping avoids a wasted LLM round-trip and, for a large type-only
+      // context, the guaranteed parse-failure → empty-ports → spurious R02 (and
+      // R03 auto-synthesis) that mis-handled `scene-types` in production.
+      if (context.type === "shared-kernel") {
+        onChunk?.(
+          `→ ${context.name} (${idx + 1} of ${contexts.length}) — shared-kernel context (type-only contracts); no ports to map, skipping`,
+        );
+        continue;
+      }
       onChunk?.(
         `→ ${context.name} (${idx + 1} of ${contexts.length}) — identifying inbound commands, queries, events and outbound repositories, publishers`,
       );
