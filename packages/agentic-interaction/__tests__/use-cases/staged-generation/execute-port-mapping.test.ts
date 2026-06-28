@@ -225,6 +225,59 @@ describe("ExecutePortMappingUseCase", () => {
       assert.strictEqual(port.justification, undefined);
     }
   });
+
+  test("skips shared-kernel contexts (no LLM call, absent from the port map)", async () => {
+    // Shared-kernel contexts are type-only contracts (R09 forbids ports), so
+    // Stage 3 must not spend an LLM call deriving ports it would then have to
+    // discard — the failure mode that left a large shared-kernel context with
+    // 0 ports (and a spurious R02) in production.
+    let streamCalls = 0;
+    const mockPort = {
+      streamStructuredRequest: () => {
+        streamCalls++;
+        return createSuccessStream(validPortMappingNdjson);
+      },
+    } as unknown as SendStructuredRequestPort;
+
+    const state: Required<Pick<PipelineState, "stage0" | "stage1" | "stage2">> =
+      {
+        stage0: { intent: "scene system", projectName: "scene-app" } as any,
+        stage1: { rawContent: "sample stage 1 output" } as any,
+        stage2: {
+          accepted: [
+            {
+              name: "scene-types",
+              type: "shared-kernel" as const,
+              reasoning: "Shared Zod schemas",
+            },
+            {
+              name: "invoice-management",
+              type: "core" as const,
+              reasoning: "Manages invoices",
+            },
+          ],
+          rejected: [],
+          uncertain: [],
+        } as any,
+      };
+
+    const useCase = new ExecutePortMappingUseCase(mockPort);
+    const result = await useCase.execute(state);
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(
+        streamCalls,
+        1,
+        "exactly one LLM call — the shared-kernel context was skipped",
+      );
+      const names = result.value.portMap.contexts.map((c) => c.contextName);
+      assert.ok(
+        !names.includes("scene-types"),
+        "shared-kernel context must be absent from the port map",
+      );
+    }
+  });
 });
 
 describe("Stage 3 Prompt Shape", () => {

@@ -65,16 +65,32 @@ function checkInvalidForAggregate(
   contextName: string,
   aggregateRoots: string[],
 ): PortQualityIssue | null {
-  if (port.forAggregate && !aggregateRoots.includes(port.forAggregate)) {
+  if (!port.forAggregate || aggregateRoots.includes(port.forAggregate)) {
+    return null;
+  }
+  // The context has NO known aggregate roots — the spec declared none and domain
+  // extraction produced none. A forAggregate then can't be checked against a
+  // known set, so it's ADVISORY, not a hard error: treating it as an error
+  // turned every contexts-but-no-aggregates import into a flood of ~1-per-port
+  // R17 failures (the manifest is still produced and usable). When the context
+  // DOES have aggregate roots, a forAggregate that isn't one of them is a genuine
+  // hallucination and stays an error.
+  if (aggregateRoots.length === 0) {
     return {
       portName: port.name,
       contextName,
-      severity: "error",
+      severity: "warning",
       rule: "R17",
-      message: `Port forAggregate "${port.forAggregate}" is not a known aggregate root`,
+      message: `Port forAggregate "${port.forAggregate}" can't be validated — context '${contextName}' declares no aggregate roots`,
     };
   }
-  return null;
+  return {
+    portName: port.name,
+    contextName,
+    severity: "error",
+    rule: "R17",
+    message: `Port forAggregate "${port.forAggregate}" is not a known aggregate root`,
+  };
 }
 
 function checkDegenerateJustification(

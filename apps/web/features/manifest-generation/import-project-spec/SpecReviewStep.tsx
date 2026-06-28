@@ -44,6 +44,15 @@ export function SpecReviewStep({
             AI will skip: domain extraction (Stage 1), context classification
             (Stage 2)
           </p>
+          {specSummary.aggregateCount === 0 && (
+            <div className="mt-4 p-3 rounded border border-amber-300 bg-amber-50 text-amber-900 text-sm">
+              No aggregates were detected. The generated ports will reference
+              inferred aggregate names, so the port↔aggregate checks (R17)
+              appear as advisory warnings rather than blocking errors. Add{" "}
+              <code>aggregates</code> to your contexts if you want those checks
+              enforced.
+            </div>
+          )}
         </div>
       )}
       {cameFromConversion && specContent && (

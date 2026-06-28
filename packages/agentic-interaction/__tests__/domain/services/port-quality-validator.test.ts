@@ -58,6 +58,43 @@ describe("validatePortQuality", () => {
     assert.ok(issues.some((i) => i.rule === "R17" && i.severity === "error"));
   });
 
+  test("forAggregate with NO known aggregate roots → advisory warning R17 (not error)", () => {
+    // contexts-but-no-aggregates import: Stage 3 invents forAggregate names, but
+    // there is no known set to validate them against, so the finding is advisory
+    // rather than the ~1-per-port hard-error flood it used to produce.
+    const port: PortDefinition = {
+      name: "SceneConfigRepositoryPort",
+      type: "repository",
+      description: "Provides persistence for scene configuration aggregates",
+      forAggregate: "SceneConfig",
+    };
+    const issues = validatePortQuality([port], "scene-orchestration", []);
+    const r17 = issues.filter((i) => i.rule === "R17");
+    assert.strictEqual(r17.length, 1);
+    assert.strictEqual(
+      r17[0].severity,
+      "warning",
+      "R17 is advisory when the context declares no aggregate roots",
+    );
+  });
+
+  test("forAggregate mismatch WITH known aggregate roots stays an error R17", () => {
+    // Guard: the downgrade is scoped to the empty-set case; a real hallucination
+    // against a populated known set must remain a hard error.
+    const port: PortDefinition = {
+      name: "FooRepositoryPort",
+      type: "repository",
+      description:
+        "Provides persistence for foo aggregates in the order domain",
+      forAggregate: "NonExistent",
+    };
+    const issues = validatePortQuality([port], "OrderContext", ["Order"]);
+    assert.ok(
+      issues.some((i) => i.rule === "R17" && i.severity === "error"),
+      "a forAggregate absent from a non-empty known set is still an error",
+    );
+  });
+
   test("degenerate justification → warning", () => {
     const port: PortDefinition = {
       name: "OrderRepositoryPort",

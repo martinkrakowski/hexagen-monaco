@@ -8,6 +8,7 @@ import {
   buildDomainAnalysisFromConfig,
   buildContextMappingsFromConfig,
   buildNormalizedPromptFromConfig,
+  buildClassificationFromConfig,
 } from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.ts";
 
 /**
@@ -363,5 +364,101 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
       analysis.useCases.map((u) => u.name),
       ["Charge"],
     );
+  });
+});
+
+/**
+ * Regression: a spec that expresses the shared kernel as an architectural
+ * `plane` (per-context `plane: shared-kernel` and/or a top-level `planes:`
+ * block) with the contexts left at `type: generic` used to lose the shared-
+ * kernel exemption entirely — `inferContextType` reads `type`, not `plane`, so
+ * those contexts were port-mapped and flagged R02/R17. normalizeDialect now maps
+ * a shared-kernel plane onto the canonical `type`.
+ */
+describe("structured-config import — shared-kernel plane mapping", () => {
+  it("maps a per-context `plane: shared-kernel` onto type (over a declared type:generic)", () => {
+    const config = parseStructuredConfig(
+      [
+        "bounded_contexts:",
+        "  - name: scene-types",
+        "    type: generic",
+        "    plane: shared-kernel",
+        "  - name: scene-orchestration",
+        "    type: core",
+        "    plane: core",
+        "",
+      ].join("\n"),
+    );
+    const typeByName = Object.fromEntries(
+      config.bounded_contexts.map((c) => [c.name, c.type]),
+    );
+    assert.equal(
+      typeByName["scene-types"],
+      "shared-kernel",
+      "shared-kernel plane wins over a declared type:generic",
+    );
+    assert.equal(
+      typeByName["scene-orchestration"],
+      "core",
+      "a non-shared-kernel plane leaves the declared type untouched",
+    );
+  });
+
+  it("honors a top-level `planes: { shared-kernel: [...] }` block", () => {
+    const config = parseStructuredConfig(
+      [
+        "planes:",
+        "  shared-kernel:",
+        "    - scene-types",
+        "    - correction-delta",
+        "  core:",
+        "    - scene-orchestration",
+        "bounded_contexts:",
+        "  - name: scene-types",
+        "    type: generic",
+        "  - name: correction-delta",
+        "    type: generic",
+        "  - name: scene-orchestration",
+        "    type: core",
+        "",
+      ].join("\n"),
+    );
+    const typeByName = Object.fromEntries(
+      config.bounded_contexts.map((c) => [c.name, c.type]),
+    );
+    assert.equal(typeByName["scene-types"], "shared-kernel");
+    assert.equal(typeByName["correction-delta"], "shared-kernel");
+    assert.equal(typeByName["scene-orchestration"], "core");
+  });
+
+  it("propagates the mapped type into the deterministic classification (what Stage 3 reads)", () => {
+    const config = parseStructuredConfig(
+      [
+        "bounded_contexts:",
+        "  - name: scene-types",
+        "    type: generic",
+        "    plane: shared-kernel",
+        "",
+      ].join("\n"),
+    );
+    const analysis = buildDomainAnalysisFromConfig(config);
+    const classification = buildClassificationFromConfig(config, analysis);
+    const sceneTypes = classification.accepted.find(
+      (c) => c.name === "scene-types",
+    );
+    assert.equal(
+      sceneTypes?.type,
+      "shared-kernel",
+      "classification.accepted carries shared-kernel so Stage 3 skips it",
+    );
+  });
+
+  it("leaves a context with no plane/planes untouched (idempotent)", () => {
+    const config = parseStructuredConfig(
+      ["bounded_contexts:", "  - name: Billing", "    type: core", ""].join(
+        "\n",
+      ),
+    );
+    assert.equal(config.bounded_contexts[0].type, "core");
   });
 });

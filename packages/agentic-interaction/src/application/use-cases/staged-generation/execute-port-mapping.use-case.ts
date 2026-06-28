@@ -289,6 +289,17 @@ export class ExecutePortMappingUseCase {
     const acceptedContextNames = new Map(contexts.map((c) => [c.name, c.name]));
 
     for (const [idx, context] of contexts.entries()) {
+      // Shared-kernel contexts are type-only contracts (shared schemas / types);
+      // R09 forbids them from owning ports, so there is nothing for Stage 3 to
+      // map. Skipping avoids a wasted LLM round-trip and, for a large type-only
+      // context, the guaranteed parse-failure → empty-ports → spurious R02 (and
+      // R03 auto-synthesis) that mis-handled `scene-types` in production.
+      if (context.type === "shared-kernel") {
+        onChunk?.(
+          `→ ${context.name} (${idx + 1} of ${contexts.length}) — shared-kernel context (type-only contracts); no ports to map, skipping`,
+        );
+        continue;
+      }
       onChunk?.(
         `→ ${context.name} (${idx + 1} of ${contexts.length}) — identifying inbound commands, queries, events and outbound repositories, publishers`,
       );
@@ -378,20 +389,32 @@ export class ExecutePortMappingUseCase {
     fullResponse: string;
     retryCount: number;
   }> {
-    const { result, retryCount } = await retryWithEscalation(
+    // Stage 3 retries the SAME model inside runSingleAttempt (a smart retry-
+    // prompt that feeds the failed output back); retryWithEscalation only switches
+    // MODELS. Accumulate the same-model retries across EVERY runSingleAttempt
+    // invocation (the default chain plus any escalated chain) so the reported
+    // retryCount reflects all the retries the user saw, plus the escalation
+    // switches — not just the last chain's.
+    const attemptStats = { retries: 0 };
+    const { result, retryCount: escalationRetries } = await retryWithEscalation(
       async (preferredCloudModel?: string) => {
         return this.runSingleAttempt(
           initialPrompt,
           onChunk,
           preferredCloudModel,
           onModelResolved,
+          attemptStats,
         );
       },
       this.escalationConfig,
       (attemptResult) => attemptResult.objects.length === 0,
     );
 
-    return { ...result, retryCount };
+    return {
+      objects: result.objects,
+      fullResponse: result.fullResponse,
+      retryCount: attemptStats.retries + escalationRetries,
+    };
   }
 
   private async runSingleAttempt(
@@ -399,6 +422,7 @@ export class ExecutePortMappingUseCase {
     onChunk?: (chunk: string) => void,
     preferredCloudModel?: string,
     onModelResolved?: (info: { provider: string; model: string }) => void,
+    attemptStats?: { retries: number },
   ): Promise<{
     objects: Record<string, unknown>[];
     fullResponse: string;
@@ -407,6 +431,9 @@ export class ExecutePortMappingUseCase {
     let lastError = "";
 
     for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+      // Count each same-model retry (attempt > 1) cumulatively across invocations
+      // so the caller reports total same-model retries, not just the last chain's.
+      if (attemptStats && attempt > 1) attemptStats.retries++;
       const abortController = new AbortController();
       const timeoutHandle = setTimeout(() => {
         onChunk?.(

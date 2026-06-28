@@ -2,6 +2,7 @@ import { describe, it, vi } from "vitest";
 import assert from "node:assert";
 import { ExecuteStructuredConfigGenerationUseCase } from "../../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
 
 const mockTransactionManager = {
   begin: vi.fn(() => ({
@@ -26,7 +27,7 @@ const mockTransactionManager = {
   list: vi.fn(() => []),
   commit: vi.fn(() => null),
   rollback: vi.fn(() => null),
-};
+} as unknown as TransactionManagerPort;
 
 // Stage-6 LLM judge always "passes" — the deterministic R01 (banned context
 // name) is what drives errorsBefore for the banned-config tests.
@@ -173,6 +174,60 @@ const collisionSpec = [
   "context_mappings: []",
   "",
 ].join("\n");
+
+// AI-generated-port spec: no pre-defined `layers.application.ports`, so Stage 3
+// runs (here via the stage-aware mock below). The repository port is NAMED
+// "ScenePersistence" — Stage 3 types it `repository`, but the rendered manifest
+// carries only the name, and buildPreDefinedPortMap re-infers it as
+// "external-client" (no Repository/Repo suffix). That mismatch is what made the
+// Stage-7 gate's before (Stage-3 basis) and after (reassembly basis) counts
+// incomparable. See docs/planning/stage7-repair-rca-and-remediation.md.
+const aiSpec = [
+  "bounded_contexts:",
+  "  - name: scene",
+  "    description: Manages the 3D scene lifecycle and persistence",
+  "use_cases: {}",
+  "context_mappings: []",
+  "",
+].join("\n");
+
+// A single llmPort drives Stages 3/4/6 (0/1/2 are deterministic for a config
+// import); discriminate by each stage's system-prompt opening.
+function stageAwarePort(): SendStructuredRequestPort {
+  return {
+    sendRequest: async () => ({ success: true, value: { content: "" } }),
+    streamStructuredRequest: (request: {
+      messages?: Array<{ content?: string }>;
+    }) => {
+      const sys = String(request?.messages?.[0]?.content ?? "");
+      let payload = '{"type":"result","passed":true}\n';
+      if (sys.includes("defining ports and context mappings")) {
+        // RenderScenePort (inbound, left unbound → R05) + ScenePersistence
+        // (outbound, typed repository but with a non-inferable name).
+        payload =
+          '{"contextName":"scene","direction":"in","name":"RenderScenePort","portType":"command","description":"Renders the scene from a validated configuration"}\n' +
+          '{"contextName":"scene","direction":"out","name":"ScenePersistence","portType":"repository","description":"Persists the scene aggregate across sessions"}\n';
+      } else if (sys.includes("adapter architect")) {
+        // Bind ONLY the repository port; RenderScenePort stays unbound → R05.
+        payload =
+          JSON.stringify({
+            contextName: "scene",
+            name: "ScenePersistenceAdapter",
+            adapterType: "Repository",
+            implements: "ScenePersistence",
+          }) + "\n";
+      } else if (sys.includes("adversarial architectural linter")) {
+        payload =
+          '{"type":"error","rule":"R05","message":"Inbound port RenderScenePort lacks an adapter"}\n' +
+          '{"type":"result","passed":false}\n';
+      }
+      async function* gen() {
+        yield { success: true, value: payload };
+      }
+      return gen();
+    },
+  } as unknown as SendStructuredRequestPort;
+}
 
 describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair", () => {
   it("applies an ADDITIVE op that clears a finding (R05) — the add/apply path", async () => {
@@ -437,6 +492,52 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair
       assert.ok(result.repair);
       assert.strictEqual(result.repair?.applied, false);
       assert.ok(result.validation.errors.some((e) => e.includes("R01")));
+    }
+  });
+
+  it("applies a legit repair on an AI-generated-port manifest — before/after on the same (reassembly) basis", async () => {
+    // Regression for the Stage-7 gate measurement divergence. "ScenePersistence"
+    // is typed `repository` by Stage 3 (so the in-memory mergedPortMap has no
+    // R03), but the rendered manifest re-infers it as external-client → a phantom
+    // R03. The repair adds the missing RenderScene adapter, clearing the real
+    // R05. Measuring "before" on the Stage-3 basis (R05 only = 1) and "after" on
+    // the reassembly basis (R03 phantom = 1) made the gate see 1 ≥ 1 and REJECT a
+    // valid repair. Measuring BOTH on the reassembly basis (before R03+R05 = 2,
+    // after R03 = 1) accepts it.
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(
+      stageAwarePort(),
+      mockTransactionManager,
+      undefined,
+      undefined,
+      reviewerEmittingOps(
+        '[{"op":"add-adapter","context":"scene","name":"RenderSceneAdapter"}]',
+      ),
+    );
+    const result = await useCase.execute(aiSpec, { onProgress: () => {} });
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.ok(result.repair, "repair should have been attempted");
+      assert.strictEqual(
+        result.repair?.applied,
+        true,
+        "a real repair must be APPLIED — before/after must share the reassembly basis",
+      );
+      // before counts the phantom R03 too (reassembly basis) — under the old
+      // Stage-3 basis this was 1, and the repair was wrongly rejected.
+      assert.strictEqual(result.repair?.errorsBefore, 2);
+      assert.strictEqual(result.repair?.errorsAfter, 1);
+      const parsed = result.value.parsedObject as {
+        bounded_contexts?: Array<{
+          name: string;
+          layers?: { infrastructure?: { adapters?: string[] } };
+        }>;
+      };
+      const scene = parsed.bounded_contexts?.find((c) => c.name === "scene");
+      assert.ok(
+        scene?.layers?.infrastructure?.adapters?.includes("RenderSceneAdapter"),
+        "the repair's added adapter must be in the applied manifest",
+      );
     }
   });
 });

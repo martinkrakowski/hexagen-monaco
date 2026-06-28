@@ -162,6 +162,13 @@ export interface StructuredConfigContext {
     }>
   >;
   type?: string;
+  /**
+   * Architectural-zone dialect (e.g. `plane: shared-kernel`). Not a canonical
+   * field — `normalizeDialect` maps a shared-kernel plane onto `type:
+   * "shared-kernel"` (the field the validators read for the R02/R03/R09
+   * exemptions). Other planes are advisory and left untouched.
+   */
+  plane?: string;
   /** Pre-defined hexagonal layers — present when importing a manifest-format spec. */
   layers?: {
     domain?: Record<string, unknown>;
@@ -469,8 +476,48 @@ export function normalizeDialect(config: StructuredConfig): StructuredConfig {
     Object.keys(canonicalUseCases).map((k) => normalizeContextName(k)),
   );
 
+  // Architectural-plane → canonical type. The shared-kernel zone is the one
+  // "plane" with a canonical context-TYPE equivalent — and it's the field the
+  // R02/R03/R09 (and R17) exemptions read. Authors express it as a per-context
+  // `plane: shared-kernel` and/or a top-level `planes: { shared-kernel: [...] }`
+  // block; neither is canonical, so both are read defensively. Mis-typing a
+  // shared kernel as a regular context floods the review with R02/R17 (a
+  // port-mapped type-only context) instead of the single R09 the author wants.
+  const sharedKernelNames = new Set<string>();
+  const planesBlock = (config as { planes?: Record<string, unknown> }).planes;
+  if (planesBlock && typeof planesBlock === "object") {
+    for (const key of ["shared-kernel", "shared_kernel"]) {
+      const members = (planesBlock as Record<string, unknown>)[key];
+      if (Array.isArray(members)) {
+        for (const m of members) {
+          if (typeof m === "string" && m.trim().length > 0) {
+            sharedKernelNames.add(normalizeContextName(m));
+          }
+        }
+      }
+    }
+  }
+
   for (const ctx of config.bounded_contexts) {
     const dm = ctx.domain_models;
+
+    // Map a shared-kernel plane onto the canonical `type` (see note above). An
+    // explicit `type: shared-kernel` already works; a shared-kernel plane wins
+    // over a non-shared-kernel `type` (generic/core/supporting), since the plane
+    // is the explicit structural designation.
+    const planeStr =
+      typeof ctx.plane === "string" ? ctx.plane.toLowerCase().trim() : "";
+    const ctxNameNorm =
+      typeof ctx.name === "string" ? normalizeContextName(ctx.name) : "";
+    if (
+      (planeStr === "shared-kernel" ||
+        planeStr === "shared_kernel" ||
+        (ctxNameNorm !== "" && sharedKernelNames.has(ctxNameNorm))) &&
+      String(ctx.type ?? "").toLowerCase() !== "shared-kernel" &&
+      String(ctx.type ?? "").toLowerCase() !== "shared_kernel"
+    ) {
+      ctx.type = "shared-kernel";
+    }
 
     // domain_models.{aggregates,entities} → ctx.aggregates. Declared `aggregates`
     // are roots; `entities` are child entities (root:false) when an explicit
@@ -2119,14 +2166,34 @@ export class ExecuteStructuredConfigGenerationUseCase {
         domainEntityCount: countDomainMembers(beforeParsed),
         contextNames: manifestContextNames(beforeParsed),
       };
-      // Deterministic baseline: R01–R09 structural errors on the same portMap/
-      // adapterBindings Stage-6 just reviewed. Apples-to-apples with the
-      // post-repair count computed below.
-      const deterministicBefore = structuralManifestErrors(
-        mergedPortMap,
-        mergedAdapterBindings,
-        beforeParsed,
-      ).length;
+      // Deterministic baseline: R01–R09 structural errors. Measure on the SAME
+      // construction path as the post-repair count below — reassemble the
+      // ORIGINAL manifest (buildPreDefinedPortMap), NOT the Stage-3 in-memory
+      // mergedPortMap. The two disagree for an unchanged manifest: the rendered
+      // manifest carries only port NAMES, so buildPreDefinedPortMap re-INFERS each
+      // port's type from its name instead of reading Stage 3's explicit `type` —
+      // e.g. an AI-derived repository port whose name doesn't look like one
+      // re-reads as non-repository, a phantom R03. Comparing the Stage-3 basis
+      // (before) against the reassembled basis (after) made a no-op repair look
+      // like it ADDED structural errors (prod: 2→13 from one edit), so the gate
+      // rejected every repair. Reassembling BOTH sides cancels that reconstruction
+      // loss, so the gate sees only the repair's true delta. Falls back to the
+      // merged structures if the baseline reassembly fails (keepOriginal-safe).
+      const baselineReassembled = this.reassembleRepairedManifest(
+        assembledManifest.parsedObject as unknown as StructuredConfig,
+        { stage0: normalizedPrompt, stage1: domainAnalysis },
+      );
+      const deterministicBefore = baselineReassembled.success
+        ? structuralManifestErrors(
+            baselineReassembled.portMap,
+            baselineReassembled.adapterBindings,
+            beforeParsed,
+          ).length
+        : structuralManifestErrors(
+            mergedPortMap,
+            mergedAdapterBindings,
+            beforeParsed,
+          ).length;
 
       // A context-name change is only a legitimate repair when the baseline had
       // an R01 (banned-name) finding — the one rule whose fix renames a context.
