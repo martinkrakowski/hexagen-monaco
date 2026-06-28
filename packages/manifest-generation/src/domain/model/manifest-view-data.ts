@@ -13,7 +13,11 @@ export interface AdapterEntry {
 
 export interface BoundedContextView {
   name: string;
-  type: "core" | "supporting" | "driver";
+  // The full canonical context-type vocabulary. `shared-kernel` and `generic`
+  // are real manifest types (DDD context taxonomy) — earlier this union omitted
+  // them, so the parser coerced both to "supporting", mislabeling cards and the
+  // AI grounding. See manifest-view-data-parser.
+  type: "core" | "supporting" | "generic" | "shared-kernel" | "driver";
   description: string;
   colorToken: string;
   portsIn: PortEntry[];

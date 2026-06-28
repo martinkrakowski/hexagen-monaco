@@ -197,7 +197,9 @@ describe("API Response Parsing and Port Normalization", () => {
       for (const ctx of contexts) {
         assert.ok(ctx.name, "Context must have name");
         assert.ok(
-          ["core", "supporting", "driver", "shared-kernel"].includes(ctx.type),
+          ["core", "supporting", "generic", "shared-kernel", "driver"].includes(
+            ctx.type,
+          ),
           `Context type must be valid: ${ctx.type}`,
         );
       }

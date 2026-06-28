@@ -208,7 +208,9 @@ describe("E2E: Manifest Generation Complete Flow - Specification", () => {
       ];
       const expectedContexts = 4;
       const hasValidTypes = contexts.every((c) =>
-        ["core", "supporting", "driver", "shared-kernel"].includes(c.type),
+        ["core", "supporting", "generic", "shared-kernel", "driver"].includes(
+          c.type,
+        ),
       );
 
       assert.strictEqual(contexts.length, expectedContexts);

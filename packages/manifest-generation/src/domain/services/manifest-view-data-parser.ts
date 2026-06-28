@@ -119,15 +119,27 @@ export function parseYamlToViewData(yamlString: string): ManifestViewData {
 
   rawContexts.forEach((c) => {
     const name = c.name || "unnamed-context";
-    const type =
-      c.type === "core" || c.type === "supporting" || c.type === "driver"
-        ? c.type
-        : "supporting";
+    // Preserve the full context-type vocabulary; only an unrecognized type falls
+    // back to "supporting". (Previously `shared-kernel` and `generic` weren't
+    // listed here and were silently coerced to "supporting".)
+    const KNOWN_TYPES: ReadonlyArray<BoundedContextView["type"]> = [
+      "core",
+      "supporting",
+      "generic",
+      "shared-kernel",
+      "driver",
+    ];
+    const type = (KNOWN_TYPES as readonly string[]).includes(c.type ?? "")
+      ? (c.type as BoundedContextView["type"])
+      : "supporting";
     const desc = c.description || "";
 
     let colorToken = "var(--manifest-context-supporting)";
     if (type === "core") colorToken = "var(--manifest-context-core)";
     if (type === "driver") colorToken = "var(--manifest-context-driver)";
+    if (type === "generic") colorToken = "var(--manifest-context-generic)";
+    if (type === "shared-kernel")
+      colorToken = "var(--manifest-context-shared-kernel)";
 
     const rawPortsIn = c.layers?.application?.ports?.in || [];
     const rawPortsOut = c.layers?.application?.ports?.out || [];

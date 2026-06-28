@@ -112,6 +112,8 @@
   --manifest-context-core: 235 40% 45%;
   --manifest-context-supporting: 140 30% 40%;
   --manifest-context-driver: 38 70% 50%;
+  --manifest-context-generic: 220 12% 50%;
+  --manifest-context-shared-kernel: 185 50% 40%;
 
   /* Component-level tokens (derived from primitives) */
   --button-height: 40px;
@@ -212,6 +214,8 @@
   --manifest-context-core: 235 40% 55%;
   --manifest-context-supporting: 140 30% 45%;
   --manifest-context-driver: 38 70% 50%;
+  --manifest-context-generic: 220 12% 55%;
+  --manifest-context-shared-kernel: 185 50% 45%;
 }
 
 /* ── Dialog backdrop ─────────────────────────────────────────────────────────── */
