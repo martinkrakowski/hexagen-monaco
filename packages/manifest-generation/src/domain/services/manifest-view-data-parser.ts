@@ -119,15 +119,32 @@ export function parseYamlToViewData(yamlString: string): ManifestViewData {
 
   rawContexts.forEach((c) => {
     const name = c.name || "unnamed-context";
-    const type =
-      c.type === "core" || c.type === "supporting" || c.type === "driver"
-        ? c.type
-        : "supporting";
+    // Preserve the full context-type vocabulary; only an unrecognized type falls
+    // back to "supporting". (Previously `shared-kernel` and `generic` weren't
+    // listed here and were silently coerced to "supporting".)
+    const KNOWN_TYPES: ReadonlyArray<BoundedContextView["type"]> = [
+      "core",
+      "supporting",
+      "generic",
+      "shared-kernel",
+      "driver",
+    ];
+    const type = (KNOWN_TYPES as readonly string[]).includes(c.type ?? "")
+      ? (c.type as BoundedContextView["type"])
+      : "supporting";
     const desc = c.description || "";
 
-    let colorToken = "var(--manifest-context-supporting)";
-    if (type === "core") colorToken = "var(--manifest-context-core)";
-    if (type === "driver") colorToken = "var(--manifest-context-driver)";
+    // The --manifest-context-* vars hold HSL *components* (e.g. `235 40% 45%`),
+    // so they must be wrapped in hsl() to be a valid CSS color — consumers use
+    // colorToken directly (inline style.color, SVG stroke, color-mix) in
+    // HexagonalArchitectureView. A bare `var(--token)` renders as an invalid
+    // color and silently falls back.
+    let colorToken = "hsl(var(--manifest-context-supporting))";
+    if (type === "core") colorToken = "hsl(var(--manifest-context-core))";
+    if (type === "driver") colorToken = "hsl(var(--manifest-context-driver))";
+    if (type === "generic") colorToken = "hsl(var(--manifest-context-generic))";
+    if (type === "shared-kernel")
+      colorToken = "hsl(var(--manifest-context-shared-kernel))";
 
     const rawPortsIn = c.layers?.application?.ports?.in || [];
     const rawPortsOut = c.layers?.application?.ports?.out || [];
