@@ -170,4 +170,42 @@ describe("Stage 3 Escalation", () => {
       "exhaustion banner must log once, not once per outer retry",
     );
   });
+
+  test("accumulates inner retries across the default AND escalated model chains", async () => {
+    // The reported retryCount must sum same-model retries from EVERY
+    // runSingleAttempt chain, not just the last. Here the default model exhausts
+    // its inner loop (2 retries) and the escalation model succeeds first try (0
+    // inner retries) → 2 inner + 1 escalation switch = 3. Storing only the last
+    // chain's count would report 1.
+    const mockPort = {
+      streamStructuredRequest: (req: LLMRequest) => {
+        async function* stream() {
+          if (req.preferredCloudModel) {
+            yield { success: true, value: validPortMappingNdjson };
+          } else {
+            yield { success: true, value: "not valid json" };
+          }
+        }
+        return stream();
+      },
+    } as unknown as SendStructuredRequestPort;
+
+    const config = {
+      maxDefaultRetries: 1,
+      maxEscalatedRetries: 1,
+      escalationModel: "gpt-4o",
+    };
+    let reportedRetryCount: number | undefined;
+    const useCase = new ExecutePortMappingUseCase(mockPort, config);
+    const result = await useCase.execute(mockStageState, undefined, (t) => {
+      reportedRetryCount = t.retryCount;
+    });
+
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(
+      reportedRetryCount,
+      3,
+      "2 default-chain inner retries + 1 escalation switch (escalated chain succeeded first try)",
+    );
+  });
 });

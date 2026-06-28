@@ -391,9 +391,11 @@ export class ExecutePortMappingUseCase {
   }> {
     // Stage 3 retries the SAME model inside runSingleAttempt (a smart retry-
     // prompt that feeds the failed output back); retryWithEscalation only switches
-    // MODELS. Track the final inner-loop attempt count so the reported retryCount
-    // reflects the same-model retries the user actually saw, plus any escalations.
-    const attemptStats = { attempts: 0 };
+    // MODELS. Accumulate the same-model retries across EVERY runSingleAttempt
+    // invocation (the default chain plus any escalated chain) so the reported
+    // retryCount reflects all the retries the user saw, plus the escalation
+    // switches — not just the last chain's.
+    const attemptStats = { retries: 0 };
     const { result, retryCount: escalationRetries } = await retryWithEscalation(
       async (preferredCloudModel?: string) => {
         return this.runSingleAttempt(
@@ -408,11 +410,10 @@ export class ExecutePortMappingUseCase {
       (attemptResult) => attemptResult.objects.length === 0,
     );
 
-    const innerRetries = Math.max(0, attemptStats.attempts - 1);
     return {
       objects: result.objects,
       fullResponse: result.fullResponse,
-      retryCount: innerRetries + escalationRetries,
+      retryCount: attemptStats.retries + escalationRetries,
     };
   }
 
@@ -421,7 +422,7 @@ export class ExecutePortMappingUseCase {
     onChunk?: (chunk: string) => void,
     preferredCloudModel?: string,
     onModelResolved?: (info: { provider: string; model: string }) => void,
-    attemptStats?: { attempts: number },
+    attemptStats?: { retries: number },
   ): Promise<{
     objects: Record<string, unknown>[];
     fullResponse: string;
@@ -430,9 +431,9 @@ export class ExecutePortMappingUseCase {
     let lastError = "";
 
     for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
-      // Surface the inner-loop attempt number so the caller reports the same-model
-      // retry count (the meaningful one), not the model-escalation count.
-      if (attemptStats) attemptStats.attempts = attempt;
+      // Count each same-model retry (attempt > 1) cumulatively across invocations
+      // so the caller reports total same-model retries, not just the last chain's.
+      if (attemptStats && attempt > 1) attemptStats.retries++;
       const abortController = new AbortController();
       const timeoutHandle = setTimeout(() => {
         onChunk?.(
