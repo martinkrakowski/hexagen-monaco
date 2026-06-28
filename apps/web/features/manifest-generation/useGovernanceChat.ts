@@ -210,9 +210,31 @@ export function useGovernanceChat() {
         }
 
         if (isCurrent()) {
-          setState((prev) =>
-            prev.status === "error" ? prev : { ...prev, status: "idle" },
-          );
+          setState((prev) => {
+            if (prev.status === "error") return prev;
+            // Defense in depth: if the stream finished without an error frame but
+            // the assistant turn is still empty (a provider that returned no
+            // content — or the BYOK path, which doesn't go through the server's
+            // empty-output retry), surface it instead of leaving a silent blank
+            // bubble. The server path already retries + emits an error frame; this
+            // catches everything else.
+            const assistant = prev.messages.find((m) => m.id === assistantId);
+            if (assistant && assistant.content === "") {
+              const message =
+                "The model returned no response. Please try again.";
+              return {
+                ...prev,
+                status: "error",
+                errorMessage: message,
+                messages: prev.messages.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, content: `Error: ${message}` }
+                    : m,
+                ),
+              };
+            }
+            return { ...prev, status: "idle" };
+          });
         }
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
