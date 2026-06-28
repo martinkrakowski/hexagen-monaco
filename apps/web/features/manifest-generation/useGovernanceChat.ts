@@ -219,7 +219,7 @@ export function useGovernanceChat() {
             // bubble. The server path already retries + emits an error frame; this
             // catches everything else.
             const assistant = prev.messages.find((m) => m.id === assistantId);
-            if (assistant && assistant.content === "") {
+            if (assistant && assistant.content.trim() === "") {
               const message =
                 "The model returned no response. Please try again.";
               return {

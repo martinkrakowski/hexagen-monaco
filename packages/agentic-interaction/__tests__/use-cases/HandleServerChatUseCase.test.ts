@@ -121,6 +121,7 @@ test("does not retry a hard provider error (surfaces it immediately)", async () 
   assert.equal(chunks(frames).length, 0);
   const error = frames.find((f) => f.type === "error");
   assert.match(error!.message!, /401 invalid key/);
+  assert.equal(frames.at(-1)?.type, "done");
   assert.equal(callCount(), 1, "a hard error is not retried");
 });
 
@@ -142,4 +143,51 @@ test("commits to an attempt once content streams, surfacing a trailing error", a
   assert.match(error!.message!, /connection reset/);
   assert.equal(frames.at(-1)?.type, "done");
   assert.equal(callCount(), 1, "a streamed attempt is never retried");
+});
+
+test("emits error then done when the provider throws", async () => {
+  // A provider whose stream throws on iteration (vs. yielding an err Result):
+  // the use-case's outer catch must still emit error + done.
+  const provider: LLMProviderPort = {
+    complete: async () => {
+      throw new Error("complete() is not used by the streaming chat path");
+    },
+    streamComplete: () => {
+      throw new Error("network exploded");
+    },
+  };
+  const useCase = new HandleServerChatUseCase(provider, "test-model");
+
+  const frames = await readFrames(
+    await useCase.handleRequest({ messages: [] }, { id: "u1" }),
+  );
+
+  const error = frames.find((f) => f.type === "error");
+  assert.match(error!.message!, /network exploded/);
+  assert.equal(
+    frames.at(-1)?.type,
+    "done",
+    "a thrown exception still terminates the stream with done",
+  );
+});
+
+test("coerces a non-finite maxAttempts to the default instead of disabling retries", async () => {
+  // NaN must not silently disable every attempt (Math.max(1, NaN) === NaN).
+  const { provider, callCount } = fakeProvider([[], [ok("recovered")]]);
+  const useCase = new HandleServerChatUseCase(
+    provider,
+    "test-model",
+    Number.NaN,
+  );
+
+  const frames = await readFrames(
+    await useCase.handleRequest({ messages: [] }, { id: "u1" }),
+  );
+
+  assert.deepEqual(chunks(frames), ["recovered"]);
+  assert.equal(
+    callCount(),
+    2,
+    "NaN falls back to the default, so the empty first attempt was retried",
+  );
 });

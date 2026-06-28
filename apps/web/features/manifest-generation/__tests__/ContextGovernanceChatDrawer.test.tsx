@@ -177,6 +177,26 @@ describe("ContextGovernanceChatDrawer", () => {
     });
   });
 
+  it("surfaces an error when the only content is whitespace", async () => {
+    server.use(
+      http.post(
+        "/api/llm/chat",
+        () =>
+          // A completion of only whitespace is no answer — treat it as empty.
+          new HttpResponse(
+            `data: ${JSON.stringify({ type: "chunk", content: "  \n\t " })}\n` +
+              `data: ${JSON.stringify({ type: "done" })}\n`,
+            { status: 200, headers: { "Content-Type": "text/event-stream" } },
+          ),
+      ),
+    );
+    render(<ContextGovernanceChatDrawer />);
+    act(() => useContextChatPanel.getState().open(ctx("orders")));
+    await waitFor(() => {
+      assert.ok(screen.getAllByText(/returned no response/i).length > 0);
+    });
+  });
+
   it("renders a trailing SSE frame that has no final newline", async () => {
     server.use(
       http.post(

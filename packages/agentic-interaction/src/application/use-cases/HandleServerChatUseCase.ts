@@ -33,8 +33,13 @@ export class HandleServerChatUseCase implements ServerLLMRequestPort {
     private readonly defaultModel: string,
     maxAttempts: number = DEFAULT_MAX_ATTEMPTS,
   ) {
-    // Always make at least one attempt, even if misconfigured with 0/negative.
-    this.maxAttempts = Math.max(1, maxAttempts);
+    // Always make at least one attempt; coerce a misconfigured value (NaN,
+    // Infinity, fractional, 0/negative) to a finite sane integer rather than
+    // silently disabling all attempts — `Math.max(1, NaN)` is `NaN`, which
+    // makes `attempt <= maxAttempts` always false (zero attempts).
+    this.maxAttempts = Number.isFinite(maxAttempts)
+      ? Math.max(1, Math.floor(maxAttempts))
+      : DEFAULT_MAX_ATTEMPTS;
   }
 
   async handleRequest(
@@ -115,6 +120,9 @@ export class HandleServerChatUseCase implements ServerLLMRequestPort {
           const errorMsg =
             error instanceof Error ? error.message : String(error);
           send({ type: "error", message: errorMsg });
+          // Terminate the stream consistently with the normal error paths
+          // (every stream ends with `done`).
+          send({ type: "done" });
         } finally {
           controller.close();
         }
