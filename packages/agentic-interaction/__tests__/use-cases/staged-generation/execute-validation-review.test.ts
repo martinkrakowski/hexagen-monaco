@@ -682,6 +682,15 @@ describe("deterministic R16/R17/R18 (LLM-duplicate discard, A4 pull-forward)", (
     const useCase = new ExecuteValidationReviewUseCase(mockLLM);
     const state = {
       ...createMockPipelineState(),
+      // The context HAS a known aggregate root, so a port pointing at a
+      // DIFFERENT aggregate ("NotReal") is a genuine hallucination → hard
+      // R17 error. (The no-known-aggregates case is advisory — covered below.)
+      stage1: {
+        verbs: [],
+        nouns: [],
+        subdomains: ["invoice-management"],
+        aggregateRoots: [{ name: "Invoice", subdomain: "invoice-management" }],
+      },
       stage3: {
         contexts: [
           {
@@ -689,7 +698,7 @@ describe("deterministic R16/R17/R18 (LLM-duplicate discard, A4 pull-forward)", (
             in: [
               {
                 name: "CreateInvoicePort",
-                type: "command",
+                type: "command" as const,
                 description:
                   "Accepts invoice creation requests from upstream billing flows.",
                 forAggregate: "NotReal",
@@ -714,6 +723,56 @@ describe("deterministic R16/R17/R18 (LLM-duplicate discard, A4 pull-forward)", (
       // the LLM's prose.
       assert.ok(r17Errors[0].startsWith("[R17] invoice-management/"));
       assert.strictEqual(result.value.passed, false);
+    }
+  });
+
+  test("programmatic R17 is advisory (warning, not error) when the context declares no aggregates", async () => {
+    // contexts-but-no-aggregates import: Stage 3 invents a forAggregate but there
+    // is no known set to validate it against, so R17 must be advisory and must
+    // NOT block — `passed` stays true. Without this, such an import floods the
+    // review with ~1-per-port hard errors.
+    const ndjson =
+      '{"type":"error","rule":"R17","message":"Port forAggregate \'SceneConfig\' is not a known aggregate root."}\n' +
+      '{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const useCase = new ExecuteValidationReviewUseCase(mockLLM);
+    const state = {
+      ...createMockPipelineState(),
+      // No stage1 aggregateRoots → empty known set for this context.
+      stage3: {
+        contexts: [
+          {
+            contextName: "invoice-management",
+            in: [
+              {
+                name: "CreateInvoicePort",
+                type: "command" as const,
+                description:
+                  "Accepts invoice creation requests from upstream billing flows.",
+                forAggregate: "SceneConfig",
+              },
+            ],
+            out: [],
+          },
+        ],
+      },
+    };
+    const result = await useCase.execute(state);
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      const r17Errors = result.value.errors.filter((e) => /\bR17\b/.test(e));
+      const r17Warnings = result.value.warnings.filter((w) =>
+        /\bR17\b/.test(w),
+      );
+      assert.strictEqual(r17Errors.length, 0, "no hard R17 error");
+      assert.strictEqual(r17Warnings.length, 1, "one advisory R17 warning");
+      assert.ok(r17Warnings[0].startsWith("[R17] invoice-management/"));
+      assert.strictEqual(
+        result.value.passed,
+        true,
+        "advisory R17 must not block — passed stays true",
+      );
     }
   });
 
