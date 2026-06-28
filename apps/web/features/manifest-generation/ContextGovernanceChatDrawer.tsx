@@ -26,6 +26,8 @@ export function ContextGovernanceChatDrawer() {
     useGovernanceChat();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
 
   const isStreaming = status === "streaming";
 
@@ -62,6 +64,19 @@ export function ContextGovernanceChatDrawer() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isOpen, close]);
 
+  // Move focus into the drawer when it opens, and restore it to the triggering
+  // element (the context card) on close. Combined with `inert` while closed,
+  // this keeps the keyboard flow sane — the off-screen drawer is never tabbable.
+  useEffect(() => {
+    if (isOpen) {
+      triggerRef.current = (document.activeElement as HTMLElement) ?? null;
+      closeButtonRef.current?.focus();
+    } else if (triggerRef.current) {
+      triggerRef.current.focus();
+      triggerRef.current = null;
+    }
+  }, [isOpen]);
+
   // Keep the transcript scrolled to the latest message as it streams. Assigning
   // scrollTop (rather than scrollTo, which jsdom doesn't implement) keeps this
   // safe under the test environment.
@@ -92,6 +107,7 @@ export function ContextGovernanceChatDrawer() {
           : "AI governance chat"
       }
       aria-hidden={!isOpen}
+      inert={!isOpen}
       className={`fixed top-0 right-0 z-40 h-full w-full sm:w-[400px] max-w-[90vw] bg-background border-l border-border shadow-xl flex flex-col transition-transform duration-300 ease-in-out ${
         isOpen ? "translate-x-0" : "translate-x-full pointer-events-none"
       }`}
@@ -107,6 +123,7 @@ export function ContextGovernanceChatDrawer() {
           </span>
         </div>
         <button
+          ref={closeButtonRef}
           type="button"
           onClick={close}
           aria-label="Close AI chat"

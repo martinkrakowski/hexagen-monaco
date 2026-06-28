@@ -37,6 +37,11 @@ const CHAT_ENDPOINT = "/api/llm/chat";
  * governance-assistant feature has a similar cloud hook, but it (a) lives in a
  * different feature slice (feature-isolation rule forbids importing it) and
  * (b) requires a client-side key, so it can't serve free-tier users.
+ *
+ * Every send is tagged with a monotonic request id; a `reset` send (a context
+ * switch) preempts an in-flight stream, and only the *current* request may
+ * mutate state or clear the streaming refs — so an aborted/superseded request
+ * settling late can't flip a newer stream back to idle or null its controller.
  */
 export function useGovernanceChat() {
   const [state, setState] = useState<ChatState>({
@@ -47,12 +52,22 @@ export function useGovernanceChat() {
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const isStreamingRef = useRef(false);
+  const requestIdRef = useRef(0);
   const messagesRef = useRef<ChatMessage[]>(state.messages);
   messagesRef.current = state.messages;
 
   const sendMessage = useCallback(
     async (content: string, { model, systemPrompt, reset }: SendOptions) => {
-      if (isStreamingRef.current) return;
+      if (isStreamingRef.current) {
+        // A follow-up can't preempt a live stream (the input is disabled while
+        // streaming). A context switch (`reset`) preempts: abort the in-flight
+        // request so the new context gets seeded.
+        if (!reset) return;
+        abortControllerRef.current?.abort();
+      }
+
+      const requestId = ++requestIdRef.current;
+      const isCurrent = () => requestIdRef.current === requestId;
 
       const priorMessages = reset ? [] : messagesRef.current;
       const now = Date.now();
@@ -89,15 +104,18 @@ export function useGovernanceChat() {
           : [...prev.messages, userMessage, assistantPlaceholder],
       }));
 
-      const appendToAssistant = (chunk: string) =>
+      const appendToAssistant = (chunk: string) => {
+        if (!isCurrent()) return;
         setState((prev) => ({
           ...prev,
           messages: prev.messages.map((m) =>
             m.id === assistantId ? { ...m, content: m.content + chunk } : m,
           ),
         }));
+      };
 
-      const failAssistant = (message: string) =>
+      const failAssistant = (message: string) => {
+        if (!isCurrent()) return;
         setState((prev) => ({
           ...prev,
           status: "error",
@@ -106,6 +124,7 @@ export function useGovernanceChat() {
             m.id === assistantId ? { ...m, content: `Error: ${message}` } : m,
           ),
         }));
+      };
 
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
@@ -171,24 +190,34 @@ export function useGovernanceChat() {
             }
           }
         }
-        setState((prev) =>
-          prev.status === "error" ? prev : { ...prev, status: "idle" },
-        );
+        if (isCurrent()) {
+          setState((prev) =>
+            prev.status === "error" ? prev : { ...prev, status: "idle" },
+          );
+        }
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
-          setState((prev) => ({ ...prev, status: "idle" }));
+          // The request was aborted (Stop, or preempted by a context switch).
+          // Only the *current* request may reset status to idle.
+          if (isCurrent()) setState((prev) => ({ ...prev, status: "idle" }));
           return;
         }
         failAssistant(error instanceof Error ? error.message : String(error));
       } finally {
-        isStreamingRef.current = false;
-        abortControllerRef.current = null;
+        // Only the current request owns the streaming refs — a superseded
+        // request settling late must not clear a newer stream's controller.
+        if (isCurrent()) {
+          isStreamingRef.current = false;
+          abortControllerRef.current = null;
+        }
       }
     },
     [],
   );
 
   const abort = useCallback(() => {
+    // Bump the id so the in-flight request's late settle is ignored, then abort.
+    requestIdRef.current += 1;
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
     isStreamingRef.current = false;

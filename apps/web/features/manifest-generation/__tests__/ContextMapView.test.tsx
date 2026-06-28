@@ -26,10 +26,11 @@ describe("ContextMapView — AI affordance", () => {
     const viewData = parseYamlToViewData(YAML);
     const { container } = render(<ContextMapView viewData={viewData} />);
 
-    // The health-tinted AI sparkle replaces the old pulsing dot.
-    assert.ok(
-      container.querySelector("svg.lucide-sparkles"),
-      "a Sparkles AI icon is rendered",
+    // The health-tinted AI sparkle replaces the old pulsing dot — one per card.
+    assert.strictEqual(
+      container.querySelectorAll("svg.lucide-sparkles").length,
+      viewData.contexts.length,
+      "each context card renders a Sparkles AI icon",
     );
     // The old health indicator was a bare `w-2 h-2 rounded-full` dot — gone now.
     assert.strictEqual(
@@ -60,18 +61,25 @@ describe("ContextMapView — AI affordance", () => {
     );
   });
 
-  it("opens via keyboard (Enter) for accessibility", () => {
-    const viewData = parseYamlToViewData(YAML);
-    render(<ContextMapView viewData={viewData} />);
+  it("opens via keyboard (Enter and Space) for accessibility", () => {
+    // The card's onKeyDown activates on both Enter and Space.
+    for (const key of ["Enter", " "]) {
+      const viewData = parseYamlToViewData(YAML);
+      const { unmount } = render(<ContextMapView viewData={viewData} />);
 
-    const card = screen.getByRole("button", {
-      name: /ask ai about the billing context/i,
-    });
-    fireEvent.keyDown(card, { key: "Enter" });
+      const card = screen.getByRole("button", {
+        name: /ask ai about the billing context/i,
+      });
+      fireEvent.keyDown(card, { key });
 
-    assert.strictEqual(
-      useContextChatPanel.getState().selectedContext?.name,
-      "billing",
-    );
+      assert.strictEqual(
+        useContextChatPanel.getState().selectedContext?.name,
+        "billing",
+        `key "${key}" opens the billing context`,
+      );
+
+      unmount();
+      useContextChatPanel.setState({ selectedContext: null, isOpen: false });
+    }
   });
 });

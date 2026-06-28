@@ -21,6 +21,10 @@ interface ContextChatPanelState {
    *  context preserves its conversation; opening a different context
    *  swaps `selectedContext` (a new reference) and re-seeds the chat. */
   close: () => void;
+  /** Fully clear the drawer. This store is a module singleton that outlives the
+   *  accept page, so the page resets it on mount/unmount — otherwise a remount
+   *  (e.g. a different manifest) could reopen/seed a stale context. */
+  reset: () => void;
 }
 
 /**
@@ -34,4 +38,5 @@ export const useContextChatPanel = create<ContextChatPanelState>((set) => ({
   isOpen: false,
   open: (ctx) => set({ selectedContext: ctx, isOpen: true }),
   close: () => set({ isOpen: false }),
+  reset: () => set({ selectedContext: null, isOpen: false }),
 }));
