@@ -3,9 +3,11 @@
 import { useState, useCallback, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { InputMode } from "./GenerateWithAi/utils/detect-input-mode";
-import { detectInputMode } from "./GenerateWithAi/utils/detect-input-mode";
+import {
+  detectInputMode,
+  parseMultiDocYaml,
+} from "./GenerateWithAi/utils/detect-input-mode";
 import { logger } from "../../lib/structured-logger";
-import yaml from "js-yaml";
 import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useStagedManifestGeneration } from "./useStagedManifestGeneration";
 import { useLooseSpecConversion } from "./useLooseSpecConversion";
@@ -48,26 +50,6 @@ type SpecPageState =
  * ModelSetupPrompt below uses). */
 const MODEL_SETUP_URL =
   "/projects/new/ai/models?returnUrl=/projects/new/import/spec";
-
-/**
- * Merge a (possibly multi-document) YAML/JSON string into one object, or null if
- * it isn't a parseable object. Mirrors the multi-doc handling used by the
- * structured-config summary and detectInputMode.
- */
-function parseImportedConfig(content: string): Record<string, unknown> | null {
-  try {
-    const docs = yaml.loadAll(content) as Array<Record<string, unknown>>;
-    const merged: Record<string, unknown> = {};
-    for (const doc of docs) {
-      if (doc && typeof doc === "object" && !Array.isArray(doc)) {
-        Object.assign(merged, doc);
-      }
-    }
-    return Object.keys(merged).length > 0 ? merged : null;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * True when the uploaded file is already an application-generated manifest — a
@@ -178,11 +160,10 @@ export default function ImportProjectSpecPage() {
   );
 
   const handleFileLoaded = (content: string) => {
-    sessionStorage.setItem("import_spec_content", content);
     setAcceptError(null);
     // Parse once: reused for the manifest fast-path AND the spec summary
-    // (supports single- and multi-document YAML / JSON).
-    const parsed = parseImportedConfig(content);
+    // (supports single- and multi-document YAML / JSON, strict on key conflicts).
+    const parsed = parseMultiDocYaml(content);
 
     // Fast-path: a complete application-generated manifest already carries the
     // derived hexagonal layers (ports/adapters), so there is nothing for the AI
@@ -193,6 +174,12 @@ export default function ImportProjectSpecPage() {
       acceptManifest(content);
       return;
     }
+
+    // Persist ONLY for the spec/AI paths. A generated manifest fast-paths to the
+    // accept screen; persisting it would let the accept screen's Back rehydrate
+    // this page from sessionStorage and immediately re-fast-path — an infinite
+    // Back→Accept loop.
+    sessionStorage.setItem("import_spec_content", content);
 
     const mode: InputMode = detectInputMode(content);
 

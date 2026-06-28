@@ -148,6 +148,16 @@ describe("ImportProjectSpecPage", () => {
     });
     // It must NOT pass through the spec-review step.
     assert.strictEqual(screen.queryByText(/spec review/i), null);
+
+    // Loop-fix regression: a manifest fast-path must NOT persist
+    // import_spec_content. If it did, the accept screen's Back would rehydrate
+    // this page from sessionStorage and immediately re-fast-path to accept — an
+    // infinite Back→Accept loop. (Specs still persist; that's a separate path.)
+    assert.strictEqual(
+      sessionStorage.getItem("import_spec_content"),
+      null,
+      "a generated manifest is not persisted for rehydration",
+    );
   });
 
   it("Upload krakowski YAML: transitions to SPEC_REVIEW", async () => {
