@@ -152,4 +152,25 @@ describe("ContextGovernanceChatDrawer", () => {
     assert.strictEqual(state.isOpen, false);
     assert.strictEqual(state.selectedContext, null);
   });
+
+  it("renders a trailing SSE frame that has no final newline", async () => {
+    server.use(
+      http.post(
+        "/api/llm/chat",
+        () =>
+          // The last chunk has NO trailing newline — without flushing the
+          // leftover buffer it would be dropped.
+          new HttpResponse(
+            `data: ${JSON.stringify({ type: "chunk", content: "first " })}\n` +
+              `data: ${JSON.stringify({ type: "chunk", content: "tail-no-newline" })}`,
+            { status: 200, headers: { "Content-Type": "text/event-stream" } },
+          ),
+      ),
+    );
+    render(<ContextGovernanceChatDrawer />);
+    act(() => useContextChatPanel.getState().open(ctx("orders")));
+    await waitFor(() => {
+      assert.ok(screen.getByText(/first tail-no-newline/i));
+    });
+  });
 });

@@ -118,9 +118,6 @@ export function ContextGovernanceChatDrawer() {
           <span className="text-sm font-semibold truncate">
             AI · {selectedContext?.name ?? "Governance"}
           </span>
-          <span className="text-xs text-muted-foreground shrink-0 hidden sm:inline">
-            {MODEL_NAME}
-          </span>
         </div>
         <button
           ref={closeButtonRef}

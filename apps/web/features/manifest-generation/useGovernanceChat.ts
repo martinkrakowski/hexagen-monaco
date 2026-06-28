@@ -70,10 +70,11 @@ export function useGovernanceChat() {
       const isCurrent = () => requestIdRef.current === requestId;
 
       const priorMessages = reset ? [] : messagesRef.current;
-      const now = Date.now();
-      const assistantId = `assistant-${now}`;
+      // Derive message ids from the monotonic requestId (not Date.now(), which
+      // collides for sends within the same millisecond → duplicate React keys).
+      const assistantId = `assistant-${requestId}`;
       const userMessage: ChatMessage = {
-        id: `user-${now}`,
+        id: `user-${requestId}`,
         role: "user",
         content,
       };
@@ -163,6 +164,28 @@ export function useGovernanceChat() {
         const decoder = new TextDecoder();
         let buffer = "";
         let done = false;
+
+        // Returns true when a terminal frame (done/error) was seen.
+        const handleDataLine = (line: string): boolean => {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data: ")) return false;
+          let frame: { type?: string; content?: string; message?: string };
+          try {
+            frame = JSON.parse(trimmed.slice(6));
+          } catch {
+            return false;
+          }
+          if (frame.type === "chunk" && frame.content) {
+            appendToAssistant(frame.content);
+            return false;
+          }
+          if (frame.type === "error") {
+            failAssistant(frame.message ?? "Unknown error");
+            return true;
+          }
+          return frame.type === "done";
+        };
+
         while (!done) {
           const { done: streamDone, value } = await reader.read();
           if (streamDone) break;
@@ -170,26 +193,22 @@ export function useGovernanceChat() {
           const lines = buffer.split("\n");
           buffer = lines.pop() ?? "";
           for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith("data: ")) continue;
-            let frame: { type?: string; content?: string; message?: string };
-            try {
-              frame = JSON.parse(trimmed.slice(6));
-            } catch {
-              continue;
-            }
-            if (frame.type === "chunk" && frame.content) {
-              appendToAssistant(frame.content);
-            } else if (frame.type === "error") {
-              failAssistant(frame.message ?? "Unknown error");
-              done = true;
-              break;
-            } else if (frame.type === "done") {
+            if (handleDataLine(line)) {
               done = true;
               break;
             }
           }
         }
+
+        // Flush any trailing frame the server emitted without a final newline —
+        // otherwise a terminal `done`/`error` (or last chunk) could be dropped.
+        if (!done) {
+          buffer += decoder.decode();
+          for (const line of buffer.split("\n")) {
+            if (handleDataLine(line)) break;
+          }
+        }
+
         if (isCurrent()) {
           setState((prev) =>
             prev.status === "error" ? prev : { ...prev, status: "idle" },
