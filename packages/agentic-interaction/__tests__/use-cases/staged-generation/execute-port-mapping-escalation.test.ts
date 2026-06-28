@@ -10,7 +10,9 @@ const validPortMappingNdjson = [
   '{"contextName":"invoice-management","direction":"in","name":"createInvoice","portType":"command","description":"Creates invoice"}',
 ].join("\n");
 
-const mockStageState: Pick<PipelineState, "stage0" | "stage1" | "stage2"> = {
+const mockStageState: Required<
+  Pick<PipelineState, "stage0" | "stage1" | "stage2">
+> = {
   stage0: { intent: "Invoice system", projectName: "invoice-app" } as any,
   stage1: { rawContent: "sample stage 1 output" } as any,
   stage2: {
@@ -120,12 +122,52 @@ describe("Stage 3 Escalation", () => {
     );
   });
 
-  test("default STAGE3_ESCALATION_CONFIG has no hardcoded escalationModel", () => {
-    // Intentionally undefined so non-OpenAI providers don't 404 on retry.
-    // The wiring layer injects an escalation model via env (LLM_ESCALATION_MODEL)
-    // when it knows the configured provider supports it.
+  test("default STAGE3_ESCALATION_CONFIG is escalation-only (no hardcoded model, no same-model re-runs)", () => {
+    // escalationModel intentionally undefined so non-OpenAI providers don't 404
+    // on retry; the wiring layer injects one via env when the provider supports
+    // it. maxDefault/maxEscalated are 1 because runSingleAttempt already retries
+    // the same model internally (MAX_RETRY_ATTEMPTS) — this wrapper only switches
+    // models, so >1 here re-runs the whole inner loop (3×3 = 9 calls/context).
     assert.strictEqual(STAGE3_ESCALATION_CONFIG.escalationModel, undefined);
-    assert.strictEqual(STAGE3_ESCALATION_CONFIG.maxDefaultRetries, 3);
-    assert.strictEqual(STAGE3_ESCALATION_CONFIG.maxEscalatedRetries, 3);
+    assert.strictEqual(STAGE3_ESCALATION_CONFIG.maxDefaultRetries, 1);
+    assert.strictEqual(STAGE3_ESCALATION_CONFIG.maxEscalatedRetries, 1);
+  });
+
+  test("a persistently-failing context makes only the inner-loop attempts, not the nested 3×3", async () => {
+    // Regression: runSingleAttempt's own MAX_RETRY_ATTEMPTS loop was ALSO wrapped
+    // by retryWithEscalation's default retries (3), so one hard-failing context
+    // burned 3×3 = 9 calls and logged the exhaustion banner 3×. With the wrapper
+    // escalation-only (maxDefaultRetries: 1) it's just the inner attempts, once.
+    let calls = 0;
+    const mockPort = {
+      streamStructuredRequest: () => {
+        calls++;
+        async function* stream() {
+          yield { success: true, value: "not valid json" };
+        }
+        return stream();
+      },
+    } as unknown as SendStructuredRequestPort;
+
+    let exhaustionBanners = 0;
+    const useCase = new ExecutePortMappingUseCase(
+      mockPort,
+      STAGE3_ESCALATION_CONFIG,
+    );
+    const result = await useCase.execute(mockStageState, (chunk) => {
+      if (chunk.includes("attempts exhausted")) exhaustionBanners++;
+    });
+
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(
+      calls,
+      3,
+      `expected 3 inner attempts, not the nested 9; got ${calls}`,
+    );
+    assert.strictEqual(
+      exhaustionBanners,
+      1,
+      "exhaustion banner must log once, not once per outer retry",
+    );
   });
 });

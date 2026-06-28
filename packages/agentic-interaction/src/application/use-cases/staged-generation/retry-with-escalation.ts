@@ -13,14 +13,23 @@ export const DEFAULT_ESCALATION_CONFIG: EscalationConfig = {
 /**
  * Default escalation config for Stage 3 (Port Mapping).
  *
+ * `maxDefaultRetries`/`maxEscalatedRetries` are 1 — this wrapper is ESCALATION-
+ * ONLY, not a retry budget. Stage 3's own per-call loop (`runSingleAttempt`,
+ * MAX_RETRY_ATTEMPTS) already retries the SAME model with a smart retry-prompt
+ * that feeds the failed output back. So the wrapper calls the default model once
+ * (one full inner loop) and, only if that still yields nothing AND an
+ * escalationModel is wired, the escalation model once (another full inner loop).
+ * Setting these >1 re-runs the entire inner loop per outer attempt — e.g. 3×3 = 9
+ * same-model calls for a single context, with the exhaustion banner logged 3×.
+ *
  * `escalationModel` is intentionally undefined here — the wiring layer should
  * inject a model name only when it knows the configured provider supports it.
  * Hardcoding "gpt-4o" here breaks any non-OpenAI provider (NVIDIA, vLLM,
  * Ollama, Anthropic, etc.) with 404s during escalation.
  */
 export const STAGE3_ESCALATION_CONFIG: EscalationConfig = {
-  maxDefaultRetries: 3,
-  maxEscalatedRetries: 3,
+  maxDefaultRetries: 1,
+  maxEscalatedRetries: 1,
   escalationModel: undefined,
 };
 

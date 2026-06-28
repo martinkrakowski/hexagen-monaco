@@ -389,20 +389,31 @@ export class ExecutePortMappingUseCase {
     fullResponse: string;
     retryCount: number;
   }> {
-    const { result, retryCount } = await retryWithEscalation(
+    // Stage 3 retries the SAME model inside runSingleAttempt (a smart retry-
+    // prompt that feeds the failed output back); retryWithEscalation only switches
+    // MODELS. Track the final inner-loop attempt count so the reported retryCount
+    // reflects the same-model retries the user actually saw, plus any escalations.
+    const attemptStats = { attempts: 0 };
+    const { result, retryCount: escalationRetries } = await retryWithEscalation(
       async (preferredCloudModel?: string) => {
         return this.runSingleAttempt(
           initialPrompt,
           onChunk,
           preferredCloudModel,
           onModelResolved,
+          attemptStats,
         );
       },
       this.escalationConfig,
       (attemptResult) => attemptResult.objects.length === 0,
     );
 
-    return { ...result, retryCount };
+    const innerRetries = Math.max(0, attemptStats.attempts - 1);
+    return {
+      objects: result.objects,
+      fullResponse: result.fullResponse,
+      retryCount: innerRetries + escalationRetries,
+    };
   }
 
   private async runSingleAttempt(
@@ -410,6 +421,7 @@ export class ExecutePortMappingUseCase {
     onChunk?: (chunk: string) => void,
     preferredCloudModel?: string,
     onModelResolved?: (info: { provider: string; model: string }) => void,
+    attemptStats?: { attempts: number },
   ): Promise<{
     objects: Record<string, unknown>[];
     fullResponse: string;
@@ -418,6 +430,9 @@ export class ExecutePortMappingUseCase {
     let lastError = "";
 
     for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+      // Surface the inner-loop attempt number so the caller reports the same-model
+      // retry count (the meaningful one), not the model-escalation count.
+      if (attemptStats) attemptStats.attempts = attempt;
       const abortController = new AbortController();
       const timeoutHandle = setTimeout(() => {
         onChunk?.(
