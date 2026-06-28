@@ -2166,14 +2166,34 @@ export class ExecuteStructuredConfigGenerationUseCase {
         domainEntityCount: countDomainMembers(beforeParsed),
         contextNames: manifestContextNames(beforeParsed),
       };
-      // Deterministic baseline: R01–R09 structural errors on the same portMap/
-      // adapterBindings Stage-6 just reviewed. Apples-to-apples with the
-      // post-repair count computed below.
-      const deterministicBefore = structuralManifestErrors(
-        mergedPortMap,
-        mergedAdapterBindings,
-        beforeParsed,
-      ).length;
+      // Deterministic baseline: R01–R09 structural errors. Measure on the SAME
+      // construction path as the post-repair count below — reassemble the
+      // ORIGINAL manifest (buildPreDefinedPortMap), NOT the Stage-3 in-memory
+      // mergedPortMap. The two disagree for an unchanged manifest: the rendered
+      // manifest carries only port NAMES, so buildPreDefinedPortMap re-INFERS each
+      // port's type from its name instead of reading Stage 3's explicit `type` —
+      // e.g. an AI-derived repository port whose name doesn't look like one
+      // re-reads as non-repository, a phantom R03. Comparing the Stage-3 basis
+      // (before) against the reassembled basis (after) made a no-op repair look
+      // like it ADDED structural errors (prod: 2→13 from one edit), so the gate
+      // rejected every repair. Reassembling BOTH sides cancels that reconstruction
+      // loss, so the gate sees only the repair's true delta. Falls back to the
+      // merged structures if the baseline reassembly fails (keepOriginal-safe).
+      const baselineReassembled = this.reassembleRepairedManifest(
+        assembledManifest.parsedObject as unknown as StructuredConfig,
+        { stage0: normalizedPrompt, stage1: domainAnalysis },
+      );
+      const deterministicBefore = baselineReassembled.success
+        ? structuralManifestErrors(
+            baselineReassembled.portMap,
+            baselineReassembled.adapterBindings,
+            beforeParsed,
+          ).length
+        : structuralManifestErrors(
+            mergedPortMap,
+            mergedAdapterBindings,
+            beforeParsed,
+          ).length;
 
       // A context-name change is only a legitimate repair when the baseline had
       // an R01 (banned-name) finding — the one rule whose fix renames a context.
