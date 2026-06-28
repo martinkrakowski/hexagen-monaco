@@ -5,13 +5,13 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { ImportSelectionPage } from "../ImportSelectionPage";
 
 describe("ImportSelectionPage", () => {
-  it("renders three ImportOptionRow instances", () => {
+  it("renders the consolidated import option rows", () => {
     const mockPush = vi.fn();
     render(<ImportSelectionPage router={{ push: mockPush }} />);
-    // Assert the three options by label — a role count is fragile because the
-    // page chrome also renders a Back button.
-    assert.ok(screen.getByText("Import Manifest YAML"));
-    assert.ok(screen.getByText("Import Project Specification"));
+    // Assert the options by label — a role count is fragile because the page
+    // chrome also renders a Back button. The former manifest + spec options are
+    // now a single "Import Manifest or Spec" row (auto-detected on upload).
+    assert.ok(screen.getByText("Import Manifest or Spec"));
     assert.ok(screen.getByText("Import from GitHub"));
   });
 

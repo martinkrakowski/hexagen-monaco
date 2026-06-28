@@ -5,22 +5,20 @@ import {
   type ImportSubOptionId,
 } from "../creation-path.js";
 
-test("IMPORT_SUB_OPTIONS has 3 entries", () => {
-  assert.equal(IMPORT_SUB_OPTIONS.length, 3);
+// The previously-separate "manifest" and "spec" options are consolidated into a
+// single "Import Manifest or Spec" option (the importer auto-detects which on
+// upload); GitHub remains a coming-soon future feature.
+
+test("IMPORT_SUB_OPTIONS has 2 entries (unified import + github)", () => {
+  assert.equal(IMPORT_SUB_OPTIONS.length, 2);
 });
 
-test("IDs are 'manifest', 'spec', 'github'", () => {
+test("IDs are 'spec' and 'github'", () => {
   const ids = IMPORT_SUB_OPTIONS.map((o) => o.id);
-  assert.deepEqual(ids, ["manifest", "spec", "github"]);
+  assert.deepEqual(ids, ["spec", "github"]);
 });
 
-test("manifest is available", () => {
-  const manifest = IMPORT_SUB_OPTIONS.find((o) => o.id === "manifest");
-  assert.ok(manifest);
-  assert.equal(manifest.status, "available");
-});
-
-test("spec is available", () => {
+test("the unified import option ('spec') is available", () => {
   const spec = IMPORT_SUB_OPTIONS.find((o) => o.id === "spec");
   assert.ok(spec);
   assert.equal(spec.status, "available");
@@ -44,13 +42,7 @@ test("each option has non-empty label, description, iconName, and href", () => {
   }
 });
 
-test("manifest href routes through the Project Name step", () => {
-  const manifest = IMPORT_SUB_OPTIONS.find((o) => o.id === "manifest");
-  assert.ok(manifest);
-  assert.equal(manifest.href, "/projects/new/name?path=manifest");
-});
-
-test("spec href routes through the Project Name step", () => {
+test("the unified import option routes through the Project Name step", () => {
   const spec = IMPORT_SUB_OPTIONS.find((o) => o.id === "spec");
   assert.ok(spec);
   assert.equal(spec.href, "/projects/new/name?path=spec");
@@ -62,7 +54,7 @@ test("github href is '/projects/new/import/github'", () => {
   assert.equal(github.href, "/projects/new/import/github");
 });
 
-test("ImportSubOptionId type allows the three values (compile-time check)", () => {
-  const ids: ImportSubOptionId[] = ["manifest", "spec", "github"];
-  assert.equal(ids.length, 3);
+test("ImportSubOptionId type allows the two values (compile-time check)", () => {
+  const ids: ImportSubOptionId[] = ["spec", "github"];
+  assert.equal(ids.length, 2);
 });

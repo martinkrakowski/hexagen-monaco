@@ -54,8 +54,8 @@ describe("creation-path domain", () => {
   });
 
   describe("IMPORT_SUB_OPTIONS", () => {
-    it("has exactly 3 sub-options", () => {
-      assert.strictEqual(IMPORT_SUB_OPTIONS.length, 3);
+    it("has exactly 2 sub-options", () => {
+      assert.strictEqual(IMPORT_SUB_OPTIONS.length, 2);
     });
 
     it("has unique ids", () => {
@@ -64,7 +64,7 @@ describe("creation-path domain", () => {
     });
 
     it("covers all ImportSubOptionId values", () => {
-      const expected: ImportSubOptionId[] = ["manifest", "spec", "github"];
+      const expected: ImportSubOptionId[] = ["spec", "github"];
       const actual = IMPORT_SUB_OPTIONS.map((o) => o.id);
       assert.deepStrictEqual(actual.sort(), expected.sort());
     });

@@ -5,8 +5,8 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { ImportOptionRow } from "../ImportOptionRow";
 import { IMPORT_SUB_OPTIONS } from "../../domain/creation-path";
 
-const mockAvailableOption = IMPORT_SUB_OPTIONS[0]; // manifest - available
-const mockComingSoonOption = IMPORT_SUB_OPTIONS[2]; // github - not available
+const mockAvailableOption = IMPORT_SUB_OPTIONS[0]; // "spec" — consolidated import, available
+const mockComingSoonOption = IMPORT_SUB_OPTIONS[1]; // github — coming-soon
 
 describe("ImportOptionRow", () => {
   it("renders available row as button", () => {
@@ -29,7 +29,7 @@ describe("ImportOptionRow", () => {
         router={{ push: mockPush }}
       />,
     );
-    assert(screen.getByText("Import Manifest YAML") !== null);
+    assert(screen.getByText("Import Manifest or Spec") !== null);
   });
 
   it("shows description for available row", () => {
@@ -40,9 +40,7 @@ describe("ImportOptionRow", () => {
         router={{ push: mockPush }}
       />,
     );
-    assert(
-      screen.getByText(/Resume or adapt a previously generated/i) !== null,
-    );
+    assert(screen.getByText(/upload a generated manifest/i) !== null);
   });
 
   it("renders coming-soon row as div with role=presentation", () => {
