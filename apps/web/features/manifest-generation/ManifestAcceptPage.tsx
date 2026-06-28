@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { ManifestPreview } from "./ManifestPreview";
 import type { ViewTab } from "./ManifestPreview";
+import { ContextGovernanceChatDrawer } from "./ContextGovernanceChatDrawer";
 import { useSavedProjects } from "../../app/hooks/useSavedProjects";
 import { usePendingManifest } from "./store/usePendingManifest";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
@@ -302,6 +303,9 @@ export function ManifestAcceptPage() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
+      {/* Right slide-in AI panel: opens when a Context Map card is clicked
+          (self-managed via useContextChatPanel; fixed-positioned overlay). */}
+      <ContextGovernanceChatDrawer />
     </ProjectsShellWithFreeTier>
   );
 }

@@ -4,8 +4,10 @@ import {
   Cuboid,
   Plug,
   AlertTriangle,
+  Sparkles,
 } from "lucide-react";
 import type { ManifestViewData } from "@hexagen/manifest-generation";
+import { useContextChatPanel } from "./store/useContextChatPanel";
 
 interface ContextMapViewProps {
   viewData: ManifestViewData;
@@ -16,6 +18,7 @@ export function ContextMapView({
   viewData,
   isFullScreen,
 }: ContextMapViewProps) {
+  const openChat = useContextChatPanel((s) => s.open);
   return (
     <div className="max-w-5xl mx-auto p-6">
       <div className="flex items-center gap-3 mb-6 animate-fade-in-up">
@@ -44,7 +47,17 @@ export function ContextMapView({
           return (
             <div
               key={`${ctx.name}-${ctxIndex}`}
-              className={`rounded-lg p-4 bg-card border ${cardBorder} transition-colors duration-200 shadow-sm animate-fade-in-up`}
+              role="button"
+              tabIndex={0}
+              onClick={() => openChat(ctx)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  openChat(ctx);
+                }
+              }}
+              aria-label={`Ask AI about the ${ctx.name} context`}
+              className={`rounded-lg p-4 bg-card border ${cardBorder} transition-all duration-200 shadow-sm animate-fade-in-up cursor-pointer hover:border-info/40 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-info`}
             >
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-bold px-2 py-1 rounded-sm font-mono tracking-wider uppercase text-info bg-info/10">
@@ -56,9 +69,13 @@ export function ContextMapView({
                       !
                     </span>
                   )}
-                  <span
-                    className={`w-2 h-2 rounded-full animate-soft-pulse ${isError ? "bg-destructive" : isWarn ? "bg-warning" : "bg-success"}`}
-                  ></span>
+                  {/* AI affordance: health-tinted so it doubles as the status
+                      cue the old pulsing dot carried (card border + "!" badge
+                      also reflect health). Clicking the card asks the AI. */}
+                  <Sparkles
+                    aria-hidden="true"
+                    className={`w-4 h-4 animate-soft-pulse ${isError ? "text-destructive" : isWarn ? "text-warning" : "text-success"}`}
+                  />
                 </div>
               </div>
               <h3 className="text-sm font-bold mb-1 text-foreground">
