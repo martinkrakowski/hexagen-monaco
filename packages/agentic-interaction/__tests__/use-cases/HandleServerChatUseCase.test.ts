@@ -107,6 +107,22 @@ test("surfaces an explicit error after every attempt returns empty", async () =>
   assert.equal(callCount(), 3, "all configured attempts were used");
 });
 
+test("stops retrying once the wall-clock budget is exhausted", async () => {
+  // A zero budget means even one empty attempt exhausts it: we must not keep
+  // retrying toward maxAttempts and risk blowing the edge timeout.
+  const { provider, callCount } = fakeProvider([[], [], [], [], []]);
+  const useCase = new HandleServerChatUseCase(provider, "test-model", 5, 0);
+
+  const frames = await readFrames(
+    await useCase.handleRequest({ messages: [] }, { id: "u1" }),
+  );
+
+  const error = frames.find((f) => f.type === "error");
+  assert.match(error!.message!, /empty response after 1 attempt\b/i);
+  assert.equal(frames.at(-1)?.type, "done");
+  assert.equal(callCount(), 1, "the budget halted retries after one attempt");
+});
+
 test("does not retry a hard provider error (surfaces it immediately)", async () => {
   const { provider, callCount } = fakeProvider([
     [err(new Error("LLM API error: 401 invalid key"))],
