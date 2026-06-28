@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { ManifestPreview } from "./ManifestPreview";
 import type { ViewTab } from "./ManifestPreview";
-import { ContextGovernanceChatDrawer } from "./ContextGovernanceChatDrawer";
 import { useContextChatPanel } from "./store/useContextChatPanel";
 import { useSavedProjects } from "../../app/hooks/useSavedProjects";
 import { usePendingManifest } from "./store/usePendingManifest";
@@ -301,6 +300,9 @@ export function ManifestAcceptPage() {
           {saveError}
         </div>
       )}
+      {/* The AI governance chat is integrated into the preview frame as a
+          collapsible third column (desktop) / slide-in overlay (mobile); it
+          opens when a Context Map card is clicked via useContextChatPanel. */}
       <ManifestPreview
         manifestYaml={pendingManifest.yaml ?? ""}
         onApprove={handleApprove}
@@ -310,12 +312,10 @@ export function ManifestAcceptPage() {
         hideActions
         hideHeader
         embedded
+        showContextChat
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
-      {/* Right slide-in AI panel: opens when a Context Map card is clicked
-          (self-managed via useContextChatPanel; fixed-positioned overlay). */}
-      <ContextGovernanceChatDrawer />
     </ProjectsShellWithFreeTier>
   );
 }

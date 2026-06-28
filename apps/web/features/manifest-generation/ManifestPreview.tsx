@@ -14,9 +14,19 @@ import {
 import { Button } from "@hexagen/ui";
 import { ManifestYamlSidebar } from "./ManifestYamlSidebar";
 import { ManifestResizeHandle } from "./ManifestResizeHandle";
-import { Panel, PanelGroup } from "react-resizable-panels";
+import {
+  Panel,
+  PanelGroup,
+  type ImperativePanelHandle,
+} from "react-resizable-panels";
 import { useIsDesktop } from "./useIsDesktop";
 import { ContextMapView } from "./ContextMapView";
+import { useContextChatPanel } from "./store/useContextChatPanel";
+import {
+  ContextGovernanceChatPanel,
+  ContextChatCollapsedStrip,
+} from "./ContextGovernanceChatPanel";
+import { ContextGovernanceChatDrawer } from "./ContextGovernanceChatDrawer";
 import { MermaidDiagramView } from "./MermaidDiagramView";
 import { ValidationReportView } from "./ValidationReportView";
 import { ManifestAutoFixDrawer } from "./ManifestAutoFixDrawer";
@@ -40,9 +50,18 @@ interface ManifestPreviewProps {
   onTabChange?: (tab: ViewTab) => void;
   embedded?: boolean;
   isApproveDisabled?: boolean;
+  /**
+   * Opt in to the in-frame AI governance chat column (accept view). On desktop
+   * it renders as a collapsible third resizable column; below md it falls back
+   * to a slide-in overlay. Clicking a Context Map card opens/seeds it.
+   */
+  showContextChat?: boolean;
 }
 
 export type ViewTab = "context-map" | "mermaid" | "validation";
+
+/** Default width (%) the AI chat column opens to when revealed. */
+const AI_PANEL_DEFAULT_SIZE = 28;
 
 export function ManifestPreview({
   manifestYaml,
@@ -56,6 +75,7 @@ export function ManifestPreview({
   onTabChange,
   embedded,
   isApproveDisabled,
+  showContextChat,
 }: ManifestPreviewProps) {
   const [internalActiveTab, setInternalActiveTab] =
     useState<ViewTab>("context-map");
@@ -66,6 +86,31 @@ export function ManifestPreview({
   // Desktop (md+) shows the resizable YAML column; below md it's hidden and the
   // YAML lives in the mobile overlay, so the PanelGroup is desktop-only.
   const isDesktop = useIsDesktop();
+
+  // --- AI governance chat column (accept view only; opt-in via showContextChat) ---
+  const aiPanelRef = useRef<ImperativePanelHandle>(null);
+  const [aiCollapsed, setAiCollapsed] = useState(false);
+  const aiChatIsOpen = useContextChatPanel((s) => s.isOpen);
+  const aiSelectedContext = useContextChatPanel((s) => s.selectedContext);
+  const closeAiChat = useContextChatPanel((s) => s.close);
+  const openAiChat = useContextChatPanel((s) => s.open);
+
+  // Reveal the column whenever a context is opened from the map. We only force a
+  // size when it's currently collapsed, so a click never disturbs a width the
+  // user has dragged while the column is already open.
+  useEffect(() => {
+    if (!showContextChat || !isDesktop || !aiChatIsOpen) return;
+    const panel = aiPanelRef.current;
+    if (panel?.isCollapsed()) panel.resize(AI_PANEL_DEFAULT_SIZE);
+  }, [aiChatIsOpen, showContextChat, isDesktop]);
+
+  const collapseAiPanel = () => aiPanelRef.current?.collapse();
+  const expandAiPanel = () => {
+    // Re-opening the last context keeps its conversation; with no prior context
+    // just size the (empty-state) column open.
+    if (aiSelectedContext) openAiChat(aiSelectedContext);
+    else aiPanelRef.current?.resize(AI_PANEL_DEFAULT_SIZE);
+  };
 
   // Local state for manifest to allow inline auto-fixes
   const [localManifestYaml, setLocalManifestYaml] = useState(manifestYaml);
@@ -220,37 +265,77 @@ export function ManifestPreview({
 
       <main className="relative z-10 flex flex-1 overflow-hidden">
         {isDesktop ? (
-          <PanelGroup
-            direction="horizontal"
-            autoSaveId="manifest-preview-layout"
-            className="flex flex-1"
-          >
-            <Panel
-              id="manifest-yaml"
-              order={1}
-              defaultSize={30}
-              minSize={25}
-              maxSize={60}
+          <>
+            <PanelGroup
+              direction="horizontal"
+              // Bump the persistence key when the AI column is present so a saved
+              // two-column layout can't strand the third panel at a stale size.
+              autoSaveId={
+                showContextChat
+                  ? "manifest-preview-layout-ai"
+                  : "manifest-preview-layout"
+              }
+              className="flex flex-1"
             >
-              <ManifestYamlSidebar
-                yamlString={localManifestYaml}
-                viewData={viewData}
-              />
-            </Panel>
-            <ManifestResizeHandle />
-            <Panel
-              id="manifest-content"
-              order={2}
-              defaultSize={70}
-              minSize={40}
-            >
-              {content}
-            </Panel>
-          </PanelGroup>
+              <Panel
+                id="manifest-yaml"
+                order={1}
+                defaultSize={showContextChat ? 26 : 30}
+                minSize={22}
+                maxSize={60}
+              >
+                <ManifestYamlSidebar
+                  yamlString={localManifestYaml}
+                  viewData={viewData}
+                />
+              </Panel>
+              <ManifestResizeHandle />
+              <Panel
+                id="manifest-content"
+                order={2}
+                defaultSize={showContextChat ? 46 : 70}
+                minSize={35}
+              >
+                {content}
+              </Panel>
+              {showContextChat && (
+                <>
+                  <ManifestResizeHandle />
+                  <Panel
+                    id="manifest-ai-chat"
+                    order={3}
+                    ref={aiPanelRef}
+                    defaultSize={AI_PANEL_DEFAULT_SIZE}
+                    minSize={22}
+                    maxSize={45}
+                    collapsible
+                    collapsedSize={0}
+                    onCollapse={() => {
+                      setAiCollapsed(true);
+                      closeAiChat();
+                    }}
+                    onExpand={() => setAiCollapsed(false)}
+                  >
+                    <ContextGovernanceChatPanel
+                      onRequestCollapse={collapseAiPanel}
+                    />
+                  </Panel>
+                </>
+              )}
+            </PanelGroup>
+            {showContextChat && aiCollapsed && (
+              <ContextChatCollapsedStrip onExpand={expandAiPanel} />
+            )}
+          </>
         ) : (
           content
         )}
       </main>
+
+      {/* Mobile: no room for a third column, so the chat is a slide-in overlay.
+          Exactly one of the panel/overlay mounts (by viewport), so the shared
+          chat state lives in a single place. */}
+      {showContextChat && !isDesktop && <ContextGovernanceChatDrawer />}
 
       <button
         type="button"
