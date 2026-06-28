@@ -137,6 +137,10 @@ describe("ImportProjectSpecPage", () => {
     ].join("\n");
     const file = new File([manifest], "manifest.yaml", { type: "text/yaml" });
 
+    // Pre-seed a stale spec from a prior upload this session — uploading a
+    // manifest must CLEAR it (not just skip persisting), so Back lands clean.
+    sessionStorage.setItem("import_spec_content", "stale: spec");
+
     const fileInput = screen.getByLabelText(/upload manifest or spec/i);
     await user.upload(fileInput as HTMLElement, file);
 

@@ -39,8 +39,9 @@ export function SpecUploadStep({ onFileLoaded }: SpecUploadStepProps) {
         className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-accent file:text-accent-foreground hover:file:bg-accent/90"
       />
       <p id="file-help" className="text-sm text-muted-foreground mt-2">
-        Accepts .yaml, .yml, or .json — a generated manifest or a structured
-        spec.
+        Accepts .yaml, .yml, .json, .txt, or .md — a generated manifest, a
+        structured spec, or a prose description (we detect which and route
+        accordingly).
       </p>
     </div>
   );

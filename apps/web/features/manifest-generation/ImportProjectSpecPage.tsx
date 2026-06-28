@@ -171,6 +171,10 @@ export default function ImportProjectSpecPage() {
     // surfaces any parse failure via acceptError (shown on the upload step). A
     // structured spec falls through to the AI flow below.
     if (isGeneratedManifest(parsed)) {
+      // Also clear any spec persisted by an earlier upload this session, so the
+      // accept screen's Back returns to a clean upload page rather than
+      // rehydrating stale content.
+      sessionStorage.removeItem("import_spec_content");
       acceptManifest(content);
       return;
     }
