@@ -104,9 +104,8 @@ describe("ImportProjectSpecPage", () => {
     // queryAllBy* (returns [] on miss, never throws) for a real either/or — the
     // helper copy appears more than once in the upload step.
     const hasInput =
-      screen.queryByLabelText(/upload project specification/i) !== null;
-    const hasHelper =
-      screen.queryAllByText(/upload a yaml or json/i).length > 0;
+      screen.queryByLabelText(/upload manifest or spec/i) !== null;
+    const hasHelper = screen.queryAllByText(/a structured/i).length > 0;
     assert.ok(
       hasInput || hasHelper,
       "upload control or its helper is rendered",
@@ -114,6 +113,54 @@ describe("ImportProjectSpecPage", () => {
     assert.strictEqual(
       screen.queryByText(/doesn't look like a structured spec/i),
       null,
+    );
+  });
+
+  it("Upload a generated manifest: skips AI and routes straight to the accept screen", async () => {
+    const user = userEvent.setup();
+    render(<ImportProjectSpecPage />);
+    // A complete manifest carries derived hexagonal layers (ports/adapters) —
+    // the importer must detect it and go straight to the accept screen, NOT the
+    // spec-review / AI path.
+    const manifest = [
+      "system: test-system",
+      "bounded_contexts:",
+      "  - name: orders",
+      "    layers:",
+      "      application:",
+      "        ports:",
+      "          in: [PlaceOrderPort]",
+      "          out: [OrderRepositoryPort]",
+      "      infrastructure:",
+      "        adapters: [OrderRepositoryAdapter]",
+      "",
+    ].join("\n");
+    const file = new File([manifest], "manifest.yaml", { type: "text/yaml" });
+
+    // Pre-seed a stale spec from a prior upload this session — uploading a
+    // manifest must CLEAR it (not just skip persisting), so Back lands clean.
+    sessionStorage.setItem("import_spec_content", "stale: spec");
+
+    const fileInput = screen.getByLabelText(/upload manifest or spec/i);
+    await user.upload(fileInput as HTMLElement, file);
+
+    await waitFor(() => {
+      assert.ok(
+        routerPush.mock.calls.some((c) => c[0] === "/projects/new/ai/accept"),
+        "a complete manifest routes straight to the accept screen",
+      );
+    });
+    // It must NOT pass through the spec-review step.
+    assert.strictEqual(screen.queryByText(/spec review/i), null);
+
+    // Loop-fix regression: a manifest fast-path must NOT persist
+    // import_spec_content. If it did, the accept screen's Back would rehydrate
+    // this page from sessionStorage and immediately re-fast-path to accept — an
+    // infinite Back→Accept loop. (Specs still persist; that's a separate path.)
+    assert.strictEqual(
+      sessionStorage.getItem("import_spec_content"),
+      null,
+      "a generated manifest is not persisted for rehydration",
     );
   });
 
@@ -125,7 +172,7 @@ describe("ImportProjectSpecPage", () => {
       type: "text/yaml",
     });
 
-    const fileInput = screen.getByLabelText(/upload project specification/i);
+    const fileInput = screen.getByLabelText(/upload manifest or spec/i);
     await user.upload(fileInput as HTMLElement, file);
 
     await waitFor(() => {
@@ -140,7 +187,7 @@ describe("ImportProjectSpecPage", () => {
     const file = new File([yamlContent], "krakowski-portal.yaml", {
       type: "text/yaml",
     });
-    const fileInput = screen.getByLabelText(/upload project specification/i);
+    const fileInput = screen.getByLabelText(/upload manifest or spec/i);
     await user.upload(fileInput, file);
 
     await waitFor(() => {
@@ -156,7 +203,7 @@ describe("ImportProjectSpecPage", () => {
     const file = new File(["Build a SaaS app"], "description.txt", {
       type: "text/plain",
     });
-    const fileInput = screen.getByLabelText(/upload project specification/i);
+    const fileInput = screen.getByLabelText(/upload manifest or spec/i);
     await user.upload(fileInput, file);
 
     await waitFor(() => {
@@ -168,7 +215,7 @@ describe("ImportProjectSpecPage", () => {
     const user = userEvent.setup();
     render(<ImportProjectSpecPage />);
     const file = new File(["plain text"], "test.txt", { type: "text/plain" });
-    const fileInput = screen.getByLabelText(/upload project specification/i);
+    const fileInput = screen.getByLabelText(/upload manifest or spec/i);
     await user.upload(fileInput, file);
 
     await waitFor(() => {
@@ -180,7 +227,7 @@ describe("ImportProjectSpecPage", () => {
     const user = userEvent.setup();
     render(<ImportProjectSpecPage />);
     const file = new File(["plain text"], "test.txt", { type: "text/plain" });
-    const fileInput = screen.getByLabelText(/upload project specification/i);
+    const fileInput = screen.getByLabelText(/upload manifest or spec/i);
     await user.upload(fileInput, file);
 
     await waitFor(() => {
@@ -198,7 +245,7 @@ describe("ImportProjectSpecPage", () => {
     const file = new File([yamlContent], "krakowski-portal.yaml", {
       type: "text/yaml",
     });
-    const fileInput = screen.getByLabelText(/upload project specification/i);
+    const fileInput = screen.getByLabelText(/upload manifest or spec/i);
     await user.upload(fileInput, file);
 
     await waitFor(() => {
@@ -209,7 +256,7 @@ describe("ImportProjectSpecPage", () => {
     await user.click(backButton);
 
     await waitFor(() => {
-      assert.ok(screen.getByLabelText(/upload project specification/i));
+      assert.ok(screen.getByLabelText(/upload manifest or spec/i));
       assert.strictEqual(screen.queryByText(/spec review/i), null);
     });
   });
@@ -218,7 +265,7 @@ describe("ImportProjectSpecPage", () => {
     const user = userEvent.setup();
     render(<ImportProjectSpecPage />);
     const file = new File(["plain text"], "test.txt", { type: "text/plain" });
-    const fileInput = screen.getByLabelText(/upload project specification/i);
+    const fileInput = screen.getByLabelText(/upload manifest or spec/i);
     await user.upload(fileInput, file);
 
     await waitFor(() => {
@@ -229,7 +276,7 @@ describe("ImportProjectSpecPage", () => {
     await user.click(backButton);
 
     await waitFor(() => {
-      assert.ok(screen.getByLabelText(/upload project specification/i));
+      assert.ok(screen.getByLabelText(/upload manifest or spec/i));
       assert.strictEqual(screen.queryByText(/description detected/i), null);
     });
   });
@@ -255,7 +302,7 @@ describe("ImportProjectSpecPage", () => {
     const file = new File([yamlContent], "krakowski-portal.yaml", {
       type: "text/yaml",
     });
-    const fileInput = screen.getByLabelText(/upload project specification/i);
+    const fileInput = screen.getByLabelText(/upload manifest or spec/i);
     await user.upload(fileInput, file);
 
     await waitFor(() => {
@@ -296,7 +343,7 @@ describe("ImportProjectSpecPage", () => {
     const file = new File([yamlContent], "krakowski-portal.yaml", {
       type: "text/yaml",
     });
-    const fileInput = screen.getByLabelText(/upload project specification/i);
+    const fileInput = screen.getByLabelText(/upload manifest or spec/i);
     await user.upload(fileInput, file);
 
     await waitFor(() => {
@@ -339,7 +386,7 @@ describe("ImportProjectSpecPage", () => {
       "We have bounded contexts, some aggregates and value objects. This should trigger the semi-structured mode.";
     const file = new File([looseContent], "loose.txt", { type: "text/plain" });
 
-    const fileInput = screen.getByLabelText(/upload project specification/i);
+    const fileInput = screen.getByLabelText(/upload manifest or spec/i);
     await user.upload(fileInput, file);
 
     await waitFor(() => {

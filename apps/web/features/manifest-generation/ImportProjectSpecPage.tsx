@@ -3,9 +3,11 @@
 import { useState, useCallback, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { InputMode } from "./GenerateWithAi/utils/detect-input-mode";
-import { detectInputMode } from "./GenerateWithAi/utils/detect-input-mode";
+import {
+  detectInputMode,
+  parseMultiDocYaml,
+} from "./GenerateWithAi/utils/detect-input-mode";
 import { logger } from "../../lib/structured-logger";
-import yaml from "js-yaml";
 import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useStagedManifestGeneration } from "./useStagedManifestGeneration";
 import { useLooseSpecConversion } from "./useLooseSpecConversion";
@@ -48,6 +50,35 @@ type SpecPageState =
  * ModelSetupPrompt below uses). */
 const MODEL_SETUP_URL =
   "/projects/new/ai/models?returnUrl=/projects/new/import/spec";
+
+/**
+ * True when the uploaded file is already an application-generated manifest — a
+ * bounded context carries the derived hexagonal output (`layers.application.ports`
+ * or `layers.infrastructure.adapters`). A structured spec never has that (it
+ * carries aggregates / domain_models, not `layers`), so this is the discriminator
+ * for the fast-path that skips the AI workflow and goes straight to the accept
+ * screen. (Run before detectInputMode, which would classify a manifest as
+ * "structured-config" since it, too, has a `bounded_contexts` array.)
+ */
+function isGeneratedManifest(parsed: Record<string, unknown> | null): boolean {
+  if (!parsed || !Array.isArray(parsed.bounded_contexts)) return false;
+  const len = (v: unknown): number => (Array.isArray(v) ? v.length : 0);
+  return (parsed.bounded_contexts as unknown[]).some((c) => {
+    const layers = (c as { layers?: unknown }).layers as
+      | {
+          application?: { ports?: { in?: unknown; out?: unknown } };
+          infrastructure?: { adapters?: unknown };
+        }
+      | undefined;
+    if (!layers || typeof layers !== "object") return false;
+    const ports = layers.application?.ports;
+    return (
+      len(ports?.in) > 0 ||
+      len(ports?.out) > 0 ||
+      len(layers.infrastructure?.adapters) > 0
+    );
+  });
+}
 
 export default function ImportProjectSpecPage() {
   const router = useRouter();
@@ -129,27 +160,38 @@ export default function ImportProjectSpecPage() {
   );
 
   const handleFileLoaded = (content: string) => {
+    setAcceptError(null);
+    // Parse once: reused for the manifest fast-path AND the spec summary
+    // (supports single- and multi-document YAML / JSON, strict on key conflicts).
+    const parsed = parseMultiDocYaml(content);
+
+    // Fast-path: a complete application-generated manifest already carries the
+    // derived hexagonal layers (ports/adapters), so there is nothing for the AI
+    // workflow to do — hand it straight to the accept screen. acceptManifest
+    // surfaces any parse failure via acceptError (shown on the upload step). A
+    // structured spec falls through to the AI flow below.
+    if (isGeneratedManifest(parsed)) {
+      // Also clear any spec persisted by an earlier upload this session, so the
+      // accept screen's Back returns to a clean upload page rather than
+      // rehydrating stale content.
+      sessionStorage.removeItem("import_spec_content");
+      acceptManifest(content);
+      return;
+    }
+
+    // Persist ONLY for the spec/AI paths. A generated manifest fast-paths to the
+    // accept screen; persisting it would let the accept screen's Back rehydrate
+    // this page from sessionStorage and immediately re-fast-path — an infinite
+    // Back→Accept loop.
     sessionStorage.setItem("import_spec_content", content);
+
     const mode: InputMode = detectInputMode(content);
 
     if (mode === "structured-config") {
       setCameFromConversion(false);
       setSpecContent(content);
       setPageState("SPEC_REVIEW");
-      try {
-        // Support both single-document and multi-document YAML (`---`
-        // separators between disjoint top-level sections).
-        const docs = yaml.loadAll(content) as Array<Record<string, unknown>>;
-        const merged: Record<string, unknown> = {};
-        for (const doc of docs) {
-          if (doc && typeof doc === "object" && !Array.isArray(doc)) {
-            Object.assign(merged, doc);
-          }
-        }
-        setSpecSummary(extractSpecSummary(merged));
-      } catch {
-        setSpecSummary(null);
-      }
+      setSpecSummary(parsed ? extractSpecSummary(parsed) : null);
     } else if (mode === "semi-structured") {
       setSpecContent(content);
       void runConversion(content);
@@ -529,7 +571,7 @@ export default function ImportProjectSpecPage() {
     <ProjectsShellWithFreeTier
       headerContent={
         <span className="font-semibold text-sm truncate">
-          Import Project Specification
+          Import Manifest or Spec
         </span>
       }
       footer={renderFooter()}
@@ -561,7 +603,17 @@ export default function ImportProjectSpecPage() {
               )}
 
             {pageState === "UPLOAD" && (
-              <SpecUploadStep onFileLoaded={handleFileLoaded} />
+              <div className="space-y-4">
+                <SpecUploadStep onFileLoaded={handleFileLoaded} />
+                {acceptError && (
+                  <p
+                    role="alert"
+                    className="text-sm text-red-600 dark:text-red-400"
+                  >
+                    {acceptError}
+                  </p>
+                )}
+              </div>
             )}
 
             {pageState === "SPEC_REVIEW" && (

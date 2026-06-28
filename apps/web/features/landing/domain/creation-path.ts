@@ -13,7 +13,7 @@ export interface CreationPathOption {
 }
 
 /** Sub-option identifiers for the import creation path */
-export type ImportSubOptionId = "manifest" | "spec" | "github";
+export type ImportSubOptionId = "spec" | "github";
 
 /** A selectable import sub-option under the import creation path */
 export interface ImportSubOption {
@@ -26,31 +26,19 @@ export interface ImportSubOption {
   readonly status: "available" | "coming-soon";
 }
 
-/** Pre-defined import sub-options: manifest upload, structured config, and GitHub import */
+/** Pre-defined import sub-options: a unified file import (manifest or spec) and GitHub import */
 export const IMPORT_SUB_OPTIONS: readonly ImportSubOption[] = [
   {
-    id: "manifest",
-    label: "Import Manifest YAML",
-    description:
-      "Resume or adapt a previously generated hexagen manifest.yaml.",
-    detail: "No AI involved — direct schema parse and load.",
-    // Route through the shared Project Name step first; it forwards the entered
-    // name to the manifest importer via `?name=`.
-    href: "/projects/new/name?path=manifest",
-    iconName: "FileCode",
-    status: "available",
-  },
-  {
     id: "spec",
-    label: "Import Project Specification",
+    label: "Import Manifest or Spec",
     description:
-      "Upload a structured YAML or JSON domain spec you have already authored.",
+      "Upload a generated manifest.yaml or a structured domain spec you have authored.",
     detail:
-      "AI maps your bounded contexts to hexagonal ports and adapters. Domain derivation is skipped.",
+      "We auto-detect the format: a complete manifest goes straight to review, while a spec is mapped to hexagonal ports and adapters by AI first.",
     // Route through the shared Project Name step first; it forwards the entered
-    // name to the spec importer via `?name=`.
+    // name to the importer via `?name=`. The importer auto-detects manifest vs spec.
     href: "/projects/new/name?path=spec",
-    iconName: "Braces",
+    iconName: "FileCode",
     status: "available",
   },
   {

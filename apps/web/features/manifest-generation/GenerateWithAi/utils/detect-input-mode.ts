@@ -87,8 +87,14 @@ function parseLeanYaml(content: string): Record<string, unknown> | null {
  * Parse multi-document YAML (visual `---` separators) and merge the
  * resulting documents. Returns null if any doc is not an object or if two
  * docs declare the same top-level key with conflicting values.
+ *
+ * Exported so the import page parses uploads with the *same* strict semantics
+ * used here for input-mode detection — no silent last-wins overwrites that could
+ * make the two paths disagree about the same file.
  */
-function parseMultiDocYaml(content: string): Record<string, unknown> | null {
+export function parseMultiDocYaml(
+  content: string,
+): Record<string, unknown> | null {
   let docs: unknown[];
   try {
     docs = yaml.loadAll(content);

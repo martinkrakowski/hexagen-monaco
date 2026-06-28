@@ -8,7 +8,7 @@ import { useSavedProjects } from "@/hooks/useSavedProjects";
 import { logger } from "../../../../lib/structured-logger";
 
 /** Streams that route through the shared Project Name step. */
-type NamedPath = "blank" | "ai" | "manifest" | "spec";
+type NamedPath = "blank" | "ai" | "spec";
 
 const PATH_COPY: Record<NamedPath, { title: string; description: string }> = {
   blank: {
@@ -21,32 +21,22 @@ const PATH_COPY: Record<NamedPath, { title: string; description: string }> = {
     description:
       "Name it first — the AI fills in the architecture next. Used for your saved project and generated workspace.",
   },
-  manifest: {
-    title: "Name your project",
-    description:
-      "Name it before importing. Used for your saved project and generated workspace.",
-  },
   spec: {
     title: "Name your project",
     description:
-      "Name it before uploading your spec. Used for your saved project and generated workspace.",
+      "Name it before importing your manifest or spec. Used for your saved project and generated workspace.",
   },
 };
 
 function isNamedPath(value: string | null): value is NamedPath {
-  return (
-    value === "blank" ||
-    value === "ai" ||
-    value === "manifest" ||
-    value === "spec"
-  );
+  return value === "blank" || value === "ai" || value === "spec";
 }
 
 /**
  * Shared "Project Name" step orchestrator for every Create stream. Reads the
  * target stream from `?path=` and, on submit, dispatches:
  *  - blank  → build + persist a blank project, then open the wizard
- *  - ai/manifest/spec → carry the name forward via `?name=` to the stream entry,
+ *  - ai/spec → carry the name forward via `?name=` to the stream entry,
  *    where it becomes the saved name and seeds `governance.workspaceName`.
  */
 export function NameStepClient() {
@@ -102,8 +92,6 @@ export function NameStepClient() {
       const encoded = encodeURIComponent(name);
       if (path === "ai") {
         router.push(`/projects/new/ai?name=${encoded}`);
-      } else if (path === "manifest") {
-        router.push(`/projects/new/import/manifest?name=${encoded}`);
       } else if (path === "spec") {
         router.push(`/projects/new/import/spec?name=${encoded}`);
       }
@@ -114,7 +102,7 @@ export function NameStepClient() {
   const handleBack = useCallback(() => {
     // Import sub-paths return to the import method picker; blank/ai return to the
     // top-level creation path selection.
-    if (path === "manifest" || path === "spec") {
+    if (path === "spec") {
       router.push("/projects/new/import");
     } else {
       router.push("/projects/new");
