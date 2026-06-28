@@ -134,12 +134,17 @@ export function parseYamlToViewData(yamlString: string): ManifestViewData {
       : "supporting";
     const desc = c.description || "";
 
-    let colorToken = "var(--manifest-context-supporting)";
-    if (type === "core") colorToken = "var(--manifest-context-core)";
-    if (type === "driver") colorToken = "var(--manifest-context-driver)";
-    if (type === "generic") colorToken = "var(--manifest-context-generic)";
+    // The --manifest-context-* vars hold HSL *components* (e.g. `235 40% 45%`),
+    // so they must be wrapped in hsl() to be a valid CSS color — consumers use
+    // colorToken directly (inline style.color, SVG stroke, color-mix) in
+    // HexagonalArchitectureView. A bare `var(--token)` renders as an invalid
+    // color and silently falls back.
+    let colorToken = "hsl(var(--manifest-context-supporting))";
+    if (type === "core") colorToken = "hsl(var(--manifest-context-core))";
+    if (type === "driver") colorToken = "hsl(var(--manifest-context-driver))";
+    if (type === "generic") colorToken = "hsl(var(--manifest-context-generic))";
     if (type === "shared-kernel")
-      colorToken = "var(--manifest-context-shared-kernel)";
+      colorToken = "hsl(var(--manifest-context-shared-kernel))";
 
     const rawPortsIn = c.layers?.application?.ports?.in || [];
     const rawPortsOut = c.layers?.application?.ports?.out || [];

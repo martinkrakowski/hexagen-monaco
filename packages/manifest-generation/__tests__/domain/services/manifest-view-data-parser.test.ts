@@ -34,11 +34,11 @@ describe("parseYamlToViewData context types", () => {
   it("gives the new types their own color tokens", () => {
     assert.strictEqual(
       ctx("scene-types").colorToken,
-      "var(--manifest-context-shared-kernel)",
+      "hsl(var(--manifest-context-shared-kernel))",
     );
     assert.strictEqual(
       ctx("split-view").colorToken,
-      "var(--manifest-context-generic)",
+      "hsl(var(--manifest-context-generic))",
     );
     // shared-kernel must not collapse onto supporting's color anymore.
     assert.notStrictEqual(
