@@ -103,7 +103,15 @@ describe("ContextGovernanceChatDrawer", () => {
     });
     fireEvent.click(sendButton);
 
-    await waitFor(() => assert.strictEqual(chatRequests, 2));
+    // Wait on `>= 2` (not exact `=== 2`): if a regression duplicate-sends, the
+    // counter skips past 2 and an exact-equality waitFor would hang into a
+    // timeout instead of failing clearly. The exact count is asserted below.
+    await waitFor(() => assert.ok(chatRequests >= 2));
+    assert.strictEqual(
+      chatRequests,
+      2,
+      "exactly one follow-up request is sent (no duplicate)",
+    );
 
     // The follow-up payload: the prior seed turn stays raw (no grounding), and
     // only the newest user turn carries the folded grounding — so the grounding
