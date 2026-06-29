@@ -5,6 +5,7 @@ import {
   applyManifestOps,
   type ManifestObject,
 } from "../../../src/domain/manifest/apply-repair-ops";
+import { applyRepairOpsToYaml } from "../../../src/domain/manifest/apply-repair-ops-to-yaml";
 
 // Follow-up C: the reviewer emits a small typed op-list applied deterministically,
 // instead of re-emitting the whole manifest (which faithfully reproduced ~2k
@@ -230,5 +231,135 @@ describe("applyManifestOps", () => {
       ["AuditLogPort"],
     );
     assert.ok(ctxOf(input, "payment-gateway"), "original context name intact");
+  });
+});
+
+describe("remove ops (interactive 'apply fix' from the chat)", () => {
+  test("remove-out-port / remove-in-port / remove-adapter strip the entity", () => {
+    const { manifest, applied, skipped } = applyManifestOps(base(), [
+      {
+        op: "remove-in-port",
+        context: "identity-access",
+        name: "RegisterUserPort",
+      },
+      {
+        op: "remove-out-port",
+        context: "identity-access",
+        name: "AuditLogPort",
+      },
+      {
+        op: "remove-adapter",
+        context: "identity-access",
+        name: "AuditLogAdapter",
+      },
+    ]);
+    assert.strictEqual(applied, 3);
+    assert.deepStrictEqual(skipped, []);
+    const ctx = ctxOf(manifest, "identity-access")!;
+    assert.deepStrictEqual(ctx.layers?.application?.ports?.in, [
+      "AuthenticateUserPort",
+    ]);
+    assert.deepStrictEqual(ctx.layers?.application?.ports?.out, []);
+    assert.deepStrictEqual(ctx.layers?.infrastructure?.adapters, []);
+  });
+
+  test("remove ops skip (don't throw) on an unknown context or missing entity", () => {
+    const { applied, skipped } = applyManifestOps(base(), [
+      { op: "remove-in-port", context: "nope", name: "X" },
+      { op: "remove-adapter", context: "identity-access", name: "Ghost" },
+    ]);
+    assert.strictEqual(applied, 0);
+    assert.strictEqual(skipped.length, 2);
+  });
+
+  test("remove matches object-shaped entries by name (not just strings)", () => {
+    const m: ManifestObject = {
+      bounded_contexts: [
+        {
+          name: "orders",
+          layers: {
+            application: {
+              ports: { in: [{ name: "PlaceOrderPort" }], out: [] },
+            },
+            infrastructure: { adapters: [{ name: "OrderRepoAdapter" }] },
+          },
+        },
+      ],
+    };
+    const { manifest, applied } = applyManifestOps(m, [
+      { op: "remove-in-port", context: "orders", name: "PlaceOrderPort" },
+      { op: "remove-adapter", context: "orders", name: "OrderRepoAdapter" },
+    ]);
+    assert.strictEqual(applied, 2);
+    const ctx = ctxOf(manifest, "orders")!;
+    assert.deepStrictEqual(ctx.layers?.application?.ports?.in, []);
+    assert.deepStrictEqual(ctx.layers?.infrastructure?.adapters, []);
+  });
+
+  test("remove-context drops the context and prunes mappings + depends_on", () => {
+    const { manifest, applied } = applyManifestOps(base(), [
+      { op: "remove-context", context: "payment-gateway" },
+    ]);
+    assert.strictEqual(applied, 1);
+    assert.strictEqual(ctxOf(manifest, "payment-gateway"), undefined);
+    assert.deepStrictEqual(manifest.context_mappings, []);
+    assert.deepStrictEqual(
+      ctxOf(manifest, "identity-access")?.depends_on,
+      [],
+      "the dangling depends_on ref is pruned",
+    );
+  });
+});
+
+describe("applyRepairOpsToYaml", () => {
+  test("round-trips YAML and applies the ops (the 'make scene-types type-only' case)", () => {
+    const yaml = [
+      "bounded_contexts:",
+      "  - name: scene-types",
+      "    type: shared-kernel",
+      "    layers:",
+      "      application:",
+      "        ports:",
+      "          in:",
+      "            - SceneTypesCommandPort",
+      "          out:",
+      "            - SceneTypesRepositoryPort",
+      "      infrastructure:",
+      "        adapters:",
+      "          - SceneTypesRepositoryAdapter",
+      "",
+    ].join("\n");
+    const { yaml: out, applied } = applyRepairOpsToYaml(yaml, [
+      {
+        op: "remove-in-port",
+        context: "scene-types",
+        name: "SceneTypesCommandPort",
+      },
+      {
+        op: "remove-out-port",
+        context: "scene-types",
+        name: "SceneTypesRepositoryPort",
+      },
+      {
+        op: "remove-adapter",
+        context: "scene-types",
+        name: "SceneTypesRepositoryAdapter",
+      },
+    ]);
+    assert.strictEqual(applied, 3);
+    assert.ok(!out.includes("SceneTypesCommandPort"));
+    assert.ok(!out.includes("SceneTypesRepositoryPort"));
+    assert.ok(!out.includes("SceneTypesRepositoryAdapter"));
+    assert.ok(out.includes("name: scene-types"), "the context itself stays");
+  });
+
+  test("returns the input unchanged (all skipped) on unparseable YAML, never throws", () => {
+    const bad = "this: : not: valid: yaml:::";
+    const res = applyRepairOpsToYaml(bad, [
+      { op: "remove-adapter", context: "x", name: "Y" },
+    ]);
+    assert.strictEqual(res.yaml, bad);
+    assert.strictEqual(res.applied, 0);
+    assert.strictEqual(res.skipped.length, 1);
   });
 });

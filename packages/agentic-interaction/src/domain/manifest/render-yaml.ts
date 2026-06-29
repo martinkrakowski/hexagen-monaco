@@ -10,7 +10,7 @@ async function computeToken(content: string): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-const YAML_DUMP_OPTIONS: yaml.DumpOptions = {
+export const YAML_DUMP_OPTIONS: yaml.DumpOptions = {
   indent: 2,
   lineWidth: -1,
   noRefs: true,

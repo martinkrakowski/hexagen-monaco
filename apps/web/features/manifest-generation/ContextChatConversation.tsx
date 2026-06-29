@@ -5,6 +5,9 @@ import { useContextChatPanel } from "./store/useContextChatPanel";
 import type { ContextView } from "./store/useContextChatPanel";
 import { useGovernanceChat } from "./useGovernanceChat";
 import { buildContextQuestion } from "./build-context-question";
+import { useContextFixes } from "./useContextFixes";
+import { ContextFixSuggestions } from "./ContextFixSuggestions";
+import { usePendingManifest } from "./store/usePendingManifest";
 import { ChatMessageList } from "../../components/chat/ChatMessageList";
 import { ChatComposer } from "../../components/chat/ChatComposer";
 
@@ -51,6 +54,21 @@ export function ContextChatConversation() {
     });
   }, [selectedContext, sendMessage]);
 
+  // Only extract fixes when there's a manifest to edit (selector returns a bool
+  // so it re-renders only when presence flips, not on every yaml change).
+  const hasManifest = usePendingManifest((s) => s.yaml != null);
+  // The review has settled once streaming has stopped and there's a non-empty
+  // assistant turn (an errored review leaves status "error" → no fix extraction).
+  const reviewComplete =
+    status === "idle" &&
+    messages.some((m) => m.role === "assistant" && m.content.trim().length > 0);
+  const {
+    fixes,
+    status: fixStatus,
+    appliedIds,
+    markApplied,
+  } = useContextFixes(selectedContext, reviewComplete && hasManifest);
+
   return (
     <div className="flex flex-1 min-h-0 flex-col">
       <ChatMessageList
@@ -62,6 +80,12 @@ export function ContextChatConversation() {
             Click a context to ask the AI about it.
           </p>
         }
+      />
+      <ContextFixSuggestions
+        fixes={fixes}
+        status={fixStatus}
+        appliedIds={appliedIds}
+        onApplied={markApplied}
       />
       <ChatComposer
         onSubmit={(text) =>

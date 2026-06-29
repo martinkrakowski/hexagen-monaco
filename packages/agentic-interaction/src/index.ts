@@ -4,6 +4,21 @@ export {
   coerceContextType,
   coercePort,
 } from "./domain/manifest/coerce-raw-topology";
+// Structured manifest edit-ops — applied deterministically to a manifest (Stage 7
+// repair, and the accept-view chat's "apply suggested fix" flow).
+export {
+  applyManifestOps,
+  parseRepairOps,
+} from "./domain/manifest/apply-repair-ops";
+export type {
+  RepairOp,
+  ManifestObject,
+  ApplyOpsResult,
+} from "./domain/manifest/apply-repair-ops";
+export {
+  applyRepairOpsToYaml,
+  type ApplyOpsToYamlResult,
+} from "./domain/manifest/apply-repair-ops-to-yaml";
 export type {
   LLMProviderPort,
   LLMMessage,
