@@ -10,7 +10,10 @@ async function computeToken(content: string): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-const YAML_DUMP_OPTIONS: yaml.DumpOptions = {
+// Frozen: it's shared across both render paths (renderManifestYaml and the
+// client's applyRepairOpsToYaml), so a stray consumer mutation must not be able
+// to change canonical serialization. js-yaml only reads these options.
+export const YAML_DUMP_OPTIONS: yaml.DumpOptions = Object.freeze({
   indent: 2,
   lineWidth: -1,
   noRefs: true,
@@ -18,7 +21,7 @@ const YAML_DUMP_OPTIONS: yaml.DumpOptions = {
   quotingType: '"',
   forceQuotes: false,
   skipInvalid: false,
-};
+});
 
 export function renderManifestYaml(manifest: ManifestOutput): string {
   return yaml.dump(manifest, YAML_DUMP_OPTIONS);

@@ -14,6 +14,10 @@ export type RepairOp =
   | { op: "add-out-port"; context: string; name: string }
   | { op: "add-in-port"; context: string; name: string }
   | { op: "add-adapter"; context: string; name: string }
+  | { op: "remove-out-port"; context: string; name: string }
+  | { op: "remove-in-port"; context: string; name: string }
+  | { op: "remove-adapter"; context: string; name: string }
+  | { op: "remove-context"; context: string }
   | { op: "rename-port"; context: string; from: string; to: string }
   | { op: "rename-context"; from: string; to: string };
 
@@ -46,6 +50,15 @@ export interface ApplyOpsResult {
 const cleanString = (v: unknown): string | null =>
   typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
 
+/** A port/adapter entry matches `name` when it's that string, or an object whose
+ * `name` is that string — generated manifests use either shape, and remove ops
+ * must hit both. */
+const entryMatchesName = (entry: unknown, name: string): boolean =>
+  entry === name ||
+  (entry != null &&
+    typeof entry === "object" &&
+    (entry as { name?: unknown }).name === name);
+
 /** Validate one raw object as a RepairOp; null if it isn't a recognised op. */
 function validateOp(item: unknown): RepairOp | null {
   if (!item || typeof item !== "object") return null;
@@ -54,10 +67,17 @@ function validateOp(item: unknown): RepairOp | null {
   switch (op) {
     case "add-out-port":
     case "add-in-port":
-    case "add-adapter": {
+    case "add-adapter":
+    case "remove-out-port":
+    case "remove-in-port":
+    case "remove-adapter": {
       const context = cleanString(o.context);
       const name = cleanString(o.name);
       return context && name ? ({ op, context, name } as RepairOp) : null;
+    }
+    case "remove-context": {
+      const context = cleanString(o.context);
+      return context ? { op, context } : null;
     }
     case "rename-port": {
       const context = cleanString(o.context);
@@ -88,7 +108,7 @@ function validateOp(item: unknown): RepairOp | null {
  * prompt itself tells it about the `[R01]`/`[R03]` finding tags, so that prose is
  * a likely shape. Scanning all balanced spans lets us pick the array that parses.
  */
-function extractBracketArrays(text: string): string[] {
+export function extractBracketArrays(text: string): string[] {
   const spans: string[] = [];
   let depth = 0;
   let startIdx = -1;
@@ -225,6 +245,40 @@ export function applyManifestOps(
       continue;
     }
 
+    if (op.op === "remove-context") {
+      const idx = contexts.findIndex(
+        (c) =>
+          c != null &&
+          normalizeContextName(c.name ?? "") ===
+            normalizeContextName(op.context),
+      );
+      if (idx === -1) {
+        skip(op, `context '${op.context}' not found`);
+        continue;
+      }
+      const removedNorm = normalizeContextName(op.context);
+      contexts.splice(idx, 1);
+      // Drop mappings that reference the removed context, and prune it from any
+      // remaining context's depends_on — leaving them would dangle (R07).
+      if (Array.isArray(next.context_mappings)) {
+        next.context_mappings = next.context_mappings.filter(
+          (m) =>
+            m != null &&
+            normalizeContextName(String(m.upstream ?? "")) !== removedNorm &&
+            normalizeContextName(String(m.downstream ?? "")) !== removedNorm,
+        );
+      }
+      for (const c of contexts) {
+        if (Array.isArray(c.depends_on)) {
+          c.depends_on = c.depends_on.filter(
+            (d) => normalizeContextName(String(d)) !== removedNorm,
+          );
+        }
+      }
+      applied++;
+      continue;
+    }
+
     const ctx = findCtx(op.context);
     if (!ctx) {
       skip(op, `context '${op.context}' not found`);
@@ -233,7 +287,7 @@ export function applyManifestOps(
 
     if (op.op === "add-out-port" || op.op === "add-in-port") {
       const list = ensurePortList(ctx, op.op === "add-out-port" ? "out" : "in");
-      if (list.includes(op.name)) {
+      if (list.some((e) => entryMatchesName(e, op.name))) {
         skip(op, `port '${op.name}' already present`);
         continue;
       }
@@ -241,7 +295,7 @@ export function applyManifestOps(
       applied++;
     } else if (op.op === "add-adapter") {
       const list = ensureAdapterList(ctx);
-      if (list.includes(op.name)) {
+      if (list.some((e) => entryMatchesName(e, op.name))) {
         skip(op, `adapter '${op.name}' already present`);
         continue;
       }
@@ -255,10 +309,13 @@ export function applyManifestOps(
       const ports = ctx.layers?.application?.ports;
       // Refuse to rename onto a name already in the context — it would create a
       // duplicate port, which checkDuplicatePortNames flags and which would fail
-      // (or be undone by) re-validation, discarding the whole repair.
+      // (or be undone by) re-validation, discarding the whole repair. Match both
+      // string and `{name}` entry shapes, same as removals.
       const collides = (["in", "out"] as const).some((slot) => {
         const list = ports?.[slot];
-        return Array.isArray(list) && list.includes(op.to);
+        return (
+          Array.isArray(list) && list.some((e) => entryMatchesName(e, op.to))
+        );
       });
       if (collides) {
         skip(op, `target port '${op.to}' already present`);
@@ -268,15 +325,50 @@ export function applyManifestOps(
       for (const slot of ["in", "out"] as const) {
         const list = ports?.[slot];
         if (Array.isArray(list)) {
-          const i = list.findIndex((p) => p === op.from);
+          const i = list.findIndex((p) => entryMatchesName(p, op.from));
           if (i !== -1) {
-            list[i] = op.to;
+            const cur = list[i];
+            // Preserve the entry's shape: rename the `name` of an object entry,
+            // or replace a bare string with the new string.
+            list[i] =
+              cur != null && typeof cur === "object"
+                ? { ...(cur as Record<string, unknown>), name: op.to }
+                : op.to;
             found = true;
           }
         }
       }
       if (found) applied++;
       else skip(op, `port '${op.from}' not found`);
+    } else if (op.op === "remove-in-port" || op.op === "remove-out-port") {
+      const slot = op.op === "remove-in-port" ? "in" : "out";
+      const ports = ctx.layers?.application?.ports;
+      const list = ports?.[slot];
+      if (!ports || !Array.isArray(list)) {
+        skip(op, `no ${slot} ports on '${op.context}'`);
+        continue;
+      }
+      const kept = list.filter((p) => !entryMatchesName(p, op.name));
+      if (kept.length === list.length) {
+        skip(op, `port '${op.name}' not found`);
+        continue;
+      }
+      ports[slot] = kept;
+      applied++;
+    } else if (op.op === "remove-adapter") {
+      const infra = ctx.layers?.infrastructure;
+      const list = infra?.adapters;
+      if (!infra || !Array.isArray(list)) {
+        skip(op, `no adapters on '${op.context}'`);
+        continue;
+      }
+      const kept = list.filter((a) => !entryMatchesName(a, op.name));
+      if (kept.length === list.length) {
+        skip(op, `adapter '${op.name}' not found`);
+        continue;
+      }
+      infra.adapters = kept;
+      applied++;
     }
   }
 
