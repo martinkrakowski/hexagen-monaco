@@ -1296,6 +1296,39 @@ export function sanitizeBannedContextNames(config: StructuredConfig): {
   return { renamed };
 }
 
+/**
+ * Single-ownership advisory: a port NAME declared in the SAME direction (in/out)
+ * by more than one context is a DDD ownership smell — each context wires its own
+ * adapter to a "shared" contract whose owner is ambiguous. Surfaced as a warning
+ * to ADDRESS (consolidate to one owner + a context-mapping, or give distinct
+ * names), never auto-fixed. Inbound EVENT ports are exempt: multiple listeners of
+ * one event is legitimate pub/sub fan-out, not contested ownership. (Cross-context
+ * duplicates don't trip the per-context R04/R05 gate, so without this they're
+ * invisible.)
+ */
+export function detectSharedPortOwnership(portMap: PortMap): string[] {
+  const warnings: string[] = [];
+  for (const slot of ["in", "out"] as const) {
+    const owners = new Map<string, Set<string>>();
+    for (const ctx of portMap.contexts) {
+      for (const port of ctx[slot]) {
+        if (slot === "in" && port.type === "event") continue;
+        let set = owners.get(port.name);
+        if (!set) owners.set(port.name, (set = new Set<string>()));
+        set.add(ctx.contextName);
+      }
+    }
+    for (const [name, ctxs] of owners) {
+      if (ctxs.size < 2) continue;
+      const list = [...ctxs].sort();
+      warnings.push(
+        `${slot === "in" ? "Inbound" : "Outbound"} port '${name}' is declared by ${ctxs.size} contexts (${list.join(", ")}) — in DDD a port has one owning context. Consolidate it to a single owner (the others depend via a context-mapping) or give them distinct names.`,
+      );
+    }
+  }
+  return warnings.sort();
+}
+
 export function buildPreDefinedPortMap(config: StructuredConfig): PortMap {
   // Coerce + drop un-nameable entries so a typed-object port doesn't throw the
   // whole rebuild; discards are reported separately (collectMalformedManifestEntries).
@@ -2278,6 +2311,17 @@ export class ExecuteStructuredConfigGenerationUseCase {
       finalReport = {
         ...finalReport,
         warnings: [...finalReport.warnings, ...assemblyAdvisories],
+      };
+    }
+
+    // Single-ownership advisory: a port name owned by >1 context is a DDD smell
+    // the per-context R04/R05 gate can't see. A warning to ADDRESS (not an
+    // auto-fix), added before Stage 7 so it survives both report paths.
+    const sharedPortWarnings = detectSharedPortOwnership(mergedPortMap);
+    if (sharedPortWarnings.length > 0) {
+      finalReport = {
+        ...finalReport,
+        warnings: [...finalReport.warnings, ...sharedPortWarnings],
       };
     }
 
