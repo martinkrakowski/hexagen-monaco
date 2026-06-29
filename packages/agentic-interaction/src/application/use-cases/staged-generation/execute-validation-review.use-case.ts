@@ -9,7 +9,7 @@ import {
   validatePortQuality,
   normalizeContextName,
 } from "../../../domain/index";
-import { isBannedContextName } from "../../../domain/prompts/architecture-contract";
+import { bannedTokensInContextName } from "../../../domain/prompts/architecture-contract";
 import type {
   ValidationReport,
   PipelineState,
@@ -253,9 +253,11 @@ export class ExecuteValidationReviewUseCase {
         // - R01 (judge-grounding fix, baseline findings F3): the judge prompt
         //   no longer carries the banned-token list, so any R01 claim the LLM
         //   emits is by construction ungrounded — discard it, then recompute
-        //   R01 here from the accepted context names. Uses isBannedContextName,
-        //   so the prose-only "rest" carve-out applies (consistent with the
-        //   Stage 2 deterministic filter).
+        //   R01 here from the accepted context names. Uses
+        //   bannedTokensInContextName (same token set as isBannedContextName, so
+        //   the prose-only "rest" carve-out applies, consistent with the Stage 2
+        //   deterministic filter) — naming the offending token(s) so the finding
+        //   is actionable.
         // - R16/R17/R18: collectPortQualityIssues below recomputes them
         //   exactly (validatePortQuality, including the runtime-concern leak
         //   net — runtimeConcerns is passed), so any LLM claim for these
@@ -288,9 +290,13 @@ export class ExecuteValidationReviewUseCase {
         const finalErrors = errors.filter((m) => !isDeterministicClaim(m));
         const finalWarnings = warnings.filter((m) => !isDeterministicClaim(m));
         for (const ctx of state.stage2?.accepted ?? []) {
-          if (isBannedContextName(ctx.name)) {
+          const bannedTokens = bannedTokensInContextName(ctx.name);
+          if (bannedTokens.length > 0) {
+            const tokenList = bannedTokens.map((t) => `'${t}'`).join(", ");
             finalErrors.push(
-              `[R01] Context '${ctx.name}' violates R01: name contains a banned technology token.`,
+              `[R01] Context '${ctx.name}' violates R01: the name contains the banned technology token${
+                bannedTokens.length > 1 ? "s" : ""
+              } ${tokenList} — rename it to a domain concept (a context is named after a business capability, not a technical pattern).`,
             );
           }
         }

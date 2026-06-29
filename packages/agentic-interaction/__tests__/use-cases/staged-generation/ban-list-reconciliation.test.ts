@@ -23,6 +23,7 @@ import {
   CONTEXT_NAME_VALIDATION_BANS,
   CONTEXT_NAME_DETERMINISTIC_BLOCKLIST,
   PROSE_ONLY_TOKENS,
+  bannedTokensInContextName,
 } from "../../../src/domain/prompts/architecture-contract";
 import {
   STAGE2_CLASSIFICATION_SYSTEM_PROMPT,
@@ -286,4 +287,21 @@ test("ban-list reconciliation: token matching still catches separator and camelC
     "PostgresStore",
     "payment_db",
   ]);
+});
+
+test("bannedTokensInContextName names the offending token(s) for an actionable R01 finding", () => {
+  // The user's 'scene-port-adapter' tripped R01 with a vague message; the
+  // finding now names exactly which token(s) to rename away.
+  assert.deepStrictEqual(bannedTokensInContextName("scene-port-adapter"), [
+    "adapter",
+  ]);
+  // Multiple distinct banned tokens, deduped + order-independent.
+  assert.deepStrictEqual(
+    bannedTokensInContextName("payment-gateway-repository").sort(),
+    ["gateway", "repository"],
+  );
+  // A clean domain name has none.
+  assert.deepStrictEqual(bannedTokensInContextName("order-management"), []);
+  // Token-boundary carve-out: "rest" inside "restaurant" is not a match.
+  assert.deepStrictEqual(bannedTokensInContextName("restaurant-booking"), []);
 });
