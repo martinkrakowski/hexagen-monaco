@@ -148,6 +148,15 @@ describe("isAutoAppliedNotice", () => {
     );
   });
 
+  test("matches the R01 context-rename advisory", () => {
+    assert.equal(
+      isAutoAppliedNotice(
+        "Renamed context 'scene-port-adapter' to 'scene-port' to remove the banned technology token 'adapter' (R01) — a context is named for a business capability, not a technical pattern.",
+      ),
+      true,
+    );
+  });
+
   test("does NOT match a real reviewer finding (even one mentioning a rule)", () => {
     assert.equal(
       isAutoAppliedNotice(
