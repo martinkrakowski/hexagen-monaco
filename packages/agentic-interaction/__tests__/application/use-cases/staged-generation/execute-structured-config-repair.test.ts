@@ -400,15 +400,13 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair
     }
   });
 
-  it("applies a rename-context op that clears the banned-name R01", async () => {
+  it("auto-resolves R01 by deterministically renaming the banned context at the source", async () => {
+    // R01 is now stripped at Stage 0 (`payment-gateway` → `payment`), so it never
+    // reaches Stage 6/7 — no reviewer needed; it surfaces as an adjustment warning
+    // like R12/R03. (Supersedes the old Stage-7 rename-context-for-R01 path.)
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
       passingStage6Port(),
       mockTransactionManager,
-      undefined,
-      undefined,
-      reviewerEmittingOps(
-        '[{"op":"rename-context","from":"payment-gateway","to":"billing"}]',
-      ),
     );
     const result = await useCase.execute(bannedConfig, {
       onProgress: () => {},
@@ -416,48 +414,57 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair
 
     assert.strictEqual(result.success, true);
     if (result.success) {
-      assert.ok(result.repair, "repair summary should be present");
-      assert.strictEqual(result.repair?.applied, true);
+      assert.ok(!result.validation.errors.some((e) => e.includes("R01")));
       assert.ok(
-        (result.repair?.errorsAfter ?? 1) < (result.repair?.errorsBefore ?? 0),
+        result.validation.warnings.some(
+          (w) =>
+            w.includes("Renamed context 'payment-gateway' to 'payment'") &&
+            w.includes("R01"),
+        ),
+        "the rename must surface as an adjustment",
       );
-      assert.strictEqual(result.repair?.errorsAfter, 0);
-      // The surfaced report is the deterministic structural report post-repair.
-      assert.strictEqual(result.validation.errors.length, 0);
+      const parsed = result.value.parsedObject as {
+        bounded_contexts?: Array<{ name: string }>;
+      };
+      assert.ok(parsed.bounded_contexts?.some((c) => c.name === "payment"));
+      assert.ok(
+        !parsed.bounded_contexts?.some((c) => c.name === "payment-gateway"),
+      );
     }
   });
 
   it("is byte-identical (no repair field) when no reviewer is configured", async () => {
+    // A surfaced R05 (judge) + no reviewer → no repair, original kept.
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
-      passingStage6Port(),
+      stage6WithOneError(),
       mockTransactionManager,
     );
-    const result = await useCase.execute(bannedConfig, {
+    const result = await useCase.execute(cleanSpec, {
       onProgress: () => {},
     });
 
     assert.strictEqual(result.success, true);
     if (result.success) {
       assert.strictEqual(result.repair, undefined);
-      // The original report still carries the R01 error.
-      assert.ok(result.validation.errors.some((e) => e.includes("R01")));
+      // The original report still carries the R05 error.
+      assert.ok(result.validation.errors.some((e) => e.includes("R05")));
     }
   });
 
   it("keeps the original when an applied edit does not reduce findings", async () => {
-    // The op applies cleanly (adds an out-port) but doesn't fix the R01 →
-    // deterministic gate: adding a port with no adapter actually ADDS an R04 error
+    // The op applies cleanly (adds an out-port) but doesn't fix the R05 →
+    // deterministic gate: adding a port with no adapter ADDS an R04 error
     // → errorsAfter (2) > errorsBefore (1) → no-error-reduction keeps original.
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
-      passingStage6Port(),
+      stage6WithOneError(),
       mockTransactionManager,
       undefined,
       undefined,
       reviewerEmittingOps(
-        '[{"op":"add-out-port","context":"payment-gateway","name":"AuditRepositoryPort"}]',
+        '[{"op":"add-out-port","context":"orders","name":"AuditRepositoryPort"}]',
       ),
     );
-    const result = await useCase.execute(bannedConfig, {
+    const result = await useCase.execute(cleanSpec, {
       onProgress: () => {},
     });
 
@@ -465,17 +472,17 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair
     if (result.success) {
       assert.ok(result.repair);
       assert.strictEqual(result.repair?.applied, false);
-      assert.ok(result.validation.errors.some((e) => e.includes("R01")));
+      assert.ok(result.validation.errors.some((e) => e.includes("R05")));
     }
   });
 
   it("keeps the original when every op targets an unknown context (all skipped)", async () => {
     // The op set can only add/rename — it cannot delete a context or shrink the
-    // structure (the old "drop a context to shed R01" gaming vector is impossible
-    // by construction). An op for a non-existent context is skipped → no edits
-    // applied → the original is kept untouched.
+    // structure (the old "drop a context to shed a finding" gaming vector is
+    // impossible by construction). An op for a non-existent context is skipped →
+    // no edits applied → the original is kept untouched.
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
-      passingStage6Port(),
+      stage6WithOneError(),
       mockTransactionManager,
       undefined,
       undefined,
@@ -483,7 +490,7 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair
         '[{"op":"add-adapter","context":"ghost-context","name":"GhostAdapter"}]',
       ),
     );
-    const result = await useCase.execute(bannedConfig, {
+    const result = await useCase.execute(cleanSpec, {
       onProgress: () => {},
     });
 
@@ -491,7 +498,7 @@ describe("ExecuteStructuredConfigGenerationUseCase — Stage 7 verify-and-repair
     if (result.success) {
       assert.ok(result.repair);
       assert.strictEqual(result.repair?.applied, false);
-      assert.ok(result.validation.errors.some((e) => e.includes("R01")));
+      assert.ok(result.validation.errors.some((e) => e.includes("R05")));
     }
   });
 

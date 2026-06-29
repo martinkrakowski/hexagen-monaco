@@ -159,3 +159,18 @@ export function bannedTokensInContextName(name: string): string[] {
     ),
   ];
 }
+
+/** Derive a banned-token-free context name by DROPPING the offending tokens
+ * (`scene-port-adapter` → `scene-port`), rejoined as kebab-case. Returns null
+ * when nothing can be salvaged — every token is banned (`api-gateway`) or the
+ * result would still be banned — so the caller leaves the original in place as
+ * an R01 advisory rather than inventing a meaningless name. Deterministic
+ * counterpart to R12/R03 auto-adjustments. */
+export function sanitizeContextName(name: string): string | null {
+  const kept = tokenizeContextName(name).filter(
+    (token) => !BANNED_TOKEN_SET.has(token),
+  );
+  if (kept.length === 0) return null;
+  const cleaned = kept.join("-");
+  return isBannedContextName(cleaned) ? null : cleaned;
+}
