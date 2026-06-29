@@ -87,6 +87,41 @@ describe("ContextGovernanceChatDrawer", () => {
     assert.match(messages[0].content, /review the "orders" bounded context/i);
   });
 
+  it("grounds only the newest turn on a follow-up (prior turns stay raw)", async () => {
+    render(<ContextGovernanceChatDrawer />);
+    act(() => useContextChatPanel.getState().open(ctx("orders")));
+
+    // Let the seed finish streaming (composer flips Stop -> Send) before the
+    // follow-up — a follow-up sent mid-stream is a no-op.
+    await waitFor(() => {
+      assert.ok(screen.getByText(/orders looks well-designed\./i));
+    });
+    const sendButton = await screen.findByRole("button", { name: /^send$/i });
+
+    fireEvent.change(screen.getByLabelText(/ask a follow-up question/i), {
+      target: { value: "What about its adapters?" },
+    });
+    fireEvent.click(sendButton);
+
+    await waitFor(() => assert.strictEqual(chatRequests, 2));
+
+    // The follow-up payload: the prior seed turn stays raw (no grounding), and
+    // only the newest user turn carries the folded grounding — so the grounding
+    // isn't duplicated across a multi-turn conversation.
+    const messages = lastBody?.messages ?? [];
+    assert.deepStrictEqual(
+      messages.map((m) => m.role),
+      ["user", "assistant", "user"],
+    );
+    assert.doesNotMatch(
+      messages[0].content,
+      /hexagonal-architecture governance/i,
+    );
+    assert.match(messages[0].content, /review the "orders" bounded context/i);
+    assert.match(messages[2].content, /hexagonal-architecture governance/i);
+    assert.match(messages[2].content, /what about its adapters\?/i);
+  });
+
   it("closes when the close button is clicked", async () => {
     render(<ContextGovernanceChatDrawer />);
     act(() => useContextChatPanel.getState().open(ctx("orders")));
