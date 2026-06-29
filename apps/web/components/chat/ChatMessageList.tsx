@@ -36,11 +36,16 @@ export function ChatMessageList({
   const scrollRef = useRef<HTMLDivElement>(null);
   const visible = messages.filter((m) => m.role !== "system");
 
-  // Keep pinned to the latest as it streams. Assigning scrollTop (not scrollTo,
-  // which jsdom doesn't implement) keeps this safe under the test environment.
+  // Keep pinned to the latest as it streams — but only when the user is already
+  // near the bottom, so a user who scrolled up to read earlier content isn't
+  // yanked back down on every chunk (which also skips the scroll write when it
+  // isn't wanted). Assigning scrollTop (not scrollTo, which jsdom doesn't
+  // implement) keeps this safe under the test environment.
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom < 80) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
   return (

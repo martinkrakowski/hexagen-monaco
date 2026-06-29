@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -7,6 +8,30 @@ interface ChatMarkdownProps {
   content: string;
   className?: string;
 }
+
+/**
+ * Element overrides for untrusted model markdown. Images render as inert
+ * alt-text (a markdown `![](url)` otherwise renders an `<img>` that auto-fetches
+ * an arbitrary URL — an IP/tracking leak with no user action), and links open in
+ * a new tab with `noopener noreferrer nofollow`.
+ */
+const MARKDOWN_COMPONENTS = {
+  img: ({ alt }: { alt?: string }) => (
+    <span className="text-muted-foreground italic">
+      {alt ? `[image: ${alt}]` : "[image]"}
+    </span>
+  ),
+  a: ({ href, children }: { href?: string; children?: ReactNode }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer nofollow"
+      className="text-info underline"
+    >
+      {children}
+    </a>
+  ),
+};
 
 /**
  * Shared markdown renderer for AI chat messages. Cloud models (GLM-5.2 et al.)
@@ -23,9 +48,14 @@ interface ChatMarkdownProps {
 export function ChatMarkdown({ content, className }: ChatMarkdownProps) {
   return (
     <div
-      className={`prose prose-sm dark:prose-invert max-w-none break-words prose-p:my-1.5 prose-headings:mt-2 prose-headings:mb-1 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:my-2 prose-pre:overflow-x-auto prose-pre:bg-card prose-pre:text-foreground prose-code:text-foreground prose-a:text-info ${className ?? ""}`}
+      className={`prose prose-sm dark:prose-invert max-w-none break-words prose-p:my-1.5 prose-headings:mt-2 prose-headings:mb-1 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:my-2 prose-pre:overflow-x-auto prose-pre:bg-card prose-pre:text-foreground prose-code:text-foreground ${className ?? ""}`}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={MARKDOWN_COMPONENTS}
+      >
+        {content}
+      </ReactMarkdown>
     </div>
   );
 }

@@ -42,4 +42,29 @@ describe("ChatMarkdown", () => {
     assert.ok(container.querySelector("table"), "GFM table renders");
     assert.strictEqual(container.querySelectorAll("td").length, 2);
   });
+
+  it("renders untrusted images as inert alt-text (no <img>, no remote fetch)", () => {
+    const { container } = render(
+      <ChatMarkdown content={"![tracker](https://evil.example/pixel.png)"} />,
+    );
+    assert.strictEqual(
+      container.querySelector("img"),
+      null,
+      "no <img> element is created from model markdown",
+    );
+    assert.ok(
+      container.textContent?.includes("tracker"),
+      "the alt text is shown instead",
+    );
+  });
+
+  it("opens links in a new tab with a safe rel", () => {
+    const { container } = render(
+      <ChatMarkdown content={"[site](https://example.com)"} />,
+    );
+    const a = container.querySelector("a");
+    assert.strictEqual(a?.getAttribute("target"), "_blank");
+    assert.match(a?.getAttribute("rel") ?? "", /noopener/);
+    assert.match(a?.getAttribute("rel") ?? "", /noreferrer/);
+  });
 });
