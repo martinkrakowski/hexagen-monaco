@@ -133,6 +133,11 @@ export function applyDeterministicFix(
     // Each context needs ≥1 inbound and ≥1 outbound port to pass the check.
     const contexts = parsed.bounded_contexts || [];
     parsed.bounded_contexts = contexts.map((c) => {
+      // Shared-kernels are type-only (R09) — they legitimately own no ports, so
+      // never synthesize any for them. Doing so would undo a deliberate "purify"
+      // edit and fight the user in a re-add loop.
+      if (c.type === "shared-kernel") return c;
+
       const name = c.name || "context";
       const portsIn = c.layers?.application?.ports?.in || [];
       const portsOut = c.layers?.application?.ports?.out || [];
