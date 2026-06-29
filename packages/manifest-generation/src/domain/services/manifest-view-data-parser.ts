@@ -297,7 +297,7 @@ export function parseYamlToViewData(yamlString: string): ManifestViewData {
       validationItems.push({
         status: "pass",
         title: "Minimum Interface Contract",
-        description: `All ${rawContexts.length} bounded contexts define at least one port-in and one port-out.`,
+        description: `All bounded contexts define at least one port-in and one port-out, or are type-only shared-kernels (exempt).`,
       });
     } else {
       validationItems.push({
