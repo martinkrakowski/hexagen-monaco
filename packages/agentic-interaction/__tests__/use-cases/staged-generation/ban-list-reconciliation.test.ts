@@ -295,11 +295,15 @@ test("bannedTokensInContextName names the offending token(s) for an actionable R
   assert.deepStrictEqual(bannedTokensInContextName("scene-port-adapter"), [
     "adapter",
   ]);
-  // Multiple distinct banned tokens, deduped + order-independent.
+  // Multiple distinct banned tokens, order-independent.
   assert.deepStrictEqual(
     bannedTokensInContextName("payment-gateway-repository").sort(),
     ["gateway", "repository"],
   );
+  // A repeated banned token collapses to a single entry (dedup contract).
+  assert.deepStrictEqual(bannedTokensInContextName("gateway-payment-gateway"), [
+    "gateway",
+  ]);
   // A clean domain name has none.
   assert.deepStrictEqual(bannedTokensInContextName("order-management"), []);
   // Token-boundary carve-out: "rest" inside "restaurant" is not a match.

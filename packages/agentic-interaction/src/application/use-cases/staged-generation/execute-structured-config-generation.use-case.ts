@@ -942,8 +942,13 @@ function ctxHasPreDefinedAdapters(ctx: StructuredConfigContext): boolean {
  * repository adapter). Tolerant of the `shared_kernel` dialect spelling.
  */
 function ctxIsSharedKernel(ctx: StructuredConfigContext): boolean {
+  // `ctx.type` is import/LLM-derived and only typed `string` — guard the runtime
+  // shape so a malformed manifest (non-string type) can't throw on `.trim()` and
+  // abort generation. (coerceContextType isn't used here: it has the same
+  // unguarded `.trim()` and would miss the `shared_kernel` dialect spelling.)
   return (
-    (ctx.type ?? "").trim().toLowerCase().replace(/_/g, "-") === "shared-kernel"
+    typeof ctx.type === "string" &&
+    ctx.type.trim().toLowerCase().replace(/_/g, "-") === "shared-kernel"
   );
 }
 
@@ -1225,7 +1230,7 @@ export function buildPreDefinedPortMap(config: StructuredConfig): PortMap {
   };
 }
 
-function buildPreDefinedAdapterBindings(
+export function buildPreDefinedAdapterBindings(
   config: StructuredConfig,
   portMap: PortMap,
 ): AdapterBindings {
