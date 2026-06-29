@@ -4,7 +4,7 @@ import {
   parseStructuredConfig,
   buildPreDefinedPortMap,
   buildPreDefinedAdapterBindings,
-} from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.ts";
+} from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 
 /**
  * Regression: importing a manifest reconstructs each adapter's `implements` port
@@ -133,5 +133,38 @@ describe("inferAdapterImplements (import-path port↔adapter reconstruction)", (
       "PlaceOrderCommandPort",
     );
     assert.strictEqual(m.get("TotallyUnrelatedAdapter"), "");
+  });
+
+  it("prefers an exact port over a longer containing port on an overlap tie (order-independent)", () => {
+    // `OrderRepositoryAdapter` (core "orderrepository") contains/equals both
+    // `OrderRepositoryPort` (exact) and `OrderRepositoryExtendedPort` (which
+    // contains the core) — same overlap. Exact must win regardless of order.
+    const bind = (portsCsv: string): string => {
+      const cfg = parseStructuredConfig(
+        [
+          "bounded_contexts:",
+          "  - name: orders",
+          "    type: core",
+          "    description: Orders.",
+          "    layers:",
+          "      application:",
+          "        ports:",
+          `          out: [${portsCsv}]`,
+          "      infrastructure:",
+          "        adapters: [OrderRepositoryAdapter]",
+          "",
+        ].join("\n"),
+      );
+      return buildPreDefinedAdapterBindings(cfg, buildPreDefinedPortMap(cfg))
+        .contexts[0].adapters[0].implements;
+    };
+    assert.strictEqual(
+      bind("OrderRepositoryExtendedPort, OrderRepositoryPort"),
+      "OrderRepositoryPort",
+    );
+    assert.strictEqual(
+      bind("OrderRepositoryPort, OrderRepositoryExtendedPort"),
+      "OrderRepositoryPort",
+    );
   });
 });

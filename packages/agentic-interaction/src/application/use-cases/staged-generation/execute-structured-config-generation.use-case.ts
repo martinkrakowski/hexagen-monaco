@@ -1127,14 +1127,23 @@ function inferAdapterImplements(
   // `ExternalPipelineClientPort`, not the shorter inbound `PipelinePort`).
   let best = "";
   let bestOverlap = 0;
+  let bestExact = false;
   for (const portName of portNames) {
     const portCore = portName.replace(/Port$/i, "").toLowerCase();
     if (!portCore) continue;
     if (!core.includes(portCore) && !portCore.includes(core)) continue;
     const overlap = Math.min(core.length, portCore.length);
-    if (overlap > bestOverlap) {
+    const exact = portCore === core;
+    // Longer overlap wins; on a TIE, an exact match beats a longer *containing*
+    // port (e.g. `OrderRepositoryAdapter` → `OrderRepositoryPort`, not
+    // `OrderRepositoryExtendedPort`) so the pick isn't portNames-order-dependent.
+    if (
+      overlap > bestOverlap ||
+      (overlap === bestOverlap && exact && !bestExact)
+    ) {
       best = portName;
       bestOverlap = overlap;
+      bestExact = exact;
     }
   }
   // No name match → leave UNBOUND ("") rather than misattributing: an empty
