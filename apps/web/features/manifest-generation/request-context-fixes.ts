@@ -1,4 +1,7 @@
-import type { RepairOp } from "@hexagen/agentic-interaction";
+import {
+  extractBracketArrays,
+  type RepairOp,
+} from "@hexagen/agentic-interaction";
 import type { ContextView } from "./store/useContextChatPanel";
 
 /**
@@ -109,8 +112,10 @@ function coerceOp(raw: unknown): RepairOp | null {
   }
 }
 
-/** True only when the op references an entity that actually exists on `ctx`
- * (adds are always allowed) — drops hallucinated targets before a button shows. */
+/** True only when the op would actually change `ctx`: a remove/rename must hit a
+ * real entity, and an add must target a name that isn't already there. Drops
+ * hallucinated *and* no-op suggestions before a button shows, so "Apply" always
+ * does something. */
 function isApplicable(op: RepairOp, ctx: ContextView): boolean {
   const has = (xs: ReadonlyArray<{ name: string }>, n: string) =>
     xs.some((x) => x.name === n);
@@ -122,41 +127,27 @@ function isApplicable(op: RepairOp, ctx: ContextView): boolean {
     case "remove-adapter":
       return op.context === ctx.name && has(ctx.adapters, op.name);
     case "add-in-port":
+      return op.context === ctx.name && !has(ctx.portsIn, op.name);
     case "add-out-port":
+      return op.context === ctx.name && !has(ctx.portsOut, op.name);
     case "add-adapter":
-      return op.context === ctx.name;
+      return op.context === ctx.name && !has(ctx.adapters, op.name);
     case "rename-port":
       return (
         op.context === ctx.name &&
         (has(ctx.portsIn, op.from) || has(ctx.portsOut, op.from))
       );
+    // remove-context / rename-context are intentionally NOT offered here: this is
+    // a per-context "fix what's wrong inside this context" flow, not architecture
+    // restructuring (that's the separate modify-architecture use-case). They stay
+    // in the engine's RepairOp vocabulary for the server-side Stage-7 repairer.
     default:
       return false;
   }
 }
 
-/** Tolerant first balanced top-level `[...]` (the model is told to emit only the
- * array, but may wrap it in prose/fences). */
-function extractJsonArray(text: string): string | null {
-  const start = text.indexOf("[");
-  const end = text.lastIndexOf("]");
-  if (start === -1 || end <= start) return null;
-  return text.slice(start, end + 1);
-}
-
-export function parseAndValidateFixes(
-  text: string,
-  ctx: ContextView,
-): ContextFix[] {
-  const span = extractJsonArray(text);
-  if (!span) return [];
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(span);
-  } catch {
-    return [];
-  }
-  if (!Array.isArray(parsed)) return [];
+/** Validate the elements of one parsed `[...]` span into applyable fixes. */
+function buildFixes(parsed: unknown[], ctx: ContextView): ContextFix[] {
   const fixes: ContextFix[] = [];
   parsed.forEach((raw, i) => {
     if (!raw || typeof raw !== "object") return;
@@ -174,6 +165,29 @@ export function parseAndValidateFixes(
     });
   });
   return fixes;
+}
+
+export function parseAndValidateFixes(
+  text: string,
+  ctx: ContextView,
+): ContextFix[] {
+  // The model is told to emit only the array, but it can wrap it in prose/fences
+  // and the prompt itself names `[Rxx]` finding tags — a naive first-`[`/last-`]`
+  // slice swallows those. Scan every balanced top-level span (string-literal
+  // aware, shared with the engine's parseRepairOps) and take the first that
+  // parses to an array yielding at least one applyable fix.
+  for (const span of extractBracketArrays(text)) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(span);
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(parsed)) continue;
+    const fixes = buildFixes(parsed, ctx);
+    if (fixes.length > 0) return fixes;
+  }
+  return [];
 }
 
 /** Run the structured fix-extraction call for one context. Returns validated,

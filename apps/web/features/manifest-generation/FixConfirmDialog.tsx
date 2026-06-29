@@ -15,6 +15,8 @@ interface FixConfirmDialogProps {
   open: boolean;
   fix: ContextFix | null;
   isApplying: boolean;
+  /** Set when a confirmed apply changed nothing — shown inline, dialog stays open. */
+  notice?: string | null;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -53,6 +55,7 @@ export function FixConfirmDialog({
   open,
   fix,
   isApplying,
+  notice,
   onConfirm,
   onCancel,
 }: FixConfirmDialogProps) {
@@ -87,6 +90,15 @@ export function FixConfirmDialog({
             ))}
           </ul>
         </div>
+
+        {notice ? (
+          <p
+            role="alert"
+            className="text-sm text-destructive border border-destructive/30 bg-destructive/10 rounded-md px-3 py-2"
+          >
+            {notice}
+          </p>
+        ) : null}
 
         <DialogFooter>
           <button

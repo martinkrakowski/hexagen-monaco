@@ -108,7 +108,7 @@ function validateOp(item: unknown): RepairOp | null {
  * prompt itself tells it about the `[R01]`/`[R03]` finding tags, so that prose is
  * a likely shape. Scanning all balanced spans lets us pick the array that parses.
  */
-function extractBracketArrays(text: string): string[] {
+export function extractBracketArrays(text: string): string[] {
   const spans: string[] = [];
   let depth = 0;
   let startIdx = -1;
@@ -287,7 +287,7 @@ export function applyManifestOps(
 
     if (op.op === "add-out-port" || op.op === "add-in-port") {
       const list = ensurePortList(ctx, op.op === "add-out-port" ? "out" : "in");
-      if (list.includes(op.name)) {
+      if (list.some((e) => entryMatchesName(e, op.name))) {
         skip(op, `port '${op.name}' already present`);
         continue;
       }
@@ -295,7 +295,7 @@ export function applyManifestOps(
       applied++;
     } else if (op.op === "add-adapter") {
       const list = ensureAdapterList(ctx);
-      if (list.includes(op.name)) {
+      if (list.some((e) => entryMatchesName(e, op.name))) {
         skip(op, `adapter '${op.name}' already present`);
         continue;
       }
@@ -309,10 +309,13 @@ export function applyManifestOps(
       const ports = ctx.layers?.application?.ports;
       // Refuse to rename onto a name already in the context — it would create a
       // duplicate port, which checkDuplicatePortNames flags and which would fail
-      // (or be undone by) re-validation, discarding the whole repair.
+      // (or be undone by) re-validation, discarding the whole repair. Match both
+      // string and `{name}` entry shapes, same as removals.
       const collides = (["in", "out"] as const).some((slot) => {
         const list = ports?.[slot];
-        return Array.isArray(list) && list.includes(op.to);
+        return (
+          Array.isArray(list) && list.some((e) => entryMatchesName(e, op.to))
+        );
       });
       if (collides) {
         skip(op, `target port '${op.to}' already present`);
@@ -322,9 +325,15 @@ export function applyManifestOps(
       for (const slot of ["in", "out"] as const) {
         const list = ports?.[slot];
         if (Array.isArray(list)) {
-          const i = list.findIndex((p) => p === op.from);
+          const i = list.findIndex((p) => entryMatchesName(p, op.from));
           if (i !== -1) {
-            list[i] = op.to;
+            const cur = list[i];
+            // Preserve the entry's shape: rename the `name` of an object entry,
+            // or replace a bare string with the new string.
+            list[i] =
+              cur != null && typeof cur === "object"
+                ? { ...(cur as Record<string, unknown>), name: op.to }
+                : op.to;
             found = true;
           }
         }

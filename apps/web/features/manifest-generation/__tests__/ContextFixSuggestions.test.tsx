@@ -91,6 +91,50 @@ describe("ContextFixSuggestions", () => {
     assert.strictEqual(appliedId, "fix-0", "the fix is reported applied");
   });
 
+  it("keeps the fix active and shows a notice when nothing applies", () => {
+    // scene-types is already type-only here, so the fix's remove-ops are all
+    // skipped (applied === 0): no write, no applied-mark, button stays enabled.
+    const TYPE_ONLY = [
+      "bounded_contexts:",
+      "  - name: scene-types",
+      "    type: shared-kernel",
+      "",
+    ].join("\n");
+    usePendingManifest.setState({ yaml: TYPE_ONLY });
+    let appliedId: string | null = null;
+    render(
+      <ContextFixSuggestions
+        fixes={[fix]}
+        status="ready"
+        appliedIds={new Set()}
+        onApplied={(id) => {
+          appliedId = id;
+        }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /make scene-types type-only/i }),
+    );
+    fireEvent.click(screen.getByText(/^apply$/i));
+
+    // Notice lives inside the <dialog> subtree (excluded from the a11y tree), so
+    // query by text like the op-list assertions above.
+    assert.ok(screen.getByText(/nothing to apply/i), "a notice is shown");
+    assert.strictEqual(appliedId, null, "the fix is not marked applied");
+    assert.strictEqual(
+      usePendingManifest.getState().yaml,
+      TYPE_ONLY,
+      "the manifest is untouched",
+    );
+    // The trigger button is still enabled (not disabled/checked).
+    assert.ok(
+      !screen
+        .getByRole("button", { name: /make scene-types type-only/i })
+        .hasAttribute("disabled"),
+    );
+  });
+
   it("renders nothing with no fixes, and a hint while loading", () => {
     const { container, rerender } = render(
       <ContextFixSuggestions

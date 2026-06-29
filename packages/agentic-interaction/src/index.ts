@@ -9,6 +9,7 @@ export {
 export {
   applyManifestOps,
   parseRepairOps,
+  extractBracketArrays,
 } from "./domain/manifest/apply-repair-ops";
 export type {
   RepairOp,

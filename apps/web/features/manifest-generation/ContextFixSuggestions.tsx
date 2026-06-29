@@ -27,6 +27,7 @@ export function ContextFixSuggestions({
   onApplied,
 }: ContextFixSuggestionsProps) {
   const [pendingFix, setPendingFix] = useState<ContextFix | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const updateYaml = usePendingManifest((s) => s.updateYaml);
 
   if (status === "loading") {
@@ -38,15 +39,33 @@ export function ContextFixSuggestions({
   }
   if (fixes.length === 0) return null;
 
+  const openFix = (fix: ContextFix) => {
+    setNotice(null);
+    setPendingFix(fix);
+  };
+  const closeDialog = () => {
+    setNotice(null);
+    setPendingFix(null);
+  };
+
   const handleConfirm = () => {
     if (!pendingFix) return;
     // Apply against the live manifest (the store is the source of truth, synced
     // from ManifestPreview's localManifestYaml via onYamlChange).
     const current = usePendingManifest.getState().yaml ?? "";
-    const { yaml } = applyRepairOpsToYaml(current, pendingFix.ops);
+    const { yaml, applied } = applyRepairOpsToYaml(current, pendingFix.ops);
+    // 0 applied means every op was skipped (e.g. the manifest drifted since the
+    // fix was suggested, or it no longer parses) — don't write, and don't mark
+    // the fix done; tell the user and leave the button active to retry.
+    if (applied === 0) {
+      setNotice(
+        "Nothing to apply — the manifest may have changed since this fix was suggested.",
+      );
+      return;
+    }
     updateYaml(yaml);
     onApplied(pendingFix.id);
-    setPendingFix(null);
+    closeDialog();
   };
 
   return (
@@ -62,7 +81,7 @@ export function ContextFixSuggestions({
               key={fix.id}
               type="button"
               disabled={applied}
-              onClick={() => setPendingFix(fix)}
+              onClick={() => openFix(fix)}
               title={fix.rationale || fix.label}
               className="text-xs px-2.5 py-1.5 rounded-md border border-border bg-card flex items-center gap-1.5 hover:border-accent hover:bg-accent/10 transition-colors disabled:opacity-60 disabled:cursor-default disabled:hover:border-border disabled:hover:bg-card"
             >
@@ -81,8 +100,9 @@ export function ContextFixSuggestions({
         open={pendingFix !== null}
         fix={pendingFix}
         isApplying={false}
+        notice={notice}
         onConfirm={handleConfirm}
-        onCancel={() => setPendingFix(null)}
+        onCancel={closeDialog}
       />
     </div>
   );

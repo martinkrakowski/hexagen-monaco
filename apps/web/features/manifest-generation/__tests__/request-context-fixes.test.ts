@@ -101,6 +101,47 @@ describe("parseAndValidateFixes", () => {
     assert.strictEqual(parseAndValidateFixes(text, ctx).length, 1);
   });
 
+  it("ignores stray bracketed tags ([Rxx]) and picks the real fixes array", () => {
+    // A naive first-`[`/last-`]` slice would span from `[R09]` to `]`, breaking
+    // JSON.parse and surfacing zero fixes.
+    const text =
+      "Findings: [R09] shared-kernel owns ports; [R03] owns an adapter.\n" +
+      'Fixes: [{"label":"Make type-only","ops":[' +
+      '{"op":"remove-in-port","context":"scene-types","name":"SceneTypesCommandPort"},' +
+      '{"op":"remove-adapter","context":"scene-types","name":"SceneTypesRepositoryAdapter"}]}]';
+    const fixes = parseAndValidateFixes(text, ctx);
+    assert.strictEqual(fixes.length, 1);
+    assert.strictEqual(fixes[0].ops.length, 2);
+  });
+
+  it("drops add ops whose target already exists, keeps genuinely-new adds", () => {
+    const json = JSON.stringify([
+      {
+        label: "Add ports",
+        ops: [
+          // already present on scene-types → no-op, dropped
+          {
+            op: "add-in-port",
+            context: "scene-types",
+            name: "SceneTypesCommandPort",
+          },
+          // new → kept
+          {
+            op: "add-out-port",
+            context: "scene-types",
+            name: "AuditTrailPort",
+          },
+        ],
+      },
+    ]);
+    const fixes = parseAndValidateFixes(json, ctx);
+    assert.strictEqual(fixes.length, 1);
+    assert.deepStrictEqual(
+      fixes[0].ops.map((o) => ("name" in o ? o.name : o.op)),
+      ["AuditTrailPort"],
+    );
+  });
+
   it("returns [] for non-JSON / empty / non-array output", () => {
     assert.deepStrictEqual(
       parseAndValidateFixes("Orders looks fine.", ctx),

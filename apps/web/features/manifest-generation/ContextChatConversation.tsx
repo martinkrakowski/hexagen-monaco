@@ -59,8 +59,14 @@ export function ContextChatConversation() {
   const hasManifest = usePendingManifest((s) => s.yaml != null);
   // The review has settled once streaming has stopped and there's a non-empty
   // assistant turn (an errored review leaves status "error" → no fix extraction).
+  // Scope it to the *current* context: right after a switch, the previous
+  // context's transcript is still in `messages` (status idle) for one render
+  // before the seed effect resets it — `seededForRef.current === selectedContext`
+  // is false in that window (the seed effect hasn't run yet), so we don't extract
+  // fixes against a stale, completed review.
   const reviewComplete =
     status === "idle" &&
+    seededForRef.current === selectedContext &&
     messages.some((m) => m.role === "assistant" && m.content.trim().length > 0);
   const {
     fixes,

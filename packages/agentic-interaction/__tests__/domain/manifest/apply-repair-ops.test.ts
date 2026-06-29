@@ -296,6 +296,71 @@ describe("remove ops (interactive 'apply fix' from the chat)", () => {
     assert.deepStrictEqual(ctx.layers?.infrastructure?.adapters, []);
   });
 
+  test("add/rename also match object-shaped entries by name (no duplicate, in-place rename)", () => {
+    const m: ManifestObject = {
+      bounded_contexts: [
+        {
+          name: "orders",
+          layers: {
+            application: {
+              ports: { in: [{ name: "PlaceOrderPort" }], out: [] },
+            },
+            infrastructure: { adapters: [] },
+          },
+        },
+      ],
+    };
+    const { manifest, applied, skipped } = applyManifestOps(m, [
+      // duplicate of the object-shaped entry → skipped, not appended twice
+      { op: "add-in-port", context: "orders", name: "PlaceOrderPort" },
+      // rename targeting an object entry → mutates its `name`, keeps object shape
+      {
+        op: "rename-port",
+        context: "orders",
+        from: "PlaceOrderPort",
+        to: "SubmitOrderPort",
+      },
+    ]);
+    assert.strictEqual(applied, 1, "only the rename applied");
+    assert.strictEqual(skipped.length, 1, "the duplicate add was skipped");
+    const ctx = ctxOf(manifest, "orders")!;
+    assert.deepStrictEqual(ctx.layers?.application?.ports?.in, [
+      { name: "SubmitOrderPort" },
+    ]);
+  });
+
+  test("rename-port collision detection sees object-shaped target entries", () => {
+    const m: ManifestObject = {
+      bounded_contexts: [
+        {
+          name: "orders",
+          layers: {
+            application: {
+              ports: {
+                in: [{ name: "PlaceOrderPort" }, { name: "SubmitOrderPort" }],
+                out: [],
+              },
+            },
+          },
+        },
+      ],
+    };
+    const { applied, skipped } = applyManifestOps(m, [
+      {
+        op: "rename-port",
+        context: "orders",
+        from: "PlaceOrderPort",
+        to: "SubmitOrderPort",
+      },
+    ]);
+    assert.strictEqual(
+      applied,
+      0,
+      "rename onto an existing object name refused",
+    );
+    assert.match(skipped[0]?.reason ?? "", /already present/);
+  });
+
   test("remove-context drops the context and prunes mappings + depends_on", () => {
     const { manifest, applied } = applyManifestOps(base(), [
       { op: "remove-context", context: "payment-gateway" },
