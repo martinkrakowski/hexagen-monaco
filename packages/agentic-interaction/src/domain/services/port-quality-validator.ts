@@ -69,20 +69,15 @@ function checkInvalidForAggregate(
     return null;
   }
   // The context has NO known aggregate roots — the spec declared none and domain
-  // extraction produced none. A forAggregate then can't be checked against a
-  // known set, so it's ADVISORY, not a hard error: treating it as an error
-  // turned every contexts-but-no-aggregates import into a flood of ~1-per-port
-  // R17 failures (the manifest is still produced and usable). When the context
-  // DOES have aggregate roots, a forAggregate that isn't one of them is a genuine
-  // hallucination and stays an error.
+  // extraction produced none. With nothing to validate `forAggregate` against,
+  // it's unverifiable but not a defect (the spec simply didn't model aggregates),
+  // so we stay SILENT rather than emit one advisory per port. Previously this
+  // returned a warning, which flooded every contexts-but-no-aggregates import
+  // (e.g. a manifest imported with empty `domain: {}` layers) with ~1-per-port
+  // R17 noise. When the context DOES declare aggregate roots, a forAggregate
+  // that isn't one of them is a genuine hallucination and stays an error.
   if (aggregateRoots.length === 0) {
-    return {
-      portName: port.name,
-      contextName,
-      severity: "warning",
-      rule: "R17",
-      message: `Port forAggregate "${port.forAggregate}" can't be validated — context '${contextName}' declares no aggregate roots`,
-    };
+    return null;
   }
   return {
     portName: port.name,
