@@ -1270,16 +1270,24 @@ export function sanitizeBannedContextNames(config: StructuredConfig): {
   }
   if (rename.size === 0) return { renamed };
 
+  // Rewrite references by NORMALIZED identity (casing/alias-tolerant, matching the
+  // rest of the pipeline's `normalizeContextName` lookups) — an exact-string match
+  // would orphan a mapping/use_case that points at the context via a casing or
+  // alias variant of the old name (e.g. `PaymentGateway` for `payment-gateway`).
+  const renameNorm = new Map(
+    [...rename].map(([from, to]) => [normalizeContextName(from), to]),
+  );
+  const remap = (ref: string): string | undefined =>
+    renameNorm.get(normalizeContextName(ref));
+
   for (const m of config.context_mappings ?? []) {
-    if (m.upstream && rename.has(m.upstream))
-      m.upstream = rename.get(m.upstream)!;
-    if (m.downstream && rename.has(m.downstream))
-      m.downstream = rename.get(m.downstream)!;
+    if (m.upstream) m.upstream = remap(m.upstream) ?? m.upstream;
+    if (m.downstream) m.downstream = remap(m.downstream) ?? m.downstream;
   }
   if (config.use_cases) {
     for (const [key, value] of Object.entries(config.use_cases)) {
-      const to = rename.get(key);
-      if (to) {
+      const to = remap(key);
+      if (to && to !== key) {
         config.use_cases[to] = value;
         delete config.use_cases[key];
       }

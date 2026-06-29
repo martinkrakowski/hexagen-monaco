@@ -72,6 +72,34 @@ describe("sanitizeBannedContextNames", () => {
     assert.ok(!config.use_cases?.["scene-port-adapter"]);
   });
 
+  it("rewrites references that point at the context via a casing/alias variant", () => {
+    // A mapping/use_case keyed by `ScenePortAdapter` (a casing variant the
+    // pipeline resolves via normalizeContextName) must follow the rename — an
+    // exact-string rewrite would orphan it.
+    const config = parseStructuredConfig(
+      [
+        "bounded_contexts:",
+        "  - name: scene-orchestration",
+        "    type: core",
+        "    description: Core.",
+        "  - name: scene-port-adapter",
+        "    type: generic",
+        "    description: Bridge.",
+        "context_mappings:",
+        "  - upstream: scene-orchestration",
+        "    downstream: ScenePortAdapter",
+        "use_cases:",
+        "  ScenePortAdapter:",
+        "    - name: ConfigureScene",
+        "",
+      ].join("\n"),
+    );
+    sanitizeBannedContextNames(config);
+    assert.strictEqual(config.context_mappings?.[0].downstream, "scene-port");
+    assert.ok(config.use_cases?.["scene-port"]);
+    assert.ok(!config.use_cases?.["ScenePortAdapter"]);
+  });
+
   it("leaves an unsalvageable (fully-banned) name untouched", () => {
     const config = parseStructuredConfig(CONFIG);
     sanitizeBannedContextNames(config);
