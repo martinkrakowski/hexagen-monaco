@@ -57,3 +57,46 @@ describe("parseYamlToViewData context types", () => {
     );
   });
 });
+
+describe("Minimum Interface Contract — shared-kernel exemption", () => {
+  // A port-less shared-kernel alongside a fully-wired core context: the contract
+  // must PASS (the shared-kernel is type-only and exempt), so the deterministic
+  // fixer never re-synthesizes ports for it (the accept-view fix-apply loop).
+  const YAML = `bounded_contexts:
+  - name: scene-types
+    type: shared-kernel
+    description: Type-only contracts.
+  - name: orders
+    type: core
+    description: Orders.
+    layers:
+      application:
+        ports:
+          in: [PlaceOrderPort]
+          out: [OrderRepositoryPort]
+      infrastructure:
+        adapters: [OrderRepositoryAdapter]
+`;
+  const view = parseYamlToViewData(YAML);
+  const contract = view.validationItems.find(
+    (v) => v.title === "Minimum Interface Contract",
+  )!;
+
+  it("passes when the only port-less context is a shared-kernel", () => {
+    assert.strictEqual(contract.status, "pass");
+  });
+
+  it("leaves the purged shared-kernel healthy (no error/warning)", () => {
+    const sk = view.contexts.find((c) => c.name === "scene-types")!;
+    assert.strictEqual(sk.health, "healthy");
+    assert.strictEqual(sk.portsIn.length, 0);
+    assert.strictEqual(sk.portsOut.length, 0);
+  });
+
+  it("still warns when a NON-shared-kernel context is missing ports", () => {
+    const v = parseYamlToViewData(
+      `bounded_contexts:\n  - name: scene-types\n    type: shared-kernel\n    description: t\n  - name: orders\n    type: core\n    description: o\n`,
+    ).validationItems.find((i) => i.title === "Minimum Interface Contract")!;
+    assert.strictEqual(v.status, "warn");
+  });
+});

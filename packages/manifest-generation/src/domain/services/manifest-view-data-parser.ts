@@ -150,7 +150,16 @@ export function parseYamlToViewData(yamlString: string): ManifestViewData {
     const rawPortsOut = c.layers?.application?.ports?.out || [];
     const rawAdapters = c.layers?.infrastructure?.adapters || [];
 
-    if (rawPortsIn.length > 0 && rawPortsOut.length > 0) {
+    // A shared-kernel is type-only (R09): it legitimately owns no ports, so it
+    // trivially satisfies the minimum-interface contract. This mirrors the server
+    // pipeline, which skips shared-kernels in port mapping ("no ports to map").
+    // Without this, a purged shared-kernel trips the "missing ports" warning, the
+    // deterministic fixer re-synthesizes default ports, and an applied "purify"
+    // fix is silently undone — fighting the user in a loop.
+    if (
+      type === "shared-kernel" ||
+      (rawPortsIn.length > 0 && rawPortsOut.length > 0)
+    ) {
       validContractCount++;
     }
 
