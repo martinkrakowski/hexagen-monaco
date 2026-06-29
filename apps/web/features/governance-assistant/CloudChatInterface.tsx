@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef, type FormEvent } from "react";
 import type { CloudChatMessage } from "./hooks/useCloudLlm";
+import { ChatMessageList } from "../../components/chat/ChatMessageList";
+import { ChatComposer } from "../../components/chat/ChatComposer";
 
 interface CloudChatInterfaceProps {
   messages: CloudChatMessage[];
@@ -14,6 +15,12 @@ interface CloudChatInterfaceProps {
   modelName: string;
 }
 
+/**
+ * Cloud chat panel for the governance assistant. Owns its header (model + clear
+ * /disconnect); the transcript (markdown rendering, streaming/error/empty,
+ * auto-scroll) and the composer come from the shared `components/chat`
+ * primitives, also used by the manifest accept-view context chat.
+ */
 export function CloudChatInterface({
   messages,
   isStreaming,
@@ -24,22 +31,6 @@ export function CloudChatInterface({
   onDisconnect,
   modelName,
 }: CloudChatInterfaceProps) {
-  const [input, setInput] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    const trimmed = input.trim();
-    if (!trimmed || isStreaming) return;
-    onSendMessage(trimmed);
-    setInput("");
-    requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-    });
-  };
-
-  const visibleMessages = messages.filter((m) => m.role !== "system");
-
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0">
@@ -65,62 +56,23 @@ export function CloudChatInterface({
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
-        {visibleMessages.length === 0 && !error && (
+      <ChatMessageList
+        messages={messages}
+        isStreaming={isStreaming}
+        error={error}
+        emptyState={
           <p className="text-sm text-muted-foreground text-center py-8">
             Send a message to start chatting with {modelName}.
           </p>
-        )}
-        {visibleMessages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`text-sm whitespace-pre-wrap ${
-              msg.role === "user"
-                ? "text-foreground ml-auto mr-0 max-w-[80%]"
-                : "text-muted-foreground mr-auto ml-0 max-w-[80%]"
-            }`}
-          >
-            {msg.content}
-          </div>
-        ))}
-        {isStreaming && (
-          <div className="text-xs text-muted-foreground animate-pulse">
-            Generating...
-          </div>
-        )}
-        {error && <p className="text-xs text-destructive">{error}</p>}
-      </div>
+        }
+      />
 
-      <form
-        onSubmit={handleSubmit}
-        className="flex items-center gap-2 px-4 py-2 border-t border-border shrink-0"
-      >
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Type a message..."
-          disabled={isStreaming}
-          className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
-        />
-        {isStreaming ? (
-          <button
-            type="button"
-            onClick={onAbort}
-            className="h-9 px-3 rounded-md bg-destructive text-destructive-foreground text-sm font-medium hover:bg-destructive/90"
-          >
-            Stop
-          </button>
-        ) : (
-          <button
-            type="submit"
-            disabled={!input.trim()}
-            className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Send
-          </button>
-        )}
-      </form>
+      <ChatComposer
+        onSubmit={onSendMessage}
+        isStreaming={isStreaming}
+        onStop={onAbort}
+        placeholder="Type a message..."
+      />
     </div>
   );
 }
