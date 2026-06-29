@@ -726,11 +726,11 @@ describe("deterministic R16/R17/R18 (LLM-duplicate discard, A4 pull-forward)", (
     }
   });
 
-  test("programmatic R17 is advisory (warning, not error) when the context declares no aggregates", async () => {
+  test("programmatic R17 is suppressed when the context declares no aggregates", async () => {
     // contexts-but-no-aggregates import: Stage 3 invents a forAggregate but there
-    // is no known set to validate it against, so R17 must be advisory and must
-    // NOT block — `passed` stays true. Without this, such an import floods the
-    // review with ~1-per-port hard errors.
+    // is no known set to validate it against. R17 is scoped out entirely (not even
+    // advisory) so such an import doesn't flood the review with ~1-per-port noise;
+    // it must not block (`passed` stays true), and an LLM-claimed R17 is discarded.
     const ndjson =
       '{"type":"error","rule":"R17","message":"Port forAggregate \'SceneConfig\' is not a known aggregate root."}\n' +
       '{"type":"result","passed":false}\n';
@@ -766,12 +766,15 @@ describe("deterministic R16/R17/R18 (LLM-duplicate discard, A4 pull-forward)", (
         /\bR17\b/.test(w),
       );
       assert.strictEqual(r17Errors.length, 0, "no hard R17 error");
-      assert.strictEqual(r17Warnings.length, 1, "one advisory R17 warning");
-      assert.ok(r17Warnings[0].startsWith("[R17] invoice-management/"));
+      assert.strictEqual(
+        r17Warnings.length,
+        0,
+        "R17 is suppressed (not even advisory) when no aggregates are declared",
+      );
       assert.strictEqual(
         result.value.passed,
         true,
-        "advisory R17 must not block — passed stays true",
+        "a no-aggregates import must not be blocked — passed stays true",
       );
     }
   });

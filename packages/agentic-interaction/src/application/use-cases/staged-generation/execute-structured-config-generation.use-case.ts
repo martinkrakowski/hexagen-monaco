@@ -933,6 +933,25 @@ function ctxHasPreDefinedAdapters(ctx: StructuredConfigContext): boolean {
   return !!ctx.layers?.infrastructure?.adapters?.length;
 }
 
+/**
+ * Shared-kernel contexts are type-only contracts; R09 forbids them owning ports
+ * or adapters. Stage 3 already skips them, but an *imported* manifest can carry
+ * pre-defined ports/adapters on a shared-kernel — those must not flow through
+ * the manifest-format merge, or the assembled manifest contradicts its own
+ * recognition (a "type-only" context that still owns SceneTypesCommandPort + a
+ * repository adapter). Tolerant of the `shared_kernel` dialect spelling.
+ */
+function ctxIsSharedKernel(ctx: StructuredConfigContext): boolean {
+  // `ctx.type` is import/LLM-derived and only typed `string` — guard the runtime
+  // shape so a malformed manifest (non-string type) can't throw on `.trim()` and
+  // abort generation. (coerceContextType isn't used here: it has the same
+  // unguarded `.trim()` and would miss the `shared_kernel` dialect spelling.)
+  return (
+    typeof ctx.type === "string" &&
+    ctx.type.trim().toLowerCase().replace(/_/g, "-") === "shared-kernel"
+  );
+}
+
 function lookupUseCases(
   config: StructuredConfig,
   contextName: string,
@@ -1192,6 +1211,9 @@ export function buildPreDefinedPortMap(config: StructuredConfig): PortMap {
   return {
     contexts: config.bounded_contexts
       .filter(ctxHasPreDefinedPorts)
+      // R09: a shared-kernel owns no ports, even when the imported spec declares
+      // some — drop them so the output matches Stage 3's "no ports" recognition.
+      .filter((ctx) => !ctxIsSharedKernel(ctx))
       .map((ctx) => ({
         contextName: ctx.name,
         in: names(ctx.layers?.application?.ports?.in).map((name) => ({
@@ -1208,13 +1230,15 @@ export function buildPreDefinedPortMap(config: StructuredConfig): PortMap {
   };
 }
 
-function buildPreDefinedAdapterBindings(
+export function buildPreDefinedAdapterBindings(
   config: StructuredConfig,
   portMap: PortMap,
 ): AdapterBindings {
   return {
     contexts: config.bounded_contexts
       .filter(ctxHasPreDefinedAdapters)
+      // R09: a shared-kernel owns no adapters either — drop pre-defined ones.
+      .filter((ctx) => !ctxIsSharedKernel(ctx))
       .map((ctx) => {
         const ctxPorts = portMap.contexts.find(
           (p) => p.contextName === ctx.name,

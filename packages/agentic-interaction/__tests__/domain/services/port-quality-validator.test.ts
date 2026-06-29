@@ -58,10 +58,11 @@ describe("validatePortQuality", () => {
     assert.ok(issues.some((i) => i.rule === "R17" && i.severity === "error"));
   });
 
-  test("forAggregate with NO known aggregate roots → advisory warning R17 (not error)", () => {
+  test("forAggregate with NO known aggregate roots emits no R17 (scoped out as noise)", () => {
     // contexts-but-no-aggregates import: Stage 3 invents forAggregate names, but
-    // there is no known set to validate them against, so the finding is advisory
-    // rather than the ~1-per-port hard-error flood it used to produce.
+    // there is no known set to validate them against. Rather than flood ~1
+    // advisory per port (a manifest imported with empty `domain: {}` produced
+    // dozens), R17 stays silent when the context declares no aggregate roots.
     const port: PortDefinition = {
       name: "SceneConfigRepositoryPort",
       type: "repository",
@@ -69,12 +70,10 @@ describe("validatePortQuality", () => {
       forAggregate: "SceneConfig",
     };
     const issues = validatePortQuality([port], "scene-orchestration", []);
-    const r17 = issues.filter((i) => i.rule === "R17");
-    assert.strictEqual(r17.length, 1);
     assert.strictEqual(
-      r17[0].severity,
-      "warning",
-      "R17 is advisory when the context declares no aggregate roots",
+      issues.filter((i) => i.rule === "R17").length,
+      0,
+      "R17 is suppressed when the context declares no aggregate roots",
     );
   });
 

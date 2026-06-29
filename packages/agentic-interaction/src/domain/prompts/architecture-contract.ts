@@ -148,3 +148,14 @@ function tokenizeContextName(name: string): string[] {
 export function isBannedContextName(name: string): boolean {
   return tokenizeContextName(name).some((token) => BANNED_TOKEN_SET.has(token));
 }
+
+/** The banned token(s) present in a context name (deduped; empty if none). Lets
+ * an R01 finding name the offending token(s) instead of the vague "contains a
+ * banned technology token", so the user knows exactly what to rename. */
+export function bannedTokensInContextName(name: string): string[] {
+  return [
+    ...new Set(
+      tokenizeContextName(name).filter((token) => BANNED_TOKEN_SET.has(token)),
+    ),
+  ];
+}
