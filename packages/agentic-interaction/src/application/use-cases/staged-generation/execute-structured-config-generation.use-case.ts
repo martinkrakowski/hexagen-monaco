@@ -1110,8 +1110,14 @@ function inferAdapterImplements(
   // made `…RepositoryAdapter` stop matching `…RepositoryPort` once R12 prefixed a
   // context name for uniqueness (phantom R04/R05 on adapters that are right there).
   const core = adapterName
+    // Strip a leading infrastructure TECHNOLOGY that precedes the domain concept
+    // (`PostgresOrderRepositoryAdapter` → `OrderRepository`). NOT `Email` — it's a
+    // notification CHANNEL, so a bare `EmailNotifierAdapter` would collapse to
+    // "notifier" and tie across every `…NotifierPort` (order-dependent misbind);
+    // left intact it goes honestly unbound, while a real `EmailOrderNotifierAdapter`
+    // still binds `OrderNotifierPort` by containment below.
     .replace(
-      /^(Postgres|Mysql|Redis|Rabbit(MQ)?|Mqtt|Express|Axios|Supabase|Stripe|Vercel|FlyIO|Email)/i,
+      /^(Postgres|Mysql|Redis|Rabbit(MQ)?|Mqtt|Express|Axios|Supabase|Stripe|Vercel|FlyIO)/i,
       "",
     )
     .replace(/(Controller|Listener)?Adapter$/i, "")

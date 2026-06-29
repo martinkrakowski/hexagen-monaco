@@ -167,4 +167,32 @@ describe("inferAdapterImplements (import-path port↔adapter reconstruction)", (
       "OrderRepositoryPort",
     );
   });
+
+  it("does not strip the `Email` channel into a bare type word (would tie across NotifierPorts)", () => {
+    const cfg = parseStructuredConfig(
+      [
+        "bounded_contexts:",
+        "  - name: notifications",
+        "    type: core",
+        "    description: Notifications.",
+        "    layers:",
+        "      application:",
+        "        ports:",
+        "          out: [OrderNotifierPort, ShipmentNotifierPort]",
+        "      infrastructure:",
+        "        adapters: [EmailOrderNotifierAdapter, EmailNotifierAdapter]",
+        "",
+      ].join("\n"),
+    );
+    const m = new Map(
+      buildPreDefinedAdapterBindings(cfg, buildPreDefinedPortMap(cfg))
+        .contexts.find((c) => c.contextName === "notifications")!
+        .adapters.map((a) => [a.name, a.implements]),
+    );
+    // A real, concept-bearing email adapter still binds via containment…
+    assert.strictEqual(m.get("EmailOrderNotifierAdapter"), "OrderNotifierPort");
+    // …but a bare `EmailNotifierAdapter` is ambiguous across both NotifierPorts,
+    // so it stays unbound rather than order-dependently mis-binding one.
+    assert.strictEqual(m.get("EmailNotifierAdapter"), "");
+  });
 });
