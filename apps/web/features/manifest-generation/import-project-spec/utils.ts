@@ -189,6 +189,7 @@ const AUTO_APPLIED_ADVISORIES: ReadonlyArray<{ prefix: string; rule: string }> =
   [
     { prefix: "Renamed adapter ", rule: "(R12)" },
     { prefix: "Auto-added a default repository port ", rule: "(R03)" },
+    { prefix: "Renamed context ", rule: "(R01)" },
   ];
 
 export function isAutoAppliedNotice(message: string): boolean {

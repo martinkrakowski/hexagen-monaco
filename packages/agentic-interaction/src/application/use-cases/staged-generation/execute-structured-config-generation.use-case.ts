@@ -25,7 +25,11 @@ import {
   dedupeAdapterNames,
   type RenamedAdapter,
 } from "../../../domain/manifest/dedupe-adapter-names";
-import { isBannedContextName } from "../../../domain/prompts/architecture-contract";
+import {
+  isBannedContextName,
+  bannedTokensInContextName,
+  sanitizeContextName,
+} from "../../../domain/prompts/architecture-contract";
 import { ExecutePortMappingUseCase } from "./execute-port-mapping.use-case";
 import { ExecuteAdapterAssignmentUseCase } from "./execute-adapter-assignment.use-case";
 import { ExecuteManifestAssemblyUseCase } from "./execute-manifest-assembly.use-case";
@@ -1231,6 +1235,67 @@ export function collectMalformedManifestEntries(
   return malformed;
 }
 
+/**
+ * Deterministically resolve R01 (a banned technology token in a context name) at
+ * the SOURCE: rename each offending context to a token-free name and rewrite every
+ * reference (context_mappings upstream/downstream + use_cases keys). `depends_on`
+ * is derived from the mappings during Stage-5 assembly, so it inherits the clean
+ * name. A name that can't be salvaged (every token banned, e.g. `api-gateway`) is
+ * left untouched for the user as an R01 advisory. Mutates `config` in place and
+ * returns the renames — reported as an adjustment, never silent (mirrors R12/R03).
+ */
+export function sanitizeBannedContextNames(config: StructuredConfig): {
+  renamed: Array<{ from: string; to: string; tokens: string[] }>;
+} {
+  const taken = new Set(
+    config.bounded_contexts.map((c) => c.name).filter(Boolean),
+  );
+  const rename = new Map<string, string>();
+  const renamed: Array<{ from: string; to: string; tokens: string[] }> = [];
+  for (const ctx of config.bounded_contexts) {
+    if (!ctx.name || !isBannedContextName(ctx.name)) continue;
+    const base = sanitizeContextName(ctx.name);
+    if (!base) continue; // unsalvageable → leave as an R01 advisory
+    taken.delete(ctx.name);
+    let candidate = base;
+    for (let n = 2; taken.has(candidate); n++) candidate = `${base}-${n}`;
+    taken.add(candidate);
+    rename.set(ctx.name, candidate);
+    renamed.push({
+      from: ctx.name,
+      to: candidate,
+      tokens: bannedTokensInContextName(ctx.name),
+    });
+    ctx.name = candidate;
+  }
+  if (rename.size === 0) return { renamed };
+
+  // Rewrite references by NORMALIZED identity (casing/alias-tolerant, matching the
+  // rest of the pipeline's `normalizeContextName` lookups) — an exact-string match
+  // would orphan a mapping/use_case that points at the context via a casing or
+  // alias variant of the old name (e.g. `PaymentGateway` for `payment-gateway`).
+  const renameNorm = new Map(
+    [...rename].map(([from, to]) => [normalizeContextName(from), to]),
+  );
+  const remap = (ref: string): string | undefined =>
+    renameNorm.get(normalizeContextName(ref));
+
+  for (const m of config.context_mappings ?? []) {
+    if (m.upstream) m.upstream = remap(m.upstream) ?? m.upstream;
+    if (m.downstream) m.downstream = remap(m.downstream) ?? m.downstream;
+  }
+  if (config.use_cases) {
+    for (const [key, value] of Object.entries(config.use_cases)) {
+      const to = remap(key);
+      if (to && to !== key) {
+        config.use_cases[to] = value;
+        delete config.use_cases[key];
+      }
+    }
+  }
+  return { renamed };
+}
+
 export function buildPreDefinedPortMap(config: StructuredConfig): PortMap {
   // Coerce + drop un-nameable entries so a typed-object port doesn't throw the
   // whole rebuild; discards are reported separately (collectMalformedManifestEntries).
@@ -1833,8 +1898,17 @@ export class ExecuteStructuredConfigGenerationUseCase {
     callbacks?.onProgress?.(0, 0);
     let config: StructuredConfig;
     let normalizedPrompt: NormalizedPrompt;
+    let contextRenameWarnings: string[] = [];
     try {
       config = parseStructuredConfig(rawConfig);
+      // R01 at the source: rename contexts whose names carry a banned technology
+      // token (`scene-port-adapter` → `scene-port`) before anything is built
+      // around them, so the clean name flows through classification, ports,
+      // adapters, mappings and the gate — R01 never reaches Stage 6/7.
+      contextRenameWarnings = sanitizeBannedContextNames(config).renamed.map(
+        (r) =>
+          `Renamed context '${r.from}' to '${r.to}' to remove the banned technology token${r.tokens.length > 1 ? "s" : ""} '${r.tokens.join("', '")}' (R01) — a context is named for a business capability, not a technical pattern.`,
+      );
       normalizedPrompt = buildNormalizedPromptFromConfig(config);
     } catch (e) {
       const durationMs = Date.now() - s0Start;
@@ -2134,6 +2208,11 @@ export class ExecuteStructuredConfigGenerationUseCase {
     for (const warning of adapterRenameWarnings) {
       callbacks?.onChunk?.(`Stage 5 · ${warning}`);
     }
+    // R01 context renames were applied at Stage 0 (source); surface them with the
+    // other deterministic adjustments so they land in the "adjustments" list.
+    for (const warning of contextRenameWarnings) {
+      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
+    }
 
     // Stage 5: Manifest Assembly (synchronous, returns AssembledManifest directly)
     const s5Start = Date.now();
@@ -2191,6 +2270,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
     // reject path both carry them. They are warnings, not errors, so `passed` and
     // the deterministic gate are unaffected.
     const assemblyAdvisories = [
+      ...contextRenameWarnings,
       ...repositorySynthesisWarnings,
       ...adapterRenameWarnings,
     ];
