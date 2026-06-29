@@ -1101,31 +1101,61 @@ function inferAdapterImplements(
   adapterName: string,
   portNames: string[],
 ): string {
-  // Strip common technology prefixes and type suffixes to isolate the core name
+  // Adapter names follow `{Tech?}{Context?}{PortConcept}{Controller|Listener?}Adapter`.
+  // The OUTBOUND type word (Repository/Publisher/Notifier/Client) is part of the
+  // PORT name too, so it must be KEPT; only a tech prefix, the inbound-only
+  // Controller/Listener qualifier, and the `Adapter` suffix are noise. Stripping
+  // the type word — as this once did — collapsed `AuditTrailNotifierAdapter` to
+  // "audittrail", which then greedily mis-matched `GetAuditTrailQueryPort`, and
+  // made `…RepositoryAdapter` stop matching `…RepositoryPort` once R12 prefixed a
+  // context name for uniqueness (phantom R04/R05 on adapters that are right there).
   const core = adapterName
+    // Strip a leading infrastructure TECHNOLOGY that precedes the domain concept
+    // (`PostgresOrderRepositoryAdapter` → `OrderRepository`). NOT `Email` — it's a
+    // notification CHANNEL, so a bare `EmailNotifierAdapter` would collapse to
+    // "notifier" and tie across every `…NotifierPort` (order-dependent misbind);
+    // left intact it goes honestly unbound, while a real `EmailOrderNotifierAdapter`
+    // still binds `OrderNotifierPort` by containment below.
     .replace(
-      /^(Postgres|Mysql|Redis|Rabbit(MQ)?|Mqtt|Express|Axios|Supabase|Stripe|Vercel|FlyIO|Email)/i,
+      /^(Postgres|Mysql|Redis|Rabbit(MQ)?|Mqtt|Express|Axios|Supabase|Stripe|Vercel|FlyIO)/i,
       "",
     )
-    .replace(
-      /(Repo|Repository|Controller|Listener|Publisher|Client|Notifier|Integration)?Adapter$/i,
-      "",
-    )
+    .replace(/(Controller|Listener)?Adapter$/i, "")
     .toLowerCase();
+  if (!core) return "";
 
-  if (core) {
-    const match = portNames.find((p) => {
-      const portCore = p.replace(/Port$/i, "").toLowerCase();
-      return portCore.includes(core) || core.includes(portCore);
-    });
-    if (match) return match;
+  // Longest-containment wins: the adapter core and a port's core (sans `Port`)
+  // must be one a substring of the other — this spans both the abbreviated shape
+  // (`StockAdapter` → `StockRepositoryPort`) and the R12-prefixed shape
+  // (`ReviewLifecycleMachineContextRepositoryAdapter` → `MachineContextRepositoryPort`).
+  // Among all matches we keep the LONGEST overlap, so a specific port beats an
+  // incidental short substring (e.g. `ExternalPipelineClientAdapter` binds
+  // `ExternalPipelineClientPort`, not the shorter inbound `PipelinePort`).
+  let best = "";
+  let bestOverlap = 0;
+  let bestExact = false;
+  for (const portName of portNames) {
+    const portCore = portName.replace(/Port$/i, "").toLowerCase();
+    if (!portCore) continue;
+    if (!core.includes(portCore) && !portCore.includes(core)) continue;
+    const overlap = Math.min(core.length, portCore.length);
+    const exact = portCore === core;
+    // Longer overlap wins; on a TIE, an exact match beats a longer *containing*
+    // port (e.g. `OrderRepositoryAdapter` → `OrderRepositoryPort`, not
+    // `OrderRepositoryExtendedPort`) so the pick isn't portNames-order-dependent.
+    if (
+      overlap > bestOverlap ||
+      (overlap === bestOverlap && exact && !bestExact)
+    ) {
+      best = portName;
+      bestOverlap = overlap;
+      bestExact = exact;
+    }
   }
-  // No name match → leave UNBOUND ("") rather than misattributing to the first
-  // port: a false `implements` hides the real R04/R05 on the intended port and
-  // manufactures a double-coverage error on portNames[0]. An empty implements is
-  // skipped by the R04/R05 adapter-count loop, so the unmatched port correctly
-  // surfaces as uncovered — the safer failure mode for the deterministic gate.
-  return "";
+  // No name match → leave UNBOUND ("") rather than misattributing: an empty
+  // implements is skipped by the R04/R05 count loop, so the unmatched port
+  // surfaces honestly as uncovered instead of hiding behind a wrong binding.
+  return best;
 }
 
 /** First line of an error, truncated — surfaces a previously-swallowed reason. */
