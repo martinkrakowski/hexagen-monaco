@@ -113,11 +113,18 @@ export class SavedProjectsV4MigrationStep implements MigrationStep {
   async verify(): Promise<boolean> {
     if (typeof window === "undefined") return true;
 
-    const loadResult = await this.savedProjectsPersistence.loadProjects();
-    if (!loadResult.success) return false;
+    // Defensive like migrate(): a throwing port would otherwise reject out of
+    // the orchestrator's step loop and skip the steps registered after this one
+    // for the rest of the boot.
+    try {
+      const loadResult = await this.savedProjectsPersistence.loadProjects();
+      if (!loadResult.success) return false;
 
-    return loadResult.value.every(
-      (p) => Number.isFinite(p.schemaVersion) && p.schemaVersion >= 4,
-    );
+      return loadResult.value.every(
+        (p) => Number.isFinite(p.schemaVersion) && p.schemaVersion >= 4,
+      );
+    } catch {
+      return false;
+    }
   }
 }

@@ -191,6 +191,37 @@ describe("useSavedProjects — layer mutations", () => {
     assert.strictEqual(missing, false, "unknown layer id → false, no change");
   });
 
+  it("updateLayer ignores explicitly-undefined patch keys (no field clobber)", async () => {
+    persistence.state.projects = [
+      seed("p1", [
+        {
+          id: "L1",
+          kind: "brainstorm",
+          title: "keep me",
+          turns: [{ id: "t1", author: "A", content: "c" }],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ]),
+    ];
+    const { result } = await mountLoaded();
+
+    let ok = false;
+    await act(async () => {
+      // TS allows explicit undefined through Partial<>; a bare spread would
+      // overwrite required fields and persist an invalid layer.
+      ok = await result.current.updateLayer("p1", "L1", {
+        title: undefined,
+        turns: undefined,
+      });
+    });
+
+    assert.strictEqual(ok, true);
+    const layer = result.current.projects[0].layers[0];
+    assert.strictEqual(layer.title, "keep me");
+    assert.strictEqual(layer.turns.length, 1);
+  });
+
   it("removeLayer deletes a matched layer and no-ops an unknown one", async () => {
     persistence.state.projects = [
       seed("p1", [
