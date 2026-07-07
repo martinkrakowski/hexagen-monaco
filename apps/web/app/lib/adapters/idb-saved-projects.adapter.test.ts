@@ -1,7 +1,10 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 
-import { normalizeLoadedProjects } from "./idb-saved-projects.adapter";
+import {
+  normalizeLoadedProjects,
+  normalizeLayers,
+} from "./idb-saved-projects.adapter";
 
 /** Read a top-level formState field without leaking `any` into the test. */
 const fs = (project: { formState: unknown }): Record<string, unknown> =>
@@ -140,5 +143,145 @@ describe("normalizeLoadedProjects", () => {
       {},
       "sibling record's default must be untouched",
     );
+  });
+
+  it("defaults layers to [] on both the valid and preserve paths", () => {
+    const result = normalizeLoadedProjects([
+      { id: "valid", formState: { addOnsAnswers: {} } }, // valid path
+      { id: "drift", formState: { boundedContexts: "drift" } }, // preserve path
+    ]);
+    assert.strictEqual(result.length, 2);
+    assert.deepStrictEqual(result[0].layers, []);
+    assert.deepStrictEqual(result[1].layers, []);
+  });
+
+  it("round-trips a well-formed brainstorm layer through the load path", () => {
+    const result = normalizeLoadedProjects([
+      {
+        id: "p1",
+        formState: {},
+        layers: [
+          {
+            id: "L1",
+            kind: "brainstorm",
+            title: "Initial brainstorm",
+            createdAt: 10,
+            updatedAt: 20,
+            turns: [
+              { id: "t1", author: "Grok", content: "propose", at: 11 },
+              { id: "t2", author: "Claude", content: "critique" },
+            ],
+          },
+        ],
+      },
+    ]);
+    assert.strictEqual(result.length, 1);
+    assert.deepStrictEqual(result[0].layers, [
+      {
+        id: "L1",
+        kind: "brainstorm",
+        title: "Initial brainstorm",
+        createdAt: 10,
+        updatedAt: 20,
+        turns: [
+          { id: "t1", author: "Grok", content: "propose", at: 11 },
+          { id: "t2", author: "Claude", content: "critique" },
+        ],
+      },
+    ]);
+  });
+});
+
+describe("normalizeLayers (salvage policy)", () => {
+  it("returns [] for absent or non-array layers", () => {
+    assert.deepStrictEqual(normalizeLayers(undefined, "p"), []);
+    assert.deepStrictEqual(normalizeLayers("nope", "p"), []);
+    assert.deepStrictEqual(normalizeLayers({ not: "array" }, "p"), []);
+  });
+
+  it("drops a turn ONLY when content is not a usable string (payload is sacred)", () => {
+    const [layer] = normalizeLayers(
+      [
+        {
+          id: "L",
+          title: "t",
+          turns: [
+            { id: "a", author: "X", content: "keep me" },
+            { id: "b", author: "X" }, // no content → dropped
+            { id: "c", author: "X", content: 42 }, // non-string content → dropped
+            "not-an-object", // → dropped
+          ],
+        },
+      ],
+      "p",
+    );
+    assert.strictEqual(layer.turns.length, 1);
+    assert.strictEqual(layer.turns[0].content, "keep me");
+  });
+
+  it("defaults bad metadata rather than dropping the turn (author, at)", () => {
+    const [layer] = normalizeLayers(
+      [
+        {
+          id: "L",
+          title: "t",
+          turns: [
+            { content: "no author" }, // author defaulted
+            { author: 5, content: "bad author type", at: "soon" }, // author defaulted, bad at removed
+          ],
+        },
+      ],
+      "p",
+    );
+    assert.strictEqual(layer.turns[0].author, "Unknown");
+    assert.strictEqual(layer.turns[1].author, "Unknown");
+    assert.ok(
+      !("at" in layer.turns[1]),
+      "non-finite at is removed, not stored",
+    );
+  });
+
+  it("synthesizes stable ids for missing layer/turn ids (deterministic across reloads)", () => {
+    const input = [{ title: "t", turns: [{ content: "hi" }] }];
+    const a = normalizeLayers(input, "proj");
+    const b = normalizeLayers(input, "proj");
+    assert.strictEqual(a[0].id, "proj-layer-0");
+    assert.strictEqual(a[0].turns[0].id, "proj-layer-0-turn-0");
+    // Same input + same projectId → same synthesized ids (no React-key churn).
+    assert.deepStrictEqual(a, b);
+  });
+
+  it("defaults a missing OR blank title and preserves an unknown future kind", () => {
+    const [missing, blank, future] = normalizeLayers(
+      [
+        { id: "L1", turns: [] },
+        { id: "L2", title: "", turns: [] },
+        { id: "L3", kind: "decisions", title: "Future", turns: [] },
+      ],
+      "p",
+    );
+    assert.strictEqual(missing.title, "Untitled session");
+    assert.strictEqual(blank.title, "Untitled session");
+    assert.strictEqual(missing.kind, "brainstorm");
+    // A newer client's layer kind is preserved, not mislabeled.
+    assert.strictEqual(future.kind, "decisions");
+  });
+
+  it("drops a non-object layer but keeps its salvageable siblings", () => {
+    const layers = normalizeLayers(
+      [null, { id: "ok", title: "keep", turns: [] }, 7],
+      "p",
+    );
+    assert.strictEqual(layers.length, 1);
+    assert.strictEqual(layers[0].id, "ok");
+  });
+
+  it("defaults missing timestamps (updatedAt falls back to createdAt)", () => {
+    const [layer] = normalizeLayers(
+      [{ id: "L", title: "t", createdAt: 99, turns: [] }],
+      "p",
+    );
+    assert.strictEqual(layer.createdAt, 99);
+    assert.strictEqual(layer.updatedAt, 99);
   });
 });

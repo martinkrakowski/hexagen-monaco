@@ -3,6 +3,8 @@ import { projectConfigSchema } from "@hexagen/project-configuration";
 import { withFormStateDefaults } from "../form-state-defaults";
 import type {
   SavedProject,
+  ProjectLayer,
+  ProjectLayerTurn,
   SavedProjectsPersistencePort,
   PersistenceError,
   Result,
@@ -10,6 +12,98 @@ import type {
 } from "@hexagen/shared";
 
 const SAVED_PROJECTS_KEY = "hexagen:saved-projects";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Salvage `layers` at the load perimeter, using the same policy as the
+ * record-level normalize above: preserve payload, default metadata, drop only
+ * genuine garbage. A brainstorm turn's `content` is often the user's only copy
+ * of that prose (a pasted archive, or a live-session turn generated in-app), so
+ * damaged metadata (`author`/`id`/`at`) never deletes it — a turn is dropped
+ * only when it isn't an object or its `content` isn't a string. Missing ids are
+ * synthesized deterministically (stable across reloads for unchanged data, so
+ * React keys don't churn); missing/mistyped `author`, `title`, and timestamps
+ * default rather than drop.
+ */
+export function normalizeLayers(
+  raw: unknown,
+  projectId: string,
+  logger?: LoggerPort,
+): ProjectLayer[] {
+  // Absent (undefined) or explicit null → no layers, silently. Only a present
+  // non-array value is worth warning about.
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    logger?.warn(
+      `[saved-projects] layers for ${projectId} is not an array; defaulting to []`,
+    );
+    return [];
+  }
+
+  const layers: ProjectLayer[] = [];
+  raw.forEach((rawLayer, layerIndex) => {
+    if (!isRecord(rawLayer)) {
+      logger?.warn(
+        `[saved-projects] dropping a layer on ${projectId} — not an object`,
+      );
+      return;
+    }
+
+    const layerId =
+      typeof rawLayer.id === "string" && rawLayer.id
+        ? rawLayer.id
+        : `${projectId}-layer-${layerIndex}`;
+    // Preserve an unknown/future `kind` rather than mislabel it; default only a
+    // missing/non-string one to the sole v1 kind.
+    const kind =
+      typeof rawLayer.kind === "string" && rawLayer.kind
+        ? (rawLayer.kind as ProjectLayer["kind"])
+        : "brainstorm";
+    const title =
+      typeof rawLayer.title === "string" && rawLayer.title
+        ? rawLayer.title
+        : "Untitled session";
+    const createdAt = Number.isFinite(rawLayer.createdAt)
+      ? (rawLayer.createdAt as number)
+      : 0;
+    const updatedAt = Number.isFinite(rawLayer.updatedAt)
+      ? (rawLayer.updatedAt as number)
+      : createdAt;
+
+    const rawTurns = Array.isArray(rawLayer.turns) ? rawLayer.turns : [];
+    const turns: ProjectLayerTurn[] = [];
+    rawTurns.forEach((rawTurn, turnIndex) => {
+      if (!isRecord(rawTurn)) {
+        logger?.warn(
+          `[saved-projects] dropping a turn on ${layerId} — not an object`,
+        );
+        return;
+      }
+      // `content` is the irreplaceable payload — the only drop condition.
+      if (typeof rawTurn.content !== "string") {
+        logger?.warn(
+          `[saved-projects] dropping a turn on ${layerId} — content is not a string`,
+        );
+        return;
+      }
+      turns.push({
+        id:
+          typeof rawTurn.id === "string" && rawTurn.id
+            ? rawTurn.id
+            : `${layerId}-turn-${turnIndex}`,
+        author: typeof rawTurn.author === "string" ? rawTurn.author : "Unknown",
+        content: rawTurn.content,
+        ...(Number.isFinite(rawTurn.at) ? { at: rawTurn.at as number } : {}),
+      });
+    });
+
+    layers.push({ id: layerId, kind, title, turns, createdAt, updatedAt });
+  });
+  return layers;
+}
 
 /**
  * Normalize the raw IDB value into `SavedProject[]` at the load perimeter, so
@@ -30,6 +124,8 @@ const SAVED_PROJECTS_KEY = "hexagen:saved-projects";
  *   renamed since it was saved — this repo has had such drift) → **preserved**
  *   via `withFormStateDefaults` + logged. Never dropped: the app already renders
  *   this "drifted" data today, so dropping it would be a silent regression.
+ * - **`layers`** → defaulted to `[]` when absent and salvaged per turn (see
+ *   `normalizeLayers`), on BOTH the valid and preserve paths.
  *
  * One bad record never fails the whole load (per-record isolation) — that would
  * hide every saved project.
@@ -88,6 +184,7 @@ export function normalizeLoadedProjects(
           ...(rawFormState as Record<string, unknown>),
           ...parsed.data,
         } as SavedProject["formState"],
+        layers: normalizeLayers(record.layers, id, logger),
       });
       continue;
     }
@@ -108,6 +205,7 @@ export function normalizeLoadedProjects(
       formState: withFormStateDefaults(
         rawFormState,
       ) as SavedProject["formState"],
+      layers: normalizeLayers(record.layers, id, logger),
     });
   }
   return out;
