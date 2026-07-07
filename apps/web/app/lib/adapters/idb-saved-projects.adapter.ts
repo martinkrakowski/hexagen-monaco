@@ -138,10 +138,7 @@ export function normalizeLoadedProjects(
 
   const out: SavedProject[] = [];
   for (const entry of raw as unknown[]) {
-    const record: Record<string, unknown> =
-      entry && typeof entry === "object" && !Array.isArray(entry)
-        ? (entry as Record<string, unknown>)
-        : {};
+    const record: Record<string, unknown> = isRecord(entry) ? entry : {};
 
     // No usable string id → the record can't be keyed/opened/deleted; drop it.
     if (typeof record.id !== "string") {

@@ -255,7 +255,15 @@ export function useSavedProjects() {
         const layers = p.layers.map((l) => {
           if (l.id !== layerId) return l;
           touched = true;
-          return { ...l, ...patch, updatedAt: now };
+          // Apply only defined keys: TS lets a caller pass `{ title: undefined }`
+          // through Partial<>, and a bare `...patch` spread would overwrite a
+          // required field with undefined (then persist it).
+          return {
+            ...l,
+            ...(patch.title !== undefined ? { title: patch.title } : {}),
+            ...(patch.turns !== undefined ? { turns: patch.turns } : {}),
+            updatedAt: now,
+          };
         });
         return touched ? { ...p, layers, updatedAt: now } : p;
       });
