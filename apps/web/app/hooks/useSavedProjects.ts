@@ -82,6 +82,10 @@ export function useSavedProjects() {
       name: string,
       formState: ProjectConfig,
       manifestYaml: string,
+      // Provenance captured at creation time (e.g. the imported spec text from
+      // the accept flow) — persisted atomically with the project so a separate
+      // follow-up write can't fail and leave the project without its layer.
+      initialLayers: NewProjectLayer[] = [],
     ): Promise<string | null> => {
       const id = crypto.randomUUID();
       const now = Date.now();
@@ -93,7 +97,12 @@ export function useSavedProjects() {
         updatedAt: now,
         formState,
         manifestYaml,
-        layers: [],
+        layers: initialLayers.map((layer) => ({
+          ...layer,
+          id: crypto.randomUUID(),
+          createdAt: now,
+          updatedAt: now,
+        })),
       };
       const snapshot = projectsRef.current;
       const updated = [newProject, ...snapshot];

@@ -16,6 +16,12 @@
 export interface LayoutMemoProps {
   currentStepIndex: unknown;
   viewMode: unknown;
+  // Phase props MUST be compared (the regression class this comparator's note
+  // warns about): the layout renders the PhaseToggle and swaps the whole shell
+  // on `phase`, so skipping any of these would freeze the workspace in a phase.
+  phase: unknown;
+  onPhaseChange: unknown;
+  canUsePlanPhase: unknown;
   onViewModeChange: unknown;
   onCloseMiddlePanel: unknown;
   onCloseRightPanel: unknown;
@@ -35,6 +41,9 @@ export function projectWorkspaceLayoutPropsEqual(
 ): boolean {
   if (prev.currentStepIndex !== next.currentStepIndex) return false;
   if (prev.viewMode !== next.viewMode) return false;
+  if (prev.phase !== next.phase) return false;
+  if (prev.onPhaseChange !== next.onPhaseChange) return false;
+  if (prev.canUsePlanPhase !== next.canUsePlanPhase) return false;
   if (prev.onViewModeChange !== next.onViewModeChange) return false;
   if (prev.onCloseMiddlePanel !== next.onCloseMiddlePanel) return false;
   if (prev.onCloseRightPanel !== next.onCloseRightPanel) return false;

@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useCallback, useEffect, useRef } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
+import type { WorkspacePhase } from "../../features/workspace-shell/plan-phase/PhaseToggle";
 
 import { ProjectWorkspace } from "../../features/workspace-shell/ProjectWorkspace";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
@@ -59,17 +60,39 @@ function WizardLayoutInner({ children }: { children: React.ReactNode }) {
 
   const viewMode: ViewMode =
     searchParams.get("view") === "code" ? "code" : "visual";
+  // The workspace phase survives reload/back via the URL, like ?view=code.
+  const phase: WorkspacePhase =
+    searchParams.get("phase") === "plan" ? "plan" : "architecture";
 
   const viewToggle = usePanelToggle("view");
   const middleToggle = usePanelToggle("middle");
   const rightToggle = usePanelToggle("right");
+  // Destructure the memoized fns: usePanelToggle returns a fresh object every
+  // render, and onPhaseChange feeds the layout's React.memo comparator — an
+  // object dep would re-mint the callback per render and defeat the memo.
+  const { toggle: setPhaseParam, close: clearPhaseParam } =
+    usePanelToggle("phase");
   const stepNav = useStepNavigation(currentStepIndex);
+
+  const onPhaseChange = useCallback(
+    (next: WorkspacePhase) => {
+      if (next === phase) return;
+      // "architecture" is the default → represented by the param's absence.
+      // toggle() is safe here: the early-return guarantees the param isn't
+      // already "plan", so it always sets rather than clears.
+      if (next === "plan") setPhaseParam("plan");
+      else clearPhaseParam();
+    },
+    [phase, setPhaseParam, clearPhaseParam],
+  );
 
   return (
     <ErrorBoundary>
       <ProjectWorkspace
         currentStepIndex={currentStepIndex}
         viewMode={viewMode}
+        phase={phase}
+        onPhaseChange={onPhaseChange}
         onViewModeChange={(mode: ViewMode) => viewToggle.toggle(mode)}
         onCloseMiddlePanel={middleToggle.close}
         onCloseRightPanel={rightToggle.close}

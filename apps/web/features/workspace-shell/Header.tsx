@@ -20,6 +20,12 @@ interface HeaderProps {
   onOpenWelcomeManifest: () => void;
   onNavigateToProjects?: () => void;
   isEditing?: boolean;
+  /**
+   * Workspace-phase switcher slot (Plan ↔ Architecture). A slot rather than a
+   * context consumer because this Header is also mounted outside the wizard
+   * lifecycle provider (apps/web/app/projects/layout.tsx).
+   */
+  phaseSlot?: React.ReactNode;
 }
 
 export function Header({
@@ -28,6 +34,7 @@ export function Header({
   onOpenWelcomeManifest,
   onNavigateToProjects,
   isEditing = false,
+  phaseSlot,
 }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
   const { activeWorkspace } = useActiveWorkspace();
@@ -87,6 +94,7 @@ export function Header({
           )}
         </div>
         <div className="flex items-center gap-2">
+          {phaseSlot}
           {isEditing && (
             <span className="text-xs font-medium text-muted-foreground px-2 py-1">
               Editing

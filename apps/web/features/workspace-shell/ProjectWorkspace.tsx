@@ -25,10 +25,14 @@ import {
   useEditorGuard,
 } from "@/contexts/EditorGuardContext";
 import type { ViewMode } from "@/types/view-mode";
+import { PhaseToggle, type WorkspacePhase } from "./plan-phase/PhaseToggle";
+import { PlanPhaseView } from "./plan-phase/PlanPhaseView";
 
 export interface ProjectWorkspaceProps {
   currentStepIndex: number;
   viewMode: ViewMode;
+  phase: WorkspacePhase;
+  onPhaseChange: (phase: WorkspacePhase) => void;
   onViewModeChange: (mode: ViewMode) => void;
   onCloseMiddlePanel: () => void;
   onCloseRightPanel: () => void;
@@ -40,6 +44,8 @@ export interface ProjectWorkspaceProps {
 export function ProjectWorkspace({
   currentStepIndex,
   viewMode,
+  phase,
+  onPhaseChange,
   onViewModeChange,
   onCloseMiddlePanel,
   onCloseRightPanel,
@@ -53,6 +59,10 @@ export function ProjectWorkspace({
   const editor = useEditorSession();
   const isEditing = ui.state.kind === "edit";
   const pendingRoute = useRef<string | null>(null);
+  // Layers live on the SAVED project only — genesis has nothing for addLayer to
+  // target (an unmatched id is a silent no-op), and one dialog path enters edit
+  // mode with an empty id, so gate on a real projectId, not just the mode.
+  const canUsePlanPhase = ui.state.kind === "edit" && ui.state.projectId !== "";
 
   return (
     <EditorGuardProvider>
@@ -66,6 +76,9 @@ export function ProjectWorkspace({
         <ProjectWorkspaceLayout
           currentStepIndex={currentStepIndex}
           viewMode={viewMode}
+          phase={phase}
+          onPhaseChange={onPhaseChange}
+          canUsePlanPhase={canUsePlanPhase}
           onViewModeChange={onViewModeChange}
           onCloseMiddlePanel={onCloseMiddlePanel}
           onCloseRightPanel={onCloseRightPanel}
@@ -86,6 +99,9 @@ export function ProjectWorkspace({
 interface ProjectWorkspaceLayoutProps {
   currentStepIndex: number;
   viewMode: ViewMode;
+  phase: WorkspacePhase;
+  onPhaseChange: (phase: WorkspacePhase) => void;
+  canUsePlanPhase: boolean;
   onViewModeChange: (mode: ViewMode) => void;
   onCloseMiddlePanel: () => void;
   onCloseRightPanel: () => void;
@@ -101,6 +117,9 @@ interface ProjectWorkspaceLayoutProps {
 const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
   currentStepIndex,
   viewMode,
+  phase,
+  onPhaseChange,
+  canUsePlanPhase,
   onViewModeChange,
   onCloseMiddlePanel,
   onCloseRightPanel,
@@ -113,6 +132,7 @@ const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
   children,
 }: ProjectWorkspaceLayoutProps) {
   const guard = useEditorGuard();
+  const pendingPhase = useRef<WorkspacePhase | null>(null);
   const handleNavigate = useCallback(
     (route: string) => {
       // Unsaved editor (in-buffer) changes take priority — prompt to save them
@@ -130,6 +150,28 @@ const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
     [guard.hasUnsavedChanges, isEditing, ui, router, pendingRoute],
   );
 
+  // Switching phase unmounts the whole 3-pane shell (incl. the Monaco editor,
+  // whose in-buffer edits are component-local and lost on unmount) — so it must
+  // respect the same unsaved-editor guard as every other shell exit. Only the
+  // unsaved-editor branch applies: an in-workspace phase switch is not "leave
+  // the project", so the new-project confirm must NOT fire here.
+  const handlePhaseChange = useCallback(
+    (next: WorkspacePhase) => {
+      if (guard.hasUnsavedChanges) {
+        pendingPhase.current = next;
+        ui.openDialog({ kind: "unsaved-editor" });
+      } else {
+        onPhaseChange(next);
+      }
+    },
+    [guard.hasUnsavedChanges, ui, onPhaseChange],
+  );
+
+  // Whole-shell phase swap: "Plan" replaces the entire 3-pane layout below the
+  // Header. Gated on a real saved project (see canUsePlanPhase) — a direct
+  // ?phase=plan URL in genesis mode falls back to the Architecture shell.
+  const planPhaseActive = phase === "plan" && canUsePlanPhase;
+
   return (
     <ExportProvider onEditorPushed={editor.clearUnpushed}>
       <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
@@ -139,49 +181,58 @@ const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
           onNewProject={() => handleNavigate("/projects/new")}
           onOpenWelcomeManifest={() => handleNavigate("/projects/new/ai")}
           onNavigateToProjects={onNavigateToProjects}
+          phaseSlot={
+            canUsePlanPhase ? (
+              <PhaseToggle phase={phase} onPhaseChange={handlePhaseChange} />
+            ) : undefined
+          }
         />
 
         <main className="flex-1 flex flex-col overflow-hidden">
-          <ResizableLayout
-            leftTitle="HexaGen Project Wizard"
-            rightTitle="AI Governance"
-            onRightPanelClose={onCloseRightPanel}
-            onLeftPanelClose={onCloseMiddlePanel}
-            left={
-              <WizardStepFormProvider>
-                <SelectedAddOnsProvider>
-                  <WizardStepRouter
-                    currentStepIndex={currentStepIndex}
-                    totalSteps={wizardSteps.length}
-                    onViewModeChange={onViewModeChange}
-                    activeContextId={ui.activeContextId ?? ""}
-                    activeMappingId={ui.activeMappingId ?? ""}
-                    onContextSelect={(id) => ui.setContextId(id)}
-                    onMappingSelect={(id) => ui.setMappingId(id)}
-                  />
-                </SelectedAddOnsProvider>
-              </WizardStepFormProvider>
-            }
-            middle={
-              <ArchitecturePreviewPane
-                viewMode={viewMode}
-                selectedFileId={editor.selectedFileId}
-                editedFiles={editor.editedFiles}
-                unpushed={editor.unpushed}
-                onViewModeChange={onViewModeChange}
-                onFileSelect={editor.selectFile}
-                onFileContentChange={editor.updateFile}
-                onFileSave={editor.markFileSaved}
-                onPushed={editor.clearUnpushed}
-              />
-            }
-            right={
-              <GovernancePanelWrapper
-                currentStepIndex={currentStepIndex}
-                enabled={isEditing}
-              />
-            }
-          />
+          {planPhaseActive ? (
+            <PlanPhaseView />
+          ) : (
+            <ResizableLayout
+              leftTitle="HexaGen Project Wizard"
+              rightTitle="AI Governance"
+              onRightPanelClose={onCloseRightPanel}
+              onLeftPanelClose={onCloseMiddlePanel}
+              left={
+                <WizardStepFormProvider>
+                  <SelectedAddOnsProvider>
+                    <WizardStepRouter
+                      currentStepIndex={currentStepIndex}
+                      totalSteps={wizardSteps.length}
+                      onViewModeChange={onViewModeChange}
+                      activeContextId={ui.activeContextId ?? ""}
+                      activeMappingId={ui.activeMappingId ?? ""}
+                      onContextSelect={(id) => ui.setContextId(id)}
+                      onMappingSelect={(id) => ui.setMappingId(id)}
+                    />
+                  </SelectedAddOnsProvider>
+                </WizardStepFormProvider>
+              }
+              middle={
+                <ArchitecturePreviewPane
+                  viewMode={viewMode}
+                  selectedFileId={editor.selectedFileId}
+                  editedFiles={editor.editedFiles}
+                  unpushed={editor.unpushed}
+                  onViewModeChange={onViewModeChange}
+                  onFileSelect={editor.selectFile}
+                  onFileContentChange={editor.updateFile}
+                  onFileSave={editor.markFileSaved}
+                  onPushed={editor.clearUnpushed}
+                />
+              }
+              right={
+                <GovernancePanelWrapper
+                  currentStepIndex={currentStepIndex}
+                  enabled={isEditing}
+                />
+              }
+            />
+          )}
         </main>
 
         <NewProjectConfirmDialog
@@ -196,13 +247,18 @@ const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
           isOpen={ui.dialog.kind === "unsaved-editor"}
           onClose={() => {
             pendingRoute.current = null;
+            pendingPhase.current = null;
             ui.closeDialog();
           }}
           onProceed={() => {
             const route = pendingRoute.current;
+            const nextPhase = pendingPhase.current;
             pendingRoute.current = null;
+            pendingPhase.current = null;
             ui.closeDialog();
             if (route) router.push(route);
+            // A parked phase switch (never set together with a route).
+            if (nextPhase) onPhaseChange(nextPhase);
           }}
         />
       </div>

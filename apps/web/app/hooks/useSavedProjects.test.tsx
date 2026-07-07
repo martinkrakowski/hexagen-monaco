@@ -77,6 +77,31 @@ describe("useSavedProjects — layer mutations", () => {
     persistence.state.saveCount = 0;
   });
 
+  it("saveProject persists initial layers atomically with the new project", async () => {
+    persistence.state.projects = [seed("existing")];
+    const { result } = await mountLoaded();
+
+    let id: string | null = null;
+    await act(async () => {
+      id = await result.current.saveProject("Vellum", {} as never, "yaml: 1", [
+        brainstorm,
+      ]);
+    });
+
+    assert.ok(id, "project created");
+    assert.strictEqual(
+      persistence.state.saveCount,
+      1,
+      "one write — capture is part of the same save, not a follow-up",
+    );
+    const saved = result.current.projects.find((p) => p.id === id);
+    assert.ok(saved);
+    assert.strictEqual(saved.layers.length, 1);
+    assert.strictEqual(saved.layers[0].title, "Vellum");
+    assert.ok(saved.layers[0].id, "layer id stamped");
+    assert.strictEqual(saved.layers[0].turns[0].content, "the session");
+  });
+
   it("addLayer stamps identity/timestamps, appends, and persists (round-trip)", async () => {
     persistence.state.projects = [seed("p1")];
     const { result } = await mountLoaded();

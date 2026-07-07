@@ -92,6 +92,12 @@ export default function ImportProjectSpecPage() {
   );
   const [specSummary, setSpecSummary] = useState<SpecSummary | null>(null);
   const [specContent, setSpecContent] = useState<string>("");
+  // The user's ORIGINAL upload/paste, preserved for provenance capture at
+  // accept-save. `specContent` is overwritten by the loose-spec conversion
+  // (the converted JSON), so it can't serve as the honest record. Stays null
+  // on the generated-manifest fast path (the manifest IS the artifact —
+  // nothing upstream to capture).
+  const [originalSpecText, setOriginalSpecText] = useState<string | null>(null);
   const [cameFromConversion, setCameFromConversion] = useState(false);
   const [isJsonDisclosed, setIsJsonDisclosed] = useState(false);
   // Set when a generated manifest fails to parse into wizard data — shown
@@ -173,8 +179,10 @@ export default function ImportProjectSpecPage() {
     if (isGeneratedManifest(parsed)) {
       // Also clear any spec persisted by an earlier upload this session, so the
       // accept screen's Back returns to a clean upload page rather than
-      // rehydrating stale content.
+      // rehydrating stale content — and drop any earlier upload's provenance so
+      // it can't attach to this unrelated manifest.
       sessionStorage.removeItem("import_spec_content");
+      setOriginalSpecText(null);
       acceptManifest(content);
       return;
     }
@@ -184,6 +192,7 @@ export default function ImportProjectSpecPage() {
     // this page from sessionStorage and immediately re-fast-path — an infinite
     // Back→Accept loop.
     sessionStorage.setItem("import_spec_content", content);
+    setOriginalSpecText(content);
 
     const mode: InputMode = detectInputMode(content);
 
@@ -237,11 +246,14 @@ export default function ImportProjectSpecPage() {
         }
         // originPath lets the accept screen's Back/Regenerate return to THIS
         // flow (the spec survives in sessionStorage) instead of the prompt flow.
+        // originSpecText rides along so the accept-save can attach the user's
+        // ORIGINAL spec as a planning layer (null on the manifest fast path).
         pendingManifest.set(
           manifestYaml,
           wizardData,
           projectName,
           "/projects/new/import/spec",
+          originalSpecText,
         );
         router.push("/projects/new/ai/accept");
       } catch (err) {
@@ -260,7 +272,7 @@ export default function ImportProjectSpecPage() {
         );
       }
     },
-    [pendingManifest, router, carriedName],
+    [pendingManifest, router, carriedName, originalSpecText],
   );
 
   const runSpecGeneration = useCallback(
