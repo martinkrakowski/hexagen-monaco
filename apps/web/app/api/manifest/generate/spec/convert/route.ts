@@ -16,7 +16,7 @@ interface ConvertRequestBody {
 type NDJSONEvent =
   | { type: "chunk"; data: string }
   | { type: "progress"; message: string }
-  | { type: "done"; configJson: string; config: unknown }
+  | { type: "done"; configJson: string; config: unknown; warnings?: string[] }
   | { type: "error"; message: string };
 
 // How often to emit a liveness heartbeat while the model is working. The
@@ -155,6 +155,11 @@ export async function POST(request: NextRequest) {
             type: "done",
             configJson: result.value.configJson,
             config: result.value.config,
+            // Advisory conversion warnings (e.g. suspected output truncation)
+            // — surfaced on the review screen, never a failure.
+            ...(result.value.warnings?.length
+              ? { warnings: result.value.warnings }
+              : {}),
           });
         } else {
           const msg =

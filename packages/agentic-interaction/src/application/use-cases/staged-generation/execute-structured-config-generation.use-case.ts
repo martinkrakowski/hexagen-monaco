@@ -459,6 +459,27 @@ function dialectToAggregate(
 export function normalizeDialect(config: StructuredConfig): StructuredConfig {
   if (!Array.isArray(config.bounded_contexts)) return config;
 
+  // Crash-proofing (import-hardening G4): a context entry without a usable
+  // string `name` used to crash the pipeline MID-RUN — a 500 after minutes of
+  // LLM work (`inferContextTypeWithConfidence` calls `ctx.name.toLowerCase()`,
+  // classification keys on the name). Drop such entries at ingestion, before
+  // the SPEC_REVIEW screen, so the user reviews exactly what will import; if
+  // nothing survives, fail fast with the same shape error a missing
+  // `bounded_contexts` produces.
+  const namedContexts = config.bounded_contexts.filter(
+    (ctx) =>
+      ctx !== null &&
+      typeof ctx === "object" &&
+      typeof (ctx as { name?: unknown }).name === "string" &&
+      (ctx as { name: string }).name.trim().length > 0,
+  );
+  if (namedContexts.length === 0) {
+    throw new StructuredConfigShapeError(
+      "Config must have at least one bounded context with a string 'name'.",
+    );
+  }
+  config.bounded_contexts = namedContexts;
+
   // Dialect: `project` may be an object ({ name, description, version, ... }), but
   // the pipeline expects the project NAME as a string. Coerce to `.name` so a
   // downstream `${config.project}` / projectName never becomes "[object Object]"

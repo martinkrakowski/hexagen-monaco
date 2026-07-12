@@ -45,7 +45,19 @@ export class ExecuteLooseSpecConversionUseCase {
     looseSpec: string,
     callbacks?: LooseSpecConversionCallbacks,
   ): Promise<
-    | { success: true; value: { configJson: string; config: StructuredConfig } }
+    | {
+        success: true;
+        value: {
+          configJson: string;
+          config: StructuredConfig;
+          /**
+           * Advisory conditions detected during conversion — currently the
+           * output-truncation suspicion (import-hardening G3). Surfaced on
+           * the review screen; never blocks the conversion.
+           */
+          warnings?: string[];
+        };
+      }
     | { success: false; error: unknown }
   > {
     if (looseSpec.length > MAX_LOOSE_SPEC_INPUT_CHARS) {
@@ -208,6 +220,21 @@ export class ExecuteLooseSpecConversionUseCase {
       let parsedConfig: StructuredConfig | null = null;
       let parseErrorStr = "";
 
+      // Output-truncation heuristic (import-hardening G3): this stage emits up
+      // to `maxTokens` and a large spec can hit that ceiling, after which
+      // jsonrepair happily closes the cut-off document and the tail contexts
+      // vanish SILENTLY. Signal: the raw output is not strict JSON *and* its
+      // last character isn't a closing brace/bracket (cut mid-structure).
+      // jsonrepair's other fix-ups (quotes, trailing commas) leave the tail
+      // intact, so this stays quiet for ordinary repairs.
+      let truncationSuspected = false;
+      try {
+        JSON.parse(cleanedResponse);
+      } catch {
+        const tail = cleanedResponse.trimEnd().slice(-1);
+        truncationSuspected = tail !== "}" && tail !== "]";
+      }
+
       try {
         const repaired = jsonrepair(cleanedResponse);
         parsedConfig = parseStructuredConfig(repaired);
@@ -217,11 +244,19 @@ export class ExecuteLooseSpecConversionUseCase {
 
       if (parsedConfig) {
         console.log(
-          `${LOG_PREFIX} phase=conversion, attempt=${attempt}, success=true`,
+          `${LOG_PREFIX} phase=conversion, attempt=${attempt}, success=true, truncationSuspected=${truncationSuspected}`,
         );
+        const warnings: string[] = [];
+        if (truncationSuspected) {
+          const count = parsedConfig.bounded_contexts.length;
+          warnings.push(
+            `The conversion output appears to have been cut off by the model's output limit — ${count} bounded context${count === 1 ? "" : "s"} were recovered, but content at the end of your spec may be missing. Review the converted spec carefully (or split the spec) before generating.`,
+          );
+        }
         return ok({
           configJson: JSON.stringify(parsedConfig, null, 2),
           config: parsedConfig,
+          ...(warnings.length > 0 ? { warnings } : {}),
         });
       }
 

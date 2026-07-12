@@ -1,0 +1,16 @@
+# Corpus: pseudo-YAML with TypeScript signatures — parses only through
+# sanitizePseudoYaml (both the sequence-item and mapping-value forms).
+project: sigspec
+bounded_contexts:
+  - name: Orders
+    responsibility: Order lifecycle
+    aggregates:
+      - name: Order
+    ports:
+      primary:
+        - name: PlaceOrderPort
+      driven:
+        - name: OrderRepositoryPort
+          signature: (order: Order) => Promise<void>
+    methods:
+      - placeOrder(cmd: PlaceOrder): Promise<OrderId>

@@ -24,6 +24,12 @@ export interface UseLooseSpecConversionReturn {
   error: string | null;
   /** Latest server-side liveness message from the conversion stream, if any. */
   progressMessage: string | null;
+  /**
+   * Advisory warnings from the last successful conversion (e.g. suspected
+   * output truncation, import-hardening G3). Shown on the review screen so a
+   * silently-shortened conversion is never presented as complete.
+   */
+  warnings: string[];
   reset: () => void;
   convert: (
     looseSpec: string,
@@ -46,6 +52,7 @@ export function useLooseSpecConversion(
   const [isConverting, setIsConverting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   const abortRef = useRef(false);
   const convertingLockRef = useRef(false);
@@ -62,6 +69,7 @@ export function useLooseSpecConversion(
     setIsConverting(false);
     setError(null);
     setProgressMessage(null);
+    setWarnings([]);
   };
 
   const executeCloudConversion = async (
@@ -107,6 +115,13 @@ export function useLooseSpecConversion(
             return null;
           }
           if (event.type === "done") {
+            setWarnings(
+              Array.isArray(event.warnings)
+                ? (event.warnings as unknown[]).filter(
+                    (w): w is string => typeof w === "string",
+                  )
+                : [],
+            );
             return { convertedConfig: event.configJson, error: null };
           }
           if (event.type === "error") {
@@ -168,6 +183,7 @@ export function useLooseSpecConversion(
     setError(null);
     setConvertedConfig(null);
     setProgressMessage(null);
+    setWarnings([]);
     setIsConverting(true);
 
     const controller = new AbortController();
@@ -214,6 +230,7 @@ export function useLooseSpecConversion(
 
           if (result.success) {
             setConvertedConfig(result.value.configJson);
+            setWarnings(result.value.warnings ?? []);
             return { convertedConfig: result.value.configJson, error: null };
           }
 
@@ -290,6 +307,7 @@ export function useLooseSpecConversion(
     isConverting,
     error,
     progressMessage,
+    warnings,
     reset,
     convert,
   };

@@ -1,0 +1,6 @@
+# Corpus: every context entry lacks a usable string name — must fail fast with
+# a shape error (import-hardening G4), not crash mid-pipeline.
+bounded_contexts:
+  - responsibility: something
+  - name: ""
+  - 42

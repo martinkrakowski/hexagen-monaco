@@ -223,3 +223,69 @@ describe("ExecuteLooseSpecConversionUseCase", () => {
     }
   });
 });
+
+describe("ExecuteLooseSpecConversionUseCase — truncation detection (G3)", () => {
+  const makePort = (content: string) =>
+    ({
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content,
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
+    }) as unknown as SendStructuredRequestPort;
+
+  test("output cut mid-structure -> success WITH a truncation warning", async () => {
+    // A large conversion that hit the output-token ceiling: jsonrepair closes
+    // the document and the tail contexts vanish. The conversion must succeed
+    // (the salvage is real) but SAY so — silent truncation is how a
+    // 25-context spec quietly imports as 12.
+    const truncated = `{
+      "bounded_contexts": [
+        { "name": "orders", "type": "core" },
+        { "name": "billing", "type": "core" },
+        { "name": "shipp`;
+    const useCase = new ExecuteLooseSpecConversionUseCase(makePort(truncated));
+    const result = await useCase.execute("Build a big platform");
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.warnings?.length, 1);
+      assert.match(result.value.warnings![0], /cut off/);
+      // jsonrepair may salvage the cut-off entry as a mangled context
+      // ("shipp") — the exact count is whatever survived; the warning itself
+      // is the point.
+      assert.match(result.value.warnings![0], /\d+ bounded contexts/);
+    }
+  });
+
+  test("ordinary repair (trailing comment, intact tail) -> no warning", async () => {
+    const repairableButComplete = `{
+      "bounded_contexts": [
+        { "name": "orders", "type": "core" },
+      ]
+    }`;
+    const useCase = new ExecuteLooseSpecConversionUseCase(
+      makePort(repairableButComplete),
+    );
+    const result = await useCase.execute("Build a platform");
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.warnings, undefined);
+    }
+  });
+
+  test("strictly valid JSON -> no warning", async () => {
+    const valid = `{"bounded_contexts": [{"name": "orders", "type": "core"}]}`;
+    const useCase = new ExecuteLooseSpecConversionUseCase(makePort(valid));
+    const result = await useCase.execute("Build a platform");
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.warnings, undefined);
+    }
+  });
+});
