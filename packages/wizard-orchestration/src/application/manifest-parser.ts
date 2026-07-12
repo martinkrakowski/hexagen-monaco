@@ -44,12 +44,18 @@ export function parseManifestToWizardData(yamlString: string): WizardData {
     );
   }
 
-  // Validate against the manifest schema
+  // Validate against the manifest schema. Include each issue's PATH: a bare
+  // "Required" gives the user (and the error banner that quotes this message)
+  // nothing to act on — "apps.0.name: Required" names the offending field.
   const parseResult = ManifestSchema.safeParse(parsedManifest);
   if (!parseResult.success) {
     throw new Error(
       `Manifest validation failed: ${parseResult.error.errors
-        .map((err) => err.message)
+        .map((err) =>
+          err.path.length > 0
+            ? `${err.path.join(".")}: ${err.message}`
+            : err.message,
+        )
         .join(", ")}`,
     );
   }

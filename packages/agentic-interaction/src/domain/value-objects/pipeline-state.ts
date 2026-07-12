@@ -138,6 +138,18 @@ export interface AssembledManifest {
   yaml: string;
   parsedObject: Record<string, unknown>;
   assemblyWarnings?: AssemblyWarning[];
+  /**
+   * Drops/coercions the Stage-5 schema gate made so the rendered manifest
+   * parses under the accept screen's strict ManifestSchema (see
+   * enforce-manifest-schema.ts). Surfaced by orchestrators as adjustments.
+   */
+  schemaAdvisories?: string[];
+  /**
+   * Schema issues that survived the gate's sanitization (`path: message`).
+   * Should be empty; non-empty means the accept screen will reject the
+   * manifest, so orchestrators surface these as errors.
+   */
+  schemaIssues?: string[];
 }
 
 export interface ValidationReport {

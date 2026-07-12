@@ -5,6 +5,7 @@ import {
   toKebabCase,
   normalizeContextName,
 } from "../../../domain/index";
+import { enforceManifestSchema } from "../../../domain/manifest/enforce-manifest-schema";
 import type {
   ManifestDraft,
   ManifestDraftContext,
@@ -151,6 +152,14 @@ export class ExecuteManifestAssemblyUseCase {
       }
     }
 
+    // Schema gate: the accept screen parses the returned YAML with the STRICT
+    // ManifestSchema, and `apps` / `context_mappings` / the domain enrichment
+    // above carry LLM-derived values verbatim (loose-spec conversion, Stage-7
+    // repair ops). Sanitize BEFORE rendering so yaml and parsedObject agree,
+    // and report every change — one bad app entry must not brick the whole
+    // manifest at the last click.
+    const schemaGate = enforceManifestSchema(manifestObj);
+
     const manifestYaml = renderManifestYaml(manifestObj);
 
     const assemblyWarnings: AssemblyWarning[] = [];
@@ -192,6 +201,12 @@ export class ExecuteManifestAssemblyUseCase {
       yaml: manifestYaml,
       parsedObject: manifestObj as unknown as Record<string, unknown>,
       assemblyWarnings,
+      ...(schemaGate.advisories.length > 0
+        ? { schemaAdvisories: schemaGate.advisories }
+        : {}),
+      ...(schemaGate.residualIssues.length > 0
+        ? { schemaIssues: schemaGate.residualIssues }
+        : {}),
     };
   }
 }

@@ -271,6 +271,22 @@ export class ExecuteFullStagedGenerationUseCase {
     });
     callbacks?.onProgress?.(5, Date.now() - s5Start);
 
+    // Schema-gate outcomes (enforce-manifest-schema.ts): drops/coercions are
+    // Stage-5 adjustment chunks; a residual issue means the accept screen's
+    // strict ManifestSchema parse would reject the manifest, so it's surfaced
+    // and merged into the report as an error below — never swallowed.
+    for (const advisory of assembledManifest.schemaAdvisories ?? []) {
+      callbacks?.onChunk?.(`Stage 5 · ${advisory}`);
+    }
+    const schemaIssueErrors = (assembledManifest.schemaIssues ?? []).map(
+      (issue) => `Manifest schema violation: ${issue}`,
+    );
+    if (schemaIssueErrors.length > 0) {
+      callbacks?.onChunk?.(
+        `Stage 5 · ⚠ Manifest failed schema validation after sanitization: ${(assembledManifest.schemaIssues ?? []).join("; ")}`,
+      );
+    }
+
     // Stage 6: Validation Review
     const s6Start = Date.now();
     callbacks?.onProgress?.(6, 0);
@@ -302,13 +318,21 @@ export class ExecuteFullStagedGenerationUseCase {
       stage3: portMap,
       stage4: dedupedAdapters,
       stage5: assembledManifest,
-      stage6:
-        adapterRenameWarnings.length > 0
-          ? {
-              ...s6.value,
-              warnings: [...s6.value.warnings, ...adapterRenameWarnings],
-            }
-          : s6.value,
+      stage6: (() => {
+        const extraWarnings = [
+          ...adapterRenameWarnings,
+          ...(assembledManifest.schemaAdvisories ?? []),
+        ];
+        if (extraWarnings.length === 0 && schemaIssueErrors.length === 0) {
+          return s6.value;
+        }
+        return {
+          ...s6.value,
+          warnings: [...s6.value.warnings, ...extraWarnings],
+          errors: [...s6.value.errors, ...schemaIssueErrors],
+          passed: s6.value.passed && schemaIssueErrors.length === 0,
+        };
+      })(),
       contextMappings,
     };
 

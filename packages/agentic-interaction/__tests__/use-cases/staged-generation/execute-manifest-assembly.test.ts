@@ -263,4 +263,58 @@ describe("Stage 5: Manifest Assembly", () => {
     const result = useCase.execute(state);
     assert.ok(Array.isArray(result.assemblyWarnings));
   });
+
+  // Regression (alvaro-ai import): LLM-derived `apps` entries flowed verbatim
+  // into the rendered YAML; a single entry without a `name` failed the accept
+  // screen's strict ManifestSchema parse and bricked the whole run behind a
+  // generic "could not be parsed". The Stage-5 schema gate must sanitize the
+  // output and report what it changed.
+  test("schema gate sanitizes LLM-derived apps and reports advisories", () => {
+    const state = {
+      stage0: {
+        intent: "Batch image upscaler",
+        explicitTechnologies: [],
+        explicitPatterns: [],
+        ambiguities: [],
+        projectName: "alvaro-ai",
+      },
+      stage2: {
+        accepted: [
+          { name: "image-domain", type: "core" as const, reasoning: "Images" },
+        ],
+        rejected: [],
+        uncertain: [],
+      },
+      stage3: {
+        contexts: [
+          {
+            contextName: "image-domain",
+            in: [],
+            out: [
+              {
+                name: "ImageRepositoryPort",
+                type: "repository",
+                description: "Image persistence",
+              },
+            ],
+          },
+        ],
+      },
+      stage4: { contexts: [{ contextName: "image-domain", adapters: [] }] },
+      // The shapes a loose-spec conversion has actually emitted: a bare string
+      // and an object missing `name`.
+      apps: ["web", { framework: "next.js" }, { name: "api" }],
+    };
+
+    const result = useCase.execute(state);
+
+    assert.ok(result.schemaAdvisories);
+    assert.equal(result.schemaAdvisories.length, 2);
+    assert.equal(result.schemaIssues, undefined);
+    // The rendered YAML and parsedObject agree, and both carry the sanitized apps.
+    const apps = (result.parsedObject as { apps: unknown[] }).apps;
+    assert.deepEqual(apps, [{ name: "web" }, { name: "api" }]);
+    assert.ok(result.yaml.includes("name: api"));
+    assert.ok(!result.yaml.includes("next.js"));
+  });
 });
