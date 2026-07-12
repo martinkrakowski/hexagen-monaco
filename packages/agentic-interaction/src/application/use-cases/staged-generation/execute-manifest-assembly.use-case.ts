@@ -68,7 +68,17 @@ export class ExecuteManifestAssemblyUseCase {
     // a first-match lookup silently dropped later entries' adapters from the
     // rendered YAML while the uncovered-port warning loop below (which
     // aggregates) saw them — warnings and output must read the same set.
-    // Dedupe by name so an exact duplicate entry can't emit an adapter twice.
+    //
+    // Dedupe by NAME (deliberately not name+implements): both orchestrators run
+    // dedupeAdapterNames (R12) before this stage, which RENAMES every same-name
+    // collision regardless of `implements` — so two same-named adapters cannot
+    // reach assembly through the pipeline. And the YAML renders adapters
+    // name-only (draftToManifest maps `a.name`): a composite key would emit two
+    // IDENTICAL name strings and let the warning loop count a binding the
+    // rendered manifest cannot express — the exact warnings/YAML divergence
+    // this helper exists to prevent, in the other direction. Under name-dedupe
+    // a collapsed second binding's port is flagged uncovered, which is true in
+    // the output's terms.
     const adaptersForContext = (contextName: string) => {
       const seen = new Set<string>();
       return adapterBindings
