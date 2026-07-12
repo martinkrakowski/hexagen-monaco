@@ -142,6 +142,29 @@ describe("useSavedProjects — layer mutations", () => {
     assert.ok(result.current.persistError, "persistError is surfaced");
   });
 
+  it("addLayer treats a THROWING port as a failed write (revert + persistError, no escaped rejection)", async () => {
+    persistence.state.projects = [seed("p1")];
+    const { result } = await mountLoaded();
+    const original = persistence.port.saveProjects;
+    persistence.port.saveProjects = async () => {
+      throw new Error("adapter blew up");
+    };
+
+    let layerId: string | null = "sentinel";
+    await act(async () => {
+      layerId = await result.current.addLayer("p1", brainstorm);
+    });
+    persistence.port.saveProjects = original;
+
+    assert.strictEqual(layerId, null, "reported as failure, not thrown");
+    assert.strictEqual(
+      result.current.projects[0].layers.length,
+      0,
+      "optimistic layer is reverted",
+    );
+    assert.strictEqual(result.current.persistError?.kind, "Unknown");
+  });
+
   it("addLayer on an unknown project id is an explicit no-op (no write)", async () => {
     persistence.state.projects = [seed("p1")];
     const { result } = await mountLoaded();

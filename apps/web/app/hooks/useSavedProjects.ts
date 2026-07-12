@@ -209,7 +209,22 @@ export function useSavedProjects() {
       const seq = ++mutationSeq.current;
       projectsRef.current = updated;
       setProjects(updated); // optimistic; reverted below if the write fails
-      const result = await port.saveProjects(updated.map(toBase));
+      // The wired IDB adapter returns a failed Result rather than throwing, but
+      // treat a throwing port as a failed write too — an escaped rejection here
+      // would blow past the dialog's inline error handling entirely.
+      let result: Awaited<ReturnType<typeof port.saveProjects>>;
+      try {
+        result = await port.saveProjects(updated.map(toBase));
+      } catch (e) {
+        result = {
+          success: false,
+          error: {
+            kind: "Unknown",
+            message: "Unexpected error persisting the layer mutation",
+            cause: e,
+          },
+        };
+      }
       if (!result.success) {
         if (mutationSeq.current === seq) {
           setProjects(snapshot);

@@ -133,6 +133,7 @@ export function ManifestAcceptPage() {
       pendingManifest.clear();
       // Clear the import spec so the next new project starts from a blank canvas.
       sessionStorage.removeItem("import_spec_content");
+      sessionStorage.removeItem("import_spec_original_content");
       router.push(`/wizard/1?project=${projectId}`);
     } catch {
       setSaveError("Unexpected error saving project. Please try again.");
