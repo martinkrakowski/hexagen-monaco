@@ -57,6 +57,41 @@ describe("sanitizePseudoYaml", () => {
     ].join("\n");
     assert.equal(sanitizePseudoYaml(input), input);
   });
+
+  it("quotes a TypeScript-signature MAPPING value (import-hardening G5)", () => {
+    // The mapping-value twin of the sequence-item case: the colon inside the
+    // parenthesised args breaks js-yaml. Previously unhandled, so a spec
+    // declaring port methods this way fell to the lossy LLM conversion.
+    const out = sanitizePseudoYaml(
+      [
+        "ports:",
+        "  driven:",
+        "    - name: OrderRepositoryPort",
+        "      signature: (order: Order) => Promise<void>",
+      ].join("\n"),
+    );
+    assert.match(out, /signature: "\(order: Order\) => Promise<void>"/);
+    assert.deepEqual(
+      (yaml.load(out) as { ports: { driven: unknown[] } }).ports.driven,
+      [
+        {
+          name: "OrderRepositoryPort",
+          signature: "(order: Order) => Promise<void>",
+        },
+      ],
+    );
+  });
+
+  it("quotes a bare arrow-function mapping value", () => {
+    const out = sanitizePseudoYaml("derived: () => Date.now()");
+    assert.equal(out, `derived: "() => Date.now()"`);
+  });
+
+  it("skips mapping values carrying an inline comment", () => {
+    // Quoting would swallow the comment into the value — leave the line alone.
+    const input = "signature: (a: B) => C # explained here";
+    assert.equal(sanitizePseudoYaml(input), input);
+  });
 });
 
 describe("parseStructuredConfig — pseudo-YAML recovery", () => {

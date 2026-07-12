@@ -44,6 +44,7 @@ import type { TransactionManagerPort } from "@hexagen/transaction-system";
 import type { ClassifyContextTypeUseCase } from "./classify-context-type.use-case";
 import { STAGE3_ESCALATION_CONFIG } from "./retry-with-escalation";
 import { sanitizePseudoYaml } from "../../../domain/utils/sanitize-pseudo-yaml";
+import { mapManifestDialect } from "../../../domain/utils/manifest-dialect";
 import { countManifestEntities } from "../../../domain/manifest/count-manifest-entities";
 import {
   parseRepairOps,
@@ -305,12 +306,21 @@ export function parseStructuredConfig(rawConfig: string): StructuredConfig {
 function parseStructuredConfigStrict(rawConfig: string): StructuredConfig {
   const trimmed = rawConfig.trimStart();
 
+  // Every parse path funnels through here: the Hexagen manifest dialect
+  // (`contexts:` + top-level `ports:`/`adapters:`) maps onto the canonical
+  // shape BEFORE the shape check, so real manifests stay on the deterministic
+  // path instead of detouring through the lossy LLM conversion. A canonical
+  // config passes through mapManifestDialect unchanged.
+  const finalize = (parsed: unknown): StructuredConfig => {
+    const mapped = mapManifestDialect(parsed) as StructuredConfig;
+    validateStructuredConfigShape(mapped);
+    return normalizeDialect(mapped);
+  };
+
   // JSON fast path
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     try {
-      const parsed = JSON.parse(rawConfig) as StructuredConfig;
-      validateStructuredConfigShape(parsed);
-      return normalizeDialect(parsed);
+      return finalize(JSON.parse(rawConfig));
     } catch (e) {
       if (e instanceof StructuredConfigShapeError) throw e;
       // JSON parse failed — fall through to YAML
@@ -320,9 +330,7 @@ function parseStructuredConfigStrict(rawConfig: string): StructuredConfig {
   // Single-document YAML path (covers .yaml, .yml, and malformed JSON)
   let singleDocError: unknown = null;
   try {
-    const parsed = yaml.load(rawConfig) as StructuredConfig;
-    validateStructuredConfigShape(parsed);
-    return normalizeDialect(parsed);
+    return finalize(yaml.load(rawConfig));
   } catch (e) {
     if (e instanceof StructuredConfigShapeError) {
       // Single-doc parse succeeded but shape was wrong — could still be
@@ -348,8 +356,7 @@ function parseStructuredConfigStrict(rawConfig: string): StructuredConfig {
   // use_cases, etc.).
   const merged = tryMergeMultiDocYaml(rawConfig);
   if (merged) {
-    validateStructuredConfigShape(merged);
-    return normalizeDialect(merged as StructuredConfig);
+    return finalize(merged);
   }
 
   // Multi-doc fallback didn't apply — surface the single-doc error.
@@ -509,13 +516,20 @@ export function normalizeDialect(config: StructuredConfig): StructuredConfig {
     // explicit `type: shared-kernel` already works; a shared-kernel plane wins
     // over a non-shared-kernel `type` (generic/core/supporting), since the plane
     // is the explicit structural designation.
+    // Compare separator-stripped so every authoring casing maps — the manifest
+    // dialect writes `plane: SharedKernel` (lowercases to "sharedkernel",
+    // which the previous hyphen/underscore-only comparison missed).
     const planeStr =
-      typeof ctx.plane === "string" ? ctx.plane.toLowerCase().trim() : "";
+      typeof ctx.plane === "string"
+        ? ctx.plane
+            .toLowerCase()
+            .trim()
+            .replace(/[-_\s]/g, "")
+        : "";
     const ctxNameNorm =
       typeof ctx.name === "string" ? normalizeContextName(ctx.name) : "";
     if (
-      (planeStr === "shared-kernel" ||
-        planeStr === "shared_kernel" ||
+      (planeStr === "sharedkernel" ||
         (ctxNameNorm !== "" && sharedKernelNames.has(ctxNameNorm))) &&
       String(ctx.type ?? "").toLowerCase() !== "shared-kernel" &&
       String(ctx.type ?? "").toLowerCase() !== "shared_kernel"

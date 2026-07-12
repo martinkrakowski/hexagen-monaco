@@ -85,3 +85,38 @@ use_cases:
 `;
   assert.strictEqual(detectInputMode(multiDocYaml), "structured-config");
 });
+
+test('detectInputMode: Hexagen manifest dialect (contexts: + top-level ports/adapters) routes to "structured-config"', () => {
+  // Previously fell to the hint path → "semi-structured" → the lossy LLM
+  // conversion, even though mapManifestDialect imports it deterministically
+  // (the alvaro-ai production failure). The shared isManifestDialect predicate
+  // keeps this routing in lockstep with the server-side mapping.
+  const manifestDialect = `name: alvaro-ai
+displayName: Alvaro AI
+contexts:
+  - name: ImageDomain
+    plane: Core
+    path: packages/core/image-domain
+  - name: Types
+    plane: SharedKernel
+    path: packages/shared/types
+ports:
+  - name: UpscalePort
+    path: packages/core/image-domain/src/ports/upscale.port.ts
+adapters:
+  - name: RealESRGANAdapter
+    implements: UpscalePort
+    context: RealESRGANAdapter
+`;
+  assert.strictEqual(detectInputMode(manifestDialect), "structured-config");
+});
+
+test("detectInputMode: a contexts: list of bare strings is NOT the manifest dialect", () => {
+  // Named objects are required; a string list is some other authoring style
+  // and keeps its heuristic routing.
+  const notDialect = `contexts:
+  - Orders
+  - Billing
+`;
+  assert.notStrictEqual(detectInputMode(notDialect), "structured-config");
+});

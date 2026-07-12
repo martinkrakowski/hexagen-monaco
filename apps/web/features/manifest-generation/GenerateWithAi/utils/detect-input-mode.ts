@@ -1,8 +1,9 @@
 import yaml from "js-yaml";
-// Import from the dedicated lightweight subpath (not the package barrel) so this
+// Import from the dedicated lightweight subpaths (not the package barrel) so this
 // client-reachable util doesn't pull the staged-generation pipeline into the
 // browser bundle.
 import { sanitizePseudoYaml } from "@hexagen/agentic-interaction/sanitize-pseudo-yaml";
+import { isManifestDialect } from "@hexagen/agentic-interaction/manifest-dialect";
 
 export type InputMode = "description" | "structured-config" | "semi-structured";
 
@@ -30,7 +31,11 @@ export function detectInputMode(content: string): InputMode {
         Array.isArray(obj.bounded_contexts) &&
         (obj.bounded_contexts as unknown[]).length > 0;
 
-      if (hasContexts) return "structured-config";
+      // The Hexagen manifest dialect (`contexts:` + top-level ports/adapters)
+      // maps deterministically server-side (mapManifestDialect in
+      // parseStructuredConfig) — the shared predicate keeps this routing and
+      // that mapping in lockstep, so such files skip the LLM conversion.
+      if (hasContexts || isManifestDialect(obj)) return "structured-config";
     }
   } catch {
     // Fallthrough

@@ -17,6 +17,11 @@
       "types": "./dist/domain/utils/sanitize-pseudo-yaml.d.ts",
       "source": "./src/domain/utils/sanitize-pseudo-yaml.ts",
       "default": "./dist/domain/utils/sanitize-pseudo-yaml.js"
+    },
+    "./manifest-dialect": {
+      "types": "./dist/domain/utils/manifest-dialect.d.ts",
+      "source": "./src/domain/utils/manifest-dialect.ts",
+      "default": "./dist/domain/utils/manifest-dialect.js"
     }
   },
   "scripts": {

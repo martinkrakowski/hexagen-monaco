@@ -1,5 +1,6 @@
 import type { StagedPhase } from "../staged-generation-types";
 import { normalizeContextName } from "@hexagen/agentic-interaction";
+import { isManifestDialect } from "@hexagen/agentic-interaction/manifest-dialect";
 
 export interface SpecSummary {
   contextCount: number;
@@ -13,9 +14,21 @@ export interface SpecSummary {
 export function extractSpecSummary(
   parsed: Record<string, unknown>,
 ): SpecSummary {
+  // The Hexagen manifest dialect names its contexts `contexts:` — count those
+  // so the review screen doesn't show "0 contexts" for a file the pipeline
+  // imports deterministically (mapManifestDialect). Domain counts below stay 0
+  // for that dialect (it carries ports/adapters, not aggregates/use cases).
   const contexts = Array.isArray(parsed.bounded_contexts)
     ? (parsed.bounded_contexts as Array<Record<string, unknown>>)
-    : [];
+    : isManifestDialect(parsed) && Array.isArray(parsed.contexts)
+      ? (parsed.contexts as Array<Record<string, unknown>>).filter(
+          (c) =>
+            typeof c === "object" &&
+            c !== null &&
+            typeof c.name === "string" &&
+            c.name.trim().length > 0,
+        )
+      : [];
 
   const useCasesMap =
     parsed.use_cases && typeof parsed.use_cases === "object"

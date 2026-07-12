@@ -190,3 +190,18 @@ describe("isAutoAppliedNotice", () => {
     );
   });
 });
+
+describe("extractSpecSummary — Hexagen manifest dialect", () => {
+  test("counts contexts: entries so the review screen doesn't show 0 contexts", () => {
+    const summary = extractSpecSummary({
+      name: "alvaro-ai",
+      contexts: [
+        { name: "ImageDomain", plane: "Core" },
+        { name: "Types", plane: "SharedKernel" },
+        { plane: "Core" }, // nameless — not counted, mirroring the mapper
+      ],
+      ports: [{ name: "UpscalePort" }],
+    });
+    assert.equal(summary.contextCount, 2);
+  });
+});
