@@ -132,6 +132,8 @@ export {
   ensurePortSuffix,
   normalizePortName,
   normalizeContextName,
+  matchAcceptedContextName,
+  canonicalContextName,
 } from "./manifest/index";
 export { validateDraft, checkClarificationTriggers } from "./manifest/index";
 export { draftToManifest } from "./manifest/index";

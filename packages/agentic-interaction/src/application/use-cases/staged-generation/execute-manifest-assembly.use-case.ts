@@ -4,6 +4,7 @@ import {
   renderManifestYaml,
   toKebabCase,
   normalizeContextName,
+  normalizePortName,
 } from "../../../domain/index";
 import { enforceManifestSchema } from "../../../domain/manifest/enforce-manifest-schema";
 import type {
@@ -62,11 +63,36 @@ export class ExecuteManifestAssemblyUseCase {
     const adapterBindings = state.stage4?.contexts || [];
     const domainAnalysis = state.stage1;
 
+    // Adapters for a context, collected across ALL bindings entries: bindings
+    // can hold a context more than once (pre-defined entry + a stage echo), and
+    // a first-match lookup silently dropped later entries' adapters from the
+    // rendered YAML while the uncovered-port warning loop below (which
+    // aggregates) saw them — warnings and output must read the same set.
+    //
+    // Dedupe by NAME (deliberately not name+implements): both orchestrators run
+    // dedupeAdapterNames (R12) before this stage, which RENAMES every same-name
+    // collision regardless of `implements` — so two same-named adapters cannot
+    // reach assembly through the pipeline. And the YAML renders adapters
+    // name-only (draftToManifest maps `a.name`): a composite key would emit two
+    // IDENTICAL name strings and let the warning loop count a binding the
+    // rendered manifest cannot express — the exact warnings/YAML divergence
+    // this helper exists to prevent, in the other direction. Under name-dedupe
+    // a collapsed second binding's port is flagged uncovered, which is true in
+    // the output's terms.
+    const adaptersForContext = (contextName: string) => {
+      const seen = new Set<string>();
+      return adapterBindings
+        .filter((a) => a.contextName === contextName)
+        .flatMap((a) => a.adapters)
+        .filter((a) => {
+          if (seen.has(a.name)) return false;
+          seen.add(a.name);
+          return true;
+        });
+    };
+
     for (const ctx of acceptedContexts) {
       const ctxPorts = portMap.find((p) => p.contextName === ctx.name);
-      const ctxAdapters = adapterBindings.find(
-        (a) => a.contextName === ctx.name,
-      );
 
       draftContexts.push({
         name: ctx.name,
@@ -76,7 +102,7 @@ export class ExecuteManifestAssemblyUseCase {
           in: ctxPorts?.in || [],
           out: ctxPorts?.out || [],
         },
-        adapters: ctxAdapters?.adapters || [],
+        adapters: adaptersForContext(ctx.name),
       });
     }
 
@@ -166,9 +192,9 @@ export class ExecuteManifestAssemblyUseCase {
 
     for (const ctx of acceptedContexts) {
       const ctxPorts = portMap.find((p) => p.contextName === ctx.name);
-      const ctxAdapters = adapterBindings.find(
-        (a) => a.contextName === ctx.name,
-      );
+      // Same aggregated view the draft build above renders — the warning and
+      // the emitted YAML must never disagree about which adapters exist.
+      const adapters = adaptersForContext(ctx.name);
 
       if (
         !ctxPorts ||
@@ -184,13 +210,20 @@ export class ExecuteManifestAssemblyUseCase {
       }
 
       const outPorts = ctxPorts?.out ?? [];
-      const adapters = ctxAdapters?.adapters ?? [];
       for (const port of outPorts) {
-        const hasAdapter = adapters.some((a) => a.implements === port.name);
+        // Compare + report NORMALIZED names: the emitted YAML goes through
+        // normalizeDraft (Port-suffix appended), so a raw-name warning cited
+        // ports the user cannot find in the manifest ("UpscaleProgressPublisher"
+        // vs the YAML's "UpscaleProgressPublisherPort" — the alvaro-ai import).
+        const normalizedPort = normalizePortName(port.name);
+        const hasAdapter = adapters.some(
+          (a) =>
+            a.implements && normalizePortName(a.implements) === normalizedPort,
+        );
         if (!hasAdapter) {
           assemblyWarnings.push({
             contextName: ctx.name,
-            message: `Outbound port "${port.name}" has no assigned adapter. Stage 4 may have missed this port.`,
+            message: `Outbound port "${normalizedPort}" has no assigned adapter. Stage 4 may have missed this port.`,
             severity: "warning",
           });
         }

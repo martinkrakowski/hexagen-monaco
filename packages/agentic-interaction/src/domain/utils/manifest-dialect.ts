@@ -25,8 +25,21 @@ interface DialectContext {
   responsibility?: string;
   responsibilities?: unknown;
   layers?: {
-    application?: { ports?: { in?: string[]; out?: string[] } };
-    infrastructure?: { adapters?: string[] };
+    application?: {
+      ports?: { in?: string[]; out?: string[] };
+      /** Sidecar: declared port descriptions (name → description), carried so
+       * the pipeline doesn't re-derive a trivial one from the name (R16). */
+      port_descriptions?: Record<string, string>;
+    };
+    infrastructure?: {
+      adapters?: string[];
+      /** Sidecar: declared bindings (adapter name → port), carried so the
+       * pipeline honors the author's `implements` instead of re-inferring —
+       * re-inference has no cross-context vocabulary and left every imported
+       * adapter unbound on the alvaro-ai import (5× phantom R06 'UnnamedPort',
+       * 11× real R14). */
+      adapter_implements?: Record<string, string>;
+    };
   };
   [key: string]: unknown;
 }
@@ -34,6 +47,7 @@ interface DialectContext {
 interface DialectPort {
   name: string;
   path?: string;
+  description?: unknown;
   [key: string]: unknown;
 }
 
@@ -108,12 +122,22 @@ function isInboundish(name: string): boolean {
  *   dropped — it is retained under the top-level `ports:` block of the
  *   converted spec (visible on the review screen for the user to correct),
  *   just not attached to a context.
- * - Top-level `adapters:` (`{name, context}`) append to the named context's
- *   `layers.infrastructure.adapters`. Explicit `implements` is not carried —
- *   the manifest layers hold name strings and the pipeline re-infers bindings
- *   (`inferAdapterImplements`, #400). An adapter whose `context` matches no
- *   context (or is absent) is likewise retained under top-level `adapters:`
- *   rather than dropped.
+ * - Top-level `adapters:` (`{name, context, implements}`) append to the named
+ *   context's `layers.infrastructure.adapters`, and the explicit `implements`
+ *   is carried in the `adapter_implements` sidecar so the pipeline honors the
+ *   author's binding instead of re-inferring it (re-inference is same-context
+ *   name containment only — it left every alvaro-ai adapter unbound). When the
+ *   implemented port is owned by a DIFFERENT context (the classic hexagonal
+ *   shape: infra context implements a core-owned port), the port name is also
+ *   seeded into the implementing context's `out` slot so the binding resolves
+ *   locally — the shared name across contexts then surfaces through the
+ *   single-ownership advisory (#402), which is the designed signal for this
+ *   pattern, instead of dying as an unbindable reference. An adapter whose
+ *   `context` matches no context (or is absent) is retained under top-level
+ *   `adapters:` rather than dropped.
+ * - Port `description:` strings are carried in the `port_descriptions` sidecar
+ *   (the canonical layers hold name strings only), so review findings quote the
+ *   author's own words rather than a name-derived stub (R16).
  * - The array-form `planes:` block (objects with name/description/color) is
  *   dropped — per-context `plane:` strings carry the signal downstream; the
  *   canonical map form passes through for normalizeDialect's shared-kernel
@@ -135,6 +159,15 @@ export function mapManifestDialect(parsed: unknown): unknown {
 
   const normalizeName = (name: string) =>
     name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  // Author descriptions for every declared port, used both by the owning
+  // context and by any implementing context a port gets seeded into below.
+  const portDescByName = new Map<string, string>(
+    ports.flatMap((p) =>
+      isNonEmptyString(p.description)
+        ? [[p.name, p.description.trim()] as const]
+        : [],
+    ),
+  );
 
   for (const ctx of contexts) {
     // Dialect `responsibilities:` list → canonical `responsibility` string.
@@ -177,6 +210,15 @@ export function mapManifestDialect(parsed: unknown): unknown {
     const existing = owner.layers?.application?.ports;
     const slot = new Set(existing?.[direction] ?? []);
     slot.add(port.name);
+    // Carry the author's port description (sidecar) — the canonical ports slots
+    // are name-only, and losing this produced name-derived stubs that Stage 6
+    // then flagged as trivial (R16) against the author's own input.
+    const descriptions = {
+      ...owner.layers?.application?.port_descriptions,
+      ...(isNonEmptyString(port.description)
+        ? { [port.name]: port.description.trim() }
+        : {}),
+    };
     owner.layers = {
       ...owner.layers,
       application: {
@@ -185,6 +227,9 @@ export function mapManifestDialect(parsed: unknown): unknown {
           in: direction === "in" ? [...slot] : (existing?.in ?? []),
           out: direction === "out" ? [...slot] : (existing?.out ?? []),
         },
+        ...(Object.keys(descriptions).length > 0
+          ? { port_descriptions: descriptions }
+          : {}),
       },
     };
   }
@@ -203,14 +248,67 @@ export function mapManifestDialect(parsed: unknown): unknown {
       continue;
     }
     const existing = target.layers?.infrastructure?.adapters ?? [];
-    if (existing.includes(adapter.name)) continue;
+    // Carry the author's declared binding (sidecar). The canonical adapters
+    // slot is name-only, and dropping `implements` forced same-context name
+    // re-inference downstream, which cannot express the dialect's declared
+    // cross-context bindings. Runs even when the adapter NAME is already
+    // listed (a context's inline layers can pre-declare the name the
+    // top-level adapters block then binds) — only the name append is
+    // conditional; skipping the whole entry dropped its binding and seeding,
+    // recreating the unbound-adapter failure mode for that shape. For a
+    // repeated name with conflicting targets, the LAST declaration wins in
+    // the sidecar (spread overwrite).
+    const declaredImplements = isNonEmptyString(adapter.implements)
+      ? adapter.implements.trim()
+      : undefined;
+    const bindings = {
+      ...target.layers?.infrastructure?.adapter_implements,
+      ...(declaredImplements ? { [adapter.name]: declaredImplements } : {}),
+    };
     target.layers = {
       ...target.layers,
       infrastructure: {
         ...target.layers?.infrastructure,
-        adapters: [...existing, adapter.name],
+        adapters: existing.includes(adapter.name)
+          ? existing
+          : [...existing, adapter.name],
+        ...(Object.keys(bindings).length > 0
+          ? { adapter_implements: bindings }
+          : {}),
       },
     };
+    // The declared port may be owned by a DIFFERENT context (infra implements a
+    // core-owned port — the classic hexagonal shape). Seed the port name into
+    // the implementing context's own `out` slot so the binding resolves in its
+    // context's port map; the duplicated name across contexts then surfaces via
+    // the single-ownership advisory (#402) — the designed signal — instead of
+    // the binding dying as an unresolvable reference.
+    if (declaredImplements) {
+      const ownPorts = target.layers?.application?.ports;
+      const alreadyLocal =
+        (ownPorts?.in ?? []).includes(declaredImplements) ||
+        (ownPorts?.out ?? []).includes(declaredImplements);
+      if (!alreadyLocal) {
+        const seededDesc = portDescByName.get(declaredImplements);
+        const descriptions = {
+          ...target.layers?.application?.port_descriptions,
+          ...(seededDesc ? { [declaredImplements]: seededDesc } : {}),
+        };
+        target.layers = {
+          ...target.layers,
+          application: {
+            ...target.layers?.application,
+            ports: {
+              in: ownPorts?.in ?? [],
+              out: [...(ownPorts?.out ?? []), declaredImplements],
+            },
+            ...(Object.keys(descriptions).length > 0
+              ? { port_descriptions: descriptions }
+              : {}),
+          },
+        };
+      }
+    }
   }
 
   const rest: Record<string, unknown> = { ...obj };

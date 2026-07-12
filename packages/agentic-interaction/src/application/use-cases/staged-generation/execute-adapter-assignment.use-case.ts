@@ -22,6 +22,12 @@ import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
 import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
+// Model-emitted context names arrive in casing/kebab variants of the names the
+// model was given (documented prod incident — same canonicalization exists in
+// Stage 3 and the Stage-6 prompt); resolve them to the requested spelling so
+// raw-equality consumers downstream (assembly draft, uncovered-port warning)
+// see one spelling per context.
+import { canonicalContextName } from "../../../domain/index";
 
 const STAGE_NUMBER = 4;
 
@@ -220,8 +226,14 @@ export class ExecuteAdapterAssignmentUseCase {
             : parsed
         ) as Record<string, unknown>;
 
-        const contextName =
+        const rawContextName =
           typeof entry.contextName === "string" ? entry.contextName : "";
+        const contextName = rawContextName
+          ? canonicalContextName(
+              rawContextName,
+              (state.stage2?.accepted ?? []).map((c) => c.name),
+            )
+          : "";
         // The system prompt uses "name" for the adapter name
         const adapterName = typeof entry.name === "string" ? entry.name : "";
         const adapterType =
@@ -270,12 +282,23 @@ export class ExecuteAdapterAssignmentUseCase {
           contexts.push({ contextName, adapters });
         }
         const result: AdapterBindings = { contexts };
-        const totalAdapters = contexts.reduce(
+        // Count only the REQUESTED contexts: the model sees the full port map
+        // for grounding and may echo entries for contexts it wasn't asked to
+        // assign (the orchestrator drops those) — counting the raw output said
+        // "across 7 contexts" right after "Assigning … across 5" (alvaro-ai).
+        // Context names are canonicalized above, so the requested match is exact.
+        const requestedNames = new Set(
+          (state.stage2?.accepted ?? []).map((c) => c.name),
+        );
+        const requestedEntries = contexts.filter((c) =>
+          requestedNames.has(c.contextName),
+        );
+        const totalAdapters = requestedEntries.reduce(
           (sum, c) => sum + c.adapters.length,
           0,
         );
         onChunk?.(
-          `${totalAdapters} adapters assigned across ${contexts.length} contexts`,
+          `${totalAdapters} adapters assigned across ${requestedEntries.length} of ${requestedNames.size} requested contexts`,
         );
         onStageTelemetry?.({
           stage: STAGE_NUMBER,

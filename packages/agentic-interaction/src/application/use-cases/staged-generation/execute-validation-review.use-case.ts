@@ -293,8 +293,12 @@ export class ExecuteValidationReviewUseCase {
           const bannedTokens = bannedTokensInContextName(ctx.name);
           if (bannedTokens.length > 0) {
             const tokenList = bannedTokens.map((t) => `'${t}'`).join(", ");
+            // Report the name as it appears in the EMITTED manifest (assembly
+            // kebab-cases context names): the finding previously cited
+            // 'QueueAdapter' while the YAML said 'queue-adapter' — a context
+            // the user cannot find (alvaro-ai).
             finalErrors.push(
-              `[R01] Context '${ctx.name}' violates R01: the name contains the banned technology token${
+              `[R01] Context '${normalizeContextName(ctx.name)}' violates R01: the name contains the banned technology token${
                 bannedTokens.length > 1 ? "s" : ""
               } ${tokenList} — rename it to a domain concept (a context is named after a business capability, not a technical pattern).`,
             );

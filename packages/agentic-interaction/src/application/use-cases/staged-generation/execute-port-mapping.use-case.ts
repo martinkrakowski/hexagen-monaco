@@ -6,6 +6,7 @@ import {
   STAGE3_PORTS_SYSTEM_PROMPT,
   compileStage3Prompt,
   normalizeContextName,
+  matchAcceptedContextName,
 } from "../../../domain/index";
 import type {
   PortMap,
@@ -132,19 +133,15 @@ export interface PortMappingResult {
 type StageState = Required<Pick<PipelineState, "stage0" | "stage1" | "stage2">>;
 
 /**
- * Find matching context name in accepted contexts, accounting for format variations.
+ * Find matching context name in accepted contexts, accounting for format
+ * variations. Thin Map-keyed wrapper over the shared matchAcceptedContextName
+ * (one normalize-and-match implementation for all stage code).
  */
 function findMatchingContextName(
   inputName: string,
   acceptedContextNames: Map<string, string>,
 ): string | undefined {
-  const normalized = normalizeContextName(inputName);
-  for (const [key] of acceptedContextNames.entries()) {
-    if (normalizeContextName(key) === normalized) {
-      return key;
-    }
-  }
-  return undefined;
+  return matchAcceptedContextName(inputName, acceptedContextNames.keys());
 }
 
 function filterStateForContext(

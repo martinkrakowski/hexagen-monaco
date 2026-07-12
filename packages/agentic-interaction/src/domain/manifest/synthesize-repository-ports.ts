@@ -115,16 +115,31 @@ export function synthesizeMissingRepositoryPorts(
   const synthByContext = new Map(
     synthesized.map((s) => [normalizeContextName(s.contextName), s]),
   );
+  // A pre-existing adapter ANYWHERE in the context's entries (bindings can hold
+  // the same context more than once — e.g. a pre-defined entry plus a stage-LLM
+  // echo) may already implement the synthesized port — adding a second would
+  // deterministically trip R04.
+  const implementedByContext = new Map<string, Set<string>>();
+  for (const ctx of adapterBindings.contexts) {
+    const key = normalizeContextName(ctx.contextName);
+    let set = implementedByContext.get(key);
+    if (!set) implementedByContext.set(key, (set = new Set<string>()));
+    for (const a of ctx.adapters) if (a.implements) set.add(a.implements);
+  }
   const adapterContextKeys = new Set<string>();
+  // Append each synthesized adapter to AT MOST ONE entry per context: with a
+  // duplicate context entry, a per-entry append minted two copies of the same
+  // adapter, which the R12 dedupe then "fixed" into a stuttered name plus a
+  // double assignment (phantom R04 — the alvaro-ai import).
+  const appendedKeys = new Set<string>();
   const augmentedAdapterContexts = adapterBindings.contexts.map((ctx) => {
     const key = normalizeContextName(ctx.contextName);
     adapterContextKeys.add(key);
     const entry = synthByContext.get(key);
     if (!entry) return ctx;
-    // A pre-existing adapter (e.g. a Stage-4 binding to a port Stage 3 never
-    // emitted) may already implement the synthesized port — adding a second
-    // would deterministically trip R04. Leave the existing one to cover it.
-    if (ctx.adapters.some((a) => a.implements === entry.portName)) return ctx;
+    if (appendedKeys.has(key)) return ctx;
+    if (implementedByContext.get(key)?.has(entry.portName)) return ctx;
+    appendedKeys.add(key);
     const adapter: AdapterBinding = {
       name: entry.adapterName,
       implements: entry.portName,
