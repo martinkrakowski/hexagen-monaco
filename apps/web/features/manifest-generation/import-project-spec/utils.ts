@@ -1,5 +1,6 @@
 import type { StagedPhase } from "../staged-generation-types";
 import { normalizeContextName } from "@hexagen/agentic-interaction";
+import { isManifestDialect } from "@hexagen/agentic-interaction/manifest-dialect";
 
 export interface SpecSummary {
   contextCount: number;
@@ -13,15 +14,6 @@ export interface SpecSummary {
 export function extractSpecSummary(
   parsed: Record<string, unknown>,
 ): SpecSummary {
-  const contexts = Array.isArray(parsed.bounded_contexts)
-    ? (parsed.bounded_contexts as Array<Record<string, unknown>>)
-    : [];
-
-  const useCasesMap =
-    parsed.use_cases && typeof parsed.use_cases === "object"
-      ? (parsed.use_cases as Record<string, unknown>)
-      : {};
-
   // Counts accept both the canonical shape and the rich "hexagonal" dialect
   // (domain_models.{entities,value_objects}, per-context primary_use_cases),
   // mirroring normalizeDialect in the structured-config pipeline so the review
@@ -33,16 +25,35 @@ export function extractSpecSummary(
   // Keep only entries that are objects with a non-empty string `name`, mirroring
   // the pipeline's `withName` so the review doesn't count nameless dialect entries
   // that normalizeDialect drops.
-  const named = (v: unknown): unknown[] =>
+  const named = (v: unknown): Array<Record<string, unknown>> =>
     Array.isArray(v)
-      ? v.filter(
+      ? (v.filter(
           (x) =>
             typeof x === "object" &&
             x !== null &&
             typeof (x as { name?: unknown }).name === "string" &&
             (x as { name: string }).name.trim().length > 0,
-        )
+        ) as Array<Record<string, unknown>>)
       : [];
+
+  // The Hexagen manifest dialect names its contexts `contexts:` — count those
+  // so the review screen doesn't show "0 contexts" for a file the pipeline
+  // imports deterministically (mapManifestDialect). Domain counts below stay 0
+  // for that dialect (it carries ports/adapters, not aggregates/use cases).
+  // Require a NON-EMPTY `bounded_contexts` before treating it as canonical,
+  // matching isManifestDialect — otherwise `bounded_contexts: []` alongside a
+  // populated `contexts:` (which the server maps) would report 0 contexts,
+  // reintroducing the "0 contexts" mismatch (CodeRabbit #409).
+  const contexts = hasItems(parsed.bounded_contexts)
+    ? (parsed.bounded_contexts as Array<Record<string, unknown>>)
+    : isManifestDialect(parsed)
+      ? named(parsed.contexts)
+      : [];
+
+  const useCasesMap =
+    parsed.use_cases && typeof parsed.use_cases === "object"
+      ? (parsed.use_cases as Record<string, unknown>)
+      : {};
 
   const aggregateCount = contexts.reduce((sum, ctx) => {
     if (hasItems(ctx.aggregates)) {

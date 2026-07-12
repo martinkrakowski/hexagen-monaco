@@ -62,6 +62,23 @@ export function sanitizePseudoYaml(raw: string): string {
       if (map) {
         return `${map[1]}${singleQuoteScalar(map[2])}`;
       }
+      // Mapping value that is a TypeScript signature:
+      // `signature: (order: Order) => Promise<void>` — the colon inside the
+      // parenthesised args makes js-yaml throw (same failure as the sequence
+      // form above, just as a mapping value). Quote the whole value. Gated on
+      // args-with-a-colon or an arrow so prose values are never touched. A line
+      // carrying an inline comment (a `#` preceded by ANY whitespace — space OR
+      // tab) is left untouched, so the comment is never swallowed into the
+      // quoted scalar; such a line stays on the fallback (LLM) path rather than
+      // being silently corrupted (qodo #409).
+      const sig = line.match(/^(\s*[\w-]+:\s+)([^"'#\s].*\S)\s*$/);
+      if (sig && !/\s#/.test(sig[2])) {
+        const value = sig[2];
+        const args = value.match(/\(([^)]*)\)/);
+        if ((args !== null && args[1].includes(":")) || value.includes("=>")) {
+          return `${sig[1]}${doubleQuoteScalar(value)}`;
+        }
+      }
       return line;
     })
     .join("\n");

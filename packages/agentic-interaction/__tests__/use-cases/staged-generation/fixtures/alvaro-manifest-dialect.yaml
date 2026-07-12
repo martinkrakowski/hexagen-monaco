@@ -1,0 +1,310 @@
+# =============================================================================
+# Hexagen-Monaco Manifest
+# Project: Alvaro AI  (Batch Image Upscaler)
+# Inspired by David Alfaro Siqueiros — master of large-scale mural art
+# Generated for: Martin Krakowski / Krakowski Cloud Solutions
+# Date: 2026-07-11
+# =============================================================================
+# This manifest is the single source of truth for architecture.
+# It is compiled by hexagen-lint and drives the visual canvas, generators,
+# and agent tools.
+# =============================================================================
+
+name: alvaro-ai
+version: 0.1.0
+displayName: Alvaro AI
+description: >
+  Alvaro AI — Large-scale image upscaling with artistic precision.
+  Local-first batch processor powered by Real-ESRGAN.
+  Beautiful single-page UI designed for hundreds of images at once.
+  Named in homage to David Alfaro Siqueiros, master of monumental mural art.
+  Built as a showcase of Hexagen-Monaco hexagonal governance.
+
+# -----------------------------------------------------------------------------
+# Planes (top-level architectural layers)
+# -----------------------------------------------------------------------------
+planes:
+  - name: Core
+    description: Pure domain logic. No infrastructure dependencies.
+    color: "#1E3A5F"          # deep mural blue
+
+  - name: Projection
+    description: User interfaces and presentation.
+    color: "#C2410C"          # warm terracotta / Siqueiros red-orange
+
+  - name: Infrastructure
+    description: Adapters that talk to the outside world (filesystem, processes, network).
+    color: "#0F766E"          # deep teal
+
+  - name: SharedKernel
+    description: Cross-cutting types, config, and utilities used by multiple planes.
+    color: "#57534E"          # warm stone gray
+
+# -----------------------------------------------------------------------------
+# Bounded Contexts
+# -----------------------------------------------------------------------------
+contexts:
+  # === Core Plane ===
+  - name: ImageDomain
+    plane: Core
+    path: packages/core/image-domain
+    description: Core image and upscale job entities, value objects, and pure business rules.
+    responsibilities:
+      - Define UpscaleJob, ImageAsset, UpscaleSettings, ModelVariant
+      - Enforce job state machine (pending → queued → processing → completed | failed | cancelled)
+      - Calculate estimated time, validate settings, generate output filenames
+
+  - name: JobDomain
+    plane: Core
+    path: packages/core/job-domain
+    description: Job queue orchestration, concurrency control, progress aggregation.
+    responsibilities:
+      - JobQueue aggregate
+      - Concurrency limiting and backpressure
+      - Progress calculation and event emission
+      - Cancellation and retry policies
+
+  # === Projection Plane ===
+  - name: WebUI
+    plane: Projection
+    path: apps/web
+    description: Next.js single-page application for batch upscaling (Alvaro AI).
+    responsibilities:
+      - Drag-and-drop / folder / ZIP selection
+      - Job queue visualization with live progress
+      - Settings panel and before/after previews
+      - ZIP download and toast notifications
+    tech:
+      framework: next.js
+      ui: react + tailwind + shadcn/ui
+      state: zustand + immer
+
+  # === Infrastructure Plane ===
+  - name: RealESRGANAdapter
+    plane: Infrastructure
+    path: packages/infrastructure/real-esrgan
+    description: Adapter that implements UpscalePort by spawning realesrgan-ncnn-vulkan.
+    responsibilities:
+      - Locate and validate Real-ESRGAN binary + models
+      - Build CLI arguments (scale, model, face_enhance, tile, etc.)
+      - Spawn process with concurrency-aware pool
+      - Parse stdout/stderr for progress and errors
+      - Map exit codes and output files back to domain results
+
+  - name: FileSystemAdapter
+    plane: Infrastructure
+    path: packages/infrastructure/filesystem
+    description: Local filesystem operations for temp dirs, inputs, outputs.
+    responsibilities:
+      - Create isolated job workspaces
+      - Safe write of uploaded files
+      - Atomic move of completed images
+      - Cleanup of temporary directories
+      - Streaming ZIP creation
+
+  - name: QueueAdapter
+    plane: Infrastructure
+    path: packages/infrastructure/queue
+    description: In-memory (and optional BullMQ) job queue implementation.
+    responsibilities:
+      - Persist job state across restarts (optional)
+      - Provide JobQueuePort
+      - Emit domain events for UI
+
+  - name: ZipAdapter
+    plane: Infrastructure
+    path: packages/infrastructure/zip
+    description: Streaming ZIP generation for bulk download + ZIP input extraction.
+    responsibilities:
+      - Create downloadable ZIP of completed jobs
+      - Extract uploaded ZIP of source images
+      - Support large result sets without OOM
+
+  # === Shared Kernel ===
+  - name: Types
+    plane: SharedKernel
+    path: packages/shared/types
+    description: Shared TypeScript types, branded types, and DTOs.
+
+  - name: Config
+    plane: SharedKernel
+    path: packages/shared/config
+    description: Environment configuration, model registry, paths.
+
+# -----------------------------------------------------------------------------
+# Ports (interfaces that Core depends on)
+# -----------------------------------------------------------------------------
+ports:
+  - name: UpscalePort
+    path: packages/core/image-domain/src/ports/upscale.port.ts
+    description: Primary port for performing super-resolution.
+    methods:
+      - name: upscale
+        signature: "(job: UpscaleJob, settings: UpscaleSettings) => Promise<UpscaleResult>"
+      - name: getSupportedModels
+        signature: "() => Promise<ModelVariant[]>"
+      - name: getCapabilities
+        signature: "() => Promise<UpscaleCapabilities>"
+      - name: cancel
+        signature: "(jobId: string) => Promise<void>"
+
+  - name: JobQueuePort
+    path: packages/core/job-domain/src/ports/job-queue.port.ts
+    description: Port for enqueuing and observing jobs.
+    methods:
+      - name: enqueue
+        signature: "(job: UpscaleJob) => Promise<void>"
+      - name: getStatus
+        signature: "(jobId: string) => Promise<JobStatus>"
+      - name: list
+        signature: "() => Promise<UpscaleJob[]>"
+      - name: cancel
+        signature: "(jobId: string) => Promise<void>"
+      - name: clearCompleted
+        signature: "() => Promise<void>"
+
+  - name: StoragePort
+    path: packages/core/image-domain/src/ports/storage.port.ts
+    description: Abstract file and workspace operations.
+    methods:
+      - name: createJobWorkspace
+        signature: "(jobId: string) => Promise<WorkspacePaths>"
+      - name: saveInput
+        signature: "(jobId: string, file: File | Buffer, filename: string) => Promise<string>"
+      - name: saveOutput
+        signature: "(jobId: string, sourcePath: string) => Promise<string>"
+      - name: getOutputUrl
+        signature: "(jobId: string) => Promise<string>"
+      - name: cleanup
+        signature: "(jobId: string) => Promise<void>"
+      - name: createZip
+        signature: "(jobIds: string[]) => Promise<ReadableStream>"
+      - name: extractZip
+        signature: "(zipBuffer: Buffer) => Promise<ExtractedImage[]>"
+
+# -----------------------------------------------------------------------------
+# Adapters (implementations of ports)
+# -----------------------------------------------------------------------------
+adapters:
+  - name: RealESRGANAdapter
+    implements: UpscalePort
+    context: RealESRGANAdapter
+    description: Primary production adapter using ncnn-vulkan binary.
+
+  - name: MockUpscaleAdapter
+    implements: UpscalePort
+    context: RealESRGANAdapter
+    description: Fast mock for UI development and testing (no GPU required).
+
+  - name: LocalFileSystemAdapter
+    implements: StoragePort
+    context: FileSystemAdapter
+
+  - name: InMemoryQueueAdapter
+    implements: JobQueuePort
+    context: QueueAdapter
+
+  - name: StreamingZipAdapter
+    implements: StoragePort
+    context: ZipAdapter
+
+# -----------------------------------------------------------------------------
+# Dependency Rules (enforced by hexagen-lint + TypeScript project references)
+# -----------------------------------------------------------------------------
+dependencyRules:
+  # Core may only depend on SharedKernel and ports (never concrete adapters)
+  - from: Core
+    mayDependOn: [SharedKernel]
+    mayNotDependOn: [Projection, Infrastructure]
+
+  # Projection may depend on Core (via ports) and SharedKernel
+  - from: Projection
+    mayDependOn: [Core, SharedKernel]
+    mayNotDependOn: [Infrastructure]
+
+  # Infrastructure may depend on Core (ports) and SharedKernel
+  - from: Infrastructure
+    mayDependOn: [Core, SharedKernel]
+    mayNotDependOn: [Projection]
+
+  # SharedKernel is leaf
+  - from: SharedKernel
+    mayDependOn: []
+    mayNotDependOn: [Core, Projection, Infrastructure]
+
+# -----------------------------------------------------------------------------
+# Model Registry (used by Config + RealESRGANAdapter)
+# -----------------------------------------------------------------------------
+models:
+  - id: realesrgan-x4plus
+    name: Real-ESRGAN x4plus
+    scale: 4
+    type: general
+    binaryModel: RealESRGAN_x4plus
+    description: Best general-purpose model for photos and mixed content.
+
+  - id: realesrgan-x4plus-anime
+    name: Real-ESRGAN Anime
+    scale: 4
+    type: anime
+    binaryModel: RealESRGAN_x4plus_anime_6B
+    description: Optimized for anime, illustrations, and digital art.
+
+  - id: realesrgan-general-wdn
+    name: Real-ESRGAN General (WDN)
+    scale: 4
+    type: general
+    binaryModel: realesrgan-x4plus
+    description: Denoising + upscaling variant.
+
+  - id: realesrgan-x2plus
+    name: Real-ESRGAN x2plus
+    scale: 2
+    type: general
+    binaryModel: RealESRGAN_x2plus
+    description: Faster 2× for large batches or high-res sources.
+
+# -----------------------------------------------------------------------------
+# Runtime Configuration Defaults
+# -----------------------------------------------------------------------------
+defaults:
+  concurrency: 2                    # safe default for M3 Max / most consumer GPUs
+  tileSize: 0                       # 0 = auto / no tiling
+  faceEnhance: false
+  outputFormat: png
+  keepOriginalNames: true
+  tempDir: .alvaro/tmp
+  resultsDir: .alvaro/results
+  binaryPath: ./bin/realesrgan-ncnn-vulkan
+  modelsPath: ./models
+
+# -----------------------------------------------------------------------------
+# Branding
+# -----------------------------------------------------------------------------
+branding:
+  name: Alvaro AI
+  shortName: Alvaro
+  tagline: Large-scale image upscaling with artistic precision
+  inspiration: David Alfaro Siqueiros — master of monumental mural painting
+  primaryColor: "#C2410C"           # terracotta / mural orange-red
+  secondaryColor: "#1E3A5F"         # deep blue
+  accentColor: "#0F766E"            # teal
+
+# -----------------------------------------------------------------------------
+# Templates Already Applied (for reference)
+# -----------------------------------------------------------------------------
+appliedTemplates:
+  - env-setup
+  - design-system
+  - docker
+  - observability
+  - error-handling
+  - rate-limiting
+
+# -----------------------------------------------------------------------------
+# Future Extension Points
+# -----------------------------------------------------------------------------
+# - Add PrunaAIAdapter implementing UpscalePort (cloud fallback)
+# - Add VideoDomain + VideoESRGANAdapter
+# - Add LangGraph HITL for agent-driven quality review
+# - Add BullMQ for durable queue across restarts
