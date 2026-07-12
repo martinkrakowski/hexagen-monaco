@@ -4,6 +4,8 @@ interface SpecReviewStepProps {
   specSummary: SpecSummary | null;
   specContent: string;
   cameFromConversion: boolean;
+  /** Advisory warnings from the conversion (e.g. suspected output truncation). */
+  conversionWarnings?: string[];
   isJsonDisclosed: boolean;
   onToggleJsonDisclosed: (open: boolean) => void;
 }
@@ -12,6 +14,7 @@ export function SpecReviewStep({
   specSummary,
   specContent,
   cameFromConversion,
+  conversionWarnings = [],
   isJsonDisclosed,
   onToggleJsonDisclosed,
 }: SpecReviewStepProps) {
@@ -24,6 +27,15 @@ export function SpecReviewStep({
           converted JSON below before generating ports and adapters.
         </div>
       )}
+      {conversionWarnings.map((warning, i) => (
+        <div
+          key={`cw-${i}`}
+          role="alert"
+          className="mb-4 p-3 rounded border border-warning/40 bg-warning/10 text-sm"
+        >
+          {warning}
+        </div>
+      ))}
       {specSummary && (
         <div className="mb-4 space-y-2">
           <p>✓ {specSummary.contextCount} bounded contexts detected</p>

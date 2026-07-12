@@ -129,6 +129,7 @@ export default function ImportProjectSpecPage() {
     convert,
     error: conversionError,
     progressMessage: conversionProgressMessage,
+    warnings: conversionWarnings,
     reset: resetConversion,
   } = useLooseSpecConversion();
 
@@ -668,6 +669,7 @@ export default function ImportProjectSpecPage() {
                   specSummary={specSummary}
                   specContent={specContent}
                   cameFromConversion={cameFromConversion}
+                  conversionWarnings={conversionWarnings}
                   isJsonDisclosed={isJsonDisclosed}
                   onToggleJsonDisclosed={setIsJsonDisclosed}
                 />

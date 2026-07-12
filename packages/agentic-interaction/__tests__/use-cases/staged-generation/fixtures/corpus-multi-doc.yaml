@@ -1,0 +1,22 @@
+# Corpus: multi-document YAML — visual `---` separators between top-level
+# sections, a common authoring style.
+project: docsplit
+---
+apps:
+  - name: web
+    framework: nextjs
+---
+bounded_contexts:
+  - name: Orders
+    responsibility: Order lifecycle
+    aggregates:
+      - name: Order
+        fields: [{ name: id, type: string, key: true }]
+  - name: Billing
+    responsibility: Invoicing
+    aggregates:
+      - name: Invoice
+---
+use_cases:
+  Orders:
+    - name: PlaceOrder
