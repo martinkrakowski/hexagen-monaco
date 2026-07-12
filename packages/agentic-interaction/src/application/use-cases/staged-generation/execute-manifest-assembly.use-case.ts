@@ -63,11 +63,26 @@ export class ExecuteManifestAssemblyUseCase {
     const adapterBindings = state.stage4?.contexts || [];
     const domainAnalysis = state.stage1;
 
+    // Adapters for a context, collected across ALL bindings entries: bindings
+    // can hold a context more than once (pre-defined entry + a stage echo), and
+    // a first-match lookup silently dropped later entries' adapters from the
+    // rendered YAML while the uncovered-port warning loop below (which
+    // aggregates) saw them — warnings and output must read the same set.
+    // Dedupe by name so an exact duplicate entry can't emit an adapter twice.
+    const adaptersForContext = (contextName: string) => {
+      const seen = new Set<string>();
+      return adapterBindings
+        .filter((a) => a.contextName === contextName)
+        .flatMap((a) => a.adapters)
+        .filter((a) => {
+          if (seen.has(a.name)) return false;
+          seen.add(a.name);
+          return true;
+        });
+    };
+
     for (const ctx of acceptedContexts) {
       const ctxPorts = portMap.find((p) => p.contextName === ctx.name);
-      const ctxAdapters = adapterBindings.find(
-        (a) => a.contextName === ctx.name,
-      );
 
       draftContexts.push({
         name: ctx.name,
@@ -77,7 +92,7 @@ export class ExecuteManifestAssemblyUseCase {
           in: ctxPorts?.in || [],
           out: ctxPorts?.out || [],
         },
-        adapters: ctxAdapters?.adapters || [],
+        adapters: adaptersForContext(ctx.name),
       });
     }
 
@@ -167,12 +182,9 @@ export class ExecuteManifestAssemblyUseCase {
 
     for (const ctx of acceptedContexts) {
       const ctxPorts = portMap.find((p) => p.contextName === ctx.name);
-      // Collect adapters across ALL entries for the context: bindings can hold
-      // a context more than once (pre-defined entry + a stage echo), and a
-      // first-match lookup would blind this check to the later entries.
-      const adapters = adapterBindings
-        .filter((a) => a.contextName === ctx.name)
-        .flatMap((a) => a.adapters);
+      // Same aggregated view the draft build above renders — the warning and
+      // the emitted YAML must never disagree about which adapters exist.
+      const adapters = adaptersForContext(ctx.name);
 
       if (
         !ctxPorts ||

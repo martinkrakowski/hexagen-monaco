@@ -317,4 +317,101 @@ describe("Stage 5: Manifest Assembly", () => {
     assert.ok(result.yaml.includes("name: api"));
     assert.ok(!result.yaml.includes("next.js"));
   });
+
+  test("renders adapters from ALL duplicate bindings entries (warning and YAML agree)", () => {
+    // Bindings can hold a context twice (pre-defined entry + a stage echo). A
+    // first-match draft build silently dropped later entries' adapters from
+    // the YAML while the aggregated uncovered-port warning saw them — the
+    // warning went quiet about an adapter the manifest didn't contain.
+    const state: Pick<
+      PipelineState,
+      "stage0" | "stage2" | "stage3" | "stage4"
+    > = {
+      stage0: {
+        intent: "Upscaler",
+        explicitTechnologies: [],
+        explicitPatterns: [],
+        ambiguities: [],
+        projectName: "alvaro",
+      },
+      stage2: {
+        accepted: [
+          { name: "real-esrgan", type: "core", reasoning: "Upscaling engine" },
+        ],
+        rejected: [],
+        uncertain: [],
+      },
+      stage3: {
+        contexts: [
+          {
+            contextName: "real-esrgan",
+            in: [],
+            out: [
+              {
+                name: "UpscalePort",
+                type: "external-client",
+                description: "Perform super-resolution",
+              },
+              {
+                name: "RealEsrganRepositoryPort",
+                type: "repository",
+                description: "Persistence",
+              },
+            ],
+          },
+        ],
+      },
+      stage4: {
+        contexts: [
+          {
+            contextName: "real-esrgan",
+            adapters: [
+              {
+                name: "RealESRGANAdapter",
+                type: "HttpClient",
+                implements: "UpscalePort",
+              },
+            ],
+          },
+          {
+            contextName: "real-esrgan",
+            adapters: [
+              {
+                name: "RealEsrganRepositoryAdapter",
+                type: "Repository",
+                implements: "RealEsrganRepositoryPort",
+              },
+              // Exact duplicate of the first entry's adapter — must not render twice.
+              {
+                name: "RealESRGANAdapter",
+                type: "HttpClient",
+                implements: "UpscalePort",
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const result = useCase.execute(state);
+    const adapterLines = result.yaml
+      .split("\n")
+      .filter((l) => l.includes("Adapter"));
+    assert.ok(
+      result.yaml.includes("RealEsrganRepositoryAdapter"),
+      "second entry's adapter must reach the YAML",
+    );
+    assert.equal(
+      adapterLines.filter((l) => l.includes("RealESRGANAdapter")).length,
+      1,
+      "duplicate adapter name renders once",
+    );
+    // Both ports covered → no uncovered-port warning; YAML and warnings agree.
+    assert.ok(
+      !result.assemblyWarnings.some((w) =>
+        w.message.includes("no assigned adapter"),
+      ),
+      JSON.stringify(result.assemblyWarnings),
+    );
+  });
 });
