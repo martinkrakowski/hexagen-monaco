@@ -113,19 +113,22 @@ describe("extractSpecSummary", () => {
 });
 
 describe("describeFindings", () => {
+  // Advisory vocabulary ("findings"/"suggestions", not "issues"/"warnings"):
+  // Stage-6 findings never block the manifest, and error-flavored words made
+  // every completed run read as "generated with errors".
   test("errors only — pluralizes, omits warnings", () => {
-    assert.equal(describeFindings(3, 0), "3 issues");
-    assert.equal(describeFindings(1, 0), "1 issue");
+    assert.equal(describeFindings(3, 0), "3 findings");
+    assert.equal(describeFindings(1, 0), "1 finding");
   });
 
-  test("warnings only — no '0 issues' prefix (the 6a copy edge)", () => {
-    assert.equal(describeFindings(0, 2), "2 warnings");
-    assert.equal(describeFindings(0, 1), "1 warning");
+  test("warnings only — no '0 findings' prefix (the 6a copy edge)", () => {
+    assert.equal(describeFindings(0, 2), "2 suggestions");
+    assert.equal(describeFindings(0, 1), "1 suggestion");
   });
 
   test("both — joined with 'and', each pluralized independently", () => {
-    assert.equal(describeFindings(3, 2), "3 issues and 2 warnings");
-    assert.equal(describeFindings(1, 1), "1 issue and 1 warning");
+    assert.equal(describeFindings(3, 2), "3 findings and 2 suggestions");
+    assert.equal(describeFindings(1, 1), "1 finding and 1 suggestion");
   });
 });
 
