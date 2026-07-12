@@ -93,8 +93,61 @@ describe("mapManifestDialect", () => {
       ).layers?.application?.ports;
     assert.deepEqual(portsOf("Inner")?.out, ["UpscalePort"]);
     assert.deepEqual(portsOf("Outer")?.out, ["SharedPort"]);
-    // The orphan is left for Stage 3 — never guessed onto a context.
-    assert.equal(JSON.stringify(mapped).includes("OrphanPort"), false);
+    // The orphan is NOT guessed onto any context...
+    assert.equal(portsOf("Inner")?.out?.includes("OrphanPort"), false);
+    assert.equal(portsOf("Outer")?.out?.includes("OrphanPort"), false);
+    // ...but it is preserved under top-level `ports:`, never silently dropped.
+    const topPorts = (mapped as { ports?: Array<{ name: string }> }).ports;
+    assert.deepEqual(
+      topPorts?.map((p) => p.name),
+      ["OrphanPort"],
+    );
+  });
+
+  it("preserves ports with no path and adapters with an unmatched context", () => {
+    const mapped = mapManifestDialect({
+      contexts: [{ name: "A", path: "packages/a" }],
+      ports: [
+        { name: "MatchedPort", path: "packages/a/p.ts" },
+        { name: "PathlessPort" }, // no path → can't be owned
+      ],
+      adapters: [
+        { name: "GoodAdapter", context: "A" },
+        { name: "OrphanAdapter", context: "DoesNotExist" },
+        { name: "ContextlessAdapter" }, // no context
+      ],
+    }) as {
+      bounded_contexts: Array<Record<string, unknown>>;
+      ports?: Array<{ name: string }>;
+      adapters?: Array<{ name: string }>;
+    };
+    const ctxA = mapped.bounded_contexts[0] as {
+      layers?: {
+        application?: { ports?: { out?: string[] } };
+        infrastructure?: { adapters?: string[] };
+      };
+    };
+    assert.deepEqual(ctxA.layers?.application?.ports?.out, ["MatchedPort"]);
+    assert.deepEqual(ctxA.layers?.infrastructure?.adapters, ["GoodAdapter"]);
+    // Unassignable declarations survive at the top level for the user to fix.
+    assert.deepEqual(
+      mapped.ports?.map((p) => p.name),
+      ["PathlessPort"],
+    );
+    assert.deepEqual(
+      mapped.adapters?.map((a) => a.name),
+      ["OrphanAdapter", "ContextlessAdapter"],
+    );
+  });
+
+  it("removes the top-level blocks entirely when everything is assigned", () => {
+    const mapped = mapManifestDialect({
+      contexts: [{ name: "A", path: "packages/a" }],
+      ports: [{ name: "P", path: "packages/a/p.ts" }],
+      adapters: [{ name: "AAdapter", context: "A" }],
+    }) as Record<string, unknown>;
+    assert.equal("ports" in mapped, false);
+    assert.equal("adapters" in mapped, false);
   });
 
   it("routes command/query-named unimplemented ports inbound, implemented ports outbound", () => {

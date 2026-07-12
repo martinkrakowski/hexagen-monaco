@@ -87,10 +87,14 @@ describe("sanitizePseudoYaml", () => {
     assert.equal(out, `derived: "() => Date.now()"`);
   });
 
-  it("skips mapping values carrying an inline comment", () => {
+  it("skips mapping values carrying an inline comment (space OR tab before #)", () => {
     // Quoting would swallow the comment into the value — leave the line alone.
-    const input = "signature: (a: B) => C # explained here";
-    assert.equal(sanitizePseudoYaml(input), input);
+    // Both whitespace forms must be recognized (qodo #409: a tab before `#`
+    // previously slipped past the space-only guard and got quoted).
+    const spaced = "signature: (a: B) => C # explained here";
+    assert.equal(sanitizePseudoYaml(spaced), spaced);
+    const tabbed = "signature: (a: B) => C\t# explained here";
+    assert.equal(sanitizePseudoYaml(tabbed), tabbed);
   });
 });
 

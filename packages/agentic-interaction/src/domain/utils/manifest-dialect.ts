@@ -101,15 +101,19 @@ function isInboundish(name: string): boolean {
  *   `responsibility` string when one isn't set — classification quality.
  * - Top-level `ports:` are assigned to their OWNING context by `path` prefix
  *   match against each context's `path:` (longest match wins, so nested
- *   context paths resolve correctly). A port with no matching path is left
- *   for Stage 3 to map — never guessed from an adapter's context, which is
- *   the implementing side, not the owner. Direction: `out` when any adapter
- *   implements it (driven), else the name heuristic above.
+ *   context paths resolve correctly). Ownership is never guessed from an
+ *   adapter's context (the implementing side, not the owner). Direction:
+ *   `out` when any adapter implements it (driven), else the name heuristic
+ *   above. A port with no `path`, or a path under no context, is NOT silently
+ *   dropped — it is retained under the top-level `ports:` block of the
+ *   converted spec (visible on the review screen for the user to correct),
+ *   just not attached to a context.
  * - Top-level `adapters:` (`{name, context}`) append to the named context's
  *   `layers.infrastructure.adapters`. Explicit `implements` is not carried —
  *   the manifest layers hold name strings and the pipeline re-infers bindings
- *   (`inferAdapterImplements`, #400); an unmatched adapter surfaces honestly
- *   as uncovered rather than misbound.
+ *   (`inferAdapterImplements`, #400). An adapter whose `context` matches no
+ *   context (or is absent) is likewise retained under top-level `adapters:`
+ *   rather than dropped.
  * - The array-form `planes:` block (objects with name/description/color) is
  *   dropped — per-context `plane:` strings carry the signal downstream; the
  *   canonical map form passes through for normalizeDialect's shared-kernel
@@ -142,23 +146,29 @@ export function mapManifestDialect(parsed: unknown): unknown {
     }
   }
 
-  // Ports → owning context by longest path-prefix match.
+  // Ports → owning context by longest path-prefix match. Unmatched ports are
+  // preserved (see below), never silently dropped.
+  const unmatchedPorts: DialectPort[] = [];
   for (const port of ports) {
-    if (!isNonEmptyString(port.path)) continue;
     let owner: DialectContext | undefined;
     let ownerPathLength = -1;
-    for (const ctx of contexts) {
-      if (!isNonEmptyString(ctx.path)) continue;
-      const ctxPath = ctx.path.replace(/\/+$/, "");
-      if (
-        (port.path === ctxPath || port.path.startsWith(`${ctxPath}/`)) &&
-        ctxPath.length > ownerPathLength
-      ) {
-        owner = ctx;
-        ownerPathLength = ctxPath.length;
+    if (isNonEmptyString(port.path)) {
+      for (const ctx of contexts) {
+        if (!isNonEmptyString(ctx.path)) continue;
+        const ctxPath = ctx.path.replace(/\/+$/, "");
+        if (
+          (port.path === ctxPath || port.path.startsWith(`${ctxPath}/`)) &&
+          ctxPath.length > ownerPathLength
+        ) {
+          owner = ctx;
+          ownerPathLength = ctxPath.length;
+        }
       }
     }
-    if (!owner) continue;
+    if (!owner) {
+      unmatchedPorts.push(port);
+      continue;
+    }
 
     const direction =
       !implementedPortNames.has(port.name) && isInboundish(port.name)
@@ -180,13 +190,18 @@ export function mapManifestDialect(parsed: unknown): unknown {
   }
 
   // Adapters → their declared context's infrastructure layer (by normalized
-  // name, tolerant of casing/kebab variants).
+  // name, tolerant of casing/kebab variants). Unmatched adapters are preserved.
+  const unmatchedAdapters: DialectAdapter[] = [];
   for (const adapter of adapters) {
-    if (!isNonEmptyString(adapter.context)) continue;
-    const target = contexts.find(
-      (ctx) => normalizeName(ctx.name) === normalizeName(adapter.context!),
-    );
-    if (!target) continue;
+    const target = isNonEmptyString(adapter.context)
+      ? contexts.find(
+          (ctx) => normalizeName(ctx.name) === normalizeName(adapter.context!),
+        )
+      : undefined;
+    if (!target) {
+      unmatchedAdapters.push(adapter);
+      continue;
+    }
     const existing = target.layers?.infrastructure?.adapters ?? [];
     if (existing.includes(adapter.name)) continue;
     target.layers = {
@@ -200,8 +215,17 @@ export function mapManifestDialect(parsed: unknown): unknown {
 
   const rest: Record<string, unknown> = { ...obj };
   delete rest.contexts;
-  delete rest.ports;
-  delete rest.adapters;
+  // Retain any ports/adapters we could NOT attach to a context (no path / no
+  // matching context) rather than deleting the whole block — otherwise a
+  // user-declared port/adapter would vanish silently before Stage 3/4. The
+  // pipeline reads ports/adapters from context layers, so these top-level
+  // remnants don't generate, but they stay visible in the converted spec for
+  // the user to correct. All-matched inputs (the common case) leave both empty,
+  // so the blocks are removed and the output is unchanged (qodo #409).
+  if (unmatchedPorts.length > 0) rest.ports = unmatchedPorts;
+  else delete rest.ports;
+  if (unmatchedAdapters.length > 0) rest.adapters = unmatchedAdapters;
+  else delete rest.adapters;
   // Only the dialect's ARRAY form of `planes:` (objects with name/description/
   // color) is dropped — per-context `plane:` strings carry the signal. The
   // canonical MAP form (`planes: { shared-kernel: [...] }`) must pass through:

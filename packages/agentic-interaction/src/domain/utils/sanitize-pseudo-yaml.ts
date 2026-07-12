@@ -66,10 +66,13 @@ export function sanitizePseudoYaml(raw: string): string {
       // `signature: (order: Order) => Promise<void>` — the colon inside the
       // parenthesised args makes js-yaml throw (same failure as the sequence
       // form above, just as a mapping value). Quote the whole value. Gated on
-      // args-with-a-colon or an arrow so prose values are never touched; lines
-      // with an inline comment are skipped (the comment must stay a comment).
+      // args-with-a-colon or an arrow so prose values are never touched. A line
+      // carrying an inline comment (a `#` preceded by ANY whitespace — space OR
+      // tab) is left untouched, so the comment is never swallowed into the
+      // quoted scalar; such a line stays on the fallback (LLM) path rather than
+      // being silently corrupted (qodo #409).
       const sig = line.match(/^(\s*[\w-]+:\s+)([^"'#\s].*\S)\s*$/);
-      if (sig && !sig[2].includes(" #")) {
+      if (sig && !/\s#/.test(sig[2])) {
         const value = sig[2];
         const args = value.match(/\(([^)]*)\)/);
         if ((args !== null && args[1].includes(":")) || value.includes("=>")) {
