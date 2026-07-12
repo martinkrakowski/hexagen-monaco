@@ -2622,8 +2622,16 @@ export class ExecuteStructuredConfigGenerationUseCase {
                   // fallback), so deterministic R08 never fires post-assembly —
                   // stripping the LLM's R08 would silently drop it and flip
                   // passed→true. Preserve it (with R10–R18 + warnings).
+                  // Also strip the ORIGINAL manifest's schema-violation errors:
+                  // they describe the pre-repair manifest that we're replacing,
+                  // and the repaired manifest's own issues are re-added via
+                  // `repairSchemaIssues` below. Keeping the stale ones would hold
+                  // `passed: false` for a repaired manifest that is actually
+                  // clean (CodeRabbit/qodo #407).
                   const preservedErrors = finalReport.errors.filter(
-                    (e) => !/^\[R0[1-7]\]|^\[R09\]/.test(e),
+                    (e) =>
+                      !/^\[R0[1-7]\]|^\[R09\]/.test(e) &&
+                      !e.startsWith("Manifest schema violation:"),
                   );
                   // Surface any adapter renames the repair-path dedupe made, the
                   // same way the initial Stage-5 pass does — so an accepted repair
@@ -2640,6 +2648,18 @@ export class ExecuteStructuredConfigGenerationUseCase {
                   const repairSchemaIssues = (
                     reassembled.manifest.schemaIssues ?? []
                   ).map((issue) => `Manifest schema violation: ${issue}`);
+                  // Drop the ORIGINAL manifest's schema advisories before
+                  // appending the repaired manifest's — otherwise a repaired
+                  // manifest carries both the pre-repair and post-repair
+                  // advisory for the same field (stale/duplicated). They were
+                  // merged into `finalReport.warnings` via `assemblyAdvisories`,
+                  // so they're exactly `assembledManifest.schemaAdvisories`.
+                  const originalSchemaAdvisories = new Set(
+                    assembledManifest.schemaAdvisories ?? [],
+                  );
+                  const carriedWarnings = finalReport.warnings.filter(
+                    (w) => !originalSchemaAdvisories.has(w),
+                  );
                   finalReport = {
                     errors: [
                       ...afterStructuralErrors,
@@ -2647,7 +2667,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
                       ...repairSchemaIssues,
                     ],
                     warnings: [
-                      ...finalReport.warnings,
+                      ...carriedWarnings,
                       ...repairRenameWarnings,
                       ...repairSchemaAdvisories,
                     ],
