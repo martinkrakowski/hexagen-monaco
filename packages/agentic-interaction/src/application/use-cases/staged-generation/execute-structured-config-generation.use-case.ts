@@ -470,6 +470,43 @@ export function normalizeDialect(config: StructuredConfig): StructuredConfig {
       typeof name === "string" && name.trim().length > 0 ? name : undefined;
   }
 
+  // LLM-emitted configs (loose-spec conversion, Stage-7 repairs) are only
+  // shape-checked, and `apps`/`context_mappings` flow VERBATIM into the
+  // assembled manifest — where the accept screen's strict ManifestSchema
+  // requires app objects with a string `name` and mappings with both
+  // endpoints. Filter/coerce at the source so the reviewed spec is already
+  // clean and pipeline internals (e.g. `normalizeContextName(m.upstream)`,
+  // `apps.find(a => a.name === …)`) can't hit undefined. This runs BEFORE the
+  // SPEC_REVIEW screen, so nothing is silently changed after user approval;
+  // the Stage-5 schema gate remains the reporting backstop.
+  if (Array.isArray(config.apps)) {
+    config.apps = (config.apps as unknown[]).flatMap((app) => {
+      if (typeof app === "string" && app.trim().length > 0) {
+        return [{ name: app.trim() } as StructuredConfigApp];
+      }
+      if (
+        app !== null &&
+        typeof app === "object" &&
+        typeof (app as { name?: unknown }).name === "string" &&
+        (app as { name: string }).name.trim().length > 0
+      ) {
+        return [app as StructuredConfigApp];
+      }
+      return [];
+    });
+  }
+  if (Array.isArray(config.context_mappings)) {
+    config.context_mappings = config.context_mappings.filter(
+      (m) =>
+        m !== null &&
+        typeof m === "object" &&
+        typeof m.upstream === "string" &&
+        m.upstream.trim().length > 0 &&
+        typeof m.downstream === "string" &&
+        m.downstream.trim().length > 0,
+    );
+  }
+
   const useCasesFromDialect: Record<string, StructuredConfigUseCase[]> = {};
   // Canonical top-level `use_cases` win over the dialect even when keyed by a
   // context alias (`name` vs `short`) — `lookupUseCases` resolves both — so compare
@@ -511,6 +548,21 @@ export function normalizeDialect(config: StructuredConfig): StructuredConfig {
 
   for (const ctx of config.bounded_contexts) {
     const dm = ctx.domain_models;
+
+    // Canonical lists can be LLM-emitted too: a nameless aggregate flows into
+    // the domain analysis as an `undefined` name and ends as `- null` in the
+    // manifest's `entities` list, which the accept-screen schema rejects.
+    // Filter BEFORE the dialect mapping below so an all-nameless canonical
+    // list correctly falls back to `domain_models`.
+    if (hasItems(ctx.aggregates)) ctx.aggregates = withName(ctx.aggregates);
+    if (hasItems(ctx.value_objects)) {
+      ctx.value_objects = withName(ctx.value_objects);
+    }
+    if (Array.isArray(ctx.events_published)) {
+      ctx.events_published = ctx.events_published.filter(
+        (e): e is string => typeof e === "string" && e.trim().length > 0,
+      );
+    }
 
     // Map a shared-kernel plane onto the canonical `type` (see note above). An
     // explicit `type: shared-kernel` already works; a shared-kernel plane wins
@@ -2276,6 +2328,19 @@ export class ExecuteStructuredConfigGenerationUseCase {
     const s5Duration = Date.now() - s5Start;
     callbacks?.onProgress?.(5, s5Duration);
 
+    // Schema-gate outcomes (enforce-manifest-schema.ts): each drop/coercion is
+    // an adjustment chunk like the other Stage-5 fixes; a residual issue means
+    // the accept screen's strict parse would reject the manifest — loud, never
+    // swallowed.
+    for (const advisory of assembledManifest.schemaAdvisories ?? []) {
+      callbacks?.onChunk?.(`Stage 5 · ${advisory}`);
+    }
+    if (assembledManifest.schemaIssues?.length) {
+      callbacks?.onChunk?.(
+        `Stage 5 · ⚠ Manifest failed schema validation after sanitization: ${assembledManifest.schemaIssues.join("; ")}`,
+      );
+    }
+
     // Stage 6: Validation Review
     const s6Start = Date.now();
     callbacks?.onProgress?.(6, 0);
@@ -2320,6 +2385,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
       ...contextRenameWarnings,
       ...repositorySynthesisWarnings,
       ...adapterRenameWarnings,
+      ...(assembledManifest.schemaAdvisories ?? []),
     ];
     if (assemblyAdvisories.length > 0) {
       finalReport = {
@@ -2336,6 +2402,22 @@ export class ExecuteStructuredConfigGenerationUseCase {
       finalReport = {
         ...finalReport,
         warnings: [...finalReport.warnings, ...sharedPortWarnings],
+      };
+    }
+
+    // Residual schema-gate issues fail the accept screen's strict parse, so
+    // they are ERRORS in the report (should be unreachable — the gate's
+    // sanitization covers every known LLM-derived shape). Added to finalReport
+    // only: the Stage-7 gate below keys on s6.value/baselineReport, and its
+    // accepted-repair report rebuild preserves non-R-code errors.
+    const schemaIssueErrors = (assembledManifest.schemaIssues ?? []).map(
+      (issue) => `Manifest schema violation: ${issue}`,
+    );
+    if (schemaIssueErrors.length > 0) {
+      finalReport = {
+        ...finalReport,
+        errors: [...finalReport.errors, ...schemaIssueErrors],
+        passed: false,
       };
     }
 
@@ -2554,8 +2636,16 @@ export class ExecuteStructuredConfigGenerationUseCase {
                   // fallback), so deterministic R08 never fires post-assembly —
                   // stripping the LLM's R08 would silently drop it and flip
                   // passed→true. Preserve it (with R10–R18 + warnings).
+                  // Also strip the ORIGINAL manifest's schema-violation errors:
+                  // they describe the pre-repair manifest that we're replacing,
+                  // and the repaired manifest's own issues are re-added via
+                  // `repairSchemaIssues` below. Keeping the stale ones would hold
+                  // `passed: false` for a repaired manifest that is actually
+                  // clean (CodeRabbit/qodo #407).
                   const preservedErrors = finalReport.errors.filter(
-                    (e) => !/^\[R0[1-7]\]|^\[R09\]/.test(e),
+                    (e) =>
+                      !/^\[R0[1-7]\]|^\[R09\]/.test(e) &&
+                      !e.startsWith("Manifest schema violation:"),
                   );
                   // Surface any adapter renames the repair-path dedupe made, the
                   // same way the initial Stage-5 pass does — so an accepted repair
@@ -2564,15 +2654,41 @@ export class ExecuteStructuredConfigGenerationUseCase {
                     (r) =>
                       `Renamed adapter '${r.from}' in context '${r.contextName}' to '${r.to}' to keep adapter names globally unique (R12).`,
                   );
+                  // The repaired manifest went through the same Stage-5 schema
+                  // gate — carry ITS advisories/issues, since it replaces the
+                  // original whose gate outcomes were merged above.
+                  const repairSchemaAdvisories =
+                    reassembled.manifest.schemaAdvisories ?? [];
+                  const repairSchemaIssues = (
+                    reassembled.manifest.schemaIssues ?? []
+                  ).map((issue) => `Manifest schema violation: ${issue}`);
+                  // Drop the ORIGINAL manifest's schema advisories before
+                  // appending the repaired manifest's — otherwise a repaired
+                  // manifest carries both the pre-repair and post-repair
+                  // advisory for the same field (stale/duplicated). They were
+                  // merged into `finalReport.warnings` via `assemblyAdvisories`,
+                  // so they're exactly `assembledManifest.schemaAdvisories`.
+                  const originalSchemaAdvisories = new Set(
+                    assembledManifest.schemaAdvisories ?? [],
+                  );
+                  const carriedWarnings = finalReport.warnings.filter(
+                    (w) => !originalSchemaAdvisories.has(w),
+                  );
                   finalReport = {
-                    errors: [...afterStructuralErrors, ...preservedErrors],
+                    errors: [
+                      ...afterStructuralErrors,
+                      ...preservedErrors,
+                      ...repairSchemaIssues,
+                    ],
                     warnings: [
-                      ...finalReport.warnings,
+                      ...carriedWarnings,
                       ...repairRenameWarnings,
+                      ...repairSchemaAdvisories,
                     ],
                     passed:
                       afterStructuralErrors.length === 0 &&
-                      preservedErrors.length === 0,
+                      preservedErrors.length === 0 &&
+                      repairSchemaIssues.length === 0,
                   };
                   for (const warning of repairRenameWarnings) {
                     callbacks?.onChunk?.(`Stage 7 · ${warning}`);

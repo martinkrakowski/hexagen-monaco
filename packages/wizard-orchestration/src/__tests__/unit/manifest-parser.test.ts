@@ -36,6 +36,24 @@ bounded_contexts:
     assert.strictEqual(result.governance.workspaceName, "test-system");
   });
 
+  it("names the offending field path in validation errors", () => {
+    // An app entry without `name` — the shape that made a generated manifest
+    // fail at the accept screen with a pathless "Required". The error must
+    // point at the field so the banner that quotes it is actionable.
+    const badAppsYaml = `
+system: test-system
+bounded_contexts:
+  - name: "UserContext"
+    type: "core"
+apps:
+  - framework: next.js
+`;
+    assert.throws(
+      () => parseManifestToWizardData(badAppsYaml),
+      /apps\.0\.name: Required/,
+    );
+  });
+
   it("preserves a recognised non-default architecture (strict-enterprise)", () => {
     const strictYaml = `
 system: strict-test

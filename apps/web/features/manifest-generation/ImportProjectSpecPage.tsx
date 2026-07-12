@@ -281,18 +281,22 @@ export default function ImportProjectSpecPage() {
         );
         router.push("/projects/new/ai/accept");
       } catch (err) {
-        if (process.env.NODE_ENV !== "production") {
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          logger.error("Failed to parse manifest for wizard:", {
-            error: errorMsg,
-          });
-        }
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        // Log in prod too: this failure previously left NO trace anywhere
+        // (client showed a fixed string, server had already reported success),
+        // which made a schema-invalid generated manifest undiagnosable post-hoc.
+        logger.error("Failed to parse manifest for wizard:", {
+          error: errorMsg,
+        });
         // Surface the failure inline on the generating step and retire the
         // Next button (a re-click would fail identically); the footer's
-        // "Go Back" is the way out.
+        // "Go Back" is the way out. Quote the real cause (truncated) — the
+        // parser's message names the offending fields.
         setCompletedManifest(null);
+        const detail =
+          errorMsg.length > 300 ? `${errorMsg.slice(0, 300)}…` : errorMsg;
         setAcceptError(
-          "The generated manifest could not be parsed. Go back and try again.",
+          `The generated manifest could not be parsed (${detail}). Go back and try again.`,
         );
       }
     },
