@@ -47,7 +47,15 @@ export function PlanTurnList({ turns }: PlanTurnListProps) {
               {turn.author}
             </span>
             {turn.at !== undefined && (
-              <span className="text-xs text-muted-foreground">
+              // `toLocaleString()` is locale/timezone-dependent, so server and
+              // browser output can differ and trip a hydration mismatch on this
+              // text node. suppressHydrationWarning scopes the tolerance to just
+              // the timestamp (the repo's pattern for locale-dependent text, cf.
+              // layout.tsx / useTheme.tsx) — CodeRabbit #405.
+              <span
+                className="text-xs text-muted-foreground"
+                suppressHydrationWarning
+              >
                 {new Date(turn.at).toLocaleString()}
               </span>
             )}

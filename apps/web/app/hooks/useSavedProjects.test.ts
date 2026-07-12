@@ -165,6 +165,36 @@ describe("useSavedProjects — layer mutations", () => {
     assert.strictEqual(result.current.persistError?.kind, "Unknown");
   });
 
+  it("saveProject treats a THROWING port as a failed write (revert + persistError, no phantom project)", async () => {
+    // Without the try/catch the optimistic project stays in state after the
+    // caller (ManifestAcceptPage) catches the rejection and retries — the next
+    // save then serializes the phantom plus the retry, duplicating it
+    // (CodeRabbit #405).
+    persistence.state.projects = [seed("existing")];
+    const { result } = await mountLoaded();
+    const original = persistence.port.saveProjects;
+    persistence.port.saveProjects = async () => {
+      throw new Error("adapter blew up");
+    };
+
+    let id: string | null = "sentinel";
+    await act(async () => {
+      id = await result.current.saveProject("Vellum", {} as never, "yaml: 1", [
+        brainstorm,
+      ]);
+    });
+    persistence.port.saveProjects = original;
+
+    assert.strictEqual(id, null, "reported as failure, not thrown");
+    assert.strictEqual(
+      result.current.projects.length,
+      1,
+      "optimistic project is reverted — no phantom left in state",
+    );
+    assert.strictEqual(result.current.projects[0].id, "existing");
+    assert.strictEqual(result.current.persistError?.kind, "Unknown");
+  });
+
   it("addLayer on an unknown project id is an explicit no-op (no write)", async () => {
     persistence.state.projects = [seed("p1")];
     const { result } = await mountLoaded();

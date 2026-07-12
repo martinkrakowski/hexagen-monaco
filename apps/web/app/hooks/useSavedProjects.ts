@@ -113,7 +113,24 @@ export function useSavedProjects() {
       // project is durably committed (the IndexedDB adapter is async).
       // Returning the id before the write resolved caused approved projects to
       // be "lost" when the next screen read storage before the write landed.
-      const result = await port.saveProjects(updated.map(toBase));
+      // The wired IDB adapter returns a failed Result rather than throwing, but
+      // treat a throwing port as a failed write too (mirrors commitLayerMutation):
+      // otherwise the optimistic project stays in state after ManifestAcceptPage
+      // catches the rejection and lets the user retry — the next save then
+      // serializes the phantom project plus the retry, duplicating it.
+      let result: Awaited<ReturnType<typeof port.saveProjects>>;
+      try {
+        result = await port.saveProjects(updated.map(toBase));
+      } catch (e) {
+        result = {
+          success: false,
+          error: {
+            kind: "Unknown",
+            message: "Unexpected error persisting the new project",
+            cause: e,
+          },
+        };
+      }
       if (!result.success) {
         if (mutationSeq.current === seq) {
           setProjects(snapshot);
