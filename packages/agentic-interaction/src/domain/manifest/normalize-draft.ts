@@ -52,6 +52,35 @@ export function normalizeContextName(name: string): string {
   );
 }
 
+/**
+ * Resolve a model-emitted context name to the accepted spelling — stage LLMs
+ * emit casing/kebab variants of the names they were given (documented prod
+ * incident, 2026-06-18 nemotron run). Returns undefined when nothing matches
+ * so callers can drop hallucinated references (Stage-3 context mappings).
+ */
+export function matchAcceptedContextName(
+  inputName: string,
+  acceptedNames: Iterable<string>,
+): string | undefined {
+  const normalized = normalizeContextName(inputName);
+  for (const name of acceptedNames) {
+    if (normalizeContextName(name) === normalized) return name;
+  }
+  return undefined;
+}
+
+/**
+ * `matchAcceptedContextName` with keep-the-input fallback — for call sites
+ * that must retain unmatched entries (the orchestrator's echo filter decides
+ * their fate, disclosed) rather than drop them.
+ */
+export function canonicalContextName(
+  inputName: string,
+  acceptedNames: Iterable<string>,
+): string {
+  return matchAcceptedContextName(inputName, acceptedNames) ?? inputName;
+}
+
 function safeTrim(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }

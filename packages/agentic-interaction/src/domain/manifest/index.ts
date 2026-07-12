@@ -38,6 +38,8 @@ export {
   ensurePortSuffix,
   normalizePortName,
   normalizeContextName,
+  matchAcceptedContextName,
+  canonicalContextName,
 } from "./normalize-draft";
 
 export { validateDraft, checkClarificationTriggers } from "./validate-draft";

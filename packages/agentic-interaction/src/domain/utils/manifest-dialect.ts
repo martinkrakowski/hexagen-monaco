@@ -248,11 +248,16 @@ export function mapManifestDialect(parsed: unknown): unknown {
       continue;
     }
     const existing = target.layers?.infrastructure?.adapters ?? [];
-    if (existing.includes(adapter.name)) continue;
     // Carry the author's declared binding (sidecar). The canonical adapters
     // slot is name-only, and dropping `implements` forced same-context name
     // re-inference downstream, which cannot express the dialect's declared
-    // cross-context bindings.
+    // cross-context bindings. Runs even when the adapter NAME is already
+    // listed (a context's inline layers can pre-declare the name the
+    // top-level adapters block then binds) — only the name append is
+    // conditional; skipping the whole entry dropped its binding and seeding,
+    // recreating the unbound-adapter failure mode for that shape. For a
+    // repeated name with conflicting targets, the LAST declaration wins in
+    // the sidecar (spread overwrite).
     const declaredImplements = isNonEmptyString(adapter.implements)
       ? adapter.implements.trim()
       : undefined;
@@ -264,7 +269,9 @@ export function mapManifestDialect(parsed: unknown): unknown {
       ...target.layers,
       infrastructure: {
         ...target.layers?.infrastructure,
-        adapters: [...existing, adapter.name],
+        adapters: existing.includes(adapter.name)
+          ? existing
+          : [...existing, adapter.name],
         ...(Object.keys(bindings).length > 0
           ? { adapter_implements: bindings }
           : {}),

@@ -408,7 +408,7 @@ describe("Stage 5: Manifest Assembly", () => {
     );
     // Both ports covered → no uncovered-port warning; YAML and warnings agree.
     assert.ok(
-      !result.assemblyWarnings.some((w) =>
+      !(result.assemblyWarnings ?? []).some((w) =>
         w.message.includes("no assigned adapter"),
       ),
       JSON.stringify(result.assemblyWarnings),

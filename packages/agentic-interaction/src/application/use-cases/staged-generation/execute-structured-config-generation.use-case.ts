@@ -1497,41 +1497,67 @@ export function buildPreDefinedAdapterBindings(
         // R04 allows exactly one adapter per port, but a declared prod + mock
         // pair implementing the same port is a legitimate authoring pattern
         // (alvaro-ai: RealESRGANAdapter + MockUpscaleAdapter → UpscalePort).
-        // Keep the FIRST declared implementer bound, leave later ones unbound
-        // (the adapter itself stays in the manifest), and disclose — the same
+        // Keep the FIRST implementer bound, leave later ones unbound (the
+        // adapter itself stays in the manifest), and disclose — the same
         // auto-resolve-and-disclose treatment as R01/R03/R12, instead of
         // failing the import with a true-by-rule R04 the user must resolve by
         // deleting their own mock.
-        const boundDeclaredPorts = new Set<string>();
+        //
+        // Two passes, so DECLARED bindings claim their ports before any
+        // inference runs: in a single pass an earlier adapter's INFERRED
+        // binding could claim a port out from under a later adapter's explicit
+        // declaration, inverting the declared-over-inferred precedence this
+        // function exists to provide.
+        const adapterNames = toEntryArray(ctx.layers?.infrastructure?.adapters)
+          .map(coercePortName)
+          .filter((name): name is string => name !== null);
+        const boundPorts = new Set<string>();
+        const declaredClaims = new Map<string, string>();
+        for (const name of adapterNames) {
+          if (declaredClaims.has(name)) continue;
+          const target = resolveDeclared(name);
+          if (!target) continue;
+          if (boundPorts.has(target)) {
+            declaredClaims.set(name, "");
+            onAdvisory?.(
+              `Port '${target}' in context '${ctx.name}' has multiple declared implementers — kept the first and left '${name}' unbound (R04 allows exactly one adapter per port). If '${name}' is a test double, remove it from the spec's adapters list.`,
+            );
+          } else {
+            boundPorts.add(target);
+            declaredClaims.set(name, target);
+          }
+        }
         return {
           contextName: ctx.name,
-          adapters: toEntryArray(ctx.layers?.infrastructure?.adapters)
-            .map(coercePortName)
-            .filter((name): name is string => name !== null)
-            .map((name) => {
-              const adapterType = inferAdapterType(name);
-              const declaredTarget = resolveDeclared(name);
-              let bound: string | undefined = declaredTarget;
-              if (declaredTarget) {
-                if (boundDeclaredPorts.has(declaredTarget)) {
-                  bound = "";
-                  onAdvisory?.(
-                    `Port '${declaredTarget}' in context '${ctx.name}' has multiple declared implementers — kept the first and left '${name}' unbound (R04 allows exactly one adapter per port). If '${name}' is a test double, remove it from the spec's adapters list.`,
-                  );
-                } else {
-                  boundDeclaredPorts.add(declaredTarget);
-                }
+          adapters: adapterNames.map((name) => {
+            const adapterType = inferAdapterType(name);
+            let bound: string;
+            const declared = declaredClaims.get(name);
+            if (declared !== undefined) {
+              bound = declared;
+            } else {
+              // Inference must also respect already-claimed ports — a mixed
+              // declared+inferred pair on one port is the same R04 collision
+              // through a side door (an UNDECLARED mock whose name contains
+              // the port core infers straight into the declared port).
+              const inferred = inferAdapterImplements(name, portNames);
+              if (inferred && boundPorts.has(inferred)) {
+                bound = "";
+                onAdvisory?.(
+                  `Port '${inferred}' in context '${ctx.name}' already has an implementer — left '${name}' (name-inferred binding) unbound (R04 allows exactly one adapter per port). Declare an explicit binding in the spec if '${name}' should own a different port.`,
+                );
+              } else {
+                bound = inferred;
+                if (inferred) boundPorts.add(inferred);
               }
-              return {
-                name,
-                type: adapterType ?? "adapter",
-                implements:
-                  bound !== undefined
-                    ? bound
-                    : inferAdapterImplements(name, portNames),
-                adapterType,
-              };
-            }),
+            }
+            return {
+              name,
+              type: adapterType ?? "adapter",
+              implements: bound,
+              adapterType,
+            };
+          }),
         };
       }),
   };

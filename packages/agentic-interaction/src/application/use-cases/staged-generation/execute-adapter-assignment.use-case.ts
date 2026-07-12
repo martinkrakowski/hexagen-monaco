@@ -22,29 +22,14 @@ import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
 import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
-import { normalizeContextName } from "../../../domain/index";
+// Model-emitted context names arrive in casing/kebab variants of the names the
+// model was given (documented prod incident — same canonicalization exists in
+// Stage 3 and the Stage-6 prompt); resolve them to the requested spelling so
+// raw-equality consumers downstream (assembly draft, uncovered-port warning)
+// see one spelling per context.
+import { canonicalContextName } from "../../../domain/index";
 
 const STAGE_NUMBER = 4;
-
-/**
- * Resolve a model-emitted context name back to the requested spelling —
- * stage LLMs emit casing/kebab variants of the names they were given (a
- * documented prod incident forced the same canonicalization into Stage 3 and
- * the Stage-6 prompt). Without this, a variant-cased entry for a REQUESTED
- * context passes the orchestrator's normalized echo filter but fails every
- * raw-equality consumer downstream: the assembly draft silently drops its
- * adapters, and the uncovered-port warning goes blind to them.
- */
-function canonicalContextName(
-  inputName: string,
-  acceptedNames: readonly string[],
-): string {
-  const normalized = normalizeContextName(inputName);
-  return (
-    acceptedNames.find((n) => normalizeContextName(n) === normalized) ??
-    inputName
-  );
-}
 
 /**
  * Brace-depth scanner: correctly extracts JSON objects from LLM output

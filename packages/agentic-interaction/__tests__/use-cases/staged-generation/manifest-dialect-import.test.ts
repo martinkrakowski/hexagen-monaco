@@ -315,6 +315,79 @@ describe("parseStructuredConfig — alvaro manifest fixture (end to end)", () =>
     assert.equal(bindingOf("StreamingZipAdapter"), "StoragePort");
   });
 
+  it("declared bindings claim ports before inference, regardless of adapter order (PR #411 CR)", () => {
+    // An UNDECLARED adapter whose name infers into a port that a LATER adapter
+    // explicitly declares must not steal the port: declared claims run first
+    // (two-pass), and the inferred binding goes unbound with an advisory.
+    const doc = [
+      "name: precedence",
+      "contexts:",
+      "  - name: Engine",
+      "    path: packages/engine",
+      "ports:",
+      "  - name: UpscalePort",
+      "    path: packages/engine/src/upscale.port.ts",
+      "adapters:",
+      "  - name: UpscaleHelperAdapter", // no implements — infers UpscalePort by containment
+      "    context: Engine",
+      "  - name: RealAdapter",
+      "    implements: UpscalePort", // declared, listed AFTER the inferring one
+      "    context: Engine",
+      "",
+    ].join("\n");
+    const parsed = parseStructuredConfig(doc);
+    const advisories: string[] = [];
+    const portMap = buildPreDefinedPortMap(parsed);
+    const bindings = buildPreDefinedAdapterBindings(parsed, portMap, (m) =>
+      advisories.push(m),
+    );
+    const all = bindings.contexts.flatMap((c) => c.adapters);
+    assert.equal(
+      all.find((a) => a.name === "RealAdapter")?.implements,
+      "UpscalePort",
+      "declared binding wins the port",
+    );
+    assert.equal(
+      all.find((a) => a.name === "UpscaleHelperAdapter")?.implements,
+      "",
+      "inferred binding yields to the declared claim",
+    );
+    assert.equal(advisories.length, 1);
+    assert.match(advisories[0], /name-inferred/);
+  });
+
+  it("a duplicate adapter name still records its binding and seeds its port (PR #411 CR)", () => {
+    // A context whose inline layers pre-declare the adapter NAME, with the
+    // top-level adapters block carrying the binding: the name must not append
+    // twice, but the sidecar + cross-context seeding must still run.
+    const doc = [
+      "name: dupe",
+      "contexts:",
+      "  - name: Core",
+      "    path: packages/core",
+      "  - name: Infra",
+      "    path: packages/infra",
+      "    layers:",
+      "      infrastructure:",
+      "        adapters: [StoreAdapter]",
+      "ports:",
+      "  - name: StorePort",
+      "    path: packages/core/src/store.port.ts",
+      "adapters:",
+      "  - name: StoreAdapter",
+      "    implements: StorePort",
+      "    context: Infra",
+      "",
+    ].join("\n");
+    const parsed = parseStructuredConfig(doc);
+    const infra = parsed.bounded_contexts.find((c) => c.name === "Infra");
+    assert.deepEqual(infra?.layers?.infrastructure?.adapters, ["StoreAdapter"]);
+    assert.deepEqual(infra?.layers?.infrastructure?.adapter_implements, {
+      StoreAdapter: "StorePort",
+    });
+    assert.deepEqual(infra?.layers?.application?.ports?.out, ["StorePort"]);
+  });
+
   it("declared bindings introduce no duplicate-R04 and no R06 at the deterministic gate (e2e pin)", () => {
     // Pins the class of error this change could INTRODUCE: honoring the
     // author's bindings must not trade the old phantom R06s for a true-by-rule
