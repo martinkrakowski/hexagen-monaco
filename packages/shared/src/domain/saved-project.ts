@@ -23,6 +23,45 @@ export interface GitHubPublishPrefs {
   readonly remember: boolean;
 }
 
+/**
+ * Current `SavedProject.schemaVersion` for newly written records. Single source
+ * of truth for the *live* write path (the `useSavedProjects` hook). Migration
+ * steps deliberately do NOT import this — each step stamps a frozen historical
+ * version (v2, v3, v4 …), so bumping this constant must never retroactively move
+ * an old migration's target.
+ */
+export const SAVED_PROJECT_SCHEMA_VERSION = 4;
+
+/**
+ * One authored message in a project planning layer. A multi-agent brainstorm is
+ * not a `user`/`assistant` exchange, so `author` is a free-form label
+ * ("Grok" | "Claude" | "You" | "Imported"), not a role enum.
+ */
+export interface ProjectLayerTurn {
+  /** Stable identity — React keys, salvage-rule index shifts, and Phase-2/3
+   * provenance all need it. Assigned at creation (`crypto.randomUUID()`). */
+  readonly id: string;
+  readonly author: string;
+  /** Markdown. */
+  readonly content: string;
+  /** Optional timestamp. */
+  readonly at?: number;
+}
+
+/**
+ * A provenance layer on a project. v1 holds only the brainstorm (`kind:
+ * "brainstorm"`); the union is left open for future `"research"` | `"decisions"`
+ * layers. `turns` is ordered: a v1 paste is one turn; a live session appends.
+ */
+export interface ProjectLayer {
+  readonly id: string;
+  readonly kind: "brainstorm";
+  readonly title: string;
+  readonly turns: readonly ProjectLayerTurn[];
+  readonly createdAt: number;
+  readonly updatedAt: number;
+}
+
 export interface SavedProject {
   readonly id: string;
   readonly name: string;
@@ -34,4 +73,11 @@ export interface SavedProject {
   readonly githubLink?: GitHubLink;
   /** Remembered GitHub publish preference (set via the publish settings modal). */
   readonly githubPublishPrefs?: GitHubPublishPrefs;
+  /**
+   * Provenance layers (the planning/brainstorm session that produced the
+   * manifest). Optional on the domain type — honest for raw/legacy records and
+   * the write path; the load perimeter (`normalizeLoadedProjects`) defaults it to
+   * `[]`, and the app-level `SavedProject` narrows it to a required array.
+   */
+  readonly layers?: readonly ProjectLayer[];
 }

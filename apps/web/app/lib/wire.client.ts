@@ -61,6 +61,7 @@ import {
   WizardDraftMigrationStep,
   SavedProjectsMigrationStep,
   SavedProjectsV3MigrationStep,
+  SavedProjectsV4MigrationStep,
   EditorWorkspaceMigrationStep,
 } from "@hexagen/web-driver";
 import { IDBWizardDraftAdapter } from "./adapters/idb-wizard-draft.adapter";
@@ -267,6 +268,7 @@ export const wireDependencies = () => {
     new WizardDraftMigrationStep(wizardPersistenceAdapter),
     new SavedProjectsMigrationStep(savedProjectsAdapter, domainRegistry),
     new SavedProjectsV3MigrationStep(savedProjectsAdapter),
+    new SavedProjectsV4MigrationStep(savedProjectsAdapter),
     new EditorWorkspaceMigrationStep(editorWorkspaceAdapter, domainRegistry),
   ]);
   void migrationOrchestrator

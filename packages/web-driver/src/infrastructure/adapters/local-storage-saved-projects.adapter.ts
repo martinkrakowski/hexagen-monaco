@@ -6,6 +6,11 @@ import type {
 } from "@hexagen/shared";
 
 const STORAGE_KEY = "hexagen-saved-projects";
+// FROZEN. This adapter is the legacy localStorage backend and is no longer
+// wired (the live path is IDB; the LS→IDB migration steps own the version
+// bumps). Its stamp is deliberately pinned to the v3 era and must NOT track the
+// live `SAVED_PROJECT_SCHEMA_VERSION` — resurrecting it should re-derive the
+// migration semantics, not silently adopt the current schema.
 const CURRENT_SCHEMA_VERSION = 3;
 const LEGACY_SCHEMA_VERSION = 1;
 
