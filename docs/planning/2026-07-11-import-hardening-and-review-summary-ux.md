@@ -178,12 +178,12 @@ parse → normalize → classification → pre-defined port map → Stage-5 asse
 
 ## 6. PR mapping & sequencing
 
-| PR   | Scope                                               | Status   |
-| ---- | --------------------------------------------------- | -------- |
-| #407 | Schema gate + ingestion filters + actionable errors | OPEN     |
-| next | UX: success-first review summary (§4)               | this arc |
-| next | P1 + P4: deterministic `contexts:` dialect import   | this arc |
-| next | P2 + P3: import corpus harness + crash-proofing     | this arc |
+| PR   | Scope                                                             | Status |
+| ---- | ----------------------------------------------------------------- | ------ |
+| #407 | Schema gate + ingestion filters + actionable errors               | OPEN   |
+| #408 | UX: success-first review summary (§4)                             | OPEN   |
+| #409 | P1 + P4: deterministic `contexts:` dialect import                 | OPEN   |
+| #410 | P2 + P3: import corpus harness + crash-proofing (stacked on #409) | OPEN   |
 
 Sequencing: UX first (small, user-visible), then P1 (+P4), then P2 (+P3, so the
 harness locks in P1's behavior). Each PR independent, branched off main.
