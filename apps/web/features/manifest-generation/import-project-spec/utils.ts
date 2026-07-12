@@ -148,10 +148,13 @@ export const SPEC_STAGE_LABELS: Partial<Record<StagedPhase, string>> = {
 
 /**
  * Human-readable summary of Stage-6 review findings for the advisory panel —
- * e.g. "3 issues and 1 warning", "2 warnings", "1 issue". A zero count is
- * omitted entirely so the errors-0 / warnings-N case never reads
- * "0 issues and N warnings". Callers render the panel only when there is at
- * least one finding, so the result is non-empty in practice; (0, 0) yields "".
+ * e.g. "3 findings and 1 suggestion", "2 suggestions", "1 finding". A zero
+ * count is omitted entirely so the errors-0 / warnings-N case never reads
+ * "0 findings and N suggestions". Callers render the panel only when there is
+ * at least one finding, so the result is non-empty in practice; (0, 0) yields
+ * "". Deliberately NOT "issues"/"warnings": Stage-6 findings are advisory and
+ * never block the manifest, and error-flavored words made every completed run
+ * read as "generated with errors".
  */
 export function describeFindings(
   errorCount: number,
@@ -159,10 +162,10 @@ export function describeFindings(
 ): string {
   const parts: string[] = [];
   if (errorCount > 0) {
-    parts.push(`${errorCount} issue${errorCount === 1 ? "" : "s"}`);
+    parts.push(`${errorCount} finding${errorCount === 1 ? "" : "s"}`);
   }
   if (warningCount > 0) {
-    parts.push(`${warningCount} warning${warningCount === 1 ? "" : "s"}`);
+    parts.push(`${warningCount} suggestion${warningCount === 1 ? "" : "s"}`);
   }
   return parts.join(" and ");
 }
@@ -175,25 +178,38 @@ export function describeFindings(
  * frames it as informational ("no action needed") rather than a warning "to
  * address".
  *
- * Anchored on the backend advisory signature — both the message prefix AND the
- * rule marker it carries (`(R12)` / `(R03)`) — the only stable signal absent a
- * structured field on the report. Requiring the marker as well as the prefix keeps
- * the classifier no broader than the backend strings: a future reviewer finding
- * that merely happens to open with the same words can't be misfiled as a notice
- * (and thereby dropped from the actionable count). Keep in sync with the advisory
- * copy in `synthesizeMissingRepositoryPorts` / `dedupeAdapterNames`
- * (@hexagen/agentic-interaction). A cleaner long-term fix is a dedicated `notices`
- * field on the validation report.
+ * Anchored on the backend advisory signature — the message prefix plus, where
+ * the copy carries one, its rule marker (`(R12)` / `(R03)`) — the only stable
+ * signal absent a structured field on the report. Requiring the marker (when
+ * defined) as well as the prefix keeps the classifier no broader than the
+ * backend strings: a future reviewer finding that merely happens to open with
+ * the same words can't be misfiled as a notice (and thereby dropped from the
+ * actionable count). Keep in sync with the advisory copy in
+ * `synthesizeMissingRepositoryPorts` / `dedupeAdapterNames` /
+ * `enforce-manifest-schema` (@hexagen/agentic-interaction). A cleaner
+ * long-term fix is a dedicated `notices` field on the validation report.
  */
-const AUTO_APPLIED_ADVISORIES: ReadonlyArray<{ prefix: string; rule: string }> =
-  [
-    { prefix: "Renamed adapter ", rule: "(R12)" },
-    { prefix: "Auto-added a default repository port ", rule: "(R03)" },
-    { prefix: "Renamed context ", rule: "(R01)" },
-  ];
+const AUTO_APPLIED_ADVISORIES: ReadonlyArray<{
+  prefix: string;
+  rule?: string;
+}> = [
+  { prefix: "Renamed adapter ", rule: "(R12)" },
+  { prefix: "Auto-added a default repository port ", rule: "(R03)" },
+  { prefix: "Renamed context ", rule: "(R01)" },
+  // Stage-5 schema-gate adjustments (enforce-manifest-schema.ts): changes
+  // already made so the manifest parses on accept — notices, not findings.
+  // Their copy carries no rule marker; the distinctive prefixes carry the
+  // classification alone.
+  { prefix: "Coerced app entry " },
+  { prefix: "Dropped an app entry without a usable name" },
+  { prefix: "Dropped a context mapping missing an upstream/downstream" },
+  { prefix: "Dropped ", rule: "the manifest schema requires string names" },
+];
 
 export function isAutoAppliedNotice(message: string): boolean {
   return AUTO_APPLIED_ADVISORIES.some(
-    ({ prefix, rule }) => message.startsWith(prefix) && message.includes(rule),
+    ({ prefix, rule }) =>
+      message.startsWith(prefix) &&
+      (rule === undefined || message.includes(rule)),
   );
 }
