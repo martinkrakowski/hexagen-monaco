@@ -185,8 +185,11 @@ parse → normalize → classification → pre-defined port map → Stage-5 asse
 | #409 | P1 + P4: deterministic `contexts:` dialect import                 | OPEN   |
 | #410 | P2 + P3: import corpus harness + crash-proofing (stacked on #409) | OPEN   |
 
-Sequencing: UX first (small, user-visible), then P1 (+P4), then P2 (+P3, so the
-harness locks in P1's behavior). Each PR independent, branched off main.
+`Status` reflects GitHub PR state. Sequencing: UX first (small, user-visible),
+then P1 (+P4), then P2 (+P3, so the harness locks in P1's behavior). #407 and
+#408 are independent branches off `main`; #409 branches off `main`; #410 is
+**stacked on #409** (its corpus asserts the manifest-dialect fixture #409 adds),
+so retarget #410 to `main` before #409 squash-merges.
 
 **Definition of done for the arc:** a user can import any file in §2's corpus —
 including real Hexagen manifests and messy unstructured prose — and either get

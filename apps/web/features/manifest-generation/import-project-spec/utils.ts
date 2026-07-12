@@ -198,11 +198,20 @@ const AUTO_APPLIED_ADVISORIES: ReadonlyArray<{
   { prefix: "Renamed context ", rule: "(R01)" },
   // Stage-5 schema-gate adjustments (enforce-manifest-schema.ts): changes
   // already made so the manifest parses on accept — notices, not findings.
-  // Their copy carries no rule marker; the distinctive prefixes carry the
-  // classification alone.
-  { prefix: "Coerced app entry " },
-  { prefix: "Dropped an app entry without a usable name" },
-  { prefix: "Dropped a context mapping missing an upstream/downstream" },
+  // Every entry is BOTH prefix- and marker-gated (like the rule-coded advisories
+  // above): Stage-6 warnings come from unstructured model output at the NDJSON
+  // boundary, so a distinctive marker substring — not the prefix alone — keeps a
+  // reviewer finding that merely opens with the same words from being misfiled as
+  // a notice and dropped from the actionable count (CodeRabbit/qodo #408).
+  { prefix: "Coerced app entry ", rule: "the manifest schema requires" },
+  {
+    prefix: "Dropped an app entry without a usable name",
+    rule: "the manifest schema requires",
+  },
+  {
+    prefix: "Dropped a context mapping missing an upstream/downstream",
+    rule: "endpoint",
+  },
   { prefix: "Dropped ", rule: "the manifest schema requires string names" },
 ];
 

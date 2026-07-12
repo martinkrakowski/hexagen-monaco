@@ -149,8 +149,10 @@ export function ManifestGeneratingStep({
                   applied automatically to keep the manifest valid
                 </summary>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  No action needed — these note what the generator changed.
-                  Rename in the manifest if you&apos;d prefer different names.
+                  No action needed to proceed — these note what the generator
+                  adjusted to keep the manifest valid. If any dropped or renamed
+                  item was intended, correct it in your source spec and
+                  re-import.
                 </p>
                 <ul className="mt-3 max-h-48 space-y-1 overflow-auto font-mono text-xs">
                   {notices.map((n, i) => (

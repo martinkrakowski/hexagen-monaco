@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it } from "vitest";
-import assert from "node:assert";
+import assert from "node:assert/strict";
 import { render, screen } from "@testing-library/react";
 import { ManifestGeneratingStep } from "../import-project-spec/ManifestGeneratingStep";
 import { isAutoAppliedNotice } from "../import-project-spec/utils";
@@ -104,6 +104,31 @@ describe("ManifestGeneratingStep completion summary", () => {
       ),
     );
     assert.equal(screen.queryByText(/couldn't reduce the errors/), null);
+  });
+
+  it("reports the applied-repair branch with its before/after counts", () => {
+    render(
+      <ManifestGeneratingStep
+        {...baseProps}
+        phase="complete"
+        validationReport={report([], ["[R16] trivial port description"])}
+        repairSummary={{
+          attempted: true,
+          applied: true,
+          errorsBefore: 3,
+          errorsAfter: 1,
+          warningsBefore: 1,
+          warningsAfter: 1,
+        }}
+      />,
+    );
+    // "resolved 2 of 3 findings automatically — 1 remain as advisory notes"
+    assert.ok(screen.getByText(/resolved 2 of 3 findings automatically/));
+    assert.ok(screen.getByText(/1 remain as advisory notes/));
+    // Still a success — an applied repair is not a failure.
+    assert.ok(
+      screen.getByText(/Manifest generated successfully — ready to review/),
+    );
   });
 
   it("classifies Stage-5 schema-gate adjustments as auto-applied notices", () => {
