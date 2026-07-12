@@ -27,15 +27,20 @@ export function SpecReviewStep({
           converted JSON below before generating ports and adapters.
         </div>
       )}
-      {conversionWarnings.map((warning, i) => (
-        <div
-          key={`cw-${i}`}
-          role="alert"
-          className="mb-4 p-3 rounded border border-warning/40 bg-warning/10 text-sm"
-        >
-          {warning}
-        </div>
-      ))}
+      {/* Conversion warnings originate ONLY from the loose-spec conversion, so
+          gate them on `cameFromConversion`: a deterministic structured-config
+          upload must never inherit a prior conversion's stale truncation
+          warning (qodo #410). */}
+      {cameFromConversion &&
+        conversionWarnings.map((warning, i) => (
+          <div
+            key={`cw-${i}`}
+            role="alert"
+            className="mb-4 p-3 rounded border border-warning/40 bg-warning/10 text-sm"
+          >
+            {warning}
+          </div>
+        ))}
       {specSummary && (
         <div className="mb-4 space-y-2">
           <p>✓ {specSummary.contextCount} bounded contexts detected</p>

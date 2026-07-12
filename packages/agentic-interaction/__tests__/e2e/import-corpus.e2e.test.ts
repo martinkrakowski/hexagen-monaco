@@ -1,4 +1,4 @@
-import { describe, it } from "vitest";
+import { describe, it, beforeAll } from "vitest";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -141,9 +141,20 @@ function runDeterministicImport(raw: string) {
 describe("import corpus — deterministic formats", () => {
   for (const c of DETERMINISTIC_CORPUS) {
     describe(`${c.format} [${c.file}]`, () => {
-      const raw = read(c.file);
-      const { config, portMap, adapterBindings, assembled } =
-        runDeterministicImport(raw);
+      // Compute inside beforeAll, NOT at describe-definition time: a fixture
+      // that fails to read/parse must surface as a failing test, not throw
+      // during suite collection (which would deregister every it() below and
+      // erase the granularity — qodo #410).
+      let config: ReturnType<typeof runDeterministicImport>["config"];
+      let portMap: ReturnType<typeof runDeterministicImport>["portMap"];
+      let adapterBindings: ReturnType<
+        typeof runDeterministicImport
+      >["adapterBindings"];
+      let assembled: ReturnType<typeof runDeterministicImport>["assembled"];
+      beforeAll(() => {
+        ({ config, portMap, adapterBindings, assembled } =
+          runDeterministicImport(read(c.file)));
+      });
 
       it("imports without the LLM and preserves the contexts", () => {
         assert.equal(config.bounded_contexts.length, c.contexts);

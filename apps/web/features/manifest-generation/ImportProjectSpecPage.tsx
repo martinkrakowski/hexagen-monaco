@@ -216,6 +216,10 @@ export default function ImportProjectSpecPage() {
 
     if (mode === "structured-config") {
       setCameFromConversion(false);
+      // Clear any prior loose-spec conversion state so a deterministic upload
+      // after an earlier conversion doesn't carry stale warnings into review
+      // (qodo #410). SpecReviewStep also gates warnings on cameFromConversion.
+      resetConversion();
       setSpecContent(content);
       setPageState("SPEC_REVIEW");
       setSpecSummary(parsed ? extractSpecSummary(parsed) : null);

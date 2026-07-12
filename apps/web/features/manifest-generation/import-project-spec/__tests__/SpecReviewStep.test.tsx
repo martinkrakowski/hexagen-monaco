@@ -54,3 +54,37 @@ describe("SpecReviewStep — no-aggregates advisory", () => {
     );
   });
 });
+
+describe("SpecReviewStep — conversion warnings gating", () => {
+  const warning = "The conversion output appears to have been cut off…";
+
+  test("shows conversion warnings on the conversion path", () => {
+    const { container } = render(
+      <SpecReviewStep
+        specSummary={baseSummary}
+        specContent=""
+        cameFromConversion={true}
+        conversionWarnings={[warning]}
+        isJsonDisclosed={false}
+        onToggleJsonDisclosed={() => {}}
+      />,
+    );
+    assert.ok((container.textContent ?? "").includes(warning));
+  });
+
+  test("suppresses stale conversion warnings on a deterministic upload", () => {
+    // cameFromConversion=false ⇒ a warning left over in state from a prior
+    // conversion must NOT render for a structured-config upload (qodo #410).
+    const { container } = render(
+      <SpecReviewStep
+        specSummary={baseSummary}
+        specContent=""
+        cameFromConversion={false}
+        conversionWarnings={[warning]}
+        isJsonDisclosed={false}
+        onToggleJsonDisclosed={() => {}}
+      />,
+    );
+    assert.ok(!(container.textContent ?? "").includes(warning));
+  });
+});
