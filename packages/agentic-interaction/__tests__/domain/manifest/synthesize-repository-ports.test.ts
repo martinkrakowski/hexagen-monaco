@@ -257,4 +257,74 @@ describe("synthesizeMissingRepositoryPorts", () => {
     );
     assert.strictEqual(result.synthesized.length, 0);
   });
+
+  // ── Duplicate-context-entry hardening (alvaro-ai RCA) ─────────────────────
+  // The bindings held 'real-esrgan' twice (pre-defined entry + a Stage-4 echo);
+  // the per-entry append then minted TWO copies of the synthesized adapter,
+  // which the R12 dedupe "fixed" into RealEsrganRealEsrganRepositoryAdapter and
+  // Stage 6 reported as a phantom R04 double assignment.
+
+  it("appends the synthesized adapter to at most ONE entry when a context appears twice", () => {
+    const portMap: PortMap = {
+      contexts: [
+        {
+          contextName: "real-esrgan",
+          in: [
+            { name: "ExecuteUpscalePort", type: "command", description: "x" },
+          ],
+          out: [],
+        },
+      ],
+    };
+    const bindings: AdapterBindings = {
+      contexts: [
+        { contextName: "real-esrgan", adapters: [] },
+        { contextName: "real-esrgan", adapters: [] }, // stage echo duplicate
+      ],
+    };
+    const result = synthesizeMissingRepositoryPorts(portMap, bindings, [
+      context({ name: "real-esrgan", aggregateRoots: [] }),
+    ]);
+    const copies = result.adapterBindings.contexts.flatMap((c) =>
+      c.adapters.filter((a) => a.name === "RealEsrganRepositoryAdapter"),
+    );
+    assert.equal(copies.length, 1, "exactly one synthesized adapter");
+    assert.equal(result.synthesized.length, 1);
+  });
+
+  it("sees an existing implementer in ANY duplicate entry (no second adapter)", () => {
+    const portMap: PortMap = {
+      contexts: [
+        {
+          contextName: "real-esrgan",
+          in: [
+            { name: "ExecuteUpscalePort", type: "command", description: "x" },
+          ],
+          out: [],
+        },
+      ],
+    };
+    const bindings: AdapterBindings = {
+      contexts: [
+        { contextName: "real-esrgan", adapters: [] },
+        {
+          contextName: "real-esrgan",
+          adapters: [
+            {
+              name: "ExistingRepoAdapter",
+              type: "Repository",
+              implements: "RealEsrganRepositoryPort",
+            },
+          ],
+        },
+      ],
+    };
+    const result = synthesizeMissingRepositoryPorts(portMap, bindings, [
+      context({ name: "real-esrgan", aggregateRoots: [] }),
+    ]);
+    const added = result.adapterBindings.contexts.flatMap((c) =>
+      c.adapters.filter((a) => a.name === "RealEsrganRepositoryAdapter"),
+    );
+    assert.equal(added.length, 0, "existing implementer covers the port");
+  });
 });

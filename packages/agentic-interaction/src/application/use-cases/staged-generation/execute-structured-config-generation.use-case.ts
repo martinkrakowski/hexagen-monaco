@@ -19,8 +19,10 @@ import type {
   AdapterBindings,
   AdapterBinding,
 } from "../../../domain/value-objects/pipeline-state";
-import { normalizeContextName } from "../../../domain/index";
+import { normalizeContextName, normalizePortName } from "../../../domain/index";
 import { synthesizeMissingRepositoryPorts } from "../../../domain/manifest/synthesize-repository-ports";
+import { synthesizeMissingInboundPorts } from "../../../domain/manifest/synthesize-inbound-ports";
+import { filterToRequestedContexts } from "../../../domain/manifest/filter-stage-output";
 import {
   dedupeAdapterNames,
   type RenamedAdapter,
@@ -182,9 +184,15 @@ export interface StructuredConfigContext {
         in?: string[];
         out?: string[];
       };
+      /** Sidecar from the manifest-dialect mapper: author port descriptions
+       * (name → description) — used instead of a name-derived stub (R16). */
+      port_descriptions?: Record<string, string>;
     };
     infrastructure?: {
       adapters?: string[];
+      /** Sidecar from the manifest-dialect mapper: author-declared bindings
+       * (adapter name → port) — preferred over `inferAdapterImplements`. */
+      adapter_implements?: Record<string, string>;
     };
   };
 
@@ -1429,25 +1437,33 @@ export function buildPreDefinedPortMap(config: StructuredConfig): PortMap {
       // R09: a shared-kernel owns no ports, even when the imported spec declares
       // some — drop them so the output matches Stage 3's "no ports" recognition.
       .filter((ctx) => !ctxIsSharedKernel(ctx))
-      .map((ctx) => ({
-        contextName: ctx.name,
-        in: names(ctx.layers?.application?.ports?.in).map((name) => ({
-          name,
-          type: inferInboundPortType(name),
-          description: name.replace(/Port$/, ""),
-        })),
-        out: names(ctx.layers?.application?.ports?.out).map((name) => ({
-          name,
-          type: inferOutboundPortType(name),
-          description: name.replace(/Port$/, ""),
-        })),
-      })),
+      .map((ctx) => {
+        // Prefer the author's declared description (dialect sidecar) — the
+        // name-derived stub is a last resort and reads as trivial to R16.
+        const declaredDesc = ctx.layers?.application?.port_descriptions ?? {};
+        const describe = (name: string) =>
+          declaredDesc[name] ?? name.replace(/Port$/, "");
+        return {
+          contextName: ctx.name,
+          in: names(ctx.layers?.application?.ports?.in).map((name) => ({
+            name,
+            type: inferInboundPortType(name),
+            description: describe(name),
+          })),
+          out: names(ctx.layers?.application?.ports?.out).map((name) => ({
+            name,
+            type: inferOutboundPortType(name),
+            description: describe(name),
+          })),
+        };
+      }),
   };
 }
 
 export function buildPreDefinedAdapterBindings(
   config: StructuredConfig,
   portMap: PortMap,
+  onAdvisory?: (message: string) => void,
 ): AdapterBindings {
   return {
     contexts: config.bounded_contexts
@@ -1462,6 +1478,31 @@ export function buildPreDefinedAdapterBindings(
           ...(ctxPorts?.in ?? []).map((p) => p.name),
           ...(ctxPorts?.out ?? []).map((p) => p.name),
         ];
+        // Author-declared bindings (dialect sidecar) win over name inference:
+        // inference is same-context containment only and left every alvaro-ai
+        // adapter unbound. A declared target is honored when it resolves to a
+        // port in this context's map (the dialect mapper seeds cross-context
+        // targets locally, so declared bindings resolve here by construction);
+        // an unresolvable declaration falls back to inference rather than
+        // carrying a dangling reference into the R04/R06 gates.
+        const declared = ctx.layers?.infrastructure?.adapter_implements ?? {};
+        const resolveDeclared = (adapterName: string): string | undefined => {
+          const target = declared[adapterName];
+          if (!target) return undefined;
+          const normalizedTarget = normalizePortName(target);
+          return portNames.find(
+            (p) => normalizePortName(p) === normalizedTarget,
+          );
+        };
+        // R04 allows exactly one adapter per port, but a declared prod + mock
+        // pair implementing the same port is a legitimate authoring pattern
+        // (alvaro-ai: RealESRGANAdapter + MockUpscaleAdapter → UpscalePort).
+        // Keep the FIRST declared implementer bound, leave later ones unbound
+        // (the adapter itself stays in the manifest), and disclose — the same
+        // auto-resolve-and-disclose treatment as R01/R03/R12, instead of
+        // failing the import with a true-by-rule R04 the user must resolve by
+        // deleting their own mock.
+        const boundDeclaredPorts = new Set<string>();
         return {
           contextName: ctx.name,
           adapters: toEntryArray(ctx.layers?.infrastructure?.adapters)
@@ -1469,10 +1510,25 @@ export function buildPreDefinedAdapterBindings(
             .filter((name): name is string => name !== null)
             .map((name) => {
               const adapterType = inferAdapterType(name);
+              const declaredTarget = resolveDeclared(name);
+              let bound: string | undefined = declaredTarget;
+              if (declaredTarget) {
+                if (boundDeclaredPorts.has(declaredTarget)) {
+                  bound = "";
+                  onAdvisory?.(
+                    `Port '${declaredTarget}' in context '${ctx.name}' has multiple declared implementers — kept the first and left '${name}' unbound (R04 allows exactly one adapter per port). If '${name}' is a test double, remove it from the spec's adapters list.`,
+                  );
+                } else {
+                  boundDeclaredPorts.add(declaredTarget);
+                }
+              }
               return {
                 name,
                 type: adapterType ?? "adapter",
-                implements: inferAdapterImplements(name, portNames),
+                implements:
+                  bound !== undefined
+                    ? bound
+                    : inferAdapterImplements(name, portNames),
                 adapterType,
               };
             }),
@@ -2122,6 +2178,18 @@ export class ExecuteStructuredConfigGenerationUseCase {
 
     if (contextsNeedingPorts.length > 0) {
       callbacks?.onChunk?.("Stage 3 · Port Mapping");
+      // Disclose the pre-defined skips in the MIXED case — without this the
+      // stage log said "Analyzing 7 bounded contexts" against a 9-context spec
+      // with no hint of where the other 2 went (alvaro-ai).
+      if (preDefinedPortNames.size > 0) {
+        callbacks?.onChunk?.(
+          `${preDefinedPortNames.size} context${
+            preDefinedPortNames.size === 1 ? "" : "s"
+          } with pre-defined ports from the imported spec — skipping AI for ${
+            preDefinedPortNames.size === 1 ? "it" : "those"
+          }: ${[...preDefinedPortNames].join(", ")}`,
+        );
+      }
       const partialClassification: ClassificationResult = {
         accepted: contextsNeedingPorts,
         rejected: [],
@@ -2142,9 +2210,24 @@ export class ExecuteStructuredConfigGenerationUseCase {
         return { success: false, error: s3.error };
       }
 
+      // Drop entries the model echoed for grounding-only contexts (it sees the
+      // full port map but was asked for a subset) — an echo would otherwise
+      // duplicate a pre-defined context entry in the merge below.
+      const s3Filtered = filterToRequestedContexts(
+        s3.value.portMap.contexts,
+        contextsNeedingPorts.map((c) => c.name),
+      );
+      if (s3Filtered.droppedContextNames.length > 0) {
+        callbacks?.onChunk?.(
+          `Ignoring ${s3Filtered.droppedContextNames.length} unrequested context entr${
+            s3Filtered.droppedContextNames.length === 1 ? "y" : "ies"
+          } echoed by the model: ${s3Filtered.droppedContextNames.join(", ")}`,
+        );
+      }
+
       // Issue 2: Validate every requested context produced LLM output; fall back to use_cases
       const portedContextNames = new Set(
-        s3.value.portMap.contexts.map((c) => c.contextName),
+        s3Filtered.kept.map((c) => c.contextName),
       );
       const fallbackContexts: ContextPorts[] = [];
       for (const ctx of contextsNeedingPorts) {
@@ -2181,7 +2264,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
       mergedPortMap = {
         contexts: [
           ...buildPreDefinedPortMap(config).contexts,
-          ...s3.value.portMap.contexts,
+          ...s3Filtered.kept,
           ...fallbackContexts,
         ],
       };
@@ -2235,6 +2318,11 @@ export class ExecuteStructuredConfigGenerationUseCase {
         .filter(ctxHasPreDefinedAdapters)
         .map((c) => c.name),
     );
+    // Multi-implementer keep-first advisories from the declared-bindings
+    // resolution — surfaced with the other Stage-5 adjustments below.
+    const declaredBindingAdvisories: string[] = [];
+    const collectBindingAdvisory = (message: string) =>
+      declaredBindingAdvisories.push(message);
     const contextsNeedingAdapters = classification.accepted.filter(
       (ctx) => !preDefinedAdapterNames.has(ctx.name),
     );
@@ -2243,6 +2331,16 @@ export class ExecuteStructuredConfigGenerationUseCase {
 
     if (contextsNeedingAdapters.length > 0) {
       callbacks?.onChunk?.("Stage 4 · Adapter Assignment");
+      // Same disclosure as Stage 3's mixed case.
+      if (preDefinedAdapterNames.size > 0) {
+        callbacks?.onChunk?.(
+          `${preDefinedAdapterNames.size} context${
+            preDefinedAdapterNames.size === 1 ? "" : "s"
+          } with pre-defined adapters from the imported spec — skipping AI for ${
+            preDefinedAdapterNames.size === 1 ? "it" : "those"
+          }: ${[...preDefinedAdapterNames].join(", ")}`,
+        );
+      }
       const partialClassification: ClassificationResult = {
         accepted: contextsNeedingAdapters,
         rejected: [],
@@ -2271,10 +2369,29 @@ export class ExecuteStructuredConfigGenerationUseCase {
         callbacks?.onError?.(4, String(s4.error), s4Duration);
         return { success: false, error: s4.error };
       }
+      // Same echo guard as Stage 3: an entry for a context with pre-defined
+      // adapters would duplicate the pre-defined bindings entry, which is what
+      // double-fed the R03 synthesizer on the alvaro-ai import (R12 stutter +
+      // phantom R04).
+      const s4Filtered = filterToRequestedContexts(
+        s4.value.contexts,
+        contextsNeedingAdapters.map((c) => c.name),
+      );
+      if (s4Filtered.droppedContextNames.length > 0) {
+        callbacks?.onChunk?.(
+          `Ignoring ${s4Filtered.droppedContextNames.length} unrequested context entr${
+            s4Filtered.droppedContextNames.length === 1 ? "y" : "ies"
+          } echoed by the model: ${s4Filtered.droppedContextNames.join(", ")}`,
+        );
+      }
       mergedAdapterBindings = {
         contexts: [
-          ...buildPreDefinedAdapterBindings(config, mergedPortMap).contexts,
-          ...s4.value.contexts,
+          ...buildPreDefinedAdapterBindings(
+            config,
+            mergedPortMap,
+            collectBindingAdvisory,
+          ).contexts,
+          ...s4Filtered.kept,
         ],
       };
     } else {
@@ -2286,6 +2403,7 @@ export class ExecuteStructuredConfigGenerationUseCase {
       mergedAdapterBindings = buildPreDefinedAdapterBindings(
         config,
         mergedPortMap,
+        collectBindingAdvisory,
       );
     }
     callbacks?.onProgress?.(4, Date.now() - s4Start);
@@ -2309,6 +2427,30 @@ export class ExecuteStructuredConfigGenerationUseCase {
         `Auto-added a default repository port '${s.portName}' and adapter '${s.adapterName}' to context '${s.contextName}' — Stage 3 produced no outbound repository port (R03). Review and rename to fit your domain.`,
     );
     for (const warning of repositorySynthesisWarnings) {
+      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
+    }
+    for (const warning of declaredBindingAdvisories) {
+      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
+    }
+
+    // R02 invariant satisfaction at the source — same rationale and placement
+    // as the R03 synthesis above: done BEFORE Stage 6 so findings and the
+    // rendered manifest agree by construction. Previously a context imported
+    // with only driven ports kept `in: []` through Stage 6 (R02 error), and the
+    // accept view's client-side auto-fixer then silently patched the YAML — the
+    // user saw an R02 finding next to a manifest that visibly had the port.
+    const inboundSynthesis = synthesizeMissingInboundPorts(
+      mergedPortMap,
+      mergedAdapterBindings,
+      classification.accepted,
+    );
+    mergedPortMap = inboundSynthesis.portMap;
+    mergedAdapterBindings = inboundSynthesis.adapterBindings;
+    const inboundSynthesisWarnings = inboundSynthesis.synthesized.map(
+      (s) =>
+        `Auto-added a default inbound command port '${s.portName}' and adapter '${s.adapterName}' to context '${s.contextName}' — the spec declared no inbound ports (R02). Review and rename to fit your domain.`,
+    );
+    for (const warning of inboundSynthesisWarnings) {
       callbacks?.onChunk?.(`Stage 5 · ${warning}`);
     }
 
@@ -2405,6 +2547,8 @@ export class ExecuteStructuredConfigGenerationUseCase {
     const assemblyAdvisories = [
       ...contextRenameWarnings,
       ...repositorySynthesisWarnings,
+      ...inboundSynthesisWarnings,
+      ...declaredBindingAdvisories,
       ...adapterRenameWarnings,
       ...(assembledManifest.schemaAdvisories ?? []),
     ];

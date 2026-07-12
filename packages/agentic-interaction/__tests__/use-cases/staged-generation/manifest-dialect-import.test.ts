@@ -7,7 +7,12 @@ import {
   isManifestDialect,
   mapManifestDialect,
 } from "../../../src/domain/utils/manifest-dialect";
-import { parseStructuredConfig } from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
+import {
+  parseStructuredConfig,
+  buildPreDefinedPortMap,
+  buildPreDefinedAdapterBindings,
+  structuralManifestErrors,
+} from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 
 const fixturePath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -218,5 +223,130 @@ describe("parseStructuredConfig — alvaro manifest fixture (end to end)", () =>
   it("joins responsibilities into the canonical responsibility string", () => {
     const image = config.bounded_contexts.find((c) => c.name === "ImageDomain");
     assert.ok(image?.responsibility?.includes("job state machine"));
+  });
+
+  // ── Provenance carried through the mapper (alvaro-ai RCA) ────────────────
+  // Dropping the author's `implements`/descriptions forced same-context name
+  // re-inference downstream, which left all five adapters unbound: 5 phantom
+  // R06 ('UnnamedPort'), 11 real R14, and trivial-description R16s against the
+  // author's own input.
+
+  const ctxOf = (name: string) =>
+    config.bounded_contexts.find((c) => c.name === name);
+
+  it("carries each adapter's declared implements in the sidecar", () => {
+    assert.deepEqual(
+      ctxOf("RealESRGANAdapter")?.layers?.infrastructure?.adapter_implements,
+      { RealESRGANAdapter: "UpscalePort", MockUpscaleAdapter: "UpscalePort" },
+    );
+    assert.deepEqual(
+      ctxOf("FileSystemAdapter")?.layers?.infrastructure?.adapter_implements,
+      { LocalFileSystemAdapter: "StoragePort" },
+    );
+    assert.deepEqual(
+      ctxOf("ZipAdapter")?.layers?.infrastructure?.adapter_implements,
+      { StreamingZipAdapter: "StoragePort" },
+    );
+  });
+
+  it("seeds a cross-context implemented port into the implementing context's out slot", () => {
+    // StoragePort is owned by ImageDomain (path) but implemented from
+    // FileSystemAdapter AND ZipAdapter — the #402 single-ownership shape.
+    assert.deepEqual(
+      ctxOf("FileSystemAdapter")?.layers?.application?.ports?.out,
+      ["StoragePort"],
+    );
+    assert.deepEqual(ctxOf("ZipAdapter")?.layers?.application?.ports?.out, [
+      "StoragePort",
+    ]);
+    assert.deepEqual(ctxOf("QueueAdapter")?.layers?.application?.ports?.out, [
+      "JobQueuePort",
+    ]);
+    // The owning context keeps it too — the duplicate is the #402 advisory's
+    // designed trigger, not a bug.
+    assert.ok(
+      ctxOf("ImageDomain")?.layers?.application?.ports?.out?.includes(
+        "StoragePort",
+      ),
+    );
+  });
+
+  it("carries author port descriptions to the owner AND to seeded contexts", () => {
+    assert.equal(
+      ctxOf("ImageDomain")?.layers?.application?.port_descriptions?.[
+        "UpscalePort"
+      ],
+      "Primary port for performing super-resolution.",
+    );
+    assert.equal(
+      ctxOf("FileSystemAdapter")?.layers?.application?.port_descriptions?.[
+        "StoragePort"
+      ],
+      "Abstract file and workspace operations.",
+    );
+  });
+
+  it("binds declared adapters through the pre-defined chain, keep-first on multi-implementers", () => {
+    // The full deterministic chain the orchestrator runs for pre-defined
+    // contexts: port map from the mapped config, then bindings. Before the fix
+    // all five adapters came out with implements: "" (nothing to infer against
+    // in their own contexts) and the judge was shown 'UnnamedPort'.
+    const advisories: string[] = [];
+    const portMap = buildPreDefinedPortMap(config);
+    const bindings = buildPreDefinedAdapterBindings(config, portMap, (m) =>
+      advisories.push(m),
+    );
+    const bindingOf = (adapterName: string) => {
+      for (const ctx of bindings.contexts) {
+        const hit = ctx.adapters.find((a) => a.name === adapterName);
+        if (hit) return hit.implements;
+      }
+      return undefined;
+    };
+    assert.equal(bindingOf("RealESRGANAdapter"), "UpscalePort");
+    // Prod + mock both declare UpscalePort; R04 allows exactly one adapter per
+    // port, so the FIRST declared implementer wins and the mock stays in the
+    // manifest unbound — disclosed, not an error.
+    assert.equal(bindingOf("MockUpscaleAdapter"), "");
+    assert.equal(advisories.length, 1);
+    assert.match(advisories[0], /UpscalePort.*MockUpscaleAdapter/s);
+    assert.equal(bindingOf("LocalFileSystemAdapter"), "StoragePort");
+    assert.equal(bindingOf("InMemoryQueueAdapter"), "JobQueuePort");
+    assert.equal(bindingOf("StreamingZipAdapter"), "StoragePort");
+  });
+
+  it("declared bindings introduce no duplicate-R04 and no R06 at the deterministic gate (e2e pin)", () => {
+    // Pins the class of error this change could INTRODUCE: honoring the
+    // author's bindings must not trade the old phantom R06s for a true-by-rule
+    // multi-implementer R04 on the prod+mock pair (keep-first resolves it).
+    // Zero-adapter R04s/R02s/R03s are expected at this point in the chain —
+    // Stage 4's LLM and the R02/R03 synthesizers fill those before the real
+    // gate runs; this test exercises only the pre-defined structures.
+    const portMap = buildPreDefinedPortMap(config);
+    const bindings = buildPreDefinedAdapterBindings(config, portMap, () => {});
+    const parsed = {
+      system: "alvaro",
+      scope: "@alvaro",
+      bounded_contexts: config.bounded_contexts,
+    } as unknown as Record<string, unknown>;
+    const errors = structuralManifestErrors(portMap, bindings, parsed);
+    assert.ok(
+      !errors.some((e) => /^\[R04\].*has [2-9]\d* adapters/.test(e)),
+      `no multi-implementer R04, got: ${errors.join(" | ")}`,
+    );
+    assert.ok(
+      !errors.some((e) => e.startsWith("[R06]")),
+      `no R06, got: ${errors.join(" | ")}`,
+    );
+  });
+
+  it("uses the author's port description in the pre-defined port map (no trivial R16 stub)", () => {
+    const portMap = buildPreDefinedPortMap(config);
+    const image = portMap.contexts.find((c) => c.contextName === "ImageDomain");
+    const upscale = image?.out.find((p) => p.name === "UpscalePort");
+    assert.equal(
+      upscale?.description,
+      "Primary port for performing super-resolution.",
+    );
   });
 });

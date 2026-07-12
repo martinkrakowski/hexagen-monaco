@@ -22,8 +22,29 @@ import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
 import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
+import { normalizeContextName } from "../../../domain/index";
 
 const STAGE_NUMBER = 4;
+
+/**
+ * Resolve a model-emitted context name back to the requested spelling —
+ * stage LLMs emit casing/kebab variants of the names they were given (a
+ * documented prod incident forced the same canonicalization into Stage 3 and
+ * the Stage-6 prompt). Without this, a variant-cased entry for a REQUESTED
+ * context passes the orchestrator's normalized echo filter but fails every
+ * raw-equality consumer downstream: the assembly draft silently drops its
+ * adapters, and the uncovered-port warning goes blind to them.
+ */
+function canonicalContextName(
+  inputName: string,
+  acceptedNames: readonly string[],
+): string {
+  const normalized = normalizeContextName(inputName);
+  return (
+    acceptedNames.find((n) => normalizeContextName(n) === normalized) ??
+    inputName
+  );
+}
 
 /**
  * Brace-depth scanner: correctly extracts JSON objects from LLM output
@@ -220,8 +241,14 @@ export class ExecuteAdapterAssignmentUseCase {
             : parsed
         ) as Record<string, unknown>;
 
-        const contextName =
+        const rawContextName =
           typeof entry.contextName === "string" ? entry.contextName : "";
+        const contextName = rawContextName
+          ? canonicalContextName(
+              rawContextName,
+              (state.stage2?.accepted ?? []).map((c) => c.name),
+            )
+          : "";
         // The system prompt uses "name" for the adapter name
         const adapterName = typeof entry.name === "string" ? entry.name : "";
         const adapterType =
@@ -270,12 +297,23 @@ export class ExecuteAdapterAssignmentUseCase {
           contexts.push({ contextName, adapters });
         }
         const result: AdapterBindings = { contexts };
-        const totalAdapters = contexts.reduce(
+        // Count only the REQUESTED contexts: the model sees the full port map
+        // for grounding and may echo entries for contexts it wasn't asked to
+        // assign (the orchestrator drops those) — counting the raw output said
+        // "across 7 contexts" right after "Assigning … across 5" (alvaro-ai).
+        // Context names are canonicalized above, so the requested match is exact.
+        const requestedNames = new Set(
+          (state.stage2?.accepted ?? []).map((c) => c.name),
+        );
+        const requestedEntries = contexts.filter((c) =>
+          requestedNames.has(c.contextName),
+        );
+        const totalAdapters = requestedEntries.reduce(
           (sum, c) => sum + c.adapters.length,
           0,
         );
         onChunk?.(
-          `${totalAdapters} adapters assigned across ${contexts.length} contexts`,
+          `${totalAdapters} adapters assigned across ${requestedEntries.length} of ${requestedNames.size} requested contexts`,
         );
         onStageTelemetry?.({
           stage: STAGE_NUMBER,

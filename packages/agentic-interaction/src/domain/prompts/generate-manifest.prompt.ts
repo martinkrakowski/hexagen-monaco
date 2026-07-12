@@ -601,6 +601,7 @@ R05: Every inbound port has exactly one adapter assigned.
 
 R06: No adapter's "implements" value references a port that belongs to a different context.
       Check: for each adapter in <adapter_bindings>, the port named by "implements" must appear in the SAME context's entry in <port_map>.
+      An adapter with an EMPTY "implements" is unbound, not misbound — its uncovered port already surfaces via R04/R05; do not report R06 for it.
 
 R07: Every dependsOn reference points to an existing context name.
       Check: for each entry in dependsOn arrays, the referenced name must appear in boundedContexts[*].name.
@@ -773,7 +774,15 @@ export function compileStage6Prompt(
                 context: escapeXml(normalizeContextName(ctx.contextName)),
                 adapters: ctx.adapters.map((a) => ({
                   name: escapeXml(a.name),
-                  implements: escapeXml(normalizePortName(a.implements)),
+                  // An unbound adapter (implements: "") must stay visibly
+                  // empty: normalizePortName("") coerces to "UnnamedPort",
+                  // which the judge then reported as a same-context R06 for a
+                  // port that never existed (5× on the alvaro-ai import). The
+                  // deterministic gate skips empty implements — the judge's
+                  // grounding must match that semantics.
+                  implements: a.implements
+                    ? escapeXml(normalizePortName(a.implements))
+                    : "",
                 })),
               }),
             )

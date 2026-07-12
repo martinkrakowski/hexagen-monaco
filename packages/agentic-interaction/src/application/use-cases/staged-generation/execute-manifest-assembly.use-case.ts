@@ -4,6 +4,7 @@ import {
   renderManifestYaml,
   toKebabCase,
   normalizeContextName,
+  normalizePortName,
 } from "../../../domain/index";
 import { enforceManifestSchema } from "../../../domain/manifest/enforce-manifest-schema";
 import type {
@@ -166,9 +167,12 @@ export class ExecuteManifestAssemblyUseCase {
 
     for (const ctx of acceptedContexts) {
       const ctxPorts = portMap.find((p) => p.contextName === ctx.name);
-      const ctxAdapters = adapterBindings.find(
-        (a) => a.contextName === ctx.name,
-      );
+      // Collect adapters across ALL entries for the context: bindings can hold
+      // a context more than once (pre-defined entry + a stage echo), and a
+      // first-match lookup would blind this check to the later entries.
+      const adapters = adapterBindings
+        .filter((a) => a.contextName === ctx.name)
+        .flatMap((a) => a.adapters);
 
       if (
         !ctxPorts ||
@@ -184,13 +188,20 @@ export class ExecuteManifestAssemblyUseCase {
       }
 
       const outPorts = ctxPorts?.out ?? [];
-      const adapters = ctxAdapters?.adapters ?? [];
       for (const port of outPorts) {
-        const hasAdapter = adapters.some((a) => a.implements === port.name);
+        // Compare + report NORMALIZED names: the emitted YAML goes through
+        // normalizeDraft (Port-suffix appended), so a raw-name warning cited
+        // ports the user cannot find in the manifest ("UpscaleProgressPublisher"
+        // vs the YAML's "UpscaleProgressPublisherPort" — the alvaro-ai import).
+        const normalizedPort = normalizePortName(port.name);
+        const hasAdapter = adapters.some(
+          (a) =>
+            a.implements && normalizePortName(a.implements) === normalizedPort,
+        );
         if (!hasAdapter) {
           assemblyWarnings.push({
             contextName: ctx.name,
-            message: `Outbound port "${port.name}" has no assigned adapter. Stage 4 may have missed this port.`,
+            message: `Outbound port "${normalizedPort}" has no assigned adapter. Stage 4 may have missed this port.`,
             severity: "warning",
           });
         }
