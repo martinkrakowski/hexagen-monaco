@@ -11,6 +11,9 @@ function baseProps(): LayoutMemoProps {
   return {
     currentStepIndex: 0,
     viewMode: "code",
+    phase: "architecture",
+    onPhaseChange: fn,
+    canUsePlanPhase: false,
     onViewModeChange: fn,
     onCloseMiddlePanel: fn,
     onCloseRightPanel: fn,
@@ -49,6 +52,11 @@ describe("projectWorkspaceLayoutPropsEqual", () => {
     const changes: Partial<LayoutMemoProps>[] = [
       { currentStepIndex: 1 },
       { viewMode: "visual" },
+      // Phase props: skipping any of these would freeze the workspace in a
+      // phase (the toggle renders inside this memoized layout).
+      { phase: "plan" },
+      { onPhaseChange: () => {} },
+      { canUsePlanPhase: true },
       { onViewModeChange: () => {} },
       { onCloseMiddlePanel: () => {} },
       { onCloseRightPanel: () => {} },

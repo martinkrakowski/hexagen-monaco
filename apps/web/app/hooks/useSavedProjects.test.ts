@@ -77,6 +77,31 @@ describe("useSavedProjects — layer mutations", () => {
     persistence.state.saveCount = 0;
   });
 
+  it("saveProject persists initial layers atomically with the new project", async () => {
+    persistence.state.projects = [seed("existing")];
+    const { result } = await mountLoaded();
+
+    let id: string | null = null;
+    await act(async () => {
+      id = await result.current.saveProject("Vellum", {} as never, "yaml: 1", [
+        brainstorm,
+      ]);
+    });
+
+    assert.ok(id, "project created");
+    assert.strictEqual(
+      persistence.state.saveCount,
+      1,
+      "one write — capture is part of the same save, not a follow-up",
+    );
+    const saved = result.current.projects.find((p) => p.id === id);
+    assert.ok(saved);
+    assert.strictEqual(saved.layers.length, 1);
+    assert.strictEqual(saved.layers[0].title, "Vellum");
+    assert.ok(saved.layers[0].id, "layer id stamped");
+    assert.strictEqual(saved.layers[0].turns[0].content, "the session");
+  });
+
   it("addLayer stamps identity/timestamps, appends, and persists (round-trip)", async () => {
     persistence.state.projects = [seed("p1")];
     const { result } = await mountLoaded();
@@ -115,6 +140,59 @@ describe("useSavedProjects — layer mutations", () => {
       "optimistic layer is reverted",
     );
     assert.ok(result.current.persistError, "persistError is surfaced");
+  });
+
+  it("addLayer treats a THROWING port as a failed write (revert + persistError, no escaped rejection)", async () => {
+    persistence.state.projects = [seed("p1")];
+    const { result } = await mountLoaded();
+    const original = persistence.port.saveProjects;
+    persistence.port.saveProjects = async () => {
+      throw new Error("adapter blew up");
+    };
+
+    let layerId: string | null = "sentinel";
+    await act(async () => {
+      layerId = await result.current.addLayer("p1", brainstorm);
+    });
+    persistence.port.saveProjects = original;
+
+    assert.strictEqual(layerId, null, "reported as failure, not thrown");
+    assert.strictEqual(
+      result.current.projects[0].layers.length,
+      0,
+      "optimistic layer is reverted",
+    );
+    assert.strictEqual(result.current.persistError?.kind, "Unknown");
+  });
+
+  it("saveProject treats a THROWING port as a failed write (revert + persistError, no phantom project)", async () => {
+    // Without the try/catch the optimistic project stays in state after the
+    // caller (ManifestAcceptPage) catches the rejection and retries — the next
+    // save then serializes the phantom plus the retry, duplicating it
+    // (CodeRabbit #405).
+    persistence.state.projects = [seed("existing")];
+    const { result } = await mountLoaded();
+    const original = persistence.port.saveProjects;
+    persistence.port.saveProjects = async () => {
+      throw new Error("adapter blew up");
+    };
+
+    let id: string | null = "sentinel";
+    await act(async () => {
+      id = await result.current.saveProject("Vellum", {} as never, "yaml: 1", [
+        brainstorm,
+      ]);
+    });
+    persistence.port.saveProjects = original;
+
+    assert.strictEqual(id, null, "reported as failure, not thrown");
+    assert.strictEqual(
+      result.current.projects.length,
+      1,
+      "optimistic project is reverted — no phantom left in state",
+    );
+    assert.strictEqual(result.current.projects[0].id, "existing");
+    assert.strictEqual(result.current.persistError?.kind, "Unknown");
   });
 
   it("addLayer on an unknown project id is an explicit no-op (no write)", async () => {

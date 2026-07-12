@@ -5,6 +5,7 @@ import assert from "node:assert";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ImportProjectSpecPage from "../ImportProjectSpecPage";
+import { usePendingManifest } from "../store/usePendingManifest";
 import fs from "node:fs";
 import path from "node:path";
 import { http, HttpResponse } from "msw";
@@ -404,5 +405,113 @@ describe("ImportProjectSpecPage", () => {
       assert.ok(screen.getByText(/spec review/i));
       assert.ok(screen.getByText(/1 bounded contexts detected/i));
     });
+  });
+
+  it("manifest fast-path after an abandoned spec upload attaches NO provenance (stale-closure regression)", async () => {
+    // Pre-fix leak: upload a spec (originalSpecText set), Back (state survived),
+    // then upload a generated manifest — acceptManifest's closure still saw the
+    // previous upload's text and attached it to the unrelated manifest. Two
+    // independent guards now close it: Back clears the state/keys, and the fast
+    // path passes an explicit null override past the un-flushed setState.
+    sessionStorage.clear();
+    usePendingManifest.getState().clear();
+    const user = userEvent.setup();
+    render(<ImportProjectSpecPage />);
+
+    const yamlContent = fs.readFileSync(yamlPath, "utf-8");
+    await user.upload(
+      screen.getByLabelText(/upload manifest or spec/i),
+      new File([yamlContent], "krakowski-portal.yaml", { type: "text/yaml" }),
+    );
+    await waitFor(() => assert.ok(screen.getByText(/spec review/i)));
+
+    await user.click(screen.getByText(/back/i));
+    await waitFor(() =>
+      assert.ok(screen.getByLabelText(/upload manifest or spec/i)),
+    );
+
+    const manifest = [
+      "system: test-system",
+      "bounded_contexts:",
+      "  - name: orders",
+      "    layers:",
+      "      application:",
+      "        ports:",
+      "          in: [PlaceOrderPort]",
+      "          out: [OrderRepositoryPort]",
+      "      infrastructure:",
+      "        adapters: [OrderRepositoryAdapter]",
+      "",
+    ].join("\n");
+    await user.upload(
+      screen.getByLabelText(/upload manifest or spec/i),
+      new File([manifest], "manifest.yaml", { type: "text/yaml" }),
+    );
+
+    await waitFor(() => {
+      assert.ok(
+        routerPush.mock.calls.some((c) => c[0] === "/projects/new/ai/accept"),
+      );
+    });
+    assert.strictEqual(
+      usePendingManifest.getState().originSpecText,
+      null,
+      "a generated manifest must carry no stale spec provenance",
+    );
+    assert.strictEqual(
+      sessionStorage.getItem("import_spec_original_content"),
+      null,
+    );
+  });
+
+  it("loose-spec conversion preserves the ORIGINAL text as provenance, across reload", async () => {
+    // The conversion overwrites import_spec_content with the converted JSON (so
+    // this step rehydrates correctly); the user's original words must live under
+    // the dedicated key and win at accept time — even after unmount/remount.
+    sessionStorage.clear();
+    usePendingManifest.getState().clear();
+    const user = userEvent.setup();
+    const first = render(<ImportProjectSpecPage />);
+
+    const looseContent =
+      "We have bounded contexts, some aggregates and value objects. This should trigger the semi-structured mode.";
+    await user.upload(
+      screen.getByLabelText(/upload manifest or spec/i),
+      new File([looseContent], "loose.txt", { type: "text/plain" }),
+    );
+    await waitFor(() => assert.ok(screen.getByText(/spec review/i)));
+
+    // Storage split: current-step content = converted JSON; original preserved.
+    assert.match(
+      sessionStorage.getItem("import_spec_content") ?? "",
+      /bounded_contexts/,
+    );
+    assert.strictEqual(
+      sessionStorage.getItem("import_spec_original_content"),
+      looseContent,
+    );
+
+    // Reload mid-import: remount rehydrates the converted step, but provenance
+    // must still be the original words.
+    first.unmount();
+    render(<ImportProjectSpecPage />);
+    await waitFor(() => assert.ok(screen.getByText(/spec review/i)));
+
+    await user.click(screen.getByText(/map ports & adapters/i));
+    await waitFor(() =>
+      assert.ok(screen.getByRole("button", { name: /next/i })),
+    );
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await waitFor(() => {
+      assert.ok(
+        routerPush.mock.calls.some((c) => c[0] === "/projects/new/ai/accept"),
+      );
+    });
+
+    assert.strictEqual(
+      usePendingManifest.getState().originSpecText,
+      looseContent,
+      "provenance is the user's original words, not the converted JSON",
+    );
   });
 });

@@ -92,6 +92,12 @@ export default function ImportProjectSpecPage() {
   );
   const [specSummary, setSpecSummary] = useState<SpecSummary | null>(null);
   const [specContent, setSpecContent] = useState<string>("");
+  // The user's ORIGINAL upload/paste, preserved for provenance capture at
+  // accept-save. `specContent` is overwritten by the loose-spec conversion
+  // (the converted JSON), so it can't serve as the honest record. Stays null
+  // on the generated-manifest fast path (the manifest IS the artifact —
+  // nothing upstream to capture).
+  const [originalSpecText, setOriginalSpecText] = useState<string | null>(null);
   const [cameFromConversion, setCameFromConversion] = useState(false);
   const [isJsonDisclosed, setIsJsonDisclosed] = useState(false);
   // Set when a generated manifest fails to parse into wizard data — shown
@@ -129,7 +135,7 @@ export default function ImportProjectSpecPage() {
   useEffect(() => {
     const saved = sessionStorage.getItem("import_spec_content");
     if (saved && !specContent) {
-      handleFileLoaded(saved);
+      handleFileLoaded(saved, { rehydratedFromSession: true });
     }
   }, []);
 
@@ -159,7 +165,10 @@ export default function ImportProjectSpecPage() {
     [convert, resetConversion, engine],
   );
 
-  const handleFileLoaded = (content: string) => {
+  const handleFileLoaded = (
+    content: string,
+    options?: { rehydratedFromSession?: boolean },
+  ) => {
     setAcceptError(null);
     // Parse once: reused for the manifest fast-path AND the spec summary
     // (supports single- and multi-document YAML / JSON, strict on key conflicts).
@@ -173,9 +182,14 @@ export default function ImportProjectSpecPage() {
     if (isGeneratedManifest(parsed)) {
       // Also clear any spec persisted by an earlier upload this session, so the
       // accept screen's Back returns to a clean upload page rather than
-      // rehydrating stale content.
+      // rehydrating stale content — and drop any earlier upload's provenance so
+      // it can't attach to this unrelated manifest. The explicit `null` to
+      // acceptManifest is load-bearing: setOriginalSpecText hasn't re-rendered
+      // yet, so acceptManifest's closure still sees the PREVIOUS upload's text.
       sessionStorage.removeItem("import_spec_content");
-      acceptManifest(content);
+      sessionStorage.removeItem("import_spec_original_content");
+      setOriginalSpecText(null);
+      acceptManifest(content, null);
       return;
     }
 
@@ -184,6 +198,18 @@ export default function ImportProjectSpecPage() {
     // this page from sessionStorage and immediately re-fast-path — an infinite
     // Back→Accept loop.
     sessionStorage.setItem("import_spec_content", content);
+    if (options?.rehydratedFromSession) {
+      // On reload, import_spec_content may hold the post-conversion JSON (the
+      // conversion overwrites it so this step rehydrates correctly). The user's
+      // ORIGINAL words live under the dedicated key; fall back to the current
+      // content only when it's absent (pre-key session).
+      setOriginalSpecText(
+        sessionStorage.getItem("import_spec_original_content") ?? content,
+      );
+    } else {
+      sessionStorage.setItem("import_spec_original_content", content);
+      setOriginalSpecText(content);
+    }
 
     const mode: InputMode = detectInputMode(content);
 
@@ -209,7 +235,12 @@ export default function ImportProjectSpecPage() {
   // approval screen. (The page used to show its own PREVIEW state first,
   // duplicating the accept screen.)
   const acceptManifest = useCallback(
-    (manifest: string) => {
+    // `originSpecTextOverride`: the fast path passes an explicit `null` because
+    // its setOriginalSpecText(null) hasn't re-rendered yet — this closure would
+    // otherwise still read the previous upload's text and attach it to an
+    // unrelated manifest. Callers after a render cycle (the generating step's
+    // Next button) omit it and get the state value.
+    (manifest: string, originSpecTextOverride?: string | null) => {
       try {
         const wizardData = parseManifestToWizardData(manifest);
         // The user-entered name (from the Project Name step) wins: it becomes the
@@ -237,11 +268,16 @@ export default function ImportProjectSpecPage() {
         }
         // originPath lets the accept screen's Back/Regenerate return to THIS
         // flow (the spec survives in sessionStorage) instead of the prompt flow.
+        // originSpecText rides along so the accept-save can attach the user's
+        // ORIGINAL spec as a planning layer (null on the manifest fast path).
         pendingManifest.set(
           manifestYaml,
           wizardData,
           projectName,
           "/projects/new/import/spec",
+          originSpecTextOverride === undefined
+            ? originalSpecText
+            : originSpecTextOverride,
         );
         router.push("/projects/new/ai/accept");
       } catch (err) {
@@ -260,7 +296,7 @@ export default function ImportProjectSpecPage() {
         );
       }
     },
-    [pendingManifest, router, carriedName],
+    [pendingManifest, router, carriedName, originalSpecText],
   );
 
   const runSpecGeneration = useCallback(
@@ -409,7 +445,9 @@ export default function ImportProjectSpecPage() {
       setPageState("UPLOAD");
       setSpecSummary(null);
       setSpecContent("");
+      setOriginalSpecText(null);
       sessionStorage.removeItem("import_spec_content");
+      sessionStorage.removeItem("import_spec_original_content");
     } else {
       router.push("/projects/new/import");
     }
@@ -424,9 +462,11 @@ export default function ImportProjectSpecPage() {
     setPageState("UPLOAD");
     setSpecContent("");
     setSpecSummary(null);
+    setOriginalSpecText(null);
     setCameFromConversion(false);
     setIsJsonDisclosed(false);
     sessionStorage.removeItem("import_spec_content");
+    sessionStorage.removeItem("import_spec_original_content");
   };
 
   const generationError =
@@ -511,8 +551,10 @@ export default function ImportProjectSpecPage() {
               resetConversion();
               setPageState("UPLOAD");
               setSpecContent("");
+              setOriginalSpecText(null);
               setCameFromConversion(false);
               sessionStorage.removeItem("import_spec_content");
+              sessionStorage.removeItem("import_spec_original_content");
             }}
           >
             Cancel

@@ -82,6 +82,10 @@ export function useSavedProjects() {
       name: string,
       formState: ProjectConfig,
       manifestYaml: string,
+      // Provenance captured at creation time (e.g. the imported spec text from
+      // the accept flow) — persisted atomically with the project so a separate
+      // follow-up write can't fail and leave the project without its layer.
+      initialLayers: NewProjectLayer[] = [],
     ): Promise<string | null> => {
       const id = crypto.randomUUID();
       const now = Date.now();
@@ -93,7 +97,12 @@ export function useSavedProjects() {
         updatedAt: now,
         formState,
         manifestYaml,
-        layers: [],
+        layers: initialLayers.map((layer) => ({
+          ...layer,
+          id: crypto.randomUUID(),
+          createdAt: now,
+          updatedAt: now,
+        })),
       };
       const snapshot = projectsRef.current;
       const updated = [newProject, ...snapshot];
@@ -104,7 +113,24 @@ export function useSavedProjects() {
       // project is durably committed (the IndexedDB adapter is async).
       // Returning the id before the write resolved caused approved projects to
       // be "lost" when the next screen read storage before the write landed.
-      const result = await port.saveProjects(updated.map(toBase));
+      // The wired IDB adapter returns a failed Result rather than throwing, but
+      // treat a throwing port as a failed write too (mirrors commitLayerMutation):
+      // otherwise the optimistic project stays in state after ManifestAcceptPage
+      // catches the rejection and lets the user retry — the next save then
+      // serializes the phantom project plus the retry, duplicating it.
+      let result: Awaited<ReturnType<typeof port.saveProjects>>;
+      try {
+        result = await port.saveProjects(updated.map(toBase));
+      } catch (e) {
+        result = {
+          success: false,
+          error: {
+            kind: "Unknown",
+            message: "Unexpected error persisting the new project",
+            cause: e,
+          },
+        };
+      }
       if (!result.success) {
         if (mutationSeq.current === seq) {
           setProjects(snapshot);
@@ -200,7 +226,22 @@ export function useSavedProjects() {
       const seq = ++mutationSeq.current;
       projectsRef.current = updated;
       setProjects(updated); // optimistic; reverted below if the write fails
-      const result = await port.saveProjects(updated.map(toBase));
+      // The wired IDB adapter returns a failed Result rather than throwing, but
+      // treat a throwing port as a failed write too — an escaped rejection here
+      // would blow past the dialog's inline error handling entirely.
+      let result: Awaited<ReturnType<typeof port.saveProjects>>;
+      try {
+        result = await port.saveProjects(updated.map(toBase));
+      } catch (e) {
+        result = {
+          success: false,
+          error: {
+            kind: "Unknown",
+            message: "Unexpected error persisting the layer mutation",
+            cause: e,
+          },
+        };
+      }
       if (!result.success) {
         if (mutationSeq.current === seq) {
           setProjects(snapshot);

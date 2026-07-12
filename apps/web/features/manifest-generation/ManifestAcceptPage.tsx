@@ -90,12 +90,38 @@ export function ManifestAcceptPage() {
     setSaveError(null);
 
     try {
+      // Provenance capture: the import flow carries the user's ORIGINAL spec
+      // text in the pending-manifest store (originSpecText — set only by the
+      // flow that produced THIS manifest, unlike the durable sessionStorage
+      // key, which a stale abandoned import could leak onto an unrelated
+      // prompt-flow project). Persist it as an initial planning layer inside
+      // the SAME save — a follow-up write could fail and leave the project
+      // without its layer.
+      const importedSpec = pendingManifest.originSpecText;
+      const initialLayers = importedSpec?.trim()
+        ? [
+            {
+              kind: "brainstorm" as const,
+              title: "Imported project spec",
+              turns: [
+                {
+                  id: crypto.randomUUID(),
+                  author: "Imported",
+                  content: importedSpec,
+                  at: Date.now(),
+                },
+              ],
+            },
+          ]
+        : [];
+
       // Await the (async IndexedDB) write before navigating so the wizard
       // reliably finds the project; navigating early lost the approved project.
       const projectId = await saveProject(
         pendingManifest.projectName,
         pendingManifest.formValues as ProjectSpec,
         pendingManifest.yaml,
+        initialLayers,
       );
 
       if (!projectId) {
@@ -107,6 +133,7 @@ export function ManifestAcceptPage() {
       pendingManifest.clear();
       // Clear the import spec so the next new project starts from a blank canvas.
       sessionStorage.removeItem("import_spec_content");
+      sessionStorage.removeItem("import_spec_original_content");
       router.push(`/wizard/1?project=${projectId}`);
     } catch {
       setSaveError("Unexpected error saving project. Please try again.");
