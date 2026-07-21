@@ -46,6 +46,14 @@ export interface ProjectLayerTurn {
   readonly content: string;
   /** Optional timestamp. */
   readonly at?: number;
+  /**
+   * Machine-readable role for live-session turns (Phase 3). `author` stays the
+   * display label; the convergence logic needs something sturdier than string
+   * matching on author names. Absent on plain archived/pasted turns.
+   */
+  readonly role?: "proposer" | "critic" | "human" | "system";
+  /** 1-based propose→critique round this turn belongs to (live sessions). */
+  readonly round?: number;
 }
 
 /**
@@ -60,6 +68,27 @@ export interface ProjectLayer {
   readonly turns: readonly ProjectLayerTurn[];
   readonly createdAt: number;
   readonly updatedAt: number;
+  /**
+   * Live-session lifecycle (Phase 3). Absent = a plain archived layer (the v1
+   * paste). Persisted so a mid-session reload can tell converged from
+   * died-at-round-3 from awaiting-human — never re-derived from prose.
+   */
+  readonly status?:
+    | "proposing"
+    | "critiquing"
+    | "revising"
+    | "awaiting-human"
+    | "converged"
+    | "finalizing"
+    | "done";
+  /** Round cap for a live session (v1 default 4). */
+  readonly maxRounds?: number;
+  /**
+   * Provenance edge: this layer produced the project's manifest. NOTE: the
+   * Phase-2 branch defines this identical field — the duplicate resolves
+   * trivially on merge (keep either side).
+   */
+  readonly link?: { readonly type: "produced-manifest"; readonly at: number };
 }
 
 export interface SavedProject {

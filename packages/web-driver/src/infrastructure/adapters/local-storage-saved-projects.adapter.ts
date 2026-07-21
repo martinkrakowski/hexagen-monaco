@@ -135,4 +135,34 @@ export class LocalStorageSavedProjectsAdapter implements SavedProjectsPersistenc
       };
     }
   }
+
+  /**
+   * Port-contract compliance for this FROZEN legacy adapter: composed from its
+   * own load/save (a synchronous-localStorage backend has no cross-writer race
+   * for read-merge-write to close). The live IDB adapter implements the real
+   * fresh-read semantics.
+   */
+  async updateProjectRecord(
+    id: string,
+    updater: (project: SavedProject) => SavedProject,
+  ): Promise<Result<SavedProject, PersistenceError>> {
+    const loaded = await this.loadProjects();
+    if (!loaded.success) return loaded;
+    const index = loaded.value.findIndex((p) => p.id === id);
+    if (index === -1) {
+      return {
+        success: false,
+        error: { kind: "NotFound", message: `No saved project with id ${id}` },
+      };
+    }
+    const current = loaded.value[index];
+    const updated = updater(current);
+    // Same-reference return = "nothing changed" — skip the write.
+    if (updated === current) return { success: true, value: current };
+    const next = [...loaded.value];
+    next[index] = updated;
+    const written = await this.saveProjects(next);
+    if (!written.success) return written;
+    return { success: true, value: updated };
+  }
 }
