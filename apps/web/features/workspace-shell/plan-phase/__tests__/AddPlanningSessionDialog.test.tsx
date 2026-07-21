@@ -139,4 +139,107 @@ describe("AddPlanningSessionDialog", () => {
     assert.ok(alert);
     assert.match(alert.textContent || "", /Not enough browser storage/);
   });
+
+  // --- Phase 2: delimiter-based turn splitting -----------------------------
+
+  const checkbox = (): HTMLInputElement | null =>
+    document.querySelector('input[type="checkbox"]');
+
+  const bodyText = () => (document.body.textContent || "").replace(/\s+/g, " ");
+
+  it("offers no split checkbox for zero or one ## heading", () => {
+    render(
+      <AddPlanningSessionDialog
+        open
+        onClose={vi.fn()}
+        onSubmit={vi.fn(async () => true)}
+        submitError={null}
+      />,
+    );
+    fireEvent.change(textarea(), { target: { value: "plain prose" } });
+    assert.strictEqual(checkbox(), null);
+    fireEvent.change(textarea(), {
+      target: { value: "## Overview\n\none section" },
+    });
+    assert.strictEqual(checkbox(), null, "a single heading is not a session");
+  });
+
+  it("shows a default-checked split checkbox with a live turn count on detection", () => {
+    render(
+      <AddPlanningSessionDialog
+        open
+        onClose={vi.fn()}
+        onSubmit={vi.fn(async () => true)}
+        submitError={null}
+      />,
+    );
+    fireEvent.change(textarea(), {
+      target: { value: "## Grok\n\npropose\n\n## Claude\n\ncritique" },
+    });
+    const box = checkbox();
+    assert.ok(box, "split checkbox appears when >= 2 headings match");
+    assert.strictEqual(box.checked, true, "split defaults to on");
+    assert.match(bodyText(), /Split into turns by/);
+    assert.match(bodyText(), /2 turns detected/);
+
+    // Preamble adds an Imported turn to the live count.
+    fireEvent.change(textarea(), {
+      target: {
+        value: "context first\n\n## Grok\n\npropose\n\n## Claude\n\ncritique",
+      },
+    });
+    assert.match(bodyText(), /3 turns detected/);
+  });
+
+  it("splits into authored turns on submit when the checkbox is checked", async () => {
+    const onSubmit = vi.fn(async () => true);
+    render(
+      <AddPlanningSessionDialog
+        open
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+        submitError={null}
+      />,
+    );
+    fireEvent.change(textarea(), {
+      target: {
+        value: "intro\n\n## Grok\n\npropose\n\n## Claude\n\ncritique",
+      },
+    });
+    fireEvent.click(button(/Add session/));
+
+    await waitFor(() => assert.strictEqual(onSubmit.mock.calls.length, 1));
+    const layer = onSubmit.mock.calls[0][0];
+    assert.deepStrictEqual(
+      layer.turns.map((t: { author: string }) => t.author),
+      ["Imported", "Grok", "Claude"],
+    );
+    assert.strictEqual(layer.turns[1].content, "propose");
+    assert.strictEqual(layer.turns[2].content, "critique");
+  });
+
+  it("keeps the lossless single-Imported-turn behavior when unchecked", async () => {
+    const onSubmit = vi.fn(async () => true);
+    render(
+      <AddPlanningSessionDialog
+        open
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+        submitError={null}
+      />,
+    );
+    const content = "## Grok\n\npropose\n\n## Claude\n\ncritique";
+    fireEvent.change(textarea(), { target: { value: content } });
+    const box = checkbox();
+    assert.ok(box);
+    fireEvent.click(box);
+    assert.strictEqual(box.checked, false);
+    fireEvent.click(button(/Add session/));
+
+    await waitFor(() => assert.strictEqual(onSubmit.mock.calls.length, 1));
+    const layer = onSubmit.mock.calls[0][0];
+    assert.strictEqual(layer.turns.length, 1);
+    assert.strictEqual(layer.turns[0].author, "Imported");
+    assert.strictEqual(layer.turns[0].content, content, "lossless");
+  });
 });
