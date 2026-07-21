@@ -10,6 +10,7 @@ import {
   useSavedProjects,
   type SavedProject,
   type NewProjectLayer,
+  type ProjectLayerPatch,
 } from "@/hooks/useSavedProjects";
 import type { PersistenceError } from "@hexagen/shared";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
@@ -70,6 +71,13 @@ export interface UseProjectLifecycleReturn {
   handleCancelNewProject: () => void;
   handleSaveAndNew: () => void;
   handleDiscardAndNew: () => void;
+  // Same single-instance constraint as addLayer above (clobber safety).
+  updateLayer: (
+    projectId: string,
+    layerId: string,
+    patch: ProjectLayerPatch,
+  ) => Promise<boolean>;
+  removeLayer: (projectId: string, layerId: string) => Promise<boolean>;
 }
 
 export function useProjectLifecycle(
@@ -88,6 +96,8 @@ export function useProjectLifecycle(
     updateProject,
     saveProject,
     addLayer,
+    updateLayer,
+    removeLayer,
     persistError,
     clearError,
   } = useSavedProjects();
@@ -265,6 +275,8 @@ export function useProjectLifecycle(
       handleSaveAndNew,
       handleDiscardAndNew,
       handleCancelNewProject,
+      updateLayer,
+      removeLayer,
     }),
     [
       projects,
@@ -284,6 +296,8 @@ export function useProjectLifecycle(
       handleSaveAndNew,
       handleDiscardAndNew,
       handleCancelNewProject,
+      updateLayer,
+      removeLayer,
     ],
   );
 }

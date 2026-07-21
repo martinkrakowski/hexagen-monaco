@@ -111,6 +111,10 @@ export function ManifestAcceptPage() {
                   at: Date.now(),
                 },
               ],
+              // Provenance: this pasted spec is literally what the accepted
+              // manifest was generated from — stamp the produced-manifest link
+              // so the workspace can offer "Derived from your planning session".
+              link: { type: "produced-manifest" as const, at: Date.now() },
             },
           ]
         : [];
