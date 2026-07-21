@@ -108,7 +108,8 @@ export function normalizeLayers(
 
     // --- Phase-2 provenance fields (link / sourceLayerId) -------------------
     // Field-level salvage only: malformed provenance metadata is dropped (and
-    // logged), never the layer carrying it.
+    // logged), never the layer carrying it. An explicit `null` is deliberately
+    // treated as absent (the JSON convention for "no value") — silent, no warn.
     let link: ProjectLayer["link"];
     if (rawLayer.link !== undefined && rawLayer.link !== null) {
       if (

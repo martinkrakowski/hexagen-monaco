@@ -91,9 +91,13 @@ describe("PlanPhaseView", () => {
     const text = bodyText();
     assert.match(text, /Initial brainstorm/);
     assert.match(text, /2 turns/);
+    assert.match(text, /updated /, "header shows the updatedAt timestamp");
     assert.match(text, /propose/);
     assert.match(text, /critique/);
     assert.doesNotMatch(text, /No planning session yet/);
+    // "Add planning session" stays available to append more (the header
+    // button is a separate code path from the empty-state one).
+    assert.ok(button(/Add planning session/));
   });
 
   it("adds a pasted session through addLayer with the loaded project's id", async () => {
@@ -370,6 +374,32 @@ describe("PlanPhaseView (Phase 2)", () => {
     const body = JSON.parse((init as RequestInit).body as string);
     assert.match(body.transcript, /## Grok\n\npropose/);
     assert.strictEqual(body.title, "Initial brainstorm");
+  });
+
+  it("surfaces the persist-failure copy when extraction succeeds but addLayer fails", async () => {
+    lifecycle.current.loadedProject = project([brainstormLayer()]);
+    lifecycle.current.addLayer = vi.fn(async () => null);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ decisions: "## Decisions\n\n- ship it" }),
+      })),
+    );
+    render(<PlanPhaseView />);
+
+    fireEvent.click(button(/Extract decisions/));
+
+    await waitFor(() => {
+      const alert = document.querySelector('[role="alert"]');
+      assert.ok(alert, "save failure after a successful extraction surfaces");
+      assert.match(
+        alert.textContent || "",
+        /Extracted the summary, but couldn't save it/,
+      );
+    });
+    const retry = button(/Extract decisions/);
+    assert.strictEqual(retry.disabled, false, "action re-enabled for retry");
   });
 
   it("surfaces an extraction failure inline and keeps the view usable", async () => {

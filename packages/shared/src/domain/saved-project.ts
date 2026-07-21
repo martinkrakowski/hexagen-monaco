@@ -51,7 +51,11 @@ export interface ProjectLayerTurn {
 /**
  * A provenance link from a layer to another project artifact. Discriminated on
  * `type` so future link kinds ("produced-code", "informed-decision", …) slot
- * into the union without reshaping stored records.
+ * into the union without reshaping stored records. NOTE: the idb load
+ * perimeter (`normalizeLayers`) whitelists the CURRENT union members and drops
+ * anything else as mistyped — adding a link kind (or a layer `kind`) requires
+ * a matching salvage-whitelist update in the same release, or older builds
+ * will strip the new value on their next write.
  */
 export interface ProducedManifestLink {
   /** This layer is the planning session the manifest was derived from. */

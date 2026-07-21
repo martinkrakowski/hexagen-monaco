@@ -251,20 +251,22 @@ describe("normalizeLayers (salvage policy)", () => {
     assert.deepStrictEqual(a, b);
   });
 
-  it("defaults a missing OR blank title and preserves an unknown future kind", () => {
-    const [missing, blank, future] = normalizeLayers(
+  it("defaults a missing OR blank title; keeps known kinds", () => {
+    const [missing, blank, decisions] = normalizeLayers(
       [
         { id: "L1", turns: [] },
         { id: "L2", title: "", turns: [] },
-        { id: "L3", kind: "decisions", title: "Future", turns: [] },
+        { id: "L3", kind: "decisions", title: "Extracted", turns: [] },
       ],
       "p",
     );
     assert.strictEqual(missing.title, "Untitled session");
     assert.strictEqual(blank.title, "Untitled session");
     assert.strictEqual(missing.kind, "brainstorm");
-    // A newer client's layer kind is preserved, not mislabeled.
-    assert.strictEqual(future.kind, "decisions");
+    // Phase 2 reversed the Phase-1 "preserve unknown kinds" policy: only the
+    // known kinds pass through; anything else is coerced to "brainstorm" (see
+    // the Phase-2 provenance-salvage describe below for the coercion pins).
+    assert.strictEqual(decisions.kind, "decisions");
   });
 
   it("drops a non-object layer but keeps its salvageable siblings", () => {

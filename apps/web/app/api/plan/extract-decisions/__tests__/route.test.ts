@@ -65,6 +65,7 @@ describe("POST /api/plan/extract-decisions", () => {
   afterEach(() => {
     vi.mocked(createLLMProvider).mockReset();
     vi.mocked(resolveWebLlmApiKey).mockReset();
+    vi.unstubAllEnvs();
   });
 
   it("returns 400 for a body that is not valid JSON", async () => {
@@ -96,6 +97,13 @@ describe("POST /api/plan/extract-decisions", () => {
     assert.match((await res.json()).error, /too large/i);
   });
 
+  it("accepts a transcript of exactly the 200k cap (boundary)", async () => {
+    const res = await POST(
+      post({ transcript: "a".repeat(200_000) }, "10.0.0.14"),
+    );
+    assert.strictEqual(res.status, 200);
+  });
+
   it("returns the extracted decisions markdown on success", async () => {
     const complete = vi.fn(async () =>
       completion("## Decisions\n\n- adopt hexagonal core"),
@@ -120,14 +128,26 @@ describe("POST /api/plan/extract-decisions", () => {
 
     assert.strictEqual(complete.mock.calls.length, 1);
     const request = complete.mock.calls[0][0];
-    assert.strictEqual(
-      request.model,
-      process.env.LLM_MODEL || "gpt-4o-mini",
-      "mirrors the chat route's model config",
-    );
     assert.strictEqual(request.messages[0].role, "system");
     assert.match(request.messages[1].content, /Session title: Vellum/);
     assert.match(request.messages[1].content, /we should split ports/);
+    assert.strictEqual(
+      request.maxTokens,
+      4096,
+      "explicit summary-sized output budget (not the adapter's 2048 default)",
+    );
+  });
+
+  it("consults LLM_MODEL for the model id (mirrors the chat route's config)", async () => {
+    // stubEnv rather than recomputing the route's own `LLM_MODEL || fallback`
+    // expression — an unset test env cannot distinguish a hardcoded model id.
+    vi.stubEnv("LLM_MODEL", "env-model");
+    const complete = vi.fn(async () => completion("## Decisions\n\n- ok"));
+    vi.mocked(createLLMProvider).mockReturnValue(providerWith(complete));
+
+    const res = await POST(post({ transcript: "## A\n\nhi" }, "10.0.0.15"));
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(complete.mock.calls[0][0].model, "env-model");
   });
 
   it("maps a provider failure to 502", async () => {
@@ -146,6 +166,46 @@ describe("POST /api/plan/extract-decisions", () => {
     const res = await POST(post({ transcript: "## A\n\nhi" }, "10.0.0.7"));
     assert.strictEqual(res.status, 502);
     assert.match((await res.json()).error, /empty response/);
+  });
+
+  it("appends a truncation notice when the model stopped on the output limit", async () => {
+    vi.mocked(createLLMProvider).mockReturnValue(
+      providerWith(
+        vi.fn(async () =>
+          ok({
+            id: "cmpl-1",
+            model: "test-model",
+            choices: [
+              {
+                message: {
+                  role: "assistant" as const,
+                  content: "## Decisions\n\n- partial",
+                },
+                finishReason: "length",
+              },
+            ],
+          }),
+        ),
+      ),
+    );
+    const res = await POST(post({ transcript: "## A\n\nhi" }, "10.0.0.16"));
+    assert.strictEqual(res.status, 200);
+    const body = await res.json();
+    assert.match(body.decisions, /- partial/);
+    assert.match(body.decisions, /truncated/i);
+  });
+
+  it("maps a throwing provider to 500 (catch arm)", async () => {
+    vi.mocked(createLLMProvider).mockReturnValue(
+      providerWith(
+        vi.fn(async () => {
+          throw new Error("wiring exploded");
+        }),
+      ),
+    );
+    const res = await POST(post({ transcript: "## A\n\nhi" }, "10.0.0.17"));
+    assert.strictEqual(res.status, 500);
+    assert.match((await res.json()).error, /wiring exploded/);
   });
 
   it("rate limits an anonymous caller after 10 requests in the window", async () => {

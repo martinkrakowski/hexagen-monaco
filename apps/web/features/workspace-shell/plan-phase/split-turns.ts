@@ -46,6 +46,11 @@ export function splitTurnsByAuthorHeadings(
   let author = "Imported"; // preamble before the first heading
   let body: string[] = [];
 
+  // Known trade-off: skipping an empty-bodied section discards its heading
+  // line too, and in a mixed transcript that heading can be user prose (e.g.
+  // "## Decision: adopt hexagonal core" with no body). Splitting is opt-out in
+  // the dialog, and the lossless single-"Imported"-turn path remains one
+  // unchecked checkbox away — the "N turns detected" hint reflects the loss.
   const flush = () => {
     const content = body.join("\n").trim();
     if (content) turns.push({ author, content });

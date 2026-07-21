@@ -218,6 +218,35 @@ describe("AddPlanningSessionDialog", () => {
     assert.strictEqual(layer.turns[2].content, "critique");
   });
 
+  it("offers no split for >=2 headings whose sections are ALL empty and falls back to one lossless Imported turn", async () => {
+    // splitTurnsByAuthorHeadings returns [] here; the dialog must normalize
+    // that to "no split" (a bare truthiness check would submit turns: [] and
+    // persist a turn-less layer).
+    const onSubmit = vi.fn(async () => true);
+    render(
+      <AddPlanningSessionDialog
+        open
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+        submitError={null}
+      />,
+    );
+    const content = "## Grok\n## Claude\n";
+    fireEvent.change(textarea(), { target: { value: content } });
+    assert.strictEqual(
+      checkbox(),
+      null,
+      "an all-empty split is not offered at all",
+    );
+    fireEvent.click(button(/Add session/));
+
+    await waitFor(() => assert.strictEqual(onSubmit.mock.calls.length, 1));
+    const layer = onSubmit.mock.calls[0][0];
+    assert.strictEqual(layer.turns.length, 1, "never a turn-less layer");
+    assert.strictEqual(layer.turns[0].author, "Imported");
+    assert.strictEqual(layer.turns[0].content, content, "lossless fallback");
+  });
+
   it("keeps the lossless single-Imported-turn behavior when unchecked", async () => {
     const onSubmit = vi.fn(async () => true);
     render(

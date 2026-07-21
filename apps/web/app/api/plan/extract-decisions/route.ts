@@ -127,6 +127,10 @@ export async function POST(request: NextRequest) {
     const provider = createLLMProvider();
     const result = await provider.complete({
       model: process.env.LLM_MODEL || "gpt-4o-mini",
+      // Explicit output budget sized for a long session's summary — without it
+      // the adapter's 2048-token default silently truncates the tail (usually
+      // "## Open questions") of a large multi-agent transcript's extraction.
+      maxTokens: 4096,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         {
@@ -148,12 +152,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const decisions = result.value.choices[0]?.message?.content ?? "";
+    const choice = result.value.choices[0];
+    let decisions = choice?.message?.content ?? "";
     if (!decisions.trim()) {
       return NextResponse.json(
         { error: "The model returned an empty response. Please try again." },
         { status: 502, headers: quotaHeaders },
       );
+    }
+    // The output budget was exhausted mid-summary: don't fail (the partial is
+    // still useful and the quota was spent), but never present a cut-off
+    // summary as complete.
+    if (choice?.finishReason === "length") {
+      decisions +=
+        "\n\n> ⚠️ This summary was truncated by the model's output limit and may be incomplete.";
     }
 
     return NextResponse.json({ decisions }, { headers: quotaHeaders });
