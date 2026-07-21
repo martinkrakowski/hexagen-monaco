@@ -23,7 +23,7 @@ GitHub API error (404): {"message":"Not Found","documentation_url":"https://docs
   bad sha / bad mode / malformed path → 422; empty repo → 409; no push access →
   404 **at the blobs step first**, distinguishable by the `git/blobs` doc URL.)
 - The app's NextAuth GitHub provider requests only `read:user user:email repo`
-  (`apps/web/app/lib/auth.ts:17`).
+  (`apps/web/app/lib/auth.ts` — `authOptions` → GitHubProvider scope string).
 - PR #330 (merged 2026-06-13) re-wired the sync-integrity auto-inject: every
   generated project whose manifest packageManager is yarn (**the wizard
   default**; gate `shouldInjectSyncIntegrityWorkflow`, pnpm/bun exempt) ships
@@ -71,9 +71,13 @@ workflow permission." No stripping.
 exposed via CORS allowlist too). Parse from the existing `GET /user` call in the
 exporter; add a tiny helper for `commitFiles`. If the header is absent (e.g. a
 future GitHub-App-token migration), treat scopes as unknown and proceed
-unchanged — the **reactive remap** then catches it: a `createTree` 404 whose
-payload contained `.github/workflows/*` paths is rewritten to the actionable
-message instead of the raw GitHub JSON.
+unchanged — the **reactive remap** then catches it: when `createTree` returns
+404 and the `tree` argument that was submitted to it contains any entry whose
+`path` starts with `.github/workflows/`, remap to the actionable message
+instead of the raw GitHub JSON. Key point: the GitHub 404 response body does
+not echo the submitted paths (`GitHubApiError` carries only `status` and
+`message`), so the remap condition is checked against the **caller's local
+`tree` array**, not the error payload.
 
 **D4 — Request `workflow` scope at sign-in.**
 `scope: "read:user user:email repo workflow"` in `authOptions`. Classic OAuth
@@ -126,10 +130,13 @@ open to revisit, see §8/Q3.
 - `/api/push/github/route.ts`: map `workflow-scope-missing` → 403 with
   `code: "workflow_scope_required"` (not `reauth_required` — the session is
   valid; the copy differs).
-- `/api/export/github/route.ts`: no mapping change needed (degrade path returns
-  success+warnings; remapped 404 already flows as a 500 with the actionable
-  message — acceptable, or optionally map to 403 `workflow_scope_required` too
-  for symmetry).
+- `/api/export/github/route.ts`: map the reactive-remap error → 403 with
+  `code: "workflow_scope_required"`, matching the push route (closes §8/Q4).
+  Rationale: the degrade path (proactive scope-less detection) returns
+  success+warnings so no error mapping is needed there; the reactive remap path
+  (scope unknown, `createTree` 404) must produce a stable typed code so PR-2's
+  client UX can surface the Reconnect GitHub action — a 500 with a message
+  string is not machine-readable by the client error handler.
 
 Tests (all mocked-fetch, following `github-exporter.adapter.test.ts` /
 `github-repository-writer.adapter.test.ts` idioms):
@@ -175,12 +182,15 @@ case.
 ## 5. Verification
 
 1. **Unit/CI:** suites above; `turbo` gates from repo root.
-2. **Live degraded path (pre-PR-2 token):** repro harness from `apps/web/`
-   (`yarn tsx`, workspace resolution requires repo cwd) with `gh auth token` —
-   local gh token conveniently lacks `workflow`. Expect: success, repo contents
-   WITHOUT `.github/workflows/sync-integrity.yml`, warning in result.
-3. **Live full path:** `gh auth refresh -s workflow` (or a PAT with repo+workflow),
-   re-run harness. Expect: success WITH the workflow file at HEAD.
+2. **Live degraded path:** repro harness from `apps/web/` (`yarn tsx`,
+   workspace resolution requires repo cwd). **Pre-flight scope check first:**
+   `curl -sI -H "Authorization: Bearer $(gh auth token)" https://api.github.com/user | grep -i x-oauth-scopes`
+   — assert that `workflow` is **absent**; if present, skip this step or use a
+   token known to lack it (a fresh PAT with only `repo`). Expect: success, repo
+   contents WITHOUT `.github/workflows/sync-integrity.yml`, warning in result.
+3. **Live full path:** run `gh auth refresh -s workflow` (or use a PAT with
+   `repo`+`workflow`); re-assert `x-oauth-scopes` contains `workflow` before
+   running the harness. Expect: success WITH the workflow file at HEAD.
 4. **In-app E2E (after deploy):** wizard → summary → Push to GitHub with an old
    session (degraded+warning), then Reconnect GitHub → republish (workflow file
    present). Editor-push a workflow file edit with an old token → actionable
@@ -205,9 +215,9 @@ case.
 
 ## 7. Cleanup
 
-- Delete debug repos from the investigation (token can't): **private**
-  `martinkrakowski/hexagen-debug-empty-repo-test`,
-  `martinkrakowski/hexagen-debug-publish-repro`.
+- Delete the two private debug repos created during the investigation (exact
+  names in internal notes; token lacks the delete-repo scope — delete via
+  GitHub settings UI).
 - Update memory `github_publish_workflow_scope_404` as PRs land.
 
 ## 8. Open questions for Martin
@@ -219,6 +229,7 @@ case.
    `HEXAGEN-ADDON-NOTICES.md`-style note into the repo explaining the missing
    CI workflow? (Recommended: no — UI warning suffices; the file is additive
    noise in an otherwise clean scaffold. Revisit if support questions recur.)
-4. **`/api/export/github` remap symmetry:** keep remapped 404 as 500-with-
-   actionable-message, or add the 403 `workflow_scope_required` mapping there
-   too (recommended: add it, trivially small)?
+4. ~~**`/api/export/github` remap symmetry:**~~ **Resolved** — 403 +
+   `workflow_scope_required` is required for the reactive path (see §4 PR-1
+   export route entry); 500 is not viable as the client UX keys on the typed
+   code.
