@@ -83,11 +83,25 @@ The saved record already holds both artifacts; the fix is to stop letting the
 degraded projection overwrite or impersonate the rich one.
 
 1. **Origin marker.** Add `manifestSource: "imported" | "wizard"` to
-   `ProjectConfig`/formState (schema default `"wizard"` so legacy records and
-   wizard-authored flows are untouched). `parseManifestToWizardData` sets
-   `"imported"`; nothing else sets it. Persisted via existing formState
-   round-trip (`normalizeLoadedProjects` preserves unknown keys — proven in
-   #404).
+   `ProjectConfig`/formState (schema default `"wizard"` so new wizard-authored
+   flows are untouched). `parseManifestToWizardData` sets `"imported"`; nothing
+   else sets it. Persisted via existing formState round-trip
+   (`normalizeLoadedProjects` preserves unknown keys — proven in #404).
+
+   **Migration for legacy records.** Existing accepted imports predate this
+   field and will default to `"wizard"`, leaving them exposed. In
+   `normalizeLoadedProjects` (the single load-path normalizer), when
+   `manifestSource` is absent: run a lightweight discriminator — if the stored
+   YAML parses successfully and contains any `bounded_contexts:` port whose name
+   does not match one of the 8 catalog literals (`Prisma`, `TypeORM`,
+   `KafkaProducer`, `KafkaConsumer`, `SQSProducer`, `SQSConsumer`,
+   `RedisAdapter`, `InMemoryAdapter`), write `"imported"`. False-positive (a
+   wizard record marked `"imported"`) is harmless — the autosave guard is
+   idempotent; false-negative (an imported record treated as `"wizard"`) allows
+   one more clobber before re-import. Regression test: record with `manifestYaml`
+   containing a named port outside the catalog + absent `manifestSource` → loads
+   as `"imported"`.
+
 2. **Autosave guard.** In `handleNext`/`handleSaveAndNew`, when
    `formState.manifestSource === "imported"`: update `formState` only and
    **keep the existing `manifestYaml`** (change `updateProject` call to pass
@@ -104,7 +118,12 @@ degraded projection overwrite or impersonate the rich one.
    client-side swap (dump the saved manifest instead of
    `wizardToManifest(wizardData)`, `useArchitectureDownload.ts:12-33`).
    Wizard-authored projects keep the live-first `wizardData` path (#222)
-   unchanged.
+   unchanged. **Fail closed on parse error:** if `yaml.load(manifestYaml)`
+   throws or the result fails the `Manifest` schema check, surface a blocking
+   error ("manifest data is corrupted — re-import or regenerate") and abort the
+   export/generation rather than falling back to `wizardToManifest`; falling
+   back silently would recreate the exact data-loss path this fix is designed
+   to prevent.
 4. **Ports step honesty.** When `manifestSource === "imported"`, the
    port-configuration step renders a read-only "ports are managed by the
    imported manifest" banner (listing the real named ports per context from a
@@ -198,7 +217,7 @@ started here; Phase A makes it non-urgent.
   `WebUiCommandPort`/`WebUiRepositoryPort` on the UI context — `web-ui`,
   emitted `type: supporting` — which legitimately declared none). Matcher
   parity alone fixes none of these — the bindings were declared, not
-  inferrable.
+  inferable.
 - The pipeline's `done` frame carries the server `ValidationReport`, but the
   accept store drops it today (`usePendingManifest` has no report field), so
   the accept view has no way to know the server already validated + synthesized.
@@ -211,7 +230,13 @@ started here; Phase A makes it non-urgent.
    re-exposes `stream.validationReport` through `useStagedManifestGeneration`).
 2. **Gate the loop:** `ManifestPreview` skips the auto-fix loop when a server
    report is present. The fixer stays live for report-less YAML (hand-edited
-   or legacy paths) — it exists for a reason there.
+   or legacy paths) — it exists for a reason there. **Stale-report guard:**
+   `usePendingManifest.updateYaml` clears `validationReport` on every call
+   (setting it to `null`) so a user hand-editing the YAML after server
+   validation reverts to the live fixer path; the report is only valid for the
+   exact YAML it was generated against. Add test: call `set()` with a report,
+   call `updateYaml`, assert `validationReport` is null and the fixer would
+   now run.
 3. **Mandatory companion — `hasFailures` must not dead-end approve:** with the
    fixer gated, the parser's connectivity heuristics would flag alvaro-class
    manifests as FAIL and disable the approve button
@@ -223,12 +248,19 @@ started here; Phase A makes it non-urgent.
 4. **Disclosure for the remaining fixer paths:** when the fixer does run
    (report-less YAML), surface an "adjustments applied" list instead of silent
    mutation — same disclosure standard the server pipeline now meets.
-5. **Include the parser's `:232` overwrite bug**
-   (`manifest-view-data-parser.ts:226-232` — a later out-port whose base
+5. **Fix and test the parser's `:232` overwrite bug.**
+   `manifest-view-data-parser.ts:226-232` — a later out-port whose base
    cross-contains an already-matched adapter's base steals that adapter's
-   `implements` in the parser's view model) in this PR's test scope; combined
-   with the fixer's exact-base skip (`manifest-violation-fixer.ts:244-255`) it
-   can strand a FAIL item unfixable.
+   `implements` in the parser's view model. Combined with the fixer's
+   exact-base skip (`manifest-violation-fixer.ts:244-255`) this can strand a
+   FAIL item permanently unfixable: the parser marks the adapter as
+   unconnected, the fixer refuses to touch it because the name matches exactly,
+   and approve never unlocks. **Fix:** apply first-match-wins precedence in
+   the parser's adapter-assignment loop — once an adapter's `implements` is
+   set, a later port match must not overwrite it. Test: fixture with two
+   out-ports whose bases cross-contain (`StorageAdapter` + `StorageProxyAdapter`)
+   — the first-matched adapter retains its original `implements` after the
+   second port is processed.
 
 ---
 
@@ -332,7 +364,7 @@ a minimal data-loss stopper** — it is two functions and a schema default.
 ## Out of scope
 
 Binding-aware client matching (needs `implements` in the emitted YAML — the
-#400 durable fix, its own project) · shared hardened stream reader across the
+`#400` durable fix, its own project) · shared hardened stream reader across the
 8 sibling hooks · Stage-7 routing (deterministic-fixable classes skip LLM
 repair) · R03 breadth policy (repository-port synthesis on non-core contexts)
 · the Vellum F1–F21 remediation
