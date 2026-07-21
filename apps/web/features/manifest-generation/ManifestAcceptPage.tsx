@@ -98,22 +98,42 @@ export function ManifestAcceptPage() {
       // the SAME save — a follow-up write could fail and leave the project
       // without its layer.
       const importedSpec = pendingManifest.originSpecText;
-      const initialLayers = importedSpec?.trim()
+      // Live-session provenance (Plan phase finalize): when the spec the
+      // import flow consumed is EXACTLY the distilled text the user confirmed,
+      // attach the FULL brainstorm transcript instead of a single "Imported
+      // project spec" turn. The equality guard means an abandoned finalize
+      // can't leak its session onto an unrelated later import.
+      const session = pendingManifest.originSession;
+      const sessionMatchesSpec =
+        session !== null &&
+        importedSpec !== null &&
+        session.specText.trim() === importedSpec.trim();
+      const initialLayers = sessionMatchesSpec
         ? [
             {
               kind: "brainstorm" as const,
-              title: "Imported project spec",
-              turns: [
-                {
-                  id: crypto.randomUUID(),
-                  author: "Imported",
-                  content: importedSpec,
-                  at: Date.now(),
-                },
-              ],
+              title: "Live planning session",
+              turns: session.turns.map((t) => ({ ...t })),
+              status: "done" as const,
+              link: { type: "produced-manifest" as const, at: Date.now() },
             },
           ]
-        : [];
+        : importedSpec?.trim()
+          ? [
+              {
+                kind: "brainstorm" as const,
+                title: "Imported project spec",
+                turns: [
+                  {
+                    id: crypto.randomUUID(),
+                    author: "Imported",
+                    content: importedSpec,
+                    at: Date.now(),
+                  },
+                ],
+              },
+            ]
+          : [];
 
       // Await the (async IndexedDB) write before navigating so the wizard
       // reliably finds the project; navigating early lost the approved project.

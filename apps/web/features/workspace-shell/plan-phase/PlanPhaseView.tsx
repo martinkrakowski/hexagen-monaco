@@ -6,22 +6,34 @@ import { NotebookPen, Plus } from "lucide-react";
 import { useWizardLifecycleContext } from "../contexts/WizardLifecycleContext";
 import { PlanTurnList } from "./PlanTurnList";
 import { AddPlanningSessionDialog } from "./AddPlanningSessionDialog";
+import { LiveSessionSection } from "./LiveSessionSection";
+import { usePlanningSession } from "./session/usePlanningSession";
 import type { NewProjectLayer } from "@/hooks/useSavedProjects";
+
+export interface PlanPhaseViewProps {
+  /** Prop-injected navigation to the spec-import flow (finalize hand-off) —
+   * repo convention: no router coupling, no auto-navigate outside an explicit
+   * user confirm. */
+  onNavigateToImport: () => void;
+}
 
 /**
  * The "Plan" phase of the saved-project workspace: renders the project's
- * planning layers (the brainstorm sessions that produced the manifest) and the
- * "Add planning session" ingestion flow.
+ * planning layers (the brainstorm sessions that produced the manifest), the
+ * "Add planning session" ingestion flow, and the LIVE brainstorm session
+ * (Phase 3).
  *
  * Reads the project LIVE from the wizard lifecycle context — the same
  * useSavedProjects instance the wizard autosave writes through — so an added
  * layer can't be clobbered by a stale-snapshot autosave, and there is no copy
  * in ActiveWorkspaceContext to go stale.
  */
-export function PlanPhaseView() {
+export function PlanPhaseView({ onNavigateToImport }: PlanPhaseViewProps) {
   const {
     loadedProject,
     addLayer,
+    updateLayer,
+    appendLayerTurn,
     layersPersistError,
     clearLayersPersistError,
   } = useWizardLifecycleContext();
@@ -31,6 +43,16 @@ export function PlanPhaseView() {
   // THIS dialog actually failed — never a stale error from an earlier,
   // unrelated write.
   const [submitFailed, setSubmitFailed] = useState(false);
+
+  // The live-session loop is owned HERE (single hook instance) so the active
+  // session's layer can be filtered out of the archive list below — otherwise
+  // its turns would render twice (live panel + archive).
+  const session = usePlanningSession({
+    projectId: loadedProject?.id ?? null,
+    addLayer,
+    appendLayerTurn,
+    updateLayer,
+  });
 
   // Gated by the phase toggle (edit mode with a real project id), but a direct
   // ?phase=plan URL in genesis mode still lands here — render the guard state
@@ -46,6 +68,7 @@ export function PlanPhaseView() {
   }
 
   const layers = loadedProject.layers;
+  const archivedLayers = layers.filter((l) => l.id !== session.activeLayerId);
 
   const handleSubmit = async (layer: NewProjectLayer): Promise<boolean> => {
     clearLayersPersistError();
@@ -78,12 +101,19 @@ export function PlanPhaseView() {
             </p>
           </div>
           {layers.length > 0 && (
-            <Button onClick={() => setDialogOpen(true)}>
+            <Button variant="secondary" onClick={() => setDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Add planning session
             </Button>
           )}
         </div>
+
+        <LiveSessionSection
+          projectId={loadedProject.id}
+          layers={layers}
+          session={session}
+          onNavigateToImport={onNavigateToImport}
+        />
 
         {layers.length === 0 ? (
           <div className="border border-dashed border-border rounded-lg p-10 text-center space-y-3">
@@ -102,7 +132,7 @@ export function PlanPhaseView() {
             </Button>
           </div>
         ) : (
-          layers.map((layer) => (
+          archivedLayers.map((layer) => (
             <section key={layer.id} className="space-y-3">
               <div className="flex items-baseline justify-between">
                 <h2 className="text-sm font-semibold text-foreground">

@@ -27,6 +27,15 @@ HTMLDialogElement.prototype.close = function () {
 
 const bodyText = () => (document.body.textContent || "").replace(/\s+/g, " ");
 
+// The Plan phase now also renders the live-session seed textarea; the paste
+// dialog's textarea must be selected by its label, not document order.
+const transcriptTextarea = () =>
+  document.querySelector(
+    'textarea[aria-label="Session transcript (markdown)"]',
+  ) as HTMLTextAreaElement;
+
+const renderView = () => render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
 function button(label: RegExp): HTMLButtonElement {
   const btn = Array.from(document.querySelectorAll("button")).find((b) =>
     label.test(b.textContent || ""),
@@ -54,6 +63,8 @@ describe("PlanPhaseView", () => {
     lifecycle.current = {
       loadedProject: project(),
       addLayer: vi.fn(async () => "layer-id"),
+      updateLayer: vi.fn(async () => true),
+      appendLayerTurn: vi.fn(async () => "turn-id"),
       layersPersistError: null,
       clearLayersPersistError: vi.fn(),
     };
@@ -61,12 +72,12 @@ describe("PlanPhaseView", () => {
 
   it("renders the guard state when no saved project is loaded (direct ?phase=plan URL)", () => {
     lifecycle.current.loadedProject = null;
-    render(<PlanPhaseView />);
+    renderView();
     assert.match(bodyText(), /Save the project to attach planning sessions/);
   });
 
   it("shows the empty state with an add action when the project has no layers", () => {
-    render(<PlanPhaseView />);
+    renderView();
     assert.match(bodyText(), /No planning session yet/);
     assert.ok(button(/Add planning session/));
   });
@@ -85,7 +96,7 @@ describe("PlanPhaseView", () => {
         ],
       },
     ]);
-    render(<PlanPhaseView />);
+    renderView();
     const text = bodyText();
     assert.match(text, /Initial brainstorm/);
     assert.match(text, /2 turns/);
@@ -95,10 +106,10 @@ describe("PlanPhaseView", () => {
   });
 
   it("adds a pasted session through addLayer with the loaded project's id", async () => {
-    render(<PlanPhaseView />);
+    renderView();
     fireEvent.click(button(/Add planning session/));
 
-    const textarea = document.querySelector("textarea") as HTMLTextAreaElement;
+    const textarea = transcriptTextarea();
     fireEvent.change(textarea, { target: { value: "the transcript" } });
     fireEvent.click(button(/Add session/));
 
@@ -116,7 +127,7 @@ describe("PlanPhaseView", () => {
       kind: "SerializationFailed",
       message: "unrelated autosave failure",
     };
-    render(<PlanPhaseView />);
+    renderView();
     fireEvent.click(button(/Add planning session/));
     assert.strictEqual(
       document.querySelector('[role="alert"]'),
@@ -128,9 +139,9 @@ describe("PlanPhaseView", () => {
   it("shows generic failure copy when addLayer fails without a persistence error", async () => {
     lifecycle.current.addLayer = vi.fn(async () => null);
     lifecycle.current.layersPersistError = null;
-    render(<PlanPhaseView />);
+    renderView();
     fireEvent.click(button(/Add planning session/));
-    const textarea = document.querySelector("textarea") as HTMLTextAreaElement;
+    const textarea = transcriptTextarea();
     fireEvent.change(textarea, { target: { value: "content" } });
     fireEvent.click(button(/Add session/));
 
@@ -147,9 +158,9 @@ describe("PlanPhaseView", () => {
       kind: "StorageQuotaExceeded",
       message: "IDB storage quota exceeded",
     };
-    render(<PlanPhaseView />);
+    renderView();
     fireEvent.click(button(/Add planning session/));
-    const textarea = document.querySelector("textarea") as HTMLTextAreaElement;
+    const textarea = transcriptTextarea();
     fireEvent.change(textarea, { target: { value: "big transcript" } });
     fireEvent.click(button(/Add session/));
 

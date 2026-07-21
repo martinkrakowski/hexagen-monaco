@@ -190,7 +190,11 @@ const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
 
         <main className="flex-1 flex flex-col overflow-hidden">
           {planPhaseActive ? (
-            <PlanPhaseView />
+            <PlanPhaseView
+              onNavigateToImport={() =>
+                handleNavigate("/projects/new/import/spec")
+              }
+            />
           ) : (
             <ResizableLayout
               leftTitle="HexaGen Project Wizard"
