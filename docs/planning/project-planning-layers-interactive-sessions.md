@@ -258,3 +258,60 @@ for extracted contracts, possibly `"architecture"` per fork 6).
   grounding-fold, and SSE-streaming patterns the orchestrator adapts (code:
   `apps/web/app/api/llm/chat/route.ts`,
   `apps/web/features/manifest-generation/useGovernanceChat.ts`).
+
+---
+
+## v1 build decisions (2026-07-21)
+
+The open questions above were resolved for the v1 build
+(`feat/planning-layers-phase-3`) as follows:
+
+- **Q0 — client-driven loop.** The browser tab owns the proposer⇄critic loop
+  over the existing `/api/llm/chat` route (`usePlanningSession`). No server
+  session store, no new streaming protocol, quota enforced per turn by the
+  chat route as-is. Accepted consequence: the loop dies with the tab — the
+  layer's persisted `status` stays non-terminal and the Plan phase shows an
+  interrupted-session banner (Resume / End) on the next mount.
+- **Q1 — one model, two role prompts.** Both roles use the standard chat model
+  (`NEXT_PUBLIC_LLM_MODEL` fallback `gpt-4o-mini`); the proposer/critic split
+  is prompt-level (`fold.ts` preambles). No new model-config surface.
+- **Q2 — critic self-declared verdict.** The critic must end with
+  `VERDICT: CONVERGED` or `VERDICT: CONTINUE` (case-insensitive, parsed from
+  the trailing lines — `verdict.ts`). Missing/malformed verdict = CONTINUE
+  plus a console warning, never a stall. Backstops: the round cap and a human
+  **Force converge** control.
+- **Q3 — round cap fixed at 4.** `DEFAULT_MAX_ROUNDS = 4`, not user-editable in
+  v1. Hitting the cap parks the session at `awaiting-human` (`cap-reached`);
+  **Resume past the cap is an explicit human extension** and advances the
+  round counter by one (reducer `RESUME` from `cap-reached`).
+- **Q4 — finalize distills to editable spec text.** One chat call converts the
+  converged proposal into `contexts:`-dialect YAML (the deterministic
+  structured-config import path), shown in an editable review. Only an
+  explicit **Confirm** seeds the import flow (`import_spec_content`) and
+  navigates — a NEW project via the existing import pipeline; never
+  auto-navigate.
+- **Q5 — existing chat quota, disclosed.** No new quota surface. The seed form
+  states "each round uses 2 AI chat requests"; finalize discloses its one
+  extra call.
+- **Q6 — latest-only manifests.** No snapshot `kind: "architecture"` layers;
+  `manifestYaml` stays canonical.
+
+Build-level decisions that fell out of the implementation:
+
+- **Clobber-safe layer writes.** All layer mutations commit through a new
+  `updateProjectRecord(id, updater)` read-merge-write on the persistence port
+  (fresh read at write time, single-record update) — a mid-session wizard
+  autosave can no longer clobber freshly appended turns. Model turns persist
+  content + `role`/`round` + the status transition in ONE write
+  (`appendLayerTurn(turn, patch)`).
+- **Session provenance hand-off.** The finalize Confirm puts the distilled
+  spec text in the import page's own `sessionStorage` key, but the session
+  TRANSCRIPT rides in the pending-manifest store
+  (`originSession`, untouched by `set()`), guarded at accept-save by an exact
+  spec-text match — so the new project gets the full brainstorm layer
+  (`status: "done"`, `link: produced-manifest`) and an abandoned finalize
+  can't leak its session onto an unrelated import.
+- **Interrupted-session recovery maps a persisted ACTIVE status to
+  `awaiting-human` (paused)** with the interrupted status as `resumeStatus`:
+  Resume re-runs the interrupted role (a duplicate proposal is recoverable; a
+  skipped critic verdict is not).
