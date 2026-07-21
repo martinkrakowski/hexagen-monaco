@@ -56,12 +56,18 @@ export function normalizeLayers(
       typeof rawLayer.id === "string" && rawLayer.id
         ? rawLayer.id
         : `${projectId}-layer-${layerIndex}`;
-    // Preserve an unknown/future `kind` rather than mislabel it; default only a
-    // missing/non-string one to the sole v1 kind.
-    const kind =
-      typeof rawLayer.kind === "string" && rawLayer.kind
-        ? (rawLayer.kind as ProjectLayer["kind"])
-        : "brainstorm";
+    // `kind` drives UI affordances (badges, per-kind actions), so an unknown or
+    // missing value defaults to the base kind rather than flowing through as an
+    // unrenderable label — metadata damage never deletes the layer.
+    let kind: ProjectLayer["kind"];
+    if (rawLayer.kind === "brainstorm" || rawLayer.kind === "decisions") {
+      kind = rawLayer.kind;
+    } else {
+      logger?.warn(
+        `[saved-projects] unknown/missing layer kind on ${layerId}; defaulting to "brainstorm"`,
+      );
+      kind = "brainstorm";
+    }
     const title =
       typeof rawLayer.title === "string" && rawLayer.title
         ? rawLayer.title
@@ -100,7 +106,54 @@ export function normalizeLayers(
       });
     });
 
-    layers.push({ id: layerId, kind, title, turns, createdAt, updatedAt });
+    // --- Phase-2 provenance fields (link / sourceLayerId) -------------------
+    // Field-level salvage only: malformed provenance metadata is dropped (and
+    // logged), never the layer carrying it.
+    let link: ProjectLayer["link"];
+    if (rawLayer.link !== undefined && rawLayer.link !== null) {
+      if (
+        isRecord(rawLayer.link) &&
+        rawLayer.link.type === "produced-manifest" &&
+        Number.isFinite(rawLayer.link.at)
+      ) {
+        link = {
+          type: "produced-manifest",
+          at: rawLayer.link.at as number,
+        };
+      } else {
+        logger?.warn(
+          `[saved-projects] dropping malformed link on ${layerId} — unknown type or bad timestamp`,
+        );
+      }
+    }
+    let sourceLayerId: string | undefined;
+    if (
+      rawLayer.sourceLayerId !== undefined &&
+      rawLayer.sourceLayerId !== null
+    ) {
+      if (
+        typeof rawLayer.sourceLayerId === "string" &&
+        rawLayer.sourceLayerId
+      ) {
+        sourceLayerId = rawLayer.sourceLayerId;
+      } else {
+        logger?.warn(
+          `[saved-projects] dropping non-string sourceLayerId on ${layerId}`,
+        );
+      }
+    }
+    // --- end Phase-2 provenance fields --------------------------------------
+
+    layers.push({
+      id: layerId,
+      kind,
+      title,
+      turns,
+      createdAt,
+      updatedAt,
+      ...(link !== undefined ? { link } : {}),
+      ...(sourceLayerId !== undefined ? { sourceLayerId } : {}),
+    });
   });
   return layers;
 }
