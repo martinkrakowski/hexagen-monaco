@@ -1,10 +1,32 @@
-import { describe, it } from "vitest";
+import { describe, it, vi, beforeEach } from "vitest";
 import assert from "node:assert/strict";
+
+// In-memory idb-keyval so IDBSavedProjectsAdapter's read-merge-write can be
+// exercised without a real IndexedDB. The pure normalize* tests below don't
+// touch it.
+const idb = vi.hoisted(() => ({
+  store: new Map<string, unknown>(),
+  // Optional read latency, used to prove the in-tab write queue: with a slow
+  // `get`, two unserialized read-merge-writes would both read the SAME
+  // pre-state and the second write would clobber the first.
+  getDelay: null as (() => Promise<void>) | null,
+}));
+vi.mock("idb-keyval", () => ({
+  get: vi.fn(async (key: string) => {
+    if (idb.getDelay) await idb.getDelay();
+    return idb.store.get(key);
+  }),
+  set: vi.fn(async (key: string, value: unknown) => {
+    idb.store.set(key, value);
+  }),
+}));
 
 import {
   normalizeLoadedProjects,
   normalizeLayers,
+  IDBSavedProjectsAdapter,
 } from "./idb-saved-projects.adapter";
+import type { SavedProject, ProjectLayer } from "@hexagen/shared";
 
 /** Read a top-level formState field without leaking `any` into the test. */
 const fs = (project: { formState: unknown }): Record<string, unknown> =>
@@ -251,20 +273,22 @@ describe("normalizeLayers (salvage policy)", () => {
     assert.deepStrictEqual(a, b);
   });
 
-  it("defaults a missing OR blank title and preserves an unknown future kind", () => {
-    const [missing, blank, future] = normalizeLayers(
+  it("defaults a missing OR blank title; keeps known kinds", () => {
+    const [missing, blank, decisions] = normalizeLayers(
       [
         { id: "L1", turns: [] },
         { id: "L2", title: "", turns: [] },
-        { id: "L3", kind: "decisions", title: "Future", turns: [] },
+        { id: "L3", kind: "decisions", title: "Extracted", turns: [] },
       ],
       "p",
     );
     assert.strictEqual(missing.title, "Untitled session");
     assert.strictEqual(blank.title, "Untitled session");
     assert.strictEqual(missing.kind, "brainstorm");
-    // A newer client's layer kind is preserved, not mislabeled.
-    assert.strictEqual(future.kind, "decisions");
+    // Phase 2 reversed the Phase-1 "preserve unknown kinds" policy: only the
+    // known kinds pass through; anything else is coerced to "brainstorm" (see
+    // the Phase-2 provenance-salvage describe below for the coercion pins).
+    assert.strictEqual(decisions.kind, "decisions");
   });
 
   it("drops a non-object layer but keeps its salvageable siblings", () => {
@@ -283,5 +307,444 @@ describe("normalizeLayers (salvage policy)", () => {
     );
     assert.strictEqual(layer.createdAt, 99);
     assert.strictEqual(layer.updatedAt, 99);
+  });
+
+  it("keeps valid Phase-3 session fields (status/maxRounds/link, role/round)", () => {
+    const [layer] = normalizeLayers(
+      [
+        {
+          id: "L",
+          title: "t",
+          status: "awaiting-human",
+          maxRounds: 4,
+          link: { type: "produced-manifest", at: 123 },
+          turns: [
+            { id: "a", author: "AI", content: "c", role: "critic", round: 2 },
+          ],
+        },
+      ],
+      "p",
+    );
+    assert.strictEqual(layer.status, "awaiting-human");
+    assert.strictEqual(layer.maxRounds, 4);
+    assert.deepStrictEqual(layer.link, { type: "produced-manifest", at: 123 });
+    assert.strictEqual(layer.turns[0].role, "critic");
+    assert.strictEqual(layer.turns[0].round, 2);
+  });
+
+  it("drops invalid Phase-3 session fields FIELD-LEVEL — never the layer or turn", () => {
+    const [layer] = normalizeLayers(
+      [
+        {
+          id: "L",
+          title: "t",
+          status: "meditating", // unknown status → field dropped
+          maxRounds: -1, // non-positive → field dropped
+          link: { type: "produced-manifest" }, // missing at → field dropped
+          turns: [
+            {
+              id: "a",
+              author: "AI",
+              content: "keep",
+              role: "villain",
+              round: "two",
+            },
+          ],
+        },
+      ],
+      "p",
+    );
+    assert.ok(!("status" in layer), "invalid status removed");
+    assert.ok(!("maxRounds" in layer), "invalid maxRounds removed");
+    assert.ok(!("link" in layer), "invalid link removed");
+    assert.strictEqual(layer.turns.length, 1, "turn survives");
+    assert.strictEqual(layer.turns[0].content, "keep");
+    assert.ok(!("role" in layer.turns[0]), "invalid role removed");
+    assert.ok(!("round" in layer.turns[0]), "invalid round removed");
+  });
+
+  it("absent Phase-3 fields stay absent (no undefined keys injected)", () => {
+    const [layer] = normalizeLayers(
+      [
+        {
+          id: "L",
+          title: "t",
+          turns: [{ id: "a", author: "X", content: "c" }],
+        },
+      ],
+      "p",
+    );
+    assert.ok(!("status" in layer));
+    assert.ok(!("maxRounds" in layer));
+    assert.ok(!("link" in layer));
+    assert.ok(!("role" in layer.turns[0]));
+    assert.ok(!("round" in layer.turns[0]));
+  });
+});
+
+describe("IDBSavedProjectsAdapter.updateProjectRecord (read-merge-write)", () => {
+  const KEY = "hexagen:saved-projects";
+  const record = (
+    id: string,
+    layers: unknown[] = [],
+  ): Record<string, unknown> => ({
+    id,
+    name: id,
+    schemaVersion: 4,
+    createdAt: 0,
+    updatedAt: 0,
+    formState: {},
+    manifestYaml: "",
+    layers,
+  });
+
+  beforeEach(() => {
+    idb.store.clear();
+    idb.getDelay = null;
+  });
+
+  it("REGRESSION: merges into the freshly-read record — a stale caller snapshot cannot clobber a concurrently-added layer", async () => {
+    // The pre-Phase-3 failure mode: writer A holds an in-memory snapshot, writer
+    // B adds a layer, then A does a whole-array saveProjects from its snapshot —
+    // B's layer vanishes. With updateProjectRecord the adapter re-reads at write
+    // time, so A's mutation lands ON TOP of B's layer instead of replacing it.
+    const adapter = new IDBSavedProjectsAdapter();
+    idb.store.set(KEY, [record("p1", [])]);
+
+    // Writer B commits a layer directly (fresh write).
+    await adapter.updateProjectRecord("p1", (p) => ({
+      ...p,
+      layers: [
+        ...(p.layers ?? []),
+        {
+          id: "from-B",
+          kind: "brainstorm",
+          title: "B",
+          turns: [],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    }));
+
+    // Writer A still believes layers === [] (its snapshot predates B's write),
+    // but appends via read-merge-write — the updater sees B's layer.
+    const result = await adapter.updateProjectRecord("p1", (p) => ({
+      ...p,
+      layers: [
+        ...(p.layers ?? []),
+        {
+          id: "from-A",
+          kind: "brainstorm",
+          title: "A",
+          turns: [],
+          createdAt: 2,
+          updatedAt: 2,
+        },
+      ],
+    }));
+
+    assert.ok(result.success);
+    const stored = idb.store.get(KEY) as Array<{ layers: ProjectLayer[] }>;
+    assert.deepStrictEqual(
+      stored[0].layers.map((l) => l.id),
+      ["from-B", "from-A"],
+      "both writers' layers survive",
+    );
+
+    // Contrast: the OLD path (whole-array save from A's stale snapshot) loses B.
+    await adapter.saveProjects([
+      {
+        ...record("p1"),
+        layers: [
+          {
+            id: "from-A",
+            kind: "brainstorm",
+            title: "A",
+            turns: [],
+            createdAt: 2,
+            updatedAt: 2,
+          },
+        ],
+      } as unknown as SavedProject,
+    ]);
+    const clobbered = idb.store.get(KEY) as Array<{ layers: ProjectLayer[] }>;
+    assert.deepStrictEqual(
+      clobbered[0].layers.map((l) => l.id),
+      ["from-A"],
+      "sanity: whole-array save from the stale snapshot is exactly the clobber this port method closes",
+    );
+  });
+
+  it("touches ONLY the target record — siblings are written back byte-identical", async () => {
+    const adapter = new IDBSavedProjectsAdapter();
+    const sibling = record("sibling");
+    idb.store.set(KEY, [sibling, record("p1")]);
+
+    await adapter.updateProjectRecord("p1", (p) => ({ ...p, name: "renamed" }));
+
+    const stored = idb.store.get(KEY) as unknown[];
+    assert.strictEqual(
+      stored[0],
+      sibling,
+      "sibling record is the same reference",
+    );
+    assert.strictEqual((stored[1] as { name: string }).name, "renamed");
+  });
+
+  it("resolves NotFound for an unknown id without writing", async () => {
+    const adapter = new IDBSavedProjectsAdapter();
+    const before = [record("p1")];
+    idb.store.set(KEY, before);
+
+    const result = await adapter.updateProjectRecord("ghost", (p) => ({
+      ...p,
+      name: "x",
+    }));
+
+    assert.strictEqual(result.success, false);
+    if (!result.success) assert.strictEqual(result.error.kind, "NotFound");
+    assert.strictEqual(idb.store.get(KEY), before, "no write happened");
+  });
+
+  it("skips the write when the updater returns its argument unchanged", async () => {
+    const adapter = new IDBSavedProjectsAdapter();
+    const before = [record("p1")];
+    idb.store.set(KEY, before);
+
+    const result = await adapter.updateProjectRecord("p1", (p) => p);
+
+    assert.ok(result.success);
+    assert.strictEqual(idb.store.get(KEY), before, "same-reference → no write");
+  });
+
+  it("serializes concurrent same-instance writes — overlapping read-merge-writes cannot lose an update", async () => {
+    // Two callbacks (e.g. the session loop's turn append and a control
+    // action's status write) can start their read-merge-write in the same
+    // tick. With slow reads and NO queue, both would read the same pre-state
+    // and the later write would silently drop the earlier one. The adapter's
+    // in-tab promise queue forces write 2 to read AFTER write 1 committed.
+    const adapter = new IDBSavedProjectsAdapter();
+    idb.store.set(KEY, [record("p1", [])]);
+    idb.getDelay = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+    const layerOf = (id: string) => ({
+      id,
+      kind: "brainstorm",
+      title: id,
+      turns: [],
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const [r1, r2] = await Promise.all([
+      adapter.updateProjectRecord("p1", (p) => ({
+        ...p,
+        layers: [...(p.layers ?? []), layerOf("first") as ProjectLayer],
+      })),
+      adapter.updateProjectRecord("p1", (p) => ({
+        ...p,
+        layers: [...(p.layers ?? []), layerOf("second") as ProjectLayer],
+      })),
+    ]);
+
+    assert.ok(r1.success);
+    assert.ok(r2.success);
+    const stored = idb.store.get(KEY) as Array<{ layers: ProjectLayer[] }>;
+    assert.deepStrictEqual(
+      stored[0].layers.map((l) => l.id),
+      ["first", "second"],
+      "both concurrent writes survive, in submission order",
+    );
+  });
+
+  it("hands the updater a record with SALVAGED layers (load-path parity)", async () => {
+    const adapter = new IDBSavedProjectsAdapter();
+    idb.store.set(KEY, [
+      record("p1", [
+        {
+          id: "L1",
+          title: "t",
+          status: "meditating", // invalid → dropped field-level before the updater sees it
+          turns: [{ id: "a", author: "X", content: "keep" }, { id: "b" }], // contentless turn dropped
+        },
+      ]),
+    ]);
+
+    let seen: ProjectLayer[] = [];
+    await adapter.updateProjectRecord("p1", (p) => {
+      seen = [...(p.layers ?? [])];
+      return { ...p, name: "touched" };
+    });
+
+    assert.strictEqual(seen.length, 1);
+    assert.ok(!("status" in seen[0]));
+    assert.strictEqual(seen[0].turns.length, 1);
+  });
+});
+
+/** Minimal LoggerPort capturing warn messages for salvage-logging assertions. */
+function warnCollector() {
+  const warns: string[] = [];
+  const logger = {
+    info: () => {},
+    warn: (msg: string) => warns.push(msg),
+    error: () => {},
+    debug: () => {},
+    errorWithException: () => {},
+  };
+  return { warns, logger };
+}
+
+describe("normalizeLayers (Phase-2 provenance salvage)", () => {
+  it("defaults an unknown kind to brainstorm — logged, layer preserved", () => {
+    const { warns, logger } = warnCollector();
+    const [layer] = normalizeLayers(
+      [{ id: "L", kind: "telepathy", title: "t", turns: [] }],
+      "p",
+      logger,
+    );
+    assert.strictEqual(layer.kind, "brainstorm");
+    assert.ok(warns.some((w) => /unknown\/missing layer kind/.test(w)));
+  });
+
+  it("defaults a missing kind to brainstorm — logged, layer preserved", () => {
+    const { warns, logger } = warnCollector();
+    const [layer] = normalizeLayers(
+      [{ id: "L", title: "t", turns: [] }],
+      "p",
+      logger,
+    );
+    assert.strictEqual(layer.kind, "brainstorm");
+    assert.ok(warns.some((w) => /unknown\/missing layer kind/.test(w)));
+  });
+
+  it("keeps the decisions kind (now a known kind)", () => {
+    const { warns, logger } = warnCollector();
+    const [layer] = normalizeLayers(
+      [{ id: "L", kind: "decisions", title: "t", turns: [] }],
+      "p",
+      logger,
+    );
+    assert.strictEqual(layer.kind, "decisions");
+    assert.strictEqual(warns.length, 0);
+  });
+
+  it("keeps a well-formed produced-manifest link", () => {
+    const [layer] = normalizeLayers(
+      [
+        {
+          id: "L",
+          kind: "brainstorm",
+          title: "t",
+          turns: [],
+          link: { type: "produced-manifest", at: 1234 },
+        },
+      ],
+      "p",
+    );
+    assert.deepStrictEqual(layer.link, { type: "produced-manifest", at: 1234 });
+  });
+
+  it("drops a malformed link FIELD-level (unknown type / bad at / non-object) — never the layer", () => {
+    const { warns, logger } = warnCollector();
+    const layers = normalizeLayers(
+      [
+        {
+          id: "L1",
+          kind: "brainstorm",
+          title: "t",
+          turns: [{ id: "a", author: "X", content: "payload survives" }],
+          link: { type: "produced-code", at: 1 }, // unknown link type
+        },
+        {
+          id: "L2",
+          kind: "brainstorm",
+          title: "t",
+          turns: [],
+          link: { type: "produced-manifest", at: "yesterday" }, // bad at
+        },
+        {
+          id: "L3",
+          kind: "brainstorm",
+          title: "t",
+          turns: [],
+          link: "produced-manifest", // not an object
+        },
+      ],
+      "p",
+      logger,
+    );
+    assert.strictEqual(layers.length, 3, "metadata damage never drops a layer");
+    for (const layer of layers) {
+      assert.ok(!("link" in layer), `link dropped on ${layer.id}`);
+    }
+    assert.strictEqual(layers[0].turns[0].content, "payload survives");
+    assert.strictEqual(
+      warns.filter((w) => /dropping malformed link/.test(w)).length,
+      3,
+    );
+  });
+
+  it("keeps a string sourceLayerId and drops a non-string one — layer preserved", () => {
+    const { warns, logger } = warnCollector();
+    const [good, bad] = normalizeLayers(
+      [
+        {
+          id: "D1",
+          kind: "decisions",
+          title: "t",
+          turns: [],
+          sourceLayerId: "L1",
+        },
+        {
+          id: "D2",
+          kind: "decisions",
+          title: "t",
+          turns: [],
+          sourceLayerId: 42,
+        },
+      ],
+      "p",
+      logger,
+    );
+    assert.strictEqual(good.sourceLayerId, "L1");
+    assert.ok(!("sourceLayerId" in bad));
+    assert.ok(warns.some((w) => /non-string sourceLayerId/.test(w)));
+  });
+
+  it("round-trips link + sourceLayerId through normalizeLoadedProjects", () => {
+    const [project] = normalizeLoadedProjects([
+      {
+        id: "p1",
+        name: "P1",
+        formState: {},
+        layers: [
+          {
+            id: "L1",
+            kind: "brainstorm",
+            title: "Imported project spec",
+            turns: [{ id: "t1", author: "Imported", content: "spec" }],
+            createdAt: 1,
+            updatedAt: 1,
+            link: { type: "produced-manifest", at: 2 },
+          },
+          {
+            id: "D1",
+            kind: "decisions",
+            title: "Decisions — Imported project spec",
+            turns: [{ id: "t2", author: "AI", content: "## Decisions" }],
+            createdAt: 3,
+            updatedAt: 3,
+            sourceLayerId: "L1",
+          },
+        ],
+      },
+    ]);
+    assert.deepStrictEqual(project.layers[0].link, {
+      type: "produced-manifest",
+      at: 2,
+    });
+    assert.strictEqual(project.layers[1].sourceLayerId, "L1");
+    assert.strictEqual(project.layers[1].kind, "decisions");
   });
 });

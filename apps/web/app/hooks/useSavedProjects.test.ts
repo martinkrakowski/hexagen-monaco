@@ -31,6 +31,31 @@ const persistence = vi.hoisted(() => {
       state.projects = projects;
       return { success: true as const, value: undefined };
     },
+    // Read-merge-write mirror of the real adapters, composed over the mutable
+    // `port.saveProjects` property so tests that override it (throw/fail) hit
+    // this path too. Honors the port contract: NotFound for a missing id,
+    // same-reference return skips the write.
+    updateProjectRecord: async (
+      id: string,
+      updater: (p: Record<string, unknown>) => Record<string, unknown>,
+    ) => {
+      const index = state.projects.findIndex((p) => p.id === id);
+      if (index === -1) {
+        return {
+          success: false as const,
+          error: { kind: "NotFound", message: `No saved project ${id}` },
+        };
+      }
+      const current = state.projects[index];
+      const updated = updater(current);
+      if (updated === current)
+        return { success: true as const, value: current };
+      const next = [...state.projects];
+      next[index] = updated;
+      const written = await port.saveProjects(next);
+      if (!written.success) return written;
+      return { success: true as const, value: updated };
+    },
   };
   return { state, port };
 });
@@ -102,6 +127,43 @@ describe("useSavedProjects — layer mutations", () => {
     assert.strictEqual(saved.layers[0].turns[0].content, "the session");
   });
 
+  it("saveProject round-trips optional provenance fields (link, sourceLayerId) on initial layers", async () => {
+    // Pins the field-spreading contract the accept-flow provenance write
+    // (ManifestAcceptPage → produced-manifest link) depends on: a refactor of
+    // saveProject to build layers field-by-field would silently drop the
+    // optional Phase-2 fields while every other assertion still passed.
+    persistence.state.projects = [seed("existing")];
+    const { result } = await mountLoaded();
+
+    let id: string | null = null;
+    await act(async () => {
+      id = await result.current.saveProject("Vellum", {} as never, "yaml: 1", [
+        {
+          ...brainstorm,
+          link: { type: "produced-manifest" as const, at: 1234 },
+          sourceLayerId: "origin-layer",
+        },
+      ]);
+    });
+
+    assert.ok(id, "project created");
+    const saved = result.current.projects.find((p) => p.id === id);
+    assert.ok(saved);
+    assert.deepEqual(saved.layers[0].link, {
+      type: "produced-manifest",
+      at: 1234,
+    });
+    assert.strictEqual(saved.layers[0].sourceLayerId, "origin-layer");
+    // ...and through the port, not just optimistic state.
+    const persisted = persistence.state.projects.find(
+      (p) => p.id === id,
+    ) as unknown as { layers: Array<Record<string, unknown>> };
+    assert.deepEqual(persisted.layers[0].link, {
+      type: "produced-manifest",
+      at: 1234,
+    });
+  });
+
   it("addLayer stamps identity/timestamps, appends, and persists (round-trip)", async () => {
     persistence.state.projects = [seed("p1")];
     const { result } = await mountLoaded();
@@ -123,7 +185,7 @@ describe("useSavedProjects — layer mutations", () => {
     assert.strictEqual(persisted.layers.length, 1);
   });
 
-  it("addLayer reverts optimistically and surfaces persistError on write failure", async () => {
+  it("addLayer leaves state untouched and surfaces persistError on write failure", async () => {
     persistence.state.projects = [seed("p1")];
     persistence.state.failSave = true;
     const { result } = await mountLoaded();
@@ -137,12 +199,12 @@ describe("useSavedProjects — layer mutations", () => {
     assert.strictEqual(
       result.current.projects[0].layers.length,
       0,
-      "optimistic layer is reverted",
+      "failed layer never appears in state",
     );
     assert.ok(result.current.persistError, "persistError is surfaced");
   });
 
-  it("addLayer treats a THROWING port as a failed write (revert + persistError, no escaped rejection)", async () => {
+  it("addLayer treats a THROWING port as a failed write (persistError, no escaped rejection)", async () => {
     persistence.state.projects = [seed("p1")];
     const { result } = await mountLoaded();
     const original = persistence.port.saveProjects;
@@ -160,7 +222,7 @@ describe("useSavedProjects — layer mutations", () => {
     assert.strictEqual(
       result.current.projects[0].layers.length,
       0,
-      "optimistic layer is reverted",
+      "failed layer never appears in state",
     );
     assert.strictEqual(result.current.persistError?.kind, "Unknown");
   });
@@ -244,6 +306,42 @@ describe("useSavedProjects — layer mutations", () => {
     assert.strictEqual(missing, false, "unknown layer id → false, no change");
   });
 
+  it("updateLayer persists a status + link patch (the accept-save done stamp)", async () => {
+    persistence.state.projects = [
+      seed("p1", [
+        {
+          id: "L1",
+          kind: "brainstorm",
+          title: "Live session",
+          turns: [],
+          status: "finalizing",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ]),
+    ];
+    const { result } = await mountLoaded();
+
+    let ok = false;
+    await act(async () => {
+      ok = await result.current.updateLayer("p1", "L1", {
+        status: "done",
+        link: { type: "produced-manifest", at: 123 },
+      });
+    });
+
+    assert.strictEqual(ok, true);
+    const layer = result.current.projects[0].layers[0];
+    assert.strictEqual(layer.status, "done");
+    assert.deepStrictEqual(layer.link, { type: "produced-manifest", at: 123 });
+    // durably written through the port, not just in state
+    const persisted = persistence.state.projects[0] as {
+      layers: Array<{ status?: string; link?: { type: string } }>;
+    };
+    assert.strictEqual(persisted.layers[0].status, "done");
+    assert.strictEqual(persisted.layers[0].link?.type, "produced-manifest");
+  });
+
   it("updateLayer ignores explicitly-undefined patch keys (no field clobber)", async () => {
     persistence.state.projects = [
       seed("p1", [
@@ -302,5 +400,180 @@ describe("useSavedProjects — layer mutations", () => {
       missing = await result.current.removeLayer("p1", "L1");
     });
     assert.strictEqual(missing, false, "already-gone layer → false");
+  });
+
+  it("appendLayerTurn appends one turn (stamped id/at) with an atomic layer patch", async () => {
+    persistence.state.projects = [
+      seed("p1", [
+        {
+          id: "L1",
+          kind: "brainstorm",
+          title: "session",
+          turns: [{ id: "t0", author: "Proposer", content: "seed" }],
+          createdAt: 1,
+          updatedAt: 1,
+          status: "proposing",
+        },
+      ]),
+    ];
+    const { result } = await mountLoaded();
+
+    let committed: { id: string; at?: number } | null = null;
+    await act(async () => {
+      committed = await result.current.appendLayerTurn(
+        "p1",
+        "L1",
+        { author: "Critic", content: "critique", role: "critic", round: 1 },
+        { status: "revising" },
+      );
+    });
+
+    assert.ok(committed, "returns the committed turn");
+    const layer = result.current.projects[0].layers[0];
+    assert.strictEqual(layer.turns.length, 2);
+    assert.strictEqual(layer.turns[1].id, committed!.id);
+    assert.strictEqual(layer.turns[1].role, "critic");
+    assert.strictEqual(layer.turns[1].round, 1);
+    assert.strictEqual(typeof layer.turns[1].at, "number");
+    // The returned turn IS what was persisted — callers mirror this object
+    // instead of re-stamping their own `at` (which would diverge).
+    assert.strictEqual(layer.turns[1].at, committed!.at);
+    assert.strictEqual(
+      layer.status,
+      "revising",
+      "status transition lands in the SAME write as the turn",
+    );
+
+    let missing: unknown = "sentinel";
+    await act(async () => {
+      missing = await result.current.appendLayerTurn("p1", "ghost", {
+        author: "Critic",
+        content: "x",
+      });
+    });
+    assert.strictEqual(missing, null, "unknown layer id → null, no write");
+  });
+
+  it("layer mutations merge into the FRESH stored record — a stale hook snapshot cannot clobber another writer's turns", async () => {
+    persistence.state.projects = [
+      seed("p1", [
+        {
+          id: "L1",
+          kind: "brainstorm",
+          title: "session",
+          turns: [{ id: "t0", author: "Proposer", content: "seed" }],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ]),
+    ];
+    const { result } = await mountLoaded();
+
+    // Another writer (different hook instance / tab) appends a turn directly in
+    // storage — this hook's in-memory snapshot is now stale.
+    const stored = persistence.state.projects[0] as {
+      layers: Array<{ turns: unknown[] }>;
+    };
+    stored.layers[0].turns = [
+      ...stored.layers[0].turns,
+      { id: "other-writer", author: "Critic", content: "external" },
+    ];
+
+    await act(async () => {
+      await result.current.appendLayerTurn("p1", "L1", {
+        author: "Human",
+        content: "steer",
+      });
+    });
+
+    const layer = result.current.projects[0].layers[0];
+    assert.deepStrictEqual(
+      layer.turns.map((t) => t.author),
+      ["Proposer", "Critic", "Human"],
+      "the external turn survives — merged, not clobbered from the stale snapshot",
+    );
+  });
+
+  it("updateProject (autosave) merges into the FRESH stored record — a concurrently-landed turn append survives", async () => {
+    persistence.state.projects = [
+      seed("p1", [
+        {
+          id: "L1",
+          kind: "brainstorm",
+          title: "session",
+          turns: [{ id: "t0", author: "Proposer", content: "seed" }],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ]),
+    ];
+    const { result } = await mountLoaded();
+
+    // A live-session turn append lands in storage after this hook's snapshot
+    // was taken (usePlanningSession writes through its own hook instance). The
+    // pre-fix updateProject saved its snapshot as a WHOLE ARRAY, which would
+    // erase this turn; the record-level write re-reads at write time.
+    const stored = persistence.state.projects[0] as {
+      layers: Array<{ turns: unknown[] }>;
+    };
+    stored.layers[0].turns = [
+      ...stored.layers[0].turns,
+      { id: "in-flight", author: "Critic", content: "landed mid-autosave" },
+    ];
+
+    act(() => {
+      result.current.updateProject("p1", {} as never, "yaml: 2");
+    });
+    // updateProject is fire-and-forget — poll the durable store, not the call.
+    await waitFor(() =>
+      assert.strictEqual(
+        (persistence.state.projects[0] as Record<string, unknown>).manifestYaml,
+        "yaml: 2",
+      ),
+    );
+
+    const written = persistence.state.projects[0] as {
+      layers: Array<{ turns: Array<{ author: string }> }>;
+    };
+    assert.deepStrictEqual(
+      written.layers[0].turns.map((t) => t.author),
+      ["Proposer", "Critic"],
+      "the concurrent turn survives — autosave writes one record, not a stale whole-array snapshot",
+    );
+
+    // ...and LOCAL state reconciles with the committed record too: the
+    // optimistic array was built from a snapshot that predates the turn, so
+    // without the success-reconcile the UI would show a stale layer until an
+    // unrelated mutation resynced it.
+    await waitFor(() => {
+      const local = result.current.projects[0];
+      assert.strictEqual(local.manifestYaml, "yaml: 2");
+      assert.deepStrictEqual(
+        local.layers[0].turns.map((t) => t.author),
+        ["Proposer", "Critic"],
+      );
+    });
+  });
+
+  it("updateProject treats a THROWING port as a failed write (revert + persistError, no escaped rejection)", async () => {
+    persistence.state.projects = [seed("p1")];
+    const { result } = await mountLoaded();
+    const original = persistence.port.saveProjects;
+    persistence.port.saveProjects = async () => {
+      throw new Error("adapter exploded");
+    };
+
+    act(() => {
+      result.current.updateProject("p1", {} as never, "yaml: boom");
+    });
+
+    await waitFor(() => assert.ok(result.current.persistError));
+    assert.strictEqual(result.current.persistError?.kind, "Unknown");
+    assert.strictEqual(
+      result.current.projects[0].manifestYaml,
+      "",
+      "optimistic update reverted",
+    );
+    persistence.port.saveProjects = original;
   });
 });
