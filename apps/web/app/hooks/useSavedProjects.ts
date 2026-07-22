@@ -195,24 +195,37 @@ export function useSavedProjects() {
     [port],
   );
 
+  // Fire-and-forget autosave with an optimistic local update, but the durable
+  // write is RECORD-level (updateProjectRecord), not a whole-array save: a
+  // saveProjects from this instance's snapshot could land AFTER a concurrent
+  // read-merge-write (e.g. an in-flight live-session turn append) and silently
+  // overwrite it with an array that predates the turn. The port re-reads at
+  // write time and touches only this record, so both writers land regardless
+  // of interleaving.
   const updateProject = useCallback(
     (id: string, formState: ProjectConfig, manifestYaml: string): void => {
       const snapshot = projectsRef.current;
+      const now = Date.now();
       const updated = snapshot.map((p) =>
-        p.id === id
-          ? { ...p, formState, manifestYaml, updatedAt: Date.now() }
-          : p,
+        p.id === id ? { ...p, formState, manifestYaml, updatedAt: now } : p,
       );
       const seq = ++mutationSeq.current;
       projectsRef.current = updated;
       setProjects(updated);
-      port.saveProjects(updated.map(toBase)).then((result) => {
-        if (!result.success && mutationSeq.current === seq) {
-          setProjects(snapshot);
-          projectsRef.current = snapshot;
-          setPersistError(result.error);
-        }
-      });
+      port
+        .updateProjectRecord(id, (base) => ({
+          ...base,
+          formState,
+          manifestYaml,
+          updatedAt: now,
+        }))
+        .then((result) => {
+          if (!result.success && mutationSeq.current === seq) {
+            setProjects(snapshot);
+            projectsRef.current = snapshot;
+            setPersistError(result.error);
+          }
+        });
     },
     [port],
   );
@@ -336,14 +349,16 @@ export function useSavedProjects() {
   // optional same-write layer patch, e.g. the session status transition that
   // belongs atomically with the turn). This is the live-session write path:
   // per-turn writes must merge into storage, not replace the turn array from
-  // a snapshot. Returns the new turn id, or null on failure/unknown ids.
+  // a snapshot. Returns the COMMITTED turn (with its stamped id/at) so callers
+  // mirror exactly what was persisted — re-stamping `at` caller-side would
+  // diverge from storage. Null on failure/unknown ids.
   const appendLayerTurn = useCallback(
     async (
       projectId: string,
       layerId: string,
       turn: NewProjectLayerTurn,
       patch?: ProjectLayerPatch,
-    ): Promise<string | null> => {
+    ): Promise<ProjectLayerTurn | null> => {
       const now = Date.now();
       const newTurn: ProjectLayerTurn = {
         ...turn,
@@ -364,7 +379,7 @@ export function useSavedProjects() {
         });
         return touched ? { ...p, layers, updatedAt: now } : p;
       });
-      return committed !== null && touched ? newTurn.id : null;
+      return committed !== null && touched ? newTurn : null;
     },
     [commitRecordMutation],
   );

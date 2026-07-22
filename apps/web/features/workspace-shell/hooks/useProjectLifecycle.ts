@@ -13,7 +13,7 @@ import {
   type NewProjectLayerTurn,
   type ProjectLayerPatch,
 } from "@/hooks/useSavedProjects";
-import type { PersistenceError } from "@hexagen/shared";
+import type { PersistenceError, ProjectLayerTurn } from "@hexagen/shared";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { useProjectGenerationFlow } from "./useProjectGenerationFlow";
 import { useProjectDialogHandlers } from "./useProjectDialogHandlers";
@@ -73,7 +73,7 @@ export interface UseProjectLifecycleReturn {
     layerId: string,
     turn: NewProjectLayerTurn,
     patch?: ProjectLayerPatch,
-  ) => Promise<string | null>;
+  ) => Promise<ProjectLayerTurn | null>;
   layersPersistError: PersistenceError | null;
   clearLayersPersistError: () => void;
 

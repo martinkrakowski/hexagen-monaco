@@ -1,5 +1,5 @@
 import { describe, it, vi, beforeEach, afterEach } from "vitest";
-import assert from "node:assert";
+import assert from "node:assert/strict";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import type { ProjectLayer } from "@hexagen/shared";
 
@@ -99,12 +99,15 @@ function makeMutations() {
       const layer = layers.get(layerId);
       if (!layer) return null;
       const id = `turn-${++nextId}`;
+      // Mirrors the real hook's contract: the COMMITTED turn (stamped id/at)
+      // is returned so callers reuse the persisted timestamp.
+      const committed = { ...turn, id, at: Date.now() };
       layers.set(layerId, {
         ...layer,
         ...patch,
-        turns: [...layer.turns, { ...turn, id, at: Date.now() }],
+        turns: [...layer.turns, committed],
       } as ProjectLayer);
-      return id;
+      return committed;
     },
   );
   const updateLayer = vi.fn(

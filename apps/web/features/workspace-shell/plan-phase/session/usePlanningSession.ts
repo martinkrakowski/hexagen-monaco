@@ -22,7 +22,7 @@ import { buildFold } from "./fold";
 import { parseVerdict } from "./verdict";
 import { streamChatTurn } from "./stream-chat-turn";
 
-const MODEL_NAME = process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini";
+import { MODEL_NAME } from "./model";
 
 export interface StreamingDraft {
   readonly role: ModelRole;
@@ -37,12 +37,14 @@ export interface UsePlanningSessionOptions {
     projectId: string,
     layer: NewProjectLayer,
   ) => Promise<string | null>;
+  // Returns the COMMITTED turn (persisted id/at) — the in-memory mirror must
+  // carry the same timestamp storage got, not a re-stamped Date.now().
   readonly appendLayerTurn: (
     projectId: string,
     layerId: string,
     turn: NewProjectLayerTurn,
     patch?: ProjectLayerPatch,
-  ) => Promise<string | null>;
+  ) => Promise<ProjectLayerTurn | null>;
   readonly updateLayer: (
     projectId: string,
     layerId: string,
@@ -242,21 +244,13 @@ export function usePlanningSession(
         // Tracked in pendingAppendRef so a superseding control action that
         // lands DURING this await can reconcile the durable outcome.
         const appendPromise = (async () => {
-          const turnId = await appendLayerTurn(
+          const turn = await appendLayerTurn(
             projectId,
             layerId,
             { author, content: result.content, role, round: state.round },
             { status: next.status },
           );
-          if (turnId === null) return null;
-          const turn: ProjectLayerTurn = {
-            id: turnId,
-            author,
-            content: result.content,
-            role,
-            round: state.round,
-            at: Date.now(),
-          };
+          if (turn === null) return null;
           return { turn, next };
         })();
         pendingAppendRef.current = appendPromise;
@@ -405,19 +399,13 @@ export function usePlanningSession(
       const trimmed = content.trim();
       const layerId = layerIdRef.current;
       if (!projectId || !layerId || !trimmed) return;
-      const turnId = await appendLayerTurn(projectId, layerId, {
+      const turn = await appendLayerTurn(projectId, layerId, {
         author: "You",
         content: trimmed,
         role: "human",
       });
-      if (turnId !== null) {
-        pushTurn({
-          id: turnId,
-          author: "You",
-          content: trimmed,
-          role: "human",
-          at: Date.now(),
-        });
+      if (turn !== null) {
+        pushTurn(turn);
       }
     },
     [projectId, appendLayerTurn, pushTurn],

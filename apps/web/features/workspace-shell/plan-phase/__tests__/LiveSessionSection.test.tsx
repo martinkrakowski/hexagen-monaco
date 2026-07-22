@@ -1,5 +1,5 @@
 import { describe, it, vi, beforeEach } from "vitest";
-import assert from "node:assert";
+import assert from "node:assert/strict";
 import React from "react";
 import { render, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import type { ProjectLayer } from "@hexagen/shared";

@@ -418,9 +418,9 @@ describe("useSavedProjects — layer mutations", () => {
     ];
     const { result } = await mountLoaded();
 
-    let turnId: string | null = null;
+    let committed: { id: string; at?: number } | null = null;
     await act(async () => {
-      turnId = await result.current.appendLayerTurn(
+      committed = await result.current.appendLayerTurn(
         "p1",
         "L1",
         { author: "Critic", content: "critique", role: "critic", round: 1 },
@@ -428,20 +428,23 @@ describe("useSavedProjects — layer mutations", () => {
       );
     });
 
-    assert.ok(turnId, "returns the new turn id");
+    assert.ok(committed, "returns the committed turn");
     const layer = result.current.projects[0].layers[0];
     assert.strictEqual(layer.turns.length, 2);
-    assert.strictEqual(layer.turns[1].id, turnId);
+    assert.strictEqual(layer.turns[1].id, committed!.id);
     assert.strictEqual(layer.turns[1].role, "critic");
     assert.strictEqual(layer.turns[1].round, 1);
     assert.strictEqual(typeof layer.turns[1].at, "number");
+    // The returned turn IS what was persisted — callers mirror this object
+    // instead of re-stamping their own `at` (which would diverge).
+    assert.strictEqual(layer.turns[1].at, committed!.at);
     assert.strictEqual(
       layer.status,
       "revising",
       "status transition lands in the SAME write as the turn",
     );
 
-    let missing: string | null = "sentinel";
+    let missing: unknown = "sentinel";
     await act(async () => {
       missing = await result.current.appendLayerTurn("p1", "ghost", {
         author: "Critic",
@@ -488,6 +491,54 @@ describe("useSavedProjects — layer mutations", () => {
       layer.turns.map((t) => t.author),
       ["Proposer", "Critic", "Human"],
       "the external turn survives — merged, not clobbered from the stale snapshot",
+    );
+  });
+
+  it("updateProject (autosave) merges into the FRESH stored record — a concurrently-landed turn append survives", async () => {
+    persistence.state.projects = [
+      seed("p1", [
+        {
+          id: "L1",
+          kind: "brainstorm",
+          title: "session",
+          turns: [{ id: "t0", author: "Proposer", content: "seed" }],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ]),
+    ];
+    const { result } = await mountLoaded();
+
+    // A live-session turn append lands in storage after this hook's snapshot
+    // was taken (usePlanningSession writes through its own hook instance). The
+    // pre-fix updateProject saved its snapshot as a WHOLE ARRAY, which would
+    // erase this turn; the record-level write re-reads at write time.
+    const stored = persistence.state.projects[0] as {
+      layers: Array<{ turns: unknown[] }>;
+    };
+    stored.layers[0].turns = [
+      ...stored.layers[0].turns,
+      { id: "in-flight", author: "Critic", content: "landed mid-autosave" },
+    ];
+
+    act(() => {
+      result.current.updateProject("p1", {} as never, "yaml: 2");
+    });
+    // updateProject is fire-and-forget — poll the durable store, not the call.
+    await waitFor(() =>
+      assert.strictEqual(
+        (persistence.state.projects[0] as Record<string, unknown>).manifestYaml,
+        "yaml: 2",
+      ),
+    );
+
+    const written = persistence.state.projects[0] as {
+      layers: Array<{ turns: Array<{ author: string }> }>;
+    };
+    assert.deepStrictEqual(
+      written.layers[0].turns.map((t) => t.author),
+      ["Proposer", "Critic"],
+      "the concurrent turn survives — autosave writes one record, not a stale whole-array snapshot",
     );
   });
 });

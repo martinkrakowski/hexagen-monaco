@@ -16,7 +16,7 @@ import { streamChatTurn } from "./session/stream-chat-turn";
 // the SAME pending-manifest store the import/accept flow reads.
 import { usePendingManifest } from "../../manifest-generation/store/usePendingManifest";
 
-const MODEL_NAME = process.env.NEXT_PUBLIC_LLM_MODEL || "gpt-4o-mini";
+import { MODEL_NAME } from "./session/model";
 
 const STATUS_LABELS: Record<SessionStatus, string> = {
   proposing: "Proposing",
@@ -150,17 +150,30 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
 
   const handleFinalizeStart = async () => {
     if (!sessionState || sessionState.status !== "converged") return;
-    await beginFinalize();
-    setFinalize({ phase: "distilling", content: "" });
+    // Re-entrancy guard, claimed SYNCHRONOUSLY before the first await: the
+    // Finalize button stays clickable through `await beginFinalize()`, so a
+    // double-click would otherwise start two concurrent distills.
+    if (distillAbortRef.current) return;
     const abortController = new AbortController();
     distillAbortRef.current = abortController;
+    await beginFinalize();
+    // Cancelled/ended while beginFinalize was in flight — that path already
+    // reset the UI; don't flash "distilling" over it.
+    if (abortController.signal.aborted) return;
+    setFinalize({ phase: "distilling", content: "" });
     const result = await streamChatTurn({
       message: buildDistillPrompt({ seed, turns }),
       model: MODEL_NAME,
       signal: abortController.signal,
       onChunk: (content) => setFinalize({ phase: "distilling", content }),
     });
-    distillAbortRef.current = null;
+    // Only clear the ref if it is still OURS: a cancel+restart during the
+    // await means a newer distill owns it now, and wiping that controller
+    // would make the new run uncancellable (mirrors the abortRef identity
+    // guard in usePlanningSession's runLoop).
+    if (distillAbortRef.current === abortController) {
+      distillAbortRef.current = null;
+    }
     if (!result.ok) {
       if (result.aborted) return; // cancelled — cancelFinalize already handled
       setFinalize({ phase: "error", message: result.error });

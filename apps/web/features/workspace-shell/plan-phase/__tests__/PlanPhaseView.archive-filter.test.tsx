@@ -1,5 +1,5 @@
 import { describe, it, vi, beforeEach } from "vitest";
-import assert from "node:assert";
+import assert from "node:assert/strict";
 import React from "react";
 import { render, cleanup } from "@testing-library/react";
 
@@ -71,7 +71,12 @@ describe("PlanPhaseView archive filter (single hook instance)", () => {
       },
       addLayer: vi.fn(async () => "layer-id"),
       updateLayer: vi.fn(async () => true),
-      appendLayerTurn: vi.fn(async () => "turn-id"),
+      appendLayerTurn: vi.fn(async () => ({
+        id: "turn-id",
+        author: "AI",
+        content: "",
+        at: 0,
+      })),
       layersPersistError: null,
       clearLayersPersistError: vi.fn(),
     };
