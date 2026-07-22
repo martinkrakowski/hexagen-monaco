@@ -7,6 +7,7 @@ import type {
   SavedProjectsPersistencePort,
   PersistenceError,
   ProjectLayer,
+  ProjectLayerTurn,
 } from "@hexagen/shared";
 import { SAVED_PROJECT_SCHEMA_VERSION } from "@hexagen/shared";
 import {
@@ -33,7 +34,12 @@ export type NewProjectLayer = Omit<
 >;
 
 /** The mutable fields of an existing layer (`updateLayer` patch). */
-export type ProjectLayerPatch = Partial<Pick<ProjectLayer, "title" | "turns">>;
+export type ProjectLayerPatch = Partial<
+  Pick<ProjectLayer, "title" | "turns" | "status" | "maxRounds" | "link">
+>;
+
+/** A new session turn without the hook-stamped identity/timestamp. */
+export type NewProjectLayerTurn = Omit<ProjectLayerTurn, "id" | "at">;
 
 function toBase(project: SavedProject): BaseSavedProject {
   return project;
@@ -189,49 +195,98 @@ export function useSavedProjects() {
     [port],
   );
 
+  // Fire-and-forget autosave with an optimistic local update, but the durable
+  // write is RECORD-level (updateProjectRecord), not a whole-array save: a
+  // saveProjects from this instance's snapshot could land AFTER a concurrent
+  // read-merge-write (e.g. an in-flight live-session turn append) and silently
+  // overwrite it with an array that predates the turn. The port re-reads at
+  // write time and touches only this record, so both writers land regardless
+  // of interleaving.
   const updateProject = useCallback(
     (id: string, formState: ProjectConfig, manifestYaml: string): void => {
       const snapshot = projectsRef.current;
+      const now = Date.now();
       const updated = snapshot.map((p) =>
-        p.id === id
-          ? { ...p, formState, manifestYaml, updatedAt: Date.now() }
-          : p,
+        p.id === id ? { ...p, formState, manifestYaml, updatedAt: now } : p,
       );
       const seq = ++mutationSeq.current;
       projectsRef.current = updated;
       setProjects(updated);
-      port.saveProjects(updated.map(toBase)).then((result) => {
-        if (!result.success && mutationSeq.current === seq) {
+      void (async () => {
+        // Same throwing-port hardening as commitRecordMutation below — an
+        // escaped rejection from a fire-and-forget autosave is unreportable.
+        let result: Awaited<ReturnType<typeof port.updateProjectRecord>>;
+        try {
+          result = await port.updateProjectRecord(id, (base) => ({
+            ...base,
+            formState,
+            manifestYaml,
+            updatedAt: now,
+          }));
+        } catch (e) {
+          result = {
+            success: false,
+            error: {
+              kind: "Unknown",
+              message: "Unexpected error persisting the project",
+              cause: e,
+            },
+          };
+        }
+        if (mutationSeq.current !== seq) return;
+        if (!result.success) {
           setProjects(snapshot);
           projectsRef.current = snapshot;
           setPersistError(result.error);
+          return;
         }
-      });
+        // Reconcile with the COMMITTED record: the port's read-merge-write may
+        // have folded in sibling fields another writer landed first (a
+        // live-session turn appended just before this autosave queued), which
+        // the optimistic array above — built from this instance's snapshot —
+        // cannot know about. Guarded by seq: a newer mutation owns state now.
+        const committed = fromBase(result.value);
+        const reconciled = projectsRef.current.map((p) =>
+          p.id === id ? committed : p,
+        );
+        projectsRef.current = reconciled;
+        setProjects(reconciled);
+      })();
     },
     [port],
   );
 
-  // Persist a layer mutation with the AWAITED-write + optimistic-revert contract
-  // of saveProject — deliberately NOT the fire-and-forget updateProject path.
-  // A layer paste is a large, hard-to-reconstruct transcript: the caller (e.g.
-  // the "Add planning session" modal) must know whether the write landed before
-  // it closes/navigates, and a failed write (most plausibly StorageQuotaExceeded)
-  // must surface persistError rather than optimistically appear then silently
-  // revert. Returns whether the write committed.
-  const commitLayerMutation = useCallback(
+  // Persist a layer mutation AWAITED (the caller must know whether the write
+  // landed — a session turn or pasted transcript is hard to reconstruct) and
+  // CLOBBER-SAFE: through the port's read-merge-write `updateProjectRecord`,
+  // which re-reads the stored array at write time and touches only this
+  // record — a whole-array write from this instance's (possibly stale)
+  // snapshot could silently revert other writers' records (the Phase-3
+  // precondition; previously mitigated only by sharing one hook instance).
+  // Local state is reconciled AFTER the durable write (no optimistic window),
+  // so there is nothing to revert on failure. Returns the committed record,
+  // or null on failure (NotFound — unknown/genesis project id — reports null
+  // WITHOUT setting persistError, preserving addLayer's explicit-no-op
+  // contract for genesis mode).
+  const commitRecordMutation = useCallback(
     async (
-      snapshot: SavedProject[],
-      updated: SavedProject[],
-    ): Promise<boolean> => {
+      projectId: string,
+      mutate: (project: SavedProject) => SavedProject,
+    ): Promise<SavedProject | null> => {
       const seq = ++mutationSeq.current;
-      projectsRef.current = updated;
-      setProjects(updated); // optimistic; reverted below if the write fails
       // The wired IDB adapter returns a failed Result rather than throwing, but
       // treat a throwing port as a failed write too — an escaped rejection here
       // would blow past the dialog's inline error handling entirely.
-      let result: Awaited<ReturnType<typeof port.saveProjects>>;
+      let result: Awaited<ReturnType<typeof port.updateProjectRecord>>;
       try {
-        result = await port.saveProjects(updated.map(toBase));
+        result = await port.updateProjectRecord(projectId, (base) => {
+          const current = fromBase(base);
+          const next = mutate(current);
+          // Preserve the port's same-reference "no change" contract: mutate
+          // returning its input unchanged must surface as the ORIGINAL base
+          // reference (fromBase always allocates), so the adapter skips the write.
+          return next === current ? base : toBase(next);
+        });
       } catch (e) {
         result = {
           success: false,
@@ -243,27 +298,40 @@ export function useSavedProjects() {
         };
       }
       if (!result.success) {
-        if (mutationSeq.current === seq) {
-          setProjects(snapshot);
-          projectsRef.current = snapshot;
+        if (result.error.kind !== "NotFound" && mutationSeq.current === seq) {
           setPersistError(result.error);
         }
-        return false;
+        return null;
       }
-      return true;
+      const committed = fromBase(result.value);
+      // Reconcile this instance's snapshot with what was durably written (the
+      // merged record may carry newer sibling fields than our snapshot had).
+      const reconciled = projectsRef.current.map((p) =>
+        p.id === projectId ? committed : p,
+      );
+      projectsRef.current = reconciled;
+      setProjects(reconciled);
+      return committed;
     },
     [port],
   );
+
+  // Apply only defined keys: TS lets a caller pass `{ title: undefined }`
+  // through Partial<>, and a bare `...patch` spread would overwrite a
+  // required field with undefined (then persist it).
+  const definedPatch = (patch: ProjectLayerPatch): Partial<ProjectLayer> => ({
+    ...(patch.title !== undefined ? { title: patch.title } : {}),
+    ...(patch.turns !== undefined ? { turns: patch.turns } : {}),
+    ...(patch.status !== undefined ? { status: patch.status } : {}),
+    ...(patch.maxRounds !== undefined ? { maxRounds: patch.maxRounds } : {}),
+    ...(patch.link !== undefined ? { link: patch.link } : {}),
+  });
 
   const addLayer = useCallback(
     async (
       projectId: string,
       layer: NewProjectLayer,
     ): Promise<string | null> => {
-      const snapshot = projectsRef.current;
-      // Unknown/genesis project id → explicit failure, not a silent no-op that
-      // rewrites the whole array (and looks like success to the caller).
-      if (!snapshot.some((p) => p.id === projectId)) return null;
       const now = Date.now();
       const newLayer: ProjectLayer = {
         ...layer,
@@ -271,15 +339,14 @@ export function useSavedProjects() {
         createdAt: now,
         updatedAt: now,
       };
-      const updated = snapshot.map((p) =>
-        p.id === projectId
-          ? { ...p, layers: [...p.layers, newLayer], updatedAt: now }
-          : p,
-      );
-      const committed = await commitLayerMutation(snapshot, updated);
+      const committed = await commitRecordMutation(projectId, (p) => ({
+        ...p,
+        layers: [...p.layers, newLayer],
+        updatedAt: now,
+      }));
       return committed ? newLayer.id : null;
     },
-    [commitLayerMutation],
+    [commitRecordMutation],
   );
 
   const updateLayer = useCallback(
@@ -288,48 +355,74 @@ export function useSavedProjects() {
       layerId: string,
       patch: ProjectLayerPatch,
     ): Promise<boolean> => {
-      const snapshot = projectsRef.current;
       const now = Date.now();
       let touched = false;
-      const updated = snapshot.map((p) => {
-        if (p.id !== projectId) return p;
+      const committed = await commitRecordMutation(projectId, (p) => {
         const layers = p.layers.map((l) => {
           if (l.id !== layerId) return l;
           touched = true;
-          // Apply only defined keys: TS lets a caller pass `{ title: undefined }`
-          // through Partial<>, and a bare `...patch` spread would overwrite a
-          // required field with undefined (then persist it).
+          return { ...l, ...definedPatch(patch), updatedAt: now };
+        });
+        // Unknown layer id → same reference → the adapter skips the write.
+        return touched ? { ...p, layers, updatedAt: now } : p;
+      });
+      return committed !== null && touched;
+    },
+    [commitRecordMutation],
+  );
+
+  // Append ONE turn to a layer against the FRESH stored record (plus an
+  // optional same-write layer patch, e.g. the session status transition that
+  // belongs atomically with the turn). This is the live-session write path:
+  // per-turn writes must merge into storage, not replace the turn array from
+  // a snapshot. Returns the COMMITTED turn (with its stamped id/at) so callers
+  // mirror exactly what was persisted — re-stamping `at` caller-side would
+  // diverge from storage. Null on failure/unknown ids.
+  const appendLayerTurn = useCallback(
+    async (
+      projectId: string,
+      layerId: string,
+      turn: NewProjectLayerTurn,
+      patch?: ProjectLayerPatch,
+    ): Promise<ProjectLayerTurn | null> => {
+      const now = Date.now();
+      const newTurn: ProjectLayerTurn = {
+        ...turn,
+        id: crypto.randomUUID(),
+        at: now,
+      };
+      let touched = false;
+      const committed = await commitRecordMutation(projectId, (p) => {
+        const layers = p.layers.map((l) => {
+          if (l.id !== layerId) return l;
+          touched = true;
           return {
             ...l,
-            ...(patch.title !== undefined ? { title: patch.title } : {}),
-            ...(patch.turns !== undefined ? { turns: patch.turns } : {}),
+            turns: [...l.turns, newTurn],
+            ...(patch ? definedPatch(patch) : {}),
             updatedAt: now,
           };
         });
         return touched ? { ...p, layers, updatedAt: now } : p;
       });
-      if (!touched) return false;
-      return commitLayerMutation(snapshot, updated);
+      return committed !== null && touched ? newTurn : null;
     },
-    [commitLayerMutation],
+    [commitRecordMutation],
   );
 
   const removeLayer = useCallback(
     async (projectId: string, layerId: string): Promise<boolean> => {
-      const snapshot = projectsRef.current;
       const now = Date.now();
       let touched = false;
-      const updated = snapshot.map((p) => {
-        if (p.id !== projectId) return p;
+      const committed = await commitRecordMutation(projectId, (p) => {
         const layers = p.layers.filter((l) => l.id !== layerId);
         if (layers.length === p.layers.length) return p;
         touched = true;
         return { ...p, layers, updatedAt: now };
       });
-      if (!touched) return false;
-      return commitLayerMutation(snapshot, updated);
+      return committed !== null && touched;
     },
-    [commitLayerMutation],
+    [commitRecordMutation],
   );
 
   if (!mounted) {
@@ -343,6 +436,7 @@ export function useSavedProjects() {
       updateProject: () => {},
       addLayer: async () => null,
       updateLayer: async () => false,
+      appendLayerTurn: async () => null,
       removeLayer: async () => false,
       persistError: null as PersistenceError | null,
       clearError: () => {},
@@ -359,6 +453,7 @@ export function useSavedProjects() {
     updateProject,
     addLayer,
     updateLayer,
+    appendLayerTurn,
     removeLayer,
     persistError,
     clearError,

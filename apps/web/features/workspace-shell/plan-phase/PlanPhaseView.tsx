@@ -15,9 +15,15 @@ import type { ProjectLayer } from "@hexagen/shared";
 import { useWizardLifecycleContext } from "../contexts/WizardLifecycleContext";
 import { PlanLayerCard } from "./PlanLayerCard";
 import { AddPlanningSessionDialog } from "./AddPlanningSessionDialog";
+import { LiveSessionSection } from "./LiveSessionSection";
+import { usePlanningSession } from "./session/usePlanningSession";
 import type { NewProjectLayer } from "@/hooks/useSavedProjects";
 
-interface PlanPhaseViewProps {
+export interface PlanPhaseViewProps {
+  /** Prop-injected navigation to the spec-import flow (finalize hand-off) —
+   * repo convention: no router coupling, no auto-navigate outside an explicit
+   * user confirm. */
+  onNavigateToImport: () => void;
   /**
    * Prop-injected phase switch (the repo's router-injection test pattern):
    * rendered as the "View architecture →" affordance on the layer that
@@ -28,19 +34,24 @@ interface PlanPhaseViewProps {
 
 /**
  * The "Plan" phase of the saved-project workspace: renders the project's
- * planning layers (the brainstorm sessions that produced the manifest) and the
- * "Add planning session" ingestion flow.
+ * planning layers (the brainstorm sessions that produced the manifest), the
+ * "Add planning session" ingestion flow, and the LIVE brainstorm session
+ * (Phase 3).
  *
  * Reads the project LIVE from the wizard lifecycle context — the same
  * useSavedProjects instance the wizard autosave writes through — so an added
  * layer can't be clobbered by a stale-snapshot autosave, and there is no copy
  * in ActiveWorkspaceContext to go stale.
  */
-export function PlanPhaseView({ onSwitchToArchitecture }: PlanPhaseViewProps) {
+export function PlanPhaseView({
+  onNavigateToImport,
+  onSwitchToArchitecture,
+}: PlanPhaseViewProps) {
   const {
     loadedProject,
     addLayer,
     updateLayer,
+    appendLayerTurn,
     removeLayer,
     layersPersistError,
     clearLayersPersistError,
@@ -66,6 +77,16 @@ export function PlanPhaseView({ onSwitchToArchitecture }: PlanPhaseViewProps) {
     [layers],
   );
 
+  // The live-session loop is owned HERE (single hook instance) so the active
+  // session's layer can be filtered out of the archive list below — otherwise
+  // its turns would render twice (live panel + archive).
+  const session = usePlanningSession({
+    projectId: loadedProject?.id ?? null,
+    addLayer,
+    appendLayerTurn,
+    updateLayer,
+  });
+
   // Gated by the phase toggle (edit mode with a real project id), but a direct
   // ?phase=plan URL in genesis mode still lands here — render the guard state
   // rather than crash or silently no-op.
@@ -78,6 +99,12 @@ export function PlanPhaseView({ onSwitchToArchitecture }: PlanPhaseViewProps) {
       </div>
     );
   }
+
+  // The active live-session layer renders in the live panel above the
+  // archive — filter it out here so its turns don't appear twice.
+  const archivedLayers = orderedLayers.filter(
+    (l) => l.id !== session.activeLayerId,
+  );
 
   const handleSubmit = async (layer: NewProjectLayer): Promise<boolean> => {
     clearLayersPersistError();
@@ -193,12 +220,19 @@ export function PlanPhaseView({ onSwitchToArchitecture }: PlanPhaseViewProps) {
             </p>
           </div>
           {orderedLayers.length > 0 && (
-            <Button onClick={() => setDialogOpen(true)}>
+            <Button variant="secondary" onClick={() => setDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Add planning session
             </Button>
           )}
         </div>
+
+        <LiveSessionSection
+          projectId={loadedProject.id}
+          layers={orderedLayers}
+          session={session}
+          onNavigateToImport={onNavigateToImport}
+        />
 
         {orderedLayers.length === 0 ? (
           <div className="border border-dashed border-border rounded-lg p-10 text-center space-y-3">
@@ -217,7 +251,7 @@ export function PlanPhaseView({ onSwitchToArchitecture }: PlanPhaseViewProps) {
             </Button>
           </div>
         ) : (
-          orderedLayers.map((layer) => (
+          archivedLayers.map((layer) => (
             <PlanLayerCard
               key={layer.id}
               layer={layer}

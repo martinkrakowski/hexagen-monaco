@@ -2,6 +2,23 @@
 
 import { create } from "zustand";
 import { ProjectSpec } from "@hexagen/project-configuration";
+import type { ProjectLayerTurn } from "@hexagen/shared";
+
+/**
+ * Provenance for a manifest whose spec text was DISTILLED from a live
+ * planning session (Plan phase, Phase 3). Carried so the accept-save can
+ * attach the FULL brainstorm transcript — not just the distilled spec — as
+ * the new project's planning layer.
+ */
+export interface PendingSessionProvenance {
+  /** The distilled spec text as confirmed by the user (guard: only attach the
+   * transcript when the import flow actually consumed THIS text — an
+   * abandoned finalize can't leak its session onto an unrelated import). */
+  readonly specText: string;
+  readonly turns: readonly ProjectLayerTurn[];
+  readonly sourceProjectId: string;
+  readonly sourceLayerId: string;
+}
 
 interface PendingManifestState {
   yaml: string | null;
@@ -24,6 +41,15 @@ interface PendingManifestState {
    * user's own words.
    */
   originSpecText: string | null;
+  /**
+   * Live-session provenance (see PendingSessionProvenance). Set by the Plan
+   * phase's finalize Confirm, DELIBERATELY not touched by `set()` — the
+   * finalize hand-off runs BEFORE the import flow produces the manifest and
+   * calls `set()`. Cleared with everything else by `clear()`, and guarded at
+   * accept-save by an exact specText match.
+   */
+  originSession: PendingSessionProvenance | null;
+  setOriginSession: (session: PendingSessionProvenance | null) => void;
   set: (
     yaml: string,
     formValues: ProjectSpec,
@@ -41,6 +67,10 @@ export const usePendingManifest = create<PendingManifestState>((set) => ({
   projectName: null,
   originPath: null,
   originSpecText: null,
+  originSession: null,
+  setOriginSession: (session: PendingSessionProvenance | null) => {
+    set({ originSession: session });
+  },
   set: (
     yaml: string,
     formValues: ProjectSpec,
@@ -66,6 +96,7 @@ export const usePendingManifest = create<PendingManifestState>((set) => ({
       projectName: null,
       originPath: null,
       originSpecText: null,
+      originSession: null,
     });
   },
 }));

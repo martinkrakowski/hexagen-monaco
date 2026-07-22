@@ -32,6 +32,24 @@ class FakePort implements SavedProjectsPersistencePort {
     this.projects = projects;
     return { success: true, value: undefined };
   }
+
+  // Port-contract compliance only — the migration step never updates a single
+  // record (it stamps whole arrays via saveProjects).
+  async updateProjectRecord(
+    id: string,
+    updater: (project: SavedProject) => SavedProject,
+  ): Promise<Result<SavedProject, PersistenceError>> {
+    const index = this.projects.findIndex((p) => p.id === id);
+    if (index === -1) {
+      return {
+        success: false,
+        error: { kind: "NotFound", message: `No saved project with id ${id}` },
+      };
+    }
+    const updated = updater(this.projects[index]);
+    this.projects[index] = updated;
+    return { success: true, value: updated };
+  }
 }
 
 function project(id: string, schemaVersion: number): SavedProject {

@@ -27,6 +27,15 @@ HTMLDialogElement.prototype.close = function () {
 
 const bodyText = () => (document.body.textContent || "").replace(/\s+/g, " ");
 
+// The Plan phase now also renders the live-session seed textarea; the paste
+// dialog's textarea must be selected by its label, not document order.
+const transcriptTextarea = () =>
+  document.querySelector(
+    'textarea[aria-label="Session transcript (markdown)"]',
+  ) as HTMLTextAreaElement;
+
+const renderView = () => render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
 function button(label: RegExp): HTMLButtonElement {
   const btn = Array.from(document.querySelectorAll("button")).find((b) =>
     label.test(b.textContent || ""),
@@ -55,6 +64,12 @@ describe("PlanPhaseView", () => {
       loadedProject: project(),
       addLayer: vi.fn(async () => "layer-id"),
       updateLayer: vi.fn(async () => true),
+      appendLayerTurn: vi.fn(async () => ({
+        id: "turn-id",
+        author: "AI",
+        content: "",
+        at: 0,
+      })),
       removeLayer: vi.fn(async () => true),
       layersPersistError: null,
       clearLayersPersistError: vi.fn(),
@@ -63,12 +78,12 @@ describe("PlanPhaseView", () => {
 
   it("renders the guard state when no saved project is loaded (direct ?phase=plan URL)", () => {
     lifecycle.current.loadedProject = null;
-    render(<PlanPhaseView />);
+    renderView();
     assert.match(bodyText(), /Save the project to attach planning sessions/);
   });
 
   it("shows the empty state with an add action when the project has no layers", () => {
-    render(<PlanPhaseView />);
+    renderView();
     assert.match(bodyText(), /No planning session yet/);
     assert.ok(button(/Add planning session/));
   });
@@ -87,7 +102,7 @@ describe("PlanPhaseView", () => {
         ],
       },
     ]);
-    render(<PlanPhaseView />);
+    renderView();
     const text = bodyText();
     assert.match(text, /Initial brainstorm/);
     assert.match(text, /2 turns/);
@@ -101,10 +116,10 @@ describe("PlanPhaseView", () => {
   });
 
   it("adds a pasted session through addLayer with the loaded project's id", async () => {
-    render(<PlanPhaseView />);
+    renderView();
     fireEvent.click(button(/Add planning session/));
 
-    const textarea = document.querySelector("textarea") as HTMLTextAreaElement;
+    const textarea = transcriptTextarea();
     fireEvent.change(textarea, { target: { value: "the transcript" } });
     fireEvent.click(button(/Add session/));
 
@@ -122,7 +137,7 @@ describe("PlanPhaseView", () => {
       kind: "SerializationFailed",
       message: "unrelated autosave failure",
     };
-    render(<PlanPhaseView />);
+    renderView();
     fireEvent.click(button(/Add planning session/));
     assert.strictEqual(
       document.querySelector('[role="alert"]'),
@@ -134,9 +149,9 @@ describe("PlanPhaseView", () => {
   it("shows generic failure copy when addLayer fails without a persistence error", async () => {
     lifecycle.current.addLayer = vi.fn(async () => null);
     lifecycle.current.layersPersistError = null;
-    render(<PlanPhaseView />);
+    renderView();
     fireEvent.click(button(/Add planning session/));
-    const textarea = document.querySelector("textarea") as HTMLTextAreaElement;
+    const textarea = transcriptTextarea();
     fireEvent.change(textarea, { target: { value: "content" } });
     fireEvent.click(button(/Add session/));
 
@@ -153,9 +168,9 @@ describe("PlanPhaseView", () => {
       kind: "StorageQuotaExceeded",
       message: "IDB storage quota exceeded",
     };
-    render(<PlanPhaseView />);
+    renderView();
     fireEvent.click(button(/Add planning session/));
-    const textarea = document.querySelector("textarea") as HTMLTextAreaElement;
+    const textarea = transcriptTextarea();
     fireEvent.change(textarea, { target: { value: "big transcript" } });
     fireEvent.click(button(/Add session/));
 
@@ -194,6 +209,12 @@ describe("PlanPhaseView (Phase 2)", () => {
       loadedProject: project(),
       addLayer: vi.fn(async () => "layer-id"),
       updateLayer: vi.fn(async () => true),
+      appendLayerTurn: vi.fn(async () => ({
+        id: "turn-id",
+        author: "AI",
+        content: "",
+        at: 0,
+      })),
       removeLayer: vi.fn(async () => true),
       layersPersistError: null,
       clearLayersPersistError: vi.fn(),
@@ -212,7 +233,7 @@ describe("PlanPhaseView (Phase 2)", () => {
       brainstormLayer({ id: "L2", title: "Second session", createdAt: 20 }),
       brainstormLayer({ id: "L1", title: "First session", createdAt: 10 }),
     ]);
-    render(<PlanPhaseView />);
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
     const text = bodyText();
     assert.ok(
       text.indexOf("First session") < text.indexOf("Second session"),
@@ -233,7 +254,7 @@ describe("PlanPhaseView (Phase 2)", () => {
         turns: [{ id: "t2", author: "AI", content: "## Decisions" }],
       },
     ]);
-    render(<PlanPhaseView />);
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
     const text = bodyText();
     assert.match(text, /Brainstorm/);
     assert.match(text, /Decisions —/);
@@ -250,7 +271,7 @@ describe("PlanPhaseView (Phase 2)", () => {
   it("renames a layer through the awaited updateLayer and surfaces failure inline", async () => {
     lifecycle.current.loadedProject = project([brainstormLayer()]);
     lifecycle.current.updateLayer = vi.fn(async () => false);
-    render(<PlanPhaseView />);
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
 
     fireEvent.click(buttonByAriaLabel("Rename session")!);
     const input = document.querySelector(
@@ -282,7 +303,7 @@ describe("PlanPhaseView (Phase 2)", () => {
 
   it("deletes a layer only after the confirm dialog, via awaited removeLayer", async () => {
     lifecycle.current.loadedProject = project([brainstormLayer()]);
-    render(<PlanPhaseView />);
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
 
     const removeLayer = lifecycle.current.removeLayer as ReturnType<
       typeof vi.fn
@@ -303,7 +324,7 @@ describe("PlanPhaseView (Phase 2)", () => {
   it("keeps the confirm dialog open with an inline error when removal fails", async () => {
     lifecycle.current.loadedProject = project([brainstormLayer()]);
     lifecycle.current.removeLayer = vi.fn(async () => false);
-    render(<PlanPhaseView />);
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
 
     fireEvent.click(buttonByAriaLabel("Delete session")!);
     fireEvent.click(button(/^\s*Delete session\s*$/));
@@ -317,15 +338,21 @@ describe("PlanPhaseView (Phase 2)", () => {
   });
 
   it("collapses and expands a layer's turns", () => {
-    lifecycle.current.loadedProject = project([brainstormLayer()]);
-    render(<PlanPhaseView />);
-    assert.match(bodyText(), /propose/);
+    // Distinct content: the live-session blurb contains "proposer", so the
+    // default "propose" turn body can't prove the archive collapsed.
+    lifecycle.current.loadedProject = project([
+      brainstormLayer({
+        turns: [{ id: "t1", author: "Grok", content: "the-collapsible-body" }],
+      }),
+    ]);
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    assert.match(bodyText(), /the-collapsible-body/);
 
     fireEvent.click(buttonByAriaLabel("Collapse session")!);
-    assert.doesNotMatch(bodyText(), /propose/);
+    assert.doesNotMatch(bodyText(), /the-collapsible-body/);
 
     fireEvent.click(buttonByAriaLabel("Expand session")!);
-    assert.match(bodyText(), /propose/);
+    assert.match(bodyText(), /the-collapsible-body/);
   });
 
   it("badges the layer that produced the manifest and switches back on click only", () => {
@@ -335,7 +362,12 @@ describe("PlanPhaseView (Phase 2)", () => {
       }),
     ]);
     const onSwitch = vi.fn();
-    render(<PlanPhaseView onSwitchToArchitecture={onSwitch} />);
+    render(
+      <PlanPhaseView
+        onNavigateToImport={vi.fn()}
+        onSwitchToArchitecture={onSwitch}
+      />,
+    );
 
     assert.match(bodyText(), /Produced this architecture/);
     assert.strictEqual(onSwitch.mock.calls.length, 0, "never auto-navigates");
@@ -352,7 +384,7 @@ describe("PlanPhaseView (Phase 2)", () => {
         json: async () => ({ decisions: "## Decisions\n\n- ship it" }),
       })),
     );
-    render(<PlanPhaseView />);
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
 
     fireEvent.click(button(/Extract decisions/));
 
@@ -386,7 +418,7 @@ describe("PlanPhaseView (Phase 2)", () => {
         json: async () => ({ decisions: "## Decisions\n\n- ship it" }),
       })),
     );
-    render(<PlanPhaseView />);
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
 
     fireEvent.click(button(/Extract decisions/));
 
@@ -411,7 +443,7 @@ describe("PlanPhaseView (Phase 2)", () => {
         json: async () => ({ error: "Daily quota exhausted" }),
       })),
     );
-    render(<PlanPhaseView />);
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
 
     fireEvent.click(button(/Extract decisions/));
 

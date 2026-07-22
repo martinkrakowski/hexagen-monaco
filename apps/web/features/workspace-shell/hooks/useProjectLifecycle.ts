@@ -10,9 +10,10 @@ import {
   useSavedProjects,
   type SavedProject,
   type NewProjectLayer,
+  type NewProjectLayerTurn,
   type ProjectLayerPatch,
 } from "@/hooks/useSavedProjects";
-import type { PersistenceError } from "@hexagen/shared";
+import type { PersistenceError, ProjectLayerTurn } from "@hexagen/shared";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { useProjectGenerationFlow } from "./useProjectGenerationFlow";
 import { useProjectDialogHandlers } from "./useProjectDialogHandlers";
@@ -56,10 +57,23 @@ export interface UseProjectLifecycleReturn {
   // wizard autosave (handleNext/handleSaveAndNew → updateProject) writes the
   // whole projects array from THIS instance's snapshot, so a layer added via a
   // different instance would be silently clobbered on the next autosave.
+  // (The mutations themselves are additionally clobber-safe: they commit via
+  // the port's read-merge-write updateProjectRecord, not a whole-array save.)
   addLayer: (
     projectId: string,
     layer: NewProjectLayer,
   ) => Promise<string | null>;
+  updateLayer: (
+    projectId: string,
+    layerId: string,
+    patch: ProjectLayerPatch,
+  ) => Promise<boolean>;
+  appendLayerTurn: (
+    projectId: string,
+    layerId: string,
+    turn: NewProjectLayerTurn,
+    patch?: ProjectLayerPatch,
+  ) => Promise<ProjectLayerTurn | null>;
   layersPersistError: PersistenceError | null;
   clearLayersPersistError: () => void;
 
@@ -72,11 +86,6 @@ export interface UseProjectLifecycleReturn {
   handleSaveAndNew: () => void;
   handleDiscardAndNew: () => void;
   // Same single-instance constraint as addLayer above (clobber safety).
-  updateLayer: (
-    projectId: string,
-    layerId: string,
-    patch: ProjectLayerPatch,
-  ) => Promise<boolean>;
   removeLayer: (projectId: string, layerId: string) => Promise<boolean>;
 }
 
@@ -97,6 +106,7 @@ export function useProjectLifecycle(
     saveProject,
     addLayer,
     updateLayer,
+    appendLayerTurn,
     removeLayer,
     persistError,
     clearError,
@@ -265,6 +275,8 @@ export function useProjectLifecycle(
       deleteProject,
       renameProject,
       addLayer,
+      updateLayer,
+      appendLayerTurn,
       layersPersistError: persistError,
       clearLayersPersistError: clearError,
       handleNext,
@@ -275,7 +287,6 @@ export function useProjectLifecycle(
       handleSaveAndNew,
       handleDiscardAndNew,
       handleCancelNewProject,
-      updateLayer,
       removeLayer,
     }),
     [
@@ -286,6 +297,8 @@ export function useProjectLifecycle(
       deleteProject,
       renameProject,
       addLayer,
+      updateLayer,
+      appendLayerTurn,
       persistError,
       clearError,
       handleNext,
@@ -296,7 +309,6 @@ export function useProjectLifecycle(
       handleSaveAndNew,
       handleDiscardAndNew,
       handleCancelNewProject,
-      updateLayer,
       removeLayer,
     ],
   );

@@ -1,10 +1,32 @@
-import { describe, it } from "vitest";
+import { describe, it, vi, beforeEach } from "vitest";
 import assert from "node:assert/strict";
+
+// In-memory idb-keyval so IDBSavedProjectsAdapter's read-merge-write can be
+// exercised without a real IndexedDB. The pure normalize* tests below don't
+// touch it.
+const idb = vi.hoisted(() => ({
+  store: new Map<string, unknown>(),
+  // Optional read latency, used to prove the in-tab write queue: with a slow
+  // `get`, two unserialized read-merge-writes would both read the SAME
+  // pre-state and the second write would clobber the first.
+  getDelay: null as (() => Promise<void>) | null,
+}));
+vi.mock("idb-keyval", () => ({
+  get: vi.fn(async (key: string) => {
+    if (idb.getDelay) await idb.getDelay();
+    return idb.store.get(key);
+  }),
+  set: vi.fn(async (key: string, value: unknown) => {
+    idb.store.set(key, value);
+  }),
+}));
 
 import {
   normalizeLoadedProjects,
   normalizeLayers,
+  IDBSavedProjectsAdapter,
 } from "./idb-saved-projects.adapter";
+import type { SavedProject, ProjectLayer } from "@hexagen/shared";
 
 /** Read a top-level formState field without leaking `any` into the test. */
 const fs = (project: { formState: unknown }): Record<string, unknown> =>
@@ -285,6 +307,278 @@ describe("normalizeLayers (salvage policy)", () => {
     );
     assert.strictEqual(layer.createdAt, 99);
     assert.strictEqual(layer.updatedAt, 99);
+  });
+
+  it("keeps valid Phase-3 session fields (status/maxRounds/link, role/round)", () => {
+    const [layer] = normalizeLayers(
+      [
+        {
+          id: "L",
+          title: "t",
+          status: "awaiting-human",
+          maxRounds: 4,
+          link: { type: "produced-manifest", at: 123 },
+          turns: [
+            { id: "a", author: "AI", content: "c", role: "critic", round: 2 },
+          ],
+        },
+      ],
+      "p",
+    );
+    assert.strictEqual(layer.status, "awaiting-human");
+    assert.strictEqual(layer.maxRounds, 4);
+    assert.deepStrictEqual(layer.link, { type: "produced-manifest", at: 123 });
+    assert.strictEqual(layer.turns[0].role, "critic");
+    assert.strictEqual(layer.turns[0].round, 2);
+  });
+
+  it("drops invalid Phase-3 session fields FIELD-LEVEL — never the layer or turn", () => {
+    const [layer] = normalizeLayers(
+      [
+        {
+          id: "L",
+          title: "t",
+          status: "meditating", // unknown status → field dropped
+          maxRounds: -1, // non-positive → field dropped
+          link: { type: "produced-manifest" }, // missing at → field dropped
+          turns: [
+            {
+              id: "a",
+              author: "AI",
+              content: "keep",
+              role: "villain",
+              round: "two",
+            },
+          ],
+        },
+      ],
+      "p",
+    );
+    assert.ok(!("status" in layer), "invalid status removed");
+    assert.ok(!("maxRounds" in layer), "invalid maxRounds removed");
+    assert.ok(!("link" in layer), "invalid link removed");
+    assert.strictEqual(layer.turns.length, 1, "turn survives");
+    assert.strictEqual(layer.turns[0].content, "keep");
+    assert.ok(!("role" in layer.turns[0]), "invalid role removed");
+    assert.ok(!("round" in layer.turns[0]), "invalid round removed");
+  });
+
+  it("absent Phase-3 fields stay absent (no undefined keys injected)", () => {
+    const [layer] = normalizeLayers(
+      [
+        {
+          id: "L",
+          title: "t",
+          turns: [{ id: "a", author: "X", content: "c" }],
+        },
+      ],
+      "p",
+    );
+    assert.ok(!("status" in layer));
+    assert.ok(!("maxRounds" in layer));
+    assert.ok(!("link" in layer));
+    assert.ok(!("role" in layer.turns[0]));
+    assert.ok(!("round" in layer.turns[0]));
+  });
+});
+
+describe("IDBSavedProjectsAdapter.updateProjectRecord (read-merge-write)", () => {
+  const KEY = "hexagen:saved-projects";
+  const record = (
+    id: string,
+    layers: unknown[] = [],
+  ): Record<string, unknown> => ({
+    id,
+    name: id,
+    schemaVersion: 4,
+    createdAt: 0,
+    updatedAt: 0,
+    formState: {},
+    manifestYaml: "",
+    layers,
+  });
+
+  beforeEach(() => {
+    idb.store.clear();
+    idb.getDelay = null;
+  });
+
+  it("REGRESSION: merges into the freshly-read record — a stale caller snapshot cannot clobber a concurrently-added layer", async () => {
+    // The pre-Phase-3 failure mode: writer A holds an in-memory snapshot, writer
+    // B adds a layer, then A does a whole-array saveProjects from its snapshot —
+    // B's layer vanishes. With updateProjectRecord the adapter re-reads at write
+    // time, so A's mutation lands ON TOP of B's layer instead of replacing it.
+    const adapter = new IDBSavedProjectsAdapter();
+    idb.store.set(KEY, [record("p1", [])]);
+
+    // Writer B commits a layer directly (fresh write).
+    await adapter.updateProjectRecord("p1", (p) => ({
+      ...p,
+      layers: [
+        ...(p.layers ?? []),
+        {
+          id: "from-B",
+          kind: "brainstorm",
+          title: "B",
+          turns: [],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    }));
+
+    // Writer A still believes layers === [] (its snapshot predates B's write),
+    // but appends via read-merge-write — the updater sees B's layer.
+    const result = await adapter.updateProjectRecord("p1", (p) => ({
+      ...p,
+      layers: [
+        ...(p.layers ?? []),
+        {
+          id: "from-A",
+          kind: "brainstorm",
+          title: "A",
+          turns: [],
+          createdAt: 2,
+          updatedAt: 2,
+        },
+      ],
+    }));
+
+    assert.ok(result.success);
+    const stored = idb.store.get(KEY) as Array<{ layers: ProjectLayer[] }>;
+    assert.deepStrictEqual(
+      stored[0].layers.map((l) => l.id),
+      ["from-B", "from-A"],
+      "both writers' layers survive",
+    );
+
+    // Contrast: the OLD path (whole-array save from A's stale snapshot) loses B.
+    await adapter.saveProjects([
+      {
+        ...record("p1"),
+        layers: [
+          {
+            id: "from-A",
+            kind: "brainstorm",
+            title: "A",
+            turns: [],
+            createdAt: 2,
+            updatedAt: 2,
+          },
+        ],
+      } as unknown as SavedProject,
+    ]);
+    const clobbered = idb.store.get(KEY) as Array<{ layers: ProjectLayer[] }>;
+    assert.deepStrictEqual(
+      clobbered[0].layers.map((l) => l.id),
+      ["from-A"],
+      "sanity: whole-array save from the stale snapshot is exactly the clobber this port method closes",
+    );
+  });
+
+  it("touches ONLY the target record — siblings are written back byte-identical", async () => {
+    const adapter = new IDBSavedProjectsAdapter();
+    const sibling = record("sibling");
+    idb.store.set(KEY, [sibling, record("p1")]);
+
+    await adapter.updateProjectRecord("p1", (p) => ({ ...p, name: "renamed" }));
+
+    const stored = idb.store.get(KEY) as unknown[];
+    assert.strictEqual(
+      stored[0],
+      sibling,
+      "sibling record is the same reference",
+    );
+    assert.strictEqual((stored[1] as { name: string }).name, "renamed");
+  });
+
+  it("resolves NotFound for an unknown id without writing", async () => {
+    const adapter = new IDBSavedProjectsAdapter();
+    const before = [record("p1")];
+    idb.store.set(KEY, before);
+
+    const result = await adapter.updateProjectRecord("ghost", (p) => ({
+      ...p,
+      name: "x",
+    }));
+
+    assert.strictEqual(result.success, false);
+    if (!result.success) assert.strictEqual(result.error.kind, "NotFound");
+    assert.strictEqual(idb.store.get(KEY), before, "no write happened");
+  });
+
+  it("skips the write when the updater returns its argument unchanged", async () => {
+    const adapter = new IDBSavedProjectsAdapter();
+    const before = [record("p1")];
+    idb.store.set(KEY, before);
+
+    const result = await adapter.updateProjectRecord("p1", (p) => p);
+
+    assert.ok(result.success);
+    assert.strictEqual(idb.store.get(KEY), before, "same-reference → no write");
+  });
+
+  it("serializes concurrent same-instance writes — overlapping read-merge-writes cannot lose an update", async () => {
+    // Two callbacks (e.g. the session loop's turn append and a control
+    // action's status write) can start their read-merge-write in the same
+    // tick. With slow reads and NO queue, both would read the same pre-state
+    // and the later write would silently drop the earlier one. The adapter's
+    // in-tab promise queue forces write 2 to read AFTER write 1 committed.
+    const adapter = new IDBSavedProjectsAdapter();
+    idb.store.set(KEY, [record("p1", [])]);
+    idb.getDelay = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+    const layerOf = (id: string) => ({
+      id,
+      kind: "brainstorm",
+      title: id,
+      turns: [],
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const [r1, r2] = await Promise.all([
+      adapter.updateProjectRecord("p1", (p) => ({
+        ...p,
+        layers: [...(p.layers ?? []), layerOf("first") as ProjectLayer],
+      })),
+      adapter.updateProjectRecord("p1", (p) => ({
+        ...p,
+        layers: [...(p.layers ?? []), layerOf("second") as ProjectLayer],
+      })),
+    ]);
+
+    assert.ok(r1.success);
+    assert.ok(r2.success);
+    const stored = idb.store.get(KEY) as Array<{ layers: ProjectLayer[] }>;
+    assert.deepStrictEqual(
+      stored[0].layers.map((l) => l.id),
+      ["first", "second"],
+      "both concurrent writes survive, in submission order",
+    );
+  });
+
+  it("hands the updater a record with SALVAGED layers (load-path parity)", async () => {
+    const adapter = new IDBSavedProjectsAdapter();
+    idb.store.set(KEY, [
+      record("p1", [
+        {
+          id: "L1",
+          title: "t",
+          status: "meditating", // invalid → dropped field-level before the updater sees it
+          turns: [{ id: "a", author: "X", content: "keep" }, { id: "b" }], // contentless turn dropped
+        },
+      ]),
+    ]);
+
+    let seen: ProjectLayer[] = [];
+    await adapter.updateProjectRecord("p1", (p) => {
+      seen = [...(p.layers ?? [])];
+      return { ...p, name: "touched" };
+    });
+
+    assert.strictEqual(seen.length, 1);
+    assert.ok(!("status" in seen[0]));
+    assert.strictEqual(seen[0].turns.length, 1);
   });
 });
 

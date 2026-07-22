@@ -33,6 +33,25 @@ const persistencePort = vi.hoisted(() => {
   const port = {
     loadProjects: async () => ({ success: true, value: state.projects }),
     saveProjects: async () => ({ success: true, value: undefined }),
+    // Minimal read-merge-write: updateProject autosaves through this (not
+    // whole-array saveProjects) so a concurrent turn append can't be clobbered.
+    updateProjectRecord: async (
+      id: string,
+      updater: (p: Record<string, unknown>) => Record<string, unknown>,
+    ) => {
+      const index = state.projects.findIndex((p) => p.id === id);
+      if (index === -1) {
+        return {
+          success: false as const,
+          error: { kind: "NotFound", message: `No saved project ${id}` },
+        };
+      }
+      const updated = updater(state.projects[index]);
+      state.projects = state.projects.map((p, i) =>
+        i === index ? updated : p,
+      );
+      return { success: true as const, value: updated };
+    },
   };
   return { state, port };
 });

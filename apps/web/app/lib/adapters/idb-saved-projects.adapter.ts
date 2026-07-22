@@ -17,6 +17,109 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// ─── Phase-3 live-session field salvage (self-contained block) ──────────────
+// Salvage policy matches the rest of this file: an invalid value drops the
+// FIELD, never the layer or turn. `link`/`sourceLayerId` salvage lives with
+// the other Phase-2 provenance handling inside normalizeLayers, not here.
+
+const LAYER_STATUSES = new Set<NonNullable<ProjectLayer["status"]>>([
+  "proposing",
+  "critiquing",
+  "revising",
+  "awaiting-human",
+  "converged",
+  "finalizing",
+  "done",
+]);
+
+const TURN_ROLES = new Set<NonNullable<ProjectLayerTurn["role"]>>([
+  "proposer",
+  "critic",
+  "human",
+  "system",
+]);
+
+function isLayerStatus(
+  value: unknown,
+): value is NonNullable<ProjectLayer["status"]> {
+  return (
+    typeof value === "string" &&
+    LAYER_STATUSES.has(value as NonNullable<ProjectLayer["status"]>)
+  );
+}
+
+function isTurnRole(
+  value: unknown,
+): value is NonNullable<ProjectLayerTurn["role"]> {
+  return (
+    typeof value === "string" &&
+    TURN_ROLES.has(value as NonNullable<ProjectLayerTurn["role"]>)
+  );
+}
+
+/** Field-level salvage for a layer's session fields (status/maxRounds). */
+function salvageSessionLayerFields(
+  rawLayer: Record<string, unknown>,
+  layerId: string,
+  logger?: LoggerPort,
+): Pick<ProjectLayer, "status" | "maxRounds"> {
+  const out: {
+    status?: NonNullable<ProjectLayer["status"]>;
+    maxRounds?: number;
+  } = {};
+  if (rawLayer.status !== undefined) {
+    if (isLayerStatus(rawLayer.status)) out.status = rawLayer.status;
+    else
+      logger?.warn(
+        `[saved-projects] dropping invalid status on ${layerId} (layer kept)`,
+      );
+  }
+  if (rawLayer.maxRounds !== undefined) {
+    if (
+      typeof rawLayer.maxRounds === "number" &&
+      Number.isFinite(rawLayer.maxRounds) &&
+      rawLayer.maxRounds > 0
+    ) {
+      out.maxRounds = rawLayer.maxRounds;
+    } else {
+      logger?.warn(
+        `[saved-projects] dropping invalid maxRounds on ${layerId} (layer kept)`,
+      );
+    }
+  }
+  return out;
+}
+
+/** Field-level salvage for a turn's session fields (role/round). */
+function salvageSessionTurnFields(
+  rawTurn: Record<string, unknown>,
+  layerId: string,
+  logger?: LoggerPort,
+): Pick<ProjectLayerTurn, "role" | "round"> {
+  const out: {
+    role?: NonNullable<ProjectLayerTurn["role"]>;
+    round?: number;
+  } = {};
+  if (rawTurn.role !== undefined) {
+    if (isTurnRole(rawTurn.role)) out.role = rawTurn.role;
+    else
+      logger?.warn(
+        `[saved-projects] dropping invalid turn role on ${layerId} (turn kept)`,
+      );
+  }
+  if (rawTurn.round !== undefined) {
+    if (typeof rawTurn.round === "number" && Number.isFinite(rawTurn.round)) {
+      out.round = rawTurn.round;
+    } else {
+      logger?.warn(
+        `[saved-projects] dropping invalid turn round on ${layerId} (turn kept)`,
+      );
+    }
+  }
+  return out;
+}
+// ─── end Phase-3 live-session field salvage ─────────────────────────────────
+
 /**
  * Salvage `layers` at the load perimeter, using the same policy as the
  * record-level normalize above: preserve payload, default metadata, drop only
@@ -103,6 +206,8 @@ export function normalizeLayers(
         author: typeof rawTurn.author === "string" ? rawTurn.author : "Unknown",
         content: rawTurn.content,
         ...(Number.isFinite(rawTurn.at) ? { at: rawTurn.at as number } : {}),
+        // Phase-3 session fields — field-level salvage, never drops the turn.
+        ...salvageSessionTurnFields(rawTurn, layerId, logger),
       });
     });
 
@@ -154,6 +259,8 @@ export function normalizeLayers(
       updatedAt,
       ...(link !== undefined ? { link } : {}),
       ...(sourceLayerId !== undefined ? { sourceLayerId } : {}),
+      // Phase-3 session fields — field-level salvage, never drops the layer.
+      ...salvageSessionLayerFields(rawLayer, layerId, logger),
     });
   });
   return layers;
@@ -265,6 +372,24 @@ export function normalizeLoadedProjects(
 export class IDBSavedProjectsAdapter implements SavedProjectsPersistencePort {
   constructor(private readonly logger?: LoggerPort) {}
 
+  /**
+   * In-tab write serialization: every write is a get-then-set on ONE IDB key,
+   * so two interleaved writes (e.g. a live-session turn append racing a
+   * pause's status patch, or a whole-array autosave) could read the same
+   * snapshot and the later set() would silently drop the earlier one. The
+   * adapter is wired as a singleton, so chaining all writes through one
+   * promise queue makes them atomic relative to each other, in call order.
+   * (Cross-tab races remain out of scope — same as before this queue.)
+   */
+  private writeQueue: Promise<unknown> = Promise.resolve();
+
+  private enqueueWrite<T>(op: () => Promise<T>): Promise<T> {
+    const run = this.writeQueue.then(op, op);
+    // Keep the chain alive on failure; the caller still sees the rejection.
+    this.writeQueue = run.catch(() => undefined);
+    return run;
+  }
+
   async loadProjects(): Promise<Result<SavedProject[], PersistenceError>> {
     try {
       const data = await get(SAVED_PROJECTS_KEY);
@@ -287,27 +412,82 @@ export class IDBSavedProjectsAdapter implements SavedProjectsPersistencePort {
   async saveProjects(
     projects: SavedProject[],
   ): Promise<Result<void, PersistenceError>> {
+    return this.enqueueWrite(async () => {
+      try {
+        await set(SAVED_PROJECTS_KEY, projects);
+        return { success: true as const, value: undefined };
+      } catch (e) {
+        return { success: false as const, error: mapWriteError(e) };
+      }
+    });
+  }
+
+  /**
+   * Read-merge-write single-record update (the Phase-3 clobber-safety
+   * precondition): a FRESH read of the stored array at write time, `updater`
+   * applied to the matching record only, every other record written back
+   * byte-identical. A caller's stale in-memory snapshot therefore cannot
+   * revert other projects' recent writes — the failure mode of every
+   * whole-array `saveProjects` from a per-instance snapshot.
+   */
+  async updateProjectRecord(
+    id: string,
+    updater: (project: SavedProject) => SavedProject,
+  ): Promise<Result<SavedProject, PersistenceError>> {
+    return this.enqueueWrite(() =>
+      this.updateProjectRecordUnqueued(id, updater),
+    );
+  }
+
+  private async updateProjectRecordUnqueued(
+    id: string,
+    updater: (project: SavedProject) => SavedProject,
+  ): Promise<Result<SavedProject, PersistenceError>> {
     try {
-      await set(SAVED_PROJECTS_KEY, projects);
-      return { success: true, value: undefined };
-    } catch (e) {
-      if (e instanceof DOMException && e.name === "QuotaExceededError") {
+      const data = await get(SAVED_PROJECTS_KEY);
+      const raw: unknown[] = Array.isArray(data) ? [...data] : [];
+      const index = raw.findIndex(
+        (entry) => isRecord(entry) && entry.id === id,
+      );
+      if (index === -1) {
         return {
           success: false,
           error: {
-            kind: "StorageQuotaExceeded",
-            message: "IDB storage quota exceeded",
+            kind: "NotFound",
+            message: `No saved project with id ${id}`,
           },
         };
       }
-      return {
-        success: false,
-        error: {
-          kind: "SerializationFailed",
-          message: "Failed to save projects to IDB",
-          cause: e,
-        },
-      };
+      const record = raw[index] as Record<string, unknown>;
+      // Hand the updater a record whose `layers` are salvaged like the load
+      // path (layer mutations are the primary caller); every other field —
+      // including possibly-drifted formState — passes through untouched.
+      const current = {
+        ...(record as unknown as SavedProject),
+        layers: normalizeLayers(record.layers, id, this.logger),
+      } as SavedProject;
+      const updated = updater(current);
+      // Same-reference return = "nothing changed" — skip the write entirely.
+      if (updated === current) return { success: true, value: current };
+      raw[index] = updated;
+      await set(SAVED_PROJECTS_KEY, raw);
+      return { success: true, value: updated };
+    } catch (e) {
+      return { success: false, error: mapWriteError(e) };
     }
   }
+}
+
+function mapWriteError(e: unknown): PersistenceError {
+  if (e instanceof DOMException && e.name === "QuotaExceededError") {
+    return {
+      kind: "StorageQuotaExceeded",
+      message: "IDB storage quota exceeded",
+    };
+  }
+  return {
+    kind: "SerializationFailed",
+    message: "Failed to save projects to IDB",
+    cause: e,
+  };
 }
