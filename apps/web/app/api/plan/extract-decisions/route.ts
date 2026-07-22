@@ -66,15 +66,29 @@ const SYSTEM_PROMPT = [
  * single server-key completion, not a user-keyed streaming chat.
  */
 export async function POST(request: NextRequest) {
-  let body: ExtractDecisionsBody;
+  let rawBody: unknown;
   try {
-    body = await request.json();
+    rawBody = await request.json();
   } catch {
     return NextResponse.json(
       { error: "Invalid JSON in request body" },
       { status: 400 },
     );
   }
+  // Guard: body must be a plain object. request.json() happily returns null,
+  // arrays, and primitives, all of which would throw on the property access
+  // below (mirrors the spec-convert route's guard).
+  if (
+    rawBody === null ||
+    typeof rawBody !== "object" ||
+    Array.isArray(rawBody)
+  ) {
+    return NextResponse.json(
+      { error: "Body must be a JSON object" },
+      { status: 400 },
+    );
+  }
+  const body = rawBody as ExtractDecisionsBody;
 
   const session = await getServerSession(authOptions);
 

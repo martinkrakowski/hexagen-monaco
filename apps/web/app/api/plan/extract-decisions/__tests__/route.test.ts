@@ -74,6 +74,18 @@ describe("POST /api/plan/extract-decisions", () => {
     assert.match((await res.json()).error, /Invalid JSON/);
   });
 
+  it("returns 400 for valid JSON that is not an object (null / array)", async () => {
+    // JSON `null` parses successfully; without the shape guard the transcript
+    // property access would throw and surface as a 500 instead of a 400.
+    const nullBody = await POST(post(null, "10.0.0.21"));
+    assert.strictEqual(nullBody.status, 400);
+    assert.match((await nullBody.json()).error, /JSON object/);
+
+    const arrayBody = await POST(post([], "10.0.0.21"));
+    assert.strictEqual(arrayBody.status, 400);
+    assert.match((await arrayBody.json()).error, /JSON object/);
+  });
+
   it("returns 401 when unauthenticated and no server LLM key is configured", async () => {
     vi.mocked(resolveWebLlmApiKey).mockReturnValue(undefined);
     const res = await POST(post({ transcript: "## A\n\nhello" }, "10.0.0.2"));
