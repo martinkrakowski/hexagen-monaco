@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,11 +9,13 @@ import {
   DialogDescription,
   DialogFooter,
   Button,
+  Checkbox,
   Input,
   Textarea,
   FileDropZone,
 } from "@hexagen/ui";
 import type { NewProjectLayer } from "@/hooks/useSavedProjects";
+import { splitTurnsByAuthorHeadings } from "./split-turns";
 
 interface AddPlanningSessionDialogProps {
   open: boolean;
@@ -25,9 +27,11 @@ interface AddPlanningSessionDialogProps {
 }
 
 /**
- * Paste / import a planning-session transcript as a brainstorm layer.
- * Deliberately dumb ingestion (no multi-agent auto-parsing): the whole markdown
- * becomes one "Imported" turn — lossless.
+ * Paste / import a planning-session transcript as a brainstorm layer. Default
+ * ingestion is deliberately dumb (the whole markdown becomes one "Imported"
+ * turn — lossless); when the paste carries `## Author` heading delimiters, an
+ * opt-out checkbox splits it into one turn per section instead (see
+ * split-turns.ts).
  *
  * The submit is AWAITED and the dialog only closes on success: a pasted
  * transcript is hard to reconstruct, so a failed write (most plausibly storage
@@ -41,7 +45,16 @@ export function AddPlanningSessionDialog({
 }: AddPlanningSessionDialogProps) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [splitEnabled, setSplitEnabled] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // null = no split offered (fewer than two `## Author` headings). A detected
+  // split with zero usable turns (all sections empty) is treated as no split —
+  // it must never produce a turn-less layer.
+  const detectedTurns = useMemo(() => {
+    const turns = splitTurnsByAuthorHeadings(content);
+    return turns && turns.length > 0 ? turns : null;
+  }, [content]);
 
   const canSubmit = content.trim().length > 0 && !isSubmitting;
 
@@ -49,21 +62,32 @@ export function AddPlanningSessionDialog({
     if (!canSubmit) return;
     setIsSubmitting(true);
     try {
+      const at = Date.now();
+      const turns =
+        detectedTurns && splitEnabled
+          ? detectedTurns.map((turn) => ({
+              id: crypto.randomUUID(),
+              author: turn.author,
+              content: turn.content,
+              at,
+            }))
+          : [
+              {
+                id: crypto.randomUUID(),
+                author: "Imported",
+                content,
+                at,
+              },
+            ];
       const ok = await onSubmit({
         kind: "brainstorm",
         title: title.trim() || "Planning session",
-        turns: [
-          {
-            id: crypto.randomUUID(),
-            author: "Imported",
-            content,
-            at: Date.now(),
-          },
-        ],
+        turns,
       });
       if (ok) {
         setTitle("");
         setContent("");
+        setSplitEnabled(true);
         onClose();
       }
     } finally {
@@ -113,6 +137,22 @@ export function AddPlanningSessionDialog({
               );
             }}
           />
+          {detectedTurns && (
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                <Checkbox
+                  checked={splitEnabled}
+                  onCheckedChange={setSplitEnabled}
+                  disabled={isSubmitting}
+                />
+                Split into turns by <code>## Author</code> headings
+              </label>
+              <span className="text-xs text-muted-foreground">
+                {detectedTurns.length}{" "}
+                {detectedTurns.length === 1 ? "turn" : "turns"} detected
+              </span>
+            </div>
+          )}
           {submitError && (
             <p role="alert" className="text-sm text-destructive">
               {submitError}

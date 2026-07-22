@@ -24,6 +24,8 @@ export type {
   GitHubPublishPrefs,
   ProjectLayer,
   ProjectLayerTurn,
+  ProjectLayerLink,
+  ProducedManifestLink,
 } from "./domain/saved-project.js";
 export { SAVED_PROJECT_SCHEMA_VERSION } from "./domain/saved-project.js";
 export type { GenerationResult } from "./domain/types/generation-result.js";
