@@ -20,9 +20,10 @@ propose→critique→revise session between two models plus a human that became 
 16-context hexagonal manifest with no trace of its own reasoning left in the
 project.
 
-The decision: a project becomes a small **stack of provenance layers** —
-`Plan` (brainstorm, decisions) alongside `Architecture` (the manifest) — and,
-in its final phase, the app **runs** the brainstorm itself.
+The decision: a project gains a small **stack of provenance layers** —
+`Plan` (brainstorm, decisions) — alongside the canonical `Architecture`
+manifest, which stays a sibling field, not a layer (D1). In its final phase,
+the app **runs** the brainstorm itself.
 
 Three persistence realities (verified in the plan doc's codebase review)
 constrain every design choice below:
@@ -183,10 +184,12 @@ Two hardening decisions from review are load-bearing:
 - **Zero new server infrastructure** for Phase 3 (Q0/Q1/Q5): sessions reuse
   the chat route, its model pinning, and its quota; the only new route (D8)
   is a thin non-streaming mirror.
-- The read-merge-write port (D5) retires the whole-array clobber class for
-  layer writes: fresh read at write time, single-record update, and same-tab
-  serialization — strictly stronger than the fresh-read-but-whole-array-save
-  pattern `persistGithubLink` uses today.
+- The read-merge-write port (D5) takes the layer mutations — and the wizard
+  autosave — out of the whole-array clobber class: fresh read at write time,
+  single-record update, and same-tab serialization — strictly stronger than
+  the fresh-read-but-whole-array-save pattern `persistGithubLink` uses today.
+  Not-yet-migrated whole-array writers can still revert layers (see
+  Negative).
 
 ### Negative
 
@@ -200,12 +203,14 @@ Two hardening decisions from review are load-bearing:
   `contexts:`-dialect text, not the transcript, is what the import pipeline
   sees. The transcript rides along as provenance, but decisions not captured
   by the distill do not reach the manifest.
-- Only layer mutations use D5's read-merge-write port method so far. The
-  hook's other mutations (and wizard autosave) still persist stale full-array
+- Only layer mutations and the wizard autosave use D5's read-merge-write
+  port method so far. The hook's other mutations (`saveProject`,
+  `deleteProject`, `renameProject`) still persist stale full-array
   snapshots, which can revert fields written through the port by
   `ExportContext` / `useEditorPush` — the pre-existing
-  `githubLink.lastCommitSha` clobber. Migrating those writers to
-  `updateProjectRecord` is a follow-up.
+  `githubLink.lastCommitSha` clobber — and, because each snapshot carries
+  every record's `layers`, freshly committed layers too. Migrating those
+  writers to `updateProjectRecord` is a follow-up.
 
 ### Neutral
 
