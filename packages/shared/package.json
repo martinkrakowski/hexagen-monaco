@@ -1,6 +1,6 @@
 {
   "name": "@hexagen/shared",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "type": "module",
   "description": "HexaGen shared types and utilities",
   "license": "SEE LICENSE IN LICENSE",

@@ -3,6 +3,31 @@
 Release notes for the co-published `@hexagen-monaco/sync` and
 `@hexagen-monaco/arch-linter` packages (they share one version, tagged `vX.Y.Z`).
 
+## 0.9.0
+
+Lock-step version bump — **no functional changes** to `@hexagen-monaco/sync`
+or `@hexagen-monaco/arch-linter` this cycle. The release carries a large
+web-app cycle that ships via the VPS deploy (not npm):
+
+- **AI governance chat on the accept view** (#388, #391–#402): a chat panel on
+  the project-accept view that explains governance findings and applies
+  AI-suggested manifest fixes, plus the generator fixes that arc surfaced —
+  shared-kernel exemption from the minimum-interface contract, adapter→port
+  implements re-inference on import (phantom R04/R05), deterministic R01
+  auto-resolve, and a single-ownership advisory for ports shared across
+  contexts.
+- **Import hardening** (#407–#411): generated manifests are guaranteed to
+  parse on the accept screen, the generating step summarizes success-first,
+  the Hexagen `contexts:` manifest dialect imports deterministically, a corpus
+  regression harness adds crash-proofing and truncation detection, and
+  dialect-declared bindings/descriptions are honored on import (alvaro-ai RCA).
+- **Project planning layers** (#403–#405, #414–#416, ADR-0045): projects gain
+  a provenance layer stack — brainstorm/decisions capture at import-accept,
+  provenance links from a manifest back to its planning session, turn
+  splitting, LLM decisions extraction, and interactive in-app brainstorm
+  sessions v1 (proposer⇄critic loop with convergence detection and a
+  finalize→import handoff).
+
 ## 0.8.1
 
 Generated-project **app scaffolding** gains real, build-verified starter
