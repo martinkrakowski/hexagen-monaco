@@ -341,6 +341,24 @@ export function normalizeLoadedProjects(
 export class IDBSavedProjectsAdapter implements SavedProjectsPersistencePort {
   constructor(private readonly logger?: LoggerPort) {}
 
+  /**
+   * In-tab write serialization: every write is a get-then-set on ONE IDB key,
+   * so two interleaved writes (e.g. a live-session turn append racing a
+   * pause's status patch, or a whole-array autosave) could read the same
+   * snapshot and the later set() would silently drop the earlier one. The
+   * adapter is wired as a singleton, so chaining all writes through one
+   * promise queue makes them atomic relative to each other, in call order.
+   * (Cross-tab races remain out of scope — same as before this queue.)
+   */
+  private writeQueue: Promise<unknown> = Promise.resolve();
+
+  private enqueueWrite<T>(op: () => Promise<T>): Promise<T> {
+    const run = this.writeQueue.then(op, op);
+    // Keep the chain alive on failure; the caller still sees the rejection.
+    this.writeQueue = run.catch(() => undefined);
+    return run;
+  }
+
   async loadProjects(): Promise<Result<SavedProject[], PersistenceError>> {
     try {
       const data = await get(SAVED_PROJECTS_KEY);
@@ -363,12 +381,14 @@ export class IDBSavedProjectsAdapter implements SavedProjectsPersistencePort {
   async saveProjects(
     projects: SavedProject[],
   ): Promise<Result<void, PersistenceError>> {
-    try {
-      await set(SAVED_PROJECTS_KEY, projects);
-      return { success: true, value: undefined };
-    } catch (e) {
-      return { success: false, error: mapWriteError(e) };
-    }
+    return this.enqueueWrite(async () => {
+      try {
+        await set(SAVED_PROJECTS_KEY, projects);
+        return { success: true as const, value: undefined };
+      } catch (e) {
+        return { success: false as const, error: mapWriteError(e) };
+      }
+    });
   }
 
   /**
@@ -380,6 +400,15 @@ export class IDBSavedProjectsAdapter implements SavedProjectsPersistencePort {
    * whole-array `saveProjects` from a per-instance snapshot.
    */
   async updateProjectRecord(
+    id: string,
+    updater: (project: SavedProject) => SavedProject,
+  ): Promise<Result<SavedProject, PersistenceError>> {
+    return this.enqueueWrite(() =>
+      this.updateProjectRecordUnqueued(id, updater),
+    );
+  }
+
+  private async updateProjectRecordUnqueued(
     id: string,
     updater: (project: SavedProject) => SavedProject,
   ): Promise<Result<SavedProject, PersistenceError>> {

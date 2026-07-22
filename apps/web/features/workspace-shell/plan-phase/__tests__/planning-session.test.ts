@@ -192,4 +192,63 @@ describe("sessionStateFromLayer (interrupted-session recovery)", () => {
       "done",
     );
   });
+
+  it("a persisted `revising` recovers one round AHEAD of the highest turn stamp", () => {
+    // CRITIQUE_DONE(continue) advances the in-memory round to k+1 while the
+    // round-k critic turn + `revising` status land in one write — so the
+    // stored turns lag the live round by one.
+    const s = sessionStateFromLayer({
+      status: "revising",
+      maxRounds: 4,
+      turns: [
+        { role: "proposer", round: 2 },
+        { role: "critic", round: 2 },
+      ],
+    });
+    assert.strictEqual(s.round, 3);
+    // ACTIVE persisted status + no loop = interrupted → parked.
+    assert.strictEqual(s.status, "awaiting-human");
+    assert.strictEqual(s.resumeStatus, "revising");
+  });
+
+  it("a persisted `finalizing` recovers as converged (the distill is stateless and re-runnable)", () => {
+    const s = sessionStateFromLayer({
+      status: "finalizing",
+      turns: [{ role: "critic", round: 2 }],
+    });
+    assert.strictEqual(s.status, "converged");
+    assert.strictEqual(s.round, 2);
+  });
+
+  it("derives a cap-park: awaiting-human whose last model turn is a critic at round >= maxRounds", () => {
+    const s = sessionStateFromLayer({
+      status: "awaiting-human",
+      maxRounds: 4,
+      turns: [
+        { role: "proposer", round: 4 },
+        { role: "critic", round: 4 },
+        // trailing human steering doesn't mask the cap-park
+        { role: "human" },
+      ],
+    });
+    assert.strictEqual(s.awaitReason, "cap-reached");
+    assert.strictEqual(
+      s.resumeStatus,
+      "revising",
+      "Resume keeps its round-extension semantics",
+    );
+  });
+
+  it("an awaiting-human below the cap recovers as a plain pause", () => {
+    const s = sessionStateFromLayer({
+      status: "awaiting-human",
+      maxRounds: 4,
+      turns: [
+        { role: "proposer", round: 2 },
+        { role: "critic", round: 2 },
+      ],
+    });
+    assert.strictEqual(s.awaitReason, "paused");
+    assert.strictEqual(s.resumeStatus, "proposing");
+  });
 });

@@ -4,9 +4,18 @@ import assert from "node:assert/strict";
 // In-memory idb-keyval so IDBSavedProjectsAdapter's read-merge-write can be
 // exercised without a real IndexedDB. The pure normalize* tests below don't
 // touch it.
-const idb = vi.hoisted(() => ({ store: new Map<string, unknown>() }));
+const idb = vi.hoisted(() => ({
+  store: new Map<string, unknown>(),
+  // Optional read latency, used to prove the in-tab write queue: with a slow
+  // `get`, two unserialized read-merge-writes would both read the SAME
+  // pre-state and the second write would clobber the first.
+  getDelay: null as (() => Promise<void>) | null,
+}));
 vi.mock("idb-keyval", () => ({
-  get: vi.fn(async (key: string) => idb.store.get(key)),
+  get: vi.fn(async (key: string) => {
+    if (idb.getDelay) await idb.getDelay();
+    return idb.store.get(key);
+  }),
   set: vi.fn(async (key: string, value: unknown) => {
     idb.store.set(key, value);
   }),
@@ -389,6 +398,7 @@ describe("IDBSavedProjectsAdapter.updateProjectRecord (read-merge-write)", () =>
 
   beforeEach(() => {
     idb.store.clear();
+    idb.getDelay = null;
   });
 
   it("REGRESSION: merges into the freshly-read record — a stale caller snapshot cannot clobber a concurrently-added layer", async () => {
@@ -504,6 +514,45 @@ describe("IDBSavedProjectsAdapter.updateProjectRecord (read-merge-write)", () =>
 
     assert.ok(result.success);
     assert.strictEqual(idb.store.get(KEY), before, "same-reference → no write");
+  });
+
+  it("serializes concurrent same-instance writes — overlapping read-merge-writes cannot lose an update", async () => {
+    // Two callbacks (e.g. the session loop's turn append and a control
+    // action's status write) can start their read-merge-write in the same
+    // tick. With slow reads and NO queue, both would read the same pre-state
+    // and the later write would silently drop the earlier one. The adapter's
+    // in-tab promise queue forces write 2 to read AFTER write 1 committed.
+    const adapter = new IDBSavedProjectsAdapter();
+    idb.store.set(KEY, [record("p1", [])]);
+    idb.getDelay = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+    const layerOf = (id: string) => ({
+      id,
+      kind: "brainstorm",
+      title: id,
+      turns: [],
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const [r1, r2] = await Promise.all([
+      adapter.updateProjectRecord("p1", (p) => ({
+        ...p,
+        layers: [...(p.layers ?? []), layerOf("first") as ProjectLayer],
+      })),
+      adapter.updateProjectRecord("p1", (p) => ({
+        ...p,
+        layers: [...(p.layers ?? []), layerOf("second") as ProjectLayer],
+      })),
+    ]);
+
+    assert.ok(r1.success);
+    assert.ok(r2.success);
+    const stored = idb.store.get(KEY) as Array<{ layers: ProjectLayer[] }>;
+    assert.deepStrictEqual(
+      stored[0].layers.map((l) => l.id),
+      ["first", "second"],
+      "both concurrent writes survive, in submission order",
+    );
   });
 
   it("hands the updater a record with SALVAGED layers (load-path parity)", async () => {

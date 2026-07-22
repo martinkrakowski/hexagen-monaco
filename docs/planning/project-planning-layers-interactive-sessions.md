@@ -272,9 +272,13 @@ The open questions above were resolved for the v1 build
   chat route as-is. Accepted consequence: the loop dies with the tab — the
   layer's persisted `status` stays non-terminal and the Plan phase shows an
   interrupted-session banner (Resume / End) on the next mount.
-- **Q1 — one model, two role prompts.** Both roles use the standard chat model
-  (`NEXT_PUBLIC_LLM_MODEL` fallback `gpt-4o-mini`); the proposer/critic split
-  is prompt-level (`fold.ts` preambles). No new model-config surface.
+- **Q1 — one model, two role prompts.** Both roles go through the standard
+  chat route, whose server-key (non-BYOK) arm pins the deployment's
+  `LLM_MODEL` secret and ignores the request's `model`/`temperature`/
+  `maxTokens` fields entirely (they are honored only by the BYOK proxy arm;
+  the client still sends `NEXT_PUBLIC_LLM_MODEL` for contract parity with the
+  governance chat). The proposer/critic split is prompt-level (`fold.ts`
+  preambles). No new model-config surface.
 - **Q2 — critic self-declared verdict.** The critic must end with
   `VERDICT: CONVERGED` or `VERDICT: CONTINUE` (case-insensitive, parsed from
   the trailing lines — `verdict.ts`). Missing/malformed verdict = CONTINUE
@@ -310,8 +314,24 @@ Build-level decisions that fell out of the implementation:
   (`originSession`, untouched by `set()`), guarded at accept-save by an exact
   spec-text match — so the new project gets the full brainstorm layer
   (`status: "done"`, `link: produced-manifest`) and an abandoned finalize
-  can't leak its session onto an unrelated import.
+  can't leak its session onto an unrelated import. The SOURCE layer on the
+  originating project is stamped `done` + linked by the accept-save too (via
+  `originSession.sourceProjectId`/`sourceLayerId`), NOT at Confirm-time:
+  Confirm routes through the workspace-exit guard dialog and the user may
+  cancel, so the layer stays `finalizing` (recoverable) until a manifest
+  actually exists. The review panel likewise stays open across Confirm.
+- **Steering is first-class at any point.** The steering input is available
+  throughout a live session (not only while parked); a steering turn persists
+  immediately and folds into the next model turn. The seed brief is
+  `turns[0]` and is folded only as the `## Brief` — never doubled as a
+  steering note.
 - **Interrupted-session recovery maps a persisted ACTIVE status to
   `awaiting-human` (paused)** with the interrupted status as `resumeStatus`:
   Resume re-runs the interrupted role (a duplicate proposal is recoverable; a
-  skipped critic verdict is not).
+  skipped critic verdict is not). Recovery derives the rest without new
+  schema fields: a persisted `revising` resumes one round AHEAD of the
+  highest turn stamp (the continue-critique write is one round behind the
+  live counter), a persisted `finalizing` recovers as `converged` (the
+  distill is stateless and re-runnable), and a persisted `awaiting-human`
+  whose last model turn is a critic at `round >= maxRounds` recovers as a
+  `cap-reached` park (preserving Resume's round-extension semantics).

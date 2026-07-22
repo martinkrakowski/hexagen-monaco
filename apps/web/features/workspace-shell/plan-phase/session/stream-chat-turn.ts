@@ -38,6 +38,10 @@ export async function streamChatTurn(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         messages: [{ role: "user", content: message }],
+        // NOTE: the server-key (non-BYOK) route arm pins the deployment's
+        // LLM_MODEL and ignores model/temperature/maxTokens entirely — these
+        // fields are honored only by the BYOK proxy arm. Kept for request
+        // parity with the governance chat's contract.
         model,
         temperature: 0.7,
         maxTokens: 2048,

@@ -75,13 +75,14 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
     forceConverge,
     end,
     beginFinalize,
-    completeFinalize,
     cancelFinalize,
+    reset,
   } = session;
 
   const [seedText, setSeedText] = useState("");
   const [steeringText, setSteeringText] = useState("");
   const [isStarting, setIsStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const [finalize, setFinalize] = useState<FinalizeUiState>({ phase: "idle" });
   const distillAbortRef = useRef<AbortController | null>(null);
   const pendingManifest = usePendingManifest();
@@ -100,9 +101,18 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
   const handleStart = async () => {
     if (!seedText.trim() || isStarting) return;
     setIsStarting(true);
+    setStartError(null);
     try {
-      await start(seedText);
-      setSeedText("");
+      const started = await start(seedText);
+      // Only a SUCCESSFUL start clears the textarea — a failed layer write
+      // must never silently discard the user's typed brief.
+      if (started) {
+        setSeedText("");
+      } else {
+        setStartError(
+          "Couldn't start the session — the layer could not be saved. Your brief is still here; please try again.",
+        );
+      }
     } finally {
       setIsStarting(false);
     }
@@ -118,6 +128,16 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
 
   const handleEndInterrupted = (layer: ProjectLayer) => {
     attach(layer);
+    void end();
+  };
+
+  // End must also tear down any finalize in progress: an in-flight distill
+  // completing into the review panel of an already-ended session would let
+  // Confirm hand off without any layer left to link.
+  const handleEnd = () => {
+    distillAbortRef.current?.abort();
+    distillAbortRef.current = null;
+    setFinalize({ phase: "idle" });
     void end();
   };
 
@@ -158,7 +178,7 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
   };
 
   // The EXPLICIT confirm — the only place that hands off and navigates.
-  const handleFinalizeConfirm = async () => {
+  const handleFinalizeConfirm = () => {
     if (finalize.phase !== "review" || !activeLayerId) return;
     const specText = finalize.text.trim();
     if (!specText) return;
@@ -176,9 +196,13 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
     // travel through sessionStorage.
     sessionStorage.setItem("import_spec_content", specText);
     sessionStorage.setItem("import_spec_original_content", specText);
-    // Mark the SOURCE layer done + stamp its produced-manifest link.
-    await completeFinalize();
-    setFinalize({ phase: "idle" });
+    // Deliberately NO terminal stamp here: the source layer stays
+    // "finalizing" until the import flow's accept-save marks it done + linked
+    // (via originSession) — the hand-off isn't successful until a manifest
+    // actually exists. The review panel also stays open, because
+    // onNavigateToImport routes through the workspace-exit guard dialog and
+    // the user may cancel it; a premature done-stamp + panel reset stranded a
+    // terminal layer with no manifest and no way back into the review.
     onNavigateToImport();
   };
 
@@ -239,6 +263,11 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
             rows={4}
             disabled={isStarting}
           />
+          {startError && (
+            <p role="alert" className="text-sm text-destructive">
+              {startError}
+            </p>
+          )}
           <Button
             onClick={() => void handleStart()}
             disabled={!seedText.trim() || isStarting}
@@ -310,24 +339,31 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
               force convergence, or end the session.
             </p>
           )}
-          <div className="space-y-2">
-            <Textarea
-              value={steeringText}
-              onChange={(e) => setSteeringText(e.target.value)}
-              placeholder="Steer the session (folded into the next model turn)…"
-              aria-label="Steering note"
-              rows={2}
-            />
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => void handleAddSteering()}
-              disabled={!steeringText.trim()}
-            >
-              <Send className="w-4 h-4 mr-2" />
-              Add steering turn
-            </Button>
-          </div>
+        </div>
+      )}
+
+      {/* The human is a first-class author: steering is available at ANY
+          point of a live session (design doc), not just while parked — the
+          turn persists immediately and folds into the next model turn. Hidden
+          only once the session is terminal. */}
+      {status !== "done" && (
+        <div className="space-y-2">
+          <Textarea
+            value={steeringText}
+            onChange={(e) => setSteeringText(e.target.value)}
+            placeholder="Steer the session (folded into the next model turn)…"
+            aria-label="Steering note"
+            rows={2}
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => void handleAddSteering()}
+            disabled={!steeringText.trim()}
+          >
+            <Send className="w-4 h-4 mr-2" />
+            Add steering turn
+          </Button>
         </div>
       )}
 
@@ -396,7 +432,8 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
 
       {finalize.phase === "error" && (
         <p role="alert" className="text-sm text-destructive">
-          Finalize failed: {finalize.message}
+          Finalize failed: {finalize.message} — the session is still converged;
+          you can retry.
         </p>
       )}
 
@@ -423,14 +460,18 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
             Force converge
           </Button>
         )}
-        {status === "converged" && finalize.phase === "idle" && (
-          <Button size="sm" onClick={() => void handleFinalizeStart()}>
-            <Sparkles className="w-4 h-4 mr-2" />
-            Finalize → Generate manifest
-          </Button>
-        )}
+        {/* Also rendered in the "error" phase: a transient distill failure
+            (rate limit, network) must leave a retry path — the session is
+            back at converged, so finalizing again is always safe. */}
+        {status === "converged" &&
+          (finalize.phase === "idle" || finalize.phase === "error") && (
+            <Button size="sm" onClick={() => void handleFinalizeStart()}>
+              <Sparkles className="w-4 h-4 mr-2" />
+              Finalize → Generate manifest
+            </Button>
+          )}
         {status !== "done" && (
-          <Button size="sm" variant="secondary" onClick={() => void end()}>
+          <Button size="sm" variant="secondary" onClick={handleEnd}>
             <Square className="w-4 h-4 mr-2" />
             End session
           </Button>
@@ -438,9 +479,16 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
       </div>
 
       {status === "done" && (
-        <p className="text-sm text-muted-foreground">
-          Session complete. The transcript is stored as a planning layer below.
-        </p>
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Session complete. The transcript is stored as a planning layer
+            below.
+          </p>
+          <Button size="sm" variant="secondary" onClick={reset}>
+            <Sparkles className="w-4 h-4 mr-2" />
+            Start another session
+          </Button>
+        </div>
       )}
     </section>
   );

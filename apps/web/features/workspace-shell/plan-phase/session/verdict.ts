@@ -20,10 +20,15 @@ const VERDICT_LINE = /^\W*verdict\W*[:\-]\W*(converged|continue)\b/i;
 
 export function parseVerdict(content: string): ParsedVerdict {
   const lines = content.split("\n");
+  // Drop trailing blank/whitespace lines FIRST so the scan window measures
+  // content lines — a well-formed verdict followed by several trailing blank
+  // lines must not read as malformed.
+  let end = lines.length;
+  while (end > 0 && lines[end - 1].trim() === "") end--;
   // Scan from the end: the verdict is contractually the LAST line, but models
   // sometimes append sign-off fluff; only the last few lines are considered so
   // an early "VERDICT: CONVERGED" quoted mid-critique can't end the session.
-  const tail = lines.slice(-5);
+  const tail = lines.slice(Math.max(0, end - 5), end);
   for (let i = tail.length - 1; i >= 0; i--) {
     const line = tail[i].trim();
     if (!line) continue;

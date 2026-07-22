@@ -39,7 +39,12 @@ export function buildFold(input: FoldInput): string {
 
   const lastProposal = findLast(turns, (t) => t.role === "proposer");
   const lastCritique = findLast(turns, (t) => t.role === "critic");
-  const steering = humanTurnsSinceLastModelTurn(turns);
+  // turns[0] is the session's seed turn (start() creates the layer with the
+  // seed first; attach() reuses the stored order) — it is already the
+  // "## Brief" section, so it must not ALSO fold in as "Human steering"
+  // (duplicated brief, '- '-mangled multi-line text, skewed "must be honored"
+  // framing on the very first proposer turn).
+  const steering = humanTurnsSinceLastModelTurn(turns.slice(1));
 
   const sections: string[] = [
     role === "proposer" ? PROPOSER_PREAMBLE : CRITIC_PREAMBLE,

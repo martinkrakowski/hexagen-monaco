@@ -75,5 +75,20 @@ describe("parseVerdict", () => {
       parseVerdict("x\nVERDICT: CONVERGED\n\n  \n").verdict,
       "converged",
     );
+    // Many trailing blanks must not push the verdict out of the scan window.
+    assert.deepStrictEqual(
+      parseVerdict("x\nVERDICT: CONVERGED\n\n\n\n\n\n\n"),
+      {
+        verdict: "converged",
+        explicit: true,
+      },
+    );
+  });
+
+  it("tolerates CRLF line endings", () => {
+    assert.deepStrictEqual(parseVerdict("Good.\r\nVERDICT: CONVERGED\r\n"), {
+      verdict: "converged",
+      explicit: true,
+    });
   });
 });

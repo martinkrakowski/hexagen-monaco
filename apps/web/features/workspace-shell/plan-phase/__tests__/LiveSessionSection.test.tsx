@@ -44,7 +44,7 @@ function makeSession(
     isRunning: false,
     seed: "",
     turns: [],
-    start: vi.fn(async () => {}),
+    start: vi.fn(async () => true),
     attach: vi.fn(),
     pause: vi.fn(async () => {}),
     resume: vi.fn(async () => {}),
@@ -52,8 +52,8 @@ function makeSession(
     forceConverge: vi.fn(async () => {}),
     end: vi.fn(async () => {}),
     beginFinalize: vi.fn(async () => {}),
-    completeFinalize: vi.fn(async () => {}),
     cancelFinalize: vi.fn(async () => {}),
+    reset: vi.fn(),
     ...overrides,
   };
 }
@@ -130,6 +130,23 @@ describe("LiveSessionSection", () => {
     );
   });
 
+  it("a failed start surfaces an inline error and keeps the typed brief", async () => {
+    const session = makeSession({ start: vi.fn(async () => false) });
+    renderSection({ session });
+    const textarea = document.querySelector(
+      'textarea[aria-label="Session brief"]',
+    ) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "Build a todo app" } });
+    fireEvent.click(button(/Start live session/));
+
+    await waitFor(() => {
+      const alert = document.querySelector('[role="alert"]');
+      assert.match(alert?.textContent ?? "", /Couldn't start the session/);
+    });
+    // The brief the user typed is NOT discarded on failure.
+    assert.strictEqual(textarea.value, "Build a todo app");
+  });
+
   it("shows the interrupted banner for a persisted non-terminal session; Resume attaches and resumes", async () => {
     const interrupted = layer({ id: "L7", status: "critiquing" });
     const session = makeSession();
@@ -195,6 +212,12 @@ describe("LiveSessionSection", () => {
     assert.match(bodyText(), /partial critique/);
     assert.ok(button(/Pause/));
     noButton(/Resume/);
+    // Steering is first-class at ANY point, not only while parked — a note
+    // added mid-run folds into the next model turn.
+    assert.ok(
+      document.querySelector('textarea[aria-label="Steering note"]'),
+      "steering input available while running",
+    );
   });
 
   it("awaiting-human exposes steering, Resume, and Force converge; steering text is sent", async () => {
@@ -274,13 +297,9 @@ describe("LiveSessionSection", () => {
     assert.strictEqual(onNavigateToImport.mock.calls.length, 0);
     assert.strictEqual(usePendingManifest.getState().originSession, null);
     assert.strictEqual(sessionStorage.getItem("import_spec_content"), null);
-    assert.strictEqual(
-      (session.completeFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
-      0,
-    );
   });
 
-  it("Confirm hands off the EDITED spec + session provenance, completes finalize, then navigates", async () => {
+  it("Confirm hands off the EDITED spec + session provenance and navigates; the review stays open", async () => {
     const onNavigateToImport = vi.fn();
     const turns = [
       { id: "t1", author: "You", content: "the brief", role: "human" as const },
@@ -325,10 +344,11 @@ describe("LiveSessionSection", () => {
       sessionStorage.getItem("import_spec_content"),
       "name: edited-by-human",
     );
-    assert.strictEqual(
-      (session.completeFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
-      1,
-    );
+    // The review panel is NOT torn down: the workspace's navigation guard
+    // dialog can cancel the navigation, and the user must land back on an
+    // intact review, not a stranded session. The source layer is stamped done
+    // by the import flow's accept-save (not here).
+    assert.ok(document.querySelector('[data-testid="finalize-review"]'));
   });
 
   it("Cancel in review abandons the finalize without navigation or hand-off", async () => {
@@ -377,6 +397,56 @@ describe("LiveSessionSection", () => {
     });
     assert.strictEqual(
       (session.cancelFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
+      1,
+    );
+    // A transient distill failure must leave a retry path.
+    assert.ok(
+      button(/Finalize → Generate manifest/),
+      "Finalize is offered again after a failed distillation",
+    );
+  });
+
+  it("End session during the finalize review abandons the review and ends the session", async () => {
+    const onNavigateToImport = vi.fn();
+    const session = makeSession({
+      sessionState: state({ status: "converged" }),
+      activeLayerId: "L1",
+      seed: "s",
+      turns: [],
+    });
+    renderSection({ session, onNavigateToImport });
+
+    fireEvent.click(button(/Finalize → Generate manifest/));
+    await waitFor(() =>
+      assert.ok(document.querySelector('[data-testid="finalize-review"]')),
+    );
+    fireEvent.click(button(/End session/));
+
+    await waitFor(() =>
+      assert.strictEqual(
+        (session.end as ReturnType<typeof vi.fn>).mock.calls.length,
+        1,
+      ),
+    );
+    // The stale review panel is torn down with the session.
+    assert.strictEqual(
+      document.querySelector('[data-testid="finalize-review"]'),
+      null,
+    );
+    assert.strictEqual(onNavigateToImport.mock.calls.length, 0);
+  });
+
+  it("the done panel offers Start another session, which resets the hook", () => {
+    const session = makeSession({
+      sessionState: state({ status: "done" }),
+      activeLayerId: "L1",
+    });
+    renderSection({ session });
+
+    assert.match(bodyText(), /Session complete/);
+    fireEvent.click(button(/Start another session/));
+    assert.strictEqual(
+      (session.reset as ReturnType<typeof vi.fn>).mock.calls.length,
       1,
     );
   });

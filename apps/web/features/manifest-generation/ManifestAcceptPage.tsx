@@ -16,6 +16,7 @@ import type { ViewTab } from "./ManifestPreview";
 import { useContextChatPanel } from "./store/useContextChatPanel";
 import { useSavedProjects } from "../../app/hooks/useSavedProjects";
 import { usePendingManifest } from "./store/usePendingManifest";
+import { deriveInitialLayers, sessionMatchesSpec } from "./accept-save-layers";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import type { ProjectSpec } from "@hexagen/project-configuration";
 import { parseYamlToViewData } from "@hexagen/manifest-generation";
@@ -29,7 +30,11 @@ const TAB_CONFIG: { id: ViewTab; icon: typeof Network; label: string }[] = [
 export function ManifestAcceptPage() {
   const router = useRouter();
   const pendingManifest = usePendingManifest();
-  const { saveProject, isLoading: isLoadingProjects } = useSavedProjects();
+  const {
+    saveProject,
+    updateLayer,
+    isLoading: isLoadingProjects,
+  } = useSavedProjects();
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
@@ -100,40 +105,11 @@ export function ManifestAcceptPage() {
       const importedSpec = pendingManifest.originSpecText;
       // Live-session provenance (Plan phase finalize): when the spec the
       // import flow consumed is EXACTLY the distilled text the user confirmed,
-      // attach the FULL brainstorm transcript instead of a single "Imported
-      // project spec" turn. The equality guard means an abandoned finalize
-      // can't leak its session onto an unrelated later import.
+      // deriveInitialLayers attaches the FULL brainstorm transcript instead of
+      // a single "Imported project spec" turn (guard logic + shapes live in
+      // accept-save-layers.ts).
       const session = pendingManifest.originSession;
-      const sessionMatchesSpec =
-        session !== null &&
-        importedSpec !== null &&
-        session.specText.trim() === importedSpec.trim();
-      const initialLayers = sessionMatchesSpec
-        ? [
-            {
-              kind: "brainstorm" as const,
-              title: "Live planning session",
-              turns: session.turns.map((t) => ({ ...t })),
-              status: "done" as const,
-              link: { type: "produced-manifest" as const, at: Date.now() },
-            },
-          ]
-        : importedSpec?.trim()
-          ? [
-              {
-                kind: "brainstorm" as const,
-                title: "Imported project spec",
-                turns: [
-                  {
-                    id: crypto.randomUUID(),
-                    author: "Imported",
-                    content: importedSpec,
-                    at: Date.now(),
-                  },
-                ],
-              },
-            ]
-          : [];
+      const initialLayers = deriveInitialLayers(importedSpec, session);
 
       // Await the (async IndexedDB) write before navigating so the wizard
       // reliably finds the project; navigating early lost the approved project.
@@ -149,6 +125,20 @@ export function ManifestAcceptPage() {
         return;
       }
 
+      // Stamp the SOURCE session layer (on the ORIGINATING project) done +
+      // linked only now — after the hand-off actually produced a saved
+      // manifest. Confirm-time stamping would mark the session done even when
+      // the user cancels at the workspace guard dialog or the import flow
+      // never completes. Best-effort: an unknown project/layer id (deleted
+      // meanwhile) returns false without throwing, and a failed stamp must
+      // not fail the accept-save itself.
+      if (sessionMatchesSpec(session, importedSpec)) {
+        await updateLayer(session.sourceProjectId, session.sourceLayerId, {
+          status: "done",
+          link: { type: "produced-manifest", at: Date.now() },
+        });
+      }
+
       isNavigatingAway.current = true;
       pendingManifest.clear();
       // Clear the import spec so the next new project starts from a blank canvas.
@@ -162,7 +152,15 @@ export function ManifestAcceptPage() {
       // otherwise release it so the user can retry.
       if (!isNavigatingAway.current) setIsSaving(false);
     }
-  }, [canSave, canAccept, viewData, pendingManifest, saveProject, router]);
+  }, [
+    canSave,
+    canAccept,
+    viewData,
+    pendingManifest,
+    saveProject,
+    updateLayer,
+    router,
+  ]);
 
   // Wrapper accepted by ManifestPreview's onApprove (string) and the footer
   // button's onClick (MouseEvent). Both paths converge here and both are

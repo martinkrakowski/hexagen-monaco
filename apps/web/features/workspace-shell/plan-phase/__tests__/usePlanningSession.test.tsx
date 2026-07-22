@@ -32,13 +32,16 @@ function sseBody(frames: string[]): ReadableStream<Uint8Array> {
 }
 
 let scripts: Script[] = [];
-let requests: Array<{ message: string }> = [];
+let requests: Array<{ message: string; signal: AbortSignal | undefined }> = [];
 
 function installFetch() {
   global.fetch = vi.fn(
     async (_url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const body = JSON.parse(String(init?.body));
-      requests.push({ message: body.messages[0].content });
+      requests.push({
+        message: body.messages[0].content,
+        signal: init?.signal ?? undefined,
+      });
       const script = scripts.shift();
       if (!script) throw new Error("Unscripted chat request");
       if (script.kind === "hang") {
@@ -78,12 +81,14 @@ function installFetch() {
 function makeMutations() {
   const layers = new Map<string, ProjectLayer>();
   let nextId = 0;
-  const addLayer = vi.fn(async (_projectId: string, layer: unknown) => {
-    const id = `layer-${++nextId}`;
-    const l = layer as Omit<ProjectLayer, "id" | "createdAt" | "updatedAt">;
-    layers.set(id, { ...l, id, createdAt: 1, updatedAt: 1 } as ProjectLayer);
-    return id;
-  });
+  const addLayer = vi.fn(
+    async (_projectId: string, layer: unknown): Promise<string | null> => {
+      const id = `layer-${++nextId}`;
+      const l = layer as Omit<ProjectLayer, "id" | "createdAt" | "updatedAt">;
+      layers.set(id, { ...l, id, createdAt: 1, updatedAt: 1 } as ProjectLayer);
+      return id;
+    },
+  );
   const appendLayerTurn = vi.fn(
     async (
       _projectId: string,
@@ -189,6 +194,25 @@ describe("usePlanningSession", () => {
     assert.strictEqual(result.current.turns.length, 3);
     assert.strictEqual(result.current.isRunning, false);
     assert.strictEqual(result.current.draft, null);
+
+    // The seed lives in "## Brief" only — it must NOT be double-folded as a
+    // "Human steering" note (the seed turn is turns[0], excluded from the
+    // steering scan).
+    assert.doesNotMatch(requests[0].message, /Human steering/);
+  });
+
+  it("start() resolves false and keeps no session when the layer create fails", async () => {
+    const { result } = renderSession({
+      addLayer: vi.fn(async () => null),
+    });
+    let started: boolean | undefined;
+    await act(async () => {
+      started = await result.current.start("Build a todo app");
+    });
+    assert.strictEqual(started, false);
+    assert.strictEqual(result.current.sessionState, null);
+    assert.strictEqual(result.current.activeLayerId, null);
+    assert.strictEqual(requests.length, 0, "no model turn without a layer");
   });
 
   it("folds the seed and prior turns into each request; CONTINUE advances the round", async () => {
@@ -295,6 +319,20 @@ describe("usePlanningSession", () => {
     assert.ok(statusWrites.includes("awaiting-human"));
   });
 
+  it("an HTTP error response parks the session at awaiting-human with the status", async () => {
+    scripts = [{ kind: "http-error", status: 429 }];
+    const { result } = renderSession();
+
+    await act(async () => {
+      await result.current.start("seed");
+    });
+    await waitFor(() =>
+      assert.strictEqual(result.current.sessionState?.status, "awaiting-human"),
+    );
+    assert.strictEqual(result.current.sessionState?.awaitReason, "error");
+    assert.match(result.current.sessionState?.errorMessage ?? "", /429/);
+  });
+
   it("a failed turn persist parks the session at awaiting-human", async () => {
     scripts = [{ kind: "reply", content: "Proposal v1" }];
     const { result } = renderSession({
@@ -343,6 +381,114 @@ describe("usePlanningSession", () => {
     });
     await waitFor(() =>
       assert.strictEqual(result.current.sessionState?.status, "converged"),
+    );
+  });
+
+  it("pause during an in-flight turn persist reconciles the durable turn — no duplicate on resume", async () => {
+    // The proposer turn's appendLayerTurn is gated so pause() can land while
+    // the persist is in flight (the F2 race: the turn IS durable, so the
+    // superseding action must apply it exactly once).
+    const mutations = makeMutations();
+    let releaseAppend!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseAppend = resolve;
+    });
+    const realAppend = mutations.appendLayerTurn;
+    const gatedAppend = vi.fn(
+      async (...args: Parameters<typeof realAppend>) => {
+        await gate;
+        return realAppend(...args);
+      },
+    );
+    scripts = [{ kind: "reply", content: "Proposal v1" }];
+    const { result } = renderSession({
+      ...mutations,
+      appendLayerTurn: gatedAppend,
+    });
+
+    await act(async () => {
+      await result.current.start("seed");
+    });
+    await waitFor(() => assert.strictEqual(gatedAppend.mock.calls.length, 1));
+
+    await act(async () => {
+      const pausing = result.current.pause();
+      releaseAppend();
+      await pausing;
+    });
+
+    // The persisted proposal was reconciled into the transcript...
+    assert.strictEqual(result.current.turns.length, 2);
+    assert.strictEqual(result.current.turns[1].content, "Proposal v1");
+    // ...and the park points at the CRITIC (the proposal is done).
+    assert.strictEqual(result.current.sessionState?.status, "awaiting-human");
+    assert.strictEqual(result.current.sessionState?.awaitReason, "paused");
+    assert.strictEqual(result.current.sessionState?.resumeStatus, "critiquing");
+
+    // Resume runs ONLY the critic — the proposer turn is not re-run.
+    scripts = [{ kind: "reply", content: CONVERGED_CRITIQUE }];
+    await act(async () => {
+      await result.current.resume();
+    });
+    await waitFor(() =>
+      assert.strictEqual(result.current.sessionState?.status, "converged"),
+    );
+    assert.strictEqual(gatedAppend.mock.calls.length, 2, "no duplicate turn");
+    assert.strictEqual(requests.length, 2);
+  });
+
+  it("unmount aborts the in-flight stream and supersedes the loop (no zombie writes)", async () => {
+    scripts = [{ kind: "hang" }];
+    const mutations = makeMutations();
+    const { result, unmount } = renderSession(mutations);
+
+    await act(async () => {
+      await result.current.start("seed");
+    });
+    await waitFor(() => assert.strictEqual(result.current.isRunning, true));
+    assert.strictEqual(requests.length, 1);
+    assert.strictEqual(requests[0].signal?.aborted, false);
+
+    unmount();
+    assert.strictEqual(
+      requests[0].signal?.aborted,
+      true,
+      "teardown aborts the fetch",
+    );
+    // Allow the rejected stream promise to settle: the superseded loop must
+    // not persist anything afterwards.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.strictEqual(mutations.appendLayerTurn.mock.calls.length, 0);
+  });
+
+  it("logger defaults to console when none is injected (Q2: malformed verdict is logged)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    scripts = [
+      { kind: "reply", content: "Proposal v1" },
+      { kind: "reply", content: "critique without any verdict" },
+      { kind: "reply", content: "Proposal v2" },
+      { kind: "reply", content: CONVERGED_CRITIQUE },
+    ];
+    const mutations = makeMutations();
+    const { result } = renderHook(() =>
+      usePlanningSession({
+        projectId: "p1",
+        addLayer: mutations.addLayer,
+        appendLayerTurn: mutations.appendLayerTurn,
+        updateLayer: mutations.updateLayer,
+        model: "test-model",
+        // no logger injected — the real Plan-phase wiring passes none
+      }),
+    );
+    await act(async () => {
+      await result.current.start("seed");
+    });
+    await waitFor(() =>
+      assert.strictEqual(result.current.sessionState?.status, "converged"),
+    );
+    assert.ok(
+      warnSpy.mock.calls.some(([msg]) => /VERDICT/.test(String(msg))),
+      "default logger is console",
     );
   });
 
@@ -436,7 +582,54 @@ describe("usePlanningSession", () => {
     assert.strictEqual(result.current.isRunning, false);
   });
 
-  it("completeFinalize stamps the produced-manifest link in the same write as the done status", async () => {
+  it("attach() + resume continues an interrupted session at its persisted round with the stored transcript folded", async () => {
+    const interrupted: ProjectLayer = {
+      id: "L9",
+      kind: "brainstorm",
+      title: "Live session: seed",
+      createdAt: 1,
+      updatedAt: 2,
+      status: "critiquing",
+      maxRounds: 4,
+      turns: [
+        { id: "t1", author: "You", content: "seed brief", role: "human" },
+        {
+          id: "t2",
+          author: "Proposer",
+          content: "Stored proposal p1",
+          role: "proposer",
+          round: 2,
+        },
+      ],
+    };
+    scripts = [{ kind: "reply", content: CONVERGED_CRITIQUE }];
+    const { result, mutations } = renderSession();
+    // The persisted layer exists in storage (attach never creates it).
+    mutations.layers.set("L9", interrupted);
+
+    act(() => {
+      result.current.attach(interrupted);
+    });
+    await act(async () => {
+      await result.current.resume();
+    });
+    await waitFor(() =>
+      assert.strictEqual(result.current.sessionState?.status, "converged"),
+    );
+
+    // The single resumed turn is the CRITIC, at the persisted round, and its
+    // fold carries the stored proposal — not a fresh round-1 restart.
+    assert.strictEqual(requests.length, 1);
+    assert.match(requests[0].message, /Stored proposal p1/);
+    assert.match(requests[0].message, /Round 2 of 4/);
+    assert.strictEqual(result.current.sessionState?.round, 2);
+    const [, layerId, turn] = mutations.appendLayerTurn.mock.calls[0];
+    assert.strictEqual(layerId, "L9");
+    assert.strictEqual(turn.role, "critic");
+    assert.strictEqual(turn.round, 2);
+  });
+
+  it("beginFinalize persists finalizing; reset detaches so a new session can start", async () => {
     scripts = [
       { kind: "reply", content: "Proposal v1" },
       { kind: "reply", content: CONVERGED_CRITIQUE },
@@ -453,16 +646,32 @@ describe("usePlanningSession", () => {
       await result.current.beginFinalize();
     });
     assert.strictEqual(result.current.sessionState?.status, "finalizing");
-
-    await act(async () => {
-      await result.current.completeFinalize();
-    });
-    assert.strictEqual(result.current.sessionState?.status, "done");
-    const doneWrite = mutations.updateLayer.mock.calls.find(
-      (c) => c[2].status === "done",
+    assert.ok(
+      mutations.updateLayer.mock.calls.some(
+        (c) => c[2].status === "finalizing",
+      ),
+      "finalizing status persisted",
     );
-    assert.ok(doneWrite, "terminal status persisted");
-    assert.strictEqual(doneWrite![2].link.type, "produced-manifest");
+
+    act(() => {
+      result.current.reset();
+    });
+    assert.strictEqual(result.current.sessionState, null);
+    assert.strictEqual(result.current.activeLayerId, null);
+    assert.strictEqual(result.current.turns.length, 0);
+
+    // The hook accepts a fresh start after reset (stateRef gate cleared).
+    scripts = [
+      { kind: "reply", content: "Proposal v1" },
+      { kind: "reply", content: CONVERGED_CRITIQUE },
+    ];
+    await act(async () => {
+      assert.strictEqual(await result.current.start("second seed"), true);
+    });
+    await waitFor(() =>
+      assert.strictEqual(result.current.sessionState?.status, "converged"),
+    );
+    assert.strictEqual(mutations.addLayer.mock.calls.length, 2);
   });
 
   it("cancelFinalize returns to converged (review dismissed)", async () => {

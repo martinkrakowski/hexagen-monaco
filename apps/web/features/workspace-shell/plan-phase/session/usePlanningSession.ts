@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProjectLayer, ProjectLayerTurn } from "@hexagen/shared";
 
 import type {
@@ -61,7 +61,9 @@ export interface UsePlanningSessionReturn {
   /** True while the client loop is driving model turns. */
   readonly isRunning: boolean;
   readonly seed: string;
-  start: (seed: string) => Promise<void>;
+  /** Resolves false when the session layer could not be created (the typed
+   * brief must NOT be discarded — the caller surfaces an inline error). */
+  start: (seed: string) => Promise<boolean>;
   /** Attach to a persisted (possibly interrupted) session layer. */
   attach: (layer: ProjectLayer) => void;
   pause: () => Promise<void>;
@@ -71,10 +73,11 @@ export interface UsePlanningSessionReturn {
   end: () => Promise<void>;
   /** converged → finalizing (persisted). */
   beginFinalize: () => Promise<void>;
-  /** finalizing → done, stamping the produced-manifest link. */
-  completeFinalize: () => Promise<void>;
   /** finalizing → converged (finalize review cancelled/failed). */
   cancelFinalize: () => Promise<void>;
+  /** Detach from a finished session so a new one can be started. The layer
+   * stays persisted; only the hook's tracking is cleared. */
+  reset: () => void;
   /** Persisted turns as the loop sees them (fresh, not render-cycle bound). */
   readonly turns: readonly ProjectLayerTurn[];
 }
@@ -91,8 +94,12 @@ export interface UsePlanningSessionReturn {
 export function usePlanningSession(
   options: UsePlanningSessionOptions,
 ): UsePlanningSessionReturn {
-  const { projectId, addLayer, appendLayerTurn, updateLayer, logger } = options;
+  const { projectId, addLayer, appendLayerTurn, updateLayer } = options;
   const model = options.model ?? MODEL_NAME;
+  // Default to console so the decided Q2 behavior (malformed verdict is
+  // "treated as CONTINUE and logged") holds in the real app, where the
+  // Plan-phase wiring injects no logger.
+  const logger = options.logger ?? console;
 
   const [sessionState, setSessionState] = useState<PlanningSessionState | null>(
     null,
@@ -111,6 +118,30 @@ export function usePlanningSession(
   const abortRef = useRef<AbortController | null>(null);
   // Monotonic generation: bumping it supersedes (cancels) any running loop.
   const generationRef = useRef(0);
+  // The turn persist currently in flight (if any). A superseding control
+  // action (pause/force-converge/end) can land DURING the awaited
+  // appendLayerTurn — the turn is then durably persisted but the superseded
+  // loop must not apply it. The superseding action awaits this promise and
+  // reconciles (pushTurn + advance state) so turnsRef matches storage and a
+  // later resume can't re-run the already-persisted role.
+  const pendingAppendRef = useRef<Promise<{
+    turn: ProjectLayerTurn;
+    next: PlanningSessionState;
+  } | null> | null>(null);
+
+  // Unmount teardown: the Plan phase is a conditional whole-shell swap, so
+  // without this a phase switch/navigation leaves a headless "zombie" loop
+  // streaming turns (burning quota) and writing to storage — and Resume from
+  // the interrupted banner would then start a SECOND loop against the same
+  // layer. Parking semantics are free: the persisted non-terminal status
+  // already yields the interrupted banner on the next mount.
+  useEffect(() => {
+    return () => {
+      generationRef.current += 1;
+      abortRef.current?.abort();
+      abortRef.current = null;
+    };
+  }, []);
 
   const applyState = useCallback((next: PlanningSessionState) => {
     stateRef.current = next;
@@ -207,34 +238,45 @@ export function usePlanningSession(
           event = { type: "PROPOSAL_DONE" as const };
         }
         const next = planningSessionReducer(state, event);
-        const turnId = await appendLayerTurn(
-          projectId,
-          layerId,
-          {
-            author: role === "critic" ? "Critic" : "Proposer",
+        const author = role === "critic" ? "Critic" : "Proposer";
+        // Tracked in pendingAppendRef so a superseding control action that
+        // lands DURING this await can reconcile the durable outcome.
+        const appendPromise = (async () => {
+          const turnId = await appendLayerTurn(
+            projectId,
+            layerId,
+            { author, content: result.content, role, round: state.round },
+            { status: next.status },
+          );
+          if (turnId === null) return null;
+          const turn: ProjectLayerTurn = {
+            id: turnId,
+            author,
             content: result.content,
             role,
             round: state.round,
-          },
-          { status: next.status },
-        );
+            at: Date.now(),
+          };
+          return { turn, next };
+        })();
+        pendingAppendRef.current = appendPromise;
+        const appended = await appendPromise;
+        if (pendingAppendRef.current === appendPromise) {
+          pendingAppendRef.current = null;
+        }
+        // Superseded mid-persist: the superseding action (which bumped the
+        // generation synchronously before this continuation ran) owns the
+        // reconciliation via the promise it captured — don't double-apply.
         if (!isCurrent()) return;
-        if (turnId === null) {
+        if (appended === null) {
           await failToAwaitingHuman(
             "The turn could not be saved — the session is paused.",
           );
           return;
         }
-        pushTurn({
-          id: turnId,
-          author: role === "critic" ? "Critic" : "Proposer",
-          content: result.content,
-          role,
-          round: state.round,
-          at: Date.now(),
-        });
+        pushTurn(appended.turn);
         setDraft(null);
-        applyState(next);
+        applyState(appended.next);
       }
     } finally {
       if (generationRef.current === generation) {
@@ -253,9 +295,9 @@ export function usePlanningSession(
   ]);
 
   const start = useCallback(
-    async (seedText: string) => {
+    async (seedText: string): Promise<boolean> => {
       const trimmed = seedText.trim();
-      if (!projectId || !trimmed || stateRef.current !== null) return;
+      if (!projectId || !trimmed || stateRef.current !== null) return false;
 
       const initial = initialSessionState(DEFAULT_MAX_ROUNDS);
       const seedTurn: ProjectLayerTurn = {
@@ -275,7 +317,9 @@ export function usePlanningSession(
         status: initial.status,
         maxRounds: initial.maxRounds,
       });
-      if (layerId === null) return; // persistError surfaced by the lifecycle hook
+      // false = the caller must keep the typed brief and surface an error
+      // (the lifecycle hook's persistError carries the failure detail).
+      if (layerId === null) return false;
 
       layerIdRef.current = layerId;
       setActiveLayerId(layerId);
@@ -285,6 +329,7 @@ export function usePlanningSession(
       setTurns(turnsRef.current);
       applyState(initial);
       void runLoop();
+      return true;
     },
     [projectId, addLayer, applyState, runLoop],
   );
@@ -309,20 +354,41 @@ export function usePlanningSession(
     [applyState],
   );
 
+  // A control action can land while the loop is awaiting appendLayerTurn —
+  // the turn IS (or is about to be) durable, so it must reach turnsRef and
+  // advance the state before the control transition is computed; otherwise a
+  // later resume re-runs the persisted role (duplicate turn) and the UI/fold
+  // diverge from storage. Callers bump the generation BEFORE awaiting this,
+  // so the superseded loop applies nothing itself.
+  const settlePendingAppend = useCallback(async () => {
+    const pending = pendingAppendRef.current;
+    if (!pending) return;
+    pendingAppendRef.current = null;
+    const settled = await pending;
+    if (settled) {
+      pushTurn(settled.turn);
+      applyState(settled.next);
+    }
+  }, [pushTurn, applyState]);
+
   const pause = useCallback(async () => {
-    const current = stateRef.current;
-    if (!current) return;
-    const next = planningSessionReducer(current, { type: "PAUSE" });
-    if (next === current) return;
-    // Supersede the loop FIRST so the aborted stream's settle is ignored.
+    if (!stateRef.current) return;
+    // Supersede the loop FIRST (synchronously) so it neither applies state
+    // nor starts another stream, and abort any in-flight stream.
     generationRef.current += 1;
     abortRef.current?.abort();
     abortRef.current = null;
     setIsRunning(false);
     setDraft(null);
+    // Reconcile a turn persist the click may have interrupted.
+    await settlePendingAppend();
+    const current = stateRef.current;
+    if (!current) return;
+    const next = planningSessionReducer(current, { type: "PAUSE" });
+    if (next === current) return; // e.g. the settled turn already converged
     applyState(next);
     await persistStatus({ status: next.status });
-  }, [applyState, persistStatus]);
+  }, [applyState, persistStatus, settlePendingAppend]);
 
   const resume = useCallback(async () => {
     const current = stateRef.current;
@@ -359,19 +425,22 @@ export function usePlanningSession(
 
   const transitionAndStop = useCallback(
     async (event: { type: "FORCE_CONVERGE" } | { type: "END" }) => {
-      const current = stateRef.current;
-      if (!current) return;
-      const next = planningSessionReducer(current, event);
-      if (next === current) return;
+      if (!stateRef.current) return;
       generationRef.current += 1;
       abortRef.current?.abort();
       abortRef.current = null;
       setIsRunning(false);
       setDraft(null);
+      // Reconcile a turn persist the click may have interrupted (see pause).
+      await settlePendingAppend();
+      const current = stateRef.current;
+      if (!current) return;
+      const next = planningSessionReducer(current, event);
+      if (next === current) return;
       applyState(next);
       await persistStatus({ status: next.status });
     },
-    [applyState, persistStatus],
+    [applyState, persistStatus, settlePendingAppend],
   );
 
   const forceConverge = useCallback(
@@ -393,18 +462,11 @@ export function usePlanningSession(
     await persistStatus({ status: next.status });
   }, [applyState, persistStatus]);
 
-  const completeFinalize = useCallback(async () => {
-    const current = stateRef.current;
-    if (!current) return;
-    const next = planningSessionReducer(current, { type: "FINALIZE_DONE" });
-    if (next === current) return;
-    applyState(next);
-    // Stamp the provenance link in the SAME write as the terminal status.
-    await persistStatus({
-      status: next.status,
-      link: { type: "produced-manifest", at: Date.now() },
-    });
-  }, [applyState, persistStatus]);
+  // NOTE: there is deliberately no completeFinalize here. The source layer is
+  // stamped done + linked by the import flow's accept-save (via the
+  // originSession provenance) — i.e. only AFTER the hand-off actually
+  // produced a manifest. Stamping at Confirm-time stranded a terminally
+  // "done" layer whenever the navigation guard dialog was cancelled.
 
   const cancelFinalize = useCallback(async () => {
     const current = stateRef.current;
@@ -413,6 +475,23 @@ export function usePlanningSession(
     applyState(next);
     await persistStatus({ status: "converged" });
   }, [applyState, persistStatus]);
+
+  const reset = useCallback(() => {
+    generationRef.current += 1;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    pendingAppendRef.current = null;
+    setIsRunning(false);
+    setDraft(null);
+    stateRef.current = null;
+    setSessionState(null);
+    layerIdRef.current = null;
+    setActiveLayerId(null);
+    turnsRef.current = [];
+    setTurns([]);
+    seedRef.current = "";
+    setSeed("");
+  }, []);
 
   return {
     sessionState,
@@ -429,7 +508,7 @@ export function usePlanningSession(
     forceConverge,
     end,
     beginFinalize,
-    completeFinalize,
     cancelFinalize,
+    reset,
   };
 }

@@ -269,6 +269,42 @@ describe("useSavedProjects — layer mutations", () => {
     assert.strictEqual(missing, false, "unknown layer id → false, no change");
   });
 
+  it("updateLayer persists a status + link patch (the accept-save done stamp)", async () => {
+    persistence.state.projects = [
+      seed("p1", [
+        {
+          id: "L1",
+          kind: "brainstorm",
+          title: "Live session",
+          turns: [],
+          status: "finalizing",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ]),
+    ];
+    const { result } = await mountLoaded();
+
+    let ok = false;
+    await act(async () => {
+      ok = await result.current.updateLayer("p1", "L1", {
+        status: "done",
+        link: { type: "produced-manifest", at: 123 },
+      });
+    });
+
+    assert.strictEqual(ok, true);
+    const layer = result.current.projects[0].layers[0];
+    assert.strictEqual(layer.status, "done");
+    assert.deepStrictEqual(layer.link, { type: "produced-manifest", at: 123 });
+    // durably written through the port, not just in state
+    const persisted = persistence.state.projects[0] as {
+      layers: Array<{ status?: string; link?: { type: string } }>;
+    };
+    assert.strictEqual(persisted.layers[0].status, "done");
+    assert.strictEqual(persisted.layers[0].link?.type, "produced-manifest");
+  });
+
   it("updateLayer ignores explicitly-undefined patch keys (no field clobber)", async () => {
     persistence.state.projects = [
       seed("p1", [

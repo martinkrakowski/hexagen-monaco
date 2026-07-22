@@ -16,10 +16,12 @@ const turn = (
 
 describe("buildFold", () => {
   it("first proposer turn: preamble + round + brief only (nothing to fold yet)", () => {
+    // Real shape: the seed IS turns[0] (a human turn) — it must appear as the
+    // Brief only, never doubled as a "Human steering" note.
     const fold = buildFold({
       role: "proposer",
       seed: "A booking platform for climbing gyms",
-      turns: [],
+      turns: [turn("human", "A booking platform for climbing gyms")],
       round: 1,
       maxRounds: 4,
     });
@@ -29,6 +31,19 @@ describe("buildFold", () => {
     assert.doesNotMatch(fold, /## Latest proposal/);
     assert.doesNotMatch(fold, /## Latest critique/);
     assert.doesNotMatch(fold, /## Human steering/);
+  });
+
+  it("steering added before any model turn (paused first turn) IS folded — only the seed is excluded", () => {
+    const fold = buildFold({
+      role: "proposer",
+      seed: "the brief",
+      turns: [turn("human", "the brief"), turn("human", "use event sourcing")],
+      round: 1,
+      maxRounds: 4,
+    });
+    assert.match(fold, /## Human steering \(must be honored\)/);
+    assert.match(fold, /- use event sourcing/);
+    assert.doesNotMatch(fold, /- the brief/);
   });
 
   it("critic turn folds the LATEST proposal (not older ones) and requires the verdict contract", () => {
