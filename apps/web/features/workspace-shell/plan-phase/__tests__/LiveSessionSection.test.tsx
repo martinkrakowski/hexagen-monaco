@@ -436,6 +436,32 @@ describe("LiveSessionSection", () => {
     assert.strictEqual(onNavigateToImport.mock.calls.length, 0);
   });
 
+  it("unmounting mid-distill aborts the in-flight stream (no zombie fetch after a phase switch)", async () => {
+    let captured: AbortSignal | undefined;
+    distillMock.impl = vi.fn(
+      (opts: { signal?: AbortSignal }) =>
+        new Promise(() => {
+          captured = opts.signal; // hangs — torn down only by the abort
+        }),
+    ) as typeof distillMock.impl;
+    const session = makeSession({
+      sessionState: state({ status: "converged" }),
+      activeLayerId: "L1",
+      seed: "s",
+      turns: [],
+    });
+    const { unmount } = renderSection({ session });
+
+    fireEvent.click(button(/Finalize → Generate manifest/));
+    await waitFor(() => assert.ok(captured, "distill stream started"));
+    assert.strictEqual(captured!.aborted, false);
+
+    // Phase switch / navigation. The layer keeps its persisted "finalizing"
+    // status — sessionStateFromLayer recovers it as converged on next attach.
+    unmount();
+    assert.strictEqual(captured!.aborted, true, "distill stream aborted");
+  });
+
   it("the done panel offers Start another session, which resets the hook", () => {
     const session = makeSession({
       sessionState: state({ status: "done" }),

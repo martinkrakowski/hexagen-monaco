@@ -540,5 +540,40 @@ describe("useSavedProjects — layer mutations", () => {
       ["Proposer", "Critic"],
       "the concurrent turn survives — autosave writes one record, not a stale whole-array snapshot",
     );
+
+    // ...and LOCAL state reconciles with the committed record too: the
+    // optimistic array was built from a snapshot that predates the turn, so
+    // without the success-reconcile the UI would show a stale layer until an
+    // unrelated mutation resynced it.
+    await waitFor(() => {
+      const local = result.current.projects[0];
+      assert.strictEqual(local.manifestYaml, "yaml: 2");
+      assert.deepStrictEqual(
+        local.layers[0].turns.map((t) => t.author),
+        ["Proposer", "Critic"],
+      );
+    });
+  });
+
+  it("updateProject treats a THROWING port as a failed write (revert + persistError, no escaped rejection)", async () => {
+    persistence.state.projects = [seed("p1")];
+    const { result } = await mountLoaded();
+    const original = persistence.port.saveProjects;
+    persistence.port.saveProjects = async () => {
+      throw new Error("adapter exploded");
+    };
+
+    act(() => {
+      result.current.updateProject("p1", {} as never, "yaml: boom");
+    });
+
+    await waitFor(() => assert.ok(result.current.persistError));
+    assert.strictEqual(result.current.persistError?.kind, "Unknown");
+    assert.strictEqual(
+      result.current.projects[0].manifestYaml,
+      "",
+      "optimistic update reverted",
+    );
+    persistence.port.saveProjects = original;
   });
 });

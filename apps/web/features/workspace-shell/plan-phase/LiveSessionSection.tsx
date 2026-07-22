@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Textarea } from "@hexagen/ui";
 import { Sparkles, Pause, Play, Square, CheckCheck, Send } from "lucide-react";
 import type { ProjectLayer } from "@hexagen/shared";
@@ -86,6 +86,18 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
   const [finalize, setFinalize] = useState<FinalizeUiState>({ phase: "idle" });
   const distillAbortRef = useRef<AbortController | null>(null);
   const pendingManifest = usePendingManifest();
+
+  // Unmount teardown: kill an in-flight distill stream (same zombie-stream
+  // rationale as usePlanningSession's loop teardown — a phase switch must not
+  // leave a headless fetch streaming into a dead component). The layer keeps
+  // its persisted "finalizing" status; sessionStateFromLayer recovers that as
+  // converged on the next attach, so Finalize is simply re-runnable.
+  useEffect(() => {
+    return () => {
+      distillAbortRef.current?.abort();
+      distillAbortRef.current = null;
+    };
+  }, []);
 
   // A persisted session layer with a non-terminal status and NO loop running
   // in this mount = an interrupted session (the tab died mid-loop, Q0).

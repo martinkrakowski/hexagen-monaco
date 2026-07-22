@@ -212,20 +212,46 @@ export function useSavedProjects() {
       const seq = ++mutationSeq.current;
       projectsRef.current = updated;
       setProjects(updated);
-      port
-        .updateProjectRecord(id, (base) => ({
-          ...base,
-          formState,
-          manifestYaml,
-          updatedAt: now,
-        }))
-        .then((result) => {
-          if (!result.success && mutationSeq.current === seq) {
-            setProjects(snapshot);
-            projectsRef.current = snapshot;
-            setPersistError(result.error);
-          }
-        });
+      void (async () => {
+        // Same throwing-port hardening as commitRecordMutation below — an
+        // escaped rejection from a fire-and-forget autosave is unreportable.
+        let result: Awaited<ReturnType<typeof port.updateProjectRecord>>;
+        try {
+          result = await port.updateProjectRecord(id, (base) => ({
+            ...base,
+            formState,
+            manifestYaml,
+            updatedAt: now,
+          }));
+        } catch (e) {
+          result = {
+            success: false,
+            error: {
+              kind: "Unknown",
+              message: "Unexpected error persisting the project",
+              cause: e,
+            },
+          };
+        }
+        if (mutationSeq.current !== seq) return;
+        if (!result.success) {
+          setProjects(snapshot);
+          projectsRef.current = snapshot;
+          setPersistError(result.error);
+          return;
+        }
+        // Reconcile with the COMMITTED record: the port's read-merge-write may
+        // have folded in sibling fields another writer landed first (a
+        // live-session turn appended just before this autosave queued), which
+        // the optimistic array above — built from this instance's snapshot —
+        // cannot know about. Guarded by seq: a newer mutation owns state now.
+        const committed = fromBase(result.value);
+        const reconciled = projectsRef.current.map((p) =>
+          p.id === id ? committed : p,
+        );
+        projectsRef.current = reconciled;
+        setProjects(reconciled);
+      })();
     },
     [port],
   );
