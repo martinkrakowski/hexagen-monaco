@@ -47,7 +47,11 @@ describe("deriveInitialLayers", () => {
     const layer = layers[0];
     assert.equal(layer.title, "Imported project spec");
     assert.equal(layer.status, undefined, "not marked done");
-    assert.equal(layer.link, undefined, "no produced-manifest link");
+    // The guard blocks the session TRANSCRIPT and done-status from leaking —
+    // not the provenance link: the pasted spec is still literally what the
+    // accepted manifest was generated from (Phase-2 semantics, pinned by
+    // ManifestAcceptPage's "stamps the produced-manifest link" test).
+    assert.deepEqual(layer.link, { type: "produced-manifest", at: 777 });
     assert.equal(layer.turns.length, 1);
     assert.equal(layer.turns[0].content, "name: unrelated-import");
     assert.equal(layer.turns[0].author, "Imported");

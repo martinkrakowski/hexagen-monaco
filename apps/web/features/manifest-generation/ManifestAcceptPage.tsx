@@ -107,7 +107,7 @@ export function ManifestAcceptPage() {
       // import flow consumed is EXACTLY the distilled text the user confirmed,
       // deriveInitialLayers attaches the FULL brainstorm transcript instead of
       // a single "Imported project spec" turn (guard logic + shapes live in
-      // accept-save-layers.ts).
+      // accept-save-layers.ts). Both branches stamp the produced-manifest link.
       const session = pendingManifest.originSession;
       const initialLayers = deriveInitialLayers(importedSpec, session);
 

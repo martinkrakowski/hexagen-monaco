@@ -55,6 +55,11 @@ export function deriveInitialLayers(
             at: now,
           },
         ],
+        // Provenance: this pasted spec is literally what the accepted
+        // manifest was generated from — stamp the produced-manifest link so
+        // the workspace can offer "Derived from your planning session"
+        // (Phase-2 behavior, pinned by ManifestAcceptPage tests).
+        link: { type: "produced-manifest" as const, at: now },
       },
     ];
   }

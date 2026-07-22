@@ -127,6 +127,43 @@ describe("useSavedProjects — layer mutations", () => {
     assert.strictEqual(saved.layers[0].turns[0].content, "the session");
   });
 
+  it("saveProject round-trips optional provenance fields (link, sourceLayerId) on initial layers", async () => {
+    // Pins the field-spreading contract the accept-flow provenance write
+    // (ManifestAcceptPage → produced-manifest link) depends on: a refactor of
+    // saveProject to build layers field-by-field would silently drop the
+    // optional Phase-2 fields while every other assertion still passed.
+    persistence.state.projects = [seed("existing")];
+    const { result } = await mountLoaded();
+
+    let id: string | null = null;
+    await act(async () => {
+      id = await result.current.saveProject("Vellum", {} as never, "yaml: 1", [
+        {
+          ...brainstorm,
+          link: { type: "produced-manifest" as const, at: 1234 },
+          sourceLayerId: "origin-layer",
+        },
+      ]);
+    });
+
+    assert.ok(id, "project created");
+    const saved = result.current.projects.find((p) => p.id === id);
+    assert.ok(saved);
+    assert.deepEqual(saved.layers[0].link, {
+      type: "produced-manifest",
+      at: 1234,
+    });
+    assert.strictEqual(saved.layers[0].sourceLayerId, "origin-layer");
+    // ...and through the port, not just optimistic state.
+    const persisted = persistence.state.projects.find(
+      (p) => p.id === id,
+    ) as unknown as { layers: Array<Record<string, unknown>> };
+    assert.deepEqual(persisted.layers[0].link, {
+      type: "produced-manifest",
+      at: 1234,
+    });
+  });
+
   it("addLayer stamps identity/timestamps, appends, and persists (round-trip)", async () => {
     persistence.state.projects = [seed("p1")];
     const { result } = await mountLoaded();

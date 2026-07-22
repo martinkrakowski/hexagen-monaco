@@ -273,20 +273,22 @@ describe("normalizeLayers (salvage policy)", () => {
     assert.deepStrictEqual(a, b);
   });
 
-  it("defaults a missing OR blank title and preserves an unknown future kind", () => {
-    const [missing, blank, future] = normalizeLayers(
+  it("defaults a missing OR blank title; keeps known kinds", () => {
+    const [missing, blank, decisions] = normalizeLayers(
       [
         { id: "L1", turns: [] },
         { id: "L2", title: "", turns: [] },
-        { id: "L3", kind: "decisions", title: "Future", turns: [] },
+        { id: "L3", kind: "decisions", title: "Extracted", turns: [] },
       ],
       "p",
     );
     assert.strictEqual(missing.title, "Untitled session");
     assert.strictEqual(blank.title, "Untitled session");
     assert.strictEqual(missing.kind, "brainstorm");
-    // A newer client's layer kind is preserved, not mislabeled.
-    assert.strictEqual(future.kind, "decisions");
+    // Phase 2 reversed the Phase-1 "preserve unknown kinds" policy: only the
+    // known kinds pass through; anything else is coerced to "brainstorm" (see
+    // the Phase-2 provenance-salvage describe below for the coercion pins).
+    assert.strictEqual(decisions.kind, "decisions");
   });
 
   it("drops a non-object layer but keeps its salvageable siblings", () => {
@@ -577,5 +579,172 @@ describe("IDBSavedProjectsAdapter.updateProjectRecord (read-merge-write)", () =>
     assert.strictEqual(seen.length, 1);
     assert.ok(!("status" in seen[0]));
     assert.strictEqual(seen[0].turns.length, 1);
+  });
+});
+
+/** Minimal LoggerPort capturing warn messages for salvage-logging assertions. */
+function warnCollector() {
+  const warns: string[] = [];
+  const logger = {
+    info: () => {},
+    warn: (msg: string) => warns.push(msg),
+    error: () => {},
+    debug: () => {},
+    errorWithException: () => {},
+  };
+  return { warns, logger };
+}
+
+describe("normalizeLayers (Phase-2 provenance salvage)", () => {
+  it("defaults an unknown kind to brainstorm — logged, layer preserved", () => {
+    const { warns, logger } = warnCollector();
+    const [layer] = normalizeLayers(
+      [{ id: "L", kind: "telepathy", title: "t", turns: [] }],
+      "p",
+      logger,
+    );
+    assert.strictEqual(layer.kind, "brainstorm");
+    assert.ok(warns.some((w) => /unknown\/missing layer kind/.test(w)));
+  });
+
+  it("defaults a missing kind to brainstorm — logged, layer preserved", () => {
+    const { warns, logger } = warnCollector();
+    const [layer] = normalizeLayers(
+      [{ id: "L", title: "t", turns: [] }],
+      "p",
+      logger,
+    );
+    assert.strictEqual(layer.kind, "brainstorm");
+    assert.ok(warns.some((w) => /unknown\/missing layer kind/.test(w)));
+  });
+
+  it("keeps the decisions kind (now a known kind)", () => {
+    const { warns, logger } = warnCollector();
+    const [layer] = normalizeLayers(
+      [{ id: "L", kind: "decisions", title: "t", turns: [] }],
+      "p",
+      logger,
+    );
+    assert.strictEqual(layer.kind, "decisions");
+    assert.strictEqual(warns.length, 0);
+  });
+
+  it("keeps a well-formed produced-manifest link", () => {
+    const [layer] = normalizeLayers(
+      [
+        {
+          id: "L",
+          kind: "brainstorm",
+          title: "t",
+          turns: [],
+          link: { type: "produced-manifest", at: 1234 },
+        },
+      ],
+      "p",
+    );
+    assert.deepStrictEqual(layer.link, { type: "produced-manifest", at: 1234 });
+  });
+
+  it("drops a malformed link FIELD-level (unknown type / bad at / non-object) — never the layer", () => {
+    const { warns, logger } = warnCollector();
+    const layers = normalizeLayers(
+      [
+        {
+          id: "L1",
+          kind: "brainstorm",
+          title: "t",
+          turns: [{ id: "a", author: "X", content: "payload survives" }],
+          link: { type: "produced-code", at: 1 }, // unknown link type
+        },
+        {
+          id: "L2",
+          kind: "brainstorm",
+          title: "t",
+          turns: [],
+          link: { type: "produced-manifest", at: "yesterday" }, // bad at
+        },
+        {
+          id: "L3",
+          kind: "brainstorm",
+          title: "t",
+          turns: [],
+          link: "produced-manifest", // not an object
+        },
+      ],
+      "p",
+      logger,
+    );
+    assert.strictEqual(layers.length, 3, "metadata damage never drops a layer");
+    for (const layer of layers) {
+      assert.ok(!("link" in layer), `link dropped on ${layer.id}`);
+    }
+    assert.strictEqual(layers[0].turns[0].content, "payload survives");
+    assert.strictEqual(
+      warns.filter((w) => /dropping malformed link/.test(w)).length,
+      3,
+    );
+  });
+
+  it("keeps a string sourceLayerId and drops a non-string one — layer preserved", () => {
+    const { warns, logger } = warnCollector();
+    const [good, bad] = normalizeLayers(
+      [
+        {
+          id: "D1",
+          kind: "decisions",
+          title: "t",
+          turns: [],
+          sourceLayerId: "L1",
+        },
+        {
+          id: "D2",
+          kind: "decisions",
+          title: "t",
+          turns: [],
+          sourceLayerId: 42,
+        },
+      ],
+      "p",
+      logger,
+    );
+    assert.strictEqual(good.sourceLayerId, "L1");
+    assert.ok(!("sourceLayerId" in bad));
+    assert.ok(warns.some((w) => /non-string sourceLayerId/.test(w)));
+  });
+
+  it("round-trips link + sourceLayerId through normalizeLoadedProjects", () => {
+    const [project] = normalizeLoadedProjects([
+      {
+        id: "p1",
+        name: "P1",
+        formState: {},
+        layers: [
+          {
+            id: "L1",
+            kind: "brainstorm",
+            title: "Imported project spec",
+            turns: [{ id: "t1", author: "Imported", content: "spec" }],
+            createdAt: 1,
+            updatedAt: 1,
+            link: { type: "produced-manifest", at: 2 },
+          },
+          {
+            id: "D1",
+            kind: "decisions",
+            title: "Decisions — Imported project spec",
+            turns: [{ id: "t2", author: "AI", content: "## Decisions" }],
+            createdAt: 3,
+            updatedAt: 3,
+            sourceLayerId: "L1",
+          },
+        ],
+      },
+    ]);
+    assert.deepStrictEqual(project.layers[0].link, {
+      type: "produced-manifest",
+      at: 2,
+    });
+    assert.strictEqual(project.layers[1].sourceLayerId, "L1");
+    assert.strictEqual(project.layers[1].kind, "decisions");
   });
 });

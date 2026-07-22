@@ -19,8 +19,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 // ─── Phase-3 live-session field salvage (self-contained block) ──────────────
 // Salvage policy matches the rest of this file: an invalid value drops the
-// FIELD, never the layer or turn. NOTE: the Phase-2 branch adds `link` salvage
-// too — the duplicate resolves trivially on merge (keep either side).
+// FIELD, never the layer or turn. `link`/`sourceLayerId` salvage lives with
+// the other Phase-2 provenance handling inside normalizeLayers, not here.
 
 const LAYER_STATUSES = new Set<NonNullable<ProjectLayer["status"]>>([
   "proposing",
@@ -57,16 +57,15 @@ function isTurnRole(
   );
 }
 
-/** Field-level salvage for a layer's session fields (status/maxRounds/link). */
+/** Field-level salvage for a layer's session fields (status/maxRounds). */
 function salvageSessionLayerFields(
   rawLayer: Record<string, unknown>,
   layerId: string,
   logger?: LoggerPort,
-): Pick<ProjectLayer, "status" | "maxRounds" | "link"> {
+): Pick<ProjectLayer, "status" | "maxRounds"> {
   const out: {
     status?: NonNullable<ProjectLayer["status"]>;
     maxRounds?: number;
-    link?: ProjectLayer["link"];
   } = {};
   if (rawLayer.status !== undefined) {
     if (isLayerStatus(rawLayer.status)) out.status = rawLayer.status;
@@ -85,21 +84,6 @@ function salvageSessionLayerFields(
     } else {
       logger?.warn(
         `[saved-projects] dropping invalid maxRounds on ${layerId} (layer kept)`,
-      );
-    }
-  }
-  if (rawLayer.link !== undefined) {
-    const link = rawLayer.link as { type?: unknown; at?: unknown } | null;
-    if (
-      isRecord(link) &&
-      link.type === "produced-manifest" &&
-      typeof link.at === "number" &&
-      Number.isFinite(link.at)
-    ) {
-      out.link = { type: "produced-manifest", at: link.at };
-    } else {
-      logger?.warn(
-        `[saved-projects] dropping invalid link on ${layerId} (layer kept)`,
       );
     }
   }
@@ -175,12 +159,18 @@ export function normalizeLayers(
       typeof rawLayer.id === "string" && rawLayer.id
         ? rawLayer.id
         : `${projectId}-layer-${layerIndex}`;
-    // Preserve an unknown/future `kind` rather than mislabel it; default only a
-    // missing/non-string one to the sole v1 kind.
-    const kind =
-      typeof rawLayer.kind === "string" && rawLayer.kind
-        ? (rawLayer.kind as ProjectLayer["kind"])
-        : "brainstorm";
+    // `kind` drives UI affordances (badges, per-kind actions), so an unknown or
+    // missing value defaults to the base kind rather than flowing through as an
+    // unrenderable label — metadata damage never deletes the layer.
+    let kind: ProjectLayer["kind"];
+    if (rawLayer.kind === "brainstorm" || rawLayer.kind === "decisions") {
+      kind = rawLayer.kind;
+    } else {
+      logger?.warn(
+        `[saved-projects] unknown/missing layer kind on ${layerId}; defaulting to "brainstorm"`,
+      );
+      kind = "brainstorm";
+    }
     const title =
       typeof rawLayer.title === "string" && rawLayer.title
         ? rawLayer.title
@@ -221,6 +211,45 @@ export function normalizeLayers(
       });
     });
 
+    // --- Phase-2 provenance fields (link / sourceLayerId) -------------------
+    // Field-level salvage only: malformed provenance metadata is dropped (and
+    // logged), never the layer carrying it. An explicit `null` is deliberately
+    // treated as absent (the JSON convention for "no value") — silent, no warn.
+    let link: ProjectLayer["link"];
+    if (rawLayer.link !== undefined && rawLayer.link !== null) {
+      if (
+        isRecord(rawLayer.link) &&
+        rawLayer.link.type === "produced-manifest" &&
+        Number.isFinite(rawLayer.link.at)
+      ) {
+        link = {
+          type: "produced-manifest",
+          at: rawLayer.link.at as number,
+        };
+      } else {
+        logger?.warn(
+          `[saved-projects] dropping malformed link on ${layerId} — unknown type or bad timestamp`,
+        );
+      }
+    }
+    let sourceLayerId: string | undefined;
+    if (
+      rawLayer.sourceLayerId !== undefined &&
+      rawLayer.sourceLayerId !== null
+    ) {
+      if (
+        typeof rawLayer.sourceLayerId === "string" &&
+        rawLayer.sourceLayerId
+      ) {
+        sourceLayerId = rawLayer.sourceLayerId;
+      } else {
+        logger?.warn(
+          `[saved-projects] dropping non-string sourceLayerId on ${layerId}`,
+        );
+      }
+    }
+    // --- end Phase-2 provenance fields --------------------------------------
+
     layers.push({
       id: layerId,
       kind,
@@ -228,6 +257,8 @@ export function normalizeLayers(
       turns,
       createdAt,
       updatedAt,
+      ...(link !== undefined ? { link } : {}),
+      ...(sourceLayerId !== undefined ? { sourceLayerId } : {}),
       // Phase-3 session fields — field-level salvage, never drops the layer.
       ...salvageSessionLayerFields(rawLayer, layerId, logger),
     });

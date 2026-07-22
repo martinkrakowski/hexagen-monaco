@@ -27,6 +27,7 @@ import {
 import type { ViewMode } from "@/types/view-mode";
 import { PhaseToggle, type WorkspacePhase } from "./plan-phase/PhaseToggle";
 import { PlanPhaseView } from "./plan-phase/PlanPhaseView";
+import { DerivedFromPlanLink } from "./plan-phase/DerivedFromPlanLink";
 
 export interface ProjectWorkspaceProps {
   currentStepIndex: number;
@@ -183,7 +184,17 @@ const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
           onNavigateToProjects={onNavigateToProjects}
           phaseSlot={
             canUsePlanPhase ? (
-              <PhaseToggle phase={phase} onPhaseChange={handlePhaseChange} />
+              <>
+                {/* Provenance affordance: only in Architecture phase, and it
+                    subscribes to the lifecycle context itself (no new memo
+                    prop). Switches phase on user click only. */}
+                {phase === "architecture" && (
+                  <DerivedFromPlanLink
+                    onNavigateToPlan={() => handlePhaseChange("plan")}
+                  />
+                )}
+                <PhaseToggle phase={phase} onPhaseChange={handlePhaseChange} />
+              </>
             ) : undefined
           }
         />
@@ -194,6 +205,7 @@ const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
               onNavigateToImport={() =>
                 handleNavigate("/projects/new/import/spec")
               }
+              onSwitchToArchitecture={() => handlePhaseChange("architecture")}
             />
           ) : (
             <ResizableLayout

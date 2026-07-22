@@ -57,13 +57,32 @@ export interface ProjectLayerTurn {
 }
 
 /**
- * A provenance layer on a project. v1 holds only the brainstorm (`kind:
- * "brainstorm"`); the union is left open for future `"research"` | `"decisions"`
- * layers. `turns` is ordered: a v1 paste is one turn; a live session appends.
+ * A provenance link from a layer to another project artifact. Discriminated on
+ * `type` so future link kinds ("produced-code", "informed-decision", …) slot
+ * into the union without reshaping stored records. NOTE: the idb load
+ * perimeter (`normalizeLayers`) whitelists the CURRENT union members and drops
+ * anything else as mistyped — adding a link kind (or a layer `kind`) requires
+ * a matching salvage-whitelist update in the same release, or older builds
+ * will strip the new value on their next write.
+ */
+export interface ProducedManifestLink {
+  /** This layer is the planning session the manifest was derived from. */
+  readonly type: "produced-manifest";
+  /** When the manifest was produced (epoch ms). */
+  readonly at: number;
+}
+
+export type ProjectLayerLink = ProducedManifestLink;
+
+/**
+ * A provenance layer on a project. Phase 1 held only the brainstorm; Phase 2
+ * adds `"decisions"` (an extracted summary of finalized decisions). The union
+ * stays open for future `"research"` | … layers. `turns` is ordered: a v1
+ * paste is one turn; a live session appends.
  */
 export interface ProjectLayer {
   readonly id: string;
-  readonly kind: "brainstorm";
+  readonly kind: "brainstorm" | "decisions";
   readonly title: string;
   readonly turns: readonly ProjectLayerTurn[];
   readonly createdAt: number;
@@ -83,12 +102,10 @@ export interface ProjectLayer {
     | "done";
   /** Round cap for a live session (v1 default 4). */
   readonly maxRounds?: number;
-  /**
-   * Provenance edge: this layer produced the project's manifest. NOTE: the
-   * Phase-2 branch defines this identical field — the duplicate resolves
-   * trivially on merge (keep either side).
-   */
-  readonly link?: { readonly type: "produced-manifest"; readonly at: number };
+  /** Provenance link to the artifact this layer produced (see ProjectLayerLink). */
+  readonly link?: ProjectLayerLink;
+  /** For a "decisions" layer: the brainstorm layer it was extracted from. */
+  readonly sourceLayerId?: string;
 }
 
 export interface SavedProject {

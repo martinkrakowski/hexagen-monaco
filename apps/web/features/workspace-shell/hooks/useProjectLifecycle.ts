@@ -85,6 +85,8 @@ export interface UseProjectLifecycleReturn {
   handleCancelNewProject: () => void;
   handleSaveAndNew: () => void;
   handleDiscardAndNew: () => void;
+  // Same single-instance constraint as addLayer above (clobber safety).
+  removeLayer: (projectId: string, layerId: string) => Promise<boolean>;
 }
 
 export function useProjectLifecycle(
@@ -105,6 +107,7 @@ export function useProjectLifecycle(
     addLayer,
     updateLayer,
     appendLayerTurn,
+    removeLayer,
     persistError,
     clearError,
   } = useSavedProjects();
@@ -284,6 +287,7 @@ export function useProjectLifecycle(
       handleSaveAndNew,
       handleDiscardAndNew,
       handleCancelNewProject,
+      removeLayer,
     }),
     [
       projects,
@@ -305,6 +309,7 @@ export function useProjectLifecycle(
       handleSaveAndNew,
       handleDiscardAndNew,
       handleCancelNewProject,
+      removeLayer,
     ],
   );
 }
