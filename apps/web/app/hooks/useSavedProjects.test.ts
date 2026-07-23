@@ -577,3 +577,220 @@ describe("useSavedProjects — layer mutations", () => {
     persistence.port.saveProjects = original;
   });
 });
+
+describe("useSavedProjects — updateProjectFormState (Plan-phase settings autosave)", () => {
+  beforeEach(() => {
+    persistence.state.projects = [];
+    persistence.state.failSave = false;
+    persistence.state.saveCount = 0;
+  });
+
+  // A full ProjectConfig isn't needed to exercise the seam — a nested marker
+  // object round-trips through the same path (cast, since the port stores it
+  // verbatim regardless of shape).
+  const settings = { governance: { workspaceName: "Renamed" } } as never;
+
+  function seedRich(): Record<string, unknown> {
+    return {
+      id: "p1",
+      name: "Vellum",
+      schemaVersion: 4,
+      createdAt: 0,
+      updatedAt: 0,
+      formState: { governance: { workspaceName: "Original" } },
+      manifestYaml: "contexts:\n  - real architecture",
+      layers: [
+        {
+          id: "L1",
+          kind: "brainstorm",
+          title: "session",
+          turns: [],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    };
+  }
+
+  it("persists ONLY formState — the real manifest and layers are left untouched (round-trip)", async () => {
+    persistence.state.projects = [seedRich()];
+    const { result } = await mountLoaded();
+
+    // fire-and-forget autosave
+    act(() => {
+      result.current.updateProjectFormState("p1", settings);
+    });
+
+    await waitFor(() =>
+      assert.deepStrictEqual(
+        (persistence.state.projects[0] as { formState: unknown }).formState,
+        { governance: { workspaceName: "Renamed" } },
+      ),
+    );
+    const persisted = persistence.state.projects[0] as Record<string, unknown>;
+    assert.strictEqual(
+      persisted.manifestYaml,
+      "contexts:\n  - real architecture",
+      "the generated manifest is NOT regenerated from the form — the whole reason this is not updateProject",
+    );
+    assert.strictEqual(
+      (persisted.layers as unknown[]).length,
+      1,
+      "layers untouched",
+    );
+
+    // ...and local state carries the new formState while keeping the manifest.
+    assert.deepStrictEqual(result.current.projects[0].formState, {
+      governance: { workspaceName: "Renamed" },
+    });
+    assert.strictEqual(
+      result.current.projects[0].manifestYaml,
+      "contexts:\n  - real architecture",
+    );
+  });
+
+  it("merges into the FRESH stored record — a concurrently-regenerated manifest survives", async () => {
+    persistence.state.projects = [seedRich()];
+    const { result } = await mountLoaded();
+
+    // Another writer regenerates the architecture in storage AFTER this hook's
+    // snapshot was taken. A whole-array write from the stale snapshot would
+    // erase it; the record-level updater preserves `base.manifestYaml`.
+    (persistence.state.projects[0] as Record<string, unknown>).manifestYaml =
+      "regenerated architecture";
+
+    act(() => {
+      result.current.updateProjectFormState("p1", settings);
+    });
+
+    await waitFor(() =>
+      assert.deepStrictEqual(
+        (persistence.state.projects[0] as { formState: unknown }).formState,
+        { governance: { workspaceName: "Renamed" } },
+      ),
+    );
+    assert.strictEqual(
+      (persistence.state.projects[0] as Record<string, unknown>).manifestYaml,
+      "regenerated architecture",
+      "the fresh stored manifest survives the settings autosave",
+    );
+    // local state reconciles with the committed record (incl. the sibling manifest)
+    await waitFor(() =>
+      assert.strictEqual(
+        result.current.projects[0].manifestYaml,
+        "regenerated architecture",
+      ),
+    );
+  });
+
+  it("is a silent no-op for an unknown/deleted project id (no write, no persistError, no revert)", async () => {
+    persistence.state.projects = [seedRich()];
+    const { result } = await mountLoaded();
+    const before = persistence.state.saveCount;
+
+    // Flush the fire-and-forget async so we can assert nothing changed AFTER it ran.
+    await act(async () => {
+      result.current.updateProjectFormState("ghost", settings);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    assert.strictEqual(
+      persistence.state.saveCount,
+      before,
+      "no whole-array rewrite for a missing id",
+    );
+    assert.strictEqual(
+      result.current.persistError,
+      null,
+      "NotFound stays silent — a late debounced flush against a gone project must not error",
+    );
+    assert.strictEqual(
+      result.current.projects[0].manifestYaml,
+      "contexts:\n  - real architecture",
+      "the real project is left exactly as it was",
+    );
+  });
+
+  it("treats a THROWING port as a failed write (revert + persistError, no escaped rejection)", async () => {
+    persistence.state.projects = [seedRich()];
+    const { result } = await mountLoaded();
+    const original = persistence.port.saveProjects;
+    persistence.port.saveProjects = async () => {
+      throw new Error("adapter exploded");
+    };
+
+    act(() => {
+      result.current.updateProjectFormState("p1", settings);
+    });
+
+    await waitFor(() => assert.ok(result.current.persistError));
+    assert.strictEqual(result.current.persistError?.kind, "Unknown");
+    assert.deepStrictEqual(
+      result.current.projects[0].formState,
+      { governance: { workspaceName: "Original" } },
+      "optimistic formState update reverted on failure",
+    );
+    persistence.port.saveProjects = original;
+  });
+
+  it("drops a STALE overlapping reconcile — when the first of two writes resolves late, the seq-guard keeps the newer local state", async () => {
+    persistence.state.projects = [seedRich()];
+    const { result } = await mountLoaded();
+
+    // Gate the FIRST port resolution so it lands after the second completes.
+    const originalUpdateRecord = persistence.port.updateProjectRecord;
+    let releaseStale!: () => void;
+    const staleGate = new Promise<void>((res) => {
+      releaseStale = res;
+    });
+    let recordCalls = 0;
+    persistence.port.updateProjectRecord = async (id, updater) => {
+      recordCalls += 1;
+      if (recordCalls === 1) await staleGate;
+      return originalUpdateRecord(id, updater);
+    };
+
+    const settingsA = { governance: { workspaceName: "stale-A" } } as never;
+    const settingsB = { governance: { workspaceName: "final-B" } } as never;
+
+    act(() => {
+      result.current.updateProjectFormState("p1", settingsA);
+      // Bumps mutationSeq past A's — A's reconcile is stale from here on.
+      result.current.updateProjectFormState("p1", settingsB);
+    });
+
+    // The unblocked SECOND write lands and reconciles first.
+    await waitFor(() =>
+      assert.deepStrictEqual(
+        (persistence.state.projects[0] as { formState: unknown }).formState,
+        { governance: { workspaceName: "final-B" } },
+      ),
+    );
+
+    // Now the stale FIRST call resolves. Its late write reaching the adapter
+    // is honest last-write-wins at the storage level (the next autosave tick
+    // of the same form reconverges it); what the seq-guard owns is the LOCAL
+    // reconcile: the stale A record must NOT overwrite the newer B in state.
+    releaseStale();
+    await waitFor(() =>
+      assert.deepStrictEqual(
+        (persistence.state.projects[0] as { formState: unknown }).formState,
+        { governance: { workspaceName: "stale-A" } },
+        "completion probe: the late write reached the adapter",
+      ),
+    );
+    // Give the hook's post-await code (the seq check) a beat to run.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    assert.deepStrictEqual(
+      result.current.projects[0].formState,
+      { governance: { workspaceName: "final-B" } },
+      "the stale A-reconcile was dropped — deleting the seq-guard flips this to stale-A",
+    );
+
+    persistence.port.updateProjectRecord = originalUpdateRecord;
+  });
+});

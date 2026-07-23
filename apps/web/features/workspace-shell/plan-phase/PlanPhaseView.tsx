@@ -14,6 +14,7 @@ import { NotebookPen, Plus } from "lucide-react";
 import type { ProjectLayer } from "@hexagen/shared";
 import { useWizardLifecycleContext } from "../contexts/WizardLifecycleContext";
 import { PlanLayerCard } from "./PlanLayerCard";
+import { ProjectSettingsSection } from "./ProjectSettingsSection";
 import { AddPlanningSessionDialog } from "./AddPlanningSessionDialog";
 import { LiveSessionSection } from "./LiveSessionSection";
 import { usePlanningSession } from "./session/usePlanningSession";
@@ -53,6 +54,7 @@ export function PlanPhaseView({
     updateLayer,
     appendLayerTurn,
     removeLayer,
+    updateProjectFormState,
     layersPersistError,
     clearLayersPersistError,
   } = useWizardLifecycleContext();
@@ -226,6 +228,11 @@ export function PlanPhaseView({
             </Button>
           )}
         </div>
+
+        <ProjectSettingsSection
+          projectId={loadedProject.id}
+          persist={updateProjectFormState}
+        />
 
         <LiveSessionSection
           projectId={loadedProject.id}
