@@ -111,7 +111,17 @@ function Root(props: RootProps) {
     }
   };
 
+  // Single mode with collapsible={false}: the sole open item can't be closed,
+  // so re-clicking its trigger is a no-op. Single source of truth for that
+  // condition — `toggle` early-returns on it and the trigger advertises it via
+  // aria-disabled, so the behaviour and the hint can't drift apart.
+  const isToggleDisabled = (itemValue: string) =>
+    type !== "multiple" &&
+    (props.collapsible ?? true) === false &&
+    openValues.includes(itemValue);
+
   const toggle = (itemValue: string) => {
+    if (isToggleDisabled(itemValue)) return;
     const currentlyOpen = openValues.includes(itemValue);
     if (type === "multiple") {
       emit(
@@ -121,22 +131,12 @@ function Root(props: RootProps) {
       );
       return;
     }
-    // single
-    if (currentlyOpen) {
-      const collapsible = props.collapsible ?? true;
-      if (collapsible) emit([]);
-      return;
-    }
-    emit([itemValue]);
+    // single: the non-collapsible open case was filtered out above, so an open
+    // item closes (emit []) and a closed item opens (emit [itemValue]).
+    emit(currentlyOpen ? [] : [itemValue]);
   };
 
   const isOpen = (itemValue: string) => openValues.includes(itemValue);
-  // Single mode with collapsible={false}: the sole open item can't be closed,
-  // so re-clicking its trigger does nothing — advertise that via aria-disabled.
-  const isToggleDisabled = (itemValue: string) =>
-    type !== "multiple" &&
-    (props.collapsible ?? true) === false &&
-    openValues.includes(itemValue);
   const triggerId = (itemValue: string) => `${rootId}-trigger-${itemValue}`;
   const contentId = (itemValue: string) => `${rootId}-content-${itemValue}`;
 
