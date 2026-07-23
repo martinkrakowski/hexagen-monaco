@@ -712,6 +712,52 @@ describe("useSavedProjects — updateProjectFormState (Plan-phase settings autos
     );
   });
 
+  it("a no-op against an unknown id never bumps the mutation seq — an in-flight write's failure revert still runs", async () => {
+    persistence.state.projects = [seedRich()];
+    const { result } = await mountLoaded();
+
+    // Hold updateProject's record write in flight behind a gate…
+    let releaseWrite: (result: {
+      success: false;
+      error: { kind: string; message: string };
+    }) => void = () => {};
+    const original = persistence.port.updateProjectRecord;
+    persistence.port.updateProjectRecord = (() =>
+      new Promise((resolve) => {
+        releaseWrite = resolve;
+      })) as typeof original;
+
+    act(() => {
+      result.current.updateProject("p1", settings, "autosaved yaml");
+    });
+    // …then fire the settings autosave against an id that is not in the local
+    // array. This must be a TRUE no-op: if it advanced mutationSeq, the gated
+    // write's completion below would read a stale seq and skip its revert.
+    act(() => {
+      result.current.updateProjectFormState("ghost", settings);
+    });
+
+    await act(async () => {
+      releaseWrite({
+        success: false,
+        error: { kind: "StorageQuotaExceeded", message: "quota" },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    assert.ok(
+      result.current.persistError,
+      "the in-flight write's failure was reported, not suppressed",
+    );
+    assert.deepStrictEqual(
+      result.current.projects[0].formState,
+      { governance: { workspaceName: "Original" } },
+      "the failed write's optimistic update was reverted — the ghost no-op did not steal its seq",
+    );
+    persistence.port.updateProjectRecord = original;
+  });
+
   it("treats a THROWING port as a failed write (revert + persistError, no escaped rejection)", async () => {
     persistence.state.projects = [seedRich()];
     const { result } = await mountLoaded();

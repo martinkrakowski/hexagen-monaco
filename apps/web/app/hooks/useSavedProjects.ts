@@ -271,6 +271,13 @@ export function useSavedProjects() {
   const updateProjectFormState = useCallback(
     (id: string, formState: ProjectConfig): void => {
       const snapshot = projectsRef.current;
+      // Unknown id (genesis/deleted): decide the no-op HERE, like the layer
+      // mutations do, rather than letting the port's NotFound arm below catch
+      // it. A no-op that bumped mutationSeq would mark an unrelated in-flight
+      // mutation on this instance as stale and suppress its revert/reconcile.
+      // The NotFound arm stays as the backstop for an id that exists locally
+      // but has vanished from storage by write time.
+      if (!snapshot.some((p) => p.id === id)) return;
       const now = Date.now();
       const updated = snapshot.map((p) =>
         p.id === id ? { ...p, formState, updatedAt: now } : p,
