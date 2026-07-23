@@ -184,7 +184,85 @@ describe("TextareaComposer", () => {
     assert.strictEqual(screen.queryByRole("button", { name: /stop/i }), null);
 
     gate.resolve(true);
-    await waitFor(() => assert.strictEqual(textarea.value, ""));
+    // The submit resolves (Send re-enables). The draft typed mid-flight
+    // ("still typing") differs from what was submitted ("in flight"), so it is
+    // PRESERVED rather than wiped — clearing it would lose the user's text.
+    await waitFor(() =>
+      assert.strictEqual(
+        screen.getByRole("button", { name: "Send" }).hasAttribute("disabled"),
+        false,
+      ),
+    );
+    assert.strictEqual(textarea.value, "still typing");
+  });
+
+  it("preserves a new draft typed while a submit is in flight", async () => {
+    const gate = deferred<boolean>();
+    render(<TextareaComposer onSubmit={async () => gate.promise} />);
+    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "first message" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    // The user keeps drafting the next message while the request is pending.
+    fireEvent.change(textarea, { target: { value: "second draft" } });
+
+    gate.resolve(true);
+    // Resolving the FIRST submit must not clobber the newer draft — only the
+    // exact text that was submitted is eligible to be cleared.
+    await waitFor(() => assert.strictEqual(textarea.value, "second draft"));
+    assert.strictEqual(textarea.value, "second draft");
+  });
+
+  it("keeps Enter as a normal key (no preventDefault) when a submit would no-op", async () => {
+    const calls: string[] = [];
+    render(
+      <TextareaComposer
+        onSubmit={async (t) => {
+          calls.push(t);
+          return true;
+        }}
+      />,
+    );
+    const textarea = screen.getByRole("textbox");
+    // Whitespace-only: Enter must fall through to the browser's newline
+    // insertion (not preventDefaulted) and must not submit. fireEvent returns
+    // false when the event was canceled via preventDefault.
+    fireEvent.change(textarea, { target: { value: "   " } });
+    const notCanceled = fireEvent.keyDown(textarea, { key: "Enter" });
+    assert.strictEqual(notCanceled, true);
+    await Promise.resolve();
+    assert.strictEqual(calls.length, 0);
+  });
+
+  it("preventDefaults Enter only when it will actually submit", () => {
+    render(<TextareaComposer onSubmit={async () => true} />);
+    const textarea = screen.getByRole("textbox");
+    fireEvent.change(textarea, { target: { value: "ready" } });
+    // A valid submit swallows the newline: fireEvent returns false (canceled).
+    const canceled = fireEvent.keyDown(textarea, { key: "Enter" });
+    assert.strictEqual(canceled, false);
+  });
+
+  it("does not crash (or leave the composer locked) when onSubmit rejects", async () => {
+    render(
+      <TextareaComposer
+        onSubmit={async () => {
+          throw new Error("network down");
+        }}
+      />,
+    );
+    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "will fail" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+
+    // The rejection is absorbed: the draft is retained and the composer recovers
+    // (Send re-enables), so no unhandled rejection and no permanent lock.
+    await waitFor(() =>
+      assert.strictEqual(
+        screen.getByRole("button", { name: "Send" }).hasAttribute("disabled"),
+        false,
+      ),
+    );
+    assert.strictEqual(textarea.value, "will fail");
   });
 
   it("does not submit when disabled", async () => {

@@ -15,6 +15,10 @@ import { cn } from "../lib/utils.js";
 interface AccordionContextValue {
   isOpen: (value: string) => boolean;
   toggle: (value: string) => void;
+  /** True when the item is open and cannot be collapsed (single mode with
+   * `collapsible={false}`), so its trigger's toggle is a no-op. Drives
+   * `aria-disabled` per the WAI-ARIA accordion pattern. */
+  isToggleDisabled: (value: string) => boolean;
   /** Per-Root unique prefix so trigger/panel ids don't collide when two
    * Accordion.Root instances reuse the same item value on one page. */
   triggerId: (value: string) => string;
@@ -127,11 +131,19 @@ function Root(props: RootProps) {
   };
 
   const isOpen = (itemValue: string) => openValues.includes(itemValue);
+  // Single mode with collapsible={false}: the sole open item can't be closed,
+  // so re-clicking its trigger does nothing — advertise that via aria-disabled.
+  const isToggleDisabled = (itemValue: string) =>
+    type !== "multiple" &&
+    (props.collapsible ?? true) === false &&
+    openValues.includes(itemValue);
   const triggerId = (itemValue: string) => `${rootId}-trigger-${itemValue}`;
   const contentId = (itemValue: string) => `${rootId}-content-${itemValue}`;
 
   return (
-    <AccordionContext.Provider value={{ isOpen, toggle, triggerId, contentId }}>
+    <AccordionContext.Provider
+      value={{ isOpen, toggle, isToggleDisabled, triggerId, contentId }}
+    >
       <div data-accordion-root="" className={cn("flex flex-col", className)}>
         {children}
       </div>
@@ -172,7 +184,8 @@ function Trigger({
   children: ReactNode;
   className?: string;
 }) {
-  const { isOpen, toggle, triggerId, contentId } = useAccordionContext();
+  const { isOpen, toggle, isToggleDisabled, triggerId, contentId } =
+    useAccordionContext();
   const value = useAccordionItemContext();
   const open = isOpen(value);
 
@@ -181,9 +194,12 @@ function Trigger({
     // the normal Tab order (no roving tabindex); arrows are an enhancement.
     const root = e.currentTarget.closest("[data-accordion-root]");
     if (!root) return;
+    // `querySelectorAll` is recursive, so a nested <Accordion.Root> inside an
+    // open panel would surface its triggers too. Keep only triggers whose
+    // nearest root is THIS root, so arrow-nav can't leak across nesting.
     const triggers = Array.from(
       root.querySelectorAll<HTMLElement>("[data-accordion-trigger]"),
-    );
+    ).filter((el) => el.closest("[data-accordion-root]") === root);
     const idx = triggers.indexOf(e.currentTarget);
     if (idx === -1) return;
 
@@ -207,6 +223,9 @@ function Trigger({
       type="button"
       data-accordion-trigger=""
       aria-expanded={open}
+      // Open + non-collapsible → toggling is a no-op; surface it (but leave the
+      // button focusable/navigable, hence aria-disabled rather than `disabled`).
+      aria-disabled={isToggleDisabled(value) || undefined}
       aria-controls={contentId(value)}
       id={triggerId(value)}
       onClick={() => toggle(value)}

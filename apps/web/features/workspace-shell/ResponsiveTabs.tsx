@@ -39,13 +39,20 @@ export function ResponsiveTabs({ panels, defaultTab }: ResponsiveTabsProps) {
               key={panel.id}
               type="button"
               onClick={() => setActiveTab(panel.id)}
+              // The visible label is `hidden` below `sm`, so an icon-only tab
+              // would otherwise have no accessible name. Pin the name with
+              // aria-label at every breakpoint and mark the icon decorative so
+              // it can't become the accidental name.
+              aria-label={panel.title}
               className={`flex-1 flex items-center justify-center gap-2 px-3 py-3 text-sm font-medium transition-colors ${
                 isActive
                   ? "text-primary border-b-2 border-primary bg-card"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
               }`}
             >
-              {IconComponent && <IconComponent className="h-4 w-4" />}
+              {IconComponent && (
+                <IconComponent aria-hidden="true" className="h-4 w-4" />
+              )}
               <span className="hidden sm:inline">{panel.title}</span>
             </button>
           );

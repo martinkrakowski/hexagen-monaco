@@ -1,10 +1,14 @@
-import { describe, it, beforeAll, afterEach } from "vitest";
+import { describe, it, beforeAll, afterAll, afterEach } from "vitest";
 import assert from "node:assert";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { TwoPaneLayout } from "../TwoPaneLayout";
 
 // react-resizable-panels (the desktop path) instantiates a ResizeObserver on
-// mount; jsdom doesn't ship one. A no-op stub lets the panels render.
+// mount; jsdom doesn't ship one. A no-op stub lets the panels render. Capture
+// whatever was there first and restore it in afterAll so this stub doesn't leak
+// into sibling suites sharing the worker (which may rely on its absence).
+const hadResizeObserver = "ResizeObserver" in globalThis;
+const originalResizeObserver = globalThis.ResizeObserver;
 beforeAll(() => {
   if (!globalThis.ResizeObserver) {
     globalThis.ResizeObserver = class {
@@ -12,6 +16,13 @@ beforeAll(() => {
       unobserve() {}
       disconnect() {}
     } as unknown as typeof ResizeObserver;
+  }
+});
+afterAll(() => {
+  if (hadResizeObserver) {
+    globalThis.ResizeObserver = originalResizeObserver;
+  } else {
+    delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
   }
 });
 
@@ -88,9 +99,14 @@ describe("TwoPaneLayout", () => {
           leftFooter={<button type="button">Add planning session</button>}
         />,
       );
-      // Two tab buttons, labelled by the two titles.
-      assert.ok(screen.getByRole("button", { name: "Workspace" }));
-      assert.ok(screen.getByRole("button", { name: "Session" }));
+      // Two tab buttons, labelled by the two titles. The visible label span is
+      // `hidden` below `sm`; jsdom applies no Tailwind CSS, so asserting the
+      // accessible name alone wouldn't prove the mobile case. Pin the explicit
+      // aria-label so the name survives even when the span is display:none.
+      const formTab = screen.getByRole("button", { name: "Workspace" });
+      const sessionTab = screen.getByRole("button", { name: "Session" });
+      assert.strictEqual(formTab.getAttribute("aria-label"), "Workspace");
+      assert.strictEqual(sessionTab.getAttribute("aria-label"), "Session");
       // First tab (form) is active: left content + footer visible, right hidden.
       assert.ok(screen.getByText("LEFT-PANE"));
       assert.ok(screen.getByRole("button", { name: "Add planning session" }));

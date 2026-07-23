@@ -45,13 +45,26 @@ export function TextareaComposer({
   const inFlightRef = useRef(false);
 
   const submit = async () => {
-    const trimmed = input.trim();
+    // Snapshot the exact draft we're submitting: the textarea stays editable
+    // in flight, so the user may keep typing while we await onSubmit.
+    const draftAtSubmit = input;
+    const trimmed = draftAtSubmit.trim();
     if (!trimmed || inFlightRef.current || disabled) return;
     inFlightRef.current = true;
     setIsSubmitting(true);
     try {
       const accepted = await onSubmit(trimmed);
-      if (accepted) setInput("");
+      // Clear ONLY the draft we submitted. If the user typed a new draft while
+      // the request was in flight, `current !== draftAtSubmit` and we keep it —
+      // clearing unconditionally here would silently discard their new text.
+      if (accepted)
+        setInput((current) => (current === draftAtSubmit ? "" : current));
+    } catch {
+      // onSubmit is documented to resolve `false` on failure; a throw is an
+      // unexpected contract break we treat the same way — keep the draft so the
+      // user can retry. Swallowing here also stops the `void submit()` call
+      // sites from producing an unhandled promise rejection. Surfacing the
+      // error to the user is the caller's responsibility (it owns onSubmit).
     } finally {
       inFlightRef.current = false;
       setIsSubmitting(false);
@@ -67,10 +80,13 @@ export function TextareaComposer({
     // Enter sends; Shift+Enter (and Enter during IME composition) inserts a
     // newline. `isComposing` guards CJK/IME input where Enter commits a
     // candidate rather than the message.
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-      e.preventDefault();
-      void submit();
-    }
+    if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
+    // Nothing to send / already sending / gated off: let Enter behave like a
+    // normal textarea key (insert a newline) instead of swallowing it with a
+    // preventDefault that blocks the newline yet triggers no submit.
+    if (!input.trim() || inFlightRef.current || disabled) return;
+    e.preventDefault();
+    void submit();
   };
 
   const canSend = input.trim().length > 0 && !isSubmitting && !disabled;
