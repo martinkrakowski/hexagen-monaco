@@ -79,10 +79,73 @@ export function rekeyGenesisFormValues(
 }
 
 /**
- * Drops the snapshot. Used by tests today; PR C2's identity reconciliation
- * wires this into the accept-save completion so a finished flow can't leak
- * its edits into the next one.
+ * Drops the snapshot. Wired into the accept screen's SUCCESSFUL save (Plan
+ * Workbench C2) so a finished genesis flow can't leak its edits into the next
+ * one; the abandoned paths (accept Back/Regenerate) deliberately do NOT call
+ * this — surviving them is the store's whole purpose.
  */
 export function clearGenesisFormValues(): void {
   snapshot = null;
+}
+
+type GenesisGovernance = ProjectConfig["governance"];
+
+/**
+ * The Section A governance fields whose snapshot values differ from the
+ * flow's own seed — i.e. the fields the user actually EDITED (Plan Workbench
+ * C2, locked plan §5 Q5). `handleUseManifest` gives these top precedence
+ * (edited > carriedName-derived > AI-derived).
+ *
+ * Field-level comparison against a fresh seed matters: the snapshot exists
+ * after ANY Section A edit, so treating its whole governance object as
+ * "edited" would let an untouched seed default (e.g. the bypassed flow's
+ * `@hexagen` workspaceName, or the seed's template) clobber the AI-derived
+ * value the user never overrode. Blank/whitespace identity values also count
+ * as not-edited — an emptied field must fall through the precedence chain,
+ * never become the manifest's `system`/`scope`.
+ *
+ * workspaceDescription is deliberately excluded: the AI-derived manifest
+ * description is the accept screen's source of truth and its reconciliation
+ * is out of C2's scope.
+ */
+export interface EditedGenesisGovernance {
+  workspaceName?: string;
+  namespacePrefix?: string;
+  packageManager?: GenesisGovernance["packageManager"];
+  workspaceTemplate?: GenesisGovernance["workspaceTemplate"];
+  namingConventions?: GenesisGovernance["namingConventions"];
+}
+
+export function loadEditedGenesisGovernance(
+  seedName: string | null,
+): EditedGenesisGovernance {
+  const saved = loadGenesisFormValues(seedName);
+  if (saved === null) return {};
+  const seed = seedGenesisFormValues(seedName).governance;
+  const current = saved.governance;
+  const edited: EditedGenesisGovernance = {};
+
+  const workspaceName = current.workspaceName.trim();
+  if (workspaceName && workspaceName !== seed.workspaceName) {
+    edited.workspaceName = workspaceName;
+  }
+  const namespacePrefix = current.namespacePrefix.trim();
+  if (namespacePrefix && namespacePrefix !== seed.namespacePrefix) {
+    edited.namespacePrefix = namespacePrefix;
+  }
+  if (current.packageManager !== seed.packageManager) {
+    edited.packageManager = current.packageManager;
+  }
+  if (current.workspaceTemplate !== seed.workspaceTemplate) {
+    edited.workspaceTemplate = current.workspaceTemplate;
+  }
+  if (
+    current.namingConventions.contextDirectoryPattern !==
+      seed.namingConventions.contextDirectoryPattern ||
+    current.namingConventions.adapterSuffix !==
+      seed.namingConventions.adapterSuffix
+  ) {
+    edited.namingConventions = { ...current.namingConventions };
+  }
+  return edited;
 }

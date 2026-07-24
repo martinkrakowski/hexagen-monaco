@@ -287,6 +287,18 @@ describe("PlanWorkbench (real hook through the wiring host)", () => {
       "the live layer is not an archived row",
     );
   });
+
+  it("renders NO Generation options section — the C2 slot is genesis-only and this host omits it", () => {
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
+    // Plan Workbench C2 added an OPTIONAL third accordion section for the
+    // genesis host's generation options; the plan-phase host must stay at
+    // exactly the two shared sections (zero behavior change for
+    // /projects/[id]).
+    assert.ok(button(/Project settings/));
+    assert.ok(button(/Sessions & sources/));
+    assert.doesNotMatch(bodyText(), /Generation options/);
+  });
 });
 
 describe("PlanWorkbench (mobile, locked §5 Q6)", () => {

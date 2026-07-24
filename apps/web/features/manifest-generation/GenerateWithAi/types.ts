@@ -8,18 +8,24 @@ import type {
 export type { ModelSelectionFlowState };
 
 /**
- * Plan Workbench C1: the two right-pane slots GenerateWithAi produces when a
- * host mounts it inside the shared workbench (`renderWorkbench`). The host owns
- * the workbench shell (left column, layout); GenerateWithAi owns what fills the
- * right pane at every point of the generation flow.
+ * Plan Workbench C1/C2: the workbench slots GenerateWithAi produces for the
+ * host's `renderWorkbench` callback. The host owns the workbench shell (left
+ * column, layout); GenerateWithAi owns what fills the right pane at every
+ * point of the generation flow, plus the left column's "Generation options"
+ * section content.
  */
 export interface GenerateWithAiWorkbenchSlots {
   /** Right-pane main content: the generate form body, the AiGeneratingStep
    * telemetry while a run is in flight/parked, or a flow-state view. */
   main: ReactNode;
-  /** Bottom-pinned composer (replaces DescriptionInput + the ActionBar submit).
-   * Absent during generation and in non-idle flow states. */
+  /** Bottom-pinned composer (the flow's single submit affordance). Absent
+   * during generation and in non-idle flow states. */
   composer?: ReactNode;
+  /** Left-column "Generation options" accordion content (Plan Workbench C2,
+   * plan §3.6): deployment, max contexts, engine picker, change-model. Present
+   * with the form AND during the generating screen (disabled there); absent in
+   * non-idle flow states, mirroring the form body they belong to. */
+  generationOptions?: ReactNode;
 }
 
 export interface GenerateWithAiProps {
@@ -27,15 +33,13 @@ export interface GenerateWithAiProps {
   llmContext: LocalLLMContext;
   onGeneratingStateChange?: (actions: GeneratingFooterActions | null) => void;
   /**
-   * Plan Workbench C1: when provided, GenerateWithAi renders through this
-   * callback instead of its single-column layout, handing the host `main` +
-   * `composer` slots for the workbench's right pane. All flow behavior
-   * (min-length gate, local-generation warning, /models detour, parked
-   * telemetry) is identical in both modes — only the layout differs. Optional
-   * so the single-column path stays intact for any host that has not adopted
-   * the workbench (PR C2 relocates the remaining sections and retires it).
+   * Plan Workbench C2: GenerateWithAi renders exclusively through this
+   * callback, handing the host `main` + `composer` + `generationOptions`
+   * slots for the shared workbench. REQUIRED — the legacy single-column
+   * layout was retired in C2 (AIGenerationPage is the only consumer and
+   * always mounts the workbench), so there is no fallback rendering path.
    */
-  renderWorkbench?: (slots: GenerateWithAiWorkbenchSlots) => ReactNode;
+  renderWorkbench: (slots: GenerateWithAiWorkbenchSlots) => ReactNode;
 }
 
 export interface GeneratingFooterActions {
@@ -57,14 +61,6 @@ export interface EntryPointsSectionProps {
 export interface HeaderSectionProps {
   title: string;
   subtitle: string;
-}
-
-export interface ActionBarProps {
-  canGenerate: boolean;
-  isGenerating: boolean;
-  onGenerate: () => void;
-  onCancel: () => void;
-  disabledTooltip?: string;
 }
 
 export interface ClientManifestGenerationResult {

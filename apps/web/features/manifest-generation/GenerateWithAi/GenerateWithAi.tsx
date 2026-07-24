@@ -16,16 +16,13 @@ import type { LLMEngineStatus, ModelMetadata } from "@hexagen/local-llm";
 import { Button } from "@hexagen/ui";
 import { ModelProgressCard } from "@/governance-assistant/ModelProgressCard";
 import { TextareaComposer } from "@/chat/TextareaComposer";
-import { ActionBar } from "./ActionBar";
 import { AiReadyIndicator } from "./AiReadyIndicator";
-import { DescriptionInput } from "./DescriptionInput";
 import { ExampleCardsSection } from "./ExampleCardsSection";
 import { AdvancedOptionsSection } from "./AdvancedOptionsSection";
 import { HeaderSection } from "./HeaderSection";
 import { ModelSetupPrompt } from "./ModelSetupPrompt";
 import { StateView } from "./StateView";
 import { AiGeneratingStep } from "./AiGeneratingStep";
-import { GenerateWithAiLayout } from "./GenerateWithAiLayout";
 import { useGenerateWithAiForm } from "./hooks/useGenerateWithAiForm";
 import type { GenerateWithAiProps } from "./types";
 import { useLLMReadiness } from "../hooks/useLLMReadiness";
@@ -269,7 +266,7 @@ export function GenerateWithAi({
   }, [stagedGen, actions, retryCount]);
 
   // Plan Workbench C1: the workbench composer routes through the SAME
-  // handleGenerate gate as the ActionBar button — min-length validation
+  // handleGenerate gate the retired ActionBar button used — min-length validation
   // (canGenerate ← formHandlers.isValid), the explicit-local warning dialog and
   // the /models detour are all preserved behind it. Deliberately resolves
   // `false` on every call: TextareaComposer clears its draft on `true`, but
@@ -281,53 +278,70 @@ export function GenerateWithAi({
     return false;
   };
 
+  // Hoisted above the early-return arms (Plan Workbench C2): the relocated
+  // "Generation options" accordion section stays mounted in the left column
+  // during the generating screen — disabled there via isGenerating — instead
+  // of vanishing with the form body it used to live in.
+  const isGenerating = flowState.state === "generating";
+
+  const advancedOptions = (
+    <AdvancedOptionsSection
+      deployment={formState.deployment}
+      onDeploymentChange={(value) => formHandlers.setValue("deployment", value)}
+      maxContexts={formState.maxContexts}
+      onMaxContextsChange={(value) =>
+        formHandlers.setValue("maxContexts", value)
+      }
+      isDisabled={isGenerating}
+      onChangeModel={() => navigateToModelSelection(false)}
+      engine={engine}
+      onEngineChange={setEngine}
+    />
+  );
+
   if (flowState.state !== "idle" && flowState.state !== "generating") {
-    const stateView = (
-      <StateView
-        flowState={flowState}
-        actions={actions}
-        onConfirmAndContinue={handleRetryOrRegenerate}
-        onRetryFromError={handleRetryOrRegenerate}
-      />
-    );
-    // Workbench mode: flow-state screens (setup/error interstitials) fill the
-    // right pane's main slot, as today (§3.6) — no composer alongside them.
-    if (renderWorkbench) {
-      return renderWorkbench({
-        main: <div className="h-full overflow-y-auto">{stateView}</div>,
-      });
-    }
-    return stateView;
+    // Flow-state screens (setup/error interstitials) fill the right pane's
+    // main slot, as today (§3.6) — no composer or generation options
+    // alongside them (they belong to the generate form, which these states
+    // replaced pre-workbench too).
+    return renderWorkbench({
+      main: (
+        <div className="h-full overflow-y-auto">
+          <StateView
+            flowState={flowState}
+            actions={actions}
+            onConfirmAndContinue={handleRetryOrRegenerate}
+            onRetryFromError={handleRetryOrRegenerate}
+          />
+        </div>
+      ),
+    });
   }
 
   // Replace the form with the dedicated full-height generating screen (mirrors
-  // the import flow). See showGeneratingScreen above for exactly when.
+  // the import flow). See showGeneratingScreen above for exactly when. The
+  // telemetry/progress log IS the main view while the run is in flight and
+  // after it parks (no composer — the shell footer's explicit Next advances;
+  // deliberately no router.push from the success arm, per the
+  // parked-on-telemetry contract above). Generation options stay in the left
+  // column, disabled while the run is in flight or parked.
   if (showGeneratingScreen) {
-    const generatingScreen = (
-      <div className="h-full flex flex-col dot-grid bg-ambient p-4">
-        <AiGeneratingStep
-          phase={stagedGen.phase}
-          stepDetail={stagedGen.stepDetail}
-          stageProgress={stagedGen.stageProgress}
-          verboseLog={stagedGen.verboseLog}
-        />
-      </div>
-    );
-    // Workbench mode: the telemetry/progress log IS the main view while the
-    // run is in flight and after it parks (no composer — the shell footer's
-    // explicit Next advances; deliberately no router.push from the success
-    // arm, per the parked-on-telemetry contract above).
-    if (renderWorkbench) {
-      return renderWorkbench({ main: generatingScreen });
-    }
-    return generatingScreen;
+    return renderWorkbench({
+      main: (
+        <div className="h-full flex flex-col dot-grid bg-ambient p-4">
+          <AiGeneratingStep
+            phase={stagedGen.phase}
+            stepDetail={stagedGen.stepDetail}
+            stageProgress={stagedGen.stageProgress}
+            verboseLog={stagedGen.verboseLog}
+          />
+        </div>
+      ),
+      generationOptions: advancedOptions,
+    });
   }
 
-  const isGenerating = flowState.state === "generating";
   const hasError = stagedGen.generationError !== null;
-
-  // ── Form-era sections, shared verbatim by both layouts ────────────────────
-  // (single-column below, workbench right-pane when renderWorkbench is set).
 
   const setupPrompt = needsSetup && !isProbing && (
     <ModelSetupPrompt onSetupModel={() => navigateToModelSelection(false)} />
@@ -392,21 +406,6 @@ export function GenerateWithAi({
         formHandlers.setValue("selectedExample", index);
       }}
       isDisabled={isGenerating}
-    />
-  );
-
-  const advancedOptions = (
-    <AdvancedOptionsSection
-      deployment={formState.deployment}
-      onDeploymentChange={(value) => formHandlers.setValue("deployment", value)}
-      maxContexts={formState.maxContexts}
-      onMaxContextsChange={(value) =>
-        formHandlers.setValue("maxContexts", value)
-      }
-      isDisabled={isGenerating}
-      onChangeModel={() => navigateToModelSelection(false)}
-      engine={engine}
-      onEngineChange={setEngine}
     />
   );
 
@@ -484,117 +483,70 @@ export function GenerateWithAi({
     />
   );
 
-  // ── Workbench layout (Plan Workbench C1) ──────────────────────────────────
-  // DescriptionInput is replaced by the bottom-pinned composer; every other
-  // section keeps today's placement in the main body (Generation-options /
-  // example-cards relocation is PR C2, per the settled scope). The submit
-  // affordance moves from the ActionBar into the composer — rendering both
-  // would duplicate the Generate action.
-  if (renderWorkbench) {
-    return renderWorkbench({
-      main: (
-        <div className="h-full overflow-y-auto dot-grid">
-          <div className="max-w-2xl mx-auto w-full px-6 py-8 space-y-8">
-            <HeaderSection
-              title="Project with AI"
-              subtitle="Describe what you want to build. The more context you provide, the better the result."
-            />
-            {setupPrompt}
-            {errorSection}
-            {exampleCards}
-            {advancedOptions}
-            {capabilityWarning}
-          </div>
-          {modelLoadingPortal}
-          {localWarningDialog}
-        </div>
-      ),
-      composer: (
-        <div className="shrink-0">
-          <TextareaComposer
-            value={formState.description}
-            onValueChange={(value) => {
-              formHandlers.setValue("description", value);
-              formHandlers.setValue("selectedExample", null);
-            }}
-            onSubmit={handleComposerSubmit}
-            placeholder="Describe your project in detail... e.g., A task management system with user authentication, project boards, and real-time collaboration features..."
-            inputAriaLabel="Project description"
-            submitLabel="Generate"
-            // Mirrors the ActionBar gate exactly (canGenerate && !hasError).
-            // TextareaComposer keeps the textarea editable when disabled — it
-            // only blocks submit — so the user can keep drafting while short,
-            // probing, or in the error state.
-            disabled={!canGenerate || hasError}
+  // ── Workbench layout (Plan Workbench C1/C2) ───────────────────────────────
+  // The bottom-pinned composer is the flow's single submit affordance; the
+  // main body keeps the state-dependent sections (setup prompt, capability
+  // warning, error/retry) and the example cards above the composer (§3.6).
+  // Generation options moved to the host's left-column accordion (C2).
+  return renderWorkbench({
+    main: (
+      <div className="h-full overflow-y-auto dot-grid">
+        <div className="max-w-2xl mx-auto w-full px-6 py-8 space-y-8">
+          <HeaderSection
+            title="Project with AI"
+            subtitle="Describe what you want to build. The more context you provide, the better the result."
           />
-          <div className="flex items-center justify-between px-4 pb-2">
-            <AiReadyIndicator isReady={hasAnyProvider} />
-            {/* aria-atomic keeps parity with the DescriptionInput counter this
-                caption row replaced: the counter/limit copy swaps wholesale,
-                so screen readers must re-announce the whole region. */}
-            <p
-              className="text-xs"
-              aria-live="polite"
-              aria-atomic="true"
-              style={{ fontVariantNumeric: "tabular-nums" }}
-            >
-              {disabledTooltip ? (
-                <span className="text-amber-600">{disabledTooltip}</span>
-              ) : (
-                <span className="text-muted-foreground">
-                  {formHandlers.charCount.toLocaleString()} /{" "}
-                  {DESCRIPTION_MAX_LENGTH.toLocaleString()}
-                </span>
-              )}
-            </p>
-          </div>
+          {setupPrompt}
+          {errorSection}
+          {exampleCards}
+          {capabilityWarning}
         </div>
-      ),
-    });
-  }
-
-  return (
-    <GenerateWithAiLayout>
-      <HeaderSection
-        title="Project with AI"
-        subtitle="Describe what you want to build. The more context you provide, the better the result."
-      />
-
-      <DescriptionInput
-        value={formState.description}
-        onChange={(value) => {
-          formHandlers.setValue("description", value);
-          formHandlers.setValue("selectedExample", null);
-        }}
-        charCount={formHandlers.charCount}
-        disabled={isGenerating}
-        isAiReady={hasAnyProvider}
-      />
-
-      {setupPrompt}
-
-      {errorSection}
-
-      {exampleCards}
-
-      {advancedOptions}
-
-      {capabilityWarning}
-
-      {modelLoadingPortal}
-
-      <ActionBar
-        canGenerate={canGenerate && !hasError}
-        isGenerating={isGenerating}
-        onGenerate={handleGenerate}
-        onCancel={() => {
-          actions.clearError();
-          stagedGen.reset();
-        }}
-        disabledTooltip={disabledTooltip}
-      />
-
-      {localWarningDialog}
-    </GenerateWithAiLayout>
-  );
+        {modelLoadingPortal}
+        {localWarningDialog}
+      </div>
+    ),
+    generationOptions: advancedOptions,
+    composer: (
+      <div className="shrink-0">
+        <TextareaComposer
+          value={formState.description}
+          onValueChange={(value) => {
+            formHandlers.setValue("description", value);
+            formHandlers.setValue("selectedExample", null);
+          }}
+          onSubmit={handleComposerSubmit}
+          placeholder="Describe your project in detail... e.g., A task management system with user authentication, project boards, and real-time collaboration features..."
+          inputAriaLabel="Project description"
+          submitLabel="Generate"
+          // The retired ActionBar's exact gate (canGenerate && !hasError).
+          // TextareaComposer keeps the textarea editable when disabled — it
+          // only blocks submit — so the user can keep drafting while short,
+          // probing, or in the error state.
+          disabled={!canGenerate || hasError}
+        />
+        <div className="flex items-center justify-between px-4 pb-2">
+          <AiReadyIndicator isReady={hasAnyProvider} />
+          {/* aria-atomic keeps parity with the counter of the retired
+                DescriptionInput this caption row replaced: the counter/limit
+                copy swaps wholesale, so screen readers must re-announce the
+                whole region. */}
+          <p
+            className="text-xs"
+            aria-live="polite"
+            aria-atomic="true"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+          >
+            {disabledTooltip ? (
+              <span className="text-amber-600">{disabledTooltip}</span>
+            ) : (
+              <span className="text-muted-foreground">
+                {formHandlers.charCount.toLocaleString()} /{" "}
+                {DESCRIPTION_MAX_LENGTH.toLocaleString()}
+              </span>
+            )}
+          </p>
+        </div>
+      </div>
+    ),
+  });
 }

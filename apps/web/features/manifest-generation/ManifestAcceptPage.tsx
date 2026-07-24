@@ -17,6 +17,7 @@ import { useContextChatPanel } from "./store/useContextChatPanel";
 import { useSavedProjects } from "../../app/hooks/useSavedProjects";
 import { usePendingManifest } from "./store/usePendingManifest";
 import { deriveInitialLayers, sessionMatchesSpec } from "./accept-save-layers";
+import { clearGenesisFormValues } from "./genesis-workbench/genesisProjectSettingsStore";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import type { ProjectSpec } from "@hexagen/project-configuration";
 import { parseYamlToViewData } from "@hexagen/manifest-generation";
@@ -140,6 +141,15 @@ export function ManifestAcceptPage() {
       }
 
       isNavigatingAway.current = true;
+      // A COMPLETED genesis save closes the Section A round-trip lifecycle
+      // (Plan Workbench C2): drop the settings snapshot so a later fresh
+      // genesis visit can't inherit this flow's edits. Gated on the GENESIS
+      // originPath — an import-flow save has nothing to do with the genesis
+      // snapshot — and deliberately NOT called on Back/Regenerate below:
+      // surviving those abandoned-accept paths is the store's whole purpose.
+      if (pendingManifest.originPath === "/projects/new/ai") {
+        clearGenesisFormValues();
+      }
       pendingManifest.clear();
       // Clear the import spec so the next new project starts from a blank canvas.
       sessionStorage.removeItem("import_spec_content");

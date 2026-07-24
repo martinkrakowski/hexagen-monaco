@@ -14,7 +14,10 @@ import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { PlanWorkbench } from "@/workspace-shell/plan-phase/PlanWorkbench";
 import { GenesisProjectSettingsSection } from "./genesis-workbench/GenesisProjectSettingsSection";
 import { GenesisSourcesSection } from "./genesis-workbench/GenesisSourcesSection";
-import { rekeyGenesisFormValues } from "./genesis-workbench/genesisProjectSettingsStore";
+import {
+  loadEditedGenesisGovernance,
+  rekeyGenesisFormValues,
+} from "./genesis-workbench/genesisProjectSettingsStore";
 import { Button } from "@hexagen/ui";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { LocalLLMContext } from "../../lib/llm-interfaces";
@@ -63,6 +66,12 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
           carriedName ||
           wizardData.governance?.workspaceName ||
           `AI Project ${new Date().toLocaleTimeString()}`;
+        // Identity reconciliation (Plan Workbench C2, locked plan §5 Q5):
+        // Section A values the user actually EDITED (snapshot diffed against
+        // this flow's own seed) take top precedence — edited >
+        // carriedName-derived > AI-derived. Read BEFORE the rekey below moves
+        // the snapshot to the manufactured name.
+        const edited = loadEditedGenesisGovernance(carriedName);
         // Bypassed-name flows snapshot Section A edits under the null key,
         // but the accept screen re-attaches THIS manufactured projectName as
         // `?name=` on Back/Regenerate — move the snapshot with the hand-off
@@ -70,17 +79,46 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
         // carry. No-op when a carried name exists (snapshot and URL already
         // share that key) or when nothing was edited.
         rekeyGenesisFormValues(carriedName, projectName);
-        // Keep the previewed/saved manifest string in sync with the carried
-        // name: seed the form's workspaceName/namespacePrefix AND rewrite the
-        // manifest's top-level system/scope so the Approve screen and saved
-        // manifestYaml agree with formState (see manifestIdentity).
         let manifestYaml = yaml;
-        if (carriedName && wizardData.governance) {
-          const slug = deriveWorkspaceName(carriedName).name;
-          const scope = `@${slug}`;
-          wizardData.governance.workspaceName = slug;
-          wizardData.governance.namespacePrefix = scope;
-          manifestYaml = setManifestIdentity(yaml, { system: slug, scope });
+        if (wizardData.governance) {
+          // formValues-only fields (locked §5 Q5): packageManager, template
+          // and naming conventions have NO YAML home — edited values ride in
+          // wizardData.governance only; no governance section is invented in
+          // the manifest YAML (that would be a schema change needing an ADR).
+          if (edited.packageManager) {
+            wizardData.governance.packageManager = edited.packageManager;
+          }
+          if (edited.workspaceTemplate) {
+            wizardData.governance.workspaceTemplate = edited.workspaceTemplate;
+          }
+          if (edited.namingConventions) {
+            wizardData.governance.namingConventions = edited.namingConventions;
+          }
+
+          // Identity fields: keep the previewed/saved manifest string in sync
+          // with the resolved identity — seed the form's
+          // workspaceName/namespacePrefix AND rewrite the manifest's top-level
+          // system/scope so the Approve screen and saved manifestYaml agree
+          // with formState (see manifestIdentity). Per-field precedence:
+          // an edited value wins, then the carried name's derivation, then
+          // the AI-derived value already in wizardData (a rewrite to which is
+          // a semantic no-op).
+          const carriedSlug = carriedName
+            ? deriveWorkspaceName(carriedName).name
+            : null;
+          const system = edited.workspaceName ?? carriedSlug;
+          const scope =
+            edited.namespacePrefix ?? (carriedSlug ? `@${carriedSlug}` : null);
+          if (system !== null || scope !== null) {
+            const finalSystem = system ?? wizardData.governance.workspaceName;
+            const finalScope = scope ?? wizardData.governance.namespacePrefix;
+            wizardData.governance.workspaceName = finalSystem;
+            wizardData.governance.namespacePrefix = finalScope;
+            manifestYaml = setManifestIdentity(yaml, {
+              system: finalSystem,
+              scope: finalScope,
+            });
+          }
         }
         setPendingManifest(
           manifestYaml,
@@ -166,7 +204,7 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
             onUseManifest={handleUseManifest}
             llmContext={llmContext}
             onGeneratingStateChange={setGeneratingActions}
-            renderWorkbench={({ main, composer }) => (
+            renderWorkbench={({ main, composer, generationOptions }) => (
               <PlanWorkbench
                 leftTitle="Plan"
                 rightTitle="Generate"
@@ -176,6 +214,10 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
                 sessions={
                   <GenesisSourcesSection originSpecText={originSpecText} />
                 }
+                // Third left-column accordion section (Plan Workbench C2,
+                // §3.6): the deployment/max-contexts/engine controls
+                // GenerateWithAi produces; absent in non-idle flow states.
+                generationOptions={generationOptions}
                 // No leftFooter: "Add planning session" is HIDDEN in genesis
                 // (locked decision §5 Q1) — the hint lives in Section B's
                 // muted empty-state line, never as a footer control.

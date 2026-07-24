@@ -59,15 +59,25 @@ vi.mock("../../../app/hooks/useSavedProjects", () => ({
 
 import { ManifestAcceptPage } from "../ManifestAcceptPage";
 import { usePendingManifest } from "../store/usePendingManifest";
+import {
+  clearGenesisFormValues,
+  loadGenesisFormValues,
+  saveGenesisFormValues,
+  seedGenesisFormValues,
+} from "../genesis-workbench/genesisProjectSettingsStore";
 
 const YAML = "bounded_contexts:\n  - name: core\n";
 
-function approve() {
+function clickButton(name: RegExp) {
   const btn = Array.from(document.querySelectorAll("button")).find((b) =>
-    /Use This Manifest/.test(b.textContent || ""),
+    name.test(b.textContent || ""),
   );
-  assert.ok(btn, "expected the approve button");
+  assert.ok(btn, `expected a button matching ${name}`);
   fireEvent.click(btn as HTMLButtonElement);
+}
+
+function approve() {
+  clickButton(/Use This Manifest/);
 }
 
 describe("ManifestAcceptPage — provenance capture at accept-save", () => {
@@ -120,5 +130,77 @@ describe("ManifestAcceptPage — provenance capture at accept-save", () => {
     await waitFor(() => assert.strictEqual(saveProject.mock.calls.length, 1));
     const initialLayers = saveProject.mock.calls[0][3];
     assert.deepStrictEqual(initialLayers, []);
+  });
+});
+
+// Plan Workbench C2: the genesis Section A snapshot's END of life. It exists
+// to survive the accept screen's Back/Regenerate round trips — so ONLY a
+// completed genesis save may drop it, and only for the genesis origin.
+describe("ManifestAcceptPage — genesis settings snapshot lifecycle", () => {
+  beforeEach(() => {
+    cleanup();
+    saveProject.mockClear();
+    usePendingManifest.getState().clear();
+    clearGenesisFormValues();
+  });
+
+  function seedSnapshot() {
+    // The null (bypassed-name) seed: the carried-name seed would route
+    // through the REAL deriveWorkspaceName, which this suite's
+    // @hexagen/manifest-generation mock does not provide — and the lifecycle
+    // under test only cares that A snapshot exists under the flow's key.
+    const values = seedGenesisFormValues(null);
+    values.governance.packageManager = "pnpm";
+    saveGenesisFormValues("Vellum", values);
+    return values;
+  }
+
+  it("a COMPLETED genesis save drops the snapshot — a later fresh genesis flow must not inherit this one's edits", async () => {
+    seedSnapshot();
+    usePendingManifest
+      .getState()
+      .set(YAML, {} as never, "Vellum", "/projects/new/ai", null);
+    render(<ManifestAcceptPage />);
+    approve();
+
+    await waitFor(() => assert.strictEqual(saveProject.mock.calls.length, 1));
+    await waitFor(() =>
+      assert.strictEqual(loadGenesisFormValues("Vellum"), null),
+    );
+  });
+
+  it("Back KEEPS the snapshot — surviving the abandoned-accept round trip is the store's purpose", () => {
+    const values = seedSnapshot();
+    usePendingManifest
+      .getState()
+      .set(YAML, {} as never, "Vellum", "/projects/new/ai", null);
+    render(<ManifestAcceptPage />);
+    clickButton(/^Back$/);
+
+    assert.strictEqual(saveProject.mock.calls.length, 0);
+    assert.strictEqual(loadGenesisFormValues("Vellum"), values);
+  });
+
+  it("Regenerate KEEPS the snapshot for the same reason", () => {
+    const values = seedSnapshot();
+    usePendingManifest
+      .getState()
+      .set(YAML, {} as never, "Vellum", "/projects/new/ai", null);
+    render(<ManifestAcceptPage />);
+    clickButton(/^Regenerate$/);
+
+    assert.strictEqual(loadGenesisFormValues("Vellum"), values);
+  });
+
+  it("an IMPORT-flow save leaves an unrelated genesis snapshot alone (the clear is gated on the genesis originPath)", async () => {
+    const values = seedSnapshot();
+    usePendingManifest
+      .getState()
+      .set(YAML, {} as never, "Imported", "/projects/new/import/spec", null);
+    render(<ManifestAcceptPage />);
+    approve();
+
+    await waitFor(() => assert.strictEqual(saveProject.mock.calls.length, 1));
+    assert.strictEqual(loadGenesisFormValues("Vellum"), values);
   });
 });
