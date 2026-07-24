@@ -8,6 +8,12 @@ import { parseManifestToWizardData } from "@hexagen/wizard-orchestration";
 import { deriveWorkspaceName } from "@hexagen/manifest-generation";
 import { setManifestIdentity } from "./manifestIdentity";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
+// PlanWorkbench is the shared PRESENTATIONAL two-pane shell (plan §3.1): it
+// reads no app context — this host fills every slot with genesis-owned data,
+// so the alias cross-slice import carries no workspace-shell coupling.
+import { PlanWorkbench } from "@/workspace-shell/plan-phase/PlanWorkbench";
+import { GenesisProjectSettingsSection } from "./genesis-workbench/GenesisProjectSettingsSection";
+import { GenesisSourcesSection } from "./genesis-workbench/GenesisSourcesSection";
 import { Button } from "@hexagen/ui";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { LocalLLMContext } from "../../lib/llm-interfaces";
@@ -20,7 +26,10 @@ interface AIGenerationPageProps {
 export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { set: setPendingManifest } = usePendingManifest();
+  // originSpecText feeds the read-only Source row in the workbench's left
+  // column (Plan Workbench C1) — present when this manifest came from an
+  // imported/pasted spec, null in the plain prompt flow.
+  const { set: setPendingManifest, originSpecText } = usePendingManifest();
 
   // The project name comes from the shared Project Name step (`?name=`). It is
   // also re-attached to the URL on Back/Regenerate from the accept screen so it
@@ -132,10 +141,31 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
           </div>
         )}
         <div className="flex-1 min-h-0">
+          {/* Plan Workbench C1: the genesis flow mounts the SHARED two-pane
+              workbench. GenerateWithAi keeps every flow behavior (min-length
+              gate, warning dialog, /models detour, parked telemetry) and hands
+              this host the right-pane slots; the host owns the left column. */}
           <GenerateWithAi
             onUseManifest={handleUseManifest}
             llmContext={llmContext}
             onGeneratingStateChange={setGeneratingActions}
+            renderWorkbench={({ main, composer }) => (
+              <PlanWorkbench
+                leftTitle="Plan"
+                rightTitle="Generate"
+                settings={
+                  <GenesisProjectSettingsSection carriedName={carriedName} />
+                }
+                sessions={
+                  <GenesisSourcesSection originSpecText={originSpecText} />
+                }
+                // No leftFooter: "Add planning session" is HIDDEN in genesis
+                // (locked decision §5 Q1) — the hint lives in Section B's
+                // muted empty-state line, never as a footer control.
+                main={main}
+                composer={composer}
+              />
+            )}
           />
         </div>
       </div>

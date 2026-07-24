@@ -7,12 +7,17 @@ import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelect
 import { useStagedManifestGeneration } from "../useStagedManifestGeneration";
 import { getModelPreferences } from "../ModelSelectionFlow/modelPreferencesStorage";
 import { assessModelCapability } from "@hexagen/manifest-generation";
-import { DESCRIPTION_MIN_LENGTH } from "@hexagen/agentic-interaction";
+import {
+  DESCRIPTION_MIN_LENGTH,
+  DESCRIPTION_MAX_LENGTH,
+} from "@hexagen/agentic-interaction";
 import type { DomainModelId } from "../../../lib/llm-interfaces";
 import type { LLMEngineStatus, ModelMetadata } from "@hexagen/local-llm";
 import { Button } from "@hexagen/ui";
 import { ModelProgressCard } from "@/governance-assistant/ModelProgressCard";
+import { TextareaComposer } from "@/chat/TextareaComposer";
 import { ActionBar } from "./ActionBar";
+import { AiReadyIndicator } from "./AiReadyIndicator";
 import { DescriptionInput } from "./DescriptionInput";
 import { ExampleCardsSection } from "./ExampleCardsSection";
 import { AdvancedOptionsSection } from "./AdvancedOptionsSection";
@@ -38,6 +43,7 @@ export function GenerateWithAi({
   onUseManifest,
   llmContext,
   onGeneratingStateChange,
+  renderWorkbench,
 }: GenerateWithAiProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -240,8 +246,21 @@ export function GenerateWithAi({
     actions.regenerateManifest();
   }, [stagedGen, actions, retryCount]);
 
+  // Plan Workbench C1: the workbench composer routes through the SAME
+  // handleGenerate gate as the ActionBar button — min-length validation
+  // (canGenerate ← formHandlers.isValid), the explicit-local warning dialog and
+  // the /models detour are all preserved behind it. Deliberately resolves
+  // `false` on every call: TextareaComposer clears its draft on `true`, but
+  // here the draft IS formState.description — the generation effect reads it
+  // AFTER the flow transitions, and retry/regenerate reuse it, so clearing
+  // would generate from an empty description.
+  const handleComposerSubmit = async (): Promise<boolean> => {
+    handleGenerate();
+    return false;
+  };
+
   if (flowState.state !== "idle" && flowState.state !== "generating") {
-    return (
+    const stateView = (
       <StateView
         flowState={flowState}
         actions={actions}
@@ -249,12 +268,20 @@ export function GenerateWithAi({
         onRetryFromError={handleRetryOrRegenerate}
       />
     );
+    // Workbench mode: flow-state screens (setup/error interstitials) fill the
+    // right pane's main slot, as today (§3.6) — no composer alongside them.
+    if (renderWorkbench) {
+      return renderWorkbench({
+        main: <div className="h-full overflow-y-auto">{stateView}</div>,
+      });
+    }
+    return stateView;
   }
 
   // Replace the form with the dedicated full-height generating screen (mirrors
   // the import flow). See showGeneratingScreen above for exactly when.
   if (showGeneratingScreen) {
-    return (
+    const generatingScreen = (
       <div className="h-full flex flex-col dot-grid bg-ambient p-4">
         <AiGeneratingStep
           phase={stagedGen.phase}
@@ -264,10 +291,241 @@ export function GenerateWithAi({
         />
       </div>
     );
+    // Workbench mode: the telemetry/progress log IS the main view while the
+    // run is in flight and after it parks (no composer — the shell footer's
+    // explicit Next advances; deliberately no router.push from the success
+    // arm, per the parked-on-telemetry contract above).
+    if (renderWorkbench) {
+      return renderWorkbench({ main: generatingScreen });
+    }
+    return generatingScreen;
   }
 
   const isGenerating = flowState.state === "generating";
   const hasError = stagedGen.generationError !== null;
+
+  // ── Form-era sections, shared verbatim by both layouts ────────────────────
+  // (single-column below, workbench right-pane when renderWorkbench is set).
+
+  const setupPrompt = needsSetup && !isProbing && (
+    <ModelSetupPrompt onSetupModel={() => navigateToModelSelection(false)} />
+  );
+
+  const errorSection = hasError && (
+    <div className="p-4 bg-destructive/10 border border-destructive rounded-md space-y-3">
+      <div className="flex items-start gap-3">
+        <svg
+          className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5"
+          fill="currentColor"
+          viewBox="0 0 20 20"
+        >
+          <path
+            fillRule="evenodd"
+            d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+            clipRule="evenodd"
+          />
+        </svg>
+        <div className="flex-1">
+          <h3 className="font-semibold text-destructive text-sm">
+            Generation Failed
+          </h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            {stagedGen.generationError}
+          </p>
+          {retryCount >= 3 && (
+            <p className="text-sm text-destructive mt-2">
+              Maximum retry attempts reached. Please check your connection or
+              try again later.
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="flex gap-2 pt-2">
+        <button
+          onClick={() => handleRetryOrRegenerate()}
+          disabled={retryCount >= 3}
+          className="text-sm font-medium px-3 py-1 text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Try Again ({3 - retryCount} attempts left)
+        </button>
+        <button
+          onClick={() => {
+            stagedGen.reset();
+            formHandlers.reset();
+            setRetryCount(0);
+          }}
+          className="text-sm font-medium px-3 py-1 text-muted-foreground hover:bg-muted rounded transition-colors"
+        >
+          Clear & Start Over
+        </button>
+      </div>
+    </div>
+  );
+
+  const exampleCards = (
+    <ExampleCardsSection
+      selectedExample={formState.selectedExample}
+      onUseExample={(example, index) => {
+        formHandlers.setValue("description", example);
+        formHandlers.setValue("selectedExample", index);
+      }}
+      isDisabled={isGenerating}
+    />
+  );
+
+  const advancedOptions = (
+    <AdvancedOptionsSection
+      deployment={formState.deployment}
+      onDeploymentChange={(value) => formHandlers.setValue("deployment", value)}
+      maxContexts={formState.maxContexts}
+      onMaxContextsChange={(value) =>
+        formHandlers.setValue("maxContexts", value)
+      }
+      isDisabled={isGenerating}
+      onChangeModel={() => navigateToModelSelection(false)}
+      engine={engine}
+      onEngineChange={setEngine}
+    />
+  );
+
+  const capabilityWarning = !manifestCapable && loadedModelId && (
+    <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+      <p className="font-medium text-amber-600 dark:text-amber-400">
+        Model may produce unreliable results
+      </p>
+      <p className="mt-1 text-muted-foreground">
+        The current model may not reliably produce structured JSON. For best
+        results, use a 3B+ parameter model.
+      </p>
+      <div className="mt-3">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => navigateToModelSelection(false)}
+        >
+          Switch to 3B+ Model
+        </Button>
+      </div>
+    </div>
+  );
+
+  // Portal to document.body — tree placement is irrelevant, so both layouts
+  // can include it wherever convenient.
+  const modelLoadingPortal =
+    mounted &&
+    (isModelLoading || isModelError) &&
+    createPortal(
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+        onClick={(e) => {
+          if (e.target === e.currentTarget && isModelLoading) return;
+        }}
+        aria-modal="true"
+        role="dialog"
+      >
+        <div className="w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+          <ModelProgressCard
+            status={engineStatus as LLMEngineStatus}
+            progress={llmContext.engineState.progress}
+            errorMessage={llmContext.engineState.errorMessage}
+            onCancel={() => navigateToModelSelection(false)}
+            onRetry={() => {
+              const modelId = llmContext.engineState.loadedModelId;
+              if (modelId) llmContext.initializeModel(modelId);
+            }}
+            model={llmContext.loadedModel as ModelMetadata | null}
+            modelId={
+              llmContext.engineState.loadedModelId as DomainModelId | undefined
+            }
+          />
+        </div>
+      </div>,
+      document.body,
+    );
+
+  const localWarningDialog = (
+    <LocalGenerationWarningDialog
+      open={showLocalWarning}
+      onOpenChange={setShowLocalWarning}
+      onContinueLocal={() => {
+        setShowLocalWarning(false);
+        proceedWithGeneration("local");
+      }}
+      onSwitchToCloud={() => {
+        setShowLocalWarning(false);
+        // Same-handler setEngine + transition is safe: React batches both,
+        // so the generation effect runs with engine === "cloud".
+        setEngine("cloud");
+        proceedWithGeneration("cloud");
+      }}
+      canSwitchToCloud={hasAnyCloud}
+    />
+  );
+
+  // ── Workbench layout (Plan Workbench C1) ──────────────────────────────────
+  // DescriptionInput is replaced by the bottom-pinned composer; every other
+  // section keeps today's placement in the main body (Generation-options /
+  // example-cards relocation is PR C2, per the settled scope). The submit
+  // affordance moves from the ActionBar into the composer — rendering both
+  // would duplicate the Generate action.
+  if (renderWorkbench) {
+    return renderWorkbench({
+      main: (
+        <div className="h-full overflow-y-auto dot-grid">
+          <div className="max-w-2xl mx-auto w-full px-6 py-8 space-y-8">
+            <HeaderSection
+              title="Project with AI"
+              subtitle="Describe what you want to build. The more context you provide, the better the result."
+            />
+            {setupPrompt}
+            {errorSection}
+            {exampleCards}
+            {advancedOptions}
+            {capabilityWarning}
+          </div>
+          {modelLoadingPortal}
+          {localWarningDialog}
+        </div>
+      ),
+      composer: (
+        <div className="shrink-0">
+          <TextareaComposer
+            value={formState.description}
+            onValueChange={(value) => {
+              formHandlers.setValue("description", value);
+              formHandlers.setValue("selectedExample", null);
+            }}
+            onSubmit={handleComposerSubmit}
+            placeholder="Describe your project in detail... e.g., A task management system with user authentication, project boards, and real-time collaboration features..."
+            inputAriaLabel="Project description"
+            submitLabel="Generate"
+            // Mirrors the ActionBar gate exactly (canGenerate && !hasError).
+            // TextareaComposer keeps the textarea editable when disabled — it
+            // only blocks submit — so the user can keep drafting while short,
+            // probing, or in the error state.
+            disabled={!canGenerate || hasError}
+          />
+          <div className="flex items-center justify-between px-4 pb-2">
+            <AiReadyIndicator isReady={hasAnyProvider} />
+            <p
+              className="text-xs"
+              aria-live="polite"
+              style={{ fontVariantNumeric: "tabular-nums" }}
+            >
+              {disabledTooltip ? (
+                <span className="text-amber-600">{disabledTooltip}</span>
+              ) : (
+                <span className="text-muted-foreground">
+                  {formHandlers.charCount.toLocaleString()} /{" "}
+                  {DESCRIPTION_MAX_LENGTH.toLocaleString()}
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+      ),
+    });
+  }
 
   return (
     <GenerateWithAiLayout>
@@ -287,143 +545,17 @@ export function GenerateWithAi({
         isAiReady={hasAnyProvider}
       />
 
-      {needsSetup && !isProbing && (
-        <ModelSetupPrompt
-          onSetupModel={() => navigateToModelSelection(false)}
-        />
-      )}
+      {setupPrompt}
 
-      {hasError && (
-        <div className="p-4 bg-destructive/10 border border-destructive rounded-md space-y-3">
-          <div className="flex items-start gap-3">
-            <svg
-              className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5"
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
-              <path
-                fillRule="evenodd"
-                d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                clipRule="evenodd"
-              />
-            </svg>
-            <div className="flex-1">
-              <h3 className="font-semibold text-destructive text-sm">
-                Generation Failed
-              </h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                {stagedGen.generationError}
-              </p>
-              {retryCount >= 3 && (
-                <p className="text-sm text-destructive mt-2">
-                  Maximum retry attempts reached. Please check your connection
-                  or try again later.
-                </p>
-              )}
-            </div>
-          </div>
-          <div className="flex gap-2 pt-2">
-            <button
-              onClick={() => handleRetryOrRegenerate()}
-              disabled={retryCount >= 3}
-              className="text-sm font-medium px-3 py-1 text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Try Again ({3 - retryCount} attempts left)
-            </button>
-            <button
-              onClick={() => {
-                stagedGen.reset();
-                formHandlers.reset();
-                setRetryCount(0);
-              }}
-              className="text-sm font-medium px-3 py-1 text-muted-foreground hover:bg-muted rounded transition-colors"
-            >
-              Clear & Start Over
-            </button>
-          </div>
-        </div>
-      )}
+      {errorSection}
 
-      <ExampleCardsSection
-        selectedExample={formState.selectedExample}
-        onUseExample={(example, index) => {
-          formHandlers.setValue("description", example);
-          formHandlers.setValue("selectedExample", index);
-        }}
-        isDisabled={isGenerating}
-      />
+      {exampleCards}
 
-      <AdvancedOptionsSection
-        deployment={formState.deployment}
-        onDeploymentChange={(value) =>
-          formHandlers.setValue("deployment", value)
-        }
-        maxContexts={formState.maxContexts}
-        onMaxContextsChange={(value) =>
-          formHandlers.setValue("maxContexts", value)
-        }
-        isDisabled={isGenerating}
-        onChangeModel={() => navigateToModelSelection(false)}
-        engine={engine}
-        onEngineChange={setEngine}
-      />
+      {advancedOptions}
 
-      {!manifestCapable && loadedModelId && (
-        <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
-          <p className="font-medium text-amber-600 dark:text-amber-400">
-            Model may produce unreliable results
-          </p>
-          <p className="mt-1 text-muted-foreground">
-            The current model may not reliably produce structured JSON. For best
-            results, use a 3B+ parameter model.
-          </p>
-          <div className="mt-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigateToModelSelection(false)}
-            >
-              Switch to 3B+ Model
-            </Button>
-          </div>
-        </div>
-      )}
+      {capabilityWarning}
 
-      {mounted &&
-        (isModelLoading || isModelError) &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
-            onClick={(e) => {
-              if (e.target === e.currentTarget && isModelLoading) return;
-            }}
-            aria-modal="true"
-            role="dialog"
-          >
-            <div
-              className="w-full max-w-sm"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <ModelProgressCard
-                status={engineStatus as LLMEngineStatus}
-                progress={llmContext.engineState.progress}
-                errorMessage={llmContext.engineState.errorMessage}
-                onCancel={() => navigateToModelSelection(false)}
-                onRetry={() => {
-                  const modelId = llmContext.engineState.loadedModelId;
-                  if (modelId) llmContext.initializeModel(modelId);
-                }}
-                model={llmContext.loadedModel as ModelMetadata | null}
-                modelId={
-                  llmContext.engineState.loadedModelId as
-                    | DomainModelId
-                    | undefined
-                }
-              />
-            </div>
-          </div>,
-          document.body,
-        )}
+      {modelLoadingPortal}
 
       <ActionBar
         canGenerate={canGenerate && !hasError}
@@ -436,22 +568,7 @@ export function GenerateWithAi({
         disabledTooltip={disabledTooltip}
       />
 
-      <LocalGenerationWarningDialog
-        open={showLocalWarning}
-        onOpenChange={setShowLocalWarning}
-        onContinueLocal={() => {
-          setShowLocalWarning(false);
-          proceedWithGeneration("local");
-        }}
-        onSwitchToCloud={() => {
-          setShowLocalWarning(false);
-          // Same-handler setEngine + transition is safe: React batches both,
-          // so the generation effect runs with engine === "cloud".
-          setEngine("cloud");
-          proceedWithGeneration("cloud");
-        }}
-        canSwitchToCloud={hasAnyCloud}
-      />
+      {localWarningDialog}
     </GenerateWithAiLayout>
   );
 }
