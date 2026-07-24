@@ -338,12 +338,115 @@ describe("PlanPhaseView (workbench host)", () => {
     );
   });
 
-  it("offers the empty-state secondary action (doc copy) that opens the add-session view", () => {
-    renderView(); // zero layers → Section B empty state
-    fireEvent.click(button(/Add an existing transcript/));
+  it("offers the empty-state secondary action in the EMPTY MAIN VIEW (plan §3.2), opening the add-session view", () => {
+    renderView(); // zero layers → the live view IS the empty main view
+    const action = button(/Add an existing transcript/);
+    // Placement is part of the pin: §3.2 puts the action in the empty MAIN
+    // view (right pane), not the Section B empty state in the left pane.
+    assert.strictEqual(
+      action.closest('nav[aria-label="Sessions and sources"]'),
+      null,
+      "the action does NOT live in the left-pane sessions nav",
+    );
+    assert.ok(
+      action.closest('section[aria-label="Live planning session"]'),
+      "the action lives in the right pane's empty main (live) view",
+    );
+    fireEvent.click(action);
     assert.ok(
       document.querySelector('section[aria-label="Add planning session"]'),
       "the secondary action opens the same inline add-session view",
+    );
+  });
+
+  it("preserves a pasted transcript across a row-click leave and reopen (draft lifted to the host)", () => {
+    // The add-session view is conditionally rendered, so a single click on a
+    // sessions row unmounts it — the always-mounted dialog it replaced kept
+    // the draft alive structurally. The draft is lifted to the host (exactly
+    // like composerDraft) so the leave can't destroy a pasted transcript.
+    lifecycle.current.loadedProject = project([brainstormLayer()]);
+    renderView();
+    fireEvent.click(button(/Add planning session/));
+    fireEvent.change(transcriptTextarea(), {
+      target: { value: "precious pasted transcript" },
+    });
+    fireEvent.change(
+      document.querySelector(
+        'input[aria-label="Session title"]',
+      ) as HTMLInputElement,
+      { target: { value: "Recovered notes" } },
+    );
+
+    fireEvent.click(sessionRow(/Initial brainstorm/));
+    assert.strictEqual(
+      document.querySelector('section[aria-label="Add planning session"]'),
+      null,
+      "the row click left the add-session view",
+    );
+
+    fireEvent.click(button(/Add planning session/));
+    assert.strictEqual(
+      transcriptTextarea().value,
+      "precious pasted transcript",
+      "the transcript survived the unmount",
+    );
+    assert.strictEqual(
+      (
+        document.querySelector(
+          'input[aria-label="Session title"]',
+        ) as HTMLInputElement
+      ).value,
+      "Recovered notes",
+      "the title survived too",
+    );
+  });
+
+  it("ignores row clicks while a submit is in flight (the old dialog's dismissible={!isSubmitting} gate, ported)", async () => {
+    lifecycle.current.loadedProject = project([brainstormLayer()]);
+    // Deferred, production-faithful addLayer: resolution is held open so the
+    // in-flight window is observable; on success the layer really lands in
+    // the project so the URL-derived view can resolve the fresh id.
+    let resolveAdd!: (id: string | null) => void;
+    lifecycle.current.addLayer = vi.fn(
+      (_projectId: string, layer: Record<string, unknown>) =>
+        new Promise<string | null>((resolve) => {
+          resolveAdd = (id) => {
+            if (id !== null) {
+              const proj = lifecycle.current.loadedProject as {
+                layers: unknown[];
+              };
+              proj.layers = [
+                ...proj.layers,
+                { id, createdAt: 99, updatedAt: 99, ...layer },
+              ];
+            }
+            resolve(id);
+          };
+        }),
+    );
+    renderView();
+    fireEvent.click(button(/Add planning session/));
+    fireEvent.change(transcriptTextarea(), {
+      target: { value: "in-flight transcript" },
+    });
+    fireEvent.click(button(/Add session/));
+
+    // Mid-write, a row click must NOT unmount the form: a failure after the
+    // unmount would land on nothing, and a success would yank the selection
+    // the user just made (the modal's dismissible gate blocked exactly this).
+    fireEvent.click(sessionRow(/Initial brainstorm/));
+    assert.ok(
+      document.querySelector('section[aria-label="Add planning session"]'),
+      "the add-session view stays mounted while the write is in flight",
+    );
+    assert.doesNotMatch(navState.search, /layer=/);
+
+    resolveAdd("L-new");
+    await waitFor(() => assert.match(navState.search, /layer=L-new/));
+    assert.strictEqual(
+      document.querySelector('section[aria-label="Add planning session"]'),
+      null,
+      "the success arm still leaves the view and selects the new layer",
     );
   });
 

@@ -5,15 +5,36 @@ import { Button, Checkbox, Input, Textarea, FileDropZone } from "@hexagen/ui";
 import type { NewProjectLayer } from "@/hooks/useSavedProjects";
 import { splitTurnsByAuthorHeadings } from "./split-turns";
 
+/** The add-session form's draft — LIFTED to the host (like the composer
+ * draft): this view is conditionally rendered, so any host-level leave (a
+ * sessions-row click) unmounts it mid-edit, and a pasted transcript is hard
+ * to reconstruct. The former always-mounted dialog preserved this state
+ * structurally; the inline view must do it explicitly. */
+export interface AddSessionDraft {
+  title: string;
+  content: string;
+  splitEnabled: boolean;
+}
+
+export const EMPTY_ADD_SESSION_DRAFT: AddSessionDraft = {
+  title: "",
+  content: "",
+  splitEnabled: true,
+};
+
 export interface AddPlanningSessionViewProps {
   /** Leaves the view without submitting (the host restores the URL-derived
-   * view — the add-session view is transient state, never in the URL). */
+   * view — the add-session view is transient state, never in the URL). The
+   * DRAFT survives a cancel: only a successful submit resets it. */
   onCancel: () => void;
   /** Awaited; resolves true when the layer was durably persisted. On success
    * the HOST leaves this view and selects the new layer's reader. */
   onSubmit: (layer: NewProjectLayer) => Promise<boolean>;
   /** Human-readable reason shown when the last submit failed (e.g. quota). */
   submitError: string | null;
+  /** Controlled draft, owned by the host (see AddSessionDraft). */
+  draft: AddSessionDraft;
+  onDraftChange: (draft: AddSessionDraft) => void;
 }
 
 /**
@@ -25,18 +46,21 @@ export interface AddPlanningSessionViewProps {
  * opt-out checkbox splits it into one turn per section instead (see
  * split-turns.ts).
  *
- * The submit is AWAITED and the view only resets on success: a pasted
+ * The submit is AWAITED and the draft only resets on success: a pasted
  * transcript is hard to reconstruct, so a failed write (most plausibly storage
- * quota) keeps the content in the form with the error shown inline.
+ * quota) keeps the content in the form with the error shown inline. For the
+ * same reason the draft itself is CONTROLLED (host-owned): a host-level leave
+ * of this view (sessions-row click) unmounts it, and the transcript must
+ * survive the round trip.
  */
 export function AddPlanningSessionView({
   onCancel,
   onSubmit,
   submitError,
+  draft,
+  onDraftChange,
 }: AddPlanningSessionViewProps) {
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [splitEnabled, setSplitEnabled] = useState(true);
+  const { title, content, splitEnabled } = draft;
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // null = no split offered (fewer than two `## Author` headings). A detected
@@ -77,10 +101,10 @@ export function AddPlanningSessionView({
       });
       if (ok) {
         // The host unmounts this view on success (it selects the new layer's
-        // reader); reset anyway so the contract doesn't depend on that.
-        setTitle("");
-        setContent("");
-        setSplitEnabled(true);
+        // reader); reset the lifted draft anyway so the contract doesn't
+        // depend on that. (Calling the host setter from a possibly-unmounted
+        // continuation is fine — the state lives in the host.)
+        onDraftChange(EMPTY_ADD_SESSION_DRAFT);
       }
     } finally {
       setIsSubmitting(false);
@@ -103,14 +127,14 @@ export function AddPlanningSessionView({
 
         <Input
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => onDraftChange({ ...draft, title: e.target.value })}
           placeholder="Session title (e.g. Initial brainstorm)"
           aria-label="Session title"
           disabled={isSubmitting}
         />
         <Textarea
           value={content}
-          onChange={(e) => setContent(e.target.value)}
+          onChange={(e) => onDraftChange({ ...draft, content: e.target.value })}
           placeholder="Paste the markdown transcript here…"
           aria-label="Session transcript (markdown)"
           rows={10}
@@ -122,10 +146,14 @@ export function AddPlanningSessionView({
           label="Import a markdown transcript file"
           hint={<>Drop a .md transcript here</>}
           onFileLoaded={(fileContent, filename) => {
-            setContent(fileContent);
-            // Filename is a better default title than nothing; never
-            // overwrite one the user already typed.
-            setTitle((t) => t || filename.replace(/\.(md|markdown|txt)$/i, ""));
+            // ONE draft update for both fields: filename is a better default
+            // title than nothing, but never overwrite one the user typed.
+            onDraftChange({
+              ...draft,
+              content: fileContent,
+              title:
+                draft.title || filename.replace(/\.(md|markdown|txt)$/i, ""),
+            });
           }}
         />
         {detectedTurns && (
@@ -133,7 +161,9 @@ export function AddPlanningSessionView({
             <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
               <Checkbox
                 checked={splitEnabled}
-                onCheckedChange={setSplitEnabled}
+                onCheckedChange={(checked) =>
+                  onDraftChange({ ...draft, splitEnabled: checked })
+                }
                 disabled={isSubmitting}
               />
               Split into turns by <code>## Author</code> headings

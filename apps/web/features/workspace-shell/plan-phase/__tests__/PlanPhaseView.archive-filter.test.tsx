@@ -89,6 +89,14 @@ function sessionRow(title: RegExp): HTMLButtonElement {
   return row as HTMLButtonElement;
 }
 
+function button(label: RegExp): HTMLButtonElement {
+  const btn = Array.from(document.querySelectorAll("button")).find((b) =>
+    label.test(b.textContent || ""),
+  );
+  assert.ok(btn, `expected a button matching ${label}`);
+  return btn as HTMLButtonElement;
+}
+
 function makeSession(overrides: Record<string, unknown> = {}) {
   return {
     sessionState: null,
@@ -479,6 +487,70 @@ describe("PlanPhaseView ?layer= deep-linking (PR B)", () => {
   });
 });
 
+describe("PlanPhaseView add-session overlay row-click exits (B review round)", () => {
+  // The overlay comment names THREE exit paths — Cancel, row click, success.
+  // Cancel and success are pinned above/in the main suite; these pin the
+  // row-click one (both selectors), which also carries the submitFailed
+  // reset: only closeAddSession reset it before, so a failed submit's alert
+  // leaked into the NEXT view instance over freshly reopened fields.
+
+  it("a sessions-row click drops the overlay and clears a failed submit's error for the next open", async () => {
+    lifecycle.current.addLayer = vi.fn(async () => null); // the write fails
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
+    fireEvent.click(button(/Add planning session/));
+    fireEvent.change(
+      document.querySelector(
+        'textarea[aria-label="Session transcript (markdown)"]',
+      ) as HTMLTextAreaElement,
+      { target: { value: "will fail" } },
+    );
+    fireEvent.click(button(/Add session/));
+    await waitFor(() =>
+      assert.ok(
+        document.querySelector('[role="alert"]'),
+        "the failed submit surfaces its inline error",
+      ),
+    );
+
+    fireEvent.click(sessionRow(/Archived one/));
+    assert.equal(
+      document.querySelector('section[aria-label="Add planning session"]'),
+      null,
+      "the row click drops the overlay",
+    );
+    assert.match(bodyText(), /Archived one content/, "the reader is forward");
+
+    fireEvent.click(button(/Add planning session/));
+    assert.equal(
+      document.querySelector('[role="alert"]'),
+      null,
+      "no stale submit error on the next open, before any submit",
+    );
+  });
+
+  it("the pinned Live row also exits the overlay, restoring the live view and clearing ?layer=", () => {
+    navState.reset("layer=L-old");
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    assert.match(bodyText(), /Archived one content/);
+
+    fireEvent.click(button(/Add planning session/));
+    assert.ok(
+      document.querySelector('section[aria-label="Add planning session"]'),
+    );
+
+    fireEvent.click(sessionRow(/Live session/));
+    assert.equal(
+      document.querySelector('section[aria-label="Add planning session"]'),
+      null,
+      "the Live row click drops the overlay",
+    );
+    assert.match(bodyText(), /Start a live session/);
+    assert.doesNotMatch(navState.search, /layer=/);
+    assert.equal(navState.pushCalls.length, 0);
+  });
+});
+
 describe("PlanPhaseView composer modes", () => {
   it("live view + no session: seed mode — submit calls start() with the brief", async () => {
     const session = makeSession();
@@ -700,6 +772,43 @@ describe("PlanPhaseView shell footer (locked §5 Q2)", () => {
     await waitFor(() =>
       assert.equal(
         (errored.startFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
+        1,
+      ),
+    );
+  });
+
+  it("Finalize fired from a READER view brings the live view forward and clears ?layer= (replace, never push)", async () => {
+    // handleFinalize deliberately calls selectLive() before startFinalize():
+    // the distill streams into the LIVE view's panels and must be on-screen.
+    // Since PR B that switch is URL-backed, so it must also clear the
+    // now-dead ?layer= param — every other footer test fires Finalize from
+    // the default live view, where selectLive() is a no-op.
+    const converged = makeSession({
+      activeLayerId: "L-active",
+      sessionState: { status: "converged", round: 2, maxRounds: 4 },
+      turns: [{ id: "t", author: "You", content: "live turn", role: "human" }],
+    });
+    planningSession.current = converged;
+    navState.reset("layer=L-old");
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    assert.match(
+      bodyText(),
+      /Archived one content/,
+      "a reader view is on-screen when Finalize is clicked",
+    );
+
+    fireEvent.click(button(/Finalize → Generate manifest/));
+    assert.match(bodyText(), /live turn/, "the live view came forward");
+    assert.doesNotMatch(
+      bodyText(),
+      /Archived one content/,
+      "the reader is gone — the distill will not stream off-screen",
+    );
+    await waitFor(() => assert.doesNotMatch(navState.search, /layer=/));
+    assert.equal(navState.pushCalls.length, 0, "cleared via replace only");
+    await waitFor(() =>
+      assert.equal(
+        (converged.startFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
         1,
       ),
     );

@@ -23,7 +23,11 @@ import { PlanWorkbench, type WorkbenchMainView } from "./PlanWorkbench";
 import { ProjectSettingsSection } from "./ProjectSettingsSection";
 import { SessionsSourcesList } from "./SessionsSourcesList";
 import { PlanLayerReader } from "./PlanLayerReader";
-import { AddPlanningSessionView } from "./AddPlanningSessionView";
+import {
+  AddPlanningSessionView,
+  EMPTY_ADD_SESSION_DRAFT,
+  type AddSessionDraft,
+} from "./AddPlanningSessionView";
 import { LiveSessionSection } from "./LiveSessionSection";
 import { usePlanningSession } from "./session/usePlanningSession";
 import type { NewProjectLayer } from "@/hooks/useSavedProjects";
@@ -72,6 +76,21 @@ export function PlanPhaseView({
   // the URL-derived view: it is never persisted to `?layer=`, so leaving it
   // (Cancel, row click, success) restores whatever the URL says.
   const [isAddingSession, setIsAddingSession] = useState(false);
+  // The add-session DRAFT is lifted here for the same reason as composerDraft
+  // below: the view is conditionally rendered, so a host-level leave (a
+  // sessions-row click) unmounts it mid-edit — and a pasted transcript is
+  // hard to reconstruct. The old always-mounted dialog kept this state alive
+  // structurally; the inline view gets it from the host. Only a successful
+  // submit resets it.
+  const [addSessionDraft, setAddSessionDraft] = useState<AddSessionDraft>(
+    EMPTY_ADD_SESSION_DRAFT,
+  );
+  // True while an add-session submit's addLayer write is in flight — the port
+  // of the old dialog's `dismissible={!isSubmitting}` gate: the leave paths
+  // below ignore row clicks mid-write, so the form can't be unmounted between
+  // submit and resolution (and the success arm can't yank a selection the
+  // user just made out from under them).
+  const [isAddSubmitting, setIsAddSubmitting] = useState(false);
   // persistError is instance-wide (any saved-projects write can set it, e.g. a
   // failed wizard autosave). Show it in the add-session view only after a
   // submit from THIS view actually failed — never a stale error from an
@@ -164,18 +183,30 @@ export function PlanPhaseView({
     ? { kind: "add-session" }
     : urlView;
 
-  /** Row/footer selection — leaves the transient add-session view first. */
+  /**
+   * Row/footer selection — leaves the transient add-session view first.
+   * Both selectors are no-ops while an add-session submit is in flight (the
+   * old dialog's `dismissible={!isSubmitting}`, ported), and both clear a
+   * previous submit's failure flag: a row click is a deliberate exit from
+   * the add-session view, and reopening it later must not show a stale
+   * "couldn't save" alert from one view instance ago (only Cancel did this
+   * before — the row-click exit leaked it).
+   */
   const selectLive = useCallback(() => {
+    if (isAddSubmitting) return;
     setIsAddingSession(false);
+    setSubmitFailed(false);
     if (layerParam !== null) replaceLayerParam(null);
-  }, [layerParam, replaceLayerParam]);
+  }, [isAddSubmitting, layerParam, replaceLayerParam]);
 
   const selectLayer = useCallback(
     (layerId: string) => {
+      if (isAddSubmitting) return;
       setIsAddingSession(false);
+      setSubmitFailed(false);
       if (layerParam !== layerId) replaceLayerParam(layerId);
     },
-    [layerParam, replaceLayerParam],
+    [isAddSubmitting, layerParam, replaceLayerParam],
   );
 
   // Gated by the phase toggle (edit mode with a real project id), but a direct
@@ -203,23 +234,32 @@ export function PlanPhaseView({
   const handleSubmit = async (layer: NewProjectLayer): Promise<boolean> => {
     clearLayersPersistError();
     setSubmitFailed(false);
-    const layerId = await addLayer(loadedProject.id, layer);
-    if (layerId === null) {
-      setSubmitFailed(true);
-      return false;
+    setIsAddSubmitting(true);
+    try {
+      const layerId = await addLayer(loadedProject.id, layer);
+      if (layerId === null) {
+        setSubmitFailed(true);
+        return false;
+      }
+      // Success: leave the transient add-session view and select the freshly
+      // created layer's reader (plan §3.3 — "On success: select the new
+      // layer"). replace, not push — same-screen view selection, and this arm
+      // lands on the reader, not a navigation target.
+      setIsAddingSession(false);
+      replaceLayerParam(layerId);
+      return true;
+    } finally {
+      setIsAddSubmitting(false);
     }
-    // Success: leave the transient add-session view and select the freshly
-    // created layer's reader (plan §3.3 — "On success: select the new
-    // layer"). replace, not push — same-screen view selection, and this arm
-    // lands on the reader, not a navigation target.
-    setIsAddingSession(false);
-    replaceLayerParam(layerId);
-    return true;
   };
+
+  const openAddSession = () => setIsAddingSession(true);
 
   const closeAddSession = () => {
     // Cancel: drop the overlay — the URL-derived view (live or the previously
-    // selected layer) is untouched underneath and simply shows again.
+    // selected layer) is untouched underneath and simply shows again. The
+    // DRAFT deliberately survives (as it did in the always-mounted dialog):
+    // an accidental dismiss must never cost a pasted transcript.
     setIsAddingSession(false);
     setSubmitFailed(false);
   };
@@ -416,7 +456,6 @@ export function PlanPhaseView({
               selectedView={resolvedView}
               onSelectLive={selectLive}
               onSelectLayer={selectLayer}
-              onAddSession={() => setIsAddingSession(true)}
             />
           }
           leftFooter={
@@ -426,7 +465,7 @@ export function PlanPhaseView({
             <Button
               variant="secondary"
               className="w-full"
-              onClick={() => setIsAddingSession(true)}
+              onClick={openAddSession}
             >
               <Plus className="w-4 h-4 mr-2" />
               Add planning session
@@ -438,6 +477,8 @@ export function PlanPhaseView({
                 onCancel={closeAddSession}
                 onSubmit={handleSubmit}
                 submitError={submitError}
+                draft={addSessionDraft}
+                onDraftChange={setAddSessionDraft}
               />
             ) : selectedLayer ? (
               <PlanLayerReader
@@ -469,6 +510,7 @@ export function PlanPhaseView({
                 layers={layers}
                 session={session}
                 onNavigateToImport={onNavigateToImport}
+                onAddSession={openAddSession}
               />
             )
           }

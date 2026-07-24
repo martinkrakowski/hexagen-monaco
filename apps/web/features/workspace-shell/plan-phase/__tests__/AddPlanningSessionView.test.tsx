@@ -6,10 +6,15 @@ vi.stubGlobal("crypto", {
 
 import { describe, it, vi, beforeEach } from "vitest";
 import assert from "node:assert/strict";
-import React from "react";
+import React, { useState } from "react";
 import { render, cleanup, fireEvent, waitFor } from "@testing-library/react";
 
-import { AddPlanningSessionView } from "../AddPlanningSessionView";
+import {
+  AddPlanningSessionView,
+  EMPTY_ADD_SESSION_DRAFT,
+  type AddSessionDraft,
+  type AddPlanningSessionViewProps,
+} from "../AddPlanningSessionView";
 
 // Behavior pins ported verbatim from the deleted AddPlanningSessionDialog
 // suite (PR B, plan req 4b): the ingestion contract is unchanged, only the
@@ -18,6 +23,20 @@ import { AddPlanningSessionView } from "../AddPlanningSessionView";
 // "closes on success" pin became host behavior ("on success select the new
 // layer") and lives in PlanPhaseView.test.tsx; its view-level residue here is
 // the fields resetting on a successful submit.
+//
+// B review round: the draft (title/content/splitEnabled) is CONTROLLED —
+// lifted to the host so a pasted transcript survives the view's unmount (a
+// sessions-row click leaves this conditionally-rendered view). This harness
+// stands in for the host's useState; the survive-the-unmount pin itself lives
+// in PlanPhaseView.test.tsx, where the real host owns the draft.
+function ControlledAddSessionView(
+  props: Omit<AddPlanningSessionViewProps, "draft" | "onDraftChange">,
+) {
+  const [draft, setDraft] = useState<AddSessionDraft>(EMPTY_ADD_SESSION_DRAFT);
+  return (
+    <AddPlanningSessionView {...props} draft={draft} onDraftChange={setDraft} />
+  );
+}
 
 function button(label: RegExp): HTMLButtonElement {
   const btn = Array.from(document.querySelectorAll("button")).find((b) =>
@@ -38,7 +57,7 @@ describe("AddPlanningSessionView", () => {
 
   it("renders as a plain full-height section — no modal dialog element", () => {
     render(
-      <AddPlanningSessionView
+      <ControlledAddSessionView
         onCancel={vi.fn()}
         onSubmit={vi.fn(async () => true)}
         submitError={null}
@@ -57,7 +76,7 @@ describe("AddPlanningSessionView", () => {
 
   it("disables submit until the transcript has content", () => {
     render(
-      <AddPlanningSessionView
+      <ControlledAddSessionView
         onCancel={vi.fn()}
         onSubmit={vi.fn(async () => true)}
         submitError={null}
@@ -72,7 +91,7 @@ describe("AddPlanningSessionView", () => {
     const onCancel = vi.fn();
     const onSubmit = vi.fn(async () => true);
     render(
-      <AddPlanningSessionView
+      <ControlledAddSessionView
         onCancel={onCancel}
         onSubmit={onSubmit}
         submitError={null}
@@ -87,7 +106,7 @@ describe("AddPlanningSessionView", () => {
   it("submits one Imported turn (default title) and resets the fields on success", async () => {
     const onSubmit = vi.fn(async () => true);
     render(
-      <AddPlanningSessionView
+      <ControlledAddSessionView
         onCancel={vi.fn()}
         onSubmit={onSubmit}
         submitError={null}
@@ -113,7 +132,7 @@ describe("AddPlanningSessionView", () => {
   it("uses the typed title when provided", async () => {
     const onSubmit = vi.fn(async () => true);
     render(
-      <AddPlanningSessionView
+      <ControlledAddSessionView
         onCancel={vi.fn()}
         onSubmit={onSubmit}
         submitError={null}
@@ -136,7 +155,7 @@ describe("AddPlanningSessionView", () => {
   it("keeps the content intact when the write fails and surfaces the error inline", async () => {
     const onSubmit = vi.fn(async () => false);
     const { rerender } = render(
-      <AddPlanningSessionView
+      <ControlledAddSessionView
         onCancel={vi.fn()}
         onSubmit={onSubmit}
         submitError={null}
@@ -155,7 +174,7 @@ describe("AddPlanningSessionView", () => {
 
     // The parent surfaces the persistence error; it renders inline.
     rerender(
-      <AddPlanningSessionView
+      <ControlledAddSessionView
         onCancel={vi.fn()}
         onSubmit={onSubmit}
         submitError="Not enough browser storage."
@@ -175,7 +194,7 @@ describe("AddPlanningSessionView", () => {
 
   it("offers no split checkbox for zero or one ## heading", () => {
     render(
-      <AddPlanningSessionView
+      <ControlledAddSessionView
         onCancel={vi.fn()}
         onSubmit={vi.fn(async () => true)}
         submitError={null}
@@ -191,7 +210,7 @@ describe("AddPlanningSessionView", () => {
 
   it("shows a default-checked split checkbox with a live turn count on detection", () => {
     render(
-      <AddPlanningSessionView
+      <ControlledAddSessionView
         onCancel={vi.fn()}
         onSubmit={vi.fn(async () => true)}
         submitError={null}
@@ -218,7 +237,7 @@ describe("AddPlanningSessionView", () => {
   it("splits into authored turns on submit when the checkbox is checked", async () => {
     const onSubmit = vi.fn(async () => true);
     render(
-      <AddPlanningSessionView
+      <ControlledAddSessionView
         onCancel={vi.fn()}
         onSubmit={onSubmit}
         submitError={null}
@@ -247,7 +266,7 @@ describe("AddPlanningSessionView", () => {
     // persist a turn-less layer).
     const onSubmit = vi.fn(async () => true);
     render(
-      <AddPlanningSessionView
+      <ControlledAddSessionView
         onCancel={vi.fn()}
         onSubmit={onSubmit}
         submitError={null}
@@ -268,7 +287,7 @@ describe("AddPlanningSessionView", () => {
   it("keeps the lossless single-Imported-turn behavior when unchecked", async () => {
     const onSubmit = vi.fn(async () => true);
     render(
-      <AddPlanningSessionView
+      <ControlledAddSessionView
         onCancel={vi.fn()}
         onSubmit={onSubmit}
         submitError={null}

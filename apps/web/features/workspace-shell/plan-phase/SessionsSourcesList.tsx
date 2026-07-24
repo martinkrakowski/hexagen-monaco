@@ -18,9 +18,6 @@ export interface SessionsSourcesListProps {
   selectedView: WorkbenchMainView;
   onSelectLive: () => void;
   onSelectLayer: (layerId: string) => void;
-  /** Empty-state secondary action (plan §3.2): opens the add-session view —
-   * the left footer stays the action's primary home, not its only one. */
-  onAddSession: () => void;
 }
 
 const ROW_BASE_CLASSES =
@@ -42,7 +39,6 @@ export function SessionsSourcesList({
   selectedView,
   onSelectLive,
   onSelectLayer,
-  onAddSession,
 }: SessionsSourcesListProps) {
   const newestFirst = [...layers].sort((a, b) => b.createdAt - a.createdAt);
 
@@ -71,20 +67,14 @@ export function SessionsSourcesList({
       </button>
 
       {newestFirst.length === 0 ? (
-        <div className="px-2 py-1.5 space-y-1">
+        <div className="px-2 py-1.5">
+          {/* A muted line only: the "Add an existing transcript" secondary
+              action lives in the EMPTY MAIN VIEW (plan §3.2 — "The empty main
+              view keeps a secondary 'Add an existing transcript' action"),
+              i.e. the right pane's live view, not this Section B state. */}
           <p className="text-xs text-muted-foreground">
             No archived sessions yet — pasted or finished sessions appear here.
           </p>
-          {/* Secondary action (plan §3.2 — doc copy): the empty state keeps
-              pitching transcript import; the left footer is the button's
-              PRIMARY home, not its exclusive one. */}
-          <button
-            type="button"
-            onClick={onAddSession}
-            className="text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-          >
-            Add an existing transcript
-          </button>
         </div>
       ) : (
         newestFirst.map((layer) => {
