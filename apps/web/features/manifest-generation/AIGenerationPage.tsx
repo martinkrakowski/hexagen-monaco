@@ -28,9 +28,18 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   // originSpecText feeds the read-only Source row in the workbench's left
-  // column (Plan Workbench C1) — present when this manifest came from an
-  // imported/pasted spec, null in the plain prompt flow.
-  const { set: setPendingManifest, originSpecText } = usePendingManifest();
+  // column (Plan Workbench C1). Gate it on THIS host's originPath: the only
+  // setter today is the import/spec flow (originPath "/projects/new/import/spec"),
+  // which never routes back here — so a non-null value reaching this page can
+  // only be a leftover from an import abandoned mid-accept, i.e. wrong-flow
+  // provenance. The row stays wired for the day a genesis source exists.
+  const {
+    set: setPendingManifest,
+    originSpecText: pendingOriginSpecText,
+    originPath,
+  } = usePendingManifest();
+  const originSpecText =
+    originPath === "/projects/new/ai" ? pendingOriginSpecText : null;
 
   // The project name comes from the shared Project Name step (`?name=`). It is
   // also re-attached to the URL on Back/Regenerate from the accept screen so it

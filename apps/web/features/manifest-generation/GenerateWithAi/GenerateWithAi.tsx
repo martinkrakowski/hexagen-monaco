@@ -171,9 +171,18 @@ export function GenerateWithAi({
   const navigateToModelSelection = useCallback(
     (autoGenerate = false) => {
       modelSelectionIntent.setAutoGenerate(autoGenerate);
-      router.push("/projects/new/ai/models");
+      // Carry `?name=` through the detour: it keys the genesis settings-store
+      // snapshot and seeds carriedName, and ModelSelectionPage echoes it back
+      // on both return legs — dropping it here would reseed Section A from
+      // blank when the user returns.
+      const detourName = searchParams.get("name");
+      router.push(
+        detourName
+          ? `/projects/new/ai/models?name=${encodeURIComponent(detourName)}`
+          : "/projects/new/ai/models",
+      );
     },
-    [modelSelectionIntent, router],
+    [modelSelectionIntent, router, searchParams],
   );
 
   // Kicks off generation for the given strategy. Cloud goes straight to
@@ -215,8 +224,8 @@ export function GenerateWithAi({
   // on the same route — no remount — so it would flip carriedName to null
   // mid-mount, mirror later Section A edits under the wrong store key, and
   // wipe them on the next accept Back/Regenerate round trip. (The /models
-  // detour's return URL is owned by ModelSelectionPage and still drops the
-  // name — carrying it through that hop is a disclosed follow-up.)
+  // detour carries the name too: navigateToModelSelection forwards it and
+  // ModelSelectionPage echoes it back on both return legs.)
   const inboundName = searchParams.get("name");
   const autoStartConsumedUrl = inboundName
     ? `/projects/new/ai?name=${encodeURIComponent(inboundName)}`

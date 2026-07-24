@@ -18,7 +18,13 @@ vi.stubGlobal("crypto", {
 import { describe, it, vi, beforeEach, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
 import { deriveWorkspaceName } from "@hexagen/manifest-generation";
 import { DESCRIPTION_MAX_LENGTH } from "@hexagen/agentic-interaction";
 import type { ProjectSpec } from "@hexagen/project-configuration";
@@ -106,6 +112,39 @@ afterAll(() => {
 const pendingForever = () => new Promise<Response>(() => {});
 const fetchMock = vi.fn<typeof fetch>(pendingForever);
 vi.stubGlobal("fetch", fetchMock);
+
+// The one per-test wire override: the staged NDJSON endpoint answers with a
+// terminal "done" event so generation completes and parks. The manufactured
+// system name ("test-system") doubles as the AI-derived workspace name the
+// bypassed-name hand-off asserts on.
+const STAGE_ENDPOINT = "/api/manifest/generate/stage";
+const DONE_MANIFEST_YAML = [
+  "system: test-system",
+  'scope: "@hexagen/test"',
+  'architecture: "modular-monolith"',
+  "bounded_contexts:",
+  '  - name: "UserContext"',
+  '    type: "core"',
+  '    description: "Handles user management"',
+].join("\n");
+const stageDoneEvent = `${JSON.stringify({
+  type: "done",
+  yaml: DONE_MANIFEST_YAML,
+  contextCount: 1,
+  portCount: 0,
+  adapterCount: 0,
+})}\n`;
+const mockStageDone = () => {
+  fetchMock.mockImplementation((input: RequestInfo | URL) =>
+    String(input) === STAGE_ENDPOINT
+      ? Promise.resolve(new Response(stageDoneEvent, { status: 200 }))
+      : pendingForever(),
+  );
+};
+/** fetch calls that hit the staged endpoint — the capability probe and other
+ * consumers stay on the pending-forever default and must not count. */
+const stageCalls = () =>
+  fetchMock.mock.calls.filter(([input]) => String(input) === STAGE_ENDPOINT);
 
 /** Idle local engine: nothing downloaded, nothing loaded — the WebLLM detour
  * case. Only the members the genesis flow actually reads are functional. */
@@ -256,6 +295,43 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     assert.equal(nav.push.mock.calls.length, 0);
   });
 
+  it("parks on COMPLETION: the footer swaps Cancel for Go Back + Next, the success arm never auto-navigates, and the parked-run guard swallows late dependency changes", async () => {
+    mockStageDone();
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+
+    fireEvent.change(composerTextarea(), {
+      target: { value: VALID_DESCRIPTION },
+    });
+    submitComposer();
+
+    // The stream's terminal "done" event completes the run: the flow stays
+    // parked on the telemetry view and the shell footer swaps Cancel for
+    // Go Back plus the explicit Next.
+    await waitFor(() =>
+      assert.ok(screen.getByRole("button", { name: "Next" })),
+    );
+    assert.ok(screen.getByRole("button", { name: "Go Back" }));
+    assert.equal(screen.queryByRole("button", { name: "Cancel" }), null);
+    assert.ok(screen.getByText("Generating Manifest"));
+
+    // Parked means parked: the success arm must NEVER router.push — the
+    // hand-off to /ai/accept happens only through the footer's explicit
+    // Next (the in-flight test above pins only the pre-completion half of
+    // this contract).
+    assert.equal(nav.push.mock.calls.length, 0);
+
+    // Parked-run relaunch guard: a late dependency change re-runs the
+    // generation effect over a COMPLETED run (engine toggle — auto and
+    // cloud both resolve to the cloud path under the server-key fast-pass);
+    // the hasResult guard must swallow it, not fire a second staged call.
+    assert.equal(stageCalls().length, 1);
+    await act(async () => {
+      useExecutionEngine.setState({ engine: "cloud" });
+    });
+    assert.equal(stageCalls().length, 1);
+    assert.equal(nav.push.mock.calls.length, 0);
+  });
+
   it("preserves the explicit-local path: warning dialog first, then Continue detours through /models when no model is ready or remembered", async () => {
     useExecutionEngine.setState({ engine: "local" });
     render(<AIGenerationPage llmContext={makeLlmContext()} />);
@@ -277,9 +353,13 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     fireEvent.click(screen.getByText("Continue with local"));
 
     // Engine unloaded + no remembered model → the /models detour, exactly as
-    // in the pre-workbench flow.
+    // in the pre-workbench flow — except the detour now CARRIES ?name=:
+    // ModelSelectionPage echoes it back on both return legs, so dropping it
+    // here would reseed Section A from blank when the user returns.
     await waitFor(() =>
-      assert.deepEqual(nav.push.mock.calls, [["/projects/new/ai/models"]]),
+      assert.deepEqual(nav.push.mock.calls, [
+        ["/projects/new/ai/models?name=Vellum%20Notes"],
+      ]),
     );
     assert.equal(screen.queryByText("Generating Manifest"), null);
   });
@@ -310,27 +390,7 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     nav.searchParams = new URLSearchParams("");
     // Terminal NDJSON "done" from the staged endpoint (the wire boundary):
     // generation completes and the footer's Next hands the manifest over.
-    const manifestYaml = [
-      "system: test-system",
-      'scope: "@hexagen/test"',
-      'architecture: "modular-monolith"',
-      "bounded_contexts:",
-      '  - name: "UserContext"',
-      '    type: "core"',
-      '    description: "Handles user management"',
-    ].join("\n");
-    const doneEvent = `${JSON.stringify({
-      type: "done",
-      yaml: manifestYaml,
-      contextCount: 1,
-      portCount: 0,
-      adapterCount: 0,
-    })}\n`;
-    fetchMock.mockImplementation((input: RequestInfo | URL) =>
-      String(input) === "/api/manifest/generate/stage"
-        ? Promise.resolve(new Response(doneEvent, { status: 200 }))
-        : pendingForever(),
-    );
+    mockStageDone();
 
     render(<AIGenerationPage llmContext={makeLlmContext()} />);
 
@@ -365,9 +425,10 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     assert.equal(loadGenesisFormValues(null), null);
   });
 
-  it("feeds the pending origin spec into Section B's read-only Source row (import-flow entry)", () => {
-    // Populated by the import flow before it lands here; the host must wire
-    // usePendingManifest.originSpecText into GenesisSourcesSection.
+  it("gates Section B's Source row on origin: an import-flow leftover stays hidden, a genesis-origin spec renders its first-line excerpt", () => {
+    // A pending manifest from the IMPORT flow (e.g. abandoned mid-accept) is
+    // wrong-flow provenance — its spec text must not surface as a genesis
+    // "Source". Only originPath "/projects/new/ai" feeds the row.
     usePendingManifest
       .getState()
       .set(
@@ -375,13 +436,30 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
         {} as unknown as ProjectSpec,
         "Seeded Project",
         "/projects/new/import/spec",
+        "# Import spec leftover",
+      );
+
+    const { unmount } = render(
+      <AIGenerationPage llmContext={makeLlmContext()} />,
+    );
+    assert.equal(screen.queryByText("Source"), null);
+    assert.equal(screen.queryByText("# Import spec leftover"), null);
+    unmount();
+
+    // Same store, genesis origin: the row is wired and renders the spec's
+    // first line only.
+    usePendingManifest
+      .getState()
+      .set(
+        "system: seeded",
+        {} as unknown as ProjectSpec,
+        "Seeded Project",
+        "/projects/new/ai",
         "# Vellum spec\nsecond line is not excerpted",
       );
 
     render(<AIGenerationPage llmContext={makeLlmContext()} />);
-
     assert.ok(screen.getByText("Source"));
-    // The excerpt is the spec's first line.
     assert.ok(screen.getByText("# Vellum spec"));
     assert.equal(screen.queryByText(/second line is not excerpted/), null);
   });

@@ -53,6 +53,17 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
 
   const searchParams = useSearchParams();
   const returnUrl = searchParams.get("returnUrl");
+  // The genesis flow carries `?name=` through the /models detour: it keys the
+  // genesis settings-store snapshot and seeds the saved-project name, so both
+  // genesis return legs must echo it back or the workbench form reseeds from
+  // blank on return (the returnUrl arm is owned by its caller and untouched).
+  const carriedName = searchParams.get("name");
+  const genesisPath = carriedName
+    ? `/projects/new/ai?name=${encodeURIComponent(carriedName)}`
+    : "/projects/new/ai";
+  const genesisAutoStartPath = carriedName
+    ? `/projects/new/ai?generate=1&name=${encodeURIComponent(carriedName)}`
+    : "/projects/new/ai?generate=1";
 
   const hasServerApiKey = hasServerLLMAccessKey();
   const isModelReady =
@@ -60,8 +71,8 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
 
   const handleBack = useCallback(() => {
     clear();
-    router.push(returnUrl || "/projects/new/ai");
-  }, [clear, router, returnUrl]);
+    router.push(returnUrl || genesisPath);
+  }, [clear, router, returnUrl, genesisPath]);
 
   const handleGenerate = useCallback(() => {
     // Save the currently loaded model as the preferred one
@@ -72,12 +83,13 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
     if (returnUrl) {
       router.push(returnUrl);
     } else {
-      router.push("/projects/new/ai?generate=1");
+      router.push(genesisAutoStartPath);
     }
   }, [
     clear,
     router,
     returnUrl,
+    genesisAutoStartPath,
     llmContext.engineState.loadedModelId,
     setPreferredLocalModel,
   ]);
