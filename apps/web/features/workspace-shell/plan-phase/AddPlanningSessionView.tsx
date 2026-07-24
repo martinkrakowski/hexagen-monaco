@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { Button, Checkbox, Input, Textarea, FileDropZone } from "@hexagen/ui";
 import type { NewProjectLayer } from "@/hooks/useSavedProjects";
 import { splitTurnsByAuthorHeadings } from "./split-turns";
@@ -34,7 +34,12 @@ export interface AddPlanningSessionViewProps {
   submitError: string | null;
   /** Controlled draft, owned by the host (see AddSessionDraft). */
   draft: AddSessionDraft;
-  onDraftChange: (draft: AddSessionDraft) => void;
+  /** Functional-updater contract (a useState setter satisfies it): writes
+   * that complete asynchronously (FileReader onload) must build on the
+   * LATEST draft, not the render-time one they closed over — otherwise a
+   * title typed while the file was loading gets clobbered by the stale
+   * spread. */
+  onDraftChange: Dispatch<SetStateAction<AddSessionDraft>>;
 }
 
 /**
@@ -127,14 +132,20 @@ export function AddPlanningSessionView({
 
         <Input
           value={title}
-          onChange={(e) => onDraftChange({ ...draft, title: e.target.value })}
+          onChange={(e) => {
+            const title = e.target.value;
+            onDraftChange((prev) => ({ ...prev, title }));
+          }}
           placeholder="Session title (e.g. Initial brainstorm)"
           aria-label="Session title"
           disabled={isSubmitting}
         />
         <Textarea
           value={content}
-          onChange={(e) => onDraftChange({ ...draft, content: e.target.value })}
+          onChange={(e) => {
+            const content = e.target.value;
+            onDraftChange((prev) => ({ ...prev, content }));
+          }}
           placeholder="Paste the markdown transcript here…"
           aria-label="Session transcript (markdown)"
           rows={10}
@@ -148,12 +159,15 @@ export function AddPlanningSessionView({
           onFileLoaded={(fileContent, filename) => {
             // ONE draft update for both fields: filename is a better default
             // title than nothing, but never overwrite one the user typed.
-            onDraftChange({
-              ...draft,
+            // FUNCTIONAL update is load-bearing here: FileReader completes
+            // asynchronously, so a spread of the render-time draft would
+            // clobber a title typed while the file was still loading.
+            onDraftChange((prev) => ({
+              ...prev,
               content: fileContent,
               title:
-                draft.title || filename.replace(/\.(md|markdown|txt)$/i, ""),
-            });
+                prev.title || filename.replace(/\.(md|markdown|txt)$/i, ""),
+            }));
           }}
         />
         {detectedTurns && (
@@ -162,7 +176,7 @@ export function AddPlanningSessionView({
               <Checkbox
                 checked={splitEnabled}
                 onCheckedChange={(checked) =>
-                  onDraftChange({ ...draft, splitEnabled: checked })
+                  onDraftChange((prev) => ({ ...prev, splitEnabled: checked }))
                 }
                 disabled={isSubmitting}
               />

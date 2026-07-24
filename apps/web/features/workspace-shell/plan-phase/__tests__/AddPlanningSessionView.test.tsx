@@ -4,10 +4,16 @@ vi.stubGlobal("crypto", {
   randomUUID: () => "turn-uuid",
 } as unknown as Crypto);
 
-import { describe, it, vi, beforeEach } from "vitest";
+import { describe, it, vi, beforeEach, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import React, { useState } from "react";
-import { render, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  cleanup,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
 
 import {
   AddPlanningSessionView,
@@ -306,5 +312,110 @@ describe("AddPlanningSessionView", () => {
     assert.equal(layer.turns.length, 1);
     assert.equal(layer.turns[0].author, "Imported");
     assert.equal(layer.turns[0].content, content, "lossless");
+  });
+
+  // --- File import completes asynchronously (qodo review, PR #422) ---------
+
+  describe("file import race", () => {
+    // FileReader.onload fires asynchronously, so the test needs a reader
+    // whose completion IT releases — a title is typed while the read is "in
+    // flight". Manual save/restore instead of vi.stubGlobal: unstubbing
+    // would also tear down the module-scope crypto stub above, which the
+    // rest of the suite depends on.
+    const RealFileReader = globalThis.FileReader;
+    const RealFile = globalThis.File;
+    let pendingLoads: Array<(content: string) => void>;
+
+    beforeEach(() => {
+      pendingLoads = [];
+      class DeferredFileReader {
+        onload: ((e: { target: { result: string } }) => void) | null = null;
+        onerror: (() => void) | null = null;
+        readAsText() {
+          pendingLoads.push((content: string) => {
+            this.onload?.({ target: { result: content } });
+          });
+        }
+      }
+      class StubFile {
+        name: string;
+        constructor(_parts: unknown[], name: string) {
+          this.name = name;
+        }
+      }
+      globalThis.FileReader =
+        DeferredFileReader as unknown as typeof FileReader;
+      globalThis.File = StubFile as unknown as typeof File;
+    });
+
+    afterEach(() => {
+      globalThis.FileReader = RealFileReader;
+      globalThis.File = RealFile;
+    });
+
+    const fileInput = (): HTMLInputElement => {
+      const el = document.querySelector('input[type="file"]');
+      assert.ok(el, "expected the drop zone's hidden file input");
+      return el as HTMLInputElement;
+    };
+
+    const titleInput = (): HTMLInputElement => {
+      const el = document.querySelector("input[type=text]");
+      assert.ok(el, "expected the title input");
+      return el as HTMLInputElement;
+    };
+
+    it("keeps a title typed while the file was loading (no stale-spread clobber)", () => {
+      render(
+        <ControlledAddSessionView
+          onCancel={vi.fn()}
+          onSubmit={vi.fn(async () => true)}
+          submitError={null}
+        />,
+      );
+
+      // Start the file load; the read stays in flight.
+      fireEvent.change(fileInput(), {
+        target: { files: [new File([""], "vellum-notes.md")] },
+      });
+      assert.equal(pendingLoads.length, 1, "the read is in flight");
+
+      // The user types a title while the file is still loading.
+      fireEvent.change(titleInput(), { target: { value: "My brainstorm" } });
+
+      // The load completes AFTER the edit. A spread of the render-time
+      // draft captured at drop time would resurrect the empty title and
+      // replace it with the filename-derived default.
+      act(() => pendingLoads[0]("# imported transcript"));
+
+      assert.equal(
+        titleInput().value,
+        "My brainstorm",
+        "the typed title survives the async load",
+      );
+      assert.equal(
+        textarea().value,
+        "# imported transcript",
+        "the file content still lands",
+      );
+    });
+
+    it("falls back to the filename-derived title when none was typed", () => {
+      render(
+        <ControlledAddSessionView
+          onCancel={vi.fn()}
+          onSubmit={vi.fn(async () => true)}
+          submitError={null}
+        />,
+      );
+
+      fireEvent.change(fileInput(), {
+        target: { files: [new File([""], "vellum-notes.md")] },
+      });
+      act(() => pendingLoads[0]("# imported transcript"));
+
+      assert.equal(titleInput().value, "vellum-notes");
+      assert.equal(textarea().value, "# imported transcript");
+    });
   });
 });
