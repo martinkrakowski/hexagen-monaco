@@ -10,11 +10,18 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@hexagen/ui";
-import { NotebookPen, Plus } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import type { ProjectLayer } from "@hexagen/shared";
 import { useWizardLifecycleContext } from "../contexts/WizardLifecycleContext";
-import { PlanLayerCard } from "./PlanLayerCard";
+// Cross-slice import is allowed here: workspace-shell is the composition root
+// (exempt from no-feature-slice-imports) and the plan phase mounts inside the
+// same projects shell chrome as the landing/import screens.
+import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
+import { TextareaComposer } from "@/chat/TextareaComposer";
+import { PlanWorkbench, type WorkbenchMainView } from "./PlanWorkbench";
 import { ProjectSettingsSection } from "./ProjectSettingsSection";
+import { SessionsSourcesList } from "./SessionsSourcesList";
+import { PlanLayerReader } from "./PlanLayerReader";
 import { AddPlanningSessionDialog } from "./AddPlanningSessionDialog";
 import { LiveSessionSection } from "./LiveSessionSection";
 import { usePlanningSession } from "./session/usePlanningSession";
@@ -34,10 +41,11 @@ export interface PlanPhaseViewProps {
 }
 
 /**
- * The "Plan" phase of the saved-project workspace: renders the project's
- * planning layers (the brainstorm sessions that produced the manifest), the
- * "Add planning session" ingestion flow, and the LIVE brainstorm session
- * (Phase 3).
+ * The "Plan" phase of the saved-project workspace, as the two-pane WORKBENCH
+ * (Plan Workbench A2): this component is the WIRING HOST — it owns every
+ * context read (wizard lifecycle), the single usePlanningSession instance,
+ * the right-pane view selection, and the shared composer draft, and feeds the
+ * purely presentational PlanWorkbench through adapter props.
  *
  * Reads the project LIVE from the wizard lifecycle context — the same
  * useSavedProjects instance the wizard autosave writes through — so an added
@@ -64,30 +72,47 @@ export function PlanPhaseView({
   // THIS dialog actually failed — never a stale error from an earlier,
   // unrelated write.
   const [submitFailed, setSubmitFailed] = useState(false);
-  const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
   const [deleteTarget, setDeleteTarget] = useState<ProjectLayer | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Right-pane selection — LOCAL state in A2; PR B moves it to a `?layer=`
+  // URL param (subscribed HERE, never through ProjectWorkspaceLayout props —
+  // its React.memo comparator hand-picks props and would swallow updates).
+  const [mainView, setMainView] = useState<WorkbenchMainView>({
+    kind: "live",
+  });
+  // ONE shared composer draft, lifted to the host: the composer unmounts on a
+  // view switch (and on the mobile tab switch), and typed text must survive.
+  const [composerDraft, setComposerDraft] = useState("");
+  const [startError, setStartError] = useState<string | null>(null);
 
-  const layers = loadedProject?.layers;
-  // Ordered by creation time; Array.prototype.sort is stable, so layers created
-  // in the same millisecond (e.g. batch import) keep their stored order.
-  const orderedLayers = useMemo(
-    () => (layers ? [...layers].sort((a, b) => a.createdAt - b.createdAt) : []),
-    [layers],
+  const layers = useMemo(
+    () => loadedProject?.layers ?? [],
+    [loadedProject?.layers],
   );
 
-  // The live-session loop is owned HERE (single hook instance) so the active
-  // session's layer can be filtered out of the archive list below — otherwise
-  // its turns would render twice (live panel + archive).
+  // The live-session loop is owned HERE (single hook instance, mounted for
+  // the whole plan phase) so the active session's layer can be filtered out
+  // of the sessions list AND so the lifted finalize state survives right-pane
+  // view switches (the whole point of the A2 state lift).
   const session = usePlanningSession({
     projectId: loadedProject?.id ?? null,
     addLayer,
     appendLayerTurn,
     updateLayer,
   });
+
+  // View-union guards: the active session's layer always normalizes to the
+  // live view (its turns must never render twice), and an unknown/deleted id
+  // falls back to live instead of a blank pane.
+  const resolvedView: WorkbenchMainView = useMemo(() => {
+    if (mainView.kind === "layer") {
+      if (mainView.layerId === session.activeLayerId) return { kind: "live" };
+      if (!layers.some((l) => l.id === mainView.layerId))
+        return { kind: "live" };
+    }
+    return mainView;
+  }, [mainView, session.activeLayerId, layers]);
 
   // Gated by the phase toggle (edit mode with a real project id), but a direct
   // ?phase=plan URL in genesis mode still lands here — render the guard state
@@ -102,11 +127,14 @@ export function PlanPhaseView({
     );
   }
 
-  // The active live-session layer renders in the live panel above the
-  // archive — filter it out here so its turns don't appear twice.
-  const archivedLayers = orderedLayers.filter(
-    (l) => l.id !== session.activeLayerId,
-  );
+  // The active live-session layer renders as the pinned "Live session" row —
+  // filter it out here so it never appears as an archived row too.
+  const archivedLayers = layers.filter((l) => l.id !== session.activeLayerId);
+
+  const selectedLayer =
+    resolvedView.kind === "layer"
+      ? (layers.find((l) => l.id === resolvedView.layerId) ?? null)
+      : null;
 
   const handleSubmit = async (layer: NewProjectLayer): Promise<boolean> => {
     clearLayersPersistError();
@@ -127,15 +155,6 @@ export function PlanPhaseView({
       : "Couldn't save the session. Your text is still here — please try again."
     : null;
 
-  const toggleCollapsed = (layerId: string) => {
-    setCollapsedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(layerId)) next.delete(layerId);
-      else next.add(layerId);
-      return next;
-    });
-  };
-
   const closeDeleteDialog = () => {
     if (isDeleting) return;
     setDeleteTarget(null);
@@ -149,6 +168,15 @@ export function PlanPhaseView({
     try {
       const ok = await removeLayer(loadedProject.id, deleteTarget.id);
       if (ok) {
+        // Deleting the layer currently on screen: fall back to the live view
+        // explicitly (the normalization above would too, but an explicit
+        // reset keeps mainView from pointing at a dead id).
+        if (
+          resolvedView.kind === "layer" &&
+          resolvedView.layerId === deleteTarget.id
+        ) {
+          setMainView({ kind: "live" });
+        }
         setDeleteTarget(null);
       } else {
         setDeleteError("Couldn't delete the session. Please try again.");
@@ -160,7 +188,8 @@ export function PlanPhaseView({
 
   // Runs the LLM extraction for a brainstorm layer and appends the resulting
   // "decisions" layer via the same awaited addLayer path as a paste. Returns a
-  // user-facing error message (the card surfaces it inline) or null on success.
+  // user-facing error message (the reader surfaces it inline) or null on
+  // success.
   const extractDecisions = async (
     layer: ProjectLayer,
   ): Promise<string | null> => {
@@ -210,77 +239,158 @@ export function PlanPhaseView({
       : null;
   };
 
-  return (
-    <div className="h-full overflow-y-auto">
-      <div className="max-w-3xl mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold text-foreground">Plan</h1>
-            <p className="text-sm text-muted-foreground">
-              The planning sessions behind{" "}
-              <span className="font-medium">{loadedProject.name}</span>.
-            </p>
-          </div>
-          {orderedLayers.length > 0 && (
-            <Button variant="secondary" onClick={() => setDialogOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add planning session
-            </Button>
-          )}
-        </div>
+  // ── Composer wiring (right pane, pinned bottom) ───────────────────────────
+  const sessionStatus = session.sessionState?.status ?? null;
+  const composerMode: "seed" | "steering" | "hidden" =
+    resolvedView.kind !== "live"
+      ? "hidden"
+      : sessionStatus === null
+        ? "seed"
+        : sessionStatus !== "done"
+          ? "steering"
+          : "hidden";
 
-        <ProjectSettingsSection
-          projectId={loadedProject.id}
-          persist={updateProjectFormState}
-        />
+  const handleComposerSubmit = async (text: string): Promise<boolean> => {
+    if (session.sessionState === null) {
+      setStartError(null);
+      const started = await session.start(text);
+      // Resolving false keeps the draft in the composer (its documented
+      // contract) — a failed layer write must never discard the typed brief.
+      if (!started) {
+        setStartError(
+          "Couldn't start the session — the layer could not be saved. Your brief is still here; please try again.",
+        );
+      }
+      return started;
+    }
+    await session.addSteering(text);
+    return true;
+  };
 
-        <LiveSessionSection
-          projectId={loadedProject.id}
-          layers={orderedLayers}
-          session={session}
-          onNavigateToImport={onNavigateToImport}
-        />
-
-        {orderedLayers.length === 0 ? (
-          <div className="border border-dashed border-border rounded-lg p-10 text-center space-y-3">
-            <NotebookPen className="w-8 h-8 mx-auto text-muted-foreground" />
-            <p className="text-sm font-medium text-foreground">
-              No planning session yet
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Add the brainstorm that produced this architecture — pasted
-              markdown or a .md file — and it lives here, next to the manifest
-              it became.
-            </p>
-            <Button onClick={() => setDialogOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add planning session
-            </Button>
-          </div>
-        ) : (
-          archivedLayers.map((layer) => (
-            <PlanLayerCard
-              key={layer.id}
-              layer={layer}
-              collapsed={collapsedIds.has(layer.id)}
-              onToggleCollapsed={() => toggleCollapsed(layer.id)}
-              onRename={(title) =>
-                updateLayer(loadedProject.id, layer.id, { title })
-              }
-              onRequestDelete={() => {
-                setDeleteError(null);
-                setDeleteTarget(layer);
-              }}
-              onExtractDecisions={
-                layer.kind === "brainstorm"
-                  ? () => extractDecisions(layer)
-                  : undefined
-              }
-              onSwitchToArchitecture={onSwitchToArchitecture}
-            />
-          ))
+  const composer =
+    composerMode === "hidden" ? undefined : (
+      <div className="shrink-0">
+        {composerMode === "seed" && startError && (
+          <p role="alert" className="px-4 pt-2 text-sm text-destructive">
+            {startError}
+          </p>
         )}
+        <TextareaComposer
+          value={composerDraft}
+          onValueChange={setComposerDraft}
+          onSubmit={handleComposerSubmit}
+          placeholder={
+            composerMode === "seed"
+              ? "Describe what you want to build (the brief the session starts from)…"
+              : "Steer the session (folded into the next model turn)…"
+          }
+          inputAriaLabel={
+            composerMode === "seed" ? "Session brief" : "Steering note"
+          }
+          submitLabel={composerMode === "seed" ? "Start session" : "Send"}
+        />
+        {/* ADR-0045 Q5: both live composer modes carry the quota cost. */}
+        <p className="px-4 pb-2 text-xs text-muted-foreground">
+          Each round uses 2 AI chat requests from your daily quota.
+        </p>
       </div>
+    );
+
+  // ── Shell footer (locked decision §5 Q2): EMPTY until converged ──────────
+  const handleFinalize = () => {
+    // Bring the live view forward first: startFinalize streams the distill
+    // into the live view's panels, and the user must see it. This is a view
+    // switch inside the same screen driven by an explicit click — not an
+    // auto-navigation (no router involved).
+    setMainView({ kind: "live" });
+    void session.startFinalize();
+  };
+
+  const showFinalizeAction =
+    sessionStatus === "converged" &&
+    (session.finalize.phase === "idle" || session.finalize.phase === "error");
+  const footer = showFinalizeAction ? (
+    // ml-auto: the footer's left side stays empty (locked §5 Q2 — the action
+    // sits right, where the wizard's forward action lives).
+    <Button className="ml-auto" onClick={handleFinalize}>
+      <Sparkles className="w-4 h-4 mr-2" />
+      Finalize → Generate manifest
+    </Button>
+  ) : undefined;
+
+  return (
+    <div className="h-full min-h-0 p-4">
+      <ProjectsShellWithFreeTier
+        title={`Plan — ${loadedProject.name}`}
+        footer={footer}
+      >
+        <PlanWorkbench
+          leftTitle="Plan"
+          rightTitle="Session"
+          settings={
+            <ProjectSettingsSection
+              projectId={loadedProject.id}
+              persist={updateProjectFormState}
+            />
+          }
+          sessions={
+            <SessionsSourcesList
+              layers={archivedLayers}
+              sessionStatus={sessionStatus}
+              selectedView={resolvedView}
+              onSelectLive={() => setMainView({ kind: "live" })}
+              onSelectLayer={(layerId) =>
+                setMainView({ kind: "layer", layerId })
+              }
+            />
+          }
+          leftFooter={
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => setDialogOpen(true)}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add planning session
+            </Button>
+          }
+          main={
+            selectedLayer ? (
+              <PlanLayerReader
+                // Keyed by layer id so rename-in-progress state can't leak
+                // across a row switch in the sessions list.
+                key={selectedLayer.id}
+                layer={selectedLayer}
+                onRename={(title) =>
+                  updateLayer(loadedProject.id, selectedLayer.id, { title })
+                }
+                // Only archived layers ever reach the reader (the active
+                // layer normalizes to the live view), so Delete is always
+                // offered here — the "no Delete for the session-backed
+                // layer" guard is the normalization above.
+                onRequestDelete={() => {
+                  setDeleteError(null);
+                  setDeleteTarget(selectedLayer);
+                }}
+                onExtractDecisions={
+                  selectedLayer.kind === "brainstorm"
+                    ? () => extractDecisions(selectedLayer)
+                    : undefined
+                }
+                onSwitchToArchitecture={onSwitchToArchitecture}
+              />
+            ) : (
+              <LiveSessionSection
+                projectId={loadedProject.id}
+                layers={layers}
+                session={session}
+                onNavigateToImport={onNavigateToImport}
+              />
+            )
+          }
+          composer={composer}
+        />
+      </ProjectsShellWithFreeTier>
 
       <AddPlanningSessionDialog
         open={dialogOpen}
@@ -289,6 +399,8 @@ export function PlanPhaseView({
         submitError={submitError}
       />
 
+      {/* Delete-confirm stays a Dialog (jsdom's <dialog> a11y-excludes its
+          subtree, which the suite works around with prototype stubs). */}
       <Dialog
         open={deleteTarget !== null}
         onClose={closeDeleteDialog}

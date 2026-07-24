@@ -4,18 +4,16 @@ import React from "react";
 import { render, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import type { ProjectLayer } from "@hexagen/shared";
 
-// Finalize distills via one chat call — mock the stream, not the whole flow.
-const distillMock = vi.hoisted(() => ({
-  impl: vi.fn(async () => ({ ok: true as const, content: "name: distilled" })),
-}));
-vi.mock("../session/stream-chat-turn", () => ({
-  streamChatTurn: (...args: unknown[]) => distillMock.impl(...args),
-}));
-
 import { LiveSessionSection } from "../LiveSessionSection";
 import type { UsePlanningSessionReturn } from "../session/usePlanningSession";
 import type { PlanningSessionState } from "../session/planning-session";
 import { usePendingManifest } from "../../../manifest-generation/store/usePendingManifest";
+
+// A2: LiveSessionSection is the workbench right pane's LIVE view and is
+// deliberately STATELESS about drafts and finalize — the composer lives in the
+// host and the finalize state lives in usePlanningSession. This suite drives
+// it purely through the session prop; the full finalize FLOW (real hook) is
+// pinned in PlanWorkbench.test.tsx.
 
 const bodyText = () => (document.body.textContent || "").replace(/\s+/g, " ");
 
@@ -53,6 +51,10 @@ function makeSession(
     end: vi.fn(async () => {}),
     beginFinalize: vi.fn(async () => {}),
     cancelFinalize: vi.fn(async () => {}),
+    finalize: { phase: "idle" },
+    startFinalize: vi.fn(async () => {}),
+    abandonFinalize: vi.fn(async () => {}),
+    setFinalizeReviewText: vi.fn(),
     reset: vi.fn(),
     ...overrides,
   };
@@ -100,51 +102,17 @@ describe("LiveSessionSection", () => {
     cleanup();
     sessionStorage.clear();
     usePendingManifest.getState().clear();
-    distillMock.impl = vi.fn(async () => ({
-      ok: true as const,
-      content: "name: distilled",
-    }));
   });
 
-  it("shows the seed form with the quota-cost note when no session is tracked", () => {
+  it("shows the intro when no session is tracked — the seed composer is the HOST's, not this view's", () => {
     renderSection({ session: makeSession() });
     assert.match(bodyText(), /Start a live session/);
-    assert.match(bodyText(), /2 AI chat requests/);
-    const startButton = button(/Start live session/);
-    assert.ok(startButton.disabled, "start disabled without a brief");
-  });
-
-  it("start() receives the typed brief", async () => {
-    const session = makeSession();
-    renderSection({ session });
-    const textarea = document.querySelector(
-      'textarea[aria-label="Session brief"]',
-    ) as HTMLTextAreaElement;
-    fireEvent.change(textarea, { target: { value: "Build a todo app" } });
-    fireEvent.click(button(/Start live session/));
-    await waitFor(() =>
-      assert.deepStrictEqual(
-        (session.start as ReturnType<typeof vi.fn>).mock.calls,
-        [["Build a todo app"]],
-      ),
+    assert.match(bodyText(), /composer below/);
+    assert.strictEqual(
+      document.querySelector("textarea"),
+      null,
+      "no draft-owning input in the live view (A2 lift)",
     );
-  });
-
-  it("a failed start surfaces an inline error and keeps the typed brief", async () => {
-    const session = makeSession({ start: vi.fn(async () => false) });
-    renderSection({ session });
-    const textarea = document.querySelector(
-      'textarea[aria-label="Session brief"]',
-    ) as HTMLTextAreaElement;
-    fireEvent.change(textarea, { target: { value: "Build a todo app" } });
-    fireEvent.click(button(/Start live session/));
-
-    await waitFor(() => {
-      const alert = document.querySelector('[role="alert"]');
-      assert.match(alert?.textContent ?? "", /Couldn't start the session/);
-    });
-    // The brief the user typed is NOT discarded on failure.
-    assert.strictEqual(textarea.value, "Build a todo app");
   });
 
   it("shows the interrupted banner for a persisted non-terminal session; Resume attaches and resumes", async () => {
@@ -212,40 +180,24 @@ describe("LiveSessionSection", () => {
     assert.match(bodyText(), /partial critique/);
     assert.ok(button(/Pause/));
     noButton(/Resume/);
-    // Steering is first-class at ANY point, not only while parked — a note
-    // added mid-run folds into the next model turn.
-    assert.ok(
-      document.querySelector('textarea[aria-label="Steering note"]'),
-      "steering input available while running",
-    );
   });
 
-  it("awaiting-human exposes steering, Resume, and Force converge; steering text is sent", async () => {
-    const session = makeSession({
-      sessionState: state({
-        status: "awaiting-human",
-        awaitReason: "cap-reached",
-        resumeStatus: "revising",
-        round: 4,
+  it("awaiting-human (cap reached) exposes Resume and Force converge with the cap copy", () => {
+    renderSection({
+      session: makeSession({
+        sessionState: state({
+          status: "awaiting-human",
+          awaitReason: "cap-reached",
+          resumeStatus: "revising",
+          round: 4,
+        }),
+        activeLayerId: "L1",
       }),
-      activeLayerId: "L1",
     });
-    renderSection({ session });
 
     assert.match(bodyText(), /Round cap reached/);
     assert.ok(button(/Resume/));
     assert.ok(button(/Force converge/));
-    const textarea = document.querySelector(
-      'textarea[aria-label="Steering note"]',
-    ) as HTMLTextAreaElement;
-    fireEvent.change(textarea, { target: { value: "focus on billing" } });
-    fireEvent.click(button(/Add steering turn/));
-    await waitFor(() =>
-      assert.deepStrictEqual(
-        (session.addSteering as ReturnType<typeof vi.fn>).mock.calls,
-        [["focus on billing"]],
-      ),
-    );
   });
 
   it("surfaces a stream error as an alert, never a silent stall", () => {
@@ -264,42 +216,72 @@ describe("LiveSessionSection", () => {
     assert.ok(button(/Resume/));
   });
 
-  it("finalize: distills to an editable review and does NOT navigate or hand off before Confirm", async () => {
-    distillMock.impl = vi.fn(async () => ({
-      ok: true as const,
-      content: "```yaml\nname: distilled-app\ncontexts: []\n```",
-    }));
-    const onNavigateToImport = vi.fn();
-    const session = makeSession({
-      sessionState: state({ status: "converged", round: 2 }),
-      activeLayerId: "L1",
-      seed: "the brief",
-      turns: [{ id: "t1", author: "You", content: "the brief", role: "human" }],
+  it("converged + idle finalize: hints at the shell-footer Finalize (no Finalize button HERE — locked §5 Q2)", () => {
+    renderSection({
+      session: makeSession({
+        sessionState: state({ status: "converged", round: 2 }),
+        activeLayerId: "L1",
+      }),
     });
+    assert.match(bodyText(), /The critic signed off/);
+    noButton(/Finalize/);
+  });
+
+  it("distilling: renders the streamed content and Cancel wired to abandonFinalize", async () => {
+    const session = makeSession({
+      sessionState: state({ status: "finalizing", round: 2 }),
+      activeLayerId: "L1",
+      finalize: { phase: "distilling", content: "name: partial-spec" },
+    });
+    renderSection({ session });
+
+    assert.ok(document.querySelector('[data-testid="finalize-distilling"]'));
+    assert.match(bodyText(), /name: partial-spec/);
+    fireEvent.click(button(/^\s*Cancel\s*$/));
+    await waitFor(() =>
+      assert.strictEqual(
+        (session.abandonFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
+        1,
+      ),
+    );
+  });
+
+  it("review: shows the lifted text, forwards edits to setFinalizeReviewText, and Cancel abandons", async () => {
+    const session = makeSession({
+      sessionState: state({ status: "finalizing", round: 2 }),
+      activeLayerId: "L1",
+      finalize: { phase: "review", text: "name: distilled-app" },
+    });
+    const onNavigateToImport = vi.fn();
     renderSection({ session, onNavigateToImport });
 
-    fireEvent.click(button(/Finalize → Generate manifest/));
-    await waitFor(() =>
-      assert.ok(document.querySelector('[data-testid="finalize-review"]')),
-    );
-    assert.strictEqual(
-      (session.beginFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
-      1,
-    );
-
-    // The fenced YAML is stripped into the editable textarea.
     const review = document.querySelector(
       'textarea[aria-label="Distilled spec"]',
     ) as HTMLTextAreaElement;
-    assert.strictEqual(review.value, "name: distilled-app\ncontexts: []");
+    assert.strictEqual(review.value, "name: distilled-app");
 
-    // CRITICAL: review shown ≠ hand-off. Nothing moves until Confirm.
+    fireEvent.change(review, { target: { value: "name: edited" } });
+    assert.deepStrictEqual(
+      (session.setFinalizeReviewText as ReturnType<typeof vi.fn>).mock.calls,
+      [["name: edited"]],
+    );
+
+    // Review shown ≠ hand-off: nothing moves before Confirm.
     assert.strictEqual(onNavigateToImport.mock.calls.length, 0);
     assert.strictEqual(usePendingManifest.getState().originSession, null);
     assert.strictEqual(sessionStorage.getItem("import_spec_content"), null);
+
+    fireEvent.click(button(/^\s*Cancel\s*$/));
+    await waitFor(() =>
+      assert.strictEqual(
+        (session.abandonFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
+        1,
+      ),
+    );
+    assert.strictEqual(onNavigateToImport.mock.calls.length, 0);
   });
 
-  it("Confirm hands off the EDITED spec + session provenance and navigates; the review stays open", async () => {
+  it("Confirm hands off the reviewed spec + session provenance and navigates; the review stays open", async () => {
     const onNavigateToImport = vi.fn();
     const turns = [
       { id: "t1", author: "You", content: "the brief", role: "human" as const },
@@ -311,21 +293,14 @@ describe("LiveSessionSection", () => {
       },
     ];
     const session = makeSession({
-      sessionState: state({ status: "converged", round: 1 }),
+      sessionState: state({ status: "finalizing", round: 1 }),
       activeLayerId: "L42",
       seed: "the brief",
       turns,
+      finalize: { phase: "review", text: "name: edited-by-human" },
     });
     renderSection({ session, onNavigateToImport });
 
-    fireEvent.click(button(/Finalize → Generate manifest/));
-    await waitFor(() =>
-      assert.ok(document.querySelector('[data-testid="finalize-review"]')),
-    );
-    const review = document.querySelector(
-      'textarea[aria-label="Distilled spec"]',
-    ) as HTMLTextAreaElement;
-    fireEvent.change(review, { target: { value: "name: edited-by-human" } });
     fireEvent.click(button(/Confirm and continue to import/));
 
     await waitFor(() =>
@@ -351,115 +326,34 @@ describe("LiveSessionSection", () => {
     assert.ok(document.querySelector('[data-testid="finalize-review"]'));
   });
 
-  it("Cancel in review abandons the finalize without navigation or hand-off", async () => {
-    const onNavigateToImport = vi.fn();
-    const session = makeSession({
-      sessionState: state({ status: "converged" }),
-      activeLayerId: "L1",
-      seed: "s",
-      turns: [],
+  it("a finalize error phase surfaces as an alert with retry framing", () => {
+    renderSection({
+      session: makeSession({
+        sessionState: state({ status: "converged" }),
+        activeLayerId: "L1",
+        finalize: { phase: "error", message: "model unavailable" },
+      }),
     });
-    renderSection({ session, onNavigateToImport });
-
-    fireEvent.click(button(/Finalize → Generate manifest/));
-    await waitFor(() =>
-      assert.ok(document.querySelector('[data-testid="finalize-review"]')),
-    );
-    fireEvent.click(button(/^\s*Cancel\s*$/));
-
-    await waitFor(() =>
-      assert.strictEqual(
-        (session.cancelFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
-        1,
-      ),
-    );
-    assert.strictEqual(onNavigateToImport.mock.calls.length, 0);
-    assert.strictEqual(usePendingManifest.getState().originSession, null);
-    assert.strictEqual(sessionStorage.getItem("import_spec_content"), null);
+    const alert = document.querySelector('[role="alert"]');
+    assert.match(alert?.textContent ?? "", /model unavailable/);
+    assert.match(alert?.textContent ?? "", /you can retry/);
   });
 
-  it("a failed distillation surfaces an error and returns the session to converged", async () => {
-    distillMock.impl = vi.fn(async () => ({
-      ok: false as const,
-      error: "model unavailable",
-      aborted: false,
-    }));
+  it("End session stays available during the review (teardown is the hook's job)", async () => {
     const session = makeSession({
-      sessionState: state({ status: "converged" }),
+      sessionState: state({ status: "finalizing" }),
       activeLayerId: "L1",
+      finalize: { phase: "review", text: "name: spec" },
     });
     renderSection({ session });
 
-    fireEvent.click(button(/Finalize → Generate manifest/));
-    await waitFor(() => {
-      const alert = document.querySelector('[role="alert"]');
-      assert.match(alert?.textContent ?? "", /model unavailable/);
-    });
-    assert.strictEqual(
-      (session.cancelFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
-      1,
-    );
-    // A transient distill failure must leave a retry path.
-    assert.ok(
-      button(/Finalize → Generate manifest/),
-      "Finalize is offered again after a failed distillation",
-    );
-  });
-
-  it("End session during the finalize review abandons the review and ends the session", async () => {
-    const onNavigateToImport = vi.fn();
-    const session = makeSession({
-      sessionState: state({ status: "converged" }),
-      activeLayerId: "L1",
-      seed: "s",
-      turns: [],
-    });
-    renderSection({ session, onNavigateToImport });
-
-    fireEvent.click(button(/Finalize → Generate manifest/));
-    await waitFor(() =>
-      assert.ok(document.querySelector('[data-testid="finalize-review"]')),
-    );
     fireEvent.click(button(/End session/));
-
     await waitFor(() =>
       assert.strictEqual(
         (session.end as ReturnType<typeof vi.fn>).mock.calls.length,
         1,
       ),
     );
-    // The stale review panel is torn down with the session.
-    assert.strictEqual(
-      document.querySelector('[data-testid="finalize-review"]'),
-      null,
-    );
-    assert.strictEqual(onNavigateToImport.mock.calls.length, 0);
-  });
-
-  it("unmounting mid-distill aborts the in-flight stream (no zombie fetch after a phase switch)", async () => {
-    let captured: AbortSignal | undefined;
-    distillMock.impl = vi.fn(
-      (opts: { signal?: AbortSignal }) =>
-        new Promise(() => {
-          captured = opts.signal; // hangs — torn down only by the abort
-        }),
-    ) as typeof distillMock.impl;
-    const session = makeSession({
-      sessionState: state({ status: "converged" }),
-      activeLayerId: "L1",
-      seed: "s",
-      turns: [],
-    });
-    const { unmount } = renderSection({ session });
-
-    fireEvent.click(button(/Finalize → Generate manifest/));
-    await waitFor(() => assert.ok(captured, "distill stream started"));
-    assert.strictEqual(captured!.aborted, false);
-
-    // Phase switch / navigation. The layer keeps its persisted "finalizing"
-    // status — sessionStateFromLayer recovers it as converged on next attach.
-    unmount();
-    assert.strictEqual(captured!.aborted, true, "distill stream aborted");
   });
 
   it("the done panel offers Start another session, which resets the hook", () => {

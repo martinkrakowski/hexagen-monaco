@@ -14,7 +14,15 @@ vi.stubGlobal("crypto", {
   randomUUID: () => `uuid-${(uuidCounter += 1)}`,
 } as unknown as Crypto);
 
-import { describe, it, vi, beforeEach, afterEach } from "vitest";
+import {
+  describe,
+  it,
+  vi,
+  beforeEach,
+  afterEach,
+  beforeAll,
+  afterAll,
+} from "vitest";
 import assert from "node:assert/strict";
 import React from "react";
 import {
@@ -91,6 +99,27 @@ HTMLDialogElement.prototype.showModal = function () {
 HTMLDialogElement.prototype.close = function () {
   this.removeAttribute("open");
 };
+
+// PlanPhaseView now hosts the two-pane workbench (A2): the desktop layout is
+// react-resizable-panels, which requires ResizeObserver (absent in jsdom).
+const hadResizeObserver = "ResizeObserver" in globalThis;
+const originalResizeObserver = globalThis.ResizeObserver;
+beforeAll(() => {
+  if (!globalThis.ResizeObserver) {
+    globalThis.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+  }
+});
+afterAll(() => {
+  if (hadResizeObserver) {
+    globalThis.ResizeObserver = originalResizeObserver;
+  } else {
+    delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
+  }
+});
 
 beforeEach(() => {
   persistencePort.state.projects = [

@@ -3,7 +3,6 @@
 import React from "react";
 import { Panel, PanelGroup } from "react-resizable-panels";
 
-import { Card, CardContent } from "@hexagen/ui";
 import type { UsePanelCollapseReturn } from "../hooks/usePanelCollapse";
 
 import { PanelHeader } from "./PanelHeader";
@@ -30,6 +29,10 @@ export interface TwoPaneDesktopLayoutProps {
  * primary content and is always visible. Widths persist via
  * TWO_PANE_AUTO_SAVE_ID. The right column intentionally has no header — its
  * content owns its own chrome (the interacted resource's title changes).
+ *
+ * The panes are FLAT (a border-r divider, no nested Cards): the plan
+ * workbench mounts inside the ProjectsShell Card, and a Card-in-Card double
+ * frame reads as clutter at workbench density (plan §3.1).
  */
 export const TwoPaneDesktopLayout = React.memo(function TwoPaneDesktopLayout({
   left,
@@ -39,7 +42,7 @@ export const TwoPaneDesktopLayout = React.memo(function TwoPaneDesktopLayout({
   leftCollapse,
 }: TwoPaneDesktopLayoutProps) {
   return (
-    <div className="flex h-full gap-2">
+    <div className="flex h-full">
       {leftCollapse.isCollapsed && (
         <CollapsedStrip
           side="left"
@@ -65,22 +68,22 @@ export const TwoPaneDesktopLayout = React.memo(function TwoPaneDesktopLayout({
           onCollapse={leftCollapse.onPanelCollapse}
           onExpand={leftCollapse.onPanelExpand}
         >
-          <Card className="h-full border border-border rounded-md flex flex-col">
+          <div className="h-full flex flex-col border-r border-border">
             <PanelHeader
               title={leftTitle}
               side="left"
               isCollapsed={leftCollapse.isCollapsed}
               onCollapse={leftCollapse.collapse}
             />
-            <CardContent className="p-0 flex-1 min-h-0 flex flex-col overflow-auto">
+            <div className="flex-1 min-h-0 flex flex-col overflow-auto">
               {left}
-            </CardContent>
+            </div>
             {leftFooter && (
               <div className="border-t border-border p-3 shrink-0">
                 {leftFooter}
               </div>
             )}
-          </Card>
+          </div>
         </Panel>
 
         <VerticalResizeHandle />
@@ -91,9 +94,7 @@ export const TwoPaneDesktopLayout = React.memo(function TwoPaneDesktopLayout({
           defaultSize={TWO_PANE_RIGHT_SIZES.defaultSize}
           minSize={TWO_PANE_RIGHT_SIZES.minSize}
         >
-          <Card className="h-full overflow-hidden border border-border rounded-md flex flex-col">
-            {right}
-          </Card>
+          <div className="h-full overflow-hidden flex flex-col">{right}</div>
         </Panel>
       </PanelGroup>
     </div>

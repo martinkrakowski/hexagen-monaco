@@ -286,4 +286,60 @@ describe("TextareaComposer", () => {
       true,
     );
   });
+
+  // ── Controlled mode (Plan Workbench A2) ────────────────────────────────────
+  // The workbench host lifts the draft so a right-pane view switch (which
+  // unmounts the composer) can't lose typed text.
+
+  describe("controlled mode (value/onValueChange)", () => {
+    it("renders the lifted value and routes typing to onValueChange", () => {
+      const changes: string[] = [];
+      render(
+        <TextareaComposer
+          value="lifted draft"
+          onValueChange={(v) => changes.push(v)}
+          onSubmit={async () => true}
+        />,
+      );
+      const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+      assert.strictEqual(textarea.value, "lifted draft");
+
+      fireEvent.change(textarea, { target: { value: "lifted draft!" } });
+      assert.deepStrictEqual(changes, ["lifted draft!"]);
+      // Controlled: the DOM value tracks the PROP, which this render never
+      // updated — the parent owns the state.
+      assert.strictEqual(textarea.value, "lifted draft");
+    });
+
+    it('clears via onValueChange("") when onSubmit resolves true', async () => {
+      const changes: string[] = [];
+      render(
+        <TextareaComposer
+          value="send me"
+          onValueChange={(v) => changes.push(v)}
+          onSubmit={async () => true}
+        />,
+      );
+      fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+      await waitFor(() => assert.deepStrictEqual(changes, [""]));
+    });
+
+    it("keeps the lifted draft when onSubmit resolves false", async () => {
+      const changes: string[] = [];
+      let called = false;
+      render(
+        <TextareaComposer
+          value="keep me"
+          onValueChange={(v) => changes.push(v)}
+          onSubmit={async () => {
+            called = true;
+            return false;
+          }}
+        />,
+      );
+      fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+      await waitFor(() => assert.strictEqual(called, true));
+      assert.strictEqual(changes.length, 0, "no clear on a failed send");
+    });
+  });
 });

@@ -123,5 +123,23 @@ describe("TwoPaneLayout", () => {
       assert.ok(screen.getByText("RIGHT-PANE"));
       assert.strictEqual(screen.queryByText("LEFT-PANE"), null);
     });
+
+    it("keeps the leftFooter visible on the RIGHT tab too (pinned below both tabs, locked §5 Q6)", () => {
+      setViewportWidth(500);
+      render(
+        <TwoPaneLayout
+          {...baseProps}
+          leftFooter={<button type="button">Add planning session</button>}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Session" }));
+
+      assert.ok(screen.getByText("RIGHT-PANE"));
+      assert.ok(
+        screen.getByRole("button", { name: "Add planning session" }),
+        "the footer action stays reachable while the right tab is active",
+      );
+    });
   });
 });

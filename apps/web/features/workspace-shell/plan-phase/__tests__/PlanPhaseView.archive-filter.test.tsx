@@ -1,13 +1,19 @@
-import { describe, it, vi, beforeEach } from "vitest";
+import { describe, it, vi, beforeEach, beforeAll, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import React from "react";
-import { render as rtlRender, cleanup } from "@testing-library/react";
+import {
+  render as rtlRender,
+  cleanup,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 import { FormProvider, useForm } from "react-hook-form";
 import { emptyFormValues } from "../../../project-wizard/config";
 
 // Separate file from PlanPhaseView.test.tsx: this one mocks usePlanningSession
-// itself (module-level vi.mock) to pin the archive-filter seam, while the main
-// suite exercises the view with the REAL hook.
+// itself (module-level vi.mock) to pin the archive-filter, view-union and
+// composer-mode seams, while the main suite exercises the view with the REAL
+// hook.
 const lifecycle = vi.hoisted(() => ({
   current: {} as Record<string, unknown>,
 }));
@@ -34,7 +40,45 @@ function PlanFormHarness({ children }: { children: React.ReactNode }) {
 const render = (ui: React.ReactElement) =>
   rtlRender(ui, { wrapper: PlanFormHarness });
 
+// jsdom has no <dialog>; PlanPhaseView mounts (closed) dialogs.
+HTMLDialogElement.prototype.showModal = function () {
+  this.setAttribute("open", "");
+};
+HTMLDialogElement.prototype.close = function () {
+  this.removeAttribute("open");
+};
+
+// The desktop workbench renders react-resizable-panels → needs ResizeObserver.
+const hadResizeObserver = "ResizeObserver" in globalThis;
+const originalResizeObserver = globalThis.ResizeObserver;
+beforeAll(() => {
+  if (!globalThis.ResizeObserver) {
+    globalThis.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+  }
+});
+afterAll(() => {
+  if (hadResizeObserver) {
+    globalThis.ResizeObserver = originalResizeObserver;
+  } else {
+    delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
+  }
+});
+
 const bodyText = () => (document.body.textContent || "").replace(/\s+/g, " ");
+
+function sessionRow(title: RegExp): HTMLButtonElement {
+  const nav = document.querySelector('nav[aria-label="Sessions and sources"]');
+  assert.ok(nav, "the sessions nav is present");
+  const row = Array.from(nav.querySelectorAll("button")).find((b) =>
+    title.test(b.textContent || ""),
+  );
+  assert.ok(row, `expected a sessions row matching ${title}`);
+  return row as HTMLButtonElement;
+}
 
 function makeSession(overrides: Record<string, unknown> = {}) {
   return {
@@ -53,6 +97,10 @@ function makeSession(overrides: Record<string, unknown> = {}) {
     end: vi.fn(async () => {}),
     beginFinalize: vi.fn(async () => {}),
     cancelFinalize: vi.fn(async () => {}),
+    finalize: { phase: "idle" },
+    startFinalize: vi.fn(async () => {}),
+    abandonFinalize: vi.fn(async () => {}),
+    setFinalizeReviewText: vi.fn(),
     reset: vi.fn(),
     ...overrides,
   };
@@ -67,37 +115,37 @@ const layer = (id: string, title: string) => ({
   turns: [{ id: `${id}-t1`, author: "You", content: `${title} content` }],
 });
 
-describe("PlanPhaseView archive filter (single hook instance)", () => {
-  beforeEach(() => {
-    cleanup();
-    lifecycle.current = {
-      loadedProject: {
-        id: "p1",
-        name: "Vellum",
-        schemaVersion: 4,
-        createdAt: 0,
-        updatedAt: 0,
-        formState: {},
-        manifestYaml: "",
-        layers: [layer("L-active", "Live one"), layer("L-old", "Archived one")],
-      },
-      addLayer: vi.fn(async () => "layer-id"),
-      updateLayer: vi.fn(async () => true),
-      appendLayerTurn: vi.fn(async () => ({
-        id: "turn-id",
-        author: "AI",
-        content: "",
-        at: 0,
-      })),
-      removeLayer: vi.fn(async () => true),
-      updateProjectFormState: vi.fn(),
-      layersPersistError: null,
-      clearLayersPersistError: vi.fn(),
-    };
-    planningSession.current = makeSession();
-  });
+beforeEach(() => {
+  cleanup();
+  lifecycle.current = {
+    loadedProject: {
+      id: "p1",
+      name: "Vellum",
+      schemaVersion: 4,
+      createdAt: 0,
+      updatedAt: 0,
+      formState: {},
+      manifestYaml: "",
+      layers: [layer("L-active", "Live one"), layer("L-old", "Archived one")],
+    },
+    addLayer: vi.fn(async () => "layer-id"),
+    updateLayer: vi.fn(async () => true),
+    appendLayerTurn: vi.fn(async () => ({
+      id: "turn-id",
+      author: "AI",
+      content: "",
+      at: 0,
+    })),
+    removeLayer: vi.fn(async () => true),
+    updateProjectFormState: vi.fn(),
+    layersPersistError: null,
+    clearLayersPersistError: vi.fn(),
+  };
+  planningSession.current = makeSession();
+});
 
-  it("filters the ACTIVE session's layer out of the archive list (its turns render once, in the live panel)", () => {
+describe("PlanPhaseView archive filter (single hook instance)", () => {
+  it("filters the ACTIVE session's layer out of the sessions list (its turns render once, in the live view)", () => {
     planningSession.current = makeSession({
       activeLayerId: "L-active",
       sessionState: {
@@ -110,20 +158,279 @@ describe("PlanPhaseView archive filter (single hook instance)", () => {
     });
     render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
 
-    const text = bodyText();
-    assert.match(text, /Archived one/, "non-active layer stays archived");
-    assert.doesNotMatch(
-      text,
-      /Live one content/,
-      "the active layer's archived rendering is suppressed",
+    const nav = document.querySelector(
+      'nav[aria-label="Sessions and sources"]',
     );
-    assert.match(text, /live turn/, "the live panel renders the session turns");
+    assert.ok(nav);
+    assert.match(
+      nav.textContent || "",
+      /Archived one/,
+      "non-active layer stays listed",
+    );
+    assert.doesNotMatch(
+      nav.textContent || "",
+      /Live one/,
+      "the active layer never appears as an archived row",
+    );
+    assert.match(bodyText(), /live turn/, "the live view renders the session");
+    // The pinned live row carries the session's status chip.
+    const chip = document.querySelector(
+      '[data-testid="session-row-status-chip"]',
+    );
+    assert.equal(chip?.textContent, "Critiquing");
   });
 
-  it("renders ALL layers in the archive when no session is active", () => {
+  it("lists ALL layers when no session is active (live row has no status chip)", () => {
     render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
-    const text = bodyText();
-    assert.match(text, /Live one content/);
-    assert.match(text, /Archived one content/);
+    const nav = document.querySelector(
+      'nav[aria-label="Sessions and sources"]',
+    );
+    assert.ok(nav);
+    assert.match(nav.textContent || "", /Live one/);
+    assert.match(nav.textContent || "", /Archived one/);
+    assert.equal(
+      document.querySelector('[data-testid="session-row-status-chip"]'),
+      null,
+    );
+  });
+});
+
+describe("PlanPhaseView view union (right-pane selection)", () => {
+  it("normalizes a selected layer that becomes the ACTIVE session's layer back to the live view", () => {
+    // Selecting the active session's layer id must resolve to the live view —
+    // its turns must never render twice (list row selection can't reach it,
+    // but PR B's ?layer= URLs can).
+    planningSession.current = makeSession({
+      activeLayerId: "L-active",
+      sessionState: {
+        status: "critiquing",
+        round: 1,
+        maxRounds: 4,
+        nextRole: "critic",
+      },
+      turns: [{ id: "t", author: "You", content: "live turn", role: "human" }],
+    });
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
+    // Only the archived row is selectable; open it, then confirm the live row
+    // brings the live view back.
+    fireEvent.click(sessionRow(/Archived one/));
+    assert.match(bodyText(), /Archived one content/);
+    assert.doesNotMatch(bodyText(), /live turn/);
+
+    fireEvent.click(sessionRow(/Live session/));
+    assert.match(bodyText(), /live turn/);
+    assert.doesNotMatch(bodyText(), /Archived one content/);
+  });
+
+  it("hides Delete for the reader of a non-archived (active) layer by never offering the active layer as a row", () => {
+    planningSession.current = makeSession({
+      activeLayerId: "L-active",
+      sessionState: {
+        status: "critiquing",
+        round: 1,
+        maxRounds: 4,
+        nextRole: "critic",
+      },
+    });
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    // The live view never renders the reader's Delete affordance.
+    assert.equal(
+      document.querySelector('button[aria-label="Delete session"]'),
+      null,
+    );
+  });
+});
+
+describe("PlanPhaseView composer modes", () => {
+  it("live view + no session: seed mode — submit calls start() with the brief", async () => {
+    const session = makeSession();
+    planningSession.current = session;
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
+    const textarea = document.querySelector(
+      'textarea[aria-label="Session brief"]',
+    ) as HTMLTextAreaElement;
+    assert.ok(textarea, "seed composer present");
+    assert.match(
+      bodyText(),
+      /Each round uses 2 AI chat requests from your daily quota\./,
+      "ADR-0045 Q5 quota caption",
+    );
+    fireEvent.change(textarea, { target: { value: "Build a todo app" } });
+    fireEvent.click(
+      Array.from(document.querySelectorAll("button")).find((b) =>
+        /Start session/.test(b.textContent || ""),
+      ) as HTMLButtonElement,
+    );
+    await waitFor(() =>
+      assert.deepEqual((session.start as ReturnType<typeof vi.fn>).mock.calls, [
+        ["Build a todo app"],
+      ]),
+    );
+    // Accepted submit clears the draft.
+    await waitFor(() => assert.equal(textarea.value, ""));
+  });
+
+  it("a failed start surfaces an inline error and keeps the typed brief", async () => {
+    const session = makeSession({ start: vi.fn(async () => false) });
+    planningSession.current = session;
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
+    const textarea = document.querySelector(
+      'textarea[aria-label="Session brief"]',
+    ) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "Build a todo app" } });
+    fireEvent.click(
+      Array.from(document.querySelectorAll("button")).find((b) =>
+        /Start session/.test(b.textContent || ""),
+      ) as HTMLButtonElement,
+    );
+
+    await waitFor(() => {
+      const alert = document.querySelector('[role="alert"]');
+      assert.match(alert?.textContent ?? "", /Couldn't start the session/);
+    });
+    // The brief the user typed is NOT discarded on failure.
+    assert.equal(textarea.value, "Build a todo app");
+  });
+
+  it("live view + active session: steering mode — submit calls addSteering()", async () => {
+    const session = makeSession({
+      activeLayerId: "L-active",
+      sessionState: {
+        status: "awaiting-human",
+        round: 2,
+        maxRounds: 4,
+        awaitReason: "paused",
+        resumeStatus: "proposing",
+      },
+    });
+    planningSession.current = session;
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
+    const textarea = document.querySelector(
+      'textarea[aria-label="Steering note"]',
+    ) as HTMLTextAreaElement;
+    assert.ok(textarea, "steering composer present");
+    assert.match(
+      bodyText(),
+      /Each round uses 2 AI chat requests from your daily quota\./,
+      "quota caption in steering mode too",
+    );
+    fireEvent.change(textarea, { target: { value: "focus on billing" } });
+    fireEvent.click(
+      Array.from(document.querySelectorAll("button")).find(
+        (b) => (b.textContent || "").trim() === "Send",
+      ) as HTMLButtonElement,
+    );
+    await waitFor(() =>
+      assert.deepEqual(
+        (session.addSteering as ReturnType<typeof vi.fn>).mock.calls,
+        [["focus on billing"]],
+      ),
+    );
+  });
+
+  it("layer view: the composer is hidden; the typed draft survives the view round-trip", () => {
+    planningSession.current = makeSession();
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
+    const textarea = document.querySelector(
+      'textarea[aria-label="Session brief"]',
+    ) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "half-typed brief" } });
+
+    fireEvent.click(sessionRow(/Archived one/));
+    assert.equal(
+      document.querySelector('textarea[aria-label="Session brief"]'),
+      null,
+      "no composer on a read-only transcript (§5 Q3)",
+    );
+
+    fireEvent.click(sessionRow(/Live session/));
+    const back = document.querySelector(
+      'textarea[aria-label="Session brief"]',
+    ) as HTMLTextAreaElement;
+    assert.equal(
+      back.value,
+      "half-typed brief",
+      "the draft is lifted to the host and survives the unmount",
+    );
+  });
+
+  it("done session: composer hidden (no steering into a terminal session)", () => {
+    planningSession.current = makeSession({
+      activeLayerId: "L-active",
+      sessionState: { status: "done", round: 2, maxRounds: 4 },
+    });
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    assert.equal(
+      document.querySelector('textarea[aria-label="Session brief"]'),
+      null,
+    );
+    assert.equal(
+      document.querySelector('textarea[aria-label="Steering note"]'),
+      null,
+    );
+  });
+});
+
+describe("PlanPhaseView shell footer (locked §5 Q2)", () => {
+  it("is empty until converged; when converged it offers Finalize wired to the lifted startFinalize", async () => {
+    const session = makeSession({
+      activeLayerId: "L-active",
+      sessionState: {
+        status: "awaiting-human",
+        round: 2,
+        maxRounds: 4,
+        awaitReason: "paused",
+        resumeStatus: "proposing",
+      },
+    });
+    planningSession.current = session;
+    const { unmount } = render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    assert.equal(
+      Array.from(document.querySelectorAll("button")).find((b) =>
+        /Finalize → Generate manifest/.test(b.textContent || ""),
+      ),
+      undefined,
+      "no footer action before convergence",
+    );
+    unmount();
+
+    const converged = makeSession({
+      activeLayerId: "L-active",
+      sessionState: { status: "converged", round: 2, maxRounds: 4 },
+    });
+    planningSession.current = converged;
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    const finalizeButton = Array.from(document.querySelectorAll("button")).find(
+      (b) => /Finalize → Generate manifest/.test(b.textContent || ""),
+    ) as HTMLButtonElement;
+    assert.ok(finalizeButton, "converged surfaces the footer action");
+    fireEvent.click(finalizeButton);
+    await waitFor(() =>
+      assert.equal(
+        (converged.startFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
+        1,
+      ),
+    );
+  });
+
+  it("hides the footer action while a finalize is already distilling or under review", () => {
+    planningSession.current = makeSession({
+      activeLayerId: "L-active",
+      sessionState: { status: "converged", round: 2, maxRounds: 4 },
+      finalize: { phase: "review", text: "name: spec" },
+    });
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    assert.equal(
+      Array.from(document.querySelectorAll("button")).find((b) =>
+        /Finalize → Generate manifest/.test(b.textContent || ""),
+      ),
+      undefined,
+      "no duplicate Finalize while the review is open",
+    );
   });
 });
