@@ -3,7 +3,14 @@
 **Date:** 2026-07-22 · **Status:** v3 — **decisions locked** (Martin,
 2026-07-22, §5); critique-revised (33-agent adversarial pass: 26 findings
 integrated, 2 refuted). Ready for Phase 0 / PR A1.
-**Related:** ADR-0045 (project planning layers), PRs #403–#405, #414–#416
+**Status update (2026-07-24):** Phase 0 (#418) and PR A1 (#419) have since
+shipped. §2 "current state" describes the pre-arc baseline and is retained
+as-written as the planning record — the shared `Accordion`/`TextareaComposer`/
+`TwoPaneLayout` primitives and the stepless plan-phase autosave
+(`useProjectSettingsAutosave` → `updateProjectFormState`) now exist on `main`.
+Remaining phases: A2, B, C1, C2 (§4).
+**Related:** ADR-0045 (project planning layers), PRs #403–#405, #414–#416,
+#418, #419
 
 ## 1. Goal & requirements
 
