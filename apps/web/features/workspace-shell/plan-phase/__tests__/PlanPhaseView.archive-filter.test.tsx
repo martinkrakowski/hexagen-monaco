@@ -1,7 +1,9 @@
 import { describe, it, vi, beforeEach } from "vitest";
 import assert from "node:assert/strict";
 import React from "react";
-import { render, cleanup } from "@testing-library/react";
+import { render as rtlRender, cleanup } from "@testing-library/react";
+import { FormProvider, useForm } from "react-hook-form";
+import { emptyFormValues } from "../../../project-wizard/config";
 
 // Separate file from PlanPhaseView.test.tsx: this one mocks usePlanningSession
 // itself (module-level vi.mock) to pin the archive-filter seam, while the main
@@ -21,6 +23,16 @@ vi.mock("../session/usePlanningSession", () => ({
 }));
 
 import { PlanPhaseView } from "../PlanPhaseView";
+
+// PlanPhaseView renders ProjectSettingsSection, whose fields read the shared
+// wizard form via `useFormContext`; wrap every render in a FormProvider harness
+// (production uses WizardStepFormProvider) by shadowing `render`.
+function PlanFormHarness({ children }: { children: React.ReactNode }) {
+  const form = useForm({ defaultValues: emptyFormValues });
+  return <FormProvider {...form}>{children}</FormProvider>;
+}
+const render = (ui: React.ReactElement) =>
+  rtlRender(ui, { wrapper: PlanFormHarness });
 
 const bodyText = () => (document.body.textContent || "").replace(/\s+/g, " ");
 
@@ -77,6 +89,8 @@ describe("PlanPhaseView archive filter (single hook instance)", () => {
         content: "",
         at: 0,
       })),
+      removeLayer: vi.fn(async () => true),
+      updateProjectFormState: vi.fn(),
       layersPersistError: null,
       clearLayersPersistError: vi.fn(),
     };

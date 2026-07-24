@@ -201,12 +201,18 @@ const ProjectWorkspaceLayout = React.memo(function ProjectWorkspaceLayout({
 
         <main className="flex-1 flex flex-col overflow-hidden">
           {planPhaseActive ? (
-            <PlanPhaseView
-              onNavigateToImport={() =>
-                handleNavigate("/projects/new/import/spec")
-              }
-              onSwitchToArchitecture={() => handlePhaseChange("architecture")}
-            />
+            // Share the one wizard form instance (owned above the phase branch)
+            // so the Plan-phase "Project settings" fields read/write the same
+            // governance state as the Architecture wizard — WizardStepFormProvider
+            // is a pure context re-mount, safe to widen here.
+            <WizardStepFormProvider>
+              <PlanPhaseView
+                onNavigateToImport={() =>
+                  handleNavigate("/projects/new/import/spec")
+                }
+                onSwitchToArchitecture={() => handlePhaseChange("architecture")}
+              />
+            </WizardStepFormProvider>
           ) : (
             <ResizableLayout
               leftTitle="HexaGen Project Wizard"

@@ -5,7 +5,12 @@ vi.stubGlobal("crypto", {
 import { describe, it, vi, beforeEach } from "vitest";
 import assert from "node:assert";
 import React from "react";
-import { render, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render as rtlRender,
+  cleanup,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 
 // PlanPhaseView reads the project + layer mutations from the wizard lifecycle
 // context. Mock the hook (the provider needs the whole workspace tree).
@@ -17,6 +22,20 @@ vi.mock("../../contexts/WizardLifecycleContext", () => ({
 }));
 
 import { PlanPhaseView } from "../PlanPhaseView";
+import { FormProvider, useForm } from "react-hook-form";
+import { emptyFormValues } from "../../../project-wizard/config";
+
+// PlanPhaseView now renders ProjectSettingsSection, whose governance fields read
+// the shared wizard form via `useFormContext`. Production supplies it through
+// WizardStepFormProvider; here a lightweight FormProvider harness stands in.
+// Shadowing `render` routes every existing call site through the wrapper without
+// touching them.
+function PlanFormHarness({ children }: { children: React.ReactNode }) {
+  const form = useForm({ defaultValues: emptyFormValues });
+  return <FormProvider {...form}>{children}</FormProvider>;
+}
+const render = (ui: React.ReactElement) =>
+  rtlRender(ui, { wrapper: PlanFormHarness });
 
 HTMLDialogElement.prototype.showModal = function () {
   this.setAttribute("open", "");
@@ -71,6 +90,7 @@ describe("PlanPhaseView", () => {
         at: 0,
       })),
       removeLayer: vi.fn(async () => true),
+      updateProjectFormState: vi.fn(),
       layersPersistError: null,
       clearLayersPersistError: vi.fn(),
     };
@@ -216,6 +236,7 @@ describe("PlanPhaseView (Phase 2)", () => {
         at: 0,
       })),
       removeLayer: vi.fn(async () => true),
+      updateProjectFormState: vi.fn(),
       layersPersistError: null,
       clearLayersPersistError: vi.fn(),
     };

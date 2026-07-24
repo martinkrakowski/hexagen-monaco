@@ -256,6 +256,76 @@ export function useSavedProjects() {
     [port],
   );
 
+  // Autosave for stepless field edits — the Plan-phase "Project settings" form
+  // (Plan Workbench PR A1). Persists ONLY `formState`, leaving `manifestYaml`
+  // and `layers` untouched, via the record-level read-merge-write port. This is
+  // deliberately NOT `updateProject`: that regenerates `manifestYaml` from the
+  // form (`wizardToManifest`), which is correct in the wizard but WRONG here,
+  // where `manifestYaml` is the real generated architecture — a wizard
+  // projection would silently overwrite it. Fire-and-forget with an optimistic
+  // local update and a seq-guarded reconcile, mirroring `updateProject`'s
+  // throwing-port + revert semantics. A `NotFound` (genesis/unknown/deleted id)
+  // is an explicit no-op — no revert, no persistError — so a late-firing
+  // debounced flush against a project that has since gone away stays silent
+  // (matches the layer mutations' NotFound contract).
+  const updateProjectFormState = useCallback(
+    (id: string, formState: ProjectConfig): void => {
+      const snapshot = projectsRef.current;
+      // Unknown id (genesis/deleted): decide the no-op HERE, like the layer
+      // mutations do, rather than letting the port's NotFound arm below catch
+      // it. A no-op that bumped mutationSeq would mark an unrelated in-flight
+      // mutation on this instance as stale and suppress its revert/reconcile.
+      // The NotFound arm stays as the backstop for an id that exists locally
+      // but has vanished from storage by write time.
+      if (!snapshot.some((p) => p.id === id)) return;
+      const now = Date.now();
+      const updated = snapshot.map((p) =>
+        p.id === id ? { ...p, formState, updatedAt: now } : p,
+      );
+      const seq = ++mutationSeq.current;
+      projectsRef.current = updated;
+      setProjects(updated);
+      void (async () => {
+        let result: Awaited<ReturnType<typeof port.updateProjectRecord>>;
+        try {
+          result = await port.updateProjectRecord(id, (base) => ({
+            ...base,
+            formState,
+            updatedAt: now,
+          }));
+        } catch (e) {
+          result = {
+            success: false,
+            error: {
+              kind: "Unknown",
+              message: "Unexpected error persisting the project settings",
+              cause: e,
+            },
+          };
+        }
+        if (mutationSeq.current !== seq) return;
+        if (!result.success) {
+          if (result.error.kind === "NotFound") return;
+          setProjects(snapshot);
+          projectsRef.current = snapshot;
+          setPersistError(result.error);
+          return;
+        }
+        // Reconcile with the COMMITTED record — the port's read-merge-write may
+        // have folded in sibling fields (e.g. a live-session turn appended just
+        // before this autosave queued) that the optimistic array, built from
+        // this instance's snapshot, cannot know about. Guarded by seq.
+        const committed = fromBase(result.value);
+        const reconciled = projectsRef.current.map((p) =>
+          p.id === id ? committed : p,
+        );
+        projectsRef.current = reconciled;
+        setProjects(reconciled);
+      })();
+    },
+    [port],
+  );
+
   // Persist a layer mutation AWAITED (the caller must know whether the write
   // landed — a session turn or pasted transcript is hard to reconstruct) and
   // CLOBBER-SAFE: through the port's read-merge-write `updateProjectRecord`,
@@ -434,6 +504,7 @@ export function useSavedProjects() {
       deleteProject: () => {},
       renameProject: () => {},
       updateProject: () => {},
+      updateProjectFormState: () => {},
       addLayer: async () => null,
       updateLayer: async () => false,
       appendLayerTurn: async () => null,
@@ -451,6 +522,7 @@ export function useSavedProjects() {
     deleteProject,
     renameProject,
     updateProject,
+    updateProjectFormState,
     addLayer,
     updateLayer,
     appendLayerTurn,
