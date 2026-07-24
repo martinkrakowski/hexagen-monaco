@@ -14,6 +14,7 @@ import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { PlanWorkbench } from "@/workspace-shell/plan-phase/PlanWorkbench";
 import { GenesisProjectSettingsSection } from "./genesis-workbench/GenesisProjectSettingsSection";
 import { GenesisSourcesSection } from "./genesis-workbench/GenesisSourcesSection";
+import { rekeyGenesisFormValues } from "./genesis-workbench/genesisProjectSettingsStore";
 import { Button } from "@hexagen/ui";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { LocalLLMContext } from "../../lib/llm-interfaces";
@@ -53,6 +54,13 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
           carriedName ||
           wizardData.governance?.workspaceName ||
           `AI Project ${new Date().toLocaleTimeString()}`;
+        // Bypassed-name flows snapshot Section A edits under the null key,
+        // but the accept screen re-attaches THIS manufactured projectName as
+        // `?name=` on Back/Regenerate — move the snapshot with the hand-off
+        // so the remounted page still finds the edits under the name it will
+        // carry. No-op when a carried name exists (snapshot and URL already
+        // share that key) or when nothing was edited.
+        rekeyGenesisFormValues(carriedName, projectName);
         // Keep the previewed/saved manifest string in sync with the carried
         // name: seed the form's workspaceName/namespacePrefix AND rewrite the
         // manifest's top-level system/scope so the Approve screen and saved

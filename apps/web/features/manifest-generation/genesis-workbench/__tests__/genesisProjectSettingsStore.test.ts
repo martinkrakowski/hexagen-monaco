@@ -13,6 +13,7 @@ import { deriveWorkspaceName } from "@hexagen/manifest-generation";
 import {
   clearGenesisFormValues,
   loadGenesisFormValues,
+  rekeyGenesisFormValues,
   saveGenesisFormValues,
   seedGenesisFormValues,
 } from "../genesisProjectSettingsStore";
@@ -65,6 +66,30 @@ describe("genesisProjectSettingsStore", () => {
     saveGenesisFormValues(null, seedGenesisFormValues(null));
     assert.notEqual(loadGenesisFormValues(null), null);
     assert.equal(loadGenesisFormValues("Vellum Notes"), null);
+  });
+
+  it("re-keys the bypassed flow's snapshot to the manufactured hand-off name — the accept screen re-attaches that name as ?name=, so the round trip must find the edits under it", () => {
+    const values = seedGenesisFormValues(null);
+    values.governance.packageManager = "pnpm";
+    saveGenesisFormValues(null, values);
+
+    rekeyGenesisFormValues(null, "AI Project 3:45:12 PM");
+
+    assert.equal(loadGenesisFormValues(null), null);
+    assert.equal(loadGenesisFormValues("AI Project 3:45:12 PM"), values);
+  });
+
+  it("rekey no-ops when the store is empty or the snapshot belongs to a different flow", () => {
+    // Empty store: nothing to move, nothing invented.
+    rekeyGenesisFormValues(null, "AI Project 3:45:12 PM");
+    assert.equal(loadGenesisFormValues("AI Project 3:45:12 PM"), null);
+
+    // A named flow's snapshot must not be hijacked by a null-keyed re-key.
+    const values = seedGenesisFormValues("Vellum Notes");
+    saveGenesisFormValues("Vellum Notes", values);
+    rekeyGenesisFormValues(null, "Other Project");
+    assert.equal(loadGenesisFormValues("Vellum Notes"), values);
+    assert.equal(loadGenesisFormValues("Other Project"), null);
   });
 
   it("clear drops the snapshot", () => {

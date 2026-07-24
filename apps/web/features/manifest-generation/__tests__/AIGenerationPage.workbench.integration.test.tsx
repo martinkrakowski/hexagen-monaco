@@ -20,13 +20,18 @@ import assert from "node:assert/strict";
 import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { deriveWorkspaceName } from "@hexagen/manifest-generation";
+import { DESCRIPTION_MAX_LENGTH } from "@hexagen/agentic-interaction";
+import type { ProjectSpec } from "@hexagen/project-configuration";
 
 // The setup-file next/navigation stub mints a fresh router per call — this
 // suite needs a STABLE push spy (the /models detour assertion) and a real
-// ?name= query, so it overrides the mock with its own factory.
+// ?name= query, so it overrides the mock with its own factory. searchParams
+// is mutable so individual tests can enter with the bypassed-name (no
+// ?name=) or regenerate (?generate=1) URLs; beforeEach restores the default.
 const nav = vi.hoisted(() => ({
   push: vi.fn(),
   replace: vi.fn(),
+  searchParams: new URLSearchParams("name=Vellum Notes"),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -38,7 +43,7 @@ vi.mock("next/navigation", () => ({
     refresh: vi.fn(),
   }),
   usePathname: () => "/projects/new/ai",
-  useSearchParams: () => new URLSearchParams("name=Vellum Notes"),
+  useSearchParams: () => nav.searchParams,
   useParams: () => ({}),
 }));
 
@@ -56,7 +61,10 @@ vi.mock("../../../app/lib/wire.client", async (importOriginal) => ({
 import { AIGenerationPage } from "../AIGenerationPage";
 import { usePendingManifest } from "../store/usePendingManifest";
 import { useExecutionEngine } from "../store/useExecutionEngine";
-import { clearGenesisFormValues } from "../genesis-workbench/genesisProjectSettingsStore";
+import {
+  clearGenesisFormValues,
+  loadGenesisFormValues,
+} from "../genesis-workbench/genesisProjectSettingsStore";
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
 
 // jsdom has no <dialog>: the local-generation warning dialog calls showModal.
@@ -88,14 +96,16 @@ afterAll(() => {
   }
 });
 
-// Keep every network consumer quiet AND in-flight: the capability probe stays
-// unresolved (irrelevant behind the server-key fast-pass) and the cloud staged
-// generation never completes — exactly what the parked-on-telemetry assertions
-// need (Cancel-only footer, no Next).
-vi.stubGlobal(
-  "fetch",
-  vi.fn(() => new Promise<Response>(() => {})),
-);
+// Keep every network consumer quiet AND in-flight by default: the capability
+// probe stays unresolved (irrelevant behind the server-key fast-pass) and the
+// cloud staged generation never completes — exactly what the
+// parked-on-telemetry assertions need (Cancel-only footer, no Next). The
+// hand-off test overrides this per-URL (still the wire boundary: the staged
+// NDJSON endpoint answers with a terminal "done" event); beforeEach restores
+// the pending-forever default.
+const pendingForever = () => new Promise<Response>(() => {});
+const fetchMock = vi.fn<typeof fetch>(pendingForever);
+vi.stubGlobal("fetch", fetchMock);
 
 /** Idle local engine: nothing downloaded, nothing loaded — the WebLLM detour
  * case. Only the members the genesis flow actually reads are functional. */
@@ -133,6 +143,9 @@ beforeEach(() => {
   useExecutionEngine.setState({ engine: "auto" });
   nav.push.mockClear();
   nav.replace.mockClear();
+  nav.searchParams = new URLSearchParams("name=Vellum Notes");
+  fetchMock.mockClear();
+  fetchMock.mockImplementation(pendingForever);
 });
 
 describe("AIGenerationPage — Plan Workbench C1", () => {
@@ -167,6 +180,21 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     assert.ok(composerTextarea());
     assert.ok(screen.getByRole("button", { name: "Generate" }));
     assert.equal(screen.queryByText("Generating Manifest"), null);
+
+    // Caption row under the composer — the relocated DescriptionInput
+    // affordances (disclosed deviation 2): the AI-ready indicator (server-key
+    // fast-pass → ready) and the character counter at idle, announced via the
+    // live region DescriptionInput's counter had (aria-live + aria-atomic).
+    // Expected text mirrors the production toLocaleString formatting so the
+    // pin is locale-independent.
+    assert.ok(screen.getByText("AI Ready"));
+    const counter = screen.getByText(
+      `${(0).toLocaleString()} / ${DESCRIPTION_MAX_LENGTH.toLocaleString()}`,
+    );
+    const caption = counter.closest("p");
+    assert.ok(caption, "counter renders inside the caption live region");
+    assert.equal(caption.getAttribute("aria-live"), "polite");
+    assert.equal(caption.getAttribute("aria-atomic"), "true");
   });
 
   it("keeps the min-length gate: a too-short description disables Generate, shows the amber caption, and a forced submit does not start generation", () => {
@@ -185,6 +213,20 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     submitComposer();
     assert.equal(screen.queryByText("Generating Manifest"), null);
     assert.equal(composerTextarea().value, "too short");
+
+    // The too-long arm of the same amber caption: over-limit copy replaces
+    // the counter and the gate stays closed.
+    fireEvent.change(composerTextarea(), {
+      target: { value: "x".repeat(DESCRIPTION_MAX_LENGTH + 1) },
+    });
+    assert.ok(screen.getByText("Description exceeds character limit"));
+    assert.equal(
+      (screen.getByRole("button", { name: "Generate" }) as HTMLButtonElement)
+        .disabled,
+      true,
+    );
+    submitComposer();
+    assert.equal(screen.queryByText("Generating Manifest"), null);
   });
 
   it("routes a valid description through handleGenerate to the parked telemetry view — Cancel-only footer, and NO auto-navigation", async () => {
@@ -240,5 +282,107 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
       assert.deepEqual(nav.push.mock.calls, [["/projects/new/ai/models"]]),
     );
     assert.equal(screen.queryByText("Generating Manifest"), null);
+  });
+
+  it("regenerate auto-start (?generate=1&name=) strips ONLY generate=1 — ?name= survives the router.replace so the store key and carried name stay intact", async () => {
+    // The accept screen's Regenerate lands here with both params; the
+    // auto-start effect fires once the description is valid again.
+    nav.searchParams = new URLSearchParams("name=Vellum Notes&generate=1");
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+
+    fireEvent.change(composerTextarea(), {
+      target: { value: VALID_DESCRIPTION },
+    });
+
+    // engine "auto" + cloud available → auto-start straight to generating.
+    await waitFor(() => assert.ok(screen.getByText("Generating Manifest")));
+    // The URL cleanup consumed the auto-start intent but kept the name — a
+    // parameterless replace here would flip carriedName to null mid-mount
+    // and corrupt the genesis settings store key.
+    assert.deepEqual(nav.replace.mock.calls, [
+      ["/projects/new/ai?name=Vellum%20Notes"],
+    ]);
+  });
+
+  it("bypassed-name flow: Section A edits survive the hand-off — handleUseManifest re-keys the null-keyed snapshot to the manufactured project name the accept screen will re-attach", async () => {
+    // Direct visit: no ?name= (a supported entry — several in-app links push
+    // /projects/new/ai bare), so Section A edits snapshot under the null key.
+    nav.searchParams = new URLSearchParams("");
+    // Terminal NDJSON "done" from the staged endpoint (the wire boundary):
+    // generation completes and the footer's Next hands the manifest over.
+    const manifestYaml = [
+      "system: test-system",
+      'scope: "@hexagen/test"',
+      'architecture: "modular-monolith"',
+      "bounded_contexts:",
+      '  - name: "UserContext"',
+      '    type: "core"',
+      '    description: "Handles user management"',
+    ].join("\n");
+    const doneEvent = `${JSON.stringify({
+      type: "done",
+      yaml: manifestYaml,
+      contextCount: 1,
+      portCount: 0,
+      adapterCount: 0,
+    })}\n`;
+    fetchMock.mockImplementation((input: RequestInfo | URL) =>
+      String(input) === "/api/manifest/generate/stage"
+        ? Promise.resolve(new Response(doneEvent, { status: 200 }))
+        : pendingForever(),
+    );
+
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+
+    // Edit Section A while the flow has no carried name.
+    const workspaceNameInput = document.querySelector(
+      'input[placeholder="@mycompany"]',
+    ) as HTMLInputElement;
+    fireEvent.change(workspaceNameInput, {
+      target: { value: "vellum-edited" },
+    });
+
+    fireEvent.change(composerTextarea(), {
+      target: { value: VALID_DESCRIPTION },
+    });
+    submitComposer();
+
+    // Generation completes (the stream's done event) and parks on telemetry;
+    // the footer's explicit Next performs the hand-off.
+    const nextButton = await waitFor(() =>
+      screen.getByRole("button", { name: "Next" }),
+    );
+    fireEvent.click(nextButton);
+
+    // The manufactured name is the manifest's AI-derived workspace name.
+    assert.equal(usePendingManifest.getState().projectName, "test-system");
+    assert.deepEqual(nav.push.mock.calls, [["/projects/new/ai/accept"]]);
+    // Back/Regenerate will re-attach ?name=test-system: the remounted page
+    // must find the edits under that key, not reseed and wipe them.
+    const rekeyed = loadGenesisFormValues("test-system");
+    assert.ok(rekeyed, "snapshot re-keyed to the manufactured name");
+    assert.equal(rekeyed.governance.workspaceName, "vellum-edited");
+    assert.equal(loadGenesisFormValues(null), null);
+  });
+
+  it("feeds the pending origin spec into Section B's read-only Source row (import-flow entry)", () => {
+    // Populated by the import flow before it lands here; the host must wire
+    // usePendingManifest.originSpecText into GenesisSourcesSection.
+    usePendingManifest
+      .getState()
+      .set(
+        "system: seeded",
+        {} as unknown as ProjectSpec,
+        "Seeded Project",
+        "/projects/new/import/spec",
+        "# Vellum spec\nsecond line is not excerpted",
+      );
+
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+
+    assert.ok(screen.getByText("Source"));
+    // The excerpt is the spec's first line.
+    assert.ok(screen.getByText("# Vellum spec"));
+    assert.equal(screen.queryByText(/second line is not excerpted/), null);
   });
 });

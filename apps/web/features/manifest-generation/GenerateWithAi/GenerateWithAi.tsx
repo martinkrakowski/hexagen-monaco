@@ -209,6 +209,18 @@ export function GenerateWithAi({
   };
 
   const hasReturnedFromModelSelection = searchParams.get("generate") === "1";
+  // Consuming the auto-start intent must strip ONLY `generate=1`: `?name=`
+  // keys the genesis settings store snapshot AND becomes the saved project
+  // name (AIGenerationPage's carriedName), and a parameterless replace stays
+  // on the same route — no remount — so it would flip carriedName to null
+  // mid-mount, mirror later Section A edits under the wrong store key, and
+  // wipe them on the next accept Back/Regenerate round trip. (The /models
+  // detour's return URL is owned by ModelSelectionPage and still drops the
+  // name — carrying it through that hop is a disclosed follow-up.)
+  const inboundName = searchParams.get("name");
+  const autoStartConsumedUrl = inboundName
+    ? `/projects/new/ai?name=${encodeURIComponent(inboundName)}`
+    : "/projects/new/ai";
 
   useEffect(() => {
     if (!hasReturnedFromModelSelection) return;
@@ -217,7 +229,7 @@ export function GenerateWithAi({
 
     if (!effectivePreferLocal(engine, preferLocal)) {
       actions.transitionTo("generating");
-      router.replace("/projects/new/ai");
+      router.replace(autoStartConsumedUrl);
     } else {
       const prefs = getModelPreferences();
       if (
@@ -225,11 +237,12 @@ export function GenerateWithAi({
         (prefs.rememberChoice && prefs.lastModelId)
       ) {
         actions.transitionTo("generating");
-        router.replace("/projects/new/ai");
+        router.replace(autoStartConsumedUrl);
       }
     }
   }, [
     hasReturnedFromModelSelection,
+    autoStartConsumedUrl,
     flowState.state,
     formHandlers.isValid,
     llmContext.engineState.status,
@@ -507,9 +520,13 @@ export function GenerateWithAi({
           />
           <div className="flex items-center justify-between px-4 pb-2">
             <AiReadyIndicator isReady={hasAnyProvider} />
+            {/* aria-atomic keeps parity with the DescriptionInput counter this
+                caption row replaced: the counter/limit copy swaps wholesale,
+                so screen readers must re-announce the whole region. */}
             <p
               className="text-xs"
               aria-live="polite"
+              aria-atomic="true"
               style={{ fontVariantNumeric: "tabular-nums" }}
             >
               {disabledTooltip ? (

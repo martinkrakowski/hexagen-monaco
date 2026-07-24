@@ -16,7 +16,12 @@ import { emptyFormValues } from "@/project-wizard/config";
  *
  * The snapshot is keyed by the flow's `?name=` seed: a NEW genesis flow
  * (different — or no — carried name) must not inherit a previous attempt's
- * edits, while the same flow's round trips must.
+ * edits, while the same flow's round trips must. One deliberate exception:
+ * when the name step was bypassed (null seed), `handleUseManifest`
+ * manufactures the project name at hand-off and the accept screen re-attaches
+ * it as `?name=` on Back/Regenerate — `rekeyGenesisFormValues` moves the
+ * null-keyed snapshot to that name so the flow's OWN round trip still finds
+ * its edits (the mismatch is inflicted by the flow, not by a new flow).
  */
 interface GenesisFormSnapshot {
   seedName: string | null;
@@ -54,6 +59,23 @@ export function saveGenesisFormValues(
   values: ProjectConfig,
 ): void {
   snapshot = { seedName, values };
+}
+
+/**
+ * Moves the current snapshot from one seed key to another. Used by the
+ * genesis hand-off (`handleUseManifest`) when the Project Name step was
+ * bypassed: the flow manufactures a project name there, and the accept
+ * screen re-attaches it as `?name=` on Back/Regenerate — so the null-keyed
+ * Section A edits must follow that name or the remounted page would miss
+ * the snapshot and reseed, wiping them. No-ops when the snapshot is empty
+ * or belongs to a different flow (its key is not `fromSeed`).
+ */
+export function rekeyGenesisFormValues(
+  fromSeed: string | null,
+  toSeed: string | null,
+): void {
+  if (snapshot === null || snapshot.seedName !== fromSeed) return;
+  snapshot = { seedName: toSeed, values: snapshot.values };
 }
 
 /**
