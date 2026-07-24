@@ -401,6 +401,21 @@ describe("PlanPhaseView (reader actions)", () => {
 
   it("deletes a layer only after the confirm dialog, and falls back to the live view", async () => {
     lifecycle.current.loadedProject = project([brainstormLayer()]);
+    // Production-faithful mock: removeLayer really shrinks the project's
+    // layers (the suite default resolves true but leaves the list intact,
+    // which would let resolvedView keep resolving the dead id). The direct
+    // unknown-id normalization pin lives in the archive-filter suite; this
+    // flow's live view additionally comes from confirmDelete's explicit
+    // mainView reset.
+    lifecycle.current.removeLayer = vi.fn(
+      async (_projectId: string, layerId: string) => {
+        const proj = lifecycle.current.loadedProject as {
+          layers: { id: string }[];
+        };
+        proj.layers = proj.layers.filter((l) => l.id !== layerId);
+        return true;
+      },
+    );
     render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
     fireEvent.click(sessionRow(/Initial brainstorm/));
 

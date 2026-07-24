@@ -196,10 +196,7 @@ describe("PlanPhaseView archive filter (single hook instance)", () => {
 });
 
 describe("PlanPhaseView view union (right-pane selection)", () => {
-  it("normalizes a selected layer that becomes the ACTIVE session's layer back to the live view", () => {
-    // Selecting the active session's layer id must resolve to the live view —
-    // its turns must never render twice (list row selection can't reach it,
-    // but PR B's ?layer= URLs can).
+  it("switches between an archived reader and the live view via row selection", () => {
     planningSession.current = makeSession({
       activeLayerId: "L-active",
       sessionState: {
@@ -221,6 +218,84 @@ describe("PlanPhaseView view union (right-pane selection)", () => {
     fireEvent.click(sessionRow(/Live session/));
     assert.match(bodyText(), /live turn/);
     assert.doesNotMatch(bodyText(), /Archived one content/);
+  });
+
+  it("normalizes a selected layer that becomes the ACTIVE session's layer back to the live view", () => {
+    // Row selection alone can't produce this state (the active layer is
+    // filtered out of the rows), so drive it through the mocked hook: select
+    // the archived layer, THEN rerender with the session attached to that
+    // very layer — attach() to an interrupted layer and PR B's ?layer= URLs
+    // both reach this. The view union must resolve the id to the live view;
+    // the layer's turns must never render twice.
+    planningSession.current = makeSession({
+      activeLayerId: "L-active",
+      sessionState: {
+        status: "critiquing",
+        round: 1,
+        maxRounds: 4,
+        nextRole: "critic",
+      },
+      turns: [{ id: "t", author: "You", content: "live turn", role: "human" }],
+    });
+    const { rerender } = render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
+    fireEvent.click(sessionRow(/Archived one/));
+    assert.match(bodyText(), /Archived one content/);
+    assert.doesNotMatch(bodyText(), /live turn/);
+
+    planningSession.current = makeSession({
+      activeLayerId: "L-old",
+      sessionState: {
+        status: "critiquing",
+        round: 1,
+        maxRounds: 4,
+        nextRole: "critic",
+      },
+      turns: [{ id: "t", author: "You", content: "live turn", role: "human" }],
+    });
+    rerender(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    assert.match(
+      bodyText(),
+      /live turn/,
+      "the selected-now-active id resolves to the live view",
+    );
+    assert.doesNotMatch(
+      bodyText(),
+      /Archived one content/,
+      "the now-active layer's transcript never renders twice",
+    );
+  });
+
+  it("falls back to the live view when the selected layer no longer exists in the project", () => {
+    // The on-screen delete confirm resets mainView explicitly, so this guard
+    // only fires when the layer vanishes some other way (a write from
+    // another tab rehydrating the project, PR B's ?layer= URLs). An unknown
+    // id must fall back to the live view — including the composer, which
+    // gates on resolvedView (not on which pane component rendered).
+    planningSession.current = makeSession();
+    const { rerender } = render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
+    fireEvent.click(sessionRow(/Archived one/));
+    assert.match(bodyText(), /Archived one content/);
+
+    lifecycle.current = {
+      ...lifecycle.current,
+      loadedProject: {
+        ...(lifecycle.current.loadedProject as Record<string, unknown>),
+        layers: [layer("L-active", "Live one")],
+      },
+    };
+    rerender(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    assert.doesNotMatch(bodyText(), /Archived one content/);
+    assert.match(
+      bodyText(),
+      /Start a live session/,
+      "unknown id falls back to the live view",
+    );
+    assert.ok(
+      document.querySelector('textarea[aria-label="Session brief"]'),
+      "the composer follows the NORMALIZED view, not the raw selection",
+    );
   });
 
   it("hides Delete for the reader of a non-archived (active) layer by never offering the active layer as a row", () => {
@@ -332,6 +407,28 @@ describe("PlanPhaseView composer modes", () => {
     );
   });
 
+  it("keeps the steering composer available WHILE the loop is running, not only while parked", () => {
+    // Steering is first-class at ANY point — a mid-run note folds into the
+    // NEXT model turn (fold.ts), it does not wait for awaiting-human. This
+    // pin lived in the LiveSessionSection suite before the composer moved to
+    // the host; it must survive the move.
+    planningSession.current = makeSession({
+      activeLayerId: "L-active",
+      isRunning: true,
+      sessionState: {
+        status: "critiquing",
+        round: 1,
+        maxRounds: 4,
+        nextRole: "critic",
+      },
+    });
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    assert.ok(
+      document.querySelector('textarea[aria-label="Steering note"]'),
+      "steering input available while running",
+    );
+  });
+
   it("layer view: the composer is hidden; the typed draft survives the view round-trip", () => {
     planningSession.current = makeSession();
     render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
@@ -413,6 +510,34 @@ describe("PlanPhaseView shell footer (locked §5 Q2)", () => {
     await waitFor(() =>
       assert.equal(
         (converged.startFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
+        1,
+      ),
+    );
+  });
+
+  it("offers Finalize again after a failed distillation (converged + finalize error)", async () => {
+    // §5 Q2's error half: a failed distill leaves finalize.phase at "error"
+    // (only attach/end/reset clear it), and the in-pane alert's "you can
+    // retry" copy points at the SHELL FOOTER button — the only retry
+    // affordance on screen. It must render and re-fire startFinalize.
+    const errored = makeSession({
+      activeLayerId: "L-active",
+      sessionState: { status: "converged", round: 2, maxRounds: 4 },
+      finalize: { phase: "error", message: "model unavailable" },
+    });
+    planningSession.current = errored;
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    const retryButton = Array.from(document.querySelectorAll("button")).find(
+      (b) => /Finalize → Generate manifest/.test(b.textContent || ""),
+    ) as HTMLButtonElement;
+    assert.ok(
+      retryButton,
+      "Finalize is offered again after a failed distillation",
+    );
+    fireEvent.click(retryButton);
+    await waitFor(() =>
+      assert.equal(
+        (errored.startFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
         1,
       ),
     );
