@@ -5,23 +5,20 @@ vi.stubGlobal("crypto", {
 } as unknown as Crypto);
 
 import { describe, it, vi, beforeEach } from "vitest";
-import assert from "node:assert";
+import assert from "node:assert/strict";
 import React from "react";
 import { render, cleanup, fireEvent, waitFor } from "@testing-library/react";
 
-import { AddPlanningSessionDialog } from "../AddPlanningSessionDialog";
+import { AddPlanningSessionView } from "../AddPlanningSessionView";
 
-// jsdom doesn't implement the native <dialog> modal API the @hexagen/ui Dialog
-// calls (dialog.showModal()/close()) — stub it so the panel mounts.
-HTMLDialogElement.prototype.showModal = function () {
-  this.setAttribute("open", "");
-};
-HTMLDialogElement.prototype.close = function () {
-  this.removeAttribute("open");
-};
+// Behavior pins ported verbatim from the deleted AddPlanningSessionDialog
+// suite (PR B, plan req 4b): the ingestion contract is unchanged, only the
+// chrome moved from a modal <Dialog> to an inline right-pane view — which is
+// also why this suite needs NO HTMLDialogElement stubs anymore. The dialog's
+// "closes on success" pin became host behavior ("on success select the new
+// layer") and lives in PlanPhaseView.test.tsx; its view-level residue here is
+// the fields resetting on a successful submit.
 
-// jsdom's <dialog> a11y is incomplete (subtree not exposed to role queries) —
-// query the raw DOM by text/label instead.
 function button(label: RegExp): HTMLButtonElement {
   const btn = Array.from(document.querySelectorAll("button")).find((b) =>
     label.test(b.textContent || ""),
@@ -36,30 +33,62 @@ function textarea(): HTMLTextAreaElement {
   return el as HTMLTextAreaElement;
 }
 
-describe("AddPlanningSessionDialog", () => {
+describe("AddPlanningSessionView", () => {
   beforeEach(() => cleanup());
 
-  it("disables submit until the transcript has content", () => {
+  it("renders as a plain full-height section — no modal dialog element", () => {
     render(
-      <AddPlanningSessionDialog
-        open
-        onClose={vi.fn()}
+      <AddPlanningSessionView
+        onCancel={vi.fn()}
         onSubmit={vi.fn(async () => true)}
         submitError={null}
       />,
     );
-    assert.strictEqual(button(/Add session/).disabled, true);
-    fireEvent.change(textarea(), { target: { value: "# The session" } });
-    assert.strictEqual(button(/Add session/).disabled, false);
+    assert.ok(
+      document.querySelector('section[aria-label="Add planning session"]'),
+      "the view is a labeled section (right-pane main view)",
+    );
+    assert.equal(
+      document.querySelector("dialog"),
+      null,
+      "req 4b: the modal is gone",
+    );
   });
 
-  it("submits one Imported turn (default title) and closes on success", async () => {
-    const onClose = vi.fn();
+  it("disables submit until the transcript has content", () => {
+    render(
+      <AddPlanningSessionView
+        onCancel={vi.fn()}
+        onSubmit={vi.fn(async () => true)}
+        submitError={null}
+      />,
+    );
+    assert.equal(button(/Add session/).disabled, true);
+    fireEvent.change(textarea(), { target: { value: "# The session" } });
+    assert.equal(button(/Add session/).disabled, false);
+  });
+
+  it("fires onCancel from the Cancel action without submitting", () => {
+    const onCancel = vi.fn();
     const onSubmit = vi.fn(async () => true);
     render(
-      <AddPlanningSessionDialog
-        open
-        onClose={onClose}
+      <AddPlanningSessionView
+        onCancel={onCancel}
+        onSubmit={onSubmit}
+        submitError={null}
+      />,
+    );
+    fireEvent.change(textarea(), { target: { value: "typed but abandoned" } });
+    fireEvent.click(button(/Cancel/));
+    assert.equal(onCancel.mock.calls.length, 1);
+    assert.equal(onSubmit.mock.calls.length, 0, "Cancel never submits");
+  });
+
+  it("submits one Imported turn (default title) and resets the fields on success", async () => {
+    const onSubmit = vi.fn(async () => true);
+    render(
+      <AddPlanningSessionView
+        onCancel={vi.fn()}
         onSubmit={onSubmit}
         submitError={null}
       />,
@@ -68,23 +97,24 @@ describe("AddPlanningSessionDialog", () => {
     fireEvent.change(textarea(), { target: { value: "# The session" } });
     fireEvent.click(button(/Add session/));
 
-    await waitFor(() => assert.strictEqual(onClose.mock.calls.length, 1));
-    assert.strictEqual(onSubmit.mock.calls.length, 1);
+    await waitFor(() => assert.equal(onSubmit.mock.calls.length, 1));
     const layer = onSubmit.mock.calls[0][0];
-    assert.strictEqual(layer.kind, "brainstorm");
-    assert.strictEqual(layer.title, "Planning session");
-    assert.strictEqual(layer.turns.length, 1);
-    assert.strictEqual(layer.turns[0].author, "Imported");
-    assert.strictEqual(layer.turns[0].content, "# The session");
-    assert.strictEqual(layer.turns[0].id, "turn-uuid");
+    assert.equal(layer.kind, "brainstorm");
+    assert.equal(layer.title, "Planning session");
+    assert.equal(layer.turns.length, 1);
+    assert.equal(layer.turns[0].author, "Imported");
+    assert.equal(layer.turns[0].content, "# The session");
+    assert.equal(layer.turns[0].id, "turn-uuid");
+    // The host unmounts the view on success; the view still resets so the
+    // contract doesn't depend on that.
+    await waitFor(() => assert.equal(textarea().value, ""));
   });
 
   it("uses the typed title when provided", async () => {
     const onSubmit = vi.fn(async () => true);
     render(
-      <AddPlanningSessionDialog
-        open
-        onClose={vi.fn()}
+      <AddPlanningSessionView
+        onCancel={vi.fn()}
         onSubmit={onSubmit}
         submitError={null}
       />,
@@ -99,17 +129,15 @@ describe("AddPlanningSessionDialog", () => {
     fireEvent.change(textarea(), { target: { value: "content" } });
     fireEvent.click(button(/Add session/));
 
-    await waitFor(() => assert.strictEqual(onSubmit.mock.calls.length, 1));
-    assert.strictEqual(onSubmit.mock.calls[0][0].title, "Vellum brainstorm");
+    await waitFor(() => assert.equal(onSubmit.mock.calls.length, 1));
+    assert.equal(onSubmit.mock.calls[0][0].title, "Vellum brainstorm");
   });
 
-  it("stays open with the content intact when the write fails", async () => {
-    const onClose = vi.fn();
+  it("keeps the content intact when the write fails and surfaces the error inline", async () => {
     const onSubmit = vi.fn(async () => false);
     const { rerender } = render(
-      <AddPlanningSessionDialog
-        open
-        onClose={onClose}
+      <AddPlanningSessionView
+        onCancel={vi.fn()}
         onSubmit={onSubmit}
         submitError={null}
       />,
@@ -118,9 +146,8 @@ describe("AddPlanningSessionDialog", () => {
     fireEvent.change(textarea(), { target: { value: "precious transcript" } });
     fireEvent.click(button(/Add session/));
 
-    await waitFor(() => assert.strictEqual(onSubmit.mock.calls.length, 1));
-    assert.strictEqual(onClose.mock.calls.length, 0, "dialog must stay open");
-    assert.strictEqual(
+    await waitFor(() => assert.equal(onSubmit.mock.calls.length, 1));
+    assert.equal(
       textarea().value,
       "precious transcript",
       "pasted content is not cleared on failure",
@@ -128,9 +155,8 @@ describe("AddPlanningSessionDialog", () => {
 
     // The parent surfaces the persistence error; it renders inline.
     rerender(
-      <AddPlanningSessionDialog
-        open
-        onClose={onClose}
+      <AddPlanningSessionView
+        onCancel={vi.fn()}
         onSubmit={onSubmit}
         submitError="Not enough browser storage."
       />,
@@ -140,7 +166,7 @@ describe("AddPlanningSessionDialog", () => {
     assert.match(alert.textContent || "", /Not enough browser storage/);
   });
 
-  // --- Phase 2: delimiter-based turn splitting -----------------------------
+  // --- Delimiter-based turn splitting (ported unchanged) ---------------------
 
   const checkbox = (): HTMLInputElement | null =>
     document.querySelector('input[type="checkbox"]');
@@ -149,26 +175,24 @@ describe("AddPlanningSessionDialog", () => {
 
   it("offers no split checkbox for zero or one ## heading", () => {
     render(
-      <AddPlanningSessionDialog
-        open
-        onClose={vi.fn()}
+      <AddPlanningSessionView
+        onCancel={vi.fn()}
         onSubmit={vi.fn(async () => true)}
         submitError={null}
       />,
     );
     fireEvent.change(textarea(), { target: { value: "plain prose" } });
-    assert.strictEqual(checkbox(), null);
+    assert.equal(checkbox(), null);
     fireEvent.change(textarea(), {
       target: { value: "## Overview\n\none section" },
     });
-    assert.strictEqual(checkbox(), null, "a single heading is not a session");
+    assert.equal(checkbox(), null, "a single heading is not a session");
   });
 
   it("shows a default-checked split checkbox with a live turn count on detection", () => {
     render(
-      <AddPlanningSessionDialog
-        open
-        onClose={vi.fn()}
+      <AddPlanningSessionView
+        onCancel={vi.fn()}
         onSubmit={vi.fn(async () => true)}
         submitError={null}
       />,
@@ -178,7 +202,7 @@ describe("AddPlanningSessionDialog", () => {
     });
     const box = checkbox();
     assert.ok(box, "split checkbox appears when >= 2 headings match");
-    assert.strictEqual(box.checked, true, "split defaults to on");
+    assert.equal(box.checked, true, "split defaults to on");
     assert.match(bodyText(), /Split into turns by/);
     assert.match(bodyText(), /2 turns detected/);
 
@@ -194,9 +218,8 @@ describe("AddPlanningSessionDialog", () => {
   it("splits into authored turns on submit when the checkbox is checked", async () => {
     const onSubmit = vi.fn(async () => true);
     render(
-      <AddPlanningSessionDialog
-        open
-        onClose={vi.fn()}
+      <AddPlanningSessionView
+        onCancel={vi.fn()}
         onSubmit={onSubmit}
         submitError={null}
       />,
@@ -208,51 +231,45 @@ describe("AddPlanningSessionDialog", () => {
     });
     fireEvent.click(button(/Add session/));
 
-    await waitFor(() => assert.strictEqual(onSubmit.mock.calls.length, 1));
+    await waitFor(() => assert.equal(onSubmit.mock.calls.length, 1));
     const layer = onSubmit.mock.calls[0][0];
-    assert.deepStrictEqual(
+    assert.deepEqual(
       layer.turns.map((t: { author: string }) => t.author),
       ["Imported", "Grok", "Claude"],
     );
-    assert.strictEqual(layer.turns[1].content, "propose");
-    assert.strictEqual(layer.turns[2].content, "critique");
+    assert.equal(layer.turns[1].content, "propose");
+    assert.equal(layer.turns[2].content, "critique");
   });
 
   it("offers no split for >=2 headings whose sections are ALL empty and falls back to one lossless Imported turn", async () => {
-    // splitTurnsByAuthorHeadings returns [] here; the dialog must normalize
+    // splitTurnsByAuthorHeadings returns [] here; the view must normalize
     // that to "no split" (a bare truthiness check would submit turns: [] and
     // persist a turn-less layer).
     const onSubmit = vi.fn(async () => true);
     render(
-      <AddPlanningSessionDialog
-        open
-        onClose={vi.fn()}
+      <AddPlanningSessionView
+        onCancel={vi.fn()}
         onSubmit={onSubmit}
         submitError={null}
       />,
     );
     const content = "## Grok\n## Claude\n";
     fireEvent.change(textarea(), { target: { value: content } });
-    assert.strictEqual(
-      checkbox(),
-      null,
-      "an all-empty split is not offered at all",
-    );
+    assert.equal(checkbox(), null, "an all-empty split is not offered at all");
     fireEvent.click(button(/Add session/));
 
-    await waitFor(() => assert.strictEqual(onSubmit.mock.calls.length, 1));
+    await waitFor(() => assert.equal(onSubmit.mock.calls.length, 1));
     const layer = onSubmit.mock.calls[0][0];
-    assert.strictEqual(layer.turns.length, 1, "never a turn-less layer");
-    assert.strictEqual(layer.turns[0].author, "Imported");
-    assert.strictEqual(layer.turns[0].content, content, "lossless fallback");
+    assert.equal(layer.turns.length, 1, "never a turn-less layer");
+    assert.equal(layer.turns[0].author, "Imported");
+    assert.equal(layer.turns[0].content, content, "lossless fallback");
   });
 
   it("keeps the lossless single-Imported-turn behavior when unchecked", async () => {
     const onSubmit = vi.fn(async () => true);
     render(
-      <AddPlanningSessionDialog
-        open
-        onClose={vi.fn()}
+      <AddPlanningSessionView
+        onCancel={vi.fn()}
         onSubmit={onSubmit}
         submitError={null}
       />,
@@ -262,13 +279,13 @@ describe("AddPlanningSessionDialog", () => {
     const box = checkbox();
     assert.ok(box);
     fireEvent.click(box);
-    assert.strictEqual(box.checked, false);
+    assert.equal(box.checked, false);
     fireEvent.click(button(/Add session/));
 
-    await waitFor(() => assert.strictEqual(onSubmit.mock.calls.length, 1));
+    await waitFor(() => assert.equal(onSubmit.mock.calls.length, 1));
     const layer = onSubmit.mock.calls[0][0];
-    assert.strictEqual(layer.turns.length, 1);
-    assert.strictEqual(layer.turns[0].author, "Imported");
-    assert.strictEqual(layer.turns[0].content, content, "lossless");
+    assert.equal(layer.turns.length, 1);
+    assert.equal(layer.turns[0].author, "Imported");
+    assert.equal(layer.turns[0].content, content, "lossless");
   });
 });

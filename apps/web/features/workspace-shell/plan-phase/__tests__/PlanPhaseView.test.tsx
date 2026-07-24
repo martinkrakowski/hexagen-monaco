@@ -21,6 +21,14 @@ vi.mock("../../contexts/WizardLifecycleContext", () => ({
   useWizardLifecycleContext: () => lifecycle.current,
 }));
 
+// Selection lives in the `?layer=` URL param (PR B): replace the inert global
+// next/navigation stub with the stateful one, so a row click — which only
+// calls router.replace — actually re-renders the view under test.
+vi.mock("next/navigation", async () =>
+  (await import("./nav-stub")).statefulNavigationMock(),
+);
+import { navState } from "./nav-stub";
+
 import { PlanPhaseView } from "../PlanPhaseView";
 import { FormProvider, useForm } from "react-hook-form";
 import { emptyFormValues } from "../../../project-wizard/config";
@@ -112,6 +120,7 @@ function project(layers: unknown[] = []) {
 describe("PlanPhaseView (workbench host)", () => {
   beforeEach(() => {
     cleanup();
+    navState.reset();
     lifecycle.current = {
       loadedProject: project(),
       addLayer: vi.fn(async () => "layer-id"),
@@ -233,6 +242,111 @@ describe("PlanPhaseView (workbench host)", () => {
     assert.strictEqual(layer.turns[0].content, "the transcript");
   });
 
+  it("opens the INLINE add-session view from the left footer: full-height section, no modal, composer hidden, URL untouched", () => {
+    renderView();
+    fireEvent.click(button(/Add planning session/));
+
+    assert.ok(
+      document.querySelector('section[aria-label="Add planning session"]'),
+      "the add-session view renders as the right-pane main view (req 4b)",
+    );
+    assert.strictEqual(
+      document.querySelector("dialog[open]"),
+      null,
+      "no modal opens — the dialog is deleted",
+    );
+    assert.strictEqual(
+      document.querySelector('textarea[aria-label="Session brief"]'),
+      null,
+      "the composer is hidden in the add-session view",
+    );
+    // Transient local state layered over the URL — never persisted to it.
+    assert.doesNotMatch(navState.search, /layer=/);
+    assert.strictEqual(navState.replaceCalls.length, 0);
+  });
+
+  it("Cancel returns to the previous view — the URL-derived reader underneath is restored", () => {
+    lifecycle.current.loadedProject = project([brainstormLayer()]);
+    renderView();
+    fireEvent.click(sessionRow(/Initial brainstorm/));
+    assert.match(navState.search, /layer=L1/);
+
+    fireEvent.click(button(/Add planning session/));
+    const addView = document.querySelector(
+      'section[aria-label="Add planning session"]',
+    );
+    assert.ok(addView, "the add-session view replaced the reader");
+    assert.match(
+      navState.search,
+      /layer=L1/,
+      "opening the overlay never rewrites the URL",
+    );
+
+    const cancel = Array.from(addView.querySelectorAll("button")).find((b) =>
+      /Cancel/.test(b.textContent || ""),
+    ) as HTMLButtonElement;
+    fireEvent.click(cancel);
+    assert.ok(
+      document.querySelector(
+        'section[aria-label="Planning session: Initial brainstorm"]',
+      ),
+      "leaving the overlay restores the URL-derived layer view",
+    );
+  });
+
+  it("on success leaves the add-session view and selects the NEW layer's reader (?layer= via replace, never push)", async () => {
+    // Production-faithful addLayer: the new layer really lands in the
+    // project, so the URL-derived view can resolve the fresh id.
+    lifecycle.current.addLayer = vi.fn(
+      async (_projectId: string, layer: Record<string, unknown>) => {
+        const proj = lifecycle.current.loadedProject as {
+          layers: unknown[];
+        };
+        proj.layers = [
+          ...proj.layers,
+          { id: "L-new", createdAt: 99, updatedAt: 99, ...layer },
+        ];
+        return "L-new";
+      },
+    );
+    renderView();
+    fireEvent.click(button(/Add planning session/));
+    fireEvent.change(
+      document.querySelector(
+        'input[aria-label="Session title"]',
+      ) as HTMLInputElement,
+      { target: { value: "Imported plan" } },
+    );
+    fireEvent.change(transcriptTextarea(), {
+      target: { value: "the transcript" },
+    });
+    fireEvent.click(button(/Add session/));
+
+    await waitFor(() => {
+      assert.ok(
+        document.querySelector(
+          'section[aria-label="Planning session: Imported plan"]',
+        ),
+        "the freshly created layer's reader is selected",
+      );
+    });
+    assert.match(navState.search, /layer=L-new/);
+    assert.strictEqual(
+      navState.pushCalls.length,
+      0,
+      "selection always uses router.replace — no history spam",
+    );
+  });
+
+  it("offers the empty-state secondary action (doc copy) that opens the add-session view", () => {
+    renderView(); // zero layers → Section B empty state
+    fireEvent.click(button(/Add an existing transcript/));
+    assert.ok(
+      document.querySelector('section[aria-label="Add planning session"]'),
+      "the secondary action opens the same inline add-session view",
+    );
+  });
+
   it("does not show a stale persistence error from an unrelated write before any submit", () => {
     // persistError is instance-wide (a failed wizard autosave sets it too);
     // opening the dialog must not present it as a session-save failure.
@@ -308,6 +422,7 @@ function buttonByAriaLabel(label: string, root: ParentNode = document) {
 describe("PlanPhaseView (reader actions)", () => {
   beforeEach(() => {
     cleanup();
+    navState.reset();
     lifecycle.current = {
       loadedProject: project(),
       addLayer: vi.fn(async () => "layer-id"),

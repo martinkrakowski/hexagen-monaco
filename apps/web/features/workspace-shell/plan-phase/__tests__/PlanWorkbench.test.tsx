@@ -58,6 +58,16 @@ vi.mock("../session/stream-chat-turn", () => ({
   },
 }));
 
+// Since PR B, row selection is URL-driven (`?layer=` via router.replace), so
+// the view-switch round-trips here need the STATEFUL next/navigation stub —
+// under the inert global stub from vitest.setup.ts the replace would be
+// swallowed and the main view would never switch. (Factory referenced lazily;
+// vi.mock is hoisted above the import.)
+vi.mock("next/navigation", async () =>
+  (await import("./nav-stub")).statefulNavigationMock(),
+);
+
+import { navState } from "./nav-stub";
 import { PlanPhaseView } from "../PlanPhaseView";
 import { emptyFormValues } from "../../../project-wizard/config";
 
@@ -132,6 +142,7 @@ let turnCounter = 0;
 
 beforeEach(() => {
   cleanup();
+  navState.reset();
   setViewportWidth(DEFAULT_WIDTH);
   stream.scripts = [];
   stream.calls = [];
