@@ -14,7 +14,10 @@ import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { PlanWorkbench } from "@/workspace-shell/plan-phase/PlanWorkbench";
 import { GenesisProjectSettingsSection } from "./genesis-workbench/GenesisProjectSettingsSection";
 import { GenesisSourcesSection } from "./genesis-workbench/GenesisSourcesSection";
-import { rekeyGenesisFormValues } from "./genesis-workbench/genesisProjectSettingsStore";
+import {
+  clearGenesisFormValues,
+  rekeyGenesisFormValues,
+} from "./genesis-workbench/genesisProjectSettingsStore";
 import { Button } from "@hexagen/ui";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { LocalLLMContext } from "../../lib/llm-interfaces";
@@ -134,7 +137,16 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
       <>
         <Button
           variant="secondary"
-          onClick={() => router.push("/projects/new")}
+          onClick={() => {
+            // Back here EXITS the genesis flow, so the flow-local Section A
+            // snapshot dies with it — otherwise a later visit sharing the
+            // seed key (in particular the null key of an unnamed entry)
+            // would inherit this abandoned attempt's edits. The round trips
+            // the store exists for (the /models detour and the accept
+            // screen's Back/Regenerate) never pass through this button.
+            clearGenesisFormValues();
+            router.push("/projects/new");
+          }}
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back

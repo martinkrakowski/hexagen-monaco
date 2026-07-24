@@ -79,9 +79,11 @@ export function rekeyGenesisFormValues(
 }
 
 /**
- * Drops the snapshot. Used by tests today; PR C2's identity reconciliation
- * wires this into the accept-save completion so a finished flow can't leak
- * its edits into the next one.
+ * Drops the snapshot. Wired into the genesis footer's Back exit — leaving
+ * the flow must not leak an abandoned attempt's edits into a later visit
+ * that shares the seed key (the null key of unnamed entries especially).
+ * PR C2's identity reconciliation additionally wires this into the
+ * accept-save completion so a finished flow can't leak either.
  */
 export function clearGenesisFormValues(): void {
   snapshot = null;

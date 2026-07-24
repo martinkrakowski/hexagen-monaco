@@ -425,6 +425,31 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     assert.equal(loadGenesisFormValues(null), null);
   });
 
+  it("drops the Section A snapshot on the footer's Back exit — an abandoned unnamed attempt must not seed the next bare visit", async () => {
+    // Unnamed entry: the leak-prone case, since every unnamed flow shares
+    // the null seed key and nothing else distinguishes a fresh visit from
+    // an abandoned attempt in the same SPA session.
+    nav.searchParams = new URLSearchParams("");
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+
+    const workspaceNameInput = document.querySelector(
+      'input[placeholder="@mycompany"]',
+    ) as HTMLInputElement;
+    fireEvent.change(workspaceNameInput, {
+      target: { value: "abandoned-edit" },
+    });
+    await waitFor(() =>
+      assert.ok(loadGenesisFormValues(null), "edit mirrored into the store"),
+    );
+
+    // Back EXITS the flow (unlike the /models detour and the accept screen's
+    // Back/Regenerate, which round-trip through the store) — the snapshot
+    // must die with the flow.
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    assert.deepEqual(nav.push.mock.calls, [["/projects/new"]]);
+    assert.equal(loadGenesisFormValues(null), null);
+  });
+
   it("gates Section B's Source row on origin: an import-flow leftover stays hidden, a genesis-origin spec renders its first-line excerpt", () => {
     // A pending manifest from the IMPORT flow (e.g. abandoned mid-accept) is
     // wrong-flow provenance — its spec text must not surface as a genesis
