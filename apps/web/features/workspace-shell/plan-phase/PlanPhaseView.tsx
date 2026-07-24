@@ -378,8 +378,9 @@ export function PlanPhaseView({
       }
       return started;
     }
-    await session.addSteering(text);
-    return true;
+    // Propagate the persist outcome: false keeps the draft in the composer
+    // (its documented contract), mirroring the seed branch above.
+    return session.addSteering(text);
   };
 
   const composer =

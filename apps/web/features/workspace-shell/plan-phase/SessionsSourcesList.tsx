@@ -40,7 +40,9 @@ export function SessionsSourcesList({
   onSelectLive,
   onSelectLayer,
 }: SessionsSourcesListProps) {
-  const newestFirst = [...layers].sort((a, b) => b.createdAt - a.createdAt);
+  // Sort key deliberately matches the timestamp the rows display ("updated…")
+  // — sorting by createdAt read as unsorted against the only visible date.
+  const newestFirst = [...layers].sort((a, b) => b.updatedAt - a.updatedAt);
 
   return (
     <nav aria-label="Sessions and sources" className="space-y-1">

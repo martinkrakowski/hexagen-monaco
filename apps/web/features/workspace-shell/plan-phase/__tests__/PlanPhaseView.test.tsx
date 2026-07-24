@@ -214,16 +214,29 @@ describe("PlanPhaseView (workbench host)", () => {
     );
   });
 
-  it("orders archived rows NEWEST first (a returning user looks for the latest session)", () => {
+  it("orders archived rows NEWEST first by the displayed 'updated' timestamp", () => {
+    // The sort key must match the timestamp the rows show: an older-created
+    // but recently-updated layer sorts FIRST (sorting by createdAt made the
+    // list read as unsorted against the only visible date).
     lifecycle.current.loadedProject = project([
-      brainstormLayer({ id: "L1", title: "First session", createdAt: 10 }),
-      brainstormLayer({ id: "L2", title: "Second session", createdAt: 20 }),
+      brainstormLayer({
+        id: "L1",
+        title: "First session",
+        createdAt: 20,
+        updatedAt: 10,
+      }),
+      brainstormLayer({
+        id: "L2",
+        title: "Second session",
+        createdAt: 10,
+        updatedAt: 20,
+      }),
     ]);
     renderView();
     const text = bodyText();
     assert.ok(
       text.indexOf("Second session") < text.indexOf("First session"),
-      "newest-first ordering, not stored order",
+      "most recently UPDATED first, not stored or created order",
     );
   });
 
@@ -615,6 +628,56 @@ describe("PlanPhaseView (reader actions)", () => {
       document.querySelector('input[aria-label="Session title"]'),
       "rename editor stays open on failure",
     );
+  });
+
+  it("moves focus into the rename input on open and back to the trigger on cancel", async () => {
+    lifecycle.current.loadedProject = project([brainstormLayer()]);
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    fireEvent.click(sessionRow(/Initial brainstorm/));
+
+    // Opening rename unmounts the pencil trigger — without explicit focus
+    // management keyboard focus falls to <body>.
+    fireEvent.click(buttonByAriaLabel("Rename session")!);
+    const input = document.querySelector(
+      'input[aria-label="Session title"]',
+    ) as HTMLInputElement;
+    await waitFor(() => assert.strictEqual(document.activeElement, input));
+
+    fireEvent.click(buttonByAriaLabel("Cancel rename")!);
+    await waitFor(() =>
+      assert.strictEqual(
+        document.activeElement,
+        buttonByAriaLabel("Rename session"),
+        "cancel returns focus to the re-mounted rename trigger",
+      ),
+    );
+  });
+
+  it("does not commit a rename on Enter during IME composition", async () => {
+    lifecycle.current.loadedProject = project([brainstormLayer()]);
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    fireEvent.click(sessionRow(/Initial brainstorm/));
+
+    fireEvent.click(buttonByAriaLabel("Rename session")!);
+    const input = document.querySelector(
+      'input[aria-label="Session title"]',
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Renamed session" } });
+
+    // Enter while composing commits the IME candidate, not the rename.
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    const updateLayer = lifecycle.current.updateLayer as ReturnType<
+      typeof vi.fn
+    >;
+    assert.strictEqual(updateLayer.mock.calls.length, 0);
+    assert.ok(
+      document.querySelector('input[aria-label="Session title"]'),
+      "the editor stays open",
+    );
+
+    // A plain Enter still commits.
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => assert.strictEqual(updateLayer.mock.calls.length, 1));
   });
 
   it("deletes a layer only after the confirm dialog, and falls back to the live view", async () => {

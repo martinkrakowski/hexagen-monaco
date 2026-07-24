@@ -109,7 +109,7 @@ function makeSession(overrides: Record<string, unknown> = {}) {
     attach: vi.fn(),
     pause: vi.fn(async () => {}),
     resume: vi.fn(async () => {}),
-    addSteering: vi.fn(async () => {}),
+    addSteering: vi.fn(async () => true),
     forceConverge: vi.fn(async () => {}),
     end: vi.fn(async () => {}),
     beginFinalize: vi.fn(async () => {}),
@@ -639,6 +639,43 @@ describe("PlanPhaseView composer modes", () => {
         [["focus on billing"]],
       ),
     );
+    // A durably persisted steering turn clears the draft.
+    await waitFor(() => assert.equal(textarea.value, ""));
+  });
+
+  it("keeps the steering draft when the persist fails (addSteering resolves false)", async () => {
+    const session = makeSession({
+      activeLayerId: "L-active",
+      sessionState: {
+        status: "awaiting-human",
+        round: 2,
+        maxRounds: 4,
+        awaitReason: "paused",
+        resumeStatus: "proposing",
+      },
+      addSteering: vi.fn(async () => false),
+    });
+    planningSession.current = session;
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
+    const textarea = document.querySelector(
+      'textarea[aria-label="Steering note"]',
+    ) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "focus on billing" } });
+    fireEvent.click(
+      Array.from(document.querySelectorAll("button")).find(
+        (b) => (b.textContent || "").trim() === "Send",
+      ) as HTMLButtonElement,
+    );
+    await waitFor(() =>
+      assert.deepEqual(
+        (session.addSteering as ReturnType<typeof vi.fn>).mock.calls,
+        [["focus on billing"]],
+      ),
+    );
+    // The failed persist must NOT silently discard the typed note — the
+    // composer keeps it for retry (same protection the seed branch has).
+    assert.equal(textarea.value, "focus on billing");
   });
 
   it("keeps the steering composer available WHILE the loop is running, not only while parked", () => {
