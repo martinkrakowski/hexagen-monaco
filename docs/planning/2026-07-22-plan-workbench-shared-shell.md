@@ -8,7 +8,10 @@ shipped. §2 "current state" describes the pre-arc baseline and is retained
 as-written as the planning record — the shared `Accordion`/`TextareaComposer`/
 `TwoPaneLayout` primitives and the stepless plan-phase autosave
 (`useProjectSettingsAutosave` → `updateProjectFormState`) now exist on `main`.
-Remaining phases: A2, B, C1, C2 (§4).
+Remaining phases: A2, B, C1, C2 (§4). A2 shipped one deliberate deviation
+from §3.1: `TwoPaneLayout` switches to tabs below `lg` (not `<md`) — the
+resizable desktop panes need the width; the footer-below-both-tabs contract
+shipped exactly as specified (§5 Q6).
 **Related:** ADR-0045 (project planning layers), PRs #403–#405, #414–#416,
 #418, #419
 
