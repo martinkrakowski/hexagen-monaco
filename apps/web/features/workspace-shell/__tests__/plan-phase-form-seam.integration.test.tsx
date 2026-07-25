@@ -165,13 +165,21 @@ function renderPlanSeam() {
 const workspaceNameInput = () =>
   document.querySelector('input[placeholder="@mycompany"]') as HTMLInputElement;
 
+// This suite runs the REAL provider stack (no timer mocks), so its waitFor
+// polls compete with 60+ parallel turbo tasks on CI — the default 1s timeout
+// starves there (observed: passes 5/5 in isolation, times out under full-load
+// runs). The generous explicit timeout only bounds the failure case; green
+// runs return as soon as the condition holds.
+const CI_SAFE_TIMEOUT = { timeout: 15_000 };
+
 describe("Plan-phase form seam (PR A1 integration)", () => {
   it("renders the governance fields under the REAL providers and shares the wizard's form instance — a plan edit is visible to a wizard-step read and persists formState-only through the port", async () => {
     renderPlanSeam();
 
     // The port load is async — the guard state renders until p1 surfaces.
-    await waitFor(() =>
-      assert.ok(workspaceNameInput(), "governance fields render"),
+    await waitFor(
+      () => assert.ok(workspaceNameInput(), "governance fields render"),
+      CI_SAFE_TIMEOUT,
     );
     assert.ok(
       document.querySelector('section[aria-label="Project settings"]'),
@@ -209,7 +217,7 @@ describe("Plan-phase form seam (PR A1 integration)", () => {
         "@seam-proof",
         "the edit reached the persistence port",
       );
-    });
+    }, CI_SAFE_TIMEOUT);
     // formState-only: the real generated manifest was NOT regenerated from the
     // form (the reason this path is updateProjectFormState, not updateProject).
     assert.strictEqual(
