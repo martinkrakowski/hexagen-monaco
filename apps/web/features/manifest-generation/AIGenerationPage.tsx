@@ -8,6 +8,16 @@ import { parseManifestToWizardData } from "@hexagen/wizard-orchestration";
 import { deriveWorkspaceName } from "@hexagen/manifest-generation";
 import { setManifestIdentity } from "./manifestIdentity";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
+// PlanWorkbench is the shared PRESENTATIONAL two-pane shell (plan §3.1): it
+// reads no app context — this host fills every slot with genesis-owned data,
+// so the alias cross-slice import carries no workspace-shell coupling.
+import { PlanWorkbench } from "@/workspace-shell/plan-phase/PlanWorkbench";
+import { GenesisProjectSettingsSection } from "./genesis-workbench/GenesisProjectSettingsSection";
+import { GenesisSourcesSection } from "./genesis-workbench/GenesisSourcesSection";
+import {
+  clearGenesisFormValues,
+  rekeyGenesisFormValues,
+} from "./genesis-workbench/genesisProjectSettingsStore";
 import { Button } from "@hexagen/ui";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { LocalLLMContext } from "../../lib/llm-interfaces";
@@ -20,7 +30,19 @@ interface AIGenerationPageProps {
 export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { set: setPendingManifest } = usePendingManifest();
+  // originSpecText feeds the read-only Source row in the workbench's left
+  // column (Plan Workbench C1). Gate it on THIS host's originPath: the only
+  // setter today is the import/spec flow (originPath "/projects/new/import/spec"),
+  // which never routes back here — so a non-null value reaching this page can
+  // only be a leftover from an import abandoned mid-accept, i.e. wrong-flow
+  // provenance. The row stays wired for the day a genesis source exists.
+  const {
+    set: setPendingManifest,
+    originSpecText: pendingOriginSpecText,
+    originPath,
+  } = usePendingManifest();
+  const originSpecText =
+    originPath === "/projects/new/ai" ? pendingOriginSpecText : null;
 
   // The project name comes from the shared Project Name step (`?name=`). It is
   // also re-attached to the URL on Back/Regenerate from the accept screen so it
@@ -44,6 +66,13 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
           carriedName ||
           wizardData.governance?.workspaceName ||
           `AI Project ${new Date().toLocaleTimeString()}`;
+        // Bypassed-name flows snapshot Section A edits under the null key,
+        // but the accept screen re-attaches THIS manufactured projectName as
+        // `?name=` on Back/Regenerate — move the snapshot with the hand-off
+        // so the remounted page still finds the edits under the name it will
+        // carry. No-op when a carried name exists (snapshot and URL already
+        // share that key) or when nothing was edited.
+        rekeyGenesisFormValues(carriedName, projectName);
         // Keep the previewed/saved manifest string in sync with the carried
         // name: seed the form's workspaceName/namespacePrefix AND rewrite the
         // manifest's top-level system/scope so the Approve screen and saved
@@ -108,7 +137,16 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
       <>
         <Button
           variant="secondary"
-          onClick={() => router.push("/projects/new")}
+          onClick={() => {
+            // Back here EXITS the genesis flow, so the flow-local Section A
+            // snapshot dies with it — otherwise a later visit sharing the
+            // seed key (in particular the null key of an unnamed entry)
+            // would inherit this abandoned attempt's edits. The round trips
+            // the store exists for (the /models detour and the accept
+            // screen's Back/Regenerate) never pass through this button.
+            clearGenesisFormValues();
+            router.push("/projects/new");
+          }}
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
@@ -132,10 +170,31 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
           </div>
         )}
         <div className="flex-1 min-h-0">
+          {/* Plan Workbench C1: the genesis flow mounts the SHARED two-pane
+              workbench. GenerateWithAi keeps every flow behavior (min-length
+              gate, warning dialog, /models detour, parked telemetry) and hands
+              this host the right-pane slots; the host owns the left column. */}
           <GenerateWithAi
             onUseManifest={handleUseManifest}
             llmContext={llmContext}
             onGeneratingStateChange={setGeneratingActions}
+            renderWorkbench={({ main, composer }) => (
+              <PlanWorkbench
+                leftTitle="Plan"
+                rightTitle="Generate"
+                settings={
+                  <GenesisProjectSettingsSection carriedName={carriedName} />
+                }
+                sessions={
+                  <GenesisSourcesSection originSpecText={originSpecText} />
+                }
+                // No leftFooter: "Add planning session" is HIDDEN in genesis
+                // (locked decision §5 Q1) — the hint lives in Section B's
+                // muted empty-state line, never as a footer control.
+                main={main}
+                composer={composer}
+              />
+            )}
           />
         </div>
       </div>
