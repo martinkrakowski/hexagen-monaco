@@ -213,7 +213,10 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
                 errorMessage={llmContext.engineState.errorMessage}
                 onCancel={() => {
                   clear();
-                  router.push(returnUrl || "/projects/new/ai");
+                  // Third genesis return leg: cancelling a download must echo
+                  // `?name=` back like Back/Generate, or the workbench form
+                  // reseeds from blank and strands the Section A edits.
+                  router.push(returnUrl || genesisPath);
                 }}
                 onRetry={() => {
                   const modelId = llmContext.engineState.loadedModelId;
