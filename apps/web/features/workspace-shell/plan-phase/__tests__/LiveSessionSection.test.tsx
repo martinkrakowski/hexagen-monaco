@@ -46,7 +46,7 @@ function makeSession(
     attach: vi.fn(),
     pause: vi.fn(async () => {}),
     resume: vi.fn(async () => {}),
-    addSteering: vi.fn(async () => {}),
+    addSteering: vi.fn(async () => true),
     forceConverge: vi.fn(async () => {}),
     end: vi.fn(async () => {}),
     beginFinalize: vi.fn(async () => {}),
@@ -235,7 +235,15 @@ describe("LiveSessionSection", () => {
     });
     renderSection({ session });
 
-    assert.ok(document.querySelector('[data-testid="finalize-distilling"]'));
+    const distilling = document.querySelector(
+      '[data-testid="finalize-distilling"]',
+    );
+    assert.ok(distilling);
+    assert.strictEqual(
+      distilling.getAttribute("role"),
+      "status",
+      "distill progress is announced to assistive tech",
+    );
     assert.match(bodyText(), /name: partial-spec/);
     fireEvent.click(button(/^\s*Cancel\s*$/));
     await waitFor(() =>

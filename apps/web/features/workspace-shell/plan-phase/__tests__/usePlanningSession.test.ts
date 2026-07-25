@@ -527,9 +527,11 @@ describe("usePlanningSession", () => {
       await result.current.pause();
     });
 
+    let steered = false;
     await act(async () => {
-      await result.current.addSteering("Use event sourcing");
+      steered = await result.current.addSteering("Use event sourcing");
     });
+    assert.strictEqual(steered, true, "durable append resolves true");
     assert.strictEqual(
       result.current.turns[result.current.turns.length - 1].content,
       "Use event sourcing",
@@ -548,6 +550,29 @@ describe("usePlanningSession", () => {
     // requests[0] was the hung turn; requests[1] is the resumed proposer turn.
     assert.match(requests[1].message, /Use event sourcing/);
     assert.match(requests[1].message, /Human steering/);
+  });
+
+  it("addSteering resolves false when the turn persist fails, and the turn is not mirrored", async () => {
+    scripts = [{ kind: "hang" }];
+    const { result, mutations } = renderSession();
+    await act(async () => {
+      await result.current.start("seed");
+    });
+    await waitFor(() => assert.strictEqual(result.current.isRunning, true));
+    await act(async () => {
+      await result.current.pause();
+    });
+
+    const turnsBefore = result.current.turns.length;
+    mutations.appendLayerTurn.mockResolvedValueOnce(null);
+    let steered = true;
+    await act(async () => {
+      steered = await result.current.addSteering("Use event sourcing");
+    });
+    // false = the caller must keep the composer draft (a swallowed failure
+    // here silently discarded the typed steering note).
+    assert.strictEqual(steered, false);
+    assert.strictEqual(result.current.turns.length, turnsBefore);
   });
 
   it("attach() recovers an interrupted persisted session as awaiting-human (paused)", async () => {

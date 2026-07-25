@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge, Button, Input, Spinner } from "@hexagen/ui";
 import { Check, Pencil, Sparkles, Trash2, X } from "lucide-react";
 import type { ProjectLayer } from "@hexagen/shared";
@@ -50,6 +50,23 @@ export function PlanLayerReader({
   const [renameError, setRenameError] = useState<string | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
+
+  // Rename swaps the pencil trigger for the Input (an unmount), so without
+  // explicit management keyboard focus falls to <body>: move it into the
+  // input on open, and back to the re-mounted trigger on save/cancel. The
+  // wasRenaming ref keeps the effect from stealing focus on the initial mount.
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+  const renameTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const wasRenamingRef = useRef(false);
+  useEffect(() => {
+    if (isRenaming) {
+      wasRenamingRef.current = true;
+      renameInputRef.current?.focus();
+    } else if (wasRenamingRef.current) {
+      wasRenamingRef.current = false;
+      renameTriggerRef.current?.focus();
+    }
+  }, [isRenaming]);
 
   const producedManifest = layer.link?.type === "produced-manifest";
   const isDecisions = layer.kind === "decisions";
@@ -109,12 +126,17 @@ export function PlanLayerReader({
             {isRenaming ? (
               <div className="flex items-center gap-1">
                 <Input
+                  ref={renameInputRef}
                   value={draftTitle}
                   onChange={(e) => setDraftTitle(e.target.value)}
                   aria-label="Session title"
                   disabled={isSavingTitle}
                   className="h-8 text-sm"
                   onKeyDown={(e) => {
+                    // During IME composition Enter commits a candidate (and
+                    // Escape cancels the composition), not the rename — same
+                    // guard as TextareaComposer.
+                    if (e.nativeEvent.isComposing) return;
                     if (e.key === "Enter") void commitRename();
                     if (e.key === "Escape") cancelRename();
                   }}
@@ -154,6 +176,7 @@ export function PlanLayerReader({
                   <Badge variant="outline">Produced this architecture</Badge>
                 )}
                 <button
+                  ref={renameTriggerRef}
                   type="button"
                   onClick={startRename}
                   aria-label="Rename session"

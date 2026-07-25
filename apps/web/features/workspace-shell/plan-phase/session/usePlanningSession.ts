@@ -85,7 +85,9 @@ export interface UsePlanningSessionReturn {
   attach: (layer: ProjectLayer) => void;
   pause: () => Promise<void>;
   resume: () => Promise<void>;
-  addSteering: (content: string) => Promise<void>;
+  /** Resolves true only when the steering turn was durably appended — false
+   * keeps the composer draft (a failed persist must never discard it). */
+  addSteering: (content: string) => Promise<boolean>;
   forceConverge: () => Promise<void>;
   end: () => Promise<void>;
   /** converged → finalizing (persisted). */
@@ -439,18 +441,18 @@ export function usePlanningSession(
   }, [isRunning, applyState, persistStatus, runLoop]);
 
   const addSteering = useCallback(
-    async (content: string) => {
+    async (content: string): Promise<boolean> => {
       const trimmed = content.trim();
       const layerId = layerIdRef.current;
-      if (!projectId || !layerId || !trimmed) return;
+      if (!projectId || !layerId || !trimmed) return false;
       const turn = await appendLayerTurn(projectId, layerId, {
         author: "You",
         content: trimmed,
         role: "human",
       });
-      if (turn !== null) {
-        pushTurn(turn);
-      }
+      if (turn === null) return false;
+      pushTurn(turn);
+      return true;
     },
     [projectId, appendLayerTurn, pushTurn],
   );
