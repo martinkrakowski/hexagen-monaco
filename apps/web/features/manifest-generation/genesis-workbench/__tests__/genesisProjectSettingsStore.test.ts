@@ -151,6 +151,41 @@ describe("loadEditedGenesisGovernance", () => {
     assert.deepEqual(loadEditedGenesisGovernance("Vellum Notes"), {});
   });
 
+  it("keeps the diff baseline ACROSS a rekey — untouched @hexagen seed defaults must not surface as edits under the manufactured name on the second hand-off", () => {
+    // Bypassed flow: null seed, user edits ONLY packageManager.
+    const values = seedGenesisFormValues(null);
+    values.governance.packageManager = "pnpm";
+    saveGenesisFormValues(null, values);
+
+    // Hand-off #1 rekeys the snapshot to the manufactured AI-derived name.
+    rekeyGenesisFormValues(null, "test-system");
+
+    // Hand-off #2 (after Back/Regenerate re-attached ?name=test-system):
+    // the baseline must still be the NULL seed the flow started from — a
+    // baseline recomputed from "test-system" would report the untouched
+    // "@hexagen" identity defaults as edits and clobber system/scope.
+    assert.deepEqual(loadEditedGenesisGovernance("test-system"), {
+      packageManager: "pnpm",
+    });
+  });
+
+  it("keeps the ORIGINAL baseline when the rekeyed snapshot is overwritten by later same-key saves (the remounted form keeps mirroring edits)", () => {
+    const values = seedGenesisFormValues(null);
+    values.governance.packageManager = "pnpm";
+    saveGenesisFormValues(null, values);
+    rekeyGenesisFormValues(null, "test-system");
+
+    // Post-Back remount: the section saves under the re-attached name key.
+    const later = structuredClone(values);
+    later.governance.workspaceTemplate = "strict-enterprise";
+    saveGenesisFormValues("test-system", later);
+
+    assert.deepEqual(loadEditedGenesisGovernance("test-system"), {
+      packageManager: "pnpm",
+      workspaceTemplate: "strict-enterprise",
+    });
+  });
+
   it("reports template and naming-convention edits (formValues-only fields), copying the naming object", () => {
     const values = seedGenesisFormValues(null);
     values.governance.workspaceTemplate = "strict-enterprise";

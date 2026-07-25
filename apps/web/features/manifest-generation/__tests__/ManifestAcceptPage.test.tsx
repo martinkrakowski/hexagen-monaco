@@ -7,7 +7,13 @@ vi.stubGlobal("crypto", {
 import { describe, it, vi, beforeEach } from "vitest";
 import assert from "node:assert";
 import React from "react";
-import { render, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  cleanup,
+  fireEvent,
+  waitFor,
+  screen,
+} from "@testing-library/react";
 
 // The page under test is a heavy container; stub its presentation-only
 // collaborators so the test pins exactly one behavior: the layer array handed
@@ -35,8 +41,10 @@ vi.mock("@/landing/ProjectsShellWithFreeTier", () => ({
 }));
 // The page only needs a passing viewData (no validation failures) to enable
 // the accept path; parsing real YAML is ManifestPreview's concern, not this
-// test's.
-vi.mock("@hexagen/manifest-generation", () => ({
+// test's. Passthrough for everything else: the genesis settings store's
+// save() seeds its diff baseline through the REAL deriveWorkspaceName.
+vi.mock("@hexagen/manifest-generation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@hexagen/manifest-generation")>()),
   parseYamlToViewData: () => ({
     validationItems: [],
     overallScore: 90,
@@ -145,10 +153,10 @@ describe("ManifestAcceptPage — genesis settings snapshot lifecycle", () => {
   });
 
   function seedSnapshot() {
-    // The null (bypassed-name) seed: the carried-name seed would route
-    // through the REAL deriveWorkspaceName, which this suite's
-    // @hexagen/manifest-generation mock does not provide — and the lifecycle
-    // under test only cares that A snapshot exists under the flow's key.
+    // The null (bypassed-name) seed VALUES under the "Vellum" key — the
+    // lifecycle under test only cares that A snapshot exists under the
+    // flow's key. (save() itself seeds its diff baseline through the real
+    // deriveWorkspaceName — the manifest-generation mock passes it through.)
     const values = seedGenesisFormValues(null);
     values.governance.packageManager = "pnpm";
     saveGenesisFormValues("Vellum", values);
@@ -189,6 +197,28 @@ describe("ManifestAcceptPage — genesis settings snapshot lifecycle", () => {
     render(<ManifestAcceptPage />);
     clickButton(/^Regenerate$/);
 
+    assert.strictEqual(loadGenesisFormValues("Vellum"), values);
+  });
+
+  it("a FAILED genesis save KEEPS the snapshot — the clear happens only after a truthy projectId, so the Back retry path still finds the edits", async () => {
+    const values = seedSnapshot();
+    usePendingManifest
+      .getState()
+      .set(YAML, {} as never, "Vellum", "/projects/new/ai", null);
+    // saveProject resolves null: the !projectId arm — the page must stay on
+    // accept with the retry message, and the snapshot must survive (a clear
+    // hoisted above the await, moved into finally, or wired into this arm
+    // would wipe the user's Section A edits on a failed save).
+    saveProject.mockResolvedValueOnce(null as never);
+    render(<ManifestAcceptPage />);
+    approve();
+
+    await waitFor(() => assert.strictEqual(saveProject.mock.calls.length, 1));
+    await waitFor(() =>
+      assert.ok(
+        screen.getByText("Failed to create project. Please try again."),
+      ),
+    );
     assert.strictEqual(loadGenesisFormValues("Vellum"), values);
   });
 

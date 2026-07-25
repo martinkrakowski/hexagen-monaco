@@ -65,6 +65,36 @@ vi.mock("../../../app/lib/wire.client", async (importOriginal) => ({
   isLocalLLMReady: vi.fn(() => false),
 }));
 
+// Passthrough shim over the REAL flow-state machine: every test runs the
+// actual useModelSelectionFlowState (override null), but the non-idle
+// flow-state test below needs an interstitial state (e.g. "error") that no
+// in-page interaction can reach through this harness — the override forces
+// the returned STATE only, leaving the machine and its actions real.
+const flowStateOverride = vi.hoisted(() => ({
+  current: null as Record<string, unknown> | null,
+}));
+vi.mock(
+  "../ModelSelectionFlow/useModelSelectionFlowState",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("../ModelSelectionFlow/useModelSelectionFlowState")
+      >();
+    return {
+      ...actual,
+      useModelSelectionFlowState: (
+        ...args: Parameters<typeof actual.useModelSelectionFlowState>
+      ) => {
+        const [state, actions] = actual.useModelSelectionFlowState(...args);
+        return [
+          (flowStateOverride.current as typeof state | null) ?? state,
+          actions,
+        ] as const;
+      },
+    };
+  },
+);
+
 import { AIGenerationPage } from "../AIGenerationPage";
 import { usePendingManifest } from "../store/usePendingManifest";
 import { useExecutionEngine } from "../store/useExecutionEngine";
@@ -186,6 +216,7 @@ beforeEach(() => {
   nav.searchParams = new URLSearchParams("name=Vellum Notes");
   fetchMock.mockClear();
   fetchMock.mockImplementation(pendingForever);
+  flowStateOverride.current = null;
 });
 
 describe("AIGenerationPage — Plan Workbench C1", () => {
@@ -516,16 +547,22 @@ describe("AIGenerationPage — Plan Workbench C2", () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     );
 
-    // Every relocated control lives INSIDE the panel. The getByLabelText
-    // queries double as uniqueness pins: a copy left behind in the main body
-    // would make them throw on multiple matches.
+    // Every relocated control lives INSIDE the panel — pinned in two halves:
+    // the GLOBAL screen.getBy* queries throw on multiple matches, so a copy
+    // left behind in the right-pane main body fails here (a within(region)
+    // query would never see it), and region.contains pins the survivor to
+    // the accordion panel.
     const region = optionsRegion();
-    assert.ok(within(region).getByLabelText("Deployment (optional)"));
-    assert.ok(within(region).getByLabelText("Max Bounded Contexts"));
-    assert.ok(
-      within(region).getByRole("radiogroup", { name: "Execution engine" }),
-    );
-    assert.ok(within(region).getByRole("button", { name: /change model/i }));
+    const deployment = screen.getByLabelText("Deployment (optional)");
+    assert.ok(region.contains(deployment));
+    const maxContexts = screen.getByLabelText("Max Bounded Contexts");
+    assert.ok(region.contains(maxContexts));
+    const engineGroup = screen.getByRole("radiogroup", {
+      name: "Execution engine",
+    });
+    assert.ok(region.contains(engineGroup));
+    const changeModel = screen.getByRole("button", { name: /change model/i });
+    assert.ok(region.contains(changeModel));
 
     // §3.6 placement confirmation: the example cards STAY in the main view
     // body above the composer — not in the left column's new section.
@@ -689,5 +726,102 @@ describe("AIGenerationPage — Plan Workbench C2", () => {
     // The edit the user DID make still lands.
     assert.equal(state.formValues?.governance?.packageManager, "pnpm");
     assert.equal(state.projectName, "test-system");
+  });
+
+  it("carried-name tier in isolation: with Section A untouched, the hand-off derives system/scope from ?name= (the default flow's pre-C2 contract)", async () => {
+    // No Section A edits at all — no snapshot, so `edited` is empty and the
+    // precedence chain's MIDDLE tier must carry alone: dropping the
+    // carriedSlug fallback (or the whole identity-rewrite block) would leave
+    // the AI's test-system in the saved YAML.
+    mockStageDone();
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+
+    await generateAndHandOff();
+
+    const state = usePendingManifest.getState();
+    const slug = deriveWorkspaceName("Vellum Notes").name;
+    assert.match(state.yaml as string, new RegExp(`^system: ${slug}$`, "m"));
+    assert.match(
+      state.yaml as string,
+      new RegExp(`^scope: ['"]?@${slug}['"]?$`, "m"),
+    );
+    assert.equal(state.formValues?.governance?.workspaceName, slug);
+    assert.equal(state.formValues?.governance?.namespacePrefix, `@${slug}`);
+    assert.equal(state.projectName, "Vellum Notes");
+  });
+
+  it("bypassed-flow round trip: after the rekey, a second hand-off under the re-attached ?name= still reports only the real edit — untouched @hexagen seed defaults never clobber system/scope", async () => {
+    // Pass 1 — bypassed entry, edit ONLY packageManager (identity untouched:
+    // the null seed's "@hexagen" defaults). This is one step PAST the
+    // bypassed-name guard test above: the hand-off rekeys the snapshot to
+    // the manufactured "test-system".
+    nav.searchParams = new URLSearchParams("");
+    mockStageDone();
+    const { unmount } = render(
+      <AIGenerationPage llmContext={makeLlmContext()} />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Package Manager"), {
+      target: { value: "pnpm" },
+    });
+    await generateAndHandOff();
+    assert.match(
+      usePendingManifest.getState().yaml as string,
+      /^system: test-system$/m,
+    );
+
+    // Accept-screen Back: clears the pending manifest and re-attaches the
+    // manufactured name as ?name=test-system; the page remounts.
+    unmount();
+    usePendingManifest.getState().clear();
+    nav.push.mockClear();
+    nav.searchParams = new URLSearchParams("name=test-system");
+
+    // Pass 2 — regenerate and hand off again. The diff baseline must still
+    // be the NULL seed the flow started from: a baseline recomputed from the
+    // "test-system" key would report the untouched "@hexagen" identity
+    // defaults as edits and stamp them over system/scope.
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+    await generateAndHandOff();
+
+    const state = usePendingManifest.getState();
+    const slug = deriveWorkspaceName("test-system").name;
+    assert.match(state.yaml as string, new RegExp(`^system: ${slug}$`, "m"));
+    assert.match(
+      state.yaml as string,
+      new RegExp(`^scope: ['"]?@${slug}['"]?$`, "m"),
+    );
+    assert.doesNotMatch(state.yaml as string, /^system: @hexagen$/m);
+    assert.equal(state.formValues?.governance?.workspaceName, slug);
+    assert.equal(state.formValues?.governance?.namespacePrefix, `@${slug}`);
+    // The one REAL edit still rides the second hand-off too.
+    assert.equal(state.formValues?.governance?.packageManager, "pnpm");
+    assert.equal(state.projectName, "test-system");
+  });
+
+  it("non-idle flow states drop the generationOptions slot: the interstitial fills the main view with NO Generation options section and no composer", () => {
+    // No in-page interaction reaches the StateView interstitials through
+    // this harness (the closest paths stay idle), so force the machine's
+    // returned state via the passthrough shim — the slots contract under
+    // test (types.ts: generationOptions "absent in non-idle flow states")
+    // belongs to GenerateWithAi's rendering, not to how the state was
+    // reached.
+    flowStateOverride.current = {
+      state: "error",
+      error: "engine exploded",
+      errorCode: null,
+      isModelReady: false,
+    };
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+
+    // The interstitial is the main view…
+    assert.ok(screen.getByText("engine exploded"));
+    // …and the left column's third section is NOT rendered alongside it,
+    // nor is the composer.
+    assert.equal(
+      screen.queryByRole("button", { name: "Generation options" }),
+      null,
+    );
+    assert.equal(screen.queryByLabelText("Project description"), null);
   });
 });
