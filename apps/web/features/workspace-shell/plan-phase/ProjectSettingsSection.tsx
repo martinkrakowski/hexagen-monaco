@@ -25,9 +25,10 @@ interface ProjectSettingsSectionProps {
  * template, package manager and naming conventions stay one source of truth
  * across both phases.
  *
- * Plan Workbench PR A1: the collapsible accordion + two-pane layout land in A2.
- * Here the section renders inline in the existing single-column plan view so the
- * new persistence path is reviewable in isolation.
+ * Plan Workbench A2: the section renders inside the workbench's "Project
+ * settings" accordion item, whose Trigger is the visible heading — so the
+ * section carries no heading (or border chrome) of its own, only the
+ * `aria-label` landmark and the autosave hint.
  */
 export function ProjectSettingsSection({
   projectId,
@@ -40,21 +41,16 @@ export function ProjectSettingsSection({
   return (
     <section
       aria-label="Project settings"
-      className="border border-border rounded-lg p-4 space-y-4"
+      className="space-y-4"
       // Flush the debounced autosave the moment focus leaves any field in the
       // section (React `onBlur` is focusout — it bubbles), so a blur commits
       // without waiting out the debounce.
       onBlur={() => flush()}
     >
-      <div className="space-y-1">
-        <h2 className="text-sm font-semibold text-foreground">
-          Project settings
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          Workspace identity, template and conventions — shared with the
-          Architecture wizard. Changes save automatically.
-        </p>
-      </div>
+      <p className="text-xs text-muted-foreground">
+        Workspace identity, template and conventions — shared with the
+        Architecture wizard. Changes save automatically.
+      </p>
       <fieldset className="space-y-6">
         <IdentityFields control={control} />
         <TemplateSelector control={control} />

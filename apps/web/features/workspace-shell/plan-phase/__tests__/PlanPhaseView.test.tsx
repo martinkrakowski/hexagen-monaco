@@ -2,7 +2,7 @@ vi.stubGlobal("crypto", {
   randomUUID: () => "turn-uuid",
 } as unknown as Crypto);
 
-import { describe, it, vi, beforeEach } from "vitest";
+import { describe, it, vi, beforeEach, beforeAll, afterAll } from "vitest";
 import assert from "node:assert";
 import React from "react";
 import {
@@ -25,7 +25,7 @@ import { PlanPhaseView } from "../PlanPhaseView";
 import { FormProvider, useForm } from "react-hook-form";
 import { emptyFormValues } from "../../../project-wizard/config";
 
-// PlanPhaseView now renders ProjectSettingsSection, whose governance fields read
+// PlanPhaseView renders ProjectSettingsSection, whose governance fields read
 // the shared wizard form via `useFormContext`. Production supplies it through
 // WizardStepFormProvider; here a lightweight FormProvider harness stands in.
 // Shadowing `render` routes every existing call site through the wrapper without
@@ -44,10 +44,32 @@ HTMLDialogElement.prototype.close = function () {
   this.removeAttribute("open");
 };
 
+// The workbench's desktop path (jsdom default width 1024 = "lg") renders
+// react-resizable-panels, which instantiates a ResizeObserver on mount; jsdom
+// doesn't ship one. Stub + restore so the stub can't leak into sibling suites.
+const hadResizeObserver = "ResizeObserver" in globalThis;
+const originalResizeObserver = globalThis.ResizeObserver;
+beforeAll(() => {
+  if (!globalThis.ResizeObserver) {
+    globalThis.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+  }
+});
+afterAll(() => {
+  if (hadResizeObserver) {
+    globalThis.ResizeObserver = originalResizeObserver;
+  } else {
+    delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
+  }
+});
+
 const bodyText = () => (document.body.textContent || "").replace(/\s+/g, " ");
 
-// The Plan phase now also renders the live-session seed textarea; the paste
-// dialog's textarea must be selected by its label, not document order.
+// The right pane hosts the seed composer; the paste dialog's textarea must be
+// selected by its label, not document order.
 const transcriptTextarea = () =>
   document.querySelector(
     'textarea[aria-label="Session transcript (markdown)"]',
@@ -63,6 +85,17 @@ function button(label: RegExp): HTMLButtonElement {
   return btn as HTMLButtonElement;
 }
 
+/** A sessions-list row (inside the "Sessions and sources" nav) by its title. */
+function sessionRow(title: RegExp): HTMLButtonElement {
+  const nav = document.querySelector('nav[aria-label="Sessions and sources"]');
+  assert.ok(nav, "the sessions nav is present");
+  const row = Array.from(nav!.querySelectorAll("button")).find((b) =>
+    title.test(b.textContent || ""),
+  );
+  assert.ok(row, `expected a sessions row matching ${title}`);
+  return row as HTMLButtonElement;
+}
+
 function project(layers: unknown[] = []) {
   return {
     id: "p1",
@@ -76,7 +109,7 @@ function project(layers: unknown[] = []) {
   };
 }
 
-describe("PlanPhaseView", () => {
+describe("PlanPhaseView (workbench host)", () => {
   beforeEach(() => {
     cleanup();
     lifecycle.current = {
@@ -102,13 +135,42 @@ describe("PlanPhaseView", () => {
     assert.match(bodyText(), /Save the project to attach planning sessions/);
   });
 
-  it("shows the empty state with an add action when the project has no layers", () => {
+  it("renders the two-pane workbench chrome: shell title, accordion sections, live row, and the footer Add action", () => {
     renderView();
-    assert.match(bodyText(), /No planning session yet/);
-    assert.ok(button(/Add planning session/));
+    const text = bodyText();
+    assert.match(text, /Plan — Vellum/, "shell header carries the project");
+    assert.match(text, /Project settings/);
+    assert.match(text, /Sessions & sources/);
+    assert.match(text, /Live session/);
+    assert.match(
+      text,
+      /No archived sessions yet/,
+      "empty archive state in the sessions list",
+    );
+    assert.ok(button(/Add planning session/), "left-footer add action");
+    // Locked §5 Q2: the shell footer is EMPTY until the session converges.
+    assert.strictEqual(
+      Array.from(document.querySelectorAll("button")).find((b) =>
+        /Finalize/.test(b.textContent || ""),
+      ),
+      undefined,
+      "no Finalize action before convergence",
+    );
   });
 
-  it("renders each layer's title, turn count, and turns", () => {
+  it("shows the seed composer with the ADR-0045 quota caption when no session is tracked", () => {
+    renderView();
+    assert.ok(
+      document.querySelector('textarea[aria-label="Session brief"]'),
+      "seed composer in the right pane",
+    );
+    assert.match(
+      bodyText(),
+      /Each round uses 2 AI chat requests from your daily quota\./,
+    );
+  });
+
+  it("lists archived layers as rows and opens the full-height reader on click", () => {
     lifecycle.current.loadedProject = project([
       {
         id: "L1",
@@ -123,16 +185,54 @@ describe("PlanPhaseView", () => {
       },
     ]);
     renderView();
+    const row = sessionRow(/Initial brainstorm/);
+    assert.match(row.textContent || "", /2 turns/);
+    assert.match(row.textContent || "", /updated /);
+    // Archived turns do NOT render until the layer is opened in the reader.
+    assert.doesNotMatch(bodyText(), /critique/);
+
+    fireEvent.click(row);
+    const reader = document.querySelector(
+      'section[aria-label="Planning session: Initial brainstorm"]',
+    );
+    assert.ok(reader, "the reader opens as the right-pane view");
+    assert.match(bodyText(), /propose/);
+    assert.match(bodyText(), /critique/);
+    // The composer is hidden in the layer view (read-only transcript, §5 Q3).
+    assert.strictEqual(
+      document.querySelector('textarea[aria-label="Session brief"]'),
+      null,
+    );
+  });
+
+  it("orders archived rows NEWEST first by the displayed 'updated' timestamp", () => {
+    // The sort key must match the timestamp the rows show: an older-created
+    // but recently-updated layer sorts FIRST (sorting by createdAt made the
+    // list read as unsorted against the only visible date).
+    lifecycle.current.loadedProject = project([
+      brainstormLayer({
+        id: "L1",
+        title: "First session",
+        createdAt: 20,
+        updatedAt: 10,
+      }),
+      brainstormLayer({
+        id: "L2",
+        title: "Second session",
+        createdAt: 10,
+        updatedAt: 20,
+      }),
+    ]);
+    renderView();
     const text = bodyText();
-    assert.match(text, /Initial brainstorm/);
-    assert.match(text, /2 turns/);
-    assert.match(text, /updated /, "header shows the updatedAt timestamp");
-    assert.match(text, /propose/);
-    assert.match(text, /critique/);
-    assert.doesNotMatch(text, /No planning session yet/);
-    // "Add planning session" stays available to append more (the header
-    // button is a separate code path from the empty-state one).
-    assert.ok(button(/Add planning session/));
+    // Presence first: indexOf returns -1 for a missing title, which would
+    // make the ordering comparison pass vacuously.
+    assert.ok(text.includes("Second session"), "Second session renders");
+    assert.ok(text.includes("First session"), "First session renders");
+    assert.ok(
+      text.indexOf("Second session") < text.indexOf("First session"),
+      "most recently UPDATED first, not stored or created order",
+    );
   });
 
   it("adds a pasted session through addLayer with the loaded project's id", async () => {
@@ -202,7 +302,7 @@ describe("PlanPhaseView", () => {
   });
 });
 
-// --- Phase 2: multiple named layers, provenance, extraction -----------------
+// --- Reader actions: provenance, rename, delete, extraction -----------------
 
 function brainstormLayer(overrides: Record<string, unknown> = {}) {
   return {
@@ -222,7 +322,7 @@ function buttonByAriaLabel(label: string, root: ParentNode = document) {
   ) as HTMLButtonElement | null;
 }
 
-describe("PlanPhaseView (Phase 2)", () => {
+describe("PlanPhaseView (reader actions)", () => {
   beforeEach(() => {
     cleanup();
     lifecycle.current = {
@@ -249,20 +349,7 @@ describe("PlanPhaseView (Phase 2)", () => {
     );
   });
 
-  it("orders layers by createdAt regardless of stored order", () => {
-    lifecycle.current.loadedProject = project([
-      brainstormLayer({ id: "L2", title: "Second session", createdAt: 20 }),
-      brainstormLayer({ id: "L1", title: "First session", createdAt: 10 }),
-    ]);
-    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
-    const text = bodyText();
-    assert.ok(
-      text.indexOf("First session") < text.indexOf("Second session"),
-      "createdAt ordering, not stored order",
-    );
-  });
-
-  it("shows kind badges and offers extraction only on brainstorm layers", () => {
+  it("shows kind badges on rows and offers extraction only in a brainstorm layer's reader", () => {
     lifecycle.current.loadedProject = project([
       brainstormLayer(),
       {
@@ -279,20 +366,27 @@ describe("PlanPhaseView (Phase 2)", () => {
     const text = bodyText();
     assert.match(text, /Brainstorm/);
     assert.match(text, /Decisions —/);
-    const extractButtons = Array.from(
-      document.querySelectorAll("button"),
-    ).filter((b) => /Extract decisions/.test(b.textContent || ""));
+
+    fireEvent.click(sessionRow(/Decisions —/));
     assert.strictEqual(
-      extractButtons.length,
-      1,
+      Array.from(document.querySelectorAll("button")).find((b) =>
+        /Extract decisions/.test(b.textContent || ""),
+      ),
+      undefined,
       "decisions layers do not offer extraction",
     );
+
+    // Anchored: the decisions row's title ("Decisions — Initial brainstorm")
+    // also CONTAINS the brainstorm title, and it sorts first (newest-first).
+    fireEvent.click(sessionRow(/^Initial brainstorm/));
+    assert.ok(button(/Extract decisions/), "brainstorm reader offers it");
   });
 
   it("renames a layer through the awaited updateLayer and surfaces failure inline", async () => {
     lifecycle.current.loadedProject = project([brainstormLayer()]);
     lifecycle.current.updateLayer = vi.fn(async () => false);
     render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    fireEvent.click(sessionRow(/Initial brainstorm/));
 
     fireEvent.click(buttonByAriaLabel("Rename session")!);
     const input = document.querySelector(
@@ -322,9 +416,75 @@ describe("PlanPhaseView (Phase 2)", () => {
     );
   });
 
-  it("deletes a layer only after the confirm dialog, via awaited removeLayer", async () => {
+  it("moves focus into the rename input on open and back to the trigger on cancel", async () => {
     lifecycle.current.loadedProject = project([brainstormLayer()]);
     render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    fireEvent.click(sessionRow(/Initial brainstorm/));
+
+    // Opening rename unmounts the pencil trigger — without explicit focus
+    // management keyboard focus falls to <body>.
+    fireEvent.click(buttonByAriaLabel("Rename session")!);
+    const input = document.querySelector(
+      'input[aria-label="Session title"]',
+    ) as HTMLInputElement;
+    await waitFor(() => assert.strictEqual(document.activeElement, input));
+
+    fireEvent.click(buttonByAriaLabel("Cancel rename")!);
+    await waitFor(() =>
+      assert.strictEqual(
+        document.activeElement,
+        buttonByAriaLabel("Rename session"),
+        "cancel returns focus to the re-mounted rename trigger",
+      ),
+    );
+  });
+
+  it("does not commit a rename on Enter during IME composition", async () => {
+    lifecycle.current.loadedProject = project([brainstormLayer()]);
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    fireEvent.click(sessionRow(/Initial brainstorm/));
+
+    fireEvent.click(buttonByAriaLabel("Rename session")!);
+    const input = document.querySelector(
+      'input[aria-label="Session title"]',
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Renamed session" } });
+
+    // Enter while composing commits the IME candidate, not the rename.
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    const updateLayer = lifecycle.current.updateLayer as ReturnType<
+      typeof vi.fn
+    >;
+    assert.strictEqual(updateLayer.mock.calls.length, 0);
+    assert.ok(
+      document.querySelector('input[aria-label="Session title"]'),
+      "the editor stays open",
+    );
+
+    // A plain Enter still commits.
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => assert.strictEqual(updateLayer.mock.calls.length, 1));
+  });
+
+  it("deletes a layer only after the confirm dialog, and falls back to the live view", async () => {
+    lifecycle.current.loadedProject = project([brainstormLayer()]);
+    // Production-faithful mock: removeLayer really shrinks the project's
+    // layers (the suite default resolves true but leaves the list intact,
+    // which would let resolvedView keep resolving the dead id). The direct
+    // unknown-id normalization pin lives in the archive-filter suite; this
+    // flow's live view additionally comes from confirmDelete's explicit
+    // mainView reset.
+    lifecycle.current.removeLayer = vi.fn(
+      async (_projectId: string, layerId: string) => {
+        const proj = lifecycle.current.loadedProject as {
+          layers: { id: string }[];
+        };
+        proj.layers = proj.layers.filter((l) => l.id !== layerId);
+        return true;
+      },
+    );
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    fireEvent.click(sessionRow(/Initial brainstorm/));
 
     const removeLayer = lifecycle.current.removeLayer as ReturnType<
       typeof vi.fn
@@ -340,12 +500,18 @@ describe("PlanPhaseView (Phase 2)", () => {
     fireEvent.click(button(/^\s*Delete session\s*$/));
     await waitFor(() => assert.strictEqual(removeLayer.mock.calls.length, 1));
     assert.deepStrictEqual(removeLayer.mock.calls[0], ["p1", "L1"]);
+    // Deleting the on-screen layer falls back to the live view (no dead pane).
+    await waitFor(() => {
+      assert.doesNotMatch(bodyText(), /Delete planning session\?/);
+      assert.match(bodyText(), /Start a live session/);
+    });
   });
 
   it("keeps the confirm dialog open with an inline error when removal fails", async () => {
     lifecycle.current.loadedProject = project([brainstormLayer()]);
     lifecycle.current.removeLayer = vi.fn(async () => false);
     render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    fireEvent.click(sessionRow(/Initial brainstorm/));
 
     fireEvent.click(buttonByAriaLabel("Delete session")!);
     fireEvent.click(button(/^\s*Delete session\s*$/));
@@ -356,24 +522,6 @@ describe("PlanPhaseView (Phase 2)", () => {
       assert.match(alert.textContent || "", /Couldn't delete the session/);
     });
     assert.match(bodyText(), /Delete planning session\?/, "dialog stays open");
-  });
-
-  it("collapses and expands a layer's turns", () => {
-    // Distinct content: the live-session blurb contains "proposer", so the
-    // default "propose" turn body can't prove the archive collapsed.
-    lifecycle.current.loadedProject = project([
-      brainstormLayer({
-        turns: [{ id: "t1", author: "Grok", content: "the-collapsible-body" }],
-      }),
-    ]);
-    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
-    assert.match(bodyText(), /the-collapsible-body/);
-
-    fireEvent.click(buttonByAriaLabel("Collapse session")!);
-    assert.doesNotMatch(bodyText(), /the-collapsible-body/);
-
-    fireEvent.click(buttonByAriaLabel("Expand session")!);
-    assert.match(bodyText(), /the-collapsible-body/);
   });
 
   it("badges the layer that produced the manifest and switches back on click only", () => {
@@ -391,6 +539,7 @@ describe("PlanPhaseView (Phase 2)", () => {
     );
 
     assert.match(bodyText(), /Produced this architecture/);
+    fireEvent.click(sessionRow(/Initial brainstorm/));
     assert.strictEqual(onSwitch.mock.calls.length, 0, "never auto-navigates");
     fireEvent.click(button(/View architecture/));
     assert.strictEqual(onSwitch.mock.calls.length, 1);
@@ -406,6 +555,7 @@ describe("PlanPhaseView (Phase 2)", () => {
       })),
     );
     render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    fireEvent.click(sessionRow(/Initial brainstorm/));
 
     fireEvent.click(button(/Extract decisions/));
 
@@ -440,6 +590,7 @@ describe("PlanPhaseView (Phase 2)", () => {
       })),
     );
     render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    fireEvent.click(sessionRow(/Initial brainstorm/));
 
     fireEvent.click(button(/Extract decisions/));
 
@@ -465,6 +616,7 @@ describe("PlanPhaseView (Phase 2)", () => {
       })),
     );
     render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    fireEvent.click(sessionRow(/Initial brainstorm/));
 
     fireEvent.click(button(/Extract decisions/));
 

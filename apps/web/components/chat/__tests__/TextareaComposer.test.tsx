@@ -1,5 +1,6 @@
 import { describe, it, afterEach } from "vitest";
 import assert from "node:assert";
+import { useState } from "react";
 import {
   render,
   screen,
@@ -285,5 +286,104 @@ describe("TextareaComposer", () => {
       screen.getByRole("button", { name: "Send" }).hasAttribute("disabled"),
       true,
     );
+  });
+
+  // ── Controlled mode (Plan Workbench A2) ────────────────────────────────────
+  // The workbench host lifts the draft so a right-pane view switch (which
+  // unmounts the composer) can't lose typed text.
+
+  describe("controlled mode (value/onValueChange)", () => {
+    it("renders the lifted value and routes typing to onValueChange", () => {
+      const changes: string[] = [];
+      render(
+        <TextareaComposer
+          value="lifted draft"
+          onValueChange={(v) => changes.push(v)}
+          onSubmit={async () => true}
+        />,
+      );
+      const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+      assert.strictEqual(textarea.value, "lifted draft");
+
+      fireEvent.change(textarea, { target: { value: "lifted draft!" } });
+      assert.deepStrictEqual(changes, ["lifted draft!"]);
+      // Controlled: the DOM value tracks the PROP, which this render never
+      // updated — the parent owns the state.
+      assert.strictEqual(textarea.value, "lifted draft");
+    });
+
+    it('clears via onValueChange("") when onSubmit resolves true', async () => {
+      const changes: string[] = [];
+      render(
+        <TextareaComposer
+          value="send me"
+          onValueChange={(v) => changes.push(v)}
+          onSubmit={async () => true}
+        />,
+      );
+      fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+      await waitFor(() => assert.deepStrictEqual(changes, [""]));
+    });
+
+    it("preserves a NEWER lifted draft typed while a submit is in flight", async () => {
+      // Controlled twin of the uncontrolled mid-flight test above: the
+      // inputRef skip-clear guard must also hold when the draft round-trips
+      // through the parent's onValueChange → value re-render.
+      const gate = deferred<boolean>();
+      const changes: string[] = [];
+      function Host() {
+        const [value, setValue] = useState("first message");
+        return (
+          <TextareaComposer
+            value={value}
+            onValueChange={(v) => {
+              changes.push(v);
+              setValue(v);
+            }}
+            onSubmit={async () => gate.promise}
+          />
+        );
+      }
+      render(<Host />);
+      const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+      fireEvent.keyDown(textarea, { key: "Enter" });
+      // The user keeps drafting the next message while the request is pending.
+      fireEvent.change(textarea, { target: { value: "second draft" } });
+      assert.strictEqual(textarea.value, "second draft");
+
+      gate.resolve(true);
+      // Resolving the FIRST submit must not clear the newer lifted draft:
+      // only the exact text that was submitted is eligible to be cleared.
+      await waitFor(() =>
+        assert.strictEqual(
+          screen.getByRole("button", { name: "Send" }).hasAttribute("disabled"),
+          false,
+        ),
+      );
+      assert.strictEqual(textarea.value, "second draft");
+      assert.deepStrictEqual(
+        changes,
+        ["second draft"],
+        'no onValueChange("") clear fired against the newer draft',
+      );
+    });
+
+    it("keeps the lifted draft when onSubmit resolves false", async () => {
+      const changes: string[] = [];
+      let called = false;
+      render(
+        <TextareaComposer
+          value="keep me"
+          onValueChange={(v) => changes.push(v)}
+          onSubmit={async () => {
+            called = true;
+            return false;
+          }}
+        />,
+      );
+      fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+      await waitFor(() => assert.strictEqual(called, true));
+      assert.strictEqual(changes.length, 0, "no clear on a failed send");
+    });
   });
 });

@@ -46,7 +46,10 @@ describe("ProjectSettingsSection", () => {
     );
     assert.ok(section, "the section landmark is present");
     const text = (document.body.textContent || "").replace(/\s+/g, " ");
-    assert.match(text, /Project settings/);
+    // A2: the visible "Project settings" heading moved to the workbench's
+    // accordion Trigger — the section itself carries only the aria-label
+    // landmark and the autosave hint.
+    assert.match(text, /Changes save automatically/);
     assert.match(text, /Workspace Name/);
     assert.match(text, /Naming Conventions/i);
     // Seeded from the shared form's defaults.

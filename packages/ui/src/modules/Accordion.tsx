@@ -177,6 +177,17 @@ function Item({
 
 // ─── Trigger ──────────────────────────────────────────────────────────────────
 
+/**
+ * The accordion header's interactive button (WAI-ARIA accordion pattern: it
+ * carries `aria-expanded` and `aria-controls` for its panel).
+ *
+ * Heading semantics are the CONSUMER's job: WAI-ARIA guidance says each
+ * accordion header should be wrapped in a heading element at the level
+ * appropriate for the page's outline — e.g.
+ * `<h3><Accordion.Trigger>…</Accordion.Trigger></h3>` (typically h2–h4).
+ * The Trigger deliberately renders only the `<button>`, because the right
+ * heading level depends on where the accordion sits in the document.
+ */
 function Trigger({
   children,
   className,

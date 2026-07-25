@@ -19,6 +19,13 @@ interface TextareaComposerProps {
    * request leaves the textarea editable so the user can keep drafting.
    */
   disabled?: boolean;
+  /**
+   * Optional controlled draft (with `onValueChange`). The plan workbench lifts
+   * the draft to its host so a right-pane view switch — which unmounts the
+   * composer — can't lose typed text. Omit both to keep the internal state.
+   */
+  value?: string;
+  onValueChange?: (value: string) => void;
 }
 
 /**
@@ -35,14 +42,37 @@ export function TextareaComposer({
   inputAriaLabel,
   submitLabel = "Send",
   disabled = false,
+  value,
+  onValueChange,
 }: TextareaComposerProps) {
-  const [input, setInput] = useState("");
+  const [internalInput, setInternalInput] = useState("");
+  // Controlled iff `value` is provided (React's own convention); the internal
+  // state keeps serving callers that don't lift the draft.
+  const isControlled = value !== undefined;
+  const input = isControlled ? value : internalInput;
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Ref guard, not the state flag: two synchronous Enter presses share one
   // render, so both would read `isSubmitting === false`. The ref flips
   // immediately and blocks the second call; the state flag only drives the
   // button's disabled styling.
   const inFlightRef = useRef(false);
+  // Mirror of the rendered draft for the post-await clear comparison below —
+  // controlled mode has no functional setState to read the current value
+  // atomically. Render-phase ref write is deliberate and safe here: it's a
+  // plain mirror of props/state, never read during render, so it can't tear.
+  const inputRef = useRef(input);
+  inputRef.current = input;
+
+  const setInput = (next: string) => {
+    if (isControlled) {
+      onValueChange?.(next);
+    } else {
+      setInternalInput(next);
+    }
+    // Keep the mirror in sync immediately: a controlled parent re-renders us
+    // asynchronously, and submit() may compare before that render lands.
+    inputRef.current = next;
+  };
 
   const submit = async () => {
     // Snapshot the exact draft we're submitting: the textarea stays editable
@@ -55,10 +85,9 @@ export function TextareaComposer({
     try {
       const accepted = await onSubmit(trimmed);
       // Clear ONLY the draft we submitted. If the user typed a new draft while
-      // the request was in flight, `current !== draftAtSubmit` and we keep it —
+      // the request was in flight, the mirror differs and we keep it —
       // clearing unconditionally here would silently discard their new text.
-      if (accepted)
-        setInput((current) => (current === draftAtSubmit ? "" : current));
+      if (accepted && inputRef.current === draftAtSubmit) setInput("");
     } catch {
       // onSubmit is documented to resolve `false` on failure; a throw is an
       // unexpected contract break we treat the same way — keep the draft so the

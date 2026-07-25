@@ -63,16 +63,7 @@ export const TwoPaneLayout = React.memo(function TwoPaneLayout({
       id: "form",
       title: leftTitle,
       icon: "wizard",
-      content: (
-        <div className="flex h-full flex-col">
-          <div className="flex-1 overflow-auto">{left}</div>
-          {leftFooter && (
-            <div className="border-t border-border p-3 shrink-0">
-              {leftFooter}
-            </div>
-          )}
-        </div>
-      ),
+      content: <div className="h-full overflow-auto">{left}</div>,
     },
     {
       id: "main",
@@ -82,9 +73,17 @@ export const TwoPaneLayout = React.memo(function TwoPaneLayout({
     },
   ];
 
+  // The footer sits BELOW both tabs (locked decision §5 Q6), not inside the
+  // form tab: "Add planning session" must stay reachable while the session
+  // tab is active, and ResponsiveTabs unmounts inactive tab content.
   return (
-    <div className="flex h-full">
-      <ResponsiveTabs panels={panels} />
+    <div className="flex h-full flex-col">
+      <div className="flex-1 min-h-0 flex">
+        <ResponsiveTabs panels={panels} />
+      </div>
+      {leftFooter && (
+        <div className="border-t border-border p-3 shrink-0">{leftFooter}</div>
+      )}
     </div>
   );
 });
