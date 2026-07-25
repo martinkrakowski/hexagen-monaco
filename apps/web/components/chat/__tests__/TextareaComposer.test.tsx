@@ -1,5 +1,6 @@
 import { describe, it, afterEach } from "vitest";
 import assert from "node:assert";
+import { useState } from "react";
 import {
   render,
   screen,
@@ -322,6 +323,49 @@ describe("TextareaComposer", () => {
       );
       fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
       await waitFor(() => assert.deepStrictEqual(changes, [""]));
+    });
+
+    it("preserves a NEWER lifted draft typed while a submit is in flight", async () => {
+      // Controlled twin of the uncontrolled mid-flight test above: the
+      // inputRef skip-clear guard must also hold when the draft round-trips
+      // through the parent's onValueChange → value re-render.
+      const gate = deferred<boolean>();
+      const changes: string[] = [];
+      function Host() {
+        const [value, setValue] = useState("first message");
+        return (
+          <TextareaComposer
+            value={value}
+            onValueChange={(v) => {
+              changes.push(v);
+              setValue(v);
+            }}
+            onSubmit={async () => gate.promise}
+          />
+        );
+      }
+      render(<Host />);
+      const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+      fireEvent.keyDown(textarea, { key: "Enter" });
+      // The user keeps drafting the next message while the request is pending.
+      fireEvent.change(textarea, { target: { value: "second draft" } });
+      assert.strictEqual(textarea.value, "second draft");
+
+      gate.resolve(true);
+      // Resolving the FIRST submit must not clear the newer lifted draft:
+      // only the exact text that was submitted is eligible to be cleared.
+      await waitFor(() =>
+        assert.strictEqual(
+          screen.getByRole("button", { name: "Send" }).hasAttribute("disabled"),
+          false,
+        ),
+      );
+      assert.strictEqual(textarea.value, "second draft");
+      assert.deepStrictEqual(
+        changes,
+        ["second draft"],
+        'no onValueChange("") clear fired against the newer draft',
+      );
     });
 
     it("keeps the lifted draft when onSubmit resolves false", async () => {

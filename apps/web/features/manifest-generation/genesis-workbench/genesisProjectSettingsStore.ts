@@ -109,10 +109,12 @@ export function rekeyGenesisFormValues(
 }
 
 /**
- * Drops the snapshot. Wired into the accept screen's SUCCESSFUL save (Plan
- * Workbench C2) so a finished genesis flow can't leak its edits into the next
- * one; the abandoned paths (accept Back/Regenerate) deliberately do NOT call
- * this — surviving them is the store's whole purpose.
+ * Drops the snapshot. Two callers: the genesis footer's Back EXIT — leaving
+ * the flow must not leak an abandoned attempt's edits into a later visit
+ * that shares the seed key (the null key of unnamed entries especially) —
+ * and the accept screen's SUCCESSFUL save (Plan Workbench C2), so a finished
+ * flow can't leak either. The accept screen's Back/Regenerate deliberately
+ * do NOT call this — surviving those round trips is the store's whole purpose.
  */
 export function clearGenesisFormValues(): void {
   snapshot = null;

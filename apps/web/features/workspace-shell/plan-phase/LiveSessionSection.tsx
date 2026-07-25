@@ -276,7 +276,13 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
         )}
 
         {finalize.phase === "distilling" && (
-          <div className="space-y-2" data-testid="finalize-distilling">
+          // role="status": announce distill progress to assistive tech
+          // (consistent with the interrupted banner above).
+          <div
+            role="status"
+            className="space-y-2"
+            data-testid="finalize-distilling"
+          >
             <p className="text-sm text-muted-foreground animate-pulse">
               Distilling the session into a spec…
             </p>

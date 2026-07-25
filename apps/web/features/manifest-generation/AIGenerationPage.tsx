@@ -15,6 +15,7 @@ import { PlanWorkbench } from "@/workspace-shell/plan-phase/PlanWorkbench";
 import { GenesisProjectSettingsSection } from "./genesis-workbench/GenesisProjectSettingsSection";
 import { GenesisSourcesSection } from "./genesis-workbench/GenesisSourcesSection";
 import {
+  clearGenesisFormValues,
   loadEditedGenesisGovernance,
   rekeyGenesisFormValues,
 } from "./genesis-workbench/genesisProjectSettingsStore";
@@ -172,7 +173,16 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
       <>
         <Button
           variant="secondary"
-          onClick={() => router.push("/projects/new")}
+          onClick={() => {
+            // Back here EXITS the genesis flow, so the flow-local Section A
+            // snapshot dies with it — otherwise a later visit sharing the
+            // seed key (in particular the null key of an unnamed entry)
+            // would inherit this abandoned attempt's edits. The round trips
+            // the store exists for (the /models detour and the accept
+            // screen's Back/Regenerate) never pass through this button.
+            clearGenesisFormValues();
+            router.push("/projects/new");
+          }}
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
