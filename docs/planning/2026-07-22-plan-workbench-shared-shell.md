@@ -8,10 +8,13 @@ shipped. §2 "current state" describes the pre-arc baseline and is retained
 as-written as the planning record — the shared `Accordion`/`TextareaComposer`/
 `TwoPaneLayout` primitives and the stepless plan-phase autosave
 (`useProjectSettingsAutosave` → `updateProjectFormState`) now exist on `main`.
-Remaining phases: A2, B, C1, C2 (§4). A2 shipped one deliberate deviation
-from §3.1: `TwoPaneLayout` switches to tabs below `lg` (not `<md`) — the
-resizable desktop panes need the width; the footer-below-both-tabs contract
-shipped exactly as specified (§5 Q6).
+Phase status (§4): merged = Phase 0 (#418), A1 (#419); open PRs, not yet on
+`main` = A2 (#421), B (#422), C1 (#423); in progress = C2. A2's
+implementation (on the #421 branch) carries one deliberate deviation from
+§3.1: `TwoPaneLayout` switches to tabs below `lg` (not `<md`) — the
+resizable desktop panes need the width; its footer-below-both-tabs contract
+matches §5 Q6 exactly. Until #421 merges, `main` (and therefore this docs
+branch) still has Phase 0's in-tab footer.
 **Related:** ADR-0045 (project planning layers), PRs #403–#405, #414–#416,
 #418, #419
 
