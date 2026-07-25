@@ -165,11 +165,17 @@ function renderPlanSeam() {
 const workspaceNameInput = () =>
   document.querySelector('input[placeholder="@mycompany"]') as HTMLInputElement;
 
-// This suite runs the REAL provider stack (no timer mocks), so its waitFor
-// polls compete with 60+ parallel turbo tasks on CI — the default 1s timeout
-// starves there (observed: passes 5/5 in isolation, times out under full-load
-// runs). The generous explicit timeout only bounds the failure case; green
-// runs return as soon as the condition holds.
+// This suite runs the REAL provider stack (no timer mocks), so the initial
+// port-load waitFor competes with 60+ parallel turbo tasks on CI — a generous
+// bound there only widens the failure case; green runs return as soon as the
+// condition holds. The PORT-WRITE waitFor deliberately keeps the 1s default:
+// the historical failure there was NOT starvation (it failed identically at
+// 15s) but a permanently lost edit — the autosave watch subscription used to
+// land one Scheduler task after the fields committed, so a change dispatched
+// in that gap never armed dirtyRef (fixed: the subscription is a layout
+// effect now, live in the same commit that renders the fields). Post-fix the
+// write lands in ~one poll; a long bound would only waste 15s per genuine
+// regression.
 const CI_SAFE_TIMEOUT = { timeout: 15_000 };
 
 describe("Plan-phase form seam (PR A1 integration)", () => {
@@ -217,7 +223,7 @@ describe("Plan-phase form seam (PR A1 integration)", () => {
         "@seam-proof",
         "the edit reached the persistence port",
       );
-    }, CI_SAFE_TIMEOUT);
+    });
     // formState-only: the real generated manifest was NOT regenerated from the
     // form (the reason this path is updateProjectFormState, not updateProject).
     assert.strictEqual(
