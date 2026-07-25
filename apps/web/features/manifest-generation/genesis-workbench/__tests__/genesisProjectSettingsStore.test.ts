@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 import { deriveWorkspaceName } from "@hexagen/manifest-generation";
 import {
   clearGenesisFormValues,
+  loadEditedGenesisGovernance,
   loadGenesisFormValues,
   rekeyGenesisFormValues,
   saveGenesisFormValues,
@@ -101,5 +102,111 @@ describe("genesisProjectSettingsStore", () => {
     );
     clearGenesisFormValues();
     assert.equal(loadGenesisFormValues("Vellum Notes"), null);
+  });
+});
+
+// Plan Workbench C2 (locked plan §5 Q5): the field-level diff behind the
+// hand-off's identity reconciliation. Only fields the user actually EDITED
+// (snapshot differs from THIS flow's own seed) may outrank the
+// carriedName-derived and AI-derived values.
+describe("loadEditedGenesisGovernance", () => {
+  it("reports nothing when the store is empty or belongs to a different flow", () => {
+    assert.deepEqual(loadEditedGenesisGovernance("Vellum Notes"), {});
+
+    saveGenesisFormValues(
+      "Other Project",
+      seedGenesisFormValues("Other Project"),
+    );
+    assert.deepEqual(loadEditedGenesisGovernance("Vellum Notes"), {});
+    assert.deepEqual(loadEditedGenesisGovernance(null), {});
+  });
+
+  it("reports nothing for an UNEDITED snapshot — untouched seed defaults (e.g. the bypassed flow's @hexagen) must never masquerade as user edits", () => {
+    saveGenesisFormValues(null, seedGenesisFormValues(null));
+    assert.deepEqual(loadEditedGenesisGovernance(null), {});
+
+    saveGenesisFormValues(
+      "Vellum Notes",
+      seedGenesisFormValues("Vellum Notes"),
+    );
+    assert.deepEqual(loadEditedGenesisGovernance("Vellum Notes"), {});
+  });
+
+  it("reports exactly the fields that differ from the seed, trimming identity values", () => {
+    const values = seedGenesisFormValues("Vellum Notes");
+    values.governance.workspaceName = "  vellum-edited  ";
+    values.governance.packageManager = "pnpm";
+    saveGenesisFormValues("Vellum Notes", values);
+
+    assert.deepEqual(loadEditedGenesisGovernance("Vellum Notes"), {
+      workspaceName: "vellum-edited",
+      packageManager: "pnpm",
+    });
+  });
+
+  it("treats a blanked identity field as NOT edited — an emptied value must fall through the precedence chain, never become system/scope", () => {
+    const values = seedGenesisFormValues("Vellum Notes");
+    values.governance.workspaceName = "   ";
+    values.governance.namespacePrefix = "";
+    saveGenesisFormValues("Vellum Notes", values);
+
+    assert.deepEqual(loadEditedGenesisGovernance("Vellum Notes"), {});
+  });
+
+  it("keeps the diff baseline ACROSS a rekey — untouched @hexagen seed defaults must not surface as edits under the manufactured name on the second hand-off", () => {
+    // Bypassed flow: null seed, user edits ONLY packageManager.
+    const values = seedGenesisFormValues(null);
+    values.governance.packageManager = "pnpm";
+    saveGenesisFormValues(null, values);
+
+    // Hand-off #1 rekeys the snapshot to the manufactured AI-derived name.
+    rekeyGenesisFormValues(null, "test-system");
+
+    // Hand-off #2 (after Back/Regenerate re-attached ?name=test-system):
+    // the baseline must still be the NULL seed the flow started from — a
+    // baseline recomputed from "test-system" would report the untouched
+    // "@hexagen" identity defaults as edits and clobber system/scope.
+    assert.deepEqual(loadEditedGenesisGovernance("test-system"), {
+      packageManager: "pnpm",
+    });
+  });
+
+  it("keeps the ORIGINAL baseline when the rekeyed snapshot is overwritten by later same-key saves (the remounted form keeps mirroring edits)", () => {
+    const values = seedGenesisFormValues(null);
+    values.governance.packageManager = "pnpm";
+    saveGenesisFormValues(null, values);
+    rekeyGenesisFormValues(null, "test-system");
+
+    // Post-Back remount: the section saves under the re-attached name key.
+    const later = structuredClone(values);
+    later.governance.workspaceTemplate = "strict-enterprise";
+    saveGenesisFormValues("test-system", later);
+
+    assert.deepEqual(loadEditedGenesisGovernance("test-system"), {
+      packageManager: "pnpm",
+      workspaceTemplate: "strict-enterprise",
+    });
+  });
+
+  it("reports template and naming-convention edits (formValues-only fields), copying the naming object", () => {
+    const values = seedGenesisFormValues(null);
+    values.governance.workspaceTemplate = "strict-enterprise";
+    values.governance.namingConventions.adapterSuffix = ".gateway.ts";
+    saveGenesisFormValues(null, values);
+
+    const edited = loadEditedGenesisGovernance(null);
+    assert.equal(edited.workspaceTemplate, "strict-enterprise");
+    assert.deepEqual(edited.namingConventions, {
+      contextDirectoryPattern: "packages/",
+      adapterSuffix: ".gateway.ts",
+    });
+    // A defensive copy: the caller mutating the result must not write back
+    // into the live snapshot.
+    assert.notEqual(
+      edited.namingConventions,
+      values.governance.namingConventions,
+    );
+    assert.equal(edited.workspaceName, undefined);
+    assert.equal(edited.namespacePrefix, undefined);
   });
 });

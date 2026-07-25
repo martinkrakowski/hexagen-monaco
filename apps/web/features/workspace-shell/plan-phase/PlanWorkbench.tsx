@@ -22,6 +22,14 @@ export interface PlanWorkbenchProps {
   settings: ReactNode;
   /** Section B content — the live-session row + archived layer rows. */
   sessions: ReactNode;
+  /**
+   * Optional third accordion section — "Generation options" (Plan Workbench
+   * C2, plan §3.6). Only the GENESIS host fills it (the deployment /
+   * max-contexts / engine controls relocated out of the right pane); the
+   * plan-phase host omits it and the section never renders — zero behavior
+   * change for `phase=plan`.
+   */
+  generationOptions?: ReactNode;
   /** Pinned under the left column (desktop) / under both tabs (mobile). */
   leftFooter?: ReactNode;
   /** The right pane's main area (live session view or a layer reader). */
@@ -45,6 +53,7 @@ export interface PlanWorkbenchProps {
 export function PlanWorkbench({
   settings,
   sessions,
+  generationOptions,
   leftFooter,
   main,
   composer,
@@ -59,10 +68,15 @@ export function PlanWorkbench({
       left={
         <Accordion.Root
           type="multiple"
-          // Both sections start open: the workbench is the plan phase's whole
+          // All sections start open: the workbench is the plan phase's whole
           // surface, and a collapsed-by-default settings section would hide
-          // the A1 autosave fields behind an extra click.
-          defaultValue={["settings", "sessions"]}
+          // the A1 autosave fields behind an extra click. "generation-options"
+          // is listed unconditionally — the uncontrolled Root captures
+          // defaultValue once at mount, and the genesis host's slot content
+          // can appear AFTER mount (it is absent during generation), so the
+          // default must already cover it; a value with no matching item is
+          // inert for the plan-phase host.
+          defaultValue={["settings", "sessions", "generation-options"]}
           className="px-4"
         >
           <Accordion.Item value="settings">
@@ -76,12 +90,23 @@ export function PlanWorkbench({
                 pending edits on unmount. */}
             <Accordion.Content>{settings}</Accordion.Content>
           </Accordion.Item>
-          <Accordion.Item value="sessions" className="border-b-0">
+          <Accordion.Item
+            value="sessions"
+            className={generationOptions ? undefined : "border-b-0"}
+          >
             <h2>
               <Accordion.Trigger>Sessions &amp; sources</Accordion.Trigger>
             </h2>
             <Accordion.Content>{sessions}</Accordion.Content>
           </Accordion.Item>
+          {generationOptions && (
+            <Accordion.Item value="generation-options" className="border-b-0">
+              <h2>
+                <Accordion.Trigger>Generation options</Accordion.Trigger>
+              </h2>
+              <Accordion.Content>{generationOptions}</Accordion.Content>
+            </Accordion.Item>
+          )}
         </Accordion.Root>
       }
       right={

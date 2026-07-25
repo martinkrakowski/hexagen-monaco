@@ -398,11 +398,6 @@ dialog::backdrop {
     0 0 0 4px hsl(var(--ring));
 }
 
-.textarea-glow:focus-within {
-  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.5), 0 0 20px -4px hsl(var(--primary) / 0.2);
-  transition: box-shadow 0.2s ease;
-}
-
 /* ── Animation utilities ───────────────────────────────────────────────────── */
 @keyframes slide {
   from {
@@ -526,15 +521,6 @@ dialog::backdrop {
   .detail-rolodex-enter {
     opacity: 1;
   }
-  .textarea-glow:focus-within {
-    transition: none;
-  }
-}
-
-/* ── Resizable Description Textarea ──────────────────────────────────────────── */
-.description-textarea {
-  min-height: var(--textarea-min-height);
-  max-height: var(--textarea-max-height);
 }
 
 /* ── Mermaid Source Panel ─────────────────────────────────────────────────────── */

@@ -23,8 +23,22 @@ import { emptyFormValues } from "@/project-wizard/config";
  * null-keyed snapshot to that name so the flow's OWN round trip still finds
  * its edits (the mismatch is inflicted by the flow, not by a new flow).
  */
+type GenesisGovernance = ProjectConfig["governance"];
+
 interface GenesisFormSnapshot {
   seedName: string | null;
+  /**
+   * The governance this flow was originally SEEDED with — the baseline the
+   * edited-vs-seed diff (`loadEditedGenesisGovernance`) compares against.
+   * Captured once, when the snapshot is first created for a flow, and carried
+   * UNCHANGED across same-key overwrites and `rekeyGenesisFormValues`:
+   * recomputing it from the current key would silently shift the baseline
+   * after a bypassed-flow rekey (null → manufactured name), making the
+   * untouched `@hexagen` seed defaults look like user edits on the second
+   * hand-off — exactly the untouched-seed-default clobber the field-level
+   * diff exists to prevent.
+   */
+  seedGovernance: GenesisGovernance;
   values: ProjectConfig;
 }
 
@@ -58,7 +72,14 @@ export function saveGenesisFormValues(
   seedName: string | null,
   values: ProjectConfig,
 ): void {
-  snapshot = { seedName, values };
+  // Preserve the existing diff baseline when overwriting the same flow's
+  // snapshot (see GenesisFormSnapshot.seedGovernance); only a NEW flow
+  // (different key, or empty store) captures a fresh one from its own seed.
+  const seedGovernance =
+    snapshot !== null && snapshot.seedName === seedName
+      ? snapshot.seedGovernance
+      : seedGenesisFormValues(seedName).governance;
+  snapshot = { seedName, seedGovernance, values };
 }
 
 /**
@@ -69,22 +90,99 @@ export function saveGenesisFormValues(
  * Section A edits must follow that name or the remounted page would miss
  * the snapshot and reseed, wiping them. No-ops when the snapshot is empty
  * or belongs to a different flow (its key is not `fromSeed`).
+ *
+ * The `seedGovernance` diff baseline travels with the snapshot UNCHANGED —
+ * the rekey moves the same flow's edits under a new key, it does not start
+ * a new flow, so the edited-vs-seed comparison must keep judging against
+ * the seed the user actually started from.
  */
 export function rekeyGenesisFormValues(
   fromSeed: string | null,
   toSeed: string | null,
 ): void {
   if (snapshot === null || snapshot.seedName !== fromSeed) return;
-  snapshot = { seedName: toSeed, values: snapshot.values };
+  snapshot = {
+    seedName: toSeed,
+    seedGovernance: snapshot.seedGovernance,
+    values: snapshot.values,
+  };
 }
 
 /**
- * Drops the snapshot. Wired into the genesis footer's Back exit — leaving
+ * Drops the snapshot. Two callers: the genesis footer's Back EXIT — leaving
  * the flow must not leak an abandoned attempt's edits into a later visit
- * that shares the seed key (the null key of unnamed entries especially).
- * PR C2's identity reconciliation additionally wires this into the
- * accept-save completion so a finished flow can't leak either.
+ * that shares the seed key (the null key of unnamed entries especially) —
+ * and the accept screen's SUCCESSFUL save (Plan Workbench C2), so a finished
+ * flow can't leak either. The accept screen's Back/Regenerate deliberately
+ * do NOT call this — surviving those round trips is the store's whole purpose.
  */
 export function clearGenesisFormValues(): void {
   snapshot = null;
+}
+
+/**
+ * The Section A governance fields whose snapshot values differ from the
+ * flow's own seed — i.e. the fields the user actually EDITED (Plan Workbench
+ * C2, locked plan §5 Q5). `handleUseManifest` gives these top precedence
+ * (edited > carriedName-derived > AI-derived).
+ *
+ * Field-level comparison against the flow's ORIGINAL seed matters: the
+ * snapshot exists
+ * after ANY Section A edit, so treating its whole governance object as
+ * "edited" would let an untouched seed default (e.g. the bypassed flow's
+ * `@hexagen` workspaceName, or the seed's template) clobber the AI-derived
+ * value the user never overrode. Blank/whitespace identity values also count
+ * as not-edited — an emptied field must fall through the precedence chain,
+ * never become the manifest's `system`/`scope`.
+ *
+ * The baseline is the snapshot's own `seedGovernance` — NOT a seed recomputed
+ * from the current key: after a bypassed-flow rekey the current key's seed
+ * (`createBlankProjectConfig(manufacturedName)`) differs from the seed the
+ * user actually started from on exactly the identity fields, and diffing
+ * against it would report the untouched defaults as edits on the second
+ * hand-off.
+ *
+ * workspaceDescription is deliberately excluded: the AI-derived manifest
+ * description is the accept screen's source of truth and its reconciliation
+ * is out of C2's scope.
+ */
+export interface EditedGenesisGovernance {
+  workspaceName?: string;
+  namespacePrefix?: string;
+  packageManager?: GenesisGovernance["packageManager"];
+  workspaceTemplate?: GenesisGovernance["workspaceTemplate"];
+  namingConventions?: GenesisGovernance["namingConventions"];
+}
+
+export function loadEditedGenesisGovernance(
+  seedName: string | null,
+): EditedGenesisGovernance {
+  if (snapshot === null || snapshot.seedName !== seedName) return {};
+  const seed = snapshot.seedGovernance;
+  const current = snapshot.values.governance;
+  const edited: EditedGenesisGovernance = {};
+
+  const workspaceName = current.workspaceName.trim();
+  if (workspaceName && workspaceName !== seed.workspaceName) {
+    edited.workspaceName = workspaceName;
+  }
+  const namespacePrefix = current.namespacePrefix.trim();
+  if (namespacePrefix && namespacePrefix !== seed.namespacePrefix) {
+    edited.namespacePrefix = namespacePrefix;
+  }
+  if (current.packageManager !== seed.packageManager) {
+    edited.packageManager = current.packageManager;
+  }
+  if (current.workspaceTemplate !== seed.workspaceTemplate) {
+    edited.workspaceTemplate = current.workspaceTemplate;
+  }
+  if (
+    current.namingConventions.contextDirectoryPattern !==
+      seed.namingConventions.contextDirectoryPattern ||
+    current.namingConventions.adapterSuffix !==
+      seed.namingConventions.adapterSuffix
+  ) {
+    edited.namingConventions = { ...current.namingConventions };
+  }
+  return edited;
 }

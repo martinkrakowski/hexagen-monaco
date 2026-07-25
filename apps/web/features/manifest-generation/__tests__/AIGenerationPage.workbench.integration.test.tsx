@@ -25,6 +25,7 @@ import {
   screen,
   fireEvent,
   waitFor,
+  within,
   act,
 } from "@testing-library/react";
 import { deriveWorkspaceName } from "@hexagen/manifest-generation";
@@ -65,6 +66,36 @@ vi.mock("../../../app/lib/wire.client", async (importOriginal) => ({
   hasServerLLMAccessKey: vi.fn(() => true),
   isLocalLLMReady: vi.fn(() => false),
 }));
+
+// Passthrough shim over the REAL flow-state machine: every test runs the
+// actual useModelSelectionFlowState (override null), but the non-idle
+// flow-state test below needs an interstitial state (e.g. "error") that no
+// in-page interaction can reach through this harness — the override forces
+// the returned STATE only, leaving the machine and its actions real.
+const flowStateOverride = vi.hoisted(() => ({
+  current: null as Record<string, unknown> | null,
+}));
+vi.mock(
+  "../ModelSelectionFlow/useModelSelectionFlowState",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("../ModelSelectionFlow/useModelSelectionFlowState")
+      >();
+    return {
+      ...actual,
+      useModelSelectionFlowState: (
+        ...args: Parameters<typeof actual.useModelSelectionFlowState>
+      ) => {
+        const [state, actions] = actual.useModelSelectionFlowState(...args);
+        return [
+          (flowStateOverride.current as typeof state | null) ?? state,
+          actions,
+        ] as const;
+      },
+    };
+  },
+);
 
 import { AIGenerationPage } from "../AIGenerationPage";
 import { usePendingManifest } from "../store/usePendingManifest";
@@ -187,6 +218,7 @@ beforeEach(() => {
   nav.searchParams = new URLSearchParams("name=Vellum Notes");
   fetchMock.mockClear();
   fetchMock.mockImplementation(pendingForever);
+  flowStateOverride.current = null;
 });
 
 describe("AIGenerationPage — Plan Workbench C1", () => {
@@ -489,5 +521,334 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     assert.ok(screen.getByText("Source"));
     assert.ok(screen.getByText("# Vellum spec"));
     assert.equal(screen.queryByText(/second line is not excerpted/), null);
+  });
+});
+
+// Plan Workbench C2: the generation options leave the right-pane main body for
+// a THIRD left-column accordion section, and the hand-off reconciles EDITED
+// Section A identity into both the saved YAML and the wizardData (locked plan
+// §5 Q5: edited > carriedName-derived > AI-derived).
+describe("AIGenerationPage — Plan Workbench C2", () => {
+  /** The relocated options section's accordion panel (Accordion.Content
+   * renders role="region" named by its trigger). */
+  const optionsRegion = () =>
+    screen.getByRole("region", { name: "Generation options" });
+
+  const workspaceNameInput = () =>
+    document.querySelector(
+      'input[placeholder="@mycompany"]',
+    ) as HTMLInputElement;
+  const namespacePrefixInput = () =>
+    document.querySelector('input[placeholder="@hexagen"]') as HTMLInputElement;
+
+  /** Drive a full run to the parked telemetry view and click the footer's
+   * explicit Next — the hand-off that fills usePendingManifest. Callers must
+   * mockStageDone() first. */
+  const generateAndHandOff = async () => {
+    fireEvent.change(composerTextarea(), {
+      target: { value: VALID_DESCRIPTION },
+    });
+    submitComposer();
+    const nextButton = await waitFor(() =>
+      screen.getByRole("button", { name: "Next" }),
+    );
+    fireEvent.click(nextButton);
+  };
+
+  it("relocates the generation options into a third left-column accordion section, below the two shared ones — and the example cards stay in the main body", () => {
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+
+    // The section exists as an accordion trigger + open-by-default panel,
+    // ORDERED after Project settings and Sessions & sources.
+    const settings = screen.getByRole("button", { name: /project settings/i });
+    const sessions = screen.getByRole("button", {
+      name: /sessions & sources/i,
+    });
+    const options = screen.getByRole("button", { name: "Generation options" });
+    assert.ok(
+      settings.compareDocumentPosition(sessions) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    assert.ok(
+      sessions.compareDocumentPosition(options) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+
+    // Every relocated control lives INSIDE the panel — pinned in two halves:
+    // the GLOBAL screen.getBy* queries throw on multiple matches, so a copy
+    // left behind in the right-pane main body fails here (a within(region)
+    // query would never see it), and region.contains pins the survivor to
+    // the accordion panel.
+    const region = optionsRegion();
+    const deployment = screen.getByLabelText("Deployment (optional)");
+    assert.ok(region.contains(deployment));
+    const maxContexts = screen.getByLabelText("Max Bounded Contexts");
+    assert.ok(region.contains(maxContexts));
+    const engineGroup = screen.getByRole("radiogroup", {
+      name: "Execution engine",
+    });
+    assert.ok(region.contains(engineGroup));
+    const changeModel = screen.getByRole("button", { name: /change model/i });
+    assert.ok(region.contains(changeModel));
+
+    // §3.6 placement confirmation: the example cards STAY in the main view
+    // body above the composer — not in the left column's new section.
+    const quickExamples = screen.getByText("Quick Examples");
+    assert.equal(region.contains(quickExamples), false);
+    assert.ok(
+      quickExamples.compareDocumentPosition(composerTextarea()) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      "example cards render above the composer",
+    );
+  });
+
+  it("keeps the relocated controls WIRED: the engine picker drives the store, Change Model detours through /models with ?name=, and the deployment value rides the staged request body", async () => {
+    mockStageDone();
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+    const region = optionsRegion();
+
+    // Engine picker → useExecutionEngine (the same store the flow reads).
+    fireEvent.click(within(region).getByRole("radio", { name: "Cloud" }));
+    assert.equal(useExecutionEngine.getState().engine, "cloud");
+    // Back to auto so the submit below takes the plain cloud fast-pass.
+    fireEvent.click(within(region).getByRole("radio", { name: "Auto" }));
+    assert.equal(useExecutionEngine.getState().engine, "auto");
+
+    // onChangeModel → navigateToModelSelection(false): the /models detour,
+    // still carrying ?name= (same contract as the explicit-local detour).
+    fireEvent.click(
+      within(region).getByRole("button", { name: /change model/i }),
+    );
+    assert.deepEqual(nav.push.mock.calls, [
+      ["/projects/new/ai/models?name=Vellum%20Notes"],
+    ]);
+    nav.push.mockClear();
+
+    // Deployment edit feeds handleGenerate's options — asserted at the wire:
+    // the staged endpoint's JSON body carries the edited value.
+    fireEvent.change(within(region).getByLabelText("Deployment (optional)"), {
+      target: { value: "AWS Lambda" },
+    });
+    fireEvent.change(composerTextarea(), {
+      target: { value: VALID_DESCRIPTION },
+    });
+    submitComposer();
+    await waitFor(() => assert.equal(stageCalls().length, 1));
+    const [, init] = stageCalls()[0];
+    const body = JSON.parse(String((init as RequestInit).body));
+    assert.equal(body.deployment, "AWS Lambda");
+  });
+
+  it("keeps the options section mounted but DISABLED while generating", async () => {
+    // Default pending-forever fetch: the run stays in flight.
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+    fireEvent.change(composerTextarea(), {
+      target: { value: VALID_DESCRIPTION },
+    });
+    submitComposer();
+    await waitFor(() => assert.ok(screen.getByText("Generating Manifest")));
+
+    // The left column persists through the generating screen; its controls
+    // must not accept edits that could desync from the in-flight request.
+    const region = optionsRegion();
+    const deployment = within(region).getByLabelText(
+      "Deployment (optional)",
+    ) as HTMLInputElement;
+    assert.equal(deployment.disabled, true);
+    const maxContexts = within(region).getByLabelText(
+      "Max Bounded Contexts",
+    ) as HTMLInputElement;
+    assert.equal(maxContexts.disabled, true);
+    for (const radio of within(region).getAllByRole("radio")) {
+      assert.equal((radio as HTMLButtonElement).disabled, true);
+    }
+    assert.equal(
+      (
+        within(region).getByRole("button", {
+          name: /change model/i,
+        }) as HTMLButtonElement
+      ).disabled,
+      true,
+    );
+  });
+
+  it("identity reconciliation (locked §5 Q5): EDITED Section A identity wins over the carried name — saved YAML system/scope and wizardData agree, formValues-only fields never invent YAML", async () => {
+    mockStageDone();
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+
+    // Edit both identity fields plus a formValues-only field in Section A.
+    fireEvent.change(workspaceNameInput(), {
+      target: { value: "vellum-edited" },
+    });
+    fireEvent.change(namespacePrefixInput(), {
+      target: { value: "@vellum-scope" },
+    });
+    fireEvent.change(screen.getByLabelText("Package Manager"), {
+      target: { value: "pnpm" },
+    });
+
+    await generateAndHandOff();
+
+    const state = usePendingManifest.getState();
+    // The saved manifest string and the wizardData MUST agree on identity —
+    // the edits, not the carried name's derivation or the AI's test-system.
+    assert.match(state.yaml as string, /^system: vellum-edited$/m);
+    assert.match(state.yaml as string, /^scope: ['"]?@vellum-scope['"]?$/m);
+    assert.equal(state.formValues?.governance?.workspaceName, "vellum-edited");
+    assert.equal(
+      state.formValues?.governance?.namespacePrefix,
+      "@vellum-scope",
+    );
+    // packageManager has NO YAML home (locked §5 Q5): the edit rides
+    // wizardData into the save, and no governance section is invented.
+    assert.equal(state.formValues?.governance?.packageManager, "pnpm");
+    assert.doesNotMatch(state.yaml as string, /governance:|packageManager/);
+    // The carried name still names the PROJECT — identity edits do not
+    // rename it.
+    assert.equal(state.projectName, "Vellum Notes");
+    assert.deepEqual(nav.push.mock.calls, [["/projects/new/ai/accept"]]);
+  });
+
+  it("per-field precedence: the edited identity field wins while the untouched one falls back to the carried name's derivation", async () => {
+    mockStageDone();
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+
+    // Only workspaceName is edited; namespacePrefix keeps its seed value.
+    fireEvent.change(workspaceNameInput(), {
+      target: { value: "vellum-edited" },
+    });
+
+    await generateAndHandOff();
+
+    const state = usePendingManifest.getState();
+    const slug = deriveWorkspaceName("Vellum Notes").name;
+    assert.match(state.yaml as string, /^system: vellum-edited$/m);
+    assert.match(
+      state.yaml as string,
+      new RegExp(`^scope: ['"]?@${slug}['"]?$`, "m"),
+    );
+    assert.equal(state.formValues?.governance?.namespacePrefix, `@${slug}`);
+  });
+
+  it("bypassed-name guard: an unrelated Section A edit must NOT let untouched seed identity defaults clobber the AI-derived system/scope", async () => {
+    // No ?name=: the seed's identity defaults (emptyFormValues' "@hexagen")
+    // were never typed by the user. Editing ONLY packageManager creates the
+    // snapshot — a whole-object "snapshot exists → its values win" would now
+    // stamp "@hexagen" over the AI's test-system.
+    nav.searchParams = new URLSearchParams("");
+    mockStageDone();
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+
+    fireEvent.change(screen.getByLabelText("Package Manager"), {
+      target: { value: "pnpm" },
+    });
+
+    await generateAndHandOff();
+
+    const state = usePendingManifest.getState();
+    // Identity stays AI-derived, in YAML and wizardData alike.
+    assert.match(state.yaml as string, /^system: test-system$/m);
+    assert.match(state.yaml as string, /^scope: ['"]?@hexagen\/test['"]?$/m);
+    assert.equal(state.formValues?.governance?.workspaceName, "test-system");
+    // The edit the user DID make still lands.
+    assert.equal(state.formValues?.governance?.packageManager, "pnpm");
+    assert.equal(state.projectName, "test-system");
+  });
+
+  it("carried-name tier in isolation: with Section A untouched, the hand-off derives system/scope from ?name= (the default flow's pre-C2 contract)", async () => {
+    // No Section A edits at all — no snapshot, so `edited` is empty and the
+    // precedence chain's MIDDLE tier must carry alone: dropping the
+    // carriedSlug fallback (or the whole identity-rewrite block) would leave
+    // the AI's test-system in the saved YAML.
+    mockStageDone();
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+
+    await generateAndHandOff();
+
+    const state = usePendingManifest.getState();
+    const slug = deriveWorkspaceName("Vellum Notes").name;
+    assert.match(state.yaml as string, new RegExp(`^system: ${slug}$`, "m"));
+    assert.match(
+      state.yaml as string,
+      new RegExp(`^scope: ['"]?@${slug}['"]?$`, "m"),
+    );
+    assert.equal(state.formValues?.governance?.workspaceName, slug);
+    assert.equal(state.formValues?.governance?.namespacePrefix, `@${slug}`);
+    assert.equal(state.projectName, "Vellum Notes");
+  });
+
+  it("bypassed-flow round trip: after the rekey, a second hand-off under the re-attached ?name= still reports only the real edit — untouched @hexagen seed defaults never clobber system/scope", async () => {
+    // Pass 1 — bypassed entry, edit ONLY packageManager (identity untouched:
+    // the null seed's "@hexagen" defaults). This is one step PAST the
+    // bypassed-name guard test above: the hand-off rekeys the snapshot to
+    // the manufactured "test-system".
+    nav.searchParams = new URLSearchParams("");
+    mockStageDone();
+    const { unmount } = render(
+      <AIGenerationPage llmContext={makeLlmContext()} />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Package Manager"), {
+      target: { value: "pnpm" },
+    });
+    await generateAndHandOff();
+    assert.match(
+      usePendingManifest.getState().yaml as string,
+      /^system: test-system$/m,
+    );
+
+    // Accept-screen Back: clears the pending manifest and re-attaches the
+    // manufactured name as ?name=test-system; the page remounts.
+    unmount();
+    usePendingManifest.getState().clear();
+    nav.push.mockClear();
+    nav.searchParams = new URLSearchParams("name=test-system");
+
+    // Pass 2 — regenerate and hand off again. The diff baseline must still
+    // be the NULL seed the flow started from: a baseline recomputed from the
+    // "test-system" key would report the untouched "@hexagen" identity
+    // defaults as edits and stamp them over system/scope.
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+    await generateAndHandOff();
+
+    const state = usePendingManifest.getState();
+    const slug = deriveWorkspaceName("test-system").name;
+    assert.match(state.yaml as string, new RegExp(`^system: ${slug}$`, "m"));
+    assert.match(
+      state.yaml as string,
+      new RegExp(`^scope: ['"]?@${slug}['"]?$`, "m"),
+    );
+    assert.doesNotMatch(state.yaml as string, /^system: @hexagen$/m);
+    assert.equal(state.formValues?.governance?.workspaceName, slug);
+    assert.equal(state.formValues?.governance?.namespacePrefix, `@${slug}`);
+    // The one REAL edit still rides the second hand-off too.
+    assert.equal(state.formValues?.governance?.packageManager, "pnpm");
+    assert.equal(state.projectName, "test-system");
+  });
+
+  it("non-idle flow states drop the generationOptions slot: the interstitial fills the main view with NO Generation options section and no composer", () => {
+    // No in-page interaction reaches the StateView interstitials through
+    // this harness (the closest paths stay idle), so force the machine's
+    // returned state via the passthrough shim — the slots contract under
+    // test (types.ts: generationOptions "absent in non-idle flow states")
+    // belongs to GenerateWithAi's rendering, not to how the state was
+    // reached.
+    flowStateOverride.current = {
+      state: "error",
+      error: "engine exploded",
+      errorCode: null,
+      isModelReady: false,
+    };
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+
+    // The interstitial is the main view…
+    assert.ok(screen.getByText("engine exploded"));
+    // …and the left column's third section is NOT rendered alongside it,
+    // nor is the composer.
+    assert.equal(
+      screen.queryByRole("button", { name: "Generation options" }),
+      null,
+    );
+    assert.equal(screen.queryByLabelText("Project description"), null);
   });
 });
