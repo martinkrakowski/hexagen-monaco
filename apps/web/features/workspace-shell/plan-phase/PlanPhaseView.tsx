@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Button,
   Dialog,
@@ -22,7 +23,11 @@ import { PlanWorkbench, type WorkbenchMainView } from "./PlanWorkbench";
 import { ProjectSettingsSection } from "./ProjectSettingsSection";
 import { SessionsSourcesList } from "./SessionsSourcesList";
 import { PlanLayerReader } from "./PlanLayerReader";
-import { AddPlanningSessionDialog } from "./AddPlanningSessionDialog";
+import {
+  AddPlanningSessionView,
+  EMPTY_ADD_SESSION_DRAFT,
+  type AddSessionDraft,
+} from "./AddPlanningSessionView";
 import { LiveSessionSection } from "./LiveSessionSection";
 import { usePlanningSession } from "./session/usePlanningSession";
 import type { NewProjectLayer } from "@/hooks/useSavedProjects";
@@ -42,10 +47,11 @@ export interface PlanPhaseViewProps {
 
 /**
  * The "Plan" phase of the saved-project workspace, as the two-pane WORKBENCH
- * (Plan Workbench A2): this component is the WIRING HOST — it owns every
+ * (Plan Workbench A2/B): this component is the WIRING HOST — it owns every
  * context read (wizard lifecycle), the single usePlanningSession instance,
- * the right-pane view selection, and the shared composer draft, and feeds the
- * purely presentational PlanWorkbench through adapter props.
+ * the right-pane view selection (the `?layer=` URL param + the transient
+ * add-session overlay), and the shared composer draft, and feeds the purely
+ * presentational PlanWorkbench through adapter props.
  *
  * Reads the project LIVE from the wizard lifecycle context — the same
  * useSavedProjects instance the wizard autosave writes through — so an added
@@ -66,25 +72,66 @@ export function PlanPhaseView({
     layersPersistError,
     clearLayersPersistError,
   } = useWizardLifecycleContext();
-  const [dialogOpen, setDialogOpen] = useState(false);
+  // The add-session view (plan req 4b) is TRANSIENT local state layered over
+  // the URL-derived view: it is never persisted to `?layer=`, so leaving it
+  // (Cancel, row click, success) restores whatever the URL says.
+  const [isAddingSession, setIsAddingSession] = useState(false);
+  // The add-session DRAFT is lifted here for the same reason as composerDraft
+  // below: the view is conditionally rendered, so a host-level leave (a
+  // sessions-row click) unmounts it mid-edit — and a pasted transcript is
+  // hard to reconstruct. The old always-mounted dialog kept this state alive
+  // structurally; the inline view gets it from the host. Only a successful
+  // submit resets it.
+  const [addSessionDraft, setAddSessionDraft] = useState<AddSessionDraft>(
+    EMPTY_ADD_SESSION_DRAFT,
+  );
+  // True while an add-session submit's addLayer write is in flight — the port
+  // of the old dialog's `dismissible={!isSubmitting}` gate: the leave paths
+  // below ignore row clicks mid-write, so the form can't be unmounted between
+  // submit and resolution (and the success arm can't yank a selection the
+  // user just made out from under them).
+  const [isAddSubmitting, setIsAddSubmitting] = useState(false);
   // persistError is instance-wide (any saved-projects write can set it, e.g. a
-  // failed wizard autosave). Show it in the dialog only after a submit from
-  // THIS dialog actually failed — never a stale error from an earlier,
-  // unrelated write.
+  // failed wizard autosave). Show it in the add-session view only after a
+  // submit from THIS view actually failed — never a stale error from an
+  // earlier, unrelated write.
   const [submitFailed, setSubmitFailed] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProjectLayer | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  // Right-pane selection — LOCAL state in A2; PR B moves it to a `?layer=`
-  // URL param (subscribed HERE, never through ProjectWorkspaceLayout props —
-  // its React.memo comparator hand-picks props and would swallow updates).
-  const [mainView, setMainView] = useState<WorkbenchMainView>({
-    kind: "live",
-  });
   // ONE shared composer draft, lifted to the host: the composer unmounts on a
   // view switch (and on the mobile tab switch), and typed text must survive.
   const [composerDraft, setComposerDraft] = useState("");
   const [startError, setStartError] = useState<string | null>(null);
+
+  // ── `?layer=` selection (PR B) ─────────────────────────────────────────────
+  // Subscribed HERE, inside the plan host — never threaded through
+  // ProjectWorkspaceLayout props: its React.memo comparator hand-picks props
+  // (documented trap at DerivedFromPlanLink.tsx:14-19) and would swallow
+  // updates. useSearchParams re-renders this component directly.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // Snapshot as a string: stable across renders while the URL is unchanged,
+  // so the callbacks/effects below don't re-mint on the params OBJECT.
+  const search = searchParams.toString();
+  const layerParam = searchParams.get("layer");
+
+  /**
+   * Rewrite only the `layer` param (null clears it), preserving every other
+   * param (`project`, `phase`, `view`…) — always via router.REPLACE: selection
+   * is view state, and push would spray one history entry per row click.
+   */
+  const replaceLayerParam = useCallback(
+    (layerId: string | null) => {
+      const params = new URLSearchParams(search);
+      if (layerId === null) params.delete("layer");
+      else params.set("layer", layerId);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname);
+    },
+    [search, router, pathname],
+  );
 
   const layers = useMemo(
     () => loadedProject?.layers ?? [],
@@ -102,17 +149,65 @@ export function PlanPhaseView({
     updateLayer,
   });
 
-  // View-union guards: the active session's layer always normalizes to the
-  // live view (its turns must never render twice), and an unknown/deleted id
-  // falls back to live instead of a blank pane.
-  const resolvedView: WorkbenchMainView = useMemo(() => {
-    if (mainView.kind === "layer") {
-      if (mainView.layerId === session.activeLayerId) return { kind: "live" };
-      if (!layers.some((l) => l.id === mainView.layerId))
-        return { kind: "live" };
+  // View-union guards on the URL-derived selection: the active session's
+  // layer always normalizes to the live view (its turns must never render
+  // twice — this is also the delete guard: the reader, and its Delete
+  // affordance, are unreachable for the session-backed layer even via a deep
+  // link), and an unknown/deleted id falls back to live instead of a blank
+  // pane.
+  const urlView: WorkbenchMainView = useMemo(() => {
+    if (layerParam !== null) {
+      if (
+        layerParam !== session.activeLayerId &&
+        layers.some((l) => l.id === layerParam)
+      ) {
+        return { kind: "layer", layerId: layerParam };
+      }
     }
-    return mainView;
-  }, [mainView, session.activeLayerId, layers]);
+    return { kind: "live" };
+  }, [layerParam, session.activeLayerId, layers]);
+
+  // When the param normalized away (unknown/deleted id, or the active
+  // session's layer id), clean the URL too — via replace, so the dead link
+  // doesn't linger in the address bar or get copied onward.
+  const hasProject = loadedProject !== null && loadedProject !== undefined;
+  useEffect(() => {
+    if (!hasProject) return;
+    if (layerParam === null) return;
+    if (urlView.kind === "layer") return;
+    replaceLayerParam(null);
+  }, [hasProject, layerParam, urlView.kind, replaceLayerParam]);
+
+  // The transient add-session view sits ON TOP of the URL-derived view.
+  const resolvedView: WorkbenchMainView = isAddingSession
+    ? { kind: "add-session" }
+    : urlView;
+
+  /**
+   * Row/footer selection — leaves the transient add-session view first.
+   * Both selectors are no-ops while an add-session submit is in flight (the
+   * old dialog's `dismissible={!isSubmitting}`, ported), and both clear a
+   * previous submit's failure flag: a row click is a deliberate exit from
+   * the add-session view, and reopening it later must not show a stale
+   * "couldn't save" alert from one view instance ago (only Cancel did this
+   * before — the row-click exit leaked it).
+   */
+  const selectLive = useCallback(() => {
+    if (isAddSubmitting) return;
+    setIsAddingSession(false);
+    setSubmitFailed(false);
+    if (layerParam !== null) replaceLayerParam(null);
+  }, [isAddSubmitting, layerParam, replaceLayerParam]);
+
+  const selectLayer = useCallback(
+    (layerId: string) => {
+      if (isAddSubmitting) return;
+      setIsAddingSession(false);
+      setSubmitFailed(false);
+      if (layerParam !== layerId) replaceLayerParam(layerId);
+    },
+    [isAddSubmitting, layerParam, replaceLayerParam],
+  );
 
   // Gated by the phase toggle (edit mode with a real project id), but a direct
   // ?phase=plan URL in genesis mode still lands here — render the guard state
@@ -139,13 +234,33 @@ export function PlanPhaseView({
   const handleSubmit = async (layer: NewProjectLayer): Promise<boolean> => {
     clearLayersPersistError();
     setSubmitFailed(false);
-    const layerId = await addLayer(loadedProject.id, layer);
-    if (layerId === null) setSubmitFailed(true);
-    return layerId !== null;
+    setIsAddSubmitting(true);
+    try {
+      const layerId = await addLayer(loadedProject.id, layer);
+      if (layerId === null) {
+        setSubmitFailed(true);
+        return false;
+      }
+      // Success: leave the transient add-session view and select the freshly
+      // created layer's reader (plan §3.3 — "On success: select the new
+      // layer"). replace, not push — same-screen view selection, and this arm
+      // lands on the reader, not a navigation target.
+      setIsAddingSession(false);
+      replaceLayerParam(layerId);
+      return true;
+    } finally {
+      setIsAddSubmitting(false);
+    }
   };
 
-  const closeDialog = () => {
-    setDialogOpen(false);
+  const openAddSession = () => setIsAddingSession(true);
+
+  const closeAddSession = () => {
+    // Cancel: drop the overlay — the URL-derived view (live or the previously
+    // selected layer) is untouched underneath and simply shows again. The
+    // DRAFT deliberately survives (as it did in the always-mounted dialog):
+    // an accidental dismiss must never cost a pasted transcript.
+    setIsAddingSession(false);
     setSubmitFailed(false);
   };
 
@@ -169,13 +284,13 @@ export function PlanPhaseView({
       const ok = await removeLayer(loadedProject.id, deleteTarget.id);
       if (ok) {
         // Deleting the layer currently on screen: fall back to the live view
-        // explicitly (the normalization above would too, but an explicit
-        // reset keeps mainView from pointing at a dead id).
+        // explicitly (the URL-cleanup effect would too, but an explicit
+        // replace keeps ?layer= from transiently pointing at a dead id).
         if (
           resolvedView.kind === "layer" &&
           resolvedView.layerId === deleteTarget.id
         ) {
-          setMainView({ kind: "live" });
+          selectLive();
         }
         setDeleteTarget(null);
       } else {
@@ -301,9 +416,10 @@ export function PlanPhaseView({
   const handleFinalize = () => {
     // Bring the live view forward first: startFinalize streams the distill
     // into the live view's panels, and the user must see it. This is a view
-    // switch inside the same screen driven by an explicit click — not an
-    // auto-navigation (no router involved).
-    setMainView({ kind: "live" });
+    // switch inside the same screen driven by an explicit click — the
+    // router.replace inside selectLive only rewrites ?layer=, never the
+    // route (no auto-navigation).
+    selectLive();
     void session.startFinalize();
   };
 
@@ -339,24 +455,33 @@ export function PlanPhaseView({
               layers={archivedLayers}
               sessionStatus={sessionStatus}
               selectedView={resolvedView}
-              onSelectLive={() => setMainView({ kind: "live" })}
-              onSelectLayer={(layerId) =>
-                setMainView({ kind: "layer", layerId })
-              }
+              onSelectLive={selectLive}
+              onSelectLayer={selectLayer}
             />
           }
           leftFooter={
+            // Selects the inline add-session view (req 4b — the modal is
+            // gone). Same slot renders as the mobile fixed footer below both
+            // tabs, so this one handler covers both form factors.
             <Button
               variant="secondary"
               className="w-full"
-              onClick={() => setDialogOpen(true)}
+              onClick={openAddSession}
             >
               <Plus className="w-4 h-4 mr-2" />
               Add planning session
             </Button>
           }
           main={
-            selectedLayer ? (
+            resolvedView.kind === "add-session" ? (
+              <AddPlanningSessionView
+                onCancel={closeAddSession}
+                onSubmit={handleSubmit}
+                submitError={submitError}
+                draft={addSessionDraft}
+                onDraftChange={setAddSessionDraft}
+              />
+            ) : selectedLayer ? (
               <PlanLayerReader
                 // Keyed by layer id so rename-in-progress state can't leak
                 // across a row switch in the sessions list.
@@ -386,19 +511,13 @@ export function PlanPhaseView({
                 layers={layers}
                 session={session}
                 onNavigateToImport={onNavigateToImport}
+                onAddSession={openAddSession}
               />
             )
           }
           composer={composer}
         />
       </ProjectsShellWithFreeTier>
-
-      <AddPlanningSessionDialog
-        open={dialogOpen}
-        onClose={closeDialog}
-        onSubmit={handleSubmit}
-        submitError={submitError}
-      />
 
       {/* Delete-confirm stays a Dialog (jsdom's <dialog> a11y-excludes its
           subtree, which the suite works around with prototype stubs). */}

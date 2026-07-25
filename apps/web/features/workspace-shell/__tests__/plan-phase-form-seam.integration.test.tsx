@@ -194,13 +194,27 @@ function renderPlanSeam() {
 const workspaceNameInput = () =>
   document.querySelector('input[placeholder="@mycompany"]') as HTMLInputElement;
 
+// This suite runs the REAL provider stack (no timer mocks), so the initial
+// port-load waitFor competes with 60+ parallel turbo tasks on CI — a generous
+// bound there only widens the failure case; green runs return as soon as the
+// condition holds. The PORT-WRITE waitFor deliberately keeps the 1s default:
+// the historical failure there was NOT starvation (it failed identically at
+// 15s) but a permanently lost edit — the autosave watch subscription used to
+// land one Scheduler task after the fields committed, so a change dispatched
+// in that gap never armed dirtyRef (fixed: the subscription is a layout
+// effect now, live in the same commit that renders the fields). Post-fix the
+// write lands in ~one poll; a long bound would only waste 15s per genuine
+// regression.
+const CI_SAFE_TIMEOUT = { timeout: 15_000 };
+
 describe("Plan-phase form seam (PR A1 integration)", () => {
   it("renders the governance fields under the REAL providers and shares the wizard's form instance — a plan edit is visible to a wizard-step read and persists formState-only through the port", async () => {
     renderPlanSeam();
 
     // The port load is async — the guard state renders until p1 surfaces.
-    await waitFor(() =>
-      assert.ok(workspaceNameInput(), "governance fields render"),
+    await waitFor(
+      () => assert.ok(workspaceNameInput(), "governance fields render"),
+      CI_SAFE_TIMEOUT,
     );
     assert.ok(
       document.querySelector('section[aria-label="Project settings"]'),

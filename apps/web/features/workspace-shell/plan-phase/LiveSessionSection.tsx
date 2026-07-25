@@ -22,6 +22,11 @@ export interface LiveSessionSectionProps {
   session: UsePlanningSessionReturn;
   /** Prop-injected navigation (repo convention — testable without a router). */
   onNavigateToImport: () => void;
+  /** Opens the inline add-session view. Plan §3.2: "The EMPTY MAIN VIEW keeps
+   * a secondary 'Add an existing transcript' action" — rendered only in the
+   * zero-layer, no-session state (the pre-workbench empty state's home was
+   * this main column too); the left-footer button stays the primary home. */
+  onAddSession?: () => void;
 }
 
 /**
@@ -37,7 +42,8 @@ export interface LiveSessionSectionProps {
  * neither typed drafts nor a distill in progress may die with it.
  */
 export function LiveSessionSection(props: LiveSessionSectionProps) {
-  const { projectId, layers, session, onNavigateToImport } = props;
+  const { projectId, layers, session, onNavigateToImport, onAddSession } =
+    props;
 
   const {
     sessionState,
@@ -165,6 +171,24 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
               build in the composer below to begin.
             </p>
           </div>
+
+          {layers.length === 0 && onAddSession && (
+            // Secondary action, EMPTY MAIN VIEW only (plan §3.2): a zero-layer
+            // project lands here, and today's empty state keeps pitching
+            // transcript import. Once the project has any layer this is no
+            // longer the empty state and the pitch disappears — the left
+            // footer remains the action's primary, permanent home.
+            <p className="text-sm text-muted-foreground">
+              Already brainstormed elsewhere?{" "}
+              <button
+                type="button"
+                onClick={onAddSession}
+                className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+              >
+                Add an existing transcript
+              </button>
+            </p>
+          )}
         </div>
       </section>
     );

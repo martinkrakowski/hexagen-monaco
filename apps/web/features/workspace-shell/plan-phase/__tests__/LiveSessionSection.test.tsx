@@ -86,6 +86,7 @@ function renderSection(props: {
   session: UsePlanningSessionReturn;
   layers?: readonly ProjectLayer[];
   onNavigateToImport?: () => void;
+  onAddSession?: () => void;
 }) {
   return render(
     <LiveSessionSection
@@ -93,6 +94,7 @@ function renderSection(props: {
       layers={props.layers ?? []}
       session={props.session}
       onNavigateToImport={props.onNavigateToImport ?? vi.fn()}
+      onAddSession={props.onAddSession}
     />,
   );
 }
@@ -113,6 +115,22 @@ describe("LiveSessionSection", () => {
       null,
       "no draft-owning input in the live view (A2 lift)",
     );
+  });
+
+  it("zero-layer empty state offers the 'Add an existing transcript' secondary action (plan §3.2: the EMPTY MAIN VIEW keeps it)", () => {
+    const onAddSession = vi.fn();
+    renderSection({ session: makeSession(), onAddSession });
+    fireEvent.click(button(/Add an existing transcript/));
+    assert.equal(onAddSession.mock.calls.length, 1);
+  });
+
+  it("hides the secondary action once the project has any layer (an empty-state pitch, not a fixture)", () => {
+    renderSection({
+      session: makeSession(),
+      layers: [layer({ id: "a" })],
+      onAddSession: vi.fn(),
+    });
+    noButton(/Add an existing transcript/);
   });
 
   it("shows the interrupted banner for a persisted non-terminal session; Resume attaches and resumes", async () => {

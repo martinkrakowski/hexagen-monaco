@@ -69,9 +69,15 @@ export function SessionsSourcesList({
       </button>
 
       {newestFirst.length === 0 ? (
-        <p className="text-xs text-muted-foreground px-2 py-1.5">
-          No archived sessions yet — pasted or finished sessions appear here.
-        </p>
+        <div className="px-2 py-1.5">
+          {/* A muted line only: the "Add an existing transcript" secondary
+              action lives in the EMPTY MAIN VIEW (plan §3.2 — "The empty main
+              view keeps a secondary 'Add an existing transcript' action"),
+              i.e. the right pane's live view, not this Section B state. */}
+          <p className="text-xs text-muted-foreground">
+            No archived sessions yet — pasted or finished sessions appear here.
+          </p>
+        </div>
       ) : (
         newestFirst.map((layer) => {
           const isSelected =

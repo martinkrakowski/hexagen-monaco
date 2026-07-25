@@ -6,13 +6,16 @@ import { Accordion } from "@hexagen/ui";
 import { TwoPaneLayout } from "../resizable-layout/TwoPaneLayout";
 
 /**
- * Which resource the workbench's right pane shows (Plan Workbench A2). PR B
- * adds the add-session view and moves the selection into a `?layer=` URL
- * param; until then the host keeps it as local state.
+ * Which resource the workbench's right pane shows. `live` and `layer` derive
+ * from the `?layer=` URL param (subscribed in the plan host — PR B);
+ * `add-session` is TRANSIENT host-local state layered over the URL-derived
+ * view — never persisted to the URL, so leaving it restores whatever the URL
+ * says.
  */
 export type WorkbenchMainView =
   | { readonly kind: "live" }
-  | { readonly kind: "layer"; readonly layerId: string };
+  | { readonly kind: "layer"; readonly layerId: string }
+  | { readonly kind: "add-session" };
 
 export interface PlanWorkbenchProps {
   /** Section A content — the A1 project-settings field set. */

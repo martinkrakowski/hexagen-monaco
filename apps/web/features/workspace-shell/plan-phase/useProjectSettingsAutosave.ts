@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
@@ -76,7 +76,16 @@ export function useProjectSettingsAutosave({
 
   // Subscribe to form changes. `watch(cb)` does NOT fire on subscribe, so mount
   // is safe; it fires on every field change thereafter.
-  useEffect(() => {
+  //
+  // LAYOUT effect, deliberately: the fields are interactive the moment they
+  // commit, so edit capture must be live in that same commit. As a passive
+  // effect this subscription landed one Scheduler task later, and an edit
+  // dispatched inside that gap (automation typing the instant the input
+  // appears — the form-seam suite reproduced this under load) was PERMANENTLY
+  // lost: watch(cb) doesn't replay past changes, so dirtyRef never armed and
+  // every later flush no-opped. No SSR concern: the section only renders after
+  // the client-only port load supplies a project.
+  useLayoutEffect(() => {
     if (!projectId) return;
     const subscription = form.watch((_values, info) => {
       // A programmatic reset (project load / mode switch) is not a user edit —

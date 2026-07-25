@@ -28,6 +28,15 @@ vi.mock("../session/usePlanningSession", () => ({
   usePlanningSession: () => planningSession.current,
 }));
 
+// Selection lives in the `?layer=` URL param (PR B): replace the inert global
+// next/navigation stub with the stateful one, so a row click — which only
+// calls router.replace — actually re-renders the view, and deep links can be
+// seeded via navState.reset("layer=…").
+vi.mock("next/navigation", async () =>
+  (await import("./nav-stub")).statefulNavigationMock(),
+);
+import { navState } from "./nav-stub";
+
 import { PlanPhaseView } from "../PlanPhaseView";
 
 // PlanPhaseView renders ProjectSettingsSection, whose fields read the shared
@@ -80,6 +89,14 @@ function sessionRow(title: RegExp): HTMLButtonElement {
   return row as HTMLButtonElement;
 }
 
+function button(label: RegExp): HTMLButtonElement {
+  const btn = Array.from(document.querySelectorAll("button")).find((b) =>
+    label.test(b.textContent || ""),
+  );
+  assert.ok(btn, `expected a button matching ${label}`);
+  return btn as HTMLButtonElement;
+}
+
 function makeSession(overrides: Record<string, unknown> = {}) {
   return {
     sessionState: null,
@@ -117,6 +134,7 @@ const layer = (id: string, title: string) => ({
 
 beforeEach(() => {
   cleanup();
+  navState.reset();
   lifecycle.current = {
     loadedProject: {
       id: "p1",
@@ -314,6 +332,222 @@ describe("PlanPhaseView view union (right-pane selection)", () => {
       document.querySelector('button[aria-label="Delete session"]'),
       null,
     );
+  });
+});
+
+describe("PlanPhaseView ?layer= deep-linking (PR B)", () => {
+  it("selects an archived layer via router.REPLACE, preserving unrelated params — and never push", () => {
+    navState.reset("project=p1&phase=plan");
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
+    fireEvent.click(sessionRow(/Archived one/));
+    assert.match(bodyText(), /Archived one content/);
+    assert.match(navState.search, /layer=L-old/);
+    assert.match(navState.search, /project=p1/);
+    assert.match(navState.search, /phase=plan/, "unrelated params preserved");
+
+    // Selecting live CLEARS the param (live = the param's absence).
+    fireEvent.click(sessionRow(/Live session/));
+    assert.doesNotMatch(navState.search, /layer=/);
+    assert.match(navState.search, /project=p1/);
+    assert.match(navState.search, /phase=plan/);
+
+    assert.equal(
+      navState.pushCalls.length,
+      0,
+      "selection never pushes — no history spam",
+    );
+    assert.equal(navState.replaceCalls.length, 2);
+  });
+
+  it("opens the layer view from a deep link with ?layer=<archived-id>", () => {
+    navState.reset("layer=L-old");
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
+    assert.ok(
+      document.querySelector(
+        'section[aria-label="Planning session: Archived one"]',
+      ),
+      "the deep-linked layer's reader is the initial view",
+    );
+    assert.match(bodyText(), /Archived one content/);
+    assert.equal(
+      navState.replaceCalls.length,
+      0,
+      "a valid deep link is left alone",
+    );
+  });
+
+  it("falls back to live for ?layer=<unknown id> and CLEANS the param via replace", async () => {
+    navState.reset("project=p1&layer=ghost");
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
+    assert.match(
+      bodyText(),
+      /Start a live session/,
+      "unknown id falls back to the live view",
+    );
+    await waitFor(() => assert.doesNotMatch(navState.search, /layer=/));
+    assert.match(navState.search, /project=p1/, "other params survive");
+    assert.equal(navState.pushCalls.length, 0);
+  });
+
+  it("normalizes ?layer=<the ACTIVE session's layer id> to live, cleans the param, and never offers Delete (guard)", async () => {
+    planningSession.current = makeSession({
+      activeLayerId: "L-active",
+      sessionState: {
+        status: "critiquing",
+        round: 1,
+        maxRounds: 4,
+        nextRole: "critic",
+      },
+      turns: [{ id: "t", author: "You", content: "live turn", role: "human" }],
+    });
+    navState.reset("layer=L-active");
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
+    assert.match(
+      bodyText(),
+      /live turn/,
+      "the session-backed layer resolves to the LIVE view, not a reader",
+    );
+    assert.doesNotMatch(
+      bodyText(),
+      /Live one content/,
+      "the active layer's transcript never renders twice",
+    );
+    // The delete guard survives URL-driven selection: the reader (the only
+    // place with a Delete affordance) is unreachable for the active layer.
+    assert.equal(
+      document.querySelector('button[aria-label="Delete session"]'),
+      null,
+    );
+    await waitFor(() => assert.doesNotMatch(navState.search, /layer=/));
+  });
+
+  it("falls back to live and cleans the param when the deep-linked layer is REALLY removed from the project", async () => {
+    // Exercises the resolvedView normalization for real (the A2 review found
+    // the delete-path test's mock never shrank loadedProject.layers): the id
+    // enters via the URL, the reader opens, THEN the layer genuinely
+    // disappears from the loaded project — as an external write (another
+    // tab) or a delete would cause.
+    navState.reset("layer=L-old");
+    const { rerender } = render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    assert.match(bodyText(), /Archived one content/);
+
+    lifecycle.current = {
+      ...lifecycle.current,
+      loadedProject: {
+        ...(lifecycle.current.loadedProject as Record<string, unknown>),
+        layers: [layer("L-active", "Live one")],
+      },
+    };
+    rerender(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
+    assert.doesNotMatch(bodyText(), /Archived one content/);
+    assert.match(
+      bodyText(),
+      /Start a live session/,
+      "the dead id falls back to the live view",
+    );
+    await waitFor(() => assert.doesNotMatch(navState.search, /layer=/));
+    assert.equal(navState.pushCalls.length, 0);
+  });
+
+  it("keeps the add-session view OUT of the URL: transient overlay over the deep-linked view, restored on leave", () => {
+    navState.reset("layer=L-old");
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    assert.match(bodyText(), /Archived one content/);
+
+    const footerAdd = Array.from(document.querySelectorAll("button")).find(
+      (b) => /Add planning session/.test(b.textContent || ""),
+    ) as HTMLButtonElement;
+    fireEvent.click(footerAdd);
+
+    const addView = document.querySelector(
+      'section[aria-label="Add planning session"]',
+    );
+    assert.ok(addView, "the add-session view replaced the reader");
+    assert.equal(
+      navState.search,
+      "layer=L-old",
+      "the overlay is NEVER persisted to the URL",
+    );
+    assert.equal(navState.replaceCalls.length, 0);
+
+    const cancel = Array.from(addView.querySelectorAll("button")).find((b) =>
+      /Cancel/.test(b.textContent || ""),
+    ) as HTMLButtonElement;
+    fireEvent.click(cancel);
+    assert.match(
+      bodyText(),
+      /Archived one content/,
+      "leaving the overlay restores the URL-derived view",
+    );
+  });
+});
+
+describe("PlanPhaseView add-session overlay row-click exits (B review round)", () => {
+  // The overlay comment names THREE exit paths — Cancel, row click, success.
+  // Cancel and success are pinned above/in the main suite; these pin the
+  // row-click one (both selectors), which also carries the submitFailed
+  // reset: only closeAddSession reset it before, so a failed submit's alert
+  // leaked into the NEXT view instance over freshly reopened fields.
+
+  it("a sessions-row click drops the overlay and clears a failed submit's error for the next open", async () => {
+    lifecycle.current.addLayer = vi.fn(async () => null); // the write fails
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+
+    fireEvent.click(button(/Add planning session/));
+    fireEvent.change(
+      document.querySelector(
+        'textarea[aria-label="Session transcript (markdown)"]',
+      ) as HTMLTextAreaElement,
+      { target: { value: "will fail" } },
+    );
+    fireEvent.click(button(/Add session/));
+    await waitFor(() =>
+      assert.ok(
+        document.querySelector('[role="alert"]'),
+        "the failed submit surfaces its inline error",
+      ),
+    );
+
+    fireEvent.click(sessionRow(/Archived one/));
+    assert.equal(
+      document.querySelector('section[aria-label="Add planning session"]'),
+      null,
+      "the row click drops the overlay",
+    );
+    assert.match(bodyText(), /Archived one content/, "the reader is forward");
+
+    fireEvent.click(button(/Add planning session/));
+    assert.equal(
+      document.querySelector('[role="alert"]'),
+      null,
+      "no stale submit error on the next open, before any submit",
+    );
+  });
+
+  it("the pinned Live row also exits the overlay, restoring the live view and clearing ?layer=", () => {
+    navState.reset("layer=L-old");
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    assert.match(bodyText(), /Archived one content/);
+
+    fireEvent.click(button(/Add planning session/));
+    assert.ok(
+      document.querySelector('section[aria-label="Add planning session"]'),
+    );
+
+    fireEvent.click(sessionRow(/Live session/));
+    assert.equal(
+      document.querySelector('section[aria-label="Add planning session"]'),
+      null,
+      "the Live row click drops the overlay",
+    );
+    assert.match(bodyText(), /Start a live session/);
+    assert.doesNotMatch(navState.search, /layer=/);
+    assert.equal(navState.pushCalls.length, 0);
   });
 });
 
@@ -575,6 +809,43 @@ describe("PlanPhaseView shell footer (locked §5 Q2)", () => {
     await waitFor(() =>
       assert.equal(
         (errored.startFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
+        1,
+      ),
+    );
+  });
+
+  it("Finalize fired from a READER view brings the live view forward and clears ?layer= (replace, never push)", async () => {
+    // handleFinalize deliberately calls selectLive() before startFinalize():
+    // the distill streams into the LIVE view's panels and must be on-screen.
+    // Since PR B that switch is URL-backed, so it must also clear the
+    // now-dead ?layer= param — every other footer test fires Finalize from
+    // the default live view, where selectLive() is a no-op.
+    const converged = makeSession({
+      activeLayerId: "L-active",
+      sessionState: { status: "converged", round: 2, maxRounds: 4 },
+      turns: [{ id: "t", author: "You", content: "live turn", role: "human" }],
+    });
+    planningSession.current = converged;
+    navState.reset("layer=L-old");
+    render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+    assert.match(
+      bodyText(),
+      /Archived one content/,
+      "a reader view is on-screen when Finalize is clicked",
+    );
+
+    fireEvent.click(button(/Finalize → Generate manifest/));
+    assert.match(bodyText(), /live turn/, "the live view came forward");
+    assert.doesNotMatch(
+      bodyText(),
+      /Archived one content/,
+      "the reader is gone — the distill will not stream off-screen",
+    );
+    await waitFor(() => assert.doesNotMatch(navState.search, /layer=/));
+    assert.equal(navState.pushCalls.length, 0, "cleared via replace only");
+    await waitFor(() =>
+      assert.equal(
+        (converged.startFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
         1,
       ),
     );
