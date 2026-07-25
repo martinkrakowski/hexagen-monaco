@@ -234,6 +234,10 @@ describe("PlanPhaseView (workbench host)", () => {
     ]);
     renderView();
     const text = bodyText();
+    // Presence first: indexOf returns -1 for a missing title, which would
+    // make the ordering comparison pass vacuously.
+    assert.ok(text.includes("Second session"), "Second session renders");
+    assert.ok(text.includes("First session"), "First session renders");
     assert.ok(
       text.indexOf("Second session") < text.indexOf("First session"),
       "most recently UPDATED first, not stored or created order",
