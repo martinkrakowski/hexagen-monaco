@@ -401,4 +401,91 @@ describe("package json", () => {
       },
     );
   });
+
+  describe("workspaceDefaults dual-read (F8)", () => {
+    it("reads monorepo-nested workspaceDefaults.packageJson (where wizard-to-manifest writes them)", async () => {
+      await withTempWorkspace(
+        "nested-pkg",
+        async ({ workspaceRoot, pkgPath }) => {
+          const manifest: Manifest = {
+            scope: "acme",
+            bounded_contexts: [{ name: "nested-pkg" }],
+            monorepo: {
+              workspaceDefaults: {
+                packageJson: {
+                  scripts: { lint: "eslint src --ext .ts,.tsx" },
+                  devDependencies: { "typescript-eslint": "^8.0.0" },
+                },
+              },
+            },
+          };
+
+          await generatePackageJson(
+            path.dirname(pkgPath),
+            "nested-pkg",
+            makeConfig(workspaceRoot, manifest),
+          );
+
+          const pkg = await readJson(pkgPath);
+          const scripts = pkg.scripts as Record<string, string>;
+          const devDeps = pkg.devDependencies as Record<string, string>;
+          assert.strictEqual(
+            scripts.lint,
+            "eslint src --ext .ts,.tsx",
+            "monorepo.workspaceDefaults.packageJson.scripts must reach the emitted file (F8 — was silently dropped)",
+          );
+          assert.strictEqual(
+            devDeps["typescript-eslint"],
+            "^8.0.0",
+            "monorepo.workspaceDefaults.packageJson.devDependencies must reach the emitted file (F8)",
+          );
+        },
+      );
+    });
+
+    it("root-level workspaceDefaults still wins over the monorepo-nested location", async () => {
+      await withTempWorkspace(
+        "root-pkg",
+        async ({ workspaceRoot, pkgPath }) => {
+          const manifest: Manifest = {
+            scope: "acme",
+            bounded_contexts: [{ name: "root-pkg" }],
+            workspaceDefaults: {
+              packageJson: {
+                devDependencies: { "root-wins": "^1.0.0" },
+              },
+            },
+            monorepo: {
+              workspaceDefaults: {
+                packageJson: {
+                  devDependencies: { "nested-loses": "^1.0.0" },
+                },
+              },
+            },
+          };
+
+          await generatePackageJson(
+            path.dirname(pkgPath),
+            "root-pkg",
+            makeConfig(workspaceRoot, manifest),
+          );
+
+          const devDeps = (await readJson(pkgPath)).devDependencies as Record<
+            string,
+            string
+          >;
+          assert.strictEqual(
+            devDeps["root-wins"],
+            "^1.0.0",
+            "root-level workspaceDefaults must win (same precedence as tsconfig.ts/eslint.ts)",
+          );
+          assert.strictEqual(
+            devDeps["nested-loses"],
+            undefined,
+            "the two locations are alternatives, not merged — root level wins wholesale",
+          );
+        },
+      );
+    });
+  });
 });

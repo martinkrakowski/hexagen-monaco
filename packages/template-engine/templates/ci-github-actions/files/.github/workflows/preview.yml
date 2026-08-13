@@ -31,25 +31,26 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v5
-        with:
-          node-version: "{node_version}"
-          # No `cache: yarn` here. setup-node's yarn cache runs the runner's
-          # global Yarn (Classic 1.22) to locate the store — BEFORE the Corepack
-          # steps below activate the pinned yarn@4 — so it fails on a
-          # packageManager-pinned project. Committing yarn.lock does NOT make it
-          # safe: the hazard is ordering, not the lockfile. To cache, add a
-          # separate actions/cache step AFTER Corepack instead. Mirrors ci.yml.
-
-      # Corepack activates the package manager pinned in package.json
-      # (`packageManager`); without it the runner's default Yarn (Classic) can't
-      # honor a Yarn-4 project. Mirrors ci.yml. See SETUP.md.
+      # Corepack MUST run before setup-node: setup-node@v5 probes the
+      # package-manager cache with the runner's global Yarn (Classic), which
+      # hard-errors on a packageManager-pinned yarn@4 project. Corepack
+      # activates the package manager pinned in package.json
+      # (`packageManager`). Mirrors ci.yml. See SETUP.md.
       - name: Enable Corepack
         run: corepack enable
 
       - name: Prepare package manager
         run: |
           corepack prepare "$(node -p 'require("./package.json").packageManager')" --activate
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "{node_version}"
+          # No `cache: yarn` — and the v5 auto-probe is disabled explicitly:
+          # setup-node@v5 otherwise still runs the global Yarn Classic to locate
+          # the store, which fails on a packageManager-pinned project. To cache,
+          # add a separate actions/cache step AFTER Corepack. Mirrors ci.yml.
+          package-manager-cache: false
 
       # First run has no committed lockfile, so install is NOT immutable. Switch
       # to `yarn install --immutable` after you commit yarn.lock. See SETUP.md.

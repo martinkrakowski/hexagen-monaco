@@ -33,20 +33,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v5
-        with:
-          node-version: "{node_version}"
-          # No `cache: yarn` here. setup-node's yarn cache runs the runner's
-          # global Yarn (Classic 1.22) to locate the store — BEFORE the Corepack
-          # steps below activate the pinned yarn@4 — so it fails on a
-          # packageManager-pinned project. Committing yarn.lock does NOT make it
-          # safe: the hazard is ordering, not the lockfile. To cache, add a
-          # separate actions/cache step AFTER Corepack instead. The Turbo cache
-          # below already covers task outputs.
-
-      # Corepack activates the package manager pinned in package.json
-      # (`packageManager`). Without it, the runner's default Yarn (Classic)
-      # can't honor a Yarn-4 project. See SETUP.md.
+      # Corepack MUST run before setup-node: setup-node@v5 probes the
+      # package-manager cache with the runner's global Yarn (Classic 1.22),
+      # which hard-errors on a packageManager-pinned yarn@4 project. Enabling
+      # Corepack first makes `yarn` resolve to the pinned shim. Corepack
+      # activates the package manager pinned in package.json
+      # (`packageManager`). See SETUP.md.
       - name: Enable Corepack
         run: corepack enable
 
@@ -55,6 +47,18 @@ jobs:
       - name: Prepare package manager
         run: |
           corepack prepare "$(node -p 'require("./package.json").packageManager')" --activate
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "{node_version}"
+          # No `cache: yarn` — and the v5 auto-probe is disabled explicitly:
+          # setup-node@v5 otherwise still runs the global Yarn Classic
+          # (`yarn cache dir`) to locate the store, which fails on a
+          # packageManager-pinned project. Committing yarn.lock does NOT make it
+          # safe: the hazard is the probe, not the lockfile. To cache, add a
+          # separate actions/cache step AFTER Corepack instead. The Turbo cache
+          # below already covers task outputs.
+          package-manager-cache: false
 
       # First run has no committed lockfile, so install is NOT immutable.
       # After you commit yarn.lock, switch this to `yarn install --immutable`

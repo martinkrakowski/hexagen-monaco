@@ -157,6 +157,46 @@ describe("eslint", () => {
     );
   });
 
+  it("scopes an empty-interface allowance to port-stub files in both fallbacks (F4)", async () => {
+    // Generated `{name}.in-port.ts` / `{name}.out-port.ts` stubs are empty
+    // interfaces by design (the owner fills them in), which
+    // tseslint.configs.recommended's no-empty-object-type rejects — turning
+    // the very first `yarn lint` red. The allowance must be scoped to the
+    // stub naming convention, not disabled globally.
+    for (const framework of [undefined, "vue" as const]) {
+      await withTempWorkspace(
+        "port-stub-pkg",
+        async ({ workspaceRoot, eslintPath }) => {
+          const manifest: Manifest = {
+            bounded_contexts: [{ name: "port-stub-pkg" }],
+          };
+          const config = makeConfig(workspaceRoot, manifest);
+
+          await generateEslintConfig(
+            path.dirname(eslintPath),
+            "port-stub-pkg",
+            config,
+            undefined,
+            framework ? { framework } : {},
+          );
+
+          const content = await fs.readFile(eslintPath, "utf8");
+          const label = framework ?? "builtin";
+          assert.ok(
+            content.includes("files: ['**/*.in-port.ts', '**/*.out-port.ts']"),
+            `${label} fallback must scope the allowance to the port-stub globs (DEFAULT_NAMING in stub-templates.ts)`,
+          );
+          assert.ok(
+            content.includes(
+              "'@typescript-eslint/no-empty-object-type': ['error', { allowInterfaces: 'always' }]",
+            ),
+            `${label} fallback must allow empty port-stub interfaces (F4)`,
+          );
+        },
+      );
+    }
+  });
+
   it("should use workspaceDefaults eslint template over fallback", async () => {
     await withTempWorkspace(
       "workspace-pkg",

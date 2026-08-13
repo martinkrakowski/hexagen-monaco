@@ -15,7 +15,9 @@
  *   - Corepack is enabled and the pinned `yarn@4` prepared BEFORE setup-node,
  *     because setup-node's yarn cache probe runs the runner's global Yarn
  *     (Classic 1.x) and errors on a `packageManager`-pinned yarn@4 project;
- *   - setup-node carries NO `cache: "yarn"` for that same ordering reason;
+ *   - setup-node carries NO `cache: "yarn"` AND sets
+ *     `package-manager-cache: false` — on setup-node@v5 omitting the cache
+ *     input is not enough, the auto-probe still runs (F21);
  *   - install is `yarn install --immutable` (Yarn Berry), not the old
  *     `--frozen-lockfile` (Yarn Classic).
  * Mirrors the live `ci-github-actions` `ci.yml` template, which documents the
@@ -56,6 +58,10 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "22"
+          # setup-node@v5 auto-probes the package-manager cache even without
+          # \`cache: "yarn"\` — disable it explicitly (F21); the probe runs the
+          # global Yarn Classic and fails on a packageManager-pinned project.
+          package-manager-cache: false
 
       - name: "Install Dependencies"
         run: yarn install --immutable

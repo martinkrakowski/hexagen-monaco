@@ -115,6 +115,10 @@ coverage/
 .env
 .env.*
 !.env.example
+# Add-on templates ship additional committed examples (.env.bullmq.example,
+# .env.rate-limit.example, …) that \`.env.*\` would otherwise swallow — without
+# this re-include \`git add -A\` stages only 1 of N example files (F3).
+!.env.*.example
 
 # Logs & OS
 *.log

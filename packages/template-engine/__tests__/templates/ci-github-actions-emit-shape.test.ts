@@ -207,6 +207,46 @@ describe("ci-github-actions template — emit shape", () => {
       assert.ok(ci.includes("turbo-cache"));
     });
 
+    it("orders Corepack before setup-node and disables the v5 cache probe in every node workflow (F21)", async () => {
+      // setup-node@v5 probes the package-manager cache with the runner's
+      // global Yarn Classic even WITHOUT `cache: yarn` — omitting the input is
+      // not enough. Both halves of the fix are asserted: Corepack activated
+      // first, and the probe disabled explicitly.
+      for (const rel of [
+        `${WORKFLOWS}/ci.yml`,
+        `${WORKFLOWS}/preview.yml`,
+        `${WORKFLOWS}/deploy-vercel.yml`,
+      ]) {
+        const wf = await read(projectRoot, rel);
+        const corepackAt = wf.indexOf("corepack enable");
+        const setupNodeAt = wf.indexOf("actions/setup-node@");
+        assert.ok(corepackAt >= 0, `${rel} must enable Corepack`);
+        assert.ok(setupNodeAt >= 0, `${rel} must use setup-node`);
+        assert.ok(
+          corepackAt < setupNodeAt,
+          `${rel}: corepack enable must come BEFORE setup-node (its cache probe runs global Yarn Classic and fails on a packageManager-pinned yarn@4 project)`,
+        );
+        assert.ok(
+          wf.includes('corepack prepare "$(node -p'),
+          `${rel} must prepare the package manager pinned in package.json`,
+        );
+        // Line-anchored so the explanatory comments don't satisfy the checks.
+        const nonComment = wf
+          .split("\n")
+          .filter((l) => !l.trimStart().startsWith("#"));
+        assert.ok(
+          nonComment.some((l) =>
+            /^\s*package-manager-cache:\s*false\s*$/.test(l),
+          ),
+          `${rel} must set package-manager-cache: false (setup-node@v5 probes even without cache: yarn)`,
+        );
+        assert.ok(
+          !nonComment.some((l) => /\bcache:\s*["']?yarn["']?/.test(l)),
+          `${rel} must not use setup-node's yarn cache in any quoting`,
+        );
+      }
+    });
+
     it("preserves GitHub Actions ${{ }} expressions through interpolation", async () => {
       const ci = await read(projectRoot, `${WORKFLOWS}/ci.yml`);
       assert.ok(ci.includes("${{ secrets.TURBO_TOKEN }}"));
