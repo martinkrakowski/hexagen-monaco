@@ -3,6 +3,10 @@ name: "Capstone — First-Run-Green"
 # Proves a freshly generated project installs the @hexagen-monaco tooling and the
 # installed CLI targets it correctly — hermetic for the tooling (packed tarballs),
 # no real npm release required. See scripts/capstone/first-run-green.js.
+#
+# The generate-then-gate jobs extend the same chassis to WIZARD-SHAPED projects
+# (fixtures built at runtime from scripted wizard answers via wizardToManifest —
+# the vellum findings harness, plan §5.2). See scripts/capstone/generate-then-gate.js.
 on:
   # Always run on main (safety net: catches anything merged regardless of paths).
   push:
@@ -19,11 +23,21 @@ on:
       - "packages/governance/**"
       - "packages/visualization/**"
       - "packages/template-engine/**"
+      # wizard-orchestration + project-generation feed the generate-then-gate
+      # fixtures (wizardToManifest → external SyncEngine → add-on merge).
+      - "packages/wizard-orchestration/**"
+      - "packages/project-generation/**"
       - "tools/arch-linter/**"
       - "scripts/capstone/**"
       - "scripts/prepare-publish-package.js"
       - ".github/workflows/capstone.yml"
   workflow_dispatch:
+
+# Every job only reads the repo (checkout with persist-credentials: false) and
+# publishes nothing — pin the GITHUB_TOKEN to read-only instead of inheriting
+# the repository default.
+permissions:
+  contents: read
 
 jobs:
   first-run-green:
@@ -31,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: "Checkout Repository"
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
 
@@ -46,7 +60,7 @@ jobs:
         run: corepack prepare yarn@4.12.0 --activate
 
       - name: "Setup Node.js"
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22.7"
 
@@ -55,3 +69,115 @@ jobs:
 
       - name: "Run capstone (first-run-green)"
         run: yarn capstone
+
+  # Wizard-shaped fixture, small: 1 bounded context + 5 add-on templates
+  # (F3/F19/F21 surface). Cheap enough to run on every PR the paths filter
+  # selects, alongside first-run-green.
+  generate-then-gate-minimal:
+    name: "Generate → gate (minimal-addons)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      # Same ordering rationale as above: Corepack BEFORE setup-node so the
+      # environment probe sees yarn@4, not classic global yarn.
+      - name: "Enable Corepack"
+        run: corepack enable
+
+      - name: "Prepare Yarn"
+        run: corepack prepare yarn@4.12.0 --activate
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22.7"
+          # setup-node@v5 probes the package-manager cache even without
+          # `cache:` — disable it outright (the F21 hazard this harness gates
+          # in EMITTED workflows applies to our own workflow too).
+          package-manager-cache: false
+
+      # The fixture installs public registry deps (turbo, typescript, eslint,
+      # vitest, …) into a fresh temp project on every run — keep Yarn's global
+      # cache warm across runs to hold the job in the 8–15 min budget.
+      - name: "Cache Yarn global cache"
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.yarn/berry/cache
+          key: capstone-gate-yarn-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            capstone-gate-yarn-${{ runner.os }}-
+
+      # Checksum-verified artifact install — NOT `bash <(curl …)` of the remote
+      # installer script: the release tarball is pinned by version AND sha256,
+      # so neither a mutated installer nor a swapped asset can reach the job.
+      - name: "Install actionlint"
+        run: |
+          curl -sSfL -o actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          echo "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757  actionlint.tar.gz" | sha256sum -c -
+          tar -xzf actionlint.tar.gz actionlint
+          sudo mv ./actionlint /usr/local/bin/actionlint
+          actionlint -version
+
+      - name: "Install Dependencies"
+        run: yarn install --immutable
+
+      - name: "Run generate-then-gate (minimal-addons)"
+        run: yarn capstone:gate --fixture=minimal-addons
+
+  # Wizard-shaped fixture, large: 15 bounded contexts + shared, Next.js web +
+  # Nitro api (F2/F8/F15 surface). Install+build across 18 workspaces is the
+  # expensive end of the 8–15 min budget, so it runs on main pushes and
+  # manual dispatch only — PRs get the minimal fixture (above) plus the full
+  # unit-level coverage of the same emission defaults in packages/sync,
+  # wizard-orchestration and template-engine suites.
+  generate-then-gate-monolith:
+    name: "Generate → gate (monolith-15)"
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: "Enable Corepack"
+        run: corepack enable
+
+      - name: "Prepare Yarn"
+        run: corepack prepare yarn@4.12.0 --activate
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22.7"
+          package-manager-cache: false
+
+      - name: "Cache Yarn global cache"
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.yarn/berry/cache
+          key: capstone-gate-yarn-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            capstone-gate-yarn-${{ runner.os }}-
+
+      # Checksum-verified artifact install — NOT `bash <(curl …)` of the remote
+      # installer script: the release tarball is pinned by version AND sha256,
+      # so neither a mutated installer nor a swapped asset can reach the job.
+      - name: "Install actionlint"
+        run: |
+          curl -sSfL -o actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          echo "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757  actionlint.tar.gz" | sha256sum -c -
+          tar -xzf actionlint.tar.gz actionlint
+          sudo mv ./actionlint /usr/local/bin/actionlint
+          actionlint -version
+
+      - name: "Install Dependencies"
+        run: yarn install --immutable
+
+      - name: "Run generate-then-gate (monolith-15)"
+        run: yarn capstone:gate --fixture=monolith-15

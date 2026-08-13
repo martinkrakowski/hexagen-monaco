@@ -39,19 +39,29 @@ vi.mock("@/landing/ProjectsShellWithFreeTier", () => ({
     </div>
   ),
 }));
-// The page only needs a passing viewData (no validation failures) to enable
-// the accept path; parsing real YAML is ManifestPreview's concern, not this
-// test's. Passthrough for everything else: the genesis settings store's
-// save() seeds its diff baseline through the REAL deriveWorkspaceName.
-vi.mock("@hexagen/manifest-generation", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@hexagen/manifest-generation")>()),
-  parseYamlToViewData: () => ({
-    validationItems: [],
+// The page only needs a controllable viewData to drive the accept gate;
+// parsing real YAML is ManifestPreview's concern, not this test's. Default is
+// a passing viewData (no validation failures); the server-report gate tests
+// below swap in connectivity failures via the hoisted holder. Passthrough for
+// everything else: the genesis settings store's save() seeds its diff
+// baseline through the REAL deriveWorkspaceName.
+const mockViewData = vi.hoisted(() => {
+  const defaults = () => ({
+    validationItems: [] as Array<{
+      status: "pass" | "warn" | "fail";
+      title: string;
+      description: string;
+    }>,
     overallScore: 90,
     system: "Vellum",
     architecture: "hexagonal",
     contexts: [],
-  }),
+  });
+  return { current: defaults(), defaults };
+});
+vi.mock("@hexagen/manifest-generation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@hexagen/manifest-generation")>()),
+  parseYamlToViewData: () => mockViewData.current,
 }));
 
 const saveProject = vi.hoisted(() =>
@@ -93,6 +103,7 @@ describe("ManifestAcceptPage — provenance capture at accept-save", () => {
     cleanup();
     saveProject.mockClear();
     usePendingManifest.getState().clear();
+    mockViewData.current = mockViewData.defaults();
   });
 
   it("stamps the produced-manifest link on the initial layer when an origin spec exists", async () => {
@@ -150,6 +161,7 @@ describe("ManifestAcceptPage — genesis settings snapshot lifecycle", () => {
     saveProject.mockClear();
     usePendingManifest.getState().clear();
     clearGenesisFormValues();
+    mockViewData.current = mockViewData.defaults();
   });
 
   function seedSnapshot() {
@@ -232,5 +244,87 @@ describe("ManifestAcceptPage — genesis settings snapshot lifecycle", () => {
 
     await waitFor(() => assert.strictEqual(saveProject.mock.calls.length, 1));
     assert.strictEqual(loadGenesisFormValues("Vellum"), values);
+  });
+});
+
+// Import round-trip integrity, Item 3.3: the footer's approve gate must not
+// dead-end on the parser's connectivity heuristics when the store carries the
+// server's own validation report for this manifest.
+describe("ManifestAcceptPage — server-report approve gate", () => {
+  const connectivityFail = {
+    status: "fail" as const,
+    title: "files: 1 Unconnected Ports",
+    description: "Missing adapters for: 'StorageProxyPort'.",
+  };
+
+  const approveBtn = () =>
+    Array.from(document.querySelectorAll("button")).find((b) =>
+      /Use This Manifest/.test(b.textContent || ""),
+    ) as HTMLButtonElement;
+
+  beforeEach(() => {
+    cleanup();
+    saveProject.mockClear();
+    usePendingManifest.getState().clear();
+    mockViewData.current = mockViewData.defaults();
+  });
+
+  it("a connectivity FAIL blocks approve on report-less YAML (heuristics are the only validation there)", () => {
+    mockViewData.current.validationItems = [connectivityFail];
+    usePendingManifest
+      .getState()
+      .set(YAML, {} as never, "Vellum", "/projects/new/import/spec", null);
+    render(<ManifestAcceptPage />);
+
+    assert.strictEqual(approveBtn().disabled, true);
+  });
+
+  it("with a passing server report the same FAIL is advisory: approve is enabled and saves", async () => {
+    mockViewData.current.validationItems = [connectivityFail];
+    usePendingManifest
+      .getState()
+      .set(YAML, {} as never, "Vellum", "/projects/new/import/spec", null, {
+        errors: [],
+        warnings: [],
+        passed: true,
+      });
+    render(<ManifestAcceptPage />);
+
+    assert.strictEqual(approveBtn().disabled, false);
+    approve();
+    await waitFor(() => assert.strictEqual(saveProject.mock.calls.length, 1));
+  });
+
+  it("a FAILED server report still blocks approve", () => {
+    usePendingManifest
+      .getState()
+      .set(YAML, {} as never, "Vellum", "/projects/new/import/spec", null, {
+        errors: ["[R02] Context 'files' has no inbound port."],
+        warnings: [],
+        passed: false,
+      });
+    render(<ManifestAcceptPage />);
+
+    assert.strictEqual(approveBtn().disabled, true);
+  });
+
+  it("Invalid YAML blocks approve even with a passing report (the report vouches for parseable YAML only)", () => {
+    mockViewData.current.validationItems = [
+      {
+        status: "fail",
+        title: "Invalid YAML",
+        description: "Failed to parse YAML document.",
+      },
+    ];
+    usePendingManifest
+      .getState()
+      .set(YAML, {} as never, "Vellum", "/projects/new/import/spec", null, {
+        errors: [],
+        warnings: [],
+        passed: true,
+      });
+    render(<ManifestAcceptPage />);
+
+    assert.strictEqual(approveBtn().disabled, true);
   });
 });

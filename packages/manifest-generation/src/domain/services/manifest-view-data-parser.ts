@@ -223,10 +223,28 @@ export function parseYamlToViewData(yamlString: string): ManifestViewData {
       }
 
       const portBase = p.replace(/Port$/, "").replace(/!/g, "");
-      const matchedAdapter = adaptersList.find((a) => {
-        const adBase = a.name.replace(/Adapter$/, "").replace(/!/g, "");
-        return adBase.includes(portBase) || portBase.includes(adBase);
-      });
+      const adapterBase = (a: AdapterEntry) =>
+        a.name.replace(/Adapter$/, "").replace(/!/g, "");
+      // First-match-wins: an adapter implements exactly one port here, and once
+      // its `implements` is set a LATER port must never steal it. The fuzzy
+      // cross-containment match used to let e.g. `StorageProxyPort` re-match
+      // (and overwrite) `StorageAdapter` after `StoragePort` had already
+      // claimed it — leaving `StoragePort` falsely "unconnected" while
+      // `StorageProxyAdapter` sat unused. That FAIL was permanently unfixable:
+      // the deterministic fixer's exact-base skip (manifest-violation-fixer)
+      // sees the `Storage` base already present and refuses to synthesize, so
+      // approve never unlocked. Only UNCLAIMED adapters are candidates, and an
+      // exact base match is preferred over cross-containment so `StoragePort`
+      // pairs with `StorageAdapter` regardless of the ports' declaration order.
+      const matchedAdapter =
+        adaptersList.find(
+          (a) => a.implements === undefined && adapterBase(a) === portBase,
+        ) ??
+        adaptersList.find((a) => {
+          if (a.implements !== undefined) return false;
+          const adBase = adapterBase(a);
+          return adBase.includes(portBase) || portBase.includes(adBase);
+        });
 
       if (matchedAdapter) {
         matchedAdapter.implements = p;

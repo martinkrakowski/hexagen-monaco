@@ -706,4 +706,177 @@ describe("root files", () => {
       });
     });
   });
+
+  describe("gitignore env examples (F3)", () => {
+    it("re-includes .env.*.example files after the .env.* ignore", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = { system: "envtest" };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+
+        const gitignore = await readFile(
+          path.join(workspaceRoot, ".gitignore"),
+        );
+        const lines = gitignore.split("\n").map((l) => l.trim());
+        const ignoreAt = lines.indexOf(".env.*");
+        const reincludeAt = lines.indexOf("!.env.*.example");
+        assert.ok(ignoreAt >= 0, ".gitignore must ignore .env.*");
+        assert.ok(
+          reincludeAt >= 0,
+          ".gitignore must re-include .env.*.example (F3 — add-on templates ship .env.bullmq.example etc.)",
+        );
+        assert.ok(
+          reincludeAt > ignoreAt,
+          "the !.env.*.example re-include must come AFTER the .env.* ignore (gitignore last-match-wins)",
+        );
+      });
+    });
+  });
+
+  describe("turboConfig consumption (F15)", () => {
+    it("emits manifest turboConfig (globalDependencies + pipeline→tasks) instead of dropping it", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = {
+          system: "turbotest",
+          monorepo: {
+            turboConfig: {
+              globalDependencies: ["**/.env.*"],
+              pipeline: {
+                build: { dependsOn: ["^build"], outputs: ["dist/**"] },
+                lint: { dependsOn: ["^build"] },
+                test: { dependsOn: ["^build"] },
+                typecheck: { dependsOn: ["^build"], outputs: [], cache: true },
+              },
+            },
+          },
+        };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+
+        const turbo = JSON.parse(
+          await readFile(path.join(workspaceRoot, "turbo.json")),
+        ) as Record<string, unknown>;
+        assert.deepStrictEqual(
+          turbo.globalDependencies,
+          ["**/.env.*"],
+          "manifest globalDependencies must be emitted verbatim (F15 — env changes must invalidate the cache)",
+        );
+        const tasks = turbo.tasks as Record<
+          string,
+          { dependsOn?: string[]; outputs?: string[] }
+        >;
+        assert.deepStrictEqual(
+          tasks.build,
+          { dependsOn: ["^build"], outputs: ["dist/**"] },
+          "manifest pipeline tasks must be emitted under Turbo 2's `tasks` key",
+        );
+        assert.strictEqual(
+          turbo.pipeline,
+          undefined,
+          "the legacy `pipeline` key must NOT be emitted (Turbo 2 rejects it)",
+        );
+        assert.ok(
+          tasks.dev,
+          "built-in tasks the manifest does not mention (dev) must be preserved so `turbo dev` still resolves",
+        );
+        assert.deepStrictEqual(
+          tasks.typecheck?.dependsOn,
+          ["^build"],
+          "typecheck must keep ^build (#2 — TS6305 on fresh clone)",
+        );
+      });
+    });
+
+    it("appends Next/Nitro build outputs when the manifest declares such apps", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = {
+          system: "fw-outputs",
+          apps: [
+            { name: "web", framework: "next.js" },
+            { name: "api", framework: "nitro" },
+          ],
+          monorepo: {
+            turboConfig: {
+              pipeline: {
+                build: { dependsOn: ["^build"], outputs: ["dist/**"] },
+              },
+            },
+          },
+        };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+
+        const turbo = JSON.parse(
+          await readFile(path.join(workspaceRoot, "turbo.json")),
+        ) as { tasks?: { build?: { outputs?: string[] } } };
+        assert.deepStrictEqual(
+          turbo.tasks?.build?.outputs,
+          ["dist/**", ".next/**", "!.next/cache/**", ".output/**", ".nitro/**"],
+          "build outputs must include the Next/Nitro output dirs (F15 — else app builds are uncacheable)",
+        );
+      });
+    });
+
+    it("does NOT append framework outputs when no Next/Nitro app exists", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = {
+          system: "no-fw",
+          apps: [{ name: "cli", framework: "plain-ts" }],
+          monorepo: {
+            turboConfig: {
+              pipeline: {
+                build: { dependsOn: ["^build"], outputs: ["dist/**"] },
+              },
+            },
+          },
+        };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+
+        const turbo = JSON.parse(
+          await readFile(path.join(workspaceRoot, "turbo.json")),
+        ) as { tasks?: { build?: { outputs?: string[] } } };
+        assert.deepStrictEqual(turbo.tasks?.build?.outputs, ["dist/**"]);
+      });
+    });
+
+    it("an explicit rootFiles.turbo.template still wins over turboConfig", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        // Pretty-printed on purpose: manifest-supplied templates pass through
+        // interpolate(), whose escape rule collapses adjacent `}}` into `}` —
+        // compact JSON would be mangled (the builtin templates are
+        // pretty-printed for the same reason).
+        const customTemplate = `{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": { "outputs": ["custom/**"] }
+  }
+}`;
+        const manifest: Manifest = {
+          system: "override",
+          monorepo: {
+            turboConfig: {
+              globalDependencies: ["**/.env.*"],
+              pipeline: { build: { outputs: ["out/**"] } },
+            },
+            rootFiles: { turbo: { template: customTemplate } },
+          },
+        };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+
+        const content = await readFile(path.join(workspaceRoot, "turbo.json"));
+        assert.strictEqual(
+          content,
+          customTemplate,
+          "author-supplied full template is the most specific override and must be used verbatim",
+        );
+      });
+    });
+  });
 });

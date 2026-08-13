@@ -22,6 +22,7 @@ import { clearGenesisFormValues } from "./genesis-workbench/genesisProjectSettin
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import type { ProjectSpec } from "@hexagen/project-configuration";
 import { parseYamlToViewData } from "@hexagen/manifest-generation";
+import { computeHasBlockingFailures } from "./manifest-validation-display";
 
 const TAB_CONFIG: { id: ViewTab; icon: typeof Network; label: string }[] = [
   { id: "context-map", icon: Network, label: "Context Map" },
@@ -69,8 +70,13 @@ export function ManifestAcceptPage() {
     }
   }, [pendingManifest.yaml]);
 
-  const hasFailures =
-    viewData?.validationItems.some((v) => v.status === "fail") ?? false;
+  // Same gate ManifestPreview applies to its own approve button: with a
+  // server report the parser's connectivity heuristics are advisory and only
+  // Invalid-YAML or a failed server report blocks; without one, any parser
+  // FAIL blocks (see manifest-validation-display).
+  const hasFailures = viewData
+    ? computeHasBlockingFailures(viewData, pendingManifest.validationReport)
+    : false;
 
   const canAccept =
     !!pendingManifest.yaml &&
@@ -369,6 +375,10 @@ export function ManifestAcceptPage() {
         showContextChat
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        // Server-report pass-through: gates the auto-fix loop and switches the
+        // Validation tab to the pipeline's findings. updateYaml (wired above)
+        // nulls it on any edit, re-arming the client fixer.
+        validationReport={pendingManifest.validationReport}
       />
     </ProjectsShellWithFreeTier>
   );

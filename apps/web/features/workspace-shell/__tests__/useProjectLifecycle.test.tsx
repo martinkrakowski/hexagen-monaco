@@ -293,3 +293,259 @@ describe("useProjectLifecycle - Manifest Integration", () => {
     assert.strictEqual(mockEditor.setActiveWorkspace.mock.calls.length, 1);
   });
 });
+
+// Import round-trip integrity (Item 1.2): the wizard autosave (handleNext /
+// handleSaveAndNew, the ONLY updateProject callers) must never overwrite an
+// imported project's rich manifestYaml with the lossy wizardToManifest
+// projection. Wizard-authored projects keep the regenerate-on-autosave path.
+describe("useProjectLifecycle - imported-manifest autosave guard", () => {
+  const RICH_MANIFEST_YAML = [
+    "system: shop",
+    "bounded_contexts:",
+    "  - name: billing",
+    "    layers:",
+    "      application:",
+    "        ports:",
+    "          in: [ProcessPaymentPort]",
+    "",
+  ].join("\n");
+
+  beforeEach(() => {
+    persistencePort.state.projects = [];
+    window.history.replaceState(null, "", "/");
+  });
+
+  function buildLifecycleMocks(formValues: ProjectConfig) {
+    const mockForm = {
+      getValues: vi.fn(() => formValues),
+      reset: vi.fn(),
+      trigger: vi.fn(async () => true),
+    } as unknown as UseFormReturn<ProjectConfig>;
+    const mockUi = {
+      currentStepIndex: 0,
+      viewMode: "visual" as const,
+      openDialog: vi.fn(),
+      closeDialog: vi.fn(),
+      setContextId: vi.fn(),
+      setMappingId: vi.fn(),
+      enterEditMode: vi.fn(),
+      enterGenesisMode: vi.fn(),
+    } as unknown as UseWorkspaceShellUiReturn;
+    const mockEditor = {
+      setSessionId: vi.fn(),
+      clearSession: vi.fn(),
+      setActiveWorkspace: vi.fn(),
+      clearActiveWorkspace: vi.fn(),
+    } as unknown as Pick<
+      UseEditorSessionReturn,
+      | "setSessionId"
+      | "clearSession"
+      | "setActiveWorkspace"
+      | "clearActiveWorkspace"
+    >;
+    return { mockForm, mockUi, mockEditor };
+  }
+
+  function seedProject(id: string, formState: ProjectConfig) {
+    persistencePort.state.projects = [
+      {
+        id,
+        name: "Seeded",
+        schemaVersion: 3,
+        formState: structuredClone(formState) as unknown as Record<
+          string,
+          unknown
+        >,
+        manifestYaml: RICH_MANIFEST_YAML,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    ];
+  }
+
+  it("REGRESSION: handleNext on an imported project persists formState only — the rich manifestYaml survives", async () => {
+    const importedValues = {
+      ...structuredClone(emptyFormValues),
+      manifestSource: "imported",
+      governance: {
+        ...structuredClone(emptyFormValues.governance),
+        workspaceName: "renamed-by-user",
+      },
+    } as ProjectConfig;
+    seedProject("imp-1", importedValues);
+    const { mockForm, mockUi, mockEditor } =
+      buildLifecycleMocks(importedValues);
+    const onGoToStep = vi.fn();
+
+    const { result } = renderHook(
+      () =>
+        useProjectLifecycle({
+          form: mockForm,
+          ui: mockUi,
+          uiState: { kind: "edit", projectId: "imp-1" },
+          editor: mockEditor,
+          totalSteps: 4,
+          onGoToStep,
+        }),
+      { wrapper: ActiveWorkspaceProvider },
+    );
+
+    await waitFor(() => {
+      assert.strictEqual(result.current.projects.length, 1);
+    });
+
+    await act(async () => {
+      await result.current.handleNext();
+    });
+
+    await waitFor(() => {
+      const record = persistencePort.state.projects[0];
+      const formState = record.formState as Record<string, unknown>;
+      assert.strictEqual(
+        (formState.governance as Record<string, unknown>).workspaceName,
+        "renamed-by-user",
+        "formState edit must be persisted",
+      );
+    });
+    // The clobber this arc removes: pre-fix this held JSON.stringify(wizardToManifest(...)).
+    assert.strictEqual(
+      persistencePort.state.projects[0].manifestYaml,
+      RICH_MANIFEST_YAML,
+      "imported manifestYaml must survive the autosave byte-identical",
+    );
+    assert.deepStrictEqual(onGoToStep.mock.calls, [[1]]);
+  });
+
+  it("control: handleNext on a wizard-authored project still regenerates manifestYaml (projection path unchanged)", async () => {
+    const wizardValues = structuredClone(emptyFormValues) as ProjectConfig;
+    seedProject("wiz-1", wizardValues);
+    const { mockForm, mockUi, mockEditor } = buildLifecycleMocks(wizardValues);
+
+    const { result } = renderHook(
+      () =>
+        useProjectLifecycle({
+          form: mockForm,
+          ui: mockUi,
+          uiState: { kind: "edit", projectId: "wiz-1" },
+          editor: mockEditor,
+          totalSteps: 4,
+          onGoToStep: vi.fn(),
+        }),
+      { wrapper: ActiveWorkspaceProvider },
+    );
+
+    await waitFor(() => {
+      assert.strictEqual(result.current.projects.length, 1);
+    });
+
+    await act(async () => {
+      await result.current.handleNext();
+    });
+
+    await waitFor(() => {
+      const stored = persistencePort.state.projects[0].manifestYaml as string;
+      assert.notStrictEqual(
+        stored,
+        RICH_MANIFEST_YAML,
+        "wizard autosave must overwrite manifestYaml with the fresh projection",
+      );
+      // The regenerated projection is JSON.stringify(wizardToManifest(...)).
+      assert.ok(JSON.parse(stored));
+    });
+  });
+
+  it("handleSaveAndNew honors the same guard for an imported project", async () => {
+    const importedValues = {
+      ...structuredClone(emptyFormValues),
+      manifestSource: "imported",
+    } as ProjectConfig;
+    seedProject("imp-2", importedValues);
+    const { mockForm, mockUi, mockEditor } =
+      buildLifecycleMocks(importedValues);
+
+    const { result } = renderHook(
+      () =>
+        useProjectLifecycle({
+          form: mockForm,
+          ui: mockUi,
+          uiState: { kind: "edit", projectId: "imp-2" },
+          editor: mockEditor,
+          totalSteps: 4,
+          onGoToStep: vi.fn(),
+        }),
+      { wrapper: ActiveWorkspaceProvider },
+    );
+
+    await waitFor(() => {
+      assert.strictEqual(result.current.projects.length, 1);
+    });
+
+    await act(async () => {
+      await result.current.handleSaveAndNew();
+    });
+
+    await waitFor(() => {
+      assert.strictEqual(mockForm.reset.mock.calls.length, 1);
+    });
+    assert.strictEqual(
+      persistencePort.state.projects[0].manifestYaml,
+      RICH_MANIFEST_YAML,
+    );
+  });
+
+  it("handleGenerate sends the SAVED manifest for an imported project (parity with exports)", async () => {
+    const importedValues = {
+      ...structuredClone(emptyFormValues),
+      manifestSource: "imported",
+    } as ProjectConfig;
+    seedProject("imp-3", importedValues);
+    const { mockForm, mockUi, mockEditor } =
+      buildLifecycleMocks(importedValues);
+
+    const originalFetch = globalThis.fetch;
+    // Fail the generation server-side so the flow stops after the request —
+    // the assertion target is the request BODY, not the success plumbing
+    // (covered in useProjectGenerationFlow.test.ts).
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ success: false, error: "stop here" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      const { result } = renderHook(
+        () =>
+          useProjectLifecycle({
+            form: mockForm,
+            ui: mockUi,
+            uiState: { kind: "edit", projectId: "imp-3" },
+            editor: mockEditor,
+            totalSteps: 4,
+            onGoToStep: vi.fn(),
+          }),
+        { wrapper: ActiveWorkspaceProvider },
+      );
+
+      await waitFor(() => {
+        assert.strictEqual(result.current.projects.length, 1);
+      });
+
+      await act(async () => {
+        await result.current.handleGenerate();
+      });
+
+      assert.strictEqual(fetchMock.mock.calls.length, 1);
+      const body = JSON.parse(
+        (fetchMock.mock.calls[0]?.[1] as RequestInit).body as string,
+      );
+      // Rich manifest, not the wizardToManifest(emptyFormValues) projection:
+      // "billing" exists only in the SAVED manifestYaml.
+      assert.strictEqual(body.manifest.system, "shop");
+      assert.strictEqual(body.manifest.bounded_contexts[0].name, "billing");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});

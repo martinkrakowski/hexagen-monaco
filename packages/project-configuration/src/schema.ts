@@ -164,6 +164,19 @@ export const ProjectSpecSchema = z.object({
       ),
     )
     .default({}),
+  /**
+   * Provenance of the project's `manifestYaml` (import round-trip integrity,
+   * Item 1). `"imported"` = the manifest is the source of truth (accepted via
+   * `parseManifestToWizardData` — file import or AI generation) and the wizard
+   * projection (`wizardToManifest`) is LOSSY for it, so autosave/export paths
+   * must never overwrite or impersonate the stored manifest. Deliberately
+   * `.optional()` rather than `.default("wizard")`: absent ≡ `"wizard"`
+   * everywhere (guards key on `=== "imported"` only), which keeps every
+   * wizard-authored formState byte-identical to before this field existed and
+   * lets the load perimeter distinguish "legacy record, provenance unknown"
+   * (absent) from an explicit value when running its one-time discriminator.
+   */
+  manifestSource: z.enum(["wizard", "imported"]).optional(),
 });
 
 // --- Type Exports for Apps/Web & Orchestration ---

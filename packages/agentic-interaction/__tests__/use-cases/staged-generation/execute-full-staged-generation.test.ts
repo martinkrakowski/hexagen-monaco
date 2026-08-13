@@ -43,12 +43,24 @@ const stage3Response = [
   '{"contextName":"invoice-management","direction":"out","name":"invoiceRepository","portType":"repository","description":"Persist invoices"}',
 ].join("\n");
 
-const stage4Response = JSON.stringify({
-  contextName: "invoice-management",
-  name: "InMemoryInvoiceAdapter",
-  adapterType: "Repository",
-  implements: "InvoiceRepositoryPort",
-});
+// Both ports carry exactly one adapter: Stage 6 now recomputes R04/R05
+// deterministically from stage3+stage4 (per-context discard+recompute), so a
+// fixture leaving CreateInvoicePort uncovered would genuinely fail validation
+// instead of riding on the scripted judge's passed:true.
+const stage4Response = [
+  JSON.stringify({
+    contextName: "invoice-management",
+    name: "InMemoryInvoiceAdapter",
+    adapterType: "Repository",
+    implements: "InvoiceRepositoryPort",
+  }),
+  JSON.stringify({
+    contextName: "invoice-management",
+    name: "CreateInvoiceController",
+    adapterType: "Controller",
+    implements: "CreateInvoicePort",
+  }),
+].join("\n");
 
 const stage6Response = '{"type":"result","passed":true}\n';
 
@@ -226,10 +238,11 @@ describe("ExecuteFullStagedGenerationUseCase", () => {
     assert.ok(typeof beginMetadata.yaml === "string");
     // Counts must read the manifest's nested layout
     // (layers.application.ports / layers.infrastructure.adapters):
-    // 1 context, 2 ports (createInvoice + invoiceRepository), 1 adapter.
+    // 1 context, 2 ports (createInvoice + invoiceRepository), 2 adapters
+    // (one per port — see the stage4Response comment).
     assert.equal(beginMetadata.contextCount, 1);
     assert.equal(beginMetadata.portCount, 2);
-    assert.equal(beginMetadata.adapterCount, 1);
+    assert.equal(beginMetadata.adapterCount, 2);
   });
 
   test("chaining: each stage's prompt embeds upstream output", async () => {

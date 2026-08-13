@@ -20,6 +20,12 @@ import { type ViewFileNode, ADDON_NOTICES_FILENAME } from "./types";
 
 interface CodeViewProps {
   wizardData: WizardData;
+  /**
+   * The saved record's manifestYaml — source of truth for IMPORTED projects
+   * (import round-trip integrity, Item 1.3). Both generation hooks consult it
+   * only when `wizardData.manifestSource === "imported"`.
+   */
+  savedManifestYaml?: string | null;
   selectedFileId: string | null;
   editedFiles: Map<string, string>;
   onFileSelect: (fileId: string | null) => void;
@@ -35,6 +41,7 @@ interface CodeViewProps {
 
 export const CodeView: React.FC<CodeViewProps> = ({
   wizardData,
+  savedManifestYaml,
   selectedFileId,
   editedFiles,
   onFileSelect,
@@ -51,7 +58,7 @@ export const CodeView: React.FC<CodeViewProps> = ({
     isStale,
     refresh,
     downloadZip,
-  } = useProjectGeneration(wizardData);
+  } = useProjectGeneration(wizardData, savedManifestYaml);
 
   const selectedFile = useMemo((): ViewFileNode | null => {
     if (!selectedFileId) return null;
@@ -70,11 +77,18 @@ export const CodeView: React.FC<CodeViewProps> = ({
     ? (editedFiles.get(selectedFileId) ?? files.get(selectedFileId) ?? "")
     : "";
 
-  const { downloadArchitectureZip, isDownloading: isDownloadingArch } =
-    useArchitectureDownload(wizardData);
+  const {
+    downloadArchitectureZip,
+    isDownloading: isDownloadingArch,
+    error: archError,
+  } = useArchitectureDownload(wizardData, savedManifestYaml);
 
   const fileTree = useMemo(() => mapToFolderTree(files), [files]);
   const isNetworkActive = loading || isDownloading;
+  // One sidebar error slot: the generation error wins (it blocks the whole
+  // view); the architecture-download fail-closed error shows when that's all
+  // there is.
+  const displayError = error ?? archError;
 
   return (
     <div className="flex h-full w-full bg-background overflow-hidden text-foreground">
@@ -113,10 +127,10 @@ export const CodeView: React.FC<CodeViewProps> = ({
           </ExplorerToolbar.Actions>
         </ExplorerToolbar.Root>
 
-        {error ? (
+        {displayError ? (
           <div className="p-4 text-destructive text-sm flex items-start gap-2">
             <AlertCircle size={16} className="shrink-0 mt-0.5" />
-            <span>{error}</span>
+            <span>{displayError}</span>
           </div>
         ) : loading && files.size === 0 ? (
           <div className="p-8 flex justify-center text-muted-foreground">

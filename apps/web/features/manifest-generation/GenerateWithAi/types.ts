@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
+import type { StageValidationReport } from "../useStagedGenerationStream";
 import type {
   ModelSelectionFlowState,
   ModelSelectionFlowActions,
@@ -29,7 +30,16 @@ export interface GenerateWithAiWorkbenchSlots {
 }
 
 export interface GenerateWithAiProps {
-  onUseManifest?: (manifest: string) => void;
+  /**
+   * Hand-off of the completed run. `validationReport` is the Stage-6 report
+   * the stream's done event carried for exactly this manifest (null/absent on
+   * older payloads) — the host stores it with the manifest so the accept view
+   * renders the pipeline's findings instead of re-deriving heuristics.
+   */
+  onUseManifest?: (
+    manifest: string,
+    validationReport?: StageValidationReport | null,
+  ) => void;
   llmContext: LocalLLMContext;
   onGeneratingStateChange?: (actions: GeneratingFooterActions | null) => void;
   /**

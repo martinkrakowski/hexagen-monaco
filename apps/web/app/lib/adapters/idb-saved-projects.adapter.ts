@@ -1,4 +1,5 @@
 import { get, set } from "idb-keyval";
+import yaml from "js-yaml";
 import { projectConfigSchema } from "@hexagen/project-configuration";
 import { withFormStateDefaults } from "../form-state-defaults";
 import type {
@@ -266,6 +267,90 @@ export function normalizeLayers(
   return layers;
 }
 
+// ─── Legacy manifestSource discriminator (import round-trip integrity) ──────
+// Wizard-authored manifests only ever carry port names the wizard itself
+// emits: the 8 checkbox catalog types, written by `wizardToManifest` as
+// `<type>.in-port.ts` / `<type>.out-port.ts` (stable since the first port-
+// emitting version; the bare type literals are included defensively — they are
+// the values the wizard round-trips through `parseManifestToWizardData`).
+// NOTE: the plan doc's migration paragraph lists adapter-ish literals
+// ("KafkaProducer" etc.) that exist nowhere in this codebase's history; the
+// catalog below is grounded in `port-catalog.ts` + `wizardToManifest`'s
+// `getInbound/OutboundPortName` emission instead.
+const WIZARD_EMITTED_PORT_NAMES = new Set(
+  [
+    ["rest-controller", "in"],
+    ["graphql-resolver", "in"],
+    ["event-listener", "in"],
+    ["cli-command", "in"],
+    ["relational-db", "out"],
+    ["document-db", "out"],
+    ["external-service-client", "out"],
+    ["message-publisher", "out"],
+  ].flatMap(([type, dir]) => [type, `${type}.${dir}-port.ts`]),
+);
+
+/**
+ * One-shot provenance discriminator for records that predate `manifestSource`:
+ * a stored manifest containing any port name OUTSIDE the wizard's emitted
+ * catalog cannot have been produced by `wizardToManifest`, so the record is an
+ * accepted import (or AI-generated manifest) and must be protected from the
+ * autosave/export projection paths. Asymmetric by design:
+ * - false positive (wizard record marked "imported") is harmless — the
+ *   autosave guard is idempotent and exports still send a valid manifest;
+ * - false negative (unparseable YAML / catalog-only ports → treated as
+ *   "wizard") allows at most one more clobber before re-import, same as today.
+ * Runs only when `manifestSource` is absent, so the yaml.load cost is paid
+ * once per legacy record per load, never for new records.
+ */
+function inferLegacyManifestSource(
+  manifestYaml: unknown,
+): "imported" | undefined {
+  if (typeof manifestYaml !== "string" || manifestYaml.trim() === "") {
+    return undefined;
+  }
+  let loaded: unknown;
+  try {
+    // JSON ⊂ YAML: the pre-fix autosave wrote `JSON.stringify` output into
+    // manifestYaml, so one loader covers both stored dialects.
+    loaded = yaml.load(manifestYaml);
+  } catch {
+    return undefined;
+  }
+  if (!isRecord(loaded) || !Array.isArray(loaded.bounded_contexts)) {
+    return undefined;
+  }
+  for (const bc of loaded.bounded_contexts as unknown[]) {
+    if (!isRecord(bc)) continue;
+    const layers = isRecord(bc.layers) ? bc.layers : undefined;
+    const application =
+      layers && isRecord(layers.application) ? layers.application : undefined;
+    const ports =
+      application && isRecord(application.ports)
+        ? application.ports
+        : undefined;
+    if (!ports) continue;
+    for (const dir of ["in", "out"] as const) {
+      const list = ports[dir];
+      if (!Array.isArray(list)) continue;
+      for (const entry of list as unknown[]) {
+        // Ports are strings in the legacy dialect, `{ name }` objects in the
+        // newer one (LegacyOrNewPortSchema) — accept both.
+        const name =
+          typeof entry === "string"
+            ? entry
+            : isRecord(entry) && typeof entry.name === "string"
+              ? entry.name
+              : null;
+        if (name !== null && !WIZARD_EMITTED_PORT_NAMES.has(name)) {
+          return "imported";
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
 /**
  * Normalize the raw IDB value into `SavedProject[]` at the load perimeter, so
  * the React tree + downstream use cases never see missing keys — notably
@@ -330,6 +415,13 @@ export function normalizeLoadedProjects(
       continue;
     }
 
+    // Legacy provenance migration: only when the record predates the field
+    // entirely — an explicit stored value (either of them) is always kept.
+    const inferredManifestSource =
+      (rawFormState as Record<string, unknown>).manifestSource === undefined
+        ? inferLegacyManifestSource(record.manifestYaml)
+        : undefined;
+
     const parsed = projectConfigSchema.safeParse(rawFormState);
     if (parsed.success) {
       out.push({
@@ -341,6 +433,9 @@ export function normalizeLoadedProjects(
         formState: {
           ...(rawFormState as Record<string, unknown>),
           ...parsed.data,
+          ...(inferredManifestSource !== undefined
+            ? { manifestSource: inferredManifestSource }
+            : {}),
         } as SavedProject["formState"],
         layers: normalizeLayers(record.layers, id, logger),
       });
@@ -360,9 +455,14 @@ export function normalizeLoadedProjects(
     out.push({
       ...(record as unknown as SavedProject),
       name,
-      formState: withFormStateDefaults(
-        rawFormState,
-      ) as SavedProject["formState"],
+      formState: {
+        ...withFormStateDefaults(rawFormState),
+        // Same legacy-provenance stamp as the valid path: a drifted imported
+        // record still needs its manifest protected from the autosave clobber.
+        ...(inferredManifestSource !== undefined
+          ? { manifestSource: inferredManifestSource }
+          : {}),
+      } as SavedProject["formState"],
       layers: normalizeLayers(record.layers, id, logger),
     });
   }

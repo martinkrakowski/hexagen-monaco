@@ -1,6 +1,20 @@
-import { test, describe } from "vitest";
+import { test, describe, vi } from "vitest";
 import assert from "node:assert";
-import { resolveExecutionStrategy } from "../useStagedSpecGeneration.ts";
+import { renderHook, act } from "@testing-library/react";
+import {
+  resolveExecutionStrategy,
+  useStagedSpecGeneration,
+} from "../useStagedSpecGeneration.ts";
+
+// The hook resolves its engine through wire.client; stub it to the cloud path
+// so retry tests exercise the streaming fetch (no WebLLM in jsdom).
+vi.mock("../../../app/lib/wire.client", () => ({
+  getClientSpecGenerationUseCase: () => {
+    throw new Error("local path must not run in these tests");
+  },
+  isLocalLLMReady: () => false,
+  hasServerLLMAccessKey: () => true,
+}));
 
 describe("resolveExecutionStrategy", () => {
   test("returns local when strategy is local and hasLocalLLM is true", () => {
@@ -39,5 +53,90 @@ describe("resolveExecutionStrategy", () => {
 
   test("auto: returns none when no capabilities available", () => {
     assert.strictEqual(resolveExecutionStrategy("auto", false, false), "none");
+  });
+});
+
+describe("useStagedSpecGeneration retry", () => {
+  test("retry re-runs the last generation end-to-end (silent stream death → retry → success)", async () => {
+    const originalFetch = global.fetch;
+    const bodies: string[] = [];
+    let call = 0;
+    global.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      call++;
+      bodies.push(String(init?.body));
+      const encoder = new TextEncoder();
+      // First request: stream dies after stage-start (no done/error frame).
+      // Second request (the retry): healthy stream with a done frame.
+      const lines =
+        call === 1
+          ? ['{"type":"stage-start","stage":0,"label":"Config Parse"}\n']
+          : [
+              '{"type":"done","yaml":"retried-manifest","contextCount":1,"portCount":1,"adapterCount":1}\n',
+            ];
+      let i = 0;
+      return {
+        ok: true,
+        status: 200,
+        body: new ReadableStream<Uint8Array>({
+          pull(controller) {
+            if (i < lines.length) {
+              controller.enqueue(encoder.encode(lines[i++]));
+            } else {
+              controller.close();
+            }
+          },
+        }),
+      } as unknown as Response;
+    }) as typeof fetch;
+
+    try {
+      const { result } = renderHook(() => useStagedSpecGeneration());
+
+      await act(async () => {
+        await result.current.generateFromSpec("spec: content", {
+          executionStrategy: "cloud",
+        });
+      });
+
+      // The dead stream surfaced as a failed state with retry copy (the
+      // stream hook's terminal-frame accounting, propagated through
+      // executeCloudGeneration's failed branch).
+      assert.strictEqual(result.current.phase, "failed");
+      assert.match(result.current.generationError || "", /ended unexpectedly/i);
+
+      let retryResult:
+        | Awaited<ReturnType<typeof result.current.retry>>
+        | undefined;
+      await act(async () => {
+        retryResult = await result.current.retry();
+      });
+
+      assert.strictEqual(call, 2, "retry issued a second request");
+      // Same body replayed — retry re-runs the LAST invocation verbatim.
+      assert.deepStrictEqual(JSON.parse(bodies[1]), JSON.parse(bodies[0]));
+      assert.strictEqual(retryResult?.phase, "complete");
+      assert.strictEqual(result.current.generatedManifest, "retried-manifest");
+      assert.strictEqual(result.current.phase, "complete");
+      assert.strictEqual(result.current.generationError, null);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  test("retry with no prior run is a no-op (resolves undefined, no fetch)", async () => {
+    const originalFetch = global.fetch;
+    const fetchSpy = vi.fn();
+    global.fetch = fetchSpy as unknown as typeof fetch;
+    try {
+      const { result } = renderHook(() => useStagedSpecGeneration());
+      let out: unknown = "sentinel";
+      await act(async () => {
+        out = await result.current.retry();
+      });
+      assert.strictEqual(out, undefined);
+      assert.strictEqual(fetchSpy.mock.calls.length, 0);
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 });

@@ -91,6 +91,14 @@ export function GenerateWithAi({
   const onUseManifestRef = useRef(onUseManifest);
   onUseManifestRef.current = onUseManifest;
 
+  // The Stage-6 report rides WITH the manifest into the hand-off. Ref-read
+  // like onUseManifest above: it is only consumed inside the parked Next
+  // action, and it lands in the same stream-completion batch as
+  // generatedManifest — keeping it out of the effect's dep array below avoids
+  // re-publishing the footer actions for a value Next reads lazily anyway.
+  const validationReportRef = useRef(stagedGen.validationReport);
+  validationReportRef.current = stagedGen.validationReport;
+
   // On success the flow stays parked on the generating screen (telemetry log
   // stays reviewable); the parent footer gets a Next action that hands the
   // completed manifest to /ai/accept. While still in flight, Cancel only.
@@ -110,7 +118,11 @@ export function GenerateWithAi({
         ? {
             onCancel: () => cancelGenerationRef.current(),
             onNext: completedManifest
-              ? () => onUseManifestRef.current?.(completedManifest)
+              ? () =>
+                  onUseManifestRef.current?.(
+                    completedManifest,
+                    validationReportRef.current,
+                  )
               : undefined,
           }
         : null,

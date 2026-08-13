@@ -42,23 +42,35 @@ export function resolveExecutionStrategy(
   return "none";
 }
 
+/** Result shape shared by generateFromSpec and retry (undefined = run skipped). */
+export type SpecGenerationResult =
+  | {
+      generatedManifest: string | null;
+      phase: StagedPhase;
+      stepDetail: string;
+      stageProgress: Record<number, StageProgress>;
+      validationErrors: string[];
+      contextCount: number;
+      portCount: number;
+      adapterCount: number;
+    }
+  | undefined;
+
 export interface UseStagedSpecGenerationReturn {
   generateFromSpec: (
     config: string,
     options?: SpecGenerationOptions,
-  ) => Promise<
-    | {
-        generatedManifest: string | null;
-        phase: StagedPhase;
-        stepDetail: string;
-        stageProgress: Record<number, StageProgress>;
-        validationErrors: string[];
-        contextCount: number;
-        portCount: number;
-        adapterCount: number;
-      }
-    | undefined
-  >;
+  ) => Promise<SpecGenerationResult>;
+  /**
+   * Re-runs the last generateFromSpec invocation (same spec, same options).
+   * Resolves undefined when no prior run exists or a run is already in
+   * flight. This is the hook-level surface for the stream's retry():
+   * delegating to the raw stream retry would bypass this hook's engine
+   * resolution, the local-path fallback, and the completion state writes in
+   * executeCloudGeneration (the stream-mirroring effect only runs while the
+   * stream reports isGenerating), so retry re-enters generateFromSpec instead.
+   */
+  retry: () => Promise<SpecGenerationResult>;
   isGenerating: boolean;
   generationError: string | null;
   generatedManifest: string | null;
@@ -118,6 +130,15 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
 
   const abortRef = useRef(false);
   const generatingLockRef = useRef(false);
+  // Last ATTEMPTED generateFromSpec invocation (recorded once the lock is
+  // taken, so failed runs stay replayable — that is retry()'s whole purpose),
+  // remembered for retry(). The caller's AbortSignal is deliberately dropped:
+  // replaying an already-aborted signal would abort the retry instantly (and a
+  // one-shot "abort" listener has already been consumed).
+  const lastRunRef = useRef<{
+    config: string;
+    options?: SpecGenerationOptions;
+  } | null>(null);
   // Engine-selection banner lines (which engine is generating, fallback
   // notices). Kept in a ref because the cloud-stream mirror effect below
   // replaces verboseLog wholesale with the stream's chunk list — these lines
@@ -204,6 +225,10 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
       return undefined;
     }
     generatingLockRef.current = true;
+    lastRunRef.current = {
+      config,
+      options: options ? { ...options, signal: undefined } : undefined,
+    };
 
     setGenerationError(null);
     setGeneratedManifest(null);
@@ -530,6 +555,16 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     }
   };
 
+  // See the interface doc: retry re-enters generateFromSpec (not the raw
+  // stream retry) so engine resolution, local fallback, and completion state
+  // writes all run again. The lock inside generateFromSpec makes a retry
+  // during an in-flight run a no-op (resolves undefined).
+  const retry = async (): Promise<SpecGenerationResult> => {
+    const last = lastRunRef.current;
+    if (!last) return undefined;
+    return generateFromSpec(last.config, last.options);
+  };
+
   const proposePR = async (manifest: AssembledManifest, intent: string) => {
     setPrState((prev) => ({ ...prev, isProposing: true, error: null }));
 
@@ -562,6 +597,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
 
   return {
     generateFromSpec,
+    retry,
     isGenerating,
     generationError,
     generatedManifest,

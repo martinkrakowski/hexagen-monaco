@@ -29,6 +29,7 @@ import {
 import { ContextGovernanceChatDrawer } from "./ContextGovernanceChatDrawer";
 import { MermaidDiagramView } from "./MermaidDiagramView";
 import { ValidationReportView } from "./ValidationReportView";
+import { ValidationFindingsPanel } from "./ValidationFindingsPanel";
 import { ManifestAutoFixDrawer } from "./ManifestAutoFixDrawer";
 import type { ValidationItem } from "@hexagen/manifest-generation";
 import {
@@ -36,6 +37,11 @@ import {
   canAutoFix,
   applyDeterministicFix,
 } from "@hexagen/manifest-generation";
+import type { StageValidationReport } from "./useStagedGenerationStream";
+import {
+  toAdvisoryValidationItems,
+  computeHasBlockingFailures,
+} from "./manifest-validation-display";
 import { generateMermaidDiagram } from "./generate-mermaid-diagram";
 
 interface ManifestPreviewProps {
@@ -56,6 +62,16 @@ interface ManifestPreviewProps {
    * to a slide-in overlay. Clicking a Context Map card opens/seeds it.
    */
   showContextChat?: boolean;
+  /**
+   * The server pipeline's Stage-6 report for EXACTLY this manifestYaml
+   * (usePendingManifest.validationReport). When present, the client auto-fix
+   * loop is skipped (the server already validated — and where needed
+   * repaired — this YAML), the Validation tab renders the server's findings,
+   * and the parser's connectivity heuristics stop gating approve. Absent/null
+   * for report-less YAML (hand-written manifests, legacy imports), where the
+   * fixer and heuristics remain the only validation there is.
+   */
+  validationReport?: StageValidationReport | null;
 }
 
 export type ViewTab = "context-map" | "mermaid" | "validation";
@@ -76,6 +92,7 @@ export function ManifestPreview({
   embedded,
   isApproveDisabled,
   showContextChat,
+  validationReport,
 }: ManifestPreviewProps) {
   const [internalActiveTab, setInternalActiveTab] =
     useState<ViewTab>("context-map");
@@ -116,16 +133,29 @@ export function ManifestPreview({
   const [localManifestYaml, setLocalManifestYaml] = useState(manifestYaml);
   const [activeFixViolation, setActiveFixViolation] =
     useState<ValidationItem | null>(null);
+  // Disclosure for the auto-fix loop below: the violation titles it resolved,
+  // listed on the Validation tab so the mutation is never silent.
+  const [appliedAutoFixes, setAppliedAutoFixes] = useState<string[]>([]);
 
   const autoFixAppliedRef = useRef(false);
   useEffect(() => {
     setLocalManifestYaml(manifestYaml);
     autoFixAppliedRef.current = false;
+    setAppliedAutoFixes([]);
   }, [manifestYaml]);
   useEffect(() => {
+    // Server-validated manifests skip the client fixer entirely: the staged
+    // pipeline already validated (and where needed repaired) exactly this
+    // YAML, and the fixer's name-heuristic padding was re-adding adapters the
+    // server knew were bound (alvaro field test: duplicated real adapters,
+    // R12 uniqueness violations). The fixer stays live for report-less YAML
+    // and re-arms when an edit clears the report (usePendingManifest.updateYaml
+    // nulls it, and the parent re-render lands here with a fresh yaml prop).
+    if (validationReport) return;
     if (autoFixAppliedRef.current) return;
     autoFixAppliedRef.current = true;
     let yaml = localManifestYaml;
+    const applied: string[] = [];
     let changed = true;
     while (changed) {
       changed = false;
@@ -135,6 +165,7 @@ export function ManifestPreview({
           const patched = applyDeterministicFix(yaml, v);
           if (patched && patched !== yaml) {
             yaml = patched;
+            applied.push(v.title);
             changed = true;
             break;
           }
@@ -143,20 +174,42 @@ export function ManifestPreview({
     }
     if (yaml !== localManifestYaml) {
       setLocalManifestYaml(yaml);
+      // Disclose, don't silently mutate — the fixpoint loop can apply the
+      // same fix class more than once, so dedupe for display.
+      setAppliedAutoFixes(Array.from(new Set(applied)));
       onYamlChange?.(yaml);
     }
-  }, [localManifestYaml, onYamlChange]);
+  }, [localManifestYaml, onYamlChange, validationReport]);
 
   const viewData = useMemo(
     () => parseYamlToViewData(localManifestYaml),
     [localManifestYaml],
+  );
+  // Display projection: with a server report, the parser's connectivity FAILs
+  // are advisory (they can't see the server-validated declared bindings), so
+  // the Validation tab must agree with the approve gate below. Contexts and
+  // score are untouched.
+  const displayViewData = useMemo(
+    () =>
+      validationReport
+        ? {
+            ...viewData,
+            validationItems: toAdvisoryValidationItems(
+              viewData.validationItems,
+            ),
+          }
+        : viewData,
+    [viewData, validationReport],
   );
   const mermaidCode = useMemo(
     () => generateMermaidDiagram(viewData),
     [viewData],
   );
 
-  const hasFailures = viewData.validationItems.some((v) => v.status === "fail");
+  const hasFailures = computeHasBlockingFailures(
+    viewData,
+    validationReport ?? null,
+  );
 
   // Tab content, extracted so it mounts once whether or not the desktop
   // resizable-panel layout wraps it.
@@ -179,8 +232,33 @@ export function ManifestPreview({
       )}
       {activeTab === "validation" && (
         <div className="absolute inset-0 overflow-auto custom-scrollbar">
+          {validationReport && (
+            <div className="max-w-2xl mx-auto px-4 sm:px-8 pt-6">
+              {/* The pipeline's own findings for exactly this YAML — the
+                  authoritative report. The parser checks below are local
+                  display heuristics (connectivity items advisory here). */}
+              <ValidationFindingsPanel validationReport={validationReport} />
+            </div>
+          )}
+          {!validationReport && appliedAutoFixes.length > 0 && (
+            <div className="max-w-2xl mx-auto px-4 sm:px-8 pt-6">
+              <div className="rounded-md border border-border bg-muted/30 p-4 text-sm">
+                <p className="font-medium text-foreground">
+                  {appliedAutoFixes.length === 1
+                    ? "1 automatic adjustment was"
+                    : `${appliedAutoFixes.length} automatic adjustments were`}{" "}
+                  applied to make this manifest approvable
+                </p>
+                <ul className="mt-2 space-y-1 font-mono text-xs text-muted-foreground">
+                  {appliedAutoFixes.map((title) => (
+                    <li key={title}>• {title}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
           <ValidationReportView
-            viewData={viewData}
+            viewData={displayViewData}
             onRequestFix={(v) => setActiveFixViolation(v)}
           />
         </div>

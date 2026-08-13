@@ -27,7 +27,16 @@ export async function generatePackageJson(
 ): Promise<GeneratorResult> {
   const result = createEmptyResult();
 
-  const defaults = config.manifest?.workspaceDefaults?.packageJson ?? {};
+  // Workspace defaults are canonically nested under `monorepo.workspaceDefaults`
+  // (where wizard-to-manifest writes them) but a legacy root-level
+  // `workspaceDefaults` is also supported. Root wins — the same dual-location
+  // read tsconfig.ts's resolveWorkspaceTemplate and eslint.ts use; reading only
+  // the root level silently dropped every wizard-declared script/devDependency
+  // from generated package.json files (F8).
+  const defaults =
+    config.manifest?.workspaceDefaults?.packageJson ??
+    config.manifest?.monorepo?.workspaceDefaults?.packageJson ??
+    {};
   const context = config.manifest?.bounded_contexts?.find(
     (m): m is NonNullable<Manifest["bounded_contexts"]>[number] =>
       m.name === moduleName,

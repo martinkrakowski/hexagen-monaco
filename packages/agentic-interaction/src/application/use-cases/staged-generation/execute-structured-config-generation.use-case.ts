@@ -21,6 +21,10 @@ import type {
 } from "../../../domain/value-objects/pipeline-state";
 import { normalizeContextName, normalizePortName } from "../../../domain/index";
 import { synthesizeMissingRepositoryPorts } from "../../../domain/manifest/synthesize-repository-ports";
+import {
+  buildPortAdapterCounts,
+  portCoverageErrorsForContext,
+} from "../../../domain/manifest/port-adapter-coverage";
 import { synthesizeMissingInboundPorts } from "../../../domain/manifest/synthesize-inbound-ports";
 import { filterToRequestedContexts } from "../../../domain/manifest/filter-stage-output";
 import {
@@ -1755,22 +1759,10 @@ export function structuralManifestErrors(
   // All known context names (normalized) for R07 dangling-dependency check.
   const knownContextNorms = new Set(contextTypeByNorm.keys());
 
-  // Per-context adapter counts: contextNorm → portName → # adapters implementing it.
-  const portAdapterCount = new Map<string, Map<string, number>>();
-  for (const ctxAdapters of adapterBindings.contexts) {
-    const ctxNorm = normalizeContextName(ctxAdapters.contextName);
-    if (!portAdapterCount.has(ctxNorm))
-      portAdapterCount.set(ctxNorm, new Map());
-    const countMap = portAdapterCount.get(ctxNorm)!;
-    for (const adapter of ctxAdapters.adapters) {
-      if (adapter.implements) {
-        countMap.set(
-          adapter.implements,
-          (countMap.get(adapter.implements) ?? 0) + 1,
-        );
-      }
-    }
-  }
+  // Per-context adapter counts: contextNorm → portName → # adapters implementing
+  // it. Extracted to port-adapter-coverage.ts (shared with the Stage-6 review's
+  // deterministic R04/R05 recompute); the empty-implements skip lives there.
+  const portAdapterCount = buildPortAdapterCounts(adapterBindings);
 
   // Per-context port-name sets for the R06 cross-context check. A single global
   // name→owner map mis-attributes a port name that two contexts both define
@@ -1827,24 +1819,14 @@ export function structuralManifestErrors(
       );
     }
 
-    // R04/R05: each port must have exactly one adapter implementing it.
-    const countMap = portAdapterCount.get(ctxNorm) ?? new Map<string, number>();
-    for (const port of ctx.out) {
-      const n = countMap.get(port.name) ?? 0;
-      if (n !== 1) {
-        errors.push(
-          `[R04] Outbound port '${port.name}' in '${ctx.contextName}' has ${n} adapter${n !== 1 ? "s" : ""} (expected 1).`,
-        );
-      }
-    }
-    for (const port of ctx.in) {
-      const n = countMap.get(port.name) ?? 0;
-      if (n !== 1) {
-        errors.push(
-          `[R05] Inbound port '${port.name}' in '${ctx.contextName}' has ${n} adapter${n !== 1 ? "s" : ""} (expected 1).`,
-        );
-      }
-    }
+    // R04/R05: each port must have exactly one adapter implementing it
+    // (counted within this context only — see port-adapter-coverage.ts).
+    errors.push(
+      ...portCoverageErrorsForContext(
+        ctx,
+        portAdapterCount.get(ctxNorm) ?? new Map<string, number>(),
+      ),
+    );
   }
 
   // Portless contexts: buildPreDefinedPortMap drops contexts with no ports, so a

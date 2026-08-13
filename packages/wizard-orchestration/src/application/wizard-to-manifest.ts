@@ -361,6 +361,11 @@ export function wizardToManifest(
             declarationMap: true,
             tsBuildInfoFile: "./dist/.tsbuildinfo",
           },
+          // Without an explicit `include`, tsc compiles every .ts under the
+          // package dir — including emitted config files and, worse, nothing
+          // at all when rootDir constraints bite (F2). The sync tsconfig
+          // generator only emits `include` when the template declares it.
+          include: ["src"],
         },
         packageJson: {
           scripts: {
@@ -368,11 +373,16 @@ export function wizardToManifest(
             lint: "eslint src --ext .ts,.tsx",
             typecheck: "tsc --noEmit",
           },
+          // Must satisfy the imports of the EMITTED eslint.config.js
+          // (`@eslint/js` + `typescript-eslint`) so each workspace lints
+          // standalone via `yarn workspace <pkg> lint` — not only when turbo
+          // happens to hoist compatible bins from an app scaffold (F8). Pins
+          // mirror apps-framework-templates.ts.
           devDependencies: {
             typescript: "^5.5.4",
             eslint: "^9.0.0",
-            "@typescript-eslint/parser": "^8.0.0",
-            "@typescript-eslint/eslint-plugin": "^8.0.0",
+            "@eslint/js": "^9.0.0",
+            "typescript-eslint": "^8.0.0",
           },
         },
       },
@@ -382,7 +392,11 @@ export function wizardToManifest(
           build: { dependsOn: ["^build"], outputs: ["dist/**"] },
           lint: { dependsOn: ["^build"] },
           test: { dependsOn: ["^build"] },
-          typecheck: { outputs: [], cache: true },
+          // `dependsOn: ["^build"]` matters: since F15 this pipeline is
+          // actually emitted (replacing the built-in task of the same name),
+          // and a typecheck without ^build hits TS6305 on a fresh clone
+          // (composite deps' .d.ts not built yet) — see root-files.test.ts.
+          typecheck: { dependsOn: ["^build"], outputs: [], cache: true },
         },
       },
     },

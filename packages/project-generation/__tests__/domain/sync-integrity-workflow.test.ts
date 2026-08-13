@@ -36,6 +36,17 @@ describe("sync-integrity workflow content", () => {
     );
   });
 
+  it("disables setup-node@v5's cache auto-probe explicitly (F21)", () => {
+    // On setup-node@v5 omitting `cache:` is NOT enough — the action still
+    // probes the package-manager cache with the global Yarn Classic.
+    assert.ok(
+      /^[ \t]*package-manager-cache:\s*false[ \t]*$/m.test(
+        SYNC_INTEGRITY_WORKFLOW,
+      ),
+      "setup-node@v5 must carry package-manager-cache: false",
+    );
+  });
+
   it("installs with --immutable (Yarn Berry), never --frozen-lockfile (Classic)", () => {
     assert.ok(SYNC_INTEGRITY_WORKFLOW.includes("yarn install --immutable"));
     assert.ok(!SYNC_INTEGRITY_WORKFLOW.includes("--frozen-lockfile"));

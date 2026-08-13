@@ -10,6 +10,7 @@ import {
   PortsEmptyState,
   toggleContextPort,
 } from "./port-configuration-step";
+import { listImportedManifestPorts } from "../utils/imported-manifest-ports";
 
 interface PortConfigurationStepProps {
   onNext: () => void;
@@ -20,6 +21,14 @@ interface PortConfigurationStepProps {
   title?: string;
   description?: string;
   readOnly?: boolean;
+  /**
+   * The saved record's manifest for IMPORTED projects (import round-trip
+   * integrity, Item 1.4). When `manifestSource === "imported"` the checkbox
+   * catalog is replaced by a read-only banner listing the manifest's real
+   * named ports — the checkboxes only cover the 8 wizard catalog types and
+   * would misrepresent (and on save, degrade) the imported architecture.
+   */
+  importedManifestYaml?: string | null;
 }
 
 /**
@@ -37,9 +46,11 @@ export function PortConfigurationStep({
   title,
   description,
   readOnly,
+  importedManifestYaml,
 }: PortConfigurationStepProps) {
   const { watch, setValue } = useFormContext<ProjectConfig>();
   const boundedContexts = watch("boundedContexts") || [];
+  const isImported = watch("manifestSource") === "imported";
 
   const handleTogglePort = (
     contextIndex: number,
@@ -57,6 +68,61 @@ export function PortConfigurationStep({
     );
     setValue("boundedContexts", next);
   };
+
+  if (isImported) {
+    // Honest read-only view for manifest-first projects: the checkbox catalog
+    // cannot represent (let alone edit) the imported manifest's named ports,
+    // so we list them verbatim instead. The list is display-only — the saved
+    // manifest stays the source of truth (autosave for imported projects
+    // persists formState only and never rewrites manifestYaml).
+    const importedPorts = listImportedManifestPorts(importedManifestYaml);
+    return (
+      <div className="flex flex-col h-full bg-card">
+        <StepHeader
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+          title={title || "Ports Configuration"}
+          description={description || "Configure ports for each context."}
+        />
+
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-6 space-y-4">
+          <div
+            role="status"
+            className="rounded-md border border-border bg-muted/50 p-4 text-sm text-muted-foreground"
+          >
+            Ports are managed by the imported manifest and can&apos;t be edited
+            here. The lists below show the manifest&apos;s real named ports;
+            exports and generation use the manifest directly.
+          </div>
+
+          {importedPorts.map(({ context, inPorts, outPorts }) => (
+            <div
+              key={context}
+              className="rounded-md border border-border p-4 space-y-2"
+            >
+              <h3 className="text-sm font-medium text-foreground">{context}</h3>
+              <div className="text-sm text-muted-foreground">
+                <span className="font-medium">Inbound:</span>{" "}
+                {inPorts.length > 0 ? inPorts.join(", ") : "none"}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                <span className="font-medium">Outbound:</span>{" "}
+                {outPorts.length > 0 ? outPorts.join(", ") : "none"}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <WizardFooter
+          onBack={onBack}
+          onNext={onNext}
+          canProceed={canProceed}
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-card">

@@ -10,9 +10,10 @@ import {
 import { logger } from "../../lib/structured-logger";
 import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useStagedManifestGeneration } from "./useStagedManifestGeneration";
+import type { StageValidationReport } from "./useStagedGenerationStream";
 import { useLooseSpecConversion } from "./useLooseSpecConversion";
 import { Button } from "@hexagen/ui";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, RefreshCw } from "lucide-react";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { useLLMReadiness } from "./hooks/useLLMReadiness";
 import { usePendingManifest } from "./store/usePendingManifest";
@@ -184,13 +185,15 @@ export default function ImportProjectSpecPage() {
       // Also clear any spec persisted by an earlier upload this session, so the
       // accept screen's Back returns to a clean upload page rather than
       // rehydrating stale content — and drop any earlier upload's provenance so
-      // it can't attach to this unrelated manifest. The explicit `null` to
-      // acceptManifest is load-bearing: setOriginalSpecText hasn't re-rendered
-      // yet, so acceptManifest's closure still sees the PREVIOUS upload's text.
+      // it can't attach to this unrelated manifest. The explicit `null`s to
+      // acceptManifest are load-bearing: setOriginalSpecText hasn't re-rendered
+      // yet, so acceptManifest's closure still sees the PREVIOUS upload's text —
+      // and an earlier abandoned generation run could have left a stale Stage-6
+      // report on the hooks that must not attach to this hand-uploaded manifest.
       sessionStorage.removeItem("import_spec_content");
       sessionStorage.removeItem("import_spec_original_content");
       setOriginalSpecText(null);
-      acceptManifest(content, null);
+      acceptManifest(content, null, null);
       return;
     }
 
@@ -245,7 +248,16 @@ export default function ImportProjectSpecPage() {
     // otherwise still read the previous upload's text and attach it to an
     // unrelated manifest. Callers after a render cycle (the generating step's
     // Next button) omit it and get the state value.
-    (manifest: string, originSpecTextOverride?: string | null) => {
+    // `validationReportOverride`: same override pattern for the Stage-6
+    // report. The fast path passes an explicit `null` — its manifest never
+    // went through the pipeline, but a generation run abandoned earlier in
+    // this page session could have left a stale report on the hooks. Omitted
+    // by the generating step's Next, which wants the live report.
+    (
+      manifest: string,
+      originSpecTextOverride?: string | null,
+      validationReportOverride?: StageValidationReport | null,
+    ) => {
       try {
         const wizardData = parseManifestToWizardData(manifest);
         // The user-entered name (from the Project Name step) wins: it becomes the
@@ -275,6 +287,13 @@ export default function ImportProjectSpecPage() {
         // flow (the spec survives in sessionStorage) instead of the prompt flow.
         // originSpecText rides along so the accept-save can attach the user's
         // ORIGINAL spec as a planning layer (null on the manifest fast path).
+        // The Stage-6 report rides along too, so the accept view trusts the
+        // pipeline's validation instead of re-padding via the client fixer.
+        // The ??-coalesce over the two hooks is exact, not a guess: each run
+        // function resets the OTHER hook before generating, so at most one
+        // report is non-null. (The identity rewrite above only touches
+        // top-level system/scope, which the Stage-6 review does not key on —
+        // its findings stay valid for the stored YAML.)
         pendingManifest.set(
           manifestYaml,
           wizardData,
@@ -283,6 +302,10 @@ export default function ImportProjectSpecPage() {
           originSpecTextOverride === undefined
             ? originalSpecText
             : originSpecTextOverride,
+          validationReportOverride === undefined
+            ? (specGeneration.validationReport ??
+                manifestGeneration.validationReport)
+            : validationReportOverride,
         );
         router.push("/projects/new/ai/accept");
       } catch (err) {
@@ -305,21 +328,21 @@ export default function ImportProjectSpecPage() {
         );
       }
     },
-    [pendingManifest, router, carriedName, originalSpecText],
+    [
+      pendingManifest,
+      router,
+      carriedName,
+      originalSpecText,
+      specGeneration.validationReport,
+      manifestGeneration.validationReport,
+    ],
   );
 
-  const runSpecGeneration = useCallback(
-    async (strategy: ExecutionEngine) => {
-      setPreviousState(pageState);
-      setPageState("GENERATING");
-      setAcceptError(null);
-      setCompletedManifest(null);
-      manifestGeneration.reset();
-
-      const result = await specGeneration.generateFromSpec(specContent, {
-        executionStrategy: strategy,
-      });
-
+  // Shared completion handling for the spec path — the original run and the
+  // footer's Retry (which re-enters via specGeneration.retry()) must land the
+  // result identically.
+  const applySpecResult = useCallback(
+    (result: Awaited<ReturnType<typeof specGeneration.generateFromSpec>>) => {
       if (result?.generatedManifest?.trim()) {
         // Stay on the generating step (telemetry log stays reviewable);
         // the footer's "Next" button carries the manifest forward.
@@ -332,8 +355,8 @@ export default function ImportProjectSpecPage() {
           setPageState("DESCRIPTION_FALLBACK");
         }
         // Other failures: specGeneration.generationError is set by executeCloudGeneration,
-        // so ManifestGeneratingStep will display the error. The "Go Back" button is shown
-        // when isGenerating=false, so the user can recover.
+        // so ManifestGeneratingStep will display the error. The "Go Back" and
+        // "Retry" buttons are shown when isGenerating=false, so the user can recover.
       } else if (result) {
         // Completed without a manifest (e.g. the endpoint reported success but
         // streamed an empty document): without this branch the page would park
@@ -344,12 +367,40 @@ export default function ImportProjectSpecPage() {
         );
       }
     },
-    [specContent, specGeneration, manifestGeneration, pageState],
+    [specGeneration],
+  );
+
+  const runSpecGeneration = useCallback(
+    async (strategy: ExecutionEngine) => {
+      // Retry re-enters generation while the page is already on GENERATING;
+      // overwriting previousState with "GENERATING" would turn the footer's
+      // Go Back into a no-op loop, so only record a genuine origin state.
+      if (pageState !== "GENERATING") setPreviousState(pageState);
+      setPageState("GENERATING");
+      setAcceptError(null);
+      setCompletedManifest(null);
+      manifestGeneration.reset();
+
+      applySpecResult(
+        await specGeneration.generateFromSpec(specContent, {
+          executionStrategy: strategy,
+        }),
+      );
+    },
+    [
+      specContent,
+      specGeneration,
+      manifestGeneration,
+      pageState,
+      applySpecResult,
+    ],
   );
 
   const runDescriptionGeneration = useCallback(
     async (strategy: ExecutionEngine) => {
-      setPreviousState(pageState);
+      // Same GENERATING guard as runSpecGeneration: Retry must not clobber
+      // the origin state the footer's Go Back returns to.
+      if (pageState !== "GENERATING") setPreviousState(pageState);
       setPageState("GENERATING");
       setAcceptError(null);
       setCompletedManifest(null);
@@ -374,6 +425,28 @@ export default function ImportProjectSpecPage() {
     },
     [specContent, manifestGeneration, specGeneration, pageState, preferLocal],
   );
+
+  // Footer Retry after a failed run parked on the generating step. The spec
+  // path re-enters via the hook's retry() (same spec + options as the failed
+  // attempt); the description path re-runs with the current engine. previousState
+  // discriminates the two: description runs only start from DESCRIPTION_FALLBACK,
+  // spec runs from SPEC_REVIEW (and the GENERATING guard above keeps it stable
+  // across retries).
+  const handleRetry = useCallback(async () => {
+    if (previousState === "DESCRIPTION_FALLBACK") {
+      void runDescriptionGeneration(engine);
+      return;
+    }
+    setAcceptError(null);
+    setCompletedManifest(null);
+    applySpecResult(await specGeneration.retry());
+  }, [
+    previousState,
+    engine,
+    runDescriptionGeneration,
+    specGeneration,
+    applySpecResult,
+  ]);
 
   const handleMapPorts = useCallback(() => {
     if (needsSetup) return;
@@ -592,6 +665,16 @@ export default function ImportProjectSpecPage() {
             >
               {isRunning ? "Cancel" : "Go Back"}
             </Button>
+            {/* Failed run (stream death, timeout, empty manifest, parse
+                failure): offer an explicit Retry beside Go Back. The stream's
+                terminal-frame accounting now guarantees dead streams reach
+                this resting state instead of spinning forever. */}
+            {!isRunning && !completedManifest && generationError && (
+              <Button onClick={() => void handleRetry()}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Retry
+              </Button>
+            )}
             {/* Generation succeeded: let the user review the telemetry log
                 at their own pace; Next carries the manifest to the accept
                 screen. */}

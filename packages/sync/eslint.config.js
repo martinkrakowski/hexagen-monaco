@@ -12,6 +12,15 @@ export default tseslint.config(
     },
   },
   {
+    // Generated port stubs start life as empty interfaces the owner fills in;
+    // scoped to the port-stub naming convention so the rule still guards the
+    // rest of the codebase.
+    files: ['**/*.in-port.ts', '**/*.out-port.ts'],
+    rules: {
+      '@typescript-eslint/no-empty-object-type': ['error', { allowInterfaces: 'always' }],
+    },
+  },
+  {
     ignores: ['dist/**', 'node_modules/**'],
   },
 );

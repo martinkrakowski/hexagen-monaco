@@ -19,6 +19,25 @@ jobs:
           tool-cache: false
           docker-images: false
 
+      # The web engine stamps `@hexagen-monaco/sync` / `@hexagen-monaco/arch-linter`
+      # pins at ^<packages/sync version> into every generated project
+      # (resolveToolchainVersion + the co-release invariant: publish.yml releases
+      # both public packages at that version together). Deploying an engine whose
+      # version is not yet on npm makes every generated project fail `yarn install`
+      # with a registry 404 — the F1 prod breakage (vellum field test). `npm view`
+      # exits non-zero when the version is absent, which fails the deploy here,
+      # before the image is built.
+      - name: Preflight — generated-project toolchain pins must exist on npm
+        run: |
+          version=$(node -p "require('./packages/sync/package.json').version")
+          for pkg in @hexagen-monaco/sync @hexagen-monaco/arch-linter; do
+            echo "Checking ${pkg}@${version} on the npm registry..."
+            npm view "${pkg}@${version}" version >/dev/null || {
+              echo "FATAL: ${pkg}@${version} is not published — generated projects would 404 on install (F1). Run publish.yml for v${version} before deploying." >&2
+              exit 1
+            }
+          done
+
       - name: Build Docker Image
         run: |
           docker build \

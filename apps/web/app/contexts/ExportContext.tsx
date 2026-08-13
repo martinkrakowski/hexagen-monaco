@@ -19,6 +19,10 @@ import { downloadBlob } from "@/lib/download-blob";
 import { postJson, postForBlob } from "@/lib/fetch-json";
 import { withFormStateDefaults } from "@/lib/form-state-defaults";
 import {
+  isImportedFormState,
+  parseImportedManifest,
+} from "@/lib/imported-manifest";
+import {
   getSavedProjectsPersistence,
   getEditorWorkspacePersistence,
   getLogger,
@@ -167,6 +171,12 @@ export function ExportProvider({
     string,
     unknown
   > | null>(null);
+  // The saved record's manifestYaml — the SOURCE OF TRUTH for imported
+  // projects' exports (import round-trip integrity, Item 1.3). Wizard-authored
+  // projects never read it here.
+  const [savedManifestYaml, setSavedManifestYaml] = useState<string | null>(
+    null,
+  );
 
   // Replayed by Retry; the latest editor clearUnpushed kept in a ref so the
   // push callbacks stay referentially stable.
@@ -180,8 +190,15 @@ export function ExportProvider({
       setGithubLink(null);
       setPublishPrefs(null);
       setSavedFormState(null);
+      setSavedManifestYaml(null);
       return;
     }
+    // Clear the PREVIOUS project's manifest before the async load: during the
+    // window between a project switch and loadProjects resolving, an export
+    // would otherwise pair the NEW project's wizardData with the OLD project's
+    // manifest. Nulling it makes resolveManifestPayload fail closed (blocking
+    // error) instead of exporting the wrong manifest.
+    setSavedManifestYaml(null);
     void (async () => {
       const persistence = getSavedProjectsPersistence();
       const res = await persistence.loadProjects();
@@ -190,6 +207,7 @@ export function ExportProvider({
       setGithubLink(project?.githubLink ?? null);
       setPublishPrefs(project?.githubPublishPrefs ?? null);
       setSavedFormState(project?.formState ?? null);
+      setSavedManifestYaml(project?.manifestYaml ?? null);
     })();
     return () => {
       cancelled = true;
@@ -204,15 +222,46 @@ export function ExportProvider({
     [githubLink],
   );
 
+  // Import round-trip integrity (Item 1.3): for an IMPORTED project the export
+  // payload carries the parsed saved manifest — the routes' existing
+  // `body.manifest ?? wizardToManifest(body.wizardData)` fallback then never
+  // runs the degraded projection. Wizard-authored projects return no extra
+  // field, keeping the live-first wizardData path (#222) byte-identical.
+  // FAIL CLOSED: a corrupt saved manifest yields a blocking error instead of a
+  // silent wizardData fallback (that fallback IS the data-loss path).
+  const resolveManifestPayload = useCallback(():
+    | { ok: true; extra: Record<string, unknown> }
+    | { ok: false; message: string } => {
+    const formStateForExport = activeWizardData ?? savedFormState;
+    if (!isImportedFormState(formStateForExport)) {
+      return { ok: true, extra: {} };
+    }
+    const parsed = parseImportedManifest(savedManifestYaml);
+    if (!parsed.ok) return { ok: false, message: parsed.message };
+    return { ok: true, extra: { manifest: parsed.manifest } };
+  }, [activeWizardData, savedFormState, savedManifestYaml]);
+
   const exportZip = useCallback(async () => {
     if (!activeProjectId) return;
+    const manifestPayload = resolveManifestPayload();
+    if (!manifestPayload.ok) {
+      setState({
+        kind: "error",
+        destination: "zip",
+        message: manifestPayload.message,
+      });
+      return;
+    }
     setState({ kind: "exporting", destination: "zip" });
 
     const result = await postForBlob("/api/export/zip", {
       projectId: activeProjectId,
       // Live workspace state primary (matches the code view); IDB formState as a
       // fallback; normalized so a legacy snapshot still carries addOnsAnswers.
+      // wizardData is still sent alongside `manifest` for imported projects:
+      // the route reads addOnsAnswers from it.
       wizardData: withFormStateDefaults(activeWizardData ?? savedFormState),
+      ...manifestPayload.extra,
     });
 
     if (result.kind !== "success") {
@@ -237,7 +286,13 @@ export function ExportProvider({
       message: "ZIP downloaded",
       notices: result.notices,
     });
-  }, [activeProjectId, activeProjectName, activeWizardData, savedFormState]);
+  }, [
+    activeProjectId,
+    activeProjectName,
+    activeWizardData,
+    savedFormState,
+    resolveManifestPayload,
+  ]);
 
   // --- persistence helpers (client IDB only; token stays server-side) ---
 
@@ -314,6 +369,17 @@ export function ExportProvider({
     async (args: ScaffoldPublishArgs) => {
       if (!activeProjectId) return;
       lastOperationRef.current = { kind: "scaffold", args };
+      const manifestPayload = resolveManifestPayload();
+      if (!manifestPayload.ok) {
+        // Fail closed (imported project, corrupt manifest) — same guard as the
+        // ZIP path. lastOperationRef stays set so Retry re-checks after a fix.
+        setState({
+          kind: "error",
+          destination: "github",
+          message: manifestPayload.message,
+        });
+        return;
+      }
       setState({ kind: "exporting", destination: "github" });
 
       const result = await postJson<GithubExportResponse>(
@@ -325,7 +391,10 @@ export function ExportProvider({
           isPrivate: args.isPrivate,
           commitMessage: args.commitMessage,
           // Same precedence as the ZIP path: live primary, IDB fallback, normalized.
+          // For imported projects `manifest` rides along and wins server-side;
+          // wizardData still carries addOnsAnswers.
           wizardData: withFormStateDefaults(activeWizardData ?? savedFormState),
+          ...manifestPayload.extra,
         },
       );
 
@@ -367,7 +436,13 @@ export function ExportProvider({
             : undefined,
       });
     },
-    [activeProjectId, activeWizardData, savedFormState, persistGithubLink],
+    [
+      activeProjectId,
+      activeWizardData,
+      savedFormState,
+      persistGithubLink,
+      resolveManifestPayload,
+    ],
   );
 
   // Push the current editor (user/LLM) edits to the linked repo, incrementally.

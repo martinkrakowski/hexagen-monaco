@@ -328,6 +328,99 @@ describe("ImportProjectSpecPage", () => {
     });
   });
 
+  it("hands the done frame's Stage-6 report to the pending-manifest store on accept", async () => {
+    // Import round-trip integrity, Item 3.1: the accept screen keys its
+    // auto-fixer gate and approve logic on this report — dropping it here
+    // re-enabled the client fixer's padding on server-validated manifests.
+    usePendingManifest.getState().clear();
+    const report = {
+      errors: [],
+      warnings: ["[R04] Port 'StoragePort' has no adapter."],
+      passed: true,
+    };
+    server.use(
+      http.post("/api/manifest/generate/spec", () => {
+        return new HttpResponse(
+          JSON.stringify({
+            type: "done",
+            yaml: "bounded_contexts:\n  - name: test\n",
+            contextCount: 1,
+            portCount: 0,
+            adapterCount: 0,
+            transactionId: "txn-123",
+            validation: report,
+          }) + "\n",
+          { status: 200, headers: { "Content-Type": "application/x-ndjson" } },
+        );
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<ImportProjectSpecPage />);
+    const yamlContent = fs.readFileSync(yamlPath, "utf-8");
+    await user.upload(
+      screen.getByLabelText(/upload manifest or spec/i),
+      new File([yamlContent], "krakowski-portal.yaml", { type: "text/yaml" }),
+    );
+    await waitFor(() => assert.ok(screen.getByText(/spec review/i)));
+    await user.click(screen.getByText(/map ports & adapters/i));
+    await waitFor(() =>
+      assert.ok(screen.getByRole("button", { name: /next/i })),
+    );
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    await waitFor(() =>
+      assert.ok(
+        routerPush.mock.calls.some((c) => c[0] === "/projects/new/ai/accept"),
+      ),
+    );
+    assert.deepStrictEqual(
+      usePendingManifest.getState().validationReport,
+      report,
+    );
+  });
+
+  it("the manifest fast path stores a NULL report — a stale one from an earlier run must not attach", async () => {
+    // A hand-uploaded complete manifest never went through the pipeline; the
+    // explicit-null override in handleFileLoaded keeps any report left on the
+    // generation hooks (or, as seeded here, in the store) from leaking onto it.
+    usePendingManifest.getState().clear();
+    usePendingManifest
+      .getState()
+      .set("old: yaml", {} as never, "Old", "/projects/new/import/spec", null, {
+        errors: [],
+        warnings: [],
+        passed: true,
+      });
+
+    const user = userEvent.setup();
+    render(<ImportProjectSpecPage />);
+    const manifest = [
+      "system: test-system",
+      "bounded_contexts:",
+      "  - name: orders",
+      "    layers:",
+      "      application:",
+      "        ports:",
+      "          in: [PlaceOrderPort]",
+      "          out: [OrderRepositoryPort]",
+      "      infrastructure:",
+      "        adapters: [OrderRepositoryAdapter]",
+      "",
+    ].join("\n");
+    await user.upload(
+      screen.getByLabelText(/upload manifest or spec/i),
+      new File([manifest], "manifest.yaml", { type: "text/yaml" }),
+    );
+
+    await waitFor(() =>
+      assert.ok(
+        routerPush.mock.calls.some((c) => c[0] === "/projects/new/ai/accept"),
+      ),
+    );
+    assert.strictEqual(usePendingManifest.getState().validationReport, null);
+  });
+
   it("shows error on invalid config during generation", async () => {
     server.use(
       http.post("/api/manifest/generate/spec", () => {
@@ -513,5 +606,67 @@ describe("ImportProjectSpecPage", () => {
       looseContent,
       "provenance is the user's original words, not the converted JSON",
     );
+  });
+
+  it("silent stream death: surfaces a failed state and the footer Retry re-runs to success", async () => {
+    // First request: the NDJSON stream ends after stage-start with NO
+    // done/error frame (server crash / proxy close). The page must surface a
+    // failed state with a Retry button — previously this parked the spinner
+    // forever. Second request (the Retry): a healthy stream.
+    let requestCount = 0;
+    server.use(
+      http.post("/api/manifest/generate/spec", async () => {
+        requestCount++;
+        if (requestCount === 1) {
+          return new HttpResponse(
+            JSON.stringify({ type: "stage-start", stage: 0 }) + "\n",
+            {
+              status: 200,
+              headers: { "Content-Type": "application/x-ndjson" },
+            },
+          );
+        }
+        return new HttpResponse(
+          JSON.stringify({ type: "stage-start", stage: 0 }) +
+            "\n" +
+            JSON.stringify({
+              type: "done",
+              yaml: "bounded_contexts:\n  - name: test\n",
+              contextCount: 1,
+              portCount: 0,
+              adapterCount: 0,
+              validation: { errors: [], warnings: [], passed: true },
+            }) +
+            "\n",
+          { status: 200, headers: { "Content-Type": "application/x-ndjson" } },
+        );
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<ImportProjectSpecPage />);
+    const yamlContent = fs.readFileSync(yamlPath, "utf-8");
+    await user.upload(
+      screen.getByLabelText(/upload manifest or spec/i),
+      new File([yamlContent], "krakowski-portal.yaml", { type: "text/yaml" }),
+    );
+    await waitFor(() => assert.ok(screen.getByText(/spec review/i)));
+    await user.click(screen.getByText(/map ports & adapters/i));
+
+    // Failed state with retry-oriented copy, not an endless spinner.
+    await waitFor(() => {
+      assert.ok(screen.getByText(/ended unexpectedly/i));
+    });
+
+    await user.click(screen.getByRole("button", { name: /retry/i }));
+
+    // The retry replays the SAME spec request and lands the normal success
+    // resting state (footer Next).
+    await waitFor(() => {
+      assert.ok(screen.getByRole("button", { name: /next/i }));
+    });
+    assert.strictEqual(requestCount, 2);
+    // The error box cleared on the successful retry.
+    assert.strictEqual(screen.queryByText(/ended unexpectedly/i), null);
   });
 });
