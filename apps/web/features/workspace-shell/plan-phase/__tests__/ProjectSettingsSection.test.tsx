@@ -8,7 +8,13 @@ vi.stubGlobal("crypto", {
 import { describe, it, vi, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import React from "react";
-import { render, cleanup, fireEvent, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  cleanup,
+  fireEvent,
+  act,
+} from "@testing-library/react";
 import { FormProvider, useForm } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 import { emptyFormValues } from "../../../project-wizard/config";
@@ -36,7 +42,7 @@ function renderSection(
 }
 
 const workspaceNameInput = () =>
-  document.querySelector('input[placeholder="@mycompany"]') as HTMLInputElement;
+  screen.getByLabelText("Workspace Name") as HTMLInputElement;
 
 describe("ProjectSettingsSection", () => {
   it("renders the governance fields under a labeled section", () => {

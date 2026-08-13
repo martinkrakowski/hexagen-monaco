@@ -24,7 +24,7 @@ beforeEach(() => {
 });
 
 const workspaceNameInput = () =>
-  document.querySelector('input[placeholder="@mycompany"]') as HTMLInputElement;
+  screen.getByLabelText("Workspace Name") as HTMLInputElement;
 
 describe("GenesisProjectSettingsSection", () => {
   it("renders the plan-phase field set under the settings landmark, seeded from the carried name", () => {

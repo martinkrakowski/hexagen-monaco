@@ -230,8 +230,8 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     assert.ok(screen.getByRole("button", { name: /sessions & sources/i }));
 
     // Section A is the plan-phase field set, seeded from the carried name.
-    const workspaceNameInput = document.querySelector(
-      'input[placeholder="@mycompany"]',
+    const workspaceNameInput = screen.getByLabelText(
+      "Workspace Name",
     ) as HTMLInputElement;
     assert.ok(workspaceNameInput, "genesis settings form renders");
     assert.equal(
@@ -429,8 +429,8 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     render(<AIGenerationPage llmContext={makeLlmContext()} />);
 
     // Edit Section A while the flow has no carried name.
-    const workspaceNameInput = document.querySelector(
-      'input[placeholder="@mycompany"]',
+    const workspaceNameInput = screen.getByLabelText(
+      "Workspace Name",
     ) as HTMLInputElement;
     fireEvent.change(workspaceNameInput, {
       target: { value: "vellum-edited" },
@@ -466,8 +466,8 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     nav.searchParams = new URLSearchParams("");
     render(<AIGenerationPage llmContext={makeLlmContext()} />);
 
-    const workspaceNameInput = document.querySelector(
-      'input[placeholder="@mycompany"]',
+    const workspaceNameInput = screen.getByLabelText(
+      "Workspace Name",
     ) as HTMLInputElement;
     fireEvent.change(workspaceNameInput, {
       target: { value: "abandoned-edit" },
@@ -535,11 +535,9 @@ describe("AIGenerationPage — Plan Workbench C2", () => {
     screen.getByRole("region", { name: "Generation options" });
 
   const workspaceNameInput = () =>
-    document.querySelector(
-      'input[placeholder="@mycompany"]',
-    ) as HTMLInputElement;
+    screen.getByLabelText("Workspace Name") as HTMLInputElement;
   const namespacePrefixInput = () =>
-    document.querySelector('input[placeholder="@hexagen"]') as HTMLInputElement;
+    screen.getByLabelText("Namespace Prefix") as HTMLInputElement;
 
   /** Drive a full run to the parked telemetry view and click the footer's
    * explicit Next — the hand-off that fills usePendingManifest. Callers must
