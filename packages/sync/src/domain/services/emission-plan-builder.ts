@@ -3,12 +3,22 @@
  *
  * Flattens the bounded context's layers object into an ordered list of
  * emission items (kind, subdir, names) so the generator can iterate
- * them uniformly.
+ * them uniformly. Directories are resolved through the single layer-folder
+ * resolver (A2): each conventional emission site is combined with the
+ * manifest's `generator.sync.layers` configuration, so a custom
+ * `application.folder` (or an underscored `value_objects` subfolder — F16)
+ * places stubs in the same tree `ensureLayerFolders` scaffolds.
  */
 
 import type { BoundedContext } from "../../types/manifest.js";
 import { portName } from "../../types/manifest.js";
+import { resolveEmissionDir, type LayersConfig } from "./layer-dir-resolver.js";
 
+/**
+ * Conventional emission-site vocabulary (layer + kebab-case site). These are
+ * the resolver INPUTS — the plan's `subdir` carries the RESOLVED directory
+ * (relative to the package root, `src/...` by convention).
+ */
 export type EmissionSite =
   | "domain/entities"
   | "domain/value-objects"
@@ -31,13 +41,20 @@ export type StubKind =
 
 export interface EmissionPlan {
   kind: StubKind;
-  subdir: EmissionSite;
+  /** Resolved on-disk directory relative to the package root (e.g. `src/app/ports/in`). */
+  subdir: string;
   names: string[];
 }
 
-export function buildEmissionPlan(context: BoundedContext): EmissionPlan[] {
+export function buildEmissionPlan(
+  context: BoundedContext,
+  layersConfig?: LayersConfig,
+): EmissionPlan[] {
   const layers = context.layers;
   if (!layers) return [];
+
+  const dir = (site: EmissionSite): string =>
+    resolveEmissionDir(layersConfig, site);
 
   const plan: EmissionPlan[] = [];
 
@@ -46,35 +63,35 @@ export function buildEmissionPlan(context: BoundedContext): EmissionPlan[] {
     if (domain.entities?.length) {
       plan.push({
         kind: "entity",
-        subdir: "domain/entities",
+        subdir: dir("domain/entities"),
         names: domain.entities,
       });
     }
     if (domain.value_objects?.length) {
       plan.push({
         kind: "valueObject",
-        subdir: "domain/value-objects",
+        subdir: dir("domain/value-objects"),
         names: domain.value_objects,
       });
     }
     if (domain.domain_services?.length) {
       plan.push({
         kind: "domainService",
-        subdir: "domain/services",
+        subdir: dir("domain/services"),
         names: domain.domain_services,
       });
     }
     if (domain.ports?.in?.length) {
       plan.push({
         kind: "inPort",
-        subdir: "domain/ports/in",
+        subdir: dir("domain/ports/in"),
         names: domain.ports.in,
       });
     }
     if (domain.ports?.out?.length) {
       plan.push({
         kind: "outPort",
-        subdir: "domain/ports/out",
+        subdir: dir("domain/ports/out"),
         names: domain.ports.out,
       });
     }
@@ -85,21 +102,21 @@ export function buildEmissionPlan(context: BoundedContext): EmissionPlan[] {
     if (application.use_cases?.length) {
       plan.push({
         kind: "useCase",
-        subdir: "application/use-cases",
+        subdir: dir("application/use-cases"),
         names: application.use_cases,
       });
     }
     if (application.ports?.in?.length) {
       plan.push({
         kind: "inPort",
-        subdir: "application/ports/in",
+        subdir: dir("application/ports/in"),
         names: application.ports.in.map(portName),
       });
     }
     if (application.ports?.out?.length) {
       plan.push({
         kind: "outPort",
-        subdir: "application/ports/out",
+        subdir: dir("application/ports/out"),
         names: application.ports.out.map(portName),
       });
     }
@@ -109,7 +126,7 @@ export function buildEmissionPlan(context: BoundedContext): EmissionPlan[] {
   if (infrastructure?.adapters?.length) {
     plan.push({
       kind: "adapter",
-      subdir: "infrastructure/adapters",
+      subdir: dir("infrastructure/adapters"),
       names: infrastructure.adapters,
     });
   }

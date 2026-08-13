@@ -8,6 +8,7 @@ import {
   type GeneratorResult,
 } from "../results.js";
 import { isInScope, safeWriteFileAtomic } from "../fs-utils.js";
+import { normalizeSubfolder } from "../domain/services/layer-dir-resolver.js";
 
 // Typed shape for layers from .architecture/manifest.yaml
 interface LayerConfig {
@@ -240,9 +241,14 @@ export async function ensureLayerFolders(
       await ensureGitkeepCounted(layerPath, config, result);
     }
 
-    // Recurse into subfolders
+    // Recurse into subfolders. Known-site spellings are normalized to the
+    // conventional kebab-case form (F16): the wizard's layer config names
+    // `value_objects` while stub emission and the add-on template payloads
+    // (and their import specifiers) use `value-objects` — scaffolding the
+    // configured spelling verbatim produced BOTH folders, one holding only
+    // this generator's `.gitkeep`. One site, one folder.
     for (const sub of subfolders) {
-      const subPath = path.join(layerPath, sub);
+      const subPath = path.join(layerPath, normalizeSubfolder(sub));
 
       // Same two-arm scope guard as the parent layer (counted mkdir).
       if (

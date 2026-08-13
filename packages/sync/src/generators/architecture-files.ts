@@ -24,6 +24,7 @@ import {
   GENERATOR_CONFIG_TEMPLATE,
 } from "./architecture-file-templates.js";
 import type { ReportRecorder } from "../domain/types.js";
+import { toPascalCaseIdentifier } from "../domain/services/name-normalizer.js";
 
 function resolveWorkspaceTemplate(manifest: Manifest): string {
   const legacy = (manifest as { workspaceTemplate?: unknown })
@@ -36,14 +37,6 @@ function resolveWorkspaceTemplate(manifest: Manifest): string {
     return manifest.architecture;
   }
   return "modular-monolith";
-}
-
-function toPascalCase(stem: string): string {
-  return stem
-    .split(/[-.]/)
-    .filter((part) => part.length > 0)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join("");
 }
 
 /**
@@ -65,6 +58,19 @@ function yamlScalar(value: string): string {
   return plainSafe && !reserved ? value : JSON.stringify(value);
 }
 
+/**
+ * Ownership-registry keys are rendered with the SAME normalizer stub
+ * emission uses (A3 — `toPascalCaseIdentifier`), so the registry names what
+ * the generated artifacts are actually called. Two deliberate changes from
+ * the old private `[-.]`-splitting `toPascalCase` copy, both pinned in
+ * tests: underscores now split words (`user_repo` → `UserRepo`, previously
+ * `User_repo` — the stub identifier was always `UserRepo`), and a
+ * digit-leading name gains the identifier-guard prefix (`3d-renderer` →
+ * `Stub3dRenderer`, matching its emitted class/interface). Distinct raw
+ * spellings that normalize to the same key (`user_repo` vs `user-repo`)
+ * collide exactly like their generated artifacts would — the existing
+ * collision pass then context-qualifies them.
+ */
 function buildOwnershipBlock(manifest: Manifest): {
   block: string;
   collisions: string[];
@@ -97,13 +103,19 @@ function buildOwnershipBlock(manifest: Manifest): {
     const infrastructure = bc.layers?.infrastructure;
 
     for (const p of application?.ports?.in ?? []) {
-      add(toPascalCase(portName(p).replace(/\.in-port\.ts$/, "")), bc.name);
+      add(
+        toPascalCaseIdentifier(portName(p).replace(/\.in-port\.ts$/, "")),
+        bc.name,
+      );
     }
     for (const p of application?.ports?.out ?? []) {
-      add(toPascalCase(portName(p).replace(/\.out-port\.ts$/, "")), bc.name);
+      add(
+        toPascalCaseIdentifier(portName(p).replace(/\.out-port\.ts$/, "")),
+        bc.name,
+      );
     }
     for (const a of infrastructure?.adapters ?? []) {
-      add(toPascalCase(a.replace(/\.adapter\.ts$/, "")), bc.name);
+      add(toPascalCaseIdentifier(a.replace(/\.adapter\.ts$/, "")), bc.name);
     }
   }
 
@@ -117,7 +129,7 @@ function buildOwnershipBlock(manifest: Manifest): {
   // context name in a double-quoted key (JSON string
   // escaping is valid YAML double-quote syntax): entries are unique
   // (name, context) pairs after the pass-1 dedupe and names never contain a
-  // dot (toPascalCase strips them), so the emitted keys are unique by
+  // dot (toPascalCaseIdentifier strips them), so the emitted keys are unique by
   // construction — a normalized qualifier would be lossy ("api2"/"api-2"
   // both PascalCase to "Api2") and could reintroduce the duplicate-key
   // failure. Bare keys never contain a dot; qualified keys always do — the

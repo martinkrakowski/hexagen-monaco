@@ -4,6 +4,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
 import { generateArchitectureFiles } from "../../src/generators/architecture-files.js";
+import { normalizeStubName } from "../../src/generators/stubs.js";
 import type { Manifest } from "../../src/types/manifest.js";
 import { makeCapturingLogger } from "../helpers/spy-logger.js";
 import {
@@ -497,6 +498,67 @@ describe("architecture files", () => {
       assert.ok(
         !/:\s*billing$/m.test(ownershipSection),
         "context without ports/adapters should not contribute ownership entries",
+      );
+    });
+  });
+
+  it("renders ownership keys with the shared normalizer — underscores split, digit-leading guarded (A3)", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const archDir = path.join(workspaceRoot, ".architecture");
+      // BEHAVIOR CHANGE pinned deliberately: the old private toPascalCase
+      // split on `[-.]` only, so `user_repo` rendered as `User_repo` and
+      // `3d-renderer` as `3dRenderer` — while the stubs those manifest
+      // entries actually generate are named `UserRepo` / `Stub3dRenderer`
+      // (normalizeStubName, #242). The registry now names the artifacts as
+      // they are emitted.
+      const manifest: Manifest = {
+        scope: "a3",
+        architecture: "modular-monolith",
+        bounded_contexts: [
+          {
+            name: "orders",
+            layers: {
+              application: {
+                ports: {
+                  out: ["user_repo.out-port.ts", "3d-renderer.out-port.ts"],
+                },
+              },
+            },
+          },
+        ],
+      };
+      const config = makeConfig(workspaceRoot, manifest, {
+        mode: "external",
+        forceRoot: true,
+      });
+
+      await generateArchitectureFiles(config);
+
+      const genCfg = await readText(
+        path.join(archDir, "generator.config.yaml"),
+      );
+      assert.ok(
+        genCfg.includes("      UserRepo: orders"),
+        "underscored port name renders fully PascalCased (matches its stub identifier)",
+      );
+      assert.ok(
+        !genCfg.includes("User_repo"),
+        "the old underscore-preserving rendering must be gone",
+      );
+      assert.ok(
+        genCfg.includes("      Stub3dRenderer: orders"),
+        "digit-leading name carries the identifier guard, like its emitted stub",
+      );
+
+      // The names above are EXACTLY what normalizeStubName produces for the
+      // same manifest entries — the consolidation A3 exists to guarantee.
+      assert.equal(
+        normalizeStubName("user_repo.out-port.ts", "{name}.out-port.ts"),
+        "UserRepo",
+      );
+      assert.equal(
+        normalizeStubName("3d-renderer.out-port.ts", "{name}.out-port.ts"),
+        "Stub3dRenderer",
       );
     });
   });

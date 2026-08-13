@@ -14,6 +14,7 @@ import {
   relativeImportSpecifier,
 } from "./port-analyzer.js";
 import type { ReportRecorder } from "../domain/types.js";
+import { toPascalCaseIdentifier } from "../domain/services/name-normalizer.js";
 
 /**
  * Dedicated cross-context transport emitter (Phase 3 — event-bus + network).
@@ -71,19 +72,6 @@ function addAll(
   const set = map.get(key) ?? new Set<string>();
   values.forEach((v) => set.add(v));
   map.set(key, set);
-}
-
-/**
- * PascalCase a kebab/dot stem into a valid TS identifier (e.g.
- * `message-publisher` → `MessagePublisher`). Kept local — a 5-line pure helper —
- * rather than coupling this emitter to `architecture-files.ts`'s private copy.
- */
-function toPascalCase(stem: string): string {
-  return stem
-    .split(/[-.]/)
-    .filter((part) => part.length > 0)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join("");
 }
 
 /**
@@ -284,7 +272,11 @@ async function emitPortAndAdapter(
   // suffix (`MessagePublisherAdapter`), matching the generic stub template's
   // `{name}Adapter` convention. Passing the kebab `portBase` here produced an
   // invalid `export class message-publisher` — a compile error in generated output.
-  const adapterClassName = `${toPascalCase(spec.portBase)}Adapter`;
+  // PascalCase the kebab port stem via the ONE shared normalizer (A3) — the
+  // fixed transport vocabulary (`message-publisher`, `rest-controller`, ...)
+  // normalizes identically under the old local `[-.]` splitter and the shared
+  // one, so this is a pure consolidation here.
+  const adapterClassName = `${toPascalCaseIdentifier(spec.portBase)}Adapter`;
   // The adapter must import the port interface it implements (relative to itself).
   const portSpecifier = relativeImportSpecifier(adapterPath, portPath);
   recordWriteStatus(
