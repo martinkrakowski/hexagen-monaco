@@ -214,6 +214,107 @@ describe("normalizeLoadedProjects", () => {
   });
 });
 
+describe("normalizeLoadedProjects (legacy manifestSource discriminator)", () => {
+  // Manifest with a named port the wizard's catalog can never emit —
+  // provably an accepted import / AI manifest, not wizardToManifest output.
+  const importedYaml = [
+    "system: shop",
+    "bounded_contexts:",
+    "  - name: billing",
+    "    layers:",
+    "      application:",
+    "        ports:",
+    "          in: [ProcessPaymentPort]",
+  ].join("\n");
+
+  // Only wizard-emitted names (bare catalog type + emitted file form).
+  const wizardYaml = [
+    "bounded_contexts:",
+    "  - name: core",
+    "    layers:",
+    "      application:",
+    "        ports:",
+    "          in: [rest-controller.in-port.ts]",
+    "          out: [relational-db]",
+  ].join("\n");
+
+  it("REGRESSION: marks a legacy record 'imported' when its manifest carries a non-catalog port (valid path)", () => {
+    const result = normalizeLoadedProjects([
+      { id: "legacy", formState: {}, manifestYaml: importedYaml },
+    ]);
+    assert.strictEqual(fs(result[0]).manifestSource, "imported");
+  });
+
+  it("marks a drifted legacy record 'imported' too (preserve-with-defaults path)", () => {
+    const result = normalizeLoadedProjects([
+      {
+        id: "drifted-import",
+        // schema-invalid → preserve path
+        formState: { boundedContexts: "not-an-array" },
+        manifestYaml: importedYaml,
+      },
+    ]);
+    assert.strictEqual(result.length, 1);
+    assert.strictEqual(fs(result[0]).manifestSource, "imported");
+  });
+
+  it("recognizes {name} port objects and JSON-dialect manifests (pre-fix autosave wrote JSON)", () => {
+    const jsonYaml = JSON.stringify({
+      bounded_contexts: [
+        {
+          name: "billing",
+          layers: {
+            application: { ports: { out: [{ name: "PaymentGatewayPort" }] } },
+          },
+        },
+      ],
+    });
+    const result = normalizeLoadedProjects([
+      { id: "json-legacy", formState: {}, manifestYaml: jsonYaml },
+    ]);
+    assert.strictEqual(fs(result[0]).manifestSource, "imported");
+  });
+
+  it("leaves a catalog-only legacy record unmarked (absent ≡ wizard)", () => {
+    const result = normalizeLoadedProjects([
+      { id: "legacy-wizard", formState: {}, manifestYaml: wizardYaml },
+    ]);
+    assert.strictEqual(fs(result[0]).manifestSource, undefined);
+  });
+
+  it("leaves an unparseable/absent manifest unmarked (false negative allows at most one more clobber — same as today)", () => {
+    const result = normalizeLoadedProjects([
+      { id: "bad-yaml", formState: {}, manifestYaml: "a: [unclosed" },
+      { id: "no-yaml", formState: {} },
+      { id: "empty-yaml", formState: {}, manifestYaml: "   " },
+    ]);
+    for (const project of result) {
+      assert.strictEqual(
+        fs(project).manifestSource,
+        undefined,
+        `expected no marker on ${project.id}`,
+      );
+    }
+  });
+
+  it("NEVER overrides an explicit stored manifestSource (either value)", () => {
+    const result = normalizeLoadedProjects([
+      {
+        id: "explicit-wizard",
+        formState: { manifestSource: "wizard" },
+        manifestYaml: importedYaml, // would otherwise infer "imported"
+      },
+      {
+        id: "explicit-imported",
+        formState: { manifestSource: "imported" },
+        manifestYaml: wizardYaml, // catalog-only — inference must not run at all
+      },
+    ]);
+    assert.strictEqual(fs(result[0]).manifestSource, "wizard");
+    assert.strictEqual(fs(result[1]).manifestSource, "imported");
+  });
+});
+
 describe("normalizeLayers (salvage policy)", () => {
   it("returns [] for absent or non-array layers", () => {
     assert.deepStrictEqual(normalizeLayers(undefined, "p"), []);

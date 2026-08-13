@@ -200,6 +200,14 @@ export function parseManifestToWizardData(yamlString: string): WizardData {
       },
     },
     addOnsAnswers: {},
+    // Import round-trip integrity (Item 1): this parser is the single entry
+    // point for manifest-first projects (file import AND the AI accept flow),
+    // and the mapping above is lossy — named ports, context types, depends_on,
+    // apps, relationships etc. survive only in the manifest itself. Mark the
+    // provenance so the web app's autosave/export paths keep the stored
+    // manifestYaml authoritative instead of regenerating it via
+    // `wizardToManifest`. Nothing else ever sets this field.
+    manifestSource: "imported",
   };
 
   return wizardData;

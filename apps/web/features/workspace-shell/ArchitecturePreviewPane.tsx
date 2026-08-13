@@ -77,6 +77,13 @@ export const ArchitecturePreviewPane = React.memo(
             <>
               <CodeView
                 wizardData={wizardData}
+                // Source of truth for imported projects: CodeView's generation
+                // and architecture-download hooks read this instead of the
+                // lossy wizardToManifest projection (import round-trip
+                // integrity, Item 1.3). Null for wizard-authored workspaces is
+                // fine — the hooks only consult it when
+                // wizardData.manifestSource === "imported".
+                savedManifestYaml={activeWorkspace?.manifestYaml ?? null}
                 selectedFileId={selectedFileId}
                 editedFiles={editedFilesMap}
                 onFileSelect={onFileSelect}

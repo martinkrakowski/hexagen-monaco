@@ -36,6 +36,15 @@ bounded_contexts:
     assert.strictEqual(result.governance.workspaceName, "test-system");
   });
 
+  it("stamps manifestSource: 'imported' — this parser is the single origin of manifest-first projects", () => {
+    // Import round-trip integrity (Item 1.1): every project born from a
+    // manifest (file import AND the AI accept flow) goes through this parser,
+    // and the marker is what the web app's autosave/export guards key on.
+    // Nothing else may ever set the field.
+    const result = parseManifestToWizardData(validManifestYaml);
+    assert.strictEqual(result.manifestSource, "imported");
+  });
+
   it("names the offending field path in validation errors", () => {
     // An app entry without `name` — the shape that made a generated manifest
     // fail at the accept screen with a pathless "Required". The error must

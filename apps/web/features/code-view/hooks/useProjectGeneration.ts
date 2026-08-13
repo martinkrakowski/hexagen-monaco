@@ -3,11 +3,26 @@ import type { WizardData } from "@hexagen/project-configuration";
 import type { GenerationResult } from "@hexagen/shared";
 import { getGenerationResultPersistence } from "../../../app/lib/wire.client";
 import { withFormStateDefaults } from "../../../app/lib/form-state-defaults";
+import {
+  isImportedFormState,
+  parseImportedManifest,
+} from "../../../app/lib/imported-manifest";
 import type { GenerationNotices } from "../types";
 
 const MAX_RETRIES = 3;
 
-export function useProjectGeneration(wizardData: WizardData) {
+/**
+ * `savedManifestYaml` is the loaded project's stored manifest. It is consulted
+ * only when `wizardData.manifestSource === "imported"` (import round-trip
+ * integrity, Item 1.3): the request then carries the parsed manifest so the
+ * route's `manifest ?? wizardToManifest(wizardData)` fallback never degrades
+ * the architecture — and a corrupt manifest FAILS CLOSED as a blocking error.
+ * Wizard-authored projects ignore it (live-first wizardData path unchanged).
+ */
+export function useProjectGeneration(
+  wizardData: WizardData,
+  savedManifestYaml?: string | null,
+) {
   const [files, setFiles] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState<boolean>(false);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
@@ -22,6 +37,18 @@ export function useProjectGeneration(wizardData: WizardData) {
   const hasAttemptedRef = useRef(false);
   const retryCountRef = useRef(0);
 
+  // Shared by generate() and downloadZip(): the optional `manifest` request
+  // field for imported projects, or a blocking error (fail closed — never fall
+  // back to the degraded wizard projection). `{}` for wizard-authored projects.
+  const resolveImportedManifest = useCallback(():
+    | { ok: true; extra: Record<string, unknown> }
+    | { ok: false; message: string } => {
+    if (!isImportedFormState(wizardData)) return { ok: true, extra: {} };
+    const parsed = parseImportedManifest(savedManifestYaml);
+    if (!parsed.ok) return { ok: false, message: parsed.message };
+    return { ok: true, extra: { manifest: parsed.manifest } };
+  }, [wizardData, savedManifestYaml]);
+
   const generate = useCallback(
     async (force = false) => {
       const currentDataStr = JSON.stringify(wizardData);
@@ -33,6 +60,12 @@ export function useProjectGeneration(wizardData: WizardData) {
 
       if (loading) return;
 
+      const resolved = resolveImportedManifest();
+      if (!resolved.ok) {
+        setError(resolved.message);
+        return;
+      }
+
       setLoading(true);
       setError(null);
 
@@ -43,8 +76,12 @@ export function useProjectGeneration(wizardData: WizardData) {
           body: JSON.stringify({
             // Normalize at the boundary (same helper as the export path) so a
             // legacy/partial session still carries addOnsAnswers + schema defaults.
+            // For imported projects `manifest` rides along and wins server-side
+            // (`manifest ?? wizardToManifest(wizardData)`); wizardData still
+            // carries addOnsAnswers.
             wizardData: withFormStateDefaults(wizardData),
             outputFormat: "json",
+            ...resolved.extra,
           }),
         });
 
@@ -94,11 +131,17 @@ export function useProjectGeneration(wizardData: WizardData) {
         setLoading(false);
       }
     },
-    [wizardData, loading],
+    [wizardData, loading, resolveImportedManifest],
   );
 
   const downloadZip = useCallback(async () => {
     if (isDownloading) return;
+
+    const resolved = resolveImportedManifest();
+    if (!resolved.ok) {
+      setError(resolved.message);
+      return;
+    }
 
     setIsDownloading(true);
     setError(null);
@@ -114,6 +157,7 @@ export function useProjectGeneration(wizardData: WizardData) {
         body: JSON.stringify({
           wizardData: withFormStateDefaults(wizardData),
           outputFormat: "zip",
+          ...resolved.extra,
         }),
       });
 
@@ -140,7 +184,7 @@ export function useProjectGeneration(wizardData: WizardData) {
     } finally {
       setIsDownloading(false);
     }
-  }, [wizardData, isStale, isDownloading, generate]);
+  }, [wizardData, isStale, isDownloading, generate, resolveImportedManifest]);
 
   useEffect(() => {
     if (
