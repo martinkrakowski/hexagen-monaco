@@ -278,4 +278,54 @@ describe("ClassifyContextTypeUseCase — fail-fast on timeout", () => {
       vi.useRealTimers();
     }
   });
+
+  test("adapter settles an external abort after the deadline -> still a cancel, not a timeout", async () => {
+    // Regression: the deadline timer must die WITH the external cancel. If it
+    // survived the cancel, it would flip `isTimedOut` while the adapter is
+    // still winding down and rebrand the caller's cancel as the deadline
+    // timeout.
+    const mockLLMAdapter = {
+      sendRequest: (request: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          request.signal.addEventListener(
+            "abort",
+            () => {
+              // Settle the abort only AFTER the (now-dead) deadline would
+              // have fired.
+              setTimeout(() => {
+                const e = new Error("AbortError");
+                e.name = "AbortError";
+                reject(e);
+              }, STAGE_ATTEMPT_TIMEOUT_MS + 30_000);
+            },
+            { once: true },
+          );
+        }),
+    } as unknown as SendStructuredRequestPort;
+
+    vi.useFakeTimers();
+    try {
+      const external = new AbortController();
+      const useCase = new ClassifyContextTypeUseCase(mockLLMAdapter);
+      const promise = useCase.execute(context, undefined, external.signal);
+      await vi.advanceTimersByTimeAsync(5_000);
+      external.abort();
+      // Cross the original deadline and reach the adapter's late settle.
+      await vi.advanceTimersByTimeAsync(STAGE_ATTEMPT_TIMEOUT_MS + 30_000);
+      const result = await promise;
+
+      assert.strictEqual(result.success, false);
+      if (!result.success) {
+        assert.strictEqual((result.error as Error).name, "AbortError");
+        assert.doesNotMatch((result.error as Error).message, /timed out/i);
+      }
+      assert.strictEqual(
+        vi.getTimerCount(),
+        0,
+        "no timer may survive the settle",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

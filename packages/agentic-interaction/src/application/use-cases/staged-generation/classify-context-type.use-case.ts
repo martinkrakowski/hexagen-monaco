@@ -49,10 +49,16 @@ export class ClassifyContextTypeUseCase {
       isTimedOut = true;
       abortController.abort();
     }, STAGE_ATTEMPT_TIMEOUT_MS);
-    const onExternalAbort = () => abortController.abort();
+    const onExternalAbort = () => {
+      // Kill the deadline BEFORE aborting: a late-settling adapter must never
+      // observe `isTimedOut` flipped by a deadline that fired after the
+      // caller's cancel, or the cancel gets rebranded as a timeout.
+      clearTimeout(timeoutHandle);
+      abortController.abort();
+    };
     if (signal) {
       if (signal.aborted) {
-        abortController.abort();
+        onExternalAbort();
       } else {
         signal.addEventListener("abort", onExternalAbort, { once: true });
       }

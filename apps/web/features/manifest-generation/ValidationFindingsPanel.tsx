@@ -39,6 +39,13 @@ interface ValidationFindingsPanelProps {
   validationReport: StageValidationReport;
   /** Stage-7 verify-and-repair outcome, when the reviewer model ran. */
   repairSummary?: StageRepairSummary | null;
+  /**
+   * Remedy clause ending the auto-adjustment notice ("If any dropped or
+   * renamed item was intended, …"). Flow-specific: only the /spec import flow
+   * has a source spec to re-import, so it keeps the default; the /stage
+   * prompt flow points at manifest edits / re-generation instead.
+   */
+  intendedItemRemedy?: string;
 }
 
 /**
@@ -52,6 +59,7 @@ interface ValidationFindingsPanelProps {
 export function ValidationFindingsPanel({
   validationReport,
   repairSummary,
+  intendedItemRemedy = "correct it in your source spec and re-import.",
 }: ValidationFindingsPanelProps) {
   const { reviewWarnings, notices, errorCount, hasFindings, hasNotices } =
     splitReviewFindings(validationReport);
@@ -110,7 +118,7 @@ export function ValidationFindingsPanel({
           <p className="mt-1 text-xs text-muted-foreground">
             No action needed to proceed — these note what the generator adjusted
             to keep the manifest valid. If any dropped or renamed item was
-            intended, correct it in your source spec and re-import.
+            intended, {intendedItemRemedy}
           </p>
           <ul className="mt-3 max-h-48 space-y-1 overflow-auto font-mono text-xs">
             {notices.map((n, i) => (

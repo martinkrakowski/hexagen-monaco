@@ -403,6 +403,10 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
         exact: false,
       }),
     );
+    // The adjustment notice's remedy must be route-appropriate: /stage has no
+    // source spec to re-import, so the panel's /spec default may not leak in.
+    assert.ok(screen.getByText(/adjust your prompt and generate again/i));
+    assert.equal(screen.queryByText(/re-import/i), null);
     // Still parked — surfacing findings must not introduce auto-navigation.
     assert.equal(nav.push.mock.calls.length, 0);
   });

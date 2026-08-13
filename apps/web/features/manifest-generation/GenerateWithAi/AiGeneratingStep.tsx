@@ -55,7 +55,12 @@ export function AiGeneratingStep({
         </Suspense>
       </div>
       {phase === "complete" && validationReport && (
-        <ValidationFindingsPanel validationReport={validationReport} />
+        <ValidationFindingsPanel
+          validationReport={validationReport}
+          // /stage has no source spec to re-import — the remedy must point at
+          // the manifest / prompt instead (/spec keeps the panel's default).
+          intendedItemRemedy="edit the manifest after proceeding, or adjust your prompt and generate again."
+        />
       )}
     </>
   );
