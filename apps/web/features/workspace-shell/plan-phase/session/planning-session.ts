@@ -182,6 +182,29 @@ export function isActive(status: SessionStatus): boolean {
 }
 
 /**
+ * Statuses in which a human steering note can still be CONSUMED by a later
+ * model turn. Steering only ever feeds the NEXT model turn's fold (fold.ts),
+ * so once the session leaves the loop there is no consumer left:
+ * - `converged`: no further proposer/critic turn runs — RESUME outside
+ *   awaiting-human is a reducer no-op (see the RESUME case below), and the
+ *   finalize distill reads only the seed + last proposal (distill.ts);
+ * - `finalizing`: the distill call is already the terminal hand-off;
+ * - `done`: terminal.
+ * The steering composer therefore HIDES at these statuses (decision D4, soft
+ * form: hidden rather than visible-but-disabled, mirroring `done`).
+ */
+const STEERING_CONSUMING_STATUSES: ReadonlySet<SessionStatus> = new Set([
+  "proposing",
+  "critiquing",
+  "revising",
+  "awaiting-human",
+]);
+
+export function canConsumeSteering(status: SessionStatus): boolean {
+  return STEERING_CONSUMING_STATUSES.has(status);
+}
+
+/**
  * Pure transition function. Invalid events for the current status return the
  * SAME state reference (callers can detect ignored events by identity).
  */
@@ -240,6 +263,10 @@ export function planningSessionReducer(
     }
 
     case "RESUME": {
+      // Only awaiting-human resumes. In particular, RESUME from `converged`
+      // is deliberately an identity no-op: there is no active status to
+      // return to, which is why steering persisted at converged could never
+      // reach a model turn (see canConsumeSteering).
       if (status !== "awaiting-human") return state;
       const resumed = state.resumeStatus ?? "proposing";
       const next: PlanningSessionState = clearAwait({

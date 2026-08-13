@@ -12,6 +12,10 @@ export function buildDistillPrompt(input: {
   readonly turns: readonly ProjectLayerTurn[];
 }): string {
   const { seed, turns } = input;
+  // Deliberate grounding: seed brief + the LAST proposer turn only. Critiques
+  // are already folded into that proposal, and human steering turns persisted
+  // after it have no consumer here — the UI stops accepting steering once the
+  // session leaves the active loop (canConsumeSteering in planning-session.ts).
   const finalProposal = findLast(turns, (t) => t.role === "proposer");
 
   return [

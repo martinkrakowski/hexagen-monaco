@@ -726,6 +726,30 @@ describe("PlanPhaseView composer modes", () => {
       null,
     );
   });
+
+  it("converged/finalizing session: composer hidden (steering has no consumer — D4 soft gate)", () => {
+    // A note typed here would provably never be read: steering only folds
+    // into the NEXT model turn, and none runs after convergence (fold.ts /
+    // distill.ts / canConsumeSteering). Hidden, not disabled, mirroring done.
+    for (const status of ["converged", "finalizing"] as const) {
+      cleanup();
+      planningSession.current = makeSession({
+        activeLayerId: "L-active",
+        sessionState: { status, round: 2, maxRounds: 4 },
+      });
+      render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+      assert.equal(
+        document.querySelector('textarea[aria-label="Session brief"]'),
+        null,
+        `no seed composer at ${status}`,
+      );
+      assert.equal(
+        document.querySelector('textarea[aria-label="Steering note"]'),
+        null,
+        `no steering composer at ${status}`,
+      );
+    }
+  });
 });
 
 describe("PlanPhaseView shell footer (locked §5 Q2)", () => {
