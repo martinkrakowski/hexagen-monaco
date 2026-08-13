@@ -1,6 +1,6 @@
 # LLM Execution & Free-Tier UX Overhaul
 
-**Status:** PR-1–PR-5 shipped · PR-6 next · **Created:** 2026-06-10 · **Owner:** Martin
+**Status:** ✅ COMPLETE — all 7 PRs shipped (closeout 2026-08-13; see "As built" below) · **Created:** 2026-06-10 · **Owner:** Martin
 
 ## Motivation
 
@@ -25,15 +25,15 @@ endpoint as implicit throttle), and a duplicated manifest-approval screen.
 
 ## PR sequence
 
-| PR   | Title                                          | Size         | Depends on           | Status            |
-| ---- | ---------------------------------------------- | ------------ | -------------------- | ----------------- |
-| PR-1 | Cloud-first `auto` strategy + honest fallback  | S            | —                    | done (#305)       |
-| PR-2 | Model identity in generation telemetry         | M            | —                    | done (#306)       |
-| PR-3 | Explicit local override + pre-generate warning | M            | PR-1                 | done (#307)       |
-| PR-4 | Remove the first approve-manifest screen       | M            | —                    | done (#308, #309) |
-| PR-5 | Tandem mode removal                            | L (deletion) | #303 merge           | done (#310, #311) |
-| PR-6 | Free-tier provider swap + in-app quotas        | L            | decisions below      | planned           |
-| PR-7 | FreeTierModal UI refactor                      | M            | PR-6 + HTML template | blocked           |
+| PR   | Title                                          | Size         | Depends on           | Status                 |
+| ---- | ---------------------------------------------- | ------------ | -------------------- | ---------------------- |
+| PR-1 | Cloud-first `auto` strategy + honest fallback  | S            | —                    | done (#305)            |
+| PR-2 | Model identity in generation telemetry         | M            | —                    | done (#306)            |
+| PR-3 | Explicit local override + pre-generate warning | M            | PR-1                 | done (#307)            |
+| PR-4 | Remove the first approve-manifest screen       | M            | —                    | done (#308, #309)      |
+| PR-5 | Tandem mode removal                            | L (deletion) | #303 merge           | done (#310, #311)      |
+| PR-6 | Free-tier provider swap + in-app quotas        | L            | decisions below      | done (#334, #337–#340) |
+| PR-7 | FreeTierModal UI refactor                      | M            | PR-6 + HTML template | done (same arc)        |
 
 PR-1 → PR-3 are one arc (strategy semantics, then override UX). PR-2, PR-4,
 PR-5 are independent and can interleave. PR-6 → PR-7 are the free-tier arc.
@@ -186,6 +186,31 @@ copy describes the free-tier model/limits PR-6 redefines).
 **Direction:** decompose the template into the component tree under
 `apps/web/app/lib/free-tier/`, map styling to tailwind/shadcn tokens, rewire
 `useFreeTier()` contextual data (model name is generation-truthful post-#303).
+
+---
+
+## As built — closeout (2026-08-13)
+
+The free-tier arc (PR-6/PR-7) shipped across **#334 + #337–#340**; the plan's
+open decisions resolved as follows:
+
+- **Provider swap:** the free tier no longer rides a slow endpoint. The
+  chat/generation model is the `LLM_MODEL` deploy **secret** (currently
+  `z-ai/glm-5.2` via OpenRouter) — flippable per-deploy without a code change.
+- **Quota policy:** in-app quotas shipped (per-session daily generation
+  credits with friendly exhaustion UX) instead of latency-as-throttle.
+- **Quota store:** SQLite via `better-sqlite3` at `/data/quota.db`. Infra:
+  **#339** added the Alpine build toolchain for the native module; **#340**
+  moved the quota DB onto the named volume `hexagen-monaco-quota-data` so it
+  survives container replacement. De-facto closed; revisit only at a node-22
+  base-image bump.
+- **Known accounting quirk — accepted (decision 2026-08-13):** a loose-spec
+  import burns **2** of the 10 daily generation credits (convert + spec are
+  metered separately). Decision: **leave as-is.** A GitHub-login-based gate
+  for subscription-based access is a planned feature and supersedes free-tier
+  metering concerns; no further tuning of free-tier credit accounting.
+
+Nothing from this plan remains open.
 
 ---
 

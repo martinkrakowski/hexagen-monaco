@@ -1,6 +1,7 @@
 # Generated-Output Correctness — Follow-ups & Remaining Work
 
 **Status:** The "generated output compiles" arc is **shipped**. This doc captures the loose ends it spawned (Track A, not yet planned elsewhere) and indexes the larger adjacent tracks (B, C) that already have planning docs.
+**Update 2026-08-13:** A1 is **obsolete** (its target generators were deleted — see A1). A2/A3 remain valid and are scheduled in `2026-07-25-remaining-work-consolidated-plan.md` (Wave 5). Track B shipped separately (the staged pipeline runs the real model cascade in prod since 2026-06-11).
 **Date:** 2026-06-06
 **Parent:** Follow-on to [wire-architectural-template-into-generation.md](./wire-architectural-template-into-generation.md) → [materialize-cross-context-communication.md](./materialize-cross-context-communication.md).
 
@@ -24,6 +25,14 @@ Generated projects (the `mode: "external"`, API-driven scaffold from `wizardToMa
 ## Track A — compile-correctness loose ends (not yet planned elsewhere)
 
 ### A1 — `generateWiring` / `generateTests` use raw `portName` (issue #252)
+
+> **OBSOLETE (2026-08-13).** #318 deleted `wiring.ts` and `test-generator.ts`
+> wholesale (`c0970838`) — the never-invoked generators this item targeted no
+> longer exist. Issue #252 closed as not-planned. The surviving stub path
+> already sanitizes names via `normalizeStubName` (`stubs.ts:157`), which is
+> the guardrail this item asked for. If composition-root/test generation
+> returns as a product requirement, it should be re-planned fresh (and pick up
+> A2's layer resolver), not resurrected from this spec.
 
 **Problem.** The composition-root + in-memory-test-double generator (`generateWiring`) and the test generator (`generateTests`) interpolate **raw** manifest port names into identifiers, class names, and import paths — the same defect class #242/#248 fixed for stubs. For `relational-db.out-port.ts` they emit `export class Fakerelational-db.out-port.ts implements relational-db.out-port.ts` and an import path `'.../relational-db.out-port.ts.port'` (double-suffix + `.port`, not `.out-port`).
 
@@ -103,6 +112,6 @@ Generated projects (the `mode: "external"`, API-driven scaffold from `wizardToMa
 ## Suggested order when we return
 
 1. **Nothing is urgent** — the compile arc is complete and the live surface is correct.
-2. If generated **tests/composition-root** become a product requirement → A1 (+ A2 alongside, since A1 needs the layer resolver).
+2. ~~If generated **tests/composition-root** become a product requirement → A1 (+ A2 alongside, since A1 needs the layer resolver).~~ **A1 obsolete** — its generators were deleted in #318; a future tests/composition-root feature is a fresh plan.
 3. Highest _value_ independent of the above → **Track B** (production is wired to a mock-grade stub).
 4. A2/A3 are cheap cleanups; fold A3 into whichever PR next touches `stubs.ts`.

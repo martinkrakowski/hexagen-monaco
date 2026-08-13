@@ -1,5 +1,11 @@
 # Generator Scaffold & Wizard Remediation Plan
 
+**Status:** ✅ COMPLETE — all 8 phases shipped (closeout 2026-08-13). #1/#3–#6
+landed as #262–#266; #2 as #267 (the TS6305 fix also needed a turbo `^build`
+dep on the typecheck task); #7 became ADR-0041 and shipped as the Applications
+step (#271 + #272); #8 shipped as #268/#269/#270 (`--only` scope filter +
+idempotent no-op sync that writes zero files).
+
 Remediation for bugs and design gaps in the hexagen-monaco generator, surfaced
 end-to-end while scaffolding and shipping a real generated project — **campaign-foundry**,
 a Nitro + Next.js hexagonal modular monolith. Every item below was hit in the
