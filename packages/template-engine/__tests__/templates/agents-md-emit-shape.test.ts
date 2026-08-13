@@ -140,6 +140,22 @@ describe("agents-md template — emit shape", () => {
       assert.ok(!arch.includes("{architecture_style}"));
     });
 
+    it("protects the yarn lockfile, not npm's (F18 — generated repos pin yarn)", async () => {
+      const agents = await read(projectRoot, "AGENTS.md");
+      // Generated projects pin yarn via `packageManager`, so the never-edit
+      // table must name yarn.lock. package-lock.json may still be MENTIONED in
+      // the row's reason (the npm/pnpm substitution note) but must not be the
+      // protected file itself (i.e. must not start a table row).
+      assert.ok(
+        agents.includes("| `yarn.lock`"),
+        "the never-edit table must have a yarn.lock row",
+      );
+      assert.ok(
+        !agents.includes("| `package-lock.json`"),
+        "package-lock.json must not be the protected lockfile row in a yarn-pinned repo",
+      );
+    });
+
     it("only mandates what the scaffold installed (RCA #9 — governance truth)", async () => {
       const agents = await read(projectRoot, "AGENTS.md");
       // agents-md alone: no logger was installed, so AGENTS.md must not

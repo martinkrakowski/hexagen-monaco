@@ -38,6 +38,19 @@ type NDJSONEvent =
     }
   | { type: "chunk"; stage: number; data: string }
   | { type: "validation-error"; stage: number; errors: string[] }
+  // Early manifest (Part B-lite): emitted once, right after Stage-5 assembly,
+  // while the Stage-6 review (and optional Stage-7 repair) is still running.
+  // NON-terminal — `done` always follows and its yaml supersedes this one.
+  // transactionId is "" here: the transaction is only begun AFTER the review
+  // passes, so no id exists yet; the real id arrives on `done`.
+  | {
+      type: "manifest";
+      yaml: string;
+      contextCount: number;
+      portCount: number;
+      adapterCount: number;
+      transactionId: string;
+    }
   | {
       type: "done";
       yaml: string;
@@ -61,6 +74,35 @@ type NDJSONEvent =
       };
     }
   | { type: "error"; message: string };
+
+// Shared by the early `manifest` frame and the terminal `done` frame so the
+// two can never disagree on how counts are derived. NOTE: portCount reads
+// context_mappings — the historical wire contract of this route (predates the
+// layered-ports layout); kept as-is to avoid changing what `done` reports.
+function countsFromParsed(parsed: Record<string, unknown>): {
+  contextCount: number;
+  portCount: number;
+  adapterCount: number;
+} {
+  const contextCount = Array.isArray(parsed.bounded_contexts)
+    ? parsed.bounded_contexts.length
+    : 0;
+  const portCount = Array.isArray(parsed.context_mappings)
+    ? parsed.context_mappings.length
+    : 0;
+  const adapterCount = Array.isArray(parsed.bounded_contexts)
+    ? (parsed.bounded_contexts as Array<unknown>).reduce<number>((sum, ctx) => {
+        // A bare `-` YAML list item parses to null — counting must never
+        // throw on LLM-produced yaml (same posture as countManifestEntities),
+        // so non-object entries contribute zero instead of crashing the
+        // stream (review fix).
+        if (ctx === null || typeof ctx !== "object") return sum;
+        const adapters = (ctx as Record<string, unknown>).adapters;
+        return sum + (Array.isArray(adapters) ? adapters.length : 0);
+      }, 0)
+    : 0;
+  return { contextCount, portCount, adapterCount };
+}
 
 export async function POST(request: NextRequest) {
   // Rate limiting
@@ -170,6 +212,19 @@ export async function POST(request: NextRequest) {
             });
           }
         },
+        onManifestReady: (manifest) => {
+          // Part B-lite: surface the Stage-5 manifest while Stage 6/7 run.
+          send({
+            type: "manifest",
+            yaml: manifest.yaml || "",
+            ...countsFromParsed(
+              (manifest.parsedObject as Record<string, unknown>) || {},
+            ),
+            // No transaction exists until the review completes — see the
+            // NDJSONEvent comment. The client ignores this field anyway.
+            transactionId: "",
+          });
+        },
       };
 
       try {
@@ -208,26 +263,13 @@ export async function POST(request: NextRequest) {
           const yaml = result.value.yaml || "";
           const parsed =
             (result.value.parsedObject as Record<string, unknown>) || {};
-          const ctxCount = Array.isArray(parsed.bounded_contexts)
-            ? parsed.bounded_contexts.length
-            : 0;
-          const portCount = Array.isArray(parsed.context_mappings)
-            ? parsed.context_mappings.length
-            : 0;
-          const adapterCount = Array.isArray(parsed.bounded_contexts)
-            ? (
-                parsed.bounded_contexts as Array<Record<string, unknown>>
-              ).reduce(
-                (sum, ctx) =>
-                  sum + (Array.isArray(ctx.adapters) ? ctx.adapters.length : 0),
-                0,
-              )
-            : 0;
+          const { contextCount, portCount, adapterCount } =
+            countsFromParsed(parsed);
 
           send({
             type: "done",
             yaml,
-            contextCount: ctxCount,
+            contextCount,
             portCount,
             adapterCount,
             transactionId: result.transactionId,

@@ -173,6 +173,34 @@ describe("docker template — emit shape", () => {
         "no GHA expression should be mangled to single-brace ${ ... }",
       );
     });
+
+    it("gates the CI image build to workflow_dispatch until the Dockerfile builds (F20)", async () => {
+      const workflow = await read(
+        projectRoot,
+        ".github/workflows/docker-build.yml",
+      );
+      // F20 (day-one noise): a freshly generated repo's Dockerfile often needs
+      // layout adaptation before `docker build .` succeeds, so automatic
+      // push/PR builds would show permanently red checks. Top-level `on:`
+      // children sit at 2-space indent; commented-out triggers and the
+      // deeper-indented `push:` step input of build-push-action must not
+      // satisfy/violate the check.
+      const nonComment = workflow
+        .split("\n")
+        .filter((l) => !l.trimStart().startsWith("#"));
+      assert.ok(
+        nonComment.some((l) => /^\s{2}workflow_dispatch:/.test(l)),
+        "docker-build.yml must be workflow_dispatch-gated",
+      );
+      assert.ok(
+        !nonComment.some((l) => /^\s{2}push:/.test(l)),
+        "docker-build.yml must NOT have an active push trigger by default",
+      );
+      assert.ok(
+        !nonComment.some((l) => /^\s{2}pull_request:/.test(l)),
+        "docker-build.yml must NOT have an active pull_request trigger by default",
+      );
+    });
   });
 
   describe("non-default answers (node_version=20, services=[redis,postgres])", () => {

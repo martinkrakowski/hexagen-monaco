@@ -1,13 +1,19 @@
 name: Deploy to Fly.io
 
-# Production deploy on every merge to main. Fly.io suits apps that need
-# persistent connections / WebSockets. Deploy config lives in fly.toml.
+# Production deploy — manual-only (workflow_dispatch) until Fly.io is
+# configured, so a freshly pushed repo shows zero failed Actions runs (F20).
+# Fly.io suits apps that need persistent connections / WebSockets. Deploy
+# config lives in fly.toml.
 #
-# TODO: add FLY_API_TOKEN in GitHub repo → Settings → Secrets and variables →
-# Actions  (create one with `fly tokens create deploy`).
+# TO ENABLE automatic deploys on merge to main:
+#   1. Add FLY_API_TOKEN in GitHub repo → Settings → Secrets and variables →
+#      Actions  (create one with `fly tokens create deploy`).
+#   2. Uncomment the push trigger below (keep workflow_dispatch — it gives you
+#      a manual deploy button in the Actions tab).
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
 
 concurrency:
   group: deploy-production

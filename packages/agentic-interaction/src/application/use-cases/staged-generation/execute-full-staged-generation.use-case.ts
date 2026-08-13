@@ -34,6 +34,7 @@ import {
 } from "../../../domain/prompts/build-architecture-context";
 import { countManifestEntities } from "../../../domain/manifest/count-manifest-entities";
 import { dedupeAdapterNames } from "../../../domain/manifest/dedupe-adapter-names";
+import { synthesizeMissingRepositoryPorts } from "../../../domain/manifest/synthesize-repository-ports";
 import { ExecutePromptNormalizationUseCase } from "./execute-prompt-normalization.use-case";
 import { ExecuteDomainExtractionUseCase } from "./execute-domain-extraction.use-case";
 import type { Stage1RefinementConfig } from "./execute-domain-extraction.use-case";
@@ -55,6 +56,11 @@ export interface FullStagedGenerationCallbacks {
   onChunk?: (chunk: string) => void;
   /** Called at completion of each stage with full telemetry. */
   onStageTelemetry?: (telemetry: StageTelemetry) => void;
+  /** Fired once, between Stage-5 assembly and the Stage-6 LLM review, with the
+   * freshly assembled manifest — lets a streaming route surface the manifest
+   * to the client while validation is still running (Stage-6 Part B-lite).
+   * The final result (and `done` frame) still carries the post-review yaml. */
+  onManifestReady?: (manifest: AssembledManifest) => void;
 }
 
 export interface FullStagedGenerationOptions {
@@ -242,30 +248,55 @@ export class ExecuteFullStagedGenerationUseCase {
     }
     callbacks?.onProgress?.(4, s4Duration);
 
+    // R03 invariant satisfaction at the source — the fast-follow deferred from
+    // the structured-config PR: a non-shared-kernel context that Stage 3 left
+    // with no outbound repository port gets a default <Aggregate>RepositoryPort
+    // + matching adapter (explicit type/implements). Done on the structures
+    // Stage 5/6 actually read, so R03 never reaches the reviewer and the port +
+    // adapter land in the rendered manifest.
+    const repoSynthesis = synthesizeMissingRepositoryPorts(
+      portMap,
+      s4.value,
+      s2.value.accepted,
+    );
+    const finalPortMap = repoSynthesis.portMap;
+    const repositorySynthesisWarnings = repoSynthesis.synthesized.map(
+      (s) =>
+        `Auto-added a default repository port '${s.portName}' and adapter '${s.adapterName}' to context '${s.contextName}' — Stage 3 produced no outbound repository port (R03). Review and rename to fit your domain.`,
+    );
+
     // R12: make adapter names globally unique before assembly (Stage 4 can give
     // the same generic name to multiple contexts that share a technology). Only
     // `.name` changes — `implements` is untouched, so the bindings still ground
-    // R04/R05/R06. Mirrors the structured-config orchestrator. (The R03
-    // repository-port synthesis net is the separate /stage fast-follow.)
-    const adapterDedup = dedupeAdapterNames(s4.value);
+    // R04/R05/R06. Mirrors the structured-config orchestrator: dedupe AFTER the
+    // R03 synthesis so the synthesized repository adapters are covered too.
+    const adapterDedup = dedupeAdapterNames(repoSynthesis.adapterBindings);
     const dedupedAdapters = adapterDedup.adapterBindings;
     const adapterRenameWarnings = adapterDedup.renamed.map(
       (r) =>
         `Renamed adapter '${r.from}' in context '${r.contextName}' to '${r.to}' to keep adapter names globally unique (R12).`,
     );
-    for (const warning of adapterRenameWarnings) {
-      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
-    }
 
     // Stage 5: Manifest Assembly (synchronous, returns AssembledManifest directly)
     const s5Start = Date.now();
     callbacks?.onProgress?.(5, 0);
     callbacks?.onChunk?.("Stage 5 · Manifest Assembly");
+
+    // "Stage 5 ·" warning chunks are emitted only AFTER onProgress(5, 0)
+    // (review fix): the /stage NDJSON adapter stamps every chunk with the
+    // CURRENT stage, which only advances on onProgress(stage, 0) — chunks
+    // emitted before it go out labeled with the previous stage.
+    for (const warning of repositorySynthesisWarnings) {
+      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
+    }
+    for (const warning of adapterRenameWarnings) {
+      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
+    }
     const assembledManifest = this.stage5.execute({
       stage0: s0.value,
       stage1: s1.value,
       stage2: s2.value,
-      stage3: portMap,
+      stage3: finalPortMap,
       stage4: dedupedAdapters,
       contextMappings,
     });
@@ -287,6 +318,11 @@ export class ExecuteFullStagedGenerationUseCase {
       );
     }
 
+    // Early-manifest hook (Part B-lite): the manifest is fully assembled here;
+    // only the LLM review (Stage 6) is still ahead. Fired before Stage 6 so a
+    // streaming consumer can offer the manifest while validation runs.
+    callbacks?.onManifestReady?.(assembledManifest);
+
     // Stage 6: Validation Review
     const s6Start = Date.now();
     callbacks?.onProgress?.(6, 0);
@@ -296,7 +332,7 @@ export class ExecuteFullStagedGenerationUseCase {
         stage0: s0.value,
         stage1: s1.value,
         stage2: s2.value,
-        stage3: portMap,
+        stage3: finalPortMap,
         stage4: dedupedAdapters,
         stage5: assembledManifest,
         contextMappings,
@@ -315,11 +351,12 @@ export class ExecuteFullStagedGenerationUseCase {
       stage0: s0.value,
       stage1: s1.value,
       stage2: s2.value,
-      stage3: portMap,
+      stage3: finalPortMap,
       stage4: dedupedAdapters,
       stage5: assembledManifest,
       stage6: (() => {
         const extraWarnings = [
+          ...repositorySynthesisWarnings,
           ...adapterRenameWarnings,
           ...(assembledManifest.schemaAdvisories ?? []),
         ];

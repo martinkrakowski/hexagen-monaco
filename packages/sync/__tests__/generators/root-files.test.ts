@@ -439,6 +439,14 @@ describe("root files", () => {
             gitignore.includes(".env"),
           ".gitignore must cover node_modules/.turbo/.env",
         );
+        // F20: failed/partial tsc runs leave vitest.config declaration
+        // artifacts at package roots — cover them so a fresh repo's
+        // `git status` stays clean.
+        assert.ok(
+          gitignore.includes("packages/*/vitest.config.d.ts") &&
+            gitignore.includes("packages/*/vitest.config.d.ts.map"),
+          ".gitignore must cover packages/*/vitest.config.d.ts(.map) tsc artifacts",
+        );
 
         const yarnrc = await readFile(path.join(workspaceRoot, ".yarnrc.yml"));
         assert.ok(

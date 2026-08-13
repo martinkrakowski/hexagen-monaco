@@ -48,12 +48,12 @@ before continuing.
 
 | Trigger                  | Command                                  | On failure              |
 | ------------------------ | ---------------------------------------- | ----------------------- |
-| Before starting work     | `npm run build && npm run typecheck`     | STOP — fix first        |
-| Any `.ts` / `.tsx` edit  | `npm run lint && npm run typecheck`      | Fix before continuing   |
+| Before starting work     | `yarn build && yarn typecheck`           | STOP — fix first        |
+| Any `.ts` / `.tsx` edit  | `yarn lint && yarn typecheck`            | Fix before continuing   |
 | After adding a template  | `hexagen validate-templates`             | Resolve conflicts       |
-| Before committing        | `npm test`                               | Diagnose — never skip    |
+| Before committing        | `yarn test`                              | Diagnose — never skip    |
 
-(If this project uses yarn or pnpm, substitute the package manager — the
+(If this project uses npm or pnpm, substitute the package manager — the
 triggers stay the same.)
 
 ## Files Never Edit
@@ -64,7 +64,7 @@ Each rule has a reason; agents follow rules they understand.
 | ----------------------------- | ----------------------------------------------------------- |
 | `AGENTS.md`                   | This contract. Change it deliberately, never as a side effect. |
 | `.agents/*.md` (except `session-log.md`) | Spec files — edit only when explicitly asked to update specs. `session-log.md` is the deliberate exception: append to it after each session. |
-| `package-lock.json`           | Updated only via `npm` commands, never by hand.             |
+| `yarn.lock`                   | Lockfile — updated only by `yarn` commands, never by hand. (Generated projects pin yarn via `packageManager`; if this repo uses npm or pnpm instead, the same rule applies to `package-lock.json` / `pnpm-lock.yaml`.) |
 | `DESIGN.md`                   | Design contract (if present). Changes require design review. |
 
 ## Mode System

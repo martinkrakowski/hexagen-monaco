@@ -8,6 +8,11 @@ import {
   type GeneratorResult,
 } from "../results.js";
 import { isInScope, safeWriteFileAtomic } from "../fs-utils.js";
+import {
+  isSafeLayerFolder,
+  normalizeSubfolder,
+  resolveLayerDir,
+} from "../domain/services/layer-dir-resolver.js";
 
 // Typed shape for layers from .architecture/manifest.yaml
 interface LayerConfig {
@@ -203,8 +208,13 @@ export async function ensureLayerFolders(
     logger.warn("layer-rules.yaml not found — skipping layer rule enforcement");
   }
 
-  for (const [, layerConfig] of Object.entries(layers)) {
-    const layerPath = path.join(moduleDir, layerConfig.folder);
+  for (const [layerName, layerConfig] of Object.entries(layers)) {
+    // Resolver-validated (review fix): an absolute or `..`-traversing
+    // configured folder falls back to the `src/<layer>` convention instead of
+    // escaping the package. Every emitter already went through the resolver;
+    // the scaffold was the one consumer still joining the raw configured
+    // folder.
+    const layerPath = path.join(moduleDir, resolveLayerDir(layers, layerName));
 
     // Under --only, a layer is in scope when EITHER its directory path
     // matches (plain `--only packages/billing` prefix patterns) OR its barrel
@@ -240,9 +250,26 @@ export async function ensureLayerFolders(
       await ensureGitkeepCounted(layerPath, config, result);
     }
 
-    // Recurse into subfolders
+    // Recurse into subfolders. Known-site spellings are normalized to the
+    // conventional kebab-case form (F16): the wizard's layer config names
+    // `value_objects` while stub emission and the add-on template payloads
+    // (and their import specifiers) use `value-objects` — scaffolding the
+    // configured spelling verbatim produced BOTH folders, one holding only
+    // this generator's `.gitkeep`. One site, one folder.
     for (const sub of subfolders) {
-      const subPath = path.join(layerPath, sub);
+      const normalizedSub = normalizeSubfolder(sub);
+
+      // Same traversal posture as the layer folder above (review fix): a
+      // configured subfolder that is absolute or `..`-traverses is skipped —
+      // there is no conventional fallback name for a custom subfolder.
+      if (!isSafeLayerFolder(normalizedSub)) {
+        logger.warn(
+          `Skipping unsafe configured subfolder "${sub}" in layer "${layerName}"`,
+        );
+        continue;
+      }
+
+      const subPath = path.join(layerPath, normalizedSub);
 
       // Same two-arm scope guard as the parent layer (counted mkdir).
       if (

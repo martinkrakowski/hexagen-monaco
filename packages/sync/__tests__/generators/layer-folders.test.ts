@@ -277,4 +277,62 @@ describe("ensureLayerFolders (directories + leaf keeps, probe-first counting)", 
       );
     });
   });
+
+  it("an unsafe configured folder never escapes the package: layer falls back to convention, subfolder is skipped with a warning (review fix)", async () => {
+    await withTempWorkspace(async ({ workspaceRoot, moduleDir }) => {
+      const warnings: string[] = [];
+      const config = makeConfig(workspaceRoot, {
+        logger: {
+          ...silentLogger,
+          warn: (message: string) => {
+            warnings.push(message);
+          },
+        },
+      });
+      // Manifests reach the scaffold unvalidated via /api/generate — the
+      // resolver's traversal posture must hold at THIS seam, not just in the
+      // emitters.
+      const layers = {
+        domain: { folder: "../../escape" },
+        application: {
+          folder: "src/application",
+          subfolders: ["../outside", "use-cases"],
+        },
+        infrastructure: { folder: "/absolute/elsewhere" },
+      };
+
+      const result = await ensureLayerFolders(moduleDir, layers, config);
+
+      assert.ok(
+        await dirExists(path.join(moduleDir, "src/domain")),
+        "a `..`-traversing layer folder falls back to src/<layer>",
+      );
+      assert.strictEqual(
+        await dirExists(path.join(workspaceRoot, "escape")),
+        false,
+        "nothing is written outside the module dir",
+      );
+      assert.ok(
+        await dirExists(path.join(moduleDir, "src/infrastructure")),
+        "an absolute layer folder falls back to src/<layer>",
+      );
+      assert.ok(
+        await dirExists(path.join(moduleDir, "src/application/use-cases")),
+        "safe subfolders in the same layer still materialize",
+      );
+      assert.strictEqual(
+        await dirExists(path.join(moduleDir, "src/outside")),
+        false,
+        "the traversing subfolder is skipped entirely",
+      );
+      assert.ok(
+        warnings.some((w) => w.includes("../outside")),
+        "the skip is warned, never silent",
+      );
+      assert.ok(
+        result.created.every((p) => p.startsWith(moduleDir)),
+        "every counted write stays inside the module dir",
+      );
+    });
+  });
 });

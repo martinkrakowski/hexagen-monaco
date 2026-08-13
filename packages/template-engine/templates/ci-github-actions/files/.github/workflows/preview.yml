@@ -3,8 +3,18 @@ name: Preview Deploy
 # Vercel preview deploy on every PR, commenting the preview URL back on the PR.
 # Pair with deploy_target vercel (or railway with its own preview setup).
 #
-# TODO: reuse the same secrets as deploy-vercel.yml — VERCEL_TOKEN,
-# VERCEL_ORG_ID, VERCEL_PROJECT_ID.
+# OFF by default (F20): the job is gated on the repository variable
+# ENABLE_PREVIEW_DEPLOYS, so PRs on a freshly pushed repo show a neutral
+# "skipped" check instead of a permanently red one. (A variable, not a secret,
+# is the gate because GitHub does not expose the secrets context to job-level
+# `if:` conditions.)
+#
+# TO ENABLE preview deploys:
+#   1. Add the same secrets as deploy-vercel.yml — VERCEL_TOKEN,
+#      VERCEL_ORG_ID, VERCEL_PROJECT_ID (Settings → Secrets and variables →
+#      Actions → Secrets).
+#   2. Create the repository variable ENABLE_PREVIEW_DEPLOYS with value `true`
+#      (same page → Variables tab).
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -22,9 +32,14 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    # Secrets are not exposed to PRs from forks, so this job would always fail
-    # for external contributors — skip it there instead.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    # Two gates (both must hold, see the header comment):
+    #   - ENABLE_PREVIEW_DEPLOYS repo variable — off until Vercel is configured
+    #     (F20: keeps fresh repos free of failing checks).
+    #   - Secrets are not exposed to PRs from forks, so this job would always
+    #     fail for external contributors — skip it there instead.
+    if: >-
+      vars.ENABLE_PREVIEW_DEPLOYS == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

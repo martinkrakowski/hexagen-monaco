@@ -112,22 +112,58 @@ export function GenerateWithAi({
       ? stagedGen.generatedManifest
       : null;
 
+  // Early-enable (Part B-lite): the Stage-5 manifest arrived on the stream's
+  // non-terminal `manifest` frame while the Stage-6 review is still running.
+  // Offered only WHILE the run is in flight — once it resolves,
+  // completedManifest (the done yaml, possibly repair-adjusted) supersedes it,
+  // and a failed run offers neither.
+  const earlyManifest =
+    stagedGen.isGenerating && stagedGen.earlyManifest
+      ? stagedGen.earlyManifest
+      : null;
+
+  // The Stage-7 verify-and-repair pass changed the yaml between the early
+  // frame and `done` — surfaced as a subtle footer note (the user may have
+  // been looking at the early manifest's counts while parked here).
+  const manifestUpdatedByRepair = Boolean(
+    completedManifest &&
+    stagedGen.earlyManifest &&
+    stagedGen.earlyManifest !== completedManifest,
+  );
+
   useEffect(() => {
     onGeneratingStateChange?.(
       showGeneratingScreen
         ? {
             onCancel: () => cancelGenerationRef.current(),
+            // completedManifest wins over earlyManifest by construction (they
+            // are never non-null together — see the isGenerating gates above).
+            // The early hand-off carries a null report + validationPending:
+            // navigation unmounts this component and kills the stream, so the
+            // Stage-6 findings for this run will never arrive (B-lite).
+            // NO auto-navigation on either arm: the user clicks Next.
             onNext: completedManifest
               ? () =>
                   onUseManifestRef.current?.(
                     completedManifest,
                     validationReportRef.current,
+                    false,
                   )
-              : undefined,
+              : earlyManifest
+                ? () => onUseManifestRef.current?.(earlyManifest, null, true)
+                : undefined,
+            validationPending: earlyManifest !== null,
+            manifestUpdatedByRepair,
           }
         : null,
     );
-  }, [showGeneratingScreen, onGeneratingStateChange, completedManifest]);
+  }, [
+    showGeneratingScreen,
+    onGeneratingStateChange,
+    completedManifest,
+    earlyManifest,
+    manifestUpdatedByRepair,
+  ]);
 
   const generateRef = useRef(stagedGen.generateManifest);
   useEffect(() => {

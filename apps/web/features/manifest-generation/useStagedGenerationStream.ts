@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { logger } from "../../lib/structured-logger";
 import type { StagedPhase, StageProgress } from "./staged-generation-types";
 
@@ -90,6 +90,12 @@ export interface StagedGenerationStreamReturn {
   isGenerating: boolean;
   generationError: string | null;
   generatedManifest: string | null;
+  /** Early Stage-5 manifest (Part B-lite): set when the NON-terminal
+   * `manifest` frame arrives, while the Stage-6 review is still streaming.
+   * The terminal `done` frame's yaml (possibly Stage-7-repaired) supersedes
+   * it as `generatedManifest`; this stays set so consumers can detect a
+   * repair-driven difference between the two. */
+  earlyManifest: string | null;
   phase: StagedPhase;
   stepDetail: string;
   stageProgress: Record<number, StageProgress>;
@@ -104,6 +110,7 @@ export interface StagedGenerationStreamReturn {
     signal?: AbortSignal,
   ) => Promise<{
     generatedManifest: string | null;
+    earlyManifest: string | null;
     phase: StagedPhase;
     stepDetail: string;
     stageProgress: Record<number, StageProgress>;
@@ -134,6 +141,7 @@ export function useStagedGenerationStream(
   const [generatedManifest, setGeneratedManifest] = useState<string | null>(
     null,
   );
+  const [earlyManifest, setEarlyManifest] = useState<string | null>(null);
   const [phase, setPhase] = useState<StagedPhase>("idle");
   const [stepDetail, setStepDetail] = useState("");
   const [stageProgress, setStageProgress] = useState<
@@ -152,10 +160,23 @@ export function useStagedGenerationStream(
   const abortRef = useRef<AbortController | null>(null);
   const lastBodyRef = useRef<Record<string, unknown> | null>(null);
 
+  // Abort any in-flight stream when the consumer unmounts (review fix).
+  // Early-enable makes this a routine path — the user can navigate away on
+  // the `manifest` frame while Stage 6/7 still stream; without the abort the
+  // read loop and its inactivity watchdog keep running until the server
+  // closes the stream.
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+    },
+    [],
+  );
+
   const generate = useCallback(
     async (body: Record<string, unknown>, signal?: AbortSignal) => {
       lastBodyRef.current = body;
       setGeneratedManifest(null);
+      setEarlyManifest(null);
       setPhase("stage-0");
       setStepDetail("Starting generation...");
       setStageProgress({});
@@ -183,6 +204,7 @@ export function useStagedGenerationStream(
       // Result object to collect final state
       const result = {
         generatedManifest: null as string | null,
+        earlyManifest: null as string | null,
         phase: "idle" as StagedPhase,
         stepDetail: "",
         stageProgress: {} as Record<number, StageProgress>,
@@ -413,6 +435,22 @@ export function useStagedGenerationStream(
                     const errors = event.errors as string[];
                     result.validationErrors = errors;
                     setValidationErrors(errors);
+                  } else if (type === "manifest") {
+                    // Early Stage-5 manifest (Part B-lite) — NON-terminal by
+                    // protocol: the loop keeps reading (Stage-6 chunks and the
+                    // terminal `done`/`error` still follow), so this branch
+                    // must NOT touch phase/isGenerating or the terminal-frame
+                    // accounting. Deliberately not handled in the residual-
+                    // buffer flush: a `manifest` frame stranded there means
+                    // the stream died before any terminal frame, i.e. the run
+                    // failed and early-enable is moot.
+                    if (
+                      typeof event.yaml === "string" &&
+                      event.yaml.length > 0
+                    ) {
+                      result.earlyManifest = event.yaml;
+                      setEarlyManifest(result.earlyManifest);
+                    }
                   } else if (applyTerminalFrame(event)) {
                     sawTerminalFrame = true;
                     // A done/error frame is terminal by protocol — stop reading
@@ -517,6 +555,7 @@ export function useStagedGenerationStream(
     setIsGenerating(false);
     setGenerationError(null);
     setGeneratedManifest(null);
+    setEarlyManifest(null);
     setPhase("idle");
     setStepDetail("");
     setStageProgress({});
@@ -532,6 +571,7 @@ export function useStagedGenerationStream(
     isGenerating,
     generationError,
     generatedManifest,
+    earlyManifest,
     phase,
     stepDetail,
     stageProgress,

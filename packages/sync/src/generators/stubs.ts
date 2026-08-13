@@ -25,6 +25,11 @@ import {
 import { DEFAULT_TEMPLATES, DEFAULT_NAMING } from "./stubs/stub-templates.js";
 import type { StubKind } from "./stubs/stub-templates.js";
 import { buildEmissionPlan } from "../domain/services/emission-plan-builder.js";
+import {
+  resolveEmissionDir,
+  type LayersConfig,
+} from "../domain/services/layer-dir-resolver.js";
+import { toPascalCaseIdentifier } from "../domain/services/name-normalizer.js";
 import type { ReportRecorder } from "../domain/types.js";
 import { interpolateWithLog } from "../domain/services/stub-template-resolver.js";
 
@@ -96,9 +101,17 @@ async function tryAnalyzeRelatedPort(
   kind: "adapter" | "useCase",
   context: BoundedContext,
   relatedPortNamingTemplate: string,
+  layersConfig: LayersConfig | undefined,
 ): Promise<ReturnType<typeof analyzePortFile>> {
   const portType = kind === "adapter" ? "out" : "in";
-  const portSubdir = `application/ports/${portType}`;
+  // Probe where the port is actually EMITTED (the A2 resolver), not the
+  // conventional `src/application/ports/*` — with a custom
+  // `application.folder` the conventional probe would always miss and every
+  // adapter/use-case would silently degrade to a generic stub.
+  const portSubdir = resolveEmissionDir(
+    layersConfig,
+    `application/ports/${portType}`,
+  );
 
   const derivedPortName = name.replace(/Adapter$|UseCase$/, "Port");
 
@@ -132,7 +145,9 @@ async function tryAnalyzeRelatedPort(
   ];
 
   for (const filename of possibleFilenames) {
-    const portFilePath = path.join(moduleDir, "src", portSubdir, filename);
+    // portSubdir is package-root-relative (it already carries the configured
+    // or conventional `src/...` layer folder) — no extra "src" segment here.
+    const portFilePath = path.join(moduleDir, portSubdir, filename);
     const analysis = analyzePortFile(portFilePath);
     if (analysis) {
       return analysis;
@@ -152,7 +167,10 @@ async function tryAnalyzeRelatedPort(
  * exactly once instead of `…in-port.ts.in-port.ts`), then PascalCase — so the
  * content template's `{name}Port`/`{name}Adapter` is a valid identifier rather
  * than `interface rest-controller.in-port.tsPort`. A no-op for names that are
- * already clean PascalCase. Mirrors what `architecture-files.ts` already does.
+ * already clean PascalCase. The PascalCase/identifier step is the shared
+ * `toPascalCaseIdentifier` (A3) — the same normalizer `architecture-files.ts`
+ * and `cross-context.ts` render names with, so a stub identifier and its
+ * ownership-registry/cross-context rendering can never drift apart again.
  */
 export function normalizeStubName(
   rawName: string,
@@ -168,14 +186,7 @@ export function normalizeStubName(
   const ext = idx >= 0 ? namingTemplate.slice(idx + placeholder.length) : "";
   const base =
     ext && rawName.endsWith(ext) ? rawName.slice(0, -ext.length) : rawName;
-  const pascal = base
-    .split(/[^a-zA-Z0-9]+/)
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join("");
-  if (pascal.length === 0) return "Stub";
-  // Guarantee a valid identifier start (a digit-leading name like "3d-renderer").
-  return /^[0-9]/.test(pascal) ? `Stub${pascal}` : pascal;
+  return toPascalCaseIdentifier(base);
 }
 
 export async function generateStubs(
@@ -202,7 +213,13 @@ export async function generateStubs(
     return result;
   }
 
-  const plan = buildEmissionPlan(context);
+  // Resolve every emission directory from `generator.sync.layers` (A2) so
+  // stub placement, the layer-folder scaffold, and the related-port probe all
+  // agree on one tree.
+  const layersConfig: LayersConfig | undefined =
+    config.manifest.generator?.sync?.layers;
+
+  const plan = buildEmissionPlan(context, layersConfig);
   if (plan.length === 0) {
     config.logger.debug(
       `generateStubs: no layer declarations for '${moduleName}'`,
@@ -230,7 +247,9 @@ export async function generateStubs(
         config,
       );
 
-      const filePath = path.join(moduleDir, "src", subdir, filename);
+      // `subdir` comes RESOLVED from the emission plan (package-root-relative,
+      // configured or conventional `src/...` folder included) — see A2.
+      const filePath = path.join(moduleDir, subdir, filename);
       let content: string;
 
       if (kind === "adapter" || kind === "useCase") {
@@ -248,6 +267,7 @@ export async function generateStubs(
           kind,
           context,
           relatedPortNaming,
+          layersConfig,
         );
 
         if (portAnalysis) {
@@ -272,12 +292,12 @@ export async function generateStubs(
               contextNaming,
               manifestNaming,
             );
+            // Same resolved directory the out-port stubs are emitted into
+            // (A2) — the derived import specifiers must point at the actual
+            // emission site, not the conventional one.
             const outPortDir = path.join(
               moduleDir,
-              "src",
-              "application",
-              "ports",
-              "out",
+              resolveEmissionDir(layersConfig, "application/ports/out"),
             );
             const outPorts: UseCaseOutPort[] = (
               context.layers?.application?.ports?.out ?? []

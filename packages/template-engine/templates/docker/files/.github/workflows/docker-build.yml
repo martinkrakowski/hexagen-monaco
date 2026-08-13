@@ -1,16 +1,25 @@
 name: Docker Build & Push
 
-# Builds and pushes the production image on every merge to main, and builds
-# (without pushing) on PRs so a broken Dockerfile is caught before merge.
+# Builds and pushes the production image — manual-only (workflow_dispatch)
+# until the Dockerfile builds in this repo's layout, so a freshly pushed repo
+# shows zero failed Actions runs (F20). The scaffolded Dockerfile usually needs
+# adapting to your workspace layout before `docker build .` succeeds.
+#
+# TO ENABLE CI image builds (push to main = build+push; PRs = build-only, so a
+# broken Dockerfile is caught before merge):
+#   1. Verify `docker build .` succeeds locally.
+#   2. Uncomment the push/pull_request triggers below (keep workflow_dispatch —
+#      it gives you a manual build button in the Actions tab).
 #
 # Default target: GitHub Container Registry (ghcr.io) — zero extra secrets,
 # uses the built-in GITHUB_TOKEN. To target another registry, see the commented
 # alternatives in the "Log in" and "env" sections below and set REGISTRY_ORG.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
+  # pull_request:
+  #   branches: [main]
 
 env:
   REGISTRY: ghcr.io
