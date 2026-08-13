@@ -264,9 +264,6 @@ export class ExecuteFullStagedGenerationUseCase {
       (s) =>
         `Auto-added a default repository port '${s.portName}' and adapter '${s.adapterName}' to context '${s.contextName}' — Stage 3 produced no outbound repository port (R03). Review and rename to fit your domain.`,
     );
-    for (const warning of repositorySynthesisWarnings) {
-      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
-    }
 
     // R12: make adapter names globally unique before assembly (Stage 4 can give
     // the same generic name to multiple contexts that share a technology). Only
@@ -279,14 +276,22 @@ export class ExecuteFullStagedGenerationUseCase {
       (r) =>
         `Renamed adapter '${r.from}' in context '${r.contextName}' to '${r.to}' to keep adapter names globally unique (R12).`,
     );
-    for (const warning of adapterRenameWarnings) {
-      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
-    }
 
     // Stage 5: Manifest Assembly (synchronous, returns AssembledManifest directly)
     const s5Start = Date.now();
     callbacks?.onProgress?.(5, 0);
     callbacks?.onChunk?.("Stage 5 · Manifest Assembly");
+
+    // "Stage 5 ·" warning chunks are emitted only AFTER onProgress(5, 0)
+    // (review fix): the /stage NDJSON adapter stamps every chunk with the
+    // CURRENT stage, which only advances on onProgress(stage, 0) — chunks
+    // emitted before it go out labeled with the previous stage.
+    for (const warning of repositorySynthesisWarnings) {
+      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
+    }
+    for (const warning of adapterRenameWarnings) {
+      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
+    }
     const assembledManifest = this.stage5.execute({
       stage0: s0.value,
       stage1: s1.value,

@@ -8,7 +8,11 @@ import {
   type GeneratorResult,
 } from "../results.js";
 import { isInScope, safeWriteFileAtomic } from "../fs-utils.js";
-import { normalizeSubfolder } from "../domain/services/layer-dir-resolver.js";
+import {
+  isSafeLayerFolder,
+  normalizeSubfolder,
+  resolveLayerDir,
+} from "../domain/services/layer-dir-resolver.js";
 
 // Typed shape for layers from .architecture/manifest.yaml
 interface LayerConfig {
@@ -204,8 +208,13 @@ export async function ensureLayerFolders(
     logger.warn("layer-rules.yaml not found — skipping layer rule enforcement");
   }
 
-  for (const [, layerConfig] of Object.entries(layers)) {
-    const layerPath = path.join(moduleDir, layerConfig.folder);
+  for (const [layerName, layerConfig] of Object.entries(layers)) {
+    // Resolver-validated (review fix): an absolute or `..`-traversing
+    // configured folder falls back to the `src/<layer>` convention instead of
+    // escaping the package. Every emitter already went through the resolver;
+    // the scaffold was the one consumer still joining the raw configured
+    // folder.
+    const layerPath = path.join(moduleDir, resolveLayerDir(layers, layerName));
 
     // Under --only, a layer is in scope when EITHER its directory path
     // matches (plain `--only packages/billing` prefix patterns) OR its barrel
@@ -248,7 +257,19 @@ export async function ensureLayerFolders(
     // configured spelling verbatim produced BOTH folders, one holding only
     // this generator's `.gitkeep`. One site, one folder.
     for (const sub of subfolders) {
-      const subPath = path.join(layerPath, normalizeSubfolder(sub));
+      const normalizedSub = normalizeSubfolder(sub);
+
+      // Same traversal posture as the layer folder above (review fix): a
+      // configured subfolder that is absolute or `..`-traverses is skipped —
+      // there is no conventional fallback name for a custom subfolder.
+      if (!isSafeLayerFolder(normalizedSub)) {
+        logger.warn(
+          `Skipping unsafe configured subfolder "${sub}" in layer "${layerName}"`,
+        );
+        continue;
+      }
+
+      const subPath = path.join(layerPath, normalizedSub);
 
       // Same two-arm scope guard as the parent layer (counted mkdir).
       if (

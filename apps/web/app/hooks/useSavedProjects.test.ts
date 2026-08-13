@@ -599,6 +599,43 @@ describe("useSavedProjects — layer mutations", () => {
     );
     persistence.port.saveProjects = original;
   });
+
+  it("updateProject on an id unknown to this instance is a TRUE no-op (no write, no pending entry) — review fix", async () => {
+    persistence.state.projects = [seed("p1")];
+    const { result } = await mountLoaded();
+    const before = persistence.state.saveCount;
+
+    await act(async () => {
+      result.current.updateProject("ghost", {} as never, "yaml: ghost");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    assert.strictEqual(persistence.state.saveCount, before, "no write");
+    assert.strictEqual(result.current.persistError, null);
+  });
+
+  it("updateProject is a SILENT no-op when the record vanished from storage by write time (NotFound) — review fix", async () => {
+    persistence.state.projects = [seed("p1"), seed("p2")];
+    const { result } = await mountLoaded();
+
+    // p2 exists in this instance's snapshot but was deleted from storage.
+    persistence.state.projects = persistence.state.projects.filter(
+      (p) => p.id !== "p2",
+    );
+
+    await act(async () => {
+      result.current.updateProject("p2", {} as never, "yaml: gone");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    assert.strictEqual(
+      result.current.persistError,
+      null,
+      "NotFound stays silent (matches renameProject / updateProjectFormState's contract)",
+    );
+  });
 });
 
 describe("useSavedProjects — updateProjectFormState (Plan-phase settings autosave)", () => {

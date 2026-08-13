@@ -125,6 +125,60 @@ test("emits the early `manifest` frame before `done`, and `done` still carries t
   });
 });
 
+test("a null bounded_contexts entry (bare `-` yaml list item) never crashes the count derivation (review fix)", async () => {
+  // LLM-produced yaml can parse a bare `-` list item to null; counting must
+  // contribute zero for it instead of throwing mid-stream.
+  vi.spyOn(
+    ExecuteStructuredConfigGenerationUseCase.prototype,
+    "execute",
+  ).mockImplementation(async (_config, callbacks) => {
+    callbacks?.onManifestReady?.({
+      yaml: "sparse: manifest\n",
+      parsedObject: {
+        bounded_contexts: [
+          { name: "billing", adapters: [{ name: "a1" }] },
+          null,
+          "not-an-object",
+        ],
+        context_mappings: [],
+      },
+    } as unknown as AssembledManifest);
+    return {
+      success: true as const,
+      value: {
+        yaml: "sparse: manifest\n",
+        parsedObject: {
+          bounded_contexts: [null],
+          context_mappings: [],
+        },
+      } as unknown as AssembledManifest,
+      validation: { errors: [], warnings: [], passed: true },
+      transactionId: "txn-null-ctx",
+    };
+  });
+
+  const res = await POST(specRequest("10.9.0.4"));
+  assert.equal(res.status, 200);
+  const events = await readNdjson(res);
+
+  const manifest = events.find((e) => e.type === "manifest");
+  assert.ok(manifest, "the early frame still goes out");
+  assert.equal(
+    manifest.contextCount,
+    3,
+    "null entries still count as contexts",
+  );
+  assert.equal(
+    manifest.adapterCount,
+    1,
+    "non-object entries contribute zero adapters",
+  );
+
+  const done = events.find((e) => e.type === "done");
+  assert.ok(done, "the stream still terminates in `done`, not `error`");
+  assert.equal(done.adapterCount, 0);
+});
+
 test("a run that never fires onManifestReady emits no `manifest` frame (backward compat)", async () => {
   vi.spyOn(
     ExecuteStructuredConfigGenerationUseCase.prototype,

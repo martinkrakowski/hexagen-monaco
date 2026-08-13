@@ -48,12 +48,12 @@ before continuing.
 
 | Trigger                  | Command                                  | On failure              |
 | ------------------------ | ---------------------------------------- | ----------------------- |
-| Before starting work     | `npm run build && npm run typecheck`     | STOP — fix first        |
-| Any `.ts` / `.tsx` edit  | `npm run lint && npm run typecheck`      | Fix before continuing   |
+| Before starting work     | `yarn build && yarn typecheck`           | STOP — fix first        |
+| Any `.ts` / `.tsx` edit  | `yarn lint && yarn typecheck`            | Fix before continuing   |
 | After adding a template  | `hexagen validate-templates`             | Resolve conflicts       |
-| Before committing        | `npm test`                               | Diagnose — never skip    |
+| Before committing        | `yarn test`                              | Diagnose — never skip    |
 
-(If this project uses yarn or pnpm, substitute the package manager — the
+(If this project uses npm or pnpm, substitute the package manager — the
 triggers stay the same.)
 
 ## Files Never Edit

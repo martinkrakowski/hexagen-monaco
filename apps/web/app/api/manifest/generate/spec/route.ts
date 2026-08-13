@@ -91,11 +91,15 @@ function countsFromParsed(parsed: Record<string, unknown>): {
     ? parsed.context_mappings.length
     : 0;
   const adapterCount = Array.isArray(parsed.bounded_contexts)
-    ? (parsed.bounded_contexts as Array<Record<string, unknown>>).reduce(
-        (sum, ctx) =>
-          sum + (Array.isArray(ctx.adapters) ? ctx.adapters.length : 0),
-        0,
-      )
+    ? (parsed.bounded_contexts as Array<unknown>).reduce<number>((sum, ctx) => {
+        // A bare `-` YAML list item parses to null — counting must never
+        // throw on LLM-produced yaml (same posture as countManifestEntities),
+        // so non-object entries contribute zero instead of crashing the
+        // stream (review fix).
+        if (ctx === null || typeof ctx !== "object") return sum;
+        const adapters = (ctx as Record<string, unknown>).adapters;
+        return sum + (Array.isArray(adapters) ? adapters.length : 0);
+      }, 0)
     : 0;
   return { contextCount, portCount, adapterCount };
 }

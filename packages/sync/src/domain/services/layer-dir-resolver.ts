@@ -65,12 +65,14 @@ export function normalizeSubfolder(subfolder: string): string {
 }
 
 /**
- * A configured layer folder must stay inside the package: reject absolute
- * paths and `..` segments (unvalidated `/api/generate` manifests reach this
- * code — same posture as the SyncEngine module-name guard and
- * cross-context's `isSafePathSegment`).
+ * A configured layer folder (or subfolder) must stay inside the package:
+ * reject absolute paths and `..` segments (unvalidated `/api/generate`
+ * manifests reach this code — same posture as the SyncEngine module-name
+ * guard and cross-context's `isSafePathSegment`). Exported so the scaffold
+ * (`ensureLayerFolders`) applies the same rule to configured subfolders
+ * before any filesystem write.
  */
-function isSafeLayerFolder(folder: string): boolean {
+export function isSafeLayerFolder(folder: string): boolean {
   if (folder.length === 0) return false;
   if (folder.startsWith("/") || folder.startsWith("\\")) return false;
   if (/^[A-Za-z]:/.test(folder)) return false; // windows drive-absolute
@@ -91,7 +93,9 @@ function isSafeLayerFolder(folder: string): boolean {
  */
 export function resolveLayerDir(
   layers: LayersConfig | undefined,
-  layer: LayerKind,
+  // Widened beyond LayerKind: the scaffold iterates whatever layer names the
+  // manifest configures; unknown layers still get the `src/<layer>` fallback.
+  layer: string,
   subfolder?: string,
 ): string {
   const configured = layers?.[layer]?.folder;

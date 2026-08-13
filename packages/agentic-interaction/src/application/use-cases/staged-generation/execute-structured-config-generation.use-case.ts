@@ -2457,12 +2457,6 @@ export class ExecuteStructuredConfigGenerationUseCase {
       (s) =>
         `Auto-added a default repository port '${s.portName}' and adapter '${s.adapterName}' to context '${s.contextName}' — Stage 3 produced no outbound repository port (R03). Review and rename to fit your domain.`,
     );
-    for (const warning of repositorySynthesisWarnings) {
-      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
-    }
-    for (const warning of declaredBindingAdvisories) {
-      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
-    }
 
     // R02 invariant satisfaction at the source — same rationale and placement
     // as the R03 synthesis above: done BEFORE Stage 6 so findings and the
@@ -2481,9 +2475,6 @@ export class ExecuteStructuredConfigGenerationUseCase {
       (s) =>
         `Auto-added a default inbound command port '${s.portName}' and adapter '${s.adapterName}' to context '${s.contextName}' — the spec declared no inbound ports (R02). Review and rename to fit your domain.`,
     );
-    for (const warning of inboundSynthesisWarnings) {
-      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
-    }
 
     // R12 satisfaction at the source: Stage 4 can give the same generic adapter
     // name to multiple contexts that share a technology (e.g. StripeClientAdapter
@@ -2498,6 +2489,24 @@ export class ExecuteStructuredConfigGenerationUseCase {
       (r) =>
         `Renamed adapter '${r.from}' in context '${r.contextName}' to '${r.to}' to keep adapter names globally unique (R12).`,
     );
+
+    // Stage 5: Manifest Assembly (synchronous, returns AssembledManifest directly)
+    const s5Start = Date.now();
+    callbacks?.onProgress?.(5, 0);
+
+    // "Stage 5 ·" warning chunks are emitted only AFTER onProgress(5, 0)
+    // (review fix): the /stage NDJSON adapter stamps every chunk with the
+    // CURRENT stage, which only advances on onProgress(stage, 0) — chunks
+    // emitted before it go out labeled with the previous stage.
+    for (const warning of repositorySynthesisWarnings) {
+      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
+    }
+    for (const warning of declaredBindingAdvisories) {
+      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
+    }
+    for (const warning of inboundSynthesisWarnings) {
+      callbacks?.onChunk?.(`Stage 5 · ${warning}`);
+    }
     for (const warning of adapterRenameWarnings) {
       callbacks?.onChunk?.(`Stage 5 · ${warning}`);
     }
@@ -2507,9 +2516,6 @@ export class ExecuteStructuredConfigGenerationUseCase {
       callbacks?.onChunk?.(`Stage 5 · ${warning}`);
     }
 
-    // Stage 5: Manifest Assembly (synchronous, returns AssembledManifest directly)
-    const s5Start = Date.now();
-    callbacks?.onProgress?.(5, 0);
     const assembledManifest = this.stage5.execute({
       stage0: normalizedPrompt,
       stage1: domainAnalysis,

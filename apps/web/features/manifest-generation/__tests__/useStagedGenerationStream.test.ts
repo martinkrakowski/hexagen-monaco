@@ -727,3 +727,60 @@ test("attempts reconnection on reader error", async () => {
     global.fetch = originalFetch;
   }
 });
+
+test("unmounting mid-stream aborts the in-flight request (review fix)", async () => {
+  // Early-enable makes unmount-mid-stream a routine path: the user can
+  // navigate away on the `manifest` frame while Stage 6/7 still stream.
+  // Without the unmount cleanup the read loop and its inactivity watchdog
+  // keep running until the server closes the stream.
+  let streamController!: ReadableStreamDefaultController<Uint8Array>;
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      streamController = controller;
+      controller.enqueue(
+        encoder.encode(
+          '{"type":"manifest","yaml":"early: x","contextCount":1,"portCount":0,"adapterCount":0,"transactionId":""}\n',
+        ),
+      );
+      // Deliberately no close — the server is still streaming Stage 6/7.
+    },
+  });
+  let capturedSignal: AbortSignal | undefined;
+  global.fetch = (async (_input: unknown, init?: RequestInit) => {
+    capturedSignal = init?.signal ?? undefined;
+    return { ok: true, body: stream } as unknown as Response;
+  }) as typeof fetch;
+
+  try {
+    const { result, unmount } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+
+    let generatePromise!: ReturnType<typeof result.current.generate>;
+    await act(async () => {
+      generatePromise = result.current.generate({ description: "test" });
+      // Let the fetch resolve and the manifest frame land; the stream stays
+      // open, so generate() is still parked on the next read().
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    assert.strictEqual(result.current.earlyManifest, "early: x");
+    assert.ok(capturedSignal, "the request carries the hook's abort signal");
+    assert.strictEqual(capturedSignal.aborted, false);
+
+    unmount();
+    assert.strictEqual(
+      capturedSignal.aborted,
+      true,
+      "unmount must abort the in-flight request",
+    );
+
+    // Wind the parked read loop down cleanly: the aborted run resolves
+    // without surfacing a failure (the hook's aborted-run contract).
+    streamController.close();
+    const generateResult = await generatePromise;
+    assert.notStrictEqual(generateResult.phase, "failed");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});

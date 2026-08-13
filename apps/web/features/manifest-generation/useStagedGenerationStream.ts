@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { logger } from "../../lib/structured-logger";
 import type { StagedPhase, StageProgress } from "./staged-generation-types";
 
@@ -159,6 +159,18 @@ export function useStagedGenerationStream(
 
   const abortRef = useRef<AbortController | null>(null);
   const lastBodyRef = useRef<Record<string, unknown> | null>(null);
+
+  // Abort any in-flight stream when the consumer unmounts (review fix).
+  // Early-enable makes this a routine path — the user can navigate away on
+  // the `manifest` frame while Stage 6/7 still stream; without the abort the
+  // read loop and its inactivity watchdog keep running until the server
+  // closes the stream.
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+    },
+    [],
+  );
 
   const generate = useCallback(
     async (body: Record<string, unknown>, signal?: AbortSignal) => {

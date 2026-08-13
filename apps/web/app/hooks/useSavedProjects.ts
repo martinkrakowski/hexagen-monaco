@@ -454,9 +454,11 @@ export function useSavedProjects() {
   const updateProject = useCallback(
     (id: string, formState: ProjectConfig, manifestYaml: string): void => {
       const current = projectsRef.current;
-      // Pre-op value for the per-record revert; may be undefined for an id
-      // this instance never had — the failure still surfaces below.
       const prev = current.find((p) => p.id === id);
+      // Unknown id is decided HERE, like renameProject / updateProjectFormState
+      // (review fix): no pointless port write, and no phantom pending entry
+      // that would shield a nonexistent record through a refresh merge.
+      if (!prev) return;
       const now = Date.now();
       const seq = recordOps.begin(id);
       const updated = current.map((p) =>
@@ -489,7 +491,11 @@ export function useSavedProjects() {
         recordOps.settle(id);
         if (!owner) return;
         if (!result.success) {
-          if (prev) replaceRecord(id, prev);
+          // NotFound (deleted from storage between snapshot and write) is a
+          // silent no-op — no revert, no persistError — matching renameProject
+          // and updateProjectFormState's NotFound contract (review fix).
+          if (result.error.kind === "NotFound") return;
+          replaceRecord(id, prev);
           setPersistError(result.error);
           return;
         }
