@@ -192,7 +192,7 @@ function renderPlanSeam() {
 }
 
 const workspaceNameInput = () =>
-  document.querySelector('input[placeholder="@mycompany"]') as HTMLInputElement;
+  screen.getByLabelText("Workspace Name") as HTMLInputElement;
 
 // This suite runs the REAL provider stack (no timer mocks), so the initial
 // port-load waitFor competes with 60+ parallel turbo tasks on CI — a generous

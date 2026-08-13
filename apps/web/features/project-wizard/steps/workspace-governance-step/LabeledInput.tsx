@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import type { InputHTMLAttributes, ReactNode } from "react";
 
 interface LabeledInputProps extends Omit<
@@ -30,8 +31,17 @@ export function LabeledInput({
   onChange,
   compact = false,
   className,
+  // `id` must be destructured here, NOT left in `...rest`: the rest spread
+  // lands after the explicit `id={id}` on the input, so a caller-supplied id
+  // riding in `rest` would silently override it while `htmlFor` kept pointing
+  // at the generated id, breaking the label association.
+  id: idProp,
   ...rest
 }: LabeledInputProps) {
+  // Unconditional hook call — don't fold into `idProp ?? useId()` (the
+  // short-circuit would make the hook conditional).
+  const generatedId = useId();
+  const id = idProp ?? generatedId;
   const labelClasses = compact
     ? "text-xs font-medium text-muted-foreground"
     : "text-xs font-bold uppercase tracking-wider text-muted-foreground";
@@ -39,8 +49,11 @@ export function LabeledInput({
 
   return (
     <div className="space-y-2">
-      <label className={labelClasses}>{label}</label>
+      <label htmlFor={id} className={labelClasses}>
+        {label}
+      </label>
       <input
+        id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={
