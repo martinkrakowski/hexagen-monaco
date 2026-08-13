@@ -1055,3 +1055,517 @@ describe("useSavedProjects — record-level deleteProject / renameProject (ADR-0
     );
   });
 });
+
+describe("useSavedProjects — per-record pending ops (PR #431 follow-up)", () => {
+  beforeEach(() => {
+    persistence.state.projects = [];
+    persistence.state.failSave = false;
+    persistence.state.saveCount = 0;
+  });
+
+  it("a delete that fails AFTER an unrelated rename began still restores its row (the old global seq suppressed this revert)", async () => {
+    persistence.state.projects = [seed("p1"), seed("p2")];
+    const { result } = await mountLoaded();
+
+    const originalDelete = persistence.port.deleteProjectRecord;
+    let releaseDelete!: (r: {
+      success: false;
+      error: { kind: string; message: string };
+    }) => void;
+    persistence.port.deleteProjectRecord = (() =>
+      new Promise((resolve) => {
+        releaseDelete = resolve;
+      })) as typeof originalDelete;
+
+    act(() => {
+      result.current.deleteProject("p2");
+    });
+    assert.deepStrictEqual(
+      result.current.projects.map((p) => p.id),
+      ["p1"],
+      "optimistic removal applied",
+    );
+
+    // A LATER unrelated mutation begins (and lands) while the delete is in
+    // flight — under the old global mutationSeq this marked the delete's
+    // settle stale and its failure revert never ran.
+    act(() => {
+      result.current.renameProject("p1", "Renamed");
+    });
+    await waitFor(() =>
+      assert.strictEqual(
+        (persistence.state.projects[0] as Record<string, unknown>).name,
+        "Renamed",
+      ),
+    );
+
+    await act(async () => {
+      releaseDelete({
+        success: false,
+        error: { kind: "StorageQuotaExceeded", message: "quota" },
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    persistence.port.deleteProjectRecord = originalDelete;
+
+    assert.deepStrictEqual(
+      result.current.projects.map((p) => p.id),
+      ["p1", "p2"],
+      "the failed delete's row IS restored — per-record ownership, not the global seq",
+    );
+    assert.strictEqual(
+      result.current.projects[0].name,
+      "Renamed",
+      "the unrelated rename's value survives the per-record revert",
+    );
+    assert.ok(result.current.persistError, "the failure is surfaced");
+  });
+
+  it("a create that fails AFTER an unrelated mutation began still removes the phantom project", async () => {
+    persistence.state.projects = [seed("p1")];
+    const { result } = await mountLoaded();
+
+    const originalCreate = persistence.port.createProjectRecord;
+    let releaseCreate!: (r: {
+      success: false;
+      error: { kind: string; message: string };
+    }) => void;
+    persistence.port.createProjectRecord = (() =>
+      new Promise((resolve) => {
+        releaseCreate = resolve;
+      })) as typeof originalCreate;
+
+    let savePromise!: Promise<string | null>;
+    act(() => {
+      savePromise = result.current.saveProject(
+        "Phantom",
+        {} as never,
+        "yaml: x",
+      );
+    });
+    assert.strictEqual(result.current.projects.length, 2, "optimistic prepend");
+
+    act(() => {
+      result.current.renameProject("p1", "Renamed");
+    });
+    await waitFor(() =>
+      assert.strictEqual(
+        (persistence.state.projects[0] as Record<string, unknown>).name,
+        "Renamed",
+      ),
+    );
+
+    let created: string | null = "sentinel";
+    await act(async () => {
+      releaseCreate({
+        success: false,
+        error: { kind: "StorageQuotaExceeded", message: "quota" },
+      });
+      created = await savePromise;
+    });
+    persistence.port.createProjectRecord = originalCreate;
+
+    assert.strictEqual(created, null);
+    assert.deepStrictEqual(
+      result.current.projects.map((p) => p.id),
+      ["p1"],
+      "the phantom optimistic create is removed even though a later mutation ran",
+    );
+    assert.strictEqual(result.current.projects[0].name, "Renamed");
+    assert.ok(result.current.persistError);
+  });
+
+  it("refresh while ONE record has a pending rename: untouched records take fresh storage state; the pending record keeps its optimistic value, then reconciles on settle", async () => {
+    persistence.state.projects = [seed("p1"), seed("p2")];
+    const { result } = await mountLoaded();
+
+    const originalUpdate = persistence.port.updateProjectRecord;
+    let releaseRename!: () => void;
+    const renameGate = new Promise<void>((res) => {
+      releaseRename = res;
+    });
+    persistence.port.updateProjectRecord = async (id, updater) => {
+      if (id === "p1") await renameGate;
+      return originalUpdate(id, updater);
+    };
+
+    act(() => {
+      result.current.renameProject("p1", "optimistic");
+    });
+
+    // Other-tab writes land in storage while the rename is in flight: p2
+    // renamed, p3 created.
+    persistence.state.projects = [
+      seed("p3"),
+      persistence.state.projects.find((p) => p.id === "p1")!,
+      { ...seed("p2"), name: "fresh-p2" },
+    ];
+
+    await act(async () => {
+      await result.current.refreshProjects();
+    });
+
+    assert.deepStrictEqual(
+      result.current.projects.map((p) => p.id),
+      ["p3", "p1", "p2"],
+      "fresh ordering applied; the concurrently-created record arrives",
+    );
+    assert.strictEqual(
+      result.current.projects.find((p) => p.id === "p2")?.name,
+      "fresh-p2",
+      "an untouched record takes the fresh stored value",
+    );
+    assert.strictEqual(
+      result.current.projects.find((p) => p.id === "p1")?.name,
+      "optimistic",
+      "the record with the pending op keeps its optimistic value",
+    );
+
+    await act(async () => {
+      releaseRename();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    persistence.port.updateProjectRecord = originalUpdate;
+
+    await waitFor(() =>
+      assert.strictEqual(
+        (
+          persistence.state.projects.find((p) => p.id === "p1") as Record<
+            string,
+            unknown
+          >
+        ).name,
+        "optimistic",
+        "the rename landed durably after its gate released",
+      ),
+    );
+    await waitFor(() =>
+      assert.strictEqual(
+        result.current.projects.find((p) => p.id === "p1")?.name,
+        "optimistic",
+      ),
+    );
+    assert.strictEqual(
+      result.current.projects.find((p) => p.id === "p2")?.name,
+      "fresh-p2",
+      "the settle-time reconcile touched only its own record",
+    );
+  });
+
+  it("a refresh whose read predates a rename that SETTLES mid-refresh cannot clobber the settled record", async () => {
+    persistence.state.projects = [seed("p1")];
+    const { result } = await mountLoaded();
+
+    // Hold the rename's write…
+    const originalUpdate = persistence.port.updateProjectRecord;
+    let releaseRename!: () => void;
+    const renameGate = new Promise<void>((res) => {
+      releaseRename = res;
+    });
+    persistence.port.updateProjectRecord = async (id, updater) => {
+      await renameGate;
+      return originalUpdate(id, updater);
+    };
+    act(() => {
+      result.current.renameProject("p1", "Renamed");
+    });
+
+    // …and hold a refresh whose read was captured BEFORE the write landed.
+    const originalLoad = persistence.port.loadProjects;
+    const staleRead = persistence.state.projects; // pre-rename storage snapshot
+    let releaseLoad!: () => void;
+    const loadGate = new Promise<void>((res) => {
+      releaseLoad = res;
+    });
+    persistence.port.loadProjects = async () => {
+      await loadGate;
+      return { success: true as const, value: staleRead };
+    };
+
+    let refreshDone!: Promise<void>;
+    act(() => {
+      refreshDone = result.current.refreshProjects();
+    });
+
+    // The rename lands, reconciles, and SETTLES while the refresh is in flight.
+    await act(async () => {
+      releaseRename();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await waitFor(() =>
+      assert.strictEqual(result.current.projects[0].name, "Renamed"),
+    );
+
+    // Now the stale read applies. Its data predates the rename's write; the
+    // settled-after-read-start guard must keep the local record.
+    await act(async () => {
+      releaseLoad();
+      await refreshDone;
+    });
+    persistence.port.loadProjects = originalLoad;
+    persistence.port.updateProjectRecord = originalUpdate;
+
+    assert.strictEqual(
+      result.current.projects[0].name,
+      "Renamed",
+      "the settled rename survives the stale refresh read (deleting the settled-stamp guard flips this to 'p1')",
+    );
+  });
+
+  it("refresh preserves a pending create the read missed — the optimistic project is prepended, then lands durably", async () => {
+    persistence.state.projects = [seed("p1")];
+    const { result } = await mountLoaded();
+
+    const originalCreate = persistence.port.createProjectRecord;
+    let releaseCreate!: () => void;
+    const createGate = new Promise<void>((res) => {
+      releaseCreate = res;
+    });
+    persistence.port.createProjectRecord = async (project) => {
+      await createGate;
+      return originalCreate(project);
+    };
+
+    let savePromise!: Promise<string | null>;
+    act(() => {
+      savePromise = result.current.saveProject("New", {} as never, "yaml: n");
+    });
+
+    await act(async () => {
+      await result.current.refreshProjects();
+    });
+
+    assert.deepStrictEqual(
+      result.current.projects.map((p) => p.name),
+      ["New", "p1"],
+      "the pending create survives a refresh whose read predates its write",
+    );
+
+    let id: string | null = null;
+    await act(async () => {
+      releaseCreate();
+      id = await savePromise;
+    });
+    persistence.port.createProjectRecord = originalCreate;
+
+    assert.ok(id, "the create resolved successfully after the refresh");
+    assert.deepStrictEqual(
+      persistence.state.projects.map((p) => p.name),
+      ["New", "p1"],
+      "the record landed durably",
+    );
+  });
+
+  it("refresh keeps a pending delete deleted even though the read still saw the row", async () => {
+    persistence.state.projects = [seed("p1"), seed("p2")];
+    const { result } = await mountLoaded();
+
+    const originalDelete = persistence.port.deleteProjectRecord;
+    let releaseDelete!: () => void;
+    const deleteGate = new Promise<void>((res) => {
+      releaseDelete = res;
+    });
+    persistence.port.deleteProjectRecord = async (id) => {
+      await deleteGate;
+      return originalDelete(id);
+    };
+
+    act(() => {
+      result.current.deleteProject("p2");
+    });
+
+    await act(async () => {
+      await result.current.refreshProjects();
+    });
+
+    assert.deepStrictEqual(
+      result.current.projects.map((p) => p.id),
+      ["p1"],
+      "the optimistic delete's local ABSENCE wins over the fresh row",
+    );
+
+    await act(async () => {
+      releaseDelete();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    persistence.port.deleteProjectRecord = originalDelete;
+
+    await waitFor(() =>
+      assert.deepStrictEqual(
+        persistence.state.projects.map((p) => p.id),
+        ["p1"],
+        "the delete landed durably",
+      ),
+    );
+    assert.deepStrictEqual(
+      result.current.projects.map((p) => p.id),
+      ["p1"],
+    );
+    assert.strictEqual(result.current.persistError, null);
+  });
+
+  it("two rapid renames on one record: the FIRST op's late reconcile is dropped (per-record seq)", async () => {
+    persistence.state.projects = [seed("p1")];
+    const { result } = await mountLoaded();
+
+    const originalUpdate = persistence.port.updateProjectRecord;
+    let releaseStale!: () => void;
+    const staleGate = new Promise<void>((res) => {
+      releaseStale = res;
+    });
+    let recordCalls = 0;
+    persistence.port.updateProjectRecord = async (id, updater) => {
+      recordCalls += 1;
+      if (recordCalls === 1) await staleGate;
+      return originalUpdate(id, updater);
+    };
+
+    act(() => {
+      result.current.renameProject("p1", "stale-A");
+      result.current.renameProject("p1", "final-B");
+    });
+
+    await waitFor(() =>
+      assert.strictEqual(
+        (persistence.state.projects[0] as Record<string, unknown>).name,
+        "final-B",
+      ),
+    );
+
+    // The stale first write resolves late. Its late arrival at the adapter is
+    // honest last-write-wins at the STORAGE level (same note as the formState
+    // suite); the per-record seq owns the LOCAL reconcile.
+    releaseStale();
+    await waitFor(() =>
+      assert.strictEqual(
+        (persistence.state.projects[0] as Record<string, unknown>).name,
+        "stale-A",
+        "completion probe: the late write reached the adapter",
+      ),
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    persistence.port.updateProjectRecord = originalUpdate;
+
+    assert.strictEqual(
+      result.current.projects[0].name,
+      "final-B",
+      "the stale reconcile was dropped — the record's newest op owns local state",
+    );
+  });
+
+  it("a local delete during a pending rename: the rename settling with success cannot resurrect the row", async () => {
+    persistence.state.projects = [seed("p1"), seed("p2")];
+    const { result } = await mountLoaded();
+
+    const originalUpdate = persistence.port.updateProjectRecord;
+    let releaseRename!: () => void;
+    const renameGate = new Promise<void>((res) => {
+      releaseRename = res;
+    });
+    // Resolve the rename as SUCCESS carrying the renamed record even though
+    // the row is deleted meanwhile — the strongest resurrection probe (a
+    // NotFound resolution would pass even without the ownership guard).
+    persistence.port.updateProjectRecord = async () => {
+      await renameGate;
+      return {
+        success: true as const,
+        value: { ...seed("p1"), name: "doomed" },
+      };
+    };
+
+    act(() => {
+      result.current.renameProject("p1", "doomed");
+    });
+    act(() => {
+      result.current.deleteProject("p1");
+    });
+    await waitFor(() =>
+      assert.deepStrictEqual(
+        persistence.state.projects.map((p) => p.id),
+        ["p2"],
+        "the delete landed durably",
+      ),
+    );
+
+    await act(async () => {
+      releaseRename();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    persistence.port.updateProjectRecord = originalUpdate;
+
+    assert.deepStrictEqual(
+      result.current.projects.map((p) => p.id),
+      ["p2"],
+      "the settling rename neither resurrects nor reconciles the deleted row",
+    );
+    assert.strictEqual(result.current.persistError, null);
+  });
+
+  it("a record deleted server-side while a rename is pending: the local value survives refresh until the op settles; the NEXT refresh converges", async () => {
+    persistence.state.projects = [seed("p1"), seed("p2")];
+    const { result } = await mountLoaded();
+
+    const originalUpdate = persistence.port.updateProjectRecord;
+    let releaseRename!: () => void;
+    const renameGate = new Promise<void>((res) => {
+      releaseRename = res;
+    });
+    persistence.port.updateProjectRecord = async (id, updater) => {
+      await renameGate;
+      return originalUpdate(id, updater);
+    };
+
+    act(() => {
+      result.current.renameProject("p1", "doomed");
+    });
+    // Another tab deletes p1 in storage while the rename write is held.
+    persistence.state.projects = persistence.state.projects.filter(
+      (p) => p.id !== "p1",
+    );
+
+    await act(async () => {
+      await result.current.refreshProjects();
+    });
+    assert.deepStrictEqual(
+      result.current.projects.map((p) => p.id),
+      ["p1", "p2"],
+      "the pending record survives the refresh (kept-local rows missing from fresh are prepended)",
+    );
+    assert.strictEqual(result.current.projects[0].name, "doomed");
+
+    // The rename settles NotFound — silent per the established contract; the
+    // row lingers locally until the next refresh.
+    await act(async () => {
+      releaseRename();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    persistence.port.updateProjectRecord = originalUpdate;
+    assert.strictEqual(
+      result.current.persistError,
+      null,
+      "NotFound stays silent",
+    );
+
+    await act(async () => {
+      await result.current.refreshProjects();
+    });
+    assert.deepStrictEqual(
+      result.current.projects.map((p) => p.id),
+      ["p2"],
+      "with no pending op left, the next refresh converges to server truth",
+    );
+  });
+});
