@@ -11,6 +11,7 @@ import {
   Component,
   ShieldCheck,
 } from "lucide-react";
+import { withCarriedName } from "./carriedName";
 import { ManifestPreview } from "./ManifestPreview";
 import type { ViewTab } from "./ManifestPreview";
 import { useContextChatPanel } from "./store/useContextChatPanel";
@@ -188,16 +189,14 @@ export function ManifestAcceptPage() {
   // the generation screen (the Project Name step ran before this page).
   // Computed during render and captured in the handler closures *before* they
   // call `pendingManifest.clear()` — so the cleared store can't blank it out.
-  // Don't move this computation inside the callbacks (it would read the
+  // Don't move this read inside the callbacks (it would read the
   // already-cleared name).
-  const nameQuery = pendingManifest.projectName
-    ? `name=${encodeURIComponent(pendingManifest.projectName)}`
-    : "";
+  const carriedName = pendingManifest.projectName;
 
   // Back/Regenerate return to whichever generation flow produced the manifest
   // (prompt flow or spec import) — both push here, so a hardcoded
   // "/projects/new/ai" stranded import-flow users in the wrong flow. Captured
-  // during render for the same reason as nameQuery above. The fallback only
+  // during render for the same reason as carriedName above. The fallback only
   // applies to a store populated before this field existed (impossible —
   // the store isn't persisted) or future setters that miss it.
   const originPath = pendingManifest.originPath || "/projects/new/ai";
@@ -208,8 +207,8 @@ export function ManifestAcceptPage() {
     // above and race away our `?name=` push.
     isNavigatingAway.current = true;
     pendingManifest.clear();
-    router.push(`${originPath}${nameQuery ? `?${nameQuery}` : ""}`);
-  }, [pendingManifest, router, nameQuery, originPath]);
+    router.push(withCarriedName(originPath, carriedName));
+  }, [pendingManifest, router, carriedName, originPath]);
 
   const handleRegenerate = useCallback(() => {
     isNavigatingAway.current = true;
@@ -217,8 +216,8 @@ export function ManifestAcceptPage() {
     // `generate=1` auto-starts the prompt flow; the import page ignores it
     // (the spec is restored from sessionStorage there and the user re-runs
     // generation explicitly).
-    router.push(`${originPath}?generate=1${nameQuery ? `&${nameQuery}` : ""}`);
-  }, [pendingManifest, router, nameQuery, originPath]);
+    router.push(withCarriedName(`${originPath}?generate=1`, carriedName));
+  }, [pendingManifest, router, carriedName, originPath]);
 
   const renderHeaderContent = () => {
     if (!viewData) {

@@ -7,8 +7,11 @@
 // Only the wire/port boundary is mocked, mirroring useProjectLifecycle.test.tsx.
 
 // crypto is a getter-only global in Node, so stub it via vi.stubGlobal (a plain
-// `global.crypto =` throws "has only a getter") — and BEFORE the imports below:
-// emptyFormValues seeds a bounded-context id via crypto.randomUUID at module eval.
+// `global.crypto =` throws "has only a getter"). Textual position is cosmetic:
+// Vitest hoists imports, so emptyFormValues' module-eval id is minted by the
+// REAL crypto.randomUUID before this line runs — the stub only makes the ids
+// minted at RUNTIME (e.g. the lifecycle's new-project id) deterministic, and
+// no assertion reads either batch.
 let uuidCounter = 0;
 vi.stubGlobal("crypto", {
   randomUUID: () => `uuid-${(uuidCounter += 1)}`,
