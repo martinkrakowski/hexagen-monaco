@@ -45,6 +45,9 @@ docker compose -f docker-compose.yml -f docker-compose.ci.yml up --build   # pro
 
 ## Notes for agents
 
+- `docker-build.yml` starts **manual-only** (`workflow_dispatch`) so a fresh repo has zero
+  failing checks — once `docker build .` works locally, uncomment its push/pull_request
+  triggers (see the workflow's header comment).
 - `ghcr.io` needs no extra secrets (uses `GITHUB_TOKEN`); Docker Hub/ECR require switching the
   commented login step in `docker-build.yml` and setting `REGISTRY_ORG`.
 - The container health check probes `health_path` — point it at `/api/health` if `observability`

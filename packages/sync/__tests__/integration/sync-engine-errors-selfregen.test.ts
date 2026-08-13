@@ -104,7 +104,10 @@ describe("SyncEngine — self-regen git-check (fixture-only)", () => {
       },
     );
 
-    await assert.rejects(() => engine.run(), /Dirty git tree/);
+    // The thrown message is what the CLI surfaces as "Fatal sync error: ..."
+    // (F20) — it must itself carry the --allow-dirty hint, not rely on the
+    // logger line being shown.
+    await assert.rejects(() => engine.run(), /Dirty git tree.*--allow-dirty/);
 
     assert.ok(
       messagesAt(logger, "error").some((m) =>

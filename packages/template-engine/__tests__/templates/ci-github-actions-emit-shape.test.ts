@@ -77,6 +77,26 @@ async function exists(projectRoot: string, rel: string): Promise<boolean> {
   }
 }
 
+/**
+ * F20 (day-one noise): a deploy workflow must be manual-only until its infra
+ * is configured — `workflow_dispatch:` present, and NO active `push:` trigger
+ * (top-level `on:` children sit at 2-space indent; commented-out triggers and
+ * deeper-indented step inputs must not satisfy/violate the check).
+ */
+function assertDispatchOnly(workflow: string, label: string): void {
+  const nonComment = workflow
+    .split("\n")
+    .filter((l) => !l.trimStart().startsWith("#"));
+  assert.ok(
+    nonComment.some((l) => /^\s{2}workflow_dispatch:/.test(l)),
+    `${label} must be workflow_dispatch-gated (F20 — no red runs on a fresh push)`,
+  );
+  assert.ok(
+    !nonComment.some((l) => /^\s{2}push:/.test(l)),
+    `${label} must NOT have an active push trigger before its secrets exist (F20)`,
+  );
+}
+
 describe("ci-github-actions template — emit shape", () => {
   describe("defaults (deploy_target=vercel, preview=true, node=22)", () => {
     let projectRoot: string;
@@ -120,8 +140,8 @@ describe("ci-github-actions template — emit shape", () => {
         "npm production deps must be grouped, not one PR per dep",
       );
       assert.ok(/dev-dependencies\s*:/.test(cfg), "npm dev deps stay grouped");
-      // update-types restricted to minor+patch so non-breaking bumps batch and
-      // MAJORs arrive individually — regardless of list style/quoting/order.
+      // update-types restricted to minor+patch so non-breaking bumps batch —
+      // regardless of list style/quoting/order.
       assert.ok(
         /update-types\s*:/.test(cfg),
         "groups must declare update-types",
@@ -130,9 +150,23 @@ describe("ci-github-actions template — emit shape", () => {
         /\bminor\b/.test(cfg) && /\bpatch\b/.test(cfg),
         "update-types must batch minor + patch",
       );
+      // MAJOR npm bumps are ignored outright for the first release cycle
+      // (F20): a fresh repo is a major behind on several deps at once, and
+      // each major opens its own PR. The ONLY non-comment mention of "major"
+      // must be the ignore block's version-update:semver-major entry.
       assert.ok(
-        !/\bmajor\b/i.test(cfg),
-        "major must NOT be an update-type — major bumps arrive individually",
+        /ignore\s*:/.test(cfg),
+        "npm entry must declare an ignore block",
+      );
+      const majorLines = cfg.split("\n").filter((l) => /major/i.test(l));
+      assert.ok(
+        majorLines.length > 0 &&
+          majorLines.every((l) => l.includes("version-update:semver-major")),
+        "major must appear ONLY as the ignored version-update:semver-major update-type",
+      );
+      assert.ok(
+        /open-pull-requests-limit\s*:\s*5/.test(cfg),
+        "a modest open-pull-requests-limit caps the day-one PR flood",
       );
       // Action bumps grouped into one PR too (the github-actions ecosystem
       // declares a groups: block).
@@ -257,6 +291,20 @@ describe("ci-github-actions template — emit shape", () => {
         "no GHA expression should be collapsed to single braces",
       );
     });
+
+    it("gates the deploy workflow to workflow_dispatch until secrets exist (F20)", async () => {
+      const wf = await read(projectRoot, `${WORKFLOWS}/deploy-vercel.yml`);
+      assertDispatchOnly(wf, "deploy-vercel.yml");
+      // ci.yml is unaffected — it still runs on push (its jobs need no secrets).
+      const ci = await read(projectRoot, `${WORKFLOWS}/ci.yml`);
+      const ciNonComment = ci
+        .split("\n")
+        .filter((l) => !l.trimStart().startsWith("#"));
+      assert.ok(
+        ciNonComment.some((l) => /^\s{2}push:/.test(l)),
+        "ci.yml must keep its push trigger — only DEPLOY workflows are dispatch-gated",
+      );
+    });
   });
 
   describe("deploy_target=railway", () => {
@@ -281,6 +329,7 @@ describe("ci-github-actions template — emit shape", () => {
         /railway-deploy@[0-9a-f]{40}/.test(wf),
         "pinned to a commit SHA",
       );
+      assertDispatchOnly(wf, "deploy-railway.yml");
     });
   });
 
@@ -304,6 +353,7 @@ describe("ci-github-actions template — emit shape", () => {
       const wf = await read(projectRoot, `${WORKFLOWS}/deploy-fly.yml`);
       assert.ok(!wf.includes("setup-flyctl@master"), "no floating @master ref");
       assert.ok(/setup-flyctl@[0-9a-f]{40}/.test(wf), "pinned to a commit SHA");
+      assertDispatchOnly(wf, "deploy-fly.yml");
     });
   });
 
@@ -322,6 +372,7 @@ describe("ci-github-actions template — emit shape", () => {
       const vps = await read(projectRoot, `${WORKFLOWS}/deploy-vps.yml`);
       assert.ok(vps.includes("yarn install --immutable"));
       assert.ok(vps.includes("${{ secrets.VPS_SSH_KEY }}"));
+      assertDispatchOnly(vps, "deploy-vps.yml");
     });
   });
 
@@ -392,6 +443,27 @@ describe("ci-github-actions template — emit shape", () => {
           "github.event.pull_request.head.repo.full_name == github.repository",
         ),
         "preview job should skip on forked PRs where secrets are unavailable",
+      );
+    });
+
+    it("gates the preview job on the ENABLE_PREVIEW_DEPLOYS repo variable (F20)", async () => {
+      const preview = await read(projectRoot, `${WORKFLOWS}/preview.yml`);
+      // Off-by-default: on a fresh repo the variable is unset, the job is
+      // skipped (neutral check), and no red run appears before Vercel is
+      // configured. `vars` (not `secrets`) because GitHub does not expose the
+      // secrets context to job-level `if:` conditions.
+      assert.ok(
+        preview.includes("vars.ENABLE_PREVIEW_DEPLOYS == 'true'"),
+        "preview job must be gated on the ENABLE_PREVIEW_DEPLOYS repository variable",
+      );
+      // The PR trigger itself stays — previews are meaningless via
+      // workflow_dispatch (no PR to comment on).
+      const nonComment = preview
+        .split("\n")
+        .filter((l) => !l.trimStart().startsWith("#"));
+      assert.ok(
+        nonComment.some((l) => /^\s{2}pull_request:/.test(l)),
+        "preview.yml must keep its pull_request trigger (the gate is the job-level if)",
       );
     });
 

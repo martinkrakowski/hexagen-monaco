@@ -1,15 +1,21 @@
 name: Deploy to Railway
 
-# Production deploy on every merge to main. Railway natively runs background
-# worker services alongside the web service — pair with the bullmq template's
-# separate-worker mode by adding a second deploy step targeting that service.
+# Production deploy — manual-only (workflow_dispatch) until Railway is
+# configured, so a freshly pushed repo shows zero failed Actions runs (F20).
+# Railway natively runs background worker services alongside the web service —
+# pair with the bullmq template's separate-worker mode by adding a second
+# deploy step targeting that service.
 #
-# TODO: add in GitHub repo → Settings → Secrets and variables → Actions:
-#   - RAILWAY_TOKEN    (secret)    Railway → Account → Tokens
-#   - RAILWAY_SERVICE  (variable)  the service name to redeploy (optional)
+# TO ENABLE automatic deploys on merge to main:
+#   1. Add in GitHub repo → Settings → Secrets and variables → Actions:
+#      - RAILWAY_TOKEN    (secret)    Railway → Account → Tokens
+#      - RAILWAY_SERVICE  (variable)  the service name to redeploy (optional)
+#   2. Uncomment the push trigger below (keep workflow_dispatch — it gives you
+#      a manual deploy button in the Actions tab).
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
 
 concurrency:
   group: deploy-production
