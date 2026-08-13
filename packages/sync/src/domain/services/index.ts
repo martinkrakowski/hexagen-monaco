@@ -5,4 +5,6 @@ export * from "./emission-plan-builder.js";
 export * from "./impact-analysis.types.js";
 export * from "./impact-request-validator.js";
 export * from "./layer-classifier.js";
+export * from "./layer-dir-resolver.js";
+export * from "./name-normalizer.js";
 export * from "./stub-template-resolver.js";
