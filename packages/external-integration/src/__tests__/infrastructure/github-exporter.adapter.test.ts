@@ -17,6 +17,8 @@ interface MockRoute {
   match: (method: string, path: string) => boolean;
   status: number;
   body: unknown;
+  /** Response headers (e.g. `x-oauth-scopes` for scope-detection tests). */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -54,6 +56,9 @@ function installFetchMock(routes: MockRoute[]): {
     return {
       ok: status >= 200 && status < 300,
       status,
+      // Empty Headers when unspecified: `x-oauth-scopes` absent = scopes
+      // unknown, so pre-existing tests exercise the fail-open path unchanged.
+      headers: new Headers(route.headers ?? {}),
       json: async () => route.body,
     } as Response;
   }) as typeof fetch;
@@ -78,10 +83,12 @@ const route = (
   pathFragment: string,
   status: number,
   body: unknown,
+  headers?: Record<string, string>,
 ): MockRoute => ({
   match: (m, p) => m === method && p.includes(pathFragment),
   status,
   body,
+  headers,
 });
 
 const githubConfig = (): ExportConfig => ({
@@ -368,5 +375,186 @@ describe("GitHubExporterAdapter", () => {
 
     assert.strictEqual(result.success, false);
     assert.match(result.error ?? "", /missing GitHub configuration/i);
+  });
+
+  describe("workflow OAuth-scope handling", () => {
+    const WORKFLOW_FILE = ".github/workflows/sync-integrity.yml";
+
+    async function addWorkflowFile() {
+      await fs.mkdir(path.join(sourceDir, ".github", "workflows"), {
+        recursive: true,
+      });
+      await fs.writeFile(
+        path.join(sourceDir, WORKFLOW_FILE),
+        "name: sync-integrity\n",
+      );
+    }
+
+    it("skips workflow files with a warning when scopes are KNOWN to lack 'workflow' (degrade, don't fail)", async () => {
+      await addWorkflowFile();
+      const mock = installFetchMock([
+        // Scope-less token: x-oauth-scopes present but without `workflow`.
+        route(
+          "GET",
+          "/user",
+          200,
+          { login: "octocat" },
+          {
+            "x-oauth-scopes": "read:user, user:email, repo",
+          },
+        ),
+        route("POST", "/user/repos", 201, { name: "hexagen-app" }),
+        // Only the two non-workflow files reach blob creation.
+        route("POST", "/git/blobs", 201, { sha: "blob1" }),
+        route("POST", "/git/blobs", 201, { sha: "blob2" }),
+        route("POST", "/git/trees", 201, { sha: "tree1" }),
+        route("GET", "/git/ref/heads/main", 404, { message: "Not Found" }),
+        route("POST", "/git/commits", 201, { sha: "commit1" }),
+        route("POST", "/git/refs", 201, { ref: "refs/heads/main" }),
+      ]);
+      restore = mock.restore;
+
+      const result = await new GitHubExporterAdapter().export(
+        sourceDir,
+        githubConfig(),
+      );
+
+      assert.strictEqual(result.success, true);
+      // The submitted tree must not contain the workflow path (GitHub would
+      // reject the whole tree with an opaque 404).
+      const tree = mock.calls.find((c) => c.path.endsWith("/git/trees"));
+      const paths = (tree!.body as { tree: Array<{ path: string }> }).tree.map(
+        (e) => e.path,
+      );
+      assert.ok(
+        !paths.includes(WORKFLOW_FILE),
+        "workflow file must be skipped",
+      );
+      assert.strictEqual(paths.length, 2);
+      // One per-file warning naming the skipped file.
+      assert.strictEqual(result.warnings?.length, 1);
+      assert.match(
+        result.warnings![0],
+        /\.github\/workflows\/sync-integrity\.yml/,
+      );
+      assert.match(result.warnings![0], /workflow/);
+    });
+
+    it("includes workflow files with no warning when the token has the 'workflow' scope", async () => {
+      await addWorkflowFile();
+      const mock = installFetchMock([
+        route(
+          "GET",
+          "/user",
+          200,
+          { login: "octocat" },
+          {
+            "x-oauth-scopes": "read:user, user:email, repo, workflow",
+          },
+        ),
+        route("POST", "/user/repos", 201, { name: "hexagen-app" }),
+        route("POST", "/git/blobs", 201, { sha: "blob1" }),
+        route("POST", "/git/blobs", 201, { sha: "blob2" }),
+        route("POST", "/git/blobs", 201, { sha: "blob3" }),
+        route("POST", "/git/trees", 201, { sha: "tree1" }),
+        route("GET", "/git/ref/heads/main", 404, { message: "Not Found" }),
+        route("POST", "/git/commits", 201, { sha: "commit1" }),
+        route("POST", "/git/refs", 201, { ref: "refs/heads/main" }),
+      ]);
+      restore = mock.restore;
+
+      const result = await new GitHubExporterAdapter().export(
+        sourceDir,
+        githubConfig(),
+      );
+
+      assert.strictEqual(result.success, true);
+      const tree = mock.calls.find((c) => c.path.endsWith("/git/trees"));
+      const paths = (tree!.body as { tree: Array<{ path: string }> }).tree.map(
+        (e) => e.path,
+      );
+      assert.ok(paths.includes(WORKFLOW_FILE));
+      assert.strictEqual(result.warnings, undefined);
+    });
+
+    it("fails open (workflow file included) when the scope header is absent", async () => {
+      await addWorkflowFile();
+      const mock = installFetchMock([
+        // No x-oauth-scopes header → scopes unknown → proceed as if scoped.
+        route("GET", "/user", 200, { login: "octocat" }),
+        route("POST", "/user/repos", 201, { name: "hexagen-app" }),
+        route("POST", "/git/blobs", 201, { sha: "blob1" }),
+        route("POST", "/git/blobs", 201, { sha: "blob2" }),
+        route("POST", "/git/blobs", 201, { sha: "blob3" }),
+        route("POST", "/git/trees", 201, { sha: "tree1" }),
+        route("GET", "/git/ref/heads/main", 404, { message: "Not Found" }),
+        route("POST", "/git/commits", 201, { sha: "commit1" }),
+        route("POST", "/git/refs", 201, { ref: "refs/heads/main" }),
+      ]);
+      restore = mock.restore;
+
+      const result = await new GitHubExporterAdapter().export(
+        sourceDir,
+        githubConfig(),
+      );
+
+      assert.strictEqual(result.success, true);
+      const tree = mock.calls.find((c) => c.path.endsWith("/git/trees"));
+      const paths = (tree!.body as { tree: Array<{ path: string }> }).tree.map(
+        (e) => e.path,
+      );
+      assert.ok(paths.includes(WORKFLOW_FILE));
+    });
+
+    it("surfaces the typed remap when scopes were unknown and createTree 404s over local workflow files", async () => {
+      await addWorkflowFile();
+      const mock = installFetchMock([
+        route("GET", "/user", 200, { login: "octocat" }),
+        route("POST", "/user/repos", 201, { name: "hexagen-app" }),
+        route("POST", "/git/blobs", 201, { sha: "blob1" }),
+        route("POST", "/git/blobs", 201, { sha: "blob2" }),
+        route("POST", "/git/blobs", 201, { sha: "blob3" }),
+        // GitHub's opaque workflow-scope rejection: bare 404 on the tree POST.
+        route("POST", "/git/trees", 404, {
+          message: "Not Found",
+          documentation_url:
+            "https://docs.github.com/rest/git/trees#create-a-tree",
+        }),
+      ]);
+      restore = mock.restore;
+
+      const result = await new GitHubExporterAdapter().export(
+        sourceDir,
+        githubConfig(),
+      );
+
+      assert.strictEqual(result.success, false);
+      assert.strictEqual(result.errorCode, "workflow-scope-missing");
+      assert.match(result.error ?? "", /workflow/i);
+      // The remap text must not carry a parenthesized status code — the export
+      // route's /\((401|403)\)/ → reauth_required regex must not misfire.
+      assert.doesNotMatch(result.error ?? "", /\(\d{3}\)/);
+    });
+
+    it("keeps the raw 404 (no typed code) when the tree had no workflow files", async () => {
+      // No workflow file added — only README.md and src/index.ts.
+      const mock = installFetchMock([
+        route("GET", "/user", 200, { login: "octocat" }),
+        route("POST", "/user/repos", 201, { name: "hexagen-app" }),
+        route("POST", "/git/blobs", 201, { sha: "blob1" }),
+        route("POST", "/git/blobs", 201, { sha: "blob2" }),
+        route("POST", "/git/trees", 404, { message: "Not Found" }),
+      ]);
+      restore = mock.restore;
+
+      const result = await new GitHubExporterAdapter().export(
+        sourceDir,
+        githubConfig(),
+      );
+
+      assert.strictEqual(result.success, false);
+      assert.strictEqual(result.errorCode, undefined);
+      assert.match(result.error ?? "", /404/);
+    });
   });
 });

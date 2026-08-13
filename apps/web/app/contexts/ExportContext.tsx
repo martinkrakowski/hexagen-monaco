@@ -241,21 +241,27 @@ export function ExportProvider({
 
   // --- persistence helpers (client IDB only; token stays server-side) ---
 
+  // Record-level read-merge-write (ADR-0045): no pre-read + whole-array save —
+  // that pattern persisted a possibly-stale snapshot of EVERY record, silently
+  // reverting concurrent writers (the original githubLink.lastCommitSha
+  // clobber). The port re-reads at write time and touches only this record.
+  // NotFound (project deleted mid-flow) → warn + no-op: the publish itself
+  // succeeded, there is just no record left to stamp.
   const persistGithubLink = useCallback(
     async (link: GithubLinkData) => {
       if (!activeProjectId) return;
       try {
         const persistence = getSavedProjectsPersistence();
-        const loadRes = await persistence.loadProjects();
-        if (!loadRes.success) return;
-        const updated = loadRes.value.map((p) =>
-          p.id === activeProjectId
-            ? { ...p, githubLink: link, updatedAt: Date.now() }
-            : p,
+        const res = await persistence.updateProjectRecord(
+          activeProjectId,
+          (p) => ({ ...p, githubLink: link, updatedAt: Date.now() }),
         );
-        const saveRes = await persistence.saveProjects(updated);
-        if (!saveRes.success) {
-          getLogger().warn("Failed to persist GitHub link to saved project");
+        if (!res.success) {
+          getLogger().warn(
+            res.error.kind === "NotFound"
+              ? "Skipped persisting GitHub link — the saved project no longer exists"
+              : "Failed to persist GitHub link to saved project",
+          );
         }
       } catch (e) {
         getLogger().errorWithException(
@@ -274,20 +280,25 @@ export function ExportProvider({
     [persistGithubLink],
   );
 
+  // Record-level for the same reason as persistGithubLink. NotFound → warn +
+  // no-op (and no in-memory prefs update — nothing was durably remembered).
   const persistPublishPrefs = useCallback(
     async (prefs: GitHubPublishPrefs) => {
       if (!activeProjectId) return;
       try {
         const persistence = getSavedProjectsPersistence();
-        const loadRes = await persistence.loadProjects();
-        if (!loadRes.success) return;
-        const updated = loadRes.value.map((p) =>
-          p.id === activeProjectId
-            ? { ...p, githubPublishPrefs: prefs, updatedAt: Date.now() }
-            : p,
+        const res = await persistence.updateProjectRecord(
+          activeProjectId,
+          (p) => ({ ...p, githubPublishPrefs: prefs, updatedAt: Date.now() }),
         );
-        const saveRes = await persistence.saveProjects(updated);
-        if (saveRes.success) setPublishPrefs(prefs);
+        if (res.success) setPublishPrefs(prefs);
+        else {
+          getLogger().warn(
+            res.error.kind === "NotFound"
+              ? "Skipped persisting publish prefs — the saved project no longer exists"
+              : "Failed to persist publish prefs",
+          );
+        }
       } catch (e) {
         getLogger().errorWithException(e, "Failed to persist publish prefs");
       }

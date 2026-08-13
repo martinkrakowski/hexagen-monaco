@@ -21,13 +21,18 @@ export interface CommitResult {
 }
 
 /**
- * Error codes for repository writer (map 401/403 from GitHub to reauth_required at route).
+ * Error codes for repository writer (map 401/403 from GitHub to reauth_required
+ * at route). `workflow-scope-missing` = the file set contains
+ * `.github/workflows/*` but the token lacks the `workflow` OAuth scope; the
+ * route maps it to 403 + `workflow_scope_required` (NOT `reauth_required` —
+ * the session is valid, only the scope is missing).
  */
 export type RepositoryWriterError =
   | { readonly code: "auth-failed"; readonly message: string }
   | { readonly code: "conflict"; readonly message: string }
   | { readonly code: "rate-limit"; readonly message: string }
   | { readonly code: "network"; readonly message: string }
+  | { readonly code: "workflow-scope-missing"; readonly message: string }
   | { readonly code: "unknown"; readonly message: string };
 
 /**

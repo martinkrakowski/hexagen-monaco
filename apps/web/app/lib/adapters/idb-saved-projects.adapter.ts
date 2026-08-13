@@ -423,6 +423,65 @@ export class IDBSavedProjectsAdapter implements SavedProjectsPersistencePort {
   }
 
   /**
+   * Record-level create: fresh read at write time, duplicate-id → `Conflict`
+   * (never a silent overwrite), new record PREPENDED, siblings written back
+   * byte-identical. Queued like every other write so it can't interleave with
+   * an in-flight read-merge-write.
+   */
+  async createProjectRecord(
+    project: SavedProject,
+  ): Promise<Result<SavedProject, PersistenceError>> {
+    return this.enqueueWrite(async () => {
+      try {
+        const data = await get(SAVED_PROJECTS_KEY);
+        const raw: unknown[] = Array.isArray(data) ? data : [];
+        if (raw.some((entry) => isRecord(entry) && entry.id === project.id)) {
+          return {
+            success: false as const,
+            error: {
+              kind: "Conflict" as const,
+              message: `A saved project with id ${project.id} already exists`,
+            },
+          };
+        }
+        await set(SAVED_PROJECTS_KEY, [project, ...raw]);
+        return { success: true as const, value: project };
+      } catch (e) {
+        return { success: false as const, error: mapWriteError(e) };
+      }
+    });
+  }
+
+  /**
+   * Record-level delete: fresh read, filter out the matching record, siblings
+   * written back byte-identical. IDEMPOTENT by contract (see the port): an
+   * absent id resolves success WITHOUT a write — "already deleted" is the
+   * desired end state, not an error, and surfacing it as one would trip the
+   * hook's optimistic-revert arm and resurrect the row locally.
+   */
+  async deleteProjectRecord(
+    id: string,
+  ): Promise<Result<void, PersistenceError>> {
+    return this.enqueueWrite(async () => {
+      try {
+        const data = await get(SAVED_PROJECTS_KEY);
+        const raw: unknown[] = Array.isArray(data) ? data : [];
+        const next = raw.filter(
+          (entry) => !(isRecord(entry) && entry.id === id),
+        );
+        // Idempotent no-op: nothing matched, nothing to write.
+        if (next.length === raw.length) {
+          return { success: true as const, value: undefined };
+        }
+        await set(SAVED_PROJECTS_KEY, next);
+        return { success: true as const, value: undefined };
+      } catch (e) {
+        return { success: false as const, error: mapWriteError(e) };
+      }
+    });
+  }
+
+  /**
    * Read-merge-write single-record update (the Phase-3 clobber-safety
    * precondition): a FRESH read of the stored array at write time, `updater`
    * applied to the matching record only, every other record written back

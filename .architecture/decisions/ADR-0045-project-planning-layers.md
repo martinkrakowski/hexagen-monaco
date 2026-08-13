@@ -186,10 +186,9 @@ Two hardening decisions from review are load-bearing:
   is a thin non-streaming mirror.
 - The read-merge-write port (D5) takes the layer mutations — and the wizard
   autosave — out of the whole-array clobber class: fresh read at write time,
-  single-record update, and same-tab serialization — strictly stronger than
-  the fresh-read-but-whole-array-save pattern `persistGithubLink` uses today.
-  Not-yet-migrated whole-array writers can still revert layers (see
-  Negative).
+  single-record update, and same-tab serialization. Since the follow-up
+  migration (see the resolved Negative bullet), every application writer
+  goes through the record-level port methods.
 
 ### Negative
 
@@ -203,14 +202,20 @@ Two hardening decisions from review are load-bearing:
   `contexts:`-dialect text, not the transcript, is what the import pipeline
   sees. The transcript rides along as provenance, but decisions not captured
   by the distill do not reach the manifest.
-- Only layer mutations and the wizard autosave use D5's read-merge-write
-  port method so far. The hook's other mutations (`saveProject`,
-  `deleteProject`, `renameProject`) still persist stale full-array
-  snapshots, which can revert fields written through the port by
-  `ExportContext` / `useEditorPush` — the pre-existing
-  `githubLink.lastCommitSha` clobber — and, because each snapshot carries
-  every record's `layers`, freshly committed layers too. Migrating those
-  writers to `updateProjectRecord` is a follow-up.
+- **(Resolved 2026-08-13.)** At acceptance time, only layer mutations and
+  the wizard autosave used D5's read-merge-write port method. The hook's
+  other mutations (`saveProject`, `deleteProject`, `renameProject`) still
+  persisted stale full-array snapshots, which could revert fields written
+  through the port by `ExportContext` / `useEditorPush` — the pre-existing
+  `githubLink.lastCommitSha` clobber — and, because each snapshot carried
+  every record's `layers`, freshly committed layers too. The follow-up
+  migrated all six writers to record-level port methods: `saveProject` →
+  `createProjectRecord`; `deleteProject` → `deleteProjectRecord`
+  (idempotent — an absent id resolves success, so the hook's optimistic
+  revert arm cannot resurrect a locally-deleted row); `renameProject` and
+  the `ExportContext` / `useEditorPush` persist helpers →
+  `updateProjectRecord`. `saveProjects` remains on the port for the LS→IDB
+  migration steps only.
 
 ### Neutral
 

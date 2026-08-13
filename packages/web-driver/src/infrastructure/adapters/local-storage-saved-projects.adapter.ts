@@ -137,32 +137,103 @@ export class LocalStorageSavedProjectsAdapter implements SavedProjectsPersistenc
   }
 
   /**
-   * Port-contract compliance for this FROZEN legacy adapter: composed from its
-   * own load/save (a synchronous-localStorage backend has no cross-writer race
-   * for read-merge-write to close). The live IDB adapter implements the real
-   * fresh-read semantics.
+   * Serializes the record-level read-merge-write methods (mirrors the IDB
+   * adapter's enqueueWrite). localStorage itself is synchronous, but
+   * `await this.loadProjects()` yields a microtask between a method's read and
+   * its write — two record ops started in the same tick would otherwise read
+   * the same array, and the later write would silently discard the earlier
+   * one, violating the port's clobber-safety contract.
+   * `loadProjects`/`saveProjects` stay UNQUEUED: they are the internal helpers
+   * the queued methods compose over (queueing them would deadlock the chain),
+   * and as port methods they are migration-step-only single calls with no
+   * read-merge-write of their own to protect.
    */
-  async updateProjectRecord(
+  private writeQueue: Promise<unknown> = Promise.resolve();
+
+  private enqueueWrite<T>(op: () => Promise<T>): Promise<T> {
+    const run = this.writeQueue.then(op, op);
+    // Keep the chain alive on failure; the caller still sees the rejection.
+    this.writeQueue = run.catch(() => undefined);
+    return run;
+  }
+
+  /**
+   * Port-contract compliance for this FROZEN legacy adapter: composed from its
+   * own load/save, serialized through the write queue. The live IDB adapter
+   * implements the real fresh-read semantics. Duplicate ids reject with
+   * `Conflict`, per the port contract.
+   */
+  createProjectRecord(
+    project: SavedProject,
+  ): Promise<Result<SavedProject, PersistenceError>> {
+    return this.enqueueWrite(async () => {
+      const loaded = await this.loadProjects();
+      if (!loaded.success) return loaded;
+      if (loaded.value.some((p) => p.id === project.id)) {
+        return {
+          success: false,
+          error: {
+            kind: "Conflict",
+            message: `A saved project with id ${project.id} already exists`,
+          },
+        };
+      }
+      const written = await this.saveProjects([project, ...loaded.value]);
+      if (!written.success) return written;
+      return { success: true, value: project };
+    });
+  }
+
+  /**
+   * Port-contract compliance for this FROZEN legacy adapter, composed from its
+   * own load/save and serialized through the write queue. IDEMPOTENT per the
+   * port contract: an absent id resolves success without a write (deliberate
+   * divergence from updateProjectRecord's NotFound — see the port's D6
+   * rationale).
+   */
+  deleteProjectRecord(id: string): Promise<Result<void, PersistenceError>> {
+    return this.enqueueWrite(async () => {
+      const loaded = await this.loadProjects();
+      if (!loaded.success) return loaded;
+      const next = loaded.value.filter((p) => p.id !== id);
+      if (next.length === loaded.value.length) {
+        return { success: true, value: undefined };
+      }
+      return this.saveProjects(next);
+    });
+  }
+
+  /**
+   * Port-contract compliance for this FROZEN legacy adapter: composed from its
+   * own load/save, serialized through the write queue. The live IDB adapter
+   * implements the real fresh-read semantics.
+   */
+  updateProjectRecord(
     id: string,
     updater: (project: SavedProject) => SavedProject,
   ): Promise<Result<SavedProject, PersistenceError>> {
-    const loaded = await this.loadProjects();
-    if (!loaded.success) return loaded;
-    const index = loaded.value.findIndex((p) => p.id === id);
-    if (index === -1) {
-      return {
-        success: false,
-        error: { kind: "NotFound", message: `No saved project with id ${id}` },
-      };
-    }
-    const current = loaded.value[index];
-    const updated = updater(current);
-    // Same-reference return = "nothing changed" — skip the write.
-    if (updated === current) return { success: true, value: current };
-    const next = [...loaded.value];
-    next[index] = updated;
-    const written = await this.saveProjects(next);
-    if (!written.success) return written;
-    return { success: true, value: updated };
+    return this.enqueueWrite(async () => {
+      const loaded = await this.loadProjects();
+      if (!loaded.success) return loaded;
+      const index = loaded.value.findIndex((p) => p.id === id);
+      if (index === -1) {
+        return {
+          success: false,
+          error: {
+            kind: "NotFound",
+            message: `No saved project with id ${id}`,
+          },
+        };
+      }
+      const current = loaded.value[index];
+      const updated = updater(current);
+      // Same-reference return = "nothing changed" — skip the write.
+      if (updated === current) return { success: true, value: current };
+      const next = [...loaded.value];
+      next[index] = updated;
+      const written = await this.saveProjects(next);
+      if (!written.success) return written;
+      return { success: true, value: updated };
+    });
   }
 }

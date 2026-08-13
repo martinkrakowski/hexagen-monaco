@@ -557,6 +557,137 @@ describe("IDBSavedProjectsAdapter.updateProjectRecord (read-merge-write)", () =>
     );
   });
 
+  it("createProjectRecord PREPENDS via a fresh read and leaves siblings byte-identical", async () => {
+    const adapter = new IDBSavedProjectsAdapter();
+    const sibling = record("existing");
+    idb.store.set(KEY, [sibling]);
+
+    const created = record("new") as unknown as SavedProject;
+    const result = await adapter.createProjectRecord(created);
+
+    assert.ok(result.success);
+    const stored = idb.store.get(KEY) as Array<{ id: string }>;
+    assert.deepStrictEqual(
+      stored.map((p) => p.id),
+      ["new", "existing"],
+      "new record is prepended (newest-first)",
+    );
+    assert.strictEqual(stored[1], sibling, "sibling is the same reference");
+  });
+
+  it("createProjectRecord rejects a duplicate id with Conflict — never a silent overwrite", async () => {
+    const adapter = new IDBSavedProjectsAdapter();
+    const before = [record("p1")];
+    idb.store.set(KEY, before);
+
+    const result = await adapter.createProjectRecord(
+      record("p1") as unknown as SavedProject,
+    );
+
+    assert.strictEqual(result.success, false);
+    if (!result.success) assert.strictEqual(result.error.kind, "Conflict");
+    assert.strictEqual(idb.store.get(KEY), before, "no write happened");
+  });
+
+  it("deleteProjectRecord removes only the target — siblings byte-identical", async () => {
+    const adapter = new IDBSavedProjectsAdapter();
+    const sibling = record("keep");
+    idb.store.set(KEY, [sibling, record("doomed")]);
+
+    const result = await adapter.deleteProjectRecord("doomed");
+
+    assert.ok(result.success);
+    const stored = idb.store.get(KEY) as unknown[];
+    assert.deepStrictEqual(
+      stored.map((p) => (p as { id: string }).id),
+      ["keep"],
+    );
+    assert.strictEqual(stored[0], sibling, "sibling is the same reference");
+  });
+
+  it("deleteProjectRecord is IDEMPOTENT — an absent id resolves success without a write", async () => {
+    // Deliberate divergence from updateProjectRecord's NotFound (port D6): the
+    // hook's delete revert arm would otherwise resurrect a row that another
+    // writer had already deleted from storage.
+    const adapter = new IDBSavedProjectsAdapter();
+    const before = [record("p1")];
+    idb.store.set(KEY, before);
+
+    const result = await adapter.deleteProjectRecord("already-gone");
+
+    assert.ok(result.success, "absent id is success, not NotFound");
+    assert.strictEqual(idb.store.get(KEY), before, "no write happened");
+  });
+
+  it("INTERLEAVE PIN: a queued turn-append is not reverted by a concurrent create/delete/rename", async () => {
+    // The §3.3 regression class: with slow reads and NO write queue, the
+    // create/delete/rename would read a pre-append snapshot and their write
+    // would land without the turn. The queue forces each write to read AFTER
+    // the previous one committed, so the appended turn survives all three.
+    const adapter = new IDBSavedProjectsAdapter();
+    idb.store.set(KEY, [
+      record("p1", [
+        {
+          id: "L1",
+          kind: "brainstorm",
+          title: "session",
+          turns: [],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ]),
+      record("doomed"),
+    ]);
+    idb.getDelay = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+    const [appended, created, deleted, renamed] = await Promise.all([
+      // The live-session turn append…
+      adapter.updateProjectRecord("p1", (p) => ({
+        ...p,
+        layers: (p.layers ?? []).map((l) =>
+          l.id === "L1"
+            ? {
+                ...l,
+                turns: [
+                  ...l.turns,
+                  { id: "t1", author: "Critic", content: "landed" },
+                ],
+              }
+            : l,
+        ),
+      })),
+      // …racing a create, a delete, and a rename submitted in the same tick.
+      adapter.createProjectRecord(
+        record("brand-new") as unknown as SavedProject,
+      ),
+      adapter.deleteProjectRecord("doomed"),
+      adapter.updateProjectRecord("p1", (p) => ({ ...p, name: "renamed" })),
+    ]);
+
+    assert.ok(appended.success);
+    assert.ok(created.success);
+    assert.ok(deleted.success);
+    assert.ok(renamed.success);
+    const stored = idb.store.get(KEY) as Array<{
+      id: string;
+      name: string;
+      layers: Array<{ turns: Array<{ id: string }> }>;
+    }>;
+    assert.deepStrictEqual(
+      stored.map((p) => p.id),
+      ["brand-new", "p1"],
+      "create landed (prepended), delete landed, p1 survives",
+    );
+    const p1 = stored.find((p) => p.id === "p1");
+    assert.ok(p1);
+    assert.deepStrictEqual(
+      p1.layers[0].turns.map((t) => t.id),
+      ["t1"],
+      "the queued turn append was NOT reverted by the concurrent writers",
+    );
+    assert.strictEqual(p1.name, "renamed", "the rename landed too");
+  });
+
   it("hands the updater a record with SALVAGED layers (load-path parity)", async () => {
     const adapter = new IDBSavedProjectsAdapter();
     idb.store.set(KEY, [

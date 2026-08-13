@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
-import { InitiateExportUseCase } from "@hexagen/project-generation";
+import {
+  ExportError,
+  InitiateExportUseCase,
+} from "@hexagen/project-generation";
 import { getGenerateProject } from "@/lib/wire.server";
 import { wizardToManifest } from "@hexagen/wizard-orchestration";
 import { readAddOnAnswers } from "@/lib/add-on-answers";
@@ -98,6 +101,22 @@ export async function POST(request: NextRequest) {
 
     if (!result.success) {
       const message = result.error.message;
+      // Typed mapping first: the reactive createTree-404 remap (tree contained
+      // `.github/workflows/*` files, token lacks the `workflow` scope) arrives
+      // as ExportError.code through the export port — preferred over matching
+      // on message text. 403, not 401: the session is valid; only the scope is
+      // missing, so the client offers "Reconnect GitHub", not a re-login.
+      // (The remapped message deliberately contains no parenthesized status
+      // codes, so the regex below cannot misfire on it.)
+      if (
+        result.error instanceof ExportError &&
+        result.error.code === "workflow-scope-missing"
+      ) {
+        return NextResponse.json(
+          { error: message, code: "workflow_scope_required" },
+          { status: 403 },
+        );
+      }
       // Map a downstream GitHub auth failure (revoked/expired token → 401/403)
       // to reauth_required so the UI prompts a re-login, mirroring
       // /api/push/github. The "(401)"/"(403)" shape is emitted by

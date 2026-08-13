@@ -31,6 +31,29 @@ const persistence = vi.hoisted(() => {
       state.projects = projects;
       return { success: true as const, value: undefined };
     },
+    // Record-level create, composed over the mutable `port.saveProjects`
+    // property so tests that override it (throw/fail) hit this path too.
+    // Honors the port contract: duplicate id → Conflict, prepend.
+    createProjectRecord: async (project: Record<string, unknown>) => {
+      if (state.projects.some((p) => p.id === project.id)) {
+        return {
+          success: false as const,
+          error: { kind: "Conflict", message: `Duplicate id ${project.id}` },
+        };
+      }
+      const written = await port.saveProjects([project, ...state.projects]);
+      if (!written.success) return written;
+      return { success: true as const, value: project };
+    },
+    // Record-level delete, composed like create. IDEMPOTENT per the port
+    // contract: an absent id resolves success without a write.
+    deleteProjectRecord: async (id: string) => {
+      const next = state.projects.filter((p) => p.id !== id);
+      if (next.length === state.projects.length) {
+        return { success: true as const, value: undefined };
+      }
+      return port.saveProjects(next);
+    },
     // Read-merge-write mirror of the real adapters, composed over the mutable
     // `port.saveProjects` property so tests that override it (throw/fail) hit
     // this path too. Honors the port contract: NotFound for a missing id,
@@ -838,5 +861,197 @@ describe("useSavedProjects — updateProjectFormState (Plan-phase settings autos
     );
 
     persistence.port.updateProjectRecord = originalUpdateRecord;
+  });
+});
+
+describe("useSavedProjects — record-level deleteProject / renameProject (ADR-0045 follow-up)", () => {
+  beforeEach(() => {
+    persistence.state.projects = [];
+    persistence.state.failSave = false;
+    persistence.state.saveCount = 0;
+  });
+
+  it("deleteProject deletes ONE record — a concurrently-created storage record survives", async () => {
+    persistence.state.projects = [seed("p1"), seed("p2")];
+    const { result } = await mountLoaded();
+
+    // Another hook instance creates a project directly in storage AFTER this
+    // instance snapshotted. The pre-fix whole-array save of the filtered
+    // snapshot would erase it; deleteProjectRecord touches only the target.
+    persistence.state.projects = [
+      seed("external"),
+      ...persistence.state.projects,
+    ];
+
+    act(() => {
+      result.current.deleteProject("p2");
+    });
+
+    await waitFor(() =>
+      assert.deepStrictEqual(
+        persistence.state.projects.map((p) => p.id),
+        ["external", "p1"],
+        "target deleted; the concurrent create survives",
+      ),
+    );
+    assert.strictEqual(result.current.persistError, null);
+  });
+
+  it("deleteProject of a row already deleted from storage stays deleted — the idempotent port cannot trip the revert arm", async () => {
+    // The D6 pin: if the port surfaced "already gone" as an error, the revert
+    // below would resurrect the row in local state.
+    persistence.state.projects = [seed("p1"), seed("p2")];
+    const { result } = await mountLoaded();
+
+    // Another instance already deleted p2 in storage.
+    persistence.state.projects = persistence.state.projects.filter(
+      (p) => p.id !== "p2",
+    );
+    const before = persistence.state.saveCount;
+
+    await act(async () => {
+      result.current.deleteProject("p2");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    assert.deepStrictEqual(
+      result.current.projects.map((p) => p.id),
+      ["p1"],
+      "locally deleted row is NOT resurrected",
+    );
+    assert.strictEqual(result.current.persistError, null, "no error surfaced");
+    assert.strictEqual(
+      persistence.state.saveCount,
+      before,
+      "idempotent no-op — no write for an absent id",
+    );
+  });
+
+  it("deleteProject reverts the optimistic removal and surfaces persistError on write failure", async () => {
+    persistence.state.projects = [seed("p1"), seed("p2")];
+    persistence.state.failSave = true;
+    const { result } = await mountLoaded();
+
+    act(() => {
+      result.current.deleteProject("p2");
+    });
+
+    await waitFor(() => assert.ok(result.current.persistError));
+    assert.deepStrictEqual(
+      result.current.projects.map((p) => p.id),
+      ["p1", "p2"],
+      "optimistic removal reverted",
+    );
+  });
+
+  it("deleteProject treats a THROWING port as a failed write (revert + persistError, no escaped rejection)", async () => {
+    persistence.state.projects = [seed("p1"), seed("p2")];
+    const { result } = await mountLoaded();
+    const original = persistence.port.saveProjects;
+    persistence.port.saveProjects = async () => {
+      throw new Error("adapter blew up");
+    };
+
+    act(() => {
+      result.current.deleteProject("p2");
+    });
+
+    await waitFor(() => assert.ok(result.current.persistError));
+    persistence.port.saveProjects = original;
+    assert.strictEqual(result.current.persistError?.kind, "Unknown");
+    assert.deepStrictEqual(
+      result.current.projects.map((p) => p.id),
+      ["p1", "p2"],
+      "optimistic removal reverted",
+    );
+  });
+
+  it("renameProject merges into the FRESH stored record — a concurrently-regenerated manifest survives", async () => {
+    persistence.state.projects = [seed("p1")];
+    const { result } = await mountLoaded();
+
+    // Another writer regenerates the manifest in storage AFTER this hook's
+    // snapshot. The pre-fix whole-array save would revert it to "".
+    (persistence.state.projects[0] as Record<string, unknown>).manifestYaml =
+      "regenerated architecture";
+
+    act(() => {
+      result.current.renameProject("p1", "Renamed");
+    });
+
+    await waitFor(() =>
+      assert.strictEqual(
+        (persistence.state.projects[0] as Record<string, unknown>).name,
+        "Renamed",
+      ),
+    );
+    assert.strictEqual(
+      (persistence.state.projects[0] as Record<string, unknown>).manifestYaml,
+      "regenerated architecture",
+      "the concurrent sibling-field write survives the rename",
+    );
+    // Local state reconciles with the committed record (incl. the manifest).
+    await waitFor(() => {
+      assert.strictEqual(result.current.projects[0].name, "Renamed");
+      assert.strictEqual(
+        result.current.projects[0].manifestYaml,
+        "regenerated architecture",
+      );
+    });
+  });
+
+  it("renameProject on an id unknown to this instance is a TRUE no-op (no write, no seq bump)", async () => {
+    persistence.state.projects = [seed("p1")];
+    const { result } = await mountLoaded();
+    const before = persistence.state.saveCount;
+
+    await act(async () => {
+      result.current.renameProject("ghost", "x");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    assert.strictEqual(persistence.state.saveCount, before, "no write");
+    assert.strictEqual(result.current.persistError, null);
+  });
+
+  it("renameProject is a SILENT no-op when the record vanished from storage by write time (NotFound)", async () => {
+    persistence.state.projects = [seed("p1"), seed("p2")];
+    const { result } = await mountLoaded();
+
+    // p2 exists in this instance's snapshot but was deleted from storage.
+    persistence.state.projects = persistence.state.projects.filter(
+      (p) => p.id !== "p2",
+    );
+
+    await act(async () => {
+      result.current.renameProject("p2", "Renamed");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    assert.strictEqual(
+      result.current.persistError,
+      null,
+      "NotFound stays silent (matches updateProjectFormState's contract)",
+    );
+  });
+
+  it("renameProject reverts the optimistic rename and surfaces persistError on write failure", async () => {
+    persistence.state.projects = [seed("p1")];
+    persistence.state.failSave = true;
+    const { result } = await mountLoaded();
+
+    act(() => {
+      result.current.renameProject("p1", "doomed");
+    });
+
+    await waitFor(() => assert.ok(result.current.persistError));
+    assert.strictEqual(
+      result.current.projects[0].name,
+      "p1",
+      "optimistic rename reverted",
+    );
   });
 });
