@@ -8,6 +8,9 @@ import path from "node:path";
 import {
   GitHubGitDataClient,
   GitHubApiError,
+  isWorkflowFilePath,
+  parseOAuthScopesHeader,
+  WORKFLOW_SCOPE,
 } from "./github-git-data.client.js";
 
 interface FileEntry {
@@ -39,6 +42,16 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
         config.github;
       const client = new GitHubGitDataClient();
 
+      // Resolve the authenticated user once; the same response carries the
+      // token's `x-oauth-scopes` header, so scope detection costs no extra
+      // round trip. `scopes === null` = unknown (header absent, e.g. a future
+      // GitHub-App-token migration) → FAIL OPEN: proceed as if fully scoped.
+      // Safe ONLY because the reactive createTree 404 remap in
+      // GitHubGitDataClient backstops the one scope-dependent failure with an
+      // actionable typed error instead of the opaque 404.
+      const { login: authedLogin, scopes } =
+        await this.getAuthenticatedUser(token);
+
       // createRepo returns the repo's default branch. GitHub initializes an
       // auto_init repo on the account/org default branch, which is not
       // guaranteed to be "main"; targeting the wrong branch would push the
@@ -49,9 +62,29 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
         owner,
         repoName,
         isPrivate,
+        authedLogin,
       );
 
-      const files = await this.readFiles(sourceDirectory);
+      const allFiles = await this.readFiles(sourceDirectory);
+
+      // Proactive degrade: when scopes are KNOWN to lack `workflow`, GitHub
+      // would reject the whole tree over the injected CI workflow. The user's
+      // primary intent is "my project on GitHub", so publish the rest and
+      // surface one warning per skipped file (filtered BEFORE blob creation —
+      // no wasted blob calls) instead of hard-failing.
+      const warnings: string[] = [];
+      let files = allFiles;
+      if (scopes !== null && !scopes.has(WORKFLOW_SCOPE)) {
+        files = allFiles.filter((f) => !isWorkflowFilePath(f.path));
+        for (const skipped of allFiles) {
+          if (!isWorkflowFilePath(skipped.path)) continue;
+          warnings.push(
+            `Skipped ${skipped.path}: the connected GitHub token lacks the ` +
+              "'workflow' scope. Reconnect GitHub to include CI workflow " +
+              "files in future publishes.",
+          );
+        }
+      }
 
       // create blobs via client (base64 already)
       const fileShas: FileEntry[] = [];
@@ -113,6 +146,7 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
         success: true,
         destinationUrl: `https://github.com/${owner}/${repoName}`,
         defaultBranch,
+        ...(warnings.length > 0 ? { warnings } : {}),
       };
     } catch (err) {
       return {
@@ -120,6 +154,12 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
         destinationUrl: "",
         error:
           err instanceof Error ? err.message : "Failed to export to GitHub",
+        // Thread the typed failure class (e.g. the reactive workflow-scope
+        // remap) through the port so routes never regress to matching on
+        // message text.
+        ...(err instanceof GitHubApiError && err.code
+          ? { errorCode: err.code }
+          : {}),
       };
     }
   }
@@ -133,15 +173,15 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
     owner: string,
     repoName: string,
     isPrivate: boolean,
+    authedLogin: string,
   ): Promise<string> {
     // Inline minimal request to keep test mocks (which spy on global fetch + expect json error shape) happy.
     const base = "https://api.github.com";
     // POST /user/repos always creates under the authenticated user and ignores
     // `owner`. An org-owned export must use POST /orgs/{owner}/repos — otherwise
     // the repo lands under the user while destinationUrl (built from `owner`)
-    // points at the org, a location that was never created. Resolve the
-    // authenticated login to choose the endpoint.
-    const authedLogin = await this.getAuthenticatedLogin(token);
+    // points at the org, a location that was never created. The caller resolves
+    // the authenticated login (one shared GET /user) to choose the endpoint.
     const endpoint =
       owner && owner.toLowerCase() !== authedLogin.toLowerCase()
         ? `/orgs/${owner}/repos`
@@ -209,8 +249,16 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
     return data.default_branch || "main";
   }
 
-  /** Resolve the login of the token's owner (to choose user vs. org repo creation). */
-  private async getAuthenticatedLogin(token: string): Promise<string> {
+  /**
+   * Resolve the login of the token's owner (to choose user vs. org repo
+   * creation) plus the token's OAuth scopes from the same response's
+   * `x-oauth-scopes` header — one round trip serves both needs.
+   * `scopes: null` = header absent → unknown (callers fail open; the reactive
+   * createTree remap is the backstop).
+   */
+  private async getAuthenticatedUser(
+    token: string,
+  ): Promise<{ login: string; scopes: Set<string> | null }> {
     const res = await fetch("https://api.github.com/user", {
       method: "GET",
       headers: {
@@ -233,7 +281,10 @@ export class GitHubExporterAdapter implements ProjectExporterPort {
         "Could not resolve the authenticated GitHub user",
       );
     }
-    return data.login;
+    // Optional-chained: unit-test fetch doubles return header-less responses,
+    // and a missing headers bag means the same thing as a missing header.
+    const scopes = parseOAuthScopesHeader(res.headers?.get?.("x-oauth-scopes"));
+    return { login: data.login, scopes };
   }
 
   private async readFiles(dirPath: string): Promise<FileEntry[]> {

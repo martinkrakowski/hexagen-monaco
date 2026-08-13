@@ -5,7 +5,10 @@ export { Project } from "./domain/entities/project.js";
 export { ProjectSpecification } from "./domain/value-objects/project-specification.js";
 
 // Application exports
-export { GenerateProjectUseCase } from "./application/generate-project-use-case.js";
+export {
+  GenerateProjectUseCase,
+  ExportError,
+} from "./application/generate-project-use-case.js";
 export { InitiateExportUseCase } from "./application/use-cases/initiate-export.use-case.js";
 export type { GenerateProjectUseCaseFactory } from "./application/use-cases/initiate-export.use-case.js";
 export type {
@@ -33,6 +36,7 @@ export type {
 export type {
   ExportConfig,
   ExportDestination,
+  ExportErrorCode,
   ExportResult,
   GitHubExportConfig,
   ProjectExporterPort,
