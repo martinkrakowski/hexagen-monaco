@@ -2,7 +2,7 @@ vi.stubGlobal("crypto", {
   randomUUID: () => "turn-uuid",
 } as unknown as Crypto);
 
-import { describe, it, vi, beforeEach, beforeAll, afterAll } from "vitest";
+import { describe, it, vi, beforeEach } from "vitest";
 import assert from "node:assert";
 import React from "react";
 import {
@@ -32,6 +32,7 @@ import { navState } from "./nav-stub";
 import { PlanPhaseView } from "../PlanPhaseView";
 import { FormProvider, useForm } from "react-hook-form";
 import { emptyFormValues } from "../../../project-wizard/config";
+import { installResizeObserverStub } from "../../../../__tests__/support/resize-observer-stub";
 
 // PlanPhaseView renders ProjectSettingsSection, whose governance fields read
 // the shared wizard form via `useFormContext`. Production supplies it through
@@ -54,25 +55,8 @@ HTMLDialogElement.prototype.close = function () {
 
 // The workbench's desktop path (jsdom default width 1024 = "lg") renders
 // react-resizable-panels, which instantiates a ResizeObserver on mount; jsdom
-// doesn't ship one. Stub + restore so the stub can't leak into sibling suites.
-const hadResizeObserver = "ResizeObserver" in globalThis;
-const originalResizeObserver = globalThis.ResizeObserver;
-beforeAll(() => {
-  if (!globalThis.ResizeObserver) {
-    globalThis.ResizeObserver = class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    } as unknown as typeof ResizeObserver;
-  }
-});
-afterAll(() => {
-  if (hadResizeObserver) {
-    globalThis.ResizeObserver = originalResizeObserver;
-  } else {
-    delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
-  }
-});
+// doesn't ship one.
+installResizeObserverStub();
 
 const bodyText = () => (document.body.textContent || "").replace(/\s+/g, " ");
 

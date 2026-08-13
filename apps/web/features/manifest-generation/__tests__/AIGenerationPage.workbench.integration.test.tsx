@@ -17,7 +17,7 @@ vi.stubGlobal("crypto", {
   randomUUID: () => `uuid-${(uuidCounter += 1)}`,
 } as unknown as Crypto);
 
-import { describe, it, vi, beforeEach, beforeAll, afterAll } from "vitest";
+import { describe, it, vi, beforeEach } from "vitest";
 import assert from "node:assert/strict";
 import React from "react";
 import {
@@ -105,6 +105,7 @@ import {
   loadGenesisFormValues,
 } from "../genesis-workbench/genesisProjectSettingsStore";
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
+import { installResizeObserverStub } from "../../../__tests__/support/resize-observer-stub";
 
 // jsdom has no <dialog>: the local-generation warning dialog calls showModal.
 HTMLDialogElement.prototype.showModal = function () {
@@ -116,24 +117,7 @@ HTMLDialogElement.prototype.close = function () {
 
 // The workbench's desktop layout is react-resizable-panels, which requires
 // ResizeObserver (absent in jsdom).
-const hadResizeObserver = "ResizeObserver" in globalThis;
-const originalResizeObserver = globalThis.ResizeObserver;
-beforeAll(() => {
-  if (!globalThis.ResizeObserver) {
-    globalThis.ResizeObserver = class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    } as unknown as typeof ResizeObserver;
-  }
-});
-afterAll(() => {
-  if (hadResizeObserver) {
-    globalThis.ResizeObserver = originalResizeObserver;
-  } else {
-    delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
-  }
-});
+installResizeObserverStub();
 
 // Keep every network consumer quiet AND in-flight by default: the capability
 // probe stays unresolved (irrelevant behind the server-key fast-pass) and the

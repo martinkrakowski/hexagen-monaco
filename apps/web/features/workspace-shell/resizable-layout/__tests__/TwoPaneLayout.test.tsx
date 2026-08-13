@@ -1,30 +1,12 @@
-import { describe, it, beforeAll, afterAll, afterEach } from "vitest";
+import { describe, it, beforeAll, afterEach } from "vitest";
 import assert from "node:assert";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { TwoPaneLayout } from "../TwoPaneLayout";
+import { installResizeObserverStub } from "../../../../__tests__/support/resize-observer-stub";
 
 // react-resizable-panels (the desktop path) instantiates a ResizeObserver on
-// mount; jsdom doesn't ship one. A no-op stub lets the panels render. Capture
-// whatever was there first and restore it in afterAll so this stub doesn't leak
-// into sibling suites sharing the worker (which may rely on its absence).
-const hadResizeObserver = "ResizeObserver" in globalThis;
-const originalResizeObserver = globalThis.ResizeObserver;
-beforeAll(() => {
-  if (!globalThis.ResizeObserver) {
-    globalThis.ResizeObserver = class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    } as unknown as typeof ResizeObserver;
-  }
-});
-afterAll(() => {
-  if (hadResizeObserver) {
-    globalThis.ResizeObserver = originalResizeObserver;
-  } else {
-    delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
-  }
-});
+// mount; jsdom doesn't ship one. A no-op stub lets the panels render.
+installResizeObserverStub();
 
 const DEFAULT_WIDTH = 1024;
 
