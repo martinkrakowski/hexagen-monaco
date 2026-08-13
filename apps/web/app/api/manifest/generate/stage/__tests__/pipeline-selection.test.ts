@@ -1,8 +1,12 @@
 import { test, describe } from "vitest";
 import assert from "node:assert";
-import type { PipelineState } from "@hexagen/agentic-interaction";
+import type {
+  AssembledManifest,
+  PipelineState,
+} from "@hexagen/agentic-interaction";
 import {
   buildDoneEvent,
+  buildManifestEvent,
   createFullPipelineEventAdapter,
   STAGE_LABELS,
   type StageRouteEvent,
@@ -128,6 +132,87 @@ describe("createFullPipelineEventAdapter", () => {
         "Manifest Assembly",
         "Validation Review",
       ],
+    );
+  });
+});
+
+describe("buildManifestEvent (Part B-lite)", () => {
+  // The NON-terminal early `manifest` frame, emitted between Stage-5 assembly
+  // and the Stage-6 review. `done` always follows and supersedes its yaml.
+
+  const assembled = {
+    yaml: "workspace:\n  name: early\n",
+    // countManifestEntities reads the LAYERED shape assembly emits
+    // (layers.application.ports / layers.infrastructure.adapters).
+    parsedObject: {
+      bounded_contexts: [
+        {
+          name: "billing",
+          layers: {
+            application: {
+              ports: {
+                in: [{ name: "CreateInvoicePort" }],
+                out: [{ name: "InvoiceRepositoryPort" }],
+              },
+            },
+            infrastructure: {
+              adapters: [{ name: "InvoiceRepositoryAdapter" }],
+            },
+          },
+        },
+        { name: "notifications" },
+      ],
+    },
+  } as unknown as AssembledManifest;
+
+  test("carries the Stage-5 yaml, shared-counter counts, and an empty transactionId", () => {
+    // transactionId is "" BY DESIGN: no transaction exists at Stage-5 time
+    // (it is begun only after the review passes); the real id arrives on
+    // `done`, and the client does not read the field from this frame.
+    assert.deepStrictEqual(buildManifestEvent(assembled), {
+      type: "manifest",
+      yaml: "workspace:\n  name: early\n",
+      contextCount: 2,
+      portCount: 2,
+      adapterCount: 1,
+      transactionId: "",
+    });
+  });
+
+  test("degrades to empty yaml / zero counts on a sparse manifest", () => {
+    const event = buildManifestEvent({
+      yaml: "",
+      parsedObject: {},
+    } as AssembledManifest);
+    assert.deepStrictEqual(event, {
+      type: "manifest",
+      yaml: "",
+      contextCount: 0,
+      portCount: 0,
+      adapterCount: 0,
+      transactionId: "",
+    });
+  });
+
+  test("the event adapter forwards onManifestReady as a `manifest` frame in stream position", () => {
+    // Simulate the orchestrator's surrounding protocol: stage-5 completes,
+    // the hook fires, stage 6 starts. The frame must land between them —
+    // i.e. before any terminal event the route would emit afterwards.
+    const events: StageRouteEvent[] = [];
+    const adapter = createFullPipelineEventAdapter((e) => events.push(e));
+    adapter.onProgress?.(5, 0);
+    adapter.onProgress?.(5, 0);
+    adapter.onManifestReady?.(assembled);
+    adapter.onProgress?.(6, 0);
+
+    assert.deepStrictEqual(
+      events.map((e) => e.type),
+      ["stage-start", "stage-complete", "manifest", "stage-start"],
+    );
+    const manifestEvent = events[2];
+    assert.strictEqual(
+      manifestEvent.type === "manifest" ? manifestEvent.yaml : "",
+      "workspace:\n  name: early\n",
     );
   });
 });

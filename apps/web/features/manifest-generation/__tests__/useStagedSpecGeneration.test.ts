@@ -123,6 +123,68 @@ describe("useStagedSpecGeneration retry", () => {
     }
   });
 
+  test("exposes the stream's early Stage-5 manifest, keeps it after completion, and clears it on the next run (Part B-lite)", async () => {
+    const originalFetch = global.fetch;
+    const encoder = new TextEncoder();
+    let call = 0;
+    global.fetch = (async () => {
+      call++;
+      // Run 1: early manifest frame, then a done with DIFFERENT yaml (the
+      // Stage-7 repaired one). Run 2: no manifest frame at all.
+      const lines =
+        call === 1
+          ? [
+              '{"type":"manifest","yaml":"early: spec\\n","contextCount":1,"portCount":1,"adapterCount":1,"transactionId":""}\n',
+              '{"type":"done","yaml":"repaired: spec\\n","contextCount":1,"portCount":1,"adapterCount":1}\n',
+            ]
+          : ['{"type":"done","yaml":"final: run2\\n"}\n'];
+      let i = 0;
+      return {
+        ok: true,
+        status: 200,
+        body: new ReadableStream<Uint8Array>({
+          pull(controller) {
+            if (i < lines.length) {
+              controller.enqueue(encoder.encode(lines[i++]));
+            } else {
+              controller.close();
+            }
+          },
+        }),
+      } as unknown as Response;
+    }) as typeof fetch;
+
+    try {
+      const { result } = renderHook(() => useStagedSpecGeneration());
+
+      await act(async () => {
+        await result.current.generateFromSpec("spec: content", {
+          executionStrategy: "cloud",
+        });
+      });
+
+      // Kept after completion (repair-diff seam): the import page compares it
+      // against the final manifest for the "updated by validation repair"
+      // note. Also pins the last-batch hazard — the manifest frame can land
+      // in the same React batch as done, so the mirror is not gated on
+      // isGenerating.
+      assert.strictEqual(result.current.phase, "complete");
+      assert.strictEqual(result.current.earlyManifest, "early: spec\n");
+      assert.strictEqual(result.current.generatedManifest, "repaired: spec\n");
+
+      // A new run without a manifest frame must not inherit the stale one.
+      await act(async () => {
+        await result.current.generateFromSpec("spec: content 2", {
+          executionStrategy: "cloud",
+        });
+      });
+      assert.strictEqual(result.current.earlyManifest, null);
+      assert.strictEqual(result.current.generatedManifest, "final: run2\n");
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   test("retry with no prior run is a no-op (resolves undefined, no fetch)", async () => {
     const originalFetch = global.fetch;
     const fetchSpy = vi.fn();

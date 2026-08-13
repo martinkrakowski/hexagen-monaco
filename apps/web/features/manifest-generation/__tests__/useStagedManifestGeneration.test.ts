@@ -216,6 +216,93 @@ describe("useStagedManifestGeneration (cloud path)", () => {
     assert.strictEqual(result.current.validationReport, null);
   });
 
+  it("exposes the stream's early Stage-5 manifest and KEEPS it after completion (repair-diff seam, Part B-lite)", async () => {
+    // The early `manifest` frame arrives mid-run; `done` then carries a
+    // DIFFERENT yaml (Stage-7 repair). earlyManifest must survive completion —
+    // GenerateWithAi compares it against the final manifest to show the
+    // "updated by validation repair" note. This also pins the last-batch
+    // hazard: the frame can land in the same React batch as `done`, so the
+    // mirror must not be gated on isGenerating.
+    mockFetchWith([
+      {
+        type: "manifest",
+        yaml: "early: x\n",
+        contextCount: 1,
+        portCount: 1,
+        adapterCount: 1,
+        transactionId: "",
+      },
+      {
+        type: "done",
+        yaml: "repaired: x\n",
+        contextCount: 1,
+        portCount: 1,
+        adapterCount: 1,
+        transactionId: "t",
+      },
+    ]);
+    const { result } = renderHook(() => useStagedManifestGeneration());
+
+    await act(async () => {
+      await result.current.generateManifest("desc", { preferLocal: false });
+    });
+
+    assert.strictEqual(result.current.phase, "complete");
+    assert.strictEqual(result.current.earlyManifest, "early: x\n");
+    assert.strictEqual(result.current.generatedManifest, "repaired: x\n");
+  });
+
+  it("a new run clears the previous run's earlyManifest; reset() clears it too", async () => {
+    mockFetchWith([
+      {
+        type: "manifest",
+        yaml: "early: run1\n",
+        contextCount: 1,
+        portCount: 0,
+        adapterCount: 0,
+        transactionId: "",
+      },
+      { type: "done", yaml: "final: run1\n", transactionId: "t1" },
+    ]);
+    const { result } = renderHook(() => useStagedManifestGeneration());
+
+    await act(async () => {
+      await result.current.generateManifest("run 1", { preferLocal: false });
+    });
+    assert.strictEqual(result.current.earlyManifest, "early: run1\n");
+
+    // Run 2 never emits a manifest frame — the stale early manifest from run 1
+    // must not leak (the pages would early-enable Next on it).
+    mockFetchWith([
+      { type: "done", yaml: "final: run2\n", transactionId: "t2" },
+    ]);
+    await act(async () => {
+      await result.current.generateManifest("run 2", { preferLocal: false });
+    });
+    assert.strictEqual(result.current.earlyManifest, null);
+
+    // And reset() clears it after a run that did set it.
+    mockFetchWith([
+      {
+        type: "manifest",
+        yaml: "early: run3\n",
+        contextCount: 1,
+        portCount: 0,
+        adapterCount: 0,
+        transactionId: "",
+      },
+      { type: "done", yaml: "final: run3\n", transactionId: "t3" },
+    ]);
+    await act(async () => {
+      await result.current.generateManifest("run 3", { preferLocal: false });
+    });
+    assert.strictEqual(result.current.earlyManifest, "early: run3\n");
+    act(() => {
+      result.current.reset();
+    });
+    assert.strictEqual(result.current.earlyManifest, null);
+  });
+
   it("reset() clears generationError, verboseLog and phase", async () => {
     mockFetchWith([{ type: "error", message: "boom" }]);
     const { result } = renderHook(() => useStagedManifestGeneration());

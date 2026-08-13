@@ -513,6 +513,181 @@ test("resolves after a terminal frame even when the server holds the stream open
   }
 });
 
+test("a `manifest` frame is non-terminal: earlyManifest is set, reading continues, and done's yaml supersedes it (Part B-lite)", async () => {
+  const lines = [
+    '{"type":"manifest","yaml":"early: manifest","contextCount":1,"portCount":1,"adapterCount":1,"transactionId":""}',
+    '{"type":"chunk","stage":6,"data":"Stage 6 · Validation Review"}',
+    '{"type":"done","yaml":"final: manifest","contextCount":1,"portCount":1,"adapterCount":1}',
+  ];
+  global.fetch = mockFetchWithSSE(lines);
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+    let generateResult:
+      | Awaited<ReturnType<typeof result.current.generate>>
+      | undefined;
+
+    await act(async () => {
+      generateResult = await result.current.generate({ description: "test" });
+    });
+
+    // The manifest frame did not terminate the run — the done frame after it
+    // was still consumed and completed the run.
+    assert.strictEqual(generateResult?.phase, "complete");
+    assert.strictEqual(generateResult?.earlyManifest, "early: manifest");
+    assert.strictEqual(generateResult?.generatedManifest, "final: manifest");
+    assert.strictEqual(result.current.earlyManifest, "early: manifest");
+    // generatedManifest carries done's yaml — the early manifest is
+    // superseded (consumers prefer generatedManifest once complete, and
+    // compare the two to show the "updated by validation repair" note).
+    assert.strictEqual(result.current.generatedManifest, "final: manifest");
+
+    // reset() clears the early manifest with the rest of the run state.
+    act(() => result.current.reset());
+    assert.strictEqual(result.current.earlyManifest, null);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("a stream ending after only a `manifest` frame still fails (manifest is not terminal-frame accounting)", async () => {
+  const lines = [
+    '{"type":"manifest","yaml":"early: manifest","contextCount":1,"portCount":1,"adapterCount":1,"transactionId":""}',
+  ];
+  global.fetch = mockFetchWithSSE(lines);
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+    let generateResult:
+      | Awaited<ReturnType<typeof result.current.generate>>
+      | undefined;
+
+    await act(async () => {
+      generateResult = await result.current.generate({ description: "test" });
+    });
+
+    // No done/error ever arrived — the run failed despite the early manifest.
+    assert.strictEqual(generateResult?.phase, "failed");
+    assert.match(generateResult?.stepDetail || "", /ended unexpectedly/i);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("an empty-yaml `manifest` frame is ignored (earlyManifest stays null)", async () => {
+  const lines = [
+    '{"type":"manifest","yaml":"","contextCount":0,"portCount":0,"adapterCount":0,"transactionId":""}',
+    '{"type":"done","yaml":"final: manifest","contextCount":1,"portCount":1,"adapterCount":1}',
+  ];
+  global.fetch = mockFetchWithSSE(lines);
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+
+    await act(async () => {
+      await result.current.generate({ description: "test" });
+    });
+
+    assert.strictEqual(result.current.earlyManifest, null);
+    assert.strictEqual(result.current.generatedManifest, "final: manifest");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("resolves after a terminal frame even when the server holds the stream open — with a preceding manifest frame", async () => {
+  // Part B-lite guard on the PR-#432 regression: the non-terminal `manifest`
+  // branch must not disturb the break-on-terminal-frame accounting. A
+  // regression here fails as a test timeout.
+  let cancelled = false;
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode(
+          '{"type":"manifest","yaml":"early: x","contextCount":1,"portCount":0,"adapterCount":0,"transactionId":""}\n',
+        ),
+      );
+      controller.enqueue(
+        encoder.encode('{"type":"done","yaml":"system: x"}\n'),
+      );
+      // Deliberately no controller.close().
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+
+  global.fetch = async () =>
+    ({ ok: true, body: stream }) as unknown as Response;
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+    let generateResult:
+      | Awaited<ReturnType<typeof result.current.generate>>
+      | undefined;
+
+    await act(async () => {
+      generateResult = await result.current.generate({ description: "test" });
+    });
+
+    assert.strictEqual(generateResult?.phase, "complete");
+    assert.strictEqual(generateResult?.generatedManifest, "system: x");
+    assert.strictEqual(result.current.earlyManifest, "early: x");
+    assert.strictEqual(cancelled, true);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("a new generate() clears the previous run's earlyManifest", async () => {
+  // Run 1 delivers an early manifest; run 2 never does. The stale early
+  // manifest must not leak into run 2 (the pages early-enable Next on it).
+  let call = 0;
+  global.fetch = async () => {
+    call++;
+    const lines =
+      call === 1
+        ? [
+            '{"type":"manifest","yaml":"early: run1","contextCount":1,"portCount":0,"adapterCount":0,"transactionId":""}',
+            '{"type":"done","yaml":"final: run1"}',
+          ]
+        : ['{"type":"done","yaml":"final: run2"}'];
+    return {
+      ok: true,
+      status: 200,
+      body: createMockReadableStream(lines),
+    } as unknown as Response;
+  };
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+
+    await act(async () => {
+      await result.current.generate({ description: "run 1" });
+    });
+    assert.strictEqual(result.current.earlyManifest, "early: run1");
+
+    await act(async () => {
+      await result.current.generate({ description: "run 2" });
+    });
+    assert.strictEqual(result.current.earlyManifest, null);
+    assert.strictEqual(result.current.generatedManifest, "final: run2");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("attempts reconnection on reader error", async () => {
   let fetchCount = 0;
 

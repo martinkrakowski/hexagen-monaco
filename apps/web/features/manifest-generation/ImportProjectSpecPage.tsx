@@ -253,10 +253,14 @@ export default function ImportProjectSpecPage() {
     // went through the pipeline, but a generation run abandoned earlier in
     // this page session could have left a stale report on the hooks. Omitted
     // by the generating step's Next, which wants the live report.
+    // `validationPending` (Part B-lite): true when the user continued with
+    // the EARLY Stage-5 manifest while the Stage-6 review was still
+    // streaming — stored so the accept view notes findings are unavailable.
     (
       manifest: string,
       originSpecTextOverride?: string | null,
       validationReportOverride?: StageValidationReport | null,
+      validationPending?: boolean,
     ) => {
       try {
         const wizardData = parseManifestToWizardData(manifest);
@@ -306,7 +310,11 @@ export default function ImportProjectSpecPage() {
             ? (specGeneration.validationReport ??
                 manifestGeneration.validationReport)
             : validationReportOverride,
+          validationPending ?? false,
         );
+        // User-click navigation (the footer's Next / the manifest fast
+        // path's explicit upload) — never an auto-navigate from a stream
+        // success arm.
         router.push("/projects/new/ai/accept");
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
@@ -648,10 +656,45 @@ export default function ImportProjectSpecPage() {
     if (pageState === "GENERATING") {
       const isRunning =
         specGeneration.isGenerating || manifestGeneration.isGenerating;
+      // Early Stage-5 manifest (Part B-lite): each run function resets the
+      // OTHER hook before generating, so at most one is non-null. Offered
+      // only while the run is in flight — after completion the parked
+      // completedManifest Next below wins, and a failed run offers neither.
+      const earlyManifest = isRunning
+        ? (specGeneration.earlyManifest ?? manifestGeneration.earlyManifest)
+        : null;
+      // The Stage-7 verify-and-repair pass changed the yaml between the
+      // early frame and `done` — surfaced as a subtle informational note.
+      const finalEarly =
+        specGeneration.earlyManifest ?? manifestGeneration.earlyManifest;
+      const manifestUpdatedByRepair = Boolean(
+        !isRunning &&
+        completedManifest &&
+        finalEarly &&
+        finalEarly !== completedManifest,
+      );
       return (
         <>
-          <span />
-          <div className="flex gap-2">
+          {manifestUpdatedByRepair ? (
+            <span className="text-xs text-muted-foreground self-center">
+              Manifest updated by validation repair
+            </span>
+          ) : (
+            <span />
+          )}
+          <div className="flex items-center gap-2">
+            {/* "Validating…" affordance: the manifest is ready and Next is
+                usable, but Stage 6 is still reviewing — continuing now means
+                the accept view shows findings as unavailable. */}
+            {isRunning && earlyManifest && !acceptError && (
+              <span
+                className="text-xs text-muted-foreground"
+                role="status"
+                aria-live="polite"
+              >
+                Validating manifest…
+              </span>
+            )}
             <Button
               variant="outline"
               onClick={() => {
@@ -680,6 +723,21 @@ export default function ImportProjectSpecPage() {
                 screen. */}
             {!isRunning && completedManifest && (
               <Button onClick={() => acceptManifest(completedManifest)}>
+                Next
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            )}
+            {/* Early-enable Next (Part B-lite): the user may continue with
+                the Stage-5 manifest without waiting for the review. Explicit
+                null report + validationPending — no findings exist yet, and
+                navigating kills the component-owned stream, so none will
+                arrive. User-click only; never auto-navigated. */}
+            {isRunning && earlyManifest && !acceptError && (
+              <Button
+                onClick={() =>
+                  acceptManifest(earlyManifest, undefined, null, true)
+                }
+              >
                 Next
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>

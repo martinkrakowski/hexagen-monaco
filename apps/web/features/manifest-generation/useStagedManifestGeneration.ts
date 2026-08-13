@@ -35,6 +35,15 @@ export interface UseStagedManifestGenerationReturn {
   isGenerating: boolean;
   generationError: string | null;
   generatedManifest: string | null;
+  /**
+   * Early Stage-5 manifest (Part B-lite) from the cloud pipeline's
+   * NON-terminal `manifest` frame — set while the Stage-6 review is still
+   * streaming, so the UI can offer "Use This Manifest" before `done`.
+   * `generatedManifest` (the `done` yaml, possibly repair-adjusted)
+   * supersedes it; kept set after completion so consumers can detect a
+   * repair-driven difference. Always null on the local WebLLM path.
+   */
+  earlyManifest: string | null;
   phase: StagedPhase;
   stepDetail: string;
   stageProgress: Record<number, StageProgress>;
@@ -73,6 +82,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
   const [generatedManifest, setGeneratedManifest] = useState<string | null>(
     null,
   );
+  const [earlyManifest, setEarlyManifest] = useState<string | null>(null);
   const [phase, setPhase] = useState<StagedPhase>("idle");
   const [stepDetail, setStepDetail] = useState("");
   const [stageProgress, setStageProgress] = useState<
@@ -158,6 +168,16 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
       setVerboseLog(entries);
     }
 
+    // Early manifest (Part B-lite): mirrored OUTSIDE the isGenerating guard
+    // below for the same last-batch reason as the verbose log — if the
+    // `manifest` frame and the terminal frame land in one React batch,
+    // isGenerating is already false on this render. Only non-null values are
+    // mirrored (it is set at most once per run); clearing is owned by
+    // generateManifest's reset block and reset().
+    if (cloudStream.earlyManifest !== null) {
+      setEarlyManifest(cloudStream.earlyManifest);
+    }
+
     // phase / stepDetail / stageProgress only need mirroring while the stream is
     // active; once it resolves, generateManifest copies the final values from
     // the result, so guard these to avoid clobbering that final state.
@@ -167,6 +187,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     setStageProgress(cloudStream.stageProgress);
   }, [
     cloudStream.isGenerating,
+    cloudStream.earlyManifest,
     cloudStream.phase,
     cloudStream.stepDetail,
     cloudStream.stageProgress,
@@ -185,6 +206,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     ) => {
       setGenerationError(null);
       setGeneratedManifest(null);
+      setEarlyManifest(null);
       setPhase("stage-0");
       setStepDetail("Starting staged generation...");
       setStageProgress({});
@@ -381,6 +403,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     setIsGenerating(false);
     setGenerationError(null);
     setGeneratedManifest(null);
+    setEarlyManifest(null);
     setPhase("idle");
     setStepDetail("");
     setStageProgress({});
@@ -399,6 +422,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     isGenerating,
     generationError,
     generatedManifest,
+    earlyManifest,
     phase,
     stepDetail,
     stageProgress,

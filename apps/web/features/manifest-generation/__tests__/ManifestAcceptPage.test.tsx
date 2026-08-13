@@ -328,3 +328,85 @@ describe("ManifestAcceptPage — server-report approve gate", () => {
     assert.strictEqual(approveBtn().disabled, true);
   });
 });
+
+// Part B-lite early-continue provenance: validationPending is set only when
+// the user advanced with the Stage-5 manifest while the Stage-6 review was
+// still streaming (the stream died with the generation page, so no findings
+// exist). The accept view must say so — and must NOT loosen its approve gate.
+describe("ManifestAcceptPage — validationPending banner (Part B-lite)", () => {
+  const approveBtn = () =>
+    Array.from(document.querySelectorAll("button")).find((b) =>
+      /Use This Manifest/.test(b.textContent || ""),
+    ) as HTMLButtonElement;
+
+  beforeEach(() => {
+    cleanup();
+    saveProject.mockClear();
+    usePendingManifest.getState().clear();
+    mockViewData.current = mockViewData.defaults();
+  });
+
+  it("shows the skipped-review notice (role=status) and, with clean client checks, approve stays enabled", () => {
+    usePendingManifest
+      .getState()
+      .set(
+        YAML,
+        {} as never,
+        "Vellum",
+        "/projects/new/import/spec",
+        null,
+        null,
+        true,
+      );
+    render(<ManifestAcceptPage />);
+
+    const note = screen.getByText(/validation review was skipped/i);
+    assert.ok(note);
+    // A polite live region, not an alert — informational provenance.
+    assert.ok(note.closest("[role='status']"));
+    // b1 fallback: no report exists, so the client parse checks gate approve;
+    // the default (passing) viewData leaves it enabled.
+    assert.strictEqual(approveBtn().disabled, false);
+  });
+
+  it("does NOT bypass the client-side gate: a connectivity FAIL still blocks approve on a pending manifest", () => {
+    mockViewData.current.validationItems = [
+      {
+        status: "fail",
+        title: "files: 1 Unconnected Ports",
+        description: "Missing adapters for: 'StorageProxyPort'.",
+      },
+    ];
+    usePendingManifest
+      .getState()
+      .set(
+        YAML,
+        {} as never,
+        "Vellum",
+        "/projects/new/import/spec",
+        null,
+        null,
+        true,
+      );
+    render(<ManifestAcceptPage />);
+
+    assert.ok(screen.getByText(/validation review was skipped/i));
+    assert.strictEqual(approveBtn().disabled, true);
+  });
+
+  it("absent when validation completed normally (flag unset)", () => {
+    usePendingManifest
+      .getState()
+      .set(YAML, {} as never, "Vellum", "/projects/new/import/spec", null, {
+        errors: [],
+        warnings: [],
+        passed: true,
+      });
+    render(<ManifestAcceptPage />);
+
+    assert.strictEqual(
+      screen.queryByText(/validation review was skipped/i),
+      null,
+    );
+  });
+});

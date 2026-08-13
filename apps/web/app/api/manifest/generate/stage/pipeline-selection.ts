@@ -1,8 +1,10 @@
 import type {
+  AssembledManifest,
   FullStagedGenerationCallbacks,
   PipelineState,
   StageTelemetry,
 } from "@hexagen/agentic-interaction";
+import { countManifestEntities } from "@hexagen/agentic-interaction";
 
 /**
  * NDJSON event vocabulary for the stage route + the adapter that lets
@@ -35,6 +37,19 @@ export type StageRouteEvent =
     }
   | { type: "chunk"; stage: number; data: string }
   | { type: "validation-error"; stage: number; errors: string[] }
+  // Early manifest (Part B-lite): emitted once, right after Stage-5 assembly,
+  // while the Stage-6 review is still running. NON-terminal — `done` always
+  // follows and its yaml supersedes this one. transactionId is "" here: the
+  // transaction is only begun AFTER the review, so no id exists yet; the real
+  // id arrives on `done`.
+  | {
+      type: "manifest";
+      yaml: string;
+      contextCount: number;
+      portCount: number;
+      adapterCount: number;
+      transactionId: string;
+    }
   | {
       type: "done";
       yaml: string;
@@ -98,6 +113,31 @@ export function buildDoneEvent(
 }
 
 /**
+ * Builds the NON-terminal early `manifest` event (Part B-lite) from the
+ * Stage-5 assembled manifest. Counts come from `countManifestEntities` — the
+ * same shared counter the orchestrator records in transaction metadata, so
+ * the frame and the transaction can't disagree. `transactionId` is "" by
+ * design: at Stage-5 time no transaction exists yet (it is begun only after
+ * the Stage-6 review); the real id arrives on `done`, and the client does not
+ * consume transactionId from this frame.
+ */
+export function buildManifestEvent(
+  manifest: AssembledManifest,
+): StageRouteEvent {
+  const { contextCount, portCount, adapterCount } = countManifestEntities(
+    manifest.parsedObject,
+  );
+  return {
+    type: "manifest",
+    yaml: manifest.yaml || "",
+    contextCount,
+    portCount,
+    adapterCount,
+    transactionId: "",
+  };
+}
+
+/**
  * Adapts `FullStagedGenerationCallbacks` to the route's NDJSON events.
  *
  * The orchestrator emits, per successful stage:
@@ -147,6 +187,12 @@ export function createFullPipelineEventAdapter(
         stage: telemetry.stage,
         telemetry: telemetry as unknown as Record<string, unknown>,
       });
+    },
+    // Part B-lite: forward the Stage-5 manifest to the wire while the Stage-6
+    // review runs. The orchestrator fires this before Stage 6 starts, so the
+    // frame always precedes `done` / `error`.
+    onManifestReady: (manifest) => {
+      send(buildManifestEvent(manifest));
     },
   };
 }

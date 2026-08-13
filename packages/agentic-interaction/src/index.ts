@@ -20,6 +20,13 @@ export {
   applyRepairOpsToYaml,
   type ApplyOpsToYamlResult,
 } from "./domain/manifest/apply-repair-ops-to-yaml";
+// The single shared context/port/adapter counter (A2/A4) — exported so the
+// stage route's early `manifest` frame counts with the same helper the
+// orchestrators use for transaction metadata.
+export {
+  countManifestEntities,
+  type ManifestEntityCounts,
+} from "./domain/manifest/count-manifest-entities";
 export type {
   LLMProviderPort,
   LLMMessage,
