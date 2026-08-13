@@ -14,6 +14,7 @@ import {
 import { logger } from "../../../../../lib/structured-logger";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 import {
+  buildDoneEvent,
   createFullPipelineEventAdapter,
   type StageRouteEvent,
 } from "./pipeline-selection";
@@ -149,27 +150,10 @@ export async function POST(request: NextRequest) {
         });
 
         if (result.success) {
-          const yaml = result.state.stage5?.yaml || "";
-          const ctxCount = result.state.stage2?.accepted.length ?? 0;
-          const portCount =
-            result.state.stage3?.contexts.reduce(
-              (sum, c) => sum + c.in.length + c.out.length,
-              0,
-            ) ?? 0;
-          const adapterCount =
-            result.state.stage4?.contexts.reduce(
-              (sum, c) => sum + c.adapters.length,
-              0,
-            ) ?? 0;
-
-          send({
-            type: "done",
-            yaml,
-            contextCount: ctxCount,
-            portCount,
-            adapterCount,
-            transactionId: result.transactionId,
-          });
+          // Counts + the Stage-6 `validation` report (previously dropped by
+          // this route — /spec surfaced it, /stage didn't) are built in one
+          // tested helper; see buildDoneEvent in pipeline-selection.ts.
+          send(buildDoneEvent(result.state, result.transactionId));
         } else {
           const msg =
             result.error instanceof Error

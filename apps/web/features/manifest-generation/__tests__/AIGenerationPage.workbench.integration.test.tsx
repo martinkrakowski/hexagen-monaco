@@ -350,6 +350,63 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     assert.equal(nav.push.mock.calls.length, 0);
   });
 
+  it("renders the done event's Stage-6 findings on the parked view with the /spec flow's presentation (validation parity)", async () => {
+    // The /stage route now attaches the Stage-6 report to its terminal done
+    // event (previously dropped — plan §3.5); the parked telemetry view must
+    // present it exactly like the /spec import flow: reviewer findings under
+    // "optional improvements", auto-applied advisories bucketed as
+    // adjustments (shared ValidationFindingsPanel).
+    const doneWithValidation = `${JSON.stringify({
+      type: "done",
+      yaml: DONE_MANIFEST_YAML,
+      contextCount: 1,
+      portCount: 0,
+      adapterCount: 0,
+      validation: {
+        errors: ["[R14] Port 'UserPort' does not reflect a use case."],
+        warnings: [
+          "Consider a query port for user reads.",
+          // Auto-applied advisory signature (prefix + rule marker) — must be
+          // bucketed as an adjustment, not a suggestion.
+          "Auto-added a default repository port 'UserRepositoryPort' and adapter 'UserRepositoryAdapter' to context 'UserContext' — every context needs persistence (R03). Review and rename to fit your domain.",
+        ],
+        passed: false,
+      },
+    })}\n`;
+    fetchMock.mockImplementation((input: RequestInfo | URL) =>
+      String(input) === STAGE_ENDPOINT
+        ? Promise.resolve(new Response(doneWithValidation, { status: 200 }))
+        : pendingForever(),
+    );
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+
+    fireEvent.change(composerTextarea(), {
+      target: { value: VALID_DESCRIPTION },
+    });
+    submitComposer();
+
+    // Run completes and parks (footer Next present) — the findings panel
+    // renders alongside the telemetry log.
+    await waitFor(() =>
+      assert.ok(screen.getByRole("button", { name: "Next" })),
+    );
+    // 1 error + 1 reviewer warning → "1 finding and 1 suggestion"; the R03
+    // advisory is NOT counted here (it's an adjustment).
+    assert.ok(
+      screen.getByText(/1 finding and 1 suggestion from the review/, {
+        exact: false,
+      }),
+    );
+    assert.ok(
+      screen.getByText(/1 adjustment was.*applied automatically/, {
+        // summary text is broken across inline nodes
+        exact: false,
+      }),
+    );
+    // Still parked — surfacing findings must not introduce auto-navigation.
+    assert.equal(nav.push.mock.calls.length, 0);
+  });
+
   it("preserves the explicit-local path: warning dialog first, then Continue detours through /models when no model is ready or remembered", async () => {
     useExecutionEngine.setState({ engine: "local" });
     render(<AIGenerationPage llmContext={makeLlmContext()} />);

@@ -332,6 +332,7 @@ export function GenerateWithAi({
             stepDetail={stagedGen.stepDetail}
             stageProgress={stagedGen.stageProgress}
             verboseLog={stagedGen.verboseLog}
+            validationReport={stagedGen.validationReport}
           />
         </div>
       ),

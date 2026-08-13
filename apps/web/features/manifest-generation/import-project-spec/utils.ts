@@ -196,9 +196,10 @@ export function describeFindings(
  * backend strings: a future reviewer finding that merely happens to open with
  * the same words can't be misfiled as a notice (and thereby dropped from the
  * actionable count). Keep in sync with the advisory copy in
- * `synthesizeMissingRepositoryPorts` / `dedupeAdapterNames` /
- * `enforce-manifest-schema` (@hexagen/agentic-interaction). A cleaner
- * long-term fix is a dedicated `notices` field on the validation report.
+ * `synthesizeMissingRepositoryPorts` / `synthesizeMissingInboundPorts` /
+ * `dedupeAdapterNames` / `enforce-manifest-schema`
+ * (@hexagen/agentic-interaction). A cleaner long-term fix is a dedicated
+ * `notices` field on the validation report.
  */
 const AUTO_APPLIED_ADVISORIES: ReadonlyArray<{
   prefix: string;
@@ -206,6 +207,11 @@ const AUTO_APPLIED_ADVISORIES: ReadonlyArray<{
 }> = [
   { prefix: "Renamed adapter ", rule: "(R12)" },
   { prefix: "Auto-added a default repository port ", rule: "(R03)" },
+  // R02 inbound-port synthesis is the exact counterpart of the R03 entry above
+  // (same server-side path: both merge into the report via assemblyAdvisories)
+  // — it was missing here, so identical auto-applied adds were split across
+  // "suggestions" (R02) and "adjustments" (R03) in the panel.
+  { prefix: "Auto-added a default inbound command port ", rule: "(R02)" },
   { prefix: "Renamed context ", rule: "(R01)" },
   // Stage-5 schema-gate adjustments (enforce-manifest-schema.ts): changes
   // already made so the manifest parses on accept — notices, not findings.

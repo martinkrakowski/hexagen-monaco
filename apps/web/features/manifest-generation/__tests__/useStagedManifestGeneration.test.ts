@@ -114,6 +114,89 @@ describe("useStagedManifestGeneration (cloud path)", () => {
     assert.match(log, /hello world/);
   });
 
+  it("exposes the done event's Stage-6 `validation` report as validationReport", async () => {
+    // The /stage route now mirrors /spec by attaching the Stage-6 report to
+    // its done event; this hook previously dropped it even though the stream
+    // hook parsed it (plan §3.5 — /stage route parity).
+    mockFetchWith([
+      { type: "stage-start", stage: 6, label: "Validation Review" },
+      {
+        type: "done",
+        yaml: "workspace:\n  name: x\n",
+        contextCount: 1,
+        portCount: 1,
+        adapterCount: 1,
+        transactionId: "t",
+        validation: {
+          errors: ["[R02] Context 'billing' has no inbound port."],
+          warnings: ["Consider a query port for reads."],
+          passed: false,
+        },
+      },
+    ]);
+    const { result } = renderHook(() => useStagedManifestGeneration());
+
+    await act(async () => {
+      await result.current.generateManifest("desc", { preferLocal: false });
+    });
+
+    assert.strictEqual(result.current.phase, "complete");
+    assert.deepStrictEqual(result.current.validationReport, {
+      errors: ["[R02] Context 'billing' has no inbound port."],
+      warnings: ["Consider a query port for reads."],
+      passed: false,
+    });
+  });
+
+  it("leaves validationReport null when the done event omits `validation` (older payloads)", async () => {
+    // `validation` is optional/additive on the NDJSON contract — a server
+    // without it must not break or fake a report.
+    mockFetchWith([
+      {
+        type: "done",
+        yaml: "workspace:\n  name: x\n",
+        contextCount: 1,
+        portCount: 0,
+        adapterCount: 0,
+        transactionId: "t",
+      },
+    ]);
+    const { result } = renderHook(() => useStagedManifestGeneration());
+
+    await act(async () => {
+      await result.current.generateManifest("desc", { preferLocal: false });
+    });
+
+    assert.strictEqual(result.current.phase, "complete");
+    assert.strictEqual(result.current.validationReport, null);
+  });
+
+  it("reset() clears validationReport", async () => {
+    mockFetchWith([
+      {
+        type: "done",
+        yaml: "workspace:\n  name: x\n",
+        contextCount: 1,
+        portCount: 0,
+        adapterCount: 0,
+        transactionId: "t",
+        validation: { errors: [], warnings: ["w"], passed: true },
+      },
+    ]);
+    const { result } = renderHook(() => useStagedManifestGeneration());
+
+    await act(async () => {
+      await result.current.generateManifest("desc", { preferLocal: false });
+    });
+    assert.ok(result.current.validationReport);
+
+    act(() => {
+      result.current.reset();
+    });
+
+    assert.strictEqual(result.current.validationReport, null);
+  });
+
   it("reset() clears generationError, verboseLog and phase", async () => {
     mockFetchWith([{ type: "error", message: "boom" }]);
     const { result } = renderHook(() => useStagedManifestGeneration());

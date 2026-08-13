@@ -508,6 +508,69 @@ describe("structuralManifestErrors — R08 workspace name/description", () => {
     );
     assert.ok(!errs.some((e) => e.startsWith("[R08]")));
   });
+
+  // The check is aligned to the schema's `workspace:` block (which the R08
+  // message has always named) with top-level system/scope as fallback. The
+  // assembler emits both, workspace-derived, so R08 still never fires
+  // post-assembly; these pin the alignment for manifests from other sources
+  // (repair ops, dialect import).
+  it("no R08 when a populated workspace block covers empty top-level system/scope", () => {
+    const manifest = {
+      ...parsedManifest({ system: "", scope: "" }),
+      workspace: { name: "my-system", description: "core" },
+    };
+    const errs = structuralManifestErrors(
+      portMap([
+        {
+          name: "orders",
+          in: ["PlaceOrderPort"],
+          out: ["OrderRepositoryPort"],
+        },
+      ]),
+      adapterBindings([
+        {
+          name: "orders",
+          adapters: [
+            { name: "A", implements: "PlaceOrderPort" },
+            { name: "B", implements: "OrderRepositoryPort" },
+          ],
+        },
+      ]),
+      manifest,
+    );
+    assert.ok(!errs.some((e) => e.startsWith("[R08]")));
+  });
+
+  it("R08 still fires when the workspace block is as empty as system/scope", () => {
+    const manifest = {
+      ...parsedManifest({ system: "", scope: "core" }),
+      workspace: { name: "   ", description: "" },
+    };
+    const errs = structuralManifestErrors(
+      portMap([
+        {
+          name: "orders",
+          in: ["PlaceOrderPort"],
+          out: ["OrderRepositoryPort"],
+        },
+      ]),
+      adapterBindings([
+        {
+          name: "orders",
+          adapters: [
+            { name: "A", implements: "PlaceOrderPort" },
+            { name: "B", implements: "OrderRepositoryPort" },
+          ],
+        },
+      ]),
+      manifest,
+    );
+    const r08 = errs.find((e) => e.startsWith("[R08]"));
+    assert.ok(r08);
+    // system missing everywhere; scope covered by the top-level fallback.
+    assert.match(r08!, /system name/);
+    assert.match(r08!, /is empty/);
+  });
 });
 
 // ── R09 (shared-kernel has ports) ────────────────────────────────────────────
