@@ -41,8 +41,10 @@ remote cache.
 
 ## Usage
 
-Push to a feature branch → CI runs. Look for `# TODO` comments in the generated workflows for
-the secrets each needs.
+Push to a feature branch → CI runs. Deploy workflows start **manual-only**
+(`workflow_dispatch`) and the preview job is gated on the `ENABLE_PREVIEW_DEPLOYS` repository
+variable, so a freshly pushed repo has zero failing checks — each generated workflow's header
+comment lists the secrets it needs and how to switch on automatic triggers.
 
 ## Notes for agents
 
@@ -53,16 +55,20 @@ the secrets each needs.
 - Only the workflow for the chosen `deploy_target` is emitted.
 - **Dependabot is tuned to avoid a first-publish PR flood.** Action bumps are
   grouped into one PR; npm minor+patch bumps are batched into one PR per
-  dependency type (`production-dependencies`, `dev-dependencies`), while **major**
-  bumps still arrive individually for careful review. To go quieter, make the npm
-  ecosystem security-only: change the npm entry's existing
+  dependency type (`production-dependencies`, `dev-dependencies`), and **major**
+  npm bumps are **ignored** outright (an `ignore` block on
+  `version-update:semver-major`) — a fresh repo is a major behind on several
+  deps at once. Delete the ignore block when you're ready to review majors one
+  at a time; security advisories open PRs regardless. To go quieter still, make
+  the npm ecosystem security-only: change the npm entry's existing
   `open-pull-requests-limit: 5` to `0` (version updates off; security updates
   still open) — trades freshness for near-zero noise on a freshly scaffolded repo.
 
 ## Checklist (post-install)
 
-Verify CI runs green; add the secrets flagged by `# TODO`; set Turbo cache vars; merge to main and
-confirm deploy triggers; open a PR to test preview deploys; review Dependabot PRs.
+Verify CI runs green; add the secrets listed in each workflow's header comment; set Turbo cache
+vars; uncomment the deploy workflow's push trigger and confirm it runs on merge to main; set
+`ENABLE_PREVIEW_DEPLOYS=true` and open a PR to test preview deploys; review Dependabot PRs.
 
 ## Related
 

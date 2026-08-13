@@ -267,7 +267,12 @@ export class SyncEngine {
           logger.error(
             "Git working tree is dirty. Commit or stash changes, or use --allow-dirty to proceed.",
           );
-          throw new Error("Dirty git tree");
+          // The thrown message is what the CLI surfaces as "Fatal sync error:
+          // ..." — it must carry the --allow-dirty hint itself (F20), because
+          // callers may not show the logger line above.
+          throw new Error(
+            "Dirty git tree — commit or stash changes, or re-run with --allow-dirty",
+          );
         }
       } catch (gitErr) {
         if (gitErr instanceof Error) {

@@ -55,6 +55,7 @@
     "Enable backing services with profiles, e.g. COMPOSE_PROFILES=redis,postgres docker compose up — or persist COMPOSE_PROFILES in .env.local",
     "Verify the app at http://localhost:3000/ — the container health check probes the health_path you chose (default /); point it at /api/health if you install the observability template",
     "Production-equivalent run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up --build",
+    "CI image builds start manual-only (workflow_dispatch) so a fresh repo has zero failing checks — once `docker build .` works locally, uncomment the push/pull_request triggers in .github/workflows/docker-build.yml",
     "ghcr.io needs no extra secrets (uses GITHUB_TOKEN). For Docker Hub/ECR, set the REGISTRY_ORG repo variable and switch the commented login step in .github/workflows/docker-build.yml"
   ],
   "branch": "feature/generator-template-docker"

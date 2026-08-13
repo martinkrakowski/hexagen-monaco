@@ -64,7 +64,7 @@ Each rule has a reason; agents follow rules they understand.
 | ----------------------------- | ----------------------------------------------------------- |
 | `AGENTS.md`                   | This contract. Change it deliberately, never as a side effect. |
 | `.agents/*.md` (except `session-log.md`) | Spec files — edit only when explicitly asked to update specs. `session-log.md` is the deliberate exception: append to it after each session. |
-| `package-lock.json`           | Updated only via `npm` commands, never by hand.             |
+| `yarn.lock`                   | Lockfile — updated only by `yarn` commands, never by hand. (Generated projects pin yarn via `packageManager`; if this repo uses npm or pnpm instead, the same rule applies to `package-lock.json` / `pnpm-lock.yaml`.) |
 | `DESIGN.md`                   | Design contract (if present). Changes require design review. |
 
 ## Mode System

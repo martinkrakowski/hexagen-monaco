@@ -103,6 +103,11 @@ dist/
 .nitro/
 .output/
 
+# Failed/partial tsc runs can leave vitest.config declaration artifacts at
+# package roots (F20) — build noise, never source; keep them out of git status.
+packages/*/vitest.config.d.ts
+packages/*/vitest.config.d.ts.map
+
 # Next.js static export — anchored to apps so a bare \`out/\` can't shadow a
 # bounded context's hexagonal \`src/application/ports/out/\` source (which a
 # pattern without a leading path matches at any depth).

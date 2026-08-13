@@ -112,8 +112,8 @@
     "Add required secrets: GitHub repo → Settings → Secrets and variables → Actions (look for the # TODO comments in the generated workflow files)",
     "Set TURBO_TOKEN (secret) and TURBO_TEAM (variable) for the remote Turbo cache — CI is much faster after the first run",
     "The 'Validate env vars' step runs `check:env`, provided by the env-setup template; delete that step if you did not install env-setup",
-    "Merge to main and verify the deploy workflow triggers (only the workflow for your chosen deploy_target was generated)",
-    "If preview deploys are enabled, open a PR and verify the preview URL comment appears",
+    "Deploy workflows start manual-only (workflow_dispatch) so a fresh repo has zero failing checks — after adding the secrets, uncomment the push trigger in the generated deploy workflow (see its header comment), then merge to main and verify it runs",
+    "If preview deploys are enabled: add the Vercel secrets, set the ENABLE_PREVIEW_DEPLOYS repository variable to true, then open a PR and verify the preview URL comment appears",
     "Dependabot opens weekly PRs to keep Actions and dev dependencies current — review and merge them"
   ],
   "branch": "feature/generator-template-ci-github-actions"

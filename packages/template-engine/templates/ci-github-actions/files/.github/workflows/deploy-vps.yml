@@ -1,15 +1,21 @@
 name: Deploy to VPS
 
-# Production deploy on every merge to main via SSH + pull/build/restart.
-# Minimal-infrastructure option for a plain VPS running pm2.
+# Production deploy via SSH + pull/build/restart — manual-only
+# (workflow_dispatch) until the VPS secrets are configured, so a freshly pushed
+# repo shows zero failed Actions runs (F20). Minimal-infrastructure option for
+# a plain VPS running pm2.
 #
-# TODO: add in GitHub repo → Settings → Secrets and variables → Actions:
-#   - VPS_HOST     (secret)  hostname or IP
-#   - VPS_USER     (secret)  ssh user
-#   - VPS_SSH_KEY  (secret)  private key with deploy access
+# TO ENABLE automatic deploys on merge to main:
+#   1. Add in GitHub repo → Settings → Secrets and variables → Actions:
+#      - VPS_HOST     (secret)  hostname or IP
+#      - VPS_USER     (secret)  ssh user
+#      - VPS_SSH_KEY  (secret)  private key with deploy access
+#   2. Uncomment the push trigger below (keep workflow_dispatch — it gives you
+#      a manual deploy button in the Actions tab).
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
 
 concurrency:
   group: deploy-production

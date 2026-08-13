@@ -1,14 +1,19 @@
 name: Deploy to Vercel
 
-# Production deploy on every merge to main.
+# Production deploy — manual-only (workflow_dispatch) until Vercel is
+# configured, so a freshly pushed repo shows zero failed Actions runs (F20).
 #
-# TODO: add these in GitHub repo → Settings → Secrets and variables → Actions:
-#   - VERCEL_TOKEN       (secret)   vercel.com → Account Settings → Tokens
-#   - VERCEL_ORG_ID      (secret)   from `vercel link` → .vercel/project.json
-#   - VERCEL_PROJECT_ID  (secret)   from `vercel link` → .vercel/project.json
+# TO ENABLE automatic deploys on merge to main:
+#   1. Add these in GitHub repo → Settings → Secrets and variables → Actions:
+#      - VERCEL_TOKEN       (secret)   vercel.com → Account Settings → Tokens
+#      - VERCEL_ORG_ID      (secret)   from `vercel link` → .vercel/project.json
+#      - VERCEL_PROJECT_ID  (secret)   from `vercel link` → .vercel/project.json
+#   2. Uncomment the push trigger below (keep workflow_dispatch — it gives you
+#      a manual deploy button in the Actions tab).
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
 
 concurrency:
   group: deploy-production

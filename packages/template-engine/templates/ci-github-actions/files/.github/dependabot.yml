@@ -15,8 +15,9 @@ updates:
   # npm: batch NON-BREAKING bumps (minor + patch) into one PR per dependency
   # type, so a freshly published repo doesn't open a wave of PRs (every dep is
   # "behind latest" at once on first push — previously production deps were
-  # ungrouped, so each one opened its own PR). MAJOR bumps still arrive
-  # individually so each potentially-breaking change is reviewed on its own.
+  # ungrouped, so each one opened its own PR). MAJOR bumps are IGNORED for the
+  # first release cycle (see the ignore block below) — a fresh repo is a major
+  # behind on several deps at once, and each major opens its own PR.
   # To go quieter still, switch npm to security-only updates — see README.
   - package-ecosystem: npm
     directory: /
@@ -30,3 +31,9 @@ updates:
       dev-dependencies:
         dependency-type: development
         update-types: ["minor", "patch"]
+    # First-release-cycle quiet mode: skip major version bumps entirely.
+    # Delete this block once the project is stable enough to review majors
+    # one at a time. Security advisories still open PRs regardless.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
