@@ -44,6 +44,12 @@ export function buildFold(input: FoldInput): string {
   // "## Brief" section, so it must not ALSO fold in as "Human steering"
   // (duplicated brief, '- '-mangled multi-line text, skewed "must be honored"
   // framing on the very first proposer turn).
+  //
+  // This fold is the ONLY consumer of steering turns, and it only ever feeds
+  // the NEXT model turn — so steering persisted after the loop ends
+  // (converged/finalizing) is intentionally inert in the transcript; the UI
+  // stops offering the steering composer there (canConsumeSteering in
+  // planning-session.ts).
   const steering = humanTurnsSinceLastModelTurn(turns.slice(1));
 
   const sections: string[] = [

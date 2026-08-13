@@ -6,8 +6,10 @@ import {
   planningSessionReducer as reduce,
   sessionStateFromLayer,
   roleForStatus,
+  canConsumeSteering,
   DEFAULT_MAX_ROUNDS,
   type PlanningSessionState,
+  type SessionStatus,
 } from "../session/planning-session";
 
 describe("planningSessionReducer", () => {
@@ -250,5 +252,34 @@ describe("sessionStateFromLayer (interrupted-session recovery)", () => {
     });
     assert.strictEqual(s.awaitReason, "paused");
     assert.strictEqual(s.resumeStatus, "proposing");
+  });
+});
+
+describe("canConsumeSteering (decision D4)", () => {
+  it("true exactly while a future model turn can fold the note in", () => {
+    const consuming: SessionStatus[] = [
+      "proposing",
+      "critiquing",
+      "revising",
+      "awaiting-human",
+    ];
+    for (const status of consuming) {
+      assert.strictEqual(canConsumeSteering(status), true, status);
+    }
+  });
+
+  it("false once the loop has ended: converged, finalizing, done", () => {
+    const ended: SessionStatus[] = ["converged", "finalizing", "done"];
+    for (const status of ended) {
+      assert.strictEqual(canConsumeSteering(status), false, status);
+    }
+  });
+
+  it("matches the reducer: RESUME from converged is an identity no-op (no model turn could ever consume the note)", () => {
+    let s = initialSessionState();
+    s = reduce(s, { type: "PROPOSAL_DONE" });
+    s = reduce(s, { type: "CRITIQUE_DONE", verdict: "converged" });
+    assert.strictEqual(s.status, "converged");
+    assert.strictEqual(reduce(s, { type: "RESUME" }), s);
   });
 });

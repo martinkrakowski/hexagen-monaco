@@ -8,7 +8,7 @@ vi.stubGlobal("crypto", {
   randomUUID: () => `uuid-${(uuidCounter += 1)}`,
 } as unknown as Crypto);
 
-import { describe, it, vi, beforeEach, beforeAll, afterAll } from "vitest";
+import { describe, it, vi, beforeEach } from "vitest";
 import assert from "node:assert/strict";
 import React from "react";
 import {
@@ -70,6 +70,7 @@ vi.mock("next/navigation", async () =>
 import { navState } from "./nav-stub";
 import { PlanPhaseView } from "../PlanPhaseView";
 import { emptyFormValues } from "../../../project-wizard/config";
+import { installResizeObserverStub } from "../../../../__tests__/support/resize-observer-stub";
 
 function PlanFormHarness({ children }: { children: React.ReactNode }) {
   const form = useForm({ defaultValues: emptyFormValues });
@@ -86,24 +87,7 @@ HTMLDialogElement.prototype.close = function () {
 };
 
 // Desktop workbench = react-resizable-panels = ResizeObserver (absent in jsdom).
-const hadResizeObserver = "ResizeObserver" in globalThis;
-const originalResizeObserver = globalThis.ResizeObserver;
-beforeAll(() => {
-  if (!globalThis.ResizeObserver) {
-    globalThis.ResizeObserver = class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    } as unknown as typeof ResizeObserver;
-  }
-});
-afterAll(() => {
-  if (hadResizeObserver) {
-    globalThis.ResizeObserver = originalResizeObserver;
-  } else {
-    delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
-  }
-});
+installResizeObserverStub();
 
 const DEFAULT_WIDTH = 1024;
 function setViewportWidth(width: number) {

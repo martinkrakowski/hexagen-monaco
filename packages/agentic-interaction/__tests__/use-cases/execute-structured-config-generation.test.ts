@@ -129,6 +129,61 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
     }
   });
 
+  it("logs an accurate skip message for shared-kernel contexts instead of 'LLM returned no ports'", async () => {
+    // Stage 3 skips shared-kernels BY DESIGN (type-only contracts, R09 —
+    // execute-port-mapping.use-case.ts), so they always land in the
+    // no-LLM-output fallback loop; logging "LLM returned no ports — leaving
+    // empty" there misread the deliberate skip as a model failure (2026-08-13
+    // prod run log residual).
+    const mockPort = createMockSendStructuredRequest();
+    const mockTx = createMockTransactionManager();
+    const useCase = new ExecuteStructuredConfigGenerationUseCase(
+      mockPort,
+      mockTx,
+    );
+    const config = {
+      bounded_contexts: [
+        { name: "billing", type: "core" },
+        { name: "shared-types", type: "shared-kernel" },
+      ],
+      use_cases: { billing: [{ name: "Process Billing" }] },
+      context_mappings: [],
+    };
+    const chunks: string[] = [];
+    const result = await useCase.execute(JSON.stringify(config), {
+      onChunk: (chunk) => {
+        chunks.push(chunk);
+      },
+    });
+    assert.strictEqual(result.success, true);
+
+    const sharedKernelLines = chunks.filter((c) =>
+      c.startsWith("shared-types:"),
+    );
+    // The accurate by-design message is present...
+    assert.ok(
+      sharedKernelLines.some((c) =>
+        c.includes("shared-kernel (type-only contracts)"),
+      ),
+      `expected an accurate shared-kernel skip line, got: ${JSON.stringify(chunks)}`,
+    );
+    // ...and the misleading model-failure line is gone for this context.
+    assert.ok(
+      !sharedKernelLines.some((c) => c.includes("LLM returned no ports")),
+      `shared-kernel context still logged as an LLM failure: ${JSON.stringify(sharedKernelLines)}`,
+    );
+    // Non-shared-kernel contexts that genuinely got no LLM output keep the
+    // original wording (billing DID get ports here, so no such line exists —
+    // pin that the new message never leaks onto other contexts).
+    assert.ok(
+      !chunks.some(
+        (c) =>
+          c.startsWith("billing:") &&
+          c.includes("shared-kernel (type-only contracts)"),
+      ),
+    );
+  });
+
   it("invokes onProgress callbacks during stages", async () => {
     const mockPort = createMockSendStructuredRequest();
     const mockTx = createMockTransactionManager();

@@ -1,4 +1,4 @@
-import { describe, it, vi, beforeEach, beforeAll, afterAll } from "vitest";
+import { describe, it, vi, beforeEach } from "vitest";
 import assert from "node:assert/strict";
 import React from "react";
 import {
@@ -38,6 +38,7 @@ vi.mock("next/navigation", async () =>
 import { navState } from "./nav-stub";
 
 import { PlanPhaseView } from "../PlanPhaseView";
+import { installResizeObserverStub } from "../../../../__tests__/support/resize-observer-stub";
 
 // PlanPhaseView renders ProjectSettingsSection, whose fields read the shared
 // wizard form via `useFormContext`; wrap every render in a FormProvider harness
@@ -58,24 +59,7 @@ HTMLDialogElement.prototype.close = function () {
 };
 
 // The desktop workbench renders react-resizable-panels → needs ResizeObserver.
-const hadResizeObserver = "ResizeObserver" in globalThis;
-const originalResizeObserver = globalThis.ResizeObserver;
-beforeAll(() => {
-  if (!globalThis.ResizeObserver) {
-    globalThis.ResizeObserver = class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    } as unknown as typeof ResizeObserver;
-  }
-});
-afterAll(() => {
-  if (hadResizeObserver) {
-    globalThis.ResizeObserver = originalResizeObserver;
-  } else {
-    delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
-  }
-});
+installResizeObserverStub();
 
 const bodyText = () => (document.body.textContent || "").replace(/\s+/g, " ");
 
@@ -741,6 +725,30 @@ describe("PlanPhaseView composer modes", () => {
       document.querySelector('textarea[aria-label="Steering note"]'),
       null,
     );
+  });
+
+  it("converged/finalizing session: composer hidden (steering has no consumer — D4 soft gate)", () => {
+    // A note typed here would provably never be read: steering only folds
+    // into the NEXT model turn, and none runs after convergence (fold.ts /
+    // distill.ts / canConsumeSteering). Hidden, not disabled, mirroring done.
+    for (const status of ["converged", "finalizing"] as const) {
+      cleanup();
+      planningSession.current = makeSession({
+        activeLayerId: "L-active",
+        sessionState: { status, round: 2, maxRounds: 4 },
+      });
+      render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
+      assert.equal(
+        document.querySelector('textarea[aria-label="Session brief"]'),
+        null,
+        `no seed composer at ${status}`,
+      );
+      assert.equal(
+        document.querySelector('textarea[aria-label="Steering note"]'),
+        null,
+        `no steering composer at ${status}`,
+      );
+    }
   });
 });
 

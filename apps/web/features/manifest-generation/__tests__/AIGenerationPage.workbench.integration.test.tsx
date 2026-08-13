@@ -17,7 +17,7 @@ vi.stubGlobal("crypto", {
   randomUUID: () => `uuid-${(uuidCounter += 1)}`,
 } as unknown as Crypto);
 
-import { describe, it, vi, beforeEach, beforeAll, afterAll } from "vitest";
+import { describe, it, vi, beforeEach } from "vitest";
 import assert from "node:assert/strict";
 import React from "react";
 import {
@@ -105,6 +105,7 @@ import {
   loadGenesisFormValues,
 } from "../genesis-workbench/genesisProjectSettingsStore";
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
+import { installResizeObserverStub } from "../../../__tests__/support/resize-observer-stub";
 
 // jsdom has no <dialog>: the local-generation warning dialog calls showModal.
 HTMLDialogElement.prototype.showModal = function () {
@@ -116,24 +117,7 @@ HTMLDialogElement.prototype.close = function () {
 
 // The workbench's desktop layout is react-resizable-panels, which requires
 // ResizeObserver (absent in jsdom).
-const hadResizeObserver = "ResizeObserver" in globalThis;
-const originalResizeObserver = globalThis.ResizeObserver;
-beforeAll(() => {
-  if (!globalThis.ResizeObserver) {
-    globalThis.ResizeObserver = class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    } as unknown as typeof ResizeObserver;
-  }
-});
-afterAll(() => {
-  if (hadResizeObserver) {
-    globalThis.ResizeObserver = originalResizeObserver;
-  } else {
-    delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
-  }
-});
+installResizeObserverStub();
 
 // Keep every network consumer quiet AND in-flight by default: the capability
 // probe stays unresolved (irrelevant behind the server-key fast-pass) and the
@@ -230,8 +214,8 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     assert.ok(screen.getByRole("button", { name: /sessions & sources/i }));
 
     // Section A is the plan-phase field set, seeded from the carried name.
-    const workspaceNameInput = document.querySelector(
-      'input[placeholder="@mycompany"]',
+    const workspaceNameInput = screen.getByLabelText(
+      "Workspace Name",
     ) as HTMLInputElement;
     assert.ok(workspaceNameInput, "genesis settings form renders");
     assert.equal(
@@ -366,6 +350,67 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     assert.equal(nav.push.mock.calls.length, 0);
   });
 
+  it("renders the done event's Stage-6 findings on the parked view with the /spec flow's presentation (validation parity)", async () => {
+    // The /stage route now attaches the Stage-6 report to its terminal done
+    // event (previously dropped — plan §3.5); the parked telemetry view must
+    // present it exactly like the /spec import flow: reviewer findings under
+    // "optional improvements", auto-applied advisories bucketed as
+    // adjustments (shared ValidationFindingsPanel).
+    const doneWithValidation = `${JSON.stringify({
+      type: "done",
+      yaml: DONE_MANIFEST_YAML,
+      contextCount: 1,
+      portCount: 0,
+      adapterCount: 0,
+      validation: {
+        errors: ["[R14] Port 'UserPort' does not reflect a use case."],
+        warnings: [
+          "Consider a query port for user reads.",
+          // Auto-applied advisory signature (prefix + rule marker) — must be
+          // bucketed as an adjustment, not a suggestion.
+          "Auto-added a default repository port 'UserRepositoryPort' and adapter 'UserRepositoryAdapter' to context 'UserContext' — every context needs persistence (R03). Review and rename to fit your domain.",
+        ],
+        passed: false,
+      },
+    })}\n`;
+    fetchMock.mockImplementation((input: RequestInfo | URL) =>
+      String(input) === STAGE_ENDPOINT
+        ? Promise.resolve(new Response(doneWithValidation, { status: 200 }))
+        : pendingForever(),
+    );
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+
+    fireEvent.change(composerTextarea(), {
+      target: { value: VALID_DESCRIPTION },
+    });
+    submitComposer();
+
+    // Run completes and parks (footer Next present) — the findings panel
+    // renders alongside the telemetry log.
+    await waitFor(() =>
+      assert.ok(screen.getByRole("button", { name: "Next" })),
+    );
+    // 1 error + 1 reviewer warning → "1 finding and 1 suggestion"; the R03
+    // advisory is NOT counted here (it's an adjustment).
+    assert.ok(
+      screen.getByText(/1 finding and 1 suggestion from the review/, {
+        exact: false,
+      }),
+    );
+    assert.ok(
+      screen.getByText(/1 adjustment was.*applied automatically/, {
+        // summary text is broken across inline nodes
+        exact: false,
+      }),
+    );
+    // The adjustment notice's remedy must be route-appropriate: /stage has no
+    // source spec to re-import, so the panel's /spec default may not leak in.
+    assert.ok(screen.getByText(/adjust your prompt and generate again/i));
+    assert.equal(screen.queryByText(/re-import/i), null);
+    // Still parked — surfacing findings must not introduce auto-navigation.
+    assert.equal(nav.push.mock.calls.length, 0);
+  });
+
   it("preserves the explicit-local path: warning dialog first, then Continue detours through /models when no model is ready or remembered", async () => {
     useExecutionEngine.setState({ engine: "local" });
     render(<AIGenerationPage llmContext={makeLlmContext()} />);
@@ -429,8 +474,8 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     render(<AIGenerationPage llmContext={makeLlmContext()} />);
 
     // Edit Section A while the flow has no carried name.
-    const workspaceNameInput = document.querySelector(
-      'input[placeholder="@mycompany"]',
+    const workspaceNameInput = screen.getByLabelText(
+      "Workspace Name",
     ) as HTMLInputElement;
     fireEvent.change(workspaceNameInput, {
       target: { value: "vellum-edited" },
@@ -466,8 +511,8 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     nav.searchParams = new URLSearchParams("");
     render(<AIGenerationPage llmContext={makeLlmContext()} />);
 
-    const workspaceNameInput = document.querySelector(
-      'input[placeholder="@mycompany"]',
+    const workspaceNameInput = screen.getByLabelText(
+      "Workspace Name",
     ) as HTMLInputElement;
     fireEvent.change(workspaceNameInput, {
       target: { value: "abandoned-edit" },
@@ -535,11 +580,9 @@ describe("AIGenerationPage — Plan Workbench C2", () => {
     screen.getByRole("region", { name: "Generation options" });
 
   const workspaceNameInput = () =>
-    document.querySelector(
-      'input[placeholder="@mycompany"]',
-    ) as HTMLInputElement;
+    screen.getByLabelText("Workspace Name") as HTMLInputElement;
   const namespacePrefixInput = () =>
-    document.querySelector('input[placeholder="@hexagen"]') as HTMLInputElement;
+    screen.getByLabelText("Namespace Prefix") as HTMLInputElement;
 
   /** Drive a full run to the parked telemetry view and click the footer's
    * explicit Next — the hand-off that fills usePendingManifest. Callers must

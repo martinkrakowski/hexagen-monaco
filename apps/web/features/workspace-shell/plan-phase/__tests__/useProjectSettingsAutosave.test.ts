@@ -1,6 +1,8 @@
-// emptyFormValues seeds a bounded context id via crypto.randomUUID at module
-// eval, so crypto must be stubbed BEFORE that import. (crypto is getter-only in
-// Node — assign it via vi.stubGlobal, not `global.crypto =`.)
+// crypto is a getter-only global in Node, so stub it via vi.stubGlobal (a plain
+// `global.crypto =` throws "has only a getter"). Textual position is cosmetic:
+// Vitest hoists imports, so emptyFormValues' module-eval id is minted by the
+// REAL crypto.randomUUID before this line runs — the stub only makes any ids
+// minted at RUNTIME deterministic, and no assertion reads either batch.
 let uuidCounter = 0;
 vi.stubGlobal("crypto", {
   randomUUID: () => `uuid-${(uuidCounter += 1)}`,

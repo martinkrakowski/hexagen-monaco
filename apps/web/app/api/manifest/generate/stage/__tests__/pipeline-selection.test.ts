@@ -1,6 +1,8 @@
 import { test, describe } from "vitest";
 import assert from "node:assert";
+import type { PipelineState } from "@hexagen/agentic-interaction";
 import {
+  buildDoneEvent,
   createFullPipelineEventAdapter,
   STAGE_LABELS,
   type StageRouteEvent,
@@ -127,5 +129,155 @@ describe("createFullPipelineEventAdapter", () => {
         "Validation Review",
       ],
     );
+  });
+});
+
+describe("buildDoneEvent", () => {
+  // The terminal `done` event for a successful run: yaml + counts as before,
+  // plus the previously-dropped Stage-6 report as an OPTIONAL, ADDITIVE
+  // `validation` field mirroring the /spec route's done-event shape.
+
+  function successState(overrides?: Partial<PipelineState>): PipelineState {
+    return {
+      stage2: {
+        accepted: [
+          {
+            name: "billing",
+            type: "core",
+            reasoning: "core revenue",
+          },
+          {
+            name: "notifications",
+            type: "supporting",
+            reasoning: "sends emails",
+          },
+        ],
+        rejected: [],
+        uncertain: [],
+      },
+      stage3: {
+        contexts: [
+          {
+            contextName: "billing",
+            in: [
+              {
+                name: "CreateInvoicePort",
+                type: "command",
+                description: "create",
+              },
+            ],
+            out: [
+              {
+                name: "InvoiceRepositoryPort",
+                type: "repository",
+                description: "persist",
+              },
+            ],
+          },
+          {
+            contextName: "notifications",
+            in: [
+              { name: "NotifyPort", type: "command", description: "notify" },
+            ],
+            out: [],
+          },
+        ],
+      },
+      stage4: {
+        contexts: [
+          {
+            contextName: "billing",
+            adapters: [
+              {
+                name: "InvoiceRepositoryAdapter",
+                type: "Repository",
+                implements: "InvoiceRepositoryPort",
+              },
+            ],
+          },
+        ],
+      },
+      stage5: {
+        yaml: "workspace:\n  name: my-system\n",
+        parsedObject: {},
+      },
+      ...overrides,
+    };
+  }
+
+  test("includes the Stage-6 report as `validation` with exact {errors, warnings, passed} shape", () => {
+    const event = buildDoneEvent(
+      successState({
+        stage6: {
+          errors: ["[R02] Context 'billing' has no inbound port."],
+          warnings: ["Consider a query port for reads."],
+          passed: false,
+        },
+      }),
+      "txn-1",
+    );
+    assert.deepStrictEqual(event, {
+      type: "done",
+      yaml: "workspace:\n  name: my-system\n",
+      contextCount: 2,
+      portCount: 3,
+      adapterCount: 1,
+      transactionId: "txn-1",
+      validation: {
+        errors: ["[R02] Context 'billing' has no inbound port."],
+        warnings: ["Consider a query port for reads."],
+        passed: false,
+      },
+    });
+  });
+
+  test("omits `validation` entirely when the pipeline produced no Stage-6 report (additive contract)", () => {
+    const event = buildDoneEvent(successState(), "txn-2");
+    assert.strictEqual(event.type, "done");
+    // OMITTED, not null/undefined-valued: older consumers must see a payload
+    // indistinguishable from the pre-validation contract.
+    assert.ok(!("validation" in event));
+    assert.strictEqual(
+      event.type === "done" ? event.transactionId : "",
+      "txn-2",
+    );
+  });
+
+  test("counts and yaml match the previous inline computation (parity guard)", () => {
+    const event = buildDoneEvent(successState(), "txn-3");
+    assert.deepStrictEqual(event, {
+      type: "done",
+      yaml: "workspace:\n  name: my-system\n",
+      contextCount: 2,
+      portCount: 3,
+      adapterCount: 1,
+      transactionId: "txn-3",
+    });
+  });
+
+  test("defaults for a sparse state: empty yaml and zero counts", () => {
+    const event = buildDoneEvent({}, "txn-4");
+    assert.deepStrictEqual(event, {
+      type: "done",
+      yaml: "",
+      contextCount: 0,
+      portCount: 0,
+      adapterCount: 0,
+      transactionId: "txn-4",
+    });
+  });
+
+  test("a passing Stage-6 report with no findings is still forwarded", () => {
+    // The client keys its findings panel on report CONTENT, not presence —
+    // but the route must not second-guess that and drop an empty report.
+    const event = buildDoneEvent(
+      successState({ stage6: { errors: [], warnings: [], passed: true } }),
+      "txn-5",
+    );
+    assert.deepStrictEqual(event.type === "done" ? event.validation : null, {
+      errors: [],
+      warnings: [],
+      passed: true,
+    });
   });
 });

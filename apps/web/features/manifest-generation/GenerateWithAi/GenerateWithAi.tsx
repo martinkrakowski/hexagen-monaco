@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
+import { withCarriedName } from "../carriedName";
 import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelectionFlowState";
 import { useStagedManifestGeneration } from "../useStagedManifestGeneration";
 import { getModelPreferences } from "../ModelSelectionFlow/modelPreferencesStorage";
@@ -172,11 +173,8 @@ export function GenerateWithAi({
       // snapshot and seeds carriedName, and ModelSelectionPage echoes it back
       // on both return legs — dropping it here would reseed Section A from
       // blank when the user returns.
-      const detourName = searchParams.get("name");
       router.push(
-        detourName
-          ? `/projects/new/ai/models?name=${encodeURIComponent(detourName)}`
-          : "/projects/new/ai/models",
+        withCarriedName("/projects/new/ai/models", searchParams.get("name")),
       );
     },
     [modelSelectionIntent, router, searchParams],
@@ -223,10 +221,10 @@ export function GenerateWithAi({
   // wipe them on the next accept Back/Regenerate round trip. (The /models
   // detour carries the name too: navigateToModelSelection forwards it and
   // ModelSelectionPage echoes it back on both return legs.)
-  const inboundName = searchParams.get("name");
-  const autoStartConsumedUrl = inboundName
-    ? `/projects/new/ai?name=${encodeURIComponent(inboundName)}`
-    : "/projects/new/ai";
+  const autoStartConsumedUrl = withCarriedName(
+    "/projects/new/ai",
+    searchParams.get("name"),
+  );
 
   useEffect(() => {
     if (!hasReturnedFromModelSelection) return;
@@ -334,6 +332,7 @@ export function GenerateWithAi({
             stepDetail={stagedGen.stepDetail}
             stageProgress={stagedGen.stageProgress}
             verboseLog={stagedGen.verboseLog}
+            validationReport={stagedGen.validationReport}
           />
         </div>
       ),

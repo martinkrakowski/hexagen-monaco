@@ -151,6 +151,19 @@ describe("isAutoAppliedNotice", () => {
     );
   });
 
+  test("matches the R02 inbound-port synthesis advisory (same bucket as its R03 counterpart)", () => {
+    // R02 and R03 synthesis advisories take the identical server-side path
+    // (assemblyAdvisories → report warnings); missing the R02 signature here
+    // split identical auto-applied adds across "suggestions" and
+    // "adjustments" in the findings panel.
+    assert.equal(
+      isAutoAppliedNotice(
+        "Auto-added a default inbound command port 'InvoicingBillingCommandPort' and adapter 'InvoicingBillingCommandAdapter' to context 'invoicing-billing' — the spec declared no inbound ports (R02). Review and rename to fit your domain.",
+      ),
+      true,
+    );
+  });
+
   test("matches the R01 context-rename advisory", () => {
     assert.equal(
       isAutoAppliedNotice(
@@ -188,6 +201,12 @@ describe("isAutoAppliedNotice", () => {
     assert.equal(
       isAutoAppliedNotice(
         "Auto-added a default repository port would simplify this context.",
+      ),
+      false,
+    );
+    assert.equal(
+      isAutoAppliedNotice(
+        "Auto-added a default inbound command port could improve this context.",
       ),
       false,
     );

@@ -30,6 +30,7 @@ import {
 } from "./AddPlanningSessionView";
 import { LiveSessionSection } from "./LiveSessionSection";
 import { usePlanningSession } from "./session/usePlanningSession";
+import { canConsumeSteering } from "./session/planning-session";
 import type { NewProjectLayer } from "@/hooks/useSavedProjects";
 
 export interface PlanPhaseViewProps {
@@ -356,12 +357,17 @@ export function PlanPhaseView({
 
   // ── Composer wiring (right pane, pinned bottom) ───────────────────────────
   const sessionStatus = session.sessionState?.status ?? null;
+  // Steering is offered only while a future model turn can still consume it:
+  // at converged/finalizing the composer HIDES like it does at done (decision
+  // D4, soft form — the right pane already shows the "Finalize to distill…"
+  // hint there), because a note added then would provably never be read (see
+  // canConsumeSteering).
   const composerMode: "seed" | "steering" | "hidden" =
     resolvedView.kind !== "live"
       ? "hidden"
       : sessionStatus === null
         ? "seed"
-        : sessionStatus !== "done"
+        : canConsumeSteering(sessionStatus)
           ? "steering"
           : "hidden";
 

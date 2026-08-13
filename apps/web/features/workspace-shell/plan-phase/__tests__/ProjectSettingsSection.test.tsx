@@ -1,5 +1,8 @@
-// emptyFormValues seeds a bounded-context id via crypto.randomUUID at module
-// eval, so crypto must be stubbed BEFORE that import.
+// crypto is a getter-only global in Node, so stub it via vi.stubGlobal (a plain
+// `global.crypto =` throws "has only a getter"). Textual position is cosmetic:
+// Vitest hoists imports, so emptyFormValues' module-eval id is minted by the
+// REAL crypto.randomUUID before this line runs — the stub only makes any ids
+// minted at RUNTIME deterministic, and no assertion reads either batch.
 let uuidCounter = 0;
 vi.stubGlobal("crypto", {
   randomUUID: () => `uuid-${(uuidCounter += 1)}`,
@@ -8,7 +11,13 @@ vi.stubGlobal("crypto", {
 import { describe, it, vi, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import React from "react";
-import { render, cleanup, fireEvent, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  cleanup,
+  fireEvent,
+  act,
+} from "@testing-library/react";
 import { FormProvider, useForm } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 import { emptyFormValues } from "../../../project-wizard/config";
@@ -36,7 +45,7 @@ function renderSection(
 }
 
 const workspaceNameInput = () =>
-  document.querySelector('input[placeholder="@mycompany"]') as HTMLInputElement;
+  screen.getByLabelText("Workspace Name") as HTMLInputElement;
 
 describe("ProjectSettingsSection", () => {
   it("renders the governance fields under a labeled section", () => {

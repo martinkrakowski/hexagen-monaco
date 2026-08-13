@@ -1,5 +1,6 @@
 import type {
   FullStagedGenerationCallbacks,
+  PipelineState,
   StageTelemetry,
 } from "@hexagen/agentic-interaction";
 
@@ -41,8 +42,60 @@ export type StageRouteEvent =
       portCount: number;
       adapterCount: number;
       transactionId: string;
+      /**
+       * Stage-6 review findings on the (successfully produced) manifest —
+       * advisory, mirrors the /spec route's done event so both flows surface
+       * the same report shape. OPTIONAL and ADDITIVE: older payloads without
+       * it remain valid, and consumers must treat its absence as "no report"
+       * — this is a backward-compatible extension of the NDJSON contract,
+       * not a breaking change.
+       */
+      validation?: { errors: string[]; warnings: string[]; passed: boolean };
     }
   | { type: "error"; message: string };
+
+/**
+ * Builds the terminal `done` event from a successful pipeline run. Extracted
+ * from the route handler so the counts + Stage-6 `validation` projection are
+ * unit-testable without standing up the streaming/quota/rate-limit stack.
+ *
+ * `validation` is picked field-by-field (not passed by reference) so the wire
+ * shape stays exactly `{errors, warnings, passed}` even if `ValidationReport`
+ * grows server-only fields later. Omitted when the pipeline produced no
+ * Stage-6 report (the field is optional/additive — see the type above).
+ */
+export function buildDoneEvent(
+  state: PipelineState,
+  transactionId: string,
+): StageRouteEvent {
+  const yaml = state.stage5?.yaml || "";
+  const contextCount = state.stage2?.accepted.length ?? 0;
+  const portCount =
+    state.stage3?.contexts.reduce(
+      (sum, c) => sum + c.in.length + c.out.length,
+      0,
+    ) ?? 0;
+  const adapterCount =
+    state.stage4?.contexts.reduce((sum, c) => sum + c.adapters.length, 0) ?? 0;
+
+  return {
+    type: "done",
+    yaml,
+    contextCount,
+    portCount,
+    adapterCount,
+    transactionId,
+    ...(state.stage6
+      ? {
+          validation: {
+            errors: state.stage6.errors,
+            warnings: state.stage6.warnings,
+            passed: state.stage6.passed,
+          },
+        }
+      : {}),
+  };
+}
 
 /**
  * Adapts `FullStagedGenerationCallbacks` to the route's NDJSON events.
