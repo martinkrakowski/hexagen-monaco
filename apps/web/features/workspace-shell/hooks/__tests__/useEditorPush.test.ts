@@ -22,6 +22,8 @@ const harness = vi.hoisted(() => {
     warns: [] as string[],
     /** When set, updateProjectRecord fails with this error instead of writing. */
     failWith: null as null | { kind: string; message: string },
+    /** When set, updateProjectRecord REJECTS (throwing port) instead of writing. */
+    rejectWith: null as null | Error,
   };
   const port = {
     loadProjects: async () => {
@@ -38,6 +40,9 @@ const harness = vi.hoisted(() => {
       updater: (p: Record<string, unknown>) => Record<string, unknown>,
     ) => {
       state.updateCalls.push(id);
+      if (state.rejectWith) {
+        throw state.rejectWith;
+      }
       if (state.failWith) {
         return { success: false as const, error: state.failWith };
       }
@@ -132,6 +137,7 @@ describe("useEditorPush — record-level persistCommitSha (ADR-0045 follow-up)",
     harness.state.updateCalls = [];
     harness.state.warns = [];
     harness.state.failWith = null;
+    harness.state.rejectWith = null;
     harness.postJson.mockReset();
     vi.spyOn(window, "open").mockImplementation(() => null);
   });
@@ -197,6 +203,26 @@ describe("useEditorPush — record-level persistCommitSha (ADR-0045 follow-up)",
     });
 
     assert.strictEqual(result.current.pushError, null);
+    assert.deepStrictEqual(harness.state.warns, [
+      "Failed to persist commit sha to saved project",
+    ]);
+  });
+
+  it("a THROWING port is contained: the push still completes and opens the commit page", async () => {
+    mockPushOk("sha-4");
+    const { result, onPushed } = await renderConnectedHook();
+    harness.state.rejectWith = new Error("adapter rejected");
+
+    await act(async () => {
+      await (result.current.onPush as () => Promise<void>)();
+    });
+
+    // The rejection must not escape handlePush (which has no catch arm): the
+    // push completed, the successful-push tail ran, and the failure surfaced
+    // only as the best-effort warn.
+    assert.strictEqual(onPushed.mock.calls.length, 1);
+    assert.strictEqual(result.current.pushError, null);
+    assert.strictEqual(vi.mocked(window.open).mock.calls.length, 1);
     assert.deepStrictEqual(harness.state.warns, [
       "Failed to persist commit sha to saved project",
     ]);

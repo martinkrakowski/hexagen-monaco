@@ -86,18 +86,29 @@ export function useEditorPush({
       if (!projectId) return;
       const persistence = getSavedProjectsPersistence();
       const nextLink: GitHubLink = { ...link, lastCommitSha: commitSha };
-      const result = await persistence.updateProjectRecord(projectId, (p) => ({
-        ...p,
-        githubLink: nextLink,
-        updatedAt: Date.now(),
-      }));
-      if (result.success) setGithubLink(nextLink);
-      else {
-        getLogger().warn(
-          result.error.kind === "NotFound"
-            ? "Skipped persisting commit sha — the saved project no longer exists"
-            : "Failed to persist commit sha to saved project",
+      // Contain a THROWING port too, not just failed Results: handlePush has
+      // no catch arm, so an escaped rejection would reject the whole push flow
+      // — skipping the commit-page open — after GitHub already accepted the
+      // commit. Mirrors the throwing-port hardening in useSavedProjects.
+      try {
+        const result = await persistence.updateProjectRecord(
+          projectId,
+          (p) => ({
+            ...p,
+            githubLink: nextLink,
+            updatedAt: Date.now(),
+          }),
         );
+        if (result.success) setGithubLink(nextLink);
+        else {
+          getLogger().warn(
+            result.error.kind === "NotFound"
+              ? "Skipped persisting commit sha — the saved project no longer exists"
+              : "Failed to persist commit sha to saved project",
+          );
+        }
+      } catch {
+        getLogger().warn("Failed to persist commit sha to saved project");
       }
     },
     [projectId],
