@@ -56,7 +56,11 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
     useState<GeneratingFooterActions | null>(null);
 
   const handleUseManifest = useCallback(
-    (yaml: string, validationReport?: StageValidationReport | null) => {
+    (
+      yaml: string,
+      validationReport?: StageValidationReport | null,
+      validationPending?: boolean,
+    ) => {
       try {
         setParseError(null);
         const wizardData = parseManifestToWizardData(yaml);
@@ -135,7 +139,14 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
           // the stored YAML.
           null,
           validationReport ?? null,
+          // Part B-lite: true when the user continued with the early Stage-5
+          // manifest while the Stage-6 review was still streaming — the
+          // accept view notes that findings are unavailable for this run.
+          validationPending ?? false,
         );
+        // User-click navigation (the footer's Next) — NOT an auto-navigate
+        // from a success arm; the flow parks on the telemetry screen until
+        // the user advances.
         router.push("/projects/new/ai/accept");
       } catch (error) {
         const message =
@@ -150,14 +161,41 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
 
   const renderFooter = () => {
     if (generatingActions) {
-      // Once generation completes, GenerateWithAi supplies onNext and the
-      // flow parks on the telemetry screen; a parse failure on Next retires
-      // the button (the inline parseError above the content explains why).
-      const isComplete = Boolean(generatingActions.onNext);
+      // GenerateWithAi supplies onNext once the manifest exists — either the
+      // parked completed run, or (Part B-lite) the early Stage-5 manifest
+      // while validation still streams (validationPending). A parse failure
+      // on Next retires the button (the inline parseError above the content
+      // explains why).
+      const hasNext = Boolean(generatingActions.onNext);
+      // The run is genuinely parked (complete) only when Next is offered
+      // WITHOUT the validating flag — with it, the run is still in flight,
+      // so the leave-action keeps its "Cancel" label.
+      const isParked = hasNext && !generatingActions.validationPending;
       return (
         <>
-          <span />
+          {/* Left footer slot: subtle post-repair note (Part B-lite). Shown
+              only when the final yaml differs from the early Stage-5 one. */}
+          {generatingActions.manifestUpdatedByRepair ? (
+            <span className="text-xs text-muted-foreground self-center">
+              Manifest updated by validation repair
+            </span>
+          ) : (
+            <span />
+          )}
           <div className="flex items-center gap-2">
+            {/* "Validating…" affordance: Next is usable, but Stage 6 is
+                still reviewing — continuing now means the accept view shows
+                findings as unavailable. aria-live so the state change is
+                announced when the frame arrives mid-run. */}
+            {hasNext && generatingActions.validationPending && !parseError && (
+              <span
+                className="text-xs text-muted-foreground"
+                role="status"
+                aria-live="polite"
+              >
+                Validating manifest…
+              </span>
+            )}
             <Button
               variant="secondary"
               onClick={() => {
@@ -165,9 +203,9 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
                 generatingActions.onCancel();
               }}
             >
-              {isComplete ? "Go Back" : "Cancel"}
+              {isParked ? "Go Back" : "Cancel"}
             </Button>
-            {isComplete && !parseError && (
+            {hasNext && !parseError && (
               <Button onClick={generatingActions.onNext}>
                 Next
                 <ArrowRight className="h-4 w-4 ml-2" />

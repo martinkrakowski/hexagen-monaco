@@ -74,6 +74,15 @@ export interface UseStagedSpecGenerationReturn {
   isGenerating: boolean;
   generationError: string | null;
   generatedManifest: string | null;
+  /**
+   * Early Stage-5 manifest (Part B-lite) from the cloud pipeline's
+   * NON-terminal `manifest` frame — set while the Stage-6 review (and any
+   * Stage-7 repair) is still streaming, so the UI can offer the manifest
+   * before `done`. `generatedManifest` (the `done` yaml) supersedes it; kept
+   * set after completion so consumers can detect a repair-driven difference.
+   * Always null on the local path.
+   */
+  earlyManifest: string | null;
   phase: StagedPhase;
   stepDetail: string;
   stageProgress: Record<number, StageProgress>;
@@ -110,6 +119,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
   const [generatedManifest, setGeneratedManifest] = useState<string | null>(
     null,
   );
+  const [earlyManifest, setEarlyManifest] = useState<string | null>(null);
   const [phase, setPhase] = useState<StagedPhase>("idle");
   const [stepDetail, setStepDetail] = useState("");
   const [stageProgress, setStageProgress] = useState<
@@ -175,12 +185,21 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
       setVerboseLog([...engineLogRef.current, ...chunkStage.chunks]);
     }
 
+    // Early manifest (Part B-lite): mirrored OUTSIDE the isGenerating guard
+    // for the same last-batch reason as the verbose log above. Only non-null
+    // values are mirrored (set at most once per run); clearing is owned by
+    // generateFromSpec's reset block and reset().
+    if (stream.earlyManifest !== null) {
+      setEarlyManifest(stream.earlyManifest);
+    }
+
     if (!stream.isGenerating) return;
     setPhase(stream.phase);
     if (stream.stepDetail) setStepDetail(stream.stepDetail);
     setStageProgress(numberedStages);
   }, [
     stream.isGenerating,
+    stream.earlyManifest,
     stream.phase,
     stream.stepDetail,
     stream.stageProgress,
@@ -203,6 +222,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     setIsGenerating(false);
     setGenerationError(null);
     setGeneratedManifest(null);
+    setEarlyManifest(null);
     setPhase("idle");
     setStepDetail("");
     setStageProgress({});
@@ -232,6 +252,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
 
     setGenerationError(null);
     setGeneratedManifest(null);
+    setEarlyManifest(null);
     setPhase("stage-0");
     setStepDetail("Starting config generation...");
     setStageProgress({});
@@ -601,6 +622,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     isGenerating,
     generationError,
     generatedManifest,
+    earlyManifest,
     phase,
     stepDetail,
     stageProgress,

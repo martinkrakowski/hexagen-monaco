@@ -380,6 +380,183 @@ describe("ImportProjectSpecPage", () => {
     );
   });
 
+  it("Part B-lite: the early manifest enables Next while validation still streams; continuing stores validationPending + a null report", async () => {
+    usePendingManifest.getState().clear();
+    // Stream the early `manifest` frame, then HOLD the stream open (Stage 6
+    // still "running") until the test releases it — deterministic, no timing
+    // dependence. Deliberately NOT an msw handler: an msw HttpResponse whose
+    // ReadableStream body is held open crashes the vitest worker fork
+    // (msw/undici interception of a never-draining body), so this test stubs
+    // global.fetch for the generation endpoint only — the same fake-Response
+    // pattern the useStagedSpecGeneration tests use — and delegates every
+    // other request to msw's patched fetch.
+    let releaseDone!: () => void;
+    const doneGate = new Promise<void>((resolve) => {
+      releaseDone = resolve;
+    });
+    const encoder = new TextEncoder();
+    const frames = [
+      JSON.stringify({
+        type: "manifest",
+        yaml: "bounded_contexts:\n  - name: early\n",
+        contextCount: 1,
+        portCount: 0,
+        adapterCount: 0,
+        transactionId: "",
+      }) + "\n",
+      JSON.stringify({
+        type: "done",
+        yaml: "bounded_contexts:\n  - name: final\n",
+        contextCount: 1,
+        portCount: 0,
+        adapterCount: 0,
+        transactionId: "txn-123",
+        validation: { errors: [], warnings: [], passed: true },
+      }) + "\n",
+    ];
+    const mswFetch = global.fetch;
+    global.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
+      if (!url.includes("/api/manifest/generate/spec")) {
+        return mswFetch(input as never, init);
+      }
+      let pullCount = 0;
+      return {
+        ok: true,
+        status: 200,
+        body: new ReadableStream<Uint8Array>({
+          async pull(controller) {
+            pullCount++;
+            if (pullCount === 1) {
+              controller.enqueue(encoder.encode(frames[0]));
+            } else if (pullCount === 2) {
+              // Held open here until the test calls releaseDone().
+              await doneGate;
+              controller.enqueue(encoder.encode(frames[1]));
+            } else {
+              controller.close();
+            }
+          },
+        }),
+      } as unknown as Response;
+    }) as typeof fetch;
+
+    try {
+      const user = userEvent.setup();
+      render(<ImportProjectSpecPage />);
+      const yamlContent = fs.readFileSync(yamlPath, "utf-8");
+      await user.upload(
+        screen.getByLabelText(/upload manifest or spec/i),
+        new File([yamlContent], "krakowski-portal.yaml", { type: "text/yaml" }),
+      );
+      await waitFor(() => assert.ok(screen.getByText(/spec review/i)));
+      await user.click(screen.getByText(/map ports & adapters/i));
+
+      // The run is still in flight: the early manifest surfaces the validating
+      // affordance AND an early Next; the leave-action stays "Cancel" (the run
+      // is NOT parked).
+      await waitFor(() => assert.ok(screen.getByText(/validating manifest/i)));
+      assert.ok(screen.getByRole("button", { name: /next/i }));
+      assert.ok(screen.getByRole("button", { name: /cancel/i }));
+
+      // User clicks Next (never auto-navigated): the EARLY yaml is stored with
+      // validationPending and an explicit null report — findings don't exist
+      // yet, and navigating kills the component-owned stream so none arrive.
+      await user.click(screen.getByRole("button", { name: /next/i }));
+      await waitFor(() =>
+        assert.ok(
+          routerPush.mock.calls.some((c) => c[0] === "/projects/new/ai/accept"),
+        ),
+      );
+      const state = usePendingManifest.getState();
+      assert.match(state.yaml || "", /name: early/);
+      assert.strictEqual(state.validationReport, null);
+      assert.strictEqual(state.validationPending, true);
+
+      // Release the held stream and let the run settle so no state update
+      // lands after the test tears down. Deliberately a bounded plain-timer
+      // poll, NOT RTL waitFor: waitFor issued here deadlocks against the
+      // just-released stream continuation (the fork never reports a timeout
+      // and vitest SIGKILLs it); the manual poll settles on the first tick.
+      releaseDone();
+      let settled = false;
+      for (let i = 0; i < 50 && !settled; i++) {
+        await new Promise((r) => setTimeout(r, 20));
+        settled = screen.queryByText(/validating manifest/i) === null;
+      }
+      assert.ok(settled, "the run settled after the stream was released");
+    } finally {
+      releaseDone(); // idempotent — never leave the stream gated
+      global.fetch = mswFetch;
+    }
+  });
+
+  it("Part B-lite: when done's yaml differs from the early manifest, the repair note shows and Next stores the FINAL yaml", async () => {
+    usePendingManifest.getState().clear();
+    const report = { errors: [], warnings: ["[R12] renamed"], passed: true };
+    server.use(
+      http.post("/api/manifest/generate/spec", () => {
+        return new HttpResponse(
+          JSON.stringify({
+            type: "manifest",
+            yaml: "bounded_contexts:\n  - name: early\n",
+            contextCount: 1,
+            portCount: 0,
+            adapterCount: 0,
+            transactionId: "",
+          }) +
+            "\n" +
+            JSON.stringify({
+              type: "done",
+              yaml: "bounded_contexts:\n  - name: repaired\n",
+              contextCount: 1,
+              portCount: 0,
+              adapterCount: 0,
+              transactionId: "txn-123",
+              validation: report,
+            }) +
+            "\n",
+          { status: 200, headers: { "Content-Type": "application/x-ndjson" } },
+        );
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<ImportProjectSpecPage />);
+    const yamlContent = fs.readFileSync(yamlPath, "utf-8");
+    await user.upload(
+      screen.getByLabelText(/upload manifest or spec/i),
+      new File([yamlContent], "krakowski-portal.yaml", { type: "text/yaml" }),
+    );
+    await waitFor(() => assert.ok(screen.getByText(/spec review/i)));
+    await user.click(screen.getByText(/map ports & adapters/i));
+
+    // Run complete: the early yaml differs from done's → subtle repair note;
+    // the validating affordance is gone (the run is parked, not in flight).
+    await waitFor(() =>
+      assert.ok(screen.getByText(/manifest updated by validation repair/i)),
+    );
+    assert.strictEqual(screen.queryByText(/validating manifest/i), null);
+
+    // The parked Next stores the FINAL (repaired) yaml with the live report —
+    // validation completed, so validationPending stays false.
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await waitFor(() =>
+      assert.ok(
+        routerPush.mock.calls.some((c) => c[0] === "/projects/new/ai/accept"),
+      ),
+    );
+    const state = usePendingManifest.getState();
+    assert.match(state.yaml || "", /name: repaired/);
+    assert.deepStrictEqual(state.validationReport, report);
+    assert.strictEqual(state.validationPending, false);
+  });
+
   it("the manifest fast path stores a NULL report — a stale one from an earlier run must not attach", async () => {
     // A hand-uploaded complete manifest never went through the pipeline; the
     // explicit-null override in handleFileLoaded keeps any report left on the

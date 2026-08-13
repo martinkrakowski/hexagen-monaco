@@ -62,6 +62,15 @@ interface PendingManifestState {
    * (`updateYaml`) invalidates it (see there).
    */
   validationReport: StageValidationReport | null;
+  /**
+   * True when the user continued with the EARLY Stage-5 manifest while the
+   * Stage-6 review was still streaming (Part B-lite early-enable). The
+   * generation stream is component-owned and dies with the generation page,
+   * so no report will ever arrive for this manifest — the accept view shows
+   * a "validation unavailable — re-run to review" note and falls back to the
+   * client-side parse gate (validationReport is null in this state).
+   */
+  validationPending: boolean;
   setOriginSession: (session: PendingSessionProvenance | null) => void;
   set: (
     yaml: string,
@@ -70,6 +79,7 @@ interface PendingManifestState {
     originPath: string,
     originSpecText?: string | null,
     validationReport?: StageValidationReport | null,
+    validationPending?: boolean,
   ) => void;
   updateYaml: (yaml: string) => void;
   clear: () => void;
@@ -83,6 +93,7 @@ export const usePendingManifest = create<PendingManifestState>((set) => ({
   originSpecText: null,
   originSession: null,
   validationReport: null,
+  validationPending: false,
   setOriginSession: (session: PendingSessionProvenance | null) => {
     set({ originSession: session });
   },
@@ -93,6 +104,7 @@ export const usePendingManifest = create<PendingManifestState>((set) => ({
     originPath: string,
     originSpecText?: string | null,
     validationReport?: StageValidationReport | null,
+    validationPending?: boolean,
   ) => {
     set({
       yaml,
@@ -101,6 +113,7 @@ export const usePendingManifest = create<PendingManifestState>((set) => ({
       originPath,
       originSpecText: originSpecText ?? null,
       validationReport: validationReport ?? null,
+      validationPending: validationPending ?? false,
     });
   },
   updateYaml: (yaml: string) => {
@@ -109,6 +122,8 @@ export const usePendingManifest = create<PendingManifestState>((set) => ({
     // invalidates it, reverting the accept view to the live client-fixer
     // path. originSession is DELIBERATELY untouched, same contract as set()
     // (the finalize hand-off runs before the manifest lands here).
+    // validationPending is also untouched: an edit doesn't change the fact
+    // that this manifest's Stage-6 review never completed.
     set({ yaml, validationReport: null });
   },
   clear: () => {
@@ -120,6 +135,7 @@ export const usePendingManifest = create<PendingManifestState>((set) => ({
       originSpecText: null,
       originSession: null,
       validationReport: null,
+      validationPending: false,
     });
   },
 }));

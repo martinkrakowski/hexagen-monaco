@@ -93,3 +93,44 @@ describe("usePendingManifest — validationReport semantics", () => {
     assert.strictEqual(usePendingManifest.getState().validationReport, null);
   });
 });
+
+describe("usePendingManifest — validationPending semantics (Part B-lite)", () => {
+  beforeEach(() => {
+    usePendingManifest.getState().clear();
+  });
+
+  it("set() stores the early-continue flag (no report exists in this state)", () => {
+    usePendingManifest
+      .getState()
+      .set("yaml: x", spec, "proj", "/projects/new/ai", null, null, true);
+    const state = usePendingManifest.getState();
+    assert.strictEqual(state.validationPending, true);
+    assert.strictEqual(state.validationReport, null);
+  });
+
+  it("set() without the flag resets a previous pending state (no cross-manifest leak)", () => {
+    usePendingManifest
+      .getState()
+      .set("yaml: x", spec, "proj", "/projects/new/ai", null, null, true);
+    usePendingManifest
+      .getState()
+      .set("yaml: y", spec, "proj2", "/projects/new/ai");
+    assert.strictEqual(usePendingManifest.getState().validationPending, false);
+  });
+
+  it("updateYaml() leaves the flag untouched (an edit doesn't change that the review never completed)", () => {
+    usePendingManifest
+      .getState()
+      .set("yaml: x", spec, "proj", "/projects/new/ai", null, null, true);
+    usePendingManifest.getState().updateYaml("yaml: edited");
+    assert.strictEqual(usePendingManifest.getState().validationPending, true);
+  });
+
+  it("clear() resets the flag with everything else", () => {
+    usePendingManifest
+      .getState()
+      .set("yaml: x", spec, "proj", "/projects/new/ai", null, null, true);
+    usePendingManifest.getState().clear();
+    assert.strictEqual(usePendingManifest.getState().validationPending, false);
+  });
+});

@@ -65,6 +65,12 @@ export interface StructuredConfigGenerationCallbacks {
   onChunk?: (chunk: string) => void;
   /** Called at completion of each stage with full telemetry. See Phase P17. */
   onStageTelemetry?: (telemetry: StageTelemetry) => void;
+  /** Fired once, between Stage-5 assembly and the Stage-6 LLM review, with the
+   * freshly assembled manifest — lets a streaming route surface the manifest
+   * to the client while validation is still running (Stage-6 Part B-lite).
+   * The final result (and `done` frame) still carries the post-review /
+   * Stage-7-repaired yaml, which supersedes this one. */
+  onManifestReady?: (manifest: AssembledManifest) => void;
 }
 
 export type StructuredConfigInput = {
@@ -2528,6 +2534,12 @@ export class ExecuteStructuredConfigGenerationUseCase {
         `Stage 5 · ⚠ Manifest failed schema validation after sanitization: ${assembledManifest.schemaIssues.join("; ")}`,
       );
     }
+
+    // Early-manifest hook (Part B-lite): the manifest is fully assembled here;
+    // only the LLM review (Stage 6 / optional Stage 7) is still ahead. Fired
+    // before Stage 6 so a streaming consumer can offer the manifest while
+    // validation runs; `done` later carries the final (possibly repaired) yaml.
+    callbacks?.onManifestReady?.(assembledManifest);
 
     // Stage 6: Validation Review
     const s6Start = Date.now();

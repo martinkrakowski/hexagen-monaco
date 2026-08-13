@@ -217,6 +217,59 @@ test("stage 3 (port mapping) failure → returns { success: false }", async () =
   assert.equal(result.success, false);
 });
 
+test("onManifestReady fires exactly once, between Stage-5 completion and Stage-6 start (Part B-lite)", async () => {
+  const config: StructuredConfig = {
+    bounded_contexts: [{ name: "Payment" }],
+    use_cases: { Payment: [{ name: "Process Payment" }] },
+    context_mappings: [],
+  };
+  const useCase = new ExecuteStructuredConfigGenerationUseCase(
+    createMockLLMPort(),
+    createMockTransactionManager(),
+  );
+
+  // One shared timeline of onProgress markers + the manifest-ready hook.
+  // Stage-5 assembly is synchronous, so its completion duration can be 0ms —
+  // ordering is proven positionally against the fixed start/complete protocol
+  // (each stage pings (N, 0) then reports (N, duration)), not by duration.
+  const events: string[] = [];
+  let readyYaml: string | null = null;
+  const result = await useCase.execute(JSON.stringify(config), {
+    onProgress: (stage) => events.push(`p${stage}`),
+    onManifestReady: (manifest) => {
+      events.push("manifest-ready");
+      readyYaml = manifest.yaml;
+    },
+  });
+
+  assert.equal(result.success, true);
+  const readyIdx = events.indexOf("manifest-ready");
+  assert.ok(readyIdx !== -1, "onManifestReady must fire");
+  assert.equal(
+    events.filter((e) => e === "manifest-ready").length,
+    1,
+    "onManifestReady must fire exactly once",
+  );
+  // Both stage-5 progress events (start ping + completion) precede it; every
+  // stage-6 progress event follows it.
+  assert.equal(
+    events.slice(0, readyIdx).filter((e) => e === "p5").length,
+    2,
+    "stage 5 must have started AND completed before the early manifest",
+  );
+  assert.equal(
+    events.slice(0, readyIdx).filter((e) => e === "p6").length,
+    0,
+    "stage 6 must not have started before the early manifest",
+  );
+  assert.equal(events.slice(readyIdx + 1).filter((e) => e === "p6").length, 2);
+  // The scripted judge passes, so no Stage-7 repair runs: the early yaml IS
+  // the final yaml here (the supersede path is covered by the route tests).
+  if (result.success) {
+    assert.equal(readyYaml, result.value.yaml);
+  }
+});
+
 test("full flow with callbacks → returns assembled manifest", async () => {
   const config: StructuredConfig = {
     bounded_contexts: [{ name: "Payment" }, { name: "Shipping" }],

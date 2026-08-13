@@ -1,29 +1,159 @@
-import { test } from "vitest";
+import { test, afterEach, vi } from "vitest";
 import assert from "node:assert/strict";
+import { NextRequest } from "next/server";
+import { ExecuteStructuredConfigGenerationUseCase } from "@hexagen/agentic-interaction";
+import type { AssembledManifest } from "@hexagen/agentic-interaction";
+import { POST } from "../route.ts";
 
-test("POST /api/manifest/generate/spec returns NDJSON stream", async () => {
-  // Note: Requires running dev server on port 3000
-  // Uncomment to run manually:
-  // import fs from "node:fs";
-  // import path from "node:path";
-  // const yamlPath = path.join(
-  //   "/Users/martin/Projects/hexagen-monaco/packages/agentic-interaction/src/application/use-cases/staged-generation/__tests__/fixtures",
-  //   "krakowski-portal.yaml"
-  // );
-  // const yamlContent = fs.readFileSync(yamlPath, "utf-8");
-  // const { execSync } = require("node:child_process");
-  // const config = JSON.stringify(yamlContent);
-  // const curlCommand = `curl -s -X POST http://localhost:3000/api/manifest/generate/spec \
-  //   -H "Content-Type: application/json" \
-  //   -d "{\"config\": ${config}}" \
-  //   --no-buffer 2>&1 | head -30`;
-  // const output = execSync(curlCommand).toString();
-  // assert.match(output, /type":"stage-start"/);
-  // assert.match(output, /type":"done"/);
-  assert.ok(true); // Placeholder until server is running
+// The quota gate is a stateful sqlite-backed store; stub it open so these
+// tests exercise only the route's streaming contract. The per-IP rate limiter
+// stays real — each test uses its own X-Forwarded-For.
+vi.mock("../../../../../../lib/enforce-quota", () => ({
+  enforceDailyQuota: () => ({ ok: true, headers: {} }),
+}));
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+async function readNdjson(
+  res: Response,
+): Promise<Array<Record<string, unknown>>> {
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (value) text += decoder.decode(value, { stream: true });
+    if (done) break;
+  }
+  return text
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+}
+
+function specRequest(ip: string): NextRequest {
+  return new NextRequest("http://localhost/api/manifest/generate/spec", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Forwarded-For": ip,
+    },
+    body: JSON.stringify({ config: "{}" }),
+  });
+}
+
+test("emits the early `manifest` frame before `done`, and `done` still carries the final yaml (Part B-lite)", async () => {
+  // The orchestrator fires onManifestReady between Stage 5 and Stage 6; the
+  // route must translate it into a NON-terminal `manifest` frame. The final
+  // `done` then carries a DIFFERENT yaml (as after a Stage-7 repair) — the
+  // client replaces the early manifest with it.
+  vi.spyOn(
+    ExecuteStructuredConfigGenerationUseCase.prototype,
+    "execute",
+  ).mockImplementation(async (_config, callbacks) => {
+    callbacks?.onProgress?.(5, 0);
+    callbacks?.onProgress?.(5, 1);
+    callbacks?.onManifestReady?.({
+      yaml: "early: manifest\n",
+      parsedObject: {
+        bounded_contexts: [
+          { name: "billing", adapters: [{ name: "a1" }, { name: "a2" }] },
+          { name: "shipping" },
+        ],
+        context_mappings: [{ upstream: "billing", downstream: "shipping" }],
+      },
+    } as AssembledManifest);
+    callbacks?.onProgress?.(6, 0);
+    callbacks?.onProgress?.(6, 2);
+    return {
+      success: true as const,
+      value: {
+        yaml: "final: manifest\n",
+        parsedObject: {
+          bounded_contexts: [{ name: "billing" }],
+          context_mappings: [],
+        },
+      } as AssembledManifest,
+      validation: { errors: [], warnings: [], passed: true },
+      transactionId: "txn-blite-1",
+    };
+  });
+
+  const res = await POST(specRequest("10.9.0.1"));
+  assert.equal(res.status, 200);
+  const events = await readNdjson(res);
+
+  const manifestIdx = events.findIndex((e) => e.type === "manifest");
+  const doneIdx = events.findIndex((e) => e.type === "done");
+  assert.ok(manifestIdx !== -1, "a `manifest` frame must be emitted");
+  assert.ok(doneIdx !== -1, "a `done` frame must be emitted");
+  assert.ok(manifestIdx < doneIdx, "`manifest` must precede `done`");
+  assert.equal(
+    events.filter((e) => e.type === "manifest").length,
+    1,
+    "exactly one `manifest` frame",
+  );
+  // The early frame also precedes the stage-6 start the route relays.
+  const stage6StartIdx = events.findIndex(
+    (e) => e.type === "stage-start" && e.stage === 6,
+  );
+  assert.ok(manifestIdx < stage6StartIdx);
+
+  // Early frame: Stage-5 yaml + counts from ITS parsedObject; transactionId is
+  // "" because the transaction is only begun after the review (see route).
+  assert.deepEqual(events[manifestIdx], {
+    type: "manifest",
+    yaml: "early: manifest\n",
+    contextCount: 2,
+    portCount: 1,
+    adapterCount: 2,
+    transactionId: "",
+  });
+
+  // `done` is UNCHANGED by Part B-lite: final yaml (superseding the early
+  // one), real transaction id, counts from the final parsedObject, validation.
+  assert.deepEqual(events[doneIdx], {
+    type: "done",
+    yaml: "final: manifest\n",
+    contextCount: 1,
+    portCount: 0,
+    adapterCount: 0,
+    transactionId: "txn-blite-1",
+    validation: { errors: [], warnings: [], passed: true },
+  });
+});
+
+test("a run that never fires onManifestReady emits no `manifest` frame (backward compat)", async () => {
+  vi.spyOn(
+    ExecuteStructuredConfigGenerationUseCase.prototype,
+    "execute",
+  ).mockImplementation(async (_config, _callbacks) => ({
+    success: true as const,
+    value: { yaml: "only: final\n", parsedObject: {} } as AssembledManifest,
+    validation: { errors: [], warnings: [], passed: true },
+    transactionId: "txn-blite-2",
+  }));
+
+  const res = await POST(specRequest("10.9.0.2"));
+  const events = await readNdjson(res);
+  assert.equal(events.filter((e) => e.type === "manifest").length, 0);
+  assert.equal(events.filter((e) => e.type === "done").length, 1);
 });
 
 test("POST /api/manifest/generate/spec with missing config returns 400", async () => {
-  // Placeholder for manual testing with curl
-  assert.ok(true);
+  const req = new NextRequest("http://localhost/api/manifest/generate/spec", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Forwarded-For": "10.9.0.3",
+    },
+    body: JSON.stringify({}),
+  });
+  const res = await POST(req);
+  assert.equal(res.status, 400);
+  const body = await res.json();
+  assert.equal(body.type, "error");
+  assert.match(body.message, /Missing config/);
 });

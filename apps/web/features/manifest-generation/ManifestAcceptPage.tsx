@@ -360,6 +360,21 @@ export function ManifestAcceptPage() {
           {saveError}
         </div>
       )}
+      {/* Part B-lite early-continue provenance: the user advanced with the
+          Stage-5 manifest while the Stage-6 review was still streaming. The
+          stream died with the generation page, so no server findings exist
+          for this manifest — the approve gate falls back to the client-side
+          parse checks (computeHasBlockingFailures with a null report). */}
+      {pendingManifest.validationPending && (
+        <div
+          className="p-4 bg-warning/10 border border-warning/20 rounded-md text-sm text-warning"
+          role="status"
+        >
+          Validation review was skipped — this manifest was accepted while the
+          pipeline was still validating, so its findings are unavailable.
+          Regenerate to review them.
+        </div>
+      )}
       {/* The AI governance chat is integrated into the preview frame as a
           collapsible third column (desktop) / slide-in overlay (mobile); it
           opens when a Context Map card is clicked via useContextChatPanel. */}

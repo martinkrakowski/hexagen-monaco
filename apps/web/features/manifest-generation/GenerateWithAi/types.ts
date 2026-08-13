@@ -35,10 +35,15 @@ export interface GenerateWithAiProps {
    * the stream's done event carried for exactly this manifest (null/absent on
    * older payloads) — the host stores it with the manifest so the accept view
    * renders the pipeline's findings instead of re-deriving heuristics.
+   * `validationPending` is true for the EARLY Stage-5 hand-off (Part B-lite):
+   * the user clicked Next while the Stage-6 review was still streaming, so no
+   * report exists (and none will arrive — the stream dies with this page);
+   * the host stores the flag so the accept view can say so.
    */
   onUseManifest?: (
     manifest: string,
     validationReport?: StageValidationReport | null,
+    validationPending?: boolean,
   ) => void;
   llmContext: LocalLLMContext;
   onGeneratingStateChange?: (actions: GeneratingFooterActions | null) => void;
@@ -55,11 +60,27 @@ export interface GenerateWithAiProps {
 export interface GeneratingFooterActions {
   onCancel: () => void;
   /**
-   * Present once generation has completed successfully: the manifest is
+   * Present once generation has completed successfully — OR, since Part
+   * B-lite, as soon as the early Stage-5 manifest arrives while the Stage-6
+   * review is still streaming (see `validationPending`). The manifest is
    * parked on the telemetry screen and this advances to /ai/accept. Absent
-   * while generation is still in flight.
+   * before the manifest exists and after a failure.
    */
   onNext?: () => void;
+  /**
+   * True while onNext offers the EARLY Stage-5 manifest (Part B-lite): the
+   * manifest is assembled but the Stage-6 validation review is still
+   * running. The footer shows a "Validating…" affordance next to Next; the
+   * user may continue without waiting (the accept view then notes that
+   * findings are unavailable).
+   */
+  validationPending?: boolean;
+  /**
+   * True when the run completed and the final `done` yaml differs from the
+   * early Stage-5 manifest — the Stage-7 verify-and-repair pass adjusted it.
+   * The footer shows a subtle informational note.
+   */
+  manifestUpdatedByRepair?: boolean;
 }
 
 export interface EntryPointsSectionProps {

@@ -369,6 +369,133 @@ describe("ExecuteFullStagedGenerationUseCase", () => {
     }
   });
 
+  test("onManifestReady fires exactly once, between Stage-5 completion and Stage-6 start, with the assembled manifest (Part B-lite)", async () => {
+    const { port } = createScriptedPort(
+      happyPathSendResponses,
+      happyPathStreamResponses,
+    );
+    const { manager } = createMockTransactionManager();
+    const useCase = new ExecuteFullStagedGenerationUseCase(port, manager);
+
+    // One shared timeline: onProgress markers + the manifest-ready hook. The
+    // stage-5 completion duration can legitimately be 0ms (assembly is sync),
+    // so ordering is proven positionally against the fixed start/complete
+    // protocol ([0,0,1,1,…,6,6] — pinned by the callback-protocol test above)
+    // rather than by discriminating start pings from completions.
+    const events: string[] = [];
+    let readyYaml: string | null = null;
+    const result = await useCase.execute(
+      "Build an invoice management system",
+      undefined,
+      {
+        onProgress: (stage) => events.push(`p${stage}`),
+        onManifestReady: (manifest) => {
+          events.push("manifest-ready");
+          readyYaml = manifest.yaml;
+        },
+      },
+    );
+
+    assert.equal(result.success, true);
+    assert.deepEqual(events, [
+      "p0",
+      "p0",
+      "p1",
+      "p1",
+      "p2",
+      "p2",
+      "p3",
+      "p3",
+      "p4",
+      "p4",
+      // Stage 5 completes, THEN the early manifest, THEN Stage 6 starts.
+      "p5",
+      "p5",
+      "manifest-ready",
+      "p6",
+      "p6",
+    ]);
+    // The hook received the same assembled manifest the run returns (Stage 6
+    // reviews it but does not rewrite it in this orchestrator).
+    if (result.success) {
+      assert.equal(readyYaml, result.value.yaml);
+    }
+  });
+
+  test("R03 synthesis: a context with no outbound repository port gets a default port + adapter (deferred fast-follow from the structured-config PR)", async () => {
+    // Stage 3 produces ONLY the inbound command port — no repository port —
+    // and Stage 4 binds only the controller. Mirrors the structured-config
+    // pipeline's semantics: synthesize on the structures Stage 5/6 read,
+    // BEFORE dedupe, so the reviewer never sees R03 and the port + adapter
+    // land in the rendered manifest.
+    const stage3NoRepoResponse =
+      '{"contextName":"invoice-management","direction":"in","name":"createInvoice","portType":"command","description":"Creates invoice"}';
+    const stage4ControllerOnlyResponse = JSON.stringify({
+      contextName: "invoice-management",
+      name: "CreateInvoiceController",
+      adapterType: "Controller",
+      implements: "CreateInvoicePort",
+    });
+    const { port } = createScriptedPort(happyPathSendResponses, [
+      stage3NoRepoResponse,
+      stage4ControllerOnlyResponse,
+      stage6Response,
+    ]);
+    const { manager, calls } = createMockTransactionManager();
+    const useCase = new ExecuteFullStagedGenerationUseCase(port, manager);
+
+    const chunks: string[] = [];
+    const result = await useCase.execute(
+      "Build an invoice management system",
+      undefined,
+      { onChunk: (chunk) => chunks.push(chunk) },
+    );
+
+    assert.equal(result.success, true);
+    if (result.success) {
+      // Named after the stage-2 aggregate root ("Invoice"), typed explicitly.
+      const portCtx = result.state.stage3?.contexts[0];
+      const synthesizedPort = portCtx?.out.find(
+        (p) => p.name === "InvoiceRepositoryPort",
+      );
+      assert.ok(synthesizedPort, "synthesized port must land in state.stage3");
+      assert.equal(synthesizedPort!.type, "repository");
+      // The matching adapter carries explicit `implements` (no inference pass).
+      const adapterCtx = result.state.stage4?.contexts[0];
+      const synthesizedAdapter = adapterCtx?.adapters.find(
+        (a) => a.name === "InvoiceRepositoryAdapter",
+      );
+      assert.ok(
+        synthesizedAdapter,
+        "synthesized adapter must land in state.stage4",
+      );
+      assert.equal(synthesizedAdapter!.implements, "InvoiceRepositoryPort");
+      // Both flow into the rendered manifest…
+      assert.ok(result.state.stage5?.yaml.includes("InvoiceRepositoryPort"));
+      assert.ok(result.state.stage5?.yaml.includes("InvoiceRepositoryAdapter"));
+      // …and the advisory reaches the merged report + the chunk stream.
+      assert.ok(
+        result.state.stage6?.warnings.some(
+          (w) => w.includes("InvoiceRepositoryPort") && w.includes("R03"),
+        ),
+        "advisory warning must be merged into the stage-6 report",
+      );
+    }
+    assert.ok(
+      chunks.some(
+        (c) =>
+          c.startsWith("Stage 5 · Auto-added a default repository port") &&
+          c.includes("InvoiceRepositoryPort"),
+      ),
+      "advisory must be streamed as a Stage 5 chunk",
+    );
+    // Transaction metadata counts the synthesized entities: createInvoice +
+    // InvoiceRepositoryPort, controller + InvoiceRepositoryAdapter.
+    const beginMetadata = calls[0].args[1] as Record<string, unknown>;
+    assert.equal(beginMetadata.portCount, 2);
+    assert.equal(beginMetadata.adapterCount, 2);
+  });
+
   test("failure propagation: a failing stage reports onError, halts the chain, and opens no transaction", async () => {
     // Stage 0 succeeds; stage 1 then receives garbage for every retry attempt
     // and exhausts MAX_RETRY_ATTEMPTS.
