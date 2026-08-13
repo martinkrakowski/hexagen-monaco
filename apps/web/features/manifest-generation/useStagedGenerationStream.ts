@@ -215,6 +215,18 @@ export function useStagedGenerationStream(
 
         let lastDataTime = Date.now();
         let timeoutCheckInterval: ReturnType<typeof setInterval> | null = null;
+        // Terminal-frame accounting: a well-formed NDJSON stream always ends
+        // with a `done` or `error` frame. When the reader ends without one
+        // (server crash, proxy close, watchdog cancel), the loop used to break
+        // silently — phase stayed parked on the last stage and generate()
+        // resolved as if nothing happened. Set by the in-loop done/error
+        // branches AND the residual-buffer flush below.
+        let sawTerminalFrame = false;
+        // Set by the inactivity watchdog just before it cancels the reader
+        // (cancel() resolves the pending read() with done: true — no throw, so
+        // no reconnect attempt) so the missing-terminal-frame handler can
+        // surface a distinct timeout message instead of a generic one.
+        let timedOut = false;
 
         const attemptReconnect = async (
           attempt: number,
@@ -268,6 +280,7 @@ export function useStagedGenerationStream(
             logger.warn(
               `[SSE] Timeout: no data received for ${READ_TIMEOUT_MS / 1000}s`,
             );
+            timedOut = true;
             reader.cancel();
           }
         }, 5000);
@@ -351,6 +364,7 @@ export function useStagedGenerationStream(
                     result.validationErrors = errors;
                     setValidationErrors(errors);
                   } else if (type === "done") {
+                    sawTerminalFrame = true;
                     result.generatedManifest = event.yaml as string;
                     result.contextCount = event.contextCount as number;
                     result.portCount = event.portCount as number;
@@ -377,6 +391,7 @@ export function useStagedGenerationStream(
                     setStepDetail(result.stepDetail);
                     setIsGenerating(false);
                   } else if (type === "error") {
+                    sawTerminalFrame = true;
                     result.phase = "failed";
                     result.stepDetail = event.message as string;
                     setGenerationError(event.message as string);
@@ -404,18 +419,29 @@ export function useStagedGenerationStream(
           reader.releaseLock();
         }
 
+        // Residual-buffer flush: a terminal frame that arrived WITHOUT a
+        // trailing newline never went through the in-loop branches, so this
+        // must mirror them INCLUDING the React state writes — without the
+        // setters here the UI would stay parked on the last stage even though
+        // generate()'s resolved result said "complete"/"failed".
         if (buffer.trim()) {
           try {
             const event = JSON.parse(buffer) as Record<string, unknown>;
             const type = event.type as string;
 
             if (type === "done") {
+              sawTerminalFrame = true;
               result.generatedManifest = event.yaml as string;
               result.contextCount = event.contextCount as number;
               result.portCount = event.portCount as number;
               result.adapterCount = event.adapterCount as number;
+              setGeneratedManifest(result.generatedManifest);
+              setContextCount(result.contextCount);
+              setPortCount(result.portCount);
+              setAdapterCount(result.adapterCount);
               if (isStageValidationReport(event.validation)) {
                 result.validationReport = event.validation;
+                setValidationReport(result.validationReport);
               } else if (event.validation != null) {
                 logger.warn(
                   "[staged-gen] Ignoring malformed Stage-6 validation payload",
@@ -423,13 +449,43 @@ export function useStagedGenerationStream(
               }
               if (isStageRepairSummary(event.repair)) {
                 result.repairSummary = event.repair;
+                setRepairSummary(result.repairSummary);
               }
               result.phase = "complete";
               result.stepDetail = "Manifest generation complete";
+              setPhase(result.phase);
+              setStepDetail(result.stepDetail);
+            } else if (type === "error") {
+              // Residual error frames were previously dropped entirely,
+              // downgrading a reported failure into a silent hang.
+              sawTerminalFrame = true;
+              result.phase = "failed";
+              result.stepDetail = event.message as string;
+              setGenerationError(event.message as string);
+              setPhase(result.phase);
             }
           } catch {
-            // Acknowledge unprocessed buffer after parse failure
+            // Unparseable residual buffer: not a terminal frame — the
+            // missing-terminal-frame handler below reports the truncation.
           }
+        }
+
+        // Reader ended without a `done`/`error` frame and without the user
+        // aborting: the stream died mid-generation (server crash, proxy close,
+        // or the inactivity watchdog above cancelled the reader). Surface a
+        // failed state with retry-oriented copy instead of resolving as if the
+        // run were still in flight. The copy must NOT contain the substring
+        // "No cloud LLM API keys configured" — ImportProjectSpecPage
+        // special-cases that exact text to reroute to the description flow.
+        if (!sawTerminalFrame && !controller.signal.aborted) {
+          const message = timedOut
+            ? `Generation timed out: no data received for ${READ_TIMEOUT_MS / 1000} seconds. Please retry.`
+            : "The generation stream ended unexpectedly before finishing. Please retry.";
+          logger.error(`[staged-gen] ${message}`);
+          result.phase = "failed";
+          result.stepDetail = message;
+          setGenerationError(message);
+          setPhase(result.phase);
         }
       } catch (error) {
         if (controller.signal.aborted) {

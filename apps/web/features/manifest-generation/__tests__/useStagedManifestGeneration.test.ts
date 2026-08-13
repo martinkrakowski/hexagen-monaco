@@ -58,6 +58,25 @@ describe("useStagedManifestGeneration (cloud path)", () => {
     assert.strictEqual(result.current.generationError, "boom");
   });
 
+  it("surfaces a stream that dies without a terminal frame as a failed run", async () => {
+    // The prompt flow's true forever-hang: GenerateWithAi gates its generating
+    // screen only on generationError, so a stream that ends mid-run with no
+    // done/error frame used to park it in "generating" indefinitely. The
+    // stream hook's terminal-frame accounting now fails the run; this hook
+    // must propagate that into generationError so the Try Again card renders.
+    mockFetchWith([{ type: "stage-start", stage: 2, label: "Contexts" }]);
+    const { result } = renderHook(() => useStagedManifestGeneration());
+
+    await act(async () => {
+      await result.current.generateManifest("build a todo app", {
+        preferLocal: false,
+      });
+    });
+
+    assert.strictEqual(result.current.phase, "failed");
+    assert.match(result.current.generationError || "", /ended unexpectedly/i);
+  });
+
   it("maps a successful cloud generation into state", async () => {
     mockFetchWith([
       { type: "stage-start", stage: 0, label: "Prompt Normalization" },

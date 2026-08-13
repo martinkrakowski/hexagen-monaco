@@ -12,7 +12,7 @@ import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useStagedManifestGeneration } from "./useStagedManifestGeneration";
 import { useLooseSpecConversion } from "./useLooseSpecConversion";
 import { Button } from "@hexagen/ui";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, RefreshCw } from "lucide-react";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
 import { useLLMReadiness } from "./hooks/useLLMReadiness";
 import { usePendingManifest } from "./store/usePendingManifest";
@@ -308,18 +308,11 @@ export default function ImportProjectSpecPage() {
     [pendingManifest, router, carriedName, originalSpecText],
   );
 
-  const runSpecGeneration = useCallback(
-    async (strategy: ExecutionEngine) => {
-      setPreviousState(pageState);
-      setPageState("GENERATING");
-      setAcceptError(null);
-      setCompletedManifest(null);
-      manifestGeneration.reset();
-
-      const result = await specGeneration.generateFromSpec(specContent, {
-        executionStrategy: strategy,
-      });
-
+  // Shared completion handling for the spec path — the original run and the
+  // footer's Retry (which re-enters via specGeneration.retry()) must land the
+  // result identically.
+  const applySpecResult = useCallback(
+    (result: Awaited<ReturnType<typeof specGeneration.generateFromSpec>>) => {
       if (result?.generatedManifest?.trim()) {
         // Stay on the generating step (telemetry log stays reviewable);
         // the footer's "Next" button carries the manifest forward.
@@ -332,8 +325,8 @@ export default function ImportProjectSpecPage() {
           setPageState("DESCRIPTION_FALLBACK");
         }
         // Other failures: specGeneration.generationError is set by executeCloudGeneration,
-        // so ManifestGeneratingStep will display the error. The "Go Back" button is shown
-        // when isGenerating=false, so the user can recover.
+        // so ManifestGeneratingStep will display the error. The "Go Back" and
+        // "Retry" buttons are shown when isGenerating=false, so the user can recover.
       } else if (result) {
         // Completed without a manifest (e.g. the endpoint reported success but
         // streamed an empty document): without this branch the page would park
@@ -344,12 +337,40 @@ export default function ImportProjectSpecPage() {
         );
       }
     },
-    [specContent, specGeneration, manifestGeneration, pageState],
+    [specGeneration],
+  );
+
+  const runSpecGeneration = useCallback(
+    async (strategy: ExecutionEngine) => {
+      // Retry re-enters generation while the page is already on GENERATING;
+      // overwriting previousState with "GENERATING" would turn the footer's
+      // Go Back into a no-op loop, so only record a genuine origin state.
+      if (pageState !== "GENERATING") setPreviousState(pageState);
+      setPageState("GENERATING");
+      setAcceptError(null);
+      setCompletedManifest(null);
+      manifestGeneration.reset();
+
+      applySpecResult(
+        await specGeneration.generateFromSpec(specContent, {
+          executionStrategy: strategy,
+        }),
+      );
+    },
+    [
+      specContent,
+      specGeneration,
+      manifestGeneration,
+      pageState,
+      applySpecResult,
+    ],
   );
 
   const runDescriptionGeneration = useCallback(
     async (strategy: ExecutionEngine) => {
-      setPreviousState(pageState);
+      // Same GENERATING guard as runSpecGeneration: Retry must not clobber
+      // the origin state the footer's Go Back returns to.
+      if (pageState !== "GENERATING") setPreviousState(pageState);
       setPageState("GENERATING");
       setAcceptError(null);
       setCompletedManifest(null);
@@ -374,6 +395,28 @@ export default function ImportProjectSpecPage() {
     },
     [specContent, manifestGeneration, specGeneration, pageState, preferLocal],
   );
+
+  // Footer Retry after a failed run parked on the generating step. The spec
+  // path re-enters via the hook's retry() (same spec + options as the failed
+  // attempt); the description path re-runs with the current engine. previousState
+  // discriminates the two: description runs only start from DESCRIPTION_FALLBACK,
+  // spec runs from SPEC_REVIEW (and the GENERATING guard above keeps it stable
+  // across retries).
+  const handleRetry = useCallback(async () => {
+    if (previousState === "DESCRIPTION_FALLBACK") {
+      void runDescriptionGeneration(engine);
+      return;
+    }
+    setAcceptError(null);
+    setCompletedManifest(null);
+    applySpecResult(await specGeneration.retry());
+  }, [
+    previousState,
+    engine,
+    runDescriptionGeneration,
+    specGeneration,
+    applySpecResult,
+  ]);
 
   const handleMapPorts = useCallback(() => {
     if (needsSetup) return;
@@ -592,6 +635,16 @@ export default function ImportProjectSpecPage() {
             >
               {isRunning ? "Cancel" : "Go Back"}
             </Button>
+            {/* Failed run (stream death, timeout, empty manifest, parse
+                failure): offer an explicit Retry beside Go Back. The stream's
+                terminal-frame accounting now guarantees dead streams reach
+                this resting state instead of spinning forever. */}
+            {!isRunning && !completedManifest && generationError && (
+              <Button onClick={() => void handleRetry()}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Retry
+              </Button>
+            )}
             {/* Generation succeeded: let the user review the telemetry log
                 at their own pace; Next carries the manifest to the accept
                 screen. */}

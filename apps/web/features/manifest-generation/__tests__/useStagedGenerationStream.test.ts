@@ -1,4 +1,4 @@
-import { test } from "vitest";
+import { test, vi } from "vitest";
 import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
 import { useStagedGenerationStream } from "../useStagedGenerationStream";
@@ -12,6 +12,24 @@ function createMockReadableStream(lines: string[]): ReadableStream<Uint8Array> {
     pull(controller) {
       if (index < lines.length) {
         controller.enqueue(encoder.encode(lines[index] + "\n"));
+        index++;
+      } else {
+        controller.close();
+      }
+    },
+  });
+}
+
+/** Like createMockReadableStream but enqueues chunks EXACTLY as given — no
+ * trailing newline appended — so a terminal frame can land in the residual
+ * buffer instead of the in-loop line parser. */
+function createRawChunkStream(chunks: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  let index = 0;
+  return new ReadableStream({
+    pull(controller) {
+      if (index < chunks.length) {
+        controller.enqueue(encoder.encode(chunks[index]));
         index++;
       } else {
         controller.close();
@@ -50,9 +68,190 @@ test("parses stage-start event", async () => {
       generateResult = await result.current.generate({ description: "test" });
     });
 
-    assert.strictEqual(generateResult?.phase, "stage-0");
-    assert.strictEqual(generateResult?.stepDetail, "Context Extraction...");
+    // The stage-start frame was parsed into stageProgress…
+    assert.strictEqual(result.current.stageProgress[0]?.stage, 0);
+    assert.strictEqual(
+      result.current.stageProgress[0]?.label,
+      "Context Extraction",
+    );
+    // …but this stream then ends WITHOUT a done/error frame, which is now a
+    // failure (terminal-frame accounting) — previously the run resolved
+    // silently parked on "stage-0".
+    assert.strictEqual(generateResult?.phase, "failed");
   } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("a stream that ends without a terminal frame fails with retry copy (was a silent hang)", async () => {
+  // Server crash / proxy close mid-generation: the reader resolves done with
+  // no `done`/`error` frame ever seen. The hook must surface a failed state
+  // (React state included) instead of resolving as if still in flight.
+  const lines = ['{"type":"stage-start","stage":3,"label":"Port Mapping"}'];
+  global.fetch = mockFetchWithSSE(lines);
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+    let generateResult:
+      | Awaited<ReturnType<typeof result.current.generate>>
+      | undefined;
+
+    await act(async () => {
+      generateResult = await result.current.generate({ description: "test" });
+    });
+
+    assert.strictEqual(generateResult?.phase, "failed");
+    assert.match(generateResult?.stepDetail || "", /ended unexpectedly/i);
+    assert.match(generateResult?.stepDetail || "", /retry/i);
+    // React state, not just the resolved result — the UI reads these.
+    assert.strictEqual(result.current.phase, "failed");
+    assert.match(result.current.generationError || "", /ended unexpectedly/i);
+    assert.strictEqual(result.current.isGenerating, false);
+    // ImportProjectSpecPage special-cases this exact substring to reroute to
+    // the description flow — the silent-death copy must never contain it.
+    assert.ok(
+      !(result.current.generationError || "").includes(
+        "No cloud LLM API keys configured",
+      ),
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("a residual done frame without a trailing newline still completes AND writes React state", async () => {
+  // The terminal frame arrives in the final chunk with no trailing "\n", so it
+  // never passes through the in-loop line parser — only the residual-buffer
+  // flush sees it. The flush must mirror the in-loop branch including the
+  // React state writes (previously it only filled the resolved result, leaving
+  // the UI parked on the last stage).
+  global.fetch = async () =>
+    ({
+      ok: true,
+      status: 200,
+      body: createRawChunkStream([
+        '{"type":"stage-start","stage":0,"label":"Config Parse"}\n',
+        '{"type":"done","yaml":"residual-manifest","contextCount":2,"portCount":3,"adapterCount":4,"validation":{"errors":[],"warnings":["[R02] heads up"],"passed":true}}',
+      ]),
+    }) as unknown as Response;
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+    let generateResult:
+      | Awaited<ReturnType<typeof result.current.generate>>
+      | undefined;
+
+    await act(async () => {
+      generateResult = await result.current.generate({ description: "test" });
+    });
+
+    assert.strictEqual(generateResult?.phase, "complete");
+    assert.strictEqual(generateResult?.generatedManifest, "residual-manifest");
+    // React state written by the flush:
+    assert.strictEqual(result.current.phase, "complete");
+    assert.strictEqual(result.current.generatedManifest, "residual-manifest");
+    assert.strictEqual(result.current.contextCount, 2);
+    assert.strictEqual(result.current.portCount, 3);
+    assert.strictEqual(result.current.adapterCount, 4);
+    assert.deepStrictEqual(result.current.validationReport, {
+      errors: [],
+      warnings: ["[R02] heads up"],
+      passed: true,
+    });
+    assert.strictEqual(result.current.generationError, null);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("a residual error frame without a trailing newline fails the run (was dropped)", async () => {
+  global.fetch = async () =>
+    ({
+      ok: true,
+      status: 200,
+      body: createRawChunkStream([
+        '{"type":"error","message":"pipeline exploded"}',
+      ]),
+    }) as unknown as Response;
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+    let generateResult:
+      | Awaited<ReturnType<typeof result.current.generate>>
+      | undefined;
+
+    await act(async () => {
+      generateResult = await result.current.generate({ description: "test" });
+    });
+
+    assert.strictEqual(generateResult?.phase, "failed");
+    assert.strictEqual(generateResult?.stepDetail, "pipeline exploded");
+    // The reported failure — not the generic missing-terminal-frame copy: the
+    // residual error frame counts as a terminal frame.
+    assert.strictEqual(result.current.generationError, "pipeline exploded");
+    assert.strictEqual(result.current.phase, "failed");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("watchdog inactivity cancel surfaces a distinct timeout message", async () => {
+  vi.useFakeTimers();
+  // A stream that never produces data: read() parks forever until the
+  // watchdog's reader.cancel() resolves it with done (no throw — so no
+  // reconnect attempt fires either).
+  global.fetch = async () =>
+    ({
+      ok: true,
+      status: 200,
+      body: new ReadableStream({
+        pull: () => new Promise<never>(() => {}),
+      }),
+    }) as unknown as Response;
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+    let generatePromise!: Promise<
+      Awaited<ReturnType<typeof result.current.generate>>
+    >;
+
+    act(() => {
+      generatePromise = result.current.generate({ description: "test" });
+    });
+
+    // Let the mocked fetch resolve, then advance past READ_TIMEOUT_MS (300s)
+    // so a 5s watchdog tick observes the inactivity and cancels the reader.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(305001);
+    });
+
+    let generateResult:
+      | Awaited<ReturnType<typeof result.current.generate>>
+      | undefined;
+    await act(async () => {
+      generateResult = await generatePromise;
+    });
+
+    assert.strictEqual(generateResult?.phase, "failed");
+    assert.match(
+      generateResult?.stepDetail || "",
+      /no data received for 300 seconds/i,
+    );
+    assert.match(
+      result.current.generationError || "",
+      /no data received for 300 seconds/i,
+    );
+    assert.strictEqual(result.current.phase, "failed");
+  } finally {
+    vi.useRealTimers();
     global.fetch = originalFetch;
   }
 });
