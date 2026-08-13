@@ -33,8 +33,9 @@ class FakePort implements SavedProjectsPersistencePort {
     return { success: true, value: undefined };
   }
 
-  // Port-contract compliance only — the migration step never updates a single
-  // record (it stamps whole arrays via saveProjects).
+  // Port-contract compliance only — the migration step never touches single
+  // records (it stamps whole arrays via saveProjects, the port's
+  // migration-only method).
   async updateProjectRecord(
     id: string,
     updater: (project: SavedProject) => SavedProject,
@@ -49,6 +50,30 @@ class FakePort implements SavedProjectsPersistencePort {
     const updated = updater(this.projects[index]);
     this.projects[index] = updated;
     return { success: true, value: updated };
+  }
+
+  async createProjectRecord(
+    project: SavedProject,
+  ): Promise<Result<SavedProject, PersistenceError>> {
+    if (this.projects.some((p) => p.id === project.id)) {
+      return {
+        success: false,
+        error: {
+          kind: "Conflict",
+          message: `A saved project with id ${project.id} already exists`,
+        },
+      };
+    }
+    this.projects = [project, ...this.projects];
+    return { success: true, value: project };
+  }
+
+  // Idempotent per the port contract: absent id resolves success.
+  async deleteProjectRecord(
+    id: string,
+  ): Promise<Result<void, PersistenceError>> {
+    this.projects = this.projects.filter((p) => p.id !== id);
+    return { success: true, value: undefined };
   }
 }
 

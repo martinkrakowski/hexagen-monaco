@@ -139,6 +139,50 @@ export class LocalStorageSavedProjectsAdapter implements SavedProjectsPersistenc
   /**
    * Port-contract compliance for this FROZEN legacy adapter: composed from its
    * own load/save (a synchronous-localStorage backend has no cross-writer race
+   * for the record-level methods to close). The live IDB adapter implements
+   * the real fresh-read semantics. Duplicate ids reject with `Conflict`, per
+   * the port contract.
+   */
+  async createProjectRecord(
+    project: SavedProject,
+  ): Promise<Result<SavedProject, PersistenceError>> {
+    const loaded = await this.loadProjects();
+    if (!loaded.success) return loaded;
+    if (loaded.value.some((p) => p.id === project.id)) {
+      return {
+        success: false,
+        error: {
+          kind: "Conflict",
+          message: `A saved project with id ${project.id} already exists`,
+        },
+      };
+    }
+    const written = await this.saveProjects([project, ...loaded.value]);
+    if (!written.success) return written;
+    return { success: true, value: project };
+  }
+
+  /**
+   * Port-contract compliance for this FROZEN legacy adapter, composed from its
+   * own load/save. IDEMPOTENT per the port contract: an absent id resolves
+   * success without a write (deliberate divergence from updateProjectRecord's
+   * NotFound — see the port's D6 rationale).
+   */
+  async deleteProjectRecord(
+    id: string,
+  ): Promise<Result<void, PersistenceError>> {
+    const loaded = await this.loadProjects();
+    if (!loaded.success) return loaded;
+    const next = loaded.value.filter((p) => p.id !== id);
+    if (next.length === loaded.value.length) {
+      return { success: true, value: undefined };
+    }
+    return this.saveProjects(next);
+  }
+
+  /**
+   * Port-contract compliance for this FROZEN legacy adapter: composed from its
+   * own load/save (a synchronous-localStorage backend has no cross-writer race
    * for read-merge-write to close). The live IDB adapter implements the real
    * fresh-read semantics.
    */
