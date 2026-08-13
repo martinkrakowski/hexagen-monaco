@@ -7,6 +7,7 @@ import { Button } from "@hexagen/ui";
 import { ModelSettingsView } from "@hexagen/model-settings";
 import { ArrowLeft } from "lucide-react";
 import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
+import { withCarriedName } from "./carriedName";
 import { useModelSelectionIntent } from "./store/useModelSelectionIntent";
 import { usePreferredLLM } from "@/lib/free-tier/store/usePreferredLLM";
 import { ModelProgressCard } from "@/governance-assistant/ModelProgressCard";
@@ -58,12 +59,11 @@ export function ModelSelectionPage({ llmContext }: ModelSelectionPageProps) {
   // genesis return legs must echo it back or the workbench form reseeds from
   // blank on return (the returnUrl arm is owned by its caller and untouched).
   const carriedName = searchParams.get("name");
-  const genesisPath = carriedName
-    ? `/projects/new/ai?name=${encodeURIComponent(carriedName)}`
-    : "/projects/new/ai";
-  const genesisAutoStartPath = carriedName
-    ? `/projects/new/ai?generate=1&name=${encodeURIComponent(carriedName)}`
-    : "/projects/new/ai?generate=1";
+  const genesisPath = withCarriedName("/projects/new/ai", carriedName);
+  const genesisAutoStartPath = withCarriedName(
+    "/projects/new/ai?generate=1",
+    carriedName,
+  );
 
   const hasServerApiKey = hasServerLLMAccessKey();
   const isModelReady =
