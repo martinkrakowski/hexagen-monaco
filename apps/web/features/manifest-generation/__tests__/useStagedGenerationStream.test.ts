@@ -470,6 +470,49 @@ test("aborts stream on cancel", async () => {
   }
 });
 
+test("resolves after a terminal frame even when the server holds the stream open", async () => {
+  // The stream enqueues a complete `done` frame but is NEVER closed — the
+  // read loop must break on the terminal frame (and cancel the reader)
+  // instead of parking on the next read() until the inactivity watchdog.
+  // A regression here fails as a test timeout.
+  let cancelled = false;
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode('{"type":"done","yaml":"system: x"}\n'),
+      );
+      // Deliberately no controller.close().
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+
+  global.fetch = async () =>
+    ({ ok: true, body: stream }) as unknown as Response;
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+    let generateResult:
+      | Awaited<ReturnType<typeof result.current.generate>>
+      | undefined;
+
+    await act(async () => {
+      generateResult = await result.current.generate({ description: "test" });
+    });
+
+    assert.strictEqual(generateResult?.phase, "complete");
+    assert.strictEqual(generateResult?.generatedManifest, "system: x");
+    // The reader was cancelled so the held-open connection gets released.
+    assert.strictEqual(cancelled, true);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("attempts reconnection on reader error", async () => {
   let fetchCount = 0;
 

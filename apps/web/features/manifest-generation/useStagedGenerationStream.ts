@@ -336,7 +336,7 @@ export function useStagedGenerationStream(
         }, 5000);
 
         try {
-          for (;;) {
+          readLoop: for (;;) {
             try {
               const { done, value } = await reader.read();
               if (done) break;
@@ -415,6 +415,17 @@ export function useStagedGenerationStream(
                     setValidationErrors(errors);
                   } else if (applyTerminalFrame(event)) {
                     sawTerminalFrame = true;
+                    // A done/error frame is terminal by protocol — stop reading
+                    // instead of waiting for the server to close the stream. A
+                    // connection held open after `done` would otherwise park
+                    // generate() (and useStagedSpecGeneration's run lock) on
+                    // the pending read() until the inactivity watchdog fires.
+                    void reader.cancel().catch(() => {
+                      logger.warn(
+                        "[SSE] Failed to cancel stream after terminal frame",
+                      );
+                    });
+                    break readLoop;
                   }
                 } catch {
                   logger.warn("[staged-gen] Failed to parse NDJSON line", {
