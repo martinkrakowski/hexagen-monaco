@@ -3,6 +3,9 @@
 import { create } from "zustand";
 import { ProjectSpec } from "@hexagen/project-configuration";
 import type { ProjectLayerTurn } from "@hexagen/shared";
+// Type-only import (erased at compile time): no runtime coupling from the
+// store to the streaming hook.
+import type { StageValidationReport } from "../useStagedGenerationStream";
 
 /**
  * Provenance for a manifest whose spec text was DISTILLED from a live
@@ -49,6 +52,16 @@ interface PendingManifestState {
    * accept-save by an exact specText match.
    */
   originSession: PendingSessionProvenance | null;
+  /**
+   * The server pipeline's Stage-6 validation report for EXACTLY the `yaml`
+   * held here, or null when the manifest never went through the staged
+   * pipeline (hand-written manifest / legacy import). The accept view uses it
+   * to (a) skip the client-side auto-fixer — the server already validated,
+   * and where needed repaired, this YAML — and (b) render the server's
+   * findings instead of re-deriving name-heuristic ones. Any yaml mutation
+   * (`updateYaml`) invalidates it (see there).
+   */
+  validationReport: StageValidationReport | null;
   setOriginSession: (session: PendingSessionProvenance | null) => void;
   set: (
     yaml: string,
@@ -56,6 +69,7 @@ interface PendingManifestState {
     projectName: string,
     originPath: string,
     originSpecText?: string | null,
+    validationReport?: StageValidationReport | null,
   ) => void;
   updateYaml: (yaml: string) => void;
   clear: () => void;
@@ -68,6 +82,7 @@ export const usePendingManifest = create<PendingManifestState>((set) => ({
   originPath: null,
   originSpecText: null,
   originSession: null,
+  validationReport: null,
   setOriginSession: (session: PendingSessionProvenance | null) => {
     set({ originSession: session });
   },
@@ -77,6 +92,7 @@ export const usePendingManifest = create<PendingManifestState>((set) => ({
     projectName: string,
     originPath: string,
     originSpecText?: string | null,
+    validationReport?: StageValidationReport | null,
   ) => {
     set({
       yaml,
@@ -84,10 +100,16 @@ export const usePendingManifest = create<PendingManifestState>((set) => ({
       projectName,
       originPath,
       originSpecText: originSpecText ?? null,
+      validationReport: validationReport ?? null,
     });
   },
   updateYaml: (yaml: string) => {
-    set({ yaml });
+    // Stale-report guard: the server report vouches only for the exact YAML
+    // it was generated against — any edit (auto-fix drawer, future editors)
+    // invalidates it, reverting the accept view to the live client-fixer
+    // path. originSession is DELIBERATELY untouched, same contract as set()
+    // (the finalize hand-off runs before the manifest lands here).
+    set({ yaml, validationReport: null });
   },
   clear: () => {
     set({
@@ -97,6 +119,7 @@ export const usePendingManifest = create<PendingManifestState>((set) => ({
       originPath: null,
       originSpecText: null,
       originSession: null,
+      validationReport: null,
     });
   },
 }));

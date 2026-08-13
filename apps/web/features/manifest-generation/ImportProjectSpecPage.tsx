@@ -10,6 +10,7 @@ import {
 import { logger } from "../../lib/structured-logger";
 import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useStagedManifestGeneration } from "./useStagedManifestGeneration";
+import type { StageValidationReport } from "./useStagedGenerationStream";
 import { useLooseSpecConversion } from "./useLooseSpecConversion";
 import { Button } from "@hexagen/ui";
 import { ArrowLeft, ArrowRight, RefreshCw } from "lucide-react";
@@ -184,13 +185,15 @@ export default function ImportProjectSpecPage() {
       // Also clear any spec persisted by an earlier upload this session, so the
       // accept screen's Back returns to a clean upload page rather than
       // rehydrating stale content — and drop any earlier upload's provenance so
-      // it can't attach to this unrelated manifest. The explicit `null` to
-      // acceptManifest is load-bearing: setOriginalSpecText hasn't re-rendered
-      // yet, so acceptManifest's closure still sees the PREVIOUS upload's text.
+      // it can't attach to this unrelated manifest. The explicit `null`s to
+      // acceptManifest are load-bearing: setOriginalSpecText hasn't re-rendered
+      // yet, so acceptManifest's closure still sees the PREVIOUS upload's text —
+      // and an earlier abandoned generation run could have left a stale Stage-6
+      // report on the hooks that must not attach to this hand-uploaded manifest.
       sessionStorage.removeItem("import_spec_content");
       sessionStorage.removeItem("import_spec_original_content");
       setOriginalSpecText(null);
-      acceptManifest(content, null);
+      acceptManifest(content, null, null);
       return;
     }
 
@@ -245,7 +248,16 @@ export default function ImportProjectSpecPage() {
     // otherwise still read the previous upload's text and attach it to an
     // unrelated manifest. Callers after a render cycle (the generating step's
     // Next button) omit it and get the state value.
-    (manifest: string, originSpecTextOverride?: string | null) => {
+    // `validationReportOverride`: same override pattern for the Stage-6
+    // report. The fast path passes an explicit `null` — its manifest never
+    // went through the pipeline, but a generation run abandoned earlier in
+    // this page session could have left a stale report on the hooks. Omitted
+    // by the generating step's Next, which wants the live report.
+    (
+      manifest: string,
+      originSpecTextOverride?: string | null,
+      validationReportOverride?: StageValidationReport | null,
+    ) => {
       try {
         const wizardData = parseManifestToWizardData(manifest);
         // The user-entered name (from the Project Name step) wins: it becomes the
@@ -275,6 +287,13 @@ export default function ImportProjectSpecPage() {
         // flow (the spec survives in sessionStorage) instead of the prompt flow.
         // originSpecText rides along so the accept-save can attach the user's
         // ORIGINAL spec as a planning layer (null on the manifest fast path).
+        // The Stage-6 report rides along too, so the accept view trusts the
+        // pipeline's validation instead of re-padding via the client fixer.
+        // The ??-coalesce over the two hooks is exact, not a guess: each run
+        // function resets the OTHER hook before generating, so at most one
+        // report is non-null. (The identity rewrite above only touches
+        // top-level system/scope, which the Stage-6 review does not key on —
+        // its findings stay valid for the stored YAML.)
         pendingManifest.set(
           manifestYaml,
           wizardData,
@@ -283,6 +302,10 @@ export default function ImportProjectSpecPage() {
           originSpecTextOverride === undefined
             ? originalSpecText
             : originSpecTextOverride,
+          validationReportOverride === undefined
+            ? (specGeneration.validationReport ??
+                manifestGeneration.validationReport)
+            : validationReportOverride,
         );
         router.push("/projects/new/ai/accept");
       } catch (err) {
@@ -305,7 +328,14 @@ export default function ImportProjectSpecPage() {
         );
       }
     },
-    [pendingManifest, router, carriedName, originalSpecText],
+    [
+      pendingManifest,
+      router,
+      carriedName,
+      originalSpecText,
+      specGeneration.validationReport,
+      manifestGeneration.validationReport,
+    ],
   );
 
   // Shared completion handling for the spec path — the original run and the

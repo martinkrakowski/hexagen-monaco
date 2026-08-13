@@ -23,6 +23,7 @@ import { Button } from "@hexagen/ui";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { LocalLLMContext } from "../../lib/llm-interfaces";
 import type { GeneratingFooterActions } from "./GenerateWithAi/types";
+import type { StageValidationReport } from "./useStagedGenerationStream";
 
 interface AIGenerationPageProps {
   llmContext: LocalLLMContext;
@@ -55,7 +56,7 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
     useState<GeneratingFooterActions | null>(null);
 
   const handleUseManifest = useCallback(
-    (yaml: string) => {
+    (yaml: string, validationReport?: StageValidationReport | null) => {
       try {
         setParseError(null);
         const wizardData = parseManifestToWizardData(yaml);
@@ -126,6 +127,14 @@ export function AIGenerationPage({ llmContext }: AIGenerationPageProps) {
           wizardData,
           projectName,
           "/projects/new/ai",
+          // No spec provenance in the prompt flow (5th arg); the 6th carries
+          // the Stage-6 report so the accept view trusts the pipeline's
+          // validation instead of re-padding via the client fixer. The
+          // identity rewrite above only touches top-level system/scope, which
+          // the Stage-6 review does not key on — the findings stay valid for
+          // the stored YAML.
+          null,
+          validationReport ?? null,
         );
         router.push("/projects/new/ai/accept");
       } catch (error) {

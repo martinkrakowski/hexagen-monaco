@@ -411,6 +411,44 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     assert.equal(nav.push.mock.calls.length, 0);
   });
 
+  it("the footer's Next hands the Stage-6 report to the pending-manifest store with the manifest (import round-trip integrity, Item 3.1)", async () => {
+    // The accept screen keys its auto-fixer gate and approve logic on this
+    // report; the prompt flow used to drop it at the hand-off even though the
+    // stream parsed it.
+    const report = {
+      errors: [],
+      warnings: ["Consider a query port for user reads."],
+      passed: true,
+    };
+    const doneWithValidation = `${JSON.stringify({
+      type: "done",
+      yaml: DONE_MANIFEST_YAML,
+      contextCount: 1,
+      portCount: 0,
+      adapterCount: 0,
+      validation: report,
+    })}\n`;
+    fetchMock.mockImplementation((input: RequestInfo | URL) =>
+      String(input) === STAGE_ENDPOINT
+        ? Promise.resolve(new Response(doneWithValidation, { status: 200 }))
+        : pendingForever(),
+    );
+    render(<AIGenerationPage llmContext={makeLlmContext()} />);
+
+    fireEvent.change(composerTextarea(), {
+      target: { value: VALID_DESCRIPTION },
+    });
+    submitComposer();
+
+    const nextButton = await waitFor(() =>
+      screen.getByRole("button", { name: "Next" }),
+    );
+    fireEvent.click(nextButton);
+
+    assert.deepEqual(nav.push.mock.calls, [["/projects/new/ai/accept"]]);
+    assert.deepEqual(usePendingManifest.getState().validationReport, report);
+  });
+
   it("preserves the explicit-local path: warning dialog first, then Continue detours through /models when no model is ready or remembered", async () => {
     useExecutionEngine.setState({ engine: "local" });
     render(<AIGenerationPage llmContext={makeLlmContext()} />);

@@ -328,6 +328,99 @@ describe("ImportProjectSpecPage", () => {
     });
   });
 
+  it("hands the done frame's Stage-6 report to the pending-manifest store on accept", async () => {
+    // Import round-trip integrity, Item 3.1: the accept screen keys its
+    // auto-fixer gate and approve logic on this report — dropping it here
+    // re-enabled the client fixer's padding on server-validated manifests.
+    usePendingManifest.getState().clear();
+    const report = {
+      errors: [],
+      warnings: ["[R04] Port 'StoragePort' has no adapter."],
+      passed: true,
+    };
+    server.use(
+      http.post("/api/manifest/generate/spec", () => {
+        return new HttpResponse(
+          JSON.stringify({
+            type: "done",
+            yaml: "bounded_contexts:\n  - name: test\n",
+            contextCount: 1,
+            portCount: 0,
+            adapterCount: 0,
+            transactionId: "txn-123",
+            validation: report,
+          }) + "\n",
+          { status: 200, headers: { "Content-Type": "application/x-ndjson" } },
+        );
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<ImportProjectSpecPage />);
+    const yamlContent = fs.readFileSync(yamlPath, "utf-8");
+    await user.upload(
+      screen.getByLabelText(/upload manifest or spec/i),
+      new File([yamlContent], "krakowski-portal.yaml", { type: "text/yaml" }),
+    );
+    await waitFor(() => assert.ok(screen.getByText(/spec review/i)));
+    await user.click(screen.getByText(/map ports & adapters/i));
+    await waitFor(() =>
+      assert.ok(screen.getByRole("button", { name: /next/i })),
+    );
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    await waitFor(() =>
+      assert.ok(
+        routerPush.mock.calls.some((c) => c[0] === "/projects/new/ai/accept"),
+      ),
+    );
+    assert.deepStrictEqual(
+      usePendingManifest.getState().validationReport,
+      report,
+    );
+  });
+
+  it("the manifest fast path stores a NULL report — a stale one from an earlier run must not attach", async () => {
+    // A hand-uploaded complete manifest never went through the pipeline; the
+    // explicit-null override in handleFileLoaded keeps any report left on the
+    // generation hooks (or, as seeded here, in the store) from leaking onto it.
+    usePendingManifest.getState().clear();
+    usePendingManifest
+      .getState()
+      .set("old: yaml", {} as never, "Old", "/projects/new/import/spec", null, {
+        errors: [],
+        warnings: [],
+        passed: true,
+      });
+
+    const user = userEvent.setup();
+    render(<ImportProjectSpecPage />);
+    const manifest = [
+      "system: test-system",
+      "bounded_contexts:",
+      "  - name: orders",
+      "    layers:",
+      "      application:",
+      "        ports:",
+      "          in: [PlaceOrderPort]",
+      "          out: [OrderRepositoryPort]",
+      "      infrastructure:",
+      "        adapters: [OrderRepositoryAdapter]",
+      "",
+    ].join("\n");
+    await user.upload(
+      screen.getByLabelText(/upload manifest or spec/i),
+      new File([manifest], "manifest.yaml", { type: "text/yaml" }),
+    );
+
+    await waitFor(() =>
+      assert.ok(
+        routerPush.mock.calls.some((c) => c[0] === "/projects/new/ai/accept"),
+      ),
+    );
+    assert.strictEqual(usePendingManifest.getState().validationReport, null);
+  });
+
   it("shows error on invalid config during generation", async () => {
     server.use(
       http.post("/api/manifest/generate/spec", () => {
