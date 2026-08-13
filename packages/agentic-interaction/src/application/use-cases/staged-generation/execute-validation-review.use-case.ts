@@ -8,8 +8,10 @@ import {
   compileStage6Prompt,
   validatePortQuality,
   normalizeContextName,
+  normalizePortName,
 } from "../../../domain/index";
 import { bannedTokensInContextName } from "../../../domain/prompts/architecture-contract";
+import { portAdapterCoverageErrors } from "../../../domain/manifest/port-adapter-coverage";
 import type {
   ValidationReport,
   PipelineState,
@@ -279,9 +281,22 @@ export class ExecuteValidationReviewUseCase {
         //   contradicts) the programmatic recomputation below, which was the
         //   universal pre-discard status quo.
         // Case-insensitive throughout in case the model lowercases rule ids.
+        // R04/R05 join the discard set ONLY when the deterministic per-context
+        // recompute below can run (stage3 + stage4 present): the judge is the
+        // only default-path R04/R05 channel, so a bare discard would silently
+        // lose genuine same-context violations. The judge historically counted
+        // adapters ACROSS contexts against per-context rules, minting phantom
+        // R04/R05 for every dialect import whose seeding legitimately shares a
+        // port name between contexts (#411) — discard + recompute is the same
+        // house pattern as R01.
+        const canRecomputeCoverage = Boolean(state.stage3 && state.stage4);
         const leadingRuleTag = /^\[(R\d{2})\]/i;
-        const deterministicRule = /^R(?:01|16|17|18)$/i;
-        const deterministicMention = /\bR(?:01|16|17|18)\b/i;
+        const deterministicRule = canRecomputeCoverage
+          ? /^R(?:01|04|05|16|17|18)$/i
+          : /^R(?:01|16|17|18)$/i;
+        const deterministicMention = canRecomputeCoverage
+          ? /\bR(?:01|04|05|16|17|18)\b/i
+          : /\bR(?:01|16|17|18)\b/i;
         const isDeterministicClaim = (m: string): boolean => {
           const tag = leadingRuleTag.exec(m);
           if (tag) return deterministicRule.test(tag[1] as string);
@@ -303,6 +318,83 @@ export class ExecuteValidationReviewUseCase {
               } ${tokenList} — rename it to a domain concept (a context is named after a business capability, not a technical pattern).`,
             );
           }
+        }
+
+        // Deterministic R04/R05 recompute (companion to the discard above —
+        // never gate one without the other). Counts adapters per context via
+        // the same helper `structuralManifestErrors` uses, preserving its two
+        // carve-outs: shared-kernel contexts are exempt (they must have no
+        // ports at all — R09's territory) and adapters with an empty
+        // `implements` are not counted as bindings.
+        if (state.stage3 && state.stage4) {
+          const sharedKernelNorms = new Set<string>();
+          for (const ctx of state.stage2?.accepted ?? []) {
+            if (ctx.type === "shared-kernel") {
+              sharedKernelNorms.add(normalizeContextName(ctx.name));
+            }
+          }
+          // Also honor the assembled manifest's `type:` field — dialect
+          // imports map shared-kernel planes onto it during normalization,
+          // and stage2 may predate that mapping.
+          const rawContexts = state.stage5?.parsedObject?.["bounded_contexts"];
+          if (Array.isArray(rawContexts)) {
+            for (const raw of rawContexts) {
+              if (raw === null || typeof raw !== "object") continue;
+              const { name, type } = raw as { name?: unknown; type?: unknown };
+              if (
+                typeof name === "string" &&
+                typeof type === "string" &&
+                type.trim().toLowerCase() === "shared-kernel"
+              ) {
+                sharedKernelNorms.add(normalizeContextName(name));
+              }
+            }
+          }
+          // Count + report against the names as they appear in the EMITTED
+          // manifest: the assembler normalizes context names (kebab) and port
+          // names (PascalCase + Port suffix) when rendering, and Stage-4
+          // models answer `implements` with the normalized spellings — so
+          // counting raw Stage-3 spellings would manufacture phantom
+          // 0-adapter findings and cite ports the user cannot find in the
+          // YAML (the alvaro-ai R01 lesson). Normalization happens HERE, not
+          // inside the shared helper, so structuralManifestErrors' exact
+          // string matching stays byte-identical.
+          const normalizedPortMap = {
+            contexts: state.stage3.contexts.map((ctx) => ({
+              ...ctx,
+              contextName:
+                typeof ctx.contextName === "string"
+                  ? normalizeContextName(ctx.contextName)
+                  : ctx.contextName,
+              in: ctx.in.map((p) => ({
+                ...p,
+                name: normalizePortName(p.name),
+              })),
+              out: ctx.out.map((p) => ({
+                ...p,
+                name: normalizePortName(p.name),
+              })),
+            })),
+          };
+          const normalizedBindings = {
+            contexts: state.stage4.contexts.map((ctx) => ({
+              ...ctx,
+              adapters: ctx.adapters.map((a) => ({
+                ...a,
+                // Empty implements stays empty (the unbound-adapter skip).
+                implements: a.implements
+                  ? normalizePortName(a.implements)
+                  : a.implements,
+              })),
+            })),
+          };
+          finalErrors.push(
+            ...portAdapterCoverageErrors(
+              normalizedPortMap,
+              normalizedBindings,
+              sharedKernelNorms,
+            ),
+          );
         }
 
         const programmaticIssues = collectPortQualityIssues(state);

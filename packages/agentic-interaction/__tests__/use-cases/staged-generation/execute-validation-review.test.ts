@@ -800,6 +800,340 @@ describe("deterministic R16/R17/R18 (LLM-duplicate discard, A4 pull-forward)", (
   });
 });
 
+describe("deterministic R04/R05 (per-context discard + recompute)", () => {
+  // The judge counted adapters ACROSS contexts against per-context rules,
+  // minting phantom R04/R05 for every dialect import whose seeding shares a
+  // port name between contexts (#411, alvaro field test). Same policy as R01:
+  // when stage3+stage4 are present, LLM R04/R05 claims are discarded and the
+  // per-context deterministic count is the sole source.
+
+  const stage3TwoContextsSharedPortName = {
+    contexts: [
+      {
+        contextName: "image-domain",
+        in: [],
+        out: [
+          {
+            name: "StoragePort",
+            type: "repository" as const,
+            description: "Persists processed image artifacts for the domain",
+          },
+        ],
+      },
+      {
+        contextName: "real-esrgan",
+        in: [],
+        out: [
+          {
+            name: "StoragePort",
+            type: "repository" as const,
+            description: "Persists upscaled model outputs for retrieval",
+          },
+        ],
+      },
+    ],
+  };
+  const stage4EachContextCovered = {
+    contexts: [
+      {
+        contextName: "image-domain",
+        adapters: [
+          {
+            name: "S3StorageAdapter",
+            type: "Repository",
+            implements: "StoragePort",
+          },
+        ],
+      },
+      {
+        contextName: "real-esrgan",
+        adapters: [
+          {
+            name: "FsStorageAdapter",
+            type: "Repository",
+            implements: "StoragePort",
+          },
+        ],
+      },
+    ],
+  };
+
+  test("cross-context phantom R04 is discarded and nothing is recomputed when each context covers its own port", async () => {
+    // The exact prod hallucination shape: "implemented by 2 adapters" counted
+    // across contexts. Per-context each StoragePort has exactly 1 adapter.
+    const ndjson =
+      '{"type":"error","rule":"R04","message":"Port \'StoragePort\' is implemented by 2 adapters (context \'image-domain\') and (context \'real-esrgan\')."}\n{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const state = {
+      ...createMockPipelineState(),
+      stage3: stage3TwoContextsSharedPortName,
+      stage4: stage4EachContextCovered,
+    };
+    const result = await new ExecuteValidationReviewUseCase(mockLLM).execute(
+      state,
+    );
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.errors, []);
+      assert.strictEqual(result.value.passed, true);
+    }
+  });
+
+  test("genuine same-context violation is recomputed after the discard (never bare discard)", async () => {
+    // Judge emits a sloppy cross-context R04; real-esrgan ALSO genuinely lacks
+    // an adapter for its own port. The discard must not lose that finding.
+    const ndjson =
+      '{"type":"error","rule":"R04","message":"Port \'StoragePort\' is implemented by adapters in multiple contexts."}\n{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const state = {
+      ...createMockPipelineState(),
+      stage3: stage3TwoContextsSharedPortName,
+      stage4: {
+        contexts: [
+          {
+            contextName: "image-domain",
+            adapters: [
+              {
+                name: "S3StorageAdapter",
+                type: "Repository",
+                implements: "StoragePort",
+              },
+            ],
+          },
+          { contextName: "real-esrgan", adapters: [] },
+        ],
+      },
+    };
+    const result = await new ExecuteValidationReviewUseCase(mockLLM).execute(
+      state,
+    );
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.errors, [
+        "[R04] Outbound port 'StoragePort' in 'real-esrgan' has 0 adapters (expected 1).",
+      ]);
+      assert.strictEqual(result.value.passed, false);
+    }
+  });
+
+  test("recomputed R05 fires for an uncovered inbound port", async () => {
+    const mockLLM = createMockLLMPort(() =>
+      createSuccessStream(validValidationNdjson),
+    );
+    const state = {
+      ...createMockPipelineState(),
+      stage3: {
+        contexts: [
+          {
+            contextName: "invoice-management",
+            in: [
+              {
+                name: "CreateInvoicePort",
+                type: "command" as const,
+                description: "Accepts invoice creation requests from billing",
+              },
+            ],
+            out: [],
+          },
+        ],
+      },
+      stage4: {
+        contexts: [{ contextName: "invoice-management", adapters: [] }],
+      },
+    };
+    const result = await new ExecuteValidationReviewUseCase(mockLLM).execute(
+      state,
+    );
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.errors, [
+        "[R05] Inbound port 'CreateInvoicePort' in 'invoice-management' has 0 adapters (expected 1).",
+      ]);
+      assert.strictEqual(result.value.passed, false);
+    }
+  });
+
+  test("shared-kernel contexts are exempt from the recompute (stage2 type)", async () => {
+    const mockLLM = createMockLLMPort(() =>
+      createSuccessStream(validValidationNdjson),
+    );
+    const state = {
+      ...createMockPipelineState(),
+      stage2: {
+        accepted: [
+          {
+            name: "shared-types",
+            type: "shared-kernel" as const,
+            reasoning: "Common value objects",
+          },
+        ],
+        rejected: [],
+        uncertain: [],
+      },
+      // A shared-kernel with ports is R09's finding, not R04/R05 — counting it
+      // here would double-report.
+      stage3: {
+        contexts: [
+          {
+            contextName: "shared-types",
+            in: [],
+            out: [
+              {
+                name: "LeftoverPort",
+                type: "repository" as const,
+                description: "Should be reported by R09, not R04",
+              },
+            ],
+          },
+        ],
+      },
+      stage4: { contexts: [] },
+    };
+    const result = await new ExecuteValidationReviewUseCase(mockLLM).execute(
+      state,
+    );
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.errors, []);
+      assert.strictEqual(result.value.passed, true);
+    }
+  });
+
+  test("shared-kernel exemption also honors the assembled manifest's type field", async () => {
+    const mockLLM = createMockLLMPort(() =>
+      createSuccessStream(validValidationNdjson),
+    );
+    const state = {
+      ...createMockPipelineState(),
+      // stage2 says nothing about the context; the dialect normalizer mapped a
+      // shared-kernel plane onto `type:` in the assembled manifest.
+      stage3: {
+        contexts: [
+          {
+            contextName: "shared-types",
+            in: [],
+            out: [
+              {
+                name: "LeftoverPort",
+                type: "repository" as const,
+                description: "Should be exempt via parsedObject type lookup",
+              },
+            ],
+          },
+        ],
+      },
+      stage4: { contexts: [] },
+      stage5: {
+        yaml: "",
+        parsedObject: {
+          bounded_contexts: [{ name: "shared-types", type: "shared-kernel" }],
+        },
+        assemblyWarnings: [],
+      },
+    };
+    const result = await new ExecuteValidationReviewUseCase(mockLLM).execute(
+      state,
+    );
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.errors, []);
+      assert.strictEqual(result.value.passed, true);
+    }
+  });
+
+  test("empty-implements adapters do not count as bindings (skip preserved)", async () => {
+    const mockLLM = createMockLLMPort(() =>
+      createSuccessStream(validValidationNdjson),
+    );
+    const state = {
+      ...createMockPipelineState(),
+      stage3: {
+        contexts: [
+          {
+            contextName: "invoice-management",
+            in: [],
+            out: [
+              {
+                name: "InvoiceRepositoryPort",
+                type: "repository" as const,
+                description: "Persists invoice aggregates for the domain",
+              },
+            ],
+          },
+        ],
+      },
+      stage4: {
+        contexts: [
+          {
+            contextName: "invoice-management",
+            adapters: [
+              { name: "UnboundAdapter", type: "Repository", implements: "" },
+            ],
+          },
+        ],
+      },
+    };
+    const result = await new ExecuteValidationReviewUseCase(mockLLM).execute(
+      state,
+    );
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.deepStrictEqual(result.value.errors, [
+        "[R04] Outbound port 'InvoiceRepositoryPort' in 'invoice-management' has 0 adapters (expected 1).",
+      ]);
+      assert.strictEqual(result.value.passed, false);
+    }
+  });
+
+  test("without stage3/stage4 the judge's R04/R05 findings SURVIVE (no bare discard)", async () => {
+    // The recompute can't run without port map + bindings, so discarding the
+    // judge's findings there would silently lose the only R04/R05 channel.
+    const ndjson =
+      '{"type":"error","rule":"R04","message":"Outbound port \'InvoiceRepositoryPort\' has no adapter."}\n{"type":"result","passed":false}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const result = await new ExecuteValidationReviewUseCase(mockLLM).execute(
+      createMockPipelineState(),
+    );
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.value.errors.length, 1);
+      assert.ok(result.value.errors[0].startsWith("[R04]"));
+      assert.strictEqual(result.value.passed, false);
+    }
+  });
+
+  test("LLM R04/R05 claims are discarded in result-array form too", async () => {
+    const ndjson =
+      '{"type":"result","passed":false,"errors":[{"rule":"R05","message":"Inbound port has 2 adapters."},{"rule":"R02","message":"Context \'invoice-management\' has no inbound ports."}]}\n';
+    const mockLLM = createMockLLMPort(() => createSuccessStream(ndjson));
+    const state = {
+      ...createMockPipelineState(),
+      stage3: stage3TwoContextsSharedPortName,
+      stage4: stage4EachContextCovered,
+    };
+    const result = await new ExecuteValidationReviewUseCase(mockLLM).execute(
+      state,
+    );
+
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      const errorsString = JSON.stringify(result.value.errors);
+      assert.ok(!errorsString.includes("R05"), `R05 survived: ${errorsString}`);
+      assert.ok(
+        errorsString.includes("R02"),
+        "non-deterministic rules survive",
+      );
+    }
+  });
+});
+
 describe("STAGE6_VALIDATION_SYSTEM_PROMPT", () => {
   test("declares R16 (port description quality)", () => {
     assert.match(STAGE6_VALIDATION_SYSTEM_PROMPT, /R16/);
@@ -840,6 +1174,20 @@ describe("STAGE6_VALIDATION_SYSTEM_PROMPT", () => {
     // 'postgres-repo' was the exemplar weak judges echoed verbatim.
     assert.doesNotMatch(STAGE6_VALIDATION_SYSTEM_PROMPT, /postgres-repo/);
     assert.doesNotMatch(STAGE6_VALIDATION_SYSTEM_PROMPT, /"rule": "R01"/);
+  });
+
+  test("scopes R04/R05 to the SAME context's adapter_bindings entry (mirrors R06)", () => {
+    // The unscoped phrasing quantified over ALL of <adapter_bindings>, inviting
+    // cross-context counting — the phantom "implemented by 2 adapters" findings
+    // from the alvaro field test. Both rules now carry R06's same-context
+    // wording plus a disambiguation that shared port names count separately.
+    const r04 = STAGE6_VALIDATION_SYSTEM_PROMPT.match(/R04:[\s\S]*?(?=\nR05:)/);
+    const r05 = STAGE6_VALIDATION_SYSTEM_PROMPT.match(/R05:[\s\S]*?(?=\nR06:)/);
+    assert.ok(r04 && r05);
+    for (const section of [r04[0], r05[0]]) {
+      assert.match(section, /SAME context's entry in <adapter_bindings>/);
+      assert.match(section, /counted separately/);
+    }
   });
 
   test("grounds R02-R06 in the provided port_map and adapter_bindings sections", () => {

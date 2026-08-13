@@ -593,11 +593,13 @@ R02: Every non-shared-kernel context has at least one inbound port.
 R03: Every non-shared-kernel context has at least one outbound repository port.
       Check: for each context in <port_map> whose context is not a shared kernel, the "out" array must contain at least one entry with "type":"repository".
 
-R04: Every outbound port has exactly one adapter assigned.
-      Check: for each port in the "out" arrays of <port_map>, exactly one adapter in <adapter_bindings> must name it in "implements".
+R04: Every outbound port has exactly one adapter assigned within its own context.
+      Check: for each port in a context's "out" array in <port_map>, exactly one adapter in the SAME context's entry in <adapter_bindings> must name it in "implements".
+      Count one context at a time: a port name that also appears in ANOTHER context's entry is a separate port and is counted separately — cross-context sharing of a port name is NEVER an R04 violation (it is covered by a separate advisory, not by you).
 
-R05: Every inbound port has exactly one adapter assigned.
-      Check: for each port in the "in" arrays of <port_map>, exactly one adapter in <adapter_bindings> must name it in "implements".
+R05: Every inbound port has exactly one adapter assigned within its own context.
+      Check: for each port in a context's "in" array in <port_map>, exactly one adapter in the SAME context's entry in <adapter_bindings> must name it in "implements".
+      Count one context at a time: a port name that also appears in ANOTHER context's entry is a separate port and is counted separately — cross-context sharing of a port name is NEVER an R05 violation (it is covered by a separate advisory, not by you).
 
 R06: No adapter's "implements" value references a port that belongs to a different context.
       Check: for each adapter in <adapter_bindings>, the port named by "implements" must appear in the SAME context's entry in <port_map>.
