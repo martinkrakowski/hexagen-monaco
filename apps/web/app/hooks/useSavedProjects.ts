@@ -119,14 +119,18 @@ export function useSavedProjects() {
       // project is durably committed (the IndexedDB adapter is async).
       // Returning the id before the write resolved caused approved projects to
       // be "lost" when the next screen read storage before the write landed.
+      // The write is RECORD-level (createProjectRecord: fresh read at write
+      // time, duplicate-id reject, prepend) — a whole-array save from this
+      // instance's snapshot could revert records other writers just committed
+      // (ADR-0045's clobber class).
       // The wired IDB adapter returns a failed Result rather than throwing, but
-      // treat a throwing port as a failed write too (mirrors commitLayerMutation):
+      // treat a throwing port as a failed write too (mirrors commitRecordMutation):
       // otherwise the optimistic project stays in state after ManifestAcceptPage
       // catches the rejection and lets the user retry — the next save then
-      // serializes the phantom project plus the retry, duplicating it.
-      let result: Awaited<ReturnType<typeof port.saveProjects>>;
+      // persists the phantom project plus the retry, duplicating it.
+      let result: Awaited<ReturnType<typeof port.createProjectRecord>>;
       try {
-        result = await port.saveProjects(updated.map(toBase));
+        result = await port.createProjectRecord(toBase(newProject));
       } catch (e) {
         result = {
           success: false,
@@ -157,6 +161,13 @@ export function useSavedProjects() {
     [projects],
   );
 
+  // Fire-and-forget with an optimistic removal and a seq-guarded revert, but
+  // the durable write is RECORD-level (deleteProjectRecord), not a whole-array
+  // save of the filtered snapshot — which could silently revert every other
+  // record to this instance's stale view. The port method is IDEMPOTENT
+  // (absent id resolves success), which is load-bearing here: if "already
+  // deleted elsewhere" surfaced as an error, the revert arm below would
+  // resurrect the locally-deleted row (port D6).
   const deleteProject = useCallback(
     (id: string): void => {
       const snapshot = projectsRef.current;
@@ -164,33 +175,88 @@ export function useSavedProjects() {
       const seq = ++mutationSeq.current;
       projectsRef.current = updated;
       setProjects(updated);
-      port.saveProjects(updated.map(toBase)).then((result) => {
+      void (async () => {
+        // Same throwing-port hardening as the other writers — an escaped
+        // rejection from a fire-and-forget delete is unreportable.
+        let result: Awaited<ReturnType<typeof port.deleteProjectRecord>>;
+        try {
+          result = await port.deleteProjectRecord(id);
+        } catch (e) {
+          result = {
+            success: false,
+            error: {
+              kind: "Unknown",
+              message: "Unexpected error deleting the project",
+              cause: e,
+            },
+          };
+        }
         if (!result.success && mutationSeq.current === seq) {
           setProjects(snapshot);
           projectsRef.current = snapshot;
           setPersistError(result.error);
         }
-      });
+      })();
     },
     [port],
   );
 
+  // Fire-and-forget rename through the record-level read-merge-write port —
+  // a whole-array save from this instance's snapshot could revert sibling
+  // fields (layers, githubLink) other writers just committed. NotFound
+  // (project deleted from storage between snapshot and write) is a silent
+  // no-op — no revert, no persistError — matching updateProjectFormState's
+  // NotFound contract; failures revert the optimistic rename, seq-guarded.
   const renameProject = useCallback(
     (id: string, newName: string): void => {
       const snapshot = projectsRef.current;
+      // Unknown id: decide the no-op HERE (like updateProjectFormState) rather
+      // than in the port's NotFound arm — a no-op that bumped mutationSeq
+      // would mark an unrelated in-flight mutation as stale and suppress its
+      // revert/reconcile.
+      if (!snapshot.some((p) => p.id === id)) return;
+      const now = Date.now();
       const updated = snapshot.map((p) =>
-        p.id === id ? { ...p, name: newName, updatedAt: Date.now() } : p,
+        p.id === id ? { ...p, name: newName, updatedAt: now } : p,
       );
       const seq = ++mutationSeq.current;
       projectsRef.current = updated;
       setProjects(updated);
-      port.saveProjects(updated.map(toBase)).then((result) => {
-        if (!result.success && mutationSeq.current === seq) {
+      void (async () => {
+        let result: Awaited<ReturnType<typeof port.updateProjectRecord>>;
+        try {
+          result = await port.updateProjectRecord(id, (base) => ({
+            ...base,
+            name: newName,
+            updatedAt: now,
+          }));
+        } catch (e) {
+          result = {
+            success: false,
+            error: {
+              kind: "Unknown",
+              message: "Unexpected error renaming the project",
+              cause: e,
+            },
+          };
+        }
+        if (mutationSeq.current !== seq) return;
+        if (!result.success) {
+          if (result.error.kind === "NotFound") return;
           setProjects(snapshot);
           projectsRef.current = snapshot;
           setPersistError(result.error);
+          return;
         }
-      });
+        // Reconcile with the COMMITTED record — the read-merge-write may have
+        // folded in sibling fields another writer landed first. Guarded by seq.
+        const committed = fromBase(result.value);
+        const reconciled = projectsRef.current.map((p) =>
+          p.id === id ? committed : p,
+        );
+        projectsRef.current = reconciled;
+        setProjects(reconciled);
+      })();
     },
     [port],
   );

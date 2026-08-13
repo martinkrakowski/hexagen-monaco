@@ -51,6 +51,16 @@ const persistencePort = vi.hoisted(() => {
   const port = {
     loadProjects: async () => ({ success: true, value: state.projects }),
     saveProjects: async () => ({ success: true, value: undefined }),
+    // Record-level create/delete — the hook's saveProject/deleteProject write
+    // through these (not whole-array saveProjects) since the ADR-0045 follow-up.
+    createProjectRecord: async (project: Record<string, unknown>) => {
+      state.projects = [project, ...state.projects];
+      return { success: true as const, value: project };
+    },
+    deleteProjectRecord: async (id: string) => {
+      state.projects = state.projects.filter((p) => p.id !== id);
+      return { success: true as const, value: undefined };
+    },
     updateProjectRecord: async (
       id: string,
       updater: (p: Record<string, unknown>) => Record<string, unknown>,
