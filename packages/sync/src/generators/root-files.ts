@@ -7,7 +7,11 @@ import {
 } from "../results.js";
 import { safeWriteFileAtomic } from "../fs-utils.js";
 import { interpolate } from "../template-engine.js";
-import { resolveScope, type Manifest } from "../types/manifest.js";
+import {
+  resolveScope,
+  type Manifest,
+  type TurboPipeline,
+} from "../types/manifest.js";
 import {
   BUILTIN_PACKAGE_JSON_TEMPLATE,
   BUILTIN_TSCONFIG_BASE_TEMPLATE,
@@ -63,6 +67,76 @@ function resolveTemplate(
     return manifestTemplate;
   }
   return builtin;
+}
+
+/**
+ * Framework-specific `build` outputs (F15): Next.js and Nitro apps do not
+ * build into `dist/**`, so without these globs turbo warns "no output files
+ * found" and their builds are uncacheable. `!.next/cache/**` follows Turbo's
+ * own Next.js guidance (the cache dir is machine-local state, not an output).
+ */
+function frameworkBuildOutputs(manifest: Manifest): string[] {
+  const frameworks = new Set((manifest.apps ?? []).map((app) => app.framework));
+  const extras: string[] = [];
+  if (frameworks.has("next.js")) {
+    extras.push(".next/**", "!.next/cache/**");
+  }
+  if (frameworks.has("nitro")) {
+    extras.push(".output/**", ".nitro/**");
+  }
+  return extras;
+}
+
+/**
+ * Build turbo.json from the manifest's `monorepo.turboConfig` (F15 — the
+ * manifest declared `globalDependencies` and a `pipeline` that emission
+ * silently dropped, so env changes never invalidated the cache).
+ *
+ *   - `pipeline` (the manifest key) is emitted as Turbo 2's `tasks`.
+ *   - Manifest tasks REPLACE the same-named built-in task; built-in tasks the
+ *     manifest doesn't mention (e.g. `dev`) are kept so root scripts like
+ *     `turbo dev` still resolve.
+ *   - `globalDependencies` is emitted verbatim when non-empty.
+ *   - Next/Nitro build outputs are appended to the `build` task (see
+ *     {@link frameworkBuildOutputs}).
+ *
+ * An explicit `rootFiles.turbo.template` still wins over this (most-specific
+ * author override), and a manifest with NO `turboConfig` falls back to the
+ * built-in template byte-for-byte — existing projects only see a different
+ * turbo.json once they sync with `--force-root` (turbo.json is protected;
+ * `sync --check` counts protected files as zero ops, so converged trees stay
+ * green).
+ */
+function buildTurboContentFromConfig(manifest: Manifest): string {
+  const turboConfig = manifest.monorepo?.turboConfig ?? {};
+  const builtin = JSON.parse(BUILTIN_TURBO_TEMPLATE) as {
+    $schema: string;
+    tasks: Record<string, TurboPipeline>;
+  };
+
+  const tasks: Record<string, TurboPipeline> = { ...builtin.tasks };
+  for (const [name, task] of Object.entries(turboConfig.pipeline ?? {})) {
+    tasks[name] = { ...task };
+  }
+
+  const extras = frameworkBuildOutputs(manifest);
+  if (extras.length > 0) {
+    const build: TurboPipeline = { ...(tasks["build"] ?? {}) };
+    const outputs = [...(build.outputs ?? [])];
+    for (const glob of extras) {
+      if (!outputs.includes(glob)) outputs.push(glob);
+    }
+    build.outputs = outputs;
+    tasks["build"] = build;
+  }
+
+  const globalDependencies = turboConfig.globalDependencies ?? [];
+  const doc: Record<string, unknown> = {
+    $schema: builtin.$schema,
+    ...(globalDependencies.length > 0 ? { globalDependencies } : {}),
+    tasks,
+  };
+  return JSON.stringify(doc, null, 2);
 }
 
 function interpolateAndWarn(
@@ -154,16 +228,22 @@ export async function generateRootFiles(
       result,
     );
 
-    const turboTemplate = resolveTemplate(
-      rootFiles?.turbo?.template,
-      BUILTIN_TURBO_TEMPLATE,
-    );
-    const turboContent = interpolateAndWarn(
-      turboTemplate,
-      vars,
-      config,
-      "turbo.json",
-    );
+    // turbo.json precedence (F15): explicit `rootFiles.turbo.template`
+    // (author-supplied full file) > manifest `monorepo.turboConfig`
+    // (structured, built via buildTurboContentFromConfig) > built-in template.
+    const explicitTurboTemplate = rootFiles?.turbo?.template;
+    const hasExplicitTurboTemplate =
+      typeof explicitTurboTemplate === "string" &&
+      explicitTurboTemplate.length > 0;
+    const turboContent =
+      !hasExplicitTurboTemplate && config.manifest.monorepo?.turboConfig
+        ? buildTurboContentFromConfig(config.manifest)
+        : interpolateAndWarn(
+            resolveTemplate(explicitTurboTemplate, BUILTIN_TURBO_TEMPLATE),
+            vars,
+            config,
+            "turbo.json",
+          );
     await writeRootFile(
       path.join(config.workspaceRoot, "turbo.json"),
       turboContent,
