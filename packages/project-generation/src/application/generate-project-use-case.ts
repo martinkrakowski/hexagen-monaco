@@ -1,6 +1,7 @@
 import type { ExternalProjectGeneratorPort } from "./ports/out/external-project-generator.port.js";
 import type {
   ExportConfig,
+  ExportErrorCode,
   ProjectExporterPort,
 } from "./ports/out/project-exporter.port.js";
 import type {
@@ -58,6 +59,22 @@ function renderAddOnNotices(errors: string[]): string {
     ...(overflow > 0 ? [`- …and ${overflow} more`] : []),
     "",
   ].join("\n");
+}
+
+/**
+ * Export failure carrying the exporter's typed {@link ExportErrorCode}, so API
+ * routes can map failure classes (e.g. `workflow-scope-missing` → HTTP 403 +
+ * `workflow_scope_required`) instead of sentinel-substring matching on the
+ * message text.
+ */
+export class ExportError extends Error {
+  constructor(
+    message: string,
+    readonly code?: ExportErrorCode,
+  ) {
+    super(message);
+    this.name = "ExportError";
+  }
 }
 
 export interface GenerateProjectInput {
@@ -202,8 +219,19 @@ export class GenerateProjectUseCase {
       if (!exportResult.success) {
         return {
           success: false,
-          error: new Error(exportResult.error ?? "Export failed"),
+          // ExportError preserves the exporter's typed errorCode across the
+          // Result<_, Error> boundary the routes consume.
+          error: new ExportError(
+            exportResult.error ?? "Export failed",
+            exportResult.errorCode,
+          ),
         };
+      }
+
+      // Exporter notices (e.g. workflow files skipped for a scope-less token)
+      // join the add-on warnings already surfaced to the UI.
+      if (exportResult.warnings?.length) {
+        warnings.push(...exportResult.warnings);
       }
 
       let zipBuffer: Buffer | undefined;

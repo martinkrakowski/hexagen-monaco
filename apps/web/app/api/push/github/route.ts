@@ -78,6 +78,17 @@ export async function POST(request: NextRequest) {
           { status: 401 },
         );
       }
+      // The push includes `.github/workflows/*` files but the token lacks the
+      // `workflow` OAuth scope (writer preflight, or the reactive createTree
+      // remap when scopes were unknown). 403 + a distinct code — NOT
+      // reauth_required: the session is valid, the client should offer
+      // "Reconnect GitHub" to grant the scope.
+      if (err.code === "workflow-scope-missing") {
+        return NextResponse.json(
+          { error: err.message, code: "workflow_scope_required" },
+          { status: 403 },
+        );
+      }
       return NextResponse.json(
         { error: err.message, code: err.code },
         { status: 500 },

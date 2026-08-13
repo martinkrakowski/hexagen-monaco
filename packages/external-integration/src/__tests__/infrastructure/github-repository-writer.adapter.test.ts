@@ -13,6 +13,8 @@ interface MockRoute {
   match: (method: string, path: string) => boolean;
   status: number;
   body: unknown;
+  /** Response headers (e.g. `x-oauth-scopes` for scope-preflight tests). */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -43,6 +45,9 @@ function installFetchMock(routes: MockRoute[]): {
     return {
       ok: status >= 200 && status < 300,
       status,
+      // Empty Headers when unspecified: `x-oauth-scopes` absent = scopes
+      // unknown, so pre-existing tests exercise the fail-open path unchanged.
+      headers: new Headers(route.headers ?? {}),
       json: async () => route.body,
     } as Response;
   }) as typeof fetch;
@@ -65,10 +70,12 @@ const route = (
   pathFragment: string,
   status: number,
   body: unknown,
+  headers?: Record<string, string>,
 ): MockRoute => ({
   match: (m, p) => m === method && p.includes(pathFragment),
   status,
   body,
+  headers,
 });
 
 const link = { owner: "octocat", repo: "hexagen-app", branch: "main" };
@@ -227,5 +234,134 @@ describe("GitHubRepositoryWriterAdapter", () => {
 
     assert.strictEqual(result.success, false);
     if (!result.success) assert.strictEqual(result.error.code, "rate-limit");
+  });
+
+  describe("workflow OAuth-scope preflight", () => {
+    const workflowFiles = {
+      ".github/workflows/ci.yml": "name: ci\n",
+      "src/index.ts": "export {};",
+    };
+
+    it("returns workflow-scope-missing with ZERO write calls when scopes are known to lack 'workflow'", async () => {
+      const mock = installFetchMock([
+        // Preflight probe only — no ref/blob/tree/commit calls may follow.
+        route(
+          "GET",
+          "/user",
+          200,
+          { login: "octocat" },
+          {
+            "x-oauth-scopes": "read:user, user:email, repo",
+          },
+        ),
+      ]);
+      restore = mock.restore;
+
+      const result = await new GitHubRepositoryWriterAdapter().commitFiles(
+        link,
+        workflowFiles,
+        "ci: add workflow",
+        "ghp_test",
+      );
+
+      assert.strictEqual(result.success, false);
+      if (!result.success) {
+        assert.strictEqual(result.error.code, "workflow-scope-missing");
+        assert.match(result.error.message, /\.github\/workflows\/ci\.yml/);
+        assert.match(result.error.message, /workflow/);
+      }
+      assert.strictEqual(mock.calls.length, 1, "only the scope probe may run");
+      assert.ok(
+        !mock.calls.some((c) => c.method !== "GET"),
+        "no writes before the preflight verdict",
+      );
+    });
+
+    it("commits normally when the token has the 'workflow' scope", async () => {
+      const mock = installFetchMock([
+        route(
+          "GET",
+          "/user",
+          200,
+          { login: "octocat" },
+          {
+            "x-oauth-scopes": "read:user, user:email, repo, workflow",
+          },
+        ),
+        route("GET", "/git/ref/heads/main", 200, { object: { sha: "head1" } }),
+        route("GET", "/git/commits/head1", 200, { tree: { sha: "basetree1" } }),
+        route("POST", "/git/blobs", 201, { sha: "blob1" }),
+        route("POST", "/git/blobs", 201, { sha: "blob2" }),
+        route("POST", "/git/trees", 201, { sha: "tree1" }),
+        route("POST", "/git/commits", 201, { sha: "wfcommit" }),
+        route("PATCH", "/git/refs/heads/main", 200, { ref: "refs/heads/main" }),
+      ]);
+      restore = mock.restore;
+
+      const result = await new GitHubRepositoryWriterAdapter().commitFiles(
+        link,
+        workflowFiles,
+        "ci: add workflow",
+        "ghp_test",
+      );
+
+      assert.strictEqual(result.success, true);
+      if (result.success)
+        assert.strictEqual(result.value.commitSha, "wfcommit");
+    });
+
+    it("fails open when the scope header is absent, then remaps a createTree 404 to workflow-scope-missing", async () => {
+      const mock = installFetchMock([
+        // Probe without x-oauth-scopes → unknown → proceed (fail open)...
+        route("GET", "/user", 200, { login: "octocat" }),
+        route("GET", "/git/ref/heads/main", 200, { object: { sha: "head1" } }),
+        route("GET", "/git/commits/head1", 200, { tree: { sha: "basetree1" } }),
+        route("POST", "/git/blobs", 201, { sha: "blob1" }),
+        route("POST", "/git/blobs", 201, { sha: "blob2" }),
+        // ...and the reactive remap backstops the optimism: GitHub 404s the
+        // tree because it contains a workflow file.
+        route("POST", "/git/trees", 404, { message: "Not Found" }),
+      ]);
+      restore = mock.restore;
+
+      const result = await new GitHubRepositoryWriterAdapter().commitFiles(
+        link,
+        workflowFiles,
+        "ci: add workflow",
+        "ghp_test",
+      );
+
+      assert.strictEqual(result.success, false);
+      if (!result.success) {
+        assert.strictEqual(result.error.code, "workflow-scope-missing");
+        // No parenthesized status code in the remap text (route regex guard).
+        assert.doesNotMatch(result.error.message, /\(\d{3}\)/);
+      }
+    });
+
+    it("keeps a 404 unmapped when the pushed file set had no workflow files", async () => {
+      const mock = installFetchMock([
+        // No scope probe for a workflow-less push (no extra round trip).
+        route("GET", "/git/ref/heads/main", 200, { object: { sha: "head1" } }),
+        route("GET", "/git/commits/head1", 200, { tree: { sha: "basetree1" } }),
+        route("POST", "/git/blobs", 201, { sha: "blob1" }),
+        route("POST", "/git/trees", 404, { message: "Not Found" }),
+      ]);
+      restore = mock.restore;
+
+      const result = await new GitHubRepositoryWriterAdapter().commitFiles(
+        link,
+        { "src/index.ts": "export {};" },
+        "chore: update",
+        "ghp_test",
+      );
+
+      assert.strictEqual(result.success, false);
+      if (!result.success) assert.strictEqual(result.error.code, "unknown");
+      assert.ok(
+        !mock.calls.some((c) => c.path === "/user"),
+        "must not probe scopes for a push without workflow files",
+      );
+    });
   });
 });

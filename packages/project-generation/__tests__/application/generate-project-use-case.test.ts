@@ -1,6 +1,9 @@
 import { describe, it, beforeEach } from "vitest";
 import assert from "node:assert";
-import { GenerateProjectUseCase } from "../../src/application/generate-project-use-case.js";
+import {
+  ExportError,
+  GenerateProjectUseCase,
+} from "../../src/application/generate-project-use-case.js";
 import { InMemoryProjectGeneratorDouble } from "../doubles/in-memory-project-generator.double.js";
 import { InMemoryGitHubExporterDouble } from "../doubles/in-memory-github-exporter.double.js";
 import { InMemoryZipProjectExporterDouble } from "../doubles/in-memory-project-exporter.double.js";
@@ -485,5 +488,81 @@ describe("GenerateProjectUseCase — sync-integrity workflow injection", () => {
       ),
       "expected an override warning naming the workflow path",
     );
+  });
+});
+
+describe("GenerateProjectUseCase — exporter warnings & typed export errors", () => {
+  let generator: InMemoryProjectGeneratorDouble;
+  let githubExporter: InMemoryGitHubExporterDouble;
+  const github: ExportConfig = {
+    destination: "github",
+    github: {
+      token: "test-token",
+      owner: "octocat",
+      repoName: "hexagen-app",
+      isPrivate: false,
+    },
+  };
+
+  beforeEach(() => {
+    generator = new InMemoryProjectGeneratorDouble();
+    githubExporter = new InMemoryGitHubExporterDouble();
+  });
+
+  it("merges exporter warnings (e.g. skipped workflow files) into the output warnings", async () => {
+    githubExporter.setWarnings([
+      "Skipped .github/workflows/sync-integrity.yml: the connected GitHub token lacks the 'workflow' scope.",
+    ]);
+    const useCase = new GenerateProjectUseCase(generator, githubExporter);
+    const result = await useCase.execute({
+      manifest: { system: "test-system" },
+      exportConfig: github,
+    });
+
+    assert.strictEqual(result.success, true);
+    if (!result.success) return;
+    assert.ok(
+      result.value.warnings?.some((w) =>
+        w.includes(".github/workflows/sync-integrity.yml"),
+      ),
+      "exporter warnings must surface on GenerateProjectOutput.warnings",
+    );
+  });
+
+  it("threads the exporter's typed errorCode through as ExportError", async () => {
+    githubExporter.setFailure(
+      "GitHub rejected this push because it includes GitHub Actions workflow files.",
+      "workflow-scope-missing",
+    );
+    const useCase = new GenerateProjectUseCase(generator, githubExporter);
+    const result = await useCase.execute({
+      manifest: { system: "test-system" },
+      exportConfig: github,
+    });
+
+    assert.strictEqual(result.success, false);
+    if (result.success) return;
+    assert.ok(
+      result.error instanceof ExportError,
+      "export failures must be ExportError so routes can read the typed code",
+    );
+    assert.strictEqual(
+      (result.error as ExportError).code,
+      "workflow-scope-missing",
+    );
+  });
+
+  it("leaves the code undefined on an untyped exporter failure", async () => {
+    githubExporter.setFailure("Some raw GitHub error");
+    const useCase = new GenerateProjectUseCase(generator, githubExporter);
+    const result = await useCase.execute({
+      manifest: { system: "test-system" },
+      exportConfig: github,
+    });
+
+    assert.strictEqual(result.success, false);
+    if (result.success) return;
+    assert.ok(result.error instanceof ExportError);
+    assert.strictEqual((result.error as ExportError).code, undefined);
   });
 });
