@@ -86,7 +86,13 @@ Generated projects (the `mode: "external"`, API-driven scaffold from `wizardToMa
 
 ## Track B — AI manifest staged pipeline rewire (separate, larger effort)
 
-**Gap.** The cloud "Generate manifest" path runs `ExecuteStagedGenerationUseCase` (`packages/agentic-interaction/src/application/use-cases/staged-generation/execute-staged-generation.use-case.ts`) — a 4-phase (workspace → contexts → ports → adapters) pipeline whose phase prompts are currently shaped for / keyed on **mock LLMs** (hardened 2026-06-05 to fix a context-list JSON parse hard-fail). The standing follow-up is to rewire it to a richer/real pipeline.
+> **SHIPPED (2026-08-13).** This rewire happened via the staged-pipeline arc:
+> production has run the full 0→6 pipeline on the real model cascade
+> (mercury-2 stage chain + gpt-4o stage-1 refine) at 100% since 2026-06-11,
+> and the mock-grade stub was deleted outright (A4). The gap/de-risk text
+> below is retained as historical context only — do not action it.
+
+**Gap (historical).** The cloud "Generate manifest" path runs `ExecuteStagedGenerationUseCase` (`packages/agentic-interaction/src/application/use-cases/staged-generation/execute-staged-generation.use-case.ts`) — a 4-phase (workspace → contexts → ports → adapters) pipeline whose phase prompts are currently shaped for / keyed on **mock LLMs** (hardened 2026-06-05 to fix a context-list JSON parse hard-fail). The standing follow-up is to rewire it to a richer/real pipeline.
 
 **Already planned — read these first:**
 
@@ -113,5 +119,5 @@ Generated projects (the `mode: "external"`, API-driven scaffold from `wizardToMa
 
 1. **Nothing is urgent** — the compile arc is complete and the live surface is correct.
 2. ~~If generated **tests/composition-root** become a product requirement → A1 (+ A2 alongside, since A1 needs the layer resolver).~~ **A1 obsolete** — its generators were deleted in #318; a future tests/composition-root feature is a fresh plan.
-3. Highest _value_ independent of the above → **Track B** (production is wired to a mock-grade stub).
+3. ~~Highest _value_ independent of the above → **Track B** (production is wired to a mock-grade stub).~~ **Track B shipped** — the full pipeline runs the real cascade in prod since 2026-06-11.
 4. A2/A3 are cheap cleanups; fold A3 into whichever PR next touches `stubs.ts`.
