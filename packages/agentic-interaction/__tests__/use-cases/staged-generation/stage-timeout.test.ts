@@ -7,6 +7,7 @@ import {
   stageTimeoutError,
 } from "../../../src/application/use-cases/staged-generation/stage-timeout";
 import { ExecuteLooseSpecConversionUseCase } from "../../../src/application/use-cases/staged-generation/execute-loose-spec-conversion.use-case";
+import { ClassifyContextTypeUseCase } from "../../../src/application/use-cases/staged-generation/classify-context-type.use-case";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 
 describe("stage-timeout constants", () => {
@@ -106,6 +107,173 @@ describe("ExecuteLooseSpecConversionUseCase — fail-fast on timeout", () => {
         assert.match((result.error as Error).message, /timed out/i);
       }
       assert.strictEqual(callCount, 1, "must not retry a timeout");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("ClassifyContextTypeUseCase — fail-fast on timeout", () => {
+  // Same contract as above, for the single-context classifier (issue #258,
+  // rescoped): an internal STAGE_ATTEMPT_TIMEOUT_MS deadline composed with the
+  // optional external signal. On the deadline the timeout error surfaces with
+  // NO retry — the production caller (stage-2 low-confidence loop) fail-softs
+  // to its heuristic classification, so retrying here would only stack waits.
+
+  const context = { name: "OrderManagement", responsibility: "Manages orders" };
+
+  test("deadline fires (returned-failure abort) -> timeout error, no retry", async () => {
+    let callCount = 0;
+    const mockLLMAdapter = {
+      sendRequest: (request: { signal: AbortSignal }) => {
+        callCount++;
+        return new Promise((resolve) => {
+          request.signal.addEventListener(
+            "abort",
+            () =>
+              resolve({ success: false, error: new Error("Request aborted") }),
+            { once: true },
+          );
+        });
+      },
+    } as unknown as SendStructuredRequestPort;
+
+    vi.useFakeTimers();
+    try {
+      const useCase = new ClassifyContextTypeUseCase(mockLLMAdapter);
+      const promise = useCase.execute(context);
+      await vi.advanceTimersByTimeAsync(STAGE_ATTEMPT_TIMEOUT_MS);
+      const result = await promise;
+
+      assert.strictEqual(result.success, false);
+      if (!result.success) {
+        assert.match((result.error as Error).message, /timed out/i);
+        assert.match(
+          (result.error as Error).message,
+          /Context-type classification/,
+        );
+      }
+      assert.strictEqual(callCount, 1, "must not retry a timeout");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("deadline fires (thrown AbortError) -> timeout error, no retry", async () => {
+    let callCount = 0;
+    const mockLLMAdapter = {
+      sendRequest: (request: { signal: AbortSignal }) => {
+        callCount++;
+        return new Promise((_resolve, reject) => {
+          request.signal.addEventListener(
+            "abort",
+            () => {
+              const e = new Error("AbortError");
+              e.name = "AbortError";
+              reject(e);
+            },
+            { once: true },
+          );
+        });
+      },
+    } as unknown as SendStructuredRequestPort;
+
+    vi.useFakeTimers();
+    try {
+      const useCase = new ClassifyContextTypeUseCase(mockLLMAdapter);
+      const promise = useCase.execute(context);
+      await vi.advanceTimersByTimeAsync(STAGE_ATTEMPT_TIMEOUT_MS);
+      const result = await promise;
+
+      assert.strictEqual(result.success, false);
+      if (!result.success) {
+        assert.match((result.error as Error).message, /timed out/i);
+      }
+      assert.strictEqual(callCount, 1, "must not retry a timeout");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("completes under the deadline -> normal result, deadline timer cleaned up", async () => {
+    const mockLLMAdapter = {
+      sendRequest: () =>
+        new Promise((resolve) => {
+          // Resolve well under STAGE_ATTEMPT_TIMEOUT_MS.
+          setTimeout(
+            () =>
+              resolve({
+                success: true,
+                value: {
+                  content: '{"type":"core","reasoning":"Primary business"}',
+                },
+              }),
+            1_000,
+          );
+        }),
+    } as unknown as SendStructuredRequestPort;
+
+    vi.useFakeTimers();
+    try {
+      const useCase = new ClassifyContextTypeUseCase(mockLLMAdapter);
+      const promise = useCase.execute(context);
+      await vi.advanceTimersByTimeAsync(1_000);
+      const result = await promise;
+
+      assert.strictEqual(result.success, true);
+      if (result.success) {
+        assert.strictEqual(result.type, "core");
+        assert.strictEqual(result.reasoning, "Primary business");
+      }
+      // The internal deadline timer must be cleared once the call settles.
+      assert.strictEqual(
+        vi.getTimerCount(),
+        0,
+        "deadline timer must be cleared",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("external signal aborts early -> external abort wins over the deadline", async () => {
+    const mockLLMAdapter = {
+      sendRequest: (request: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          request.signal.addEventListener(
+            "abort",
+            () => {
+              const e = new Error("AbortError");
+              e.name = "AbortError";
+              reject(e);
+            },
+            { once: true },
+          );
+        }),
+    } as unknown as SendStructuredRequestPort;
+
+    vi.useFakeTimers();
+    try {
+      const external = new AbortController();
+      const useCase = new ClassifyContextTypeUseCase(mockLLMAdapter);
+      const promise = useCase.execute(context, undefined, external.signal);
+      // Cancel long before the internal deadline would fire.
+      await vi.advanceTimersByTimeAsync(5_000);
+      external.abort();
+      const result = await promise;
+
+      assert.strictEqual(result.success, false);
+      if (!result.success) {
+        // A caller cancel must surface as the bare abort, NOT be rebranded
+        // as the deadline timeout.
+        assert.strictEqual((result.error as Error).name, "AbortError");
+        assert.doesNotMatch((result.error as Error).message, /timed out/i);
+      }
+      assert.strictEqual(
+        vi.getTimerCount(),
+        0,
+        "deadline timer must be cleared",
+      );
     } finally {
       vi.useRealTimers();
     }
