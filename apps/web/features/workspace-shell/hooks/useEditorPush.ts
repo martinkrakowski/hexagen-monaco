@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { GitHubLink, SavedProject } from "@hexagen/shared";
+import type { GitHubLink } from "@hexagen/shared";
 
-import { getSavedProjectsPersistence } from "@/lib/wire.client";
+import { getSavedProjectsPersistence, getLogger } from "@/lib/wire.client";
 import { postJson } from "@/lib/fetch-json";
 
 interface PushGithubResponse {
@@ -76,19 +76,29 @@ export function useEditorPush({
     };
   }, [projectId]);
 
+  // Record-level read-merge-write (ADR-0045): no pre-read + whole-array save —
+  // that persisted a possibly-stale snapshot of EVERY record, which could
+  // silently revert concurrent writers (this very field was the original
+  // lastCommitSha clobber). NotFound (project deleted mid-push) → warn +
+  // no-op: the push itself succeeded, there is just no record left to stamp.
   const persistCommitSha = useCallback(
     async (link: GitHubLink, commitSha: string) => {
+      if (!projectId) return;
       const persistence = getSavedProjectsPersistence();
-      const result = await persistence.loadProjects();
-      if (!result.success) return;
       const nextLink: GitHubLink = { ...link, lastCommitSha: commitSha };
-      const updated: SavedProject[] = result.value.map((p) =>
-        p.id === projectId
-          ? { ...p, githubLink: nextLink, updatedAt: Date.now() }
-          : p,
-      );
-      const saveRes = await persistence.saveProjects(updated);
-      if (saveRes.success) setGithubLink(nextLink);
+      const result = await persistence.updateProjectRecord(projectId, (p) => ({
+        ...p,
+        githubLink: nextLink,
+        updatedAt: Date.now(),
+      }));
+      if (result.success) setGithubLink(nextLink);
+      else {
+        getLogger().warn(
+          result.error.kind === "NotFound"
+            ? "Skipped persisting commit sha — the saved project no longer exists"
+            : "Failed to persist commit sha to saved project",
+        );
+      }
     },
     [projectId],
   );
