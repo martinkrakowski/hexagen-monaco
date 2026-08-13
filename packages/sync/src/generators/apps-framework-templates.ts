@@ -4,6 +4,12 @@ import type {
   TsConfigTemplate,
 } from "../types/manifest.js";
 
+// `@types/node` must be DECLARED here, not inherited: `next build`'s
+// TypeScript setup check requires it to resolve from the app directory, and
+// relying on a sibling workspace (e.g. a NestJS context) hoisting it to the
+// monorepo root is environment-dependent — the capstone monolith-15 fixture
+// built fine locally but failed in CI with "Please install @types/node".
+// create-next-app declares it for the same reason.
 const NEXTJS_PACKAGE_JSON_TEMPLATE = `{
   "name": "@{scope}/{appName}",
   "version": "0.0.0",
@@ -21,6 +27,7 @@ const NEXTJS_PACKAGE_JSON_TEMPLATE = `{
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "typescript": "^5.5.4",

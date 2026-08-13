@@ -152,6 +152,14 @@ describe("apps", () => {
         nextDevDeps["@types/react-dom"],
         "@types/react-dom devDep present",
       );
+      // Build-verify regression (capstone monolith-15, run 31747570937):
+      // `next build`'s TypeScript setup check needs @types/node resolvable
+      // from the app dir — hoisting from sibling workspaces is
+      // environment-dependent, so the template must declare it.
+      assert.ok(
+        nextDevDeps["@types/node"],
+        "@types/node devDep present (else `next build` fails its TS setup check)",
+      );
 
       // Build-verify regression: `next build` fails without a root layout
       // ("page.tsx doesn't have a root layout").
