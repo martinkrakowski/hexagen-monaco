@@ -17,6 +17,10 @@ const persistence = vi.hoisted(() => {
     projects: [] as Array<Record<string, unknown>>,
     failSave: false,
     saveCount: 0,
+    // Counts CALLS, not successful writes — a NotFound resolution never
+    // reaches saveProjects, so saveCount alone cannot distinguish "never
+    // called the port" from "called it and got NotFound" (review fix).
+    updateProjectRecordCount: 0,
   };
   const port = {
     loadProjects: async () => ({ success: true, value: state.projects }),
@@ -62,6 +66,7 @@ const persistence = vi.hoisted(() => {
       id: string,
       updater: (p: Record<string, unknown>) => Record<string, unknown>,
     ) => {
+      state.updateProjectRecordCount += 1;
       const index = state.projects.findIndex((p) => p.id === id);
       if (index === -1) {
         return {
@@ -604,6 +609,7 @@ describe("useSavedProjects — layer mutations", () => {
     persistence.state.projects = [seed("p1")];
     const { result } = await mountLoaded();
     const before = persistence.state.saveCount;
+    const callsBefore = persistence.state.updateProjectRecordCount;
 
     await act(async () => {
       result.current.updateProject("ghost", {} as never, "yaml: ghost");
@@ -612,6 +618,13 @@ describe("useSavedProjects — layer mutations", () => {
     });
 
     assert.strictEqual(persistence.state.saveCount, before, "no write");
+    // saveCount alone can't see a wasted call — the port's NotFound arm
+    // returns before saveProjects. The no-op must happen BEFORE the port.
+    assert.strictEqual(
+      persistence.state.updateProjectRecordCount,
+      callsBefore,
+      "no record-update call at all",
+    );
     assert.strictEqual(result.current.persistError, null);
   });
 
