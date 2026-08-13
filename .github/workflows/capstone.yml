@@ -33,13 +33,19 @@ on:
       - ".github/workflows/capstone.yml"
   workflow_dispatch:
 
+# Every job only reads the repo (checkout with persist-credentials: false) and
+# publishes nothing — pin the GITHUB_TOKEN to read-only instead of inheriting
+# the repository default.
+permissions:
+  contents: read
+
 jobs:
   first-run-green:
     name: "Generate → install → verify"
     runs-on: ubuntu-latest
     steps:
       - name: "Checkout Repository"
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
 
@@ -54,7 +60,7 @@ jobs:
         run: corepack prepare yarn@4.12.0 --activate
 
       - name: "Setup Node.js"
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22.7"
 
@@ -72,7 +78,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: "Checkout Repository"
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
 
@@ -85,7 +91,7 @@ jobs:
         run: corepack prepare yarn@4.12.0 --activate
 
       - name: "Setup Node.js"
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22.7"
           # setup-node@v5 probes the package-manager cache even without
@@ -97,16 +103,22 @@ jobs:
       # vitest, …) into a fresh temp project on every run — keep Yarn's global
       # cache warm across runs to hold the job in the 8–15 min budget.
       - name: "Cache Yarn global cache"
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.yarn/berry/cache
           key: capstone-gate-yarn-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
           restore-keys: |
             capstone-gate-yarn-${{ runner.os }}-
 
+      # Checksum-verified artifact install — NOT `bash <(curl …)` of the remote
+      # installer script: the release tarball is pinned by version AND sha256,
+      # so neither a mutated installer nor a swapped asset can reach the job.
       - name: "Install actionlint"
         run: |
-          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          curl -sSfL -o actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          echo "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757  actionlint.tar.gz" | sha256sum -c -
+          tar -xzf actionlint.tar.gz actionlint
           sudo mv ./actionlint /usr/local/bin/actionlint
           actionlint -version
 
@@ -128,7 +140,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: "Checkout Repository"
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
 
@@ -139,22 +151,28 @@ jobs:
         run: corepack prepare yarn@4.12.0 --activate
 
       - name: "Setup Node.js"
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22.7"
           package-manager-cache: false
 
       - name: "Cache Yarn global cache"
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.yarn/berry/cache
           key: capstone-gate-yarn-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
           restore-keys: |
             capstone-gate-yarn-${{ runner.os }}-
 
+      # Checksum-verified artifact install — NOT `bash <(curl …)` of the remote
+      # installer script: the release tarball is pinned by version AND sha256,
+      # so neither a mutated installer nor a swapped asset can reach the job.
       - name: "Install actionlint"
         run: |
-          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          curl -sSfL -o actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          echo "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757  actionlint.tar.gz" | sha256sum -c -
+          tar -xzf actionlint.tar.gz actionlint
           sudo mv ./actionlint /usr/local/bin/actionlint
           actionlint -version
 

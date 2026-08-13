@@ -193,6 +193,12 @@ export function ExportProvider({
       setSavedManifestYaml(null);
       return;
     }
+    // Clear the PREVIOUS project's manifest before the async load: during the
+    // window between a project switch and loadProjects resolving, an export
+    // would otherwise pair the NEW project's wizardData with the OLD project's
+    // manifest. Nulling it makes resolveManifestPayload fail closed (blocking
+    // error) instead of exporting the wrong manifest.
+    setSavedManifestYaml(null);
     void (async () => {
       const persistence = getSavedProjectsPersistence();
       const res = await persistence.loadProjects();

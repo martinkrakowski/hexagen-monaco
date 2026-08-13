@@ -57,6 +57,12 @@ export function useProjectGenerationFlow(
       setIsLoading(true);
       try {
         let manifest: Record<string, unknown>;
+        // For an imported project the VALIDATED ORIGINAL text is what gets
+        // persisted after generation — the server's emitted manifest.yaml is a
+        // re-serialization that can drop comments/formatting, and overwriting
+        // the stored manifest with it would erode the source of truth on every
+        // generate.
+        let importedYamlToPersist: string | null = null;
         if (isImportedFormState(config)) {
           // Manifest-first project: the stored manifest is the source of truth.
           // A parse/schema failure aborts (fail closed) — silently falling back
@@ -67,6 +73,7 @@ export function useProjectGenerationFlow(
             return { kind: "validation-error", errors: [parsed.message] };
           }
           manifest = parsed.manifest;
+          importedYamlToPersist = savedManifestYaml ?? null;
         } else {
           manifest = wizardToManifest(
             config as Parameters<typeof wizardToManifest>[0],
@@ -97,7 +104,8 @@ export function useProjectGenerationFlow(
           };
         }
 
-        const manifestYaml = result.files?.["manifest.yaml"] || "";
+        const manifestYaml =
+          importedYamlToPersist ?? (result.files?.["manifest.yaml"] || "");
         // Await the persistence write before setting the active workspace, so
         // the workspace never references an uncommitted project.
         const projectId = await options.saveProject(

@@ -159,6 +159,53 @@ describe("useProjectGenerationFlow", () => {
     assert.strictEqual(body.manifest.bounded_contexts[0].name, "billing");
   });
 
+  it("persists the ORIGINAL imported YAML, not the server's re-serialization", async () => {
+    mockGenerateOk(); // the mocked server emits "system: x\n" — different text
+    const importedConfig = {
+      ...config,
+      manifestSource: "imported",
+    } as ProjectConfig;
+    // The comment below exists ONLY in the original text — a server YAML
+    // round-trip drops comments/formatting, which is exactly what persisting
+    // result.files["manifest.yaml"] would bake into the stored record.
+    const savedYaml = [
+      "# provenance note the server emission would drop",
+      "system: shop",
+      "bounded_contexts:",
+      "  - name: billing",
+      "    layers:",
+      "      application:",
+      "        ports:",
+      "          in: [ProcessPaymentPort]",
+    ].join("\n");
+    const saveProject = vi.fn(async () => "proj-1");
+    const setActiveWorkspace = vi.fn();
+
+    const { result } = renderHook(() =>
+      useProjectGenerationFlow({
+        saveProject,
+        setActiveWorkspace,
+        setEditorSessionId: vi.fn(),
+      }),
+    );
+
+    let outcome: Awaited<ReturnType<typeof result.current.execute>> | undefined;
+    await act(async () => {
+      outcome = await result.current.execute(importedConfig, savedYaml);
+    });
+
+    assert.ok(outcome?.kind === "success"); // narrows for .manifestYaml below
+    // saveProject, the active workspace, and the success outcome all carry the
+    // validated ORIGINAL text — not the server's "system: x\n" emission.
+    assert.strictEqual(saveProject.mock.calls[0]?.[2], savedYaml);
+    assert.strictEqual(
+      (setActiveWorkspace.mock.calls[0]?.[0] as { manifestYaml: string })
+        .manifestYaml,
+      savedYaml,
+    );
+    assert.strictEqual(outcome.manifestYaml, savedYaml);
+  });
+
   it("fails closed (no fetch) when an imported project's saved manifest is corrupt", async () => {
     mockGenerateOk();
     const importedConfig = {

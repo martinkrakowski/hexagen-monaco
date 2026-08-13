@@ -4,7 +4,7 @@ import {
   buildPortAdapterCounts,
   portCoverageErrorsForContext,
   portAdapterCoverageErrors,
-} from "../../../src/domain/manifest/port-adapter-coverage.ts";
+} from "../../../src/domain/manifest/port-adapter-coverage";
 import type {
   AdapterBindings,
   ContextPorts,

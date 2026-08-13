@@ -109,6 +109,10 @@ test("a stream that ends without a terminal frame fails with retry copy (was a s
     assert.strictEqual(result.current.phase, "failed");
     assert.match(result.current.generationError || "", /ended unexpectedly/i);
     assert.strictEqual(result.current.isGenerating, false);
+    // The stepDetail STATE carries the failure copy too — ManifestGeneratingStep
+    // renders stepDetail regardless of phase, so a stale stage label here would
+    // show "Port Mapping..." next to a failed run.
+    assert.match(result.current.stepDetail || "", /ended unexpectedly/i);
     // ImportProjectSpecPage special-cases this exact substring to reroute to
     // the description flow — the silent-death copy must never contain it.
     assert.ok(
@@ -196,6 +200,10 @@ test("a residual error frame without a trailing newline fails the run (was dropp
     // residual error frame counts as a terminal frame.
     assert.strictEqual(result.current.generationError, "pipeline exploded");
     assert.strictEqual(result.current.phase, "failed");
+    // The stepDetail STATE mirrors the failure message — before the error arm
+    // synced it (applyTerminalFrame), the UI kept showing the prior stage
+    // label even though the run had failed.
+    assert.strictEqual(result.current.stepDetail, "pipeline exploded");
   } finally {
     global.fetch = originalFetch;
   }

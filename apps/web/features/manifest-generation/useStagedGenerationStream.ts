@@ -208,6 +208,56 @@ export function useStagedGenerationStream(
           chunks: [],
         };
 
+      // Single writer for terminal frames: the in-loop NDJSON parser AND the
+      // residual-buffer flush both route through here, so the two paths cannot
+      // drift as the `done` payload grows — path drift was exactly how residual
+      // error frames got silently dropped in the first place. Returns true when
+      // the event was a terminal (`done`/`error`) frame.
+      const applyTerminalFrame = (event: Record<string, unknown>): boolean => {
+        const type = event.type as string;
+        if (type === "done") {
+          result.generatedManifest = event.yaml as string;
+          result.contextCount = event.contextCount as number;
+          result.portCount = event.portCount as number;
+          result.adapterCount = event.adapterCount as number;
+          setGeneratedManifest(result.generatedManifest);
+          setContextCount(result.contextCount);
+          setPortCount(result.portCount);
+          setAdapterCount(result.adapterCount);
+          if (isStageValidationReport(event.validation)) {
+            result.validationReport = event.validation;
+            setValidationReport(result.validationReport);
+          } else if (event.validation != null) {
+            logger.warn(
+              "[staged-gen] Ignoring malformed Stage-6 validation payload",
+            );
+          }
+          if (isStageRepairSummary(event.repair)) {
+            result.repairSummary = event.repair;
+            setRepairSummary(result.repairSummary);
+          }
+          result.phase = "complete";
+          result.stepDetail = "Manifest generation complete";
+          setPhase(result.phase);
+          setStepDetail(result.stepDetail);
+          setIsGenerating(false);
+          return true;
+        }
+        if (type === "error") {
+          result.phase = "failed";
+          result.stepDetail = event.message as string;
+          setGenerationError(event.message as string);
+          setPhase(result.phase);
+          // Keep the stepDetail STATE in step with result.stepDetail — without
+          // this the UI keeps showing the prior stage label after a failure
+          // (ManifestGeneratingStep renders stepDetail regardless of phase).
+          setStepDetail(result.stepDetail);
+          setIsGenerating(false);
+          return true;
+        }
+        return false;
+      };
+
       try {
         const MAX_RECONNECT_ATTEMPTS = 3;
         const BASE_DELAY_MS = 1000;
@@ -363,40 +413,8 @@ export function useStagedGenerationStream(
                     const errors = event.errors as string[];
                     result.validationErrors = errors;
                     setValidationErrors(errors);
-                  } else if (type === "done") {
+                  } else if (applyTerminalFrame(event)) {
                     sawTerminalFrame = true;
-                    result.generatedManifest = event.yaml as string;
-                    result.contextCount = event.contextCount as number;
-                    result.portCount = event.portCount as number;
-                    result.adapterCount = event.adapterCount as number;
-                    result.phase = "complete";
-                    result.stepDetail = "Manifest generation complete";
-                    setGeneratedManifest(result.generatedManifest);
-                    setContextCount(result.contextCount);
-                    setPortCount(result.portCount);
-                    setAdapterCount(result.adapterCount);
-                    if (isStageValidationReport(event.validation)) {
-                      result.validationReport = event.validation;
-                      setValidationReport(result.validationReport);
-                    } else if (event.validation != null) {
-                      logger.warn(
-                        "[staged-gen] Ignoring malformed Stage-6 validation payload",
-                      );
-                    }
-                    if (isStageRepairSummary(event.repair)) {
-                      result.repairSummary = event.repair;
-                      setRepairSummary(result.repairSummary);
-                    }
-                    setPhase(result.phase);
-                    setStepDetail(result.stepDetail);
-                    setIsGenerating(false);
-                  } else if (type === "error") {
-                    sawTerminalFrame = true;
-                    result.phase = "failed";
-                    result.stepDetail = event.message as string;
-                    setGenerationError(event.message as string);
-                    setPhase(result.phase);
-                    setIsGenerating(false);
                   }
                 } catch {
                   logger.warn("[staged-gen] Failed to parse NDJSON line", {
@@ -420,49 +438,15 @@ export function useStagedGenerationStream(
         }
 
         // Residual-buffer flush: a terminal frame that arrived WITHOUT a
-        // trailing newline never went through the in-loop branches, so this
-        // must mirror them INCLUDING the React state writes — without the
-        // setters here the UI would stay parked on the last stage even though
-        // generate()'s resolved result said "complete"/"failed".
+        // trailing newline never went through the in-loop branches — route it
+        // through the same applyTerminalFrame writer (residual error frames
+        // were previously dropped entirely, downgrading a reported failure
+        // into a silent hang).
         if (buffer.trim()) {
           try {
             const event = JSON.parse(buffer) as Record<string, unknown>;
-            const type = event.type as string;
-
-            if (type === "done") {
+            if (applyTerminalFrame(event)) {
               sawTerminalFrame = true;
-              result.generatedManifest = event.yaml as string;
-              result.contextCount = event.contextCount as number;
-              result.portCount = event.portCount as number;
-              result.adapterCount = event.adapterCount as number;
-              setGeneratedManifest(result.generatedManifest);
-              setContextCount(result.contextCount);
-              setPortCount(result.portCount);
-              setAdapterCount(result.adapterCount);
-              if (isStageValidationReport(event.validation)) {
-                result.validationReport = event.validation;
-                setValidationReport(result.validationReport);
-              } else if (event.validation != null) {
-                logger.warn(
-                  "[staged-gen] Ignoring malformed Stage-6 validation payload",
-                );
-              }
-              if (isStageRepairSummary(event.repair)) {
-                result.repairSummary = event.repair;
-                setRepairSummary(result.repairSummary);
-              }
-              result.phase = "complete";
-              result.stepDetail = "Manifest generation complete";
-              setPhase(result.phase);
-              setStepDetail(result.stepDetail);
-            } else if (type === "error") {
-              // Residual error frames were previously dropped entirely,
-              // downgrading a reported failure into a silent hang.
-              sawTerminalFrame = true;
-              result.phase = "failed";
-              result.stepDetail = event.message as string;
-              setGenerationError(event.message as string);
-              setPhase(result.phase);
             }
           } catch {
             // Unparseable residual buffer: not a terminal frame — the
@@ -486,6 +470,9 @@ export function useStagedGenerationStream(
           result.stepDetail = message;
           setGenerationError(message);
           setPhase(result.phase);
+          // Same stale-label hazard as applyTerminalFrame's error arm: sync
+          // the stepDetail state with result.stepDetail on this failure path.
+          setStepDetail(result.stepDetail);
         }
       } catch (error) {
         if (controller.signal.aborted) {
@@ -502,6 +489,8 @@ export function useStagedGenerationStream(
         result.stepDetail = message;
         setGenerationError(message);
         setPhase(result.phase);
+        // Same stale-label hazard as applyTerminalFrame's error arm.
+        setStepDetail(result.stepDetail);
       } finally {
         setIsGenerating(false);
         abortRef.current = null;

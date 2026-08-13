@@ -130,10 +130,11 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
 
   const abortRef = useRef(false);
   const generatingLockRef = useRef(false);
-  // Last successful generateFromSpec invocation, remembered for retry(). The
-  // caller's AbortSignal is deliberately dropped: replaying an already-aborted
-  // signal would abort the retry instantly (and a one-shot "abort" listener
-  // has already been consumed).
+  // Last ATTEMPTED generateFromSpec invocation (recorded once the lock is
+  // taken, so failed runs stay replayable — that is retry()'s whole purpose),
+  // remembered for retry(). The caller's AbortSignal is deliberately dropped:
+  // replaying an already-aborted signal would abort the retry instantly (and a
+  // one-shot "abort" listener has already been consumed).
   const lastRunRef = useRef<{
     config: string;
     options?: SpecGenerationOptions;

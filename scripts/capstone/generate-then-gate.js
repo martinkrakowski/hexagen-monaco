@@ -54,6 +54,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import semver from "semver";
+import { parse as parseYaml } from "yaml";
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -295,7 +296,10 @@ for (const fixture of fixtures) {
   });
 
   // F21 — emitted workflow hygiene: corepack before setup-node, the v5 cache
-  // auto-probe disabled, no live `cache: yarn`.
+  // auto-probe disabled, no live `cache: yarn`. Validated PER JOB from the
+  // parsed YAML, not whole-file string scans — a document-wide match would let
+  // one job's `corepack enable` or `package-manager-cache: false` vouch for a
+  // setup-node step in a DIFFERENT job.
   gate("workflows (F21)", () => {
     const wfDir = path.join(proj, ".github", "workflows");
     const workflows = existsSync(wfDir)
@@ -303,24 +307,38 @@ for (const fixture of fixtures) {
       : [];
     if (workflows.length === 0) throw new Error("no emitted workflows found");
     for (const wf of workflows) {
-      const body = readFileSync(path.join(wfDir, wf), "utf8");
-      const setupNodeAt = body.indexOf("actions/setup-node@");
-      if (setupNodeAt < 0) continue; // nothing to probe-order against
-      const corepackAt = body.indexOf("corepack enable");
-      if (corepackAt < 0 || corepackAt > setupNodeAt) {
-        throw new Error(`${wf}: corepack enable must precede setup-node`);
-      }
-      const lines = body.split("\n").filter((l) => !l.trim().startsWith("#"));
-      if (
-        !lines.some((l) => /^\s*package-manager-cache:\s*false\s*$/.test(l))
-      ) {
-        throw new Error(
-          `${wf}: setup-node@v5 needs package-manager-cache: false`,
-        );
-      }
-      const liveCache = lines.find((l) => /^\s*cache:\s*["']?yarn/.test(l));
-      if (liveCache) {
-        throw new Error(`${wf}: live \`cache: yarn\` (${liveCache.trim()})`);
+      const doc = parseYaml(readFileSync(path.join(wfDir, wf), "utf8"));
+      for (const [jobName, job] of Object.entries(doc?.jobs ?? {})) {
+        let corepackSeen = false;
+        for (const step of job?.steps ?? []) {
+          if (
+            typeof step?.run === "string" &&
+            step.run.includes("corepack enable")
+          ) {
+            corepackSeen = true;
+          }
+          const cache = step?.with?.cache;
+          if (typeof cache === "string" && cache.startsWith("yarn")) {
+            throw new Error(
+              `${wf}: job ${jobName}: live \`cache: ${cache}\``,
+            );
+          }
+          if (
+            typeof step?.uses === "string" &&
+            step.uses.startsWith("actions/setup-node@")
+          ) {
+            if (!corepackSeen) {
+              throw new Error(
+                `${wf}: job ${jobName}: corepack enable must precede setup-node`,
+              );
+            }
+            if (step.with?.["package-manager-cache"] !== false) {
+              throw new Error(
+                `${wf}: job ${jobName}: setup-node@v5 needs package-manager-cache: false`,
+              );
+            }
+          }
+        }
       }
     }
   });
