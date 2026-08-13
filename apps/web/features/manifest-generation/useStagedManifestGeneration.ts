@@ -11,7 +11,10 @@ import type { ManifestDraftContext } from "@hexagen/agentic-interaction";
 import { formatModelChip } from "@hexagen/agentic-interaction";
 import { getClientManifestGenerationUseCase } from "../../app/lib/wire.client";
 import type { StagedPhase, StageProgress } from "./staged-generation-types";
-import { useStagedGenerationStream } from "./useStagedGenerationStream";
+import {
+  useStagedGenerationStream,
+  type StageValidationReport,
+} from "./useStagedGenerationStream";
 
 /** Return type of the useStagedManifestGeneration hook */
 export interface UseStagedManifestGenerationReturn {
@@ -37,6 +40,13 @@ export interface UseStagedManifestGenerationReturn {
   stageProgress: Record<number, StageProgress>;
   verboseLog: string[];
   validationErrors: string[];
+  /**
+   * Stage-6 review findings from the cloud pipeline's `done` event (advisory
+   * — the manifest was still produced). Null while generating, after reset,
+   * on the local WebLLM path (no Stage-6 runs locally), and for older server
+   * payloads that omit the optional `validation` field.
+   */
+  validationReport: StageValidationReport | null;
   contextCount: number;
   portCount: number;
   adapterCount: number;
@@ -69,6 +79,8 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     Record<number, StageProgress>
   >({});
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [validationReport, setValidationReport] =
+    useState<StageValidationReport | null>(null);
   const [verboseLog, setVerboseLog] = useState<string[]>([]);
   const [contextCount, setContextCount] = useState(0);
   const [portCount, setPortCount] = useState(0);
@@ -177,6 +189,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
       setStepDetail("Starting staged generation...");
       setStageProgress({});
       setValidationErrors([]);
+      setValidationReport(null);
       setVerboseLog([]);
       verboseLogRef.current = { text: {}, label: {}, consumed: {}, model: {} };
       setContextCount(0);
@@ -321,6 +334,9 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
           setStepDetail(result.stepDetail);
           setStageProgress(result.stageProgress);
           setValidationErrors(result.validationErrors);
+          // Stage-6 report from the done event (parity with the /spec flow —
+          // the stream hook already parses it; this hook previously dropped it).
+          setValidationReport(result.validationReport);
           // Surface in-stream cloud failures as hook state (the stream resolves
           // rather than throwing, so the catch below never runs for them).
           if (result.phase === "failed") {
@@ -369,6 +385,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     setStepDetail("");
     setStageProgress({});
     setValidationErrors([]);
+    setValidationReport(null);
     setVerboseLog([]);
     verboseLogRef.current = { text: {}, label: {}, consumed: {}, model: {} };
     setContextCount(0);
@@ -387,6 +404,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
     stageProgress,
     verboseLog,
     validationErrors,
+    validationReport,
     contextCount,
     portCount,
     adapterCount,

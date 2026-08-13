@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import { Skeleton } from "@hexagen/ui";
 import type { StagedPhase, StageProgress } from "../staged-generation-types";
+import type { StageValidationReport } from "../useStagedGenerationStream";
+import { ValidationFindingsPanel } from "../ValidationFindingsPanel";
 import { ThinkingBlock } from "./ThinkingBlock";
 
 interface AiGeneratingStepProps {
@@ -8,6 +10,11 @@ interface AiGeneratingStepProps {
   stepDetail: string;
   stageProgress: Record<number, StageProgress>;
   verboseLog?: string[];
+  /**
+   * Stage-6 advisory review findings on the produced manifest — same report
+   * and same presentation as the /spec import flow (ValidationFindingsPanel).
+   */
+  validationReport?: StageValidationReport | null;
 }
 
 /**
@@ -22,6 +29,7 @@ export function AiGeneratingStep({
   stepDetail,
   stageProgress,
   verboseLog,
+  validationReport,
 }: AiGeneratingStepProps) {
   return (
     <>
@@ -46,6 +54,9 @@ export function AiGeneratingStep({
           />
         </Suspense>
       </div>
+      {phase === "complete" && validationReport && (
+        <ValidationFindingsPanel validationReport={validationReport} />
+      )}
     </>
   );
 }

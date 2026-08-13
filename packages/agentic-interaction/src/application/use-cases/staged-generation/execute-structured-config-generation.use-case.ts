@@ -1905,12 +1905,21 @@ export function structuralManifestErrors(
   }
 
   // R08: workspace name (system) and description (scope) must be non-empty.
-  const system =
-    typeof parsedManifest.system === "string"
-      ? parsedManifest.system.trim()
-      : "";
+  // Aligned to the schema's `workspace:` block — which this check's message
+  // has always named — with the legacy top-level `system`/`scope` as the
+  // fallback. The assembler emits both, workspace-derived
+  // (draft-to-manifest.transform.ts), so R08 still never fires post-assembly;
+  // reading only system/scope flagged manifests that carry a populated
+  // `workspace:` block but no top-level `system` as incomplete.
+  const workspace =
+    typeof parsedManifest.workspace === "object" &&
+    parsedManifest.workspace !== null
+      ? (parsedManifest.workspace as { name?: unknown; description?: unknown })
+      : {};
+  const nonEmpty = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const system = nonEmpty(workspace.name) || nonEmpty(parsedManifest.system);
   const scope =
-    typeof parsedManifest.scope === "string" ? parsedManifest.scope.trim() : "";
+    nonEmpty(workspace.description) || nonEmpty(parsedManifest.scope);
   if (!system || !scope) {
     // Name BOTH empty fields, not just the first — when system and scope are
     // both empty the single-field message hid the second (qodo #351).
@@ -2272,8 +2281,16 @@ export class ExecuteStructuredConfigGenerationUseCase {
           fallbackMsg = "leaving empty";
         }
 
+        // Shared-kernels are deliberately excluded from LLM port mapping
+        // (type-only contracts — Stage 3 skips them, see
+        // execute-port-mapping.use-case.ts). Logging "LLM returned no ports"
+        // for them misread a by-design skip as a model failure (2026-08-13
+        // prod run) — say what actually happened. Cosmetic only: the
+        // fallbackContexts push below is unchanged either way.
         callbacks?.onChunk?.(
-          `${ctx.name}: LLM returned no ports — ${fallbackMsg}`,
+          ctx.type === "shared-kernel"
+            ? `${ctx.name}: shared-kernel (type-only contracts) — port generation skipped by design (R09); ${fallbackMsg}`
+            : `${ctx.name}: LLM returned no ports — ${fallbackMsg}`,
         );
 
         fallbackContexts.push({
