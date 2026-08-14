@@ -57,8 +57,8 @@ import { logger } from "../../lib/structured-logger";
 // providers in ./adapters/wire-adapters can share it without importing this
 // composition root back (which would be a require cycle). Re-exported here so
 // existing `@/lib/wire.server` consumers (the modify-family routes) keep working.
-import { findMonorepoRoot } from "./monorepo-root";
-export { findMonorepoRoot };
+import { findMonorepoRoot, MonorepoRootNotFoundError } from "./monorepo-root";
+export { findMonorepoRoot, MonorepoRootNotFoundError };
 
 const emptyArchitectureGraph: ArchitectureGraphLike = {
   nodes: [],

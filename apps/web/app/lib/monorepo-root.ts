@@ -2,6 +2,21 @@ import { existsSync } from "fs";
 import { join, dirname } from "path";
 
 /**
+ * Thrown when no `.architecture/manifest.yaml` can be located by walking up from
+ * the start directory. This is a server-side packaging/configuration failure —
+ * the manifest anchor is missing on disk — NOT a client input error. API routes
+ * map it to 500 (distinct from the 400 they return for path-traversal input) so
+ * a missing anchor surfaces to 5xx monitoring instead of masquerading as a bad
+ * request.
+ */
+export class MonorepoRootNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MonorepoRootNotFoundError";
+  }
+}
+
+/**
  * Find the monorepo root by searching upward for .architecture/manifest.yaml.
  *
  * This is the single manifest-path anchor for every server-side consumer:
@@ -19,25 +34,22 @@ import { join, dirname } from "path";
  */
 export function findMonorepoRoot(from: string = process.cwd()): string {
   let current = from;
-  const maxDepth = 10; // Prevent infinite loop
-  let depth = 0;
 
-  while (depth < maxDepth) {
+  // Walk upward until the manifest anchor is found or the filesystem root is
+  // reached — dirname('/') === '/' (and dirname('C:\\') === 'C:\\'), so the
+  // `parent === current` check is the true terminator. No fixed depth cap: a
+  // deeply nested start directory must still be able to locate a valid root.
+  for (;;) {
     const manifestPath = join(current, ".architecture", "manifest.yaml");
     if (existsSync(manifestPath)) {
       return current;
     }
     const parent = dirname(current);
-    depth++;
     if (parent === current) {
-      throw new Error(
+      throw new MonorepoRootNotFoundError(
         `Could not locate monorepo root from ${from}. No .architecture/manifest.yaml found.`,
       );
     }
     current = parent;
   }
-
-  throw new Error(
-    `Could not locate monorepo root from ${from}. Maximum search depth (${maxDepth}) exceeded.`,
-  );
 }

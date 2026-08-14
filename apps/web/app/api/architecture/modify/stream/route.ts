@@ -7,6 +7,7 @@ import path from "path";
 import {
   getModifyArchitectureUseCase,
   findMonorepoRoot,
+  MonorepoRootNotFoundError,
 } from "@/lib/wire.server";
 import { createWebLogger } from "@/lib/wire.shared";
 import {
@@ -65,6 +66,20 @@ export async function POST(request: NextRequest) {
       body.manifestPath ?? ".architecture/manifest.yaml",
     );
   } catch (err) {
+    // A missing on-disk manifest anchor is a server config failure, not bad
+    // client input — surface it as 5xx (and log) so monitoring sees it, rather
+    // than masking it as a 400. Only path-traversal input yields 400 below.
+    if (err instanceof MonorepoRootNotFoundError) {
+      const logger = createWebLogger();
+      logger.errorWithException(
+        err,
+        "[api/architecture/modify/stream] Manifest root not found",
+      );
+      return new Response(
+        `data: ${JSON.stringify({ type: "error", success: false, error: err.message })}\n\n`,
+        { status: 500, headers: { "Content-Type": "text/event-stream" } },
+      );
+    }
     const message =
       err instanceof Error ? err.message : "Invalid manifest path";
     return new Response(

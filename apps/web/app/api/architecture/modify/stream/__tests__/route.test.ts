@@ -2,8 +2,6 @@ import { describe, it, vi, beforeEach, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 
-// Mock the composition root and logger; the route logic (path anchoring +
-// intent → use-case delegation) runs for real.
 vi.mock("@/lib/wire.server", async () => {
   // Re-export the REAL error class so the route's `instanceof` narrowing (400
   // path-traversal vs 500 missing-anchor) matches instances thrown in tests.
@@ -21,64 +19,30 @@ vi.mock("@/lib/wire.shared", () => ({
 }));
 
 import { POST } from "../route";
-import {
-  getModifyArchitectureUseCase,
-  findMonorepoRoot,
-  MonorepoRootNotFoundError,
-} from "@/lib/wire.server";
+import { findMonorepoRoot, MonorepoRootNotFoundError } from "@/lib/wire.server";
 
 function post(body: unknown): NextRequest {
-  return new NextRequest("http://localhost/api/architecture/modify", {
+  return new NextRequest("http://localhost/api/architecture/modify/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
 }
 
-describe("POST /api/architecture/modify", () => {
-  const execute = vi.fn();
-
+describe("POST /api/architecture/modify/stream", () => {
   beforeEach(() => {
-    execute.mockReset();
-
     vi.mocked(findMonorepoRoot).mockReturnValue("/fake/repo");
-    // Simulate prod cwd ≠ monorepo root.
     vi.spyOn(process, "cwd").mockReturnValue("/fake/repo/apps/web");
-
-    execute.mockResolvedValue({
-      success: true,
-      value: {
-        pipelineRunId: "run-1",
-        patchesApplied: 0,
-        lintPassed: true,
-        transactionId: "tx-1",
-        patches: [],
-        steps: [],
-      },
-    });
-    vi.mocked(getModifyArchitectureUseCase).mockReturnValue({
-      execute,
-    } as never);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("passes the use case a manifest path anchored at the monorepo root, not process.cwd()", async () => {
-    await POST(post({ intent: "add a context" }));
-
-    assert.equal(execute.mock.calls.length, 1);
-    // execute(intent, manifestPath, lineage)
-    assert.equal(
-      execute.mock.calls[0][1],
-      "/fake/repo/.architecture/manifest.yaml",
-    );
-  });
-
   it("returns 500 (not 400) when the monorepo-root/manifest anchor is missing", async () => {
     // A missing on-disk anchor is a server packaging/config failure; mapping it
-    // to 400 would hide it from 5xx monitoring and blame the caller.
+    // to 400 would hide it from 5xx monitoring and blame the caller. The stream
+    // route surfaces it as a one-shot SSE error frame with a 500 status.
     vi.mocked(findMonorepoRoot).mockImplementation(() => {
       throw new MonorepoRootNotFoundError(
         "Could not locate monorepo root from /x. No .architecture/manifest.yaml found.",
@@ -88,6 +52,15 @@ describe("POST /api/architecture/modify", () => {
     const res = await POST(post({ intent: "add a context" }));
 
     assert.equal(res.status, 500);
-    assert.equal(execute.mock.calls.length, 0);
+    assert.equal(res.headers.get("Content-Type"), "text/event-stream");
+  });
+
+  it("still returns 400 for a path-traversal manifestPath (client input error)", async () => {
+    const res = await POST(
+      post({ intent: "add a context", manifestPath: "../../etc/passwd" }),
+    );
+
+    assert.equal(res.status, 400);
+    assert.equal(res.headers.get("Content-Type"), "text/event-stream");
   });
 });

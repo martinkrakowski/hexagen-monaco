@@ -4,6 +4,7 @@ import {
   getTransactionManager,
   getManifestMutation,
   findMonorepoRoot,
+  MonorepoRootNotFoundError,
 } from "@/lib/wire.server";
 import { createWebLogger } from "@/lib/wire.shared";
 
@@ -68,6 +69,10 @@ export async function POST(request: NextRequest) {
         manifestPath ?? ".architecture/manifest.yaml",
       );
     } catch (err) {
+      // A missing on-disk manifest anchor is a server config failure, not bad
+      // client input — rethrow to the outer 5xx handler (logged there) so it is
+      // never masked as a 400. Only path-traversal input yields 400 below.
+      if (err instanceof MonorepoRootNotFoundError) throw err;
       return NextResponse.json(
         {
           success: false,
