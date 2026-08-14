@@ -3,22 +3,25 @@ import {
   ProxyRequestUseCase,
   RevokeKeyUseCase,
   AesGcmEncryptionAdapter,
-  InMemoryKeyMetadataAdapter,
-  InMemoryRevocationAdapter,
   FetchProviderProxyAdapter,
   ConsoleAuditLogAdapter,
 } from "@hexagen/byok";
 import type { EncryptKeyPort } from "@hexagen/byok";
 import type { ProxyRequestPort } from "@hexagen/byok";
 import type { RevokeKeyPort } from "@hexagen/byok";
+import type { KeyMetadataStorePort, RevocationStorePort } from "@hexagen/byok";
+// Key metadata + revocation are backed by a volume-mounted SQLite store so
+// revocations survive container restarts (AUD-007). The native better-sqlite3
+// module lives in apps/web/lib/ (alongside the quota store) and is only ever
+// imported from here — a server-only module — so it stays out of client
+// bundles.
+import { getByokStore, closeByokStore } from "../../lib/byok-store";
 
 let _encryptUseCase: EncryptApiKeyUseCase | null = null;
 let _proxyUseCase: ProxyRequestUseCase | null = null;
 let _revokeUseCase: RevokeKeyUseCase | null = null;
 
 let _encryptionAdapter: AesGcmEncryptionAdapter | null = null;
-let _metadataAdapter: InMemoryKeyMetadataAdapter | null = null;
-let _revocationAdapter: InMemoryRevocationAdapter | null = null;
 let _proxyAdapter: FetchProviderProxyAdapter | null = null;
 let _auditLogAdapter: ConsoleAuditLogAdapter | null = null;
 
@@ -29,18 +32,12 @@ function getEncryptionAdapter(): AesGcmEncryptionAdapter {
   return _encryptionAdapter;
 }
 
-export function getMetadataAdapter(): InMemoryKeyMetadataAdapter {
-  if (!_metadataAdapter) {
-    _metadataAdapter = new InMemoryKeyMetadataAdapter();
-  }
-  return _metadataAdapter;
+export function getMetadataAdapter(): KeyMetadataStorePort {
+  return getByokStore().metadata;
 }
 
-function getRevocationAdapter(): InMemoryRevocationAdapter {
-  if (!_revocationAdapter) {
-    _revocationAdapter = new InMemoryRevocationAdapter();
-  }
-  return _revocationAdapter;
+function getRevocationAdapter(): RevocationStorePort {
+  return getByokStore().revocation;
 }
 
 function getProxyAdapter(): FetchProviderProxyAdapter {
@@ -97,8 +94,9 @@ export const clearByokCache = (): void => {
   _proxyUseCase = null;
   _revokeUseCase = null;
   _encryptionAdapter = null;
-  _metadataAdapter = null;
-  _revocationAdapter = null;
   _proxyAdapter = null;
   _auditLogAdapter = null;
+  // Drop the SQLite handle too, so the next getByokStore() reopens from disk —
+  // this is what lets tests simulate a container restart.
+  closeByokStore();
 };
