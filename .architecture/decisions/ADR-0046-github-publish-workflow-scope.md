@@ -71,9 +71,9 @@ Error codes exist in two deliberately distinct vocabularies:
 
 The push route's 500s pass kebab-case writer codes through verbatim in
 `body.code`; the client's shared mapper (`mapGithubPublishFailure`)
-recognizes **only** the snake*case pair — plus the codeless-401 legacy
+recognizes **only** the `snake_case` pair — plus the codeless-401 legacy
 fallback described in Decision 4 — and maps everything else, including those
-passthroughs, to `code: null`, i.e. \_no* reconnect affordance. That
+passthroughs, to `code: null`, i.e. no reconnect affordance. That
 default is intentional, not an omission: offering "Reconnect GitHub" for a
 non-auth failure (a conflict, a validation error) would be actively
 misleading. Anyone adding an error code later must pick the vocabulary by
