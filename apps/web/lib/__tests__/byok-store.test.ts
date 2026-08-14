@@ -1,5 +1,5 @@
 import { describe, it, afterEach } from "vitest";
-import assert from "node:assert";
+import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,6 +41,28 @@ describe("byok-store (in-memory)", () => {
     await store.metadata.store(fixture({ keyId: "new" }));
     const r = await store.metadata.findByUserAndProvider("user-1", "openai");
     assert.strictEqual(r.success && r.value?.keyId, "new");
+    store.close();
+  });
+
+  it("findByUserAndProvider tracks the last write even when re-storing an earlier key (rowid is not write order)", async () => {
+    const store = createByokStore(":memory:");
+    // Store A, then B (both current for the same user+provider), then re-store A
+    // (e.g. a re-encrypt bumping keyVersion). The re-store is an in-place upsert
+    // on key_id "A", so A keeps its original — lower — rowid. Under rowid-DESC
+    // ordering the store would wrongly still return B; the genuine last write is
+    // A, so A must be reported as current.
+    await store.metadata.store(fixture({ keyId: "A" }));
+    await store.metadata.store(fixture({ keyId: "B" }));
+    await store.metadata.store(fixture({ keyId: "A", keyVersion: 2 }));
+    const r = await store.metadata.findByUserAndProvider("user-1", "openai");
+    assert.strictEqual(r.success && r.value?.keyId, "A");
+
+    // Re-storing the other key must flip current back to it — write_seq keeps
+    // advancing across arbitrary re-store order (guards against an over-
+    // correction that only re-orders non-latest re-stores).
+    await store.metadata.store(fixture({ keyId: "B", keyVersion: 2 }));
+    const r2 = await store.metadata.findByUserAndProvider("user-1", "openai");
+    assert.strictEqual(r2.success && r2.value?.keyId, "B");
     store.close();
   });
 

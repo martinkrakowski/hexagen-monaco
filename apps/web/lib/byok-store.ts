@@ -46,6 +46,7 @@ interface MetadataRow {
   created_at: string;
   revoked_at: string | null;
   revoked_by: string | null;
+  write_seq: number;
 }
 
 function rowToMetadata(row: MetadataRow): KeyMetadata {
@@ -78,6 +79,13 @@ export function createByokStore(dbPath: string): ByokStore {
   const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
   db.pragma("busy_timeout = 5000");
+  // Schema is created once, when a fresh DB file is first opened — this store
+  // ships new, so no prior byok.db exists to migrate. `CREATE TABLE IF NOT
+  // EXISTS` is a no-op on an already-created table, so any FUTURE column added
+  // inline the way `write_seq` was (NOT NULL, no default) would NOT be back-
+  // filled onto an existing deployed table and every write would fail; evolve
+  // the schema post-deploy via an explicit `ALTER TABLE` / `PRAGMA user_version`
+  // migration instead.
   db.exec(`
     CREATE TABLE IF NOT EXISTS byok_key_metadata (
       key_id      TEXT    PRIMARY KEY,
@@ -86,7 +94,13 @@ export function createByokStore(dbPath: string): ByokStore {
       key_version INTEGER NOT NULL,
       created_at  TEXT    NOT NULL,
       revoked_at  TEXT,
-      revoked_by  TEXT
+      revoked_by  TEXT,
+      -- Monotonic per-write counter, strictly increasing on every store()/upsert.
+      -- findByUserAndProvider orders by this to pick the genuinely last-written
+      -- row. rowid is NOT usable: an in-place upsert on key_id keeps the row's
+      -- original rowid, so re-storing an earlier key would look "older" than a
+      -- key inserted after it and break last-write-wins.
+      write_seq   INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_byok_meta_user_provider
       ON byok_key_metadata (user_id, provider);
@@ -101,24 +115,30 @@ export function createByokStore(dbPath: string): ByokStore {
   `);
 
   // Upsert on key_id mirrors the in-memory `byKeyId.set(keyId, …)` overwrite.
+  // write_seq is stamped MAX+1 on both insert and in-place update so every
+  // store() — including re-storing an existing key_id — advances it past every
+  // other row. (MAX() over the current table already excludes the not-yet-
+  // inserted row and, on update, sees the conflicting row's prior value.)
   const upsertMetaStmt = db.prepare(`
     INSERT INTO byok_key_metadata
-      (key_id, user_id, provider, key_version, created_at, revoked_at, revoked_by)
+      (key_id, user_id, provider, key_version, created_at, revoked_at, revoked_by, write_seq)
     VALUES
-      (@key_id, @user_id, @provider, @key_version, @created_at, @revoked_at, @revoked_by)
+      (@key_id, @user_id, @provider, @key_version, @created_at, @revoked_at, @revoked_by,
+       (SELECT COALESCE(MAX(write_seq), 0) + 1 FROM byok_key_metadata))
     ON CONFLICT(key_id) DO UPDATE SET
       user_id     = excluded.user_id,
       provider    = excluded.provider,
       key_version = excluded.key_version,
       created_at  = excluded.created_at,
       revoked_at  = excluded.revoked_at,
-      revoked_by  = excluded.revoked_by
+      revoked_by  = excluded.revoked_by,
+      write_seq   = (SELECT COALESCE(MAX(write_seq), 0) + 1 FROM byok_key_metadata)
   `);
   // Last-write-wins per (user, provider) mirrors the in-memory `byUserProvider`
-  // map: newest row (highest rowid) is the current one.
+  // map: the row with the highest write_seq is the most recently stored one.
   const findByUserProviderStmt = db.prepare(
     `SELECT * FROM byok_key_metadata WHERE user_id = ? AND provider = ?
-       ORDER BY rowid DESC LIMIT 1`,
+       ORDER BY write_seq DESC LIMIT 1`,
   );
   const findByKeyIdStmt = db.prepare(
     "SELECT * FROM byok_key_metadata WHERE key_id = ?",
@@ -193,15 +213,20 @@ export function createByokStore(dbPath: string): ByokStore {
     },
     async markRevoked(keyId, revokedBy) {
       try {
-        const existing = findByKeyIdStmt.get(keyId) as MetadataRow | undefined;
-        if (!existing) {
+        // Single UPDATE: `changes === 0` means no row matched this keyId, i.e.
+        // the key metadata does not exist — no separate existence SELECT needed.
+        const result = markRevokedStmt.run(
+          new Date().toISOString(),
+          revokedBy,
+          keyId,
+        );
+        if (result.changes === 0) {
           return err({
             kind: "key_not_found",
             message: `Key metadata not found for keyId: ${keyId}`,
             provider: "unknown",
           } satisfies ByokError);
         }
-        markRevokedStmt.run(new Date().toISOString(), revokedBy, keyId);
         return ok(undefined) as Result<void, ByokError>;
       } catch (error) {
         return metadataStoreError(error, "Failed to mark key as revoked");

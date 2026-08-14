@@ -9,6 +9,11 @@ import { enforceDailyQuota } from "../../../../lib/enforce-quota";
 import type { ChatMessage } from "@hexagen/local-llm";
 import type { ByokProvider } from "@hexagen/byok";
 
+// getProxyRequestUseCase (byok-wire) transitively imports SQLite (better-sqlite3)
+// for the durable revocation/metadata store — must run on the Node runtime, not
+// edge.
+export const runtime = "nodejs";
+
 // --- Rate Limiter (In-Memory) ---
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
 const MAX_REQUESTS_PER_WINDOW = 10;

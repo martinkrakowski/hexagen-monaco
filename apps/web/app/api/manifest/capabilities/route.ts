@@ -6,6 +6,10 @@ import type { ByokProvider } from "@hexagen/byok";
 import { BYOK_PROVIDERS } from "@hexagen/byok";
 import { resolveActiveGenerationModel } from "../../../lib/wire.server";
 
+// getMetadataAdapter (byok-wire) transitively imports SQLite (better-sqlite3) for
+// the durable key-metadata store — must run on the Node runtime, not edge.
+export const runtime = "nodejs";
+
 export type CapabilityProbeResult = {
   provider: ByokProvider;
   hasServerKey: boolean;
