@@ -35,14 +35,27 @@ describe("findMonorepoRoot", () => {
     assert.equal(findMonorepoRoot(deep), root);
   });
 
-  it("returns the nearest ancestor holding .architecture/manifest.yaml", () => {
+  it("returns the NEAREST ancestor when an outer manifest also exists (nearest wins)", () => {
     const root = makeRoot();
     mkdirSync(join(root, ".architecture"), { recursive: true });
     writeFileSync(join(root, ".architecture", "manifest.yaml"), "version: 1\n");
-    const start = join(root, "apps", "web");
+
+    // A second, NEARER manifest between root and start. The upward walk must stop
+    // at this one — anchoring mutations at the outer root instead would target the
+    // wrong directory. Both manifests must exist: with only the outer one, a
+    // "walk to the outermost match" regression would still pass, so this is the
+    // case that actually pins nearest-ancestor selection.
+    const nearer = join(root, "apps");
+    mkdirSync(join(nearer, ".architecture"), { recursive: true });
+    writeFileSync(
+      join(nearer, ".architecture", "manifest.yaml"),
+      "version: 1\n",
+    );
+
+    const start = join(nearer, "web");
     mkdirSync(start, { recursive: true });
 
-    assert.equal(findMonorepoRoot(start), root);
+    assert.equal(findMonorepoRoot(start), nearer);
   });
 
   it("throws MonorepoRootNotFoundError when no manifest exists up to the filesystem root", () => {

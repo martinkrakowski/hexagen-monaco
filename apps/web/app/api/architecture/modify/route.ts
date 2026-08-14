@@ -87,11 +87,23 @@ export async function POST(request: NextRequest) {
         err,
         "[api/architecture/modify] Manifest root not found",
       );
-      // Bare 500 by design: this is a same-origin server-config failure, and the
-      // wildcard Access-Control-Allow-* headers the sibling responses still carry
-      // are being retired (same-origin migration), so this new arm does not
-      // propagate them rather than deepen a header set that is on its way out.
-      return NextResponse.json({ error: err.message }, { status: 500 });
+      // Honor this route's still-active wildcard-CORS contract on the 500 too:
+      // every sibling response and the OPTIONS preflight set these headers, so a
+      // lone header-less response would make a cross-origin caller see a browser
+      // CORS failure instead of this 500. The contract is retired wholesale —
+      // across all responses and the preflight together — in the stacked
+      // same-origin migration, not selectively here.
+      return NextResponse.json(
+        { error: err.message },
+        {
+          status: 500,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+          },
+        },
+      );
     }
     const message =
       err instanceof Error ? err.message : "Invalid manifest path";
