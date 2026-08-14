@@ -549,8 +549,8 @@ export interface StepCallbacks {
  * Get or create the ModifyArchitectureUseCase with all dependencies wired.
  *
  * **Caching Strategy**:
- * - Cached when: mode matches cached mode AND no callbacks provided (singleton pattern)
- * - New instance when: mode differs OR callbacks provided (fresh per-request for SSE)
+ * - Cached when: mode matches cached mode AND no callbacks AND no signal provided (singleton pattern)
+ * - New instance when: mode differs OR a signal or callbacks are provided (fresh per-request for SSE)
  *
  * **Rationale**:
  * - Singleton caching improves performance for repeated non-streaming operations (in-memory mode)
@@ -610,9 +610,12 @@ export const getModifyArchitectureUseCase = (
     ...callbacks,
   };
 
-  cachedUseCase = new ModifyArchitectureUseCase(deps);
-  cachedMode = mode;
-  return cachedUseCase;
+  const useCase = new ModifyArchitectureUseCase(deps);
+  if (!callbacks && !signal) {
+    cachedUseCase = useCase;
+    cachedMode = mode;
+  }
+  return useCase;
 };
 
 /**
