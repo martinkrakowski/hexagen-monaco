@@ -5,6 +5,10 @@ import type { GitHubLink } from "@hexagen/shared";
 
 import { getSavedProjectsPersistence, getLogger } from "@/lib/wire.client";
 import { postJson } from "@/lib/fetch-json";
+import {
+  mapGithubPublishFailure,
+  type GithubPublishErrorCode,
+} from "@/lib/github-publish-errors";
 
 interface PushGithubResponse {
   success: boolean;
@@ -20,6 +24,9 @@ export interface EditorPushState {
   connectedRepo: { owner: string; repo: string } | null;
   /** Last failure message (e.g. re-auth needed); null when idle/succeeded. */
   pushError: string | null;
+  /** Actionable failure code driving the Reconnect/sign-in affordance; null
+   * for non-actionable failures (and whenever pushError is null). */
+  pushErrorCode: GithubPublishErrorCode | null;
 }
 
 interface UseEditorPushArgs {
@@ -47,6 +54,8 @@ export function useEditorPush({
   const [githubLink, setGithubLink] = useState<GitHubLink | null>(null);
   const [isPushing, setIsPushing] = useState(false);
   const [pushError, setPushError] = useState<string | null>(null);
+  const [pushErrorCode, setPushErrorCode] =
+    useState<GithubPublishErrorCode | null>(null);
 
   // Keep the latest file set in a ref so `onPush` stays referentially stable
   // (the toolbar button identity doesn't churn on every keystroke).
@@ -121,6 +130,7 @@ export function useEditorPush({
 
     setIsPushing(true);
     setPushError(null);
+    setPushErrorCode(null);
     try {
       const result = await postJson<PushGithubResponse>("/api/push/github", {
         projectId,
@@ -136,11 +146,11 @@ export function useEditorPush({
         return;
       }
 
-      if (result.kind === "http-error" && result.status === 401) {
-        setPushError("GitHub session expired — sign in again to push.");
-      } else {
-        setPushError(result.message);
-      }
+      // Code-driven mapping now (was a raw status===401 check); the mapper
+      // deliberately keeps the codeless-401 → session-expired fallback verbatim.
+      const mapped = mapGithubPublishFailure(result, "push");
+      setPushError(mapped.message);
+      setPushErrorCode(mapped.code);
     } finally {
       setIsPushing(false);
     }
@@ -162,5 +172,6 @@ export function useEditorPush({
     isPushing,
     connectedRepo,
     pushError,
+    pushErrorCode,
   };
 }

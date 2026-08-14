@@ -20,6 +20,7 @@ import {
   DialogFooter,
   Input,
 } from "@hexagen/ui";
+import type { GithubPublishErrorCode } from "@/lib/github-publish-errors";
 
 export interface ExportDialogSubmitPayload {
   repoName: string;
@@ -44,6 +45,13 @@ interface ExportDialogProps {
   initialCommitMessage?: string;
   error?: string | null;
   /**
+   * Actionable failure code (the routes' snake_case HTTP vocabulary). Gates
+   * the Reconnect/sign-in affordance and the scope caveat in the error panel.
+   */
+  errorCode?: GithubPublishErrorCode | null;
+  /** Re-run the GitHub OAuth round-trip (rendered only alongside `errorCode`). */
+  onReconnect?: () => void;
+  /**
    * Success details. `message` is always present; `owner`/`repo` and `url` are
    * optional so the panel still renders (message + Done) when the structured
    * GitHub link is absent — no blank success body.
@@ -56,6 +64,9 @@ interface ExportDialogProps {
     /** Add-on materialization notice counts (full detail is committed to the
      * repo's HEXAGEN-ADDON-NOTICES.md). */
     notices?: { warnings: number; errors: number };
+    /** Raw degraded-publish warning strings; when present they replace the
+     * count-based warnings line (see the panel comment). */
+    warningMessages?: string[];
   } | null;
 }
 
@@ -72,6 +83,8 @@ export function ExportDialog({
   initialIsPrivate = false,
   initialCommitMessage = "Initial commit",
   error = null,
+  errorCode = null,
+  onReconnect,
   success = null,
 }: ExportDialogProps) {
   const [repoName, setRepoName] = useState(initialRepoName);
@@ -202,12 +215,31 @@ export function ExportDialog({
                 </span>
               </div>
             )}
-            {success.notices && success.notices.warnings > 0 && (
-              <p className="text-sm text-muted-foreground">
-                {success.notices.warnings} generated file
-                {success.notices.warnings === 1 ? "" : "s"} overridden by
-                add-ons.
-              </p>
+            {success.warningMessages?.length ? (
+              // The raw strings win over the count line below: they are
+              // self-describing for BOTH add-on overrides and workflow-scope
+              // skips, whereas the add-on copy actively mislabels a degraded
+              // publish ("overridden by add-ons" for a skipped workflow file).
+              // No role="status": the ancestor aria-live="polite" container
+              // already announces this content, and role="status" would
+              // replace the ul's native list semantics.
+              <ul className="space-y-1 text-sm text-muted-foreground">
+                {success.warningMessages.map((warning, i) => (
+                  // Index keys are fine: the list is a static per-render
+                  // snapshot of server strings, never reordered or edited.
+                  <li key={i}>{warning}</li>
+                ))}
+              </ul>
+            ) : (
+              // Counts-only fallback (e.g. the strings were not threaded).
+              success.notices &&
+              success.notices.warnings > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  {success.notices.warnings} generated file
+                  {success.notices.warnings === 1 ? "" : "s"} overridden by
+                  add-ons.
+                </p>
+              )
             )}
             {success.url ? (
               <div className="flex flex-wrap gap-2">
@@ -240,13 +272,24 @@ export function ExportDialog({
         ) : null}
 
         {phase === "error" ? (
-          <div
-            className="flex items-start gap-2 py-2 text-sm text-destructive"
-            role="alert"
-          >
-            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
-            <span>{error ?? "Something went wrong while publishing."}</span>
-          </div>
+          <>
+            <div
+              className="flex items-start gap-2 py-2 text-sm text-destructive"
+              role="alert"
+            >
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+              <span>{error ?? "Something went wrong while publishing."}</span>
+            </div>
+            {errorCode === "workflow_scope_required" ? (
+              // Existing sessions keep their old tokens — the jwt callback
+              // refreshes only on a fresh sign-in — so this degrade is
+              // permanent for un-reconnected users, not transitional.
+              <p className="pb-2 text-sm text-muted-foreground">
+                Your GitHub connection was created before this app requested
+                workflow permission, and it stays limited until you reconnect.
+              </p>
+            ) : null}
+          </>
         ) : null}
 
         {phase === "form" ? (
@@ -352,6 +395,22 @@ export function ExportDialog({
               >
                 Back to form
               </Button>
+              {errorCode && onReconnect ? (
+                // workflow_scope_required (403): the session is valid, only
+                // the scope is missing → "Reconnect". reauth_required (401):
+                // the session expired → "Sign in". Retry keeps autoFocus — a
+                // transient failure remains the most likely case.
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onReconnect}
+                >
+                  {errorCode === "workflow_scope_required"
+                    ? "Reconnect GitHub"
+                    : "Sign in to GitHub"}
+                </Button>
+              ) : null}
               <Button type="button" size="sm" onClick={onRetry} autoFocus>
                 Retry
               </Button>

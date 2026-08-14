@@ -14,7 +14,11 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.GITHUB_SECRET ?? "",
       authorization: {
         params: {
-          scope: "read:user user:email repo",
+          // `workflow` is required so published trees may contain
+          // .github/workflows/* (the injected sync-integrity CI workflow).
+          // The token still never reaches the browser — see the session
+          // callback below, which is unchanged.
+          scope: "read:user user:email repo workflow",
         },
       },
     }),
