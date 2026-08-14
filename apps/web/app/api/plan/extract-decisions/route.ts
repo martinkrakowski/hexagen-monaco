@@ -3,32 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.js";
 import { createLLMProvider, resolveWebLlmApiKey } from "@/lib/wire.shared";
 import { enforceDailyQuota } from "../../../../lib/enforce-quota";
-
-// --- Rate Limiter (In-Memory) ---
-// Mirrors /api/llm/chat exactly: per-user (or per-IP for anonymous) sliding
-// window; the durable free-tier daily cap is enforced separately below.
-const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-const MAX_REQUESTS_PER_WINDOW = 10;
-const userRequestTimestamps = new Map<string, number[]>();
-
-function isRateLimited(userId: string): boolean {
-  const now = Date.now();
-  const timestamps = userRequestTimestamps.get(userId) || [];
-
-  // Filter out timestamps older than the window
-  const recentTimestamps = timestamps.filter(
-    (ts) => now - ts < RATE_LIMIT_WINDOW_MS,
-  );
-
-  if (recentTimestamps.length >= MAX_REQUESTS_PER_WINDOW) {
-    return true; // Rate limited
-  }
-
-  // Add current request timestamp and update the map
-  recentTimestamps.push(now);
-  userRequestTimestamps.set(userId, recentTimestamps);
-  return false;
-}
+import { checkRateLimit } from "../../../../lib/rate-limiter";
 
 /** Generous cap on the pasted transcript (same bound as the spec-convert
  * route) — a runaway payload should 400, not be forwarded to the provider. */
@@ -104,7 +79,11 @@ export async function POST(request: NextRequest) {
     request.headers.get("x-real-ip") ??
     "anon";
 
-  if (isRateLimited(userId)) {
+  // Per-user (or per-IP for anonymous) fixed-window limit via the shared
+  // limiter — mirrors /api/llm/chat. The `"extract"` namespace keeps this
+  // budget independent of the chat and mutation limiters that share the same
+  // map. The durable free-tier daily cap is enforced separately below.
+  if (!checkRateLimit(request, 10, 60 * 1000, userId, "extract").allowed) {
     return NextResponse.json(
       { error: "Too many requests. Please try again in a minute." },
       { status: 429 },

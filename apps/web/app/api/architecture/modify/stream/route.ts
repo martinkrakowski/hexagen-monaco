@@ -10,6 +10,7 @@ import {
   MonorepoRootNotFoundError,
 } from "@/lib/wire.server";
 import { createWebLogger } from "@/lib/wire.shared";
+import { guardMutation } from "@/lib/request-guards";
 import {
   createSSEResponse,
   formatSSEComment,
@@ -43,6 +44,12 @@ interface StreamRequestBody {
 }
 
 export async function POST(request: NextRequest) {
+  // Same-origin + rate-limit gate (D1): runs the full modify pipeline (LLM +
+  // manifest mutation), so gate before opening the SSE stream. A rejected
+  // request gets a plain JSON 403/429 rather than an event stream.
+  const gate = guardMutation(request);
+  if (gate) return gate;
+
   let body: StreamRequestBody;
   try {
     body = await request.json();
@@ -73,8 +80,8 @@ export async function POST(request: NextRequest) {
       const logger = createWebLogger();
       // Full detail (incl. the process.cwd() path) goes to the SERVER LOG only;
       // the SSE error frame carries the stable, path-free client message. The
-      // raw err.message embeds the server filesystem path and would disclose the
-      // server layout to cross-origin readers under wildcard CORS (CWE-209).
+      // raw err.message embeds the server filesystem path, which must never
+      // reach a client-facing error frame regardless of CORS (CWE-209).
       logger.errorWithException(
         err,
         "[api/architecture/modify/stream] Manifest root not found",

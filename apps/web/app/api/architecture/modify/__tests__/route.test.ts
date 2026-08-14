@@ -97,4 +97,26 @@ describe("POST /api/architecture/modify", () => {
     assert.doesNotMatch(body.error, /Could not locate|manifest\.yaml|\/x/);
     assert.equal(execute.mock.calls.length, 0);
   });
+
+  it("rejects a cross-origin POST with 403 before reaching the use case", async () => {
+    // The mutation gate (D1) must short-circuit a forged cross-origin request
+    // whose Origin host differs from the received Host — no manifest work runs.
+    const crossOrigin = new NextRequest(
+      "http://localhost/api/architecture/modify",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          origin: "http://evil.example",
+          host: "localhost",
+        },
+        body: JSON.stringify({ intent: "add a context" }),
+      },
+    );
+
+    const res = await POST(crossOrigin);
+
+    assert.equal(res.status, 403);
+    assert.equal(execute.mock.calls.length, 0);
+  });
 });
