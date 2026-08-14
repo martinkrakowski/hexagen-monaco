@@ -4,7 +4,11 @@
 
 import { NextRequest } from "next/server";
 import path from "path";
-import { getModifyArchitectureUseCase } from "@/lib/wire.server";
+import {
+  getModifyArchitectureUseCase,
+  findMonorepoRoot,
+  MonorepoRootNotFoundError,
+} from "@/lib/wire.server";
 import { createWebLogger } from "@/lib/wire.shared";
 import {
   createSSEResponse,
@@ -15,7 +19,8 @@ import {
 import type { IntentLineage } from "@hexagen/core-domain";
 
 function validateManifestPath(rawPath: string): string {
-  const cwd = process.cwd();
+  // Anchor path resolution + the traversal gate at the monorepo root — the same anchor the mutation/lint adapters use (findMonorepoRoot), NOT process.cwd() (which is apps/web in prod).
+  const cwd = findMonorepoRoot();
   const allowedBase = path.join(cwd, ".architecture");
   const resolvedPath = path.resolve(cwd, rawPath);
 
@@ -61,6 +66,24 @@ export async function POST(request: NextRequest) {
       body.manifestPath ?? ".architecture/manifest.yaml",
     );
   } catch (err) {
+    // A missing on-disk manifest anchor is a server config failure, not bad
+    // client input — surface it as 5xx (and log) so monitoring sees it, rather
+    // than masking it as a 400. Only path-traversal input yields 400 below.
+    if (err instanceof MonorepoRootNotFoundError) {
+      const logger = createWebLogger();
+      // Full detail (incl. the process.cwd() path) goes to the SERVER LOG only;
+      // the SSE error frame carries the stable, path-free client message. The
+      // raw err.message embeds the server filesystem path and would disclose the
+      // server layout to cross-origin readers under wildcard CORS (CWE-209).
+      logger.errorWithException(
+        err,
+        "[api/architecture/modify/stream] Manifest root not found",
+      );
+      return new Response(
+        `data: ${JSON.stringify({ type: "error", success: false, error: MonorepoRootNotFoundError.clientMessage })}\n\n`,
+        { status: 500, headers: { "Content-Type": "text/event-stream" } },
+      );
+    }
     const message =
       err instanceof Error ? err.message : "Invalid manifest path";
     return new Response(

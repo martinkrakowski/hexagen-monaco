@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
-import { getTransactionManager, getManifestMutation } from "@/lib/wire.server";
+import {
+  getTransactionManager,
+  getManifestMutation,
+  findMonorepoRoot,
+  MonorepoRootNotFoundError,
+} from "@/lib/wire.server";
 import { createWebLogger } from "@/lib/wire.shared";
 
+// Anchor path resolution + the traversal gate at the monorepo root — the same anchor the mutation/lint adapters use (findMonorepoRoot), NOT process.cwd() (which is apps/web in prod).
 function validateManifestPath(rawPath: string): string {
-  const cwd = process.cwd();
+  const cwd = findMonorepoRoot();
   const allowedBase = path.join(cwd, ".architecture");
   const resolvedPath = path.resolve(cwd, rawPath);
 
@@ -63,6 +69,10 @@ export async function POST(request: NextRequest) {
         manifestPath ?? ".architecture/manifest.yaml",
       );
     } catch (err) {
+      // A missing on-disk manifest anchor is a server config failure, not bad
+      // client input — rethrow to the outer 5xx handler (logged there) so it is
+      // never masked as a 400. Only path-traversal input yields 400 below.
+      if (err instanceof MonorepoRootNotFoundError) throw err;
       return NextResponse.json(
         {
           success: false,
@@ -81,6 +91,10 @@ export async function POST(request: NextRequest) {
         restoreResult.error,
         "[api/architecture/modify/reject] Defensive git restore failed",
       );
+      // Roll back the in-memory transaction regardless of the on-disk git
+      // restore outcome so it is never stuck in 'speculative'; the failed
+      // file restore is surfaced separately below.
+      transactionManager.rollback(transactionId, reason ?? "User rejected");
       return NextResponse.json(
         {
           success: false,
@@ -112,10 +126,17 @@ export async function POST(request: NextRequest) {
       error,
       `[api/architecture/modify/reject] Unexpected error${transactionId ? ` for transaction ${transactionId}` : ""}`,
     );
+    // The anchor error rethrown from path validation lands here (this outer 5xx
+    // catch-all). Map it to the stable, path-free client message — its raw
+    // .message embeds the server filesystem path and, under active wildcard CORS,
+    // would disclose the server layout to cross-origin callers (CWE-209). Full
+    // detail is already logged above; other errors are unchanged.
     const message =
-      error instanceof Error
-        ? error.message
-        : "Reject failed: unexpected error";
+      error instanceof MonorepoRootNotFoundError
+        ? MonorepoRootNotFoundError.clientMessage
+        : error instanceof Error
+          ? error.message
+          : "Reject failed: unexpected error";
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 },

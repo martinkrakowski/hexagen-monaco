@@ -3,7 +3,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
-import { getModifyArchitectureUseCase } from "@/lib/wire.server";
+import {
+  getModifyArchitectureUseCase,
+  findMonorepoRoot,
+  MonorepoRootNotFoundError,
+} from "@/lib/wire.server";
 import { createWebLogger } from "@/lib/wire.shared";
 import type { IntentLineage } from "@hexagen/core-domain";
 
@@ -13,7 +17,8 @@ import type { IntentLineage } from "@hexagen/core-domain";
  * @throws {Error} If path traversal is detected
  */
 function validateManifestPath(rawPath: string): string {
-  const cwd = process.cwd();
+  // Anchor path resolution + the traversal gate at the monorepo root — the same anchor the mutation/lint adapters use (findMonorepoRoot), NOT process.cwd() (which is apps/web in prod).
+  const cwd = findMonorepoRoot();
   const allowedBase = path.join(cwd, ".architecture");
   const resolvedPath = path.resolve(cwd, rawPath);
 
@@ -73,6 +78,39 @@ export async function POST(request: NextRequest) {
       body.manifestPath ?? ".architecture/manifest.yaml",
     );
   } catch (err) {
+    // A missing on-disk manifest anchor is a server config failure, not bad
+    // client input — surface it as 5xx (and log) so monitoring sees it, rather
+    // than masking it as a 400. Only path-traversal input yields 400 below.
+    if (err instanceof MonorepoRootNotFoundError) {
+      const logger = createWebLogger();
+      // Full detail (incl. the process.cwd() path) goes to the SERVER LOG only.
+      logger.errorWithException(
+        err,
+        "[api/architecture/modify] Manifest root not found",
+      );
+      // Honor this route's still-active wildcard-CORS contract on the 500 too:
+      // every sibling response and the OPTIONS preflight set these headers, so a
+      // lone header-less response would make a cross-origin caller see a browser
+      // CORS failure instead of this 500. The contract is retired wholesale —
+      // across all responses and the preflight together — in the stacked
+      // same-origin migration, not selectively here.
+      //
+      // The client body is the stable, path-free message — NOT err.message,
+      // whose text embeds the server filesystem path. Under the wildcard CORS
+      // above, echoing that raw message would leak the server layout to
+      // cross-origin callers (CWE-209).
+      return NextResponse.json(
+        { error: MonorepoRootNotFoundError.clientMessage },
+        {
+          status: 500,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+          },
+        },
+      );
+    }
     const message =
       err instanceof Error ? err.message : "Invalid manifest path";
     return NextResponse.json(

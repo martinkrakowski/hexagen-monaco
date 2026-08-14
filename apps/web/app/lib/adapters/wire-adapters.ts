@@ -9,11 +9,15 @@ import type {
 } from "@hexagen/sync";
 import type { ManifestBoundedContext } from "@hexagen/project-configuration";
 import { type ArchitectureGraph } from "@hexagen/visualization";
+import { findMonorepoRoot } from "../monorepo-root";
 
 export class ManifestProviderAdapter {
   async getManifest(): Promise<ProjectSpecLike> {
     try {
-      const workspaceRoot = process.cwd();
+      // Anchor on the monorepo root, not process.cwd() (which is apps/web under
+      // the standalone build) — otherwise the manifest read fails and the catch
+      // below silently degrades this provider to an empty context list.
+      const workspaceRoot = findMonorepoRoot();
       const manifestPath = path.join(
         workspaceRoot,
         ".architecture/manifest.yaml",
@@ -39,7 +43,10 @@ export class ServerArchitectureGraphProviderAdapter implements ArchitectureGraph
   ): Promise<Result<ArchitectureGraph>> {
     void _projectId;
     try {
-      const workspaceRoot = process.cwd();
+      // Same monorepo-root anchor as ManifestProviderAdapter — process.cwd()
+      // would resolve the wrong directory under the standalone build and the
+      // catch below would return an empty graph instead of the real one.
+      const workspaceRoot = findMonorepoRoot();
       const manifestPath = path.join(
         workspaceRoot,
         ".architecture/manifest.yaml",
