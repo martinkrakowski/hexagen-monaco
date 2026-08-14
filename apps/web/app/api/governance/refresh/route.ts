@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { readdir, writeFile, unlink } from "fs/promises";
+import { writeFile, unlink } from "fs/promises";
 import path from "path";
 import os from "os";
-import * as yaml from "js-yaml";
 import { GenerateSuggestionUseCase } from "@hexagen/agentic-interaction";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
 import { logger } from "../../../../lib/structured-logger";
 import { resolveWebLlmApiKey } from "@/lib/wire.shared";
 import { guardMutation } from "@/lib/request-guards";
+import {
+  analyzeManifest,
+  type PortAdapterStatus,
+} from "@/lib/governance/manifest-analysis";
 
 const execAsync = promisify(exec);
 
@@ -34,13 +37,6 @@ interface AISuggestion {
     | "port-definition"
     | "dependency-cleanup"
     | "general";
-}
-
-interface PortAdapterStatus {
-  context: string;
-  ports: number;
-  adapters: number;
-  complete: boolean;
 }
 
 interface RefreshRequestBody {
@@ -147,81 +143,15 @@ async function runSuggestions(
 }
 
 // ---------------------------------------------------------------------------
-// Status — parse manifest YAML, scan packages/ for adapters
+// Status — derive port/adapter status from the manifest via the shared
+// analyzer, so `refresh` and `governance/status` agree on the same manifest
+// (AUD-005). The prior filesystem scan (counting `.ts` files on disk) diverged
+// from the manifest-based `status` route; the two now share one implementation.
 // ---------------------------------------------------------------------------
 
-interface ManifestBoundedContext {
-  name: string;
-  layers?: {
-    application?: {
-      ports?: {
-        in?: unknown[];
-        out?: unknown[];
-      };
-    };
-  };
-}
-
-async function runStatus(manifestYaml: string): Promise<PortAdapterStatus[]> {
-  let boundedContexts: ManifestBoundedContext[] = [];
-
-  try {
-    const parsed = yaml.load(manifestYaml) as {
-      bounded_contexts?: ManifestBoundedContext[];
-    };
-    boundedContexts = parsed?.bounded_contexts || [];
-  } catch {
-    return [];
-  }
-
-  const packagesDir = path.join(process.cwd(), "packages");
-  let packageNames: string[] = [];
-
-  try {
-    packageNames = await readdir(packagesDir);
-  } catch {
-    return [];
-  }
-
-  const status: PortAdapterStatus[] = [];
-
-  for (const ctx of boundedContexts) {
-    const ports = ctx.layers?.application?.ports
-      ? (ctx.layers.application.ports.in?.length || 0) +
-        (ctx.layers.application.ports.out?.length || 0)
-      : 0;
-
-    const shortName = ctx.name.replace("@hexagen/", "");
-    const hasPackage = packageNames.includes(shortName);
-    let adapterCount = 0;
-
-    if (hasPackage) {
-      const adapterPath = path.join(
-        packagesDir,
-        shortName,
-        "src",
-        "infrastructure",
-        "adapters",
-      );
-      try {
-        const files = await readdir(adapterPath);
-        adapterCount = files.filter(
-          (f) => f.endsWith(".ts") || f.endsWith(".tsx"),
-        ).length;
-      } catch {
-        adapterCount = 0;
-      }
-    }
-
-    status.push({
-      context: ctx.name,
-      ports,
-      adapters: adapterCount,
-      complete: ports > 0 && adapterCount >= Math.ceil(ports / 2),
-    });
-  }
-
-  return status;
+function runStatus(manifestYaml: string): PortAdapterStatus[] {
+  const analysis = analyzeManifest(manifestYaml);
+  return analysis.ok ? analysis.status : [];
 }
 
 // ---------------------------------------------------------------------------
@@ -245,12 +175,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Run all three analyses in parallel (all now async)
-    const [violations, suggestions, portAdapterStatus] = await Promise.all([
+    // Violations (shell-lint) and suggestions (LLM) are async; status is a
+    // synchronous manifest analysis. Run the async pair concurrently.
+    const [violations, suggestions] = await Promise.all([
       runViolations(body.manifestYaml),
       runSuggestions(body.manifestYaml, body.openFileContent),
-      runStatus(body.manifestYaml),
     ]);
+    const portAdapterStatus = runStatus(body.manifestYaml);
 
     return NextResponse.json({
       violations,
