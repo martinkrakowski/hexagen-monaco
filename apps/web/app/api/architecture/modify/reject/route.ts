@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
-import { getTransactionManager, getManifestMutation } from "@/lib/wire.server";
+import {
+  getTransactionManager,
+  getManifestMutation,
+  findMonorepoRoot,
+} from "@/lib/wire.server";
 import { createWebLogger } from "@/lib/wire.shared";
 
+// Anchor path resolution + the traversal gate at the monorepo root — the same anchor the mutation/lint adapters use (findMonorepoRoot), NOT process.cwd() (which is apps/web in prod).
 function validateManifestPath(rawPath: string): string {
-  const cwd = process.cwd();
+  const cwd = findMonorepoRoot();
   const allowedBase = path.join(cwd, ".architecture");
   const resolvedPath = path.resolve(cwd, rawPath);
 
@@ -81,6 +86,10 @@ export async function POST(request: NextRequest) {
         restoreResult.error,
         "[api/architecture/modify/reject] Defensive git restore failed",
       );
+      // Roll back the in-memory transaction regardless of the on-disk git
+      // restore outcome so it is never stuck in 'speculative'; the failed
+      // file restore is surfaced separately below.
+      transactionManager.rollback(transactionId, reason ?? "User rejected");
       return NextResponse.json(
         {
           success: false,

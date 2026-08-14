@@ -51,45 +51,14 @@ import {
   ServerArchitectureGraphProviderAdapter,
   ServerLinterReportProviderAdapter,
 } from "./adapters/wire-adapters";
-import { existsSync } from "fs";
-import { join, dirname } from "path";
 import { logger } from "../../lib/structured-logger";
 
-/**
- * Find the monorepo root by searching upward for .architecture/manifest.yaml
- *
- * This fixes the workspace root resolution issue where process.cwd() resolves
- * to apps/web instead of the monorepo root, causing manifest mutations to
- * target the wrong directory.
- *
- * @param from Starting directory (defaults to process.cwd())
- * @returns Monorepo root path
- * @throws Error if no manifest found
- */
-function findMonorepoRoot(from: string = process.cwd()): string {
-  let current = from;
-  const maxDepth = 10; // Prevent infinite loop
-  let depth = 0;
-
-  while (depth < maxDepth) {
-    const manifestPath = join(current, ".architecture", "manifest.yaml");
-    if (existsSync(manifestPath)) {
-      return current;
-    }
-    const parent = dirname(current);
-    depth++;
-    if (parent === current) {
-      throw new Error(
-        `Could not locate monorepo root from ${from}. No .architecture/manifest.yaml found.`,
-      );
-    }
-    current = parent;
-  }
-
-  throw new Error(
-    `Could not locate monorepo root from ${from}. Maximum search depth (${maxDepth}) exceeded.`,
-  );
-}
+// The manifest-path anchor lives in its own module so the read-only display
+// providers in ./adapters/wire-adapters can share it without importing this
+// composition root back (which would be a require cycle). Re-exported here so
+// existing `@/lib/wire.server` consumers (the modify-family routes) keep working.
+import { findMonorepoRoot } from "./monorepo-root";
+export { findMonorepoRoot };
 
 const emptyArchitectureGraph: ArchitectureGraphLike = {
   nodes: [],

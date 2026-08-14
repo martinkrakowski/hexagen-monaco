@@ -46,6 +46,11 @@ export class SyncDelegatingManifestMutationAdapter implements ManifestMutationPo
     this.saveManifestFn = deps?.saveManifest ?? saveManifest;
   }
 
+  // Anchor invariant: `workspaceRoot` (set at construction from the monorepo
+  // root) is the single source of truth for the manifest location. `applyPatches`
+  // deliberately ignores the incoming path param and re-derives load/save from
+  // `workspaceRoot`; `restoreFromGit` honors the param but callers MUST pass a
+  // path within `workspaceRoot` (see the API routes' findMonorepoRoot anchoring).
   async applyPatches(
     patches: Patch[],
     _manifestPath: string,

@@ -3,7 +3,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
-import { getModifyArchitectureUseCase } from "@/lib/wire.server";
+import {
+  getModifyArchitectureUseCase,
+  findMonorepoRoot,
+} from "@/lib/wire.server";
 import { createWebLogger } from "@/lib/wire.shared";
 import type { IntentLineage } from "@hexagen/core-domain";
 
@@ -13,7 +16,8 @@ import type { IntentLineage } from "@hexagen/core-domain";
  * @throws {Error} If path traversal is detected
  */
 function validateManifestPath(rawPath: string): string {
-  const cwd = process.cwd();
+  // Anchor path resolution + the traversal gate at the monorepo root — the same anchor the mutation/lint adapters use (findMonorepoRoot), NOT process.cwd() (which is apps/web in prod).
+  const cwd = findMonorepoRoot();
   const allowedBase = path.join(cwd, ".architecture");
   const resolvedPath = path.resolve(cwd, rawPath);
 
