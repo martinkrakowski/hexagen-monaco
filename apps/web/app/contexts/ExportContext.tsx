@@ -17,6 +17,7 @@ import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { useExternalIntegration } from "@/contexts/ExternalIntegrationContext";
 import { downloadBlob } from "@/lib/download-blob";
 import { postJson, postForBlob } from "@/lib/fetch-json";
+import { mapGithubPublishFailure } from "@/lib/github-publish-errors";
 import { withFormStateDefaults } from "@/lib/form-state-defaults";
 import {
   isImportedFormState,
@@ -122,6 +123,14 @@ export interface ProjectExportContextValue {
   ) => Promise<void>;
   /** Re-run the last GitHub operation (after an error) without re-entering a form. */
   retryGithubExport: () => Promise<void>;
+  /**
+   * Re-run the GitHub OAuth round-trip. A fresh sign-in is the ONLY
+   * token-refresh path (the jwt callback stores the access token only on
+   * sign-in), so this is how a user upgrades a token minted before the app
+   * requested the `workflow` scope. The in-flight redirect abandons dialog
+   * state by design.
+   */
+  reconnectGithub: () => void;
 
   /** Close the GitHub dialog/modal without submitting. */
   closeDialog: () => void;
@@ -399,10 +408,16 @@ export function ExportProvider({
       );
 
       if (result.kind !== "success") {
+        // Besides threading the actionable code, the mapper also swaps the
+        // session-expired copy in for reauth_required — previously this path
+        // rendered the raw server message for an expired session (intentional
+        // improvement over the old blanket `result.message`).
+        const mapped = mapGithubPublishFailure(result, "publish");
         setState({
           kind: "error",
           destination: "github",
-          message: result.message,
+          message: mapped.message,
+          ...(mapped.code ? { code: mapped.code } : {}),
         });
         return;
       }
@@ -434,6 +449,12 @@ export function ExportProvider({
                 errors: result.data.errors?.length ?? 0,
               }
             : undefined,
+        // ALSO thread the raw warning strings (degraded-publish detail, e.g.
+        // "Skipped .github/workflows/…") — the counts above can't distinguish
+        // add-on overrides from workflow-scope skips, the strings can.
+        warnings: result.data.warnings?.length
+          ? result.data.warnings
+          : undefined,
       });
     },
     [
@@ -470,11 +491,16 @@ export function ExportProvider({
       });
 
       if (result.kind !== "success") {
-        const message =
-          result.kind === "http-error" && result.status === 401
-            ? "GitHub session expired — sign in again to push."
-            : result.message;
-        setState({ kind: "error", destination: "github", message });
+        // The mapper's codeless-401 fallback preserves the pre-existing
+        // session-expired copy verbatim; typed codes additionally light up the
+        // Reconnect/sign-in affordance in the dialog.
+        const mapped = mapGithubPublishFailure(result, "push");
+        setState({
+          kind: "error",
+          destination: "github",
+          message: mapped.message,
+          ...(mapped.code ? { code: mapped.code } : {}),
+        });
         return;
       }
 
@@ -591,6 +617,13 @@ export function ExportProvider({
     [persistPublishPrefs, runMode],
   );
 
+  // Fire-and-forget: signIn navigates away to the OAuth provider, so there is
+  // no meaningful completion to await client-side (see the JSDoc on the
+  // context value).
+  const reconnectGithub = useCallback(() => {
+    void signIn();
+  }, [signIn]);
+
   const retryGithubExport = useCallback(async () => {
     const op = lastOperationRef.current;
     if (!op) return;
@@ -626,6 +659,7 @@ export function ExportProvider({
       submitGithubExport,
       submitPublishSettings,
       retryGithubExport,
+      reconnectGithub,
       closeDialog,
       dismissStatus,
     }),
@@ -641,6 +675,7 @@ export function ExportProvider({
       submitGithubExport,
       submitPublishSettings,
       retryGithubExport,
+      reconnectGithub,
       closeDialog,
       dismissStatus,
     ],

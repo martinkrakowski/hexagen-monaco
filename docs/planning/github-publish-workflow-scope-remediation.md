@@ -1,6 +1,6 @@
 # GitHub Publish 404 — `workflow` Scope Remediation Plan
 
-**Status:** PLANNED (no work started)
+**Status:** PR-1 (server resilience) merged — #431. PR-2 (scope + Reconnect UI) implemented. Deploy + §5 live validation release-gated.
 **Date:** 2026-07-06
 **Owner:** Martin
 **Related:** PR #330 (sync-integrity workflow re-wire), memory `github_publish_workflow_scope_404`

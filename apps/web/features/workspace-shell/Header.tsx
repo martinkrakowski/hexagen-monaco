@@ -54,6 +54,10 @@ export function Header({
           : "form";
   const dialogError =
     s.kind === "error" && s.destination === "github" ? s.message : null;
+  // The actionable code (workflow_scope_required / reauth_required) gates the
+  // dialog's Reconnect/sign-in affordance; generic failures carry none.
+  const dialogErrorCode =
+    s.kind === "error" && s.destination === "github" ? (s.code ?? null) : null;
   // Provide a success payload whenever the github flow succeeds — even if the
   // structured githubLink is absent — so phase="success" never renders a blank
   // body. owner/repo/url are optional; the dialog falls back to `message`.
@@ -65,6 +69,9 @@ export function Header({
           repo: s.githubLink?.repo,
           url: s.githubLink?.htmlUrl ?? s.destinationUrl,
           notices: s.notices,
+          // Raw degraded-publish warning strings (e.g. workflow-scope skips);
+          // the dialog prefers them over the count-based add-on copy.
+          warningMessages: s.warnings,
         }
       : null;
 
@@ -152,8 +159,10 @@ export function Header({
         onSubmit={exportFlow.submitGithubExport}
         onRetry={() => void exportFlow.retryGithubExport()}
         onBackToForm={exportFlow.showGithubDialog}
+        onReconnect={() => exportFlow.reconnectGithub()}
         initialRepoName={activeWorkspace?.name ?? ""}
         error={dialogError}
+        errorCode={dialogErrorCode}
         success={dialogSuccess}
       />
 

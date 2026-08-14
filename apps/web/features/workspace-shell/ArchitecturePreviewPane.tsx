@@ -7,6 +7,7 @@ import { EditableMonaco } from "../monaco-editor/EditableMonaco";
 import { useWizardData } from "./contexts/WizardLifecycleContext";
 import { useEditorPush } from "./hooks/useEditorPush";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
+import { useExternalIntegration } from "@/contexts/ExternalIntegrationContext";
 
 import type { ViewMode } from "@/types/view-mode";
 
@@ -44,18 +45,26 @@ export const ArchitecturePreviewPane = React.memo(
   }: ArchitecturePreviewPaneProps) {
     const wizardData = useWizardData();
     const { activeWorkspace } = useActiveWorkspace();
+    // Provider wraps the whole app (layout.tsx), so the hook is always available.
+    const { signIn } = useExternalIntegration();
     const editedFilesMap = useMemo(
       () => recordToMap(editedFiles),
       [editedFiles],
     );
 
-    const { onPush, canPush, isPushing, connectedRepo, pushError } =
-      useEditorPush({
-        projectId: activeWorkspace?.projectId ?? null,
-        files: editedFiles,
-        unpushed,
-        onPushed,
-      });
+    const {
+      onPush,
+      canPush,
+      isPushing,
+      connectedRepo,
+      pushError,
+      pushErrorCode,
+    } = useEditorPush({
+      projectId: activeWorkspace?.projectId ?? null,
+      files: editedFiles,
+      unpushed,
+      onPushed,
+    });
 
     return (
       <Card className="h-full border-0 rounded-none overflow-hidden flex flex-col bg-card">
@@ -105,6 +114,19 @@ export const ArchitecturePreviewPane = React.memo(
                   className="absolute bottom-0 inset-x-0 px-4 py-2 text-xs text-destructive bg-destructive/10 border-t border-destructive/20"
                 >
                   {pushError}
+                  {/* Both actionable codes route through signIn: a fresh OAuth
+                      round-trip is the only way to mint a re-scoped token. */}
+                  {pushErrorCode && (
+                    <button
+                      type="button"
+                      onClick={() => void signIn()}
+                      className="ml-2 text-xs font-medium underline underline-offset-2 hover:opacity-80"
+                    >
+                      {pushErrorCode === "workflow_scope_required"
+                        ? "Reconnect GitHub"
+                        : "Sign in to GitHub"}
+                    </button>
+                  )}
                 </div>
               )}
             </>

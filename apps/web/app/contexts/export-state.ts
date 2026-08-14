@@ -7,6 +7,9 @@
  */
 
 import type { PublishMode } from "@hexagen/shared";
+// Type-only import (erased at compile time), so this module stays free of
+// runtime React/DI dependencies.
+import type { GithubPublishErrorCode } from "@/lib/github-publish-errors";
 
 export interface GithubLinkData {
   owner: string;
@@ -50,8 +53,19 @@ export type ExportState =
       /** Add-on materialization notice counts; the strip flips to amber when
        * `errors > 0` (full detail in the project's HEXAGEN-ADDON-NOTICES.md). */
       notices?: { warnings: number; errors: number };
+      /** Raw warning strings from a degraded publish (e.g. workflow files
+       * skipped for a missing OAuth scope). GitHub destination only — the ZIP
+       * path surfaces notice COUNTS via sideband headers, never strings. */
+      warnings?: string[];
     }
-  | { kind: "error"; destination: ExportDestination; message: string };
+  | {
+      kind: "error";
+      destination: ExportDestination;
+      message: string;
+      /** Actionable failure code from the GitHub routes (snake_case HTTP
+       * vocabulary); absent for generic failures and the ZIP destination. */
+      code?: GithubPublishErrorCode;
+    };
 
 /**
  * True while the GitHub publish flow owns the prominent UI (the create dialog,

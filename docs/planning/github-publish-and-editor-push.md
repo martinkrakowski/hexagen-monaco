@@ -17,7 +17,7 @@ together.
 
 | Capability                                   | State       | Notes                                                                  |
 | -------------------------------------------- | ----------- | ---------------------------------------------------------------------- |
-| GitHub OAuth (token acquisition)             | ✅ Built    | NextAuth `GitHubProvider`, scope `read:user user:email repo`           |
+| GitHub OAuth (token acquisition)             | ✅ Built    | NextAuth `GitHubProvider`, scope `read:user user:email repo workflow`  |
 | Wizard "Sign in / Push to GitHub" button     | ✅ Built    | `features/project-wizard/steps/summary-step/ExportActions.tsx`         |
 | `POST /api/export/github` route              | ✅ Built    | Reads token from session JWT, calls the exporter                       |
 | Create repo + commit scaffold (Git Data API) | ✅ Built    | `GitHubExporterAdapter` (blobs/tree/commit/upsertRef); updates too     |

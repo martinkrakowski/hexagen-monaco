@@ -129,17 +129,22 @@ async function renderConnectedHook() {
   return { ...rendered, onPushed };
 }
 
+/** Shared per-test reset (both describes below). */
+function resetHarness() {
+  seedProjects();
+  harness.state.loadCalls = 0;
+  harness.state.saveCalls = 0;
+  harness.state.updateCalls = [];
+  harness.state.warns = [];
+  harness.state.failWith = null;
+  harness.state.rejectWith = null;
+  harness.postJson.mockReset();
+  vi.spyOn(window, "open").mockImplementation(() => null);
+}
+
 describe("useEditorPush — record-level persistCommitSha (ADR-0045 follow-up)", () => {
   beforeEach(() => {
-    seedProjects();
-    harness.state.loadCalls = 0;
-    harness.state.saveCalls = 0;
-    harness.state.updateCalls = [];
-    harness.state.warns = [];
-    harness.state.failWith = null;
-    harness.state.rejectWith = null;
-    harness.postJson.mockReset();
-    vi.spyOn(window, "open").mockImplementation(() => null);
+    resetHarness();
   });
   afterEach(() => {
     cleanup();
@@ -226,5 +231,142 @@ describe("useEditorPush — record-level persistCommitSha (ADR-0045 follow-up)",
     assert.deepStrictEqual(harness.state.warns, [
       "Failed to persist commit sha to saved project",
     ]);
+  });
+});
+
+// GH-publish PR-2: the failure arm is now code-driven via
+// mapGithubPublishFailure — pushErrorCode carries only the snake_case HTTP
+// vocabulary (workflow_scope_required / reauth_required); kebab-case writer
+// codes forwarded by the route's 500 passthrough must never become actionable.
+describe("useEditorPush — GitHub failure-code mapping", () => {
+  beforeEach(() => {
+    resetHarness();
+  });
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it("surfaces workflow_scope_required with the server message verbatim", async () => {
+    const serverMessage =
+      "GitHub rejected the push — the connected token is missing the workflow scope. Reconnect GitHub to grant it, then retry.";
+    harness.postJson.mockResolvedValue({
+      kind: "http-error",
+      status: 403,
+      message: serverMessage,
+      code: "workflow_scope_required",
+    });
+    const { result } = await renderConnectedHook();
+
+    await act(async () => {
+      await (result.current.onPush as () => Promise<void>)();
+    });
+
+    assert.strictEqual(result.current.pushError, serverMessage);
+    assert.strictEqual(result.current.pushErrorCode, "workflow_scope_required");
+  });
+
+  it("maps a coded reauth_required 401 to the session-expired copy", async () => {
+    harness.postJson.mockResolvedValue({
+      kind: "http-error",
+      status: 401,
+      message: "GitHub authentication required",
+      code: "reauth_required",
+    });
+    const { result } = await renderConnectedHook();
+
+    await act(async () => {
+      await (result.current.onPush as () => Promise<void>)();
+    });
+
+    assert.strictEqual(
+      result.current.pushError,
+      "GitHub session expired — sign in again to push.",
+    );
+    assert.strictEqual(result.current.pushErrorCode, "reauth_required");
+  });
+
+  it("a codeless 401 keeps the legacy session-expired copy and still yields reauth_required", async () => {
+    // Pins the deliberate fallback for responses that predate code bodies.
+    harness.postJson.mockResolvedValue({
+      kind: "http-error",
+      status: 401,
+      message: "Unauthorized",
+    });
+    const { result } = await renderConnectedHook();
+
+    await act(async () => {
+      await (result.current.onPush as () => Promise<void>)();
+    });
+
+    assert.strictEqual(
+      result.current.pushError,
+      "GitHub session expired — sign in again to push.",
+    );
+    assert.strictEqual(result.current.pushErrorCode, "reauth_required");
+  });
+
+  it("a kebab-case writer-code passthrough yields the raw message with NO actionable code", async () => {
+    harness.postJson.mockResolvedValue({
+      kind: "http-error",
+      status: 500,
+      message: "boom",
+      code: "conflict",
+    });
+    const { result } = await renderConnectedHook();
+
+    await act(async () => {
+      await (result.current.onPush as () => Promise<void>)();
+    });
+
+    assert.strictEqual(result.current.pushError, "boom");
+    assert.strictEqual(result.current.pushErrorCode, null);
+  });
+
+  it("pushErrorCode clears (alongside pushError) at the start of the next push", async () => {
+    harness.postJson.mockResolvedValueOnce({
+      kind: "http-error",
+      status: 403,
+      message: "scope missing",
+      code: "workflow_scope_required",
+    });
+    const { result } = await renderConnectedHook();
+
+    await act(async () => {
+      await (result.current.onPush as () => Promise<void>)();
+    });
+    assert.strictEqual(result.current.pushErrorCode, "workflow_scope_required");
+
+    // Hold the second push in-flight so the start-of-push reset is observable
+    // before any result lands.
+    let resolvePush!: (value: unknown) => void;
+    harness.postJson.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolvePush = resolve;
+        }),
+    );
+    let pending!: Promise<void>;
+    await act(async () => {
+      // Deliberately NOT awaited: the push must still be in-flight below.
+      pending = (result.current.onPush as () => Promise<void>)();
+    });
+
+    assert.strictEqual(result.current.isPushing, true);
+    assert.strictEqual(result.current.pushError, null);
+    assert.strictEqual(result.current.pushErrorCode, null);
+
+    await act(async () => {
+      resolvePush({
+        kind: "success",
+        data: {
+          success: true,
+          commitSha: "sha-9",
+          commitUrl: "https://github.com/me/r/commit/sha-9",
+        },
+      });
+      await pending;
+    });
+    assert.strictEqual(result.current.isPushing, false);
   });
 });

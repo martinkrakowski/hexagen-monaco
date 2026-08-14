@@ -12,14 +12,14 @@ The repo contains **two** GitHub integrations built at different times:
 
 The "Push to GitHub" feature users actually hit:
 
-| Layer    | File                                                                                     |
-| -------- | ---------------------------------------------------------------------------------------- |
-| UI       | `apps/web/features/export/ExportDialog.tsx`                                              |
-| State    | `apps/web/app/contexts/ExportContext.tsx`                                                |
-| Auth     | `apps/web/app/lib/auth.ts` (NextAuth GitHub provider, scope `read:user user:email repo`) |
-| Route    | `apps/web/app/api/export/github/route.ts`                                                |
-| Use case | `packages/project-generation/.../initiate-export.use-case.ts`                            |
-| Adapter  | `packages/project-generation/.../github-exporter.adapter.ts` (raw `fetch` git-data API)  |
+| Layer    | File                                                                                              |
+| -------- | ------------------------------------------------------------------------------------------------- |
+| UI       | `apps/web/features/export/ExportDialog.tsx`                                                       |
+| State    | `apps/web/app/contexts/ExportContext.tsx`                                                         |
+| Auth     | `apps/web/app/lib/auth.ts` (NextAuth GitHub provider, scope `read:user user:email repo workflow`) |
+| Route    | `apps/web/app/api/export/github/route.ts`                                                         |
+| Use case | `packages/project-generation/.../initiate-export.use-case.ts`                                     |
+| Adapter  | `packages/project-generation/.../github-exporter.adapter.ts` (raw `fetch` git-data API)           |
 
 Wired end-to-end: OAuth → generate files → create repo → push.
 

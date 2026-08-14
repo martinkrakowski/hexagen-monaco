@@ -18,7 +18,10 @@ export interface AddOnNoticeCounts {
 
 export type FetchJsonResult<T> =
   | { kind: "success"; data: T; notices?: AddOnNoticeCounts }
-  | { kind: "http-error"; status: number; message: string }
+  // `code` is the machine-readable error code from the JSON error body (e.g.
+  // the snake_case codes emitted by /api/export/github and /api/push/github);
+  // set only when the body carries a string `code`.
+  | { kind: "http-error"; status: number; message: string; code?: string }
   | { kind: "network-error"; message: string }
   | { kind: "parse-error"; message: string };
 
@@ -43,6 +46,20 @@ export function parseNoticeCountHeaders(
   const errors = toCount(headers.get("x-hexagen-addon-errors"));
   if (warnings === 0 && errors === 0) return undefined;
   return { warnings, errors };
+}
+
+/**
+ * Extract a machine-readable `code` from an already-parsed error body.
+ * Only a string value qualifies — any other shape reads as `undefined` so a
+ * malformed body cannot leak a non-string into consumers' code branching.
+ */
+function extractErrorCode(parsed: unknown): string | undefined {
+  return parsed &&
+    typeof parsed === "object" &&
+    "code" in parsed &&
+    typeof (parsed as { code: unknown }).code === "string"
+    ? (parsed as { code: string }).code
+    : undefined;
 }
 
 /**
@@ -92,6 +109,7 @@ export async function postJson<T>(
       kind: "http-error",
       status: response.status,
       message: errorMessage,
+      code: extractErrorCode(parsed),
     };
   }
 
@@ -128,6 +146,8 @@ export async function postForBlob(
     try {
       parsed = await response.json();
     } catch {
+      // No parsed body here, so there is no `code` to surface — only the
+      // status-derived fallback message.
       return {
         kind: "http-error",
         status: response.status,
@@ -142,6 +162,7 @@ export async function postForBlob(
       kind: "http-error",
       status: response.status,
       message: errorMessage,
+      code: extractErrorCode(parsed),
     };
   }
 
