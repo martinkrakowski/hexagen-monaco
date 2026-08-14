@@ -123,10 +123,15 @@ describe("POST /api/architecture/modify/accept", () => {
     // The rethrow lands in the outer catch, which is ALSO a 500 catch-all — so a
     // bare status check can't tell the intended MonorepoRootNotFoundError rethrow
     // from an incidental failure that happens to reach the same handler. Pin the
-    // branch: the body must carry the anchor error's message, and no mutation work
-    // may have run (we short-circuited at path validation, before applyPatches).
+    // branch AND the wire contract: the outer catch must map the anchor error to
+    // the stable client-safe message — NOT err.message, whose text embeds the
+    // server's `from`/process.cwd() filesystem path. Returning that raw message
+    // (the pre-fix behavior) discloses the server layout to cross-origin callers
+    // under this route's active wildcard CORS (CWE-209). No mutation work may
+    // have run (we short-circuited at path validation, before applyPatches).
     const body = await res.json();
-    assert.match(body.error, /No \.architecture\/manifest\.yaml found/);
+    assert.equal(body.error, "Monorepo root not found");
+    assert.doesNotMatch(body.error, /Could not locate|manifest\.yaml|\/x/);
     assert.equal(applyPatches.mock.calls.length, 0);
     assert.equal(restoreFromGit.mock.calls.length, 0);
     assert.equal(commit.mock.calls.length, 0);

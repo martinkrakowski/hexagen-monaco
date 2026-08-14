@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
     // than masking it as a 400. Only path-traversal input yields 400 below.
     if (err instanceof MonorepoRootNotFoundError) {
       const logger = createWebLogger();
+      // Full detail (incl. the process.cwd() path) goes to the SERVER LOG only.
       logger.errorWithException(
         err,
         "[api/architecture/modify] Manifest root not found",
@@ -93,8 +94,13 @@ export async function POST(request: NextRequest) {
       // CORS failure instead of this 500. The contract is retired wholesale —
       // across all responses and the preflight together — in the stacked
       // same-origin migration, not selectively here.
+      //
+      // The client body is the stable, path-free message — NOT err.message,
+      // whose text embeds the server filesystem path. Under the wildcard CORS
+      // above, echoing that raw message would leak the server layout to
+      // cross-origin callers (CWE-209).
       return NextResponse.json(
-        { error: err.message },
+        { error: MonorepoRootNotFoundError.clientMessage },
         {
           status: 500,
           headers: {

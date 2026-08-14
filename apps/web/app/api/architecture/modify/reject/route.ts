@@ -126,10 +126,17 @@ export async function POST(request: NextRequest) {
       error,
       `[api/architecture/modify/reject] Unexpected error${transactionId ? ` for transaction ${transactionId}` : ""}`,
     );
+    // The anchor error rethrown from path validation lands here (this outer 5xx
+    // catch-all). Map it to the stable, path-free client message — its raw
+    // .message embeds the server filesystem path and, under active wildcard CORS,
+    // would disclose the server layout to cross-origin callers (CWE-209). Full
+    // detail is already logged above; other errors are unchanged.
     const message =
-      error instanceof Error
-        ? error.message
-        : "Reject failed: unexpected error";
+      error instanceof MonorepoRootNotFoundError
+        ? MonorepoRootNotFoundError.clientMessage
+        : error instanceof Error
+          ? error.message
+          : "Reject failed: unexpected error";
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 },

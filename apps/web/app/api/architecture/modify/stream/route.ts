@@ -71,12 +71,16 @@ export async function POST(request: NextRequest) {
     // than masking it as a 400. Only path-traversal input yields 400 below.
     if (err instanceof MonorepoRootNotFoundError) {
       const logger = createWebLogger();
+      // Full detail (incl. the process.cwd() path) goes to the SERVER LOG only;
+      // the SSE error frame carries the stable, path-free client message. The
+      // raw err.message embeds the server filesystem path and would disclose the
+      // server layout to cross-origin readers under wildcard CORS (CWE-209).
       logger.errorWithException(
         err,
         "[api/architecture/modify/stream] Manifest root not found",
       );
       return new Response(
-        `data: ${JSON.stringify({ type: "error", success: false, error: err.message })}\n\n`,
+        `data: ${JSON.stringify({ type: "error", success: false, error: MonorepoRootNotFoundError.clientMessage })}\n\n`,
         { status: 500, headers: { "Content-Type": "text/event-stream" } },
       );
     }

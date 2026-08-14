@@ -10,6 +10,15 @@ import { join, dirname } from "path";
  * request.
  */
 export class MonorepoRootNotFoundError extends Error {
+  /**
+   * Stable, path-free message for API/SSE responses. The detailed `Error.message`
+   * embeds the absolute `from` (= process.cwd()) path and is for SERVER LOGS ONLY
+   * — never return it in a response body. These routes run under active wildcard
+   * CORS, so echoing the raw message would disclose the server filesystem layout
+   * to cross-origin callers (CWE-209 information exposure).
+   */
+  static readonly clientMessage = "Monorepo root not found";
+
   constructor(message: string) {
     super(message);
     this.name = "MonorepoRootNotFoundError";

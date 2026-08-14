@@ -53,6 +53,15 @@ describe("POST /api/architecture/modify/stream", () => {
 
     assert.equal(res.status, 500);
     assert.equal(res.headers.get("Content-Type"), "text/event-stream");
+    // The one-shot SSE error frame must carry the stable client message, not the
+    // detailed anchor error whose text embeds the server filesystem path — under
+    // wildcard CORS that raw message (the pre-fix behavior) would disclose the
+    // server layout to cross-origin readers (CWE-209).
+    const payload = JSON.parse(
+      (await res.text()).replace(/^data: /, "").trim(),
+    );
+    assert.equal(payload.error, "Monorepo root not found");
+    assert.doesNotMatch(payload.error, /Could not locate|manifest\.yaml|\/x/);
   });
 
   it("still returns 400 for a path-traversal manifestPath (client input error)", async () => {
