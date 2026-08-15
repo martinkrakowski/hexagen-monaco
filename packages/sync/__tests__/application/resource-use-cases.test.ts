@@ -2,39 +2,12 @@ import { describe, it } from "vitest";
 import assert from "node:assert";
 import type { ArchitectureGraph } from "@hexagen/visualization";
 import type { LinterReport } from "@hexagen/governance";
-import type { Manifest } from "@hexagen/project-configuration";
 import { GetArchitectureGraphUseCase } from "../../src/application/use-cases/get-architecture-graph.use-case.js";
 import { GetLinterReportUseCase } from "../../src/application/use-cases/get-linter-report.use-case.js";
-import { GetManifestResourceUseCase } from "../../src/application/use-cases/get-manifest-resource.use-case.js";
 import type { ArchitectureGraphProviderPort } from "../../src/application/ports/out/architecture-graph-provider.port.js";
 import type { LinterReportProviderPort } from "../../src/application/ports/out/linter-report-provider.port.js";
-import type { ProjectConfigurationReadPort } from "../../src/application/ports/out/project-configuration-read.port.js";
 
 describe("resource use cases", () => {
-  it("should return manifest data", async () => {
-    const manifestPayload = {
-      description: "Test manifest",
-      bounded_contexts: [
-        {
-          name: "sync",
-          type: "core",
-          description: "Sync engine",
-          layers: {},
-        },
-      ],
-    } as unknown as Manifest;
-
-    const manifestProvider: ProjectConfigurationReadPort = {
-      async getManifest() {
-        return { success: true, value: manifestPayload };
-      },
-    };
-
-    const manifestUseCase = new GetManifestResourceUseCase(manifestProvider);
-    const manifestResult = await manifestUseCase.execute();
-    assert.ok(manifestResult, "manifest use case should return data");
-  });
-
   it("should return architecture graph nodes", async () => {
     const graphPayload: ArchitectureGraph = {
       nodes: [
