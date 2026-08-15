@@ -9,6 +9,7 @@ import {
   MonorepoRootNotFoundError,
 } from "@/lib/wire.server";
 import { createWebLogger } from "@/lib/wire.shared";
+import { guardMutation } from "@/lib/request-guards";
 import type { IntentLineage } from "@hexagen/core-domain";
 
 /**
@@ -41,34 +42,25 @@ interface ModifyRequestBody {
 }
 
 export async function POST(request: NextRequest) {
+  // Same-origin + rate-limit gate (D1): this endpoint mutates the on-disk
+  // manifest, so it must reject cross-origin callers and throttle bursts.
+  const gate = guardMutation(request);
+  if (gate) return gate;
+
   let body: ModifyRequestBody;
   try {
     body = await request.json();
   } catch {
     return NextResponse.json(
       { error: "Invalid JSON in request body" },
-      {
-        status: 400,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-        },
-      },
+      { status: 400 },
     );
   }
 
   if (!body.intent || typeof body.intent !== "string") {
     return NextResponse.json(
       { error: "'intent' must be a non-empty string." },
-      {
-        status: 400,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-        },
-      },
+      { status: 400 },
     );
   }
 
@@ -88,42 +80,20 @@ export async function POST(request: NextRequest) {
         err,
         "[api/architecture/modify] Manifest root not found",
       );
-      // Honor this route's still-active wildcard-CORS contract on the 500 too:
-      // every sibling response and the OPTIONS preflight set these headers, so a
-      // lone header-less response would make a cross-origin caller see a browser
-      // CORS failure instead of this 500. The contract is retired wholesale —
-      // across all responses and the preflight together — in the stacked
-      // same-origin migration, not selectively here.
-      //
       // The client body is the stable, path-free message — NOT err.message,
-      // whose text embeds the server filesystem path. Under the wildcard CORS
-      // above, echoing that raw message would leak the server layout to
-      // cross-origin callers (CWE-209).
+      // whose text embeds the server filesystem path; echoing it would leak the
+      // server layout to callers (CWE-209). The wildcard-CORS contract this
+      // route once carried is retired here as part of the same-origin migration
+      // (AUD-003): the guardMutation gate above now rejects cross-origin
+      // callers, so no Access-Control-* headers remain on any response.
       return NextResponse.json(
         { error: MonorepoRootNotFoundError.clientMessage },
-        {
-          status: 500,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-          },
-        },
+        { status: 500 },
       );
     }
     const message =
       err instanceof Error ? err.message : "Invalid manifest path";
-    return NextResponse.json(
-      { error: message },
-      {
-        status: 400,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-        },
-      },
-    );
+    return NextResponse.json({ error: message }, { status: 400 });
   }
   const lineage: IntentLineage = body.lineage ?? {
     intentId: `intent-${Date.now()}_v1`,
@@ -140,70 +110,29 @@ export async function POST(request: NextRequest) {
     if (!result.success) {
       return NextResponse.json(
         { error: result.error.message },
-        {
-          status: 500,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-          },
-        },
+        { status: 500 },
       );
     }
 
-    return NextResponse.json(
-      {
-        success: true,
-        pipelineRunId: result.value.pipelineRunId,
-        patchesApplied: result.value.patchesApplied,
-        lintPassed: result.value.lintPassed,
-        transactionId: result.value.transactionId,
-        patches: result.value.patches ?? [],
-        steps: result.value.steps.map((s) => ({
-          name: s.name,
-          status: s.status,
-          durationMs: s.endTime ? s.endTime - s.startTime : null,
-          error: s.error ?? null,
-        })),
-      },
-      {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-        },
-      },
-    );
+    return NextResponse.json({
+      success: true,
+      pipelineRunId: result.value.pipelineRunId,
+      patchesApplied: result.value.patchesApplied,
+      lintPassed: result.value.lintPassed,
+      transactionId: result.value.transactionId,
+      patches: result.value.patches ?? [],
+      steps: result.value.steps.map((s) => ({
+        name: s.name,
+        status: s.status,
+        durationMs: s.endTime ? s.endTime - s.startTime : null,
+        error: s.error ?? null,
+      })),
+    });
   } catch (err) {
     const logger = createWebLogger();
     logger.errorWithException(err, "[api/architecture/modify] Failed");
     const message =
       err instanceof Error ? err.message : "Internal server error";
-    return NextResponse.json(
-      { error: message },
-      {
-        status: 500,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-        },
-      },
-    );
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-}
-
-/**
- * OPTIONS /api/architecture/modify
- * Handle CORS preflight requests
- */
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    },
-  });
 }

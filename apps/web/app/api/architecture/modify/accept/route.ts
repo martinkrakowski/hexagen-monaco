@@ -8,6 +8,7 @@ import {
   MonorepoRootNotFoundError,
 } from "@/lib/wire.server";
 import { createWebLogger } from "@/lib/wire.shared";
+import { guardMutation } from "@/lib/request-guards";
 
 // Anchor path resolution + the traversal gate at the monorepo root — the same anchor the mutation/lint adapters use (findMonorepoRoot), NOT process.cwd() (which is apps/web in prod).
 function validateManifestPath(rawPath: string): string {
@@ -28,6 +29,11 @@ function validateManifestPath(rawPath: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  // Same-origin + rate-limit gate (D1): commits speculative patches to the
+  // on-disk manifest, so reject cross-origin callers and throttle bursts.
+  const gate = guardMutation(request);
+  if (gate) return gate;
+
   let transactionId: string | undefined;
   try {
     const body = await request.json();
@@ -40,14 +46,7 @@ export async function POST(request: NextRequest) {
     if (!transactionId) {
       return NextResponse.json(
         { success: false, error: "transactionId is required" },
-        {
-          status: 400,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-          },
-        },
+        { status: 400 },
       );
     }
 
@@ -56,14 +55,7 @@ export async function POST(request: NextRequest) {
     if (!tx) {
       return NextResponse.json(
         { success: false, error: "Transaction not found" },
-        {
-          status: 404,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-          },
-        },
+        { status: 404 },
       );
     }
 
@@ -73,14 +65,7 @@ export async function POST(request: NextRequest) {
           success: false,
           error: `Transaction is in '${tx.status}' state, expected 'speculative'`,
         },
-        {
-          status: 409,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-          },
-        },
+        { status: 409 },
       );
     }
 
@@ -99,14 +84,7 @@ export async function POST(request: NextRequest) {
           success: false,
           error: err instanceof Error ? err.message : "Invalid manifest path",
         },
-        {
-          status: 400,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-          },
-        },
+        { status: 400 },
       );
     }
 
@@ -124,14 +102,7 @@ export async function POST(request: NextRequest) {
           success: false,
           error: `Patch application failed: ${applyResult.error.message}`,
         },
-        {
-          status: 500,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-          },
-        },
+        { status: 500 },
       );
     }
 
@@ -167,34 +138,18 @@ export async function POST(request: NextRequest) {
               "Lint validation failed and git restore failed. Manual intervention required.",
             lintErrors,
           },
-          {
-            status: 500,
-            headers: {
-              "Access-Control-Allow-Origin": "*",
-              "Access-Control-Allow-Methods": "POST, OPTIONS",
-              "Access-Control-Allow-Headers": "Content-Type",
-            },
-          },
+          { status: 500 },
         );
       }
 
       transactionManager.rollback(transactionId);
 
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Lint validation failed. Patches reverted.",
-          lintPassed: false,
-          lintErrors,
-        },
-        {
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-          },
-        },
-      );
+      return NextResponse.json({
+        success: false,
+        error: "Lint validation failed. Patches reverted.",
+        lintPassed: false,
+        lintErrors,
+      });
     }
 
     transactionManager.commit(transactionId);
@@ -209,22 +164,13 @@ export async function POST(request: NextRequest) {
       },
     );
 
-    return NextResponse.json(
-      {
-        success: true,
-        transactionId,
-        status: "committed",
-        patchesApplied: patches.length,
-        lintPassed,
-      },
-      {
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-        },
-      },
-    );
+    return NextResponse.json({
+      success: true,
+      transactionId,
+      status: "committed",
+      patchesApplied: patches.length,
+      lintPassed,
+    });
   } catch (error) {
     const logger = createWebLogger();
     logger.errorWithException(
@@ -233,9 +179,9 @@ export async function POST(request: NextRequest) {
     );
     // The anchor error rethrown from path validation lands here (this outer 5xx
     // catch-all). Map it to the stable, path-free client message — its raw
-    // .message embeds the server filesystem path and, under this route's active
-    // wildcard CORS, would disclose the server layout to cross-origin callers
-    // (CWE-209). Full detail is already logged above; other errors are unchanged.
+    // .message embeds the server filesystem path, which must never reach a
+    // client-facing error body regardless of CORS (CWE-209). Full detail is
+    // already logged above; other errors are unchanged.
     const message =
       error instanceof MonorepoRootNotFoundError
         ? MonorepoRootNotFoundError.clientMessage
@@ -244,29 +190,7 @@ export async function POST(request: NextRequest) {
           : "Accept failed: unexpected error";
     return NextResponse.json(
       { success: false, error: message },
-      {
-        status: 500,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-        },
-      },
+      { status: 500 },
     );
   }
-}
-
-/**
- * OPTIONS /api/architecture/modify/accept
- * Handle CORS preflight requests
- */
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    },
-  });
 }

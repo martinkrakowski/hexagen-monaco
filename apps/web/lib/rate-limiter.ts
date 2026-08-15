@@ -33,21 +33,43 @@ export function checkRateLimit(
   request: NextRequest,
   maxRequests = 10,
   windowMs = 60 * 1000, // 1 minute
+  identifier?: string,
+  keyPrefix?: string,
 ): { allowed: boolean; retryAfter?: number } {
-  let ip = (request as { cf?: { clientIp?: string } }).cf?.clientIp;
-  if (!ip) {
-    const forwardedFor = request.headers.get("x-forwarded-for");
-    ip = forwardedFor?.split(",")[0]?.trim() ?? undefined;
-  }
-  if (!ip) {
-    ip = request.headers.get("x-real-ip") ?? undefined;
+  // A caller that already knows a stable per-principal key (e.g. an
+  // authenticated user id) passes it as `identifier`; it takes precedence over
+  // IP derivation so a signed-in user gets one budget regardless of which
+  // forwarded IP their request arrives on. Callers that omit it fall back to
+  // the IP-based key below.
+  let key = identifier || undefined;
+
+  if (!key) {
+    let ip = (request as { cf?: { clientIp?: string } }).cf?.clientIp;
+    if (!ip) {
+      const forwardedFor = request.headers.get("x-forwarded-for");
+      ip = forwardedFor?.split(",")[0]?.trim() ?? undefined;
+    }
+    if (!ip) {
+      ip = request.headers.get("x-real-ip") ?? undefined;
+    }
+    key = ip;
   }
 
-  let key = ip;
   if (!key) {
     const userAgent = request.headers.get("user-agent") ?? "";
     const acceptLanguage = request.headers.get("accept-language") ?? "";
     key = hashKey(userAgent + acceptLanguage);
+  }
+
+  // `keyPrefix` gives each logical limiter its own namespace in the shared
+  // `requestCounts` map. Without it, two routes that derive the same key (e.g.
+  // an anonymous caller's IP, or one signed-in `sub` used by several features)
+  // would draw from a single bucket — and since a record stores only its count,
+  // not the limit it was created under, a caller with a smaller `maxRequests`
+  // could be wrongly blocked by another caller's traffic. Prefixing keeps the
+  // per-route budgets independent.
+  if (keyPrefix) {
+    key = `${keyPrefix}:${key}`;
   }
 
   const now = Date.now();

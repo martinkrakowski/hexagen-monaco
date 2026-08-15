@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { readdir, writeFile, unlink } from "fs/promises";
@@ -9,6 +9,7 @@ import { GenerateSuggestionUseCase } from "@hexagen/agentic-interaction";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
 import { logger } from "../../../../lib/structured-logger";
 import { resolveWebLlmApiKey } from "@/lib/wire.shared";
+import { guardMutation } from "@/lib/request-guards";
 
 const execAsync = promisify(exec);
 
@@ -227,7 +228,13 @@ async function runStatus(manifestYaml: string): Promise<PortAdapterStatus[]> {
 // POST handler
 // ---------------------------------------------------------------------------
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  // Same-origin + rate-limit gate (D1): this endpoint spawns `yarn lint:arch`
+  // (a subprocess) and calls the LLM, so reject cross-origin callers and
+  // throttle bursts before doing any of that work.
+  const gate = guardMutation(request);
+  if (gate) return gate;
+
   try {
     const body = (await request.json()) as RefreshRequestBody;
 

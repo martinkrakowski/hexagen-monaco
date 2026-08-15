@@ -6,6 +6,7 @@ import { createLLMProvider, resolveWebLlmApiKey } from "@/lib/wire.shared";
 import { getProxyRequestUseCase } from "@/lib/byok-wire.js";
 import { SSE_HEADERS } from "@/lib/sse-helpers";
 import { enforceDailyQuota } from "../../../../lib/enforce-quota";
+import { checkRateLimit } from "../../../../lib/rate-limiter";
 import type { ChatMessage } from "@hexagen/local-llm";
 import type { ByokProvider } from "@hexagen/byok";
 
@@ -13,30 +14,6 @@ import type { ByokProvider } from "@hexagen/byok";
 // for the durable revocation/metadata store — must run on the Node runtime, not
 // edge.
 export const runtime = "nodejs";
-
-// --- Rate Limiter (In-Memory) ---
-const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-const MAX_REQUESTS_PER_WINDOW = 10;
-const userRequestTimestamps = new Map<string, number[]>();
-
-function isRateLimited(userId: string): boolean {
-  const now = Date.now();
-  const timestamps = userRequestTimestamps.get(userId) || [];
-
-  // Filter out timestamps older than the window
-  const recentTimestamps = timestamps.filter(
-    (ts) => now - ts < RATE_LIMIT_WINDOW_MS,
-  );
-
-  if (recentTimestamps.length >= MAX_REQUESTS_PER_WINDOW) {
-    return true; // Rate limited
-  }
-
-  // Add current request timestamp and update the map
-  recentTimestamps.push(now);
-  userRequestTimestamps.set(userId, recentTimestamps);
-  return false;
-}
 
 interface ByokChatBody {
   messages: unknown[];
@@ -87,7 +64,18 @@ export async function POST(request: NextRequest) {
     request.headers.get("x-real-ip") ??
     "anon";
 
-  if (isRateLimited(userId)) {
+  // Fixed-window limit via the shared limiter, namespaced to "chat" so this
+  // budget stays independent of the extract-decisions and mutation limiters
+  // that share the same map. Pass the authenticated principal (`sub`, or
+  // undefined when anonymous) as the identifier — NOT the `userId` above: its
+  // `"anon"` terminal would collapse every header-less anonymous caller into ONE
+  // shared bucket, letting a single such caller exhaust the window for all of
+  // them. Handing the limiter `undefined` instead lets it derive its own
+  // per-caller key (client IP, else a User-Agent/Accept-Language fingerprint).
+  // The durable free-tier daily cap (the real abuse backstop) is enforced below.
+  if (
+    !checkRateLimit(request, 10, 60 * 1000, session?.user?.sub, "chat").allowed
+  ) {
     return NextResponse.json(
       { error: "Too many requests. Please try again in a minute." },
       { status: 429 },

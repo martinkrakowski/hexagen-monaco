@@ -111,8 +111,8 @@ describe("POST /api/architecture/modify/reject", () => {
     // from an incidental failure. Pin the branch AND the wire contract: the outer
     // catch must map the anchor error to the stable client-safe message — NOT
     // err.message, whose text embeds the server's `from`/process.cwd() filesystem
-    // path. Returning that raw message (the pre-fix behavior) discloses the server
-    // layout to cross-origin callers under active wildcard CORS (CWE-209). The git
+    // path. Returning that raw message (the pre-fix behavior) would disclose the
+    // server layout to the client (CWE-209 — independent of CORS). The git
     // restore/rollback must never have run (short-circuited at path validation).
     const body = await res.json();
     assert.equal(body.error, "Monorepo root not found");

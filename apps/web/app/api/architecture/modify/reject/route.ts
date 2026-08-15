@@ -7,6 +7,7 @@ import {
   MonorepoRootNotFoundError,
 } from "@/lib/wire.server";
 import { createWebLogger } from "@/lib/wire.shared";
+import { guardMutation } from "@/lib/request-guards";
 
 // Anchor path resolution + the traversal gate at the monorepo root — the same anchor the mutation/lint adapters use (findMonorepoRoot), NOT process.cwd() (which is apps/web in prod).
 function validateManifestPath(rawPath: string): string {
@@ -27,6 +28,11 @@ function validateManifestPath(rawPath: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  // Same-origin + rate-limit gate (D1): rolls back a speculative transaction
+  // and restores the on-disk manifest, so gate it like the sibling routes.
+  const gate = guardMutation(request);
+  if (gate) return gate;
+
   let transactionId: string | undefined;
   try {
     const body = await request.json();
@@ -128,9 +134,9 @@ export async function POST(request: NextRequest) {
     );
     // The anchor error rethrown from path validation lands here (this outer 5xx
     // catch-all). Map it to the stable, path-free client message — its raw
-    // .message embeds the server filesystem path and, under active wildcard CORS,
-    // would disclose the server layout to cross-origin callers (CWE-209). Full
-    // detail is already logged above; other errors are unchanged.
+    // .message embeds the server filesystem path, which must never reach a
+    // client-facing error body regardless of CORS (CWE-209). Full detail is
+    // already logged above; other errors are unchanged.
     const message =
       error instanceof MonorepoRootNotFoundError
         ? MonorepoRootNotFoundError.clientMessage

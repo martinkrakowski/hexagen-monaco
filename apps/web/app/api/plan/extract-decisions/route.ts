@@ -3,32 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.js";
 import { createLLMProvider, resolveWebLlmApiKey } from "@/lib/wire.shared";
 import { enforceDailyQuota } from "../../../../lib/enforce-quota";
-
-// --- Rate Limiter (In-Memory) ---
-// Mirrors /api/llm/chat exactly: per-user (or per-IP for anonymous) sliding
-// window; the durable free-tier daily cap is enforced separately below.
-const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-const MAX_REQUESTS_PER_WINDOW = 10;
-const userRequestTimestamps = new Map<string, number[]>();
-
-function isRateLimited(userId: string): boolean {
-  const now = Date.now();
-  const timestamps = userRequestTimestamps.get(userId) || [];
-
-  // Filter out timestamps older than the window
-  const recentTimestamps = timestamps.filter(
-    (ts) => now - ts < RATE_LIMIT_WINDOW_MS,
-  );
-
-  if (recentTimestamps.length >= MAX_REQUESTS_PER_WINDOW) {
-    return true; // Rate limited
-  }
-
-  // Add current request timestamp and update the map
-  recentTimestamps.push(now);
-  userRequestTimestamps.set(userId, recentTimestamps);
-  return false;
-}
+import { checkRateLimit } from "../../../../lib/rate-limiter";
 
 /** Generous cap on the pasted transcript (same bound as the spec-convert
  * route) — a runaway payload should 400, not be forwarded to the provider. */
@@ -98,13 +73,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const userId =
-    session?.user?.sub ??
-    request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
-    request.headers.get("x-real-ip") ??
-    "anon";
-
-  if (isRateLimited(userId)) {
+  // Fixed-window limit via the shared limiter — mirrors /api/llm/chat,
+  // namespaced to "extract" to stay independent of the chat and mutation
+  // limiters sharing the same map. Pass the authenticated principal (`sub`, or
+  // undefined when anonymous) as the identifier: for an anonymous caller the
+  // limiter then derives its own per-caller key (client IP, else a User-Agent/
+  // Accept-Language fingerprint) instead of a single shared "anon" bucket that
+  // would let one caller exhaust the window for everyone. Unlike the chat route,
+  // extraction has no downstream per-user accounting, so no `userId` is derived
+  // here. The durable free-tier daily cap is enforced separately below.
+  if (
+    !checkRateLimit(request, 10, 60 * 1000, session?.user?.sub, "extract")
+      .allowed
+  ) {
     return NextResponse.json(
       { error: "Too many requests. Please try again in a minute." },
       { status: 429 },

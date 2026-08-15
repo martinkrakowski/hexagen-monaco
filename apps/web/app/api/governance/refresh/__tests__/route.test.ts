@@ -1,0 +1,89 @@
+import { describe, it, vi } from "vitest";
+import assert from "node:assert/strict";
+import { NextRequest } from "next/server";
+
+// The mutation gate (D1) must reject a cross-origin POST BEFORE the route spawns
+// `yarn lint:arch` (a subprocess) or calls the suggestion LLM. Spy on both
+// boundaries so the test enforces that "before doing any work" invariant — not
+// merely the 403 status. `resolveWebLlmApiKey` returns a real key so the LLM
+// path is actually reachable were the guard absent (an unset key would make
+// runSuggestions short-circuit on its own, hiding a guard regression).
+const { execSpy, generateExecute } = vi.hoisted(() => ({
+  // child_process.exec is a Node-style callback fn; invoke the callback so the
+  // route's promisified `execAsync` resolves if it were ever reached.
+  execSpy: vi.fn(
+    (
+      _cmd: string,
+      optsOrCb: unknown,
+      cb?: (e: unknown, r: unknown) => void,
+    ) => {
+      const callback = (typeof optsOrCb === "function" ? optsOrCb : cb) as
+        | ((e: unknown, r: unknown) => void)
+        | undefined;
+      callback?.(null, { stdout: "", stderr: "" });
+    },
+  ),
+  generateExecute: vi.fn(async () => ({ success: true, value: [] })),
+}));
+
+// Plain (non-spread) factory: spreading the real module back in leaves the
+// route's module-load `promisify(exec)` bound to the genuine `exec`, so the spy
+// never intercepts. Provide the handful of exports the route graph may touch,
+// plus a `default` for CJS-interop importers.
+vi.mock("child_process", () => {
+  const cp = {
+    exec: execSpy,
+    execSync: vi.fn(),
+    execFile: vi.fn(),
+    spawn: vi.fn(),
+    spawnSync: vi.fn(),
+  };
+  return { ...cp, default: cp };
+});
+vi.mock("@/lib/wire.shared", () => ({
+  resolveWebLlmApiKey: vi.fn(() => "test-llm-key"),
+}));
+vi.mock("@hexagen/agentic-interaction", () => ({
+  GenerateSuggestionUseCase: class {
+    execute = generateExecute;
+  },
+  ServerLLMAdapter: class {},
+}));
+
+import { POST } from "../route";
+
+describe("POST /api/governance/refresh — mutation gate (D1)", () => {
+  it("rejects a cross-origin POST with 403 before spawning lint:arch / calling the LLM", async () => {
+    const req = new NextRequest("http://localhost/api/governance/refresh", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        origin: "http://evil.example",
+        host: "localhost",
+      },
+      body: JSON.stringify({ manifestYaml: "bounded_contexts: []" }),
+    });
+
+    const res = await POST(req);
+
+    assert.equal(res.status, 403);
+    const body = await res.json();
+    assert.equal(body.success, false);
+    assert.match(body.error, /cross-origin/i);
+
+    // The guard must short-circuit BEFORE any downstream work: no lint:arch
+    // subprocess and no suggestion-LLM execution. A regression that ran either
+    // before returning 403 would still satisfy the status assertion above but
+    // fail here.
+    assert.equal(
+      execSpy.mock.calls.length,
+      0,
+      "lint:arch subprocess must not be spawned for a rejected request",
+    );
+    assert.equal(
+      generateExecute.mock.calls.length,
+      0,
+      "suggestion LLM must not be executed for a rejected request",
+    );
+  });
+});
