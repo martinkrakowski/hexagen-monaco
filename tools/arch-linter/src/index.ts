@@ -49,6 +49,9 @@ export {
   isSharedKernelAllowed,
 } from "./layer-import-violation.js";
 
+export type { OptionalYamlConfig } from "./optional-yaml-config.js";
+export { loadOptionalYamlConfig } from "./optional-yaml-config.js";
+
 export { resolveLintScope } from "./resolve-scope.js";
 
 export type { LoggerPort } from "./logger.js";

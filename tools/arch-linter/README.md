@@ -85,6 +85,13 @@ root.
 
 A project scaffolded by `@hexagen-monaco/sync` already ships all of these.
 
+**"Optional" means absent, not broken.** A missing `layer-rules.yaml` /
+`linter-config.yaml` warns and falls back to built-in defaults. A file that
+exists but cannot be read or parsed is a **fatal error** (exit 1) — defaulting
+there would silently disable every rule that file declares while the run still
+reported "Architecture is compliant". An empty or comments-only file parses
+cleanly and is treated as a legitimate empty config, not an error.
+
 ---
 
 ## Requirements

@@ -3,7 +3,6 @@
 import * as fsPromises from "fs/promises";
 import * as fs from "fs";
 import { Project } from "ts-morph";
-import * as yaml from "js-yaml";
 import path from "node:path";
 import { createConsoleLogger } from "./logger.js";
 // Manifest validation uses the schema from @hexagen/project-configuration
@@ -33,6 +32,8 @@ import {
   importPathSatisfiesLayers,
   isSharedKernelAllowed,
 } from "./layer-import-violation.js";
+import type { OptionalYamlConfig } from "./optional-yaml-config.js";
+import { loadOptionalYamlConfig } from "./optional-yaml-config.js";
 
 const logger = createConsoleLogger();
 
@@ -157,30 +158,53 @@ const PKG_ROOT_PATH = path.join(ROOT_DIR, workspacesDir);
 
 // ─── Load Optional Configs ──────────────────────────────────────────────────
 
-let layerRules: LayerRules;
-try {
-  const layerRulesContent = await fsPromises.readFile(LAYER_RULES_PATH, "utf8");
-  layerRules = (yaml.load(layerRulesContent) as LayerRules) ?? {};
-} catch {
-  logger.warn(
-    `Could not load layer-rules.yaml from ${LAYER_RULES_PATH}, using defaults`,
-  );
-  layerRules = {};
+const readUtf8 = (p: string) => fsPromises.readFile(p, "utf8");
+
+/**
+ * Apply an optional-config load, holding the linter's fail-closed contract.
+ *
+ * A MISSING file legitimately falls back to defaults — that is the documented
+ * behavior for a project that declares no invariants. A file that EXISTS and
+ * cannot be read or parsed is fatal instead: defaulting there would disable
+ * every rule the file declares and the run would still print "Architecture is
+ * compliant", reporting a pass it never verified.
+ */
+function useOptionalConfig<T>(
+  load: OptionalYamlConfig<T>,
+  filePath: string,
+  fileName: string,
+): T {
+  switch (load.kind) {
+    case "loaded":
+      return load.value;
+    case "missing":
+      logger.warn(
+        `Could not load ${fileName} from ${filePath}, using defaults`,
+      );
+      return {} as T;
+    case "invalid":
+      logger.error(
+        `FATAL ERROR: ${fileName} exists but could not be loaded from ${filePath}`,
+      );
+      logger.error(`  ${load.reason}`);
+      logger.error(
+        "  Refusing to fall back to defaults: that would silently disable the rules this file declares and still report compliance.",
+      );
+      process.exit(1);
+  }
 }
 
-let linterConfig: LinterConfig;
-try {
-  const linterConfigContent = await fsPromises.readFile(
-    LINTER_CONFIG_PATH,
-    "utf8",
-  );
-  linterConfig = (yaml.load(linterConfigContent) as LinterConfig) ?? {};
-} catch {
-  logger.warn(
-    `Could not load linter-config.yaml from ${LINTER_CONFIG_PATH}, using defaults`,
-  );
-  linterConfig = {};
-}
+const layerRules = useOptionalConfig(
+  await loadOptionalYamlConfig<LayerRules>(LAYER_RULES_PATH, readUtf8),
+  LAYER_RULES_PATH,
+  "layer-rules.yaml",
+);
+
+const linterConfig = useOptionalConfig(
+  await loadOptionalYamlConfig<LinterConfig>(LINTER_CONFIG_PATH, readUtf8),
+  LINTER_CONFIG_PATH,
+  "linter-config.yaml",
+);
 
 // ─── TypeScript Project ─────────────────────────────────────────────────────
 
