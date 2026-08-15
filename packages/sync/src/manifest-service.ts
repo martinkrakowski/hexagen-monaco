@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import type { Manifest } from "./types/manifest.js";
 import { ok, err, type Result } from "./domain/result.js";
 import { mergeSplitManifest } from "./loaders/index.js";
-import { resolveArchLinterBin } from "./arch-linter-bin.js";
+import { archLinterCommand, resolveArchLinterBin } from "./arch-linter-bin.js";
 
 export type { Result };
 
@@ -46,7 +46,6 @@ export async function validateManifest(
     // `yarn workspace …`, which only resolves inside this monorepo. In a
     // generated project the bin comes from the @hexagen-monaco/arch-linter
     // devDependency. It walks up from cwd to find .architecture/manifest.yaml.
-    // Quoted so an absolute path with spaces is passed intact to the shell.
     const bin = resolveArchLinterBin(workspaceRoot);
     if (bin === null) {
       // Distinct from a lint failure: the tool isn't installed, not "invalid".
@@ -56,7 +55,7 @@ export async function validateManifest(
         ),
       );
     }
-    const { stderr } = await execAsync(`"${bin}"`, {
+    const { stderr } = await execAsync(archLinterCommand(bin), {
       cwd: workspaceRoot,
       timeout: 30_000,
     });
