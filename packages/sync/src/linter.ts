@@ -1,7 +1,7 @@
 import { promisify } from "node:util";
 import { exec } from "node:child_process";
 import type { SyncConfig } from "./config.js";
-import { resolveArchLinterBin } from "./arch-linter-bin.js";
+import { archLinterCommand, resolveArchLinterBin } from "./arch-linter-bin.js";
 
 const execPromise = promisify(exec);
 
@@ -93,7 +93,7 @@ export async function runArchLinter(config: SyncConfig): Promise<void> {
   }
 
   try {
-    const { stdout, stderr } = await execPromise(`"${bin}"`, {
+    const { stdout, stderr } = await execPromise(archLinterCommand(bin), {
       cwd: config.workspaceRoot,
       timeout: timeoutMs,
     });

@@ -38,8 +38,11 @@ vi.mock("node:child_process", () => ({
 }));
 
 // Defaults to "installed" so most tests exercise the exec path; the missing-bin
-// tests flip binState.path to null.
-vi.mock("../src/arch-linter-bin.js", () => ({
+// tests flip binState.path to null. Only the resolver is stubbed —
+// `archLinterCommand` keeps its real implementation so the command handed to
+// `exec` is the one production builds.
+vi.mock("../src/arch-linter-bin.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/arch-linter-bin.js")>()),
   resolveArchLinterBin: () => binState.path,
 }));
 
