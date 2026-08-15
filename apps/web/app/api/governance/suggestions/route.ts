@@ -3,6 +3,7 @@ import { GenerateSuggestionUseCase } from "@hexagen/agentic-interaction";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
 import { logger } from "../../../../lib/structured-logger";
 import { resolveWebLlmApiKey } from "@/lib/wire.shared";
+import { guardManifestSize } from "@/lib/request-guards";
 
 interface AISuggestion {
   id: string;
@@ -30,6 +31,9 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    const tooLarge = guardManifestSize(body.manifestYaml);
+    if (tooLarge) return tooLarge;
 
     // WEB_LLM_API_KEY ?? LLM_API_KEY — survives the mercury prod flip
     // (which unsets LLM_API_KEY); see resolveWebLlmApiKey.

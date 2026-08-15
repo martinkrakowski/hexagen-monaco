@@ -51,6 +51,7 @@ vi.mock("@hexagen/agentic-interaction", () => ({
 }));
 
 import { POST } from "../route";
+import { MAX_MANIFEST_YAML_CHARS } from "../../../../lib/request-guards";
 
 describe("POST /api/governance/refresh — mutation gate (D1)", () => {
   it("rejects a cross-origin POST with 403 before spawning lint:arch / calling the LLM", async () => {
@@ -106,6 +107,39 @@ describe("POST /api/governance/refresh — mutation gate (D1)", () => {
       body.statusError,
       /parse/i,
       "refresh must surface the analyzer parse error, not swallow it",
+    );
+  });
+
+  it("400s an over-large manifest BEFORE spawning lint:arch / calling the LLM", async () => {
+    // Same-origin (no Origin) so the mutation gate passes; the size guard must
+    // reject before any of the expensive downstream work runs. Measure the spies
+    // as a delta so this holds regardless of test ordering (a prior test may
+    // have legitimately invoked them).
+    const execBefore = execSpy.mock.calls.length;
+    const genBefore = generateExecute.mock.calls.length;
+
+    const req = new NextRequest("http://localhost/api/governance/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", host: "localhost" },
+      body: JSON.stringify({
+        manifestYaml: "a".repeat(MAX_MANIFEST_YAML_CHARS + 1),
+      }),
+    });
+
+    const res = await POST(req);
+
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error, /too large/i);
+    assert.equal(
+      execSpy.mock.calls.length,
+      execBefore,
+      "lint:arch subprocess must not be spawned for an over-large manifest",
+    );
+    assert.equal(
+      generateExecute.mock.calls.length,
+      genBefore,
+      "suggestion LLM must not be executed for an over-large manifest",
     );
   });
 });

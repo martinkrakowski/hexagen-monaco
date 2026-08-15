@@ -8,7 +8,7 @@ import { GenerateSuggestionUseCase } from "@hexagen/agentic-interaction";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
 import { logger } from "../../../../lib/structured-logger";
 import { resolveWebLlmApiKey } from "@/lib/wire.shared";
-import { guardMutation } from "@/lib/request-guards";
+import { guardMutation, guardManifestSize } from "@/lib/request-guards";
 import {
   analyzeManifest,
   type PortAdapterStatus,
@@ -182,6 +182,10 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+
+    // Bound the raw manifest before the shell-lint / LLM / parse work below.
+    const tooLarge = guardManifestSize(body.manifestYaml);
+    if (tooLarge) return tooLarge;
 
     // Violations (shell-lint) and suggestions (LLM) are async; status is a
     // synchronous manifest analysis. Run the async pair concurrently.

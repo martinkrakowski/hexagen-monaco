@@ -2,6 +2,7 @@ import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { POST } from "../route";
 import { analyzeManifest } from "../../../../lib/governance/manifest-analysis";
+import { MAX_MANIFEST_YAML_CHARS } from "../../../../lib/request-guards";
 
 function postJson(manifestYaml: unknown) {
   return new Request("http://localhost/api/governance/status", {
@@ -15,6 +16,13 @@ describe("POST /api/governance/status", () => {
   it("400s when manifestYaml is missing", async () => {
     const res = await POST(postJson(undefined));
     assert.equal(res.status, 400);
+  });
+
+  it("400s when the manifest exceeds the size cap (bounds yaml.load DoS surface)", async () => {
+    const res = await POST(postJson("a".repeat(MAX_MANIFEST_YAML_CHARS + 1)));
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error, /too large/i);
   });
 
   it("surfaces a parse failure as an error rather than an empty-but-healthy status (AUD-005)", async () => {

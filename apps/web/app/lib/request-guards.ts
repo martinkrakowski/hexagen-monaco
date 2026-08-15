@@ -88,6 +88,48 @@ export function isSameOrigin(request: NextRequest): boolean {
   return allowed.has(originValue);
 }
 
+/**
+ * Maximum accepted size of a client-supplied manifest YAML, in characters.
+ *
+ * The governance POST routes hand this string straight to a synchronous
+ * `yaml.load` (and, in `refresh`, on to a `yarn lint:arch` shell-out and an LLM
+ * call). js-yaml 4.x applies no size, depth, or alias limit of its own, so an
+ * unbounded body is a cheap way to burn server CPU/memory before any of that
+ * work is even known to be wanted. Bounding the raw input up front caps that
+ * surface. Measured in characters (not UTF-8 bytes) to match the repo's
+ * established `MAX_TRANSCRIPT_CHARS` / `MAX_LOOSE_SPEC_INPUT_CHARS` caps — for a
+ * "reject the runaway payload" guard the two bound the parse equivalently.
+ */
+export const MAX_MANIFEST_YAML_CHARS = 200_000;
+
+/**
+ * Reject an over-large manifest before it reaches `yaml.load` / the linter /
+ * the LLM. Returns a ready-to-send 400 {@link NextResponse}, or `null` when the
+ * manifest is within {@link MAX_MANIFEST_YAML_CHARS}.
+ *
+ * Applied per-route at each governance POST handler rather than inside
+ * `analyzeManifest`, because `suggestions` and `refresh`'s lint/LLM paths
+ * consume the raw manifest WITHOUT going through the analyzer — an analyzer-only
+ * guard would leave those paths unbounded.
+ *
+ * Usage right after the presence check:
+ * ```ts
+ * const tooLarge = guardManifestSize(body.manifestYaml);
+ * if (tooLarge) return tooLarge;
+ * ```
+ */
+export function guardManifestSize(manifestYaml: string): NextResponse | null {
+  if (manifestYaml.length > MAX_MANIFEST_YAML_CHARS) {
+    return NextResponse.json(
+      {
+        error: `Manifest is too large (exceeds ${MAX_MANIFEST_YAML_CHARS.toLocaleString()} characters).`,
+      },
+      { status: 400 },
+    );
+  }
+  return null;
+}
+
 export interface GuardMutationOptions {
   /** Max requests per window before a 429 (default 20). */
   maxRequests?: number;

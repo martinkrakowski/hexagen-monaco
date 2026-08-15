@@ -1,7 +1,12 @@
 import { describe, it, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
-import { isSameOrigin, guardMutation } from "../request-guards";
+import {
+  isSameOrigin,
+  guardMutation,
+  guardManifestSize,
+  MAX_MANIFEST_YAML_CHARS,
+} from "../request-guards";
 
 /** Build a POST NextRequest with the given headers. A distinct IP per test
  * keeps the shared rate-limiter's fixed windows independent. */
@@ -230,5 +235,23 @@ describe("guardMutation", () => {
     );
     assert.ok(gate);
     assert.equal(gate.status, 403);
+  });
+});
+
+describe("guardManifestSize", () => {
+  it("allows a manifest within the size cap (returns null)", () => {
+    assert.equal(guardManifestSize("bounded_contexts: []"), null);
+  });
+
+  it("allows a manifest exactly at the cap (rejects only strictly larger)", () => {
+    assert.equal(guardManifestSize("a".repeat(MAX_MANIFEST_YAML_CHARS)), null);
+  });
+
+  it("rejects an over-cap manifest with a 400 'too large' response", async () => {
+    const res = guardManifestSize("a".repeat(MAX_MANIFEST_YAML_CHARS + 1));
+    assert.ok(res, "expected a rejection response, not null");
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error, /too large/i);
   });
 });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { logger } from "../../../../lib/structured-logger";
 import { analyzeManifest } from "../../../lib/governance/manifest-analysis";
+import { guardManifestSize } from "../../../lib/request-guards";
 
 interface ViolationsRequestBody {
   manifestYaml: string;
@@ -16,6 +17,9 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    const tooLarge = guardManifestSize(body.manifestYaml);
+    if (tooLarge) return tooLarge;
 
     const analysis = analyzeManifest(body.manifestYaml);
     if (!analysis.ok) {
