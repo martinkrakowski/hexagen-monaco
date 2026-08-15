@@ -126,9 +126,9 @@ describe("POST /api/architecture/modify/accept", () => {
     // branch AND the wire contract: the outer catch must map the anchor error to
     // the stable client-safe message — NOT err.message, whose text embeds the
     // server's `from`/process.cwd() filesystem path. Returning that raw message
-    // (the pre-fix behavior) discloses the server layout to cross-origin callers
-    // under this route's active wildcard CORS (CWE-209). No mutation work may
-    // have run (we short-circuited at path validation, before applyPatches).
+    // (the pre-fix behavior) would disclose the server layout to the client
+    // (CWE-209 — independent of CORS). No mutation work may have run (we short-
+    // circuited at path validation, before applyPatches).
     const body = await res.json();
     assert.equal(body.error, "Monorepo root not found");
     assert.doesNotMatch(body.error, /Could not locate|manifest\.yaml|\/x/);

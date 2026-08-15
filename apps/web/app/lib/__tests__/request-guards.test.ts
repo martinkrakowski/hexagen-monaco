@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { isSameOrigin, guardMutation } from "../request-guards";
 
 /** Build a POST NextRequest with the given headers. A distinct IP per test
- * keeps the shared rate-limiter's sliding windows independent. */
+ * keeps the shared rate-limiter's fixed windows independent. */
 function post(headers: Record<string, string>): NextRequest {
   return new NextRequest("http://localhost:3000/api/architecture/modify", {
     method: "POST",
@@ -106,6 +106,70 @@ describe("isSameOrigin behind a Host-rewriting proxy", () => {
         }),
       ),
       true,
+    );
+  });
+});
+
+describe("isSameOrigin scheme sensitivity (CWE-352)", () => {
+  it("rejects an http Origin when the request is effectively https (x-forwarded-proto)", () => {
+    // The proxy terminates TLS and forwards `x-forwarded-proto: https`. An
+    // Origin that shares the host but downgrades the scheme is a DIFFERENT
+    // origin — a host-only comparison would wrongly accept it and weaken the
+    // CSRF gate.
+    assert.equal(
+      isSameOrigin(
+        post({
+          origin: "http://localhost:3000",
+          host: "localhost:3000",
+          "x-forwarded-proto": "https",
+        }),
+      ),
+      false,
+    );
+  });
+
+  it("accepts a same-scheme Origin under the forwarded proto", () => {
+    assert.equal(
+      isSameOrigin(
+        post({
+          origin: "https://localhost:3000",
+          host: "localhost:3000",
+          "x-forwarded-proto": "https",
+        }),
+      ),
+      true,
+    );
+  });
+
+  it("ignores a malformed x-forwarded-proto instead of trusting it as an origin", () => {
+    // A proto value that itself contains "://" must not be interpolated into
+    // the allowed-origin set (it would otherwise parse to a foreign origin and
+    // whitelist it). Only bare http/https tokens are honored; anything else
+    // drops the own-origin path so a forged Origin cannot be matched.
+    assert.equal(
+      isSameOrigin(
+        post({
+          origin: "https://evil.example",
+          host: "localhost:3000",
+          "x-forwarded-proto": "https://evil.example",
+        }),
+      ),
+      false,
+    );
+  });
+
+  it("uses the first hop of a multi-value x-forwarded-proto", () => {
+    // A chain of proxies can produce "https, http"; the client-facing scheme is
+    // the first entry, so the downgraded http Origin is still cross-scheme.
+    assert.equal(
+      isSameOrigin(
+        post({
+          origin: "http://localhost:3000",
+          host: "localhost:3000",
+          "x-forwarded-proto": "https, http",
+        }),
+      ),
+      false,
     );
   });
 });

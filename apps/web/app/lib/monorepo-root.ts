@@ -13,9 +13,10 @@ export class MonorepoRootNotFoundError extends Error {
   /**
    * Stable, path-free message for API/SSE responses. The detailed `Error.message`
    * embeds the absolute `from` (= process.cwd()) path and is for SERVER LOGS ONLY
-   * — never return it in a response body. These routes run under active wildcard
-   * CORS, so echoing the raw message would disclose the server filesystem layout
-   * to cross-origin callers (CWE-209 information exposure).
+   * — never return it in a response body. Echoing the raw message would disclose
+   * the server filesystem layout to the client (CWE-209 information exposure);
+   * that risk is independent of CORS, so the stable message is used on every
+   * response path regardless of the same-origin gate.
    */
   static readonly clientMessage = "Monorepo root not found";
 

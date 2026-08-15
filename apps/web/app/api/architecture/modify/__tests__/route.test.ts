@@ -90,8 +90,8 @@ describe("POST /api/architecture/modify", () => {
     assert.equal(res.status, 500);
     // Client-safe body: the stable message, NOT the detailed anchor error whose
     // text embeds the server's `from`/process.cwd() filesystem path. Returning
-    // err.message here (the pre-fix behavior) disclosed the server layout to
-    // cross-origin callers under this route's active wildcard CORS (CWE-209).
+    // err.message here (the pre-fix behavior) would disclose the server layout to
+    // the client (CWE-209 — independent of CORS).
     const body = await res.json();
     assert.equal(body.error, "Monorepo root not found");
     assert.doesNotMatch(body.error, /Could not locate|manifest\.yaml|\/x/);
