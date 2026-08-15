@@ -202,3 +202,24 @@ describe("useStagedSpecGeneration retry", () => {
     }
   });
 });
+
+describe("useStagedSpecGeneration surface", () => {
+  test("does not expose the removed GitOps propose-PR surface", () => {
+    // proposePR/isProposing/prMetadata/proposeError fetched a `/api/gitops/
+    // propose-pr` route that never existed and had zero consumers; the whole
+    // surface was deleted. Guard against it silently returning.
+    const { result } = renderHook(() => useStagedSpecGeneration());
+    for (const key of [
+      "proposePR",
+      "isProposing",
+      "prMetadata",
+      "proposeError",
+    ]) {
+      assert.strictEqual(
+        key in (result.current as Record<string, unknown>),
+        false,
+        `expected removed key \`${key}\` to be absent from the hook surface`,
+      );
+    }
+  });
+});

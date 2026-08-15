@@ -7,15 +7,12 @@ import {
   type StageValidationReport,
   type StageRepairSummary,
 } from "./useStagedGenerationStream";
-import type { PullRequestMetadata } from "@hexagen/external-integration";
-import type { AssembledManifest } from "@hexagen/shared";
+import { createLocalProgressCallbacks } from "./mapLocalLLMProgressCallbacks";
 import {
   getClientSpecGenerationUseCase,
   isLocalLLMReady,
   hasServerLLMAccessKey,
 } from "../../app/lib/wire.client";
-import type { StageTelemetry } from "@hexagen/agentic-interaction";
-import { formatModelChip } from "@hexagen/agentic-interaction";
 
 export interface SpecGenerationOptions {
   platform?: string;
@@ -94,13 +91,6 @@ export interface UseStagedSpecGenerationReturn {
   portCount: number;
   adapterCount: number;
   reset: () => void;
-  proposePR: (
-    manifest: AssembledManifest,
-    intent: string,
-  ) => Promise<{ ok: boolean; value?: PullRequestMetadata; error?: Error }>;
-  isProposing: boolean;
-  prMetadata: PullRequestMetadata | null;
-  proposeError: Error | null;
 }
 
 const STAGE_LABELS: Record<number, string> = {
@@ -204,16 +194,6 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     stream.stepDetail,
     stream.stageProgress,
   ]);
-
-  const [prState, setPrState] = useState<{
-    isProposing: boolean;
-    prMetadata: PullRequestMetadata | null;
-    error: Error | null;
-  }>({
-    isProposing: false,
-    prMetadata: null,
-    error: null,
-  });
 
   const reset = () => {
     stream.reset();
@@ -367,80 +347,19 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
           const isCancelled = () =>
             abortRef.current || controller.signal.aborted;
 
-          const result = await useCase.execute(config, {
-            onProgress: (stage: number, durationMs: number) => {
-              if (isCancelled()) return;
-              setPhase(`stage-${stage}` as StagedPhase);
-              setStepDetail(STAGE_LABELS[stage] ?? `Stage ${stage}`);
-              setStageProgress((prev) => {
-                const existing = prev[stage] ?? {
-                  stage,
-                  label: "",
-                  durationMs: 0,
-                  chunks: [],
-                  completed: false,
-                };
-                return {
-                  ...prev,
-                  [stage]: {
-                    ...existing,
-                    label: STAGE_LABELS[stage] ?? `Stage ${stage}`,
-                    durationMs:
-                      durationMs > 0 ? durationMs : existing.durationMs,
-                    completed: durationMs > 0,
-                  },
-                };
-              });
-            },
-            onError: (stage: number, error: string, durationMs?: number) => {
-              if (isCancelled()) return;
-              setGenerationError(error);
-              setPhase("failed");
-              setStepDetail(`Error in ${STAGE_LABELS[stage]}: ${error}`);
-              if (durationMs) {
-                setStageProgress((prev) => ({
-                  ...prev,
-                  [stage]: {
-                    stage,
-                    label: STAGE_LABELS[stage] ?? `Stage ${stage}`,
-                    durationMs,
-                    error,
-                    chunks: [],
-                    completed: true,
-                  },
-                }));
-              }
-            },
-            onChunk: (message: string) => {
-              if (isCancelled()) return;
-              setVerboseLog((prev) => [...prev, message]);
-            },
-            onStageTelemetry: (telemetry: StageTelemetry) => {
-              if (isCancelled()) return;
-              // Cloud runs get the model line from the server (stage -1
-              // chunk); the local path emits its own equivalent here.
-              const chip = formatModelChip(telemetry);
-              if (chip) {
-                const seconds = (telemetry.durationMs / 1000).toFixed(1);
-                setVerboseLog((prev) => [
-                  ...prev,
-                  `Stage ${telemetry.stage} · ${telemetry.label} — ${chip} · ${seconds}s`,
-                ]);
-              }
-              setStageProgress((prev) => ({
-                ...prev,
-                [telemetry.stage]: {
-                  stage: telemetry.stage,
-                  label:
-                    STAGE_LABELS[telemetry.stage] ?? `Stage ${telemetry.stage}`,
-                  durationMs: telemetry.durationMs,
-                  chunks: [],
-                  completed: true,
-                  telemetry,
-                },
-              }));
-            },
-          });
+          const result = await useCase.execute(
+            config,
+            createLocalProgressCallbacks(
+              {
+                setPhase,
+                setStepDetail,
+                setStageProgress,
+                setGenerationError,
+                setVerboseLog,
+              },
+              { stageLabels: STAGE_LABELS, isCancelled },
+            ),
+          );
 
           if (abortRef.current || controller.signal.aborted) {
             return {
@@ -586,36 +505,6 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     return generateFromSpec(last.config, last.options);
   };
 
-  const proposePR = async (manifest: AssembledManifest, intent: string) => {
-    setPrState((prev) => ({ ...prev, isProposing: true, error: null }));
-
-    try {
-      const response = await fetch("/api/gitops/propose-pr", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ manifest, intent }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error ?? "Failed to create PR");
-      }
-
-      setPrState({
-        isProposing: false,
-        prMetadata: result,
-        error: null,
-      });
-
-      return { ok: true as const, value: result };
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      setPrState((prev) => ({ ...prev, isProposing: false, error: err }));
-      return { ok: false as const, error: err };
-    }
-  };
-
   return {
     generateFromSpec,
     retry,
@@ -634,9 +523,5 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
     portCount,
     adapterCount,
     reset,
-    proposePR,
-    isProposing: prState.isProposing,
-    prMetadata: prState.prMetadata,
-    proposeError: prState.error,
   };
 }
