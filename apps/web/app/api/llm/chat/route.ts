@@ -64,12 +64,18 @@ export async function POST(request: NextRequest) {
     request.headers.get("x-real-ip") ??
     "anon";
 
-  // Per-user (or per-IP for anonymous) fixed-window limit via the shared
-  // limiter; `userId` is the same principal key used downstream. The `"chat"`
-  // namespace keeps this budget independent of the extract-decisions and
-  // mutation limiters that share the same map. The durable free-tier daily cap
-  // (the real abuse backstop) is enforced separately below.
-  if (!checkRateLimit(request, 10, 60 * 1000, userId, "chat").allowed) {
+  // Fixed-window limit via the shared limiter, namespaced to "chat" so this
+  // budget stays independent of the extract-decisions and mutation limiters
+  // that share the same map. Pass the authenticated principal (`sub`, or
+  // undefined when anonymous) as the identifier — NOT the `userId` above: its
+  // `"anon"` terminal would collapse every header-less anonymous caller into ONE
+  // shared bucket, letting a single such caller exhaust the window for all of
+  // them. Handing the limiter `undefined` instead lets it derive its own
+  // per-caller key (client IP, else a User-Agent/Accept-Language fingerprint).
+  // The durable free-tier daily cap (the real abuse backstop) is enforced below.
+  if (
+    !checkRateLimit(request, 10, 60 * 1000, session?.user?.sub, "chat").allowed
+  ) {
     return NextResponse.json(
       { error: "Too many requests. Please try again in a minute." },
       { status: 429 },

@@ -73,17 +73,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const userId =
-    session?.user?.sub ??
-    request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
-    request.headers.get("x-real-ip") ??
-    "anon";
-
-  // Per-user (or per-IP for anonymous) fixed-window limit via the shared
-  // limiter — mirrors /api/llm/chat. The `"extract"` namespace keeps this
-  // budget independent of the chat and mutation limiters that share the same
-  // map. The durable free-tier daily cap is enforced separately below.
-  if (!checkRateLimit(request, 10, 60 * 1000, userId, "extract").allowed) {
+  // Fixed-window limit via the shared limiter — mirrors /api/llm/chat,
+  // namespaced to "extract" to stay independent of the chat and mutation
+  // limiters sharing the same map. Pass the authenticated principal (`sub`, or
+  // undefined when anonymous) as the identifier: for an anonymous caller the
+  // limiter then derives its own per-caller key (client IP, else a User-Agent/
+  // Accept-Language fingerprint) instead of a single shared "anon" bucket that
+  // would let one caller exhaust the window for everyone. Unlike the chat route,
+  // extraction has no downstream per-user accounting, so no `userId` is derived
+  // here. The durable free-tier daily cap is enforced separately below.
+  if (
+    !checkRateLimit(request, 10, 60 * 1000, session?.user?.sub, "extract")
+      .allowed
+  ) {
     return NextResponse.json(
       { error: "Too many requests. Please try again in a minute." },
       { status: 429 },

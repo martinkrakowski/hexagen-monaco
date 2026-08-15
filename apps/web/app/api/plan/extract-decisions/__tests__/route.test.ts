@@ -42,8 +42,8 @@ function providerWith(complete: LLMProviderPort["complete"]): LLMProviderPort {
   } as unknown as LLMProviderPort;
 }
 
-// The in-module rate limiter keys anonymous callers by X-Forwarded-For, so
-// every test uses its own IP to keep the sliding windows independent.
+// The shared fixed-window limiter keys anonymous callers by X-Forwarded-For, so
+// every test uses its own IP to keep the per-caller windows independent.
 function post(body: unknown, ip: string): NextRequest {
   return new NextRequest("http://localhost/api/plan/extract-decisions", {
     method: "POST",
@@ -52,6 +52,20 @@ function post(body: unknown, ip: string): NextRequest {
       "X-Forwarded-For": ip,
     },
     body: typeof body === "string" ? body : JSON.stringify(body),
+  });
+}
+
+// An anonymous POST with NO forwarding headers (no X-Forwarded-For / X-Real-IP)
+// and only a distinguishing User-Agent — the header-less case where the route
+// must NOT collapse callers into one shared bucket.
+function headerlessPost(userAgent: string): NextRequest {
+  return new NextRequest("http://localhost/api/plan/extract-decisions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": userAgent,
+    },
+    body: JSON.stringify({ transcript: "## A\n\nhi" }),
   });
 }
 
@@ -228,5 +242,24 @@ describe("POST /api/plan/extract-decisions", () => {
     assert.ok(res);
     assert.strictEqual(res.status, 429);
     assert.match((await res.json()).error, /Too many requests/);
+  });
+
+  it("keys header-less anonymous callers per-caller, not into one shared 'anon' bucket", async () => {
+    // No X-Forwarded-For / X-Real-IP: the route must hand the shared limiter the
+    // authenticated principal (undefined here) — NOT a route-local "anon"
+    // sentinel — so the limiter derives its own per-caller key (a User-Agent /
+    // Accept-Language fingerprint when no IP is present). Passing "anon" would
+    // collapse every header-less anonymous caller into ONE bucket, letting a
+    // single caller exhaust the window for all of them.
+
+    // Caller A fills its OWN window: 10 allowed, the 11th confirms it is full.
+    let aRes: Response | null = null;
+    for (let i = 0; i < 11; i++) aRes = await POST(headerlessPost("agent-A"));
+    assert.strictEqual(aRes!.status, 429);
+
+    // A distinct header-less caller must be unaffected. A shared "anon" bucket
+    // would already be exhausted by A, throttling B on its first request.
+    const bRes = await POST(headerlessPost("agent-B"));
+    assert.strictEqual(bRes.status, 200);
   });
 });
