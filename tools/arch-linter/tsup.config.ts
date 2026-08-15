@@ -30,7 +30,10 @@ export default defineConfig({
   target: "es2022",
   minify: false,
   sourcemap: true,
-  // No .d.ts: arch-linter is a bin-only CLI; nothing imports it as a library.
+  // No .d.ts yet. The GOD-002 split gives the package a real library barrel
+  // (`index`), but it still has ZERO importers — every consumer invokes the
+  // `hexagen-lint` bin. Turn `dts` on when something actually imports it; until
+  // then the declaration build is cost with no reader.
   dts: false,
   splitting: false,
   clean: true,
