@@ -47,8 +47,15 @@ jobs:
       - name: "Verify TypeCheck After Sync"
         run: yarn turbo run typecheck --output-logs=full --log-order=stream
 
-      - name: "Verify Architectural Rules After Sync"
-        run: yarn workspace @hexagen/sync run cli sync --dry-run --allow-dirty
+      - name: "Verify Architecture (arch-linter, strict)"
+        # A REAL architecture gate. The previous `sync --dry-run` was toothless:
+        # under --dry-run the sync engine short-circuits the linter entirely
+        # ("[DRY-RUN] would run arch-linter"), so a boundary violation could
+        # never fail this step (AUD-010). `--strict` runs the linter for real
+        # and aborts on a violation — or on a timeout, which is treated as
+        # "could not verify", never a silent pass. The sync itself is a no-op
+        # here (the tree was already converged by "Execute Hardened Sync").
+        run: yarn workspace @hexagen/sync run cli sync --strict --allow-dirty
 
       - name: "Verify Template Questions Generator Parity"
         # Asserts the two generated wizard modules are in sync with the manifests

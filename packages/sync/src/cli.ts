@@ -68,7 +68,10 @@ function buildProgram(): Command {
       "Overwrite protected root files (turbo.json, .gitignore)",
     )
     .option("--allow-dirty", "Skip git clean check (for development)")
-    .option("--strict", "Fail on architecture linter warnings")
+    .option(
+      "--strict",
+      "Abort the sync when the architecture linter reports a violation (or cannot verify)",
+    )
     .option(
       "--only <pattern...>",
       "Limit writes to workspace-relative paths/globs (e.g. packages/shared, 'packages/*/tsconfig.json'). Direct targets only — no dependency fan-out; run a full sync for cross-package changes.",
