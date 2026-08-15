@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { logger } from "../../../../lib/structured-logger";
 import { analyzeManifest } from "@/lib/governance/manifest-analysis";
-import { guardManifestBody, guardManifestSize } from "@/lib/request-guards";
+import {
+  readJsonBody,
+  guardManifestBody,
+  guardManifestSize,
+} from "@/lib/request-guards";
 
 interface StatusRequestBody {
   manifestYaml: string;
@@ -9,7 +13,11 @@ interface StatusRequestBody {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as unknown;
+    // Decode the body FIRST, mapping a malformed/empty JSON body to a 400
+    // instead of letting request.json() reject into the outer catch (a 500).
+    const parsed = await readJsonBody(request);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
 
     // Validate the decoded body shape before trusting the `as` cast below: a
     // `null` body or a non-string `manifestYaml` would otherwise slip past the

@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import {
   isSameOrigin,
   guardMutation,
+  readJsonBody,
   guardManifestSize,
   guardManifestBody,
   guardOpenFileContentSize,
@@ -238,6 +239,46 @@ describe("guardMutation", () => {
     );
     assert.ok(gate);
     assert.equal(gate.status, 403);
+  });
+});
+
+describe("readJsonBody", () => {
+  function post(body: string) {
+    return new Request("http://localhost/api/governance/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+  }
+
+  it("decodes a valid JSON body (ok: true, body carries the parsed value)", async () => {
+    const result = await readJsonBody(post(JSON.stringify({ a: 1 })));
+    assert.equal(result.ok, true);
+    if (result.ok) assert.deepEqual(result.body, { a: 1 });
+  });
+
+  it("decodes a valid JSON null body without treating it as a parse failure", async () => {
+    // `null` is valid JSON — it must decode to ok:true (shape validation is
+    // guardManifestBody's job), not be conflated with a malformed body.
+    const result = await readJsonBody(post("null"));
+    assert.equal(result.ok, true);
+    if (result.ok) assert.equal(result.body, null);
+  });
+
+  it("400s a malformed JSON body instead of throwing (would otherwise be a 500)", async () => {
+    const result = await readJsonBody(post("{ this is not valid json "));
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.response.status, 400);
+      const body = await result.response.json();
+      assert.match(body.error, /valid json/i);
+    }
+  });
+
+  it("400s an empty body (request.json rejects on empty input)", async () => {
+    const result = await readJsonBody(post(""));
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.response.status, 400);
   });
 });
 

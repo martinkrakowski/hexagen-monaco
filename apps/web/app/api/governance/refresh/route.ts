@@ -10,6 +10,7 @@ import { logger } from "../../../../lib/structured-logger";
 import { resolveWebLlmApiKey } from "@/lib/wire.shared";
 import {
   guardMutation,
+  readJsonBody,
   guardManifestBody,
   guardManifestSize,
   guardOpenFileContentSize,
@@ -179,7 +180,11 @@ export async function POST(request: NextRequest) {
   if (gate) return gate;
 
   try {
-    const body = (await request.json()) as unknown;
+    // Decode the body FIRST, mapping a malformed/empty JSON body to a 400
+    // instead of letting request.json() reject into the outer catch (a 500).
+    const parsed = await readJsonBody(request);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
 
     // Validate the decoded body shape before trusting the `as` cast below: a
     // `null` body or a non-string `manifestYaml` would otherwise slip past the

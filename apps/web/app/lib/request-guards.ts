@@ -136,6 +136,40 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Decode a request's JSON body, turning a PARSE failure into a 400 instead of
+ * letting it reject into the handler's outer `catch` (which maps every throw to
+ * a 500). `request.json()` rejects on a malformed / truncated / empty body —
+ * that is a client error and belongs in the 4xx class alongside the shape
+ * ({@link guardManifestBody}) and size ({@link guardManifestSize}) guards below,
+ * not a 500. Returns the decoded body (typed `unknown` — validate its shape with
+ * `guardManifestBody`) on success, or a ready-to-send 400 on parse failure.
+ *
+ * Usage as the first step of a POST handler:
+ * ```ts
+ * const parsed = await readJsonBody(request);
+ * if (!parsed.ok) return parsed.response;
+ * const body = parsed.body; // unknown — hand to guardManifestBody next
+ * ```
+ */
+export async function readJsonBody(
+  request: Request,
+): Promise<
+  { ok: true; body: unknown } | { ok: false; response: NextResponse }
+> {
+  try {
+    return { ok: true, body: await request.json() };
+  } catch {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Request body must be valid JSON" },
+        { status: 400 },
+      ),
+    };
+  }
+}
+
+/**
  * Validate a decoded governance request body before the route trusts its
  * `as ...RequestBody` cast. The cast is a compile-time fiction: a `null` JSON
  * body makes `body.manifestYaml` throw (→ a 500 from the outer catch), and an

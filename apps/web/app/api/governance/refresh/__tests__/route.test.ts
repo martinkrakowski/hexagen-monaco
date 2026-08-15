@@ -65,6 +65,15 @@ function sameOriginPost(body: unknown): NextRequest {
   });
 }
 
+/** Same-origin refresh POST with a syntactically invalid JSON body. */
+function sameOriginMalformed(): NextRequest {
+  return new NextRequest("http://localhost/api/governance/refresh", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", host: "localhost" },
+    body: "{ this is not valid json ",
+  });
+}
+
 describe("POST /api/governance/refresh — mutation gate (D1)", () => {
   it("rejects a cross-origin POST with 403 before spawning lint:arch / calling the LLM", async () => {
     const req = new NextRequest("http://localhost/api/governance/refresh", {
@@ -152,6 +161,31 @@ describe("POST /api/governance/refresh — mutation gate (D1)", () => {
       generateExecute.mock.calls.length,
       genBefore,
       "suggestion LLM must not be executed for an over-large manifest",
+    );
+  });
+
+  it("400s a malformed JSON body BEFORE spawning lint:arch / calling the LLM (not a 500)", async () => {
+    // Same-origin so the mutation gate passes; a malformed body makes
+    // request.json() reject — mapped to a 400 by readJsonBody, not the outer 500.
+    const execBefore = execSpy.mock.calls.length;
+    const genBefore = generateExecute.mock.calls.length;
+
+    const res = await POST(sameOriginMalformed());
+
+    assert.equal(res.status, 400);
+    // Assert the parse-guard's OWN message, not just any 400 — so this can't be
+    // silently satisfied by guardManifestBody 400ing an undefined body instead.
+    const body = await res.json();
+    assert.match(body.error, /valid json/i);
+    assert.equal(
+      execSpy.mock.calls.length,
+      execBefore,
+      "lint:arch subprocess must not be spawned for a malformed JSON body",
+    );
+    assert.equal(
+      generateExecute.mock.calls.length,
+      genBefore,
+      "suggestion LLM must not be executed for a malformed JSON body",
     );
   });
 

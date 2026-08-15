@@ -21,10 +21,28 @@ function postRawBody(value: unknown) {
   });
 }
 
+/** POST a syntactically invalid (un-parseable) JSON body. */
+function postMalformed() {
+  return new Request("http://localhost/api/governance/status", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{ this is not valid json ",
+  });
+}
+
 describe("POST /api/governance/status", () => {
   it("400s when manifestYaml is missing", async () => {
     const res = await POST(postJson(undefined));
     assert.equal(res.status, 400);
+  });
+
+  it("400s a malformed JSON body instead of a 500 (client error, not server error)", async () => {
+    const res = await POST(postMalformed());
+    assert.equal(res.status, 400);
+    // Assert the parse-guard's OWN message, not just any 400 — so this can't be
+    // silently satisfied by guardManifestBody 400ing an undefined body instead.
+    const body = await res.json();
+    assert.match(body.error, /valid json/i);
   });
 
   it("400s a null JSON body instead of throwing to a 500", async () => {
