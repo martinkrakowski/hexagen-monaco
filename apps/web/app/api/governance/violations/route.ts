@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
-import * as yaml from "js-yaml";
 import { logger } from "../../../../lib/structured-logger";
-
-interface Violation {
-  id: string;
-  type: "error" | "warning" | "info";
-  message: string;
-  severity: "HIGH" | "MEDIUM" | "LOW";
-}
+import { analyzeManifest } from "@/lib/governance/manifest-analysis";
+import {
+  readJsonBody,
+  guardManifestBody,
+  guardManifestSize,
+} from "@/lib/request-guards";
 
 interface ViolationsRequestBody {
   manifestYaml: string;
@@ -15,86 +13,44 @@ interface ViolationsRequestBody {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as ViolationsRequestBody;
+    // Decode the body FIRST, mapping a malformed/empty JSON body to a 400
+    // instead of letting request.json() reject into the outer catch (a 500).
+    const parsed = await readJsonBody(request);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
 
-    if (!body.manifestYaml) {
-      return NextResponse.json(
-        { error: "manifestYaml is required" },
-        { status: 400 },
-      );
-    }
+    // Validate the decoded body shape before trusting the `as` cast below: a
+    // `null` body or a non-string `manifestYaml` would otherwise slip past the
+    // size guard and reach the analyzer.
+    const invalidBody = guardManifestBody(body);
+    if (invalidBody) return invalidBody;
+    const { manifestYaml } = body as ViolationsRequestBody;
 
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = yaml.load(body.manifestYaml) as Record<string, unknown>;
-    } catch {
+    const tooLarge = guardManifestSize(manifestYaml);
+    if (tooLarge) return tooLarge;
+
+    const analysis = analyzeManifest(manifestYaml);
+    if (!analysis.ok) {
+      // A manifest that will not parse must NOT report as compliant (AUD-005).
+      // Surface the parse failure as a HIGH error violation so the caller sees a
+      // non-compliant result rather than a false green.
       return NextResponse.json({
-        violations: [],
-        isCompliant: true,
+        violations: [
+          {
+            id: "manifest-parse-error",
+            type: "error",
+            message: analysis.error,
+            severity: "HIGH",
+          },
+        ],
+        isCompliant: false,
+        error: analysis.error,
       });
-    }
-
-    const boundedContexts = parsed.bounded_contexts as
-      | Array<Record<string, unknown>>
-      | undefined;
-
-    if (!boundedContexts || boundedContexts.length === 0) {
-      return NextResponse.json({
-        violations: [],
-        isCompliant: true,
-      });
-    }
-
-    const violations: Violation[] = [];
-
-    for (const ctx of boundedContexts) {
-      const ctxName = ctx.name as string;
-      const layers = ctx.layers as Record<string, unknown> | undefined;
-      const domainLayer = layers?.domain as Record<string, unknown> | undefined;
-      const adapters = domainLayer?.adapters as
-        | Record<string, unknown>
-        | undefined;
-
-      const adapterCount = adapters ? Object.keys(adapters).length : 0;
-      const appLayer = layers?.application as
-        | Record<string, unknown>
-        | undefined;
-      const portConfig = appLayer?.ports as Record<string, unknown> | undefined;
-      const ports = portConfig
-        ? Object.keys(portConfig?.in || {}).length +
-          Object.keys(portConfig?.out || {}).length
-        : 0;
-
-      if (ports > 0 && adapterCount === 0) {
-        violations.push({
-          id: `${ctxName}-missing-adapters`,
-          type: "warning",
-          message: `Context "${ctxName}" has ${ports} port(s) but no adapters implemented`,
-          severity: "MEDIUM",
-        });
-      }
-
-      const dependencies = ctx.dependencies as
-        | Array<Record<string, unknown>>
-        | undefined;
-      if (dependencies) {
-        for (const dep of dependencies) {
-          const depName = dep.name as string;
-          if (depName === ctxName) {
-            violations.push({
-              id: `${ctxName}-self-dependency`,
-              type: "error",
-              message: `Context "${ctxName}" depends on itself`,
-              severity: "HIGH",
-            });
-          }
-        }
-      }
     }
 
     return NextResponse.json({
-      violations,
-      isCompliant: violations.filter((v) => v.type === "error").length === 0,
+      violations: analysis.violations,
+      isCompliant: analysis.isCompliant,
     });
   } catch (err) {
     logger.error("Governance violations error:", { error: err });
@@ -110,11 +66,13 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
+  // A 405 carries no compliance verdict — never emit `isCompliant: true` from a
+  // non-success response (AUD-005: only a parsed, error-free manifest is compliant).
   return NextResponse.json(
     {
       error: "Use POST with manifestYaml in request body",
       violations: [],
-      isCompliant: true,
+      isCompliant: false,
     },
     {
       status: 405,

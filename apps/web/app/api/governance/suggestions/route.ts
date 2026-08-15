@@ -3,6 +3,12 @@ import { GenerateSuggestionUseCase } from "@hexagen/agentic-interaction";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
 import { logger } from "../../../../lib/structured-logger";
 import { resolveWebLlmApiKey } from "@/lib/wire.shared";
+import {
+  readJsonBody,
+  guardManifestBody,
+  guardManifestSize,
+  guardOpenFileContentSize,
+} from "@/lib/request-guards";
 
 interface AISuggestion {
   id: string;
@@ -22,14 +28,24 @@ interface SuggestionsRequestBody {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as SuggestionsRequestBody;
+    // Decode the body FIRST, mapping a malformed/empty JSON body to a 400
+    // instead of letting request.json() reject into the outer catch (a 500).
+    const parsed = await readJsonBody(request);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
 
-    if (!body.manifestYaml) {
-      return NextResponse.json(
-        { error: "manifestYaml is required" },
-        { status: 400 },
-      );
-    }
+    // Validate the decoded body shape before trusting the `as` cast below.
+    const invalidBody = guardManifestBody(body);
+    if (invalidBody) return invalidBody;
+    const { manifestYaml, openFileContent } = body as SuggestionsRequestBody;
+
+    const tooLarge = guardManifestSize(manifestYaml);
+    if (tooLarge) return tooLarge;
+
+    // The optional open file is appended verbatim to the LLM prompt below — bound
+    // its size and reject a non-string before it reaches the prompt.
+    const openFileTooLarge = guardOpenFileContentSize(openFileContent);
+    if (openFileTooLarge) return openFileTooLarge;
 
     // WEB_LLM_API_KEY ?? LLM_API_KEY — survives the mercury prod flip
     // (which unsets LLM_API_KEY); see resolveWebLlmApiKey.
@@ -58,9 +74,9 @@ export async function POST(request: Request) {
       }),
     });
 
-    let prompt = `Analyze this architecture manifest and suggest improvements:\n\n${body.manifestYaml}`;
-    if (body.openFileContent) {
-      prompt += `\n\n--- Currently open file ---\n${body.openFileContent}`;
+    let prompt = `Analyze this architecture manifest and suggest improvements:\n\n${manifestYaml}`;
+    if (openFileContent) {
+      prompt += `\n\n--- Currently open file ---\n${openFileContent}`;
     }
 
     const result = await useCase.execute({

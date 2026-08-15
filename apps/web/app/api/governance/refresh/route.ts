@@ -1,15 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { readdir, writeFile, unlink } from "fs/promises";
+import { writeFile, unlink } from "fs/promises";
 import path from "path";
 import os from "os";
-import * as yaml from "js-yaml";
 import { GenerateSuggestionUseCase } from "@hexagen/agentic-interaction";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
 import { logger } from "../../../../lib/structured-logger";
 import { resolveWebLlmApiKey } from "@/lib/wire.shared";
-import { guardMutation } from "@/lib/request-guards";
+import {
+  guardMutation,
+  readJsonBody,
+  guardManifestBody,
+  guardManifestSize,
+  guardOpenFileContentSize,
+} from "@/lib/request-guards";
+import {
+  analyzeManifest,
+  type PortAdapterStatus,
+} from "@/lib/governance/manifest-analysis";
 
 const execAsync = promisify(exec);
 
@@ -34,13 +43,6 @@ interface AISuggestion {
     | "port-definition"
     | "dependency-cleanup"
     | "general";
-}
-
-interface PortAdapterStatus {
-  context: string;
-  ports: number;
-  adapters: number;
-  complete: boolean;
 }
 
 interface RefreshRequestBody {
@@ -147,81 +149,23 @@ async function runSuggestions(
 }
 
 // ---------------------------------------------------------------------------
-// Status — parse manifest YAML, scan packages/ for adapters
+// Status — derive port/adapter status from the manifest via the shared
+// analyzer, so `refresh` and `governance/status` agree on the same manifest
+// (AUD-005). The prior filesystem scan (counting `.ts` files on disk) diverged
+// from the manifest-based `status` route; the two now share one implementation.
 // ---------------------------------------------------------------------------
 
-interface ManifestBoundedContext {
-  name: string;
-  layers?: {
-    application?: {
-      ports?: {
-        in?: unknown[];
-        out?: unknown[];
-      };
-    };
-  };
-}
-
-async function runStatus(manifestYaml: string): Promise<PortAdapterStatus[]> {
-  let boundedContexts: ManifestBoundedContext[] = [];
-
-  try {
-    const parsed = yaml.load(manifestYaml) as {
-      bounded_contexts?: ManifestBoundedContext[];
-    };
-    boundedContexts = parsed?.bounded_contexts || [];
-  } catch {
-    return [];
-  }
-
-  const packagesDir = path.join(process.cwd(), "packages");
-  let packageNames: string[] = [];
-
-  try {
-    packageNames = await readdir(packagesDir);
-  } catch {
-    return [];
-  }
-
-  const status: PortAdapterStatus[] = [];
-
-  for (const ctx of boundedContexts) {
-    const ports = ctx.layers?.application?.ports
-      ? (ctx.layers.application.ports.in?.length || 0) +
-        (ctx.layers.application.ports.out?.length || 0)
-      : 0;
-
-    const shortName = ctx.name.replace("@hexagen/", "");
-    const hasPackage = packageNames.includes(shortName);
-    let adapterCount = 0;
-
-    if (hasPackage) {
-      const adapterPath = path.join(
-        packagesDir,
-        shortName,
-        "src",
-        "infrastructure",
-        "adapters",
-      );
-      try {
-        const files = await readdir(adapterPath);
-        adapterCount = files.filter(
-          (f) => f.endsWith(".ts") || f.endsWith(".tsx"),
-        ).length;
-      } catch {
-        adapterCount = 0;
-      }
-    }
-
-    status.push({
-      context: ctx.name,
-      ports,
-      adapters: adapterCount,
-      complete: ports > 0 && adapterCount >= Math.ceil(ports / 2),
-    });
-  }
-
-  return status;
+function runStatus(manifestYaml: string): {
+  portAdapterStatus: PortAdapterStatus[];
+  statusError?: string;
+} {
+  const analysis = analyzeManifest(manifestYaml);
+  // A manifest that will not parse is not "healthy with zero contexts" — carry
+  // the analyzer's error out so `refresh` surfaces it (mirrors governance/status)
+  // instead of masking a parse/shape failure as an empty status list (AUD-005).
+  return analysis.ok
+    ? { portAdapterStatus: analysis.status }
+    : { portAdapterStatus: [], statusError: analysis.error };
 }
 
 // ---------------------------------------------------------------------------
@@ -236,26 +180,44 @@ export async function POST(request: NextRequest) {
   if (gate) return gate;
 
   try {
-    const body = (await request.json()) as RefreshRequestBody;
+    // Decode the body FIRST, mapping a malformed/empty JSON body to a 400
+    // instead of letting request.json() reject into the outer catch (a 500).
+    const parsed = await readJsonBody(request);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
 
-    if (!body.manifestYaml) {
-      return NextResponse.json(
-        { error: "manifestYaml is required" },
-        { status: 400 },
-      );
-    }
+    // Validate the decoded body shape before trusting the `as` cast below: a
+    // `null` body or a non-string `manifestYaml` would otherwise slip past the
+    // size guard and reach the shell-lint / LLM / parse work.
+    const invalidBody = guardManifestBody(body);
+    if (invalidBody) return invalidBody;
+    const { manifestYaml, openFileContent } = body as RefreshRequestBody;
 
-    // Run all three analyses in parallel (all now async)
-    const [violations, suggestions, portAdapterStatus] = await Promise.all([
-      runViolations(body.manifestYaml),
-      runSuggestions(body.manifestYaml, body.openFileContent),
-      runStatus(body.manifestYaml),
+    // Bound the raw manifest before the shell-lint / LLM / parse work below.
+    const tooLarge = guardManifestSize(manifestYaml);
+    if (tooLarge) return tooLarge;
+
+    // The optional open file is appended verbatim to the suggestion LLM prompt —
+    // bound its size and reject a non-string before it reaches the prompt.
+    const openFileTooLarge = guardOpenFileContentSize(openFileContent);
+    if (openFileTooLarge) return openFileTooLarge;
+
+    // Violations (shell-lint) and suggestions (LLM) are async; status is a
+    // synchronous manifest analysis. Run the async pair concurrently.
+    const [violations, suggestions] = await Promise.all([
+      runViolations(manifestYaml),
+      runSuggestions(manifestYaml, openFileContent),
     ]);
+    const { portAdapterStatus, statusError } = runStatus(manifestYaml);
 
     return NextResponse.json({
       violations,
       suggestions,
       portAdapterStatus,
+      // Surface a manifest parse/shape failure explicitly (mirrors
+      // governance/status) so an unparseable manifest is distinguishable from a
+      // valid empty one — present only when the status analysis failed.
+      ...(statusError !== undefined && { statusError }),
     });
   } catch (error) {
     const message =

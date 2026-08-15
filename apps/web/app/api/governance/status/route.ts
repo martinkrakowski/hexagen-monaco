@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
-import * as yaml from "js-yaml";
 import { logger } from "../../../../lib/structured-logger";
-
-interface PortAdapterStatus {
-  context: string;
-  ports: number;
-  adapters: number;
-  complete: boolean;
-}
+import { analyzeManifest } from "@/lib/governance/manifest-analysis";
+import {
+  readJsonBody,
+  guardManifestBody,
+  guardManifestSize,
+} from "@/lib/request-guards";
 
 interface StatusRequestBody {
   manifestYaml: string;
@@ -15,58 +13,30 @@ interface StatusRequestBody {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as StatusRequestBody;
+    // Decode the body FIRST, mapping a malformed/empty JSON body to a 400
+    // instead of letting request.json() reject into the outer catch (a 500).
+    const parsed = await readJsonBody(request);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
 
-    if (!body.manifestYaml) {
-      return NextResponse.json(
-        { error: "manifestYaml is required" },
-        { status: 400 },
-      );
+    // Validate the decoded body shape before trusting the `as` cast below: a
+    // `null` body or a non-string `manifestYaml` would otherwise slip past the
+    // size guard and reach the analyzer.
+    const invalidBody = guardManifestBody(body);
+    if (invalidBody) return invalidBody;
+    const { manifestYaml } = body as StatusRequestBody;
+
+    const tooLarge = guardManifestSize(manifestYaml);
+    if (tooLarge) return tooLarge;
+
+    const analysis = analyzeManifest(manifestYaml);
+    if (!analysis.ok) {
+      // A manifest that will not parse is not "healthy with zero contexts" —
+      // surface the parse error explicitly instead of an empty status (AUD-005).
+      return NextResponse.json({ status: [], error: analysis.error });
     }
 
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = yaml.load(body.manifestYaml) as Record<string, unknown>;
-    } catch {
-      return NextResponse.json({ status: [] });
-    }
-
-    const boundedContexts = parsed.bounded_contexts as
-      | Array<Record<string, unknown>>
-      | undefined;
-
-    if (!boundedContexts) {
-      return NextResponse.json({ status: [] });
-    }
-
-    const status: PortAdapterStatus[] = [];
-
-    for (const ctx of boundedContexts) {
-      const ctxName = ctx.name as string;
-      const layers = ctx.layers as Record<string, unknown> | undefined;
-
-      const portsConfig = (layers?.application as Record<string, unknown>)
-        ?.ports as Record<string, unknown> | undefined;
-      const inPorts = portsConfig?.in as string[] | undefined;
-      const outPorts = portsConfig?.out as string[] | undefined;
-
-      const ports = (inPorts?.length || 0) + (outPorts?.length || 0);
-
-      const domainLayer = layers?.domain as Record<string, unknown> | undefined;
-      const adapters = domainLayer?.adapters as
-        | Record<string, unknown>
-        | undefined;
-      const adapterCount = adapters ? Object.keys(adapters).length : 0;
-
-      status.push({
-        context: ctxName,
-        ports,
-        adapters: adapterCount,
-        complete: ports > 0 && adapterCount >= Math.ceil(ports / 2),
-      });
-    }
-
-    return NextResponse.json({ status });
+    return NextResponse.json({ status: analysis.status });
   } catch (err) {
     logger.error("Governance status error:", { error: err });
     return NextResponse.json(

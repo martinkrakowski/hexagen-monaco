@@ -1,7 +1,16 @@
 import { describe, it, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
-import { isSameOrigin, guardMutation } from "../request-guards";
+import {
+  isSameOrigin,
+  guardMutation,
+  readJsonBody,
+  guardManifestSize,
+  guardManifestBody,
+  guardOpenFileContentSize,
+  MAX_MANIFEST_YAML_CHARS,
+  MAX_OPEN_FILE_CONTENT_CHARS,
+} from "../request-guards";
 
 /** Build a POST NextRequest with the given headers. A distinct IP per test
  * keeps the shared rate-limiter's fixed windows independent. */
@@ -230,5 +239,140 @@ describe("guardMutation", () => {
     );
     assert.ok(gate);
     assert.equal(gate.status, 403);
+  });
+});
+
+describe("readJsonBody", () => {
+  function post(body: string) {
+    return new Request("http://localhost/api/governance/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+  }
+
+  it("decodes a valid JSON body (ok: true, body carries the parsed value)", async () => {
+    const result = await readJsonBody(post(JSON.stringify({ a: 1 })));
+    assert.equal(result.ok, true);
+    if (result.ok) assert.deepEqual(result.body, { a: 1 });
+  });
+
+  it("decodes a valid JSON null body without treating it as a parse failure", async () => {
+    // `null` is valid JSON — it must decode to ok:true (shape validation is
+    // guardManifestBody's job), not be conflated with a malformed body.
+    const result = await readJsonBody(post("null"));
+    assert.equal(result.ok, true);
+    if (result.ok) assert.equal(result.body, null);
+  });
+
+  it("400s a malformed JSON body instead of throwing (would otherwise be a 500)", async () => {
+    const result = await readJsonBody(post("{ this is not valid json "));
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.response.status, 400);
+      const body = await result.response.json();
+      assert.match(body.error, /valid json/i);
+    }
+  });
+
+  it("400s an empty body (request.json rejects on empty input)", async () => {
+    const result = await readJsonBody(post(""));
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.response.status, 400);
+  });
+});
+
+describe("guardManifestBody", () => {
+  it("allows a plain object with a non-empty string manifestYaml (returns null)", () => {
+    assert.equal(
+      guardManifestBody({ manifestYaml: "bounded_contexts: []" }),
+      null,
+    );
+  });
+
+  it("400s a null body (a null JSON body would otherwise throw on property access)", async () => {
+    const res = guardManifestBody(null);
+    assert.ok(res, "expected a rejection response, not null");
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error, /manifestyaml is required/i);
+  });
+
+  it("400s an array body (a list is not a manifest request object)", async () => {
+    const res = guardManifestBody(["bounded_contexts: []"]);
+    assert.ok(res);
+    assert.equal(res.status, 400);
+  });
+
+  it("400s an object-valued manifestYaml (slips past the size guard's undefined .length)", async () => {
+    // `{}.length` is undefined, so `undefined > MAX` is false — an object-valued
+    // manifestYaml would clear guardManifestSize and reach yaml.load. The shape
+    // guard must reject it first.
+    const res = guardManifestBody({ manifestYaml: { nested: true } });
+    assert.ok(res);
+    assert.equal(res.status, 400);
+  });
+
+  it("400s an empty-string manifestYaml (nothing to analyze)", async () => {
+    const res = guardManifestBody({ manifestYaml: "" });
+    assert.ok(res);
+    assert.equal(res.status, 400);
+  });
+});
+
+describe("guardOpenFileContentSize", () => {
+  it("allows an absent open file (undefined → null, the field is optional)", () => {
+    assert.equal(guardOpenFileContentSize(undefined), null);
+  });
+
+  it("allows a null open file (null → null, treated as absent)", () => {
+    assert.equal(guardOpenFileContentSize(null), null);
+  });
+
+  it("allows an open file within the cap (returns null)", () => {
+    assert.equal(guardOpenFileContentSize("some open file text"), null);
+  });
+
+  it("allows an open file exactly at the cap (rejects only strictly larger)", () => {
+    assert.equal(
+      guardOpenFileContentSize("a".repeat(MAX_OPEN_FILE_CONTENT_CHARS)),
+      null,
+    );
+  });
+
+  it("400s a non-string open file (the `as` cast does not enforce the type)", async () => {
+    const res = guardOpenFileContentSize({ not: "a string" });
+    assert.ok(res, "expected a rejection response, not null");
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error, /must be a string/i);
+  });
+
+  it("400s an over-cap open file with a 'too large' response", async () => {
+    const res = guardOpenFileContentSize(
+      "a".repeat(MAX_OPEN_FILE_CONTENT_CHARS + 1),
+    );
+    assert.ok(res);
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error, /too large/i);
+  });
+});
+
+describe("guardManifestSize", () => {
+  it("allows a manifest within the size cap (returns null)", () => {
+    assert.equal(guardManifestSize("bounded_contexts: []"), null);
+  });
+
+  it("allows a manifest exactly at the cap (rejects only strictly larger)", () => {
+    assert.equal(guardManifestSize("a".repeat(MAX_MANIFEST_YAML_CHARS)), null);
+  });
+
+  it("rejects an over-cap manifest with a 400 'too large' response", async () => {
+    const res = guardManifestSize("a".repeat(MAX_MANIFEST_YAML_CHARS + 1));
+    assert.ok(res, "expected a rejection response, not null");
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error, /too large/i);
   });
 });
