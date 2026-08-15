@@ -4,6 +4,10 @@ import { authOptions } from "@/lib/auth.js";
 import { getProxyRequestUseCase } from "@/lib/byok-wire.js";
 import { isByokProvider } from "@hexagen/byok";
 
+// Reaches SQLite (better-sqlite3, via byok-wire) — must run on the Node runtime,
+// not edge.
+export const runtime = "nodejs";
+
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
 

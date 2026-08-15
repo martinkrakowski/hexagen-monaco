@@ -3,6 +3,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth.js";
 import { getMetadataAdapter } from "@/lib/byok-wire.js";
 
+// Reaches SQLite (better-sqlite3, via byok-wire) — must run on the Node runtime,
+// not edge.
+export const runtime = "nodejs";
+
 export async function GET() {
   const session = await getServerSession(authOptions);
 
