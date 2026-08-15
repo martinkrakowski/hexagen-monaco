@@ -3,12 +3,22 @@ import assert from "node:assert/strict";
 
 import { getCapabilities } from "./capability-cache";
 
-// getCapabilities stubs the fetch global; always restore so a leaked stub never
-// bleeds into other files in the worker. The module also keeps a process-wide
-// 5-min TTL cache, but every test here fails the fetch (so nothing is cached)
-// and asserts a fresh throw, so cache state does not interfere.
+const originalFetch = globalThis.fetch;
+
+// These tests stub the fetch global; always restore so a leaked stub never
+// bleeds into later tests. Restore ONLY fetch — deliberately NOT
+// `vi.unstubAllGlobals()`, which also tears down the jsdom `localStorage` /
+// `sessionStorage` globals and re-exposes Node's built-in (throwing)
+// `localStorage` getter on Node >= 24, so the shared `vitest.setup.ts`
+// afterEach blows up with `SecurityError: Cannot initialize local storage
+// without a --localstorage-file path`. Same hazard already documented at
+// features/workspace-shell/plan-phase/__tests__/PlanPhaseView.test.tsx.
+//
+// The module also keeps a process-wide 5-min TTL cache, but every test here
+// fails the fetch (so nothing is cached) and asserts a fresh throw, so cache
+// state does not interfere.
 afterEach(() => {
-  vi.unstubAllGlobals();
+  vi.stubGlobal("fetch", originalFetch);
 });
 
 describe("getCapabilities — Error.cause preservation (MOD-007)", () => {
