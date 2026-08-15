@@ -1,37 +1,16 @@
 name: external-integration
 type: supporting
-description: External authentication and identity providers — GitHub OAuth, session management
+description: GitHub integration plumbing — scaffold export (publish) and editor push, over a shared Git Data client
 layers:
-  domain:
-    value_objects:
-      - AuthSession
-      - ProviderIdentity
-      - GitHubProvider
   application:
-    use_cases:
-      - InitiateAuthUseCase
-      - GetAuthSessionUseCase
-      - RevokeAuthUseCase
     ports:
-      in:
-        - QueryAuthSessionPort
-        - InitiateAuthPort
-        - RevokeAuthPort
       out:
-        - OAuthProviderPort
-        - SessionReadPort
-plane: infrastructure
-infrastructure:
-  adapters:
-    - GitHubVcsAdapter
-    - GitHubExporterAdapter
-    - GitHubRepositoryWriterAdapter
-    - GitHubGitDataClient
+        - RepositoryWriterPort
+  infrastructure:
+    adapters:
+      - GitHubExporterAdapter
+      - GitHubRepositoryWriterAdapter
+      - GitHubGitDataClient
   # Git Data client logic relocated here from project-generation (see github-exporter.adapter.ts)
   # for sharing with RepositoryWriterPort / commitFiles (editor push) without violating project-generation import rules.
-ports:
-  out:
-    - RepositoryWriterPort
-    - IVersionControlSystem
-    - OAuthProviderPort
-    - SessionReadPort
+plane: infrastructure

@@ -1,8 +1,11 @@
-import type { Result } from "@hexagen/shared";
-import type { AssembledManifest } from "@hexagen/shared";
-
 /**
  * Metadata returned after creating a pull request.
+ *
+ * Retained as a live cross-package type: `apps/web` imports it as the response
+ * shape of the propose-PR client path. The `IVersionControlSystem` port and its
+ * only implementation (`GitHubVcsAdapter`) were removed as dead code — the
+ * adapter hardcoded `owner:'organization'`, referenced a branch it never
+ * created (AUD-009), and had zero live consumers.
  */
 export interface PullRequestMetadata {
   readonly prNumber: number;
@@ -11,28 +14,4 @@ export interface PullRequestMetadata {
   readonly createdAt: Date;
   readonly baseBranch: string;
   readonly headBranch: string;
-}
-
-/**
- * Error type for version control operations.
- */
-export type VcsError = {
-  readonly _tag: "VcsError";
-  readonly code: "network-timeout" | "auth-failed" | "pr-creation-failed";
-  readonly message: string;
-  readonly retryable: boolean;
-};
-
-/**
- * Port: Version Control System (e.g., GitHub, GitLab).
- * Returns Result<T, E> — never throws.
- */
-export interface IVersionControlSystem {
-  /**
-   * Create a pull request with the proposed manifest change.
-   */
-  createPullRequest(
-    manifest: AssembledManifest,
-    intent: string,
-  ): Promise<Result<PullRequestMetadata, VcsError>>;
 }
