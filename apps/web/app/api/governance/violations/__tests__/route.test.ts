@@ -54,6 +54,22 @@ describe("POST /api/governance/violations", () => {
     );
   });
 
+  it("a bounded_contexts list of bare scalars is NOT compliant (AUD-005)", async () => {
+    // `bounded_contexts: [a, b]` parses to an array whose elements are not
+    // context mappings; the analyzer rejects it (ok:false) and the route must
+    // render it non-compliant instead of a false-green empty result.
+    const res = await POST(postJson("bounded_contexts: [alpha, beta]"));
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.isCompliant, false);
+    assert.ok(
+      body.violations.some(
+        (v: { id: string }) => v.id === "manifest-parse-error",
+      ),
+      "surfaces the malformed-list error as a violation",
+    );
+  });
+
   it("reports a self-dependency as an error → not compliant", async () => {
     const manifest = [
       "bounded_contexts:",

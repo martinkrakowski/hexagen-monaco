@@ -123,11 +123,29 @@ export function analyzeManifest(manifestYaml: string): ManifestAnalysisResult {
   if (boundedContexts.length === 0) {
     return { ok: true, status: [], violations: [], isCompliant: true };
   }
+  // Present, a non-empty list, but with element(s) that are not context
+  // mappings (e.g. `bounded_contexts: [alpha, beta]`, a list of bare scalars).
+  // The per-context loop below skips non-record elements for type-narrowing, so
+  // an all-scalar list would fall straight through to an empty, "compliant"
+  // result — the same false green a non-list `bounded_contexts` produces. Reject
+  // the shape explicitly so a caller can never mistake dropped elements for a
+  // clean, empty manifest.
+  if (boundedContexts.some((ctx) => !isRecord(ctx))) {
+    return {
+      ok: false,
+      error:
+        "Manifest field `bounded_contexts` must be a list of context mappings",
+    };
+  }
 
   const status: PortAdapterStatus[] = [];
   const violations: Violation[] = [];
 
-  for (const raw of boundedContexts) {
+  // Index-keyed ids: the governance UI uses `violation.id` as a React list key
+  // (ViolationsSection / AIGovernancePanel), so two contexts that share a name —
+  // or are both unnamed — must not collide on a single id. The element index is
+  // unique per context and disambiguates them.
+  for (const [index, raw] of boundedContexts.entries()) {
     if (!isRecord(raw)) continue;
     const ctxName = String(raw.name ?? "");
     const layers = isRecord(raw.layers) ? raw.layers : undefined;
@@ -151,7 +169,7 @@ export function analyzeManifest(manifestYaml: string): ManifestAnalysisResult {
     // Shadow rule: declared ports with no adapters implemented yet.
     if (portCount > 0 && adapterCount === 0) {
       violations.push({
-        id: `${ctxName}-missing-adapters`,
+        id: `${ctxName || "unnamed"}-${index}-missing-adapters`,
         type: "warning",
         message: `Context "${ctxName}" has ${portCount} port(s) but no adapters implemented`,
         severity: "MEDIUM",
@@ -159,16 +177,18 @@ export function analyzeManifest(manifestYaml: string): ManifestAnalysisResult {
     }
 
     // Shadow rule: a context that depends on itself. Ignore empty names so two
-    // distinct unnamed contexts are not mislabeled as self-dependent.
-    for (const depName of dependencyNames(raw.dependencies)) {
-      if (depName && depName === ctxName) {
-        violations.push({
-          id: `${ctxName}-self-dependency`,
-          type: "error",
-          message: `Context "${ctxName}" depends on itself`,
-          severity: "HIGH",
-        });
-      }
+    // distinct unnamed contexts are not mislabeled as self-dependent. Emit at
+    // most ONE violation per context even if it self-lists more than once, so a
+    // repeated self-reference cannot mint a duplicate id.
+    if (
+      dependencyNames(raw.dependencies).some((dep) => dep && dep === ctxName)
+    ) {
+      violations.push({
+        id: `${ctxName || "unnamed"}-${index}-self-dependency`,
+        type: "error",
+        message: `Context "${ctxName}" depends on itself`,
+        severity: "HIGH",
+      });
     }
   }
 

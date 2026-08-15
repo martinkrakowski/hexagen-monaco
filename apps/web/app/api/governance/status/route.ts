@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { logger } from "../../../../lib/structured-logger";
-import { analyzeManifest } from "../../../lib/governance/manifest-analysis";
-import { guardManifestSize } from "../../../lib/request-guards";
+import { analyzeManifest } from "@/lib/governance/manifest-analysis";
+import { guardManifestSize } from "@/lib/request-guards";
 
 interface StatusRequestBody {
   manifestYaml: string;
