@@ -1513,7 +1513,7 @@ __metadata:
     yaml-eslint-parser: "npm:^2.0.0"
     zod: "npm:^3.23.8"
   bin:
-    hexagen-lint: dist/index.js
+    hexagen-lint: dist/cli.js
   languageName: unknown
   linkType: soft
 

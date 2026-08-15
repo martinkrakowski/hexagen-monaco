@@ -10,7 +10,7 @@
  * `restricted_to` still closes over UNdeclared imports but not over declared
  * ones (union doctrine — see the ADR).
  */
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import type { LinterConfig } from "../src/subpath-violation.js";
 import {
