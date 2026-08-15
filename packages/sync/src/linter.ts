@@ -66,17 +66,33 @@ export async function runArchLinter(config: SyncConfig): Promise<void> {
 
   const timeoutMs = resolveLinterTimeoutMs();
 
-  try {
-    // Installed arch-linter bin (scope-agnostic) — works in this monorepo and
-    // in a generated project (via the @hexagen-monaco/arch-linter devDep),
-    // unlike `yarn workspace …` which only resolves here.
-    const bin = resolveArchLinterBin(config.workspaceRoot);
-    if (bin === null) {
-      logger.warn(
-        "arch-linter not installed (@hexagen-monaco/arch-linter) — skipping architecture validation",
+  // Installed arch-linter bin (scope-agnostic) — works in this monorepo and
+  // in a generated project (via the @hexagen-monaco/arch-linter devDep),
+  // unlike `yarn workspace …` which only resolves here.
+  //
+  // Resolved OUTSIDE the try below so the strict abort keeps its own message:
+  // inside, the catch would relabel it as the generic "failed in strict mode".
+  const bin = resolveArchLinterBin(config.workspaceRoot);
+  if (bin === null) {
+    // A missing bin is "could not verify", exactly like a timeout — and a
+    // strict run exists to certify the architecture, so it must not exit 0
+    // having checked nothing (AUD-010: the gate must never silently pass).
+    // Non-strict runs keep the warn-and-skip behaviour: the linter is an
+    // optional devDep in generated projects, where a plain `sync` must still
+    // work without it.
+    if (strict) {
+      throw new Error(
+        "arch-linter not installed (@hexagen-monaco/arch-linter) — architecture was NOT verified, " +
+          "and --strict cannot certify an unverified tree. Install the linter, or drop --strict.",
       );
-      return;
     }
+    logger.warn(
+      "arch-linter not installed (@hexagen-monaco/arch-linter) — skipping architecture validation",
+    );
+    return;
+  }
+
+  try {
     const { stdout, stderr } = await execPromise(`"${bin}"`, {
       cwd: config.workspaceRoot,
       timeout: timeoutMs,
