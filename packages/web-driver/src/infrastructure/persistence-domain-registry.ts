@@ -7,20 +7,6 @@ import type {
 
 const MIGRATION_FLAG_PREFIX = "hexagen:persistence-domain:migrated:";
 
-const DEFAULT_BACKENDS: Record<
-  PersistenceDomain,
-  "localStorage" | "indexedDB"
-> = {
-  "wizard-draft": "indexedDB",
-  "saved-projects": "indexedDB",
-  "editor-workspace": "indexedDB",
-  "generation-results": "indexedDB",
-  "chat-threads": "indexedDB",
-  "canvas-layout": "localStorage",
-  "monaco-state": "localStorage",
-  "model-preferences": "localStorage",
-};
-
 const ALL_DOMAINS: PersistenceDomain[] = [
   "wizard-draft",
   "saved-projects",
@@ -33,17 +19,6 @@ const ALL_DOMAINS: PersistenceDomain[] = [
 ];
 
 export class PersistenceDomainRegistry implements PersistenceDomainRegistryPort {
-  getActiveBackend(domain: PersistenceDomain): "localStorage" | "indexedDB" {
-    if (typeof window === "undefined") return DEFAULT_BACKENDS[domain];
-    try {
-      const flag = localStorage.getItem(`${MIGRATION_FLAG_PREFIX}${domain}`);
-      if (flag === "true") return "indexedDB";
-      return DEFAULT_BACKENDS[domain];
-    } catch {
-      return DEFAULT_BACKENDS[domain];
-    }
-  }
-
   async markMigrated(
     domain: PersistenceDomain,
   ): Promise<Result<void, PersistenceError>> {
