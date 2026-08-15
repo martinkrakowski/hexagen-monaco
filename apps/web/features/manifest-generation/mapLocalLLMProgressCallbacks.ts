@@ -83,15 +83,26 @@ export function createLocalProgressCallbacks(
     },
     onError: (stage: number, error: string, durationMs?: number) => {
       if (isCancelled()) return;
+      // `stageLabels` is an injected, possibly-partial map (the hook passes a
+      // 0–6 map, but nothing constrains a caller to that), so the step detail
+      // needs the same `Stage N` fallback its sibling stage entry already uses
+      // — otherwise an unlabelled stage renders "Error in undefined: ...".
+      const label = stageLabels[stage] ?? `Stage ${stage}`;
       setGenerationError(error);
       setPhase("failed");
-      setStepDetail(`Error in ${stageLabels[stage]}: ${error}`);
-      if (durationMs) {
+      setStepDetail(`Error in ${label}: ${error}`);
+      // `!== undefined`, NOT truthiness: a stage that fails synchronously
+      // reports `Date.now() - start === 0` (e.g. the structured-config Stage 0
+      // parse throw in execute-structured-config-generation.use-case.ts), and a
+      // truthiness check would drop exactly those immediate failures from
+      // stage progress. Unlike `onProgress`, where 0 is the protocol's
+      // "stage started" sentinel, `onError` fires once and only on failure.
+      if (durationMs !== undefined) {
         setStageProgress((prev) => ({
           ...prev,
           [stage]: {
             stage,
-            label: stageLabels[stage] ?? `Stage ${stage}`,
+            label,
             durationMs,
             error,
             chunks: [],

@@ -21,4 +21,17 @@ export interface StageProgress {
   chunks: string[];
   /** Full telemetry, available after stage completion */
   telemetry?: StageTelemetry;
+  /**
+   * Terminal-state marker written only by the local (WebLLM) progress mapping
+   * in `mapLocalLLMProgressCallbacks.ts`. The cloud stream path leaves it
+   * undefined and derives completion from stage-index vs. current phase
+   * ordering instead, so treat `undefined` as "unknown", not "not completed".
+   */
+  completed?: boolean;
+  /**
+   * Failure message for the stage. Written only by the local (WebLLM) progress
+   * mapping; the cloud stream path surfaces stage failures through the hook's
+   * `generationError` / terminal `error` frame instead.
+   */
+  error?: string;
 }

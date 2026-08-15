@@ -123,6 +123,31 @@ describe("createLocalProgressCallbacks · onError", () => {
     });
   });
 
+  test("records a zero-duration failure instead of dropping it", () => {
+    // A stage that fails synchronously reports `Date.now() - start === 0`
+    // (structured-config Stage 0 parse throw). A truthiness check on durationMs
+    // would silently drop exactly those immediate failures from stage progress.
+    const h = makeHarness();
+    h.cbs.onError(3, "boom", 0);
+
+    assert.deepStrictEqual(h.stageProgress.get()[3], {
+      stage: 3,
+      label: "Port Mapping",
+      durationMs: 0,
+      error: "boom",
+      chunks: [],
+      completed: true,
+    });
+  });
+
+  test("falls back to `Stage N` in the error detail for an unlabelled stage", () => {
+    const h = makeHarness();
+    h.cbs.onError(7, "boom", 500);
+
+    assert.strictEqual(h.stepDetail.get(), "Error in Stage 7: boom");
+    assert.strictEqual(h.stageProgress.get()[7].label, "Stage 7");
+  });
+
   test("omits the stage entry when no duration is supplied", () => {
     const h = makeHarness();
     h.cbs.onError(3, "boom");
