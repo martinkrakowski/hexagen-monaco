@@ -130,6 +130,71 @@ export function guardManifestSize(manifestYaml: string): NextResponse | null {
   return null;
 }
 
+/** Narrow an `unknown` (e.g. a decoded JSON body) to a plain object. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Validate a decoded governance request body before the route trusts its
+ * `as ...RequestBody` cast. The cast is a compile-time fiction: a `null` JSON
+ * body makes `body.manifestYaml` throw (→ a 500 from the outer catch), and an
+ * object-valued `manifestYaml` slips past {@link guardManifestSize} (its
+ * `.length` is `undefined`, so `undefined > MAX` is `false`) and reaches YAML
+ * parse / shell-lint / the LLM. Rejects any body that is not a plain object with
+ * a non-empty string `manifestYaml` with a 400, or returns `null` to proceed.
+ */
+export function guardManifestBody(body: unknown): NextResponse | null {
+  if (
+    !isRecord(body) ||
+    typeof body.manifestYaml !== "string" ||
+    body.manifestYaml.length === 0
+  ) {
+    return NextResponse.json(
+      { error: "manifestYaml is required" },
+      { status: 400 },
+    );
+  }
+  return null;
+}
+
+/**
+ * Maximum accepted size of the optional `openFileContent` field, in characters.
+ * The `suggestions` and `refresh` routes append it verbatim to the LLM prompt,
+ * so — like {@link MAX_MANIFEST_YAML_CHARS} — it needs its own bound, or a large
+ * open-file payload re-opens the exact LLM-resource surface the manifest guard
+ * closes.
+ */
+export const MAX_OPEN_FILE_CONTENT_CHARS = 200_000;
+
+/**
+ * Bound the optional `openFileContent` before it is appended to the suggestion
+ * LLM prompt. Absent (`undefined`/`null`) is fine — the field is optional. A
+ * present non-string is rejected (the `as` cast does not enforce it, and a
+ * `[object Object]` must not reach the prompt); an over-large string is rejected
+ * with a 400. Returns `null` to proceed.
+ */
+export function guardOpenFileContentSize(
+  openFileContent: unknown,
+): NextResponse | null {
+  if (openFileContent === undefined || openFileContent === null) return null;
+  if (typeof openFileContent !== "string") {
+    return NextResponse.json(
+      { error: "openFileContent must be a string" },
+      { status: 400 },
+    );
+  }
+  if (openFileContent.length > MAX_OPEN_FILE_CONTENT_CHARS) {
+    return NextResponse.json(
+      {
+        error: `Open file is too large (exceeds ${MAX_OPEN_FILE_CONTENT_CHARS.toLocaleString()} characters).`,
+      },
+      { status: 400 },
+    );
+  }
+  return null;
+}
+
 export interface GuardMutationOptions {
   /** Max requests per window before a 429 (default 20). */
   maxRequests?: number;

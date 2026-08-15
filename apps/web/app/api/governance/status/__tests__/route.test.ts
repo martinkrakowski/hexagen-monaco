@@ -12,9 +12,30 @@ function postJson(manifestYaml: unknown) {
   });
 }
 
+/** POST an arbitrary raw JSON value as the whole body (e.g. `null`). */
+function postRawBody(value: unknown) {
+  return new Request("http://localhost/api/governance/status", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(value),
+  });
+}
+
 describe("POST /api/governance/status", () => {
   it("400s when manifestYaml is missing", async () => {
     const res = await POST(postJson(undefined));
+    assert.equal(res.status, 400);
+  });
+
+  it("400s a null JSON body instead of throwing to a 500", async () => {
+    // `JSON.stringify(null)` → "null"; a bare `null` body would make
+    // `body.manifestYaml` throw (→ 500) without the shape guard.
+    const res = await POST(postRawBody(null));
+    assert.equal(res.status, 400);
+  });
+
+  it("400s an object-valued manifestYaml (would slip past the size guard)", async () => {
+    const res = await POST(postJson({ nested: true }));
     assert.equal(res.status, 400);
   });
 

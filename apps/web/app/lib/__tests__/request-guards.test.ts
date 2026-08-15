@@ -5,7 +5,10 @@ import {
   isSameOrigin,
   guardMutation,
   guardManifestSize,
+  guardManifestBody,
+  guardOpenFileContentSize,
   MAX_MANIFEST_YAML_CHARS,
+  MAX_OPEN_FILE_CONTENT_CHARS,
 } from "../request-guards";
 
 /** Build a POST NextRequest with the given headers. A distinct IP per test
@@ -235,6 +238,83 @@ describe("guardMutation", () => {
     );
     assert.ok(gate);
     assert.equal(gate.status, 403);
+  });
+});
+
+describe("guardManifestBody", () => {
+  it("allows a plain object with a non-empty string manifestYaml (returns null)", () => {
+    assert.equal(
+      guardManifestBody({ manifestYaml: "bounded_contexts: []" }),
+      null,
+    );
+  });
+
+  it("400s a null body (a null JSON body would otherwise throw on property access)", async () => {
+    const res = guardManifestBody(null);
+    assert.ok(res, "expected a rejection response, not null");
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error, /manifestyaml is required/i);
+  });
+
+  it("400s an array body (a list is not a manifest request object)", async () => {
+    const res = guardManifestBody(["bounded_contexts: []"]);
+    assert.ok(res);
+    assert.equal(res.status, 400);
+  });
+
+  it("400s an object-valued manifestYaml (slips past the size guard's undefined .length)", async () => {
+    // `{}.length` is undefined, so `undefined > MAX` is false — an object-valued
+    // manifestYaml would clear guardManifestSize and reach yaml.load. The shape
+    // guard must reject it first.
+    const res = guardManifestBody({ manifestYaml: { nested: true } });
+    assert.ok(res);
+    assert.equal(res.status, 400);
+  });
+
+  it("400s an empty-string manifestYaml (nothing to analyze)", async () => {
+    const res = guardManifestBody({ manifestYaml: "" });
+    assert.ok(res);
+    assert.equal(res.status, 400);
+  });
+});
+
+describe("guardOpenFileContentSize", () => {
+  it("allows an absent open file (undefined → null, the field is optional)", () => {
+    assert.equal(guardOpenFileContentSize(undefined), null);
+  });
+
+  it("allows a null open file (null → null, treated as absent)", () => {
+    assert.equal(guardOpenFileContentSize(null), null);
+  });
+
+  it("allows an open file within the cap (returns null)", () => {
+    assert.equal(guardOpenFileContentSize("some open file text"), null);
+  });
+
+  it("allows an open file exactly at the cap (rejects only strictly larger)", () => {
+    assert.equal(
+      guardOpenFileContentSize("a".repeat(MAX_OPEN_FILE_CONTENT_CHARS)),
+      null,
+    );
+  });
+
+  it("400s a non-string open file (the `as` cast does not enforce the type)", async () => {
+    const res = guardOpenFileContentSize({ not: "a string" });
+    assert.ok(res, "expected a rejection response, not null");
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error, /must be a string/i);
+  });
+
+  it("400s an over-cap open file with a 'too large' response", async () => {
+    const res = guardOpenFileContentSize(
+      "a".repeat(MAX_OPEN_FILE_CONTENT_CHARS + 1),
+    );
+    assert.ok(res);
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error, /too large/i);
   });
 });
 

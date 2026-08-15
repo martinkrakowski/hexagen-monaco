@@ -8,7 +8,12 @@ import { GenerateSuggestionUseCase } from "@hexagen/agentic-interaction";
 import { ServerLLMAdapter } from "@hexagen/agentic-interaction";
 import { logger } from "../../../../lib/structured-logger";
 import { resolveWebLlmApiKey } from "@/lib/wire.shared";
-import { guardMutation, guardManifestSize } from "@/lib/request-guards";
+import {
+  guardMutation,
+  guardManifestBody,
+  guardManifestSize,
+  guardOpenFileContentSize,
+} from "@/lib/request-guards";
 import {
   analyzeManifest,
   type PortAdapterStatus,
@@ -174,26 +179,31 @@ export async function POST(request: NextRequest) {
   if (gate) return gate;
 
   try {
-    const body = (await request.json()) as RefreshRequestBody;
+    const body = (await request.json()) as unknown;
 
-    if (!body.manifestYaml) {
-      return NextResponse.json(
-        { error: "manifestYaml is required" },
-        { status: 400 },
-      );
-    }
+    // Validate the decoded body shape before trusting the `as` cast below: a
+    // `null` body or a non-string `manifestYaml` would otherwise slip past the
+    // size guard and reach the shell-lint / LLM / parse work.
+    const invalidBody = guardManifestBody(body);
+    if (invalidBody) return invalidBody;
+    const { manifestYaml, openFileContent } = body as RefreshRequestBody;
 
     // Bound the raw manifest before the shell-lint / LLM / parse work below.
-    const tooLarge = guardManifestSize(body.manifestYaml);
+    const tooLarge = guardManifestSize(manifestYaml);
     if (tooLarge) return tooLarge;
+
+    // The optional open file is appended verbatim to the suggestion LLM prompt —
+    // bound its size and reject a non-string before it reaches the prompt.
+    const openFileTooLarge = guardOpenFileContentSize(openFileContent);
+    if (openFileTooLarge) return openFileTooLarge;
 
     // Violations (shell-lint) and suggestions (LLM) are async; status is a
     // synchronous manifest analysis. Run the async pair concurrently.
     const [violations, suggestions] = await Promise.all([
-      runViolations(body.manifestYaml),
-      runSuggestions(body.manifestYaml, body.openFileContent),
+      runViolations(manifestYaml),
+      runSuggestions(manifestYaml, openFileContent),
     ]);
-    const { portAdapterStatus, statusError } = runStatus(body.manifestYaml);
+    const { portAdapterStatus, statusError } = runStatus(manifestYaml);
 
     return NextResponse.json({
       violations,
