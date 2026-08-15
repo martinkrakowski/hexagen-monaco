@@ -44,12 +44,15 @@ import { pathExists } from "./fs-helpers.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(__dirname, "..", "..", "..", "..");
 export const SYNC_DIST = path.join(REPO_ROOT, "packages", "sync", "dist");
+// The `hexagen-lint` bin target after the GOD-002 split: dist/cli.js carries the
+// CLI bootstrap + checkArchitecturalIntegrity() side effects. dist/index.js is
+// now the side-effect-free library barrel and must NOT be exec'd as the bin.
 export const LINTER_DIST = path.join(
   REPO_ROOT,
   "tools",
   "arch-linter",
   "dist",
-  "index.js",
+  "cli.js",
 );
 // Externalized by tsup (ADR-0009) — must be resolvable next to the copied dist.
 export const EXTERNALS = ["commander", "js-yaml", "ts-morph"];

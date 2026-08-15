@@ -16,7 +16,7 @@
   "bugs": "https://github.com/martinkrakowski/hexagen-monaco/issues",
   "main": "dist/index.js",
   "bin": {
-    "hexagen-lint": "dist/index.js"
+    "hexagen-lint": "dist/cli.js"
   },
   "files": [
     "dist"
@@ -29,9 +29,10 @@
     "build": "tsup",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --import tsx __tests__/**/*.test.ts",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
-    "lint:arch": "node dist/index.js",
+    "lint:arch": "node dist/cli.js",
     "lint:yaml": "eslint --config eslint.yaml.config.js ../../.architecture/**/*.yaml"
   },
   "dependencies": {
