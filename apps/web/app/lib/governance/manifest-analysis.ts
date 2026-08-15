@@ -79,8 +79,9 @@ function dependencyNames(value: unknown): string[] {
 
 /**
  * Parse a manifest and derive its governance status + shadow-rule violations.
- * Returns `{ ok: false, error }` when the YAML cannot be parsed into an object —
- * callers must render this as non-compliant/error, never as compliant.
+ * Returns `{ ok: false, error }` when the YAML cannot be parsed, does not parse
+ * to an object, or has a `bounded_contexts` that is present but not a list.
+ * Callers must render EVERY `ok: false` as non-compliant/error, never compliant.
  */
 export function analyzeManifest(manifestYaml: string): ManifestAnalysisResult {
   let parsed: unknown;
@@ -101,16 +102,25 @@ export function analyzeManifest(manifestYaml: string): ManifestAnalysisResult {
   }
 
   const boundedContexts = parsed.bounded_contexts;
-  // A well-formed manifest with no contexts is legitimately empty (and
-  // compliant) — this is NOT the parse-failure case.
-  //
-  // FOLLOW-UP (out of scope for AUD-005, which covers unparseable / non-object
-  // manifests): a well-formed root object whose `bounded_contexts` is a
-  // malformed *shape* — a scalar, a plain object, or a list of bare strings —
-  // also lands here and reports compliant-empty. Tightening that into an
-  // explicit "malformed bounded_contexts" warning belongs with broader manifest
-  // schema validation, not this parse-failure fix; deferred deliberately.
-  if (!Array.isArray(boundedContexts) || boundedContexts.length === 0) {
+  // Absent (`undefined`/`null`, including an empty `bounded_contexts:` key) → a
+  // legitimately empty, compliant manifest. This is NOT a schema failure.
+  if (boundedContexts == null) {
+    return { ok: true, status: [], violations: [], isCompliant: true };
+  }
+  // Present but not a list (a scalar, a mapping, a bare string, ...) → a
+  // schema-invalid shape. The manifest parsed, but `bounded_contexts` is
+  // structurally unusable (a caller cannot iterate it), so this is the very
+  // false-green this module exists to kill: surface it as an explicit error and
+  // never report it compliant. The routes render `ok: false` as
+  // non-compliant/error, exactly as they do for the non-object root above.
+  if (!Array.isArray(boundedContexts)) {
+    return {
+      ok: false,
+      error: "Manifest field `bounded_contexts` must be a list of contexts",
+    };
+  }
+  // A well-formed but empty context list is legitimately empty and compliant.
+  if (boundedContexts.length === 0) {
     return { ok: true, status: [], violations: [], isCompliant: true };
   }
 

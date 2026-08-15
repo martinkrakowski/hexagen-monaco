@@ -31,6 +31,21 @@ describe("POST /api/governance/violations", () => {
     );
   });
 
+  it("a malformed bounded_contexts shape is NOT compliant (AUD-005)", async () => {
+    // `bounded_contexts: {}` parses but is not a context list; the analyzer now
+    // returns ok:false and the route must render it non-compliant, not green.
+    const res = await POST(postJson("bounded_contexts: {}"));
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.isCompliant, false);
+    assert.ok(
+      body.violations.some(
+        (v: { id: string }) => v.id === "manifest-parse-error",
+      ),
+      "surfaces the malformed-shape error as a violation",
+    );
+  });
+
   it("reports a self-dependency as an error → not compliant", async () => {
     const manifest = [
       "bounded_contexts:",

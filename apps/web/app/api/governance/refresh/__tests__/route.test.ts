@@ -86,4 +86,26 @@ describe("POST /api/governance/refresh — mutation gate (D1)", () => {
       "suggestion LLM must not be executed for a rejected request",
     );
   });
+
+  it("surfaces a manifest parse failure as statusError, not an empty status (AUD-005)", async () => {
+    // Same-origin (no Origin header) so the guard passes; unparseable YAML must
+    // yield an explicit statusError rather than a bare empty portAdapterStatus
+    // that reads as a valid empty manifest — matching governance/status.
+    const req = new NextRequest("http://localhost/api/governance/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", host: "localhost" },
+      body: JSON.stringify({ manifestYaml: "bounded_contexts: [unclosed" }),
+    });
+
+    const res = await POST(req);
+
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.deepEqual(body.portAdapterStatus, []);
+    assert.match(
+      body.statusError,
+      /parse/i,
+      "refresh must surface the analyzer parse error, not swallow it",
+    );
+  });
 });

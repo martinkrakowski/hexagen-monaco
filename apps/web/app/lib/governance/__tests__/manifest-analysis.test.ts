@@ -23,6 +23,31 @@ describe("analyzeManifest — parse failure is never compliant (AUD-005)", () =>
       assert.equal(result.isCompliant, true);
     }
   });
+
+  it("returns ok:false when bounded_contexts is present but not a list", () => {
+    // A mapping / scalar / bare-string `bounded_contexts` parses fine but is
+    // structurally unusable — it must NOT report compliant-empty (a false green
+    // this module exists to kill), the same class as a non-object root.
+    for (const yaml of [
+      "bounded_contexts: {}",
+      "bounded_contexts: 42",
+      "bounded_contexts: just-a-string",
+    ]) {
+      const result = analyzeManifest(yaml);
+      assert.equal(result.ok, false, `"${yaml}" must be non-compliant`);
+      if (!result.ok) assert.match(result.error, /bounded_contexts/);
+    }
+  });
+
+  it("treats an absent or null bounded_contexts as a compliant empty manifest", () => {
+    // Only a PRESENT-but-malformed shape is an error; a missing key or an empty
+    // `bounded_contexts:` value is a legitimately empty, compliant manifest.
+    for (const yaml of ["other_key: 1", "bounded_contexts:"]) {
+      const result = analyzeManifest(yaml);
+      assert.equal(result.ok, true, `"${yaml}" is legitimately empty`);
+      if (result.ok) assert.equal(result.isCompliant, true);
+    }
+  });
 });
 
 describe("analyzeManifest — shadow rules", () => {

@@ -149,9 +149,17 @@ async function runSuggestions(
 // from the manifest-based `status` route; the two now share one implementation.
 // ---------------------------------------------------------------------------
 
-function runStatus(manifestYaml: string): PortAdapterStatus[] {
+function runStatus(manifestYaml: string): {
+  portAdapterStatus: PortAdapterStatus[];
+  statusError?: string;
+} {
   const analysis = analyzeManifest(manifestYaml);
-  return analysis.ok ? analysis.status : [];
+  // A manifest that will not parse is not "healthy with zero contexts" — carry
+  // the analyzer's error out so `refresh` surfaces it (mirrors governance/status)
+  // instead of masking a parse/shape failure as an empty status list (AUD-005).
+  return analysis.ok
+    ? { portAdapterStatus: analysis.status }
+    : { portAdapterStatus: [], statusError: analysis.error };
 }
 
 // ---------------------------------------------------------------------------
@@ -181,12 +189,16 @@ export async function POST(request: NextRequest) {
       runViolations(body.manifestYaml),
       runSuggestions(body.manifestYaml, body.openFileContent),
     ]);
-    const portAdapterStatus = runStatus(body.manifestYaml);
+    const { portAdapterStatus, statusError } = runStatus(body.manifestYaml);
 
     return NextResponse.json({
       violations,
       suggestions,
       portAdapterStatus,
+      // Surface a manifest parse/shape failure explicitly (mirrors
+      // governance/status) so an unparseable manifest is distinguishable from a
+      // valid empty one — present only when the status analysis failed.
+      ...(statusError !== undefined && { statusError }),
     });
   } catch (error) {
     const message =
