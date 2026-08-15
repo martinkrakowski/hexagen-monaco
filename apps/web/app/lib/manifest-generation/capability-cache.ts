@@ -54,7 +54,9 @@ export async function getCapabilities(): Promise<CapabilitiesResponse> {
       error instanceof Error
         ? error.message
         : "Unknown error fetching capabilities";
-    throw new Error(`Capability probe failed: ${message}`);
+    // Preserve the original failure (stack, errno, nested fetch cause) via the
+    // ES2022 Error.cause option instead of stringifying and discarding it.
+    throw new Error(`Capability probe failed: ${message}`, { cause: error });
   }
 }
 

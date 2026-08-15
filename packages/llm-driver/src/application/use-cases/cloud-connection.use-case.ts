@@ -97,6 +97,35 @@ export function createCloudConnectionUseCase(
   };
 }
 
+/**
+ * Wait `delay` ms, then run `recurse` and adopt its result.
+ *
+ * The delay Promise wraps ONLY the timer, which cannot throw, and `recurse`
+ * runs after the `await` inside this async function — so a synchronous throw
+ * from `recurse` (e.g. constructing the next use-case) becomes a rejection of
+ * the returned Promise instead of stranding it.
+ *
+ * The previous inline form was:
+ *
+ *   return new Promise((resolve) => {
+ *     setTimeout(() => { resolve(recurse()); }, delay);
+ *   });
+ *
+ * which has no reject path: a synchronous throw while evaluating `recurse()`
+ * inside the `setTimeout` callback is an unhandled exception, `resolve` is
+ * never called, and the returned Promise stays pending forever (hang).
+ *
+ * Exported for the retry-semantics suite; not part of the package's public port
+ * surface.
+ */
+export async function scheduleRetry<T>(
+  delay: number,
+  recurse: () => Promise<T>,
+): Promise<T> {
+  await new Promise<void>((resolve) => setTimeout(resolve, delay));
+  return recurse();
+}
+
 export function createCloudConnectionUseCaseWithRetry(
   deps: CloudConnectionUseCaseDependencies,
   onResult?: (result: CloudConnectionResult) => void,
@@ -114,16 +143,15 @@ export function createCloudConnectionUseCaseWithRetry(
       const nextRetryCount = getNextRetryCount(result.error);
       const delay = calculateRetryDelay(retryCount);
 
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          resolve(
-            createCloudConnectionUseCaseWithRetry(deps, onResult)(
-              config,
-              nextRetryCount,
-            ),
-          );
-        }, delay);
-      });
+      // Recursion is bounded by MAX_RETRY_ATTEMPTS: transitionToError sets
+      // `retryable: retryCount < MAX_RETRY_ATTEMPTS`, so shouldRetry stops the
+      // chain once nextRetryCount reaches the cap.
+      return scheduleRetry(delay, () =>
+        createCloudConnectionUseCaseWithRetry(deps, onResult)(
+          config,
+          nextRetryCount,
+        ),
+      );
     }
 
     return result;
