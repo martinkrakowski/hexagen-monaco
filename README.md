@@ -339,7 +339,7 @@ yarn turbo run test --dry=json | jq -r '.tasks[] | select(.task=="test") | "\(.p
 ```
 
 Workspaces printing `<NONEXISTENT>` have no `test` script and are contributing nothing. As of
-2026-08-16 that is 3 of 39 — `@hexagen/shared`, `@hexagen/model-settings` and
+2026-08-16 that is 3 of 38 — `@hexagen/shared`, `@hexagen/model-settings` and
 `@hexagen/runtime`. Closing that gap is remediation item **8.11**.
 
 **There is no coverage tooling wired in this repo**: no provider is installed and no Vitest

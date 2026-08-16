@@ -22,17 +22,17 @@ being run. Update the status table and change log as phases progress.
 
 ## 1. Status at a glance
 
-| Phase | Scope                             | State                                   | Evidence                                                                                                                                                                                           |
-| ----- | --------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **0** | ADRs 0.1–0.8 (ADR-0047…0054)      | ✅ **Merged**                           | PR #439 (`cd331ae6`); ADR 0.8 accepted → unblocks Phase 2                                                                                                                                          |
-| **1** | Prod triage 1.1–1.6               | ✅ **Merged**                           | #440 `AUD-001`, #441 `AUD-002`, #442 `AUD-007`, #443 `AUD-003/006`, #444 `AUD-005` — all on `main`                                                                                                 |
-| **2** | Enforcement ratchet (AUD-010/011) | ✅ **COMPLETE**                         | **2.1 #452** (`edbe7c2c`), **2.2 #459** (`6a08bc00`), **2.3 #462+#465** (`6942751d`, `b3f79dd6`), **2.4 #460** (`ce53bca2`), **2.5 #448** (`0a22a53d`) — **Phase 2 is green; Waves 5–8 unblocked** |
-| **3** | Toolchain honesty (3.1–3.5)       | ✅ **COMPLETE**                         | **3.1 #445** (`fcbe7cfc`), **3.2 #461** (`c5298c1a`), **3.3 #457** (`c299d967`, MOD-004; MOD-005 leg ⇐ ADR-0049), **3.4 #466** (`03b1369f`), **3.5 #449** (`50081c51`)                             |
-| **4** | Dead-code deletion (4.1–4.7)      | 🔄 **6 of 7 — only 4.7 remains, on D6** | **4.1 #450**, **4.2 #446**, **4.3 #453**, **4.4 #451**, **4.6 #447+#458** (`497c227e`, HEX-037 **and** HEX-038 — no longer partial); **4.5 prepared** (D3 resolved as delete); **4.7 ⇐ D6**        |
-| **5** | Port identity / app I/O           | 🟢 **UNBLOCKED — next**                 | entry gate **satisfied**: Phase 2 green on `main` as of `b3f79dd6`                                                                                                                                 |
-| **6** | Web routes / package fates        | ⛔ **Design-ready**                     | ⇐ 5.5 + ADRs 0.2/0.3/0.4                                                                                                                                                                           |
-| **7** | Staged-gen GOD-001 arc            | ⛔ **Design-ready**                     | strict serial 7.1→7.2→7.3→7.4/7.5→7.6                                                                                                                                                              |
-| **8** | Web/React + test reality          | ⛔ **Partly blocked**                   | ⇐ 7.1, 6.7(b), 4.3 ✅, 4.5 ✅ (D3 resolved — delete), 5.2                                                                                                                                          |
+| Phase | Scope                             | State                                   | Evidence                                                                                                                                                                                                       |
+| ----- | --------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0** | ADRs 0.1–0.8 (ADR-0047…0054)      | ✅ **Merged**                           | PR #439 (`cd331ae6`); ADR 0.8 accepted → unblocks Phase 2                                                                                                                                                      |
+| **1** | Prod triage 1.1–1.6               | ✅ **Merged**                           | #440 `AUD-001`, #441 `AUD-002`, #442 `AUD-007`, #443 `AUD-003/006`, #444 `AUD-005` — all on `main`                                                                                                             |
+| **2** | Enforcement ratchet (AUD-010/011) | ✅ **COMPLETE**                         | **2.1 #452** (`edbe7c2c`), **2.2 #459** (`6a08bc00`), **2.3 #462+#465** (`6942751d`, `b3f79dd6`), **2.4 #460** (`ce53bca2`), **2.5 #448** (`0a22a53d`) — **Phase 2 is green; Waves 5–8 unblocked**             |
+| **3** | Toolchain honesty (3.1–3.5)       | ✅ **COMPLETE**                         | **3.1 #445** (`fcbe7cfc`), **3.2 #461** (`c5298c1a`), **3.3 #457** (`c299d967`, MOD-004; MOD-005 leg **struck** — ADR-0049 Option B deleted the package), **3.4 #466** (`03b1369f`), **3.5 #449** (`50081c51`) |
+| **4** | Dead-code deletion (4.1–4.7)      | 🔄 **6 of 7 — only 4.7 remains, on D6** | **4.1 #450**, **4.2 #446**, **4.3 #453**, **4.4 #451**, **4.5 #484** (`bd70b502`, D3 resolved as delete), **4.6 #447+#458** (`497c227e`); **4.7 ⇐ D6**                                                         |
+| **5** | Port identity / app I/O           | 🔄 **10 of 11 — only 5.2 remains**      | #469, #470, #471, #472, #474, #475, #476, #477, #478, #479, #481 — see §5                                                                                                                                      |
+| **6** | Web routes / package fates        | 🟢 **UNBLOCKED**                        | ⇐ 5.5 ✅ (#469) + ADRs 0.2/0.4 — **0.3 resolved** (Option B): **6.6 executed** by the `packages/security` deletion; **6.4(e) struck**                                                                          |
+| **7** | Staged-gen GOD-001 arc            | ⛔ **Design-ready**                     | strict serial 7.1→7.2→7.3→7.4/7.5→7.6                                                                                                                                                                          |
+| **8** | Web/React + test reality          | 🟢 **UNBLOCKED**                        | ⇐ 7.1, 6.7(b), 4.3 ✅, **4.5 ✅** (D3 resolved — delete), 5.2                                                                                                                                                  |
 
 Also merged earlier in the arc: PR #437 (plan, `c9a14f48`), PR #438 (implementation
 prompt, `edccc02c`).
@@ -46,22 +46,22 @@ Jest residue, `engines.node`, ts-morph alignment, `Error.cause`, and HEX-038.
 
 **Nothing in Phases 2–4 is blocked on engineering. What remains is blocked on decisions:**
 
-| Item                          | Blocked on                                  | Note                                                                                                |
-| ----------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| **4.7**                       | **D6** — sync publish-surface semver        | release-gated                                                                                       |
-| **3.3 MOD-005 leg**           | **ADR-0049** branch selection               | ADR is `Status: Proposed`, both options live; ADR-0049 itself says 3.3 drops the leg under Option B |
-| **8.11**                      | ~~**D4** — coverage posture~~ **unblocked** | **no decision left.** See the 8.11 leg breakdown below                                              |
-| 11 of the 34 baseline entries | **`zod` in domain** — accept or burn down   | baselined, not allowlisted; ADR-0054 seeds only js-yaml/manifest                                    |
+| Item                          | Blocked on                                  | Note                                                                                                                    |
+| ----------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **4.7**                       | **D6** — sync publish-surface semver        | release-gated                                                                                                           |
+| ~~**3.3 MOD-005 leg**~~       | ~~**ADR-0049** branch selection~~           | ✅ **Dissolved** — ADR-0049 accepted as **Option B**; `packages/security` deleted, so there is no tsconfig to reconcile |
+| **8.11**                      | ~~**D4** — coverage posture~~ **unblocked** | **no decision left.** See the 8.11 leg breakdown below                                                                  |
+| 11 of the 16 baseline entries | **`zod` in domain** — accept or burn down   | baselined, not allowlisted; ADR-0054 seeds only js-yaml/manifest                                                        |
 
 **8.11, leg by leg** — the item has three, and none is decision-blocked as of 2026-08-16:
 
-| 8.11 leg                                    | State                                                                                                          |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| coverage posture                            | ✅ **decided — no gate** (D4, §2); a deferral with a re-open trigger                                           |
-| replace the `apps/api-gateway` `echo` stub  | ✅ **dissolved** — 4.5 deleted the package (D3 resolved as delete), so there is no stub left to replace        |
-| missing `test` targets                      | ⏳ **open engineering**, not a decision — `shared`, `model-settings`, `runtime`; the only remaining 8.11 work   |
+| 8.11 leg                                   | State                                                                                                        |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| coverage posture                           | ✅ **decided — no gate** (D4, §2); a deferral with a re-open trigger                                          |
+| replace the `apps/api-gateway` `echo` stub | ✅ **dissolved** — 4.5 deleted the package (D3 resolved as delete), so there is no stub left to replace       |
+| missing `test` targets                     | ⏳ **open engineering**, not a decision — `shared`, `model-settings`, `runtime`; the only remaining 8.11 work |
 
-Measured on this branch: of the 39 workspaces, **36 define a real `test` script** and exactly
+Measured on this branch: of the 38 workspaces, **35 define a real `test` script** and exactly
 those three define none. `apps/tui` has one (`vitest run`); `llm-driver` was done in 3.5.
 
 **Release gates pending** (repo PRs landed; nothing published, tagged or deployed): #457
@@ -90,7 +90,8 @@ this arc kept surfacing. Tracked in
 - **`RefactoringImpactUseCase` discards syntactic diagnostics entirely**, so an unparseable
   consumer file yields a confident, wrong impact report. #466 fixed the compiler version that
   exposed this; it did not fix the class.
-- **`typecheck:test` covers 15 of 39 workspaces** (40 before `api-gateway` was deleted). Real today, and it widens automatically as
+- **`typecheck:test` covers 15 of 38 workspaces** (40 before `api-gateway` and `security` were
+  deleted; re-counted 2026-08-16). Real today, and it widens automatically as
   workspaces gain the script — `apps/web` alone is ~1200 never-type-checked fixtures.
 
 ### Cross-phase gating (the hard constraints)
@@ -115,8 +116,16 @@ this arc kept surfacing. Tracked in
 | **D5** | TypeScript 6 upgrade        | none     | ⛔ Open — 3.1 deletes the pin regardless; upgrade is its own arc               |
 | **D6** | sync publish-surface semver | **4.7**  | ⛔ **Open** — release-gated                                                    |
 
-_ADR 0.3 (security bounded-context fate) independently gates 6.6 and the conditional
-MOD-005 leg of 3.3._
+_ADR 0.3 (security bounded-context fate) ~~independently gates 6.6 and the conditional
+MOD-005 leg of 3.3~~ is **resolved**: **ADR-0049 accepted as Option B** (amended
+2026-08-16), `packages/security` deleted. This **executes 6.6** and **strikes** both
+conditional items — **3.3's MOD-005 leg** (no tsconfig left to reconcile) and
+**6.4(e)** (the `project-configuration` `ports/in → ports/out` item's "+ (e) security
+if ADR 0.3 keeps it" leg; it did not keep it). Step 1 of the ADR's Option B was
+superseded — the value objects were deleted outright rather than moved into
+`@hexagen/governance`, since moving zero-consumer code into a registered context would
+hand the Wave-2 ratchet unused types to police. Reasoning:
+`docs/planning/2026-08-16-decision-dossier-and-remediation-followups.md` §1.2._
 
 ### D4 — coverage posture: **no gate.** A deferral, not a rejection
 
@@ -131,7 +140,7 @@ worsens.** Verified by counting the tree rather than copied forward — `package
 source files), `packages/model-settings` (15) and `packages/runtime` (9) carry **no `test`
 script and zero test files**. Source counts are `.ts` **and** `.tsx` under `src/`;
 `model-settings` is 7 `.ts` plus 8 `.tsx` React components, which is why a `*.ts`-only count
-reads 7 and understates it. Of the 39 workspaces, **36 define a real `test` script** and
+reads 7 and understates it. Of the 38 workspaces, **35 define a real `test` script** and
 exactly those three define none.
 
 A fourth case existed when this was decided and has since been removed: `apps/api-gateway`'s
@@ -161,7 +170,7 @@ sibling `yarn test --watch` failed identically and was replaced in the same edit
 
 1. **8.10's mock-suite purge has landed**, so a baseline survives the arc's own deletions;
 2. **FU-1 has brought `typecheck:test` to every workspace that has tests**
-   (`docs/planning/2026-08-16-verification-coverage-followups.md`; 15 of 39 today);
+   (`docs/planning/2026-08-16-verification-coverage-followups.md`; 15 of 38 today);
 3. **every workspace with source has a real `test` target** — a target that runs Vitest, not
    `echo "No tests configured"`.
 
@@ -353,7 +362,7 @@ plans so each phase fires the moment its gate clears:
   has ever existed in this repo), and `README.md`'s `yarn test --coverage` — which fails at
   Turbo's argument parser, before Vitest is even reached — was replaced with the
   per-workspace forms that work. The no-tests claim was re-verified by counting the tree:
-  of 39 workspaces, 36 define a real `test` script and `shared`, `model-settings` and
+  of 38 workspaces, 35 define a real `test` script and `shared`, `model-settings` and
   `runtime` define none. The fourth case at decision time, `apps/api-gateway`'s passing
   `echo` stub, was removed by 4.5 in the interval. **8.11 is no longer decision-blocked** —
   its remaining work is the three missing test targets.
