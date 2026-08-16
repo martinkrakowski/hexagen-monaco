@@ -1,0 +1,109 @@
+# CodeRabbit configuration — schema: https://docs.coderabbit.ai/reference/yaml-template
+#
+# Purpose: correct the review conventions this repo has *measured* CodeRabbit
+# getting wrong, and point it at the defect class this codebase actually cares
+# about. Every rule links to the ADR that owns it rather than restating it —
+# a restated rule drifts, and this repo has already shipped one invariant in
+# three places and had two of the three diverge before review even ran.
+#
+# Handling of bot comments (verify / refute / disposition) is NOT in here.
+# That is `.agents/REVIEW.md`, and it is aimed at our agents, not at the bot.
+
+language: en-US
+
+reviews:
+  # Repo conventions the bot has previously flagged incorrectly, plus the
+  # things we would rather it spent its attention on.
+  path_instructions:
+    - path: "**"
+      instructions: |
+        This monorepo is mid-way through an architecture-remediation arc whose
+        thesis is: **a check must not report more confidence than it has
+        earned.** Findings in that class are the most valuable ones you can
+        raise here. Please actively flag:
+
+        - A gate, guard, script or CI step that can **pass when it did not
+          actually run** — a swallowed resolution error, a `--filter` that
+          matches nothing and exits 0, a `continue-on-error` on a step
+          described as a gate.
+        - A guard that asserts a population is *clean* without first asserting
+          the population is **non-empty**. Without that floor the guard goes
+          green the moment its discovery pattern drifts. We have measured this
+          twice in this repo.
+        - A test that passes for a reason other than the one its name claims —
+          most often because a mock replaced the very subject under test.
+        - An exit code that cannot distinguish "ran and found problems" from
+          "could not run".
+
+        When you propose a fix, please state what it does to inputs the current
+        code already handles — particularly whether it converts a loud failure
+        into a quiet one. Several correct findings here have carried remedies
+        that would have been worse than the defect.
+
+    - path: "**/*.{test,spec}.{ts,tsx}"
+      instructions: |
+        **Assertion style is settled — do not flag it.** `expect()` and
+        `node:assert/strict` are BOTH permitted (ADR-0044 §2), and `assert.*`
+        is retained codebase-wide (`AGENTS.md`). The rule in ADR-0044 §3 is
+        **per file**: one file should not mix the two styles, but the repo as a
+        whole legitimately uses both. Do not propose migrating `assert.*` to
+        `expect()`, and do not treat `assert.*` as legacy.
+
+        Tests run on Vitest (ADR-0044). `apps/web` tests must be run from the
+        `apps/web` working directory.
+
+    - path: ".architecture/**"
+      instructions: |
+        **Human-authored; do not propose edits here.** `manifest.yaml`,
+        `contexts/**/context.yaml` and `invariants/**` are maintained by a
+        person, not by automation.
+
+        `layers.*.ports` and `layers.*.adapters` are a **curated ownership
+        registry, not a file inventory** (ADR-0057). The filesystem is the
+        authoritative inventory. **Accuracy** is the invariant — a wrong or
+        phantom entry is a defect. **Completeness is not** — a port file with
+        no entry is expected and is not a finding. Do not ask for an entry to
+        be added because a file exists.
+
+        Port direction follows ADR-0048: a contract implemented by an
+        infrastructure adapter, or injected into a use case as a dependency, is
+        **outbound** (`ports/out`). A contract a use case itself implements is
+        inbound.
+
+    - path: "**/eslint.config.{js,mjs}"
+      instructions: |
+        **Repeated `no-restricted-imports` entries across scoped blocks are
+        deliberate — do not flag them as duplication.** ESLint flat config
+        *replaces* rule options rather than merging them, so a narrowly-scoped
+        block silently drops every entry the broader block declared for the
+        files it matches. Removing a "duplicate" ADR-0021 `@hexagen/local-llm`
+        ACL entry from a scoped block has already caused a real regression on
+        `main` in this repo.
+
+        `no-restricted-imports` matches the **import string**, not the resolved
+        module. A pattern must therefore cover both the relative form and the
+        `@/`-alias form, and any barrel that re-exports the fenced module.
+
+    - path: "**/index.ts"
+      instructions: |
+        Some barrels carry an `@generated` marker and are emitted by
+        `@hexagen/sync`. Do not propose hand-edits to a generated barrel — the
+        next sync run reverts them. If the export surface is wrong, the
+        generator or the source module is the place to fix it.
+
+    - path: "packages/template-engine/templates/**"
+      instructions: |
+        This is **template payload emitted into customer projects**, not
+        scaffolding for this repo. It is outside this repo's tsconfig, so
+        "outside the build" is not a reason to treat a defect here as
+        cosmetic — a layering or typing error in these files is one this
+        product exports to its users.
+
+knowledge_base:
+  code_guidelines:
+    # AGENTS.md is the canonical convention document; `.agents/*.md` holds the
+    # per-mode specs it delegates to. Both are already scanned by default —
+    # listed explicitly so the dependency is visible when either moves.
+    filePatterns:
+      - "AGENTS.md"
+      - ".agents/*.md"
