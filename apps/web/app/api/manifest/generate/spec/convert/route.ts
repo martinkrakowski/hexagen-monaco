@@ -6,6 +6,7 @@ import {
   MAX_LOOSE_SPEC_INPUT_CHARS,
 } from "@hexagen/agentic-interaction";
 import { createLLMProviderSelector } from "../../../../../lib/wire.server";
+import { isSameOrigin } from "../../../../../lib/request-guards";
 import { logger } from "../../../../../../lib/structured-logger";
 
 interface ConvertRequestBody {
@@ -26,6 +27,18 @@ type NDJSONEvent =
 const HEARTBEAT_INTERVAL_MS = 10_000;
 
 export async function POST(request: NextRequest) {
+  // Same-origin gate (D1), ahead of the rate limiter. Emitted in this route's
+  // native ndjson error channel.
+  if (!isSameOrigin(request)) {
+    return new Response(
+      JSON.stringify({
+        type: "error",
+        message: "Cross-origin request rejected",
+      }) + "\n",
+      { status: 403, headers: { "Content-Type": "application/x-ndjson" } },
+    );
+  }
+
   // Rate limiting
   const rateCheck = checkRateLimit(request, 10, 60 * 1000);
   if (!rateCheck.allowed) {
@@ -188,19 +201,10 @@ export async function POST(request: NextRequest) {
       "Content-Type": "application/x-ndjson",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
-      "Access-Control-Allow-Origin": "*",
       ...quota.headers,
     },
   });
 }
 
-export async function OPTIONS() {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    },
-  });
-}
+// No OPTIONS handler — same-origin only; see the sibling /api/manifest/generate
+// route for why the wildcard-CORS preflight was removed rather than narrowed.

@@ -7,7 +7,10 @@ import type {
   ArchitectureGraphProviderPort,
   LinterReportProviderPort,
 } from "@hexagen/sync";
-import type { ManifestBoundedContext } from "@hexagen/project-configuration";
+import type {
+  Manifest,
+  ManifestBoundedContext,
+} from "@hexagen/project-configuration";
 import { type ArchitectureGraph } from "@hexagen/visualization";
 import { findMonorepoRoot } from "../monorepo-root";
 
@@ -33,6 +36,37 @@ export class ManifestProviderAdapter {
       };
     } catch {
       return { boundedContexts: [] };
+    }
+  }
+}
+
+/**
+ * Reads the workspace's merged manifest DOCUMENT (HEX-034).
+ *
+ * `ManifestProviderAdapter` above deliberately projects the manifest down to
+ * `ProjectSpecLike` (ids + names) for the prompt-compiler seam. Consumers that
+ * need the manifest's own shape — the LLM governance-context route projects
+ * port ownership out of `layers.application.ports` — were reaching for
+ * `mergeSplitManifest` themselves, each with its own workspace-root walk. This
+ * adapter is the one place that read happens for them.
+ *
+ * Returns `null` rather than throwing when the manifest cannot be located or
+ * merged: an absent/ill-formed manifest is a degraded-but-serviceable state for
+ * read-only display consumers, exactly as it was when they caught it inline.
+ */
+export class ServerMergedManifestProviderAdapter {
+  async getMergedManifest(): Promise<Manifest | null> {
+    try {
+      // Same monorepo-root anchor as the two providers around it (AUD-002) —
+      // process.cwd() is apps/web under the standalone build.
+      const workspaceRoot = findMonorepoRoot();
+      const manifestPath = path.join(
+        workspaceRoot,
+        ".architecture/manifest.yaml",
+      );
+      return await mergeSplitManifest(workspaceRoot, manifestPath);
+    } catch {
+      return null;
     }
   }
 }

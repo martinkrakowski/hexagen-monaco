@@ -24,6 +24,7 @@ import {
   StaticProviderCatalogAdapter,
 } from "@hexagen/agentic-interaction";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
 import {
   SyncDelegatingManifestMutationAdapter,
   CliLintValidationAdapter,
@@ -45,12 +46,14 @@ import type {
 } from "@hexagen/agentic-interaction";
 import type { LocalLLMProviderPort } from "@hexagen/local-llm";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
+import type { DomainModelId } from "@hexagen/local-llm";
 import type { ArchitectureGraphLike } from "@hexagen/prompt-compiler";
 import type { LinterReportLike } from "@hexagen/core-domain";
 import {
   ManifestProviderAdapter,
   ServerArchitectureGraphProviderAdapter,
   ServerLinterReportProviderAdapter,
+  ServerMergedManifestProviderAdapter,
 } from "./adapters/wire-adapters";
 import { logger } from "../../lib/structured-logger";
 
@@ -153,6 +156,25 @@ export const getTransactionManager = (): InMemoryTransactionManager => {
   }
   return _transactionManager;
 };
+
+/**
+ * Transaction manager for ONE manifest-generation request (HEX-003).
+ *
+ * Deliberately NOT `getTransactionManager()` above. That one is a
+ * process-wide singleton because the modify-architecture flow spans three
+ * requests — `POST /api/architecture/modify` begins a speculative transaction
+ * and a later `accept`/`reject` commits or rolls it back, so the transaction
+ * has to outlive the request that created it.
+ *
+ * Staged generation has no such second leg: the orchestrator begins a
+ * transaction and transitions it, nothing ever commits it, and the id it
+ * reports on the wire is not consumed by any accept/reject path. Parking those
+ * transactions in the shared singleton would grow an unbounded map for the
+ * lifetime of the server. A per-request manager keeps the existing lifetime
+ * (garbage once the response ends) while moving the `new` out of the routes.
+ */
+export const createGenerationTransactionManager = (): TransactionManagerPort =>
+  new InMemoryTransactionManager();
 
 let _manifestMutation: SyncDelegatingManifestMutationAdapter | null = null;
 
@@ -257,6 +279,37 @@ export const resolveActiveGenerationModel = (): string | null => {
     buildStagedGenerationFallbackChain(),
   );
   return resolved[0]?.model ?? null;
+};
+
+/**
+ * Browser-side WebLLM provider, loaded lazily (HEX-003).
+ *
+ * `/api/manifest/generate/local` used to `await import("@hexagen/local-llm")`
+ * and `new` this adapter inside the request handler. The import is kept dynamic
+ * so the WebLLM bundle stays out of every other server path's module graph, and
+ * the failure posture is unchanged: a load/construct error yields `null` and
+ * the selector falls back to the cloud chain rather than failing the request.
+ *
+ * A returned adapter is per-call, not memoized: it carries a `defaultModelId`
+ * chosen by the caller, and callers ask for different models.
+ */
+export const createWebLLMAdapter = async (
+  defaultModelId?: string,
+): Promise<(LocalLLMProviderPort & SendStructuredRequestPort) | null> => {
+  try {
+    const { WebLLMAdapter } = await import("@hexagen/local-llm");
+    return new WebLLMAdapter({
+      // `DomainModelId` is a string-literal union and the id arrives from an
+      // HTTP body, so this is the boundary conversion — the same one the route
+      // did inline. An absent/unknown id leaves the adapter on its own default.
+      defaultModelId: (defaultModelId || undefined) as
+        | DomainModelId
+        | undefined,
+    });
+  } catch (error) {
+    logger.warn("WebLLM adapter initialization failed:", { error });
+    return null;
+  }
 };
 
 export const createLLMProviderSelector = (
@@ -470,6 +523,24 @@ const getArchitectureGraphProviderAdapter =
       _architectureGraphProvider = new ServerArchitectureGraphProviderAdapter();
     }
     return _architectureGraphProvider;
+  };
+
+let _mergedManifestProvider: ServerMergedManifestProviderAdapter | null = null;
+
+/**
+ * Composition-root accessor for the merged-manifest read (HEX-034). The
+ * adapter is stateless, so one instance serves every request.
+ *
+ * Exported — unlike the two private provider accessors around it — because its
+ * consumer is an HTTP route (`/api/llm/context`) rather than a use case this
+ * module assembles.
+ */
+export const getMergedManifestProvider =
+  (): ServerMergedManifestProviderAdapter => {
+    if (!_mergedManifestProvider) {
+      _mergedManifestProvider = new ServerMergedManifestProviderAdapter();
+    }
+    return _mergedManifestProvider;
   };
 
 let _linterReportProvider: ServerLinterReportProviderAdapter | null = null;

@@ -11,12 +11,13 @@ import {
   createProjectDescription,
   type ProjectDescription,
 } from "@hexagen/agentic-interaction";
-import { LLMProviderSelectorAdapter } from "@hexagen/agentic-interaction";
-import { EnvironmentSecretVaultAdapter } from "@hexagen/agentic-interaction";
-import type { WebLLMAdapter } from "@hexagen/local-llm";
-import { InMemoryTransactionManager } from "@hexagen/transaction-system";
+import { isSameOrigin } from "../../../lib/request-guards";
 import { logger } from "../../../../lib/structured-logger";
-import { createStage6ValidatorConfig } from "../../../lib/wire.server";
+import {
+  createGenerationTransactionManager,
+  createLLMProviderSelector,
+  createStage6ValidatorConfig,
+} from "../../../lib/wire.server";
 
 interface GenerateManifestRequestBody {
   description: string;
@@ -72,6 +73,19 @@ type GenerateManifestResponse =
 export async function POST(
   request: NextRequest,
 ): Promise<NextResponse<GenerateManifestResponse>> {
+  // Same-origin gate (D1), ahead of the rate limiter — the same composition
+  // #443 established for app/api/architecture/. This endpoint spends the
+  // caller's daily generation quota and drives a paid LLM chain, so a
+  // cross-origin page must not be able to burn it. The wildcard-CORS block that
+  // used to invite exactly that (and the OPTIONS preflight that advertised it)
+  // is gone; the route is same-origin only.
+  if (!isSameOrigin(request)) {
+    return NextResponse.json(
+      { success: false, error: "Cross-origin request rejected" },
+      { status: 403 },
+    );
+  }
+
   // Rate limiting
   const rateCheck = checkRateLimit(request, 10, 60 * 1000);
   if (!rateCheck.allowed) {
@@ -139,56 +153,26 @@ export async function POST(
       );
     }
 
-    // Wire up dependencies
-    const secretVault = new EnvironmentSecretVaultAdapter();
-
-    let webLlmAdapter: WebLLMAdapter | null = null;
-    try {
-      if (typeof window !== "undefined") {
-        const { WebLLMAdapter: Adapter } = await import("@hexagen/local-llm");
-        webLlmAdapter = new Adapter({});
-      }
-    } catch (error) {
-      logger.warn("WebLLM adapter initialization failed:", { error });
-    }
-
-    // Configure the fallback chain for cloud providers
-    const fallbackChain = {
-      primary: {
-        providerId: "openai" as const,
-        baseUrl: "https://api.openai.com/v1",
-        model: "gpt-4o",
-        apiKeyEnvVar: "OPENAI_API_KEY",
-        temperature: 0.3,
-        maxTokens: 4000,
-      },
-      fallbacks: [
-        {
-          providerId: "anthropic" as const,
-          baseUrl: "https://api.anthropic.com/v1",
-          model: "claude-3-5-sonnet-20241022",
-          apiKeyEnvVar: "ANTHROPIC_API_KEY",
-          temperature: 0.3,
-          maxTokens: 4000,
-        },
-      ],
-    };
-
-    // Configure LLM provider selector with preference option from request
+    // Dependencies come from the composition root (HEX-003). This route used
+    // to `new` its own secret vault, selector adapter and transaction manager,
+    // and carried a SECOND hard-coded fallback chain (openai → anthropic only)
+    // that could not see the LLM_API_KEY / Inception providers wire.server's
+    // chain has carried since the mercury flip.
+    //
+    // `webLlmAdapter: null` is not a downgrade: WebLLM is a browser runtime and
+    // the block this replaces was guarded by `typeof window !== "undefined"`,
+    // which is never true inside a route handler — it always left the adapter
+    // null.
     const preferLocal =
       body.preferLocal === undefined ? false : body.preferLocal;
 
-    // Create the selector adapter
-    const llmAdapter = new LLMProviderSelectorAdapter({
-      webLlmAdapter,
+    const llmAdapter = createLLMProviderSelector({
+      webLlmAdapter: null,
       preferLocal, // Use cloud by default for backward compatibility
       validateLocalLLM: true,
-      fallbackChain,
-      secretVault,
     });
 
-    // Create transaction manager
-    const transactionManager = new InMemoryTransactionManager();
+    const transactionManager = createGenerationTransactionManager();
 
     // Create and execute use case
     // Dedicated Stage-6 reviewer (e.g. nemotron-3-ultra) — same as the
@@ -261,19 +245,7 @@ export async function POST(
   }
 }
 
-/**
- * OPTIONS /api/manifest/generate
- * Handle CORS preflight requests
- */
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    },
-  });
-}
-
-// Made with Bob
+// No OPTIONS handler: the route is same-origin only, and a same-origin fetch
+// never preflights. The handler that used to live here answered every preflight
+// with `Access-Control-Allow-Origin: *`, which is what made this endpoint
+// callable from any page on the internet.
