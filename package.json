@@ -26,7 +26,6 @@
     "sync:dry": "yarn workspace @hexagen/sync cli sync --dry-run",
     "sync:force": "yarn workspace @hexagen/sync cli sync --force",
     "dev": "turbo dev",
-    "dev:api": "yarn workspace @hexagen/api-gateway dev",
     "dev:web": "yarn workspace web dev",
     "lint": "turbo lint && yarn lint:arch",
     "lint:arch": "yarn workspace @hexagen/arch-linter lint:arch",

@@ -210,8 +210,6 @@ bounded_contexts:
 apps:
   - name: web
     file: apps/web.app.yaml
-  - name: api-gateway
-    file: apps/api-gateway.app.yaml
   - name: tui
     file: apps/tui.app.yaml
 invariants:
