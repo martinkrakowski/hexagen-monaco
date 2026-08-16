@@ -247,6 +247,23 @@ describe("Manifest Split Round-Trip", () => {
     assert.deepStrictEqual(mergedAppNames, originalAppNames);
   });
 
+  it("restores the workspace_config side-car fields on merge", () => {
+    // The split is only a round trip if the merge is its inverse. It was not:
+    // `monorepo` and `generator` were written to workspace.config.yaml and never
+    // read back, so this suite asserted a "round trip" that lost both halves of
+    // the generator configuration. Compared against the ORIGINAL monolithic
+    // manifest, not against the side-car, so a merge that quietly narrowed the
+    // blocks on the way back still fails.
+    const merged = mergedManifest as unknown as RawRecord;
+    for (const key of FIELDS_EXTRACTED_TO_WORKSPACE_CONFIG) {
+      assert.deepStrictEqual(
+        merged[key],
+        rawManifest[key],
+        `"${key}" did not survive the split → merge round trip`,
+      );
+    }
+  });
+
   it("enforces plane/path consistency in index manifest", () => {
     const indexResult = IndexManifestSchema.safeParse(indexData);
     assert.ok(
