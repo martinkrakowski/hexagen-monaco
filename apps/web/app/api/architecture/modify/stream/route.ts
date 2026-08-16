@@ -3,14 +3,13 @@
 // Emits pipeline step progress events as they complete
 
 import { NextRequest } from "next/server";
-import path from "path";
 import {
   getModifyArchitectureUseCase,
-  findMonorepoRoot,
   MonorepoRootNotFoundError,
 } from "@/lib/wire.server";
 import { createWebLogger } from "@/lib/wire.shared";
 import { guardMutation } from "@/lib/request-guards";
+import { validateManifestPath } from "@/lib/manifest-path";
 import {
   createSSEResponse,
   formatSSEComment,
@@ -18,24 +17,6 @@ import {
   SSE_HEARTBEAT_INTERVAL_MS,
 } from "@/lib/sse-helpers";
 import type { IntentLineage } from "@hexagen/core-domain";
-
-function validateManifestPath(rawPath: string): string {
-  // Anchor path resolution + the traversal gate at the monorepo root — the same anchor the mutation/lint adapters use (findMonorepoRoot), NOT process.cwd() (which is apps/web in prod).
-  const cwd = findMonorepoRoot();
-  const allowedBase = path.join(cwd, ".architecture");
-  const resolvedPath = path.resolve(cwd, rawPath);
-
-  if (
-    !resolvedPath.startsWith(allowedBase + path.sep) &&
-    resolvedPath !== allowedBase
-  ) {
-    throw new Error(
-      `Invalid path: traversal detected. Path must be within .architecture directory.`,
-    );
-  }
-
-  return resolvedPath;
-}
 
 interface StreamRequestBody {
   intent: string;
@@ -69,9 +50,7 @@ export async function POST(request: NextRequest) {
 
   let manifestPath: string;
   try {
-    manifestPath = validateManifestPath(
-      body.manifestPath ?? ".architecture/manifest.yaml",
-    );
+    manifestPath = validateManifestPath(body.manifestPath);
   } catch (err) {
     // A missing on-disk manifest anchor is a server config failure, not bad
     // client input — surface it as 5xx (and log) so monitoring sees it, rather
