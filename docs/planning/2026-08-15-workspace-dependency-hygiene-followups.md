@@ -71,16 +71,16 @@ These are per-case and need a human; none is inferable from the code.
 
 ## 4. Items
 
-| #        | Item                                                                                                                                                                                                     | Gate            | Size                                          |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | --------------------------------------------- |
-| **T4.1** | Audit shell and node helper scripts under `scripts/` for tool invocations not declared at root                                                                                                           | none            | S — read-only, may yield zero                 |
-| **T4.2** | Audit `.github/workflows/` steps for bare tool invocations                                                                                                                                               | none            | S                                             |
-| **T4.3** | Extend the guard to `lint-staged` command strings (root `package.json`)                                                                                                                                  | after T4.1/T4.2 | S                                             |
-| **T5.1** | `yarn.config.cjs` constraint: **trivial/low** rows only — one range per package where no major split exists (`typescript`, `tsx`, `js-yaml`, `@typescript-eslint/*`, `@hexagen/sync` workspace protocol) | none            | M — mechanical, wide lockfile diff            |
-| **T5.2** | `@types/node` reconciliation                                                                                                                                                                             | **D-V1**        | M                                             |
-| **T5.3** | ESLint major decision recorded; split either resolved or documented as intentional with an allow-list in the constraint                                                                                  | **D-V2**        | S (record) / L (migrate)                      |
-| **T5.4** | `apps/tui` React/zustand review                                                                                                                                                                          | **D-V3**        | S — likely "pinned deliberately, document it" |
-| **T5.5** | `packages/layout-engine` dagre/elkjs review                                                                                                                                                              | **D-V4**        | M — needs a rendering check                   |
+| #            | Item                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Gate            | Size                                          |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | --------------------------------------------- |
+| **T4.1**     | Audit shell and node helper scripts under `scripts/` for tool invocations not declared at root                                                                                                                                                                                                                                                                                                                                                                   | none            | S — read-only, may yield zero                 |
+| **T4.2**     | Audit `.github/workflows/` steps for bare tool invocations                                                                                                                                                                                                                                                                                                                                                                                                       | none            | S                                             |
+| **T4.3**     | Extend the guard to `lint-staged` command strings (root `package.json`)                                                                                                                                                                                                                                                                                                                                                                                          | after T4.1/T4.2 | S                                             |
+| ~~**T5.1**~~ | ✅ **SHIPPED** — `yarn.config.cjs` + CI enforcement (`sync-integrity.yml` → "Verify Dependency Constraints", plus `yarn lint:deps`). Pinned: `typescript`, `tsx`, `@typescript-eslint/{parser,eslint-plugin}`, `typescript-eslint`, `js-yaml`, `@types/js-yaml`, `@modelcontextprotocol/sdk`, `zod`, `@hexagen/sync`. The last four were added after measurement showed they also sat within one major — same safety criterion, wider than this row first listed | none            | done                                          |
+| **T5.2**     | `@types/node` reconciliation                                                                                                                                                                                                                                                                                                                                                                                                                                     | **D-V1**        | M                                             |
+| **T5.3**     | ESLint major decision recorded; split either resolved or documented as intentional with an allow-list in the constraint                                                                                                                                                                                                                                                                                                                                          | **D-V2**        | S (record) / L (migrate)                      |
+| **T5.4**     | `apps/tui` React/zustand review                                                                                                                                                                                                                                                                                                                                                                                                                                  | **D-V3**        | S — likely "pinned deliberately, document it" |
+| **T5.5**     | `packages/layout-engine` dagre/elkjs review                                                                                                                                                                                                                                                                                                                                                                                                                      | **D-V4**        | M — needs a rendering check                   |
 
 ### Why T5.1 is separable and worth doing first
 
@@ -121,9 +121,11 @@ The guard covers `scripts`. What it skips, by construction:
 
 - **Lockfile contention.** T5.1 and T5.2 both rewrite `yarn.lock`. Land them one at a time,
   and not concurrently with any other `package.json`-touching branch.
-- **`yarn constraints` is unused today** — no `yarn.config.cjs` exists. First use should be
-  narrow (T5.1's low-risk rows only) so the mechanism is proven before it governs the
-  contentious ones.
+- ~~**`yarn constraints` is unused today** — no `yarn.config.cjs` exists.~~ **Addressed in
+  T5.1:** `yarn.config.cjs` now exists, scoped to the low-risk rows exactly as this risk note
+  recommended, and is enforced in CI (`sync-integrity.yml` → "Verify Dependency Constraints")
+  plus a root `yarn lint:deps` script. Without that CI step the file would have been
+  documentation rather than a gate.
 - **Over-constraining.** A constraint demanding global range equality would forbid legitimate
   divergence (`apps/tui`'s Ink-driven React pin, if D-V3 confirms it). The constraint must
   support a documented exception list, or it will be disabled the first time it is
@@ -133,7 +135,7 @@ The guard covers `scripts`. What it skips, by construction:
 
 ## 7. Sequencing
 
-```
+```text
 T4.1 ‖ T4.2        (read-only audits, no gates)
    └─ T4.3         (guard lint-staged)
 T5.1               (constraint + low-risk range unification)  ← independent, do early

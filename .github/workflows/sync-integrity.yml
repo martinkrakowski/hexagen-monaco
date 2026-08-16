@@ -35,6 +35,14 @@ jobs:
       - name: "Install Dependencies"
         run: yarn install --immutable
 
+      - name: "Verify Dependency Constraints"
+        # Enforces yarn.config.cjs: one declared range per shared dependency.
+        # Without this step the constraint file is documentation, not a gate —
+        # range drift would reappear and only be caught if someone happened to
+        # run `yarn constraints` by hand. Runs right after install because it
+        # reads manifests only; no build required.
+        run: yarn constraints
+
       - name: "Build All Packages"
         run: yarn turbo run build --output-logs=full --log-order=stream
 

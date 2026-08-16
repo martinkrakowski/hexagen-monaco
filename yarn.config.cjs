@@ -32,6 +32,15 @@ const PINNED = {
   tsx: "^4.21.0",
   "@typescript-eslint/eslint-plugin": "^8.57.0",
   "@typescript-eslint/parser": "^8.57.0",
+  // NOTE: pinning these two to one range does NOT collapse the
+  // `@typescript-eslint/*` trees in yarn.lock, and this file does not pretend
+  // otherwise. The `typescript-eslint` meta-package depends on
+  // `@typescript-eslint/*` at its own *exact* version, so any caret range floats
+  // to the newest release and drags a matching tree with it. Measured: `^8.0.0`
+  // resolves 8.59.0; tightening to `^8.57.0` resolved 8.67.0 — strictly worse.
+  // Only exact-pinning the whole family collapses it, and that is a range-style
+  // policy change beyond this item's "behaviour-neutral" scope. Tracked as a
+  // follow-up in the plan; see KNOWN_SPLITS' note below.
   "typescript-eslint": "^8.0.0",
   "js-yaml": "^4.1.1",
   "@types/js-yaml": "^4.0.9",
@@ -56,6 +65,14 @@ const PINNED = {
  *
  * `ts-morph` is additionally owned elsewhere: it is item 3.4 (AUD-012) of the
  * architecture-remediation plan and is release-gated. Do not fold it in here.
+ *
+ * Not a split, but related and deliberately unsolved: the `@typescript-eslint/*`
+ * family still resolves to more than one version in yarn.lock (8.56.1 via a
+ * transitive `eslint-plugin`, and whatever `typescript-eslint`'s caret floats
+ * to). Range alignment cannot fix that — see the note on `typescript-eslint` in
+ * PINNED. Collapsing it needs exact pins across the family, which is a policy
+ * change and is gated behind D-V2 (the ESLint 8-vs-9 decision) anyway, since
+ * some of those trees are pulled by the workspaces on ESLint 9/10.
  */
 const KNOWN_SPLITS = [
   "react",
@@ -89,10 +106,19 @@ module.exports = {
           .filter((d) => d.type !== "peerDependencies")
           .map((d) => d.range),
       );
-      if (ranges.size === 1) {
+      // `< 2`, not `=== 1`: a dependency that was removed entirely (or is now
+      // only a peer) yields zero ranges, which is just as stale as one range
+      // and would otherwise sit in the list unnoticed.
+      if (ranges.size < 2) {
+        const detail =
+          ranges.size === 0
+            ? "no non-peer declarations left"
+            : `a single range (${[...ranges][0]})`;
         Yarn.workspace().error(
-          `"${ident}" is listed in KNOWN_SPLITS but now has a single range ` +
-            `(${[...ranges][0]}). Move it into PINNED and delete it from the list.`,
+          `"${ident}" is listed in KNOWN_SPLITS but now has ${detail}. ` +
+            (ranges.size === 1
+              ? "Move it into PINNED and delete it from the list."
+              : "Delete it from the list."),
         );
       }
     }
