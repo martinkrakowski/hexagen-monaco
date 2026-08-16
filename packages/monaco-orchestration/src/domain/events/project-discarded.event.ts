@@ -1,21 +1,28 @@
 /**
- * Domain event emitted when a user discards a project and starts a new one.
+ * Domain event announcing that a user discarded a project and started a new
+ * one.
  *
- * This event triggers cleanup of all project-scoped persistence:
- * - Wizard drafts in IndexedDB
- * - Chat threads in IndexedDB
- * - Editor workspace state
- * - Canvas layout preferences
+ * ANNOUNCEMENT ONLY — publishing this event purges nothing. The purge cascade
+ * (wizard draft, editor workspace, governance threads and generation results)
+ * is owned by the `discardProject` use case,
+ * `apps/web/app/lib/use-cases/project-lifecycle.use-case.ts`, which publishes
+ * this event and then performs the purge itself. There are no subscribers.
  *
- * Subscribers (adapters) handle the actual cleanup implementation,
- * maintaining the boundary between domain intent and infrastructure.
+ * It used to work the other way round: the client composition root
+ * (`apps/web/app/lib/wire.client.ts`) subscribed and purged. Because
+ * `discardProject` both published the event *and* purged inline, every discard
+ * purged chat persistence twice; the subscriber was removed rather than the
+ * inline purge. Do not add a purging subscriber — that reintroduces the
+ * double purge. Subscribe only to react to the announcement.
  *
- * @see ADR-0029: AI Governance Panel Storage Lifecycle
+ * @see ADR-0029: AI Governance Panel Storage Lifecycle (§1.3–1.4 describe the
+ *      original subscriber-driven design, since amended)
+ * @see ADR-0051 §Consequences, plan item 5.3(c) — the relocation
  */
 export interface ProjectDiscardedEvent {
   /**
-   * Unique identifier of the project being discarded.
-   * Used to scope cleanup operations in persistence adapters.
+   * Unique identifier of the project that was discarded.
+   * Scopes the purge that `discardProject` has already performed.
    */
   projectId: string;
 
@@ -35,14 +42,23 @@ export interface ProjectDiscardedEvent {
 
 /**
  * Event name constant for type-safe event bus operations.
- * Use this when emitting or subscribing to ProjectDiscarded events.
+ * Use this when publishing or subscribing to ProjectDiscarded events.
+ *
+ * Publishing announces a discard; it does not perform one. Callers that mean
+ * "discard this project" should call the `discardProject` use case, which
+ * publishes this event and owns the purge.
  *
  * @example
  * ```typescript
- * getEventBus().emit(PROJECT_DISCARDED_EVENT, {
- *   projectId: 'abc-123',
- *   timestamp: new Date(),
- *   reason: 'user_initiated'
+ * getEventBus().publish({
+ *   type: PROJECT_DISCARDED_EVENT,
+ *   payload: {
+ *     projectId: 'abc-123',
+ *     timestamp: new Date(),
+ *     reason: 'user_initiated',
+ *   },
+ *   timestamp: Date.now(),
+ *   source: 'useProjectLifecycle',
  * });
  * ```
  */
