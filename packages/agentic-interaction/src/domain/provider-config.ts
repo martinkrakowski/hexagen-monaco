@@ -36,8 +36,16 @@ export type ResolvedProvider = CloudProviderEndpoint & {
 };
 
 /**
- * Port interface for retrieving secrets from external vault.
- * Abstracts environment variables, key management systems, etc.
+ * Port interface for **looking a secret up by name** — a synchronous read of
+ * an already-provisioned secret (environment variables, a key-management
+ * system, a test double). It does not store, lock, or destroy anything.
+ *
+ * An absent secret is not an error here: `getSecret` returns `null` and
+ * `resolveApiKey` / `resolveFallbackChain` treat that provider as simply not
+ * configured. The stored-key contract that *does* raise a typed failure for an
+ * absent secret is `ApiKeyVaultLifecyclePort`
+ * (`application/ports/out/api-key-vault-lifecycle.port.ts`); the two were once
+ * both named `SecretVaultPort` (HEX-008, remediation item 5.4).
  */
 export interface SecretVaultPort {
   /**

@@ -3,8 +3,12 @@ import type { VaultStatus, VaultError } from "@hexagen/agentic-interaction";
 
 /**
  * Port interface for user API key vault (browser-side).
- * This is distinct from SecretVaultPort in agentic-interaction,
- * which is for server-side environment variable access.
+ *
+ * This is distinct from `SecretVaultPort` in agentic-interaction, which is a
+ * synchronous lookup of an already-provisioned secret (server-side
+ * environment variables). agentic-interaction's own vault-lifecycle contract
+ * is `ApiKeyVaultLifecyclePort`; per ADR-0047 each context keeps its own
+ * declaration rather than cross-importing.
  *
  * This port manages user-provided API keys in the browser with
  * support for encryption, persistence, and session management.

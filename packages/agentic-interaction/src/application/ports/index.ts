@@ -1,2 +1,2 @@
 export * from "./in/index";
-export type { SecretVaultPort } from "./out/secret-vault-port.port";
+export type { ApiKeyVaultLifecyclePort } from "./out/api-key-vault-lifecycle.port";

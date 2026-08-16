@@ -6,7 +6,7 @@ import type { UserSecretVaultPort } from "../../application/ports/user-secret-va
 const VAULT_STORAGE_KEY = "hexagen:vault:encrypted-payload";
 
 /**
- * Encrypted Session Vault implementation of SecretVaultPort.
+ * Encrypted Session Vault implementation of UserSecretVaultPort.
  *
  * This adapter stores the API key encrypted via Web Crypto (AES-GCM) to localStorage,
  * enabling persistence across page refreshes within the same session/tab.

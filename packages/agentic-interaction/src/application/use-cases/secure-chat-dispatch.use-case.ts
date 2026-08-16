@@ -5,7 +5,7 @@ import type {
   CloudLLMCompletionRequest,
   CloudLLMCompletionResponse,
 } from "../../domain/ports/cloud-llm-provider.port";
-import type { SecretVaultPort } from "../ports/index";
+import type { ApiKeyVaultLifecyclePort } from "../ports/index";
 import type { VaultError } from "../../domain/index";
 
 /**
@@ -17,7 +17,7 @@ import type { VaultError } from "../../domain/index";
  */
 export class SecureChatDispatchUseCase {
   constructor(
-    private readonly vaultPort: SecretVaultPort,
+    private readonly vaultPort: ApiKeyVaultLifecyclePort,
     private readonly cloudLLMProvider: CloudLLMProviderPort,
   ) {}
 

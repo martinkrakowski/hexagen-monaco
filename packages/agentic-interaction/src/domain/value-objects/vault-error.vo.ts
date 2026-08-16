@@ -1,6 +1,7 @@
 /**
  * Discriminated union of all possible vault-related errors.
- * Used in Result<T, VaultError> returns from SecretVaultPort.
+ * Used in Result<T, VaultError> returns from ApiKeyVaultLifecyclePort
+ * (and from web-driver's UserSecretVaultPort, which mirrors its shape).
  */
 export type VaultError =
   | { kind: "vault_empty"; message: string }
