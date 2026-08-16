@@ -83,12 +83,12 @@ jobs:
       # drifted fixture or mock is reported as a type error rather than as a
       # confusing downstream runtime failure. Same ordering as
       # sync-integrity.yml. Scoped to the publish closure (see next step).
+      # Routed through the same helper as the test gate below, and for the same
+      # reason: a bare `--filter` step exits 0 when the filter matches nothing,
+      # so it would be a gate in name only. `--task` selects which turbo task
+      # runs over the verified closure.
       - name: "TypeCheck Test Sources (publish closure)"
-        run: |
-          yarn turbo run typecheck:test \
-            --filter=@hexagen/sync... \
-            --filter=@hexagen/arch-linter... \
-            --continue --output-logs=full --log-order=stream
+        run: node scripts/verify-publish-test-scope.js --task typecheck:test packages/sync tools/arch-linter
 
       # THE RELEASE TEST GATE.
       #

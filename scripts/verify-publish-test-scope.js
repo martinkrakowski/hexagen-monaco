@@ -48,7 +48,12 @@
  *
  * USAGE
  *   node scripts/verify-publish-test-scope.js <package-dir> [<package-dir>...]
+ *   node scripts/verify-publish-test-scope.js --task typecheck:test packages/sync ...
  *   node scripts/verify-publish-test-scope.js --dry-run packages/sync ...
+ *
+ * `--task` selects the turbo task to gate on (default `test`). publish.yml
+ * drives both `typecheck:test` and `test` through here so neither gate rests
+ * on an unchecked `--filter`.
  *
  * `--dry-run` performs the derivation and the scope cross-check but does not
  * execute the tests (used by this script's own guard test).
@@ -97,7 +102,7 @@ function readWorkspaceManifests() {
         workspaceDeps: Object.entries(manifest.dependencies ?? {})
           .filter(([, spec]) => String(spec).startsWith("workspace:"))
           .map(([depName]) => depName),
-        hasTestScript: Boolean(manifest.scripts?.test),
+        scripts: manifest.scripts ?? {},
       });
     }
   }
@@ -135,12 +140,28 @@ function fail(code, message) {
 
 const argv = process.argv.slice(2);
 const dryRun = argv.includes("--dry-run");
-const packageDirs = argv.filter((a) => a !== "--dry-run");
+
+// Which turbo task to gate on. Defaults to `test`; publish.yml also uses this
+// for `typecheck:test`, so BOTH release gates get the scope cross-check rather
+// than only the loudest one. A bare `--filter` step is not a gate no matter
+// which task it runs.
+const taskIndex = argv.indexOf("--task");
+const task = taskIndex === -1 ? "test" : argv[taskIndex + 1];
+// `taskIndex + 1` would be index 0 when --task is absent (taskIndex === -1),
+// which would silently swallow the first package dir — hence the explicit -1.
+const taskValueIndex = taskIndex === -1 ? -1 : taskIndex + 1;
+const packageDirs = argv.filter(
+  (a, i) => a !== "--dry-run" && a !== "--task" && i !== taskValueIndex,
+);
+
+if (taskIndex !== -1 && !task) {
+  fail(1, "--task given with no task name.");
+}
 
 if (packageDirs.length === 0) {
   fail(
     1,
-    "No package dirs given. Usage: node scripts/verify-publish-test-scope.js <package-dir>...",
+    "No package dirs given. Usage: node scripts/verify-publish-test-scope.js [--task <turbo-task>] <package-dir>...",
   );
 }
 
@@ -180,17 +201,17 @@ console.log(
 );
 for (const name of expected) {
   const manifest = manifests.get(name);
-  const marker = manifest.hasTestScript ? "tests" : "NO test script";
+  const marker = manifest.scripts[task] ? task : `NO "${task}" script`;
   console.log(`  ${name.padEnd(32)} ${manifest.dir.padEnd(28)} ${marker}`);
 }
 
-const untested = expected.filter((n) => !manifests.get(n).hasTestScript);
+const untested = expected.filter((n) => !manifests.get(n).scripts[task]);
 if (untested.length > 0) {
   // Not fatal — but it must be visible. A package that ships inside the tarball
   // with no suite of its own is a real hole in the evidence this gate produces,
   // and silence would overstate what the green check means.
   console.log(
-    `\n::warning::Bundled but self-untested (covered only indirectly by dependents): ${untested.join(", ")}`,
+    `\n::warning::Bundled but declaring no "${task}" script (covered only indirectly, if at all): ${untested.join(", ")}`,
   );
 }
 
@@ -200,7 +221,7 @@ console.log("\nCross-checking turbo's resolved scope against the manifests...");
 
 const dry = spawnSync(
   "yarn",
-  ["turbo", "run", "test", ...filters, "--dry-run=json"],
+  ["turbo", "run", task, ...filters, "--dry-run=json"],
   { cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
 );
 
@@ -238,40 +259,47 @@ if (missing.length > 0 || unexpected.length > 0) {
 // member that declares a `test` script must appear as a scheduled `test` task,
 // or the run is partially vacuous.
 const scheduled = new Set(
-  (plan.tasks ?? []).filter((t) => t.task === "test").map((t) => t.package),
+  (plan.tasks ?? []).filter((t) => t.task === task).map((t) => t.package),
 );
 const notScheduled = expected.filter(
-  (n) => manifests.get(n).hasTestScript && !scheduled.has(n),
+  (n) => manifests.get(n).scripts[task] && !scheduled.has(n),
 );
 if (notScheduled.length > 0) {
   fail(
     2,
-    `These packages declare a "test" script but turbo scheduled no test task for them: ${notScheduled.join(", ")}`,
+    `These packages declare a "${task}" script but turbo scheduled no "${task}" task for them: ${notScheduled.join(", ")}`,
   );
 }
 
-const withTests = expected.filter((n) => manifests.get(n).hasTestScript);
+const withScript = expected.filter((n) => manifests.get(n).scripts[task]);
+if (withScript.length === 0) {
+  fail(
+    2,
+    `No package in the publish closure declares a "${task}" script — this gate would verify nothing.`,
+  );
+}
 console.log(
-  `  OK — ${resolved.length} package(s) in scope, ${scheduled.size} test task(s) scheduled, ` +
-    `${withTests.length} of which run a real suite.`,
+  `  OK — ${resolved.length} package(s) in scope, ${scheduled.size} "${task}" task(s) scheduled, ` +
+    `${withScript.length} of which run a real "${task}" script.`,
 );
 
 if (dryRun) {
-  console.log("\n--dry-run: scope verified, tests not executed.");
+  console.log(`\n--dry-run: scope verified, "${task}" not executed.`);
   process.exit(0);
 }
 
 // --- execute ---------------------------------------------------------------
 
-console.log("\nRunning the publish-closure test suite...\n");
+console.log(`\nRunning "${task}" across the publish closure...\n`);
 
 const run = spawnSync(
   "yarn",
   [
     "turbo",
     "run",
-    "test",
+    task,
     ...filters,
+    "--continue",
     "--output-logs=full",
     "--log-order=stream",
   ],
@@ -280,7 +308,7 @@ const run = spawnSync(
 
 if (run.status !== 0) {
   console.error(
-    `\n::error::Publish-closure tests failed (exit ${run.status}). Not publishing.`,
+    `\n::error::Publish-closure "${task}" failed (exit ${run.status}). Not publishing.`,
   );
 }
 process.exit(run.status ?? 1);
