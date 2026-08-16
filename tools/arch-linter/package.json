@@ -5,7 +5,7 @@
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.7.0"
   },
   "repository": {
     "type": "git",
