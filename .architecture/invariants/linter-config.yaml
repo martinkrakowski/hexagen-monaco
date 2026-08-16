@@ -6,7 +6,6 @@ subpath_conventions:
     - sync
     - mcp-server
     - tui
-    - api-gateway
     - project-generation
     - arch-linter
   enforcement: error

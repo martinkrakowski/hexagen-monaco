@@ -32,7 +32,6 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
  * @hexagen/sync is the published CLI, so it is the highest-value entry to close.
  */
 const UNLINTED = new Set([
-  "@hexagen/api-gateway",
   "@hexagen/arch-linter",
   "@hexagen/manifest-generation",
   "@hexagen/project-generation",

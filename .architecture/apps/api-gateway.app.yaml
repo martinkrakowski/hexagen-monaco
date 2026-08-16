@@ -1,9 +1,0 @@
-name: api-gateway
-driver: fastify
-framework: fastify
-version: 5.x
-description: Public HTTP API + command gateway (future phase)
-depends_on:
-  - project-configuration
-  - messaging
-  - shared
