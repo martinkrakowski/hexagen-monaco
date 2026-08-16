@@ -1,4 +1,4 @@
-import type { IPolicyEvaluator } from "../ports/in/policy-evaluator.port.js";
+import type { IPolicyEvaluator } from "../ports/out/policy-evaluator.port.js";
 import type {
   ComplianceReport,
   PolicyViolationError,
