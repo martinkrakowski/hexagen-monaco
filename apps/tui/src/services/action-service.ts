@@ -78,28 +78,48 @@ interface MCPToolSuggestion {
   arguments: Record<string, unknown>;
 }
 
+/**
+ * Narrows the parsed payload to a tool suggestion, or `null` for anything else.
+ *
+ * `parseJSON` is typed `{ ok: true; data: T }`, but `T` is an assertion about
+ * untrusted model output, not a guarantee: `JSON.parse("null")` succeeds, so a
+ * model reply of literal `null` arrives as `ok: true` with a `data` that cannot
+ * be destructured. Parse the payload as `unknown` and reject every non-object
+ * shape here, so a hostile or merely confused reply lands on the same handled
+ * "no valid suggestion" path as any other malformed one rather than throwing
+ * out of the `r` remediation flow.
+ */
 function parseToolSuggestion(content: string): MCPToolSuggestion | null {
-  const parsed = parseJSON<{
-    tool?: string;
-    arguments?: Record<string, unknown>;
-  }>(content);
+  const parsed = parseJSON<unknown>(content);
 
   if (!parsed.ok) {
     return null;
   }
 
-  const { tool, arguments: args } = parsed.data;
+  const payload = parsed.data;
   if (
-    typeof tool !== "string" ||
-    tool.length === 0 ||
-    args === null ||
-    args === undefined ||
-    typeof args !== "object"
+    payload === null ||
+    typeof payload !== "object" ||
+    Array.isArray(payload)
   ) {
     return null;
   }
 
-  return { tool, arguments: args };
+  const { tool, arguments: args } = payload as {
+    tool?: unknown;
+    arguments?: unknown;
+  };
+  if (
+    typeof tool !== "string" ||
+    tool.length === 0 ||
+    args === null ||
+    typeof args !== "object" ||
+    Array.isArray(args)
+  ) {
+    return null;
+  }
+
+  return { tool, arguments: args as Record<string, unknown> };
 }
 
 export async function refactorWithAI(

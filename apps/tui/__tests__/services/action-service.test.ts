@@ -169,6 +169,52 @@ describe("action-service drives the shared LLM port", () => {
     ]);
   });
 
+  // The reply is untrusted model output, so every non-conforming shape must
+  // land on the same handled path as any other malformed suggestion. `null` is
+  // the sharp one: `JSON.parse("null")` succeeds, so the parse is reported
+  // successful and the payload is still not destructurable. The `r` binding in
+  // index.tsx calls refactorWithAI() from a floating `void (async () => ...)()`
+  // with no catch, so a throw here surfaces as an unhandled rejection rather
+  // than a status message.
+  for (const [label, reply] of [
+    ["JSON null", "null"],
+    ["a JSON array", "[]"],
+    ["a bare number", "42"],
+    ["a bare string", '"hexagen_create_port"'],
+    ["a boolean", "true"],
+  ] as const) {
+    it(`reports ${label} as a handled failure instead of throwing`, async () => {
+      const llm = new RecordingLLM(reply);
+      const invoker = new RecordingInvoker();
+
+      const outcome = await refactorWithAI(invoker, VIOLATION, llm);
+
+      assert.equal(
+        outcome,
+        "LLM response did not include a valid MCP tool JSON suggestion.",
+      );
+      assert.deepEqual(invoker.calls, [], "no tool may be invoked");
+      assert.equal(fetchCalls, 0);
+    });
+  }
+
+  // `typeof [] === "object"`, so an array would otherwise reach callTool() as
+  // the tool's `arguments`. MCP tool arguments are a named-parameter object.
+  it("rejects a suggestion whose arguments are an array", async () => {
+    const llm = new RecordingLLM(
+      '{"tool":"hexagen_create_port","arguments":[]}',
+    );
+    const invoker = new RecordingInvoker();
+
+    const outcome = await refactorWithAI(invoker, VIOLATION, llm);
+
+    assert.equal(
+      outcome,
+      "LLM response did not include a valid MCP tool JSON suggestion.",
+    );
+    assert.deepEqual(invoker.calls, []);
+  });
+
   it("reports a missing key without calling the LLM or any tool", async () => {
     const invoker = new RecordingInvoker();
 
