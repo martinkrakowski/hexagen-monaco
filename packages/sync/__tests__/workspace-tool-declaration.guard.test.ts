@@ -28,8 +28,38 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "../../..");
 
-/** Workspace globs, mirrored from the root package.json `workspaces` field. */
-const WORKSPACE_DIRS = ["apps", "packages", "tools"];
+/**
+ * Workspace globs, read from the root `package.json` — the single source of
+ * truth. Mirroring them here would let a newly added pattern (`services/*`)
+ * be skipped silently, which in a completeness guard is the worst failure mode:
+ * it would keep passing while checking less.
+ *
+ * Only the `<dir>/*` shape this repo uses is supported. Anything else throws
+ * rather than being partially scanned — an unsupported pattern must be a loud
+ * failure, not a quiet gap.
+ */
+async function workspacePatterns(): Promise<string[]> {
+  const raw = await fs.readFile(path.join(REPO_ROOT, "package.json"), "utf8");
+  const pkg = JSON.parse(raw) as {
+    workspaces?: string[] | { packages?: string[] };
+  };
+  const patterns = Array.isArray(pkg.workspaces)
+    ? pkg.workspaces
+    : (pkg.workspaces?.packages ?? []);
+  assert.ok(
+    patterns.length > 0,
+    "root package.json declares no workspaces — this guard would check nothing",
+  );
+  const unsupported = patterns.filter((p) => !/^[^/*]+\/\*$/.test(p));
+  assert.deepEqual(
+    unsupported,
+    [],
+    `Unsupported workspace pattern(s): ${unsupported.join(", ")}. ` +
+      `This guard only expands "<dir>/*". Teach it the new shape rather than ` +
+      `letting those workspaces go unchecked.`,
+  );
+  return patterns;
+}
 
 /**
  * Commands that are not package binaries and so cannot be declared. Shell
@@ -93,6 +123,14 @@ type Workspace = {
  * matching on the package name, so a missing install degrades to the weaker
  * check rather than a false accusation.
  */
+/**
+ * Cache keyed by the RESOLVED manifest path, not by `(workspace, dep)`. Almost
+ * every dependency hoists to the root copy, so keying on the resolved path is
+ * what actually shares work across workspaces — a composite key would cache
+ * each of ~40 workspaces separately and save nothing.
+ */
+const binCache = new Map<string, Set<string>>();
+
 async function binsProvidedBy(
   dep: string,
   workspaceDir: string,
@@ -102,17 +140,23 @@ async function binsProvidedBy(
     path.join(REPO_ROOT, "node_modules", dep, "package.json"),
   ];
   for (const candidate of candidates) {
+    const cached = binCache.get(candidate);
+    if (cached) return cached;
     let raw: string;
     try {
       raw = await fs.readFile(candidate, "utf8");
     } catch {
-      continue;
+      continue; // not installed here; try the hoisted copy
     }
     const pkg = JSON.parse(raw) as { bin?: string | Record<string, string> };
-    if (typeof pkg.bin === "string") return new Set([dep]);
-    if (pkg.bin && typeof pkg.bin === "object")
-      return new Set(Object.keys(pkg.bin));
-    return new Set();
+    const bins =
+      typeof pkg.bin === "string"
+        ? new Set([dep])
+        : pkg.bin && typeof pkg.bin === "object"
+          ? new Set(Object.keys(pkg.bin))
+          : new Set<string>();
+    binCache.set(candidate, bins);
+    return bins;
   }
   return new Set();
 }
@@ -130,14 +174,18 @@ async function declaredBins(ws: Workspace): Promise<Set<string>> {
 
 async function readWorkspaces(): Promise<Workspace[]> {
   const found: Workspace[] = [];
-  for (const group of WORKSPACE_DIRS) {
+  for (const pattern of await workspacePatterns()) {
+    const group = pattern.slice(0, -2); // "packages/*" -> "packages"
     const groupDir = path.join(REPO_ROOT, group);
     let entries: string[];
     try {
       entries = await fs.readdir(groupDir);
     } catch {
-      continue;
+      assert.fail(
+        `workspace pattern "${pattern}" points at ${group}/, which does not exist`,
+      );
     }
+    const before = found.length;
     for (const entry of entries) {
       const dir = path.join(groupDir, entry);
       const manifestPath = path.join(dir, "package.json");
@@ -165,6 +213,11 @@ async function readWorkspaces(): Promise<Workspace[]> {
         ]),
       });
     }
+    assert.ok(
+      found.length > before,
+      `workspace pattern "${pattern}" matched no packages — either it is dead ` +
+        `and should be removed from root package.json, or discovery is broken`,
+    );
   }
   return found;
 }
@@ -195,9 +248,15 @@ function invokedBinaries(command: string): string[] {
 describe("workspace tool declaration", () => {
   it("every binary a workspace script invokes is declared by that workspace", async () => {
     const workspaces = await readWorkspaces();
+    // Discovery is proven by readWorkspaces() itself: every pattern in the root
+    // manifest is expanded, an unsupported shape throws, and a pattern matching
+    // nothing fails. A magic-number floor is deliberately NOT used — it would
+    // both miss a newly added pattern and break on a legitimate consolidation.
+    // Anchor on a workspace that must exist for this test to be running at all.
     assert.ok(
-      workspaces.length > 30,
-      `expected to discover the monorepo's workspaces, found ${workspaces.length}`,
+      workspaces.some((ws) => ws.dir === path.join("packages", "sync")),
+      `discovery did not find packages/sync, the package this guard lives in — ` +
+        `found ${workspaces.length}: ${workspaces.map((w) => w.dir).join(", ")}`,
     );
 
     const violations: string[] = [];
