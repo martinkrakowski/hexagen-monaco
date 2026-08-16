@@ -5,7 +5,7 @@
   "description": "HexaGen Sync Engine — Generate and sync modular monorepos",
   "license": "SEE LICENSE IN LICENSE",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.7.0"
   },
   "repository": {
     "type": "git",
