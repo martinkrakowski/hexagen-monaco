@@ -15,19 +15,19 @@ Five grounded observations forced this decision.
 
 1. **The rule has never seen an `@/` import.** `packages/eslint-plugin-ui/src/rules/no-feature-slice-imports.ts:31` reads `if (!source.startsWith("../") && !source.startsWith("./")) return;` — it inspects relative specifiers only and returns early on everything else. `apps/web/tsconfig.json` maps `@/*` across `./app/*`, `./components/*`, `./lib/*`, `./hooks/*`, `./features/*` and `./types/*`, and `apps/web` writes ~206 imports in alias form. A TypeScript-aware walk of all 508 files under `features/` found **18 cross-slice specifier sites in alias form across 17 slice→slice edges**, none of which the rule can see. It is also visitor-limited: it registers only an `ImportDeclaration` visitor, so `export … from`, dynamic `import()`, `TSImportType` and `vi.mock()` are outside its reach regardless of specifier form.
 
-2. **The rule additionally reports zero because two real violations are switched off.** `features/governance-assistant/GovernancePanelWrapper.tsx` and `features/project-wizard/WizardStepRouter.tsx` each carry an inline `// eslint-disable-next-line hexagen-ui/no-feature-slice-imports`. Confirmed via ESLint's `suppressedMessages`: `eslint features` currently reports **0 errors across 508 files** while two known violations sit disabled in the tree.
+2. **The rule additionally reports zero because two real violations are switched off.** `apps/web/features/governance-assistant/GovernancePanelWrapper.tsx` and `apps/web/features/project-wizard/WizardStepRouter.tsx` each carry an inline `// eslint-disable-next-line hexagen-ui/no-feature-slice-imports`. Confirmed via ESLint's `suppressedMessages`: `eslint features` currently reports **0 errors across 508 files** while two known violations sit disabled in the tree.
 
-3. **The rule as drawn caused duplication rather than preventing coupling.** ADR-0034's "Feature Isolation" section records `blankProjectConfig` being **inlined** in `NewProjectPage.tsx` "instead of importing `emptyFormValues` from `project-wizard/config.ts`". That fork survived as `features/landing/domain/createBlankProjectConfig.ts`, whose own JSDoc read "Mirrors `emptyFormValues` … keep the two in sync" — a hand-maintained duplicate of the ADR-0041 single-app preset, created _by_ the boundary rule.
+3. **The rule as drawn caused duplication rather than preventing coupling.** ADR-0034's "Feature Isolation" section records `blankProjectConfig` being **inlined** in `NewProjectPage.tsx` "instead of importing `emptyFormValues` from `project-wizard/config.ts`". That fork survived as `apps/web/features/landing/domain/createBlankProjectConfig.ts`, whose own JSDoc read "Mirrors `emptyFormValues` … keep the two in sync" — a hand-maintained duplicate of the ADR-0041 single-app preset, created _by_ the boundary rule.
 
-4. **The next author routed around the blind spot, in writing.** `features/manifest-generation/genesis-workbench/genesisProjectSettingsStore.ts` carried a comment stating that "the module-level lint rule only isolates relative feature imports; these two are the repo's canonical seeding sources", with a parallel note in `GenesisProjectSettingsSection.tsx`. The evasion was documented on `main` and would have been cited as precedent.
+4. **The next author routed around the blind spot, in writing.** `apps/web/features/manifest-generation/genesis-workbench/genesisProjectSettingsStore.ts` carried a comment stating that "the module-level lint rule only isolates relative feature imports; these two are the repo's canonical seeding sources", with a parallel note in `GenesisProjectSettingsSection.tsx`. The evasion was documented on `main` and would have been cited as precedent.
 
-5. **The pinned couplings were not couplings.** A per-pair investigation of all nine alias-form pairs found **zero** cases of legitimate slice-to-slice composition. Every one was a symbol with no dependency on its host slice: `features/llm-driver/` turned out to be app-global infrastructure (its `LocalLLMProvider` mounts in `app/layout.tsx` at the root wrapping every route; six of its eight consumers were already in `app/`; the directory held nine files and zero components); `project-wizard/config.ts` had **four independent consumer groups outside its own slice** and ~21 importers; `template-manifest.generated.ts` was generator output whose source of truth is `packages/template-engine`; `createBlankProjectConfig` was the ADR-0034 fork.
+5. **The pinned couplings were not couplings.** A per-pair investigation of all nine alias-form pairs found **zero** cases of legitimate slice-to-slice composition. Every one was a symbol with no dependency on its host slice: `apps/web/features/llm-driver/` turned out to be app-global infrastructure (its `LocalLLMProvider` mounts in `app/layout.tsx` at the root wrapping every route; six of its eight consumers were already in `app/`; the directory held nine files and zero components); `apps/web/features/project-wizard/config.ts` had **four independent consumer groups outside its own slice** and ~21 importers; `template-manifest.generated.ts` was generator output whose source of truth is `packages/template-engine`; `createBlankProjectConfig` was the ADR-0034 fork.
 
 ## Decision
 
 **1. Cross-slice imports are debt, not composition. There is no "shared-config provider" exemption.**
 
-All nine pinned pairs are classified as misplaced code. A general exemption was considered and rejected: it would have to read _"any slice may import any module named `config` / `_-config`/`_.generated` from any other slice"_, which is unenforceable and self-defeating — every slice would name its shared surface `config.ts`. The narrow alternative, a per-symbol allowlist, is what `CROSS_SLICE_ALIAS_BASELINE` already is, and it is designed to shrink.
+All nine pinned pairs are classified as misplaced code. A general exemption was considered and rejected: it would have to read "any slice may import any module named `config`, `<name>-config` or `<name>.generated` from any other slice", which is unenforceable and self-defeating — every slice would name its shared surface `config.ts`. The narrow alternative, a per-symbol allowlist, is what `CROSS_SLICE_ALIAS_BASELINE` already is, and it is designed to shrink.
 
 **2. The remedy is extraction to a neutral home, not an exemption.** Three homes, by kind:
 
@@ -51,11 +51,11 @@ A neutral module **must not import from `features/`**. That inverts the dependen
 
 **Landed at the time of writing** (baseline **9 → 3** pins):
 
-| PR              | Extraction                                                                  | Pins |
-| --------------- | --------------------------------------------------------------------------- | ---- |
-| #463 `e19fcf10` | generated template manifest → `lib/generated/`                              | 1    |
-| #464 `b0269340` | `features/llm-driver/` → `app/lib/local-llm-context.tsx`, directory deleted | 1    |
-| #467 `cf7ccc4e` | `project-config` presets/options/applications → `lib/`                      | 4    |
+| PR              | Extraction                                                                           | Pins |
+| --------------- | ------------------------------------------------------------------------------------ | ---- |
+| #463 `e19fcf10` | generated template manifest → `lib/generated/`                                       | 1    |
+| #464 `b0269340` | `apps/web/features/llm-driver/` → `app/lib/local-llm-context.tsx`, directory deleted | 1    |
+| #467 `cf7ccc4e` | `project-config` presets/options/applications → `lib/`                               | 4    |
 
 #464 also retires the `features/llm-driver` vs `packages/llm-driver` name collision that made `@/llm-driver/*` ambiguous to every reader and every checker.
 

@@ -96,9 +96,19 @@ The `hexagen-ui/no-feature-slice-imports` ESLint rule forbids cross-feature impo
 > is extraction to a neutral home rather than an exemption, and the rule is to be taught to
 > resolve aliases _after_ the extractions land.
 >
-> **The other two accommodations are untouched and not assessed here.** `FileDropZone` and the
-> `llmContext` prop-drill were not among the nine alias-form pairs ADR-0055 investigated; whether
-> either is now unnecessary is an open question, not a claim this amendment makes.
+> **The second accommodation is moot.** The `FileDropZone` inlining was scoped to
+> `ImportManifestPage.tsx`, which no longer exists — it was deleted by **PR #390**
+> (`cf09ff40`), which unified the two import paths into
+> `apps/web/features/manifest-generation/ImportProjectSpecPage.tsx`. That page carries no
+> dropzone at all, so the accommodation was retired by deletion long before ADR-0055, not by
+> this decision.
+>
+> **The third is genuinely open and not assessed here.** The `llmContext` prop-drill from the
+> route page client component to `AIGenerationPage` still exists and was not among the nine
+> alias-form pairs ADR-0055 investigated. Whether it is still necessary now that ADR-0055
+> permits a neutral home — and note `llm-driver` itself has since moved to
+> `apps/web/app/lib/local-llm-context.tsx` (PR #464), which is exactly such a home — is a
+> question worth asking, but not one this amendment answers.
 >
 > The de-modalization decision this ADR records is unaffected.
 
