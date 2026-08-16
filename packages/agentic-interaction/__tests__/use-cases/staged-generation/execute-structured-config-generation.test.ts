@@ -1,6 +1,6 @@
 import { test } from "vitest";
 import assert from "node:assert/strict";
-import { ExecuteStructuredConfigGenerationUseCase } from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.ts";
+import { ExecuteStructuredConfigGenerationUseCase } from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
 

@@ -1,6 +1,6 @@
 import { test, describe } from "vitest";
 import assert from "node:assert";
-import { ExecuteManifestAssemblyUseCase } from "../../../src/application/use-cases/staged-generation/execute-manifest-assembly.use-case.ts";
+import { ExecuteManifestAssemblyUseCase } from "../../../src/application/use-cases/staged-generation/execute-manifest-assembly.use-case";
 import type { PipelineState } from "../../../src/domain/value-objects/pipeline-state";
 
 describe("Stage 5: Manifest Assembly", () => {
@@ -293,7 +293,7 @@ describe("Stage 5: Manifest Assembly", () => {
             out: [
               {
                 name: "ImageRepositoryPort",
-                type: "repository",
+                type: "repository" as const,
                 description: "Image persistence",
               },
             ],

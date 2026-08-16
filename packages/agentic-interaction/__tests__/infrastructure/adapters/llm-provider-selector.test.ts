@@ -1,7 +1,14 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
+import { z } from "zod";
 import { LLMProviderSelectorAdapter } from "../../../src/infrastructure/adapters/llm-provider-selector.adapter";
+import { DomainModelId } from "@hexagen/local-llm";
 import type { LLMRequest, LLMResponse } from "@hexagen/local-llm";
+
+// `LLMRequest.modelId` / `LLMResponse.modelId` are the `DomainModelId` enum,
+// not free-form strings, and `schema` is a Zod schema, not a JSON-Schema
+// literal. The old fixtures used both wrong.
+const MOCK_MODEL_ID = DomainModelId.QWEN_CODER_3B;
 
 const mockLocalLLMAdapter = {
   sendRequest: async () => {
@@ -9,7 +16,7 @@ const mockLocalLLMAdapter = {
       success: true,
       value: {
         id: "local-123",
-        modelId: "mock-local-model",
+        modelId: MOCK_MODEL_ID,
         content: JSON.stringify({ result: "Generated from local LLM" }),
         finishReason: "stop",
         timestamp: Date.now(),
@@ -21,7 +28,7 @@ const mockLocalLLMAdapter = {
     yield { success: true, value: "chunk 2" };
   },
   getLoadedModel: () => ({
-    id: "mock-local-model",
+    id: MOCK_MODEL_ID,
     name: "Mock Local Model",
     description: "A mock local model for testing",
     vramRequirements: {
@@ -103,7 +110,7 @@ function createTestConfig(overrides: {
     validateLocalLLM: true,
     fallbackChain: {
       primary: {
-        providerId: "test",
+        providerId: "openai" as const,
         model: "test-model",
         apiKeyEnvVar: "TEST_API_KEY",
         baseUrl: "https://example.com",
@@ -125,16 +132,17 @@ describe("LLMProviderSelectorAdapter", () => {
     );
 
     const request: LLMRequest = {
-      modelId: "mock-local-model",
+      id: "req-1",
+      modelId: MOCK_MODEL_ID,
       messages: [{ role: "user", content: "Generate something" }],
-      schema: { type: "object", properties: {} },
+      schema: z.object({}),
     };
 
     const result = await adapter.sendRequest(request);
 
     assert.strictEqual(result.success, true);
     if (result.success) {
-      assert.strictEqual(result.value.modelId, "mock-local-model");
+      assert.strictEqual(result.value.modelId, MOCK_MODEL_ID);
       assert.strictEqual(
         JSON.parse(result.value.content).result,
         "Generated from local LLM",
@@ -151,9 +159,10 @@ describe("LLMProviderSelectorAdapter", () => {
     );
 
     const request: LLMRequest = {
-      modelId: "mock-local-model",
+      id: "req-1",
+      modelId: MOCK_MODEL_ID,
       messages: [{ role: "user", content: "Generate something" }],
-      schema: { type: "object", properties: {} },
+      schema: z.object({}),
     };
 
     const result = await adapter.sendRequest(request);
@@ -177,9 +186,10 @@ describe("LLMProviderSelectorAdapter", () => {
     );
 
     const request: LLMRequest = {
-      modelId: "mock-local-model",
+      id: "req-1",
+      modelId: MOCK_MODEL_ID,
       messages: [{ role: "user", content: "Generate something" }],
-      schema: { type: "object", properties: {} },
+      schema: z.object({}),
     };
 
     const result = await adapter.sendRequest(request);
@@ -203,9 +213,10 @@ describe("LLMProviderSelectorAdapter", () => {
     );
 
     const request: LLMRequest = {
-      modelId: "mock-local-model",
+      id: "req-1",
+      modelId: MOCK_MODEL_ID,
       messages: [{ role: "user", content: "Generate something" }],
-      schema: { type: "object", properties: {} },
+      schema: z.object({}),
     };
 
     const result = await adapter.sendRequest(request);
@@ -229,9 +240,10 @@ describe("LLMProviderSelectorAdapter", () => {
     );
 
     const request: LLMRequest = {
-      modelId: "mock-local-model",
+      id: "req-1",
+      modelId: MOCK_MODEL_ID,
       messages: [{ role: "user", content: "Generate something" }],
-      schema: { type: "object", properties: {} },
+      schema: z.object({}),
     };
 
     const chunks: string[] = [];
@@ -253,9 +265,10 @@ describe("LLMProviderSelectorAdapter", () => {
     );
 
     const request: LLMRequest = {
-      modelId: "mock-local-model",
+      id: "req-1",
+      modelId: MOCK_MODEL_ID,
       messages: [{ role: "user", content: "Generate something" }],
-      schema: { type: "object", properties: {} },
+      schema: z.object({}),
     };
 
     const chunks: string[] = [];

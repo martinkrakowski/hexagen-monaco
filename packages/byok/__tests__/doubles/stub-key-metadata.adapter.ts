@@ -78,4 +78,16 @@ export class StubKeyMetadataAdapter implements KeyMetadataStorePort {
     );
     return { success: true, value: undefined };
   }
+
+  // Mirrors InMemoryKeyMetadataAdapter.hasKeys: a prefix scan over the
+  // user+provider index, revoked entries included (revocation marks the record,
+  // it does not remove it).
+  async hasKeys(userId: string): Promise<Result<boolean, ByokError>> {
+    for (const key of this.byUserProvider.keys()) {
+      if (key.startsWith(`${userId}:`)) {
+        return { success: true, value: true };
+      }
+    }
+    return { success: true, value: false };
+  }
 }

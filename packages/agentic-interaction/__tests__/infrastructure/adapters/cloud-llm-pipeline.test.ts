@@ -1,5 +1,6 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
+import type { Result } from "@hexagen/shared";
 import { CloudLLMPipelineAdapter } from "../../../src/infrastructure/adapters/cloud-llm-pipeline.adapter";
 import type { CloudLLMPipelineAdapterConfig } from "../../../src/infrastructure/adapters/cloud-llm-pipeline.adapter";
 import type { ProviderFallbackChain } from "../../../src/domain/provider-config";
@@ -139,6 +140,9 @@ describe("cloud-llm-pipeline", () => {
 
     assert.ok(!result.success, "Should fail when no API keys");
     if (!result.success) {
+      // `Result<T>` defaults its error channel to `unknown`; the adapter always
+      // populates it with an Error, so assert that before reading `.message`.
+      assert.ok(result.error instanceof Error, "Error channel must hold Error");
       assert.ok(
         result.error.message.includes("No cloud LLM API keys configured"),
         "Error should mention missing API keys",
@@ -230,6 +234,10 @@ describe("cloud-llm-pipeline", () => {
 
       assert.ok(!result.success, "Should fail on auth error");
       if (!result.success) {
+        assert.ok(
+          result.error instanceof Error,
+          "Error channel must hold Error",
+        );
         assert.ok(
           result.error.message.includes("401"),
           "Error should include status code",
@@ -479,6 +487,10 @@ describe("cloud-llm-pipeline", () => {
         "Should return error immediately without fallback",
       );
       if (results[0] && !results[0].success) {
+        assert.ok(
+          results[0].error instanceof Error,
+          "Error channel must hold Error",
+        );
         assert.ok(
           results[0].error.message.includes("403"),
           "Error should include 403 status",

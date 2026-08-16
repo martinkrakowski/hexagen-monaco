@@ -1,6 +1,6 @@
 import { test, describe } from "vitest";
 import assert from "node:assert";
-import { ExecuteAdapterAssignmentUseCase } from "../../../src/application/use-cases/staged-generation/execute-adapter-assignment.use-case.ts";
+import { ExecuteAdapterAssignmentUseCase } from "../../../src/application/use-cases/staged-generation/execute-adapter-assignment.use-case";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry";

@@ -58,6 +58,19 @@ jobs:
       - name: "Verify TypeCheck After Sync"
         run: yarn turbo run typecheck --output-logs=full --log-order=stream
 
+      - name: "Verify TypeCheck (test sources)"
+        # `typecheck` only covers each package's `src` — its tsconfig excludes
+        # __tests__. Test files were therefore never type-checked by CI at all,
+        # so mocks and fixtures silently drifted away from the ports and value
+        # objects they stand in for (AUD-020). This step runs the per-package
+        # `typecheck:test` script (tsconfig.test.json, which includes
+        # __tests__/**) and fails the job on any test-source type error.
+        # Placed immediately after the src typecheck so the two type gates sit
+        # together, and BEFORE the test suite: a type error in a fixture should
+        # be reported as a type error, not as a downstream runtime failure.
+        # `--continue` so one package's errors do not hide the rest.
+        run: yarn turbo run typecheck:test --continue --output-logs=full --log-order=stream
+
       - name: "Verify Architecture (arch-linter, strict)"
         # A REAL architecture gate. The previous `sync --dry-run` was toothless:
         # under --dry-run the sync engine short-circuits the linter entirely

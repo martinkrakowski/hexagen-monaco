@@ -9,7 +9,7 @@ import {
   buildContextMappingsFromConfig,
   buildNormalizedPromptFromConfig,
   buildClassificationFromConfig,
-} from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.ts";
+} from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 
 /**
  * Regression: a spec authored in the rich "hexagonal" dialect — domain content
@@ -36,13 +36,13 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
 
     // The use case — the visible "0 use cases" symptom — must be captured.
     assert.deepEqual(
-      analysis.useCases.map((u) => u.name),
+      (analysis.useCases ?? []).map((u) => u.name),
       ["GenerateCampaignUseCase"],
       "primary_use_cases must map to the canonical use_cases map",
     );
 
     // domain_models.value_objects → value objects (5).
-    const voNames = analysis.valueObjects.map((v) => v.name).sort();
+    const voNames = (analysis.valueObjects ?? []).map((v) => v.name).sort();
     assert.deepEqual(voNames, [
       "AspectRatio",
       "ComplianceResult",
@@ -51,20 +51,22 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
       "PipelineResult",
     ]);
     // The enum VO carries its values as a derived rule.
-    const ratio = analysis.valueObjects.find((v) => v.name === "AspectRatio");
+    const ratio = (analysis.valueObjects ?? []).find(
+      (v) => v.name === "AspectRatio",
+    );
     assert.match(ratio?.rules ?? "", /1:1/);
 
     // domain_models.entities → aggregate roots (3), identity from the `id` attr.
-    const aggNames = analysis.aggregateRoots.map((a) => a.name).sort();
+    const aggNames = (analysis.aggregateRoots ?? []).map((a) => a.name).sort();
     assert.deepEqual(aggNames, ["CampaignBrief", "GeneratedAsset", "Product"]);
     assert.deepEqual(
-      analysis.aggregateRoots.find((a) => a.name === "CampaignBrief")
+      (analysis.aggregateRoots ?? []).find((a) => a.name === "CampaignBrief")
         ?.identityFields,
       ["id"],
     );
 
     // domain_events (objects) → domain events (3).
-    const eventNames = analysis.domainEvents.map((e) => e.name).sort();
+    const eventNames = (analysis.domainEvents ?? []).map((e) => e.name).sort();
     assert.deepEqual(eventNames, [
       "AssetComposited",
       "CampaignBriefIngested",
@@ -125,25 +127,25 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     const analysis = buildDomainAnalysisFromConfig(config);
 
     assert.deepEqual(
-      analysis.aggregateRoots.map((a) => a.name),
+      (analysis.aggregateRoots ?? []).map((a) => a.name),
       ["Order"],
       "empty aggregates:[] did not block dialect entities; nameless entry dropped",
     );
     assert.deepEqual(
-      analysis.valueObjects.map((v) => v.name),
+      (analysis.valueObjects ?? []).map((v) => v.name),
       ["Money"],
     );
     assert.deepEqual(
-      analysis.domainEvents.map((e) => e.name),
+      (analysis.domainEvents ?? []).map((e) => e.name),
       ["OrderPlaced"],
     );
     assert.deepEqual(
-      analysis.useCases.map((u) => u.name),
+      (analysis.useCases ?? []).map((u) => u.name),
       ["PlaceOrder"],
       "nameless use case dropped",
     );
     assert.ok(
-      analysis.aggregateRoots.every((a) => typeof a.name === "string"),
+      (analysis.aggregateRoots ?? []).every((a) => typeof a.name === "string"),
       "no undefined-named aggregates propagate",
     );
   });
@@ -164,7 +166,7 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     );
     const analysis = buildDomainAnalysisFromConfig(config);
     assert.deepEqual(
-      analysis.useCases.map((u) => u.name),
+      (analysis.useCases ?? []).map((u) => u.name),
       ["CanonicalPlaceOrder"],
       "canonical (alias-keyed) wins; the dialect entry must not also survive",
     );
@@ -184,7 +186,7 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     );
     const analysis = buildDomainAnalysisFromConfig(config);
     assert.deepEqual(
-      analysis.useCases.map((u) => u.name),
+      (analysis.useCases ?? []).map((u) => u.name),
       ["PlaceOrder"],
       "empty canonical placeholder is absent; the dialect primary_use_cases survive",
     );
@@ -205,7 +207,7 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     );
     const analysis = buildDomainAnalysisFromConfig(config);
     assert.deepEqual(
-      analysis.useCases.map((u) => u.name),
+      (analysis.useCases ?? []).map((u) => u.name),
       ["CanonicalCharge"],
       "object-form canonical entry wins; the dialect entry must not overwrite it",
     );
@@ -357,11 +359,11 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     );
     const analysis = buildDomainAnalysisFromConfig(config);
     assert.deepEqual(
-      analysis.valueObjects.map((v) => v.name),
+      (analysis.valueObjects ?? []).map((v) => v.name),
       ["Money"],
     );
     assert.deepEqual(
-      analysis.useCases.map((u) => u.name),
+      (analysis.useCases ?? []).map((u) => u.name),
       ["Charge"],
     );
   });

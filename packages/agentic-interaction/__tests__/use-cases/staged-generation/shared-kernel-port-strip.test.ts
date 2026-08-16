@@ -4,7 +4,7 @@ import {
   parseStructuredConfig,
   buildPreDefinedPortMap,
   buildPreDefinedAdapterBindings,
-} from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.ts";
+} from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 
 /**
  * Regression: importing a manifest where a shared-kernel context already carries

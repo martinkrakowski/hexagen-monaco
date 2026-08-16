@@ -4,8 +4,8 @@ import yaml from "js-yaml";
 import {
   parseStructuredConfig,
   buildDomainAnalysisFromConfig,
-} from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.ts";
-import { sanitizePseudoYaml } from "../../../src/domain/utils/sanitize-pseudo-yaml.ts";
+} from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
+import { sanitizePseudoYaml } from "../../../src/domain/utils/sanitize-pseudo-yaml";
 
 /**
  * Specs are frequently authored as "pseudo-YAML" that embeds TypeScript syntax
@@ -128,7 +128,7 @@ describe("parseStructuredConfig — pseudo-YAML recovery", () => {
 
     const analysis = buildDomainAnalysisFromConfig(cfg);
     assert.deepEqual(
-      analysis.useCases.map((u) => u.name),
+      (analysis.useCases ?? []).map((u) => u.name),
       ["PlaceOrder"],
     );
     assert.deepEqual(
@@ -151,7 +151,7 @@ describe("parseStructuredConfig — pseudo-YAML recovery", () => {
     const cfg = parseStructuredConfig(valid);
     const analysis = buildDomainAnalysisFromConfig(cfg);
     assert.deepEqual(
-      analysis.useCases.map((u) => u.name),
+      (analysis.useCases ?? []).map((u) => u.name),
       ["Charge"],
     );
   });

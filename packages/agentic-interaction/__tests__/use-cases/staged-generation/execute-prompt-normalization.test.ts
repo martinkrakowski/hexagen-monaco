@@ -1,6 +1,6 @@
 import { test, describe } from "vitest";
 import assert from "node:assert";
-import { ExecutePromptNormalizationUseCase } from "../../../src/application/use-cases/staged-generation/execute-prompt-normalization.use-case.ts";
+import { ExecutePromptNormalizationUseCase } from "../../../src/application/use-cases/staged-generation/execute-prompt-normalization.use-case";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 
 describe("ExecutePromptNormalizationUseCase", () => {

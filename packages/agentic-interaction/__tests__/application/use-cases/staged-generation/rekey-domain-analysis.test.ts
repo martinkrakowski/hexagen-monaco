@@ -58,6 +58,9 @@ describe("rekeyDomainAnalysisToManifest — collision safety (PR #344)", () => {
     ]);
     const out = rekeyDomainAnalysisToManifest(stage1, manifest);
     // Pre-fix this collapsed to ["shipping","shipping"] (orders lost its Address).
+    // `DomainAnalysis.valueObjects` is optional on the type; a rekey that
+    // dropped it entirely is itself a regression, so assert before mapping.
+    assert.ok(out.valueObjects, "rekey must preserve valueObjects");
     const subdomains = out.valueObjects
       .map((v: { subdomain?: string }) => v.subdomain)
       .sort();
@@ -78,6 +81,9 @@ describe("rekeyDomainAnalysisToManifest — collision safety (PR #344)", () => {
       { name: "shipping", value_objects: ["Address"] },
     ]);
     const out = rekeyDomainAnalysisToManifest(stage1, manifest);
+
+    assert.ok(out.aggregateRoots, "rekey must preserve aggregateRoots");
+    assert.ok(out.valueObjects, "rekey must preserve valueObjects");
 
     const payment = out.aggregateRoots.find(
       (a: { name: string }) => a.name === "Payment",

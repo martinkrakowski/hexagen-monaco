@@ -55,7 +55,10 @@ test("extract-json: balanceJSON adds missing closing brackets for arrays", () =>
 test("extract-json: parseJSON with port list missing description", () => {
   const json =
     '{"in": [{"name": "CreateOrderPort", "type": "UseCase"}], "out": []}';
-  const result = parseJSON<{ in: unknown[]; out: unknown[] }>(json);
+  const result = parseJSON<{
+    in: Array<{ name: string; type: string }>;
+    out: unknown[];
+  }>(json);
   assert.ok(result.ok);
   assert.equal(result.data.in.length, 1);
   assert.equal(result.data.in[0].name, "CreateOrderPort");
@@ -64,7 +67,10 @@ test("extract-json: parseJSON with port list missing description", () => {
 test("extract-json: parseJSON with valid complete JSON", () => {
   const json =
     '{"in": [{"name": "CreateOrderPort", "type": "UseCase", "description": "Create order"}], "out": [{"name": "OrderRepositoryPort", "type": "Repository", "description": "Persist order"}]}';
-  const result = parseJSON<{ in: unknown[]; out: unknown[] }>(json);
+  const result = parseJSON<{
+    in: Array<{ name: string; type: string }>;
+    out: unknown[];
+  }>(json);
   assert.ok(result.ok);
   assert.equal(result.data.in.length, 1);
   assert.equal(result.data.out.length, 1);

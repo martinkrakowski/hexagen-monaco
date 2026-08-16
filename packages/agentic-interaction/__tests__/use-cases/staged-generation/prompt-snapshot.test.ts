@@ -8,13 +8,13 @@ import {
   compileStage4Prompt,
   compileStage6Prompt,
   buildStageRetryPrompt,
-} from "../../../src/domain/prompts/generate-manifest.prompt.ts";
+} from "../../../src/domain/prompts/generate-manifest.prompt";
 import {
   compileTopologyUserPrompt,
   TOPOLOGY_SYSTEM_PROMPT,
-} from "../../../src/domain/prompts/generate-topology.prompt.ts";
-import { compileAdapterUserPrompt } from "../../../src/domain/prompts/generate-adapters.prompt.ts";
-import { LOOSE_SPEC_CONVERSION_SYSTEM_PROMPT } from "../../../src/domain/prompts/convert-loose-spec.prompt.ts";
+} from "../../../src/domain/prompts/generate-topology.prompt";
+import { compileAdapterUserPrompt } from "../../../src/domain/prompts/generate-adapters.prompt";
+import { LOOSE_SPEC_CONVERSION_SYSTEM_PROMPT } from "../../../src/domain/prompts/convert-loose-spec.prompt";
 
 // Minimal valid state for each stage — matches PipelineState interface
 
@@ -60,7 +60,7 @@ test("compileStage2Prompt includes classification", () => {
       accepted: [
         {
           name: "invoicing-billing",
-          type: "core",
+          type: "core" as const,
           responsibility: "test",
           aggregateRoots: [],
           useCaseNames: [],
@@ -98,7 +98,7 @@ test("compileStage3Prompt includes intent header and all accepted contexts", () 
     accepted: [
       {
         name: "invoicing-billing",
-        type: "core",
+        type: "core" as const,
         responsibility: "test",
         aggregateRoots: [],
         useCaseNames: [],
@@ -107,7 +107,7 @@ test("compileStage3Prompt includes intent header and all accepted contexts", () 
       },
       {
         name: "notification-delivery",
-        type: "supporting",
+        type: "supporting" as const,
         responsibility: "test",
         aggregateRoots: [],
         useCaseNames: [],
@@ -142,7 +142,7 @@ test("compileStage4Prompt includes intent header and context names", () => {
     accepted: [
       {
         name: "invoicing-billing",
-        type: "core",
+        type: "core" as const,
         responsibility: "test",
         aggregateRoots: [],
         useCaseNames: [],
@@ -178,7 +178,7 @@ test("compileStage6Prompt includes validation rules", () => {
     accepted: [
       {
         name: "invoicing-billing",
-        type: "core",
+        type: "core" as const,
         responsibility: "test",
         aggregateRoots: [],
         useCaseNames: [],
@@ -244,11 +244,19 @@ test("compileStage2Prompt includes classification (stage1->stage2)", () => {
 });
 
 test("compileStage3Prompt includes intent header", () => {
+  // Stage 0 is a `NormalizedPrompt`; `originalIntent`/`userDescription` were
+  // fields of a long-gone shape. The `<original_intent>` header the assertion
+  // below looks for is rendered from `intent`.
   const state0 = {
-    originalIntent: "Test intent",
-    userDescription: "Test",
+    intent: "Test intent",
+    explicitTechnologies: [],
+    explicitPatterns: [],
+    ambiguities: [],
   };
   const state1 = {
+    verbs: [],
+    nouns: [],
+    subdomains: [],
     aggregateRoots: [],
     domainEvents: [],
   };
@@ -256,7 +264,7 @@ test("compileStage3Prompt includes intent header", () => {
     accepted: [
       {
         name: "invoicing-billing",
-        type: "core",
+        type: "core" as const,
         reasoning: "test",
       },
     ],
@@ -351,7 +359,7 @@ test("compileStage6Prompt normalizes port names in grounding sections to match t
         out: [
           {
             name: "BookCollectionRepository",
-            type: "repository",
+            type: "repository" as const,
             description: "Persists book collections",
             justification: "Aggregate persistence",
           },
@@ -366,6 +374,7 @@ test("compileStage6Prompt normalizes port names in grounding sections to match t
         adapters: [
           {
             name: "PostgresBookCollectionRepository",
+            type: "repository",
             implements: "BookCollectionRepository",
             technology: "postgres",
           },

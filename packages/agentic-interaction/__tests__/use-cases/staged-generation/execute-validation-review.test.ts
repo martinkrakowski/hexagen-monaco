@@ -1,6 +1,6 @@
 import { test, describe } from "vitest";
 import assert from "node:assert";
-import { ExecuteValidationReviewUseCase } from "../../../src/application/use-cases/staged-generation/execute-validation-review.use-case.ts";
+import { ExecuteValidationReviewUseCase } from "../../../src/application/use-cases/staged-generation/execute-validation-review.use-case";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry";
@@ -8,8 +8,8 @@ import {
   STAGE6_VALIDATION_SYSTEM_PROMPT,
   compileStage6Prompt,
   buildStage6RetryPrompt,
-} from "../../../src/domain/prompts/generate-manifest.prompt.ts";
-import { CONTEXT_NAME_VALIDATION_BANS } from "../../../src/domain/prompts/architecture-contract.ts";
+} from "../../../src/domain/prompts/generate-manifest.prompt";
+import { CONTEXT_NAME_VALIDATION_BANS } from "../../../src/domain/prompts/architecture-contract";
 
 const validValidationNdjson = '{"type":"result","passed":true}\n';
 

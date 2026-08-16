@@ -21,15 +21,20 @@ describe("resource use cases", () => {
       edges: [],
     };
 
+    const seenProjectIds: string[] = [];
     const graphProvider: ArchitectureGraphProviderPort = {
-      async getArchitectureGraph() {
+      async getArchitectureGraph(projectId: string) {
+        seenProjectIds.push(projectId);
         return { success: true, value: graphPayload };
       },
     };
 
     const graphUseCase = new GetArchitectureGraphUseCase(graphProvider);
-    const graphResult = await graphUseCase.execute();
+    const graphResult = await graphUseCase.execute("project-1");
     assert.strictEqual(graphResult.nodes.length, 1);
+    // The use case is the only thing that knows how to reach the provider, so
+    // assert it forwards the project scope rather than dropping it.
+    assert.deepStrictEqual(seenProjectIds, ["project-1"]);
   });
 
   it("should return linter report compliance status", async () => {

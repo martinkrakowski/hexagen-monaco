@@ -1,6 +1,6 @@
 import { test, describe } from "vitest";
 import * as assert from "node:assert/strict";
-import { ExecuteDomainExtractionUseCase } from "../../../src/application/use-cases/staged-generation/execute-domain-extraction.use-case.ts";
+import { ExecuteDomainExtractionUseCase } from "../../../src/application/use-cases/staged-generation/execute-domain-extraction.use-case";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import type { PipelineState } from "../../../src/domain/value-objects/pipeline-state";
 import { StageMaxRetriesError } from "../../../src/domain/errors/stage-errors";
