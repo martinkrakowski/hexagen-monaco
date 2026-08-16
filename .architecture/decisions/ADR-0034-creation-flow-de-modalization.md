@@ -76,6 +76,42 @@ The `hexagen-ui/no-feature-slice-imports` ESLint rule forbids cross-feature impo
 - **`FileDropZone` inlined** from `@hexagen/ui` in `ImportManifestPage.tsx`
 - **`llmContext` passed as prop** from route page client component to `AIGenerationPage` to avoid `manifest-generation` importing `llm-driver`
 
+> **Amendment — 2026-08-16 (see ADR-0055).** The first accommodation above is **retired**; the
+> section is left unedited because it is an accurate record of 2026-05-07 and of _why_ the
+> duplication existed.
+>
+> The inlined `blankProjectConfig` survived as
+> `apps/web/features/landing/domain/createBlankProjectConfig.ts`, carrying the JSDoc "Mirrors
+> `emptyFormValues` … keep the two in sync". A later author, needing the same preset in
+> `manifest-generation`, did not fork it a third time — they used an `@/` alias import and
+> documented in a code comment that the lint rule "only isolates relative feature imports".
+> So this accommodation produced first a hand-synced duplicate of the ADR-0041 preset, then a
+> written precedent for routing around the rule.
+>
+> The cause was a defect in the rule, not in the boundary: `no-feature-slice-imports.ts:31`
+> returns early on any non-relative specifier, so it had never inspected an `@/` import. **PR
+> #467 (`cf7ccc4e`) removed the duplicate**, unifying both into
+> `apps/web/lib/project-config-presets.ts` — a neutral home, which the rule permits by
+> construction. ADR-0055 records the general decision: cross-slice imports are debt, the remedy
+> is extraction to a neutral home rather than an exemption, and the rule is to be taught to
+> resolve aliases _after_ the extractions land.
+>
+> **The second accommodation is moot.** The `FileDropZone` inlining was scoped to
+> `ImportManifestPage.tsx`, which no longer exists — it was deleted by **PR #390**
+> (`cf09ff40`), which unified the two import paths into
+> `apps/web/features/manifest-generation/ImportProjectSpecPage.tsx`. That page carries no
+> dropzone at all, so the accommodation was retired by deletion long before ADR-0055, not by
+> this decision.
+>
+> **The third is genuinely open and not assessed here.** The `llmContext` prop-drill from the
+> route page client component to `AIGenerationPage` still exists and was not among the nine
+> alias-form pairs ADR-0055 investigated. Whether it is still necessary now that ADR-0055
+> permits a neutral home — and note `llm-driver` itself has since moved to
+> `apps/web/app/lib/local-llm-context.tsx` (PR #464), which is exactly such a home — is a
+> question worth asking, but not one this amendment answers.
+>
+> The de-modalization decision this ADR records is unaffected.
+
 ## Deleted Infrastructure
 
 The following were removed entirely:
