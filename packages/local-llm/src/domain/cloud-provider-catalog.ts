@@ -5,9 +5,12 @@
  * public API documentation. When a vendor releases a new model or
  * deprecates one, this file is the single point of update.
  *
- * SECURITY BOUNDARY — `baseUrl` is server-side only. The
- * `/api/llm/chat` route uses it to reach the vendor API directly;
- * the client never sees it (see `getClientProviders()`).
+ * LAYERING (ADR-0051, Decision 1) — this file carries provider and model
+ * *identities* only. Vendor routing data (`baseUrl`) is an infrastructure
+ * concern and lives in
+ * `src/infrastructure/adapters/cloud-provider-routing.ts`; it is therefore
+ * absent from the `@hexagen/local-llm/client` subpath, which re-exports this
+ * module into the browser bundle.
  */
 
 export type CloudProviderId = "openai" | "anthropic" | "mistral" | "google";
@@ -45,8 +48,6 @@ export interface CloudProviderConfig {
   displayName: string;
   /** Whether the provider is exposed to users at all. */
   available: boolean;
-  /** SERVER-ONLY. Never ship to the client — see getClientProviders. */
-  baseUrl: string;
   models: CloudModelConfig[];
 }
 
@@ -55,7 +56,6 @@ export const CLOUD_PROVIDERS: readonly CloudProviderConfig[] = [
     id: "openai",
     displayName: "OpenAI",
     available: true,
-    baseUrl: "https://api.openai.com/v1",
     models: [
       {
         id: "gpt-4o",
@@ -87,7 +87,6 @@ export const CLOUD_PROVIDERS: readonly CloudProviderConfig[] = [
     id: "anthropic",
     displayName: "Anthropic",
     available: false,
-    baseUrl: "https://api.anthropic.com/v1",
     models: [
       {
         id: "claude-sonnet-4-20250514",
@@ -107,7 +106,6 @@ export const CLOUD_PROVIDERS: readonly CloudProviderConfig[] = [
     id: "mistral",
     displayName: "Mistral AI",
     available: false,
-    baseUrl: "https://api.mistral.ai/v1",
     models: [
       {
         id: "mistral-large-latest",
@@ -121,7 +119,6 @@ export const CLOUD_PROVIDERS: readonly CloudProviderConfig[] = [
     id: "google",
     displayName: "Google AI",
     available: false,
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
     models: [
       {
         id: "gemini-2.5-flash",
@@ -153,16 +150,21 @@ export function getProviderModels(
 }
 
 /**
- * Safe-to-serialize projection of a provider — excludes `baseUrl`
- * (server-only) but keeps everything the UI needs.
+ * Safe-to-serialize projection of a provider.
+ *
+ * Historically this stripped the server-only `baseUrl`; since ADR-0051 moved
+ * vendor routing to infrastructure there is nothing left to strip, so the
+ * projection is structurally identical to the catalog entry. The name and the
+ * explicit field list are kept: they are the contract the settings views
+ * consume, and they keep the "what may cross to the client" decision written
+ * down at the boundary rather than implied by the catalog's shape.
  */
-export type ClientProviderInfo = Omit<CloudProviderConfig, "baseUrl">;
+export type ClientProviderInfo = CloudProviderConfig;
 
 /**
- * Returns provider list with the `baseUrl` stripped, safe to send
- * to the client. Never include this function's output in a server-
- * rendered component that leaks to the client without going through
- * a serialization boundary.
+ * Provider list in its client-safe projection. Fields are enumerated rather
+ * than spread so that adding a server-only field to `CloudProviderConfig`
+ * cannot leak it to the browser by default.
  */
 export function getClientProviders(): ClientProviderInfo[] {
   return CLOUD_PROVIDERS.map(
