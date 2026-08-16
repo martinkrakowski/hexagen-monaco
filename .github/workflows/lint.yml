@@ -108,24 +108,41 @@ jobs:
       # dependency of no linted workspace, so `turbo run lint`'s `^build` never
       # reaches it.
       #
-      # Not `--filter=@hexagen/arch-linter`: the linter resolves `@scope/pkg`
-      # import targets through the workspace symlinks, whose `exports` point at
-      # each package's dist/. An unbuilt package resolves to nothing, and the
-      # resolution-dependent rules (domain-layer-import, application-layer-import)
-      # then produce no finding for it — the ratchet would silently check less
-      # than it claims. Building the whole graph makes the CI run see the same
-      # sources the baseline was recorded against.
+      # Building the arch-linter ALONE is not enough either. The linter resolves
+      # `@scope/pkg` import targets through ts-morph — i.e. through the workspace
+      # symlinks, whose `exports` point at each package's dist/. An unbuilt
+      # package resolves to nothing, and the resolution-dependent rules
+      # (domain-layer-import, application-layer-import) then produce no finding
+      # for it: the ratchet would silently check less than it claims. So every
+      # package the linter can resolve has to be built.
       #
-      # This is NOT free, and the cost is stated rather than hand-waved: turbo
-      # has no remote cache here, and the eslint step's `^build` closure does
-      # not come back as cache hits on a hosted runner, so this step builds
-      # 39/39 from scratch — measured at 1m50s of a ~4m job. That is bought
-      # deliberately: the cheaper `--filter` form yields a byte-identical
-      # finding set on today's tree, but it is the form that degrades quietly
-      # as the repo grows, and this job still finishes well inside
-      # sync-integrity.yml (two full builds, a sync and the test suite).
+      # The filter is therefore a SUBTRACTION, not a selection. `!web` builds
+      # every workspace except the Next app. A selection (`--filter=@hexagen/*`)
+      # would be the form that degrades quietly: a workspace added outside that
+      # scope drops out of the build, and out of the ratchet's resolution with
+      # it, with no signal. Subtracting over-builds instead — anything added
+      # later is built by default, and the failure direction is "built more than
+      # strictly needed", never "checked less than claimed".
+      #
+      # `web` is safe to subtract for a structural reason, not a timing one. The
+      # linter walks `<workspacesDir>/<name>` (i.e. packages/) for each entry in
+      # the manifest's `bounded_contexts`; `web` is under `apps:`, so its sources
+      # are never scanned. It is also a private Next app: it exports nothing, and
+      # no workspace depends on it, so its build output is never an import target
+      # either. Verified on this branch — the full violation output after
+      # `--filter='!web'` and after an unfiltered build is byte-identical (34
+      # findings each, `diff` clean).
+      #
+      # What the subtraction removes is `next build --webpack`: the dominant
+      # cost of this step, and a path by which an unrelated app-build breakage
+      # fails the LINT gate. sync-integrity.yml already builds the app, so that
+      # breakage is still caught — just not here, where it says nothing about
+      # lint or architecture. This step is still not free (turbo has no remote
+      # cache here and the eslint step's `^build` closure does not come back as
+      # hits on a hosted runner, so it builds 38 packages from scratch); it is
+      # merely no longer paying for a build the ratchet cannot use.
       - name: "Build Packages (arch-linter bin + resolvable workspace targets)"
-        run: yarn turbo run build --output-logs=errors-only --log-order=stream
+        run: yarn turbo run build --filter='!web' --output-logs=errors-only --log-order=stream
 
       # Layer 1. The architecture ratchet (ADR-0054 §1). Fails on any boundary
       # violation NOT already recorded in .architecture/arch-lint-baseline.json;
