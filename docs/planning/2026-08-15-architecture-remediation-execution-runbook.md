@@ -59,6 +59,25 @@ release-gated).
 
 **Phase 4:** 4.5 ⇐ **D3**, 4.7 ⇐ **D6** — both deliberately design-only, awaiting decisions.
 
+**Non-blocking follow-ups from the merged set** (recorded so they are not lost; none
+gates a phase, none has an owner yet):
+
+- **#447's guard is weaker than its name.** `no-empty-port-adapter-stubs.guard.test.ts`
+  asserts on the barrel export surface, not directory contents — mutation-tested GREEN
+  when the deleted stub file is recreated verbatim. Protected on CI only because
+  `sync-integrity.yml:42` force-syncs before tests at `:67`; local `yarn test` and
+  pre-commit runs are unprotected. Fix: assert `!existsSync(externalApisDir)` alongside
+  the symbol check. Broadening it to reject _any_ empty adapter class would flag the
+  retained `GrokAdapter` and `BullMQAdapter`, so that needs a decision first.
+- **Orphaned deps from #447:** `jszip` / `@types/jszip` in
+  `packages/project-configuration/package.json` — the deleted `jszip.adapter.ts` was the
+  package's only importer.
+- **`DownloadProviderPort` has zero implementers** after 4.1/4.6; explicitly deferred by
+  #447 to a dedicated port-deletion pass.
+- **#450 publishes a type-only breaking change** — `ProjectConfigurationReadPort` left the
+  published root entry points of two packages at `0.9.0` on npm. Needs a release note at
+  the next version bump.
+
 **⚠️ 4.6 is only half-done.** The plan defines it as two legs — delete the empty
 `*PortAdapter` stubs (HEX-037) **and** stop stub-template-resolver importing
 composition-root `config.js` (HEX-038). PR #447 landed HEX-037 only. Verified on `main`:
@@ -114,11 +133,20 @@ Per the implementation prompt §8 and `.agents/ORCHESTRATOR.md`:
   edits are **worker-drafted, Primary-applied** per `.agents/yaml-editing-disciplines.md`
   (the Primary runs `lint:arch`).
 - **Merge is a human gate throughout.** The Primary never merges; each phase stops at
-  the human merge gate. Never merge on a bot's say-so; never merge PR #437.
+  the human merge gate. Never merge on a bot's say-so.
 
 ---
 
 ## 4. Per-item execution loop
+
+> **The binding rules live in the implementation prompt (#438), not here.** This is a
+> summary for orientation; it deliberately does not restate the gates, because two copies
+> drift. Authoritative: the agent-role table (Scout = read-only pre-flight
+> liveness/zero-consumers proof; **Refuter = 2–3 parallel agents, majority verdict**), the
+> per-item loop's **"block the item if the scout contradicts the plan"** rule, and Phase 4's
+> **scout-proof-mandatory** requirement that every deletion carry a grep + typecheck
+> zero-consumers proof. Where this summary and the implementation prompt disagree, the
+> implementation prompt wins.
 
 For every item and sub-PR:
 
@@ -143,34 +171,39 @@ For every item and sub-PR:
 
 ## 5. Current wavefront — Phases 2 ‖ 3 ‖ 4
 
-**Approach chosen:** the correct maximal-parallel wavefront — implement the genuinely
-independent, gate-satisfied items of Phases 2, 3, and 4 concurrently in isolated
-worktrees via sub-agents, and run read-only design-scouts for Phases 5–8 in parallel
-so they are ready the instant their gates clear. Everything stops at the human merge
-gate.
+**State: the first wavefront pass is complete and merged.** Nine PRs (#445–#453) landed
+on `main`; see §8. What remains of Phases 2/3/4 is listed in §1 "Open items, exactly".
 
-**Step 1 (running): scout/design fan-out** — workflow `wf_9653a167-575`, 21 read-only
-agents:
+**Next pass — the unblocking sequence.** Phase 2 is the critical path because it gates
+Phases 5–8, so the next items are, in order:
 
-- 17 per-item scouts across **2.1–2.5, 3.1–3.5, 4.1–4.7** → each returns a grounded,
-  buildable spec (current state with file:line, exact files, the RED test, gotchas,
-  refuter-bait, buildability classification, release/port/decision flags).
-- 4 design-scouts for **Phases 5–8** → readiness designs (entry gate, per-item prereqs,
-  pre-designable-now, recommended build order once unblocked, key risks).
+1. **2.2** (AUD-011) — closes the layer-rules holes **and commits the ratchet baseline
+   artifact**. Everything downstream burns down against that baseline, so it goes first.
+2. **2.3** (AUD-019) — its eslint and UI-boundary legs are independent and can start in
+   parallel with 2.2; its **arch-lint ratchet leg must follow 2.2**.
+3. **2.4** (AUD-020) — independent of both; expect fallout in the `typecheck:test`
+   errors already catalogued in §1.
 
-**Step 2 (next): triage + land** — split the specs into _buildable-now_ vs _gated_,
-fan out per-item worker worktrees for the buildable Phase 2/3/4 items, and land each as
-its own PR with gates + refuter panel + reviewer's guide.
+Phase 3's 3.2 / 3.3 / 3.4 and Phase 4's 4.6-HEX-038 leg are independent of the above and
+can run concurrently in isolated worktrees. Everything still stops at the human merge gate.
 
-**Known handling within this wavefront:**
+**Known handling (carried forward):**
 
-- **4.5 (D3) and 4.7 (D6)** → **design-only** this pass; D3/D6 surfaced with trade-offs,
+- **4.5 (D3) and 4.7 (D6)** → still **design-only**; D3/D6 surfaced with trade-offs,
   not chosen unilaterally.
 - **2.2 / 3.3 (engines.node leg) / 3.4 / 4.7** → repo PR lands; publish release-gated.
-- **4.1 / 4.4** → port-touching; 4.4's `context.yaml` worker-drafted, Primary-applied.
-- **Phase 2 ordering:** 2.1+2.3 share workflow files (one worker); 2.3's arch-lint
-  ratchet leg follows 2.1/2.2; 2.2 commits the ratchet baseline artifact.
-- **Phase 3 ordering:** 3.1 first, then 3.2; 3.4/3.5 independent.
+- **4.6** → the HEX-038 leg is port-adjacent (`stub-template-resolver` → composition-root
+  `config.js`); scout it before editing, per §4 step 1.
+
+**Historical snapshot — the first pass (2026-08-15).** Approach: maximal-parallel
+wavefront, implementing the genuinely independent gate-satisfied items of Phases 2/3/4
+concurrently in isolated worktrees, with read-only design-scouts for Phases 5–8 running
+alongside. Step 1 was a scout/design fan-out (workflow `wf_9653a167-575`, 21 read-only
+agents: 17 per-item scouts across 2.1–2.5 / 3.1–3.5 / 4.1–4.7, plus 4 phase design-scouts
+for 5–8). Step 2 triaged those specs into buildable-now vs gated and landed each buildable
+item as its own PR. Both steps are done; the ordering notes that governed that pass
+(2.1+2.3 sharing workflow files under one worker; 3.1 before 3.2) are retained here only
+as a record of how the merged PRs were sequenced.
 
 ---
 
@@ -208,7 +241,7 @@ plans so each phase fires the moment its gate clears:
 - **Check the branch every commit** (`git branch --show-current`).
 - **Squash-merge** with explicit `--subject`/`--body` — a human triggers the merge.
 - **Reviewer's-guide comment** on every PR touched, in addition to the body.
-- **Pre-empt bot flags**; **never merge on a bot's say-so**; **never merge PR #437**.
+- **Pre-empt bot flags**; **never merge on a bot's say-so**.
 - **Release/deploy** only on explicit go-ahead.
 
 ---
