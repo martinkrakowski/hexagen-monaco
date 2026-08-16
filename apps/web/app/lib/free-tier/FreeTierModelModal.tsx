@@ -11,7 +11,7 @@ import {
 } from "@hexagen/ui";
 import { X, Zap, Cpu, KeyRound, ChevronRight } from "lucide-react";
 import { usePreferredLLM } from "./store/usePreferredLLM";
-import { useLocalLLM } from "@/llm-driver/useLocalLlm";
+import { useLocalLLM } from "@/lib/local-llm-context";
 import { useFreeTierQuota, type FreeTierQuota } from "./hooks/useFreeTierQuota";
 
 /**

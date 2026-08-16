@@ -219,7 +219,6 @@ WEB_ROOT="$ROOT_DIR/apps/web"
 # it. A stale entry (coupling since removed) also fails, so it cannot rot into
 # a permanent excuse.
 CROSS_SLICE_ALIAS_BASELINE="
-governance-assistant|@/llm-driver/useLocalLlm
 landing|@/project-wizard/config
 landing|@/project-wizard/steps/applications-step/applications-config
 manifest-generation|@/governance-assistant/ModelProgressCard

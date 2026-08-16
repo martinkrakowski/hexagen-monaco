@@ -6,7 +6,7 @@ import type { WizardData } from "@hexagen/project-configuration";
 import {
   useLocalLLMStreaming,
   useLocalLLMConfig,
-} from "@/llm-driver/useLocalLlm";
+} from "@/lib/local-llm-context";
 import {
   findQuestionById,
   STEP_FOLLOW_UPS,
