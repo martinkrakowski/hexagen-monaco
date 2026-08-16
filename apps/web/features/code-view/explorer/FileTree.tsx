@@ -2,7 +2,7 @@
 
 import React from "react";
 import { FileTreeItem } from "./FileTreeItem";
-import type { ViewFileNode } from "./types";
+import type { ViewFileNode } from "../types";
 
 interface FileTreeProps {
   data: ViewFileNode[];

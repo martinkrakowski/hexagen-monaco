@@ -1,11 +1,10 @@
-import type { FileTreeNode } from "@hexagen/shared";
-
-export interface ViewFileNode extends FileTreeNode {
-  id: string;
-  parentId?: string;
-  language?: string;
-  children?: ViewFileNode[];
-}
+/**
+ * `ViewFileNode` is declared in the neutral home next to its only producer
+ * (`mapToFolderTree`) and re-exported here. ADR-0055 decision 2: a neutral
+ * module must not import from `features/`, and `app/lib/tree-utils.ts` used to
+ * import this type back out of the slice.
+ */
+export type { ViewFileNode } from "@/lib/tree-utils";
 
 /**
  * Add-on materialization notices from a generation run. Shared by the transport

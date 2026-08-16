@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, Info, X } from "lucide-react";
-import { type GenerationNotices, ADDON_NOTICES_FILENAME } from "./types";
+import { type GenerationNotices, ADDON_NOTICES_FILENAME } from "../types";
 
 /**
  * Surfaces add-on materialization notices from the last generation, at the top
