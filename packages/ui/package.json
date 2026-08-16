@@ -56,7 +56,8 @@
     "eslint": "^8.57.0",
     "jsdom": "^26.1.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.9"
   },
   "private": true,
   "type": "module"
