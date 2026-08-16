@@ -1,4 +1,4 @@
-import { describe, it } from "vitest";
+import { describe, it, afterEach, vi } from "vitest";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -11,6 +11,10 @@ import { ScratchDirProjectWorkspaceAdapter } from "../../src/infrastructure/adap
  * (containment policy stayed in the application layer).
  */
 describe("ScratchDirProjectWorkspaceAdapter", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("writes nested files under the workspace reference and reads them back", async () => {
     const workspace = await new ScratchDirProjectWorkspaceAdapter().open();
     try {
@@ -66,6 +70,42 @@ describe("ScratchDirProjectWorkspaceAdapter", () => {
     const workspace = await new ScratchDirProjectWorkspaceAdapter().open();
     await workspace.release();
     await workspace.release();
+  });
+
+  it("leaves nothing on disk when open() fails after creating the directory", async () => {
+    // The caller never receives a workspace from a rejected `open()`, so it has
+    // nothing to `release()` — the port's contract puts the rollback here.
+    // `realpath` is the step that currently follows `mkdir`; forcing it to
+    // reject exercises the window between "directory exists" and "handed out".
+    let created = "";
+    let existedAtFailure = false;
+    vi.spyOn(fs, "realpath").mockImplementationOnce(async (target) => {
+      created = String(target);
+      existedAtFailure = await fs
+        .stat(created)
+        .then((entry) => entry.isDirectory())
+        .catch(() => false);
+      throw Object.assign(new Error("simulated realpath failure"), {
+        code: "EIO",
+      });
+    });
+
+    await assert.rejects(
+      () => new ScratchDirProjectWorkspaceAdapter().open(),
+      /simulated realpath failure/,
+    );
+
+    assert.notEqual(created, "", "expected open() to have reached realpath");
+    assert.equal(
+      existedAtFailure,
+      true,
+      "the test is only meaningful if the directory existed when the step failed",
+    );
+    await assert.rejects(
+      () => fs.stat(created),
+      (err: NodeJS.ErrnoException) => err.code === "ENOENT",
+      "a failed open() must not leave its scratch directory behind",
+    );
   });
 
   it("refuses to write through a symlinked parent that points outside the workspace", async () => {

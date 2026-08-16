@@ -89,17 +89,26 @@ describe("toWorkspaceSegments", () => {
     assert.equal(toWorkspaceSegments("a\\b"), null);
   });
 
-  it("drops a trailing separator the legacy guard kept (the only divergence)", () => {
-    // `path.join(root, "src/feature.ts/")` preserved the trailing slash and the
-    // subsequent `writeFile` failed with EISDIR/ENOTDIR. No emitter produces
-    // such a key; normalizing it away turns an obscure errno into a write, and
-    // is recorded here rather than buried.
+  it("rejects a trailing separator, which the legacy guard also refused to write", () => {
+    // `path.join(root, "src/feature.ts/")` preserves the trailing slash, and the
+    // subsequent `writeFile` failed with EISDIR/ENOTDIR — so the old behaviour
+    // for such a key was "throw", and rejecting it here keeps that. Normalizing
+    // it to `src/feature.ts` instead would be the one behaviour change in this
+    // refactor, and the wrong direction: a directory-shaped key is a malformed
+    // emitter key, and turning it into a successful write to a neighbouring
+    // path hides the bug. Same call as the `\` rule — refuse, don't guess.
     assert.equal(
       path.join(ROOT, "src/feature.ts/"),
       `${ROOT}/src/feature.ts/`,
-      "legacy behaviour, for the record",
+      "legacy behaviour, for the record: the slash survives the join",
     );
-    assert.deepEqual(toWorkspaceSegments("src/feature.ts/"), [
+    assert.equal(toWorkspaceSegments("src/feature.ts/"), null);
+    assert.equal(toWorkspaceSegments("src/"), null);
+    assert.equal(toWorkspaceSegments("/"), null);
+
+    // Only a TRAILING separator is malformed — interior duplicates still
+    // collapse exactly as `path.join` collapses them.
+    assert.deepEqual(toWorkspaceSegments("src//feature.ts"), [
       "src",
       "feature.ts",
     ]);

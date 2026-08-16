@@ -76,5 +76,14 @@ export interface ProjectWorkspace {
 
 /** Allocates a fresh, empty {@link ProjectWorkspace} per generation run. */
 export interface ProjectWorkspacePort {
+  /**
+   * Allocate a workspace, or reject having left nothing allocated.
+   *
+   * All-or-nothing on purpose: a rejected `open()` hands the caller no
+   * workspace, so there is nothing for the use case's `finally` to
+   * {@link ProjectWorkspace.release}. An implementation that acquires a
+   * resource and then fails part-way must therefore roll that acquisition back
+   * itself before rejecting — otherwise every failed attempt leaks.
+   */
   open(): Promise<ProjectWorkspace>;
 }

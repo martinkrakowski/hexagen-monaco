@@ -34,7 +34,18 @@ export class ScratchDirProjectWorkspaceAdapter implements ProjectWorkspacePort {
     // what makes the workspace a real thing to hand out — and makes the
     // realpath below (the anchor for the symlink guard) resolvable.
     await fs.mkdir(root, { recursive: true });
-    return new ScratchDirProjectWorkspace(root, await fs.realpath(root));
+    try {
+      return new ScratchDirProjectWorkspace(root, await fs.realpath(root));
+    } catch (err) {
+      // A rejected `open()` hands the caller nothing to `release()`, so the
+      // rollback for everything after the mkdir belongs here: without it a
+      // failing `realpath` (EIO, EACCES, or the directory being reaped from
+      // under us) would strand a `/tmp/hexagen-*` directory per attempt. The
+      // original failure is what the caller needs to see, so cleanup is best
+      // effort and the rethrow is unconditional.
+      await fs.rm(root, { recursive: true, force: true }).catch(() => {});
+      throw err;
+    }
   }
 }
 
