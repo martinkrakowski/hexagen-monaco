@@ -1,9 +1,17 @@
 /**
- * Pure state types + selectors for the project export flow.
+ * Pure state types + selectors for the project export flows.
  *
- * Kept free of React / DI imports so the selector can be unit-tested in
- * isolation and so consumers (Header, ExportStatusStrip) share one definition
- * of "is the GitHub flow active" — see `isGithubExportActive`.
+ * Kept free of React / DI imports so the selectors can be unit-tested in
+ * isolation.
+ *
+ * GOD-004: there used to be ONE `ExportState` union with a `destination:
+ * "zip" | "github"` discriminator, which forced every ZIP consumer to receive
+ * — and re-decode — the GitHub dialog/auth states. The two flows share no
+ * transition: a ZIP export is a single request/download, while the GitHub
+ * publish is a dialog → mode → publish → link state machine. They are two
+ * unions now, and the shape makes the illegal combinations unrepresentable
+ * rather than filtered out at each consumer (the old `isGithubExportActive`
+ * guard existed only to undo the merge).
  */
 
 import type { PublishMode } from "@hexagen/shared";
@@ -20,14 +28,29 @@ export interface GithubLinkData {
   htmlUrl: string;
 }
 
-export type ExportDestination = "zip" | "github";
+/**
+ * The ZIP download flow. No dialog: the request either downloads a file or
+ * reports why it could not.
+ */
+export type ZipExportState =
+  | { kind: "idle" }
+  | { kind: "exporting" }
+  | {
+      kind: "success";
+      message: string;
+      /** Add-on materialization notice counts; the strip flips to amber when
+       * `errors > 0` (full detail in the project's HEXAGEN-ADDON-NOTICES.md). */
+      notices?: { warnings: number; errors: number };
+    }
+  | { kind: "error"; message: string };
 
 /**
- * Discriminated state machine for the export flow. One variant at a time;
- * illegal combinations (e.g. exporting && error) are not representable.
+ * The GitHub publish flow: create dialog, publish-settings modal, and the
+ * in-flight/terminal states of a scaffold publish or an editor push.
  */
-export type ExportState =
+export type GithubPublishState =
   | { kind: "idle" }
+  /** The create-repo dialog (first publish, or "publish to a new repo"). */
   | { kind: "dialog-open" }
   | {
       /**
@@ -43,46 +66,32 @@ export type ExportState =
       defaultRemember: boolean;
       hasEditorEdits: boolean;
     }
-  | { kind: "exporting"; destination: ExportDestination }
+  | { kind: "publishing" }
   | {
       kind: "success";
-      destination: ExportDestination;
       message: string;
       destinationUrl?: string;
       githubLink?: GithubLinkData;
-      /** Add-on materialization notice counts; the strip flips to amber when
-       * `errors > 0` (full detail in the project's HEXAGEN-ADDON-NOTICES.md). */
+      /** Add-on materialization notice counts. */
       notices?: { warnings: number; errors: number };
       /** Raw warning strings from a degraded publish (e.g. workflow files
-       * skipped for a missing OAuth scope). GitHub destination only — the ZIP
-       * path surfaces notice COUNTS via sideband headers, never strings. */
+       * skipped for a missing OAuth scope). */
       warnings?: string[];
     }
   | {
       kind: "error";
-      destination: ExportDestination;
       message: string;
       /** Actionable failure code from the GitHub routes (snake_case HTTP
-       * vocabulary); absent for generic failures and the ZIP destination. */
+       * vocabulary); absent for generic failures. */
       code?: GithubPublishErrorCode;
     };
 
 /**
- * True while the GitHub publish flow owns the prominent UI (the create dialog,
- * the settings modal, or a github-destined exporting/success/error). Derived in
- * one place so the Header `open` condition and the status strip can't drift from
- * the state machine.
+ * True while the create/result dialog owns the prominent UI. The settings
+ * modal is a SEPARATE surface rendered from the same state machine, so it is
+ * excluded here — deriving both `open` conditions from one selector is what
+ * kept the Header and the dialog from drifting apart.
  */
-export function isGithubExportActive(state: ExportState): boolean {
-  switch (state.kind) {
-    case "dialog-open":
-    case "settings-open":
-      return true;
-    case "exporting":
-    case "success":
-    case "error":
-      return state.destination === "github";
-    default:
-      return false;
-  }
+export function isPublishDialogOpen(state: GithubPublishState): boolean {
+  return state.kind !== "idle" && state.kind !== "settings-open";
 }

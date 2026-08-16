@@ -1,10 +1,17 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 
-import { isGithubExportActive, type ExportState } from "./export-state";
+import { isPublishDialogOpen, type GithubPublishState } from "./export-state";
 
-describe("isGithubExportActive", () => {
-  const cases: Array<[string, ExportState, boolean]> = [
+// GOD-004: the predecessor of this selector (`isGithubExportActive`) also had
+// to answer "is this state a GitHub state at all", because ZIP and GitHub
+// shared one union — every ZIP variant appeared in this table purely to be
+// classified false. The split made those cases unrepresentable, so what is
+// left is the only question the Header still asks: does the create/result
+// dialog own the screen? The settings modal is a separate surface with its own
+// `open` condition, which is why it is excluded rather than lumped in.
+describe("isPublishDialogOpen", () => {
+  const cases: Array<[string, GithubPublishState, boolean]> = [
     ["idle", { kind: "idle" }, false],
     ["dialog-open", { kind: "dialog-open" }, true],
     [
@@ -17,31 +24,16 @@ describe("isGithubExportActive", () => {
         defaultRemember: false,
         hasEditorEdits: true,
       },
-      true,
-    ],
-    ["exporting zip", { kind: "exporting", destination: "zip" }, false],
-    ["exporting github", { kind: "exporting", destination: "github" }, true],
-    [
-      "success zip",
-      { kind: "success", destination: "zip", message: "ZIP downloaded" },
       false,
     ],
-    [
-      "success github",
-      { kind: "success", destination: "github", message: "Pushed" },
-      true,
-    ],
-    ["error zip", { kind: "error", destination: "zip", message: "x" }, false],
-    [
-      "error github",
-      { kind: "error", destination: "github", message: "x" },
-      true,
-    ],
+    ["publishing", { kind: "publishing" }, true],
+    ["success", { kind: "success", message: "Pushed" }, true],
+    ["error", { kind: "error", message: "x" }, true],
   ];
 
   for (const [name, state, expected] of cases) {
     it(`${name} → ${expected}`, () => {
-      assert.strictEqual(isGithubExportActive(state), expected);
+      assert.strictEqual(isPublishDialogOpen(state), expected);
     });
   }
 });
