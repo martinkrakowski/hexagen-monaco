@@ -1,7 +1,7 @@
 import {
   TEMPLATE_MANIFESTS,
   type TemplateManifestMeta,
-} from "./template-manifest.generated";
+} from "@/generated/template-manifest.generated";
 
 export interface TemplateDetails {
   overview: string;
