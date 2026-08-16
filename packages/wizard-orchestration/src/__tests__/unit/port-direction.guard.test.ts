@@ -36,8 +36,25 @@ const PACKAGE_ROOT = path.resolve(
 const SRC_DIR = path.join(PACKAGE_ROOT, "src");
 const USE_CASES_DIR = path.join(SRC_DIR, "application/use-cases");
 const PORTS_IN_DIR = path.join(SRC_DIR, "application/ports/in");
-const OUTBOUND_SEGMENT = "/ports/out/";
-const INBOUND_SEGMENT = "/ports/in/";
+
+/**
+ * True when `specifier` addresses `application/ports/{direction}` as a
+ * path segment — a file (`…/ports/out/foo.port`) or the directory barrel
+ * (`…/ports/out`). A trailing-slash substring misses the barrel and a
+ * bare prefix would fire on near-misses like `…/ports/outgoing`.
+ */
+function hasPortDirection(specifier: string, direction: "in" | "out"): boolean {
+  const normalized = specifier.replace(/\\/g, "/");
+  return new RegExp(`/ports/${direction}(?:/|$)`).test(normalized);
+}
+
+function isMisfiledDrivenImport(specifier: string | undefined): boolean {
+  return (
+    specifier === undefined ||
+    hasPortDirection(specifier, "in") ||
+    !hasPortDirection(specifier, "out")
+  );
+}
 
 function tsFilesUnder(dir: string): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -178,12 +195,7 @@ describe("ADR-0048 port direction (wizard-orchestration)", () => {
     it("imports every injected contract from application/ports/out", () => {
       const misfiled = contractsInUseCases()
         .filter(({ specifier }) => specifier?.startsWith("."))
-        .filter(
-          ({ specifier }) =>
-            specifier === undefined ||
-            specifier.includes(INBOUND_SEGMENT) ||
-            !specifier.includes(OUTBOUND_SEGMENT),
-        );
+        .filter(({ specifier }) => isMisfiledDrivenImport(specifier));
 
       assert.deepEqual(
         misfiled.map(
@@ -258,6 +270,59 @@ describe("ADR-0048 port direction (wizard-orchestration)", () => {
           "Repo<-../ports/out/repo.port.js",
         ],
       );
+    });
+
+    it("accepts outbound file paths and directory barrels, rejects inbound and near-misses", () => {
+      const file = parse(
+        "sample.use-case.ts",
+        [
+          'import type { FilePort } from "../ports/out/alpha.port.js";',
+          'import type { BarrelPort } from "../ports/out";',
+          'import type { TrailingPort } from "../ports/out/";',
+          'import type { NearMissPort } from "../ports/outgoing";',
+          'import type { InboundBarrel } from "../ports/in";',
+          "export class SampleUseCase {",
+          "  constructor(",
+          "    private readonly file: FilePort,",
+          "    private readonly barrel: BarrelPort,",
+          "    private readonly trailing: TrailingPort,",
+          "    private readonly nearMiss: NearMissPort,",
+          "    private readonly inbound: InboundBarrel,",
+          "  ) {}",
+          "}",
+        ].join("\n"),
+      );
+
+      const byContract = new Map(
+        injectedContracts("sample.use-case.ts", file).map((entry) => [
+          entry.contract,
+          entry.specifier,
+        ]),
+      );
+
+      assert.equal(byContract.get("FilePort"), "../ports/out/alpha.port.js");
+      assert.equal(byContract.get("BarrelPort"), "../ports/out");
+      assert.equal(byContract.get("TrailingPort"), "../ports/out/");
+      assert.equal(byContract.get("NearMissPort"), "../ports/outgoing");
+      assert.equal(byContract.get("InboundBarrel"), "../ports/in");
+
+      assert.equal(isMisfiledDrivenImport(byContract.get("FilePort")), false);
+      assert.equal(isMisfiledDrivenImport(byContract.get("BarrelPort")), false);
+      assert.equal(
+        isMisfiledDrivenImport(byContract.get("TrailingPort")),
+        false,
+      );
+      assert.equal(
+        isMisfiledDrivenImport(byContract.get("NearMissPort")),
+        true,
+      );
+      assert.equal(
+        isMisfiledDrivenImport(byContract.get("InboundBarrel")),
+        true,
+      );
+      assert.equal(isMisfiledDrivenImport("../ports/out-of-band"), true);
+      assert.equal(isMisfiledDrivenImport("../ports/in/beta.port.js"), true);
+      assert.equal(isMisfiledDrivenImport("../ports/inbound"), true);
     });
 
     it("flags the comment wording ADR-0048 Decision 2 names, and nothing else", () => {
