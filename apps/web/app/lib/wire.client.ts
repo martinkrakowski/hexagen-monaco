@@ -3,9 +3,6 @@
 // Safe to import in Next.js client components
 
 import { PORT_NAMES } from "@hexagen/web-driver";
-import type { ProjectDiscardedEvent } from "@hexagen/monaco-orchestration";
-import type { DomainEvent } from "@hexagen/messaging";
-import { useGovernanceThreadStore } from "../../features/governance-assistant/stores/useGovernanceThreadStore";
 
 import type {
   CanvasLayoutPersistencePort,
@@ -220,38 +217,18 @@ export const wireDependencies = () => {
     );
   }
 
-  // Chat Persistence → IndexedDB adapter with event subscription
+  // Chat Persistence → IndexedDB adapter
   const chatPersistence = new IDBChatPersistenceAdapter();
   registry.set(
     PORT_NAMES.CHAT_PERSISTENCE,
     chatPersistence satisfies ChatPersistencePort,
   );
 
-  // Subscribe to ProjectDiscarded events for automatic cleanup
-  const eventBus = registry.get(PORT_NAMES.EVENT_BUS) as EventBusPort;
-  eventBus.subscribe<ProjectDiscardedEvent>(
-    "ProjectDiscarded",
-    (event: DomainEvent<ProjectDiscardedEvent>) => {
-      // Clear IndexedDB persistence
-      void chatPersistence
-        .purgeProjectData(event.payload.projectId)
-        .catch((err) =>
-          logger.error("Failed to purge chat persistence data:", {
-            error: err,
-          }),
-        );
-
-      // Clear generation results
-      void generationResultAdapter
-        .purgeProjectResults(event.payload.projectId)
-        .catch((err) =>
-          logger.error("Failed to purge generation results:", { error: err }),
-        );
-
-      // Clear Zustand thread store
-      useGovernanceThreadStore.getState().clearAllThreads();
-    },
-  );
+  // The ProjectDiscarded purge cascade used to be subscribed here. It now
+  // lives in the discardProject use case (app/lib/use-cases/
+  // project-lifecycle.use-case.ts) — ADR-0051 §Consequences, plan item
+  // 5.3(c). "Purge everything belonging to a discarded project" is a use
+  // case's job; this file's job is wiring adapters into the registry.
 
   // Persistence Domain Registry → singleton
   const domainRegistry = new PersistenceDomainRegistry();
