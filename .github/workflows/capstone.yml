@@ -52,12 +52,16 @@ jobs:
       # Corepack must be enabled BEFORE setup-node: setup-node@v5's environment
       # probe runs `yarn` (e.g. `yarn cache dir`), and the repo pins yarn@4 via
       # packageManager — classic global yarn errors on that. Enabling Corepack
-      # first makes `yarn` resolve to the pinned 4.12.0 shim during the probe.
+      # first makes `yarn` resolve to the pinned yarn@4 shim during the probe.
       - name: "Enable Corepack"
         run: corepack enable
 
+      # No version literal here or in the two jobs below: `corepack prepare
+      # --activate` with no spec reads `packageManager` from the root
+      # package.json, so a Yarn bump is a one-line change there and no workflow
+      # can drift from the declared pin.
       - name: "Prepare Yarn"
-        run: corepack prepare yarn@4.12.0 --activate
+        run: corepack prepare --activate
 
       - name: "Setup Node.js"
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
@@ -88,7 +92,7 @@ jobs:
         run: corepack enable
 
       - name: "Prepare Yarn"
-        run: corepack prepare yarn@4.12.0 --activate
+        run: corepack prepare --activate
 
       - name: "Setup Node.js"
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
@@ -148,7 +152,7 @@ jobs:
         run: corepack enable
 
       - name: "Prepare Yarn"
-        run: corepack prepare yarn@4.12.0 --activate
+        run: corepack prepare --activate
 
       - name: "Setup Node.js"
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5

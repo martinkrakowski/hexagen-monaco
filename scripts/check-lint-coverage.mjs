@@ -44,6 +44,19 @@ function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
+/**
+ * A `lint` script only counts if it actually invokes eslint. `turbo run lint`
+ * is satisfied by `"lint": "echo ok"` or `"lint": "exit 0"` just as well as by
+ * a real invocation, so a mere existence check would let a workspace leave the
+ * firewall while still reporting as covered — the same silent-skip hole this
+ * file exists to close, one level down. Every linted workspace in the repo
+ * today invokes `eslint` directly; a workspace that lints some other way has
+ * to say so here rather than pass by accident.
+ */
+function invokesEslint(script) {
+  return typeof script === "string" && /(^|[\s/&|;()])eslint(\s|$)/.test(script);
+}
+
 function workspaceGlobs() {
   const root = readJson(join(ROOT, "package.json"));
   const globs = root.workspaces;
@@ -75,7 +88,7 @@ function discoverPackages() {
       if (!existsSync(manifest)) continue;
       const pkg = readJson(manifest);
       if (!pkg.name) continue;
-      found.push({ name: pkg.name, hasLint: Boolean(pkg.scripts?.lint) });
+      found.push({ name: pkg.name, hasLint: invokesEslint(pkg.scripts?.lint) });
     }
   }
   return found;
@@ -100,12 +113,15 @@ console.log(
 if (unexpected.length > 0) {
   console.error("");
   console.error(
-    "❌ Workspace(s) with no `lint` script and not on the documented list:",
+    "❌ Workspace(s) with no eslint-invoking `lint` script and not on the documented list:",
   );
   for (const name of unexpected) console.error(`   → ${name}`);
   console.error("");
   console.error(
-    "   `turbo run lint` skips these silently. Add a `lint` script,",
+    "   `turbo run lint` skips (or no-ops) these silently. Add a `lint`",
+  );
+  console.error(
+    "   script that runs eslint,",
   );
   console.error(
     "   or add the package to UNLINTED in this file with a reason.",
@@ -115,7 +131,7 @@ if (unexpected.length > 0) {
 if (stale.length > 0) {
   console.error("");
   console.error(
-    "❌ UNLINTED is stale — these workspaces now HAVE a `lint` script:",
+    "❌ UNLINTED is stale — these workspaces now run eslint via `lint`:",
   );
   for (const name of stale) console.error(`   → ${name}`);
   console.error("");

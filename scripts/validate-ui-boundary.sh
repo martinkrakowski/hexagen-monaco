@@ -197,6 +197,54 @@ done < <(parse_yaml_list "acl_internal_types")
 # a peer-to-peer coupling. Slice→slice imports remain violations.
 SHELL_SLICE="workspace-shell"
 
+# Relative specifiers are not the only way to cross a slice boundary, and in
+# this repo they are not even the common one. apps/web/tsconfig.json maps
+# "@/*" over ["./app/*","./components/*","./lib/*","./hooks/*","./features/*",
+# "./types/*"], so `@/landing/x` resolves to features/landing/x. A check that
+# only reads `../` specifiers scores 0 violations while 15 alias-form
+# slice→slice imports sit in the tree — the "gate that verifies nothing" shape
+# this script's own header warns about. Both forms are resolved below.
+#
+# Candidate roots BEFORE features/ in the tsconfig `paths` list. A first
+# segment that exists under one of these resolves there, not into a slice, so
+# it is not a cross-slice import. (No slice name is shadowed today; this keeps
+# the check honest if one ever is.)
+ALIAS_ROOTS_BEFORE_FEATURES="app components lib hooks"
+WEB_ROOT="$ROOT_DIR/apps/web"
+
+# Alias-form slice→slice imports that already existed when this check learned
+# to see them. Pinned so the gate is green on today's tree but any NEW pair
+# fails the build — the same ratchet UNLINTED uses in check-lint-coverage.mjs.
+# Entries are "<importing-slice>|<specifier>". Shrink this list; do not grow
+# it. A stale entry (coupling since removed) also fails, so it cannot rot into
+# a permanent excuse.
+CROSS_SLICE_ALIAS_BASELINE="
+governance-assistant|@/llm-driver/useLocalLlm
+hexagon-canvas|@/project-wizard/steps/add-ons-step/template-manifest.generated
+landing|@/project-wizard/config
+landing|@/project-wizard/steps/applications-step/applications-config
+manifest-generation|@/governance-assistant/ModelProgressCard
+manifest-generation|@/landing/ProjectsShellWithFreeTier
+manifest-generation|@/landing/domain/createBlankProjectConfig
+manifest-generation|@/project-wizard/config
+manifest-generation|@/project-wizard/steps/workspace-governance-step
+"
+BASELINE_HITS=""
+
+# Resolve an "@/..." specifier to the slice it lands in, or empty for anything
+# that resolves outside features/ (lib/, hooks/, app/, types/, ...).
+alias_slice_target() {
+  local rest="${1#@/}"
+  local seg="${rest%%/*}"
+  local root
+  [ -n "$seg" ] || return 0
+  for root in $ALIAS_ROOTS_BEFORE_FEATURES; do
+    [ -e "$WEB_ROOT/$root/$seg" ] && return 0
+  done
+  [ -d "$WEB_FEATURES/$seg" ] || return 0
+  printf '%s' "$seg"
+}
+
 echo ""
 echo "Checking for cross-slice imports in features/..."
 if [ -d "$WEB_FEATURES" ]; then
@@ -207,22 +255,52 @@ if [ -d "$WEB_FEATURES" ]; then
     while IFS= read -r file; do
       file_dir=$(dirname "$file")
       while IFS= read -r specifier; do
-        resolved="$(normalize_path "${file_dir}/${specifier}")"
-        case "$resolved" in
-          "$FEATURES_ROOT"/*) ;;
-          *) continue ;;
+        case "$specifier" in
+          @/*)
+            # Alias form — resolved through tsconfig `paths`, not the filesystem.
+            target="$(alias_slice_target "$specifier")"
+            [ -n "$target" ] || continue
+            ;;
+          *)
+            resolved="$(normalize_path "${file_dir}/${specifier}")"
+            case "$resolved" in
+              "$FEATURES_ROOT"/*) ;;
+              *) continue ;;
+            esac
+            rest="${resolved#"$FEATURES_ROOT"/}"
+            target="${rest%%/*}"
+            ;;
         esac
-        rest="${resolved#"$FEATURES_ROOT"/}"
-        target="${rest%%/*}"
         [ "$target" = "$slice_name" ] && continue
         [ "$target" = "$SHELL_SLICE" ] && continue
+        if printf '%s' "$CROSS_SLICE_ALIAS_BASELINE" |
+          grep -Fxq "${slice_name}|${specifier}"; then
+          BASELINE_HITS="${BASELINE_HITS}${slice_name}|${specifier}
+"
+          continue
+        fi
         echo "  ❌ Cross-slice import: $slice_name → $target"
         echo "     → $file: $specifier"
         VIOLATIONS=$((VIOLATIONS + 1))
-      done < <(grep -ohE "from ['\"]\.\.?/[^'\"]*['\"]" "$file" 2>/dev/null |
+      done < <(grep -ohE "from ['\"](\.\.?/|@/)[^'\"]*['\"]" "$file" 2>/dev/null |
         sed -E "s/^from ['\"](.*)['\"]$/\1/" || true)
     done < <(find "$slice_dir" \( -name '*.ts' -o -name '*.tsx' \) 2>/dev/null || true)
   done
+
+  # A baseline entry whose coupling is gone must be deleted, or the list turns
+  # into a permanent excuse that silently re-permits the import if it returns.
+  while IFS= read -r pinned; do
+    [ -n "$pinned" ] || continue
+    if ! printf '%s' "$BASELINE_HITS" | grep -Fxq "$pinned"; then
+      echo "  ❌ Stale cross-slice baseline entry — this import no longer exists:"
+      echo "     → ${pinned}"
+      echo "     Remove it from CROSS_SLICE_ALIAS_BASELINE in $(basename "${BASH_SOURCE[0]}")."
+      VIOLATIONS=$((VIOLATIONS + 1))
+    fi
+  done < <(printf '%s' "$CROSS_SLICE_ALIAS_BASELINE")
+
+  pinned_count="$(printf '%s' "$CROSS_SLICE_ALIAS_BASELINE" | grep -c . || true)"
+  echo "  ($pinned_count pre-existing alias-form cross-slice import(s) pinned — shrink, do not grow)"
 fi
 
 echo ""
