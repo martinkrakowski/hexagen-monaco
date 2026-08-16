@@ -47,10 +47,18 @@ It is also **the repo's only workspace with `echo` stubs for `build`/`test`**, s
 api-gateway half of AUD-021, not a prerequisite to it. And it carries cost: with no root `.dockerignore`,
 every web image build installs the fastify ecosystem — **~26 lockfile entries that exist solely for it**.
 
-**One hard blocker, must be in the same commit:** `scripts/check-lint-coverage.mjs` lists it in `UNLINTED`,
-and that script has a _stale-detection_ arm — a deleted workspace lands in `stale` and reddens CI.
-**Second trap:** `.architecture/manifest.yaml`'s entry and `.architecture/apps/api-gateway.app.yaml` must be
-deleted **together**; removing the app file alone throws `App file not found` at load.
+**Deletion checklist — all in the same commit:**
+
+1. **`scripts/check-lint-coverage.mjs`** lists it in `UNLINTED`, and that script has a _stale-detection_ arm —
+   a deleted workspace lands in `stale` and **reddens CI**. This is the hard blocker.
+2. **`.architecture/manifest.yaml`'s entry and `.architecture/apps/api-gateway.app.yaml` must go together.**
+   Removing the app file alone throws `App file not found` at load; removing the directory alone is invisible
+   to the linter, which walks `bounded_contexts` and never `apps:`.
+3. **The root `dev:api` script** in `package.json`, which invokes `yarn workspace @hexagen/api-gateway`. It is
+   **unguarded** — the #455 workspace-tool guard never inspects root scripts, so a dangling `dev:api` fails
+   only when a human types it. Nothing in CI will catch this one, which is exactly why it belongs on the list.
+4. Prose and inert entries: `README.md`'s "three runtime surfaces" claim,
+   `.architecture/invariants/linter-config.yaml`, and the ADR-0037 table row.
 
 ### 1.2 ADR-0049 — Option B, with one deviation from the ADR's own step 1
 
@@ -141,7 +149,7 @@ files undeclared), and cannot check (`yarn lint:arch` never reads `layers`). **T
    inventory**; the filesystem is the authoritative inventory. Fix the `AGENTS.md` rule that generates the flags.
 2. **Delete the 12 hard phantoms and re-attribute the 7 misattributions** (19 entries, ~10 files). Resolve
    `TransactionManagerPort`'s double-declaration in favour of `transaction-system`.
-3. **Delete `packages/sync/src/generators/validators/**`\*\* — see §2.3.
+3. **Delete the dead validators** under `packages/sync/src/generators/validators/` — see §2.3.
 
 **Do not enforce (option a):** ~150 additions whose _direction_ is not derivable from the tree (25 port files
 sit in folders with no in/out signal, and for the five packages HEX-018 names the folder signal is known
@@ -177,14 +185,24 @@ file move goes stale _and_ fails on the new path. The decision has been made by 
 
 ### 2.1 The grounded LLM prompt shows the model wrong port ownership · **defect**
 
-`api/llm/context` builds a `{portName → context}` map, then renders `Object.entries(...).slice(0, 10)` under
-`PORT OWNERSHIP (selected):`. The repo produces **95 entries; 85 never reach the model.** Of the 10 shown,
+Two components, and the earlier draft of this section conflated them. **`apps/web/app/api/llm/context/route.ts`
+constructs** the `{portName → context}` map from the live merged manifest and returns it whole — it truncates
+nothing. **The truncation is in `packages/prompt-compiler`**, and in _two_ adapters, not one:
+`infrastructure/adapters/app-compatibility.adapter.ts:42` and
+`infrastructure/adapters/migrated-grounded-prompt.adapter.ts:68` each render
+`Object.entries(...).slice(0, 10)` under `PORT OWNERSHIP (selected):`.
+
+That distinction matters for the fix: correcting the map is a `.architecture/` change, whereas raising or
+ordering the window is a `prompt-compiler` change — **and it has to be made in both adapters**, or one prompt
+path silently keeps the old behaviour.
+
+The repo produces **95 entries; 85 never reach the model.** Of the 10 shown,
 **3 are wrong** — a phantom `GeneratorPort`, `LoggerPort` attributed to `project-configuration` when it lives
 in `shared`, and `ProjectGeneratorPort` which names no port at all. Two lines below, the prompt asserts
 `port-single-ownership [critical]` as an invariant.
 
 **Completeness is structurally irrelevant here; accuracy is not.** Adding the 45 missing entries would push
-real ones out of the window. Fix the phantoms; make the slice deterministic or raise it.
+real ones out of the window. Fix the phantoms; make the slice deterministic or raise it **in both adapters**.
 
 ### 2.2 `manifest-analysis.ts` reads a key no file uses · **defect**
 
