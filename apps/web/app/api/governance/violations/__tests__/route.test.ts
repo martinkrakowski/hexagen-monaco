@@ -111,7 +111,11 @@ describe("POST /api/governance/violations", () => {
     const manifest = [
       "bounded_contexts:",
       "  - name: orders",
-      "    dependencies:",
+      // `depends_on` — the key the manifest schema declares and every real
+      // context.yaml writes. This fixture used to say `dependencies`, a key no
+      // manifest has ever had, and stayed green because the analyzer read the
+      // same phantom key back (dossier §2.2).
+      "    depends_on:",
       "      - name: orders",
     ].join("\n");
     const res = await POST(postJson(manifest));
@@ -130,7 +134,8 @@ describe("POST /api/governance/violations", () => {
       "      application:",
       "        ports:",
       "          in: [A, B]",
-      "      domain:",
+      // Adapters belong under `infrastructure`, per BoundedContextSchema.
+      "      infrastructure:",
       "        adapters:",
       "          AdapterA: {}",
     ].join("\n");

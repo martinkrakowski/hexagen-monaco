@@ -19,6 +19,20 @@ import * as yaml from "js-yaml";
  * `lint:arch` shell-out in `governance/refresh` is intentionally left in place;
  * the STRUCTURAL half (shell-lint / filesystem / YAML / LLM behind ports) lands
  * separately (plan item 6.3).
+ *
+ * NOTE (key paths): every manifest key this module reads is declared once in
+ * {@link MANIFEST_KEY_PATHS} and read through {@link readPath}. Nothing here
+ * reaches into a parsed manifest by hand. That is deliberate: the module
+ * previously read adapters from `layers.domain.adapters` and dependencies from
+ * `dependencies`, and NEITHER key exists in the manifest schema
+ * (`BoundedContextSchema` puts adapters under `layers.infrastructure` and names
+ * the dependency list `depends_on`) or in any real `.architecture` context file.
+ * The result was an adapter count pinned at `0`, `complete` pinned at `false`,
+ * and an unsilenceable "has N port(s) but no adapters implemented" warning on
+ * every context with declared ports. Routing all reads through one declared set
+ * lets a test assert that set against the repo's own manifest, so the next
+ * phantom key fails a test instead of shipping as a permanently-red governance
+ * panel. See `__tests__/manifest-analysis.test.ts`.
  */
 
 export interface Violation {
@@ -57,7 +71,55 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Normalize a manifest's `dependencies` field to a flat list of dependency
+/**
+ * The manifest key paths this module reads, relative to one element of
+ * `bounded_contexts`. These MUST match `BoundedContextSchema` in
+ * `@hexagen/project-configuration` — the shape every real `context.yaml` and
+ * every `wizardToManifest` projection actually emits.
+ *
+ * Exported so the test suite can assert each path resolves against the repo's
+ * OWN merged manifest. A path that no real manifest provides is a permanently
+ * dead read, which is exactly the defect this constant exists to prevent.
+ */
+export const CONTEXT_KEY_PATHS = {
+  name: ["name"],
+  portsIn: ["layers", "application", "ports", "in"],
+  portsOut: ["layers", "application", "ports", "out"],
+  adapters: ["layers", "infrastructure", "adapters"],
+  dependsOn: ["depends_on"],
+} as const;
+
+/** The root-level key holding the context list. */
+export const BOUNDED_CONTEXTS_KEY = "bounded_contexts";
+
+/**
+ * Every manifest key path this module reads, as dotted paths rooted at the
+ * manifest document. The first segment is always {@link BOUNDED_CONTEXTS_KEY};
+ * the rest address one context element.
+ */
+export const MANIFEST_KEY_PATHS: readonly string[] = [
+  BOUNDED_CONTEXTS_KEY,
+  ...Object.values(CONTEXT_KEY_PATHS).map((path) =>
+    [BOUNDED_CONTEXTS_KEY, ...path].join("."),
+  ),
+];
+
+/**
+ * Resolve a declared key path against a parsed manifest node, narrowing at each
+ * step. Returns `undefined` the moment a segment is missing or the node stops
+ * being a mapping — the same tolerance the hand-written optional chains had,
+ * minus the ability to spell a key that does not exist.
+ */
+function readPath(node: unknown, path: readonly string[]): unknown {
+  let current: unknown = node;
+  for (const segment of path) {
+    if (!isRecord(current)) return undefined;
+    current = current[segment];
+  }
+  return current;
+}
+
+/** Normalize a manifest's `depends_on` field to a flat list of dependency
  * names. Dependencies may be expressed as an array of name strings, an array of
  * `{ name }` records, or a keyed object whose keys are the dependency names —
  * the same shape divergence `countEntries` already reconciles for ports. The
@@ -101,7 +163,7 @@ export function analyzeManifest(manifestYaml: string): ManifestAnalysisResult {
     };
   }
 
-  const boundedContexts = parsed.bounded_contexts;
+  const boundedContexts = parsed[BOUNDED_CONTEXTS_KEY];
   // Absent (`undefined`/`null`, including an empty `bounded_contexts:` key) → a
   // legitimately empty, compliant manifest. This is NOT a schema failure.
   if (boundedContexts == null) {
@@ -147,17 +209,19 @@ export function analyzeManifest(manifestYaml: string): ManifestAnalysisResult {
   // unique per context and disambiguates them.
   for (const [index, raw] of boundedContexts.entries()) {
     if (!isRecord(raw)) continue;
-    const ctxName = String(raw.name ?? "");
-    const layers = isRecord(raw.layers) ? raw.layers : undefined;
+    const ctxName = String(readPath(raw, CONTEXT_KEY_PATHS.name) ?? "");
 
-    const application = isRecord(layers?.application)
-      ? layers?.application
-      : undefined;
-    const ports = isRecord(application?.ports) ? application?.ports : undefined;
-    const portCount = countEntries(ports?.in) + countEntries(ports?.out);
+    const portCount =
+      countEntries(readPath(raw, CONTEXT_KEY_PATHS.portsIn)) +
+      countEntries(readPath(raw, CONTEXT_KEY_PATHS.portsOut));
 
-    const domain = isRecord(layers?.domain) ? layers?.domain : undefined;
-    const adapterCount = countEntries(domain?.adapters);
+    // Adapters live under `layers.infrastructure`, per `BoundedContextSchema`.
+    // Reading them from `layers.domain` (as this module did) pinned the count at
+    // 0 for every manifest ever written and made the shadow rule below fire on
+    // every context with ports.
+    const adapterCount = countEntries(
+      readPath(raw, CONTEXT_KEY_PATHS.adapters),
+    );
 
     status.push({
       context: ctxName,
@@ -181,7 +245,9 @@ export function analyzeManifest(manifestYaml: string): ManifestAnalysisResult {
     // most ONE violation per context even if it self-lists more than once, so a
     // repeated self-reference cannot mint a duplicate id.
     if (
-      dependencyNames(raw.dependencies).some((dep) => dep && dep === ctxName)
+      dependencyNames(readPath(raw, CONTEXT_KEY_PATHS.dependsOn)).some(
+        (dep) => dep && dep === ctxName,
+      )
     ) {
       violations.push({
         id: `${ctxName || "unnamed"}-${index}-self-dependency`,
