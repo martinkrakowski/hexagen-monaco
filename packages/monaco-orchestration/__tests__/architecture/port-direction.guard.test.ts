@@ -198,10 +198,18 @@ interface PortReference {
  * `constructor(private readonly port: SomePort, other: NS.Thing)` →
  * ["SomePort", "NS.Thing"]. Qualified names are kept whole so a
  * namespace-imported port is still recognised as a port.
+ *
+ * The parameter list runs to the `)` that closes it — the one followed by the
+ * constructor body (or `;`, for an overload signature) — not to the first `)`
+ * in the text. A parenthesised parameter type such as `log: () => void` closes
+ * a paren of its own, and stopping there would hide every parameter after it,
+ * a misfiled port among them.
  */
 function extractConstructorParameterTypes(source: string): string[] {
   const types: string[] = [];
-  for (const match of source.matchAll(/\bconstructor\s*\(([^)]*)\)/g)) {
+  for (const match of source.matchAll(
+    /\bconstructor\s*\(([\s\S]*?)\)\s*[{;]/g,
+  )) {
     for (const param of match[1].split(",")) {
       const annotated = /:\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)/.exec(
         param,
