@@ -3,10 +3,7 @@ import type { WizardData } from "@hexagen/project-configuration";
 import type { GenerationResult } from "@hexagen/shared";
 import { getGenerationResultPersistence } from "../../../app/lib/wire.client";
 import { withFormStateDefaults } from "../../../app/lib/form-state-defaults";
-import {
-  isImportedFormState,
-  parseImportedManifest,
-} from "../../../app/lib/imported-manifest";
+import { resolveImportedManifestPayload } from "../../../app/lib/imported-manifest";
 import type { GenerationNotices } from "../types";
 
 const MAX_RETRIES = 3;
@@ -40,14 +37,12 @@ export function useProjectGeneration(
   // Shared by generate() and downloadZip(): the optional `manifest` request
   // field for imported projects, or a blocking error (fail closed — never fall
   // back to the degraded wizard projection). `{}` for wizard-authored projects.
-  const resolveImportedManifest = useCallback(():
-    | { ok: true; extra: Record<string, unknown> }
-    | { ok: false; message: string } => {
-    if (!isImportedFormState(wizardData)) return { ok: true, extra: {} };
-    const parsed = parseImportedManifest(savedManifestYaml);
-    if (!parsed.ok) return { ok: false, message: parsed.message };
-    return { ok: true, extra: { manifest: parsed.manifest } };
-  }, [wizardData, savedManifestYaml]);
+  // The decision itself is the ONE shared resolver (REA-005) — this used to be
+  // a private copy that could drift from the export provider's.
+  const resolveImportedManifest = useCallback(
+    () => resolveImportedManifestPayload(wizardData, savedManifestYaml),
+    [wizardData, savedManifestYaml],
+  );
 
   const generate = useCallback(
     async (force = false) => {
