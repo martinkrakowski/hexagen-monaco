@@ -1,4 +1,4 @@
-import type { ProcessIntentPort } from "../ports/in/process-intent.port";
+import type { ProcessIntentPort } from "../ports/out/process-intent.port";
 
 // If domain types already exist, import them here
 // import { Intent } from '../../domain/entities/intent';

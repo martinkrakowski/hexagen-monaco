@@ -1,4 +1,4 @@
-import type { ProjectWizardStatePort } from "../ports/in/project-wizard-state.port";
+import type { ProjectWizardStatePort } from "../ports/out/project-wizard-state.port";
 
 export class ProjectWizardStateUseCase {
   constructor(private readonly port: ProjectWizardStatePort) {}

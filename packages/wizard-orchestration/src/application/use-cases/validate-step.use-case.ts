@@ -1,4 +1,4 @@
-import type { ValidateStepPort } from "../ports/in/validate-step.port";
+import type { ValidateStepPort } from "../ports/out/validate-step.port";
 
 export class ValidateStepUseCase {
   constructor(private readonly port: ValidateStepPort) {}
