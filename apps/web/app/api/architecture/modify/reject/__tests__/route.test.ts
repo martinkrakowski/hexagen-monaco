@@ -54,6 +54,14 @@ describe("POST /api/architecture/modify/reject", () => {
     // Simulate prod cwd ≠ monorepo root.
     vi.spyOn(process, "cwd").mockReturnValue("/fake/repo/apps/web");
 
+    // `rollback()` returns the ROLLED-BACK transaction, as the port requires —
+    // returning nothing means "not rolled back" (already terminal), which the
+    // saga now reports as a 409 instead of a success.
+    rollback.mockReturnValue({
+      id: "tx-1",
+      status: "rolled_back",
+      metadata: {},
+    });
     vi.mocked(getTransactionManager).mockReturnValue({
       get: () => ({ status: "speculative", metadata: { patches: [] } }),
       rollback,
@@ -119,6 +127,34 @@ describe("POST /api/architecture/modify/reject", () => {
     assert.doesNotMatch(body.error, /Could not locate|manifest\.yaml|\/x/);
     assert.equal(restoreFromGit.mock.calls.length, 0);
     assert.equal(rollback.mock.calls.length, 0);
+  });
+
+  it("does not report a rollback that the manager refused", async () => {
+    // `rollback()` returning null means "not rolled back" — already terminal,
+    // i.e. a concurrent accept committed it after our `speculative` check. The
+    // pre-fix saga fell back to the transaction read at the top and answered
+    // HTTP 200 `status:"rolled_back"` for a transaction that is committed, and
+    // restored the manifest out from under the winning accept.
+    let first = true;
+    vi.mocked(getTransactionManager).mockReturnValue({
+      get: () => {
+        const status = first ? "speculative" : "committed";
+        first = false;
+        return { id: "tx-1", status, metadata: {} };
+      },
+      rollback,
+      commit,
+    } as never);
+    rollback.mockReturnValue(null);
+
+    const res = await POST(post({ transactionId: "tx-1", reason: "nope" }));
+    const body = await res.json();
+
+    assert.equal(body.success, false);
+    assert.notEqual(body.status, "rolled_back");
+    assert.equal(res.status, 409);
+    assert.match(body.error, /committed/);
+    assert.equal(restoreFromGit.mock.calls.length, 0);
   });
 
   it("still returns 400 for a path-traversal manifestPath (client input error)", async () => {

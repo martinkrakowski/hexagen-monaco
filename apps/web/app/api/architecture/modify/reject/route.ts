@@ -1,31 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import path from "path";
 import {
   getTransactionManager,
   getManifestMutation,
-  findMonorepoRoot,
   MonorepoRootNotFoundError,
 } from "@/lib/wire.server";
 import { createWebLogger } from "@/lib/wire.shared";
 import { guardMutation } from "@/lib/request-guards";
-
-// Anchor path resolution + the traversal gate at the monorepo root — the same anchor the mutation/lint adapters use (findMonorepoRoot), NOT process.cwd() (which is apps/web in prod).
-function validateManifestPath(rawPath: string): string {
-  const cwd = findMonorepoRoot();
-  const allowedBase = path.join(cwd, ".architecture");
-  const resolvedPath = path.resolve(cwd, rawPath);
-
-  if (
-    !resolvedPath.startsWith(allowedBase + path.sep) &&
-    resolvedPath !== allowedBase
-  ) {
-    throw new Error(
-      `Invalid path: traversal detected. Path must be within .architecture directory.`,
-    );
-  }
-
-  return resolvedPath;
-}
+import { validateManifestPath } from "@/lib/manifest-path";
+import { RejectTransactionUseCase } from "@hexagen/transaction-system";
 
 export async function POST(request: NextRequest) {
   // Same-origin + rate-limit gate (D1): rolls back a speculative transaction
@@ -36,12 +18,12 @@ export async function POST(request: NextRequest) {
   let transactionId: string | undefined;
   try {
     const body = await request.json();
-    transactionId = (body as { transactionId?: string }).transactionId;
     const { manifestPath, reason } = body as {
       transactionId?: string;
       manifestPath?: string;
       reason?: string;
     };
+    transactionId = (body as { transactionId?: string }).transactionId;
 
     if (!transactionId) {
       return NextResponse.json(
@@ -50,30 +32,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const transactionManager = getTransactionManager();
-    const tx = transactionManager.get(transactionId);
-    if (!tx) {
-      return NextResponse.json(
-        { success: false, error: "Transaction not found" },
-        { status: 404 },
-      );
-    }
-
-    if (tx.status !== "speculative") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Transaction is in '${tx.status}' state, expected 'speculative'`,
-        },
-        { status: 409 },
-      );
-    }
-
-    let resolvedManifestPath: string | undefined;
+    let resolvedManifestPath: string;
     try {
-      resolvedManifestPath = validateManifestPath(
-        manifestPath ?? ".architecture/manifest.yaml",
-      );
+      resolvedManifestPath = validateManifestPath(manifestPath);
     } catch (err) {
       // A missing on-disk manifest anchor is a server config failure, not bad
       // client input — rethrow to the outer 5xx handler (logged there) so it is
@@ -88,44 +49,66 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const manifestMutation = getManifestMutation();
-    const restoreResult =
-      await manifestMutation.restoreFromGit(resolvedManifestPath);
-    if (!restoreResult.success) {
-      const logger = createWebLogger();
-      logger.errorWithException(
-        restoreResult.error,
-        "[api/architecture/modify/reject] Defensive git restore failed",
-      );
-      // Roll back the in-memory transaction regardless of the on-disk git
-      // restore outcome so it is never stuck in 'speculative'; the failed
-      // file restore is surfaced separately below.
-      transactionManager.rollback(transactionId, reason ?? "User rejected");
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Failed to restore manifest from git. Manual intervention may be required.",
-          details: restoreResult.error,
-        },
-        { status: 500 },
-      );
-    }
-
-    transactionManager.rollback(transactionId, reason ?? "User rejected");
+    // Constructed from the existing composition-root getters rather than a new
+    // wire getter — see the sibling accept route for why.
+    const useCase = new RejectTransactionUseCase(
+      getTransactionManager(),
+      getManifestMutation(),
+    );
+    const outcome = await useCase.execute({
+      transactionId,
+      manifestPath: resolvedManifestPath,
+      reason,
+    });
 
     const logger = createWebLogger();
-    logger.info("[api/architecture/modify/reject] Transaction rolled back", {
-      transactionId,
-      reason: reason ?? "User rejected the changes",
-    });
 
-    return NextResponse.json({
-      success: true,
-      transactionId,
-      status: "rolled_back",
-      reason: reason ?? "User rejected the changes",
-    });
+    switch (outcome.kind) {
+      case "not-found":
+        return NextResponse.json(
+          { success: false, error: "Transaction not found" },
+          { status: 404 },
+        );
+
+      case "wrong-state":
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Transaction is in '${outcome.status}' state, expected 'speculative'`,
+          },
+          { status: 409 },
+        );
+
+      case "restore-failed":
+        logger.errorWithException(
+          outcome.error,
+          "[api/architecture/modify/reject] Defensive git restore failed",
+        );
+        // The use case rolled the transaction back regardless of the on-disk
+        // restore outcome, so it is never stuck in 'speculative'; the failed
+        // file restore is surfaced separately here.
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Failed to restore manifest from git. Manual intervention may be required.",
+            details: outcome.error,
+          },
+          { status: 500 },
+        );
+
+      case "rejected":
+        logger.info(
+          "[api/architecture/modify/reject] Transaction rolled back",
+          { transactionId, reason: outcome.reason },
+        );
+        return NextResponse.json({
+          success: true,
+          transactionId,
+          status: "rolled_back",
+          reason: outcome.reason,
+        });
+    }
   } catch (error) {
     const logger = createWebLogger();
     logger.errorWithException(

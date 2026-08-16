@@ -8,36 +8,36 @@ import {
   AlertTriangle,
   X,
 } from "lucide-react";
-import {
-  isGithubExportActive,
-  type ExportState,
-} from "@/contexts/ExportContext";
+import { type ZipExportState } from "@/contexts/export-state";
 
 const SUCCESS_AUTO_DISMISS_MS = 4000;
 
 interface ExportStatusStripProps {
-  state: ExportState;
+  state: ZipExportState;
   onDismiss: () => void;
 }
 
 /**
  * Persistent strip shown below the header bar that surfaces the
- * current export state (progress / success / error). Rendered by
+ * current ZIP export state (progress / success / error). Rendered by
  * the Header so it outlives the ProjectMenu dropdown's close.
  *
  * Solves the previous bug where setIsOpen(false) closed the dropdown
  * before the fetch completed, making the inline status messages
  * unreachable.
+ *
+ * The GitHub publish flow is surfaced by ExportDialog (form → submitting →
+ * result). This strip used to receive that flow's states too and filter them
+ * back out with `isGithubExportActive` to avoid double feedback; since GOD-004
+ * split the state machines it is typed on the ZIP flow and cannot see them.
  */
 export function ExportStatusStrip({
   state,
   onDismiss,
 }: ExportStatusStripProps) {
-  // Auto-dismiss ZIP success after a few seconds. Errors stay until dismissed.
-  // GitHub flows are owned by ExportDialog (see below) — never auto-dismiss
-  // them here, or the success dialog would close itself after 4s.
+  // Auto-dismiss success after a few seconds. Errors stay until dismissed.
   useEffect(() => {
-    if (state.kind !== "success" || isGithubExportActive(state)) return;
+    if (state.kind !== "success") return;
     // Keep notices on screen — don't auto-dismiss a success that carries add-on
     // warnings/errors, so the user can read them and find the sidecar.
     if (
@@ -49,21 +49,9 @@ export function ExportStatusStrip({
     return () => clearTimeout(timer);
   }, [state, onDismiss]);
 
-  // The GitHub publish flow is surfaced by ExportDialog (form → submitting →
-  // result), so the strip handles only the ZIP path — avoids double feedback.
-  if (isGithubExportActive(state)) return null;
-  // settings-open is also covered by isGithubExportActive above; listed here so
-  // the discriminated union narrows to exporting/success/error below.
-  if (
-    state.kind === "idle" ||
-    state.kind === "dialog-open" ||
-    state.kind === "settings-open"
-  )
-    return null;
+  if (state.kind === "idle") return null;
 
   if (state.kind === "exporting") {
-    // Only the ZIP path reaches here — the GitHub flow is gated out above and
-    // owned by ExportDialog.
     return (
       <div
         role="status"

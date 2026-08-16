@@ -105,26 +105,15 @@ describe("Governance Assistant — Error Handling", () => {
     assert.ok("snippet" in details);
   });
 
-  it("error: large manifest performance warning (>2.5s)", async () => {
-    const linterAdapter = new DelayedMockAdapter(2500);
-    registerMockPort(registry, PORT_NAMES.LINTER, linterAdapter);
-
-    const largeManifest = {
-      ...createGovernanceFixtureManifest(),
-      bounded_contexts: Array.from({ length: 100 }, (_, i) => ({
-        name: `context-${i}`,
-        type: "core",
-        description: `Bounded context ${i}`,
-      })),
-    };
-
-    const startTime = Date.now();
-    const result = await linterAdapter.lint(largeManifest);
-    const duration = Date.now() - startTime;
-
-    assert.ok(duration >= 2500);
-    assert.ok(result !== undefined);
-  });
+  // Removed: "error: large manifest performance warning (>2.5s)".
+  // It constructed a 100-context manifest, handed it to DelayedMockAdapter
+  // (a test double whose `lint` is `await setTimeout(delayMs)` and nothing
+  // else), and then asserted the call took >= 2500ms. No governance code ran,
+  // no performance warning was produced or asserted, and the manifest size was
+  // irrelevant to the assertion — it verified that Node's setTimeout waits.
+  // It was also the suite's only flake: under parallel load the timer resolved
+  // a fraction under its nominal delay and the >= window failed, which is the
+  // hard-coded wall-clock pattern ADR-0033 forbids outside fake timers.
 
   it("error: graph builder returns malformed structure", async () => {
     const malformedGraphAdapter = new MalformedGraphMockAdapter();

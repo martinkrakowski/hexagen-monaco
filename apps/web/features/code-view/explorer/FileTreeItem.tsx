@@ -11,7 +11,7 @@ import {
   FileJson,
   File,
 } from "lucide-react";
-import type { ViewFileNode } from "./types";
+import type { ViewFileNode } from "../types";
 import { cn } from "@/lib/utils";
 
 interface FileTreeItemProps {
