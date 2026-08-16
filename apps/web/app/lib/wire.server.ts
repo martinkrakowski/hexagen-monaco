@@ -486,7 +486,15 @@ export interface CloudPipelineConfig {
   fallbackChain?: ProviderFallbackChain;
 }
 
-function createLLMSender(
+/**
+ * Builds the structured-request sender for a pipeline mode.
+ *
+ * Exported (rather than module-private) so the cloud **default** path — the
+ * `cloudConfig?.fallbackChain ?? …` arm, reached whenever a caller passes no
+ * explicit chain — can be pinned behaviourally by a test. That arm is the one
+ * ADR-0051 §Decision 4 requires to stay covered.
+ */
+export function createLLMSender(
   mode: PipelineMode,
   cloudConfig?: CloudPipelineConfig,
 ): SendStructuredRequestPort {
