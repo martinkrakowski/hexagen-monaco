@@ -31,7 +31,7 @@ import { navState } from "./nav-stub";
 
 import { PlanPhaseView } from "../PlanPhaseView";
 import { FormProvider, useForm } from "react-hook-form";
-import { emptyFormValues } from "../../../project-wizard/config";
+import { emptyFormValues } from "@/project-config-presets";
 import { installResizeObserverStub } from "../../../../__tests__/support/resize-observer-stub";
 
 // PlanPhaseView renders ProjectSettingsSection, whose governance fields read

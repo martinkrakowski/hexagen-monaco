@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
-// Alias cross-slice import (same rationale as the plan-phase section): these
-// are the wizard's step-1 field components, reused verbatim so genesis and
-// plan phase render the identical Section A field set (plan §3.2).
+// The wizard's step-1 field components, reused verbatim so genesis and plan
+// phase render the identical Section A field set (plan §3.2).
 import {
   IdentityFields,
   TemplateSelector,

@@ -95,7 +95,7 @@ import {
   WizardStepFormProvider,
 } from "../contexts/WizardLifecycleContext";
 import { PlanPhaseView } from "../plan-phase/PlanPhaseView";
-import { emptyFormValues } from "../../project-wizard/config";
+import { emptyFormValues } from "@/project-config-presets";
 import { installResizeObserverStub } from "../../../__tests__/support/resize-observer-stub";
 
 // jsdom has no <dialog> implementation; PlanPhaseView mounts (closed) dialogs.

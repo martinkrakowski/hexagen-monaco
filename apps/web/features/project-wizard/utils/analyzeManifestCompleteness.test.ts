@@ -1,7 +1,7 @@
 import { test } from "vitest";
 import assert from "node:assert";
 import { analyzeManifestCompleteness } from "./analyzeManifestCompleteness";
-import { emptyFormValues } from "../config";
+import { emptyFormValues } from "@/project-config-presets";
 
 test("analyzeManifestCompleteness - empty manifest", () => {
   const result = analyzeManifestCompleteness(emptyFormValues);

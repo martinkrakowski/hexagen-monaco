@@ -8,7 +8,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { FormProvider, useForm } from "react-hook-form";
-import { emptyFormValues } from "../../../project-wizard/config";
+import { emptyFormValues } from "@/project-config-presets";
 
 // Separate file from PlanPhaseView.test.tsx: this one mocks usePlanningSession
 // itself (module-level vi.mock) to pin the archive-filter, view-union and

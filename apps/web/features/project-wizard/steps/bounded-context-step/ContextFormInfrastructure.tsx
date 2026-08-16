@@ -8,7 +8,7 @@ import {
   persistenceAdapterOptions,
   messagingAdapterOptions,
   telemetryProviderOptions,
-} from "@/project-wizard/config";
+} from "@/project-config-options";
 
 interface ContextFormInfrastructureProps {
   fieldPrefix: string;

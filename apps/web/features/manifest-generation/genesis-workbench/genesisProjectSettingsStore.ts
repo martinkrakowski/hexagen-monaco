@@ -1,10 +1,8 @@
 import type { ProjectConfig } from "@hexagen/project-configuration";
-// Alias (not relative) cross-slice imports: the module-level lint rule only
-// isolates relative feature imports; these two are the repo's canonical
-// seeding sources (mirrored presets — see createBlankProjectConfig's JSDoc)
-// and duplicating them here would fork the ADR-0041 single-app preset.
-import { createBlankProjectConfig } from "@/landing/domain/createBlankProjectConfig";
-import { emptyFormValues } from "@/project-wizard/config";
+import {
+  createDefaultProjectConfig,
+  emptyFormValues,
+} from "@/project-config-presets";
 
 /**
  * Module-scoped store for the GENESIS "Project settings" form (Plan Workbench
@@ -47,13 +45,13 @@ let snapshot: GenesisFormSnapshot | null = null;
 /**
  * The form values a fresh genesis flow starts from: the blank-project preset
  * seeded from the carried `?name=` (slug → `governance.workspaceName`,
- * `@slug` → `namespacePrefix`), or the wizard's `emptyFormValues` when the
+ * `@slug` → `namespacePrefix`), or the unnamed `emptyFormValues` preset when the
  * Project Name step was bypassed. Cloned so form edits never mutate the
  * module-level preset.
  */
 export function seedGenesisFormValues(seedName: string | null): ProjectConfig {
   return seedName
-    ? createBlankProjectConfig(seedName)
+    ? createDefaultProjectConfig(seedName)
     : structuredClone(emptyFormValues);
 }
 
@@ -137,7 +135,7 @@ export function clearGenesisFormValues(): void {
  *
  * The baseline is the snapshot's own `seedGovernance` — NOT a seed recomputed
  * from the current key: after a bypassed-flow rekey the current key's seed
- * (`createBlankProjectConfig(manufacturedName)`) differs from the seed the
+ * (`createDefaultProjectConfig(manufacturedName)`) differs from the seed the
  * user actually started from on exactly the identity fields, and diffing
  * against it would report the untouched defaults as edits on the second
  * hand-off.

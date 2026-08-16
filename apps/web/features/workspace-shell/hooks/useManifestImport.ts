@@ -6,7 +6,7 @@ import type {
   WizardData,
   BoundedContext,
 } from "@hexagen/project-configuration";
-import { emptyFormValues } from "../../project-wizard/config";
+import { emptyFormValues } from "@/project-config-presets";
 
 export type ManifestImportOutcome =
   | { kind: "success"; wizardData: WizardData; formValues: ProjectConfig }

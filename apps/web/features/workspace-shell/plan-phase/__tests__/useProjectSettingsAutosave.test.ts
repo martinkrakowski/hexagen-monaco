@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { renderHook, act, cleanup } from "@testing-library/react";
 import { useForm } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
-import { emptyFormValues } from "../../../project-wizard/config";
+import { emptyFormValues } from "@/project-config-presets";
 import {
   useProjectSettingsAutosave,
   PROJECT_SETTINGS_AUTOSAVE_DEBOUNCE_MS,

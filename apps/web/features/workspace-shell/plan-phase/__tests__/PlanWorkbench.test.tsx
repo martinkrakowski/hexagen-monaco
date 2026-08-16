@@ -69,7 +69,7 @@ vi.mock("next/navigation", async () =>
 
 import { navState } from "./nav-stub";
 import { PlanPhaseView } from "../PlanPhaseView";
-import { emptyFormValues } from "../../../project-wizard/config";
+import { emptyFormValues } from "@/project-config-presets";
 import { installResizeObserverStub } from "../../../../__tests__/support/resize-observer-stub";
 
 function PlanFormHarness({ children }: { children: React.ReactNode }) {

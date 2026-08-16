@@ -77,7 +77,7 @@ import type { UseWorkspaceShellUiReturn } from "../hooks/useWorkspaceShellUi";
 import type { UseEditorSessionReturn } from "../hooks/useEditorSession";
 
 import { useProjectLifecycle } from "../hooks/useProjectLifecycle";
-import { emptyFormValues } from "../../project-wizard/config";
+import { emptyFormValues } from "@/project-config-presets";
 
 describe("useProjectLifecycle - Manifest Integration", () => {
   beforeEach(() => {

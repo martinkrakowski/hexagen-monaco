@@ -1,103 +1,18 @@
-import {
-  projectConfigSchema,
-  type ProjectConfig,
-  type ExternalContext,
-  type BoundedContext,
-} from "@hexagen/project-configuration";
-
-export const persistenceAdapterOptions = [
-  "Prisma",
-  "TypeORM",
-  "Mongoose",
-  "Drizzle",
-] as const;
-export const messagingAdapterOptions = [
-  "BullMQ",
-  "Temporal",
-  "RabbitMQ",
-] as const;
-export const telemetryProviderOptions = [
-  "None",
-  "OpenTelemetry",
-  "Prometheus",
-  "Winston",
-] as const;
-export const apiFrameworkOptions = [
-  { value: "nitro", label: "Nitro" },
-  { value: "nestjs", label: "NestJS" },
-  { value: "express", label: "Express" },
-  { value: "serverless", label: "Serverless" },
-  { value: "plain-ts", label: "Plain TypeScript" },
-  // No separate API backend (UI-only). deriveApps emits no `api` app.
-  { value: "none", label: "None (No API backend)" },
-] as const;
-
-export const uiFrameworkOptions = [
-  { value: "", label: "None (Headless / API Only)" },
-  { value: "Next.js", label: "Next.js" },
-  { value: "Remix", label: "Remix" },
-  { value: "React Router", label: "React Router" },
-  { value: "Vue.js", label: "Vue.js" },
-  { value: "Angular", label: "Angular" },
-] as const;
-
-export const relationshipTypeOptions = [
-  { value: "U", label: "Upstream" },
-  { value: "D", label: "Downstream" },
-  { value: "ACL", label: "Anticorruption Layer" },
-  { value: "SK", label: "Shared Kernel" },
-  { value: "P", label: "Partnership" },
-  { value: "OHS", label: "Open Host Service" },
-] as const;
-
-export {
-  projectConfigSchema,
-  type ProjectConfig,
-  type ExternalContext,
-  type BoundedContext,
-};
-
-export const emptyFormValues: ProjectConfig = {
-  governance: {
-    workspaceName: "@hexagen",
-    workspaceTemplate: "modular-monolith",
-    workspaceDescription: undefined,
-    packageManager: "yarn",
-    topologyStrictness: "flexible",
-    namespacePrefix: "@hexagen",
-    namingConventions: {
-      contextDirectoryPattern: "packages/",
-      adapterSuffix: ".adapter.ts",
-    },
-  },
-  boundedContexts: [
-    {
-      id: crypto.randomUUID(),
-      name: "core",
-      description: "",
-      infrastructureTarget: "nitro",
-      coreDomainEntities: [],
-      valueObjects: [],
-      domainEvents: [],
-      entities: [],
-      useCases: [],
-      portConfiguration: {
-        inboundPorts: [],
-        outboundPorts: [],
-      },
-      // ADR-0041 single-app preset: a fresh project defaults to one Next.js web
-      // app. The Applications step fans this out across contexts; a loaded
-      // headless project (all uiFramework "") is preserved, not flipped.
-      uiFramework: "Next.js",
-      persistenceAdapter: "",
-      messagingAdapter: "",
-      telemetryProvider: "",
-    },
-  ],
-  externalContexts: [],
-  peerMappings: [],
-  addOnsAnswers: {},
-};
+/**
+ * Wizard-slice configuration: the step ledger and its id→index lookup.
+ *
+ * This file used to double as the app's shared project-config vocabulary
+ * (option lists, the `emptyFormValues` preset, and bare re-exports of
+ * `@hexagen/project-configuration`). Those were slice-agnostic, so other
+ * slices reached them through `@/project-wizard/config` alias imports — a
+ * cross-slice coupling the boundary gate had to pin, and one ADR-0034
+ * records as having forced a hand-synced fork of the preset instead.
+ * They now live in `lib/project-config-options.ts` and
+ * `lib/project-config-presets.ts`; import the schema and types from
+ * `@hexagen/project-configuration` directly.
+ *
+ * `wizardSteps` / `stepIndexById` are genuinely wizard-specific and stay here.
+ */
 
 export const wizardSteps = [
   {

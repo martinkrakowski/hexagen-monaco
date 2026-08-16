@@ -14,7 +14,7 @@ import {
   ContextForm,
   createEmptyContext,
 } from "./bounded-context-step";
-import { collapseApplications } from "./applications-step";
+import { collapseApplications } from "@/applications-config";
 
 interface BoundedContextStepProps {
   onNext: () => void;

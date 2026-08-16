@@ -1,5 +1,5 @@
 import { ProjectConfig } from "@hexagen/project-configuration";
-import { emptyFormValues } from "../config";
+import { emptyFormValues } from "@/project-config-presets";
 
 export interface ManifestCompleteness {
   governance: boolean;

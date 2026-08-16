@@ -2,7 +2,7 @@
 // `global.crypto =` throws "has only a getter"). Textual position is cosmetic:
 // Vitest hoists imports, so emptyFormValues' module-eval id is minted by the
 // REAL crypto.randomUUID before this line runs — the stub only makes the ids
-// createBlankProjectConfig mints at RUNTIME (one per seed) deterministic,
+// createDefaultProjectConfig mints at RUNTIME (one per seed) deterministic,
 // and no assertion reads either batch.
 let uuidCounter = 0;
 vi.stubGlobal("crypto", {
