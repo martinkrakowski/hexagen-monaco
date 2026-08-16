@@ -3,11 +3,18 @@ import assert from "node:assert/strict";
 
 import { parseNoticeCountHeaders, postJson, postForBlob } from "./fetch-json";
 
+const originalFetch = globalThis.fetch;
+
 // The postJson/postForBlob suites stub the fetch global per-test; always
 // restore so the parseNoticeCountHeaders suite (and other files in the
 // worker) never see a leaked stub.
+//
+// Restores ONLY fetch. `vi.unstubAllGlobals()` would work now — vitest.setup.ts
+// no longer files its storage globals in Vitest's stub registry — but "undo what
+// this file stubbed" is what this hook means, and spelling that out keeps the
+// hook honest if the setup ever grows another shared global.
 afterEach(() => {
-  vi.unstubAllGlobals();
+  vi.stubGlobal("fetch", originalFetch);
 });
 
 // Minimal Response stand-in: the helpers only touch ok/status/json/blob/

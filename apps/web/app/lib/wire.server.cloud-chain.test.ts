@@ -37,10 +37,13 @@ const realFetch = globalThis.fetch;
  * adapter captures `globalThis.fetch` in its constructor, so this must be
  * installed before `createLLMSender` runs.
  *
- * Assigns directly rather than via `vi.stubGlobal` on purpose: the paired
- * `vi.unstubAllGlobals()` would also tear down the in-memory `localStorage` /
- * `sessionStorage` that `vitest.setup.ts` installs globally, and the setup's
- * own `afterEach` would then hit jsdom's real (throwing) storage.
+ * Assigns directly rather than via `vi.stubGlobal`, and the paired teardown
+ * restores `realFetch` by hand. Historically this shape was mandatory: the
+ * setup installed its in-memory `localStorage`/`sessionStorage` with
+ * `vi.stubGlobal`, so a `vi.unstubAllGlobals()` also tore those down and the
+ * setup's own `afterEach` hit the host's throwing storage. The setup now owns
+ * those globals outside Vitest's stub registry (apps/web/vitest.setup.test.ts
+ * pins that), so this is simply a suite restoring what it replaced.
  */
 function stubFetchSequence(
   responses: Array<{ status: number; content?: string }>,
