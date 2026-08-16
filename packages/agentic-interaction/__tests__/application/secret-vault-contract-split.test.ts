@@ -65,8 +65,33 @@ const SKIP_DIRS = new Set([
   "templates",
 ]);
 
-function collectSourceFiles(root: string): string[] {
-  const found: string[] = [];
+const SCANNED_ROOTS = ["packages", "apps", "tools"] as const;
+
+/**
+ * Repo-relative path with forward slashes on every platform.
+ *
+ * `path.relative` and `path.join` emit the host separator, so on Windows the
+ * raw value is backslash-separated. Every path this suite asserts against —
+ * and the `.sort()` that orders them — is POSIX-shaped, so normalisation has
+ * to happen here, at the single boundary where an OS path becomes a compared
+ * value, rather than at each call site.
+ */
+const toRepoRelative = (absolute: string): string =>
+  path.relative(REPO_ROOT, absolute).split(path.sep).join("/");
+
+interface SourceFile {
+  /** Repo-relative, forward-slash separated. */
+  readonly path: string;
+  readonly text: string;
+}
+
+/**
+ * Walks the workspace once and reads each file once. The uniqueness questions
+ * below are asked of three different interface names; re-walking and re-reading
+ * per question triples the I/O for an answer that cannot change mid-suite.
+ */
+function collectSourceFiles(root: string): SourceFile[] {
+  const found: SourceFile[] = [];
   const walk = (dir: string): void => {
     let entries;
     try {
@@ -85,41 +110,77 @@ function collectSourceFiles(root: string): string[] {
       if (!entry.name.endsWith(".ts") && !entry.name.endsWith(".tsx")) continue;
       if (entry.name.endsWith(".test.ts") || entry.name.endsWith(".test.tsx"))
         continue;
-      found.push(full);
+      found.push({
+        path: toRepoRelative(full),
+        text: readFileSync(full, "utf8"),
+      });
     }
   };
-  for (const top of ["packages", "apps", "tools"]) {
+  for (const top of SCANNED_ROOTS) {
     walk(path.join(root, top));
   }
   return found;
 }
 
-function declarationSites(files: string[], name: string): string[] {
+function declarationSites(
+  files: readonly SourceFile[],
+  name: string,
+): string[] {
   const needle = new RegExp(`export\\s+interface\\s+${name}\\b`);
-  const sites: string[] = [];
-  for (const file of files) {
-    if (needle.test(readFileSync(file, "utf8"))) {
-      sites.push(path.relative(REPO_ROOT, file));
-    }
-  }
-  return sites.sort();
+  return files
+    .filter((file) => needle.test(file.text))
+    .map((file) => file.path)
+    .sort();
 }
 
 describe("HEX-008: one name, one secret contract", () => {
   const files = collectSourceFiles(REPO_ROOT);
 
   it("scans a real, non-empty slice of the tree (anti-vacuity control)", () => {
-    // Without this the whole suite would pass on a mis-resolved REPO_ROOT: an
-    // empty file list makes every "declared exactly once" assertion below
-    // trivially satisfiable at zero.
-    assert.ok(
-      files.length > 200,
-      `expected to scan hundreds of source files, scanned ${files.length} under ${REPO_ROOT}`,
-    );
-    // Positive control: a port that is known to exist, in a *different*
-    // package from the one under test, and whose name is deliberately NOT
-    // being changed by this item. If the scanner cannot see it, the negative
-    // assertions below prove nothing.
+    // Without an anti-vacuity control the whole suite would pass on a
+    // mis-resolved REPO_ROOT: an empty file list makes every "declared
+    // exactly once" assertion below trivially satisfiable at zero.
+    //
+    // The control anchors on things that MUST be true rather than on a file
+    // count. A count is not a property of the split — a re-org, a sparse or
+    // filtered checkout, or a new SKIP_DIRS entry can move it without
+    // weakening a single assertion, and no value of it proves the walk
+    // reached the right tree.
+    const scanned = new Set(files.map((file) => file.path));
+
+    // (a) Named files that MUST be in the scan, one per workspace tree the
+    // uniqueness claim ranges over. Anchoring on files rather than on tree
+    // names is what makes this bite: a check that merely iterates
+    // SCANNED_ROOTS shrinks along with the constant, so deleting "tools" from
+    // it would still pass. These do not.
+    //
+    // Each anchor is a file this suite's conclusions already depend on — a
+    // declaration site it asserts about, or a consumer whose binding the split
+    // exists to protect — so none of them is a new free-floating constant.
+    for (const anchor of [
+      // packages/ — the two declaration sites asserted below, plus the
+      // cross-package positive control.
+      "packages/agentic-interaction/src/domain/provider-config.ts",
+      "packages/agentic-interaction/src/application/ports/out/api-key-vault-lifecycle.port.ts",
+      "packages/web-driver/src/application/ports/user-secret-vault.port.ts",
+      // apps/ — the two consumers that bind a vault contract. The .tsx one
+      // also proves the walk's .tsx arm works: a homonym could hide there.
+      "apps/web/app/lib/vault-context.tsx",
+      "apps/tui/src/services/action-service.ts",
+      // tools/ — the linter's entry source; the tree is small, but a homonym
+      // declared in it would be just as much a collision.
+      "tools/arch-linter/src/index.ts",
+    ]) {
+      assert.ok(
+        scanned.has(anchor),
+        `scan did not reach ${anchor} under ${REPO_ROOT}; the workspace-wide uniqueness assertions below do not cover its tree`,
+      );
+    }
+
+    // (b) Positive control on the *matcher*, not just the walk: a port that is
+    // known to exist, in a different package from the one under test, and
+    // whose name is deliberately NOT being changed by this item. If the
+    // matcher cannot see it, the negative assertions below prove nothing.
     assert.deepEqual(declarationSites(files, "UserSecretVaultPort"), [
       "packages/web-driver/src/application/ports/user-secret-vault.port.ts",
     ]);
@@ -138,19 +199,18 @@ describe("HEX-008: one name, one secret contract", () => {
   });
 
   it("keeps the two contracts structurally disjoint", () => {
-    const envSource = readFileSync(
-      path.join(
-        REPO_ROOT,
-        "packages/agentic-interaction/src/domain/provider-config.ts",
-      ),
-      "utf8",
+    const sourceOf = (repoRelativePath: string): string => {
+      const file = files.find(
+        (candidate) => candidate.path === repoRelativePath,
+      );
+      assert.ok(file, `expected the scan to have read ${repoRelativePath}`);
+      return file.text;
+    };
+    const envSource = sourceOf(
+      "packages/agentic-interaction/src/domain/provider-config.ts",
     );
-    const vaultSource = readFileSync(
-      path.join(
-        REPO_ROOT,
-        "packages/agentic-interaction/src/application/ports/out/api-key-vault-lifecycle.port.ts",
-      ),
-      "utf8",
+    const vaultSource = sourceOf(
+      "packages/agentic-interaction/src/application/ports/out/api-key-vault-lifecycle.port.ts",
     );
     // The env-lookup contract must not grow the vault lifecycle, and the
     // vault must not grow a synchronous env read — that overlap is what would
