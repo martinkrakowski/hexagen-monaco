@@ -21,12 +21,9 @@ import {
   Input,
 } from "@hexagen/ui";
 import type { GithubPublishErrorCode } from "@/lib/github-publish-errors";
-
-export interface ExportDialogSubmitPayload {
-  repoName: string;
-  isPrivate: boolean;
-  commitMessage: string;
-}
+// The submit contract is owned by the publish context, not by this dialog —
+// see the module comment in `app/contexts/export-payloads.ts` (ADR-0055).
+import type { ScaffoldPublishSubmitPayload } from "@/contexts/export-payloads";
 
 /** Which panel the dialog shows; derived from the export state machine. */
 export type ExportDialogPhase = "form" | "submitting" | "success" | "error";
@@ -35,7 +32,7 @@ interface ExportDialogProps {
   open: boolean;
   phase: ExportDialogPhase;
   onClose: () => void;
-  onSubmit: (payload: ExportDialogSubmitPayload) => Promise<void> | void;
+  onSubmit: (payload: ScaffoldPublishSubmitPayload) => Promise<void> | void;
   /** Re-run the last publish after an error (no re-typing). */
   onRetry: () => void;
   /** Return to the editable form after an error. */

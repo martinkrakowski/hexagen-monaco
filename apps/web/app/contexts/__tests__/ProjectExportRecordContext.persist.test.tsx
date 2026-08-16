@@ -1,21 +1,30 @@
-// First tests for ExportContext's persistence helpers (ADR-0045 follow-up):
+// Tests for the publish record's persistence helpers (ADR-0045 follow-up):
 // persistGithubLink and persistPublishPrefs must write through the RECORD-level
 // `updateProjectRecord` — not a loadProjects pre-read + whole-array
 // saveProjects, which persisted a possibly-stale snapshot of every record
 // (the original githubLink.lastCommitSha clobber class). NotFound (project
 // deleted mid-flow) is a warn + no-op: persistence is best-effort and must
 // never fail the publish.
+//
+// GOD-004 moved these helpers out of ExportContext into
+// ProjectExportRecordContext, the one owner of the saved record. The flows are
+// still driven through their public entry points (the publish context), so
+// what is pinned is end-to-end behavior, not the helper's internals.
 
 import { describe, it, vi, beforeEach, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import React from "react";
 import { render, act, waitFor, cleanup } from "@testing-library/react";
 
+import { ExportProvider } from "../ExportContext";
 import {
-  ExportProvider,
-  useProjectExport,
-  type ProjectExportContextValue,
-} from "../ExportContext";
+  useProjectExportRecord,
+  type ProjectExportRecordValue,
+} from "../ProjectExportRecordContext";
+import {
+  useGithubPublish,
+  type GithubPublishContextValue,
+} from "../GithubPublishContext";
 
 const harness = vi.hoisted(() => {
   const state = {
@@ -117,9 +126,11 @@ function seedProjects() {
   ];
 }
 
-let ctx: ProjectExportContextValue;
+let ctx: GithubPublishContextValue;
+let record: ProjectExportRecordValue;
 function Capture() {
-  ctx = useProjectExport();
+  ctx = useGithubPublish();
+  record = useProjectExportRecord();
   return null;
 }
 
@@ -155,7 +166,7 @@ function mockScaffoldPublishOk() {
   });
 }
 
-describe("ExportContext — record-level persist helpers (ADR-0045 follow-up)", () => {
+describe("ProjectExportRecordContext — record-level persist helpers (ADR-0045 follow-up)", () => {
   beforeEach(() => {
     seedProjects();
     harness.state.loadCalls = 0;
@@ -252,7 +263,7 @@ describe("ExportContext — record-level persist helpers (ADR-0045 follow-up)", 
     );
     assert.strictEqual(harness.state.projects[1], sibling);
     assert.strictEqual(ctx.state.kind, "success");
-    assert.deepStrictEqual(ctx.connectedRepo, { owner: "me", repo: "r" });
+    assert.deepStrictEqual(record.connectedRepo, { owner: "me", repo: "r" });
   });
 
   it("persistGithubLink NotFound → warn + no-op; the publish still reports success (best-effort persistence)", async () => {
@@ -274,7 +285,7 @@ describe("ExportContext — record-level persist helpers (ADR-0045 follow-up)", 
     // The publish outcome is driven by the server response, not the IDB write;
     // the in-memory link was set from the authoritative response regardless.
     assert.strictEqual(ctx.state.kind, "success");
-    assert.deepStrictEqual(ctx.connectedRepo, { owner: "me", repo: "r" });
+    assert.deepStrictEqual(record.connectedRepo, { owner: "me", repo: "r" });
     assert.strictEqual(harness.state.saveCalls, 0);
   });
 });

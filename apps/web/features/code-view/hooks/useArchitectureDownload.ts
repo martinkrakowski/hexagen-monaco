@@ -5,10 +5,7 @@ import JSZip from "jszip";
 import yaml from "js-yaml";
 import type { WizardData } from "@hexagen/project-configuration";
 import { wizardToManifest } from "@hexagen/wizard-orchestration";
-import {
-  isImportedFormState,
-  parseImportedManifest,
-} from "../../../app/lib/imported-manifest";
+import { resolveImportedManifest } from "../../../app/lib/imported-manifest";
 
 /**
  * Resolve the manifest.yaml content for the architecture ZIP. Pure and
@@ -22,16 +19,19 @@ import {
  * formatting/comments for no gain), and a corrupt manifest FAILS CLOSED with a
  * blocking error rather than silently degrading. Wizard-authored projects keep
  * the projection path unchanged.
+ *
+ * The imported-vs-wizard decision is the ONE shared resolver (REA-005); only
+ * the wizard-authored arm — the `wizardToManifest` projection — is this
+ * module's own.
  */
 export function resolveArchitectureManifestYaml(
   wizardData: WizardData,
   savedManifestYaml?: string | null,
 ): { ok: true; yamlContent: string } | { ok: false; message: string } {
-  if (isImportedFormState(wizardData)) {
-    const parsed = parseImportedManifest(savedManifestYaml);
-    if (!parsed.ok) return { ok: false, message: parsed.message };
-    // parseImportedManifest guarantees a non-empty string here.
-    return { ok: true, yamlContent: savedManifestYaml as string };
+  const resolved = resolveImportedManifest(wizardData, savedManifestYaml);
+  if (!resolved.ok) return { ok: false, message: resolved.message };
+  if (resolved.imported) {
+    return { ok: true, yamlContent: resolved.yamlContent };
   }
   const manifest = wizardToManifest(wizardData);
   return { ok: true, yamlContent: yaml.dump(manifest, { lineWidth: -1 }) };

@@ -7,9 +7,9 @@ import type {
   BoundedContext,
 } from "@hexagen/project-configuration";
 
-import { useProjectExport } from "@/contexts/ExportContext";
-import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
-import { useConnectedRepo } from "@/hooks/useConnectedRepo";
+import { useZipExport } from "@/contexts/ZipExportContext";
+import { useGithubPublish } from "@/contexts/GithubPublishContext";
+import { useProjectExportRecord } from "@/contexts/ProjectExportRecordContext";
 import type { ViewMode } from "@/types/view-mode";
 import { StepHeader } from "./StepHeader";
 import { WizardFooter } from "../WizardFooter";
@@ -55,24 +55,19 @@ export function SummaryStep({
   const { watch } = useFormContext<ProjectConfig>();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  const { state: zipState, canExport, exportZip } = useZipExport();
   const {
-    state: exportState,
-    canExport,
     isAuthenticated,
-    exportZip,
+    isPublishing,
     requestGithubExport,
     openPublishSettings,
-  } = useProjectExport();
+  } = useGithubPublish();
+  // The publish record is the single owner of the connected link (GOD-004), and
+  // it adopts the server's link the moment a publish succeeds — so the
+  // indicator no longer needs a second IDB read keyed on the export state.
+  const { connectedRepo } = useProjectExportRecord();
 
-  const { activeWorkspace } = useActiveWorkspace();
-  // Re-read the connected repo whenever an export succeeds, so the indicator
-  // reflects a just-completed publish without needing a remount.
-  const connectedRepo = useConnectedRepo(
-    activeWorkspace?.projectId,
-    exportState.kind,
-  );
-
-  const isExporting = exportState.kind === "exporting";
+  const isExporting = zipState.kind === "exporting" || isPublishing;
 
   const governance = watch("governance");
   const boundedContexts = watch("boundedContexts") || [];
