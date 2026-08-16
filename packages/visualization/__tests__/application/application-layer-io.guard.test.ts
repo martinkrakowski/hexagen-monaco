@@ -58,10 +58,23 @@ const ALLOWED_PACKAGES = new Set(["@hexagen/project-configuration"]);
  * original substring scan named (`document`, `fetch`, `Blob` via `blob()`) are
  * all here; the rest close the obvious neighbours rather than waiting for the
  * next one to be found by review.
+ *
+ * `globalThis` is on the list because without it the whole rule is opt-out:
+ * `globalThis.document`, `globalThis["document"]` and the computed
+ * `globalThis["doc" + "ument"]` all reach the DOM while the identifier
+ * `document` never appears as a free reference. Banning the doorway rather
+ * than enumerating what can be fetched through it is the only form of this
+ * check that a determined edit cannot walk around. Nothing in this layer has
+ * a legitimate use for it.
+ *
+ * `self` is deliberately absent: it is the browser's own global alias, but it
+ * is also an ordinary local name (`const self = this`), and a guard that fails
+ * on that would be back to crying wolf.
  */
 const FORBIDDEN_GLOBALS = new Set([
   "document",
   "window",
+  "globalThis",
   "navigator",
   "localStorage",
   "sessionStorage",
@@ -98,6 +111,12 @@ function parse(filePath: string, source: string): ts.SourceFile {
 }
 
 /**
+ * Stand-in for a dynamic import whose argument is not a literal. Not relative
+ * and not in the allowlist, so it fails the assertion by construction.
+ */
+const NON_LITERAL_SPECIFIER = "<non-literal dynamic import specifier>";
+
+/**
  * Every module specifier that escapes a file, in each syntactic form.
  *
  * All four are collected because an edge the emitted JavaScript never mentions
@@ -128,8 +147,19 @@ function moduleSpecifiers(file: ts.SourceFile): string[] {
       node.expression.kind === ts.SyntaxKind.ImportKeyword
     ) {
       const [argument] = node.arguments;
-      if (argument !== undefined && ts.isStringLiteral(argument)) {
+      // Backticks are valid here and `isStringLiteral` is false for them, so
+      // `import(`html-to-image`)` would otherwise walk straight past.
+      if (
+        argument !== undefined &&
+        (ts.isStringLiteral(argument) ||
+          ts.isNoSubstitutionTemplateLiteral(argument))
+      ) {
         specifiers.push(argument.text);
+      } else {
+        // A specifier this walk cannot read is not an absence of one. Reported
+        // rather than skipped, so `import("html-to-" + "image")` fails the
+        // allowlist instead of passing it by being unanalysable.
+        specifiers.push(NON_LITERAL_SPECIFIER);
       }
     }
     ts.forEachChild(node, visit);
@@ -296,6 +326,45 @@ describe("the application layer performs no I/O of its own", () => {
           .sort(),
         ["another-package", "html-to-image", "some-npm-package"],
       );
+    });
+
+    /**
+     * The escape hatches, added after review found the first version of this
+     * guard open to all three. Each reaches exactly what the rules above ban
+     * while never writing the banned token as a free identifier or a plain
+     * string — which is the whole reason the rules are phrased as "no
+     * `globalThis`" and "no unreadable specifier" rather than as a blocklist of
+     * spellings.
+     */
+    it("closes the globalThis and computed-specifier routes around it", () => {
+      const file = parse(
+        "evasion.ts",
+        [
+          "const a = globalThis.document.querySelector(sel);",
+          'const b = globalThis["document"];',
+          'const c = globalThis["doc" + "ument"];',
+          "const d = await import(`html-to-image`);",
+          'const e = await import("html-to-" + "image");',
+          "export { a, b, c, d, e };",
+        ].join("\n"),
+      );
+
+      // One hit per `globalThis`, and nothing else: the `document` in `a` is a
+      // property name and the ones in `b`/`c` are string text, so all three are
+      // correctly invisible. The doorway is what fails, which is the point.
+      assert.deepEqual(forbiddenGlobalReferences(file), [
+        "globalThis",
+        "globalThis",
+        "globalThis",
+      ]);
+      assert.deepEqual(moduleSpecifiers(file).sort(), [
+        NON_LITERAL_SPECIFIER,
+        "html-to-image",
+      ]);
+      // And the non-literal specifier really does fail the allowlist rather
+      // than merely being recorded.
+      assert.equal(NON_LITERAL_SPECIFIER.startsWith("."), false);
+      assert.equal(ALLOWED_PACKAGES.has(NON_LITERAL_SPECIFIER), false);
     });
   });
 });
