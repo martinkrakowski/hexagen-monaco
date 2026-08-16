@@ -1,30 +1,47 @@
-import { z } from "zod";
+/**
+ * Linter-report domain types.
+ *
+ * These were Zod schemas until the ADR-0054 `zod` disposition (2026-08-16). The
+ * only non-test consumer of the runtime schema was
+ * `GetLinterReportUseCase`, which called `LinterReportSchema.parse()` on the
+ * value returned by `LinterReportProviderPort` — an IN-PROCESS port whose every
+ * implementation builds the object literal in TypeScript
+ * (`ServerLinterReportProviderAdapter` in `apps/web`, and the mcp-server
+ * adapter). There is no deserialization boundary anywhere on that path, so the
+ * parse re-validated what the type system already guaranteed and its only
+ * effect was to pull an npm package into this domain.
+ *
+ * If a caller is ever added that reads a linter report from disk or the wire,
+ * the parser belongs in THAT adapter, not here.
+ */
 
-export const BoundaryViolationSchema = z.object({
-  ruleId: z.string(),
-  severity: z.enum(["error", "warning"]),
-  file: z.string(),
-  message: z.string(),
-  snippet: z.string().optional(),
-});
+export interface BoundaryViolation {
+  ruleId: string;
+  severity: "error" | "warning";
+  file: string;
+  message: string;
+  snippet?: string;
+}
 
-export const DependencyEventSchema = z.object({
-  source: z.string(),
-  target: z.string(),
-  relationship: z.enum(["depends_on", "implements", "uses"]),
-});
+export interface DependencyEvent {
+  source: string;
+  target: string;
+  relationship: "depends_on" | "implements" | "uses";
+}
 
-export const LinterReportSchema = z.object({
-  timestamp: z.string().datetime(),
-  isCompliant: z.boolean(),
-  violations: z.array(BoundaryViolationSchema),
-  scannedFilesCount: z.number(),
-});
-export type LinterReport = z.infer<typeof LinterReportSchema>;
+export interface LinterReport {
+  /** ISO-8601 timestamp. */
+  timestamp: string;
+  isCompliant: boolean;
+  violations: BoundaryViolation[];
+  scannedFilesCount: number;
+}
 
-export const ArchitecturalEventSchema = z.object({
-  eventId: z.string().uuid(),
-  timestamp: z.string().datetime(),
-  type: z.enum(["BoundaryViolated", "DependencyAdded", "ModuleScaffolded"]),
-  payload: z.record(z.any()),
-});
+export interface ArchitecturalEvent {
+  /** UUID. */
+  eventId: string;
+  /** ISO-8601 timestamp. */
+  timestamp: string;
+  type: "BoundaryViolated" | "DependencyAdded" | "ModuleScaffolded";
+  payload: Record<string, unknown>;
+}
