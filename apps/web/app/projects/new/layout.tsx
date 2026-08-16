@@ -1,7 +1,7 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { useLocalLLMConfig } from "@/llm-driver/useLocalLlm";
+import { useLocalLLMConfig } from "@/lib/local-llm-context";
 import { ModelProgressCard } from "@/governance-assistant/ModelProgressCard";
 import {
   LLMLoadingModalProvider,

@@ -5,7 +5,7 @@ import { useGovernanceAssistant } from "../hooks/useGovernanceAssistant";
 import {
   useLocalLLMConfig,
   useLocalLLMStreaming,
-} from "@/llm-driver/useLocalLlm";
+} from "@/lib/local-llm-context";
 import { useCloudLLM } from "../hooks/useCloudLlm";
 import { useCloudConnection } from "../hooks/useCloudConnection";
 import { useSecretVault } from "@/lib/vault-context";
