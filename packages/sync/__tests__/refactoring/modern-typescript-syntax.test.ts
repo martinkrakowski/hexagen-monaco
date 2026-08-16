@@ -16,8 +16,15 @@
  * only genuinely new *syntax* between 5.4 and 5.9. Under ts-morph 22 it yields
  * three syntactic diagnostics and the whole `ImportDeclaration` **disappears
  * from the AST**; under 27 it parses clean and the declaration is present.
- * `getImportDeclarations()` is exactly what `getModificationReason` and
+ * `getImportDeclarations()` is exactly what the adapter's reason ladder and
  * `updateImports()` walk, so a dropped import is a dropped rename.
+ *
+ * WHERE THE SETTINGS LIVE. `REFACTORING_IMPACT_COMPILER_OPTIONS` moved from the
+ * use case to `infrastructure/adapters/ts-morph-symbol-index.adapter.ts` with
+ * HEX-013 (item 5.7), which put the parser behind a DTO port. Nothing about
+ * this guard's discriminating property changed: it still constructs a `Project`
+ * from the *same object production uses*, and the analyser still parses through
+ * it. Only the import path moved.
  *
  * HONEST SCOPE. Scanning all 2629 `.ts`/`.tsx` files in this repo with the 5.4.2
  * parser produces zero syntactic diagnostics today, so this alignment fixes a
@@ -46,7 +53,7 @@ import assert from "node:assert";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { Project, SyntaxKind, ts } from "ts-morph";
-import { REFACTORING_IMPACT_COMPILER_OPTIONS } from "../../src/application/use-cases/refactoring-impact.use-case.js";
+import { REFACTORING_IMPACT_COMPILER_OPTIONS } from "../../src/infrastructure/adapters/ts-morph-symbol-index.adapter.js";
 import { toWorkspaceRelativePosixPath } from "../../src/domain/services/layer-classifier.js";
 import { ImpactAnalyzer } from "../../src/refactoring/impact-analyzer.js";
 import type { Manifest } from "../../src/types/manifest.js";
@@ -177,11 +184,14 @@ describe("refactoring-impact parses >=TS 5.5 syntax (AUD-012)", () => {
   // survive, so `analyze()`'s coarse output (a file list plus a reason string)
   // looks identical either way. That is precisely why the mis-parse was
   // invisible. Kept because it proves the fixture really flows through
-  // ImpactAnalyzer -> RefactoringImpactUseCase -> ts-morph rather than through
-  // a hand-built Project the production path never touches.
-  // Follow-up worth a human decision: the use-case discards syntactic
+  // ImpactAnalyzer -> RefactoringImpactUseCase -> TsMorphSymbolIndexAdapter ->
+  // ts-morph rather than through a hand-built Project the production path never
+  // touches.
+  // Follow-up worth a human decision (RI-2): the analyser discards syntactic
   // diagnostics entirely, so an unparseable consumer file yields a confident
-  // but wrong report with no warning. Out of scope for AUD-012.
+  // but wrong report with no warning. Out of scope for AUD-012 and for
+  // HEX-013 — see the SymbolReferenceIndexPort header for why the DTO shape
+  // leaves room for it.
   it("analyses a workspace containing >=TS 5.5 syntax end to end (liveness)", async () => {
     await withTempWorkspace(async ({ workspaceRoot }) => {
       await writeFixture(
