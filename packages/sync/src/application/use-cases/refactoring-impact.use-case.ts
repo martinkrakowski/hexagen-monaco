@@ -1,8 +1,10 @@
-import { Project, SourceFile, SyntaxKind } from "ts-morph";
 import { ok, err, type Result } from "../../domain/result.js";
 import type { Manifest } from "../../types/manifest.js";
 import type { WorkspaceFileProviderPort } from "../ports/out/workspace-file-provider.port.js";
-import type { SymbolReferenceProviderPort } from "../ports/out/symbol-reference-provider.port.js";
+import type {
+  SymbolReferenceDto,
+  SymbolReferenceIndexPort,
+} from "../ports/out/symbol-reference-index.port.js";
 import { validateRequest } from "../../domain/services/impact-request-validator.js";
 import {
   determineLayer,
@@ -27,36 +29,24 @@ export interface ImpactAnalysisRequest {
 }
 
 /**
- * The ts-morph project settings this analyser parses consumer workspaces with.
+ * Analyses what a proposed refactoring would touch.
  *
- * Exported so the parser contract can be pinned by a test against the *same*
- * object production uses, rather than a copy that silently drifts. See
- * `__tests__/refactoring/modern-typescript-syntax.test.ts` (AUD-012): the
- * engine is published and points at arbitrary user code, so the TypeScript
- * version ts-morph bundles has to be at least as new as the one this repo
- * compiles with — ts-morph 22 bundled TS 5.4.2 and could not parse TS 5.9
- * syntax at all.
+ * The TypeScript parser sits behind `SymbolReferenceIndexPort` (HEX-013, item
+ * 5.7): this use case no longer constructs a ts-morph `Project` and no AST node
+ * ever reaches it. What crosses the boundary is `SymbolReferenceDto` — a file
+ * path and a reason sentence — from which every downstream step
+ * (classification, cross-package detection, boundary assessment, warnings) is
+ * derived by string work alone. Enumerating which files to hand the index
+ * stays here, because that is exactly such string work and it is where the
+ * exclusions (`node_modules`, build output, `.d.ts`) are decided.
  */
-export const REFACTORING_IMPACT_COMPILER_OPTIONS = {
-  skipAddingFilesFromTsConfig: true,
-  compilerOptions: {
-    target: 99,
-    module: 99,
-    moduleResolution: 100,
-  },
-} as const;
-
 export class RefactoringImpactUseCase {
-  private project: Project;
-
   constructor(
     private readonly workspaceRoot: string,
     private readonly manifest: Manifest,
     private readonly fileProvider: WorkspaceFileProviderPort,
-    private readonly symbolProvider: SymbolReferenceProviderPort,
-  ) {
-    this.project = new Project({ ...REFACTORING_IMPACT_COMPILER_OPTIONS });
-  }
+    private readonly symbolIndex: SymbolReferenceIndexPort,
+  ) {}
 
   async analyze(
     request: ImpactAnalysisRequest,
@@ -69,9 +59,9 @@ export class RefactoringImpactUseCase {
 
       await this.loadWorkspaceFiles();
 
-      const references = this.findSymbolReferences(request.target);
+      const references = this.symbolIndex.findReferences(request.target);
 
-      const filesToModify = this.classifyFiles(references, request.target);
+      const filesToModify = this.classifyFiles(references);
 
       const crossPackageDeps = this.detectCrossPackageDependencies(
         filesToModify,
@@ -107,32 +97,42 @@ export class RefactoringImpactUseCase {
     const packages = this.fileProvider.listPackages();
     const apps = this.fileProvider.listApps();
 
+    const filePaths: string[] = [];
+
     for (const pkg of packages) {
       const srcDir = `${this.workspaceRoot}/packages/${pkg}/src`;
       if (this.fileProvider.fileExists(srcDir)) {
-        this.addSourceFilesRecursively(srcDir);
+        this.collectSourceFilesRecursively(srcDir, filePaths);
       }
 
       const testsDir = `${this.workspaceRoot}/packages/${pkg}/__tests__`;
       if (this.fileProvider.fileExists(testsDir)) {
-        this.addSourceFilesRecursively(testsDir);
+        this.collectSourceFilesRecursively(testsDir, filePaths);
       }
     }
 
     for (const app of apps) {
       const srcDir = `${this.workspaceRoot}/apps/${app}/src`;
       if (this.fileProvider.fileExists(srcDir)) {
-        this.addSourceFilesRecursively(srcDir);
+        this.collectSourceFilesRecursively(srcDir, filePaths);
       }
 
       const appDir = `${this.workspaceRoot}/apps/${app}/app`;
       if (this.fileProvider.fileExists(appDir)) {
-        this.addSourceFilesRecursively(appDir);
+        this.collectSourceFilesRecursively(appDir, filePaths);
       }
     }
+
+    this.symbolIndex.indexFiles(filePaths);
   }
 
-  private addSourceFilesRecursively(dir: string): void {
+  /**
+   * Which files are worth parsing at all. Pure string work on paths the
+   * workspace provider reported, so it belongs on this side of the port: the
+   * exclusions (vendored trees, build output, ambient declarations) are an
+   * analyser policy, not a parser capability.
+   */
+  private collectSourceFilesRecursively(dir: string, into: string[]): void {
     const entries = this.fileProvider.getSourceFiles(dir);
 
     for (const entry of entries) {
@@ -143,43 +143,30 @@ export class RefactoringImpactUseCase {
           !entry.path.includes(".next") &&
           !entry.path.includes(".turbo")
         ) {
-          this.addSourceFilesRecursively(entry.path);
+          this.collectSourceFilesRecursively(entry.path, into);
         }
       } else if (entry.path.endsWith(".ts") || entry.path.endsWith(".tsx")) {
         if (!entry.path.endsWith(".d.ts")) {
-          this.project.addSourceFileAtPath(entry.path);
+          into.push(entry.path);
         }
       }
     }
   }
 
-  private findSymbolReferences(symbolName: string): SourceFile[] {
-    const sourceFiles = this.project.getSourceFiles();
-    return sourceFiles.filter((sf) => sf.getFullText().includes(symbolName));
-  }
-
   private classifyFiles(
-    files: SourceFile[],
-    symbolName: string,
+    references: readonly SymbolReferenceDto[],
   ): FileToModify[] {
-    return files.map((file) => {
-      const filePath = file.getFilePath();
+    return references.map((reference) => {
       const relativePath = toWorkspaceRelativePosixPath(
         this.workspaceRoot,
-        filePath,
-      );
-      const layer = determineLayer(relativePath);
-      const packageName = determinePackageName(relativePath);
-      const reason = this.symbolProvider.getModificationReason(
-        file,
-        symbolName,
+        reference.filePath,
       );
 
       return {
         path: relativePath,
-        reason,
-        layer,
-        packageName,
+        reason: reference.reason,
+        layer: determineLayer(relativePath),
+        packageName: determinePackageName(relativePath),
       };
     });
   }

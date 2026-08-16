@@ -3,4 +3,5 @@
 export * from "./atomic-file-system.adapter.js";
 export * from "./file-system-workspace.adapter.js";
 export * from "./in-memory-config-double.js";
+export * from "./ts-morph-symbol-index.adapter.js";
 export * from "./yaml-config.adapter.js";
