@@ -64,8 +64,9 @@ a required check, or the new lint workflow gates nothing in practice.
 ### Known gaps in the gates themselves
 
 Recorded because each is a check that reports more confidence than it has earned — the class
-this arc kept surfacing. Tracked in `2026-08-16-ratchet-and-parser-integrity-plan.md` and
-`2026-08-16-verification-coverage-followups.md`.
+this arc kept surfacing. Tracked in
+`docs/planning/2026-08-16-ratchet-and-parser-integrity-plan.md` and
+`docs/planning/2026-08-16-verification-coverage-followups.md`, both added by this PR.
 
 - **The arch-lint ratchet is review-enforced, not machine-enforced.** A _stale_ entry warns
   and exits 0; a PR that _grows_ `arch-lint-baseline.json` goes green. "Shrink, never grow" is
@@ -257,9 +258,12 @@ plans so each phase fires the moment its gate clears:
   Item 2.2's ratchet caught live work within the hour: `yarn lint:arch` rejected #466's first
   fix for importing `node:path` into the application layer.
 
-  New gate gaps recorded in §1 rather than left implicit; two follow-up plans written
-  (`2026-08-16-verification-coverage-followups.md`,
-  `2026-08-16-ratchet-and-parser-integrity-plan.md`).
+  New gate gaps recorded in §1 rather than left implicit; two follow-up plans written and
+  committed alongside this runbook (`docs/planning/2026-08-16-verification-coverage-followups.md`,
+  `docs/planning/2026-08-16-ratchet-and-parser-integrity-plan.md`). Both carry dated status
+  notes: **D-S1 is resolved** (all nine cross-slice pins classified as genuine debt, 6 cleared
+  by #463/#464/#467), and RI-2's fix is **cheaper** after item 5.7 / #470 puts ts-morph behind
+  a DTO port.
 
 - **2026-08-15 (late)** — **Wavefront merged: 9 PRs on `main`, zero open.** #445 (3.1),
   #446 (4.2), #447 (4.6 partial), #448 (2.5), #449 (3.5), #450 (4.1), #451 (4.4),
