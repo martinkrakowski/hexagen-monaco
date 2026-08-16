@@ -1,4 +1,4 @@
-import type { ProjectCurrentBufferStatePort } from "../ports/in/project-current-buffer-state.port";
+import type { ProjectCurrentBufferStatePort } from "../ports/out/project-current-buffer-state.port";
 
 export class ProjectCurrentBufferStateUseCase {
   constructor(private readonly port: ProjectCurrentBufferStatePort) {}

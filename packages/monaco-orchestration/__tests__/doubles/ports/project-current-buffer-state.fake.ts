@@ -1,4 +1,4 @@
-import type { ProjectCurrentBufferStatePort } from "../../../src/application/ports/in/project-current-buffer-state.port";
+import type { ProjectCurrentBufferStatePort } from "../../../src/application/ports/out/project-current-buffer-state.port";
 
 /**
  * In‑memory fake for `ProjectCurrentBufferStatePort` used in unit tests.
