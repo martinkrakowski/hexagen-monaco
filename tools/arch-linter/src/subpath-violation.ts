@@ -1,3 +1,7 @@
+import type { DomainPackageAllowlistEntry } from "./layer-purity-violation.js";
+
+export type { DomainPackageAllowlistEntry };
+
 export interface MarkerExclusion {
   package: string;
   reason: string;
@@ -17,6 +21,12 @@ export interface SubpathConventionConfig {
 
 export interface LinterConfig {
   global_whitelist?: string[];
+  /**
+   * Per-context exceptions to the domain npm-package ban (ADR-0054 §2c).
+   * Declarative on purpose: a project states its exception here rather than the
+   * linter hard-coding one. Empty by default in generated projects.
+   */
+  domain_package_allowlist?: DomainPackageAllowlistEntry[];
   package_rules?: {
     name: string;
     restricted_to?: string[];

@@ -23,7 +23,15 @@ export interface RequiredCommunicationViolation {
   consumer: string;
   provider: string;
   transport: string;
-  /** Workspace-relative path (`packages/<ctx>/...`) of the missing port. */
+  /**
+   * Root-relative path (`<workspacesDir>/<ctx>/...`) of the missing port.
+   *
+   * The workspace directory is read off `pkgRootPath` rather than hard-coded to
+   * `packages/`, because the CLI derives it from `manifest.monorepo.workspaces`
+   * and this string is both shown to a human and used as the ratchet-baseline
+   * file key — a hard-coded prefix would name a path that does not exist in a
+   * project whose workspace directory is, say, `modules/`.
+   */
   missingPort: string;
   message: string;
 }
@@ -40,7 +48,7 @@ interface ExpectedPort {
   context: string;
   /** Human role for the message. */
   role: string;
-  /** Path of the port within `packages/<context>/`. */
+  /** Path of the port within `<workspacesDir>/<context>/`. */
   relPath: string;
 }
 
@@ -94,7 +102,9 @@ function expectedPorts(
  * Check that every declared cross-context edge has its transport ports on disk.
  *
  * @param edges        `manifest.cross_context` (or undefined).
- * @param pkgRootPath  Absolute path to the workspace `packages/` directory.
+ * @param pkgRootPath  Absolute path to the workspace package directory
+ *                     (`packages/` by convention; whatever
+ *                     `manifest.monorepo.workspaces` declares in practice).
  * @param fileExists   Predicate for an absolute file path (injected for testing).
  */
 export function checkRequiredCommunication(
@@ -110,6 +120,11 @@ export function checkRequiredCommunication(
   // touching the filesystem (defense-in-depth; the emitter applies the same guard
   // when writing).
   const root = path.resolve(pkgRootPath);
+  // The workspace directory as the repo spells it (`packages`, `modules`, …).
+  // The CLI builds pkgRootPath as ROOT_DIR/<one manifest workspace segment>, so
+  // its basename IS that segment — reported and baselined paths therefore match
+  // the project's real layout instead of assuming `packages/`.
+  const wsDir = path.basename(root);
   const violations: RequiredCommunicationViolation[] = [];
   for (const edge of edges) {
     const { consumer, provider, transport } = edge;
@@ -124,8 +139,8 @@ export function checkRequiredCommunication(
           consumer,
           provider,
           transport,
-          missingPort: `packages/${port.context}/${port.relPath}`,
-          message: `required_communication violation: '${consumer}' -> '${provider}' uses an unsafe context name '${port.context}' that resolves outside packages/ — refusing to probe the filesystem`,
+          missingPort: `${wsDir}/${port.context}/${port.relPath}`,
+          message: `required_communication violation: '${consumer}' -> '${provider}' uses an unsafe context name '${port.context}' that resolves outside ${wsDir}/ — refusing to probe the filesystem`,
         });
         continue;
       }
@@ -136,8 +151,8 @@ export function checkRequiredCommunication(
           consumer,
           provider,
           transport,
-          missingPort: `packages/${port.context}/${port.relPath}`,
-          message: `required_communication violation: '${consumer}' -> '${provider}' declares ${transport} transport, but the ${port.role} is missing at packages/${port.context}/${port.relPath}`,
+          missingPort: `${wsDir}/${port.context}/${port.relPath}`,
+          message: `required_communication violation: '${consumer}' -> '${provider}' declares ${transport} transport, but the ${port.role} is missing at ${wsDir}/${port.context}/${port.relPath}`,
         });
       }
     }

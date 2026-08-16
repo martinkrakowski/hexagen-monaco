@@ -44,6 +44,14 @@ HEXAGEN_ROOT=./path/to/project npx hexagen-lint
 
 # Validate against a specific manifest file
 npx hexagen-lint --manifest ./.architecture/manifest.yaml
+
+# Use a baseline file other than .architecture/arch-lint-baseline.json.
+# A relative path resolves from the project root (--root/HEXAGEN_ROOT), not the
+# current directory, so this names the same file wherever the run starts from.
+npx hexagen-lint --baseline ./ci/arch-lint-baseline.json
+
+# (Re)write the baseline from the current run instead of enforcing against it
+npx hexagen-lint --update-baseline
 ```
 
 It exits non-zero on violations, so it drops straight into CI:
@@ -72,16 +80,59 @@ Reading your manifest and the optional invariant files, the linter enforces:
 TypeScript analysis resolves sources via `tsconfig.base.json` at the project
 root.
 
+### Layer purity
+
+Beyond `allowed_imports`, `domain/` and `application/` files are held to three
+purity rules (ADR-0054 §2):
+
+| Rule                          | What fails                                                                      | Layers              |
+| ----------------------------- | ------------------------------------------------------------------------------- | ------------------- |
+| `cross-layer-relative-import` | a relative import that resolves into a different layer the rules do not allow   | domain, application |
+| `node-builtin-in-layer`       | `node:fs`, `fs`, `path`, … — Node builtins have no business inside these layers | domain, application |
+| `npm-package-in-domain`       | a bare npm package specifier, unless allowlisted for that bounded context       | domain only         |
+
+Same-layer relative imports are always legal, and a relative import whose target
+sits in no layer at all is not this rule's business. Application-layer npm
+packages are deliberately unrestricted — application is the composition seam.
+
+Declare an exception for the third rule in `linter-config.yaml`:
+
+```yaml
+domain_package_allowlist:
+  - package: manifest-generation # bounded context ('*' for all)
+    allowed_packages:
+      - js-yaml
+```
+
+The list is **empty by default**: a scaffolded project inherits no exceptions.
+
+### The ratchet baseline
+
+An existing project rarely starts clean, so the linter fails only on violations
+that are **not** already recorded in a committed baseline
+(`.architecture/arch-lint-baseline.json` by default):
+
+- seed it once with `hexagen-lint --update-baseline`, then commit it;
+- every later run fails on any violation missing from the file — that is a
+  regression;
+- as violations get fixed, the run names the entries that no longer reproduce so
+  the fixing change can delete its own lines. The file is expected to shrink and
+  never to grow; when it is empty, delete it and the linter is strict.
+
+No baseline file means everything is enforced. A baseline that exists but cannot
+be parsed is a fatal error, for the same reason a malformed config is.
+
 ---
 
 ## Required project files
 
-| Path                                          | Required | Purpose                                                                              |
-| --------------------------------------------- | :------: | ------------------------------------------------------------------------------------ |
-| `.architecture/manifest.yaml`                 |    ✅    | The architecture definition the linter validates against                             |
-| `tsconfig.base.json`                          |    ✅    | Resolves TypeScript sources and path aliases                                         |
-| `.architecture/invariants/layer-rules.yaml`   | optional | Per-layer access rules + shared-kernel layer allowance                               |
-| `.architecture/invariants/linter-config.yaml` | optional | Cross-package `package_rules`, `global_whitelist`, subpath/server-marker conventions |
+| Path                                          | Required | Purpose                                                                                                          |
+| --------------------------------------------- | :------: | ---------------------------------------------------------------------------------------------------------------- |
+| `.architecture/manifest.yaml`                 |    ✅    | The architecture definition the linter validates against                                                         |
+| `tsconfig.base.json`                          |    ✅    | Resolves TypeScript sources and path aliases                                                                     |
+| `.architecture/invariants/layer-rules.yaml`   | optional | Per-layer access rules + shared-kernel layer allowance                                                           |
+| `.architecture/invariants/linter-config.yaml` | optional | Cross-package `package_rules`, `global_whitelist`, `domain_package_allowlist`, subpath/server-marker conventions |
+| `.architecture/arch-lint-baseline.json`       | optional | Accepted, pre-existing violations — the ratchet only fails on new ones                                           |
 
 A project scaffolded by `@hexagen-monaco/sync` already ships all of these.
 

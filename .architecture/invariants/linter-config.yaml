@@ -22,6 +22,19 @@ global_whitelist:
   - '@hexagen/shared'
   - '@hexagen/shared/**'
 
+# Exceptions to the domain npm-package ban (ADR-0054 §2c). A bare npm package
+# imported inside a `domain/` layer is a violation unless it is listed here for
+# that bounded context. Keep this list short and justified: every entry is an
+# accepted leak of an external library into a domain model.
+domain_package_allowlist:
+  - package: 'manifest-generation'
+    allowed_packages:
+      # HEX-026 disposition (AUDIT-2026-08-14 §2): YAML text is this domain's
+      # core artifact — line-ranged, format-controlled dump, the same class as
+      # the Zod parsing the files already do. Recorded as an accepted exception
+      # instead of a codec port.
+      - 'js-yaml'
+
 test_double_rules:
   allowed_cross_package_imports: true
 

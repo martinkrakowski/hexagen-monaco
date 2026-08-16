@@ -49,6 +49,42 @@ export {
   isSharedKernelAllowed,
 } from "./layer-import-violation.js";
 
+export type {
+  LayerPurityRule,
+  LayerPurityViolation,
+  DomainPackageAllowlistEntry,
+  CrossLayerRelativeInput,
+  DomainPackageInput,
+} from "./layer-purity-violation.js";
+export {
+  DEFAULT_LAYER_NAMES,
+  checkCrossLayerRelativeImport,
+  checkNodeBuiltinInLayer,
+  checkNpmPackageInDomain,
+  detectLayer,
+  isDomainPackageAllowed,
+  isNodeBuiltinSpecifier,
+  isRelativeSpecifier,
+  isWorkspaceSpecifier,
+  npmPackageNameOf,
+  resolveRelativeImportPath,
+} from "./layer-purity-violation.js";
+
+export type {
+  BaselineEntry,
+  BaselineFile,
+  PartitionResult,
+  ViolationRecord,
+} from "./ratchet-baseline.js";
+export {
+  BASELINE_VERSION,
+  DEFAULT_BASELINE_RELATIVE_PATH,
+  parseBaseline,
+  partitionAgainstBaseline,
+  serializeBaseline,
+  violationKey,
+} from "./ratchet-baseline.js";
+
 export type { OptionalYamlConfig } from "./optional-yaml-config.js";
 export { loadOptionalYamlConfig } from "./optional-yaml-config.js";
 

@@ -175,4 +175,33 @@ describe("checkRequiredCommunication — positive cross-context enforcement", ()
       "the check never stats a path resolved outside packages/",
     );
   });
+
+  // `missingPort` is both shown to a human and used verbatim as the file half of
+  // the ratchet-baseline key, so a hard-coded `packages/` prefix would name a
+  // path that does not exist in a project whose workspaces are `modules/*` —
+  // an unfixable baseline entry and a message that sends the reader nowhere.
+  it("reports the project's real workspace directory, not a hard-coded packages/", () => {
+    const modules = path.join("/ws", "modules");
+    const v = checkRequiredCommunication([eventBusEdge], modules, () => false);
+    assert.ok(v.length > 0, "missing ports are still flagged");
+    for (const x of v) {
+      assert.ok(
+        x.missingPort.startsWith("modules/"),
+        `missingPort should be workspace-relative: ${x.missingPort}`,
+      );
+      assert.doesNotMatch(x.missingPort, /packages\//);
+      assert.match(x.message, /missing at modules\//);
+    }
+  });
+
+  it("keeps the conventional packages/ prefix when that IS the workspace dir", () => {
+    const v = checkRequiredCommunication([eventBusEdge], PKG, () => false);
+    assert.ok(v.length > 0);
+    for (const x of v) {
+      assert.ok(
+        x.missingPort.startsWith("packages/"),
+        `missingPort should be workspace-relative: ${x.missingPort}`,
+      );
+    }
+  });
 });
