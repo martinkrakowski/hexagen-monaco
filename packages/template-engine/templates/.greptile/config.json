@@ -1,0 +1,21 @@
+{
+  "strictness": 1,
+  "commentTypes": ["logic", "syntax"],
+  "instructions": "This directory is template payload EMITTED INTO CUSTOMER PROJECTS. It is not scaffolding for this repo and it is not test fixture. It sits outside this repo's tsconfig, so it is never type-checked here and never runs in this repo's test suite — it is compiled by consumers. 'Outside the build' is therefore not a reason to treat a defect here as cosmetic: a layering violation, a wrong type, or an undeclared dependency in these files is one this product exports to its users, and it surfaces as a broken generated project rather than as a failure in this repo. Review it more strictly than the host codebase, not less. Style and formatting comments are switched off here on purpose so the extra scrutiny lands on correctness.",
+  "rules": [
+    {
+      "id": "template-ports-own-their-failure-channel",
+      "rule": "A port emitted into a generated project must not import from `infrastructure/`, and must not return a vendor error class through a signature typed on the domain's own failure type (ADR-0053). This exact defect shipped to customers in 14 template files and was only caught by hand — nothing in this repo's CI compiles these sources.",
+      "scope": ["**/files/src/**"],
+      "severity": "high",
+      "enabled": true
+    },
+    {
+      "id": "template-dependencies-must-be-providable",
+      "rule": "Flag any import in template payload of an npm package the generated project's own package.json will not provide. Template manifests currently have no mechanism to declare npm dependencies, so such an import fails `yarn typecheck` in the generated project before the customer's own code runs. Naming the package and the template is more useful than a generic warning.",
+      "scope": ["**/files/**"],
+      "severity": "high",
+      "enabled": true
+    }
+  ]
+}
