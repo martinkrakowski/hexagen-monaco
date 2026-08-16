@@ -1643,6 +1643,7 @@ __metadata:
     "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.0.0"
     eslint: "npm:^8.57.0"
+    html-to-image: "npm:^1.11.13"
     js-yaml: "npm:^4.1.1"
     typescript: "npm:^5.4.5"
     vitest: "npm:^4.1.9"

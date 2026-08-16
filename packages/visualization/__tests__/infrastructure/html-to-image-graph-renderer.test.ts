@@ -143,6 +143,54 @@ describe("HtmlToImageGraphRenderer", () => {
     assert.deepEqual(Array.from(result.bytes), [60, 115, 118, 103, 47, 62]);
   });
 
+  describe("outside a browser", () => {
+    /**
+     * The adapter is reachable from the package root, so a composition root can
+     * construct it on a server as easily as in a browser. What it must not do
+     * there is fail as `ReferenceError: document is not defined` — an error that
+     * names a global rather than the mistake.
+     *
+     * `null` is deliberately NOT the answer: the port reserves it for "the host
+     * has no such target", which the use case reports as "Viewport element not
+     * found: <selector>". See the comment in `render()`.
+     */
+    it("names the missing global instead of throwing a bare ReferenceError", async () => {
+      vi.unstubAllGlobals();
+      assert.equal(
+        typeof document,
+        "undefined",
+        "this arm is only meaningful with no DOM present",
+      );
+      const renderer = new HtmlToImageGraphRenderer();
+
+      const error = await renderer
+        .render({
+          target: ".react-flow__viewport",
+          encoding: "png",
+          backgroundColor: "#ffffff",
+          scale: 2,
+        })
+        .then(
+          () => null,
+          (err: unknown) => err,
+        );
+
+      assert.ok(error instanceof Error);
+      assert.equal(
+        error instanceof ReferenceError,
+        false,
+        "a ReferenceError is the unguarded failure this arm exists to rule out",
+      );
+      assert.match(error.message, /requires a browser environment/);
+      assert.match(error.message, /document/);
+    });
+
+    // No companion "and it never reached html-to-image" arm: `vi.mock` replaces
+    // the library, so that assertion holds with the guard removed too — it
+    // would be a test that passes either way. The ordering it would claim to
+    // check is recorded as a comment at the guard instead.
+  });
+
   it("resolves the target through document.querySelector", async () => {
     const seen: string[] = [];
     vi.stubGlobal("document", {

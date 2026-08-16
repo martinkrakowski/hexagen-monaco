@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, it } from "vitest";
 import { ExportGraphImageUseCase } from "../../src/application/use-cases/index.js";
 import type {
@@ -299,32 +297,9 @@ describe("ExportGraphImageUseCase", () => {
     });
   });
 
-  describe("the application layer performs no I/O of its own", () => {
-    it("the use-case source touches no DOM, fetch or rendering library", () => {
-      const source = readFileSync(
-        fileURLToPath(
-          new URL(
-            "../../src/application/use-cases/export-graph-image.ts",
-            import.meta.url,
-          ),
-        ),
-        "utf8",
-      );
-
-      for (const forbidden of [
-        "html-to-image",
-        "document",
-        "querySelector",
-        "fetch(",
-        "blob(",
-        "arrayBuffer",
-      ]) {
-        assert.equal(
-          source.includes(forbidden),
-          false,
-          `application layer must not reference ${forbidden}`,
-        );
-      }
-    });
-  });
+  // The "this use case does no I/O of its own" anti-regression lives in
+  // `application-layer-io.guard.test.ts`. It started here as a substring scan of
+  // this file's source; it is now a parsed walk over the whole application
+  // layer, because `source.includes("document")` fires on the word in a comment
+  // and misses `globalThis["docu" + "ment"]`.
 });

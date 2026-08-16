@@ -24,6 +24,7 @@
   "dependencies": {
     "@hexagen/project-configuration": "workspace:*",
     "@hexagen/shared": "workspace:*",
+    "html-to-image": "^1.11.13",
     "js-yaml": "^4.1.1"
   },
   "devDependencies": {
