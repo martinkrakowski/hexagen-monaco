@@ -131,10 +131,24 @@ const DELIBERATELY_UNEXPORTED: ReadonlyArray<readonly [string, string]> = [
   ["safeWriteFile", "fs-utils internals"],
 ];
 
+/**
+ * Memoized: constructing the `Project` loads the package's whole tsconfig
+ * program — measured at ~380 ms and 303 source files per construction — and
+ * that cost is O(source files in the package), so it grows with the package.
+ * Two of the tests below need the surface, and the barrel cannot change
+ * between them within a run, so the read happens once per file.
+ */
+let cachedSurface: readonly string[] | undefined;
+
 function readPublicSurface(): string[] {
-  const project = new Project({ tsConfigFilePath: TSCONFIG });
-  const barrel = project.getSourceFileOrThrow(BARREL);
-  return [...barrel.getExportedDeclarations().keys()].sort();
+  if (cachedSurface === undefined) {
+    const project = new Project({ tsConfigFilePath: TSCONFIG });
+    const barrel = project.getSourceFileOrThrow(BARREL);
+    cachedSurface = [...barrel.getExportedDeclarations().keys()].sort();
+  }
+  // A fresh array per call: the cache is the expensive parse, not the result,
+  // and a caller that sorted or spliced in place must not poison the next test.
+  return [...cachedSurface];
 }
 
 /**

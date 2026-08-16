@@ -78,10 +78,12 @@ const logger: LoggerPort = {
   errorWithException: (err, message) => console.error(message, err),
 };
 
+const dryRun = false;
+
 const engine = new SyncEngine(
   {
     mode: "external", // 'external' honours the workspace root you give it
-    dryRun: false,
+    dryRun,
     force: false,
     forceRoot: false,
     allowDirty: false,
@@ -97,6 +99,15 @@ const summary = await engine.run();
 // count, or a partial tree reads as success.
 if (summary.errors > 0) {
   throw new Error(`sync finished with ${summary.errors} generator failure(s)`);
+}
+
+// Only needed if you set `dryRun: true`. A missing
+// `.architecture/manifest.yaml` REJECTS `run()` on a real run, but a dry run
+// tolerates it by synthesizing an empty manifest — which plans ops against
+// nothing and still resolves with `errors: 0`. That is the same fact the CLI
+// gates `--check` on.
+if (dryRun && summary.manifestMissing) {
+  throw new Error("no .architecture/manifest.yaml in the target workspace");
 }
 ```
 
