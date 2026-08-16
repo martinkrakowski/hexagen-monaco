@@ -87,43 +87,85 @@ export const LayerTypeSchema = caseInsensitiveEnum(
   z.enum(["domain", "application", "infrastructure"]),
 );
 
-export const BoundedContextSchema = z.object({
-  name: z.string(),
-  type: BoundedContextTypeSchema.optional(),
-  plane: PlaneTypeSchema.optional(),
-  status: StatusTypeSchema.optional(),
-  description: z.string().optional(),
-  relationships: z.array(RelationshipSchema).optional(),
-  layers: z
-    .object({
-      domain: z
-        .object({
-          entities: z.array(z.string()).optional(),
-          value_objects: z.array(z.string()).optional(),
-        })
-        .optional(),
-      application: z
-        .object({
-          use_cases: z.array(z.string()).optional(),
-          ports: z
-            .object({
-              in: z.array(LegacyOrNewPortSchema).optional(),
-              out: z.array(LegacyOrNewPortSchema).optional(),
-            })
-            .optional(),
-        })
-        .optional(),
-      infrastructure: z
-        .object({
-          adapters: z.array(z.string()).optional(),
-        })
-        .optional(),
-    })
-    .optional(),
-  depends_on: z.array(z.string()).optional(),
-  wiring: z.array(z.string()).optional(),
-  generator: z.record(z.unknown()).optional(),
-});
+/**
+ * A projection-plane layer. Real context files carry it (e.g.
+ * `.architecture/contexts/projection/model-settings/context.yaml`), but it went
+ * undeclared for a long time — and because `layers` was a plain (stripping)
+ * `z.object`, `safeParse` discarded it without a word. Declared here so the
+ * shape is documented, and `.passthrough()` below so an undeclared sibling is
+ * never silently discarded again.
+ */
+const UiLayerSchema = z
+  .object({
+    components: z.array(z.string()).optional(),
+  })
+  .passthrough();
+
+export const BoundedContextSchema = z
+  .object({
+    name: z.string(),
+    type: BoundedContextTypeSchema.optional(),
+    plane: PlaneTypeSchema.optional(),
+    status: StatusTypeSchema.optional(),
+    description: z.string().optional(),
+    relationships: z.array(RelationshipSchema).optional(),
+    // PASSTHROUGH, not strict, at every level of this subtree — a deliberate
+    // choice, see the note on the schema below. Zod's default `z.object` STRIPS
+    // undeclared keys, which is how `layers.ui` disappeared between the file on
+    // disk and every consumer of the merged manifest.
+    layers: z
+      .object({
+        domain: z
+          .object({
+            entities: z.array(z.string()).optional(),
+            value_objects: z.array(z.string()).optional(),
+          })
+          .passthrough()
+          .optional(),
+        application: z
+          .object({
+            use_cases: z.array(z.string()).optional(),
+            ports: z
+              .object({
+                in: z.array(LegacyOrNewPortSchema).optional(),
+                out: z.array(LegacyOrNewPortSchema).optional(),
+              })
+              .passthrough()
+              .optional(),
+          })
+          .passthrough()
+          .optional(),
+        infrastructure: z
+          .object({
+            adapters: z.array(z.string()).optional(),
+          })
+          .passthrough()
+          .optional(),
+        ui: UiLayerSchema.optional(),
+      })
+      .passthrough()
+      .optional(),
+    depends_on: z.array(z.string()).optional(),
+    wiring: z.array(z.string()).optional(),
+    generator: z.record(z.unknown()).optional(),
+  })
+  /**
+   * Why passthrough and not `.strict()`.
+   *
+   * Strict would have caught `layers.ui` LOUDLY instead of dropping it, which
+   * is the better failure mode in the abstract. It is the wrong one here: this
+   * schema is also the parser for imported and LLM-generated manifests
+   * (`parseManifestToWizardData`), where tolerating unknown fields is a stated
+   * requirement — the sibling `AppSchema` documents exactly that, and the
+   * root schemas' `.strict()` is guarded upstream by the raw-yaml
+   * `assertSupportedSchemaVersion` gate, which a context file (that carries no
+   * version stamp of its own) has no equivalent of.
+   *
+   * Passthrough fixes the actual defect — data loss — without turning every
+   * forward-compatible manifest into a hard parse failure. The declared keys
+   * above still type the fields consumers rely on.
+   */
+  .passthrough();
 
 export const AppSchema = z
   .object({
@@ -149,6 +191,27 @@ export const AppSchema = z
   // Silently strip unknown properties to tolerate forward-compatible imported manifests
   // and allow graceful degradation when importing specs with extra fields
   .strip();
+
+/**
+ * A cross-context transport edge (Phase 3). The wizard's `deriveCrossContextEdges`
+ * emits these into the manifest; the `generateCrossContext` emitter consumes them;
+ * and the arch-linter enforces `required_communication` against them (each edge's
+ * transport ports must exist). Discriminated on `transport`: event-bus carries the
+ * provider's `events`, network the provider's `operations`.
+ *
+ * Declared on BOTH manifest forms. It used to sit only on `ManifestSchema`, so a
+ * split manifest could not legally declare an edge at all (`IndexManifestSchema`
+ * is `.strict()`) — which is why the linter's `required-communication` rule was
+ * unreachable for every split project, this repo included.
+ */
+export const CrossContextEdgeSchema = z.object({
+  consumer: z.string(),
+  provider: z.string(),
+  transport: z.enum(["event-bus", "network"]),
+  events: z.array(z.string()).optional(),
+  operations: z.array(z.string()).optional(),
+  integrationPattern: z.enum(["open-host", "acl"]).optional(),
+});
 
 export const IndexManifestSchema = z
   .object({
@@ -197,6 +260,7 @@ export const IndexManifestSchema = z
       )
       .optional(),
     mvk: z.record(z.unknown()).optional(),
+    cross_context: z.array(CrossContextEdgeSchema).optional(),
     workspace_config: z.string().optional(),
     legacy_config: z.string().optional(),
   })
@@ -216,22 +280,6 @@ export const IndexManifestSchema = z
       path: ["bounded_contexts"],
     },
   );
-
-/**
- * A cross-context transport edge (Phase 3). The wizard's `deriveCrossContextEdges`
- * emits these into the manifest; the `generateCrossContext` emitter consumes them;
- * and the arch-linter enforces `required_communication` against them (each edge's
- * transport ports must exist). Discriminated on `transport`: event-bus carries the
- * provider's `events`, network the provider's `operations`.
- */
-export const CrossContextEdgeSchema = z.object({
-  consumer: z.string(),
-  provider: z.string(),
-  transport: z.enum(["event-bus", "network"]),
-  events: z.array(z.string()).optional(),
-  operations: z.array(z.string()).optional(),
-  integrationPattern: z.enum(["open-host", "acl"]).optional(),
-});
 
 export const ManifestSchema = z
   .object({
@@ -295,6 +343,12 @@ export const ManifestSchema = z
       )
       .optional(),
     workspaceDefaults: z.record(z.unknown()).optional(),
+    // Both side-car pointers. `mergeSplitManifest` resolves `workspace_config`
+    // into the `monorepo`/`generator` blocks above and then carries the pointer
+    // through with every other index key, so the merged (flat) form has to
+    // accept it — this schema is `.strict()`, and the merge output is re-parsed
+    // against it (sync's `validateManifest`, `parseManifestToWizardData`).
+    workspace_config: z.string().optional(),
     legacy_config: z.string().optional(),
   })
   .strict();

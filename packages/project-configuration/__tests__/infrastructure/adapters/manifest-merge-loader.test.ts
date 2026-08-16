@@ -316,6 +316,121 @@ describe("mergeSplitManifest", () => {
     );
   });
 
+  it("carries cross_context edges declared on an index manifest", async () => {
+    // `IndexManifestSchema` is `.strict()` and did not declare `cross_context`,
+    // so a split manifest could not legally carry an edge — which made the
+    // arch-linter's `required-communication` rule unreachable for every split
+    // project. This pins both halves: the schema accepts it, the merge keeps it.
+    const dir = await setupDir();
+    const archDir = join(dir, ".architecture");
+    const ctxDir = join(archDir, "contexts", "core", "billing");
+    await mkdir(ctxDir, { recursive: true });
+
+    const indexYaml = [
+      `version: '2.0'`,
+      `description: cross-context fixture`,
+      `bounded_contexts:`,
+      `  - name: billing`,
+      `    type: core`,
+      `    file: contexts/core/billing/context.yaml`,
+      `cross_context:`,
+      `  - consumer: billing`,
+      `    provider: ledger`,
+      `    transport: event-bus`,
+      `    events:`,
+      `      - InvoiceIssued`,
+    ].join("\n");
+
+    await writeFile(join(archDir, "manifest.yaml"), indexYaml, "utf-8");
+    await writeFile(
+      join(ctxDir, "context.yaml"),
+      [`name: billing`, `type: core`].join("\n"),
+      "utf-8",
+    );
+
+    const result = await mergeSplitManifest(
+      dir,
+      join(archDir, "manifest.yaml"),
+    );
+
+    assert.deepStrictEqual(result.cross_context, [
+      {
+        consumer: "billing",
+        provider: "ledger",
+        transport: "event-bus",
+        events: ["InvoiceIssued"],
+      },
+    ]);
+  });
+
+  it("fails loudly when workspace_config names a file that is not there", async () => {
+    // Degrading quietly here would reproduce the original defect exactly: a
+    // green load of a manifest missing its whole `monorepo`/`generator` half.
+    const dir = await setupDir();
+    const archDir = join(dir, ".architecture");
+    const ctxDir = join(archDir, "contexts", "core", "billing");
+    await mkdir(ctxDir, { recursive: true });
+
+    const indexYaml = [
+      `version: '2.0'`,
+      `description: missing side-car fixture`,
+      `bounded_contexts:`,
+      `  - name: billing`,
+      `    type: core`,
+      `    file: contexts/core/billing/context.yaml`,
+      `workspace_config: workspace.config.yaml`,
+    ].join("\n");
+
+    await writeFile(join(archDir, "manifest.yaml"), indexYaml, "utf-8");
+    await writeFile(
+      join(ctxDir, "context.yaml"),
+      [`name: billing`, `type: core`].join("\n"),
+      "utf-8",
+    );
+
+    await assert.rejects(
+      () => mergeSplitManifest(dir, join(archDir, "manifest.yaml")),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /Workspace config file not found/);
+        return true;
+      },
+    );
+  });
+
+  it("rejects a workspace_config pointer that escapes .architecture/", async () => {
+    const dir = await setupDir();
+    const archDir = join(dir, ".architecture");
+    const ctxDir = join(archDir, "contexts", "core", "billing");
+    await mkdir(ctxDir, { recursive: true });
+
+    const indexYaml = [
+      `version: '2.0'`,
+      `description: traversing side-car fixture`,
+      `bounded_contexts:`,
+      `  - name: billing`,
+      `    type: core`,
+      `    file: contexts/core/billing/context.yaml`,
+      `workspace_config: ../../etc/passwd`,
+    ].join("\n");
+
+    await writeFile(join(archDir, "manifest.yaml"), indexYaml, "utf-8");
+    await writeFile(
+      join(ctxDir, "context.yaml"),
+      [`name: billing`, `type: core`].join("\n"),
+      "utf-8",
+    );
+
+    await assert.rejects(
+      () => mergeSplitManifest(dir, join(archDir, "manifest.yaml")),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /Path traversal detected/);
+        return true;
+      },
+    );
+  });
+
   it("throws on path traversal in context file reference", async () => {
     const dir = await setupDir();
     const archDir = join(dir, ".architecture");

@@ -17,6 +17,7 @@ import type {
 } from "../../domain/model/manifest-schema/manifest-schema.js";
 import { isIndexManifest } from "../../domain/model/manifest-schema/index.js";
 import { assertSupportedSchemaVersion } from "../../domain/model/manifest-schema/manifest-schema-version.js";
+import { WorkspaceConfigSchema } from "../../domain/model/workspace-config/workspace-config.schema.js";
 
 export { isIndexManifest };
 
@@ -131,17 +132,79 @@ export async function mergeSplitManifest(
   }
 
   const index = indexResult.data as IndexManifest;
+
+  // Carry EVERY key the index file declares, then replace only the two the
+  // merge actually rebuilds.
+  //
+  // This used to be a hand-written list of seven fields, which silently dropped
+  // `planes`, `mvk`, `invariants`, `agent_instructions`,
+  // `relationship_patterns`, `version` and both side-car pointers from every
+  // split manifest — no ADR, no comment, no test. The spread is also what the
+  // monolithic branch above already does, so the two forms now agree by
+  // construction instead of by anyone remembering to update a list. Spreading
+  // the RAW parsed object rather than `indexResult.data` keeps nested values
+  // byte-identical: the validated copy is narrowed by the inner (stripping)
+  // `z.object`s of `IndexManifestSchema`.
+  //
+  // `version: '2.0'` rides along with the rest, and stays safe: `isIndexManifest`
+  // additionally requires a `bounded_contexts` entry carrying a `file:` pointer,
+  // and the merged entries are full records.
   const result: Manifest = {
-    // Carry the (already-validated) stamp into the merged form so consumers
-    // of the merge see the same version the root file declares.
-    schemaVersion: index.schemaVersion,
+    ...(parsed as Partial<Manifest>),
+    // The (already-validated) stamp and the description fallback are the two
+    // values the merge normalizes rather than copies.
     description: index.description ?? "Auto-generated manifest",
-    system: index.system,
-    scope: index.scope,
-    architecture: index.architecture as Manifest["architecture"],
     bounded_contexts: [],
     apps: [],
   };
+
+  // Resolve the `workspace_config:` pointer. The splitter moves `monorepo` and
+  // `generator` OUT of the root manifest into this side-car (CATEGORY_B_KEYS in
+  // packages/sync/src/commands/manifest/split.ts) and records the pointer here;
+  // nothing read it back, so `manifest.monorepo?.archInvariants`,
+  // `manifest.generator?.sync?.layers` and `generator.sync.stubs` were
+  // permanently `undefined` for every split project. The merge is the inverse of
+  // the split, so it owns the read.
+  //
+  // A pointer naming a file that is not there is FATAL, not a shrug: silently
+  // continuing is precisely how the config went missing for this long, and the
+  // caller would get a green load of a manifest that is missing half its
+  // configuration. Same posture as the missing-context-file branch below.
+  if (typeof index.workspace_config === "string") {
+    assertPathWithinArchitecture(workspaceRoot, index.workspace_config);
+    const sideCarPath = path.join(
+      workspaceRoot,
+      ".architecture",
+      index.workspace_config,
+    );
+
+    let sideCarContent: string;
+    try {
+      sideCarContent = await fs.readFile(sideCarPath, "utf-8");
+    } catch (err) {
+      if (err instanceof Error && "code" in err && err.code === "ENOENT") {
+        throw new Error(`Workspace config file not found: ${sideCarPath}`);
+      }
+      throw err;
+    }
+
+    const sideCarResult = WorkspaceConfigSchema.safeParse(
+      yaml.load(sideCarContent),
+    );
+    if (!sideCarResult.success) {
+      throw new Error(
+        `Workspace config "${index.workspace_config}" validation failed: ${sideCarResult.error.message}`,
+      );
+    }
+
+    const sideCar = sideCarResult.data;
+    if (sideCar.monorepo !== undefined) {
+      result.monorepo = sideCar.monorepo as Manifest["monorepo"];
+    }
+    if (sideCar.generator !== undefined) {
+      result.generator = sideCar.generator as Manifest["generator"];
+    }
+  }
 
   const indexContexts = index.bounded_contexts ?? [];
   for (const entry of indexContexts) {
