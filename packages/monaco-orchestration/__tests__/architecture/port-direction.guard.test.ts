@@ -177,6 +177,11 @@ function findImportSpecifier(
  * The contract is declared in the very file that references it, so it has no
  * import to resolve. This is the only legitimate reason for a missing
  * specifier; every other one is a parser blind spot and must fail loudly.
+ *
+ * The `RegExp` is built from `symbol` without escaping, which is safe rather
+ * than lucky: every caller's symbol comes out of an extraction regex that
+ * admits only `[A-Za-z_$][\w$]*` (optionally dot-joined), and the dotted form
+ * returns above — so no metacharacter can reach the constructor.
  */
 function declaresLocally(source: string, symbol: string): boolean {
   if (symbol.includes(".")) return false; // a namespace member is never local
