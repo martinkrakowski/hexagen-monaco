@@ -1,5 +1,21 @@
-import type { ViewFileNode } from "../../features/code-view/types";
+import type { FileTreeNode } from "@hexagen/shared";
 import { getLanguageForFile } from "./language-utils";
+
+/**
+ * The tree node this module produces.
+ *
+ * It is declared here, not in `features/code-view/types.ts`, because ADR-0055
+ * decision 2 forbids a neutral module importing from `features/` — that inverts
+ * the dependency the neutral home exists to remove. The code-view slice
+ * re-exports it, so `ViewFileNode` still reads as a slice type at every call
+ * site inside the slice.
+ */
+export interface ViewFileNode extends FileTreeNode {
+  id: string;
+  parentId?: string;
+  language?: string;
+  children?: ViewFileNode[];
+}
 
 export function mapToFolderTree(files: Map<string, string>): ViewFileNode[] {
   const root: ViewFileNode[] = [];

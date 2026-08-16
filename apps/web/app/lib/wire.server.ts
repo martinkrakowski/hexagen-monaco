@@ -55,6 +55,9 @@ import {
   ServerLinterReportProviderAdapter,
   ServerMergedManifestProviderAdapter,
 } from "./adapters/wire-adapters";
+import { CliManifestLintAdapter } from "./governance/adapters/cli-manifest-lint.adapter";
+import { LlmSuggestionAdapter } from "./governance/adapters/llm-suggestion.adapter";
+import type { ManifestLintPort, SuggestionPort } from "./governance/ports";
 import { logger } from "../../lib/structured-logger";
 
 // The manifest-path anchor lives in its own module so the read-only display
@@ -197,6 +200,76 @@ export const getLintValidation = (): CliLintValidationAdapter => {
     _lintValidation = new CliLintValidationAdapter(workspaceRoot);
   }
   return _lintValidation;
+};
+
+// ============================================================================
+// Governance API Wiring (HEX-016)
+// ============================================================================
+//
+// The governance route family used to construct these two collaborators inline:
+// `refresh` shelled out to `yarn lint:arch` with `child_process.exec` and wrote
+// its own temp files, and both `refresh` and `suggestions` carried their own
+// copy of the `ServerLLMAdapter` + `GenerateSuggestionUseCase` wiring. They now
+// depend on `ManifestLintPort` / `SuggestionPort` and get their adapters from
+// here — this file is the single server composition root for those paths.
+
+let _manifestLint: ManifestLintPort | null = null;
+
+/**
+ * A `ManifestLintPort` for a host where the linter can never run, because the
+ * monorepo root — and with it `.architecture/manifest.yaml` and the root
+ * `lint:arch` script — was not found on disk.
+ *
+ * `getManifestLint()` is called in the route's ARGUMENT list, i.e. before
+ * `handleGovernanceRefresh` reaches its mutation gate or its `try`. Letting
+ * `findMonorepoRoot()` throw there produced a framework 500 that bypassed both
+ * the 403 for a cross-origin caller and the `lintError` field the whole port
+ * exists to populate — a linter that cannot run, once again escaping as
+ * something other than "the linter could not run". The standalone production
+ * image makes this reachable rather than hypothetical: `apps/web/Dockerfile`'s
+ * runtime stage copies only `.next/standalone` and `.next/static`, so no
+ * `.architecture/` marker is present to walk up to.
+ *
+ * The reason carried to the client is the error's path-free `clientMessage`;
+ * the detailed message embeds an absolute server path and is logged only.
+ */
+function unavailableManifestLint(error: unknown): ManifestLintPort {
+  const reason =
+    error instanceof MonorepoRootNotFoundError
+      ? MonorepoRootNotFoundError.clientMessage
+      : "Monorepo root could not be resolved";
+  logger.error("[governance] manifest lint adapter unavailable", {
+    error: error instanceof Error ? error.message : String(error),
+  });
+  return { lintManifest: async () => ({ kind: "unavailable", reason }) };
+}
+
+/** Candidate-manifest linting for the governance routes. Anchored on the
+ * monorepo root, not process.cwd() — see the adapter's class doc (AUD-002).
+ *
+ * Total by construction: it returns a port on every path. Only a successfully
+ * constructed adapter is memoized, so a host that is repaired (or a test that
+ * runs before its fixture root exists) recovers on the next request instead of
+ * being pinned to the degraded port for the process's lifetime. */
+export const getManifestLint = (): ManifestLintPort => {
+  if (!_manifestLint) {
+    try {
+      _manifestLint = CliManifestLintAdapter.fromMonorepoRoot();
+    } catch (error) {
+      return unavailableManifestLint(error);
+    }
+  }
+  return _manifestLint;
+};
+
+let _governanceSuggestions: SuggestionPort | null = null;
+
+/** The one suggestion implementation shared by `refresh` and `suggestions`. */
+export const getGovernanceSuggestions = (): SuggestionPort => {
+  if (!_governanceSuggestions) {
+    _governanceSuggestions = new LlmSuggestionAdapter();
+  }
+  return _governanceSuggestions;
 };
 
 // ============================================================================

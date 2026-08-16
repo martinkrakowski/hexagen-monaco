@@ -1,31 +1,43 @@
 // GH-publish PR-2: Header derives the ExportDialog's errorCode /
-// warningMessages / onReconnect from the export state machine. This test pins
-// that derivation (destination guard included) by capturing the props the
-// dialog receives — the dialog's own rendering is covered in
-// features/export/__tests__/ExportDialog.test.tsx.
+// warningMessages / onReconnect from the publish state machine. This test pins
+// that derivation by capturing the props the dialog receives — the dialog's own
+// rendering is covered in features/export/__tests__/ExportDialog.test.tsx.
+//
+// GOD-004 removed the `destination === "github"` guard from every branch: the
+// publish state machine no longer carries ZIP states, so the guard has nothing
+// left to exclude. What replaced it — and what is pinned below — is the
+// settings-modal case, the one publish state that must NOT open the create
+// dialog.
 
 import { describe, it, vi, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import React from "react";
 import { render, cleanup } from "@testing-library/react";
 
-const exportFlow = vi.hoisted(() => ({
+const publishFlow = vi.hoisted(() => ({
   current: {} as Record<string, unknown>,
 }));
 const dialogProps = vi.hoisted(() => ({
   current: null as Record<string, unknown> | null,
 }));
 
-// Keep the REAL isGithubExportActive (pure, from export-state — no React/DI
-// imports) so the `open` guard under test can't drift from production, while
-// useProjectExport returns a controlled flow value.
-vi.mock("@/contexts/ExportContext", async () => {
-  const state = await import("@/contexts/export-state");
-  return {
-    isGithubExportActive: state.isGithubExportActive,
-    useProjectExport: () => exportFlow.current,
-  };
-});
+// `@/contexts/export-state` is deliberately NOT mocked: isPublishDialogOpen is
+// pure (no React/DI imports), so the `open` guard under test runs the real
+// production selector and cannot drift from it.
+vi.mock("@/contexts/GithubPublishContext", () => ({
+  useGithubPublish: () => publishFlow.current,
+}));
+vi.mock("@/contexts/ZipExportContext", () => ({
+  useZipExport: () => ({
+    state: { kind: "idle" },
+    canExport: true,
+    exportZip: vi.fn(),
+    dismissStatus: vi.fn(),
+  }),
+}));
+vi.mock("@/contexts/ProjectExportRecordContext", () => ({
+  useProjectExportRecord: () => ({ connectedRepo: null }),
+}));
 vi.mock("@/hooks/useTheme", () => ({
   useTheme: () => ({ theme: "dark", toggleTheme: vi.fn() }),
 }));
@@ -58,13 +70,10 @@ import { Header } from "../Header";
 function flow(state: unknown) {
   return {
     state,
-    canExport: true,
     isAuthenticated: true,
-    connectedRepo: null,
-    exportZip: vi.fn(),
+    isPublishing: (state as { kind?: string }).kind === "publishing",
     requestGithubExport: vi.fn(),
     openPublishSettings: vi.fn(),
-    dismissStatus: vi.fn(),
     closeDialog: vi.fn(),
     submitGithubExport: vi.fn(),
     retryGithubExport: vi.fn(),
@@ -76,7 +85,7 @@ function flow(state: unknown) {
 
 function setup(state: unknown) {
   const f = flow(state);
-  exportFlow.current = f;
+  publishFlow.current = f;
   render(
     <Header
       onLoadManifest={vi.fn()}
@@ -95,10 +104,9 @@ describe("Header — ExportDialog prop threading", () => {
     dialogProps.current = null;
   });
 
-  it("github error with a code → errorCode threads through, onReconnect fires the context action", () => {
+  it("publish error with a code → errorCode threads through, onReconnect fires the context action", () => {
     const { f, props } = setup({
       kind: "error",
-      destination: "github",
       message: "GitHub rejected this push — the token lacks workflow scope.",
       code: "workflow_scope_required",
     });
@@ -111,10 +119,9 @@ describe("Header — ExportDialog prop threading", () => {
     assert.strictEqual(f.reconnectGithub.mock.calls.length, 1);
   });
 
-  it("github error without a code → errorCode is null (generic failures get no affordance)", () => {
+  it("publish error without a code → errorCode is null (generic failures get no affordance)", () => {
     const { props } = setup({
       kind: "error",
-      destination: "github",
       message: "Repository creation failed.",
     });
 
@@ -122,11 +129,14 @@ describe("Header — ExportDialog prop threading", () => {
     assert.strictEqual(props.errorCode, null);
   });
 
-  it("zip error → dialog stays closed and carries no github error state", () => {
+  it("settings-open → the create dialog stays closed (the settings modal owns the screen)", () => {
     const { props } = setup({
-      kind: "error",
-      destination: "zip",
-      message: "ZIP export failed.",
+      kind: "settings-open",
+      repo: { owner: "me", repo: "r" },
+      defaultMode: "scaffold",
+      defaultMessage: "Update scaffold",
+      defaultRemember: false,
+      hasEditorEdits: false,
     });
 
     assert.strictEqual(props.open, false);
@@ -135,10 +145,16 @@ describe("Header — ExportDialog prop threading", () => {
     assert.strictEqual(props.errorCode, null);
   });
 
-  it("github success → warningMessages and notices thread into the success payload", () => {
+  it("idle → the create dialog stays closed", () => {
+    const { props } = setup({ kind: "idle" });
+
+    assert.strictEqual(props.open, false);
+    assert.strictEqual(props.phase, "form");
+  });
+
+  it("publish success → warningMessages and notices thread into the success payload", () => {
     const { props } = setup({
       kind: "success",
-      destination: "github",
       message: "Pushed to me/r",
       githubLink: {
         owner: "me",

@@ -7,8 +7,10 @@
 
 import { describe, it, vi, beforeEach, afterEach } from "vitest";
 import assert from "node:assert/strict";
+import React from "react";
 import { renderHook, act, waitFor, cleanup } from "@testing-library/react";
 
+import { ProjectExportRecordProvider } from "@/contexts/ProjectExportRecordContext";
 import { useEditorPush } from "../useEditorPush";
 
 // The hook's whole module graph besides React is these two modules, so full
@@ -24,6 +26,8 @@ const harness = vi.hoisted(() => {
     failWith: null as null | { kind: string; message: string },
     /** When set, updateProjectRecord REJECTS (throwing port) instead of writing. */
     rejectWith: null as null | Error,
+    /** Messages passed to logger.errorWithException (throwing-port arm). */
+    loggedExceptions: [] as string[],
   };
   const port = {
     loadProjects: async () => {
@@ -67,7 +71,9 @@ const harness = vi.hoisted(() => {
     error: () => {},
     info: () => {},
     debug: () => {},
-    errorWithException: () => {},
+    errorWithException: (_e: unknown, message: string) => {
+      state.loggedExceptions.push(message);
+    },
   };
   const postJson = vi.fn();
   return { state, port, logger, postJson };
@@ -112,15 +118,31 @@ function mockPushOk(commitSha: string) {
   });
 }
 
+/**
+ * GOD-004: the connected link and the lastCommitSha write now belong to
+ * ProjectExportRecordContext, so the hook is exercised inside the real
+ * provider — the same one production mounts — rather than against a stub of
+ * the collaborator whose behavior these persistence assertions are about.
+ */
+function wrapper({ children }: { children: React.ReactNode }) {
+  return React.createElement(
+    ProjectExportRecordProvider,
+    { projectId: "p1" },
+    children,
+  );
+}
+
 async function renderConnectedHook() {
   const onPushed = vi.fn();
-  const rendered = renderHook(() =>
-    useEditorPush({
-      projectId: "p1",
-      files: { "src/a.ts": "content" },
-      unpushed: true,
-      onPushed,
-    }),
+  const rendered = renderHook(
+    () =>
+      useEditorPush({
+        projectId: "p1",
+        files: { "src/a.ts": "content" },
+        unpushed: true,
+        onPushed,
+      }),
+    { wrapper },
   );
   // The mount effect resolves the connected repo from the port (async).
   await waitFor(() => {
@@ -138,11 +160,12 @@ function resetHarness() {
   harness.state.warns = [];
   harness.state.failWith = null;
   harness.state.rejectWith = null;
+  harness.state.loggedExceptions = [];
   harness.postJson.mockReset();
   vi.spyOn(window, "open").mockImplementation(() => null);
 }
 
-describe("useEditorPush — record-level persistCommitSha (ADR-0045 follow-up)", () => {
+describe("useEditorPush — record-level lastCommitSha persistence (ADR-0045 follow-up)", () => {
   beforeEach(() => {
     resetHarness();
   });
@@ -193,7 +216,7 @@ describe("useEditorPush — record-level persistCommitSha (ADR-0045 follow-up)",
     assert.strictEqual(onPushed.mock.calls.length, 1);
     assert.strictEqual(result.current.pushError, null);
     assert.deepStrictEqual(harness.state.warns, [
-      "Skipped persisting commit sha — the saved project no longer exists",
+      "Skipped persisting GitHub link — the saved project no longer exists",
     ]);
     assert.strictEqual(harness.state.saveCalls, 0);
   });
@@ -209,7 +232,7 @@ describe("useEditorPush — record-level persistCommitSha (ADR-0045 follow-up)",
 
     assert.strictEqual(result.current.pushError, null);
     assert.deepStrictEqual(harness.state.warns, [
-      "Failed to persist commit sha to saved project",
+      "Failed to persist GitHub link to saved project",
     ]);
   });
 
@@ -228,8 +251,9 @@ describe("useEditorPush — record-level persistCommitSha (ADR-0045 follow-up)",
     assert.strictEqual(onPushed.mock.calls.length, 1);
     assert.strictEqual(result.current.pushError, null);
     assert.strictEqual(vi.mocked(window.open).mock.calls.length, 1);
-    assert.deepStrictEqual(harness.state.warns, [
-      "Failed to persist commit sha to saved project",
+    assert.deepStrictEqual(harness.state.warns, []);
+    assert.deepStrictEqual(harness.state.loggedExceptions, [
+      "Failed to persist GitHub link to saved project",
     ]);
   });
 });

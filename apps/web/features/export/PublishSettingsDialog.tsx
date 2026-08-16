@@ -18,12 +18,9 @@ import {
   PUBLISH_MODE_MESSAGES,
   resolveInitialPublishMode,
 } from "@/contexts/publish-settings";
-
-export interface PublishSettingsSubmitPayload {
-  mode: PublishMode;
-  commitMessage: string;
-  remember: boolean;
-}
+// The submit contract is owned by the publish context, not by this dialog —
+// see the module comment in `app/contexts/export-payloads.ts` (ADR-0055).
+import type { PublishSettingsSubmitPayload } from "@/contexts/export-payloads";
 
 interface PublishSettingsDialogProps {
   open: boolean;

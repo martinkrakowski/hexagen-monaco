@@ -224,9 +224,12 @@ a _separate_ gate gap rather than an FU-3 pin.
 - Mutation-restore by **inverse edit**, never `git checkout`; verify byte-identical after.
 - Run from a pristine checkout (`yarn install --immutable`) — a stale `node_modules` hid the
   arch-linter bin bug for months.
-- **Known pre-existing, not to be "fixed" incidentally:** `apps/web`'s
+- ~~**Known pre-existing, not to be "fixed" incidentally:** `apps/web`'s
   `app/lib/fetch-json.test.ts` fails 12 tests on Node ≥24 (the `vi.unstubAllGlobals()`/jsdom
-  hazard from #435). FU-1.2 will run straight into it — report it, do not absorb it.
+  hazard from #435). FU-1.2 will run straight into it — report it, do not absorb it.~~
+  **Resolved 2026-08-16.** `vitest.setup.ts` now installs its `localStorage`/`sessionStorage`
+  outside Vitest's global-stub registry, so `vi.unstubAllGlobals()` can no longer tear them
+  out; `apps/web/vitest.setup.test.ts` pins that. The `apps/web` suite is fully green.
 
 ## Risks
 
