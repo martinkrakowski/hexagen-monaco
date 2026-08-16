@@ -1,4 +1,4 @@
-import type { Manifest } from "@hexagen/sync";
+import type { GenerationManifest } from "../../generation-manifest.js";
 import type { Project } from "../../../domain/entities/project.js";
 import type { Result } from "@hexagen/shared";
 
@@ -11,6 +11,6 @@ export interface GeneratorError {
 export interface ExternalProjectGeneratorPort {
   generateAt(
     targetRoot: string,
-    manifest: Manifest,
+    manifest: GenerationManifest,
   ): Promise<Result<Project, GeneratorError>>;
 }
