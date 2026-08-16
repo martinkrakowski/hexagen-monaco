@@ -1,32 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import path from "path";
 import {
   getTransactionManager,
   getManifestMutation,
   getLintValidation,
-  findMonorepoRoot,
   MonorepoRootNotFoundError,
 } from "@/lib/wire.server";
 import { createWebLogger } from "@/lib/wire.shared";
 import { guardMutation } from "@/lib/request-guards";
-
-// Anchor path resolution + the traversal gate at the monorepo root — the same anchor the mutation/lint adapters use (findMonorepoRoot), NOT process.cwd() (which is apps/web in prod).
-function validateManifestPath(rawPath: string): string {
-  const cwd = findMonorepoRoot();
-  const allowedBase = path.join(cwd, ".architecture");
-  const resolvedPath = path.resolve(cwd, rawPath);
-
-  if (
-    !resolvedPath.startsWith(allowedBase + path.sep) &&
-    resolvedPath !== allowedBase
-  ) {
-    throw new Error(
-      `Invalid path: traversal detected. Path must be within .architecture directory.`,
-    );
-  }
-
-  return resolvedPath;
-}
+import { validateManifestPath } from "@/lib/manifest-path";
+import { AcceptTransactionUseCase } from "@hexagen/transaction-system";
 
 export async function POST(request: NextRequest) {
   // Same-origin + rate-limit gate (D1): commits speculative patches to the
@@ -37,11 +19,11 @@ export async function POST(request: NextRequest) {
   let transactionId: string | undefined;
   try {
     const body = await request.json();
-    transactionId = (body as { transactionId?: string }).transactionId;
     const { manifestPath } = body as {
       transactionId?: string;
       manifestPath?: string;
     };
+    transactionId = (body as { transactionId?: string }).transactionId;
 
     if (!transactionId) {
       return NextResponse.json(
@@ -50,30 +32,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const transactionManager = getTransactionManager();
-    const tx = transactionManager.get(transactionId);
-    if (!tx) {
-      return NextResponse.json(
-        { success: false, error: "Transaction not found" },
-        { status: 404 },
-      );
-    }
-
-    if (tx.status !== "speculative") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Transaction is in '${tx.status}' state, expected 'speculative'`,
-        },
-        { status: 409 },
-      );
-    }
-
     let resolvedManifestPath: string;
     try {
-      resolvedManifestPath = validateManifestPath(
-        manifestPath ?? ".architecture/manifest.yaml",
-      );
+      resolvedManifestPath = validateManifestPath(manifestPath);
     } catch (err) {
       // A missing on-disk manifest anchor is a server config failure, not bad
       // client input — rethrow to the outer 5xx handler (logged there) so it is
@@ -88,89 +49,146 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const patches = (tx.metadata.patches ??
-      []) as import("@hexagen/core-domain").Patch[];
-
-    const manifestMutation = getManifestMutation();
-    const applyResult = await manifestMutation.applyPatches(
-      patches,
-      resolvedManifestPath,
+    // Constructed here, from the same composition-root getters the handler
+    // always used, rather than behind a new `getAcceptTransactionUseCase()`.
+    // A new wire getter would sit OUTSIDE the mocks the Wave-1 route suites
+    // install on `@/lib/wire.server`, so the saga they cover would quietly stop
+    // running under them — green lines over a mocked-away subject. The use case
+    // is stateless; the ports it wraps are the existing singletons.
+    const useCase = new AcceptTransactionUseCase(
+      getTransactionManager(),
+      getManifestMutation(),
+      getLintValidation(),
     );
-    if (!applyResult.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Patch application failed: ${applyResult.error.message}`,
-        },
-        { status: 500 },
-      );
-    }
+    const outcome = await useCase.execute({
+      transactionId,
+      manifestPath: resolvedManifestPath,
+    });
 
-    const lintValidation = getLintValidation();
-    const lintResult =
-      await lintValidation.validateManifest(resolvedManifestPath);
-    let lintPassed = false;
-    let lintErrors: string[] = [];
+    const logger = createWebLogger();
 
-    if (lintResult.success) {
-      lintPassed = lintResult.value.valid;
-      lintErrors = lintResult.value.errors;
-    }
-
-    if (!lintPassed) {
-      const restoreResult =
-        await manifestMutation.restoreFromGit(resolvedManifestPath);
-      if (!restoreResult.success) {
-        const logger = createWebLogger();
-        logger.errorWithException(
-          restoreResult.error,
-          "[api/architecture/modify/accept] Git restore failed after lint violation",
+    switch (outcome.kind) {
+      case "not-found":
+        return NextResponse.json(
+          { success: false, error: "Transaction not found" },
+          { status: 404 },
         );
-        // Roll back the in-memory transaction regardless of the on-disk git
-        // restore outcome: the speculative snapshot + backpressure must be
-        // released so the transaction is never stuck in 'speculative'. The
-        // failed file restore is surfaced separately below.
-        transactionManager.rollback(transactionId);
+
+      case "wrong-state":
         return NextResponse.json(
           {
             success: false,
-            error:
-              "Lint validation failed and git restore failed. Manual intervention required.",
-            lintErrors,
+            error: `Transaction is in '${outcome.status}' state, expected 'speculative'`,
+          },
+          { status: 409 },
+        );
+
+      case "invalid-patch-metadata":
+        // The transaction exists and was speculative, but what it stored is not
+        // a patch set — a server-side producer defect, not client input, so 5xx.
+        // Nothing was written to disk; the use case has already rolled the
+        // transaction back so it cannot linger in `speculative`.
+        logger.error(
+          "[api/architecture/modify/accept] Transaction carries invalid patch metadata",
+          { transactionId, reason: outcome.reason },
+        );
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Transaction patch data is invalid. Patches not applied.",
           },
           { status: 500 },
         );
-      }
 
-      transactionManager.rollback(transactionId);
+      case "apply-failed":
+        logger.errorWithException(
+          outcome.error,
+          "[api/architecture/modify/accept] Patch application failed",
+        );
+        if (outcome.restoreFailure) {
+          logger.errorWithException(
+            outcome.restoreFailure,
+            "[api/architecture/modify/accept] Git restore failed after patch application failure",
+          );
+        }
+        return NextResponse.json(
+          {
+            success: false,
+            error: outcome.restoreFailure
+              ? "Patch application failed and git restore failed. Manual intervention required."
+              : `Patch application failed: ${outcome.error.message}`,
+          },
+          { status: 500 },
+        );
 
-      return NextResponse.json({
-        success: false,
-        error: "Lint validation failed. Patches reverted.",
-        lintPassed: false,
-        lintErrors,
-      });
+      case "lint-unavailable":
+        // The linter could not run. The patches' validity is unknown, so they
+        // were backed out — but this is an infrastructure failure and must not
+        // be reported as a lint violation (which would be a 200 with an empty
+        // error list, invisible to 5xx monitoring).
+        logger.errorWithException(
+          outcome.error,
+          "[api/architecture/modify/accept] Lint validation could not be run",
+        );
+        if (outcome.restoreFailure) {
+          logger.errorWithException(
+            outcome.restoreFailure,
+            "[api/architecture/modify/accept] Git restore failed after lint validation error",
+          );
+        }
+        return NextResponse.json(
+          {
+            success: false,
+            error: outcome.restoreFailure
+              ? "Lint validation could not be run and git restore failed. Manual intervention required."
+              : "Lint validation could not be run. Patches reverted.",
+          },
+          { status: 500 },
+        );
+
+      case "lint-violation":
+        if (outcome.restoreFailure) {
+          logger.errorWithException(
+            outcome.restoreFailure,
+            "[api/architecture/modify/accept] Git restore failed after lint violation",
+          );
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "Lint validation failed and git restore failed. Manual intervention required.",
+              lintErrors: outcome.lintErrors,
+            },
+            { status: 500 },
+          );
+        }
+        // A genuine lint violation is a normal, expected outcome of accepting a
+        // speculative modification — the patches were cleanly reverted, so this
+        // keeps its 200 (the UI branches on `success`, not on the status code).
+        return NextResponse.json({
+          success: false,
+          error: "Lint validation failed. Patches reverted.",
+          lintPassed: false,
+          lintErrors: outcome.lintErrors,
+        });
+
+      case "accepted":
+        logger.info(
+          "[api/architecture/modify/accept] Patches accepted and committed",
+          {
+            transactionId,
+            patchCount: outcome.patchesApplied,
+            lintPassed: true,
+          },
+        );
+        return NextResponse.json({
+          success: true,
+          transactionId,
+          status: "committed",
+          patchesApplied: outcome.patchesApplied,
+          lintPassed: true,
+        });
     }
-
-    transactionManager.commit(transactionId);
-
-    const logger = createWebLogger();
-    logger.info(
-      "[api/architecture/modify/accept] Patches accepted and committed",
-      {
-        transactionId,
-        patchCount: patches.length,
-        lintPassed,
-      },
-    );
-
-    return NextResponse.json({
-      success: true,
-      transactionId,
-      status: "committed",
-      patchesApplied: patches.length,
-      lintPassed,
-    });
   } catch (error) {
     const logger = createWebLogger();
     logger.errorWithException(
