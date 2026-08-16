@@ -20,8 +20,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@hexagen/shared": "workspace:*",
-    "zod": "^3.23.8"
+    "@hexagen/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
