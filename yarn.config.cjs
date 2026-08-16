@@ -8,12 +8,14 @@
  * (#452, AUD-010): a shared tool governed by convention rather than by anything
  * that fails when the convention is broken.
  *
- * Scope is deliberately narrow. `PINNED` covers only dependencies where every
- * declared range already sat within one major, so unifying them cannot change
- * behaviour — it is a statement-of-intent cleanup. Genuine major splits are
+ * Scope is deliberately narrow. `PINNED` started as dependencies where every
+ * declared range already sat within one major, so unifying them could not
+ * change behaviour — a statement-of-intent cleanup. Genuine major splits are
  * listed in `KNOWN_SPLITS` below and are NOT enforced here: each needs a human
  * decision, and a constraint that forced them would either be wrong or be
- * disabled the first time it was inconvenient.
+ * disabled the first time it was inconvenient. A split graduates into `PINNED`
+ * once that decision has actually been made and shipped — `ts-morph` is the
+ * first, resolved by item 3.4 (AUD-012); its entry carries the rationale.
  *
  * Run `yarn constraints` to check, `yarn constraints --fix` to apply.
  *
@@ -47,6 +49,16 @@ const PINNED = {
   "@modelcontextprotocol/sdk": "^1.29.0",
   zod: "^3.23.8",
   "@hexagen/sync": "workspace:*",
+  // Graduated from KNOWN_SPLITS by item 3.4 (AUD-012). Unlike the rest of this
+  // list this one WAS a real major split — 22 in `packages/sync` vs 27 in
+  // `tools/arch-linter` — and it was resolved upward rather than merely tidied.
+  // ts-morph bundles its own TypeScript inside `@ts-morph/common`: 22 bundles
+  // TS 5.4.2, 27 bundles 5.9.2, and this repo compiles on 5.9.3. `@hexagen/sync`
+  // is published and parses arbitrary consumer workspaces, so the older bundle
+  // silently mis-parsed post-5.4 syntax. Pinned up; do not lower without
+  // reading `packages/sync/__tests__/refactoring/modern-typescript-syntax.test.ts`,
+  // which fails if the bundled compiler drops below TS 5.5.
+  "ts-morph": "^27.0.2",
 };
 
 /**
@@ -61,10 +73,10 @@ const PINNED = {
  *   @dagrejs/dagre         1 (layout-engine) vs 2
  *   elkjs                  0.9 (layout-engine) vs 0.11
  *   lucide-react           0.453 (apps/web) vs 1
- *   ts-morph               22 (sync) vs 27 (arch-linter)
  *
- * `ts-morph` is additionally owned elsewhere: it is item 3.4 (AUD-012) of the
- * architecture-remediation plan and is release-gated. Do not fold it in here.
+ * `ts-morph` used to be on this list (22 in sync vs 27 in arch-linter). Item
+ * 3.4 (AUD-012) of the architecture-remediation plan made the call — aligned up
+ * to ^27 and moved into PINNED above, where the reasoning is recorded.
  *
  * Not a split, but related and deliberately unsolved: the `@typescript-eslint/*`
  * family still resolves to more than one version in yarn.lock (8.56.1 via a
@@ -83,7 +95,6 @@ const KNOWN_SPLITS = [
   "@dagrejs/dagre",
   "elkjs",
   "lucide-react",
-  "ts-morph",
 ];
 
 module.exports = {
