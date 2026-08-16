@@ -1,7 +1,9 @@
 /* eslint-disable no-console */
 import {
+  FileSystemProjectFilePresence,
   FileSystemTemplateRegistry,
   FileSystemTemplateConfigStore,
+  ProcessEnvironmentReader,
   ValidateTemplatesUseCase,
 } from "@hexagen/template-engine";
 import { getProjectRoot, resolveTemplatesDir } from "../shared/index.js";
@@ -11,7 +13,12 @@ export async function validateTemplatesCommand(): Promise<void> {
   const registry = new FileSystemTemplateRegistry(resolveTemplatesDir());
   const configStore = new FileSystemTemplateConfigStore();
 
-  const useCase = new ValidateTemplatesUseCase(registry, configStore);
+  const useCase = new ValidateTemplatesUseCase(
+    registry,
+    configStore,
+    new FileSystemProjectFilePresence(),
+    new ProcessEnvironmentReader(),
+  );
   const output = await useCase.execute(projectRoot);
 
   if (output.results.length === 0) {

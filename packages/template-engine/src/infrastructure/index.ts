@@ -2,6 +2,8 @@ export { FileSystemTemplateRegistry } from "./template-registry.adapter.js";
 export { InteractiveQuestionEngine } from "./question-engine.adapter.js";
 export { FileSystemFileEmitter } from "./file-emitter.adapter.js";
 export { FileSystemTemplateConfigStore } from "./template-config-store.adapter.js";
+export { FileSystemProjectFilePresence } from "./project-file-presence.adapter.js";
+export { ProcessEnvironmentReader } from "./environment-reader.adapter.js";
 
 // In-memory adapters for headless materialization (web code-view / ZIP / GitHub).
 export { InMemoryFileEmitter } from "./in-memory-file-emitter.adapter.js";

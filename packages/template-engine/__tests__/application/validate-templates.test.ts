@@ -5,6 +5,8 @@ import path from "node:path";
 import os from "node:os";
 import { ValidateTemplatesUseCase } from "../../src/application/use-cases/validate-templates.use-case.js";
 import { FileSystemTemplateConfigStore } from "../../src/infrastructure/template-config-store.adapter.js";
+import { FileSystemProjectFilePresence } from "../../src/infrastructure/project-file-presence.adapter.js";
+import { ProcessEnvironmentReader } from "../../src/infrastructure/environment-reader.adapter.js";
 import { conflictFilePath } from "../../src/domain/index.js";
 import type {
   TemplateManifest,
@@ -77,6 +79,8 @@ describe("ValidateTemplatesUseCase — conflict detection", () => {
     const useCase = new ValidateTemplatesUseCase(
       stubRegistry([manifest]),
       configStore,
+      new FileSystemProjectFilePresence(),
+      new ProcessEnvironmentReader(),
     );
     const output = await useCase.execute(projectRoot);
 
@@ -115,6 +119,8 @@ describe("ValidateTemplatesUseCase — conflict detection", () => {
     const useCase = new ValidateTemplatesUseCase(
       stubRegistry([manifest]),
       configStore,
+      new FileSystemProjectFilePresence(),
+      new ProcessEnvironmentReader(),
     );
     const output = await useCase.execute(projectRoot);
 
@@ -122,4 +128,37 @@ describe("ValidateTemplatesUseCase — conflict detection", () => {
     assert.equal(output.results[0].missingFiles.length, 0);
     assert.equal(output.results[0].passed, true);
   });
+});
+
+describe("conflict-path derivation is unchanged by dropping node:path", () => {
+  // The use case used to report
+  //   path.relative(root, conflictFilePath(path.join(root, rel)))
+  // and now reports conflictFilePath(rel) — the port takes the relative path
+  // and joins on the infrastructure side. This pins that the two agree for
+  // every path shape a template manifest declares, which is what backs the
+  // "behaviour unchanged" claim for the conflictFiles strings.
+  const root = path.join(path.sep, "workspace", "project");
+
+  const cases = [
+    "output.txt",
+    "src/a.ts",
+    "src/nested/deep/file.tsx",
+    "Dockerfile",
+    ".env",
+    "config/.eslintrc.json",
+    "app/api/auth/[...all]/route.ts",
+    "app/admin/queues/[[...slug]]/route.ts",
+    "scripts/build.config.mjs",
+  ];
+
+  for (const rel of cases) {
+    it(`agrees for '${rel}'`, () => {
+      const viaAbsolute = path.relative(
+        root,
+        conflictFilePath(path.join(root, rel)),
+      );
+      const viaRelative = conflictFilePath(rel);
+      assert.equal(viaRelative, viaAbsolute.split(path.sep).join("/"));
+    });
+  }
 });

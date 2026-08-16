@@ -1,5 +1,5 @@
-import fs from "node:fs/promises";
-import path from "node:path";
+import type { EnvironmentReaderPort } from "../ports/environment-reader.port.js";
+import type { ProjectFilePresencePort } from "../ports/project-file-presence.port.js";
 import type { TemplateConfigStorePort } from "../ports/template-config-store.port.js";
 import type { TemplateRegistryPort } from "../ports/template-registry.port.js";
 import {
@@ -26,6 +26,8 @@ export class ValidateTemplatesUseCase {
   constructor(
     private readonly registry: TemplateRegistryPort,
     private readonly configStore: TemplateConfigStorePort,
+    private readonly files: ProjectFilePresencePort,
+    private readonly environment: EnvironmentReaderPort,
   ) {}
 
   async execute(projectRoot: string): Promise<ValidateTemplatesOutput> {
@@ -73,34 +75,34 @@ export class ValidateTemplatesUseCase {
       for (const output of manifest.outputs) {
         if (!isOutputEnabled(output, answers)) continue;
         const rel = outputPath(output);
-        const abs = path.join(projectRoot, rel);
-        try {
-          await fs.access(abs);
-        } catch {
+        if (!(await this.files.exists(projectRoot, rel))) {
           missingFiles.push(rel);
         }
       }
 
       const missingEnvVars: string[] = [];
       for (const envVar of manifest.envVars) {
-        if (process.env[envVar] === undefined) {
+        if (this.environment.get(envVar) === undefined) {
           missingEnvVars.push(envVar);
         }
       }
 
       // Scan all declared outputs — not just record.generatedFiles — because
       // the emitter does not add an entry to generatedFiles when a conflict occurs.
+      //
+      // `conflictFilePath` only rewrites the basename's extension, so deriving
+      // it from the project-relative output path yields the same string the
+      // previous `relative(root, conflictFilePath(join(root, rel)))` round-trip
+      // produced, without needing node:path here. Manifest outputs are plain
+      // normalized relative paths (a `./`-prefixed or absolute output would
+      // now be echoed back verbatim instead of normalized — it was never
+      // valid, and `isContainedRelativePath` is the guard for that).
       const conflictFiles: string[] = [];
       for (const output of manifest.outputs) {
         if (!isOutputEnabled(output, answers)) continue;
-        const absConflict = conflictFilePath(
-          path.join(projectRoot, outputPath(output)),
-        );
-        try {
-          await fs.access(absConflict);
-          conflictFiles.push(path.relative(projectRoot, absConflict));
-        } catch {
-          // no conflict file — good
+        const relConflict = conflictFilePath(outputPath(output));
+        if (await this.files.exists(projectRoot, relConflict)) {
+          conflictFiles.push(relConflict);
         }
       }
 
