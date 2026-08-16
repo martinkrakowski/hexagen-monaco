@@ -9,6 +9,7 @@
  */
 import { describe, it, vi } from "vitest";
 import assert from "node:assert/strict";
+import { NextRequest } from "next/server";
 import {
   handleGovernanceSuggestions,
   type GovernanceSuggestionsDeps,
@@ -27,28 +28,27 @@ function deps(
   return { deps: value, suggest };
 }
 
-function postJson(manifestYaml: unknown) {
-  return new Request("http://localhost/api/governance/suggestions", {
+/** Same-origin (no Origin header) POST, so the D1 gate lets it through. */
+function post(body: BodyInit): NextRequest {
+  return new NextRequest("http://localhost/api/governance/suggestions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(manifestYaml === undefined ? {} : { manifestYaml }),
+    headers: { "Content-Type": "application/json", host: "localhost" },
+    body,
   });
+}
+
+function postJson(manifestYaml: unknown) {
+  return post(
+    JSON.stringify(manifestYaml === undefined ? {} : { manifestYaml }),
+  );
 }
 
 function postRawBody(value: unknown) {
-  return new Request("http://localhost/api/governance/suggestions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(value),
-  });
+  return post(JSON.stringify(value));
 }
 
 function postMalformed() {
-  return new Request("http://localhost/api/governance/suggestions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: "{ this is not valid json ",
-  });
+  return post("{ this is not valid json ");
 }
 
 describe("POST /api/governance/suggestions", () => {
@@ -160,6 +160,30 @@ describe("POST /api/governance/suggestions", () => {
     );
     assert.equal(res.status, 400);
     assert.match((await res.json()).error, /must be a string/i);
+    assert.equal(suggest.mock.calls.length, 0);
+  });
+
+  it("rejects a cross-origin POST with 403 before calling the suggestion port", async () => {
+    // This route reaches the same LLM as `governance/refresh` on the caller's
+    // word alone. #443 gated `refresh` for that reason and missed this sibling.
+    const { deps: d, suggest } = deps();
+    const req = new NextRequest("http://localhost/api/governance/suggestions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        origin: "http://evil.example",
+        host: "localhost",
+      },
+      body: JSON.stringify({ manifestYaml: "bounded_contexts: []" }),
+    });
+
+    const res = await handleGovernanceSuggestions(req, d);
+
+    assert.equal(res.status, 403);
+    const body = await res.json();
+    assert.equal(body.success, false);
+    assert.match(body.error, /cross-origin/i);
+    // The status alone would still pass if the gate ran after the model call.
     assert.equal(suggest.mock.calls.length, 0);
   });
 });

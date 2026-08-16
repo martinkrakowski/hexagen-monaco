@@ -10,10 +10,17 @@ import {
 import { analyzeManifest, type PortAdapterStatus } from "../manifest-analysis";
 import type {
   AISuggestion,
+  ManifestLintOutcome,
   ManifestLintPort,
+  SuggestionOutcome,
   SuggestionPort,
   Violation,
 } from "../ports";
+
+/** Render a rejection reason for the `unavailable` arm it is mapped onto. */
+function reasonOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 /**
  * The `POST /api/governance/refresh` handler, extracted out of the route module
@@ -83,10 +90,26 @@ export async function handleGovernanceRefresh(
 
     // Lint (subprocess) and suggestions (LLM) are independent I/O; the manifest
     // analysis is a pure function. Run the two async ports concurrently.
-    const [lintOutcome, suggestionOutcome] = await Promise.all([
+    //
+    // allSettled, not all: `deps` is an injection seam, and both ports promise
+    // OUTCOMES rather than exceptions. `Promise.all` would let one port that
+    // breaks that promise discard the other's completed result and collapse the
+    // response into a generic 500 — the all-or-nothing failure the `unavailable`
+    // arms exist to remove. Enforcing the contract here keeps a rejection
+    // indistinguishable, to the caller, from an adapter that reported
+    // `unavailable` itself.
+    const [lintSettled, suggestionSettled] = await Promise.allSettled([
       deps.lint.lintManifest(manifestYaml),
       deps.suggestions.suggest({ manifestYaml, openFileContent }),
     ]);
+    const lintOutcome: ManifestLintOutcome =
+      lintSettled.status === "fulfilled"
+        ? lintSettled.value
+        : { kind: "unavailable", reason: reasonOf(lintSettled.reason) };
+    const suggestionOutcome: SuggestionOutcome =
+      suggestionSettled.status === "fulfilled"
+        ? suggestionSettled.value
+        : { kind: "unavailable", reason: reasonOf(suggestionSettled.reason) };
 
     // Derive port/adapter status from the manifest via the shared analyzer, so
     // `refresh` and `governance/status` agree on the same manifest (AUD-005). A

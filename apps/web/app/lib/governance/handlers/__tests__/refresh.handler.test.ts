@@ -181,6 +181,64 @@ describe("governance/refresh — outcome mapping (HEX-016)", () => {
       openFileContent: "export const a = 1;",
     });
   });
+
+  it("keeps the lint verdict when the suggestion port rejects instead of returning an outcome", async () => {
+    // `deps` is an injection seam and both ports promise outcomes, not throws.
+    // A port that breaks that promise must not discard the other port's
+    // completed result — the all-or-nothing collapse `unavailable` removes.
+    const lintManifest = vi.fn(
+      async (): Promise<ManifestLintOutcome> => ({
+        kind: "violations",
+        messages: ["Layer Violation: domain imports infrastructure"],
+      }),
+    );
+    const suggest = vi.fn(async (): Promise<SuggestionOutcome> => {
+      throw new Error("provider exploded");
+    });
+
+    const res = await handleGovernanceRefresh(
+      sameOriginPost({ manifestYaml: "bounded_contexts: []" }),
+      { lint: { lintManifest }, suggestions: { suggest } },
+    );
+    const body = await res.json();
+
+    assert.equal(res.status, 200);
+    assert.equal(body.violations.length, 1);
+    assert.deepEqual(body.suggestions, []);
+    assert.match(body.suggestionsError, /provider exploded/);
+  });
+
+  it("keeps the suggestions when the lint port rejects instead of returning an outcome", async () => {
+    const lintManifest = vi.fn(async (): Promise<ManifestLintOutcome> => {
+      throw new Error("adapter exploded");
+    });
+    const suggest = vi.fn(
+      async (): Promise<SuggestionOutcome> => ({
+        kind: "suggestions",
+        suggestions: [
+          {
+            id: "1",
+            message: "Split the context",
+            confidence: 80,
+            category: "context-split",
+          },
+        ],
+      }),
+    );
+
+    const res = await handleGovernanceRefresh(
+      sameOriginPost({ manifestYaml: "bounded_contexts: []" }),
+      { lint: { lintManifest }, suggestions: { suggest } },
+    );
+    const body = await res.json();
+
+    assert.equal(res.status, 200);
+    assert.equal(body.suggestions.length, 1);
+    // A rejection is NOT a clean architecture: no violations, and the unknown
+    // verdict is named.
+    assert.deepEqual(body.violations, []);
+    assert.match(body.lintError, /adapter exploded/);
+  });
 });
 
 describe("governance/refresh — mutation gate (D1) and input guards", () => {

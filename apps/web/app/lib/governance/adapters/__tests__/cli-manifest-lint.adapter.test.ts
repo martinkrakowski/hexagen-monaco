@@ -6,12 +6,13 @@
  * reads the file back so the assertions prove the manifest actually reached
  * disk. Faking `node:fs` here would leave nothing under test but the fake.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  ARCH_LINT_BASELINE_EPILOGUE,
   ARCH_LINT_FAILURE_BANNER,
   ARCH_LINT_LOG_PREFIX,
   CliManifestLintAdapter,
@@ -122,6 +123,95 @@ describe("CliManifestLintAdapter", () => {
     });
   });
 
+  it("keeps the file and specifier lines of a multi-line violation", async () => {
+    // `Subpath Violation in [pkg]:\n File: …\n Package '…' cannot import '…'`
+    // reaches stderr from ONE console.error call, so only its first physical
+    // line carries the `[arch-lint]  - ` bullet. Dropping the rest would leave
+    // the panel showing a header with nothing to act on.
+    const stderr = [
+      line(ARCH_LINT_FAILURE_BANNER),
+      line(
+        " - Subpath Violation in [ui]:\n File: packages/ui/src/index.ts\n Package 'ui' cannot import '@hexagen/core-domain/internal' (private subpath, enforcement: error)",
+      ),
+      line(
+        " - Boundary Violation in [web]:\n File: apps/web/app/page.tsx\n Illegal import of '@hexagen/sync'",
+      ),
+    ].join("\n");
+
+    const adapter = new CliManifestLintAdapter(ROOT, async () => {
+      throw execFailure(stderr);
+    });
+
+    const outcome = await adapter.lintManifest("bounded_contexts: []");
+
+    assert.deepEqual(outcome, {
+      kind: "violations",
+      messages: [
+        "Subpath Violation in [ui]:\nFile: packages/ui/src/index.ts\nPackage 'ui' cannot import '@hexagen/core-domain/internal' (private subpath, enforcement: error)",
+        "Boundary Violation in [web]:\nFile: apps/web/app/page.tsx\nIllegal import of '@hexagen/sync'",
+      ],
+    });
+  });
+
+  it("does not fold the baseline epilogue into the last violation", async () => {
+    const stderr = [
+      line(ARCH_LINT_FAILURE_BANNER),
+      line(" - Domain Violation in [core]:\n File: packages/core/src/x.ts"),
+      line(ARCH_LINT_BASELINE_EPILOGUE),
+    ].join("\n");
+
+    const adapter = new CliManifestLintAdapter(ROOT, async () => {
+      throw execFailure(stderr);
+    });
+
+    const outcome = await adapter.lintManifest("bounded_contexts: []");
+
+    assert.deepEqual(outcome, {
+      kind: "violations",
+      messages: ["Domain Violation in [core]:\nFile: packages/core/src/x.ts"],
+    });
+  });
+
+  it("caps the subprocess output well above Node's silent 1 MiB default", async () => {
+    let maxBuffer = 0;
+    const adapter = new CliManifestLintAdapter(ROOT, async (_f, _a, opts) => {
+      maxBuffer = opts.maxBuffer;
+      return { stdout: "", stderr: "" };
+    });
+
+    await adapter.lintManifest("bounded_contexts: []");
+
+    assert.ok(
+      maxBuffer > 1024 * 1024,
+      `maxBuffer must be set past Node's 1 MiB default, got ${maxBuffer}`,
+    );
+  });
+
+  it("never parses a report Node truncated at the buffer cap", async () => {
+    // Node kills the child and truncates `stderr` on overflow (verified: code
+    // ERR_CHILD_PROCESS_STDIO_MAXBUFFER, stderr cut to exactly maxBuffer). The
+    // banner can survive that cut while an unknown number of bullets is lost,
+    // so the truncated text must never be read as the complete verdict.
+    const truncated = [
+      line(ARCH_LINT_FAILURE_BANNER),
+      line(" - Layer Violation: domain imports infrastructure"),
+    ].join("\n");
+    const adapter = new CliManifestLintAdapter(ROOT, async () => {
+      throw Object.assign(new Error("stderr maxBuffer length exceeded"), {
+        stderr: truncated,
+        code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER",
+      });
+    });
+
+    const outcome = await adapter.lintManifest("bounded_contexts: []");
+
+    assert.equal(outcome.kind, "unavailable");
+    assert.match(
+      outcome.kind === "unavailable" ? outcome.reason : "",
+      /truncated/,
+    );
+  });
+
   it("reports a linter that could not run as unavailable, not as violations", async () => {
     // The production image has no `yarn`: exit 127, empty stderr. The old route
     // returned this as a HIGH-severity architectural violation.
@@ -163,7 +253,7 @@ describe("CliManifestLintAdapter", () => {
 
     const outcome = await adapter.lintManifest("bounded_contexts: []");
 
-    expect(outcome.kind).not.toBe("clean");
+    assert.notEqual(outcome.kind, "clean");
     assert.equal(outcome.kind, "unavailable");
   });
 

@@ -32,14 +32,46 @@ import type { ManifestLintOutcome, ManifestLintPort } from "../ports";
  *
  *  3. A failed subprocess is no longer laundered into architectural
  *     violations. See {@link classify}.
+ *
+ * ## Supported hosts: posix (Linux / macOS)
+ *
+ * `execFile` is deliberately shell-free (note 1), and Node documents that this
+ * rules Windows out: ".bat and .cmd files are not executable on their own
+ * without a terminal, and therefore cannot be launched using
+ * child_process.execFile()". Corepack exposes Yarn on Windows only as a
+ * `yarn.cmd` shim, so switching the command to `yarn.cmd` would NOT fix it —
+ * every documented alternative (`exec`, `spawn` with `shell: true`, spawning
+ * `cmd.exe`) reintroduces the shell whose quoting bug note 1 removed, on the
+ * one platform whose `os.tmpdir()` contains a space. The server ships as a
+ * Linux image (`apps/web/Dockerfile`, `node:20-alpine`) and CI runs on Ubuntu,
+ * so Windows is documented as unsupported here rather than half-supported. A
+ * win32 host therefore gets `unavailable` with the spawn error as its reason —
+ * "we could not run the linter", which is true, and is exactly the outcome
+ * this adapter exists to make expressible.
  */
 
 const defaultExecFileAsync = promisify(execFile);
 
+/**
+ * stdout/stderr cap for the lint subprocess.
+ *
+ * Node's default is 1 MiB, and exceeding it does not fail loudly: the child is
+ * killed and `error.stderr` is silently TRUNCATED at the limit. A truncated
+ * report that still carries the failure banner would parse as a complete
+ * `violations` list with the tail missing — under-reporting violations, the
+ * same false-green class this classifier exists to prevent. 16 MiB is far past
+ * any plausible run (a violation line is ~200 bytes), and {@link classify}'s
+ * caller refuses to parse a run that hit the cap regardless.
+ */
+const MAX_LINT_STDIO_BYTES = 16 * 1024 * 1024;
+
+/** Node's code on `error` when the child is killed for exceeding `maxBuffer`. */
+const MAXBUFFER_ERROR_CODE = "ERR_CHILD_PROCESS_STDIO_MAXBUFFER";
+
 type ExecFileAsyncFn = (
   file: string,
   args: readonly string[],
-  options: { cwd: string; timeout: number },
+  options: { cwd: string; timeout: number; maxBuffer: number },
 ) => Promise<{ stdout: string; stderr: string }>;
 
 /**
@@ -56,6 +88,14 @@ export const ARCH_LINT_LOG_PREFIX = "[arch-lint] ";
 export const ARCH_LINT_FAILURE_BANNER =
   "Architectural Integrity Check Failed. Found violations:";
 
+/**
+ * The epilogue `reportAndExit` prints AFTER the bullets when a baseline exists.
+ * It is not indented like a continuation line, so it must be named to terminate
+ * the last violation instead of being folded into it.
+ */
+export const ARCH_LINT_BASELINE_EPILOGUE =
+  "These are NEW violations, measured against the committed baseline. The baseline may only shrink — fix the violation instead of adding an entry.";
+
 /** Bullet prefix used by `fresh.forEach((e) => logger.error(` - ${e.message}`))`. */
 const VIOLATION_BULLET = "- ";
 
@@ -64,6 +104,41 @@ interface ExecFailure extends Error {
   stdout?: string | Buffer;
   code?: number | string;
   killed?: boolean;
+}
+
+/**
+ * Regroup the post-banner lines into one message per violation.
+ *
+ * Almost every message the linter builds is MULTI-LINE — `Subpath Violation in
+ * [pkg]:\n File: <path>\n Package '<pkg>' cannot import '<specifier>'` and its
+ * Boundary / Domain / Application / server-marker / required-communication
+ * siblings all follow that header + detail shape (`tools/arch-linter/src/cli.ts`).
+ * `logger.error(` - ${e.message}`)` emits the whole thing in one `console.error`
+ * call, so only the FIRST physical line carries the `[arch-lint]  - ` bullet.
+ * Keeping just the bulleted lines would surface bare headers — `Subpath
+ * Violation in [pkg]:` with no file and no specifier — which names a problem
+ * the reader cannot act on. Continuation lines are therefore re-attached to the
+ * violation they belong to, restoring the linter's own message verbatim.
+ */
+function collectViolations(afterBanner: readonly string[]): string[] {
+  const messages: string[] = [];
+
+  for (const line of afterBanner) {
+    // The baseline epilogue closes the bullet list; anything past it is
+    // commentary about the report, not part of the last violation.
+    if (line === ARCH_LINT_BASELINE_EPILOGUE) break;
+
+    if (line.startsWith(VIOLATION_BULLET)) {
+      messages.push(line.slice(VIOLATION_BULLET.length).trim());
+      continue;
+    }
+
+    // A non-bulleted line before the first bullet belongs to no violation.
+    if (messages.length === 0) continue;
+    messages[messages.length - 1] = `${messages[messages.length - 1]}\n${line}`;
+  }
+
+  return messages.map((message) => message.trim()).filter(Boolean);
 }
 
 /**
@@ -102,11 +177,7 @@ function classify(
     };
   }
 
-  const messages = lines
-    .slice(bannerIndex + 1)
-    .filter((line) => line.startsWith(VIOLATION_BULLET))
-    .map((line) => line.slice(VIOLATION_BULLET.length).trim())
-    .filter((line) => line.length > 0);
+  const messages = collectViolations(lines.slice(bannerIndex + 1));
 
   // The banner promises violations; if none parsed out, the protocol changed.
   // Reporting "clean" here would be the false-green this classifier exists to
@@ -163,11 +234,22 @@ export class CliManifestLintAdapter implements ManifestLintPort {
         {
           cwd: this.workspaceRoot,
           timeout: 30_000,
+          maxBuffer: MAX_LINT_STDIO_BYTES,
         },
       );
       return { kind: "clean" };
     } catch (error) {
       const failure = error as ExecFailure;
+      // A run that blew the cap is reported as unknown, never parsed: its
+      // stderr is truncated mid-report, so the banner may still be present
+      // while an unknown number of violations was cut off the end. Parsing it
+      // would answer "here are the violations" with a silently short list.
+      if (failure.code === MAXBUFFER_ERROR_CODE) {
+        return {
+          kind: "unavailable",
+          reason: `Architecture linter output exceeded ${MAX_LINT_STDIO_BYTES} bytes and was truncated; the report is incomplete.`,
+        };
+      }
       const stderr = failure.stderr ? String(failure.stderr) : "";
       return classify(stderr, messageOf(error));
     } finally {

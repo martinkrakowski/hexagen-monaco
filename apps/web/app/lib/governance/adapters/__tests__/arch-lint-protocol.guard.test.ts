@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { findMonorepoRoot } from "../../../monorepo-root";
 import {
+  ARCH_LINT_BASELINE_EPILOGUE,
   ARCH_LINT_FAILURE_BANNER,
   ARCH_LINT_LOG_PREFIX,
 } from "../cli-manifest-lint.adapter";
@@ -53,6 +54,29 @@ describe("arch-linter stderr protocol", () => {
     assert.ok(
       cli.includes("fresh.forEach((e) => logger.error(` - ${e.message}`))"),
       "arch-linter changed its violation bullet format; the adapter's parser must follow",
+    );
+  });
+
+  it("still builds multi-line violation messages the parser must reassemble", () => {
+    // The bullet is emitted once per message, but nearly every message the
+    // linter builds is `<header>:\n File: …\n <detail>` — so the adapter cannot
+    // treat "one bulleted line" as "one violation". If this shape ever goes
+    // away the continuation-line grouping can be simplified; until then it is
+    // load-bearing.
+    const cli = read("tools/arch-linter/src/cli.ts");
+    assert.ok(
+      cli.includes("Violation in [${moduleName}]:\\n File:"),
+      "arch-linter no longer emits multi-line `<header>:\\n File: …` messages",
+    );
+  });
+
+  it("still prints the baseline epilogue the parser stops at", () => {
+    // Printed after the bullets when a baseline exists. It is not indented, so
+    // without this literal it would be appended to the last violation.
+    const cli = read("tools/arch-linter/src/cli.ts");
+    assert.ok(
+      cli.includes(ARCH_LINT_BASELINE_EPILOGUE),
+      `arch-linter no longer prints "${ARCH_LINT_BASELINE_EPILOGUE}" — the adapter would fold it into the final violation`,
     );
   });
 

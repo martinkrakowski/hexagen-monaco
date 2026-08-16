@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { handleGovernanceSuggestions } from "@/lib/governance/handlers/suggestions.handler";
 import { getGovernanceSuggestions } from "@/lib/wire.server";
 
@@ -7,7 +7,7 @@ import { getGovernanceSuggestions } from "@/lib/wire.server";
  * wiring this module used to duplicate from `governance/refresh` now lives in
  * the single `SuggestionPort` adapter built by `wire.server.ts`.
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   return handleGovernanceSuggestions(request, {
     suggestions: getGovernanceSuggestions(),
   });
