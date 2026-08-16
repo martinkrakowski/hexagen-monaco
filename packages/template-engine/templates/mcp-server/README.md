@@ -21,7 +21,7 @@ Design intent: `docs/planning/generator-templates/18-mcp-server.md`. Requires
 | `src/infrastructure/mcp/tools/example.tool.ts`            | Worked tool: input validation, use-case call, **explicit `Result`→MCP mapping (incl. error path)**, `dry_run` |
 | `bin/cli.ts`, `.mcp.json.example`, `.env.mcp.example`     | Entry point + client/env config                                                                               |
 | `resources/`, `prompts/` (opt-in)                         | Read-only resource + reusable prompt stubs                                                                    |
-| `*.test.ts`                                               | `node:test` scaffolds — emitted **only under `--with-tests`**                                                 |
+| `*.test.ts`                                               | Vitest scaffolds — emitted **only under `--with-tests`**                                                      |
 
 Everything under `infrastructure/mcp/**` is `@hexagen-server-only` (ADR-0037): it
 holds credentials + privileged use-cases and must never reach a client bundle.

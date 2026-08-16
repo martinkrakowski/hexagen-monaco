@@ -282,7 +282,7 @@ Validation: Smoke test for each adapter (real key in CI secrets or skip guard).
 Next steps:
   1. Add XAI_API_KEY (and other provider keys) to .env.local
   2. Verify LLM_REASONING_MODEL matches a model on your current tier
-  3. Run: node --test src/infrastructure/llm/__tests__/router.test.ts
+  3. Run: yarn vitest run src/infrastructure/llm/__tests__/router.test.ts
   4. Check xAI console for RPM and TPM limits — set TEXT_RPM accordingly
   5. See SETUP.md → LLM Adapter for model name reference and tier limits
 ```

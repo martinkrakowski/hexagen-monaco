@@ -9,10 +9,15 @@ import { defineConfig, configDefaults } from "vitest/config";
  *
  * NOT named `vitest.config.*`, so Vitest never auto-loads it as a root config —
  * it is only ever imported. That matters: there is deliberately no repo-root
- * Vitest config during the migration. Turbo runs `vitest run` from each
- * package's directory, so Vitest's `root` is the package and `include` scopes to
- * it. That per-package scoping is what lets Vitest packages and the not-yet-
- * migrated `node:test` packages coexist under a single `turbo run test`.
+ * Vitest config. Turbo runs `vitest run` from each package's directory, so
+ * Vitest's `root` is the package and `include` scopes to it.
+ *
+ * That per-package scoping originally existed so Vitest packages and not-yet-
+ * migrated `node:test` packages could coexist under a single `turbo run test`.
+ * **The migration is now complete** — no first-party source imports `node:test`
+ * (arch-linter was the last holdout, migrated in #448 under MOD-002). The
+ * per-package scoping is retained because it is still the right shape: each
+ * package owns its environment (e.g. `apps/web` → jsdom) and its own `include`.
  */
 export const baseConfig = defineConfig({
   test: {

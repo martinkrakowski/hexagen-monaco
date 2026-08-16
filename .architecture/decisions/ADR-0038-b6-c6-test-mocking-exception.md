@@ -1,10 +1,17 @@
 # ADR-0038 — B6/C6 Test Mocking Strategy Exception
 
-**Status:** Accepted
+**Status:** Accepted — **partially superseded by ADR-0044 (test runner only)**
 **Date:** 2026-05-16
 **Deciders:** martinkrakowski
 **Related Plan:** `docs/planning/AI-Generated-Structured-config-import-plan-remaining.md`
 **ADR Number:** 0038 (next available after ADR-0037)
+
+> **Runner note (added after ADR-0044).** The Context below describes `node:test` + `tsx`
+> as the established infrastructure, and §"Why we're violating AGENTS.md" quotes the
+> then-current "Never suggest: Vitest…" line. Both are accurate records of 2026-05-16 and
+> are left unedited. **ADR-0044 superseded that runner choice**: Vitest is now the monorepo
+> runner and must not be treated as prohibited. This ADR's actual decision — the targeted
+> mocking exception — is unaffected.
 
 ---
 

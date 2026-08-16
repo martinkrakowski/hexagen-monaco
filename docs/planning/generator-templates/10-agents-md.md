@@ -44,7 +44,7 @@ AGENTS.md                          # Primary instruction file (read by Claude Co
 
 **Mode declarations prevent context drift:** Every agent response starts with a mode declaration. This forces the agent to acknowledge which "hat" it's wearing (architect, implementer, debugger) and prevents mode-blending errors.
 
-**Tech stack reference is explicit and negative:** The file lists both what IS used and what IS NOT used. Negative examples ("Never suggest Vitest or Jest — this project uses `node:test`") prevent the most common hallucinations.
+**Tech stack reference is explicit and negative:** The file lists both what IS used and what IS NOT used. Negative examples ("Never suggest Jest or Mocha — this project uses Vitest") prevent the most common hallucinations. Keep the negative list aligned with the runner the templates actually ship: since ADR-0044 that is **Vitest**, so Vitest must never appear in a "never suggest" list.
 
 **Protected files have a reason:** Each entry in the "Files Never Edit" list includes a one-line reason. Agents are more reliable when they understand why a rule exists, not just that it does.
 
@@ -98,12 +98,12 @@ Generated from the set of installed templates + install-time questions:
 | **Yarn**           | Package manager    | Workspaces monorepo                         |
 | **Next.js 15**     | Web framework      | App Router; no Pages Router                 |
 | **TypeScript 5**   | Language           | `strict: true`; all files `.ts` / `.tsx`    |
-| **node:test**      | Test runner        | Built-in; `import from 'node:test'`         |
-| **node:assert**    | Assertions         | `assert.strictEqual()`; never `expect()`    |
+| **Vitest**         | Test runner        | `vitest run`; `import from 'vitest'`        |
+| **node:assert**    | Assertions         | `node:assert/strict` or `expect()` — either |
 | **Turbo**          | Build orchestrator | `yarn build`, `yarn lint`, `yarn typecheck` |
 | **Tailwind CSS 4** | Styling            | Extends tokens from `src/styles/tokens.css` |
 
-**Never suggest:** Jest, Vitest, `expect()` API, Pages Router, `getSession()` (use `getUser()`).
+**Never suggest:** Jest, Mocha/Chai, Pages Router, `getSession()` (use `getUser()`).
 ```
 
 Additional rows are appended by each installed template (e.g., BullMQ adds its row; LangGraph adds its row).
@@ -228,10 +228,10 @@ Validation: `.agents/session-log.md` placeholder is created with an example entr
 
 `.agents/testing.md`:
 
-- Test runner: `node:test`
-- Assertion library: `node:assert`
+- Test runner: Vitest (`vitest run`)
+- Assertion library: `node:assert/strict` or Vitest `expect()` — either is fine
 - File naming: `*.test.ts` (not `.spec.ts` for unit tests)
-- Mock strategy: no external mock libraries; use `node:test`'s `mock.fn()`
+- Mock strategy: no external mock libraries; use Vitest's `vi.fn()`
 - Test location: `__tests__/` adjacent to the module under test
 
 `.agents/git.md`:

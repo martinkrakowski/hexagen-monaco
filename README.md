@@ -317,7 +317,7 @@ bounded_contexts:
 
 ## Testing & CI
 
-Tests run in CI only. Local pre-commits run lint and typecheck (~2–5s); the full suite runs against a clean GitHub Actions environment. The test runner is Node's built-in `node:test`.
+Tests run in CI only. Local pre-commits run lint and typecheck (~2–5s); the full suite runs against a clean GitHub Actions environment. The test runner is **Vitest** (ADR-0044); assertions are `node:assert/strict` or Vitest `expect()` — both are fine.
 
 ```bash
 yarn test                              # full suite
@@ -346,7 +346,7 @@ All steps must pass before merging to `main`.
 - **Local inference:** WebLLM (MLC AI) on WebGPU
 - **MCP transport:** stdio
 - **Manifest:** YAML
-- **Testing:** `node:test`
+- **Testing:** Vitest (ADR-0044)
 
 ---
 

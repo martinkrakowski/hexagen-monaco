@@ -124,7 +124,7 @@ npx tsx src/infrastructure/adobe/auth/smoke-token.ts
 - **`image.adobe.io` adapter invariants:** `@hexagen-server-only`; absolute URLs via
   `normalizeBase()` (scheme lowercased, trailing slash stripped); status-URL-required guard
   before polling; type-only `import type { FireflyError }` in domain ports.
-- **Tests:** `node:test` + **`node:assert/strict`** (package-wide convention); emit-shape
+- **Tests:** Vitest + **`node:assert/strict`** (package-wide convention); emit-shape
   tests string-match the payload and are named `adobe-<service>-emit-shape.test.ts`.
 
 ## Checklist (post-install)
