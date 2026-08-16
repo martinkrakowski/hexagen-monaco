@@ -250,7 +250,8 @@ unblocked once 2.2's baseline reached `main`) → Phase 2 green → Phases 5–8
 
 > **Superseded 2026-08-16.** That critical path has fully run. PR **#465** (`b3f79dd6`) wired
 > the ratchet leg, **Phase 2 is green**, and **Phases 5–8 are open** — Phase 5 is now the
-> wavefront. See `2026-08-15-architecture-remediation-execution-runbook.md` §1 for live state.
+> wavefront. See `docs/planning/2026-08-15-architecture-remediation-execution-runbook.md` §1
+> for live state.
 
 One overlap worth noting: FU-3 touches `apps/web/features/**`, which **Phase 8** also
 targets. If FU-3.2 runs late it will collide with Phase 8's web/React splits — either do it
