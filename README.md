@@ -188,7 +188,7 @@ Hexagen-Monaco is a modular monolith. Thirty-four bounded contexts live across f
 | **Shared-Kernel**  | core-domain               | Cross-plane domain primitives                                                                  |
 | **Shared-Kernel**  | shared                    | Type-only utilities permitted in any plane                                                     |
 
-Three runtime surfaces expose the governance planes: `apps/web` (Next.js visual control plane), `apps/tui` (Ink terminal control plane), `apps/api-gateway` (HTTP surface for the canvas).
+Two runtime surfaces expose the governance planes: `apps/web` (Next.js visual control plane, which also serves the HTTP API under `app/api`) and `apps/tui` (Ink terminal control plane).
 
 ## Enforcement Stack
 
