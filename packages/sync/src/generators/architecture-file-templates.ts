@@ -56,6 +56,15 @@ cross_context_rules:
   deny_sibling_imports: true
   require_port_interface: true
 
+# Domain layers may not import npm packages (ADR-0054). Nothing is exempt by
+# default — list an exception here only when the library IS the domain artifact,
+# and say why:
+#
+# domain_package_allowlist:
+#   - package: <bounded-context>
+#     allowed_packages:
+#       - some-library
+
 test_double_rules:
   allowed_cross_package_imports: true
 `;
@@ -66,6 +75,15 @@ const LINTER_CONFIG_DEFAULT = `# Rules for @hexagen-monaco/arch-linter
 global_whitelist:
   - "@{scope}/shared"
   - "@{scope}/shared/**"
+
+# Domain layers may not import npm packages (ADR-0054). Nothing is exempt by
+# default — list an exception here only when the library IS the domain artifact,
+# and say why:
+#
+# domain_package_allowlist:
+#   - package: <bounded-context>
+#     allowed_packages:
+#       - some-library
 
 test_double_rules:
   allowed_cross_package_imports: true

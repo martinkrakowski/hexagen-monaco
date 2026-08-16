@@ -5,3 +5,9 @@
 
 # Large auto-generated bundle (manifests + inlined template file contents).
 packages/template-engine/src/infrastructure/generated/**
+
+# Tool-written ratchet baseline (ADR-0054). Deliberately one violation per line
+# so a remediation PR's burn-down reads as deleted lines; prettier would spread
+# each entry over four lines and then disagree with what `hexagen-lint
+# --update-baseline` writes, churning the file on every regeneration.
+.architecture/arch-lint-baseline.json
