@@ -7,7 +7,7 @@ export type {
 
 // Export ports
 export type {
-  SecretVaultPort,
+  ApiKeyVaultLifecyclePort,
   ServerLLMRequestPort,
   ServerLLMRequest,
   ServerLLMUserInfo,

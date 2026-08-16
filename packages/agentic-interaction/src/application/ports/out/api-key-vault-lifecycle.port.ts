@@ -2,14 +2,28 @@ import type { Result } from "@hexagen/shared";
 import type { VaultStatus, VaultError } from "../../../domain/index";
 
 /**
- * Port for managing API key storage and retrieval from a secret vault.
+ * Driven port for the **lifecycle of a stored API key**: put a
+ * user-supplied key into a vault, take it back out, and lock / unlock /
+ * destroy it in between.
  *
  * The vault supports three states:
  * - Empty: No payload stored, no key in memory
  * - Locked: Payload stored but not in memory (requires decryption/unlock)
  * - Unlocked: Key is in volatile memory, ready to use
+ *
+ * Deliberately **not** `SecretVaultPort` (HEX-008, remediation item 5.4).
+ * That name belongs to the domain's synchronous environment-variable lookup
+ * (`domain/provider-config.ts`), which is a different contract with different
+ * semantics for an absent secret: env lookup returns `null` and the caller
+ * silently skips the provider, whereas this port returns a typed `VaultError`
+ * the caller must handle. Sharing one name let the package barrel export
+ * either type under the same identifier.
+ *
+ * `@hexagen/web-driver`'s `UserSecretVaultPort` is the browser-side contract
+ * with the same shape; per ADR-0047 the two contexts each own their
+ * declaration and must not cross-import.
  */
-export interface SecretVaultPort {
+export interface ApiKeyVaultLifecyclePort {
   /**
    * Get the current vault state without modifying it.
    */

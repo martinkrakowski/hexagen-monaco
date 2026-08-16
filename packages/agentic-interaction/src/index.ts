@@ -108,6 +108,12 @@ export type {
   ArchitectureModificationPort,
   ModificationResult,
 } from "./application/ports/index";
+// The stored-API-key vault lifecycle contract that `SecureChatDispatchUseCase`
+// (exported below) is constructed with. It could not be published from this
+// barrel while it was also called `SecretVaultPort`, because the domain
+// env-lookup port of that name is exported above — HEX-008. With distinct
+// names both are reachable and neither can be bound by mistake.
+export type { ApiKeyVaultLifecyclePort } from "./application/ports/index";
 export type { ProviderCatalogPort } from "./application/ports/out/provider-catalog.port";
 export { GenerateSuggestionUseCase } from "./application/use-cases/generate-suggestion.use-case";
 export { SecureChatDispatchUseCase } from "./application/use-cases/secure-chat-dispatch.use-case";
