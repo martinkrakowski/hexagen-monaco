@@ -30,7 +30,8 @@
     "@hexagen/shared": "workspace:*"
   },
   "devDependencies": {
-    "tsx": "^4.19.2"
+    "tsx": "^4.19.2",
+    "vitest": "^4.1.9"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts"

@@ -32,7 +32,8 @@
     "@types/jszip": "^3.4.1",
     "@types/node": "^20.0.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^4.1.9"
   },
   "private": true,
   "type": "module"
