@@ -1,9 +1,15 @@
 import { describe, it, afterEach } from "vitest";
 import assert from "node:assert/strict";
-import { usePendingManifest } from "./usePendingManifest";
+import { usePendingManifest } from "../store/usePendingManifest";
 import { ProjectSpec } from "@hexagen/project-configuration";
 
-describe("usePendingManifest", () => {
+// Relocated from features/landing/store/. The store has always lived in
+// manifest-generation; landing only held a one-line re-export shim with no
+// production importers, which was the last real cross-slice import in
+// apps/web/features (Layer 3, check 6). Shim deleted, coverage kept here —
+// these are the base set/clear lifecycle cases, complementary to
+// usePendingManifest.test.ts (originSession / validationReport semantics).
+describe("usePendingManifest — set/clear lifecycle", () => {
   afterEach(() => {
     // Reset store after each test
     usePendingManifest.setState({
