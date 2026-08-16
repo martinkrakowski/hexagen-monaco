@@ -8,11 +8,26 @@ import type { Manifest } from "@hexagen/sync";
 import type { Result } from "@hexagen/shared";
 import { Project } from "../../src/domain/entities/project.js";
 
+export interface InMemoryProjectGeneratorOptions {
+  /**
+   * Mirror the generated core files onto disk at `targetRoot`, like the real
+   * `ExternalSyncEngineAdapter` (default). Set `false` when the use case is
+   * driven through an in-memory workspace: `targetRoot` is then an opaque
+   * reference such as `memory://workspace-1`, which must never be treated as a
+   * path — writing it to disk would fabricate a junk directory under the cwd.
+   */
+  persistToDisk?: boolean;
+}
+
 export class InMemoryProjectGeneratorDouble implements ExternalProjectGeneratorPort {
   private shouldFail = false;
   private failureError: GeneratorError | null = null;
   private generatedProjects: Project[] = [];
   private callCount = 0;
+  /** Roots the use case handed to `generateAt`, in call order. */
+  readonly targetRoots: string[] = [];
+
+  constructor(private readonly options: InMemoryProjectGeneratorOptions = {}) {}
 
   setFailure(error: GeneratorError): void {
     this.shouldFail = true;
@@ -39,6 +54,7 @@ export class InMemoryProjectGeneratorDouble implements ExternalProjectGeneratorP
     manifest: Manifest,
   ): Promise<Result<Project, GeneratorError>> {
     this.callCount++;
+    this.targetRoots.push(targetRoot);
 
     if (this.shouldFail && this.failureError) {
       return { success: false, error: this.failureError };
@@ -49,10 +65,12 @@ export class InMemoryProjectGeneratorDouble implements ExternalProjectGeneratorP
     // Write the core files to targetRoot like the real adapter, so use-case
     // tests exercise the genuine on-disk overwrite path (an add-on file
     // replacing a core file that already exists on disk).
-    for (const [rel, content] of files) {
-      const dest = path.join(targetRoot, rel);
-      await fs.mkdir(path.dirname(dest), { recursive: true });
-      await fs.writeFile(dest, content, "utf-8");
+    if (this.options.persistToDisk !== false) {
+      for (const [rel, content] of files) {
+        const dest = path.join(targetRoot, rel);
+        await fs.mkdir(path.dirname(dest), { recursive: true });
+        await fs.writeFile(dest, content, "utf-8");
+      }
     }
 
     const project = Project.create({

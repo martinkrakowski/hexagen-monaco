@@ -14,10 +14,13 @@ import {
   SYNC_INTEGRITY_WORKFLOW_PATH,
   shouldInjectSyncIntegrityWorkflow,
 } from "../domain/sync-integrity-workflow.js";
+import type {
+  ProjectWorkspace,
+  ProjectWorkspacePort,
+} from "./ports/out/project-workspace.port.js";
+import { toWorkspaceSegments } from "../domain/workspace-path.js";
 import type { Manifest } from "@hexagen/sync";
 import type { Result } from "@hexagen/shared";
-import fs from "node:fs/promises";
-import path from "node:path";
 
 /**
  * Filename of the in-artifact notice written when an add-on selection fails
@@ -25,6 +28,11 @@ import path from "node:path";
  * absent without opening the app. Errors only; warnings surface in the UI.
  */
 const ADD_ON_NOTICES_FILE = "HEXAGEN-ADDON-NOTICES.md";
+/**
+ * Where the archive exporter leaves the ZIP it built, read back out of the
+ * workspace for the `zipBuffer` the download route streams.
+ */
+const ARCHIVE_ENTRY = ["project.zip"] as const;
 /** Cap rendered notices so a request with very many bad add-on keys can't bloat
  * the artifact (per-error length is also capped in `toNoticeItem`). */
 const MAX_RENDERED_NOTICES = 50;
@@ -43,6 +51,21 @@ function toNoticeItem(error: unknown): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
   const capped = oneLine.length > 300 ? `${oneLine.slice(0, 300)}…` : oneLine;
   return `- \`${capped.replace(/`/g, "'")}\``;
+}
+
+/**
+ * Workspace path segments for a project-relative file key, or a throw when the
+ * key would land outside the project. The emitter already enforces this, so
+ * reaching the throw is a should-never-happen bug, not user input — but the
+ * check stays on this side of the port so no workspace implementation has to be
+ * trusted with it.
+ */
+function containedSegmentsOrThrow(rel: string): readonly string[] {
+  const segments = toWorkspaceSegments(rel);
+  if (!segments) {
+    throw new Error(`Add-on file path escapes project root: ${rel}`);
+  }
+  return segments;
 }
 
 function renderAddOnNotices(errors: string[]): string {
@@ -113,20 +136,24 @@ export class GenerateProjectUseCase {
   constructor(
     private readonly generator: ExternalProjectGeneratorPort,
     private readonly exporter: ProjectExporterPort,
-    private readonly materializer?: AddOnMaterializerPort,
+    private readonly materializer: AddOnMaterializerPort | undefined,
+    /**
+     * Where the run happens (HEX-002). Required: this use case owns no
+     * filesystem of its own, so there is no sane default to fall back to. The
+     * package's composition root (`src/index.ts`) binds the scratch-dir adapter
+     * for callers that construct the barrel export.
+     */
+    private readonly workspaceProvider: ProjectWorkspacePort,
   ) {}
 
   async execute(
     input: GenerateProjectInput,
   ): Promise<Result<GenerateProjectOutput, Error>> {
-    const tempDir = path.join(
-      "/tmp",
-      `hexagen-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-    );
+    const workspace = await this.workspaceProvider.open();
 
     try {
       const genResult = await this.generator.generateAt(
-        tempDir,
+        workspace.reference,
         input.manifest,
       );
 
@@ -150,8 +177,8 @@ export class GenerateProjectUseCase {
           input.manifest.monorepo?.packageManager,
         )
       ) {
-        await this.writeCoreFile(
-          tempDir,
+        await this.writeIntoWorkspace(
+          workspace,
           SYNC_INTEGRITY_WORKFLOW_PATH,
           SYNC_INTEGRITY_WORKFLOW,
         );
@@ -181,8 +208,8 @@ export class GenerateProjectUseCase {
         // A bad selection comes back as `errors` with no files — skip the merge
         // and let the core project still ship, errors surfaced (not thrown).
         if (materialized.files.size > 0) {
-          await this.mergeAddOnFilesIntoTempDir(
-            tempDir,
+          await this.mergeAddOnFilesIntoWorkspace(
+            workspace,
             project,
             materialized.files,
             warnings,
@@ -201,8 +228,8 @@ export class GenerateProjectUseCase {
           const notice = new Map([
             [ADD_ON_NOTICES_FILE, renderAddOnNotices(errors)],
           ]);
-          await this.mergeAddOnFilesIntoTempDir(
-            tempDir,
+          await this.mergeAddOnFilesIntoWorkspace(
+            workspace,
             project,
             notice,
             warnings,
@@ -212,7 +239,7 @@ export class GenerateProjectUseCase {
       }
 
       const exportResult = await this.exporter.export(
-        tempDir,
+        workspace.reference,
         input.exportConfig,
       );
 
@@ -237,9 +264,11 @@ export class GenerateProjectUseCase {
       let zipBuffer: Buffer | undefined;
       if (input.exportConfig.destination === "archive") {
         try {
-          const zipPath = path.join(tempDir, "project.zip");
-          const zipContent = await fs.readFile(zipPath);
-          zipBuffer = zipContent;
+          const archive = await workspace.readBytes(ARCHIVE_ENTRY);
+          // The port speaks `Uint8Array` so a non-filesystem workspace can
+          // satisfy it; the public contract (`ZipExportValue.zip`, the
+          // `/api/generate` response) is `Buffer`. Same bytes, no re-encode.
+          if (archive) zipBuffer = Buffer.from(archive);
         } catch {
           // Archive export might not create a zip file if streaming directly
         }
@@ -258,83 +287,54 @@ export class GenerateProjectUseCase {
       };
     } finally {
       try {
-        await fs.rm(tempDir, { recursive: true, force: true });
+        await workspace.release();
       } catch {
-        // Best effort cleanup
+        // Best effort cleanup. The port asks implementations not to reject,
+        // but it is injected, so a badly-behaved one must not turn a
+        // successful generation into a failed request.
       }
     }
   }
 
   /**
-   * Write a trusted core file (a fixed, compiled-in relative path) into the
-   * temp dir so the ZIP / GitHub export captures it. Unlike
-   * `mergeAddOnFilesIntoTempDir`, this needs no traversal/symlink guards — the
-   * path is a constant, not request-derived.
+   * Place a file in the workspace so the ZIP / GitHub export captures it.
+   *
+   * Containment is decided HERE, not in the workspace: `toWorkspaceSegments`
+   * rejects any key that would land outside the project, so an escaping key is
+   * never handed to an implementation that might be lenient about it. What the
+   * adapter still owns is the hazard only a real filesystem has — writing
+   * through a symlink.
    */
-  private async writeCoreFile(
-    tempDir: string,
+  private async writeIntoWorkspace(
+    workspace: ProjectWorkspace,
     rel: string,
     content: string,
   ): Promise<void> {
-    const dest = path.join(tempDir, rel);
-    await fs.mkdir(path.dirname(dest), { recursive: true });
-    await fs.writeFile(dest, content, "utf-8");
+    await workspace.writeText(containedSegmentsOrThrow(rel), content);
   }
 
   /**
-   * Write each materialized add-on file into the temp dir (so the ZIP / GitHub
+   * Write each materialized add-on file into the workspace (so the ZIP / GitHub
    * export captures it) with template-overrides-core precedence, recording a
    * warning for every generated file an add-on replaces. Runs **after**
    * `generateAt` and **before** `export`. The matching merge into the in-memory
    * `project.files` (for the code view) is done by the caller via
    * `Project.withAdditionalFiles`.
    */
-  private async mergeAddOnFilesIntoTempDir(
-    tempDir: string,
+  private async mergeAddOnFilesIntoWorkspace(
+    workspace: ProjectWorkspace,
     project: Project,
     files: ReadonlyMap<string, string>,
     warnings: string[],
   ): Promise<void> {
-    // Resolve the real project root once (`generateAt` created tempDir; the
-    // mkdir is defensive and makes realpath safe if a caller skipped it).
-    await fs.mkdir(tempDir, { recursive: true });
-    const realRoot = await fs.realpath(tempDir);
-
     for (const [rel, content] of files) {
-      const dest = path.join(tempDir, rel);
-      const within = path.relative(tempDir, dest);
-      if (
-        within === ".." ||
-        within.startsWith(".." + path.sep) ||
-        path.isAbsolute(within)
-      ) {
-        // Lexical guard: reject `..`/absolute keys. The emitter already enforces
-        // this, so reaching here is a should-never-happen bug, not user input.
-        throw new Error(`Add-on file path escapes project root: ${rel}`);
-      }
+      // Containment first, exactly as before: an escaping key aborts the run
+      // rather than being announced as an override on its way out.
+      const segments = containedSegmentsOrThrow(rel);
       if (project.files.has(rel)) {
         warnings.push(`Add-on template overrides generated file: ${rel}`);
       }
-      await fs.mkdir(path.dirname(dest), { recursive: true });
-
-      // Symlink guard: a lexical check can't see symlinks. Verify the real
-      // parent stays under the project root, and never write through a
-      // symlinked target — so a symlink under tempDir can't redirect the write.
-      const realParent = await fs.realpath(path.dirname(dest));
-      if (
-        realParent !== realRoot &&
-        !realParent.startsWith(realRoot + path.sep)
-      ) {
-        throw new Error(
-          `Add-on file path escapes project root via symlink: ${rel}`,
-        );
-      }
-      const existing = await fs.lstat(dest).catch(() => null);
-      if (existing?.isSymbolicLink()) {
-        throw new Error(`Add-on file target is a symlink: ${rel}`);
-      }
-
-      await fs.writeFile(dest, content, "utf-8");
+      await workspace.writeText(segments, content);
     }
   }
 }

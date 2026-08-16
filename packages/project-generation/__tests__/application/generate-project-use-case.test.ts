@@ -15,6 +15,30 @@ import {
   SYNC_INTEGRITY_WORKFLOW,
   SYNC_INTEGRITY_WORKFLOW_PATH,
 } from "../../src/domain/sync-integrity-workflow.js";
+import type { ExternalProjectGeneratorPort } from "../../src/application/ports/out/external-project-generator.port.js";
+import type { ProjectExporterPort } from "../../src/application/ports/out/project-exporter.port.js";
+import type { AddOnMaterializerPort } from "../../src/application/ports/out/add-on-materializer.port.js";
+import { ScratchDirProjectWorkspaceAdapter } from "../../src/infrastructure/adapters/scratch-dir-project-workspace.adapter.js";
+
+/**
+ * Every case in this file runs against the REAL scratch-dir workspace adapter —
+ * the production binding — so the on-disk assertions below (via
+ * `RecordingExporterDouble`, which walks the actual directory the exporter is
+ * handed) keep proving that what reaches an export is byte-for-byte what it was
+ * before the workspace port existed. The port is exercised against an in-memory
+ * workspace in `generate-project-workspace-port.test.ts`.
+ */
+const makeUseCase = (
+  generator: ExternalProjectGeneratorPort,
+  exporter: ProjectExporterPort,
+  materializer?: AddOnMaterializerPort,
+) =>
+  new GenerateProjectUseCase(
+    generator,
+    exporter,
+    materializer,
+    new ScratchDirProjectWorkspaceAdapter(),
+  );
 
 describe("GenerateProjectUseCase", () => {
   let generator: InMemoryProjectGeneratorDouble;
@@ -30,7 +54,7 @@ describe("GenerateProjectUseCase", () => {
   });
 
   it("generates project with zip format", async () => {
-    const useCase = new GenerateProjectUseCase(generator, zipExporter);
+    const useCase = makeUseCase(generator, zipExporter);
     const result = await useCase.execute({
       manifest,
       exportConfig: {
@@ -46,7 +70,7 @@ describe("GenerateProjectUseCase", () => {
   });
 
   it("generates project with GitHub format", async () => {
-    const useCase = new GenerateProjectUseCase(generator, githubExporter);
+    const useCase = makeUseCase(generator, githubExporter);
     const result = await useCase.execute({
       manifest,
       exportConfig: {
@@ -76,7 +100,7 @@ describe("GenerateProjectUseCase", () => {
       message: "Generation failed",
     });
 
-    const useCase = new GenerateProjectUseCase(generator, zipExporter);
+    const useCase = makeUseCase(generator, zipExporter);
     const result = await useCase.execute({
       manifest,
       exportConfig: {
@@ -93,7 +117,7 @@ describe("GenerateProjectUseCase", () => {
     generator.reset();
     zipExporter.setFailure("Export failed");
 
-    const useCase = new GenerateProjectUseCase(generator, zipExporter);
+    const useCase = makeUseCase(generator, zipExporter);
     const result = await useCase.execute({
       manifest,
       exportConfig: {
@@ -107,7 +131,7 @@ describe("GenerateProjectUseCase", () => {
   });
 
   it("returns project with correct properties", async () => {
-    const useCase = new GenerateProjectUseCase(generator, zipExporter);
+    const useCase = makeUseCase(generator, zipExporter);
     const result = await useCase.execute({
       manifest,
       exportConfig: {
@@ -145,11 +169,7 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
       ]),
     });
 
-    const useCase = new GenerateProjectUseCase(
-      generator,
-      recorder,
-      materializer,
-    );
+    const useCase = makeUseCase(generator, recorder, materializer);
     const result = await useCase.execute({
       manifest,
       exportConfig: archive,
@@ -197,11 +217,7 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
       errors: ["conflict: rate-limiting vs no-rate-limiting"],
     });
 
-    const useCase = new GenerateProjectUseCase(
-      generator,
-      recorder,
-      materializer,
-    );
+    const useCase = makeUseCase(generator, recorder, materializer);
     const result = await useCase.execute({
       manifest,
       exportConfig: archive,
@@ -239,11 +255,7 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
     materializer.setResult({
       errors: ["Unknown template: [pwn](http://evil)\nsecond line `code`"],
     });
-    const useCase = new GenerateProjectUseCase(
-      generator,
-      recorder,
-      materializer,
-    );
+    const useCase = makeUseCase(generator, recorder, materializer);
     const result = await useCase.execute({
       manifest,
       exportConfig: archive,
@@ -270,11 +282,7 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
 
   it("caps a very long error to keep the notices artifact from bloating", async () => {
     materializer.setResult({ errors: ["x".repeat(5000)] });
-    const useCase = new GenerateProjectUseCase(
-      generator,
-      recorder,
-      materializer,
-    );
+    const useCase = makeUseCase(generator, recorder, materializer);
     const result = await useCase.execute({
       manifest,
       exportConfig: archive,
@@ -296,11 +304,7 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
     materializer.setResult({
       errors: Array.from({ length: 120 }, (_, i) => `Unknown template: t${i}`),
     });
-    const useCase = new GenerateProjectUseCase(
-      generator,
-      recorder,
-      materializer,
-    );
+    const useCase = makeUseCase(generator, recorder, materializer);
     const result = await useCase.execute({
       manifest,
       exportConfig: archive,
@@ -321,11 +325,7 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
     // The materializer is an injected port; a non-string crossing it (type-system
     // violation / future adapter) must not crash the request on `.replace`.
     materializer.setResult({ errors: [null as unknown as string] });
-    const useCase = new GenerateProjectUseCase(
-      generator,
-      recorder,
-      materializer,
-    );
+    const useCase = makeUseCase(generator, recorder, materializer);
     const result = await useCase.execute({
       manifest,
       exportConfig: archive,
@@ -343,11 +343,7 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
   });
 
   it("is a no-op when addOnsAnswers is empty (materializer never called)", async () => {
-    const useCase = new GenerateProjectUseCase(
-      generator,
-      recorder,
-      materializer,
-    );
+    const useCase = makeUseCase(generator, recorder, materializer);
     const result = await useCase.execute({
       manifest,
       exportConfig: archive,
@@ -362,7 +358,7 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
   });
 
   it("behaves as before when no materializer is injected", async () => {
-    const useCase = new GenerateProjectUseCase(generator, recorder); // 2-arg
+    const useCase = makeUseCase(generator, recorder); // 2-arg
     const result = await useCase.execute({
       manifest,
       exportConfig: archive,
@@ -380,11 +376,7 @@ describe("GenerateProjectUseCase — add-on materialization", () => {
     materializer.setResult({
       files: new Map([["../escape.ts", "export const x = 1;"]]),
     });
-    const useCase = new GenerateProjectUseCase(
-      generator,
-      recorder,
-      materializer,
-    );
+    const useCase = makeUseCase(generator, recorder, materializer);
     await assert.rejects(
       () =>
         useCase.execute({
@@ -408,7 +400,7 @@ describe("GenerateProjectUseCase — sync-integrity workflow injection", () => {
   });
 
   it("auto-injects the workflow into project.files AND the export for a yarn project", async () => {
-    const useCase = new GenerateProjectUseCase(generator, recorder);
+    const useCase = makeUseCase(generator, recorder);
     const result = await useCase.execute({
       manifest: { system: "test-system" }, // no packageManager → yarn default
       exportConfig: archive,
@@ -433,7 +425,7 @@ describe("GenerateProjectUseCase — sync-integrity workflow injection", () => {
   });
 
   it("does NOT inject for a pnpm project", async () => {
-    const useCase = new GenerateProjectUseCase(generator, recorder);
+    const useCase = makeUseCase(generator, recorder);
     const result = await useCase.execute({
       manifest: {
         system: "test-system",
@@ -459,11 +451,7 @@ describe("GenerateProjectUseCase — sync-integrity workflow injection", () => {
     materializer.setResult({
       files: new Map([[SYNC_INTEGRITY_WORKFLOW_PATH, "name: custom\n"]]),
     });
-    const useCase = new GenerateProjectUseCase(
-      generator,
-      recorder,
-      materializer,
-    );
+    const useCase = makeUseCase(generator, recorder, materializer);
     const result = await useCase.execute({
       manifest: { system: "test-system" },
       exportConfig: archive,
@@ -513,7 +501,7 @@ describe("GenerateProjectUseCase — exporter warnings & typed export errors", (
     githubExporter.setWarnings([
       "Skipped .github/workflows/sync-integrity.yml: the connected GitHub token lacks the 'workflow' scope.",
     ]);
-    const useCase = new GenerateProjectUseCase(generator, githubExporter);
+    const useCase = makeUseCase(generator, githubExporter);
     const result = await useCase.execute({
       manifest: { system: "test-system" },
       exportConfig: github,
@@ -534,7 +522,7 @@ describe("GenerateProjectUseCase — exporter warnings & typed export errors", (
       "GitHub rejected this push because it includes GitHub Actions workflow files.",
       "workflow-scope-missing",
     );
-    const useCase = new GenerateProjectUseCase(generator, githubExporter);
+    const useCase = makeUseCase(generator, githubExporter);
     const result = await useCase.execute({
       manifest: { system: "test-system" },
       exportConfig: github,
@@ -554,7 +542,7 @@ describe("GenerateProjectUseCase — exporter warnings & typed export errors", (
 
   it("leaves the code undefined on an untyped exporter failure", async () => {
     githubExporter.setFailure("Some raw GitHub error");
-    const useCase = new GenerateProjectUseCase(generator, githubExporter);
+    const useCase = makeUseCase(generator, githubExporter);
     const result = await useCase.execute({
       manifest: { system: "test-system" },
       exportConfig: github,

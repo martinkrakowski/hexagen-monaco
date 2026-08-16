@@ -15,8 +15,6 @@
     {"rule":"cross-layer-relative-import","file":"packages/template-engine/templates/adobe-photoshop/files/src/domain/ports/out/photoshop-automation.port.ts","specifier":"../../../infrastructure/adobe/errors/firefly-errors"},
     {"rule":"cross-layer-relative-import","file":"packages/template-engine/templates/adobe-substance-3d/files/src/domain/ports/out/substance-3d.port.ts","specifier":"../../../infrastructure/adobe/errors/firefly-errors"},
     {"rule":"cross-layer-relative-import","file":"packages/template-engine/templates/llm-adapter/files/src/domain/ports/out/llm-client.port.ts","specifier":"../../../infrastructure/llm/errors/llm-errors"},
-    {"rule":"node-builtin-in-layer","file":"packages/project-generation/src/application/generate-project-use-case.ts","specifier":"node:fs/promises"},
-    {"rule":"node-builtin-in-layer","file":"packages/project-generation/src/application/generate-project-use-case.ts","specifier":"node:path"},
     {"rule":"node-builtin-in-layer","file":"packages/sync/src/application/use-cases/migrate-manifest.use-case.ts","specifier":"node:util"},
     {"rule":"node-builtin-in-layer","file":"packages/template-engine/src/application/use-cases/validate-templates.use-case.ts","specifier":"node:fs/promises"},
     {"rule":"node-builtin-in-layer","file":"packages/template-engine/src/application/use-cases/validate-templates.use-case.ts","specifier":"node:path"},
