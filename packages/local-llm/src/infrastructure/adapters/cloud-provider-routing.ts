@@ -6,9 +6,15 @@
  * here. Adding a vendor or rotating an endpoint is an edit to this file, not
  * to `domain/cloud-provider-catalog.ts`.
  *
- * SECURITY BOUNDARY — these URLs are server-side reachability data. They are
- * deliberately absent from the `@hexagen/local-llm/client` subpath (which
- * re-exports only `domain/`), so the browser bundle never carries them.
+ * SECURITY BOUNDARY — these URLs are server-side reachability data, and this
+ * module is reachable by deep import only. It is deliberately absent from
+ * BOTH package entry points: the `@hexagen/local-llm/client` subpath
+ * (re-exports `domain/` only) and the package root (whose barrel chain
+ * `src/index.ts -> infrastructure/index.ts -> adapters/index.ts` is imported
+ * by 26 `"use client"` modules; this package sets no `sideEffects: false`, so
+ * a bundler cannot be relied on to prove the constants away). A future
+ * server-side consumer should deep-import this file, or be given a `./server`
+ * subpath — not a re-export from the browser-facing barrel.
  *
  * Provenance: hand-maintained, lifted verbatim from the domain catalog's
  * previous `baseUrl` fields. Values sourced from each vendor's public API

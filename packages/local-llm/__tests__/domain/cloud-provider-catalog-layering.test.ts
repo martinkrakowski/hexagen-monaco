@@ -21,6 +21,8 @@ import {
   CLOUD_PROVIDER_BASE_URLS,
   getCloudProviderBaseUrl,
 } from "../../src/infrastructure/adapters/cloud-provider-routing.js";
+import * as packageRoot from "../../src/index.js";
+import * as clientSubpath from "../../src/client/index.js";
 
 describe("cloud provider catalog layering (ADR-0051 §Decision 1)", () => {
   it("carries no vendor routing data in the domain catalog", () => {
@@ -75,6 +77,43 @@ describe("cloud provider catalog layering (ADR-0051 §Decision 1)", () => {
     // members; the lookup must be own-key only.
     assert.equal(getCloudProviderBaseUrl("toString"), undefined);
     assert.equal(getCloudProviderBaseUrl("constructor"), undefined);
+  });
+
+  it("keeps the routing table off BOTH package entry points", () => {
+    // The routing module is deep-import-only. Neither entry point may
+    // re-export it: `./client` is browser-facing by contract, and the package
+    // root's barrel chain (src/index.ts -> infrastructure/index.ts ->
+    // adapters/index.ts) is imported by 26 "use client" modules. This package
+    // sets no `sideEffects: false`, so a bundler cannot be relied on to prove
+    // unused constants away.
+    //
+    // Asserted against the real module namespaces, not the barrel source
+    // text, so an `export *` chain added anywhere upstream is caught too.
+    for (const [name, ns] of [
+      ["package root", packageRoot],
+      ["./client subpath", clientSubpath],
+    ] as const) {
+      const exported = ns as unknown as Record<string, unknown>;
+      assert.equal(
+        "CLOUD_PROVIDER_BASE_URLS" in exported,
+        false,
+        `${name} re-exports CLOUD_PROVIDER_BASE_URLS`,
+      );
+      assert.equal(
+        "getCloudProviderBaseUrl" in exported,
+        false,
+        `${name} re-exports getCloudProviderBaseUrl`,
+      );
+      // Catch a rename or a differently-shaped re-export of the same data.
+      const vendorUrlCarrier = Object.entries(exported).find(([, value]) =>
+        /https?:\/\//.test(JSON.stringify(value ?? null) ?? ""),
+      );
+      assert.equal(
+        vendorUrlCarrier?.[0],
+        undefined,
+        `${name} exports a value carrying a vendor URL: ${vendorUrlCarrier?.[0]}`,
+      );
+    }
   });
 
   it("still exposes the full provider list to the client, unchanged", () => {
