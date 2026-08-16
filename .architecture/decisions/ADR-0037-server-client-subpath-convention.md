@@ -29,7 +29,6 @@ Packages and tools allowed to consume `/server` subpaths (explicit enumeration):
 | `sync`               | CLI tool, server-only by nature (`plane: infrastructure`)                                                                                                   |
 | `mcp-server`         | MCP server, no client bundle                                                                                                                                |
 | `tui`                | Terminal UI, runs in Node.js                                                                                                                                |
-| `api-gateway`        | Fastify server, no client bundle                                                                                                                            |
 | `project-generation` | Code generation, runs in Node.js                                                                                                                            |
 | `tools/arch-linter`  | CLI tool in `tools/`, not subject to ESLint cross-package rules, but governed by this convention. Imports `@hexagen/project-configuration/server` directly. |
 
@@ -142,7 +141,6 @@ subpath_conventions:
       - sync
       - mcp-server
       - tui
-      - api-gateway
       - project-generation
     enforcement: error
   client:
@@ -158,6 +156,24 @@ Not yet read by arch-linter. Serves as documented intent for arch-linter v2.
 - The two-import pattern at call sites makes server-boundary crossings auditable via `grep`.
 - Client-bundle packages have real enforcement today via per-package ESLint rules.
 - `@hexagen/local-llm/shared` remains as debt — see below.
+
+## Amendment (2026-08-16 — `api-gateway` removed from the enumeration)
+
+**Status:** ✅ Accepted · **Context:** architecture-remediation item 4.5, decision D3.
+
+`api-gateway` has been struck from `server.allowed_consumers` in both places this ADR
+carries the list — the justification table above and the `subpath_conventions` snapshot
+further down — because the workspace it named no longer exists. `apps/api-gateway` was
+deleted as 19 lines of unmodified `fastify-cli` scaffold that declared three workspace
+dependencies and imported none of them; the HTTP surface it was reserved for is served by
+`apps/web/app/api`. The entry was never load-bearing: the linter only reports a subpath
+violation for a consumer it actually observes importing a `/server` path, and this one
+never imported anything. Removing it narrows the enumeration to consumers that exist,
+which is the property the list is for. The reasoning is recorded in
+`docs/planning/2026-08-16-decision-dossier-and-remediation-followups.md` §1.1.
+
+Nothing else in this ADR changes. The convention, the two-import call-site pattern and
+the prohibited-package table stand as written.
 
 ## Debt
 
