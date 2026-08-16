@@ -13,7 +13,7 @@ import {
   registerMockPort,
   getMockPort,
   type PortRegistry,
-} from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock.ts";
+} from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock";
 import {
   MockArchitectureGraphProviderAdapter,
   MockLinterAdapter,
@@ -23,7 +23,7 @@ import {
 import {
   PORT_NAMES,
   PERFORMANCE_TARGETS,
-} from "../../../../web-driver/src/infrastructure/constants/index.ts";
+} from "../../../../web-driver/src/infrastructure/constants/index";
 
 describe("Governance Assistant — Happy Path", () => {
   let registry: PortRegistry;
