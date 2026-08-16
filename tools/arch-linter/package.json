@@ -32,7 +32,7 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
-    "lint:arch": "node dist/cli.js",
+    "lint:arch": "node bin/lint-arch.mjs",
     "lint:yaml": "eslint --config eslint.yaml.config.js ../../.architecture/**/*.yaml"
   },
   "dependencies": {

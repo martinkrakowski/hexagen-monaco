@@ -60,6 +60,22 @@ It exits non-zero on violations, so it drops straight into CI:
 - run: npx hexagen-lint
 ```
 
+### Exit codes
+
+| Code | Meaning                                                                  |
+| ---- | ------------------------------------------------------------------------ |
+| `0`  | Ran to completion; the tree is compliant (the run names what it checked) |
+| `1`  | Ran to completion; found violations that are not in the baseline         |
+| `2`  | **Could not run** — nothing was checked, so trust nothing                |
+
+`2` covers every fail-closed abort: no project root, a missing or unloadable
+manifest, a `layer-rules.yaml` / `linter-config.yaml` / baseline that exists but
+will not parse, a `--baseline` with no value, and — via the `yarn lint:arch`
+launcher in this repo (`bin/lint-arch.mjs`) — an unbuilt linter. It is a separate
+code from `1` on purpose: a caller that cannot tell "the gate found problems"
+from "the gate never ran" is one reordered build step away from a green check
+over an empty run.
+
 If you also use `@hexagen-monaco/sync`, `hexagen sync` runs the linter for you —
 invoking `hexagen-lint` directly is for standalone or CI checks.
 
@@ -138,7 +154,7 @@ A project scaffolded by `@hexagen-monaco/sync` already ships all of these.
 
 **"Optional" means absent, not broken.** A missing `layer-rules.yaml` /
 `linter-config.yaml` warns and falls back to built-in defaults. A file that
-exists but cannot be read or parsed is a **fatal error** (exit 1) — defaulting
+exists but cannot be read or parsed is a **fatal error** (exit 2) — defaulting
 there would silently disable every rule that file declares while the run still
 reported "Architecture is compliant". An empty or comments-only file parses
 cleanly and is treated as a legitimate empty config, not an error.

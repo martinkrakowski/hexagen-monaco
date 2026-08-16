@@ -98,15 +98,21 @@ jobs:
       - name: "Verify UI Boundary (firewall layer 3)"
         run: bash scripts/validate-ui-boundary.sh
 
-      # The arch-linter's entry point is `node dist/cli.js` (tools/arch-linter
-      # package.json `bin`/`lint:arch`), and **/dist/ is gitignored — on a fresh
-      # CI checkout that file does not exist, so an unbuilt `yarn lint:arch`
-      # dies with MODULE_NOT_FOUND. That is exactly the AUD-010 shape: a gate
-      # whose binary CI could never resolve. It is built explicitly here rather
-      # than left to a side effect of another step, because arch-linter has no
-      # `lint` script (it is in check-lint-coverage.mjs's UNLINTED set) and is a
-      # dependency of no linted workspace, so `turbo run lint`'s `^build` never
-      # reaches it.
+      # The arch-linter's real entry point is `dist/cli.js` (tools/arch-linter
+      # package.json `bin`), and **/dist/ is gitignored — on a fresh CI checkout
+      # that file does not exist. That is the AUD-010 shape: a gate whose binary
+      # CI could never resolve. It is built explicitly here rather than left to a
+      # side effect of another step, because arch-linter has no `lint` script (it
+      # is in check-lint-coverage.mjs's UNLINTED set) and is a dependency of no
+      # linted workspace, so `turbo run lint`'s `^build` never reaches it.
+      #
+      # If this step is ever reordered, dropped, or silently fails, the ratchet
+      # step below no longer goes green over nothing: `lint:arch` now runs
+      # through `tools/arch-linter/bin/lint-arch.mjs`, which refuses to start
+      # without its build output and exits **2** ("could not run — NOTHING WAS
+      # CHECKED"), distinct from 0 (compliant) and 1 (violations found). This
+      # step is still the fix; the launcher is the alarm that says so out loud
+      # instead of a raw MODULE_NOT_FOUND stack trace.
       #
       # Building the arch-linter ALONE is not enough either. The linter resolves
       # `@scope/pkg` import targets through ts-morph — i.e. through the workspace

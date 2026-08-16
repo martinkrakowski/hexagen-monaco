@@ -6,13 +6,14 @@ import { getCapabilities } from "./capability-cache";
 const originalFetch = globalThis.fetch;
 
 // These tests stub the fetch global; always restore so a leaked stub never
-// bleeds into later tests. Restore ONLY fetch — deliberately NOT
-// `vi.unstubAllGlobals()`, which also tears down the jsdom `localStorage` /
-// `sessionStorage` globals and re-exposes Node's built-in (throwing)
-// `localStorage` getter on Node >= 24, so the shared `vitest.setup.ts`
-// afterEach blows up with `SecurityError: Cannot initialize local storage
-// without a --localstorage-file path`. Same hazard already documented at
-// features/workspace-shell/plan-phase/__tests__/PlanPhaseView.test.tsx.
+// bleeds into later tests. Restore ONLY fetch — "undo what this file stubbed"
+// is what the hook means, and it stays correct however the shared setup grows.
+// (`vi.unstubAllGlobals()` used to be actively unsafe here: vitest.setup.ts
+// installed its `localStorage`/`sessionStorage` via `vi.stubGlobal`, so
+// unstubbing re-exposed Node's throwing built-in getter and the shared
+// afterEach died with `SecurityError: Cannot initialize local storage without a
+// --localstorage-file path`. The setup now owns those globals outside Vitest's
+// stub registry — see apps/web/vitest.setup.test.ts.)
 //
 // The module also keeps a process-wide 5-min TTL cache, but every test here
 // fails the fetch (so nothing is cached) and asserts a fresh throw, so cache
