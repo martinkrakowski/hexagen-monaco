@@ -15,7 +15,6 @@ import {
 import { ExecuteFullStagedGenerationUseCase } from "./staged-generation/execute-full-staged-generation.use-case";
 import type { Stage6ReviewerConfig } from "./staged-generation/execute-validation-review.use-case";
 import type { PromptVariables } from "../../domain/prompts/generate-manifest.prompt";
-import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
 
 export { ManifestWarningCategory } from "./generate-manifest-types";
@@ -27,21 +26,23 @@ export class GenerateManifestFromDescriptionUseCase {
 
   constructor(
     private readonly llmPipeline: SendStructuredRequestPort,
-    transactionManager?: TransactionManagerPort,
+    // HEX-010: required, not optional. The full pipeline underneath drives
+    // begin→transition, so a manager is not a nicety — and an application-layer
+    // use case must not reach for a concrete adapter to conjure one. Every
+    // caller is a composition root (the /api/manifest/generate routes, the
+    // benchmark script, tests) and picks the implementation it wants; the
+    // routes still pass a per-request `InMemoryTransactionManager`, so
+    // behaviour there is unchanged.
+    transactionManager: TransactionManagerPort,
     // Optional dedicated Stage-6 reviewer — same seam as the streaming
     // orchestrators, so this non-streaming entry (/api/manifest/generate and
     // /local) isn't silently left on the main model when STAGE6_VALIDATOR_* is
     // set. Off ⇒ Stage 6 on the main pipeline model at 800, unchanged.
     stage6Reviewer?: Stage6ReviewerConfig,
   ) {
-    // A4: the full pipeline requires a transaction manager (begin→transition),
-    // unlike the old stub which guarded an optional one. Non-web callers
-    // (scripts, tests) may omit it, so default to a throwaway in-memory manager
-    // rather than crash on `undefined.begin()`. This non-streaming entry never
-    // surfaces the transactionId, so an ephemeral manager is correct.
     this.stagedUseCase = new ExecuteFullStagedGenerationUseCase(
       llmPipeline,
-      transactionManager ?? new InMemoryTransactionManager(),
+      transactionManager,
       stage6Reviewer ? { stage6Reviewer } : undefined,
     );
   }

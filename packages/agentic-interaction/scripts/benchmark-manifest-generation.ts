@@ -9,6 +9,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { GenerateManifestFromDescriptionUseCase } from "../src/application/use-cases/generate-manifest-from-description.use-case";
+import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 import { createProjectDescription } from "../src/domain/value-objects/project-description";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
 import type { LLMRequest } from "@hexagen/local-llm";
@@ -66,8 +67,12 @@ function createMockLLMPipeline(): SendStructuredRequestPort {
 }
 
 async function benchmarkManifestGeneration(runs: number = 50): Promise<void> {
+  // HEX-010: the use case requires a TransactionManagerPort; this script is
+  // its own composition root, and a throwaway in-memory manager is the right
+  // implementation for a benchmark that never surfaces a transaction id.
   const useCase = new GenerateManifestFromDescriptionUseCase(
     createMockLLMPipeline(),
+    new InMemoryTransactionManager(),
   );
   const results: BenchmarkRun[] = [];
   const desc =
