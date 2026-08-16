@@ -3,60 +3,63 @@ import type {
   ExportGraphImagePort,
   ExportGraphImageInput,
   ExportGraphImageOutput,
+  ImageFormat,
 } from "../ports/in/export-graph-image.port.js";
+import type {
+  GraphImageRendererPort,
+  GraphImageRenderRequest,
+  RenderedImageEncoding,
+} from "../ports/out/graph-image-renderer.port.js";
+
+/** Painted behind the graph when the caller expresses no preference. */
+const DEFAULT_BACKGROUND_COLOR = "#ffffff";
+
+/** Raster exports are produced at 2x so they stay legible when zoomed. */
+const RASTER_SCALE = 2;
+
+function encodingFor(format: ImageFormat): RenderedImageEncoding {
+  switch (format) {
+    case "svg":
+      return "svg";
+    case "jpg":
+    case "jpeg":
+      return "jpeg";
+    case "png":
+    default:
+      return "png";
+  }
+}
 
 export class ExportGraphImageUseCase implements ExportGraphImagePort {
+  constructor(private readonly renderer: GraphImageRendererPort) {}
+
   async exportImage(
     input: ExportGraphImageInput,
   ): Promise<Result<ExportGraphImageOutput, Error>> {
     try {
-      const { toPng, toJpeg, toSvg } = await import("html-to-image");
+      const encoding = encodingFor(input.format);
+      const request: GraphImageRenderRequest = {
+        target: input.viewportSelector,
+        encoding,
+        backgroundColor: input.backgroundColor ?? DEFAULT_BACKGROUND_COLOR,
+        ...(encoding === "svg" ? {} : { scale: RASTER_SCALE }),
+      };
 
-      const viewport = document.querySelector(
-        input.viewportSelector,
-      ) as HTMLElement | null;
-      if (!viewport) {
+      const rendered = await this.renderer.render(request);
+      if (rendered === null) {
         return {
           success: false,
-          error: new Error(`Viewport element not found: ${input.viewportSelector}`),
+          error: new Error(
+            `Viewport element not found: ${input.viewportSelector}`,
+          ),
         };
       }
-
-      const backgroundColor = input.backgroundColor ?? "#ffffff";
-
-      let dataUrl: string;
-      switch (input.format) {
-        case "jpg":
-        case "jpeg":
-          dataUrl = await toJpeg(viewport, {
-            backgroundColor,
-            pixelRatio: 2,
-          });
-          break;
-        case "svg":
-          dataUrl = await toSvg(viewport, {
-            backgroundColor,
-          });
-          break;
-        case "png":
-        default:
-          dataUrl = await toPng(viewport, {
-            backgroundColor,
-            pixelRatio: 2,
-          });
-          break;
-      }
-
-      const response = await fetch(dataUrl);
-      const blob = await response.blob();
-      const arrayBuffer = await blob.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
 
       return {
         success: true,
         data: {
-          data: uint8Array,
-          mimeType: blob.type,
+          data: rendered.bytes,
+          mimeType: rendered.mimeType,
         },
       };
     } catch (err) {
