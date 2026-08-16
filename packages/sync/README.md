@@ -56,13 +56,59 @@ Consult `npx hexagen arch --help` for the full list of manifest operations.
 
 ## Programmatic Usage
 
-The default export exposes the sync-engine surface used by the CLI. Types
-ship alongside the bundle.
+> **The supported contract of this package is the `hexagen` binary.** The root
+> barrel below is **provisional under 0.x** (ADR-0056): names may be withdrawn,
+> and a withdrawal rides a **minor** — never a patch — and is listed by name in
+> that release's `CHANGELOG.md` section. Programmatic use is permitted and
+> unsupported. Prefer the CLI unless you are embedding the engine.
+>
+> _(Before 0.10.0 this section documented a `runSync` function. No such export
+> has ever existed — the example was wrong for the life of the package.)_
+
+The barrel exposes the engine the CLI drives. Types ship alongside the bundle.
 
 ```ts
-import { runSync } from "@hexagen-monaco/sync";
+import { SyncEngine, type LoggerPort } from "@hexagen-monaco/sync";
 
-await runSync({ mode: "external", workspaceRoot: process.cwd() });
+const logger: LoggerPort = {
+  info: console.info,
+  warn: console.warn,
+  error: console.error,
+  debug: console.debug,
+  errorWithException: (err, message) => console.error(message, err),
+};
+
+const dryRun = false;
+
+const engine = new SyncEngine(
+  {
+    mode: "external", // 'external' honours the workspace root you give it
+    dryRun,
+    force: false,
+    forceRoot: false,
+    allowDirty: false,
+    strict: false,
+    logger,
+  },
+  { targetRoot: process.cwd() },
+);
+
+const summary = await engine.run();
+
+// `run()` RESOLVES when a generator fails soft — it does not throw. Check the
+// count, or a partial tree reads as success.
+if (summary.errors > 0) {
+  throw new Error(`sync finished with ${summary.errors} generator failure(s)`);
+}
+
+// Only needed if you set `dryRun: true`. A missing
+// `.architecture/manifest.yaml` REJECTS `run()` on a real run, but a dry run
+// tolerates it by synthesizing an empty manifest — which plans ops against
+// nothing and still resolves with `errors: 0`. That is the same fact the CLI
+// gates `--check` on.
+if (dryRun && summary.manifestMissing) {
+  throw new Error("no .architecture/manifest.yaml in the target workspace");
+}
 ```
 
 The package is ESM-only (`"type": "module"`). Consumers that still use

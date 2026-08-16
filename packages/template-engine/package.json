@@ -1,6 +1,6 @@
 {
   "name": "@hexagen/template-engine",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "type": "module",
   "description": "Hexagen add-on template system — registry, question engine, file emitter, and dependency resolution",
   "license": "SEE LICENSE IN LICENSE",
