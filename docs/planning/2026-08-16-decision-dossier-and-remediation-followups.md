@@ -57,8 +57,11 @@ every web image build installs the fastify ecosystem — **~26 lockfile entries 
 3. **The root `dev:api` script** in `package.json`, which invokes `yarn workspace @hexagen/api-gateway`. It is
    **unguarded** — the #455 workspace-tool guard never inspects root scripts, so a dangling `dev:api` fails
    only when a human types it. Nothing in CI will catch this one, which is exactly why it belongs on the list.
-4. Prose and inert entries: `README.md`'s "three runtime surfaces" claim,
-   `.architecture/invariants/linter-config.yaml`, and the ADR-0037 table row.
+4. Prose and inert entries: `README.md:191`'s "Three runtime surfaces" claim, the
+   `allowed_consumers` entry in `.architecture/invariants/linter-config.yaml:9`, and **both**
+   ADR-0037 references — the table row at `:32` _and_ the embedded copy of that same
+   `allowed_consumers` list at `:145`, which is easy to miss because the first grep hit satisfies
+   the eye.
 
 ### 1.2 ADR-0049 — Option B, with one deviation from the ADR's own step 1
 
