@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { stagePublishedManifest } from "./helpers/stage-publish-package.js";
 
 /**
  * Repo-wide guard: the published packages advertise the Node floor the repo
@@ -32,7 +33,8 @@ import { fileURLToPath } from "node:url";
  *
  * Plus the publish-transform half of ADR-0052 Decision 2: a corrected source
  * value is only worth something if `prepare-publish-package.js` still carries
- * the field through verbatim.
+ * the field through verbatim — checked by running that transform over a
+ * throwaway fixture, not by reading its source text.
  */
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -198,22 +200,22 @@ describe("published engines.node floor (ADR-0052)", () => {
     // rides the retained-fields whitelist verbatim. Dropping it from that list
     // would silently un-publish the floor while every source manifest still
     // looks correct — the exact failure this guard exists to catch.
-    const script = await fs.readFile(
-      path.join(REPO_ROOT, "scripts/prepare-publish-package.js"),
-      "utf8",
+    //
+    // Asserted by RUNNING the transform, not by reading its source. A regex over
+    // the `RETAINED_FIELDS` literal is satisfied by a commented-out `// "engines",`
+    // — and broken by an unrelated reformat — so it can both false-pass and
+    // false-fail. What the staged manifest actually contains cannot do either.
+    const staged = await stagePublishedManifest(
+      "@hexagen/engines-floor-fixture",
+      {
+        engines: { node: ADR_0052_NODE_FLOOR },
+      },
     );
-    const whitelist = /const RETAINED_FIELDS = \[([\s\S]*?)\]/.exec(
-      script,
-    )?.[1];
-    assert.ok(
-      whitelist,
-      "could not locate RETAINED_FIELDS in scripts/prepare-publish-package.js — " +
-        "the publish transform changed shape; re-point this guard rather than deleting it",
-    );
-    assert.ok(
-      /(^|\s)"engines",/m.test(whitelist),
-      '"engines" is missing from RETAINED_FIELDS in scripts/prepare-publish-package.js. ' +
-        "The published manifests would then advertise no Node floor at all, no matter " +
+    assert.deepEqual(
+      staged.engines,
+      { node: ADR_0052_NODE_FLOOR },
+      "scripts/prepare-publish-package.js dropped `engines` from the staged manifest.\n" +
+        "The published packages would then advertise no Node floor at all, no matter\n" +
         "what the source manifests say (ADR-0052 Decision 2).",
     );
   });

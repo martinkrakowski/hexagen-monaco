@@ -1,50 +1,6 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
-import { promises as fs } from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
-
-// Path to the repo-root publish-staging script (../../../scripts from here).
-const SCRIPT = fileURLToPath(
-  new URL("../../../scripts/prepare-publish-package.js", import.meta.url),
-);
-
-/**
- * Create a minimal publishable fixture (package.json + dist/), run the staging
- * script against it, and return the staged manifest.
- */
-type StagedManifest = {
-  name: string;
-  peerDependencies?: Record<string, string>;
-  optionalDependencies?: Record<string, string>;
-};
-
-async function stage(
-  name: string,
-  extra: Record<string, unknown> = {},
-): Promise<StagedManifest> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "prepublish-scope-"));
-  await fs.mkdir(path.join(dir, "dist"), { recursive: true });
-  await fs.writeFile(path.join(dir, "dist", "index.js"), "export {};\n");
-  await fs.writeFile(
-    path.join(dir, "package.json"),
-    JSON.stringify(
-      { name, version: "1.2.3", type: "module", ...extra },
-      null,
-      2,
-    ),
-  );
-  try {
-    execFileSync("node", [SCRIPT, dir], { stdio: "ignore" });
-    return JSON.parse(
-      await fs.readFile(path.join(dir, "publish", "package.json"), "utf8"),
-    ) as StagedManifest;
-  } finally {
-    await fs.rm(dir, { recursive: true, force: true });
-  }
-}
+import { stagePublishedManifest as stage } from "./helpers/stage-publish-package.js";
 
 describe("prepare-publish-package scope rewrite", () => {
   it("rewrites @hexagen/* to @hexagen-monaco/* in the staged name", async () => {
