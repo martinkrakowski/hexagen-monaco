@@ -9,13 +9,10 @@ name: "Lint & Boundaries"
 # its own header since it was written (scripts/validate-ui-boundary.sh:10) — a
 # role no workflow granted it. This workflow grants it.
 #
-# PARTIAL against item 2.3. Two of the three legs ship here:
+# All three legs of item 2.3 run here:
 #   Layer 2 — workspace eslint  → "Run ESLint (all workspaces)"
 #   Layer 3 — structural checks → "Verify UI Boundary (firewall layer 3)"
-# The arch-lint ratchet leg is DEFERRED: its baseline is item 2.2's output
-# (.architecture/arch-lint-baseline.json), which does not exist on main yet.
-# It lands as a third step here once 2.2 merges — do not mark 2.3 done until
-# that step exists.
+#   Layer 1 — arch-lint ratchet → "Verify Architecture Lint Ratchet"
 #
 # Deliberately its own workflow rather than more steps on sync-integrity.yml:
 # it can be made a required check on its own, it fails in parallel with the
@@ -101,13 +98,53 @@ jobs:
       - name: "Verify UI Boundary (firewall layer 3)"
         run: bash scripts/validate-ui-boundary.sh
 
-      # DEFERRED — arch-lint ratchet (item 2.3, third leg). Blocked on item 2.2
-      # (PR #459): the ratchet compares against .architecture/arch-lint-baseline.json,
-      # which is 2.2's output and is not on main. Add here once 2.2 lands:
+      # The arch-linter's entry point is `node dist/cli.js` (tools/arch-linter
+      # package.json `bin`/`lint:arch`), and **/dist/ is gitignored — on a fresh
+      # CI checkout that file does not exist, so an unbuilt `yarn lint:arch`
+      # dies with MODULE_NOT_FOUND. That is exactly the AUD-010 shape: a gate
+      # whose binary CI could never resolve. It is built explicitly here rather
+      # than left to a side effect of another step, because arch-linter has no
+      # `lint` script (it is in check-lint-coverage.mjs's UNLINTED set) and is a
+      # dependency of no linted workspace, so `turbo run lint`'s `^build` never
+      # reaches it.
       #
-      #   - name: "Verify Architecture Lint Ratchet"
-      #     run: yarn lint:arch  # + the ratchet comparison 2.2 defines
+      # Not `--filter=@hexagen/arch-linter`: the linter resolves `@scope/pkg`
+      # import targets through the workspace symlinks, whose `exports` point at
+      # each package's dist/. An unbuilt package resolves to nothing, and the
+      # resolution-dependent rules (domain-layer-import, application-layer-import)
+      # then produce no finding for it — the ratchet would silently check less
+      # than it claims. Building the whole graph makes the CI run see the same
+      # sources the baseline was recorded against. Cost is near zero: the
+      # eslint step above already builds most of this closure via `^build`, and
+      # turbo serves it from cache.
+      - name: "Build Packages (arch-linter bin + resolvable workspace targets)"
+        run: yarn turbo run build --output-logs=errors-only --log-order=stream
+
+      # Layer 1. The architecture ratchet (ADR-0054 §1). Fails on any boundary
+      # violation NOT already recorded in .architecture/arch-lint-baseline.json;
+      # the 34 accepted entries stay suppressed so `main` is not red-walled
+      # while Waves 5-8 burn them down.
       #
-      # sync-integrity.yml already runs the arch-linter for real via
-      # `sync --strict` (AUD-010 fix), so architecture is not unguarded in the
-      # meantime — what is missing is the no-new-violations ratchet.
+      # The baseline path is passed explicitly even though it is also the CLI
+      # default: this step then names the exact file it enforces against, and a
+      # `--baseline` with no value is fatal in the CLI rather than a silent
+      # fall back to the default. If the file is ever deleted or renamed the
+      # linter enforces EVERYTHING and this step goes red — deleting the
+      # baseline cannot buy an amnesty.
+      #
+      # NOT gated here: baseline GROWTH, and stale entries. A baselined
+      # violation that no longer reproduces is warned about in this step's log
+      # but exits 0 (see reportAndExit in tools/arch-linter/src/cli.ts) — the
+      # file's monotone-decreasing property is review-enforced by ADR-0054 §1,
+      # not machine-enforced. Read the "no longer reproduces" warnings and
+      # delete those lines in the PR that fixed them.
+      #
+      # Overlaps sync-integrity.yml's "Verify Architecture (arch-linter,
+      # strict)" deliberately. That step shells out to the linter through
+      # `sync --strict` with no arguments, so it picks up the same baseline by
+      # default — but only after two full builds and a sync, only through a bin
+      # resolver that has its own "not installed" failure mode, and never
+      # naming the baseline it enforces. This step invokes the linter directly,
+      # names the file, and fails in parallel with that job.
+      - name: "Verify Architecture Lint Ratchet"
+        run: yarn lint:arch --baseline .architecture/arch-lint-baseline.json
