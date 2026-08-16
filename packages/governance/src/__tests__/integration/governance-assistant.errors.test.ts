@@ -96,8 +96,13 @@ describe("Governance Assistant — Error Handling", () => {
 
     assert.strictEqual(result.success, false);
     assert.strictEqual(result.error.code, ErrorScenario.PARSE_ERROR);
-    assert.ok("line" in result.error.details);
-    assert.ok("snippet" in result.error.details);
+    // `details` is optional on ErrorResult, so narrow before probing it —
+    // asserting `"line" in undefined` would throw a TypeError rather than fail
+    // the assertion, which reports the wrong defect.
+    assert.notStrictEqual(result.error.details, undefined);
+    const details = result.error.details as Record<string, unknown>;
+    assert.ok("line" in details);
+    assert.ok("snippet" in details);
   });
 
   it("error: large manifest performance warning (>2.5s)", async () => {
