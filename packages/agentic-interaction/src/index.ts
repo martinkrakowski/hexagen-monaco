@@ -98,11 +98,7 @@ export type {
   ResolvedProvider,
   SecretVaultPort,
 } from "./domain/provider-config";
-export {
-  resolveApiKey,
-  resolveFallbackChain,
-  createDefaultFallbackChain,
-} from "./domain/provider-config";
+export { resolveApiKey, resolveFallbackChain } from "./domain/provider-config";
 
 // Application exports
 export type {
@@ -112,6 +108,7 @@ export type {
   ArchitectureModificationPort,
   ModificationResult,
 } from "./application/ports/index";
+export type { ProviderCatalogPort } from "./application/ports/out/provider-catalog.port";
 export { GenerateSuggestionUseCase } from "./application/use-cases/generate-suggestion.use-case";
 export { SecureChatDispatchUseCase } from "./application/use-cases/secure-chat-dispatch.use-case";
 export { HandleServerChatUseCase } from "./application/use-cases/index";
@@ -189,6 +186,7 @@ export {
   type LLMProviderSelectorAdapterConfig,
 } from "./infrastructure/adapters/llm-provider-selector.adapter";
 export { EnvironmentSecretVaultAdapter } from "./infrastructure/adapters/environment-secret-vault.adapter";
+export { StaticProviderCatalogAdapter } from "./infrastructure/adapters/static-provider-catalog.adapter";
 
 // Manifest inspection helpers (from domain)
 export { generateSuggestions, detectWarnings } from "./domain/index";

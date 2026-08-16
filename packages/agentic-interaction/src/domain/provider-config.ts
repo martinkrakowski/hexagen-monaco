@@ -70,29 +70,9 @@ export function resolveFallbackChain(
   return resolved;
 }
 
-export function createDefaultFallbackChain(
-  primaryEnvVar: string = "OPENAI_API_KEY",
-): ProviderFallbackChain {
-  return {
-    primary: {
-      providerId: "openai",
-      baseUrl: "https://api.openai.com/v1",
-      model: "gpt-4o-mini",
-      apiKeyEnvVar: primaryEnvVar,
-      temperature: 0.4,
-      maxTokens: 4096,
-      timeoutMs: 60000,
-    },
-    fallbacks: [
-      {
-        providerId: "openai",
-        baseUrl: "https://api.openai.com/v1",
-        model: "gpt-3.5-turbo",
-        apiKeyEnvVar: primaryEnvVar,
-        temperature: 0.4,
-        maxTokens: 4096,
-        timeoutMs: 60000,
-      },
-    ],
-  };
-}
+// The concrete default chain that used to live here as
+// `createDefaultFallbackChain()` moved to
+// `infrastructure/adapters/static-provider-catalog.adapter.ts` and is reached
+// through `ProviderCatalogPort` (ADR-0051, Decision 1): vendor baseUrls and
+// API-key environment-variable names are routing facts, not domain artifacts.
+// This module keeps the identities and the resolution rules only.

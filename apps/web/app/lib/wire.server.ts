@@ -19,9 +19,9 @@ import {
   InMemoryPromptCompilerAdapter,
   InMemoryLLMSenderAdapter,
   CloudLLMPipelineAdapter,
-  createDefaultFallbackChain,
   resolveFallbackChain,
   EnvironmentSecretVaultAdapter,
+  StaticProviderCatalogAdapter,
 } from "@hexagen/agentic-interaction";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 import {
@@ -39,6 +39,7 @@ import { LLMProviderSelectorAdapter } from "@hexagen/agentic-interaction";
 import type {
   ModifyArchitectureDeps,
   CloudLLMPipelineAdapterConfig,
+  ProviderCatalogPort,
   ProviderFallbackChain,
   Stage1RefinementConfig,
 } from "@hexagen/agentic-interaction";
@@ -484,15 +485,51 @@ export type PipelineMode = "in-memory" | "cloud";
 
 export interface CloudPipelineConfig {
   fallbackChain?: ProviderFallbackChain;
+  /**
+   * Source of the default chain when `fallbackChain` is absent. Defaults to
+   * the composition root's catalog adapter; overridable so tests can prove
+   * the default path actually reads the port rather than a literal.
+   */
+  providerCatalog?: ProviderCatalogPort;
 }
 
-function createLLMSender(
+/**
+ * The injected provider catalog (ADR-0051, Decision 1) — vendor baseUrls,
+ * model ids and the API-key env-var name for the **default** cloud chain.
+ *
+ * Not to be confused with `buildStagedGenerationFallbackChain` above, which
+ * stays in this composition root by design (Decision 3): that one reads
+ * `process.env` at wiring time and serves staged generation on `gpt-4o`. This
+ * one is env-independent and serves the modify pipeline's default on
+ * `gpt-4o-mini`. The two are deliberately different chains.
+ */
+let _providerCatalog: ProviderCatalogPort | null = null;
+
+const getProviderCatalog = (): ProviderCatalogPort => {
+  if (!_providerCatalog) {
+    _providerCatalog = new StaticProviderCatalogAdapter();
+  }
+  return _providerCatalog;
+};
+
+/**
+ * Builds the structured-request sender for a pipeline mode.
+ *
+ * Exported (rather than module-private) so the cloud **default** path — the
+ * `cloudConfig?.fallbackChain ?? …` arm, reached whenever a caller passes no
+ * explicit chain — can be pinned behaviourally by a test. That arm is the one
+ * ADR-0051 §Decision 4 requires to stay covered.
+ */
+export function createLLMSender(
   mode: PipelineMode,
   cloudConfig?: CloudPipelineConfig,
 ): SendStructuredRequestPort {
   if (mode === "cloud") {
     const fallbackChain =
-      cloudConfig?.fallbackChain ?? createDefaultFallbackChain();
+      cloudConfig?.fallbackChain ??
+      (
+        cloudConfig?.providerCatalog ?? getProviderCatalog()
+      ).createDefaultChain();
     const adapterConfig: CloudLLMPipelineAdapterConfig = {
       fallbackChain,
       secretVault: getEnvironmentVault(),
