@@ -5,6 +5,7 @@ import { InitiateExportUseCase } from "../../src/application/use-cases/initiate-
 import { InMemoryProjectGeneratorDouble } from "../doubles/in-memory-project-generator.double.js";
 import { RecordingExporterDouble } from "../doubles/recording-exporter.double.js";
 import { InMemoryAddOnMaterializerDouble } from "../doubles/in-memory-add-on-materializer.double.js";
+import { ScratchDirProjectWorkspaceAdapter } from "../../src/infrastructure/adapters/scratch-dir-project-workspace.adapter.js";
 import type { Manifest } from "@hexagen/sync";
 
 describe("InitiateExportUseCase — add-on threading", () => {
@@ -24,7 +25,12 @@ describe("InitiateExportUseCase — add-on threading", () => {
       files: new Map([["src/added.ts", "export const x = 1;"]]),
     });
     const factory = () =>
-      new GenerateProjectUseCase(generator, recorder, materializer);
+      new GenerateProjectUseCase(
+        generator,
+        recorder,
+        materializer,
+        new ScratchDirProjectWorkspaceAdapter(),
+      );
     const useCase = new InitiateExportUseCase(factory);
 
     const result = await useCase.initiateExport({
@@ -51,7 +57,12 @@ describe("InitiateExportUseCase — add-on threading", () => {
   it("threads materialization errors out through the export result (+ sidecar on disk)", async () => {
     materializer.setResult({ errors: ["conflict: a vs b"] });
     const factory = () =>
-      new GenerateProjectUseCase(generator, recorder, materializer);
+      new GenerateProjectUseCase(
+        generator,
+        recorder,
+        materializer,
+        new ScratchDirProjectWorkspaceAdapter(),
+      );
     const useCase = new InitiateExportUseCase(factory);
 
     const result = await useCase.initiateExport({
@@ -72,7 +83,12 @@ describe("InitiateExportUseCase — add-on threading", () => {
 
   it("omits add-ons when the intent carries none (materializer not called)", async () => {
     const factory = () =>
-      new GenerateProjectUseCase(generator, recorder, materializer);
+      new GenerateProjectUseCase(
+        generator,
+        recorder,
+        materializer,
+        new ScratchDirProjectWorkspaceAdapter(),
+      );
     const useCase = new InitiateExportUseCase(factory);
 
     const result = await useCase.initiateExport({
