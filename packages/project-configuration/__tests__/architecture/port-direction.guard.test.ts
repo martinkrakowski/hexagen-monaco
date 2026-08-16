@@ -148,6 +148,21 @@ function extractConstructorInjectedPorts(source: string): string[] {
   return [...injected];
 }
 
+/**
+ * `ports/in` / `ports/out` as a path segment.
+ * File specifiers (`../ports/out/foo.port`) and directory barrels (`../ports/out`)
+ * are both legal; a trailing-slash substring misses the barrel. Near-misses
+ * like `ports/outgoing` must not match.
+ */
+function isPortDirectionSpecifier(
+  specifier: string,
+  direction: "in" | "out",
+): boolean {
+  const pattern =
+    direction === "in" ? /(^|\/)ports\/in(\/|$)/ : /(^|\/)ports\/out(\/|$)/;
+  return pattern.test(specifier);
+}
+
 describe("ADR-0048 port direction (project-configuration)", () => {
   it("has a use case implementing every port exported from application/ports/in", async () => {
     const portFiles = (await readSources(PORTS_IN_DIR)).filter(
@@ -231,8 +246,9 @@ describe("ADR-0048 port direction (project-configuration)", () => {
 
     const driven = [...implemented, ...injected];
 
-    const misfiled = driven.filter(({ specifier }) =>
-      specifier?.includes("/ports/in/"),
+    const misfiled = driven.filter(
+      ({ specifier }) =>
+        specifier !== undefined && isPortDirectionSpecifier(specifier, "in"),
     );
     expect(
       misfiled.map(
@@ -255,9 +271,52 @@ describe("ADR-0048 port direction (project-configuration)", () => {
 
     for (const { site, contract, specifier, reason } of packageLocal) {
       expect(
-        specifier,
+        specifier !== undefined && isPortDirectionSpecifier(specifier, "out"),
         `${site}: ${contract} is driven (${reason}); ADR-0048 files driven ports under application/ports/out`,
-      ).toContain("/ports/out/");
+      ).toBe(true);
     }
+  });
+});
+
+describe("isPortDirectionSpecifier", () => {
+  it("matches a file specifier that contains /ports/<dir>/", () => {
+    expect(
+      isPortDirectionSpecifier("../ports/out/generate-project.port", "out"),
+    ).toBe(true);
+    expect(
+      isPortDirectionSpecifier("../ports/in/validate-spec.port", "in"),
+    ).toBe(true);
+    expect(
+      isPortDirectionSpecifier(
+        "../../application/ports/out/telemetry.port",
+        "out",
+      ),
+    ).toBe(true);
+  });
+
+  it("matches a directory barrel with no trailing slash", () => {
+    expect(isPortDirectionSpecifier("../ports/out", "out")).toBe(true);
+    expect(isPortDirectionSpecifier("../ports/in", "in")).toBe(true);
+    expect(isPortDirectionSpecifier("./ports/out", "out")).toBe(true);
+  });
+
+  it("does not match a near-miss segment such as ports/outgoing", () => {
+    expect(isPortDirectionSpecifier("../ports/outgoing/foo.port", "out")).toBe(
+      false,
+    );
+    expect(isPortDirectionSpecifier("../ports/input/foo.port", "in")).toBe(
+      false,
+    );
+    expect(isPortDirectionSpecifier("../ports/in-memory/logger", "in")).toBe(
+      false,
+    );
+  });
+
+  it("does not treat the opposite direction as a match", () => {
+    expect(isPortDirectionSpecifier("../ports/in", "out")).toBe(false);
+    expect(isPortDirectionSpecifier("../ports/out", "in")).toBe(false);
+    expect(
+      isPortDirectionSpecifier("../ports/in/validate-spec.port", "out"),
+    ).toBe(false);
   });
 });
