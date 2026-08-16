@@ -39,6 +39,13 @@ import type {
  * moved test-double folder would turn it into a green no-op, which is the exact
  * failure mode this remediation arc keeps finding.
  *
+ * Each half also carries an anti-blind-spot assertion. A contract whose import
+ * the parser cannot resolve gets an `undefined` specifier, and `undefined` is
+ * filtered out before the direction check — so an unparsed import form is
+ * indistinguishable from a correctly filed port. The parser therefore
+ * understands named, default and namespace imports, and anything it still
+ * cannot tie to a module fails loudly rather than being skipped.
+ *
  * It is deliberately source-text based rather than type-based: `ports/in` and
  * `ports/out` type-check identically, so `tsc` can never catch this defect
  * class.
@@ -102,30 +109,78 @@ async function collectTypeScriptFiles(dir: string): Promise<string[]> {
   return found;
 }
 
-/** Module specifier the given symbol was imported from, in this source text. */
+/**
+ * One `import … from "specifier"` statement. `[^"';]` in the clause keeps a
+ * match inside a single statement even in source that omits semicolons.
+ */
+const IMPORT_PATTERN =
+  /import\s+(?:type\s+)?([^"';]*?)\s*from\s*["']([^"']+)["']/g;
+
+/**
+ * Local names an import clause binds, across all three forms TypeScript allows
+ * for a contract: named (`{ X }`, `{ type X }`, `{ X as Y }`), default (`X`)
+ * and namespace (`* as NS`).
+ */
+function importedBindings(clause: string): string[] {
+  const bindings: string[] = [];
+
+  for (const braced of clause.matchAll(/\{([^}]*)\}/g)) {
+    for (const raw of braced[1].split(",")) {
+      const name = raw
+        .trim()
+        .replace(/^type\s+/, "")
+        .split(/\s+as\s+/)
+        .pop()
+        ?.trim();
+      if (name) bindings.push(name);
+    }
+  }
+
+  // Whatever sits outside the braces is a default binding, a namespace
+  // binding, or both (`import Default, * as NS from "…"`).
+  const outside = clause.replace(/\{[^}]*\}/g, " ");
+  for (const namespaced of outside.matchAll(/\*\s+as\s+([A-Za-z_$][\w$]*)/g)) {
+    bindings.push(namespaced[1]);
+  }
+  for (const candidate of outside
+    .replace(/\*\s+as\s+[A-Za-z_$][\w$]*/g, " ")
+    .split(",")) {
+    const name = candidate.trim();
+    if (/^[A-Za-z_$][\w$]*$/.test(name)) bindings.push(name);
+  }
+
+  return bindings;
+}
+
+/**
+ * Module specifier the given symbol was imported from, in this source text.
+ *
+ * A parser that understood only named imports would return `undefined` for a
+ * contract reached through `import * as NS` or a default import, and an
+ * `undefined` specifier is dropped by `isPackageLocal` *before* the direction
+ * check — so a misfiled driven port would sail through green. Namespace
+ * members (`NS.SomePort`) therefore resolve through their namespace binding.
+ */
 function findImportSpecifier(
   source: string,
   symbol: string,
 ): string | undefined {
-  const importPattern =
-    /import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g;
+  const binding = symbol.split(".")[0];
 
-  for (const match of source.matchAll(importPattern)) {
-    const imported = match[1]
-      .split(",")
-      .map((name) =>
-        name
-          .trim()
-          .replace(/^type\s+/, "")
-          .split(/\s+as\s+/)
-          .pop()
-          ?.trim(),
-      )
-      .filter((name): name is string => Boolean(name));
-
-    if (imported.includes(symbol)) return match[2];
+  for (const match of source.matchAll(IMPORT_PATTERN)) {
+    if (importedBindings(match[1]).includes(binding)) return match[2];
   }
   return undefined;
+}
+
+/**
+ * The contract is declared in the very file that references it, so it has no
+ * import to resolve. This is the only legitimate reason for a missing
+ * specifier; every other one is a parser blind spot and must fail loudly.
+ */
+function declaresLocally(source: string, symbol: string): boolean {
+  if (symbol.includes(".")) return false; // a namespace member is never local
+  return new RegExp(`\\b(?:interface|type|class)\\s+${symbol}\\b`).test(source);
 }
 
 interface PortReference {
@@ -135,19 +190,42 @@ interface PortReference {
   readonly contract: string;
   /** Specifier it was imported from, if any. */
   readonly specifier: string | undefined;
+  /** The contract is declared in this same file, so there is no import. */
+  readonly declaredLocally: boolean;
 }
 
-/** `constructor(private readonly port: SomePort, other: Thing)` → ["SomePort", "Thing"]. */
+/**
+ * `constructor(private readonly port: SomePort, other: NS.Thing)` →
+ * ["SomePort", "NS.Thing"]. Qualified names are kept whole so a
+ * namespace-imported port is still recognised as a port.
+ */
 function extractConstructorParameterTypes(source: string): string[] {
   const types: string[] = [];
   for (const match of source.matchAll(/\bconstructor\s*\(([^)]*)\)/g)) {
     for (const param of match[1].split(",")) {
-      const annotated = /:\s*([A-Za-z_$][\w$]*)/.exec(param);
+      const annotated = /:\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)/.exec(
+        param,
+      );
       if (annotated) types.push(annotated[1]);
     }
   }
   return types;
 }
+
+/**
+ * References the parser could not tie to a module. `isPackageLocal` filters
+ * `undefined` specifiers out before the direction check, so anything landing
+ * here would be checked by nothing at all.
+ */
+const unresolvedReferences = (refs: readonly PortReference[]): string[] =>
+  refs
+    .filter(({ specifier, declaredLocally }) => !specifier && !declaredLocally)
+    .map(({ file, contract }) => `${file}: ${contract}`);
+
+const UNRESOLVED_MESSAGE =
+  "every port contract must resolve to the module it came from — an " +
+  "unresolvable specifier is dropped before the direction check, which is " +
+  "exactly how a misfiled port goes green";
 
 /** `class Fake implements SomePort` → ["SomePort"]. */
 function extractImplementedContracts(source: string): string[] {
@@ -163,7 +241,9 @@ function extractImplementedContracts(source: string): string[] {
   return contracts;
 }
 
-const isPortName = (name: string): boolean => name.endsWith("Port");
+/** `SomePort` and `NS.SomePort` alike; the namespace prefix is not the name. */
+const isPortName = (name: string): boolean =>
+  (name.split(".").pop() ?? "").endsWith("Port");
 const isPackageLocal = (specifier: string | undefined): boolean =>
   specifier !== undefined && specifier.startsWith(".");
 
@@ -180,6 +260,7 @@ describe("ADR-0048 port direction (monaco-orchestration)", () => {
           file: path.relative(PACKAGE_ROOT, file),
           contract,
           specifier: findImportSpecifier(source, contract),
+          declaredLocally: declaresLocally(source, contract),
         });
       }
     }
@@ -192,6 +273,8 @@ describe("ADR-0048 port direction (monaco-orchestration)", () => {
         "src/application/use-cases — a guard that checks nothing is worse " +
         "than no guard",
     ).toBeGreaterThan(0);
+
+    expect(unresolvedReferences(injected), UNRESOLVED_MESSAGE).toEqual([]);
 
     const local = injected.filter(({ specifier }) => isPackageLocal(specifier));
     expect(
@@ -225,6 +308,7 @@ describe("ADR-0048 port direction (monaco-orchestration)", () => {
             file: path.relative(PACKAGE_ROOT, file),
             contract,
             specifier: findImportSpecifier(source, contract),
+            declaredLocally: declaresLocally(source, contract),
           });
         }
       }
@@ -241,6 +325,8 @@ describe("ADR-0048 port direction (monaco-orchestration)", () => {
         ) +
         " — a guard that checks nothing is worse than no guard",
     ).toBeGreaterThan(0);
+
+    expect(unresolvedReferences(implemented), UNRESOLVED_MESSAGE).toEqual([]);
 
     const local = implemented.filter(({ specifier }) =>
       isPackageLocal(specifier),
