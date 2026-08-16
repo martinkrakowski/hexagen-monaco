@@ -208,10 +208,16 @@ export async function mergeSplitManifest(
 
   const indexContexts = index.bounded_contexts ?? [];
   for (const entry of indexContexts) {
+    // No pointer-less entry can reach this loop. `file` is REQUIRED on every
+    // index entry (`IndexManifestSchema.bounded_contexts`, manifest-schema.ts),
+    // so the `safeParse` above rejects the WHOLE file — loudly, naming the
+    // offending index — the moment one entry lacks it. The `if (typeof
+    // indexEntry.file !== "string") continue;` that used to stand here was
+    // therefore unreachable, and had it ever become reachable it would have
+    // dropped a real bounded context without a word: the exact class of failure
+    // this file exists to stop. Pinned by "an index entry missing `file:` is
+    // rejected by the index parse, never skipped" in manifest-merge-loader.test.ts.
     const indexEntry = entry as IndexBoundedContextEntry;
-    if (typeof indexEntry.file !== "string") {
-      continue;
-    }
 
     assertPathWithinArchitecture(workspaceRoot, indexEntry.file);
 
