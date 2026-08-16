@@ -126,6 +126,7 @@ function findImportSpecifier(
       .map((name) =>
         name
           .trim()
+          .replace(/^type\s+/, "")
           .split(/\s+as\s+/)
           .pop()
           ?.trim(),
@@ -246,6 +247,17 @@ describe("ADR-0048 port direction (project-configuration)", () => {
 
     const driven = [...implemented, ...injected];
 
+    // A contract the resolver cannot classify must not pass silently.
+    // Default / namespace / same-file symbols return undefined today.
+    const unresolved = driven.filter(
+      ({ specifier }) => specifier === undefined,
+    );
+    expect(
+      unresolved.map(({ site, contract }) => `${site}: ${contract}`),
+      "port-direction guard could not resolve an import specifier for these " +
+        "driven contracts, so their direction was never checked",
+    ).toEqual([]);
+
     const misfiled = driven.filter(
       ({ specifier }) =>
         specifier !== undefined && isPortDirectionSpecifier(specifier, "in"),
@@ -275,6 +287,44 @@ describe("ADR-0048 port direction (project-configuration)", () => {
         `${site}: ${contract} is driven (${reason}); ADR-0048 files driven ports under application/ports/out`,
       ).toBe(true);
     }
+  });
+});
+
+describe("findImportSpecifier", () => {
+  it("resolves import type { X } and import { type X }", () => {
+    expect(
+      findImportSpecifier(
+        `import type { LoggerPort } from "@hexagen/shared";`,
+        "LoggerPort",
+      ),
+    ).toBe("@hexagen/shared");
+    expect(
+      findImportSpecifier(
+        `import { type LoggerPort } from "@hexagen/shared";`,
+        "LoggerPort",
+      ),
+    ).toBe("@hexagen/shared");
+    expect(
+      findImportSpecifier(
+        `import {\n  LogLevel,\n  type LoggerPort,\n} from "@hexagen/shared";`,
+        "LoggerPort",
+      ),
+    ).toBe("@hexagen/shared");
+  });
+
+  it("returns undefined for default, namespace, and same-file symbols", () => {
+    expect(
+      findImportSpecifier(`import LoggerPort from "./logger";`, "LoggerPort"),
+    ).toBeUndefined();
+    expect(
+      findImportSpecifier(`import * as ports from "./ports";`, "LoggerPort"),
+    ).toBeUndefined();
+    expect(
+      findImportSpecifier(
+        `interface LoggerPort {}\nclass A implements LoggerPort {}`,
+        "LoggerPort",
+      ),
+    ).toBeUndefined();
   });
 });
 
