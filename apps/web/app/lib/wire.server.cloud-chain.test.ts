@@ -16,7 +16,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { LLMRequest } from "@hexagen/local-llm";
-import type { ProviderFallbackChain } from "@hexagen/agentic-interaction";
+import type {
+  ProviderCatalogPort,
+  ProviderFallbackChain,
+} from "@hexagen/agentic-interaction";
 import { createLLMSender } from "./wire.server";
 
 interface CapturedCall {
@@ -162,6 +165,99 @@ describe("createLLMSender — cloud provider chain", () => {
           ? ""
           : String((result as { error: Error }).error.message),
       ).toMatch(/No cloud LLM API keys configured/);
+    });
+  });
+
+  describe("the default path reads the injected catalog, not a literal", () => {
+    // The three cases above pin the *values* of the default chain. They would
+    // all still pass against a wire.server that ignored the catalog port and
+    // re-hard-coded those same values inline — which is exactly the regression
+    // item 5.3(b) exists to prevent. This case closes that hole: it injects a
+    // catalog whose chain shares no field with the real default, and asserts
+    // the wire followed it.
+    it("uses the chain the injected ProviderCatalogPort returns", async () => {
+      process.env.OPENAI_API_KEY = "sk-real-default";
+      process.env.LLM_API_KEY = "sk-sentinel";
+      stubFetchSequence([{ status: 200 }]);
+
+      let calls = 0;
+      const sentinelCatalog: ProviderCatalogPort = {
+        createDefaultChain: () => {
+          calls += 1;
+          return {
+            primary: {
+              providerId: "openai",
+              baseUrl: "https://sentinel.example/v1",
+              model: "sentinel-model",
+              apiKeyEnvVar: "LLM_API_KEY",
+            },
+            fallbacks: [],
+          };
+        },
+      };
+
+      const sender = createLLMSender("cloud", {
+        providerCatalog: sentinelCatalog,
+      });
+      await sender.sendRequest(aRequest());
+
+      expect(calls).toBe(1);
+      expect(captured).toHaveLength(1);
+      expect(captured[0]!.url).toBe(
+        "https://sentinel.example/v1/chat/completions",
+      );
+      expect(captured[0]!.body.model).toBe("sentinel-model");
+      expect(captured[0]!.authorization).toBe("Bearer sk-sentinel");
+    });
+
+    it("does not consult the catalog when an explicit chain is supplied", async () => {
+      process.env.LLM_API_KEY = "sk-explicit";
+      stubFetchSequence([{ status: 200 }]);
+
+      let calls = 0;
+      const countingCatalog: ProviderCatalogPort = {
+        createDefaultChain: () => {
+          calls += 1;
+          throw new Error("catalog must not be consulted on the explicit path");
+        },
+      };
+
+      const sender = createLLMSender("cloud", {
+        providerCatalog: countingCatalog,
+        fallbackChain: {
+          primary: {
+            providerId: "openai",
+            baseUrl: "https://explicit.example/v1",
+            model: "explicit-model",
+            apiKeyEnvVar: "LLM_API_KEY",
+          },
+          fallbacks: [],
+        },
+      });
+      await sender.sendRequest(aRequest());
+
+      expect(calls).toBe(0);
+      expect(captured[0]!.body.model).toBe("explicit-model");
+    });
+
+    it("does not consult the catalog in in-memory mode", async () => {
+      stubFetchSequence([{ status: 200 }]);
+
+      let calls = 0;
+      const countingCatalog: ProviderCatalogPort = {
+        createDefaultChain: () => {
+          calls += 1;
+          throw new Error("catalog must not be consulted in in-memory mode");
+        },
+      };
+
+      const sender = createLLMSender("in-memory", {
+        providerCatalog: countingCatalog,
+      });
+      await sender.sendRequest(aRequest());
+
+      expect(calls).toBe(0);
+      expect(captured).toHaveLength(0);
     });
   });
 

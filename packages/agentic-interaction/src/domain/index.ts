@@ -47,11 +47,7 @@ export type {
   ResolvedProvider,
   SecretVaultPort,
 } from "./provider-config";
-export {
-  resolveApiKey,
-  resolveFallbackChain,
-  createDefaultFallbackChain,
-} from "./provider-config";
+export { resolveApiKey, resolveFallbackChain } from "./provider-config";
 export { generateSuggestions, detectWarnings } from "./manifest-yaml-extractor";
 export {
   STAGE0_NORMALIZATION_SYSTEM_PROMPT,

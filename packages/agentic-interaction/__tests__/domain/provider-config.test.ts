@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   resolveApiKey,
   resolveFallbackChain,
-  createDefaultFallbackChain,
   type SecretVaultPort,
 } from "../../src/domain/provider-config";
 import type {
@@ -134,18 +133,9 @@ describe("provider-config", () => {
     assert.strictEqual(resolved.length, 0, "Should resolve no providers");
   });
 
-  it("should create default fallback chain", () => {
-    const chain = createDefaultFallbackChain();
-    assert.strictEqual(chain.primary.providerId, "openai");
-    assert.strictEqual(chain.primary.model, "gpt-4o-mini");
-    assert.strictEqual(chain.primary.apiKeyEnvVar, "OPENAI_API_KEY");
-    assert.strictEqual(chain.fallbacks.length, 1);
-    assert.strictEqual(chain.fallbacks[0].model, "gpt-3.5-turbo");
-  });
-
-  it("should create default fallback chain with custom env var", () => {
-    const chain = createDefaultFallbackChain("MY_CUSTOM_KEY");
-    assert.strictEqual(chain.primary.apiKeyEnvVar, "MY_CUSTOM_KEY");
-    assert.strictEqual(chain.fallbacks[0].apiKeyEnvVar, "MY_CUSTOM_KEY");
-  });
+  // The two default-chain cases that used to live here moved with the code:
+  // `createDefaultFallbackChain` is gone from domain and the concrete chain is
+  // now `StaticProviderCatalogAdapter` (ADR-0051, Decision 1). Its coverage —
+  // including a byte-for-byte pin of the chain this file used to assert on —
+  // is in __tests__/infrastructure/static-provider-catalog.adapter.test.ts.
 });

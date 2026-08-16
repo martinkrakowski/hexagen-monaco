@@ -11,3 +11,4 @@ export * from "./in-memory-pipeline-ports.adapter.js";
 export * from "./llm-provider-selector.adapter.js";
 export * from "./openai-compatible.adapter.js";
 export * from "./server-llm.adapter.js";
+export * from "./static-provider-catalog.adapter.js";
