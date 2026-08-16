@@ -35,6 +35,17 @@ jobs:
       - name: "Install Dependencies"
         run: yarn install --immutable
 
+      - name: "Verify Dependency Constraints"
+        # Enforces yarn.config.cjs: the PINNED single-range policy, plus the
+        # stale-entry guard over KNOWN_SPLITS. It is deliberately NOT "one range
+        # for every shared dependency" — KNOWN_SPLITS documents the major-version
+        # splits that are allowed to differ pending a decision.
+        # Without this step the constraint file is documentation, not a gate —
+        # range drift would reappear and only be caught if someone happened to
+        # run `yarn constraints` by hand. Runs right after install because it
+        # reads manifests only; no build required.
+        run: yarn constraints
+
       - name: "Build All Packages"
         run: yarn turbo run build --output-logs=full --log-order=stream
 

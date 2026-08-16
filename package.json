@@ -30,6 +30,7 @@
     "dev:web": "yarn workspace web dev",
     "lint": "turbo lint && yarn lint:arch",
     "lint:arch": "yarn workspace @hexagen/arch-linter lint:arch",
+    "lint:deps": "yarn constraints",
     "typecheck": "turbo run typecheck",
     "validate:purity": "bash scripts/validate-src-purity.sh",
     "validate:boundary": "bash scripts/validate-ui-boundary.sh",

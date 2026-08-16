@@ -55,7 +55,7 @@
     "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.4.1",
     "ts-jest": "^29.4.10",
-    "tsx": "^4.19.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.4.5",
     "vitest": "^4.1.9"
   }

@@ -22,8 +22,8 @@
   },
   "devDependencies": {
     "eslint": "^8.57.0",
-    "tsx": "^4.19.2",
-    "typescript": "^5.5.4",
+    "tsx": "^4.21.0",
+    "typescript": "^5.4.5",
     "vitest": "^4.1.9"
   },
   "dependencies": {
