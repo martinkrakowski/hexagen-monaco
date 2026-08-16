@@ -310,6 +310,52 @@ describe(
       );
     });
 
+    it("hole 3 — a TYPE-ONLY npm import in domain still fails (ADR-0054 amendment 2026-08-16)", async () => {
+      // `import type` emits no runtime import, and it was proposed that the rule
+      // should therefore exempt it. The amendment declined, so this is a pinned
+      // decision rather than incidental behaviour — a future contributor who
+      // "fixes" the rule has to delete this test and read the ADR to do it.
+      //
+      // The reasoning, in short: erasure removes the runtime edge but not the
+      // dependency. A domain contract written in terms of a third-party type
+      // still requires that package in package.json to typecheck, and it
+      // propagates the library to every implementer and caller of the contract.
+      // Exempting it would also make the rule silent on the one baseline entry
+      // that corresponds to a genuinely broken shipped artifact (the emitted
+      // `llm-adapter` template port, dossier §2.11). The allowlist already
+      // expresses "accepted", and it leaves an auditable record; a blind rule
+      // leaves none.
+      await withFixture(
+        {
+          "packages/billing/src/domain/model/schema.ts": `import type { ZodSchema } from "zod";\nexport type Validated = { schema: ZodSchema };\n`,
+        },
+        async (root) => {
+          const r = await runLinter(root);
+          assert.equal(r.code, 1, describeResult(r));
+          assert.match(
+            r.stderr,
+            /npm package 'zod' imported in the domain layer/,
+            describeResult(r),
+          );
+        },
+      );
+
+      // The paired legality case: the exception is declarative, not a rule
+      // carve-out. A type-only import is released by the allowlist exactly as a
+      // value import is — which is how `local-llm` is dispositioned.
+      await withFixture(
+        {
+          "packages/billing/src/domain/model/schema.ts": `import type { ZodSchema } from "zod";\nexport type Validated = { schema: ZodSchema };\n`,
+          [LINTER_CONFIG_PATH]: `domain_package_allowlist:\n  - package: billing\n    allowed_packages: [zod]\n`,
+        },
+        async (root) => {
+          const r = await runLinter(root);
+          assert.equal(r.code, 0, describeResult(r));
+          assert.match(r.stdout + r.stderr, /Architecture is compliant/);
+        },
+      );
+    });
+
     it("hole 3 — application-layer npm packages stay legal (ADR-0054 §2c)", async () => {
       await withFixture(
         {
