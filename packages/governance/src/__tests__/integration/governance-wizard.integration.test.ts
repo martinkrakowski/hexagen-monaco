@@ -22,7 +22,10 @@ import {
   type CrossBoundaryManifest,
 } from "../../../../web-driver/src/__tests__/fixtures/cross-boundary-registry";
 import { PORT_NAMES } from "../../../../web-driver/src/infrastructure/constants/port-names";
-import { registerMockPort } from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock";
+import {
+  registerMockPort,
+  type MockPortRegistry,
+} from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock";
 import { MockLinterAdapter } from "../fixtures/governance-mocks";
 
 describe("Governance-Wizard Integration Tests (Phase 6C)", () => {
@@ -38,17 +41,19 @@ describe("Governance-Wizard Integration Tests (Phase 6C)", () => {
       wireGovernanceToManifestReader(registry);
 
       // Create a linter that reports violations
+      interface LinterViolation {
+        code: string;
+        message: string;
+        details?: string;
+      }
+
       class ViolatingLinterAdapter {
         async lint(manifest: CrossBoundaryManifest): Promise<{
           isCompliant: boolean;
-          violations: Array<{
-            code: string;
-            message: string;
-            details?: string;
-          }>;
+          violations: LinterViolation[];
         }> {
           // Check for invalid patterns
-          const violations = [];
+          const violations: LinterViolation[] = [];
 
           if (manifest.bounded_contexts) {
             manifest.bounded_contexts.forEach((bc, idx) => {
@@ -88,8 +93,12 @@ describe("Governance-Wizard Integration Tests (Phase 6C)", () => {
         new ViolatingLinterAdapter(),
       );
 
-      // Act: Scan non-compliant manifest
-      const linter = getLinterAdapter(registry);
+      // Act: Scan non-compliant manifest. `getLinterAdapter` is deliberately
+      // untyped (Record<string, unknown>) so any adapter shape can be
+      // registered; re-attach the shape this test just registered.
+      const linter = getLinterAdapter(
+        registry,
+      ) as unknown as ViolatingLinterAdapter;
       const nonCompliant = createNonCompliantFixtureManifest();
       const report = await linter.lint(nonCompliant);
 
