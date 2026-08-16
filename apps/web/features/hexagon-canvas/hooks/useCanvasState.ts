@@ -33,7 +33,7 @@ import {
   overlayContextsFrom,
   type AddOnChipNode,
 } from "../addon-overlay-nodes";
-import { TEMPLATE_MANIFESTS } from "@/project-wizard/steps/add-ons-step/template-manifest.generated";
+import { TEMPLATE_MANIFESTS } from "@/generated/template-manifest.generated";
 
 interface GraphState {
   viewport: CanvasViewport;

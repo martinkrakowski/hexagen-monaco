@@ -220,7 +220,6 @@ WEB_ROOT="$ROOT_DIR/apps/web"
 # a permanent excuse.
 CROSS_SLICE_ALIAS_BASELINE="
 governance-assistant|@/llm-driver/useLocalLlm
-hexagon-canvas|@/project-wizard/steps/add-ons-step/template-manifest.generated
 manifest-generation|@/governance-assistant/ModelProgressCard
 manifest-generation|@/landing/ProjectsShellWithFreeTier
 manifest-generation|@/project-wizard/steps/workspace-governance-step
