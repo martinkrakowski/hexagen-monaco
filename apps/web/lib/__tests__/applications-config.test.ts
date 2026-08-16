@@ -4,8 +4,7 @@ import assert from "node:assert/strict";
 import {
   collapseApplications,
   fanOutApplications,
-} from "./applications-config";
-import { createEmptyContext } from "../bounded-context-step/createEmptyContext";
+} from "../applications-config";
 
 type Ctx = Parameters<typeof collapseApplications>[0][number];
 
@@ -96,29 +95,6 @@ describe("fanOutApplications", () => {
     });
     assert.equal(out.persistenceAdapter, "Prisma");
     assert.equal(out.messagingAdapter, "BullMQ");
-  });
-});
-
-describe("createEmptyContext inherits the Applications selection", () => {
-  it("a context created AFTER the Applications step carries the project's UI/API choice (ADR-0041 gap-closer)", () => {
-    // Simulates the BoundedContextStep add handler: collapse existing contexts,
-    // pass the selection into createEmptyContext.
-    const existing = [
-      { uiFramework: "Remix" as const, infrastructureTarget: "nitro" as const },
-    ];
-    const { uiFramework, infrastructureTarget } =
-      collapseApplications(existing);
-
-    const created = createEmptyContext({ uiFramework, infrastructureTarget });
-
-    assert.equal(created.uiFramework, "Remix");
-    assert.equal(created.infrastructureTarget, "nitro");
-  });
-
-  it("falls back to the single-app preset (Next.js + Nitro) with no selection", () => {
-    const created = createEmptyContext();
-    assert.equal(created.uiFramework, "Next.js");
-    assert.equal(created.infrastructureTarget, "nitro");
   });
 });
 

@@ -12,13 +12,13 @@ import { WizardFooter } from "../../WizardFooter";
 import {
   apiFrameworkOptions,
   uiFrameworkOptions,
-} from "@/project-wizard/config";
+} from "@/project-config-options";
 import {
   collapseApplications,
   fanOutApplications,
   type InfrastructureTarget,
   type UiFramework,
-} from "./applications-config";
+} from "@/applications-config";
 
 interface ApplicationsStepProps {
   onNext: () => void;

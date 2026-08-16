@@ -20,7 +20,7 @@ import {
 } from "@testing-library/react";
 import { FormProvider, useForm } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
-import { emptyFormValues } from "../../../project-wizard/config";
+import { emptyFormValues } from "@/project-config-presets";
 import { ProjectSettingsSection } from "../ProjectSettingsSection";
 
 afterEach(() => {

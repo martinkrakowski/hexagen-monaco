@@ -28,7 +28,7 @@ interface ProjectNameStepProps {
  * Shared "Project Name" step for every Create stream (blank / AI / import).
  * Presentational only — the parent owns what happens with the name (saving,
  * routing). The entered name becomes the saved-project name and seeds the
- * generated workspace name; see `createBlankProjectConfig` and the stream pages.
+ * generated workspace name; see `createDefaultProjectConfig` and the stream pages.
  */
 export function ProjectNameStep({
   title = "Name your project",

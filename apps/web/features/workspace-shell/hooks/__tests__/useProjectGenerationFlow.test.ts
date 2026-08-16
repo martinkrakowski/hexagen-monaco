@@ -5,7 +5,7 @@ import type { ProjectConfig } from "@hexagen/project-configuration";
 import { IMPORTED_MANIFEST_CORRUPT_MESSAGE } from "@/lib/imported-manifest";
 import { useProjectGenerationFlow } from "../useProjectGenerationFlow";
 
-// Minimal blank project config (mirrors usePathNavigation.createBlankProjectConfig),
+// Minimal blank project config (mirrors createDefaultProjectConfig),
 // which wizardToManifest accepts.
 const config: ProjectConfig = {
   governance: {

@@ -221,12 +221,8 @@ WEB_ROOT="$ROOT_DIR/apps/web"
 CROSS_SLICE_ALIAS_BASELINE="
 governance-assistant|@/llm-driver/useLocalLlm
 hexagon-canvas|@/project-wizard/steps/add-ons-step/template-manifest.generated
-landing|@/project-wizard/config
-landing|@/project-wizard/steps/applications-step/applications-config
 manifest-generation|@/governance-assistant/ModelProgressCard
 manifest-generation|@/landing/ProjectsShellWithFreeTier
-manifest-generation|@/landing/domain/createBlankProjectConfig
-manifest-generation|@/project-wizard/config
 manifest-generation|@/project-wizard/steps/workspace-governance-step
 "
 BASELINE_HITS=""

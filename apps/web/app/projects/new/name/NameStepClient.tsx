@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ProjectNameStep } from "@/landing/components/ProjectNameStep";
-import { createBlankProjectConfig } from "@/landing/domain/createBlankProjectConfig";
+import { createDefaultProjectConfig } from "@/project-config-presets";
 import { useSavedProjects } from "@/hooks/useSavedProjects";
 import { logger } from "../../../../lib/structured-logger";
 
@@ -63,7 +63,7 @@ export function NameStepClient() {
         try {
           const projectId = await saveProject(
             name,
-            createBlankProjectConfig(name),
+            createDefaultProjectConfig(name),
             "",
           );
           if (projectId) {

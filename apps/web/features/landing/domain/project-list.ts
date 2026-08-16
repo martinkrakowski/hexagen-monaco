@@ -1,9 +1,9 @@
 import type { SavedProject } from "@/hooks/useSavedProjects";
-import { collapseApplications } from "@/project-wizard/steps/applications-step/applications-config";
+import { collapseApplications } from "@/applications-config";
 import {
   apiFrameworkOptions,
   uiFrameworkOptions,
-} from "@/project-wizard/config";
+} from "@/project-config-options";
 
 export type SortField = "name" | "updated" | "created";
 export type SortDirection = "asc" | "desc";

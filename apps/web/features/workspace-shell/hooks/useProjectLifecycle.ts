@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
-import { emptyFormValues, stepIndexById } from "../../project-wizard/config";
+import { stepIndexById } from "../../project-wizard/config";
+import { emptyFormValues } from "@/project-config-presets";
 
 import {
   useSavedProjects,

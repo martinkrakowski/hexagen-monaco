@@ -14,7 +14,8 @@ import {
   type WizardData,
 } from "@hexagen/project-configuration";
 
-import { emptyFormValues, stepIndexById } from "../../project-wizard/config";
+import { stepIndexById } from "../../project-wizard/config";
+import { emptyFormValues } from "@/project-config-presets";
 import { buildWizardData } from "@hexagen/wizard-orchestration";
 
 export interface UseWizardFormReturn {
