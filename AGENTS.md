@@ -138,7 +138,7 @@ Ends with: **Ready to move to Develop mode when you say `develop [feature]`.**
 2.  Print a numbered ToC of all files to create/modify first.
 3.  **One file per response** — full content, no ellipsis. _(Override: "batch Phase X" authorises multi-file streaming.)_
 4.  Pause after every file and await "next step". _(Override: no pause when batching is authorised.)_
-5.  The `layers.*` lists in `.architecture/contexts/**/context.yaml` are a **curated ownership registry, not a file inventory** (ADR-0057) — the filesystem is authoritative, and many real port/adapter files are deliberately unlisted. Do **not** add an entry just because you created a file, and never delete a file just because it is unlisted. Declare an element when its context owns it as part of the contract other contexts and tools should see; then it must name a real exported symbol, spelled exactly, in the context whose package defines it, in exactly one context. `yarn lint:arch` does **not** read `layers` — it checks imports against `depends_on` — so an inaccurate entry is a defect nothing will catch for you.
+5.  `layers.*` in `.architecture/contexts/**/context.yaml` is a **curated ownership registry, not a file inventory** — never add an entry just because you created a file, never delete a file just because it is unlisted, and note that `yarn lint:arch` does not read `layers`. Declared entries must be accurate. **Full spec:** [`ADR-0057`](.architecture/decisions/ADR-0057-manifest-layer-lists-are-a-curated-ownership-registry.md).
 6.  After each port + adapter + test double slice: remind to run `yarn build && yarn sync`.
 7.  Never leave a barrel with only `export {}`.
 8.  Minimal scoped changes only — no cosmetic reformatting.
