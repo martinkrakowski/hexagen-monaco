@@ -2,3 +2,4 @@
 
 export * from "./architecture-graph-provider-port.port.js";
 export * from "./canvas-persistence.port.js";
+export * from "./graph-image-renderer.port.js";
