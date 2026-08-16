@@ -297,6 +297,95 @@ if [ -d "$WEB_FEATURES" ]; then
   echo "  ($pinned_count pre-existing alias-form cross-slice import(s) pinned — shrink, do not grow)"
 fi
 
+# Check 7: neutral homes must not import from features/ (ADR-0055 §Decision 2)
+#
+# ADR-0055 names three neutral homes for code extracted out of a slice —
+# app/lib (app-global context/infrastructure), components (shared
+# presentational), lib (slice-agnostic config/preset/generated) — and requires
+# that a neutral module NOT import from features/, because that inverts the
+# dependency the extraction exists to remove. The ADR filed this as
+# convention-held rather than gate-held: check 6 iterates slice directories
+# only, so it is structurally blind to a neutral → slice edge.
+#
+# The blind spot was not theoretical. `app/contexts/ExportContext.tsx` imported
+# the `export` slice's submit-payload types and re-published them in its public
+# context signature, so `project-wizard` and three `workspace-shell` files were
+# structurally bound to that slice through `@/contexts/ExportContext` — a
+# specifier containing neither "../" nor a slice name, which neither the ESLint
+# rule (relative specifiers only) nor check 6 (slice directories only) can see.
+#
+# Route composition roots are DELIBERATELY out of scope: app/**/page.tsx,
+# layout.tsx and their client shells exist to mount slices, exactly as
+# workspace-shell does. Only the extraction targets are scanned.
+NEUTRAL_HOME_DIRS="app/lib app/contexts app/hooks lib components hooks"
+
+# Pre-existing neutral → slice edges, pinned so the gate is green on today's
+# tree while any NEW one fails. Entries are "<path-from-apps/web>|<specifier>".
+# Shrink this list; do not grow it. A stale entry (edge since removed) also
+# fails, so it cannot rot into permanent permission.
+NEUTRAL_FEATURE_BASELINE="
+app/lib/tree-utils.ts|../../features/code-view/types
+app/lib/manifest-generation/capability-cache.ts|../../../features/manifest-generation/types/capabilities
+app/lib/use-cases/project-lifecycle.use-case.ts|../../../features/governance-assistant/stores/useGovernanceThreadStore
+app/lib/wire.client.discard-subscription.test.ts|../../features/governance-assistant/stores/useGovernanceThreadStore
+"
+NEUTRAL_BASELINE_HITS=""
+# Set independently of check 6, which computes it inside its own `if`.
+FEATURES_ROOT="$(normalize_path "$WEB_FEATURES")"
+
+echo ""
+echo "Checking for features/ imports from neutral homes (ADR-0055)..."
+for neutral_dir in $NEUTRAL_HOME_DIRS; do
+  [ -d "$WEB_ROOT/$neutral_dir" ] || continue
+  while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    file_dir=$(dirname "$file")
+    rel_file="${file#"$WEB_ROOT"/}"
+    while IFS= read -r specifier; do
+      case "$specifier" in
+        @/*)
+          target="$(alias_slice_target "$specifier")"
+          [ -n "$target" ] || continue
+          ;;
+        *)
+          resolved="$(normalize_path "${file_dir}/${specifier}")"
+          case "$resolved" in
+            "$FEATURES_ROOT"/*) ;;
+            *) continue ;;
+          esac
+          rest="${resolved#"$FEATURES_ROOT"/}"
+          target="${rest%%/*}"
+          ;;
+      esac
+      if printf '%s' "$NEUTRAL_FEATURE_BASELINE" |
+        grep -Fxq "${rel_file}|${specifier}"; then
+        NEUTRAL_BASELINE_HITS="${NEUTRAL_BASELINE_HITS}${rel_file}|${specifier}
+"
+        continue
+      fi
+      echo "  ❌ Neutral home imports a feature slice: $rel_file → $target"
+      echo "     → $specifier"
+      echo "     ADR-0055 §Decision 2: extract the symbol to the neutral home"
+      echo "     instead, or invert the import so the slice depends on it."
+      VIOLATIONS=$((VIOLATIONS + 1))
+    done < <(grep -ohE "from ['\"](\.\.?/|@/)[^'\"]*['\"]" "$file" 2>/dev/null |
+      sed -E "s/^from ['\"](.*)['\"]$/\1/" || true)
+  done < <(find "$WEB_ROOT/$neutral_dir" \( -name '*.ts' -o -name '*.tsx' \) 2>/dev/null || true)
+done
+
+while IFS= read -r pinned; do
+  [ -n "$pinned" ] || continue
+  if ! printf '%s' "$NEUTRAL_BASELINE_HITS" | grep -Fxq "$pinned"; then
+    echo "  ❌ Stale neutral-home baseline entry — this import no longer exists:"
+    echo "     → ${pinned}"
+    echo "     Remove it from NEUTRAL_FEATURE_BASELINE in $(basename "${BASH_SOURCE[0]}")."
+    VIOLATIONS=$((VIOLATIONS + 1))
+  fi
+done < <(printf '%s' "$NEUTRAL_FEATURE_BASELINE")
+
+neutral_pinned_count="$(printf '%s' "$NEUTRAL_FEATURE_BASELINE" | grep -c . || true)"
+echo "  ($neutral_pinned_count pre-existing neutral→slice import(s) pinned — shrink, do not grow)"
+
 echo ""
 echo "============================================================"
 if [ "$VIOLATIONS" -gt 0 ]; then

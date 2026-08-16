@@ -15,10 +15,13 @@ import * as yaml from "js-yaml";
  * shadow-rule set, and a parse failure that is surfaced as an explicit error the
  * routes turn into a non-compliant / error response — never `isCompliant: true`.
  *
- * NOTE (scope): this is the CORRECTNESS half of HEX-016. The authoritative
- * `lint:arch` shell-out in `governance/refresh` is intentionally left in place;
- * the STRUCTURAL half (shell-lint / filesystem / YAML / LLM behind ports) lands
- * separately (plan item 6.3).
+ * NOTE (scope): this is the CORRECTNESS half of HEX-016 (plan item 1.6). The
+ * STRUCTURAL half (item 6.3) has since put the `lint:arch` shell-out and the
+ * LLM wiring behind `ManifestLintPort` / `SuggestionPort` — see `./ports.ts`.
+ * YAML parsing deliberately did NOT become a port: parsing a string the caller
+ * already holds is a pure function, and the audit refuted the codec-port
+ * recommendation for exactly this `js-yaml` usage (HEX-026). Isolating it here,
+ * as a function, IS the structural answer for the YAML concern.
  *
  * NOTE (key paths): every manifest key this module reads is declared once in
  * {@link MANIFEST_KEY_PATHS} and read through {@link readPath}. Nothing here

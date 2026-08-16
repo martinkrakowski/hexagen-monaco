@@ -24,6 +24,7 @@ import type {
   ReconcileRequest,
 } from "@hexagen/reconciliation-engine";
 import type { Transaction } from "@hexagen/transaction-system";
+import { createPatchMetadata } from "@hexagen/transaction-system";
 import type { Result } from "@hexagen/shared";
 import type { ModificationResult } from "../ports/in/architecture-modification.port";
 import {
@@ -243,11 +244,18 @@ export class ModifyArchitectureUseCase {
     patches: Patch[],
     lineage: IntentLineage,
   ): Result<Transaction, Error> {
-    const transaction = this.deps.transactionManager.begin(lineage.intentId, {
-      intentId: lineage.intentId,
-      origin: lineage.origin,
-      patches,
-    });
+    // Typed write (AUD-004). `createPatchMetadata` pins `patches` to `Patch[]`,
+    // so storing the wrong shape here is a compile error rather than something
+    // the accept saga discovers at runtime — the read end (readPatchMetadata)
+    // validates anyway, because nothing forces a future producer through this
+    // helper.
+    const transaction = this.deps.transactionManager.begin(
+      lineage.intentId,
+      createPatchMetadata(patches, {
+        intentId: lineage.intentId,
+        origin: lineage.origin,
+      }),
+    );
     this.deps.transactionManager.transition(transaction.id, "speculative");
     return { success: true, value: transaction };
   }

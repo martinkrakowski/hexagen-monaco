@@ -1,4 +1,4 @@
-// GH-publish PR-2: the provider's failure arms must thread the routes'
+// GH-publish PR-2: the publish provider's failure arms must thread the routes'
 // snake_case error codes (workflow_scope_required / reauth_required) into the
 // error state via mapGithubPublishFailure (NOT mocked here — it is pure), the
 // success arm must carry the raw degraded-publish warning strings alongside
@@ -10,11 +10,12 @@ import assert from "node:assert/strict";
 import React from "react";
 import { render, act, waitFor, cleanup } from "@testing-library/react";
 
+import { ExportProvider } from "../ExportContext";
+import { useProjectExportRecord } from "../ProjectExportRecordContext";
 import {
-  ExportProvider,
-  useProjectExport,
-  type ProjectExportContextValue,
-} from "../ExportContext";
+  useGithubPublish,
+  type GithubPublishContextValue,
+} from "../GithubPublishContext";
 
 const harness = vi.hoisted(() => {
   const state = {
@@ -117,9 +118,11 @@ function seedProjects(options: { linked: boolean }) {
   ];
 }
 
-let ctx: ProjectExportContextValue;
+let ctx: GithubPublishContextValue;
+let connectedRepo: { owner: string; repo: string } | null = null;
 function Capture() {
-  ctx = useProjectExport();
+  ctx = useGithubPublish();
+  connectedRepo = useProjectExportRecord().connectedRepo;
   return null;
 }
 
@@ -142,7 +145,7 @@ async function renderLinkedProvider() {
   harness.state.editorFiles = { "src/index.ts": { content: "export {};" } };
   await renderProvider();
   await waitFor(() => {
-    assert.ok(ctx.connectedRepo !== null, "githubLink hydrated");
+    assert.ok(connectedRepo !== null, "githubLink hydrated");
   });
 }
 
@@ -157,7 +160,7 @@ async function submitEditorPush() {
   });
 }
 
-describe("ExportContext — GitHub publish/push error codes + degraded-publish warnings", () => {
+describe("GithubPublishContext — GitHub publish/push error codes + degraded-publish warnings", () => {
   beforeEach(() => {
     seedProjects({ linked: false });
     harness.state.loadCalls = 0;
@@ -188,7 +191,6 @@ describe("ExportContext — GitHub publish/push error codes + degraded-publish w
 
     const state = ctx.state;
     assert.ok(state.kind === "error", "state is error");
-    assert.strictEqual(state.destination, "github");
     // The workflow-scope server message is user-ready — passes through verbatim.
     assert.strictEqual(state.message, serverMessage);
     assert.strictEqual(state.code, "workflow_scope_required");
@@ -207,7 +209,6 @@ describe("ExportContext — GitHub publish/push error codes + degraded-publish w
 
     const state = ctx.state;
     assert.ok(state.kind === "error", "state is error");
-    assert.strictEqual(state.destination, "github");
     assert.strictEqual(
       state.message,
       "GitHub session expired — sign in again to push.",
@@ -260,7 +261,6 @@ describe("ExportContext — GitHub publish/push error codes + degraded-publish w
 
     const state = ctx.state;
     assert.ok(state.kind === "success", "state is success");
-    assert.strictEqual(state.destination, "github");
     assert.deepStrictEqual(state.warnings, warnings);
     assert.deepStrictEqual(state.notices, { warnings: 1, errors: 0 });
   });

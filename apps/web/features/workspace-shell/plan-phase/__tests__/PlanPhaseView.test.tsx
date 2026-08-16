@@ -542,9 +542,11 @@ describe("PlanPhaseView (reader actions)", () => {
       layersPersistError: null,
       clearLayersPersistError: vi.fn(),
     };
-    // Default fetch stub (per test — NOT unstubAllGlobals, which would also
-    // tear down vitest.setup.ts's localStorage/sessionStorage stubs and expose
-    // Node's throwing localStorage getter). Extraction tests override it.
+    // Default fetch stub, re-installed per test (extraction tests override it).
+    // This used to carry a warning that `vi.unstubAllGlobals()` would also tear
+    // down vitest.setup.ts's localStorage/sessionStorage and expose Node's
+    // throwing getter; the setup now keeps those globals out of Vitest's stub
+    // registry, so that hazard is gone (see apps/web/vitest.setup.test.ts).
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({ ok: false, json: async () => null })),
