@@ -1,7 +1,8 @@
 # ADR-0049: Security Bounded-Context Fate — Register-and-Wire or Fold
 
 **Date:** 2026-08-14
-**Status:** Proposed
+**Status:** Accepted — **Option B** (see the 2026-08-16 amendment below, which supersedes
+Option B's step 1)
 **Type:** Architecture
 **Relates to:** HEX-009, MOD-005, HEX-018 (the `ports/in` misfiling this package exhibits); ADR-0043 (linter honors `depends_on` — the enforcement surface a registered context inherits); remediation-plan items 3.3 (MOD-005 leg), 6.6 (structural fate), 6.4(e) (the `ports/in → ports/out` move, conditional on keeping the package)
 
@@ -178,3 +179,53 @@ MOD-005 leg becomes in-scope; if Option B, 3.3 drops that leg entirely and
   unregistered-package class.
 - **No supersession.** No prior ADR governs `@hexagen/security`; this is the
   first decision of record for the package.
+
+## Amendment — 2026-08-16: accepted as Option B, step 1 superseded by outright deletion
+
+The body above is left intact as the accurate record of what was decided on
+2026-08-14, when both options were live. This amendment records the resolution and
+the one place execution deviated from it.
+
+**Resolution: Option B.** The ADR turns on a single fact — _is secret scanning about
+to be called from generation/sync/wizard within the next planning horizon?_ The
+answer is **no, on the record**: no wave schedules it, no ADR proposes it, no TODO
+references it, and the package has been consumer-free for three months. Option A's
+step 4 has no candidate caller, and this ADR itself calls A-without-step-4 "the worst
+outcome". Reasoning of record:
+`docs/planning/2026-08-16-decision-dossier-and-remediation-followups.md` §1.2.
+
+Two facts not in the body above, both verified before deletion, strengthen B:
+
+- **The scanner was unreachable through its own barrel.** `src/index.ts` exported only
+  `createCleanConfig`/`createDirtyConfig` and the two VO types; `TuffleHogAdapter`,
+  `SecretSanitizationUseCase` and `ISecretScanner` could not be imported via
+  `@hexagen/security` at all. The hexagon the body describes was not reachable API.
+- **Its tests were type-invalid fictions.** Type-checking the two `__tests__` files
+  yields **10 errors**: the mocks return `{ ok, value }` while `Result` is
+  `{ success, value }`. They passed only because mock and assertion shared the same
+  wrong shape across a pass-through use-case. They were never checked in practice
+  because the package `tsconfig.json` set `include: ["src/**/*"]`, so `yarn typecheck`
+  reported 0 errors over a domain that excluded them — a gate reporting more
+  confidence than it had earned. `tuffle-hog.adapter.ts`, the one file with real
+  logic, had **zero** test coverage.
+
+**Step 1 is superseded: the value objects were deleted outright, not moved to
+`@hexagen/governance`.** `SanitizedConfig`, `SecretLeakError`, `createCleanConfig` and
+`createDirtyConfig` had zero consumers, so the move contemplated in step 1 would have
+relocated dead code into a live, manifest-visible bounded context — requiring a
+`context.yaml` edit and handing `governance` unused types that the Wave-2 arch-lint
+enforcement ratchet (ADR-0054) would then police. Preserving a scaffold's VOs to honour
+the shape of a migration, when nothing reads them, imports the liability B exists to
+remove. Steps 2 and 3 executed as written.
+
+**This ADR's predicate, not ADR-0050's, is the one that applies.** ADR-0050's deletion
+predicate is "frozen **AND** no runtime code"; `security` satisfied **neither** half —
+it was not frozen, and `tuffle-hog.adapter.ts` is runtime code. The predicate discharged
+here is this ADR's own: **unregistered, zero consumers, scaffold-grade implementation.**
+
+**Downstream, as the Consequences section specifies for Option B:** item 6.6 is
+executed by this deletion; **3.3's MOD-005 leg** and **6.4(e)** (the
+`ports/in → ports/out` move, conditional on a keep) are **struck** — MOD-005 dissolves
+with the tsconfig that carried it. The `.js`-specifier convention is untouched.
+No manifest or `context.yaml` edit was required: `security` was never registered, as
+the body's fact 1 records and as re-verified before deletion.

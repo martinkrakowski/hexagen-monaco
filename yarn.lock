@@ -1378,19 +1378,6 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@hexagen/security@workspace:packages/security":
-  version: 0.0.0-use.local
-  resolution: "@hexagen/security@workspace:packages/security"
-  dependencies:
-    "@hexagen/shared": "workspace:*"
-    "@types/node": "npm:^22.0.0"
-    eslint: "npm:^8.57.0"
-    tsx: "npm:^4.21.0"
-    typescript: "npm:^5.4.5"
-    vitest: "npm:^4.1.9"
-  languageName: unknown
-  linkType: soft
-
 "@hexagen/shared@workspace:*, @hexagen/shared@workspace:packages/shared":
   version: 0.0.0-use.local
   resolution: "@hexagen/shared@workspace:packages/shared"
@@ -3168,15 +3155,6 @@ __metadata:
   dependencies:
     undici-types: "npm:~6.21.0"
   checksum: 10c0/e27d3e1eac4105b627fdba2d86577e603c66fc7b4ad61418d41f3898d84b2f5ff3e0c6b6d3948b34976ea91056e6359740b387edcc65ca516c3f2b5a0c0f9c6a
-  languageName: node
-  linkType: hard
-
-"@types/node@npm:^22.0.0":
-  version: 22.19.19
-  resolution: "@types/node@npm:22.19.19"
-  dependencies:
-    undici-types: "npm:~6.21.0"
-  checksum: 10c0/402e0f088c94cabda3cd721546bd8e4e75e098e0b342f6e03b90ca1e19c28986f9650112c64fcfd09fc8cebc0f8b20291a513153e90489331cf666e1e5503e16
   languageName: node
   linkType: hard
 

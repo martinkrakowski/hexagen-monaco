@@ -71,6 +71,12 @@ state the inversion in plain language:
   these three packages already have a populated `application/ports/out` folder, so
   the fix is a relocation into an existing home rather than a new folder.
 
+> **Note (2026-08-16).** The `packages/security` bullet above is retained as the
+> dated evidence it was, but that path no longer exists: **ADR-0049 was accepted as
+> Option B** and the package was deleted. The in-tree HEX-018 set is therefore
+> **four** packages, not five, and the security leg of the `ports/in → ports/out`
+> work (remediation item 6.4(e)) is struck rather than pending.
+
 ### HEX-019 — mcp-server tools depend on concrete use cases, not inbound ports
 
 The mcp-server tool and resource adapters depend directly on concrete
