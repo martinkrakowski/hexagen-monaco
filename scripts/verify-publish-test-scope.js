@@ -56,7 +56,8 @@
  * on an unchecked `--filter`.
  *
  * `--dry-run` performs the derivation and the scope cross-check but does not
- * execute the tests (used by this script's own guard test).
+ * execute the tests — for inspecting the derived closure without paying for a
+ * full run.
  *
  * EXIT CODES
  *   0  Scope verified and every scheduled test task passed
@@ -74,12 +75,32 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
 
+/**
+ * Yarn accepts both `"workspaces": ["packages/*"]` and the object form
+ * `"workspaces": { "packages": ["packages/*"] }`. The root uses the array form
+ * today, but `packages/sync/__tests__/published-engines-floor.guard.test.ts`
+ * already reads both, and a gate that throws on a config refactor is a gate
+ * that has to be repaired under release pressure. Normalise here instead.
+ */
+function workspaceGlobs(rootPkg) {
+  const declared = Array.isArray(rootPkg.workspaces)
+    ? rootPkg.workspaces
+    : (rootPkg.workspaces?.packages ?? []);
+  if (!Array.isArray(declared) || declared.length === 0) {
+    fail(
+      1,
+      'Root package.json declares no workspaces (expected an array, or an object with a "packages" array) — this gate would derive an empty closure.',
+    );
+  }
+  return declared;
+}
+
 /** Workspace globs are all single-level (`apps/*`), so a readdir is enough. */
 function readWorkspaceManifests() {
   const rootPkg = JSON.parse(
     fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf8"),
   );
-  const globs = rootPkg.workspaces ?? [];
+  const globs = workspaceGlobs(rootPkg);
   const byName = new Map();
 
   for (const glob of globs) {
