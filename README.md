@@ -320,11 +320,18 @@ bounded_contexts:
 Tests run in CI only. Local pre-commits run lint and typecheck (~2–5s); the full suite runs against a clean GitHub Actions environment. The test runner is **Vitest** (ADR-0044); assertions are `node:assert/strict` or Vitest `expect()` — both are fine.
 
 ```bash
-yarn test                              # full suite
-yarn workspace @hexagen/web-driver test
-yarn test --watch
-yarn test --coverage
+yarn test                                       # full suite, every workspace
+yarn workspace @hexagen/web-driver test         # one workspace
+yarn workspace @hexagen/web-driver exec vitest  # one workspace, watch mode
 ```
+
+`yarn test` is `turbo test`, and Turbo rejects unrecognised flags rather than forwarding
+them — `yarn test --watch` and `yarn test --coverage` both fail with `unexpected argument`.
+Use the per-workspace forms above, or `yarn test -- <flag>` to pass a flag through to every
+workspace's Vitest. **There is no coverage tooling wired in this repo**: no provider is
+installed and no Vitest coverage config exists anywhere. That is a recorded, deliberate
+deferral with a re-open trigger, not an oversight — see decision **D4** in
+[`docs/planning/2026-08-15-architecture-remediation-execution-runbook.md`](docs/planning/2026-08-15-architecture-remediation-execution-runbook.md).
 
 The [`.github/workflows/sync-integrity.yml`](.github/workflows/sync-integrity.yml) workflow runs on every PR and on pushes to `main` / `develop`:
 

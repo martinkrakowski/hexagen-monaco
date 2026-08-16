@@ -46,13 +46,13 @@ Jest residue, `engines.node`, ts-morph alignment, `Error.cause`, and HEX-038.
 
 **Nothing in Phases 2–4 is blocked on engineering. What remains is blocked on decisions:**
 
-| Item                          | Blocked on                                | Note                                                                                                |
-| ----------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| **4.5**                       | **D3** — api-gateway delete-vs-wire       | also gates **Phase 8**, so D3 compounds                                                             |
-| **4.7**                       | **D6** — sync publish-surface semver      | release-gated                                                                                       |
-| **3.3 MOD-005 leg**           | **ADR-0049** branch selection             | ADR is `Status: Proposed`, both options live; ADR-0049 itself says 3.3 drops the leg under Option B |
-| **8.11**                      | **D4** — coverage posture                 |                                                                                                     |
-| 11 of the 34 baseline entries | **`zod` in domain** — accept or burn down | baselined, not allowlisted; ADR-0054 seeds only js-yaml/manifest                                    |
+| Item                          | Blocked on                                  | Note                                                                                                           |
+| ----------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| **4.5**                       | **D3** — api-gateway delete-vs-wire         | also gates **Phase 8**, so D3 compounds                                                                        |
+| **4.7**                       | **D6** — sync publish-surface semver        | release-gated                                                                                                  |
+| **3.3 MOD-005 leg**           | **ADR-0049** branch selection               | ADR is `Status: Proposed`, both options live; ADR-0049 itself says 3.3 drops the leg under Option B            |
+| **8.11**                      | ~~**D4** — coverage posture~~ **unblocked** | **D4 resolved: no coverage gate** (see §2). 8.11's remaining legs are the missing `test` targets, not the gate |
+| 11 of the 34 baseline entries | **`zod` in domain** — accept or burn down   | baselined, not allowlisted; ADR-0054 seeds only js-yaml/manifest                                               |
 
 **Release gates pending** (repo PRs landed; nothing published, tagged or deployed): #457
 (`engines.node` floor), #459 (three new arch-linter rule classes + empty-by-default
@@ -96,17 +96,74 @@ this arc kept surfacing. Tracked in
 
 ## 2. Decision & release gate ledger
 
-| Gate   | Question                    | Blocks   | Status                                                           |
-| ------ | --------------------------- | -------- | ---------------------------------------------------------------- |
-| **D1** | modify-family gate          | 1.3      | ✅ Resolved — same-origin + rate limit (shipped in #443)         |
-| **D2** | BYOK persistence backend    | 1.4      | ✅ Resolved — better-sqlite3, volume-backed (shipped in #442)    |
-| **D3** | api-gateway delete-vs-wire  | **4.5**  | ⛔ **Open** — surface with trade-offs before building 4.5        |
-| **D4** | coverage posture            | **8.11** | ⛔ **Open**                                                      |
-| **D5** | TypeScript 6 upgrade        | none     | ⛔ Open — 3.1 deletes the pin regardless; upgrade is its own arc |
-| **D6** | sync publish-surface semver | **4.7**  | ⛔ **Open** — release-gated                                      |
+| Gate   | Question                    | Blocks   | Status                                                                         |
+| ------ | --------------------------- | -------- | ------------------------------------------------------------------------------ |
+| **D1** | modify-family gate          | 1.3      | ✅ Resolved — same-origin + rate limit (shipped in #443)                       |
+| **D2** | BYOK persistence backend    | 1.4      | ✅ Resolved — better-sqlite3, volume-backed (shipped in #442)                  |
+| **D3** | api-gateway delete-vs-wire  | **4.5**  | ⛔ **Open** — surface with trade-offs before building 4.5                      |
+| **D4** | coverage posture            | **8.11** | ✅ **Resolved — no coverage gate.** Deferral with a re-open trigger; see below |
+| **D5** | TypeScript 6 upgrade        | none     | ⛔ Open — 3.1 deletes the pin regardless; upgrade is its own arc               |
+| **D6** | sync publish-surface semver | **4.7**  | ⛔ **Open** — release-gated                                                    |
 
 _ADR 0.3 (security bounded-context fate) independently gates 6.6 and the conditional
 MOD-005 leg of 3.3._
+
+### D4 — coverage posture: **no gate.** A deferral, not a rejection
+
+**Decided 2026-08-16.** Dossier §1.4 of
+`docs/planning/2026-08-16-decision-dossier-and-remediation-followups.md` carries the full
+argument; this is the ledger entry. **No ADR** — a deferral belongs in the ledger, and an
+ADR would claim more permanence than the decision has.
+
+**Why not now.** Coverage instruments _the files the runner loads_. Workspaces with no tests
+load nothing, so they contribute nothing to the denominator: **the metric rises as the gap
+worsens.** Verified against `main` (`af077ebd`) rather than copied forward —
+`packages/shared` (50 source files), `packages/model-settings` (15) and `packages/runtime`
+(9) carry **no `test` script and zero test files**. `apps/api-gateway` still exists and its
+`test` script is the literal stub `echo "No tests configured"`, which `turbo test` counts as
+a pass; it has no source of its own, so its fate is D3's question, not this one. A number
+that improves when `packages/shared` stays untested is not a check whose scope is visible in
+its output — and that is this arc's own thesis, so adopting one here would be self-refuting.
+
+Independently, item **8.10 deletes 24 mock-testing suites**. Any baseline taken before that
+lands is invalidated by the arc's own work, and until it lands the number **rewards keeping
+the suites the audit called fabricated**.
+
+**Shipped instead** (the honesty half — a dead gate is worse than no gate): the root
+`coverage` script (`c8 --lines 80 --functions 80 --branches 80 --statements 80 turbo test`)
+and the `c8` devDependency are deleted — nothing in any script, workflow or doc invoked
+them, and no `.c8rc` / `.nycrc` / Vitest coverage config has ever existed. `README.md`'s
+`yarn test --coverage` is gone: `yarn test` is `turbo test`, and Turbo **rejects** unknown
+flags (`unexpected argument '--coverage' found`) rather than forwarding them, so the line
+failed before Vitest ever saw it — and there was no provider for Vitest to use either. Its
+sibling `yarn test --watch` failed identically and was replaced in the same edit.
+
+**Re-open trigger — all three must hold:**
+
+1. **8.10's mock-suite purge has landed**, so a baseline survives the arc's own deletions;
+2. **FU-1 has brought `typecheck:test` to every workspace that has tests**
+   (`docs/planning/2026-08-16-verification-coverage-followups.md`; 15 of 40 today);
+3. **every workspace with source has a real `test` target** — a target that runs Vitest, not
+   `echo "No tests configured"`.
+
+**When re-opened, copy `scripts/check-lint-coverage.mjs`'s shape.** That script is the
+in-repo precedent for making a gate's scope visible, and its three moves transfer directly:
+
+- **Enumerate from `package.json`'s `workspaces` globs and assert the skip set is _exactly_ a
+  named constant** (`UNLINTED` there; the coverage equivalent is the set of workspaces
+  outside the denominator). Drift in **either** direction fails: an undeclared skip **and** a
+  stale entry that has since gained the script both exit 1, so the exemption list cannot rot
+  into a permanent excuse.
+- **Reject targets that satisfy the runner without doing the work.** `invokesEslint()` exists
+  because `"lint": "echo ok"` passes `turbo run lint`; the coverage check needs the same
+  guard against `echo "No tests configured"`.
+- **Print the number before enforcing it** — `Lint coverage: N/M workspaces …` on every run,
+  and `exit 2` (not 1) when the check _cannot_ run, so "could not measure" never reads as
+  "measured, and it was fine".
+
+Order matters: **land the report, watch it for a wave, then set a threshold.** A percentage
+whose denominator is not asserted is the failure class this arc has spent eight phases
+removing.
 
 **Release-gated items** (`@hexagen-monaco/sync` + `@hexagen-monaco/arch-linter`
 publish surface): **2.2, 3.3's `engines.node` leg (MOD-004), 3.4, 4.7.** The **repo
@@ -238,6 +295,16 @@ plans so each phase fires the moment its gate clears:
 ---
 
 ## 8. Change log
+
+- **2026-08-16** — **D4 resolved: no coverage gate** (§2). A deferral with a three-condition
+  re-open trigger, recorded in the ledger rather than an ADR. The dead root `c8` script and
+  its devDependency were deleted (nothing invoked them; no coverage config has ever existed
+  in this repo), and `README.md`'s `yarn test --coverage` — which fails at Turbo's argument
+  parser, before Vitest is even reached — was replaced with the per-workspace forms that
+  work. The four-no-tests claim was re-verified against `main` rather than copied: `shared`,
+  `model-settings` and `runtime` have no `test` target at all; `apps/api-gateway`'s is a
+  passing `echo` stub. **8.11 is no longer decision-blocked** — its remaining work is the
+  missing test targets.
 
 - **2026-08-16** — **Phases 2, 3 and 4's buildable set closed; Phase 2 green.** Merged
   #457 (3.3 MOD-004), #458 (4.6 HEX-038 — the leg #447 missed), #459 (2.2 + the 34-entry
