@@ -7,6 +7,7 @@ import {
   type StageValidationReport,
   type StageRepairSummary,
 } from "./useStagedGenerationStream";
+import { countManifestEntities } from "@hexagen/agentic-interaction";
 import { createLocalProgressCallbacks } from "./mapLocalLLMProgressCallbacks";
 import {
   getClientSpecGenerationUseCase,
@@ -385,16 +386,12 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
             const ptCount = Array.isArray(parsed.context_mappings)
               ? parsed.context_mappings.length
               : 0;
-            const adpCount = Array.isArray(parsed.bounded_contexts)
-              ? (
-                  parsed.bounded_contexts as Array<Record<string, unknown>>
-                ).reduce(
-                  (sum, ctx) =>
-                    sum +
-                    (Array.isArray(ctx.adapters) ? ctx.adapters.length : 0),
-                  0,
-                )
-              : 0;
+            // Adapters live at `layers.infrastructure.adapters`, not at the
+            // context root. This hook mirrored the server route's root read, so
+            // the local-LLM path reported `adapterCount: 0` for every manifest
+            // it generated. `countManifestEntities` is the shared counter the
+            // server pipelines use — same numbers on both execution strategies.
+            const adpCount = countManifestEntities(parsed).adapterCount;
 
             setGeneratedManifest(yaml);
             setContextCount(ctxCount);

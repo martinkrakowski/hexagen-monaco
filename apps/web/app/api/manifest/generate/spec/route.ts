@@ -4,6 +4,7 @@ import { enforceDailyQuota } from "../../../../../lib/enforce-quota";
 import {
   ExecuteStructuredConfigGenerationUseCase,
   ClassifyContextTypeUseCase,
+  countManifestEntities,
   formatModelChip,
   type StructuredConfigGenerationCallbacks,
 } from "@hexagen/agentic-interaction";
@@ -90,17 +91,16 @@ function countsFromParsed(parsed: Record<string, unknown>): {
   const portCount = Array.isArray(parsed.context_mappings)
     ? parsed.context_mappings.length
     : 0;
-  const adapterCount = Array.isArray(parsed.bounded_contexts)
-    ? (parsed.bounded_contexts as Array<unknown>).reduce<number>((sum, ctx) => {
-        // A bare `-` YAML list item parses to null — counting must never
-        // throw on LLM-produced yaml (same posture as countManifestEntities),
-        // so non-object entries contribute zero instead of crashing the
-        // stream (review fix).
-        if (ctx === null || typeof ctx !== "object") return sum;
-        const adapters = (ctx as Record<string, unknown>).adapters;
-        return sum + (Array.isArray(adapters) ? adapters.length : 0);
-      }, 0)
-    : 0;
+  // Adapters live at `layers.infrastructure.adapters` — that is what
+  // `draftToManifest` emits and what the manifest schema mandates. This route
+  // read `ctx.adapters` at the context ROOT, a key the transform never writes,
+  // so `adapterCount` was 0 on every `manifest` and `done` frame regardless of
+  // how many adapters the generated manifest declared. `countManifestEntities`
+  // is the shared, correct counter the two server pipelines already use
+  // (`pipeline-selection.ts`); this route was the last one still hand-rolling
+  // it. It also tolerates null / primitive list items, so the "never throw on
+  // LLM-produced YAML" posture is preserved.
+  const { adapterCount } = countManifestEntities(parsed);
   return { contextCount, portCount, adapterCount };
 }
 

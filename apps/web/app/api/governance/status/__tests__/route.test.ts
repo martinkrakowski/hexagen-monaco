@@ -80,7 +80,10 @@ describe("POST /api/governance/status", () => {
       "      application:",
       "        ports:",
       "          in: [A, B]",
-      "      domain:",
+      // Adapters belong under `infrastructure`, per BoundedContextSchema — this
+      // fixture used to write them under `domain`, a shape no manifest has
+      // (dossier §2.2).
+      "      infrastructure:",
       "        adapters:",
       "          AdapterA: {}",
     ].join("\n");

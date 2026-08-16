@@ -59,7 +59,14 @@ test("emits the early `manifest` frame before `done`, and `done` still carries t
       yaml: "early: manifest\n",
       parsedObject: {
         bounded_contexts: [
-          { name: "billing", adapters: [{ name: "a1" }, { name: "a2" }] },
+          // Adapters as `draftToManifest` really emits them —
+          // `layers.infrastructure.adapters`, not a root `adapters` key. The
+          // fixture used to write the root shape, which is why a route that
+          // read the root shape looked correct while reporting 0 in production.
+          {
+            name: "billing",
+            layers: { infrastructure: { adapters: ["a1", "a2"] } },
+          },
           { name: "shipping" },
         ],
         context_mappings: [{ upstream: "billing", downstream: "shipping" }],
@@ -136,7 +143,10 @@ test("a null bounded_contexts entry (bare `-` yaml list item) never crashes the 
       yaml: "sparse: manifest\n",
       parsedObject: {
         bounded_contexts: [
-          { name: "billing", adapters: [{ name: "a1" }] },
+          {
+            name: "billing",
+            layers: { infrastructure: { adapters: ["a1"] } },
+          },
           null,
           "not-an-object",
         ],
