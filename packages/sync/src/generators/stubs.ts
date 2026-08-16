@@ -14,7 +14,7 @@ import type {
   StubTemplates,
   StubsConfig,
 } from "../types/manifest.js";
-import { portName } from "../types/manifest.js";
+import { portName, resolveScope } from "../types/manifest.js";
 import {
   analyzePortFile,
   generateAdapterFromPort,
@@ -31,7 +31,10 @@ import {
 } from "../domain/services/layer-dir-resolver.js";
 import { toPascalCaseIdentifier } from "../domain/services/name-normalizer.js";
 import type { ReportRecorder } from "../domain/types.js";
-import { interpolateWithLog } from "../domain/services/stub-template-resolver.js";
+import {
+  interpolateWithLog,
+  type StubInterpolationContext,
+} from "../domain/services/stub-template-resolver.js";
 
 function resolveTemplate(
   kind: StubKind,
@@ -231,6 +234,18 @@ export async function generateStubs(
   const manifestNaming = stubs.naming;
   const contextNaming = context.generator?.stubs?.naming;
 
+  // The template resolver is domain code and takes only what it needs — a
+  // resolved scope and somewhere to put warnings — never the composition-root
+  // config (HEX-038). Projecting SyncConfig onto that contract is this
+  // generator's job, and `resolveScope(config.manifest)` here matches what
+  // apps/tsconfig/package-json/root-files already do. `warn` is wrapped in an
+  // arrow rather than passed as `config.logger.warn` so the logger keeps its
+  // receiver.
+  const interpolation: StubInterpolationContext = {
+    scope: resolveScope(config.manifest),
+    warn: (message) => config.logger.warn(message),
+  };
+
   for (const { kind, subdir, names } of plan) {
     const contentTemplate = resolveTemplate(kind, manifestTemplates);
     const namingTemplate = resolveNaming(kind, contextNaming, manifestNaming);
@@ -244,7 +259,7 @@ export async function generateStubs(
         namingTemplate,
         name,
         `stubs.naming.${kind}`,
-        config,
+        interpolation,
       );
 
       // `subdir` comes RESOLVED from the emission plan (package-root-relative,
@@ -307,7 +322,7 @@ export async function generateStubs(
                 outPortNaming,
                 base,
                 "stubs.naming.outPort",
-                config,
+                interpolation,
               );
               const outPortPath = path.join(outPortDir, outFile);
               const analyzed = analyzePortFile(outPortPath);
@@ -331,7 +346,7 @@ export async function generateStubs(
             contentTemplate,
             name,
             `stubs.templates.${kind}`,
-            config,
+            interpolation,
           );
         }
       } else {
@@ -339,7 +354,7 @@ export async function generateStubs(
           contentTemplate,
           name,
           `stubs.templates.${kind}`,
-          config,
+          interpolation,
         );
       }
 

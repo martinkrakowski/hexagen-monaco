@@ -201,12 +201,18 @@ describe("namespacing guard (generated project uses @{scope}, not @hexagen)", ()
 
 describe("emitted code templates reference @{scope}/shared, not @hexagen", () => {
   it("the use-case stub template interpolates {scope} from the manifest", () => {
+    // The resolver takes the RESOLVED scope, not the config (HEX-038) — but
+    // the projection under test is still manifest -> scope, so it is done here
+    // exactly as generateStubs does it rather than hard-coding "acme".
     const config = makeConfig("/tmp/unused", { scope: "acme" });
     const out = interpolateWithLog(
       DEFAULT_TEMPLATES.useCase,
       "Foo",
       "useCase",
-      config,
+      {
+        scope: resolveScope(config.manifest),
+        warn: (message) => config.logger.warn(message),
+      },
     );
     assert.ok(
       out.includes("from '@acme/shared'"),
