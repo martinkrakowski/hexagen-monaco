@@ -324,7 +324,6 @@ NEUTRAL_HOME_DIRS="app/lib app/contexts app/hooks lib components hooks"
 # Shrink this list; do not grow it. A stale entry (edge since removed) also
 # fails, so it cannot rot into permanent permission.
 NEUTRAL_FEATURE_BASELINE="
-app/lib/tree-utils.ts|../../features/code-view/types
 app/lib/manifest-generation/capability-cache.ts|../../../features/manifest-generation/types/capabilities
 app/lib/use-cases/project-lifecycle.use-case.ts|../../../features/governance-assistant/stores/useGovernanceThreadStore
 app/lib/wire.client.discard-subscription.test.ts|../../features/governance-assistant/stores/useGovernanceThreadStore
