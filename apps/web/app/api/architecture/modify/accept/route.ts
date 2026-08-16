@@ -172,6 +172,32 @@ export async function POST(request: NextRequest) {
           lintErrors: outcome.lintErrors,
         });
 
+      case "commit-conflict":
+        // The transaction was finalised by an overlapping request while this
+        // one was applying patches and linting, so `commit()` refused. 409, not
+        // 500: nothing is broken server-side — two callers raced over the same
+        // transaction and one lost. Logged at error level anyway, because the
+        // losing side had already written to the manifest.
+        logger.error(
+          "[api/architecture/modify/accept] Commit refused: transaction was finalised concurrently",
+          { transactionId, status: outcome.status },
+        );
+        if (outcome.restoreFailure) {
+          logger.errorWithException(
+            outcome.restoreFailure,
+            "[api/architecture/modify/accept] Git restore failed after commit conflict",
+          );
+        }
+        return NextResponse.json(
+          {
+            success: false,
+            error: outcome.restoreFailure
+              ? `Transaction was concurrently finalised as '${outcome.status}' and git restore failed. Manual intervention required.`
+              : `Transaction was concurrently finalised as '${outcome.status}'. Patches reverted.`,
+          },
+          { status: outcome.restoreFailure ? 500 : 409 },
+        );
+
       case "accepted":
         logger.info(
           "[api/architecture/modify/accept] Patches accepted and committed",

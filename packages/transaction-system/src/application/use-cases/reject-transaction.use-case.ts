@@ -36,7 +36,9 @@ export const DEFAULT_REJECTION_REASON = "User rejected the changes";
  * guaranteeing that, so reject restores anyway rather than trusting it. As in
  * {@link AcceptTransactionUseCase}, the in-memory rollback happens whether or
  * not the restore succeeded — a failed `git checkout` must not strand the
- * transaction in `speculative` (Wave-1 / #441).
+ * transaction in `speculative` (Wave-1 / #441). The rollback now runs FIRST,
+ * which strengthens that: there is no awaited work between the status check and
+ * the state write at all.
  */
 export class RejectTransactionUseCase {
   constructor(
@@ -56,13 +58,27 @@ export class RejectTransactionUseCase {
       return { kind: "wrong-state", status: tx.status };
     }
 
-    const restore = await this.manifestMutation.restoreFromGit(manifestPath);
+    // Claim the terminal state BEFORE touching the filesystem. The rollback is
+    // synchronous and the restore is not, so claiming first means a concurrent
+    // accept either loses its `commit()` (and then reverts our patches for us)
+    // or wins outright — in which case `rollback()` returns null below and we
+    // leave its committed manifest alone. Restoring first would let us wipe a
+    // manifest that the winning accept had legitimately committed.
     const rolledBack = this.transactionManager.rollback(transactionId, reason);
+    if (!rolledBack) {
+      // Already terminal (see TransactionManagerPort#rollback): a concurrent
+      // accept committed it in the gap after our status check. Report the same
+      // 409 the up-front check would have produced — and do NOT restore, or we
+      // would revert patches that are now legitimately committed.
+      const current = this.transactionManager.get(transactionId);
+      return { kind: "wrong-state", status: current?.status ?? tx.status };
+    }
 
+    const restore = await this.manifestMutation.restoreFromGit(manifestPath);
     if (!restore.success) {
       return { kind: "restore-failed", error: restore.error, reason };
     }
 
-    return { kind: "rejected", transaction: rolledBack ?? tx, reason };
+    return { kind: "rejected", transaction: rolledBack, reason };
   }
 }

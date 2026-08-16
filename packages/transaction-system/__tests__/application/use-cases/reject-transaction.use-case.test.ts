@@ -104,4 +104,60 @@ describe("RejectTransactionUseCase", () => {
     assert.equal(rollback.mock.calls.length, 1);
     assert.equal(rollback.mock.calls[0][0], "tx-1");
   });
+
+  it("claims the terminal state BEFORE touching the filesystem", async () => {
+    // Ordering is the concurrency guarantee, not a style choice: the rollback
+    // is synchronous, so claiming first leaves no awaited window in which a
+    // concurrent accept could commit between our status check and our write.
+    const order: string[] = [];
+    rollback.mockImplementation(() => {
+      order.push("rollback");
+      return makeTx({ status: "rolled_back" });
+    });
+    restoreFromGit.mockImplementation(async () => {
+      order.push("restore");
+      return { success: true, value: undefined };
+    });
+
+    await run();
+
+    assert.deepEqual(order, ["rollback", "restore"]);
+  });
+
+  /**
+   * `TransactionManagerPort.rollback()` is nullable, and null means "not rolled
+   * back" — already terminal. Returning `rejected` off the stale `tx` read at
+   * the top reported `status:"rolled_back"` for a transaction that a concurrent
+   * accept had just committed.
+   */
+  describe("rollback() refused (concurrent finalisation)", () => {
+    it("does not report `rejected` when rollback returns null", async () => {
+      get
+        .mockReturnValueOnce(makeTx())
+        .mockReturnValue(makeTx({ status: "committed" }));
+      rollback.mockReturnValue(null);
+
+      const outcome = await run();
+
+      assert.notEqual(outcome.kind, "rejected");
+      assert.equal(outcome.kind, "wrong-state");
+      assert.equal(
+        outcome.kind === "wrong-state" && outcome.status,
+        "committed",
+      );
+    });
+
+    it("leaves the winning accept's manifest alone", async () => {
+      // Restoring here would revert patches that were legitimately committed —
+      // which is exactly the state/disk disagreement this arm exists to avoid.
+      get
+        .mockReturnValueOnce(makeTx())
+        .mockReturnValue(makeTx({ status: "committed" }));
+      rollback.mockReturnValue(null);
+
+      await run();
+
+      assert.equal(restoreFromGit.mock.calls.length, 0);
+    });
+  });
 });

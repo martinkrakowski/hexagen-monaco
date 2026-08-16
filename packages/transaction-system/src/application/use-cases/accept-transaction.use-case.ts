@@ -28,7 +28,12 @@ export type AcceptTransactionOutcome =
   | { kind: "invalid-patch-metadata"; reason: string }
   | { kind: "apply-failed"; error: Error; restoreFailure?: Error }
   | { kind: "lint-violation"; lintErrors: string[]; restoreFailure?: Error }
-  | { kind: "lint-unavailable"; error: Error; restoreFailure?: Error };
+  | { kind: "lint-unavailable"; error: Error; restoreFailure?: Error }
+  | {
+      kind: "commit-conflict";
+      status: TransactionStatus;
+      restoreFailure?: Error;
+    };
 
 export interface AcceptTransactionRequest {
   readonly transactionId: string;
@@ -51,6 +56,13 @@ export interface AcceptTransactionRequest {
  * compensation → commit/rollback. Living in an HTTP handler meant it could only
  * be exercised through a mocked composition root, and that its compensation was
  * only as complete as whoever last edited the handler remembered to make it.
+ *
+ * CONCURRENCY: the `speculative` check at the top and the `commit()` at the
+ * bottom are separated by two awaits, so an overlapping reject can finalise the
+ * transaction in between. The saga does not serialise those requests — it makes
+ * the loser detectable and reconciles it: the manager refuses a second terminal
+ * write, and the `commit-conflict` arm restores the manifest so the file on disk
+ * agrees with the status that actually stuck.
  *
  * The compensation invariant this class enforces on EVERY failing arm past the
  * point of mutation: the manifest is restored from git AND the transaction
@@ -141,10 +153,41 @@ export class AcceptTransactionUseCase {
     }
 
     const committed = this.transactionManager.commit(transactionId);
+    if (committed) {
+      return {
+        kind: "accepted",
+        transaction: committed,
+        patchesApplied: patches.length,
+      };
+    }
+
+    // `commit()` refused (see TransactionManagerPort#commit): the transaction is
+    // already terminal, so something finalised it between our `speculative`
+    // check and here — the two awaits above (applyPatches, validateManifest)
+    // are the window. Reporting `accepted` off the stale `tx` we read at the
+    // top would claim a commit that never happened.
+    const current = this.transactionManager.get(transactionId);
+
+    // A concurrent ACCEPT won. It applied the same patch set from the same
+    // metadata and passed the same lint gate, so the manifest already reflects
+    // this transaction's outcome. Report its success rather than inventing a
+    // conflict and reverting a manifest that is correct.
+    if (current?.status === "committed") {
+      return {
+        kind: "accepted",
+        transaction: current,
+        patchesApplied: patches.length,
+      };
+    }
+
+    // A concurrent REJECT won: the transaction is rolled back, but our patches
+    // may have landed on disk after its restore. Back them out so the manifest
+    // agrees with the status that actually stuck.
+    const restore = await this.manifestMutation.restoreFromGit(manifestPath);
     return {
-      kind: "accepted",
-      transaction: committed ?? tx,
-      patchesApplied: patches.length,
+      kind: "commit-conflict",
+      status: current?.status ?? "rolled_back",
+      ...(restore.success ? {} : { restoreFailure: restore.error }),
     };
   }
 

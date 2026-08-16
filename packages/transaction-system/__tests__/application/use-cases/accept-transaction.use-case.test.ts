@@ -244,4 +244,75 @@ describe("AcceptTransactionUseCase", () => {
       "/other/root/.architecture/manifest.yaml",
     );
   });
+
+  /**
+   * `TransactionManagerPort.commit()` is nullable, and null means "not
+   * committed" — the transaction is already terminal, i.e. an overlapping
+   * request finalised it during the two awaits above. Falling back to the
+   * stale `tx` read at the top of `execute` reported a commit that never
+   * happened, as HTTP 200 `status:"committed"`.
+   */
+  describe("commit() refused (concurrent finalisation)", () => {
+    it("does not report `accepted` off a stale transaction when commit returns null", async () => {
+      commit.mockReturnValue(null);
+      get
+        .mockReturnValueOnce(makeTx())
+        .mockReturnValue(makeTx({ status: "rolled_back" }));
+
+      const outcome = await run();
+
+      assert.notEqual(outcome.kind, "accepted");
+      assert.equal(outcome.kind, "commit-conflict");
+      assert.equal(
+        outcome.kind === "commit-conflict" && outcome.status,
+        "rolled_back",
+      );
+    });
+
+    it("reverts the manifest when the winner was a REJECT", async () => {
+      // Our patches may have landed after the reject's restore. The status that
+      // stuck is `rolled_back`, so the file must not keep them.
+      commit.mockReturnValue(null);
+      get
+        .mockReturnValueOnce(makeTx())
+        .mockReturnValue(makeTx({ status: "rolled_back" }));
+
+      await run();
+
+      assert.equal(restoreFromGit.mock.calls.length, 1);
+      assert.deepEqual(restoreFromGit.mock.calls[0], [MANIFEST]);
+    });
+
+    it("flags manual intervention when that reverting restore also fails", async () => {
+      commit.mockReturnValue(null);
+      get
+        .mockReturnValueOnce(makeTx())
+        .mockReturnValue(makeTx({ status: "rolled_back" }));
+      const restoreError = new Error("git boom");
+      restoreFromGit.mockResolvedValue({ success: false, error: restoreError });
+
+      const outcome = await run();
+
+      assert.equal(outcome.kind, "commit-conflict");
+      assert.equal(
+        outcome.kind === "commit-conflict" && outcome.restoreFailure,
+        restoreError,
+      );
+    });
+
+    it("reports success WITHOUT reverting when the winner was another ACCEPT", async () => {
+      // A concurrent accept applied the same patch set from the same metadata
+      // and passed the same lint gate. The manifest is already correct, so
+      // restoring it would revert legitimately committed patches.
+      commit.mockReturnValue(null);
+      const winner = makeTx({ status: "committed" });
+      get.mockReturnValueOnce(makeTx()).mockReturnValue(winner);
+
+      const outcome = await run();
+
+      assert.equal(outcome.kind, "accepted");
+      assert.equal(outcome.kind === "accepted" && outcome.transaction, winner);
+      assert.equal(restoreFromGit.mock.calls.length, 0);
+    });
+  });
 });

@@ -68,6 +68,10 @@ describe("POST /api/architecture/modify/accept", () => {
     // Simulate prod cwd ≠ monorepo root.
     vi.spyOn(process, "cwd").mockReturnValue("/fake/repo/apps/web");
 
+    // `commit()` returns the COMMITTED transaction, as the port requires —
+    // returning nothing means "not committed" (already terminal), which the
+    // saga now treats as a conflict rather than a success.
+    commit.mockReturnValue({ id: "tx-1", status: "committed", metadata: {} });
     vi.mocked(getTransactionManager).mockReturnValue({
       get: () => ({ status: "speculative", metadata: { patches: [] } }),
       rollback,
@@ -181,6 +185,27 @@ describe("POST /api/architecture/modify/accept — saga arms (AUD-004)", () => {
     } as never);
   }
 
+  /**
+   * As `withMetadata`, but `get()` returns `speculative` only on the FIRST
+   * call — the saga's re-read after a refused commit sees `laterStatus`. That
+   * is the shape of a concurrent finalisation.
+   */
+  function withConcurrentFinalisation(
+    metadata: Record<string, unknown>,
+    laterStatus: string,
+  ): void {
+    let first = true;
+    vi.mocked(getTransactionManager).mockReturnValue({
+      get: () => {
+        const status = first ? "speculative" : laterStatus;
+        first = false;
+        return { id: "tx-1", status, metadata };
+      },
+      rollback,
+      commit,
+    } as never);
+  }
+
   beforeEach(() => {
     rollback.mockReset();
     commit.mockReset();
@@ -207,6 +232,7 @@ describe("POST /api/architecture/modify/accept — saga arms (AUD-004)", () => {
       validateManifest,
     } as never);
 
+    commit.mockReturnValue({ id: "tx-1", status: "committed", metadata: {} });
     withMetadata({ patches: [] });
   });
 
@@ -329,6 +355,34 @@ describe("POST /api/architecture/modify/accept — saga arms (AUD-004)", () => {
     assert.equal(restoreFromGit.mock.calls.length, 1);
     assert.equal(rollback.mock.calls.length, 1);
     assert.equal(commit.mock.calls.length, 0);
+  });
+
+  it("does not report a commit that the manager refused", async () => {
+    // `commit()` returning null means "not committed" — the transaction is
+    // already terminal because an overlapping reject finalised it during the
+    // awaited applyPatches/lint. The pre-fix saga fell back to the `speculative`
+    // transaction it had read at the top and answered HTTP 200
+    // `status:"committed"` for a transaction that is actually rolled back.
+    withConcurrentFinalisation(
+      {
+        patches: [
+          { id: "p1", type: "add_node", targetId: "n1", payload: { a: 1 } },
+        ],
+      },
+      "rolled_back",
+    );
+    commit.mockReturnValue(null);
+
+    const res = await POST(post({ transactionId: "tx-1" }));
+    const body = await res.json();
+
+    assert.equal(body.success, false);
+    assert.notEqual(body.status, "committed");
+    assert.equal(res.status, 409);
+    assert.match(body.error, /concurrently finalised/i);
+    // Our patches landed on disk after the reject's restore, so they must come
+    // back out — otherwise a rolled-back transaction leaves its patches behind.
+    assert.equal(restoreFromGit.mock.calls.length, 1);
   });
 
   it("returns 404 for an unknown transaction", async () => {
