@@ -43,7 +43,7 @@ given import resolves to.
 | `typescript`             | `^5.4.5`             | 5 ranges; 21 workspaces on `^5.0.0`                                                                            | Low — all resolve to one 5.x                                                                  |
 | `tsx`                    | `^4.21.0`            | 4 ranges, all `^4.x`                                                                                           | Low                                                                                           |
 | `@typescript-eslint/*`   | `^8.57.0`            | `^8.0.0` ×7, `^8.57.x` ×2                                                                                      | Low                                                                                           |
-| `@hexagen/sync`          | —                    | `workspace:*` ×5, `workspace:^` ×1                                                                             | Low — cosmetic, but pick one                                                                  |
+| `@hexagen/sync`          | —                    | ~~`workspace:*` ×5, `workspace:^` ×1~~ — **resolved in T5.1**, all six now `workspace:*`                       | Low — cosmetic; done                                                                          |
 | `js-yaml`                | —                    | `^4.1.0` ×3, `^4.1.1` ×15                                                                                      | Trivial                                                                                       |
 
 **Honest note on #455's contribution.** It declared `eslint@^8.57.0` in 19 workspaces that
