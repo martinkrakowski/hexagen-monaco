@@ -9,7 +9,7 @@
 
 ## Context
 
-`apps/web/features/` held ten vertical slices at the time of the investigation (`code-view`, `export`, `governance-assistant`, `hexagon-canvas`, `landing`, `llm-driver`, `manifest-generation`, `monaco-editor`, `project-wizard`, `workspace-shell`); it holds **nine** today, because `llm-driver` was never a slice and this decision retired it (see Consequences). Cross-slice imports are already forbidden at **error** level — `apps/web/eslint.config.js` wires `hexagen-ui/no-feature-slice-imports` for `features/**/*.{ts,tsx}`. The repo therefore has no open question about _whether_ slices may reach into each other. It had a question about whether the rule was true.
+`apps/web/features/` contained ten directories at the time of the investigation (`code-view`, `export`, `governance-assistant`, `hexagon-canvas`, `landing`, `llm-driver`, `manifest-generation`, `monaco-editor`, `project-wizard`, `workspace-shell`) — all treated as vertical slices by the boundary rule, which keys purely on directory position. It contains **nine** today: the investigation found that `llm-driver` was app-global infrastructure filed in a slice directory rather than a slice, and this decision relocated it (see Consequences). Cross-slice imports are already forbidden at **error** level — `apps/web/eslint.config.js` wires `hexagen-ui/no-feature-slice-imports` for `features/**/*.{ts,tsx}`. The repo therefore has no open question about _whether_ slices may reach into each other. It had a question about whether the rule was true.
 
 Five grounded observations forced this decision.
 
@@ -57,7 +57,7 @@ A neutral module **must not import from `features/`**. That inverts the dependen
 | #464 `b0269340` | `apps/web/features/llm-driver/` → `app/lib/local-llm-context.tsx`, directory deleted | 1    |
 | #467 `cf7ccc4e` | `project-config` presets/options/applications → `lib/`                               | 4    |
 
-#464 also retires the `features/llm-driver` vs `packages/llm-driver` name collision that made `@/llm-driver/*` ambiguous to every reader and every checker.
+PR #464 also retires the `features/llm-driver` vs `packages/llm-driver` name collision that made `@/llm-driver/*` ambiguous to every reader and every checker.
 
 **Outstanding:**
 
