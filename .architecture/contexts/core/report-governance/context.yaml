@@ -17,8 +17,7 @@ layers:
       - LogAgentRemediationUseCase
       - GetFeatureContextUseCase
     ports:
-      in:
-        - ReportInboundPort
+      in: []
       out:
         - ReportRepositoryPort
   infrastructure:

@@ -25,9 +25,7 @@ layers:
         - RenderManifestPort
         - TelemetryPort
         - GenerateProjectPort
-        - LoggerPort
       out:
-        - ProjectGeneratorPort
         - DownloadProviderPort
   infrastructure:
     adapters: []

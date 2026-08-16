@@ -138,7 +138,7 @@ Ends with: **Ready to move to Develop mode when you say `develop [feature]`.**
 2.  Print a numbered ToC of all files to create/modify first.
 3.  **One file per response** — full content, no ellipsis. _(Override: "batch Phase X" authorises multi-file streaming.)_
 4.  Pause after every file and await "next step". _(Override: no pause when batching is authorised.)_
-5.  Every file maps to a named element in `manifest.yaml`. Update manifest + run `yarn lint:arch` before any implementation file when adding a port/use-case/entity.
+5.  `layers.*` in `.architecture/contexts/**/context.yaml` is a **curated ownership registry, not a file inventory** — never add an entry just because you created a file, never delete a file just because it is unlisted, and note that `yarn lint:arch` does not read `layers`. Declared entries must be accurate. **Full spec:** [`ADR-0057`](.architecture/decisions/ADR-0057-manifest-layer-lists-are-a-curated-ownership-registry.md).
 6.  After each port + adapter + test double slice: remind to run `yarn build && yarn sync`.
 7.  Never leave a barrel with only `export {}`.
 8.  Minimal scoped changes only — no cosmetic reformatting.

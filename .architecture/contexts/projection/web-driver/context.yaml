@@ -12,7 +12,7 @@ layers:
       - PersistSessionIntentHandler
   infrastructure:
     adapters:
-      - LocalStoragePersistenceAdapter
+      - LocalStorageMonacoAdapter
       - LocalStorageCanvasLayoutAdapter
       - ArchitectureGraphProviderAdapter
       - LocalStorageByokStoreAdapter
@@ -24,6 +24,6 @@ depends_on:
   - byok
 wiring:
   - Intent Bus dispatches to projections/use-case factories only
-  - MonacoPersistencePort is owned by monaco-orchestration and implemented here by LocalStoragePersistenceAdapter
-  - ArchitectureGraphProviderPort is owned by visualization and implemented here by ArchitectureGraphProviderAdapter (stub — returns empty graph)
+  - MonacoPersistencePort is owned by shared (re-exported by monaco-orchestration for compatibility) and implemented here by LocalStorageMonacoAdapter
+  - IArchitectureGraphProviderPort is owned by visualization and implemented here by ArchitectureGraphProviderAdapter (stub — returns empty graph)
 plane: projection

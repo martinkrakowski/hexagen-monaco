@@ -13,12 +13,9 @@ layers:
       - GetLinterReportUseCase
       - MigrateManifestUseCase
     ports:
-      in:
-        - GeneratorPort
+      in: []
   infrastructure:
-    adapters:
-      - FileSystemGeneratorAdapter
-      - ArchLinterAdapter
+    adapters: []
 depends_on:
   - shared
   - project-configuration

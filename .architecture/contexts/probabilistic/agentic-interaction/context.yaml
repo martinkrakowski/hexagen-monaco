@@ -20,7 +20,6 @@ layers:
     ports:
       in:
       - ArchitectureModificationPort
-      - ConvertLooseSpecPort
       - ClassifyContextTypePort
       out:
         - LLMProviderPort

@@ -28,7 +28,7 @@ layers:
   infrastructure:
     adapters:
       - DefaultPromptCompilerAdapter
-      - GroundedPromptBuilderAdapter
+      - GroundedPromptAdapter
       - RRPSystemInstructionBuilderAdapter
       - RRPZodSchemaGeneratorAdapter
       - InMemoryPromptCacheAdapter

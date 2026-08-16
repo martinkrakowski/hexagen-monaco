@@ -32,7 +32,7 @@ layers:
       - GenerateManifestPipelineToolUseCase
     ports:
       in:
-        - McpServerPort
+        - MCPServerPort
       out:
         - ProjectConfigurationReadPort
         - ManifestWritePort
@@ -42,7 +42,6 @@ layers:
         - GovernanceReadPort
         - ManifestDiffPort
         - ReportGovernancePort
-        - TransactionManagerPort
         - ManifestGenerationPort
   infrastructure:
     adapters:

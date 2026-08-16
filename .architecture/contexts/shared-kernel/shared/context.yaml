@@ -8,4 +8,10 @@ layers:
       - Identifier
       - PersistedEditorWorkspace
       - PersistedCanvasLayout
+  application:
+    ports:
+      out:
+        - LoggerPort
+        - MonacoPersistencePort
+        - WizardPersistencePort
 plane: shared-kernel

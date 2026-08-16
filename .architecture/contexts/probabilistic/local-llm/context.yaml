@@ -28,7 +28,6 @@ layers:
     ports:
       in:
         - SendStructuredRequestPort
-        - CompiledPromptAdapterPort
       out:
         - LocalLLMProviderPort
         - WebGPUDetectorPort
@@ -40,7 +39,6 @@ layers:
       - WebGPUCapabilityAdapter
       - BrowserHardwareProfilerAdapter
       - IDBChatPersistenceAdapter
-      - CompiledPromptAdapter
 depends_on:
   - prompt-compiler
   - shared
