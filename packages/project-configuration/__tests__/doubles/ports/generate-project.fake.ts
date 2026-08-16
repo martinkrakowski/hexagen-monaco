@@ -2,7 +2,7 @@
 // Allows optional custom behavior for the `generate` method.
 // By default, `generate` simply echoes the input unchanged.
 
-import type { GenerateProjectPort } from "../../../src/application/ports/in/generate-project.port";
+import type { GenerateProjectPort } from "../../../src/application/ports/out/generate-project.port";
 
 /**
  * Fake implementation of `GenerateProjectPort`.

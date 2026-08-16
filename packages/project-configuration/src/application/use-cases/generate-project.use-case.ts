@@ -1,4 +1,4 @@
-import type { GenerateProjectPort } from "../ports/in/generate-project.port";
+import type { GenerateProjectPort } from "../ports/out/generate-project.port";
 
 import { Project } from "../../domain/entities/project";
 import { ProjectSpecification } from "../../domain/value-objects/project-specification";
