@@ -114,9 +114,16 @@ jobs:
       # resolution-dependent rules (domain-layer-import, application-layer-import)
       # then produce no finding for it — the ratchet would silently check less
       # than it claims. Building the whole graph makes the CI run see the same
-      # sources the baseline was recorded against. Cost is near zero: the
-      # eslint step above already builds most of this closure via `^build`, and
-      # turbo serves it from cache.
+      # sources the baseline was recorded against.
+      #
+      # This is NOT free, and the cost is stated rather than hand-waved: turbo
+      # has no remote cache here, and the eslint step's `^build` closure does
+      # not come back as cache hits on a hosted runner, so this step builds
+      # 39/39 from scratch — measured at 1m50s of a ~4m job. That is bought
+      # deliberately: the cheaper `--filter` form yields a byte-identical
+      # finding set on today's tree, but it is the form that degrades quietly
+      # as the repo grows, and this job still finishes well inside
+      # sync-integrity.yml (two full builds, a sync and the test suite).
       - name: "Build Packages (arch-linter bin + resolvable workspace targets)"
         run: yarn turbo run build --output-logs=errors-only --log-order=stream
 
