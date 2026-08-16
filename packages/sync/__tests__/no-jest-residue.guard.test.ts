@@ -59,21 +59,40 @@ const SKIP_DIRS = new Set([
 ]);
 
 /**
+ * Packages whose name contains `jest` but which are NOT a Jest installation.
+ *
+ * `@testing-library/jest-dom` is the whole list: despite the name it is a DOM
+ * matcher library (`expect.extend`) that supports Vitest as a first-class target
+ * and pulls in no Jest runtime. Banning it would be banning a name, not a
+ * dependency.
+ *
+ * An explicit exception rather than a gap in the pattern. The earlier version of
+ * this guard excluded it "by construction" — the scoped rule matched only an
+ * exact `/jest` tail, so `/jest-dom` fell outside it — which quietly made every
+ * OTHER `@scope/jest-*` adapter fall outside it too. Naming the one package that
+ * is genuinely fine is what lets the pattern below be as wide as the risk is.
+ */
+const JEST_PACKAGE_EXCEPTIONS = new Set(["@testing-library/jest-dom"]);
+
+/**
  * Package names that mean "Jest is installed here".
  *
- * `@[scope]/jest` covers the third-party transform adapters (`@swc/jest`,
- * `@sucrase/jest-plugin`'s cousins) — a package can only be named that to plug
- * INTO Jest, so its presence means a Jest run is being configured somewhere.
+ * Matched as a NAME SEGMENT — `jest` bounded by start-of-name, `@`, `/`, or `-`
+ * on the left and end-of-name, `-`, or `/` on the right. The ecosystem attaches
+ * itself to Jest in every affix order, and an enumerated list only ever covers
+ * the orders someone thought of: `ts-jest` and `babel-jest` were listed, but the
+ * equally real `esbuild-jest`, `vue-jest`, and `@sucrase/jest-plugin` were not —
+ * the last of those while this comment claimed to cover it. A boundary rule has
+ * no such blind side.
  *
- * Deliberately NOT matched: `@testing-library/jest-dom`. Despite the name it is
- * a DOM matcher library (`expect.extend`) that supports Vitest as a first-class
- * target and pulls in no Jest runtime — banning it would be banning a name, not
- * a dependency. It is excluded by construction (the scoped rule matches only an
- * exact `/jest` tail, not `/jest-*`), and asserted below so a widened pattern
- * cannot quietly start banning it.
+ * The boundary is what keeps it honest: `majestic` and `vitest` embed no `jest`
+ * segment and do not match. Verified against every dependency declared in this
+ * repo — the widened pattern hits exactly one, the exception above.
  */
-const JEST_PACKAGE =
-  /^(jest|jest-cli|ts-jest|babel-jest|jest-[^/]+|@types\/jest|@jest\/[^/]+|@[^/]+\/jest)$/;
+const JEST_PACKAGE = /(^|[@/-])jest($|[-/])/;
+
+const isJestPackage = (name: string) =>
+  !JEST_PACKAGE_EXCEPTIONS.has(name) && JEST_PACKAGE.test(name);
 
 /** Binaries whose invocation from a script means Jest is being run. */
 const JEST_BINARY = /^(jest|jest-cli)$/;
@@ -226,13 +245,18 @@ async function readJsonc(file: string): Promise<Json> {
  * each form through a positional parser is how a bypass survives; scanning every
  * token for a Jest basename has no positions to miss.
  *
+ * Tokenised on shell operators as well as whitespace. Splitting on whitespace
+ * alone reads `tsc&&jest` as one opaque word and misses the Jest in it — and
+ * spaces around `&&`, `;`, and `|` are a formatting habit, not a rule the shell
+ * enforces. Operators are separators here for the same reason whitespace is.
+ *
  * The trade-off is a possible false positive — a literal argument that happens
  * to be exactly `jest`. That failure is loud, visible in the violation message,
  * and one line to adjudicate. A silent bypass is neither.
  */
 function jestBinariesInvoked(command: string): string[] {
   const hits: string[] = [];
-  for (const token of command.split(/\s+/).filter(Boolean)) {
+  for (const token of command.split(/[\s;&|()<>`]+/).filter(Boolean)) {
     // Basename across both separators, minus a Windows launcher suffix.
     const base = (token.split(/[\\/]/).pop() ?? "").replace(
       /\.(cmd|ps1|exe|bat)$/i,
@@ -295,7 +319,7 @@ describe("no Jest residue", () => {
         ...Object.keys(pkg.optionalDependencies ?? {}),
       ];
       for (const dep of declared) {
-        if (JEST_PACKAGE.test(dep))
+        if (isJestPackage(dep))
           violations.push(`${rel(file)}: declares "${dep}"`);
       }
       for (const [name, command] of Object.entries(pkg.scripts ?? {})) {
@@ -329,7 +353,15 @@ describe("no Jest residue", () => {
       "@types/jest",
       "@jest/globals",
       "@swc/jest",
-    ].filter((name) => !JEST_PACKAGE.test(name));
+      // Adapters whose `jest` sits in an affix position the old enumerated
+      // pattern had no case for. All real packages; all a configured Jest.
+      "esbuild-jest",
+      "vue-jest",
+      "swc-jest",
+      "@sucrase/jest-plugin",
+      "@swc/plugin-jest",
+      "jest-preset-angular",
+    ].filter((name) => !isJestPackage(name));
     assert.deepEqual(
       banned,
       [],
@@ -342,7 +374,9 @@ describe("no Jest residue", () => {
       "@vitest/coverage-v8",
       "jsdom",
       "@types/jsdom",
-    ].filter((name) => JEST_PACKAGE.test(name));
+      // Boundary check: `jest` embedded mid-word is not a Jest package.
+      "majestic",
+    ].filter((name) => isJestPackage(name));
     assert.deepEqual(
       allowed,
       [],
@@ -393,6 +427,14 @@ describe("no Jest residue", () => {
       "./node_modules/.bin/jest",
       "node ./node_modules/.bin/jest --runInBand",
       "node_modules\\.bin\\jest.cmd",
+      // Operators need no surrounding spaces — the shell does not require them,
+      // so neither can the tokenizer.
+      "tsc&&jest",
+      "build;jest",
+      "jest&exit 0",
+      "jest||true",
+      "vitest run|| jest",
+      "(cd packages/x&&jest)",
     ].filter((command) => jestBinariesInvoked(command).length === 0);
     assert.deepEqual(missed, [], `Jest invocation not detected in: ${missed}`);
 
