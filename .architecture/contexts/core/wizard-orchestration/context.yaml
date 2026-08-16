@@ -25,9 +25,6 @@ layers:
         - SetActiveWorkspacePort
         - ClearActiveWorkspacePort
       out:
-        - WizardPersistencePort
-        - WizardTelemetryPort
-        - MonacoSyncPort
         - WizardCompletionSignalPort
 depends_on:
   - messaging

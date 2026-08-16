@@ -96,7 +96,7 @@ Non-delegatable. Primary runs this checklist after all sub-agent outputs are rec
 [ ] No Domain package imports an Infrastructure package
 [ ] No port is declared in more than one bounded context
 [ ] Every catch block returns Result<T, E>
-[ ] All new files correspond to a named element in manifest.yaml
+[ ] Every context.yaml layers entry names a real exported symbol (registry accuracy, ADR-0057 — completeness is NOT required)
 [ ] Test doubles implement the exact same interface as the real adapter
 [ ] No barrel contains only `export {}`
 [ ] git diff --stat reviewed — no unintended reformatting

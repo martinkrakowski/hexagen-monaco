@@ -22,7 +22,5 @@ layers:
         - ProjectCurrentBufferStatePort
         - ApplySemanticPatchPort
       out:
-        - MonacoPersistencePort
-        - SemanticModelAdapterPort
         - TsMorphPort
 plane: core
