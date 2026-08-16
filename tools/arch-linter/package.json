@@ -38,7 +38,7 @@
   "dependencies": {
     "@hexagen/project-configuration": "workspace:*",
     "@hexagen/shared": "workspace:*",
-    "js-yaml": "^4.1.0",
+    "js-yaml": "^4.1.1",
     "ts-morph": "^27.0.2",
     "zod": "^3.23.8"
   },
@@ -49,8 +49,8 @@
     "eslint": "^9.7.0",
     "eslint-plugin-yml": "^3.3.1",
     "tsup": "^8.1.0",
-    "tsx": "^4.19.2",
-    "typescript": "^5.5.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.4.5",
     "vitest": "^4.1.9",
     "yaml-eslint-parser": "^2.0.0"
   }
