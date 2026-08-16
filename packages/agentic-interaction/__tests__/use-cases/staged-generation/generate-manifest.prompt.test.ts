@@ -5,8 +5,8 @@ import {
   compileStage3Prompt,
   compileStage4Prompt,
   compileStage7OpsPrompt,
-} from "../../../src/domain/prompts/generate-manifest.prompt.ts";
-import type { PipelineState } from "../../../src/domain/value-objects/pipeline-state.ts";
+} from "../../../src/domain/prompts/generate-manifest.prompt";
+import type { PipelineState } from "../../../src/domain/value-objects/pipeline-state";
 
 test("STAGE3_PORTS_SYSTEM_PROMPT contains app-metadata exclusion block", () => {
   assert.match(STAGE3_PORTS_SYSTEM_PROMPT, /APP-LEVEL METADATA IS NOT A PORT/);

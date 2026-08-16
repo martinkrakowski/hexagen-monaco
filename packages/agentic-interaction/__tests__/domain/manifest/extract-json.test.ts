@@ -291,7 +291,7 @@ describe("parseJSON with repair fallback", () => {
 describe("extractArrayFromWrapper", () => {
   it("returns array directly when data is already an array", () => {
     const data = [{ name: "a" }, { name: "b" }];
-    const result = extractArrayFromWrapper(data);
+    const result = extractArrayFromWrapper<{ name: string }>(data);
     assert.strictEqual(result.length, 2);
     assert.strictEqual(result[0].name, "a");
   });
@@ -303,7 +303,7 @@ describe("extractArrayFromWrapper", () => {
         { name: "orders", type: "core", description: "Order management" },
       ],
     };
-    const result = extractArrayFromWrapper(data);
+    const result = extractArrayFromWrapper<{ name: string }>(data);
     assert.strictEqual(result.length, 2);
     assert.strictEqual(result[0].name, "auth");
   });
@@ -316,7 +316,7 @@ describe("extractArrayFromWrapper", () => {
 
   it("extracts array from first array value when no known key matches", () => {
     const data = { items: [{ name: "a" }], count: 1 };
-    const result = extractArrayFromWrapper(data);
+    const result = extractArrayFromWrapper<{ name: string }>(data);
     assert.strictEqual(result.length, 1);
     assert.strictEqual(result[0].name, "a");
   });

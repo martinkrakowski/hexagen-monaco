@@ -3,7 +3,7 @@ import assert from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AssembledManifest } from "../../../src/domain/value-objects/pipeline-state.ts";
+import type { AssembledManifest } from "../../../src/domain/value-objects/pipeline-state";
 
 // StageResult type (matches definition in use-case files)
 type StageResult<T> =

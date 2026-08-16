@@ -1,9 +1,9 @@
-// Fake implementation for IValidateSpecPort used in unit tests.
+// Fake implementation for ValidateSpecPort used in unit tests.
 // Implements the same contract as the real port but allows optional custom behavior.
 
-import type { IValidateSpecPort } from "@hexagen/project-configuration";
+import type { ValidateSpecPort } from "@hexagen/project-configuration";
 
-export class FakeValidateSpecPort implements IValidateSpecPort {
+export class FakeValidateSpecPort implements ValidateSpecPort {
   private behavior: ((input: any) => Promise<any>) | null = null;
 
   /** Set a custom implementation for the `execute` method. */

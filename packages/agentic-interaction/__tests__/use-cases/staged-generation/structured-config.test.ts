@@ -13,7 +13,7 @@ import {
   ExecuteStructuredConfigGenerationUseCase,
   inferContextType,
   StructuredConfigContext,
-} from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.ts";
+} from "../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
 
 const fixturesDir = path.join(
   path.dirname(fileURLToPath(import.meta.url)),

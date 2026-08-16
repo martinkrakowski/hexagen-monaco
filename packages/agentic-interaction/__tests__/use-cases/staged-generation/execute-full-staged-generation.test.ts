@@ -1,7 +1,7 @@
 import { test, describe } from "vitest";
 import assert from "node:assert/strict";
-import { ExecuteFullStagedGenerationUseCase } from "../../../src/application/use-cases/staged-generation/execute-full-staged-generation.use-case.ts";
-import { compileStage0Prompt } from "../../../src/domain/prompts/generate-manifest.prompt.ts";
+import { ExecuteFullStagedGenerationUseCase } from "../../../src/application/use-cases/staged-generation/execute-full-staged-generation.use-case";
+import { compileStage0Prompt } from "../../../src/domain/prompts/generate-manifest.prompt";
 import type { ArchitectureContext } from "../../../src/domain/prompts/build-architecture-context";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";

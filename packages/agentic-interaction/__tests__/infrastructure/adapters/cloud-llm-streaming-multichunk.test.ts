@@ -229,7 +229,10 @@ describe("cloud-llm-streaming multi-chunk delivery", () => {
         primary: testChain.primary,
         fallbacks: [
           {
-            providerId: "backup",
+            // `providerId` is the closed `CloudProviderId` union, not a free
+            // label — the fallback's "backup" identity lives in its baseUrl and
+            // model below.
+            providerId: "anthropic",
             baseUrl: "https://backup.example.com/v1",
             model: "backup-model",
             apiKeyEnvVar: "TEST_STREAM_FALLBACK_KEY",
@@ -298,7 +301,7 @@ describe("cloud-llm-streaming multi-chunk delivery", () => {
       // The failed primary never parsed a frame, so it must not have fired
       // the callback — exactly one report, from the provider that served.
       assert.deepStrictEqual(resolved, [
-        { provider: "backup", model: "backup-model-v2" },
+        { provider: "anthropic", model: "backup-model-v2" },
       ]);
     } finally {
       if (originalPrimary !== undefined)

@@ -1,10 +1,10 @@
 import { test, describe } from "vitest";
 import assert from "node:assert";
-import { ExecutePortMappingUseCase } from "../../../src/application/use-cases/staged-generation/execute-port-mapping.use-case.ts";
+import { ExecutePortMappingUseCase } from "../../../src/application/use-cases/staged-generation/execute-port-mapping.use-case";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import type { PipelineState } from "../../../src/domain/value-objects/pipeline-state";
 import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry";
-import { STAGE3_PORTS_SYSTEM_PROMPT } from "../../../src/domain/prompts/generate-manifest.prompt.ts";
+import { STAGE3_PORTS_SYSTEM_PROMPT } from "../../../src/domain/prompts/generate-manifest.prompt";
 
 const validPortMappingNdjson = [
   '{"contextName":"invoice-management","direction":"in","name":"createInvoice","portType":"command","description":"Creates invoice"}',
@@ -12,7 +12,11 @@ const validPortMappingNdjson = [
   '{"type":"contextMapping","upstream":"billing","downstream":"invoice-management","pattern":"ACL"}',
 ].join("\n");
 
-const mockStageState: Pick<PipelineState, "stage0" | "stage1" | "stage2"> = {
+// `execute` takes `Required<Pick<...>>` — the three stages are all mandatory
+// inputs there, so the fixture must be typed as present, not optional.
+const mockStageState: Required<
+  Pick<PipelineState, "stage0" | "stage1" | "stage2">
+> = {
   stage0: { intent: "Invoice system", projectName: "invoice-app" } as any,
   stage1: { rawContent: "sample stage 1 output" } as any,
   stage2: {

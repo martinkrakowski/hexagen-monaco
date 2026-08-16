@@ -1,6 +1,6 @@
 import { test, describe } from "vitest";
 import assert from "node:assert";
-import { validatePortQuality } from "../../../src/domain/services/port-quality-validator.ts";
+import { validatePortQuality } from "../../../src/domain/services/port-quality-validator";
 import type { PortDefinition } from "../../../src/domain/value-objects/pipeline-state";
 
 describe("validatePortQuality", () => {

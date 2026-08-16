@@ -1,27 +1,36 @@
 import { describe, it, vi } from "vitest";
 import assert from "node:assert";
 import { ExecuteStructuredConfigGenerationUseCase } from "../../../../src/application/use-cases/staged-generation/execute-structured-config-generation.use-case";
+import type {
+  Transaction,
+  TransactionManagerPort,
+  TransactionStatus,
+} from "@hexagen/transaction-system";
 
-// Mock TransactionManagerPort
-const mockTransactionManager = {
-  begin: vi.fn(() => ({
-    id: "mock-transaction-id",
-    status: "pending",
-    intentId: "mock-intent",
-    metadata: {},
-    lineage: [],
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  })),
-  transition: vi.fn((id, status) => ({
+// Mock TransactionManagerPort. `Transaction` timestamps are epoch millis and
+// there is no `lineage` field — the previous inline literal used `Date` objects
+// and an extra `lineage: []`, which only survived because this file was never
+// type-checked (AUD-020).
+function makeTransaction(
+  id: string,
+  status: TransactionStatus = "pending",
+): Transaction {
+  const now = Date.now();
+  return {
     id,
-    status,
     intentId: "mock-intent",
+    status,
     metadata: {},
-    lineage: [],
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  })),
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+const mockTransactionManager: TransactionManagerPort = {
+  begin: vi.fn(() => makeTransaction("mock-transaction-id")),
+  transition: vi.fn((id: string, status: TransactionStatus) =>
+    makeTransaction(id, status),
+  ),
   get: vi.fn(() => null),
   list: vi.fn(() => []),
   commit: vi.fn(() => null),
@@ -32,7 +41,7 @@ const mockTransactionManager = {
 const mockStreamStructuredRequest = vi.fn(() => {
   async function* mockGenerator() {
     yield {
-      success: true,
+      success: true as const,
       value: JSON.stringify({ portMap: {}, contextMappings: [] }),
     };
   }
@@ -69,7 +78,8 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
   });
 
   it("calls onProgress with stages 0-6", async () => {
-    const calls: [number, string][] = [];
+    // `onProgress` is `(stage: number, durationMs: number) => void`.
+    const calls: [number, number][] = [];
     const useCase = new ExecuteStructuredConfigGenerationUseCase(
       mockLLMPort,
       mockTransactionManager,
@@ -103,7 +113,7 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
       sendRequest: vi.fn(() => Promise.reject(new Error("LLM API error"))),
       streamStructuredRequest: vi.fn(() => {
         async function* gen() {
-          yield { success: false, error: new Error("LLM API error") };
+          yield { success: false as const, error: new Error("LLM API error") };
         }
         return gen();
       }),

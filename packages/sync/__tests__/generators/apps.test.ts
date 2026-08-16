@@ -670,6 +670,7 @@ describe("apps", () => {
         result.error,
         "a failed eslint write must surface result.error",
       );
+      assert.ok(result.summary, "a failed run must still carry a summary");
       assert.ok(
         !result.summary.startsWith("apps:"),
         "the success summary must not overwrite the sub-generator error summary",

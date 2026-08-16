@@ -23,6 +23,7 @@ describe("context-serializer", () => {
           },
         },
         peerMappings: [],
+        addOnsAnswers: {},
       },
       currentStep: "Step 1",
     });
@@ -47,7 +48,15 @@ describe("context-serializer", () => {
             description: "Handles user auth",
             infrastructureTarget: "nestjs" as const,
             apiFramework: "NestJS" as const,
-            uiFramework: "Next" as const,
+            uiFramework: "Next.js" as const,
+            // Schema-defaulted fields are still required on the parsed
+            // `WizardData` output type, so a hand-built fixture must supply them.
+            coreDomainEntities: [],
+            valueObjects: [],
+            domainEvents: [],
+            persistenceAdapter: "" as const,
+            messagingAdapter: "" as const,
+            telemetryProvider: "" as const,
             portConfiguration: {
               inboundPorts: ["rest-controller"],
               outboundPorts: ["relational-db"],
@@ -67,6 +76,7 @@ describe("context-serializer", () => {
           },
         },
         peerMappings: [],
+        addOnsAnswers: {},
       },
       currentStep: "Step 2",
     });
@@ -95,6 +105,7 @@ describe("context-serializer", () => {
           },
         },
         peerMappings: [],
+        addOnsAnswers: {},
       },
       currentStep: "Step 1",
     });
@@ -123,7 +134,7 @@ describe("context-serializer", () => {
           {
             id: "ext-1",
             name: "Payment Gateway",
-            relationshipType: "upstream" as const,
+            relationshipType: "U" as const,
           },
         ],
         governance: {
@@ -138,6 +149,7 @@ describe("context-serializer", () => {
           },
         },
         peerMappings: [],
+        addOnsAnswers: {},
       },
       currentStep: "Step 1",
     });
@@ -176,6 +188,7 @@ describe("context-serializer", () => {
             communicationBoundary: "networked" as const,
           },
         ],
+        addOnsAnswers: {},
       },
       currentStep: "Step 1",
     });

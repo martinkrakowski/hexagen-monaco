@@ -12,7 +12,11 @@ import type {
   ArchitectureGraphLike,
   LinterReportLike,
 } from "@hexagen/prompt-compiler";
-import type { SendStructuredRequestPort } from "@hexagen/local-llm";
+import { DomainModelId } from "@hexagen/local-llm";
+import type {
+  LLMResponse,
+  SendStructuredRequestPort,
+} from "@hexagen/local-llm";
 import type { LintFilterPort } from "@hexagen/reconciliation-engine";
 import {
   ReconcileUseCase,
@@ -51,21 +55,34 @@ function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
   };
 }
 
+function makeLLMResponse(content: string): LLMResponse {
+  return {
+    id: "llm-resp-test-1",
+    modelId: DomainModelId.QWEN_CODER_3B,
+    content,
+    finishReason: "stop",
+    timestamp: Date.now(),
+  };
+}
+
 const defaultLLMOutput = JSON.stringify({
   manifest: { boundedContexts: [] },
   architectureGraph: { nodes: [], edges: [] },
   reasoning: "test reasoning",
 });
 
+const unsupportedIntentError = {
+  code: "UNSUPPORTED_INTENT" as const,
+  message: "Cannot parse",
+  originalText: "gibberish",
+};
+
 function createFailingNLParser(): NLToDomainCommandParserPort {
   return {
-    parse: async () => ({
+    parse: async () => ({ success: false, error: unsupportedIntentError }),
+    parseWithMetadata: async () => ({
       success: false,
-      error: {
-        code: "UNSUPPORTED_INTENT" as const,
-        message: "Cannot parse",
-        originalText: "gibberish",
-      },
+      error: unsupportedIntentError,
     }),
   };
 }
@@ -95,12 +112,22 @@ function createMockDeps(
     lintFilterPort?: LintFilterPort;
   } = {},
 ): ModifyArchitectureDeps {
+  const parsedCommands = [
+    { kind: "add_context", name: "billing" },
+  ] as unknown as DomainCommand[];
+
   const nlParser: NLToDomainCommandParserPort = {
-    parse: async () => ({
+    parse: async () => ({ success: true, value: parsedCommands }),
+    parseWithMetadata: async () => ({
       success: true,
-      value: [
-        { kind: "add_context", name: "billing" },
-      ] as unknown as DomainCommand[],
+      value: {
+        commands: parsedCommands,
+        metadata: {
+          intentType: "create_bounded_context",
+          parameters: { name: "billing" },
+          confidence: 1,
+        },
+      },
     }),
   };
 
@@ -131,7 +158,7 @@ function createMockDeps(
   const llmSender: SendStructuredRequestPort = {
     sendRequest: async () => ({
       success: true,
-      value: { content: defaultLLMOutput },
+      value: makeLLMResponse(defaultLLMOutput),
     }),
     streamStructuredRequest: async function* () {},
   };
@@ -220,13 +247,13 @@ describe("modify-architecture", () => {
       scannedFilesCount: 1,
     };
 
+    // `LintFilterPort` is a per-patch predicate — `shouldAccept(patch, report)`.
+    // The old `filterPatches` member matched no port at all, so this double was
+    // never actually consulted by ReconcileUseCase.
     const lintFilterPort: LintFilterPort = {
-      filterPatches: (patches) =>
-        patches.filter(
-          (p) =>
-            !reportWithViolations.violations.some(
-              (v) => v.file === p.targetId && v.severity === "error",
-            ),
+      shouldAccept: (patch) =>
+        !reportWithViolations.violations.some(
+          (v) => v.file === patch.targetId && v.severity === "error",
         ),
     };
 
@@ -273,9 +300,9 @@ describe("modify-architecture", () => {
       } as any,
       { compareVerdicts: () => 0 } as any,
       { resolveConflicts: () => [] } as any,
-      { promoteToPhase: (s) => s } as any,
+      { promoteToPhase: (s: unknown) => s } as any,
       undefined,
-      { filterPatches: (p) => p } as any,
+      { shouldAccept: () => true } as any,
     );
 
     const deps = createMockDeps({
@@ -283,6 +310,20 @@ describe("modify-architecture", () => {
         parse: async () => {
           nlParsed = true;
           return { success: true, value: [] as DomainCommand[] };
+        },
+        parseWithMetadata: async () => {
+          nlParsed = true;
+          return {
+            success: true,
+            value: {
+              commands: [] as DomainCommand[],
+              metadata: {
+                intentType: "create_bounded_context",
+                parameters: {},
+                confidence: 1,
+              },
+            },
+          };
         },
       },
       promptCompiler: {
@@ -302,7 +343,10 @@ describe("modify-architecture", () => {
       llmSender: {
         sendRequest: async () => {
           llmCalled = true;
-          return { success: true, value: { content: defaultLLMOutput } };
+          return {
+            success: true as const,
+            value: makeLLMResponse(defaultLLMOutput),
+          };
         },
         streamStructuredRequest: async function* () {},
       },
@@ -405,9 +449,9 @@ describe("modify-architecture", () => {
       failingReconciliationPort as any,
       { compareVerdicts: () => 0 } as any,
       { resolveConflicts: () => [] } as any,
-      { promoteToPhase: (s) => s } as any,
+      { promoteToPhase: (s: unknown) => s } as any,
       undefined,
-      { filterPatches: (p) => p } as any,
+      { shouldAccept: () => true } as any,
     );
 
     const deps = createMockDeps({
@@ -515,9 +559,9 @@ describe("modify-architecture", () => {
       throwingReconciliationPort as any,
       { compareVerdicts: () => 0 } as any,
       { resolveConflicts: () => [] } as any,
-      { promoteToPhase: (s) => s } as any,
+      { promoteToPhase: (s: unknown) => s } as any,
       undefined,
-      { filterPatches: (p) => p } as any,
+      { shouldAccept: () => true } as any,
     );
 
     const deps = createMockDeps({

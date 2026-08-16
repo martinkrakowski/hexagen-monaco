@@ -20,6 +20,7 @@ import type {
   ManifestMutationPort,
   LintValidationPort,
   Transaction,
+  TransactionStatus,
 } from "@hexagen/transaction-system";
 import type {
   ReconciliationState,
@@ -31,78 +32,76 @@ import type {
 // MOCKS FOR PHASE B+C TESTING
 // ============================================================================
 
+/**
+ * These doubles used to model an async, Result-returning transaction manager
+ * and a manifest port with `getManifest`/`validateManifest`/`writeManifest`.
+ * Neither shape has ever matched the real ports: `TransactionManagerPort` is
+ * synchronous and returns `Transaction | null`, and `ManifestMutationPort`
+ * exposes only `applyPatches` + `restoreFromGit`. The drift was invisible
+ * because this file was never type-checked (AUD-020).
+ */
 function createMockTransactionManager(): TransactionManagerPort {
   const txns = new Map<string, Transaction>();
 
+  const setStatus = (id: string, status: TransactionStatus) => {
+    const txn = txns.get(id);
+    if (!txn) return null;
+    const updated: Transaction = { ...txn, status, updatedAt: Date.now() };
+    txns.set(id, updated);
+    return updated;
+  };
+
   return {
-    begin: async (intentId: string, metadata?: object) => {
+    begin: (intentId: string, metadata?: Record<string, unknown>) => {
       const txn: Transaction = {
         id: `txn-${Date.now()}-${Math.random()}`,
         intentId,
         status: "pending",
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        metadata: metadata || {},
+        metadata: metadata ?? {},
       };
       txns.set(txn.id, txn);
-      return { success: true, value: txn };
+      return txn;
     },
-
-    commit: async (transactionId: string) => {
-      const txn = txns.get(transactionId);
-      if (!txn) return { success: false, error: new Error("Txn not found") };
-      txn.status = "committed";
-      txn.updatedAt = Date.now();
-      return { success: true, value: txn };
-    },
-
-    rollback: async (transactionId: string) => {
-      const txn = txns.get(transactionId);
-      if (!txn) return { success: false, error: new Error("Txn not found") };
-      txn.status = "rolled_back";
-      txn.updatedAt = Date.now();
-      return { success: true, value: txn };
-    },
-
-    getTransaction: async (id: string) => {
-      const txn = txns.get(id);
-      return txn ? { success: true, value: txn } : { success: false };
-    },
+    transition: (transactionId: string, status: TransactionStatus) =>
+      setStatus(transactionId, status),
+    get: (transactionId: string) => txns.get(transactionId) ?? null,
+    list: () => [...txns.values()],
+    commit: (transactionId: string) => setStatus(transactionId, "committed"),
+    rollback: (transactionId: string) =>
+      setStatus(transactionId, "rolled_back"),
   };
 }
 
-function createMockManifestMutation(): ManifestMutationPort {
-  let manifest: ProjectSpecLike = {
-    name: "test-project",
-    boundedContexts: [],
-    dependencies: [],
-  };
+/**
+ * `ManifestMutationPort` has no read side, so the in-memory manifest is exposed
+ * next to the port rather than bolted onto it as a phantom method.
+ */
+function createMockManifestMutation(): {
+  port: ManifestMutationPort;
+  readManifest: () => ProjectSpecLike;
+} {
+  const manifest: ProjectSpecLike = { boundedContexts: [] };
 
   return {
-    applyPatches: async (patches: Patch[]) => {
-      for (const patch of patches) {
-        if (patch.operation === "add" && patch.targetId === "boundedContexts") {
-          manifest.boundedContexts.push(patch.value);
+    port: {
+      applyPatches: async (patches: Patch[]) => {
+        for (const patch of patches) {
+          if (
+            patch.type === "add_node" &&
+            patch.targetId === "boundedContexts"
+          ) {
+            manifest.boundedContexts?.push(
+              patch.payload as { id: string; name: string },
+            );
+          }
         }
-      }
-      return { success: true, value: undefined };
+        return { success: true, value: undefined };
+      },
+      restoreFromGit: async () => ({ success: true, value: undefined }),
     },
-
-    validateManifest: async (spec: ProjectSpecLike) => {
-      const errors: string[] = [];
-      if (!spec.name) errors.push("Missing project name");
-      return { success: true, value: { valid: errors.length === 0, errors } };
-    },
-
-    getManifest: async () => ({
-      success: true,
-      value: manifest,
-    }),
-
-    writeManifest: async (spec: ProjectSpecLike) => {
-      manifest = spec;
-      return { success: true, value: undefined };
-    },
+    readManifest: () => manifest,
   };
 }
 
@@ -110,7 +109,7 @@ function createMockLintValidation(): LintValidationPort {
   return {
     validateManifest: async () => ({
       success: true,
-      value: { valid: true, violations: [] },
+      value: { valid: true, errors: [] },
     }),
   };
 }
@@ -121,7 +120,7 @@ function createMockLintValidation(): LintValidationPort {
 
 describe("E2E: Phase B + C Integration", () => {
   let transactionManager: TransactionManagerPort;
-  let manifestMutation: ManifestMutationPort;
+  let manifestMutation: ReturnType<typeof createMockManifestMutation>;
   let lintValidator: LintValidationPort;
 
   beforeEach(() => {
@@ -146,28 +145,25 @@ describe("E2E: Phase B + C Integration", () => {
       };
 
       // Begin transaction
-      const beginResult = await transactionManager.begin(lineage.intentId, {
+      const begun = transactionManager.begin(lineage.intentId, {
         patchCount: 1,
       });
-      assert.ok(beginResult.success, "Transaction should begin");
-      const txnId = beginResult.value.id;
+      const txnId = begun.id;
 
       // Verify transaction is pending
-      let txnStatus = await transactionManager.getTransaction(txnId);
       assert.strictEqual(
-        txnStatus.value?.status,
+        transactionManager.get(txnId)?.status,
         "pending",
         "Transaction should be pending",
       );
 
       // Simulate patch failure → trigger rollback
-      const rollbackResult = await transactionManager.rollback(txnId);
-      assert.ok(rollbackResult.success, "Rollback should succeed");
+      const rollbackResult = transactionManager.rollback(txnId);
+      assert.ok(rollbackResult, "Rollback should succeed");
 
       // Verify transaction is rolled back
-      txnStatus = await transactionManager.getTransaction(txnId);
       assert.strictEqual(
-        txnStatus.value?.status,
+        transactionManager.get(txnId)?.status,
         "rolled_back",
         "Transaction should be rolled back",
       );
@@ -176,19 +172,16 @@ describe("E2E: Phase B + C Integration", () => {
     });
 
     it("should commit transaction after successful patch application", async () => {
-      const txnResult = await transactionManager.begin("intent-success", {
+      const txnId = transactionManager.begin("intent-success", {
         patchCount: 2,
-      });
-      assert.ok(txnResult.success);
-      const txnId = txnResult.value.id;
+      }).id;
 
       // Commit after success
-      const commitResult = await transactionManager.commit(txnId);
-      assert.ok(commitResult.success, "Commit should succeed");
+      const commitResult = transactionManager.commit(txnId);
+      assert.ok(commitResult, "Commit should succeed");
 
-      const finalStatus = await transactionManager.getTransaction(txnId);
       assert.strictEqual(
-        finalStatus.value?.status,
+        transactionManager.get(txnId)?.status,
         "committed",
         "Transaction should be committed",
       );
@@ -294,22 +287,24 @@ describe("E2E: Phase B + C Integration", () => {
   describe("Phase C: Patches Exposed in Modification Result", () => {
     it("should generate patches as part of modification result", async () => {
       // Create mock patches
+      // `Patch` is `{ id, type, targetId, payload }` — there is no
+      // `operation`/`value` pair.
       const patches: Patch[] = [
         {
           id: "patch-001",
-          operation: "add",
+          type: "add_node",
           targetId: "boundedContexts",
-          value: {
+          payload: {
             name: "payment_service",
-            type: "application",
+            kind: "application",
             ports: { inbound: [], outbound: [] },
           },
         },
         {
           id: "patch-002",
-          operation: "update",
+          type: "update_node",
           targetId: "manifest.version",
-          value: "1.1.0",
+          payload: { version: "1.1.0" },
         },
       ];
 
@@ -317,13 +312,11 @@ describe("E2E: Phase B + C Integration", () => {
       for (const patch of patches) {
         assert.ok(patch.id, "Patch should have id");
         assert.ok(
-          patch.operation === "add" ||
-            patch.operation === "update" ||
-            patch.operation === "remove",
-          "Patch should have valid operation",
+          patch.type === "add_node" || patch.type === "update_node",
+          "Patch should have valid type",
         );
         assert.ok(patch.targetId, "Patch should have targetId");
-        assert.ok(patch.value !== undefined, "Patch should have value or null");
+        assert.ok(patch.payload !== undefined, "Patch should have a payload");
       }
 
       console.log(
@@ -372,46 +365,46 @@ describe("E2E: Phase B + C Integration", () => {
       // This validates the integration of all Phase B+C fixes
 
       // 1. Begin transaction
-      const txnResult = await transactionManager.begin("intent-integration-1");
-      assert.ok(txnResult.success);
-      const txnId = txnResult.value.id;
+      const txnId = transactionManager.begin("intent-integration-1").id;
 
       // 2. Apply patches
       const patches: Patch[] = [
         {
           id: "patch-i1",
-          operation: "add",
+          type: "add_node",
           targetId: "boundedContexts",
-          value: {
+          payload: {
+            id: "auth_service",
             name: "auth_service",
-            type: "infrastructure",
-            ports: { inbound: [], outbound: [] },
           },
         },
       ];
 
-      const applyResult = await manifestMutation.applyPatches(
+      const applyResult = await manifestMutation.port.applyPatches(
         patches,
         ".architecture/manifest.yaml",
       );
       assert.ok(applyResult.success, "Should apply patches");
+      assert.strictEqual(
+        manifestMutation.readManifest().boundedContexts?.length,
+        1,
+        "Patch should have landed in the manifest",
+      );
 
       // 3. Validate manifest
-      const manifest = await manifestMutation.getManifest();
       const validateResult = await lintValidator.validateManifest(
-        manifest.value,
+        ".architecture/manifest.yaml",
       );
       assert.ok(validateResult.success);
       assert.ok(validateResult.value.valid, "Manifest should be valid");
 
       // 4. Commit transaction
-      const commitResult = await transactionManager.commit(txnId);
-      assert.ok(commitResult.success, "Should commit transaction");
+      const commitResult = transactionManager.commit(txnId);
+      assert.ok(commitResult, "Should commit transaction");
 
       // 5. Verify final state
-      const finalTxn = await transactionManager.getTransaction(txnId);
       assert.strictEqual(
-        finalTxn.value?.status,
+        transactionManager.get(txnId)?.status,
         "committed",
         "Transaction should be committed",
       );
@@ -422,36 +415,32 @@ describe("E2E: Phase B + C Integration", () => {
     });
 
     it("should rollback on validation failure", async () => {
-      const txnResult = await transactionManager.begin("intent-integration-2");
-      assert.ok(txnResult.success);
-      const txnId = txnResult.value.id;
+      const txnId = transactionManager.begin("intent-integration-2").id;
 
       // Apply patches
       const patches: Patch[] = [
         {
           id: "patch-i2",
-          operation: "add",
+          type: "add_node",
           targetId: "boundedContexts",
-          value: {
+          payload: {
+            id: "invalid_context",
             name: "invalid_context",
-            type: "unknown",
-            ports: { inbound: [], outbound: [] },
           },
         },
       ];
 
-      await manifestMutation.applyPatches(
+      await manifestMutation.port.applyPatches(
         patches,
         ".architecture/manifest.yaml",
       );
 
       // Simulate validation failure → rollback
-      const rollbackResult = await transactionManager.rollback(txnId);
-      assert.ok(rollbackResult.success, "Should rollback on failure");
+      const rollbackResult = transactionManager.rollback(txnId);
+      assert.ok(rollbackResult, "Should rollback on failure");
 
-      const finalTxn = await transactionManager.getTransaction(txnId);
       assert.strictEqual(
-        finalTxn.value?.status,
+        transactionManager.get(txnId)?.status,
         "rolled_back",
         "Transaction should be rolled back",
       );

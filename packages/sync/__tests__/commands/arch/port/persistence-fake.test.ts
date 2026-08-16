@@ -1,7 +1,21 @@
 import assert from "node:assert";
 import { describe, it, beforeEach, afterEach } from "vitest";
-import type { Manifest } from "@hexagen/sync";
+import type { BoundedContext, Manifest } from "@hexagen/sync";
 import { PersistenceFake } from "./persistence-fake.js";
+
+/**
+ * Builds a fixture context whose ports live where the manifest schema actually
+ * puts them — `layers.application.ports.{in,out}`. These fixtures used to hang
+ * a `ports: [{ name, direction }]` array off the context root, a shape
+ * `BoundedContext` has never had; it survived only because nothing type-checked
+ * this file (AUD-020).
+ */
+function makeContext(
+  name: string,
+  ports: { in?: string[]; out?: string[] } = {},
+): BoundedContext {
+  return { name, layers: { application: { ports } } };
+}
 
 describe("PersistenceFake", () => {
   let fake: PersistenceFake;
@@ -18,7 +32,7 @@ describe("PersistenceFake", () => {
     it("should write manifest successfully and return success result", async () => {
       const testManifest: Manifest = {
         version: "1.0.0",
-        bounded_contexts: [{ name: "test-context", ports: [] }],
+        bounded_contexts: [makeContext("test-context")],
       };
 
       const result = fake.writeManifestSync(
@@ -33,7 +47,7 @@ describe("PersistenceFake", () => {
     it("should store manifest in memory for later retrieval", async () => {
       const testManifest: Manifest = {
         version: "1.0.0",
-        bounded_contexts: [{ name: "test-context", ports: [] }],
+        bounded_contexts: [makeContext("test-context")],
       };
 
       fake.writeManifestSync("/fake/path/manifest.yaml", testManifest);
@@ -69,7 +83,7 @@ describe("PersistenceFake", () => {
     it("should read manifest successfully and return data", async () => {
       const testManifest: Manifest = {
         version: "1.0.0",
-        bounded_contexts: [{ name: "test-context", ports: [] }],
+        bounded_contexts: [makeContext("test-context")],
       };
 
       fake.writeManifestSync("/fake/path/manifest.yaml", testManifest);
@@ -99,7 +113,7 @@ describe("PersistenceFake", () => {
     it("should write and read successfully using async methods", async () => {
       const testManifest: Manifest = {
         version: "1.0.0",
-        bounded_contexts: [{ name: "async-test-context", ports: [] }],
+        bounded_contexts: [makeContext("async-test-context")],
       };
 
       const writeResult = await fake.writeManifest(
@@ -251,8 +265,8 @@ describe("PersistenceFake", () => {
       const originalManifest: Manifest = {
         version: "1.0.0",
         bounded_contexts: [
-          { name: "context-a", ports: [{ name: "port-1", direction: "in" }] },
-          { name: "context-b", ports: [] },
+          makeContext("context-a", { in: ["port-1"] }),
+          makeContext("context-b"),
         ],
       };
 
@@ -269,7 +283,7 @@ describe("PersistenceFake", () => {
     it("should preserve data through async write-then-read cycle", async () => {
       const originalManifest: Manifest = {
         version: "1.0.0",
-        bounded_contexts: [{ name: "async-roundtrip-context", ports: [] }],
+        bounded_contexts: [makeContext("async-roundtrip-context")],
       };
 
       await fake.writeManifest("/path/manifest.yaml", originalManifest);
@@ -419,14 +433,10 @@ describe("PersistenceFake", () => {
       const testManifest: Manifest = {
         version: "1.0.0",
         bounded_contexts: [
-          {
-            name: "complex-context",
-            ports: [
-              { name: "port-1", direction: "in" },
-              { name: "port-2", direction: "out" },
-              { name: "port-3", direction: "in" },
-            ],
-          },
+          makeContext("complex-context", {
+            in: ["port-1", "port-3"],
+            out: ["port-2"],
+          }),
         ],
       };
 
@@ -439,8 +449,14 @@ describe("PersistenceFake", () => {
 
       const readResult = fake.readManifestSync("/path/manifest.yaml");
       if (readResult.success) {
-        assert.strictEqual(readResult.data.bounded_contexts.length, 1);
-        assert.strictEqual(readResult.data.bounded_contexts[0].ports.length, 3);
+        const contexts = readResult.data.bounded_contexts ?? [];
+        assert.strictEqual(contexts.length, 1);
+        const applicationPorts = contexts[0]?.layers?.application?.ports;
+        assert.strictEqual(
+          (applicationPorts?.in?.length ?? 0) +
+            (applicationPorts?.out?.length ?? 0),
+          3,
+        );
       } else {
         assert.fail("Expected success but got error");
       }
@@ -449,12 +465,12 @@ describe("PersistenceFake", () => {
     it("should handle multiple manifests at different paths", async () => {
       const manifest1: Manifest = {
         version: "1.0.0",
-        bounded_contexts: [{ name: "context-1", ports: [] }],
+        bounded_contexts: [makeContext("context-1")],
       };
 
       const manifest2: Manifest = {
         version: "2.0.0",
-        bounded_contexts: [{ name: "context-2", ports: [] }],
+        bounded_contexts: [makeContext("context-2")],
       };
 
       fake.writeManifestSync("/path/manifest1.yaml", manifest1);
