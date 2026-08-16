@@ -1,5 +1,14 @@
+import {
+  EnvironmentSecretVaultAdapter,
+  ServerLLMAdapter,
+  parseJSON,
+  resolveApiKey,
+  type CloudProviderEndpoint,
+  type LLMProviderPort,
+  type SecretVaultPort,
+} from "@hexagen/agentic-interaction";
 import type { ViolationItem } from "../state/use-tui-store.js";
-import type { MCPClientService } from "./mcp-client.service.js";
+import type { MCPToolCallInput } from "./mcp-client.service.js";
 
 export const ALLOWED_REFACTOR_TOOLS = [
   "hexagen_audit_boundaries",
@@ -20,77 +29,48 @@ const REFACTOR_SYSTEM_PROMPT = [
   `Allowed tools: ${ALLOWED_REFACTOR_TOOLS.join(", ")}.`,
 ].join("\n");
 
-type Result<T, E = Error> =
-  | { success: true; value: T }
-  | { success: false; error: E };
+/**
+ * Provider endpoint the `r` (refactor) binding drives, expressed with the
+ * shared `CloudProviderEndpoint` contract so the key name, base URL, model and
+ * sampling settings live in one declarative place instead of being scattered
+ * through an inlined HTTP call.
+ */
+export const TUI_REFACTOR_ENDPOINT: CloudProviderEndpoint = {
+  providerId: "openai",
+  baseUrl: "https://api.openai.com/v1",
+  model: "gpt-4o",
+  apiKeyEnvVar: "OPENAI_API_KEY",
+  temperature: 0,
+  maxTokens: 1024,
+};
 
-interface LLMCompletionRequest {
-  model: string;
-  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
-  temperature?: number;
-  maxTokens?: number;
-}
-
-interface LLMCompletionResponse {
-  choices: Array<{ message: { role: "assistant"; content: string } }>;
-}
-
-interface LLMProviderPort {
-  complete(
-    request: LLMCompletionRequest,
-  ): Promise<Result<LLMCompletionResponse>>;
-  streamComplete(request: LLMCompletionRequest): AsyncGenerator<Result<string>>;
-}
-
-class LocalLLMProviderAdapter implements LLMProviderPort {
-  constructor(private readonly apiKey: string) {}
-
-  async complete(
-    request: LLMCompletionRequest,
-  ): Promise<Result<LLMCompletionResponse>> {
-    try {
-      const response = await fetch(
-        "https://api.openai.com/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.apiKey}`,
-          },
-          body: JSON.stringify({
-            model: request.model,
-            messages: request.messages,
-            temperature: request.temperature ?? 0,
-            max_tokens: request.maxTokens ?? 350,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        return {
-          success: false,
-          error: new Error(`LLM request failed: ${response.status}`),
-        };
-      }
-
-      const payload = (await response.json()) as LLMCompletionResponse;
-      return { success: true, value: payload };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error : new Error(String(error)),
-      };
-    }
+/**
+ * Builds the shared `LLMProviderPort` implementation for the refactor flow.
+ * Returns `null` when no API key is resolvable, which the caller reports as a
+ * status message rather than an error.
+ *
+ * The vault is injectable so tests never depend on ambient `process.env`.
+ */
+export function createRefactorLLMProvider(
+  vault: SecretVaultPort = new EnvironmentSecretVaultAdapter(),
+): LLMProviderPort | null {
+  const resolved = resolveApiKey(vault, TUI_REFACTOR_ENDPOINT);
+  if (!resolved) {
+    return null;
   }
+  return new ServerLLMAdapter(
+    resolved.apiKey,
+    resolved.baseUrl,
+    String(resolved.model),
+  );
+}
 
-  async *streamComplete(): AsyncGenerator<Result<string>> {
-    yield {
-      success: false,
-      error: new Error(
-        "streamComplete is not implemented in TUI action service",
-      ),
-    };
-  }
+/**
+ * The slice of the MCP client this flow needs. Declared structurally so the
+ * remediation logic can be exercised without standing up a stdio transport.
+ */
+export interface ToolInvoker {
+  callTool(input: MCPToolCallInput): Promise<unknown>;
 }
 
 interface MCPToolSuggestion {
@@ -98,73 +78,61 @@ interface MCPToolSuggestion {
   arguments: Record<string, unknown>;
 }
 
+/**
+ * Narrows the parsed payload to a tool suggestion, or `null` for anything else.
+ *
+ * `parseJSON` is typed `{ ok: true; data: T }`, but `T` is an assertion about
+ * untrusted model output, not a guarantee: `JSON.parse("null")` succeeds, so a
+ * model reply of literal `null` arrives as `ok: true` with a `data` that cannot
+ * be destructured. Parse the payload as `unknown` and reject every non-object
+ * shape here, so a hostile or merely confused reply lands on the same handled
+ * "no valid suggestion" path as any other malformed one rather than throwing
+ * out of the `r` remediation flow.
+ */
 function parseToolSuggestion(content: string): MCPToolSuggestion | null {
-  // Attempt 1: direct parse of the full response
-  try {
-    const parsed = JSON.parse(content.trim()) as {
-      tool?: string;
-      arguments?: Record<string, unknown>;
-    };
-    if (parsed.tool && parsed.arguments) {
-      return { tool: parsed.tool, arguments: parsed.arguments };
-    }
-  } catch {
-    // Not clean JSON — try extraction
-  }
+  const parsed = parseJSON<unknown>(content);
 
-  // Attempt 2: extract the outermost JSON object by walking braces
-  const start = content.indexOf("{");
-  if (start === -1) return null;
-
-  let depth = 0;
-  let end = -1;
-  for (let i = start; i < content.length; i++) {
-    if (content[i] === "{") depth++;
-    else if (content[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        end = i;
-        break;
-      }
-    }
-  }
-
-  if (end === -1) return null;
-
-  try {
-    const extracted = content.slice(start, end + 1);
-    const parsed = JSON.parse(extracted) as {
-      tool?: string;
-      arguments?: Record<string, unknown>;
-    };
-    if (
-      parsed.tool &&
-      parsed.arguments !== null &&
-      typeof parsed.arguments === "object"
-    ) {
-      return { tool: parsed.tool, arguments: parsed.arguments };
-    }
-  } catch {
+  if (!parsed.ok) {
     return null;
   }
 
-  return null;
+  const payload = parsed.data;
+  if (
+    payload === null ||
+    typeof payload !== "object" ||
+    Array.isArray(payload)
+  ) {
+    return null;
+  }
+
+  const { tool, arguments: args } = payload as {
+    tool?: unknown;
+    arguments?: unknown;
+  };
+  if (
+    typeof tool !== "string" ||
+    tool.length === 0 ||
+    args === null ||
+    typeof args !== "object" ||
+    Array.isArray(args)
+  ) {
+    return null;
+  }
+
+  return { tool, arguments: args as Record<string, unknown> };
 }
 
 export async function refactorWithAI(
-  mcpClient: MCPClientService,
+  mcpClient: ToolInvoker,
   violation: ViolationItem,
+  llm: LLMProviderPort | null = createRefactorLLMProvider(),
 ): Promise<string> {
-  // eslint-disable-next-line turbo/no-undeclared-env-vars
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return "OPENAI_API_KEY is not set. Unable to invoke AI refactor.";
+  if (!llm) {
+    return `${TUI_REFACTOR_ENDPOINT.apiKeyEnvVar} is not set. Unable to invoke AI refactor.`;
   }
 
-  const llm = new LocalLLMProviderAdapter(apiKey);
-
   const completion = await llm.complete({
-    model: "gpt-4o",
+    model: String(TUI_REFACTOR_ENDPOINT.model),
     messages: [
       { role: "system", content: REFACTOR_SYSTEM_PROMPT },
       {
@@ -179,8 +147,8 @@ export async function refactorWithAI(
         ].join("\n"),
       },
     ],
-    temperature: 0,
-    maxTokens: 1024,
+    temperature: TUI_REFACTOR_ENDPOINT.temperature,
+    maxTokens: TUI_REFACTOR_ENDPOINT.maxTokens,
   });
 
   if (!completion.success) {
