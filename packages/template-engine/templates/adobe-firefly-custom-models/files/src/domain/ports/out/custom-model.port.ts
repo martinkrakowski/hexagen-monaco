@@ -1,7 +1,5 @@
 import type { Result } from "../../../shared/result";
-// Type-only import of the infrastructure error (erased at compile) — the deliberate
-// domain→infra decoupling for the port's failure channel, not an oversight.
-import type { FireflyError } from "../../../infrastructure/adobe/errors/firefly-errors";
+import type { CreativeServiceError } from "../../errors/creative-service-error";
 
 /**
  * Outbound port for the Adobe Firefly Custom Models API.
@@ -62,16 +60,16 @@ export interface CustomModelPort {
    * Submit a training job and await it over `queued → training → completed`.
    * Resolves to the trained model id.
    */
-  train(req: TrainRequest): Promise<Result<string, FireflyError>>;
+  train(req: TrainRequest): Promise<Result<string, CreativeServiceError>>;
   /** Fetch a model's current training status. */
-  status(modelId: string): Promise<Result<TrainedModel, FireflyError>>;
+  status(modelId: string): Promise<Result<TrainedModel, CreativeServiceError>>;
   /** List the project's custom models. */
-  list(): Promise<Result<TrainedModel[], FireflyError>>;
+  list(): Promise<Result<TrainedModel[], CreativeServiceError>>;
   /**
    * Generate images with a trained custom model. Resolves to one output href per
    * variation, in request order.
    */
   generateWith(
     req: GenerateWithRequest,
-  ): Promise<Result<string[], FireflyError>>;
+  ): Promise<Result<string[], CreativeServiceError>>;
 }

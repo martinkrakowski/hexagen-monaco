@@ -1,22 +1,12 @@
-export type LLMErrorKind =
-  | "auth"
-  | "rate-limit"
-  | "service"
-  | "timeout"
-  | "parsing"
-  | "unknown";
-
-export class LLMError extends Error {
-  constructor(
-    public readonly kind: LLMErrorKind,
-    message: string,
-    public readonly cause?: unknown,
-    public readonly retryAfterMs?: number,
-  ) {
-    super(message);
-    this.name = "LLMError";
-  }
-}
+/**
+ * Transport-specific specialisations of the domain failure union.
+ *
+ * The union itself (`LLMError` / `LLMErrorKind`) belongs to the domain — the
+ * port that declares the failure channel owns it (ADR-0053). What lives here is
+ * infrastructure: subclasses carrying provider/transport detail, and the HTTP
+ * classifier that maps a wire response onto the union at the adapter boundary.
+ */
+import { LLMError } from "../../../domain/errors/llm-error";
 
 export class LLMAuthError extends LLMError {
   constructor(message = "LLM authentication failed — check your API key") {
@@ -76,8 +66,4 @@ export function classifyHttpError(status: number, retryAfterHeader?: string | nu
   if (status === 429) return new LLMRateLimitError(retryAfterMs);
   if (status >= 500) return new LLMServiceError(`LLM service error (HTTP ${status})`);
   return new LLMError("unknown", `Unexpected LLM HTTP status: ${status}`);
-}
-
-export function isRetryable(error: LLMError): boolean {
-  return error.kind === "service" || error.kind === "rate-limit";
 }

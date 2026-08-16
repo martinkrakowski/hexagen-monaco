@@ -7,11 +7,8 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import {
-  classifyAdobeError,
-  FireflyError,
-  FireflyValidationError,
-} from "../errors/firefly-errors";
+import { toCreativeServiceError } from "../errors/to-creative-service-error";
+import { CreativeServiceError } from "../../../domain/errors/creative-service-error";
 import { ok, err, type Result } from "../../../shared/result";
 
 /**
@@ -43,12 +40,15 @@ function resolveCandidates(raw: string | undefined): number {
 }
 
 export class FireflyCompositeAdapter implements CompositePort {
-  async composite(req: CompositeRequest): Promise<Result<string[], FireflyError>> {
+  async composite(req: CompositeRequest): Promise<Result<string[], CreativeServiceError>> {
     // Validate the caller's count up front (the env default is already validated)
-    // rather than letting an out-of-range value reach the API as a 400.
+    // rather than letting an out-of-range value reach the API as a 400. This
+    // returns the port's own failure type directly: the request never reached the
+    // vendor, so there is no vendor error to map (ADR-0053 §1).
     if (req.numVariations !== undefined && !isValidCandidates(req.numVariations)) {
       return err(
-        new FireflyValidationError(
+        new CreativeServiceError(
+          "invalid-request",
           `Invalid candidate count ${JSON.stringify(req.numVariations)} — must be an integer between 1 and 10.`,
         ),
       );
@@ -74,22 +74,22 @@ export class FireflyCompositeAdapter implements CompositePort {
 
       const handle = toJobHandle(await fireflyClient.post(ENDPOINT, body));
       if (!handle.jobId) {
-        return err(new FireflyError("Composite submit response did not include a job id."));
+        return err(new CreativeServiceError("unknown", "Composite submit response did not include a job id."));
       }
       const done = await jobPort.await(handle);
       if (done.status !== "succeeded") {
-        return err(new FireflyError(done.error ?? "Composite job did not succeed."));
+        return err(new CreativeServiceError("unknown", done.error ?? "Composite job did not succeed."));
       }
       // Multiple candidates — return them all.
       const hrefs = done.outputs
         .map((o) => o.href)
         .filter((href): href is string => Boolean(href));
       if (hrefs.length === 0) {
-        return err(new FireflyError("Composite job produced no output."));
+        return err(new CreativeServiceError("unknown", "Composite job produced no output."));
       }
       return ok(hrefs);
     } catch (error) {
-      return err(classifyAdobeError(error));
+      return err(toCreativeServiceError(error));
     }
   }
 }

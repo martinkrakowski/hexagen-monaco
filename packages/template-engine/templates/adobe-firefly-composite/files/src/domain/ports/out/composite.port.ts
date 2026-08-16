@@ -1,7 +1,5 @@
 import type { Result } from "../../../shared/result";
-// Type-only import of the infrastructure error (erased at compile) — types the
-// port's failure channel without runtime domain→infra coupling.
-import type { FireflyError } from "../../../infrastructure/adobe/errors/firefly-errors";
+import type { CreativeServiceError } from "../../errors/creative-service-error";
 
 /**
  * Outbound port for the Firefly Composite Operations service.
@@ -35,5 +33,5 @@ export interface CompositeRequest extends CompositeOptions {
 
 export interface CompositePort {
   /** Composite `productHref` into `sceneHref`; resolves to candidate output hrefs. */
-  composite(req: CompositeRequest): Promise<Result<string[], FireflyError>>;
+  composite(req: CompositeRequest): Promise<Result<string[], CreativeServiceError>>;
 }

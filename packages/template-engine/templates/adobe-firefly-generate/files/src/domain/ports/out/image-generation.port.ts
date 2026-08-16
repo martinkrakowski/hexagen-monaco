@@ -1,7 +1,5 @@
 import type { Result } from "../../../shared/result";
-// Type-only import of the infrastructure error (erased at compile) — types a
-// port's failure channel without runtime domain→infra coupling.
-import type { FireflyError } from "../../../infrastructure/adobe/errors/firefly-errors";
+import type { CreativeServiceError } from "../../errors/creative-service-error";
 
 /**
  * Outbound port for the Firefly Generate service.
@@ -49,13 +47,13 @@ export interface ImageEditRequest extends GenerateOptions {
 
 export interface ImageGenerationPort {
   /** Generate image(s) from a text prompt. */
-  textToImage(req: TextToImageRequest): Promise<Result<string[], FireflyError>>;
+  textToImage(req: TextToImageRequest): Promise<Result<string[], CreativeServiceError>>;
   /** Fill a masked region of an image. */
-  generativeFill(req: ImageEditRequest): Promise<Result<string[], FireflyError>>;
+  generativeFill(req: ImageEditRequest): Promise<Result<string[], CreativeServiceError>>;
   /** Extend an image beyond its original bounds. */
-  generativeExpand(req: ImageEditRequest): Promise<Result<string[], FireflyError>>;
+  generativeExpand(req: ImageEditRequest): Promise<Result<string[], CreativeServiceError>>;
   /** Generate a new image conditioned on a reference image. */
-  imageToImage(req: ImageEditRequest): Promise<Result<string[], FireflyError>>;
+  imageToImage(req: ImageEditRequest): Promise<Result<string[], CreativeServiceError>>;
   /** Apply the style of a reference image to a generation. */
-  styleTransfer(req: ImageEditRequest): Promise<Result<string[], FireflyError>>;
+  styleTransfer(req: ImageEditRequest): Promise<Result<string[], CreativeServiceError>>;
 }

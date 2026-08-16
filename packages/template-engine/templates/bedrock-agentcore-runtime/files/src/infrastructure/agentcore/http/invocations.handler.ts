@@ -1,6 +1,6 @@
+import type { AgentRuntimePort } from "../../../application/ports/agent-runtime.port";
 import {
   invocationPayloadSchema,
-  type AgentRuntimePort,
   type InvocationResponse,
 } from "../runtime/payload";
 import { readSessionId, withSession } from "../runtime/session";

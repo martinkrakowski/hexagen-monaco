@@ -1,7 +1,5 @@
 import type { Result } from "../../../shared/result";
-// Type-only import of the infrastructure error (erased at compile) — the deliberate
-// domain→infra decoupling for the port's failure channel, not an oversight.
-import type { FireflyError } from "../../../infrastructure/adobe/errors/firefly-errors";
+import type { CreativeServiceError } from "../../errors/creative-service-error";
 
 /**
  * Outbound port for the Adobe Firefly Audio/Video (Media) API.
@@ -64,17 +62,17 @@ export interface SoundEffectRequest extends MediaOptions {
 
 export interface MediaGenerationPort {
   /** Generate a video from a text prompt. */
-  textToVideo(req: TextToVideoRequest): Promise<Result<string, FireflyError>>;
+  textToVideo(req: TextToVideoRequest): Promise<Result<string, CreativeServiceError>>;
   /** Animate a source image into a video. */
-  imageToVideo(req: ImageToVideoRequest): Promise<Result<string, FireflyError>>;
+  imageToVideo(req: ImageToVideoRequest): Promise<Result<string, CreativeServiceError>>;
   /** Translate the audio/video of a source asset into another locale. */
   translateAudioVideo(
     req: TranslateAudioVideoRequest,
-  ): Promise<Result<string, FireflyError>>;
+  ): Promise<Result<string, CreativeServiceError>>;
   /** Synthesise speech from text. */
   generateSpeech(
     req: GenerateSpeechRequest,
-  ): Promise<Result<string, FireflyError>>;
+  ): Promise<Result<string, CreativeServiceError>>;
   /** Generate a sound effect from a text prompt. */
-  soundEffect(req: SoundEffectRequest): Promise<Result<string, FireflyError>>;
+  soundEffect(req: SoundEffectRequest): Promise<Result<string, CreativeServiceError>>;
 }

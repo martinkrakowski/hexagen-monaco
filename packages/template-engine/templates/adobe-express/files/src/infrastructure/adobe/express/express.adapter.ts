@@ -8,7 +8,8 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import { classifyAdobeError, FireflyError } from "../errors/firefly-errors";
+import { toCreativeServiceError } from "../errors/to-creative-service-error";
+import { CreativeServiceError } from "../../../domain/errors/creative-service-error";
 import { ok, err, type Result } from "../../../shared/result";
 
 /**
@@ -39,12 +40,12 @@ const DEFAULT_FORMAT: ExpressFormat =
 export class ExpressAdapter implements ExpressAutomationPort {
   async renderBatch(
     req: RenderBatchRequest,
-  ): Promise<Result<string[], FireflyError>> {
+  ): Promise<Result<string[], CreativeServiceError>> {
     // A batch with no variants would submit an empty job the API rejects — guard
     // up front rather than spending a round-trip to discover it. This is
     // batch-specific; the single-output image.adobe.io services can't hit it.
     if (req.items.length === 0) {
-      return err(new FireflyError("renderBatch requires at least one variant."));
+      return err(new CreativeServiceError("unknown", "renderBatch requires at least one variant."));
     }
     try {
       // Presign every variant's destination up front. An asset-valued
@@ -77,7 +78,7 @@ export class ExpressAdapter implements ExpressAutomationPort {
       // resolves a jobId-only handle in webhook mode and would fail in polling builds.
       if (!handle.statusUrl) {
         return err(
-          new FireflyError(
+          new CreativeServiceError("unknown", 
             "Express batch submit response had no status URL to track the job.",
           ),
         );
@@ -87,7 +88,7 @@ export class ExpressAdapter implements ExpressAutomationPort {
       const done = await jobPort.poll(handle);
       if (done.status !== "succeeded") {
         return err(
-          new FireflyError(done.error ?? "Express batch job did not succeed."),
+          new CreativeServiceError("unknown", done.error ?? "Express batch job did not succeed."),
         );
       }
       // The port promises one href per item, in request order. `done.outputs` is a
@@ -97,7 +98,7 @@ export class ExpressAdapter implements ExpressAutomationPort {
       // return a shorter array that no longer lines up with req.items.
       if (done.outputs.length !== req.items.length) {
         return err(
-          new FireflyError(
+          new CreativeServiceError("unknown", 
             `Express batch returned ${done.outputs.length} outputs for ${req.items.length} items.`,
           ),
         );
@@ -107,14 +108,14 @@ export class ExpressAdapter implements ExpressAutomationPort {
         const href = done.outputs[i]?.href;
         if (!href) {
           return err(
-            new FireflyError(`Express batch output ${i} has no href.`),
+            new CreativeServiceError("unknown", `Express batch output ${i} has no href.`),
           );
         }
         hrefs.push(href);
       }
       return ok(hrefs);
     } catch (error) {
-      return err(classifyAdobeError(error));
+      return err(toCreativeServiceError(error));
     }
   }
 }

@@ -11,7 +11,8 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import { classifyAdobeError, FireflyError } from "../errors/firefly-errors";
+import { toCreativeServiceError } from "../errors/to-creative-service-error";
+import { CreativeServiceError } from "../../../domain/errors/creative-service-error";
 import { ok, err, type Result } from "../../../shared/result";
 
 /**
@@ -52,7 +53,7 @@ const DEFAULT_FORMAT: "jpeg" | "png" =
 const PSD_TYPE = "image/vnd.adobe.photoshop";
 
 export class PhotoshopAutomationAdapter implements PhotoshopAutomationPort {
-  async smartObject(req: SmartObjectRequest): Promise<Result<string, FireflyError>> {
+  async smartObject(req: SmartObjectRequest): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const storage = getStoragePresigner();
       const input = await storage.presignInput(req.inputHref);
@@ -71,7 +72,7 @@ export class PhotoshopAutomationAdapter implements PhotoshopAutomationPort {
     });
   }
 
-  async editTextLayer(req: EditTextLayerRequest): Promise<Result<string, FireflyError>> {
+  async editTextLayer(req: EditTextLayerRequest): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const { input, output } = await this.presignIO(req);
       return {
@@ -87,7 +88,7 @@ export class PhotoshopAutomationAdapter implements PhotoshopAutomationPort {
     });
   }
 
-  async applyActionJson(req: ApplyActionJsonRequest): Promise<Result<string, FireflyError>> {
+  async applyActionJson(req: ApplyActionJsonRequest): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const { input, output } = await this.presignIO(req);
       return {
@@ -101,7 +102,7 @@ export class PhotoshopAutomationAdapter implements PhotoshopAutomationPort {
     });
   }
 
-  async crop(req: CropRequest): Promise<Result<string, FireflyError>> {
+  async crop(req: CropRequest): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const { input, output } = await this.presignIO(req);
       return {
@@ -115,7 +116,7 @@ export class PhotoshopAutomationAdapter implements PhotoshopAutomationPort {
     });
   }
 
-  async renderPsd(req: RenderPsdRequest): Promise<Result<string, FireflyError>> {
+  async renderPsd(req: RenderPsdRequest): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const { input, output } = await this.presignIO(req);
       const format = req.format ?? DEFAULT_FORMAT;
@@ -141,7 +142,7 @@ export class PhotoshopAutomationAdapter implements PhotoshopAutomationPort {
 
   private async run(
     build: () => Promise<{ path: string; body: unknown }>,
-  ): Promise<Result<string, FireflyError>> {
+  ): Promise<Result<string, CreativeServiceError>> {
     try {
       const { path, body } = await build();
       const handle = toJobHandle(await fireflyClient.post(path, body));
@@ -151,19 +152,19 @@ export class PhotoshopAutomationAdapter implements PhotoshopAutomationPort {
       // clear error rather than routing through the job port's await — which only
       // resolves a jobId-only handle in webhook mode and would fail in polling builds.
       if (!handle.statusUrl) {
-        return err(new FireflyError("Photoshop submit response had no status URL to track the job."));
+        return err(new CreativeServiceError("unknown", "Photoshop submit response had no status URL to track the job."));
       }
       const done = await jobPort.poll(handle);
       if (done.status !== "succeeded") {
-        return err(new FireflyError(done.error ?? "Photoshop job did not succeed."));
+        return err(new CreativeServiceError("unknown", done.error ?? "Photoshop job did not succeed."));
       }
       const href = done.outputs[0]?.href;
       if (!href) {
-        return err(new FireflyError("Photoshop job produced no output."));
+        return err(new CreativeServiceError("unknown", "Photoshop job produced no output."));
       }
       return ok(href);
     } catch (error) {
-      return err(classifyAdobeError(error));
+      return err(toCreativeServiceError(error));
     }
   }
 }

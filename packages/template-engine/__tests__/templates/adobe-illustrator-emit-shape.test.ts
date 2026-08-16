@@ -96,10 +96,21 @@ describe("adobe-illustrator template — emit shape", () => {
     for (const method of ["renderArtboard", "dataMerge", "scaleVector"]) {
       assert.ok(port.includes(`${method}(`), `port must declare ${method}`);
     }
-    assert.match(port, /import type \{\s*FireflyError\s*\}/);
+    // ADR-0053: the failure channel is a DOMAIN union the port owns. The
+    // vendor error classes stay in infrastructure and are mapped at the
+    // adapter boundary, so the port names no infrastructure symbol at all —
+    // a type-only import would still be a compile-time domain→infra edge.
+    assert.match(
+      port,
+      /import type \{\s*CreativeServiceError\s*\} from "\.\.\/\.\.\/errors\/creative-service-error"/,
+    );
     assert.ok(
-      !/^import \{[^}]*FireflyError/m.test(port),
-      "must not value-import FireflyError",
+      !/infrastructure\//.test(port),
+      "port must not reference infrastructure/ (ADR-0053 §3)",
+    );
+    assert.ok(
+      !/\bFireflyError\b/.test(port),
+      "port must not name the vendor error class",
     );
   });
 
@@ -132,7 +143,10 @@ describe("adobe-illustrator template — emit shape", () => {
     );
     // scaleVector fails fast when no dimension is supplied (guaranteed API 400)
     assert.ok(adapter.includes("scaleVector requires at least one"));
-    assert.ok(adapter.includes("FireflyValidationError"));
+    // …with the port's own failure type: this branch returns before the
+    // try/catch, so no boundary mapping runs on it (ADR-0053 §1).
+    assert.match(adapter, /new CreativeServiceError\(\s*"invalid-request"/);
+    assert.ok(!adapter.includes("FireflyValidationError"));
   });
 
   it("validates the format env and interpolates the defaults", async () => {

@@ -96,11 +96,21 @@ describe("adobe-firefly-upscale template — emit shape", () => {
   it("types the port's failure channel without runtime infra coupling", async () => {
     const port = await read(root, `${PORTS}/upscale.port.ts`);
     assert.ok(port.includes("interface UpscalePort"));
-    // FireflyError reaches the port only as a type-only import (erased at compile).
-    assert.match(port, /import type \{\s*FireflyError\s*\}/);
+    // ADR-0053: the failure channel is a DOMAIN union the port owns. The
+    // vendor error classes stay in infrastructure and are mapped at the
+    // adapter boundary, so the port names no infrastructure symbol at all —
+    // a type-only import would still be a compile-time domain→infra edge.
+    assert.match(
+      port,
+      /import type \{\s*CreativeServiceError\s*\} from "\.\.\/\.\.\/errors\/creative-service-error"/,
+    );
     assert.ok(
-      !/^import \{[^}]*FireflyError/m.test(port),
-      "must not value-import FireflyError",
+      !/infrastructure\//.test(port),
+      "port must not reference infrastructure/ (ADR-0053 §3)",
+    );
+    assert.ok(
+      !/\bFireflyError\b/.test(port),
+      "port must not name the vendor error class",
     );
   });
 
@@ -129,7 +139,10 @@ describe("adobe-firefly-upscale template — emit shape", () => {
     // a misconfigured env / bad req.factor must not reach the API as NaN/0
     assert.ok(adapter.includes("isValidFactor"));
     assert.ok(adapter.includes("Number.isFinite"));
-    assert.ok(adapter.includes("FireflyValidationError"));
+    // …and fails with the port's own failure type, not the vendor class: this
+    // branch returns before the try/catch, so nothing maps it (ADR-0053 §1).
+    assert.match(adapter, /new CreativeServiceError\(\s*"invalid-request"/);
+    assert.ok(!adapter.includes("FireflyValidationError"));
     const env = await read(root, ".env.adobe-upscale.example");
     assert.ok(env.includes("ADOBE_UPSCALE_FACTOR=2"));
   });

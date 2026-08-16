@@ -10,7 +10,8 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import { classifyAdobeError, FireflyError } from "../errors/firefly-errors";
+import { toCreativeServiceError } from "../errors/to-creative-service-error";
+import { CreativeServiceError } from "../../../domain/errors/creative-service-error";
 import { ok, err, type Result } from "../../../shared/result";
 
 /**
@@ -44,7 +45,7 @@ const DEFAULT_FORMAT: Substance3DFormat =
     : "{output_format}";
 
 export class Substance3DAdapter implements Substance3DPort {
-  async render(req: RenderRequest): Promise<Result<string, FireflyError>> {
+  async render(req: RenderRequest): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const { input, output } = await this.presignIO(req);
       return {
@@ -59,7 +60,7 @@ export class Substance3DAdapter implements Substance3DPort {
 
   async composite(
     req: CompositeRequest,
-  ): Promise<Result<string, FireflyError>> {
+  ): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const storage = getStoragePresigner();
       const input = await storage.presignInput(req.inputHref);
@@ -76,7 +77,7 @@ export class Substance3DAdapter implements Substance3DPort {
     });
   }
 
-  async relight(req: RelightRequest): Promise<Result<string, FireflyError>> {
+  async relight(req: RelightRequest): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const storage = getStoragePresigner();
       const input = await storage.presignInput(req.inputHref);
@@ -105,7 +106,7 @@ export class Substance3DAdapter implements Substance3DPort {
 
   private async run(
     build: () => Promise<{ path: string; body: unknown }>,
-  ): Promise<Result<string, FireflyError>> {
+  ): Promise<Result<string, CreativeServiceError>> {
     try {
       const { path, body } = await build();
       const handle = toJobHandle(await fireflyClient.post(path, body));
@@ -116,7 +117,7 @@ export class Substance3DAdapter implements Substance3DPort {
       // resolves a jobId-only handle in webhook mode and would fail in polling builds.
       if (!handle.statusUrl) {
         return err(
-          new FireflyError(
+          new CreativeServiceError("unknown", 
             "Substance 3D submit response had no status URL to track the job.",
           ),
         );
@@ -126,7 +127,7 @@ export class Substance3DAdapter implements Substance3DPort {
       const done = await jobPort.poll(handle);
       if (done.status !== "succeeded") {
         return err(
-          new FireflyError(done.error ?? "Substance 3D job did not succeed."),
+          new CreativeServiceError("unknown", done.error ?? "Substance 3D job did not succeed."),
         );
       }
       // `done.outputs` is a non-optional JobOutput[] (parseJobResult always returns
@@ -134,11 +135,11 @@ export class Substance3DAdapter implements Substance3DPort {
       // path below; no `?.` on `outputs` itself is needed.
       const href = done.outputs[0]?.href;
       if (!href) {
-        return err(new FireflyError("Substance 3D job produced no output."));
+        return err(new CreativeServiceError("unknown", "Substance 3D job produced no output."));
       }
       return ok(href);
     } catch (error) {
-      return err(classifyAdobeError(error));
+      return err(toCreativeServiceError(error));
     }
   }
 }

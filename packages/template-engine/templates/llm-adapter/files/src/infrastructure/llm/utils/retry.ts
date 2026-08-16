@@ -1,4 +1,4 @@
-import { isRetryable, type LLMError } from "../errors/llm-errors";
+import { isRetryable, type LLMError } from "../../../domain/errors/llm-error";
 import { parseIntSafe } from "./parse-env";
 import type { Result } from "../../../../shared/result";
 

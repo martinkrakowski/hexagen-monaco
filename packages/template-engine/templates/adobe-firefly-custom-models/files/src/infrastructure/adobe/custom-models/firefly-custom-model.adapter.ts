@@ -10,7 +10,8 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import { classifyAdobeError, FireflyError } from "../errors/firefly-errors";
+import { toCreativeServiceError } from "../errors/to-creative-service-error";
+import { CreativeServiceError } from "../../../domain/errors/creative-service-error";
 import { ok, err, type Result } from "../../../shared/result";
 
 /**
@@ -34,7 +35,7 @@ const DEFAULT_BASE_MODEL =
 const DATASET_CAPTION_FORMAT = "{dataset_caption_format}";
 
 export class FireflyCustomModelAdapter implements CustomModelPort {
-  async train(req: TrainRequest): Promise<Result<string, FireflyError>> {
+  async train(req: TrainRequest): Promise<Result<string, CreativeServiceError>> {
     try {
       // The dataset is already uploaded to storage; presign it so Firefly can read it.
       const dataset = await getStoragePresigner().presignInput(req.datasetHref);
@@ -48,7 +49,7 @@ export class FireflyCustomModelAdapter implements CustomModelPort {
       );
       if (!handle.jobId) {
         return err(
-          new FireflyError(
+          new CreativeServiceError("unknown", 
             "Custom-model train submit did not include a job id.",
           ),
         );
@@ -57,24 +58,24 @@ export class FireflyCustomModelAdapter implements CustomModelPort {
       const done = await jobPort.await(handle);
       if (done.status !== "succeeded") {
         return err(
-          new FireflyError(done.error ?? "Custom-model training did not complete."),
+          new CreativeServiceError("unknown", done.error ?? "Custom-model training did not complete."),
         );
       }
       const modelId = extractModelId(done.outputs[0]);
       if (!modelId) {
         return err(
-          new FireflyError(
+          new CreativeServiceError("unknown", 
             "Custom-model training completed without a model id (verify the result field against Adobe docs).",
           ),
         );
       }
       return ok(modelId);
     } catch (error) {
-      return err(classifyAdobeError(error));
+      return err(toCreativeServiceError(error));
     }
   }
 
-  async status(modelId: string): Promise<Result<TrainedModel, FireflyError>> {
+  async status(modelId: string): Promise<Result<TrainedModel, CreativeServiceError>> {
     try {
       const raw = await fireflyClient.get<unknown>(
         `/v3/custom-models/${encodeURIComponent(modelId)}`,
@@ -84,16 +85,16 @@ export class FireflyCustomModelAdapter implements CustomModelPort {
         // Don't return ok with an empty, unusable model id — that just pushes the
         // failure to the next call (status/generateWith expect a real id).
         return err(
-          new FireflyError("Custom-model status response had no model id."),
+          new CreativeServiceError("unknown", "Custom-model status response had no model id."),
         );
       }
       return ok(model);
     } catch (error) {
-      return err(classifyAdobeError(error));
+      return err(toCreativeServiceError(error));
     }
   }
 
-  async list(): Promise<Result<TrainedModel[], FireflyError>> {
+  async list(): Promise<Result<TrainedModel[], CreativeServiceError>> {
     try {
       const raw = await fireflyClient.get<unknown>("/v3/custom-models");
       const models = (raw as { models?: unknown[] })?.models;
@@ -105,13 +106,13 @@ export class FireflyCustomModelAdapter implements CustomModelPort {
         .filter((m): m is TrainedModel => m !== undefined);
       return ok(trained);
     } catch (error) {
-      return err(classifyAdobeError(error));
+      return err(toCreativeServiceError(error));
     }
   }
 
   async generateWith(
     req: GenerateWithRequest,
-  ): Promise<Result<string[], FireflyError>> {
+  ): Promise<Result<string[], CreativeServiceError>> {
     try {
       const output = await getStoragePresigner().presignOutput(req.outputHref);
       const body: Record<string, unknown> = {
@@ -127,7 +128,7 @@ export class FireflyCustomModelAdapter implements CustomModelPort {
       );
       if (!handle.jobId) {
         return err(
-          new FireflyError(
+          new CreativeServiceError("unknown", 
             "Custom-model generate submit did not include a job id.",
           ),
         );
@@ -138,14 +139,14 @@ export class FireflyCustomModelAdapter implements CustomModelPort {
         .filter((h): h is string => typeof h === "string" && h.length > 0);
       if (done.status !== "succeeded" || hrefs.length === 0) {
         return err(
-          new FireflyError(
+          new CreativeServiceError("unknown", 
             done.error ?? "Custom-model generation produced no output.",
           ),
         );
       }
       return ok(hrefs);
     } catch (error) {
-      return err(classifyAdobeError(error));
+      return err(toCreativeServiceError(error));
     }
   }
 }

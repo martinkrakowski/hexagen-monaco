@@ -134,8 +134,29 @@ describe("bedrock-agentcore-runtime template — emit shape (defaults)", () => {
     assert.ok(handler.includes("invocationPayloadSchema"));
     // OAuth gate is env-driven (inbound_auth = OAuth sets the discovery URL).
     assert.ok(handler.includes("AGENTCORE_OAUTH_DISCOVERY_URL"));
+    // ADR-0053 §2: the driving contract is an APPLICATION port. payload.ts
+    // keeps only the HTTP wire envelope, which is infrastructure by definition.
+    const port = await read(
+      root,
+      "src/application/ports/agent-runtime.port.ts",
+    );
+    assert.ok(port.includes("interface AgentRuntimePort"));
+    assert.ok(port.includes("interface AgentRunInput"));
+    assert.ok(port.includes("interface AgentRunResult"));
+    assert.ok(
+      !/^\s*import\b/m.test(port),
+      "the port must depend on nothing — no transport type, no SDK",
+    );
+    assert.ok(
+      handler.includes('from "../../../application/ports/agent-runtime.port"'),
+      "the inbound adapter must import the port from the application layer",
+    );
     const payload = await read(root, `${AGENTCORE}/runtime/payload.ts`);
-    assert.ok(payload.includes("interface AgentRuntimePort"));
+    assert.ok(
+      !payload.includes("interface AgentRuntimePort"),
+      "the port must not be declared inside infrastructure/",
+    );
+    assert.ok(payload.includes("invocationPayloadSchema"));
   });
 
   it("makes OAuth inbound auth fail-closed (no default accept-all verifier)", async () => {

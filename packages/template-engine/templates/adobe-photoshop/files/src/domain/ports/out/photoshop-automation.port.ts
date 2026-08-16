@@ -1,7 +1,5 @@
 import type { Result } from "../../../shared/result";
-// Type-only import of the infrastructure error (erased at compile) — types the
-// port's failure channel without runtime domain→infra coupling.
-import type { FireflyError } from "../../../infrastructure/adobe/errors/firefly-errors";
+import type { CreativeServiceError } from "../../errors/creative-service-error";
 
 /**
  * Outbound port for the Adobe Photoshop API (image.adobe.io/pie/psdService).
@@ -48,13 +46,13 @@ export interface RenderPsdRequest extends PsdRequest {
 
 export interface PhotoshopAutomationPort {
   /** Replace a named Smart Object layer with another image. */
-  smartObject(req: SmartObjectRequest): Promise<Result<string, FireflyError>>;
+  smartObject(req: SmartObjectRequest): Promise<Result<string, CreativeServiceError>>;
   /** Edit the contents of a named text layer. */
-  editTextLayer(req: EditTextLayerRequest): Promise<Result<string, FireflyError>>;
+  editTextLayer(req: EditTextLayerRequest): Promise<Result<string, CreativeServiceError>>;
   /** Apply a Photoshop actionJSON to the document. */
-  applyActionJson(req: ApplyActionJsonRequest): Promise<Result<string, FireflyError>>;
+  applyActionJson(req: ApplyActionJsonRequest): Promise<Result<string, CreativeServiceError>>;
   /** Crop the document to the given bounds. */
-  crop(req: CropRequest): Promise<Result<string, FireflyError>>;
+  crop(req: CropRequest): Promise<Result<string, CreativeServiceError>>;
   /** Render the `.psd` to a flattened image. */
-  renderPsd(req: RenderPsdRequest): Promise<Result<string, FireflyError>>;
+  renderPsd(req: RenderPsdRequest): Promise<Result<string, CreativeServiceError>>;
 }

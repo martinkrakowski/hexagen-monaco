@@ -1,7 +1,5 @@
 import type { Result } from "../../../shared/result";
-// Type-only import of the infrastructure error (erased at compile) — types the
-// port's failure channel without runtime domain→infra coupling.
-import type { FireflyError } from "../../../infrastructure/adobe/errors/firefly-errors";
+import type { CreativeServiceError } from "../../errors/creative-service-error";
 
 /**
  * Outbound port for the Firefly Content Tagging service.
@@ -24,5 +22,5 @@ export interface ContentTaggingResult {
 
 export interface ContentTaggingPort {
   /** Return structured tags for the image at `inputHref` (presigned). */
-  tag(inputHref: string): Promise<Result<ContentTaggingResult, FireflyError>>;
+  tag(inputHref: string): Promise<Result<ContentTaggingResult, CreativeServiceError>>;
 }

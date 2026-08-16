@@ -59,6 +59,7 @@
   "envVars": [],
   "outputs": [
     "Dockerfile.agentcore",
+    "src/application/ports/agent-runtime.port.ts",
     "src/infrastructure/agentcore/http/invocations.handler.ts",
     "src/infrastructure/agentcore/http/ping.handler.ts",
     "src/infrastructure/agentcore/http/server.ts",

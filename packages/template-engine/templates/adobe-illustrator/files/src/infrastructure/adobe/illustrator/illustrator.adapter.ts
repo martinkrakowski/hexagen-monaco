@@ -10,11 +10,8 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import {
-  classifyAdobeError,
-  FireflyError,
-  FireflyValidationError,
-} from "../errors/firefly-errors";
+import { toCreativeServiceError } from "../errors/to-creative-service-error";
+import { CreativeServiceError } from "../../../domain/errors/creative-service-error";
 import { ok, err, type Result } from "../../../shared/result";
 
 /**
@@ -41,7 +38,7 @@ const DEFAULT_FORMAT: IllustratorFormat =
     : "{output_format}";
 
 export class IllustratorAdapter implements IllustratorPort {
-  async renderArtboard(req: RenderArtboardRequest): Promise<Result<string, FireflyError>> {
+  async renderArtboard(req: RenderArtboardRequest): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const { input, output } = await this.presignIO(req);
       return {
@@ -55,7 +52,7 @@ export class IllustratorAdapter implements IllustratorPort {
     });
   }
 
-  async dataMerge(req: DataMergeRequest): Promise<Result<string, FireflyError>> {
+  async dataMerge(req: DataMergeRequest): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const { input, output } = await this.presignIO(req);
       return {
@@ -69,12 +66,17 @@ export class IllustratorAdapter implements IllustratorPort {
     });
   }
 
-  async scaleVector(req: ScaleVectorRequest): Promise<Result<string, FireflyError>> {
+  async scaleVector(req: ScaleVectorRequest): Promise<Result<string, CreativeServiceError>> {
     // Fail fast on an empty target: the API rejects scaling with no dimensions,
-    // so surface a clear validation error rather than a downstream 400.
+    // so surface a clear validation error rather than a downstream 400. The
+    // request never reached the vendor, so the port's own failure type is
+    // returned directly rather than mapped from one (ADR-0053 §1).
     if (req.scale === undefined && req.width === undefined && req.height === undefined) {
       return err(
-        new FireflyValidationError("scaleVector requires at least one of scale, width, or height."),
+        new CreativeServiceError(
+          "invalid-request",
+          "scaleVector requires at least one of scale, width, or height.",
+        ),
       );
     }
     return this.run(async () => {
@@ -102,7 +104,7 @@ export class IllustratorAdapter implements IllustratorPort {
 
   private async run(
     build: () => Promise<{ path: string; body: unknown }>,
-  ): Promise<Result<string, FireflyError>> {
+  ): Promise<Result<string, CreativeServiceError>> {
     try {
       const { path, body } = await build();
       const handle = toJobHandle(await fireflyClient.post(path, body));
@@ -112,22 +114,22 @@ export class IllustratorAdapter implements IllustratorPort {
       // clear error rather than routing through the job port's await — which only
       // resolves a jobId-only handle in webhook mode and would fail in polling builds.
       if (!handle.statusUrl) {
-        return err(new FireflyError("Illustrator submit response had no status URL to track the job."));
+        return err(new CreativeServiceError("unknown", "Illustrator submit response had no status URL to track the job."));
       }
       const done = await jobPort.poll(handle);
       if (done.status !== "succeeded") {
-        return err(new FireflyError(done.error ?? "Illustrator job did not succeed."));
+        return err(new CreativeServiceError("unknown", done.error ?? "Illustrator job did not succeed."));
       }
       // `done.outputs` is a non-optional JobOutput[] (parseJobResult always returns
       // an array), so `[0]?.href` is enough — an empty array yields the no-output
       // path below; no `?.` on `outputs` itself is needed.
       const href = done.outputs[0]?.href;
       if (!href) {
-        return err(new FireflyError("Illustrator job produced no output."));
+        return err(new CreativeServiceError("unknown", "Illustrator job produced no output."));
       }
       return ok(href);
     } catch (error) {
-      return err(classifyAdobeError(error));
+      return err(toCreativeServiceError(error));
     }
   }
 }

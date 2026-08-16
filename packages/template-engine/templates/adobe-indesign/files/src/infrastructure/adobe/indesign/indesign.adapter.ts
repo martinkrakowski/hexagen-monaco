@@ -10,7 +10,8 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import { classifyAdobeError, FireflyError } from "../errors/firefly-errors";
+import { toCreativeServiceError } from "../errors/to-creative-service-error";
+import { CreativeServiceError } from "../../../domain/errors/creative-service-error";
 import { ok, err, type Result } from "../../../shared/result";
 
 /**
@@ -37,7 +38,7 @@ const DEFAULT_FORMAT: InDesignFormat =
     : "{output_format}";
 
 export class InDesignAdapter implements InDesignPort {
-  async dataMerge(req: DataMergeRequest): Promise<Result<string, FireflyError>> {
+  async dataMerge(req: DataMergeRequest): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const storage = getStoragePresigner();
       const input = await storage.presignInput(req.inputHref);
@@ -54,7 +55,7 @@ export class InDesignAdapter implements InDesignPort {
     });
   }
 
-  async renderLayout(req: RenderLayoutRequest): Promise<Result<string, FireflyError>> {
+  async renderLayout(req: RenderLayoutRequest): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const { input, output } = await this.presignIO(req);
       return {
@@ -67,7 +68,7 @@ export class InDesignAdapter implements InDesignPort {
     });
   }
 
-  async exportPdf(req: ExportPdfRequest): Promise<Result<string, FireflyError>> {
+  async exportPdf(req: ExportPdfRequest): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const { input, output } = await this.presignIO(req);
       return {
@@ -93,7 +94,7 @@ export class InDesignAdapter implements InDesignPort {
 
   private async run(
     build: () => Promise<{ path: string; body: unknown }>,
-  ): Promise<Result<string, FireflyError>> {
+  ): Promise<Result<string, CreativeServiceError>> {
     try {
       const { path, body } = await build();
       const handle = toJobHandle(await fireflyClient.post(path, body));
@@ -103,24 +104,24 @@ export class InDesignAdapter implements InDesignPort {
       // clear error rather than routing through the job port's await — which only
       // resolves a jobId-only handle in webhook mode and would fail in polling builds.
       if (!handle.statusUrl) {
-        return err(new FireflyError("InDesign submit response had no status URL to track the job."));
+        return err(new CreativeServiceError("unknown", "InDesign submit response had no status URL to track the job."));
       }
       // jobPort.poll() is the centralised always-poll entry point (keeps the wait
       // path on the port rather than importing the poller directly).
       const done = await jobPort.poll(handle);
       if (done.status !== "succeeded") {
-        return err(new FireflyError(done.error ?? "InDesign job did not succeed."));
+        return err(new CreativeServiceError("unknown", done.error ?? "InDesign job did not succeed."));
       }
       // `done.outputs` is a non-optional JobOutput[] (parseJobResult always returns
       // an array), so `[0]?.href` is enough — an empty array yields the no-output
       // path below; no `?.` on `outputs` itself is needed.
       const href = done.outputs[0]?.href;
       if (!href) {
-        return err(new FireflyError("InDesign job produced no output."));
+        return err(new CreativeServiceError("unknown", "InDesign job produced no output."));
       }
       return ok(href);
     } catch (error) {
-      return err(classifyAdobeError(error));
+      return err(toCreativeServiceError(error));
     }
   }
 }

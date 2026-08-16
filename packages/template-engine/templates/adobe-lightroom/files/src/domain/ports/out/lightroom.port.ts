@@ -1,7 +1,5 @@
 import type { Result } from "../../../shared/result";
-// Type-only import of the infrastructure error (erased at compile) — the deliberate
-// domain→infra decoupling for the port's failure channel, not an oversight.
-import type { FireflyError } from "../../../infrastructure/adobe/errors/firefly-errors";
+import type { CreativeServiceError } from "../../errors/creative-service-error";
 
 /**
  * Outbound port for the Adobe Lightroom API (image.adobe.io/lrService).
@@ -28,9 +26,9 @@ export interface EditRequest extends LightroomRequest {
 
 export interface LightroomPort {
   /** Auto-tone an image (automatic exposure/colour correction). */
-  autoTone(req: LightroomRequest): Promise<Result<string, FireflyError>>;
+  autoTone(req: LightroomRequest): Promise<Result<string, CreativeServiceError>>;
   /** Apply a Lightroom preset (XMP) to an image. */
-  applyPreset(req: ApplyPresetRequest): Promise<Result<string, FireflyError>>;
+  applyPreset(req: ApplyPresetRequest): Promise<Result<string, CreativeServiceError>>;
   /** Apply explicit edit parameters to an image. */
-  edit(req: EditRequest): Promise<Result<string, FireflyError>>;
+  edit(req: EditRequest): Promise<Result<string, CreativeServiceError>>;
 }

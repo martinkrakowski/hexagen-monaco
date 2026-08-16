@@ -5,7 +5,7 @@ import type {
   LLMResponse,
 } from "../../../domain/ports/out/llm-client.port";
 import { classifyHttpError, LLMServiceError } from "../errors/llm-errors";
-import type { LLMError } from "../errors/llm-errors";
+import type { LLMError } from "../../../domain/errors/llm-error";
 import { withRetry } from "../utils/retry";
 import { withTimeout } from "../utils/timeout";
 import { callStructured } from "../utils/structured-output";
