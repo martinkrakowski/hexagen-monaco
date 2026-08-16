@@ -22,17 +22,17 @@ being run. Update the status table and change log as phases progress.
 
 ## 1. Status at a glance
 
-| Phase | Scope                             | State                                              | Evidence                                                                                                                                                                                           |
-| ----- | --------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **0** | ADRs 0.1–0.8 (ADR-0047…0054)      | ✅ **Merged**                                      | PR #439 (`cd331ae6`); ADR 0.8 accepted → unblocks Phase 2                                                                                                                                          |
-| **1** | Prod triage 1.1–1.6               | ✅ **Merged**                                      | #440 `AUD-001`, #441 `AUD-002`, #442 `AUD-007`, #443 `AUD-003/006`, #444 `AUD-005` — all on `main`                                                                                                 |
-| **2** | Enforcement ratchet (AUD-010/011) | ✅ **COMPLETE**                                    | **2.1 #452** (`edbe7c2c`), **2.2 #459** (`6a08bc00`), **2.3 #462+#465** (`6942751d`, `b3f79dd6`), **2.4 #460** (`ce53bca2`), **2.5 #448** (`0a22a53d`) — **Phase 2 is green; Waves 5–8 unblocked** |
-| **3** | Toolchain honesty (3.1–3.5)       | ✅ **COMPLETE**                                    | **3.1 #445** (`fcbe7cfc`), **3.2 #461** (`c5298c1a`), **3.3 #457** (`c299d967`, MOD-004; MOD-005 leg ⇐ ADR-0049), **3.4 #466** (`03b1369f`), **3.5 #449** (`50081c51`)                             |
-| **4** | Dead-code deletion (4.1–4.7)      | 🔄 **5 of 7 — only decision-blocked items remain** | **4.1 #450**, **4.2 #446**, **4.3 #453**, **4.4 #451**, **4.6 #447+#458** (`497c227e`, HEX-037 **and** HEX-038 — no longer partial); **4.5 ⇐ D3**, **4.7 ⇐ D6**                                    |
-| **5** | Port identity / app I/O           | 🟢 **UNBLOCKED — next**                            | entry gate **satisfied**: Phase 2 green on `main` as of `b3f79dd6`                                                                                                                                 |
-| **6** | Web routes / package fates        | ⛔ **Design-ready**                                | ⇐ 5.5 + ADRs 0.2/0.3/0.4                                                                                                                                                                           |
-| **7** | Staged-gen GOD-001 arc            | ⛔ **Design-ready**                                | strict serial 7.1→7.2→7.3→7.4/7.5→7.6                                                                                                                                                              |
-| **8** | Web/React + test reality          | ⛔ **Partly blocked**                              | ⇐ 7.1, 6.7(b), 4.3 ✅, **4.5 (⇐ D3)**, 5.2 — startable, not completable until D3                                                                                                                   |
+| Phase | Scope                             | State                                              | Evidence                                                                                                                                                                                                       |
+| ----- | --------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0** | ADRs 0.1–0.8 (ADR-0047…0054)      | ✅ **Merged**                                      | PR #439 (`cd331ae6`); ADR 0.8 accepted → unblocks Phase 2                                                                                                                                                      |
+| **1** | Prod triage 1.1–1.6               | ✅ **Merged**                                      | #440 `AUD-001`, #441 `AUD-002`, #442 `AUD-007`, #443 `AUD-003/006`, #444 `AUD-005` — all on `main`                                                                                                             |
+| **2** | Enforcement ratchet (AUD-010/011) | ✅ **COMPLETE**                                    | **2.1 #452** (`edbe7c2c`), **2.2 #459** (`6a08bc00`), **2.3 #462+#465** (`6942751d`, `b3f79dd6`), **2.4 #460** (`ce53bca2`), **2.5 #448** (`0a22a53d`) — **Phase 2 is green; Waves 5–8 unblocked**             |
+| **3** | Toolchain honesty (3.1–3.5)       | ✅ **COMPLETE**                                    | **3.1 #445** (`fcbe7cfc`), **3.2 #461** (`c5298c1a`), **3.3 #457** (`c299d967`, MOD-004; MOD-005 leg **struck** — ADR-0049 Option B deleted the package), **3.4 #466** (`03b1369f`), **3.5 #449** (`50081c51`) |
+| **4** | Dead-code deletion (4.1–4.7)      | 🔄 **5 of 7 — only decision-blocked items remain** | **4.1 #450**, **4.2 #446**, **4.3 #453**, **4.4 #451**, **4.6 #447+#458** (`497c227e`, HEX-037 **and** HEX-038 — no longer partial); **4.5 ⇐ D3**, **4.7 ⇐ D6**                                                |
+| **5** | Port identity / app I/O           | 🟢 **UNBLOCKED — next**                            | entry gate **satisfied**: Phase 2 green on `main` as of `b3f79dd6`                                                                                                                                             |
+| **6** | Web routes / package fates        | ⛔ **Design-ready**                                | ⇐ 5.5 + ADRs 0.2/0.4 — **0.3 resolved** (Option B): **6.6 executed** by the `packages/security` deletion; **6.4(e) struck**                                                                                    |
+| **7** | Staged-gen GOD-001 arc            | ⛔ **Design-ready**                                | strict serial 7.1→7.2→7.3→7.4/7.5→7.6                                                                                                                                                                          |
+| **8** | Web/React + test reality          | ⛔ **Partly blocked**                              | ⇐ 7.1, 6.7(b), 4.3 ✅, **4.5 (⇐ D3)**, 5.2 — startable, not completable until D3                                                                                                                               |
 
 Also merged earlier in the arc: PR #437 (plan, `c9a14f48`), PR #438 (implementation
 prompt, `edccc02c`).
@@ -46,13 +46,13 @@ Jest residue, `engines.node`, ts-morph alignment, `Error.cause`, and HEX-038.
 
 **Nothing in Phases 2–4 is blocked on engineering. What remains is blocked on decisions:**
 
-| Item                          | Blocked on                                | Note                                                                                                |
-| ----------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| **4.5**                       | **D3** — api-gateway delete-vs-wire       | also gates **Phase 8**, so D3 compounds                                                             |
-| **4.7**                       | **D6** — sync publish-surface semver      | release-gated                                                                                       |
-| **3.3 MOD-005 leg**           | **ADR-0049** branch selection             | ADR is `Status: Proposed`, both options live; ADR-0049 itself says 3.3 drops the leg under Option B |
-| **8.11**                      | **D4** — coverage posture                 |                                                                                                     |
-| 11 of the 34 baseline entries | **`zod` in domain** — accept or burn down | baselined, not allowlisted; ADR-0054 seeds only js-yaml/manifest                                    |
+| Item                          | Blocked on                                | Note                                                                                                                    |
+| ----------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **4.5**                       | **D3** — api-gateway delete-vs-wire       | also gates **Phase 8**, so D3 compounds                                                                                 |
+| **4.7**                       | **D6** — sync publish-surface semver      | release-gated                                                                                                           |
+| ~~**3.3 MOD-005 leg**~~       | ~~**ADR-0049** branch selection~~         | ✅ **Dissolved** — ADR-0049 accepted as **Option B**; `packages/security` deleted, so there is no tsconfig to reconcile |
+| **8.11**                      | **D4** — coverage posture                 |                                                                                                                         |
+| 11 of the 34 baseline entries | **`zod` in domain** — accept or burn down | baselined, not allowlisted; ADR-0054 seeds only js-yaml/manifest                                                        |
 
 **Release gates pending** (repo PRs landed; nothing published, tagged or deployed): #457
 (`engines.node` floor), #459 (three new arch-linter rule classes + empty-by-default
@@ -105,8 +105,16 @@ this arc kept surfacing. Tracked in
 | **D5** | TypeScript 6 upgrade        | none     | ⛔ Open — 3.1 deletes the pin regardless; upgrade is its own arc |
 | **D6** | sync publish-surface semver | **4.7**  | ⛔ **Open** — release-gated                                      |
 
-_ADR 0.3 (security bounded-context fate) independently gates 6.6 and the conditional
-MOD-005 leg of 3.3._
+_ADR 0.3 (security bounded-context fate) ~~independently gates 6.6 and the conditional
+MOD-005 leg of 3.3~~ is **resolved**: **ADR-0049 accepted as Option B** (amended
+2026-08-16), `packages/security` deleted. This **executes 6.6** and **strikes** both
+conditional items — **3.3's MOD-005 leg** (no tsconfig left to reconcile) and
+**6.4(e)** (the `project-configuration` `ports/in → ports/out` item's "+ (e) security
+if ADR 0.3 keeps it" leg; it did not keep it). Step 1 of the ADR's Option B was
+superseded — the value objects were deleted outright rather than moved into
+`@hexagen/governance`, since moving zero-consumer code into a registered context would
+hand the Wave-2 ratchet unused types to police. Reasoning:
+`docs/planning/2026-08-16-decision-dossier-and-remediation-followups.md` §1.2._
 
 **Release-gated items** (`@hexagen-monaco/sync` + `@hexagen-monaco/arch-linter`
 publish surface): **2.2, 3.3's `engines.node` leg (MOD-004), 3.4, 4.7.** The **repo
