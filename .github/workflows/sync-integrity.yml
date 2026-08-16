@@ -87,10 +87,12 @@ jobs:
       - name: "Verify Template Questions Generator Parity"
         # Asserts the two generated wizard modules are in sync with the manifests
         # under packages/template-engine/templates:
-        #   - template-questions-step/template-questions.generated.ts (id -> questions)
-        #   - add-ons-step/template-manifest.generated.ts (id -> name/description/
+        #   - features/project-wizard/steps/template-questions-step/template-questions.generated.ts
+        #     (id -> questions)
+        #   - lib/generated/template-manifest.generated.ts (id -> name/description/
         #     requires/conflicts, which the add-ons catalog merges with curated
-        #     presentation fields)
+        #     presentation fields; hexagon-canvas reads it too, so it is
+        #     slice-neutral rather than owned by the wizard step)
         # If a manifest was edited without re-running
         # `yarn workspace web gen:template-questions`, this step fails with
         # instructions. It also hard-fails on a `requires` naming a non-existent

@@ -5,12 +5,13 @@
  * that bit PR #109 — and that left 18 templates invisible in the wizard — is
  * exactly the class of issue this guards against):
  *
- *   1. template-questions-step/template-questions.generated.ts
+ *   1. features/project-wizard/steps/template-questions-step/template-questions.generated.ts
  *        id -> questions[]   (the per-template questions step)
- *   2. add-ons-step/template-manifest.generated.ts
+ *   2. lib/generated/template-manifest.generated.ts
  *        id -> { id, name, description, requires, conflicts }
  *        (the add-ons selection catalog merges this with hand-curated
- *         presentation fields — see template-catalog.ts)
+ *         presentation fields — see template-catalog.ts; the hexagon-canvas
+ *         slice reads it too, which is why it is slice-neutral)
  *
  * Run via `yarn workspace web gen:template-questions`. The CI parity check runs
  * the same script with `--check` and fails if EITHER on-disk file diverges from
@@ -40,11 +41,18 @@ const QUESTIONS_OUT = path.join(
   "template-questions-step",
   "template-questions.generated.ts",
 );
-const MANIFEST_OUT = path.join(
-  WIZARD_DIR,
-  "add-ons-step",
-  "template-manifest.generated.ts",
-);
+// The manifest map is derived from a PACKAGE (template-engine), is typed by
+// nothing slice-local, and is read from two slices (hexagon-canvas and the
+// wizard's add-ons step). It therefore has no slice of its own and lives under
+// the neutral `lib/` alias root — `lib/*` resolves BEFORE `features/*` in
+// apps/web/tsconfig.json, so `@/generated/...` is not a slice specifier and
+// neither boundary gate treats a consumer of it as crossing a slice.
+//
+// The questions map stays inside the step: it imports `TemplateQuestion` from
+// that step's own `./types`, so hoisting it to lib/ would invert the
+// dependency (shared root → feature slice), and it has no cross-slice consumer.
+const GENERATED_DIR = path.join(WEB_ROOT, "lib", "generated");
+const MANIFEST_OUT = path.join(GENERATED_DIR, "template-manifest.generated.ts");
 
 interface RawQuestion {
   id: string;

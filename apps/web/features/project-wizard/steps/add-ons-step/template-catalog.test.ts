@@ -9,7 +9,7 @@ import {
   resolveMissingRequires,
   TEMPLATE_CATALOG,
 } from "./template-catalog";
-import { TEMPLATE_MANIFESTS } from "./template-manifest.generated";
+import { TEMPLATE_MANIFESTS } from "@/generated/template-manifest.generated";
 
 describe("findCompanionSuggestions", () => {
   it("returns nothing when no selected template declares companions", () => {

@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { TEMPLATE_MANIFESTS } from "@/project-wizard/steps/add-ons-step/template-manifest.generated";
+import { TEMPLATE_MANIFESTS } from "@/generated/template-manifest.generated";
 import type { AddOnNodeMeta } from "./addon-overlay-nodes";
 
 /**
