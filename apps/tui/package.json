@@ -10,6 +10,7 @@
     "dev": "yarn workspace @hexagen/mcp-server build && tsx src/index.tsx",
     "start": "node dist/index.js",
     "lint": "eslint . --ext .ts,.tsx",
+    "test": "yarn run -T vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
