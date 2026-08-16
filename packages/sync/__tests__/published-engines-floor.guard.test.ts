@@ -69,8 +69,18 @@ async function readManifest(relDir: string): Promise<Manifest> {
 async function publishedWorkspaceDirs(): Promise<string[]> {
   const workflowPath = path.join(REPO_ROOT, ".github/workflows/publish.yml");
   const raw = await fs.readFile(workflowPath, "utf8");
+  // Match against executable lines only. Several comments in publish.yml name
+  // the staging script in prose, and a sentence like "prepare-publish-package.js
+  // strips workspace: deps" otherwise yields a phantom staged dir ("strips")
+  // that no manifest backs. Dropping comment lines keeps the derivation tied to
+  // steps that actually run; the "> 0" assertion below still fails closed if
+  // the real staging steps ever disappear.
+  const executable = raw
+    .split("\n")
+    .filter((line) => !/^\s*#/.test(line))
+    .join("\n");
   const dirs = [
-    ...raw.matchAll(/prepare-publish-package\.js\s+([^\s"']+)/g),
+    ...executable.matchAll(/prepare-publish-package\.js\s+([^\s"']+)/g),
   ].map((m) => m[1]);
   const unique = [...new Set(dirs)];
   assert.ok(

@@ -78,6 +78,47 @@ jobs:
       - name: "TypeCheck All Packages"
         run: yarn turbo run typecheck
 
+      # `typecheck` only covers each package's `src` — the base tsconfig
+      # excludes __tests__. Run the test-source type gate before the suite so a
+      # drifted fixture or mock is reported as a type error rather than as a
+      # confusing downstream runtime failure. Same ordering as
+      # sync-integrity.yml. Scoped to the publish closure (see next step).
+      - name: "TypeCheck Test Sources (publish closure)"
+        run: |
+          yarn turbo run typecheck:test \
+            --filter=@hexagen/sync... \
+            --filter=@hexagen/arch-linter... \
+            --continue --output-logs=full --log-order=stream
+
+      # THE RELEASE TEST GATE.
+      #
+      # Until this step existed, publish.yml ran build + typecheck and then
+      # pushed two packages to the public npm registry. No test ran anywhere on
+      # the release path: sync-integrity.yml runs the suite, but only on
+      # push/pull_request to main|develop — a `v*` tag triggers neither, and a
+      # tag can be pushed at any commit. Generated customer projects consume the
+      # `hexagen` binary from that registry.
+      #
+      # Scope is the *bundled* closure, not just the two root packages. The
+      # staging script strips `workspace:` deps because tsup inlines
+      # them into dist/ (ADR-0009, noExternal: [/^@hexagen\//]), so a tarball
+      # physically contains @hexagen/{shared,governance,project-configuration,
+      # template-engine,visualization} compiled in. Testing packages/sync alone
+      # would leave most of the shipped bytes unexercised.
+      #
+      # The helper derives that closure from the manifests and cross-checks it
+      # against the package set turbo actually resolves before running anything.
+      # That check is not ceremony: `turbo run test --filter=<typo>...` exits 0
+      # with "0 successful, 0 total", so a bare --filter step can silently
+      # degrade into a green no-op. It also fails on a non-zero test exit — no
+      # continue-on-error, no soft reporting. A red suite blocks the publish.
+      #
+      # NOT scoped to the whole monorepo on purpose: apps/web and the other
+      # unpublished workspaces ship in no tarball, and gating a release on them
+      # means unrelated failures block a publish.
+      - name: "Test Published Closure (release gate)"
+        run: node scripts/verify-publish-test-scope.js packages/sync tools/arch-linter
+
       # Stage self-contained, scope-rewritten manifests. Each `publish/` dir
       # holds dist/ + a public package.json (name → @hexagen-monaco/*, no
       # workspace:* deps).
