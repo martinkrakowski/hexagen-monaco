@@ -52,6 +52,9 @@ import {
   ServerArchitectureGraphProviderAdapter,
   ServerLinterReportProviderAdapter,
 } from "./adapters/wire-adapters";
+import { CliManifestLintAdapter } from "./governance/adapters/cli-manifest-lint.adapter";
+import { LlmSuggestionAdapter } from "./governance/adapters/llm-suggestion.adapter";
+import type { ManifestLintPort, SuggestionPort } from "./governance/ports";
 import { logger } from "../../lib/structured-logger";
 
 // The manifest-path anchor lives in its own module so the read-only display
@@ -175,6 +178,38 @@ export const getLintValidation = (): CliLintValidationAdapter => {
     _lintValidation = new CliLintValidationAdapter(workspaceRoot);
   }
   return _lintValidation;
+};
+
+// ============================================================================
+// Governance API Wiring (HEX-016)
+// ============================================================================
+//
+// The governance route family used to construct these two collaborators inline:
+// `refresh` shelled out to `yarn lint:arch` with `child_process.exec` and wrote
+// its own temp files, and both `refresh` and `suggestions` carried their own
+// copy of the `ServerLLMAdapter` + `GenerateSuggestionUseCase` wiring. They now
+// depend on `ManifestLintPort` / `SuggestionPort` and get their adapters from
+// here — this file is the single server composition root for those paths.
+
+let _manifestLint: ManifestLintPort | null = null;
+
+/** Candidate-manifest linting for the governance routes. Anchored on the
+ * monorepo root, not process.cwd() — see the adapter's class doc (AUD-002). */
+export const getManifestLint = (): ManifestLintPort => {
+  if (!_manifestLint) {
+    _manifestLint = CliManifestLintAdapter.fromMonorepoRoot();
+  }
+  return _manifestLint;
+};
+
+let _governanceSuggestions: SuggestionPort | null = null;
+
+/** The one suggestion implementation shared by `refresh` and `suggestions`. */
+export const getGovernanceSuggestions = (): SuggestionPort => {
+  if (!_governanceSuggestions) {
+    _governanceSuggestions = new LlmSuggestionAdapter();
+  }
+  return _governanceSuggestions;
 };
 
 // ============================================================================
