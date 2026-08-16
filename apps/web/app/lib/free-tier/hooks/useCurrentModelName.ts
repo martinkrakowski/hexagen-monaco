@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useLocalLLMConfig } from "@/llm-driver/useLocalLlm";
+import { useLocalLLMConfig } from "@/lib/local-llm-context";
 import { getCapabilities } from "@/lib/manifest-generation";
 import { isFreeTierModel } from "../../wire.client";
 import { usePreferredLLM } from "../store/usePreferredLLM";

@@ -4,7 +4,7 @@ import { ModelSelectionPage } from "@/manifest-generation/ModelSelectionPage";
 import {
   useLocalLLMConfig,
   useLocalLLMStreaming,
-} from "@/llm-driver/useLocalLlm";
+} from "@/lib/local-llm-context";
 
 export function ModelSelectionPageClient() {
   const config = useLocalLLMConfig();
