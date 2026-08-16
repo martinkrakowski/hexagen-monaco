@@ -95,11 +95,15 @@ export default [
                 "REA-003: the code-view explorer is presentational. useProjectGeneration / useArchitectureDownload belong in the CodeView boundary; take files, notices and callbacks as props instead.",
             },
             {
-              group: [
-                "**/wire.client",
-                "@/lib/wire.client",
-                "**/app/lib/adapters/*",
-              ],
+              // `no-restricted-imports` matches the import STRING, not the
+              // resolved file, so every spelling of a target has to be listed.
+              // tsconfig maps `@/*` onto `app/*`, which makes `@/lib/wire`
+              // and `@/lib/adapters/*` live import forms — and the alias is
+              // the dominant idiom in `features/`. `wire*` rather than
+              // `wire.client` because `app/lib/wire.ts` is a barrel that does
+              // `export * from "./wire.client"`; fencing only the latter left
+              // the container reachable one re-export away.
+              group: ["**/wire", "**/wire.*", "**/adapters/*", "**/adapters/*/*"],
               message:
                 "REA-003: the code-view explorer must not reach the client DI container or an adapter. Do the I/O in the CodeView boundary and pass the result down.",
             },
