@@ -18,8 +18,6 @@
     {"rule":"node-builtin-in-layer","file":"packages/project-generation/src/application/generate-project-use-case.ts","specifier":"node:fs/promises"},
     {"rule":"node-builtin-in-layer","file":"packages/project-generation/src/application/generate-project-use-case.ts","specifier":"node:path"},
     {"rule":"node-builtin-in-layer","file":"packages/sync/src/application/use-cases/migrate-manifest.use-case.ts","specifier":"node:util"},
-    {"rule":"node-builtin-in-layer","file":"packages/template-engine/src/application/use-cases/validate-templates.use-case.ts","specifier":"node:fs/promises"},
-    {"rule":"node-builtin-in-layer","file":"packages/template-engine/src/application/use-cases/validate-templates.use-case.ts","specifier":"node:path"},
     {"rule":"node-builtin-in-layer","file":"packages/template-engine/src/domain/conflict-path.ts","specifier":"node:path"},
     {"rule":"node-builtin-in-layer","file":"packages/template-engine/src/domain/output-path-safety.ts","specifier":"node:path"},
     {"rule":"npm-package-in-domain","file":"packages/agentic-interaction/src/domain/manifest/apply-repair-ops-to-yaml.ts","specifier":"js-yaml"},

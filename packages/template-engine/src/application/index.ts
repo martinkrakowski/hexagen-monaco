@@ -18,3 +18,5 @@ export type { TemplateRegistryPort } from "./ports/template-registry.port.js";
 export type { QuestionEnginePort } from "./ports/question-engine.port.js";
 export type { FileEmitterPort, EmitResult } from "./ports/file-emitter.port.js";
 export type { TemplateConfigStorePort } from "./ports/template-config-store.port.js";
+export type { ProjectFilePresencePort } from "./ports/project-file-presence.port.js";
+export type { EnvironmentReaderPort } from "./ports/environment-reader.port.js";
