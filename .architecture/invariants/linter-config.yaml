@@ -25,6 +25,17 @@ global_whitelist:
 # imported inside a `domain/` layer is a violation unless it is listed here for
 # that bounded context. Keep this list short and justified: every entry is an
 # accepted leak of an external library into a domain model.
+#
+# The entries below the first one are the `zod` disposition recorded in the
+# ADR-0054 amendment of 2026-08-16 (dossier
+# docs/planning/2026-08-16-decision-dossier-and-remediation-followups.md §1.6).
+# One shared justification: every file listed here is a PARSING CARRIER — it
+# turns untrusted external text (a YAML manifest, an LLM JSON response, a config
+# file) into a typed domain value. That is the same class as the `js-yaml`
+# exception already accepted for `manifest-generation`, and ADR-0054's own text
+# names Zod as "the same class" while dispositioning only js-yaml. Schemas that
+# merely re-validated the repo's OWN in-process port results were deleted rather
+# than listed here — see the amendment for which, and why.
 domain_package_allowlist:
   - package: 'manifest-generation'
     allowed_packages:
@@ -33,6 +44,57 @@ domain_package_allowlist:
       # the Zod parsing the files already do. Recorded as an accepted exception
       # instead of a codec port.
       - 'js-yaml'
+
+  - package: 'project-configuration'
+    allowed_packages:
+      # `manifest-schema.ts` and `workspace-config.schema.ts` ARE the parser for
+      # `.architecture/manifest.yaml` and `workspace.config.yaml`. Re-hosting
+      # them behind a codec port means hand-rolling `.strict()`, preprocessing,
+      # cross-field refinement and structured `issues[].path` for this repo's
+      # most central type — and the repo would still hand-write the JSON Schema
+      # beside it, since no `zod-to-json-schema` is installed.
+      - 'zod'
+
+  - package: 'agentic-interaction'
+    allowed_packages:
+      # `apply-repair-ops-to-yaml.ts` / `render-yaml.ts` — identical in kind to
+      # the manifest-generation grant above: line-ranged, format-controlled YAML
+      # is the artifact this domain manipulates. Listed so this one package is
+      # not adjudicated two ways (js-yaml allowlisted, zod baselined).
+      - 'js-yaml'
+      # `manifest-draft.schema.ts` validates the LLM's manifest-draft JSON at the
+      # model boundary; `manifest-draft.types.ts` derives the domain types from
+      # it via `z.infer`, which is what keeps the parser and the type from
+      # drifting apart.
+      - 'zod'
+
+  - package: 'shared'
+    allowed_packages:
+      # `bounded-context-type.ts` is the single source of truth for the
+      # bounded-context-type vocabulary, and its schema is deliberately
+      # case-insensitive (`z.preprocess` → trim + lowercase) because
+      # LLM-generated manifests vary casing. The preprocessing IS the exception's
+      # justification: it is a parser for untrusted input, not a type alias.
+      - 'zod'
+
+  - package: 'local-llm'
+    allowed_packages:
+      # `llm-request.vo.ts` carries the response schema an LLM call must validate
+      # against (`schema: ZodSchema`). The value object exists to transport that
+      # schema to the provider adapters, so the type is the contract.
+      #
+      # Type-only import, and allowlisted anyway — see the amendment: this rule
+      # deliberately does NOT exempt `import type`. A domain contract written in
+      # terms of a third-party type still forces `zod` into package.json and onto
+      # every implementer, so the exception is recorded rather than hidden.
+      - 'zod'
+
+  - package: 'prompt-compiler'
+    allowed_packages:
+      # `structured-output-schema.ts` pairs an LLM structured-output request with
+      # the `z.ZodTypeAny` its response is parsed against — the same carrier role
+      # as local-llm's, one stage earlier in the pipeline.
+      - 'zod'
 
 test_double_rules:
   allowed_cross_package_imports: true

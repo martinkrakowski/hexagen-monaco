@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 // WizardStep — Value Object (enum + helper)
 export enum WizardStep {
   Basics = "basics",
@@ -10,8 +8,6 @@ export enum WizardStep {
   Generate = "generate",
   Complete = "complete",
 }
-
-export const WizardStepSchema = z.nativeEnum(WizardStep);
 
 // WizardIntent — Discriminated Union
 export type WizardIntent =

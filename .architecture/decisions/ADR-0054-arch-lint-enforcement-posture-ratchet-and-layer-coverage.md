@@ -65,3 +65,59 @@ The layer-rule coverage of §2 is a **published-package behavior change** to `@h
 - **CI becomes a real merge gate.** After item 2.3, eslint + UI-boundary + arch-lint-ratchet run on every PR and block merge; the `validate-ui-boundary.sh` header's long-standing "merge gate" claim (`scripts/validate-ui-boundary.sh:10`) becomes true. The pre-commit lint-staged path is no longer the only line of defense.
 - **No change to ADR-0043.** The cross-context legality ladder and its `shared-kernel`/`depends_on` trust model are untouched; this ADR is additive to the layer-rules engine and the CI plumbing. The frozen-context clearance ADR-0043 recorded for `tools/arch-linter` (ADR-0043 §"Frozen-context clearance", lines 88-99) continues to authorize the 2.2 engine edits.
 - **Scope boundary with sibling audit items.** This ADR governs AUD-010/011/019 only. The `typecheck:test` CI gap (AUD-020) is governed by plan item 2.4 and is out of scope here.
+
+---
+
+## Amendment — 2026-08-16: the `zod` disposition for §2c's allowlist
+
+**Status of this amendment:** Accepted. The body above is unchanged; this records how §2c's allowlist was actually populated, and one rule question §2c left open.
+
+**Context.** §2c seeded the domain-package allowlist with `js-yaml` for `manifest-generation` and, in the same breath, described that import as "the same class as the Zod parsing the domain already does" — while dispositioning only `js-yaml`. The Zod half was left in the ratchet baseline, where it grew to **11 of 16 entries (69%)**. The decision dossier (`docs/planning/2026-08-16-decision-dossier-and-remediation-followups.md` §1.6) called for a split weighted to allowlist; this amendment executes it.
+
+**Why the baseline was the wrong resting place.** The baseline is not a neutral hold. Its key is `rule|file|specifier`, so it already enforces a de facto ban: a _new_ `zod` import in any of those domains fails CI immediately, and moving any listed file both goes stale and fails on its new path. An accepted exception that behaves like a ban, and that breaks when code is moved, is a worse instrument than the declarative allowlist §2c already built. The decision had in effect been made by mechanism; this writes it down.
+
+### 1. Seven parsing carriers are allowlisted
+
+`project-configuration` (×2), `agentic-interaction` (×2), `shared`, `local-llm` and `prompt-compiler`. The shared justification is one property, stated per entry in `linter-config.yaml`: each file turns **untrusted external text** — a YAML manifest, an LLM JSON response, a config file — into a typed domain value. That is precisely the `js-yaml` class §2c already accepted.
+
+Wholesale burn-down was rejected on cost: it means hand-rolling a validator that reproduces `.strict()`, preprocessing, cross-field refinement and structured `issues[].path` for this repo's most central type — and the repo would still hand-write the JSON Schema beside it, since no `zod-to-json-schema` is installed.
+
+`agentic-interaction`'s two `js-yaml` entries are allowlisted in the same edit, so one package is not adjudicated two ways.
+
+**Consequence for §4 (the generated-project contract): none.** Generated projects still receive an empty allowlist. These are host entries and are not granted downstream.
+
+### 2. Three schemas are deleted, because they were not carriers
+
+Not every `zod` finding was an exception waiting to be recorded. Three were code that got better by removal:
+
+- `wizard-orchestration` — `WizardStepSchema` was a single dead line. `git`-wide search found **no consumer, not even a test**.
+- `governance` (`linter-report.ts`) and `visualization` (`architecture-graph.ts`) — both were **re-validating this repo's own in-process port results**. Their only non-test consumers were `GetLinterReportUseCase` and `GetArchitectureGraphUseCase`, which called `.parse()` on values returned by `LinterReportProviderPort` / `ArchitectureGraphProviderPort` — ports whose every implementation constructs the object in TypeScript from an already-parsed manifest. There is no deserialization boundary on either path, so the parse re-checked what the type system guaranteed, and its only lasting effect was to pull an npm package into two domains. Both are now plain TypeScript types.
+
+The rule generalises: **allowlist a parser, delete a re-validator.** The untrusted-input boundary is a property of the caller, not of the type; when a caller is added that reads a report or a graph from disk or the wire, the parser belongs in that adapter.
+
+Two package manifests were corrected alongside: `zod` removed from `governance` and `wizard-orchestration` (no longer imported), and **added to `prompt-compiler`, which imported it without declaring it**. Allowlisting an undeclared import would have enshrined a phantom dependency. `visualization` had the same phantom and the burn-down resolved it.
+
+### 3. Type-only imports are NOT exempted — decided, not overlooked
+
+Three of the eleven findings were `import type { z }` / `import type { ZodSchema }`, which emit no runtime import. The dossier (§2.6) suggested this made them a rule defect rather than an architecture problem. **Declined**, for four reasons:
+
+1. **Erasure removes the runtime edge, not the dependency.** A type-only import still requires the package in `package.json` to typecheck. §2.11 demonstrates the failure concretely: the emitted `llm-adapter` template is typed on `zod` entirely through `import type`, and its generated project cannot typecheck because nothing provides `zod`. Exempting type-only imports would make this rule silent on exactly that case.
+2. **A contract written in a third-party type is a stronger commitment than a private one, not a weaker one.** `LLMRequest.schema: ZodSchema` and `LLMClientPort.callStructured(schema: ZodSchema<T>)` oblige every implementer and every caller to use Zod. An internal `import { z }` used to build a private schema does not.
+3. **It would create an invisible dodge**, of the class §2.9 already flags. A domain could express its whole contract in terms of an external library with the linter silent throughout.
+4. **The allowlist is the better instrument.** It leaves an auditable, per-context record with a written justification; a blind rule leaves nothing. `local-llm`'s type-only carrier is therefore allowlisted on its merits rather than exempted by mechanism.
+
+Because this is a decision and not incidental behaviour, it is pinned by a paired test in `tools/arch-linter/__tests__/cli-layer-purity-ratchet.test.ts` — a type-only import fails, and the same import is released by an allowlist entry. **No behaviour change ships to `@hexagen-monaco/arch-linter`**, so §4's release gate is not engaged by this amendment.
+
+### 4. One entry stays baselined, deliberately
+
+`packages/template-engine/templates/llm-adapter/files/src/domain/ports/out/llm-client.port.ts` is **payload emitted into customer projects**. Per the dossier's §2.5 RETRACTION, the linter's scan is **not** narrowed to exclude templates: PR #481 proved that treating "outside the tsconfig" as "not real code" would have hidden 14 genuine layering defects this repo exports.
+
+It is not allowlisted either. An allowlist entry is keyed by bounded context, so granting `template-engine` `zod` would also grant it to that package's own domain — and, more importantly, it would record as _accepted_ something that is merely _unfixed_. The finding is real: an emitted out-port's contract is written in terms of a third-party type.
+
+It is not burned down in this pass because the fix spans all eight template files typed on `zod`, and is blocked upstream regardless: per §2.11, template manifests have **no npm-dependency mechanism**, so nothing in the emitted `package.json` provides `zod` and the generated project cannot typecheck either way. The baseline is the correct instrument for a known defect awaiting a real fix — it is monotone-decreasing, so the entry stays visible and must eventually be deleted rather than living on as a permanent exception.
+
+The rationale is carried in a `note` field on that baseline entry. `parseBaseline` ignores unknown entry fields by design, but `serializeBaseline` strips them: **`--update-baseline` will drop the note**, and it should be restored if the file is ever regenerated.
+
+### Net effect
+
+Baseline **16 → 4**: three `node-builtin-in-layer` entries (untouched, out of scope) plus the one template `zod` entry. `npm-package-in-domain` no longer accounts for any host-source entry. `yarn lint:arch` exits 0 with no stale entries.
