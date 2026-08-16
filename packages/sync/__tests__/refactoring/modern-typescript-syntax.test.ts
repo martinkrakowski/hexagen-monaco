@@ -32,6 +32,14 @@
  * The project settings come from production via
  * `REFACTORING_IMPACT_COMPILER_OPTIONS`, so the test cannot drift from what the
  * analyser really does.
+ *
+ * SECOND SUITE. The `workspace-relative paths are POSIX on every host` describe
+ * at the bottom is *not* a ts-morph-version discriminator — it passes on 22 and
+ * 27 alike. It pins the path dialect the analyser emits, which is what earns
+ * the hard-coded POSIX assertions in the liveness arm the right to be
+ * hard-coded. See `toWorkspaceRelativePosixPath` in
+ * `src/domain/services/layer-classifier.ts` for the input/output dialect
+ * mismatch it guards.
  */
 import { describe, it } from "vitest";
 import assert from "node:assert";
@@ -39,6 +47,7 @@ import path from "node:path";
 import { promises as fs } from "node:fs";
 import { Project, SyntaxKind, ts } from "ts-morph";
 import { REFACTORING_IMPACT_COMPILER_OPTIONS } from "../../src/application/use-cases/refactoring-impact.use-case.js";
+import { toWorkspaceRelativePosixPath } from "../../src/domain/services/layer-classifier.js";
 import { ImpactAnalyzer } from "../../src/refactoring/impact-analyzer.js";
 import type { Manifest } from "../../src/types/manifest.js";
 import { withTempWorkspace } from "../helpers/fs-helpers.js";
@@ -196,6 +205,10 @@ describe("refactoring-impact parses >=TS 5.5 syntax (AUD-012)", () => {
         result.success,
         `analyse failed: ${result.success ? "" : String(result.error)}`,
       );
+      // POSIX separators are the analyser's contract, not a host assumption —
+      // `toWorkspaceRelativePosixPath` normalises both dialects, and the
+      // `workspace-relative paths are POSIX on every host` suite below pins
+      // that with Windows-shaped inputs.
       const paths = result.value.filesToModify.map((f) => f.path);
       assert.ok(
         paths.includes("packages/orders/src/order-service.ts"),
@@ -212,5 +225,67 @@ describe("refactoring-impact parses >=TS 5.5 syntax (AUD-012)", () => {
         "Declares interface OrderRepositoryPort",
       );
     });
+  });
+});
+
+/**
+ * NOT A ts-morph DISCRIMINATOR. These arms pass on ts-morph 22 and 27 alike —
+ * they pin the *path dialect* of the analyser's output, which is what makes the
+ * hard-coded POSIX assertions in the liveness arm above legitimate on every
+ * host rather than only on the Linux runner CI happens to use.
+ *
+ * The two path strings the analyser subtracts arrive in different dialects:
+ * `SourceFile.getFilePath()` is a ts-morph *output* and returns a
+ * `StandardizedFilePath` (already forward-slashed, even on Windows), while
+ * `workspaceRoot` is a raw *input* the caller supplies (native separators). The
+ * old `` filePath.replace(`${workspaceRoot}/`, "") `` matched nothing on
+ * Windows and leaked the absolute path into `FileToModify.path`.
+ */
+describe("workspace-relative paths are POSIX on every host", () => {
+  it("strips a Windows workspace root from a standardized ts-morph path", () => {
+    // Exactly the pair production sees on Windows: a native `os.tmpdir()` /
+    // `path.join` root against a ts-morph `StandardizedFilePath`.
+    assert.strictEqual(
+      toWorkspaceRelativePosixPath(
+        "C:\\Users\\ci\\AppData\\Local\\Temp\\hexagen-test-abc",
+        "C:/Users/ci/AppData/Local/Temp/hexagen-test-abc/packages/orders/src/order-service.ts",
+      ),
+      "packages/orders/src/order-service.ts",
+      "a backslashed workspace root must still reduce to a POSIX relative " +
+        "path — determinePackageName() anchors on /^(?:packages|apps)\\//",
+    );
+  });
+
+  it("is unchanged on POSIX roots (no regression for the common case)", () => {
+    assert.strictEqual(
+      toWorkspaceRelativePosixPath(
+        "/tmp/hexagen-test-abc",
+        "/tmp/hexagen-test-abc/packages/orders/src/order-service.ts",
+      ),
+      "packages/orders/src/order-service.ts",
+    );
+  });
+
+  it("tolerates a trailing separator on the workspace root", () => {
+    assert.strictEqual(
+      toWorkspaceRelativePosixPath("C:\\repo\\", "C:/repo/apps/web/app/x.tsx"),
+      "apps/web/app/x.tsx",
+    );
+  });
+
+  // ANTI-STUB CONTROL. A helper that simply returned its second argument, or
+  // that stripped every leading segment unconditionally, would satisfy the
+  // assertions above. This one pins that the root really is subtracted rather
+  // than guessed: an unrelated root must NOT yield a clean relative path.
+  it("does not fabricate a relative path when the root does not contain the file", () => {
+    const result = toWorkspaceRelativePosixPath(
+      "/tmp/other-workspace",
+      "/tmp/hexagen-test-abc/packages/orders/src/order-service.ts",
+    );
+    assert.notStrictEqual(result, "packages/orders/src/order-service.ts");
+    assert.ok(
+      result.startsWith("../"),
+      `an out-of-tree file must escape upward, got ${JSON.stringify(result)}`,
+    );
   });
 });

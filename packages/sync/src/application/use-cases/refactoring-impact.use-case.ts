@@ -7,6 +7,7 @@ import { validateRequest } from "../../domain/services/impact-request-validator.
 import {
   determineLayer,
   determinePackageName,
+  toWorkspaceRelativePosixPath,
 } from "../../domain/services/layer-classifier.js";
 import { assessArchitecturalImpact } from "../../domain/services/architectural-boundary-checker.js";
 import type {
@@ -163,7 +164,10 @@ export class RefactoringImpactUseCase {
   ): FileToModify[] {
     return files.map((file) => {
       const filePath = file.getFilePath();
-      const relativePath = filePath.replace(`${this.workspaceRoot}/`, "");
+      const relativePath = toWorkspaceRelativePosixPath(
+        this.workspaceRoot,
+        filePath,
+      );
       const layer = determineLayer(relativePath);
       const packageName = determinePackageName(relativePath);
       const reason = this.symbolProvider.getModificationReason(
