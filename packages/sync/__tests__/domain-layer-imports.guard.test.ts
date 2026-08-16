@@ -2,7 +2,7 @@ import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Project } from "ts-morph";
+import { Node, Project, SyntaxKind, type SourceFile } from "ts-morph";
 
 /**
  * Layer guard: nothing under `src/domain/` may depend on the composition root.
@@ -64,19 +64,74 @@ const ALLOWED_OUTSIDE_DOMAIN = new Set([
   "src/migration-report",
 ]);
 
+/** Native path separators to POSIX, so keys and globs compare on one dialect. */
+function toPosix(value: string): string {
+  return value.split(path.sep).join("/");
+}
+
 /** Package-relative, POSIX, extensionless — the comparison key. */
 function moduleKey(fromFile: string, specifier: string): string {
   if (!specifier.startsWith(".")) return specifier;
   const resolved = path.resolve(path.dirname(fromFile), specifier);
-  const relative = path
-    .relative(PACKAGE_ROOT, resolved)
-    .split(path.sep)
-    .join("/");
+  const relative = toPosix(path.relative(PACKAGE_ROOT, resolved));
   return relative.replace(/\.(js|ts)$/, "").replace(/\/index$/, "");
 }
 
 function isInsideDomain(key: string): boolean {
   return key.startsWith("src/domain/") || key === "src/domain";
+}
+
+/**
+ * Every module specifier that escapes a source file, in any syntactic form.
+ *
+ * All four forms are collected, because the guard's premise is that an edge the
+ * emitted JavaScript never mentions is still an edge:
+ *
+ *  - `import ... from "x"` / `import type { T } from "x"` — ImportDeclaration.
+ *  - `export ... from "x"` — ExportDeclaration (`src/domain/result.ts` re-exports
+ *    `Result` this way).
+ *  - `import("x").T` in TYPE POSITION — ImportTypeNode. Not hypothetical:
+ *    `src/domain/result.ts` writes `import("@hexagen/shared").Result<T, Error>`
+ *    as its return type, and a declaration-only walk cannot see it. This is the
+ *    same erased-at-runtime shape as HEX-038 itself, so missing it would leave
+ *    the guard blind to the exact class of edge it was written to catch.
+ *  - `await import("x")` — a CallExpression on the `import` keyword. None today,
+ *    but it is the one form that survives a `verbatimModuleSyntax` sweep, so the
+ *    ratchet should not have a hole waiting for it.
+ *
+ * Reading the parsed AST is what keeps this honest in both directions: the
+ * template-string `import type { Result } from '@{scope}/shared'` inside
+ * `src/domain/stub-templates.ts` is a StringLiteral, never an import node, so
+ * widening the walk cannot resurrect that false positive.
+ */
+function collectModuleSpecifiers(file: SourceFile): string[] {
+  const specifiers: string[] = [];
+
+  for (const declaration of [
+    ...file.getImportDeclarations(),
+    ...file.getExportDeclarations(),
+  ]) {
+    const value = declaration.getModuleSpecifierValue();
+    if (value !== undefined) specifiers.push(value);
+  }
+
+  for (const node of file.getDescendantsOfKind(SyntaxKind.ImportType)) {
+    const argument = node.getArgument();
+    if (!Node.isLiteralTypeNode(argument)) continue;
+    const literal = argument.getLiteral();
+    if (Node.isStringLiteral(literal))
+      specifiers.push(literal.getLiteralValue());
+  }
+
+  for (const call of file.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    if (call.getExpression().getKind() !== SyntaxKind.ImportKeyword) continue;
+    const [argument] = call.getArguments();
+    if (argument && Node.isStringLiteral(argument)) {
+      specifiers.push(argument.getLiteralValue());
+    }
+  }
+
+  return specifiers;
 }
 
 describe("domain layer imports", () => {
@@ -86,7 +141,12 @@ describe("domain layer imports", () => {
       skipAddingFilesFromTsConfig: true,
       skipFileDependencyResolution: true,
     });
-    project.addSourceFilesAtPaths(path.join(DOMAIN_DIR, "**/*.ts"));
+    // POSIX separators on purpose: ts-morph globs through fast-glob, which does
+    // not treat a backslash as a path separator, so a `path.join` glob matches
+    // nothing on Windows. CI is ubuntu-only, but a local Windows checkout would
+    // otherwise trip the discovery assert below for a reason that has nothing to
+    // do with the domain layer.
+    project.addSourceFilesAtPaths(`${toPosix(DOMAIN_DIR)}/**/*.ts`);
     const sourceFiles = project.getSourceFiles();
 
     // A guard that silently scans nothing is worse than no guard: it stays
@@ -105,19 +165,9 @@ describe("domain layer imports", () => {
     const violations: string[] = [];
     for (const file of sourceFiles) {
       const filePath = file.getFilePath();
-      const relativeFile = path
-        .relative(PACKAGE_ROOT, filePath)
-        .split(path.sep)
-        .join("/");
-      const specifiers = [
-        // Type-only imports are included on purpose — see the header.
-        ...file.getImportDeclarations(),
-        ...file.getExportDeclarations(),
-      ]
-        .map((declaration) => declaration.getModuleSpecifierValue())
-        .filter((value): value is string => value !== undefined);
-
-      for (const specifier of specifiers) {
+      const relativeFile = toPosix(path.relative(PACKAGE_ROOT, filePath));
+      // Type-only imports are included on purpose — see the header.
+      for (const specifier of collectModuleSpecifiers(file)) {
         const key = moduleKey(filePath, specifier);
         if (isInsideDomain(key)) continue;
         if (ALLOWED_OUTSIDE_DOMAIN.has(key)) continue;
@@ -140,5 +190,39 @@ describe("domain layer imports", () => {
         `do NOT widen the allowlist.\n\n` +
         violations.map((v) => `  - ${v}`).join("\n"),
     );
+  });
+
+  // The guard is only as good as its collector. Before widening the allowlist
+  // is ever debated, prove the walk actually sees every form an edge can take —
+  // and that widening it did not re-break the template-string case the parser
+  // was chosen for.
+  it("collects every import form, and never a specifier inside a string", () => {
+    const project = new Project({
+      useInMemoryFileSystem: true,
+      skipAddingFilesFromTsConfig: true,
+    });
+    const file = project.createSourceFile(
+      "sample.ts",
+      [
+        `import type { SyncConfig } from "./static-type-only.js";`,
+        `import { thing } from "./static-value.js";`,
+        `export type { Other } from "./reexport.js";`,
+        `type Aliased = import("./type-position.js").Shape;`,
+        `const loaded = await import("./dynamic.js");`,
+        // The decoy: an import that is text for a generated project, not an
+        // edge of this file. `src/domain/stub-templates.ts` really does this.
+        "const template = `import type { Result } from './IN-A-TEMPLATE.js';`;",
+        `export type { Aliased };`,
+        `export { thing, loaded, template };`,
+      ].join("\n"),
+    );
+
+    assert.deepEqual(collectModuleSpecifiers(file).sort(), [
+      "./dynamic.js",
+      "./reexport.js",
+      "./static-type-only.js",
+      "./static-value.js",
+      "./type-position.js",
+    ]);
   });
 });
