@@ -7,7 +7,10 @@ import {
   FALLBACK_RULES,
   CURRENT_MANIFEST_SCHEMA_VERSION,
 } from "@hexagen/project-configuration";
-import type { Manifest } from "@hexagen/sync";
+import type {
+  ManifestAppEntry,
+  ManifestAppFramework,
+} from "./manifest-app.dto.js";
 
 const getInboundPortName = (type: string) => `${type}.in-port.ts`;
 const getOutboundPortName = (type: string) => `${type}.out-port.ts`;
@@ -18,12 +21,13 @@ const getAdapterName = (type: string) => `${type}.adapter.ts`;
 // Each wizard selection maps to a framework with a built-in generator template
 // (`packages/sync/src/generators/apps-framework-templates.ts`
 // `BUILTIN_FRAMEWORK_TEMPLATES`); an unrecognised value maps to `"plain-ts"` so
-// the generator still emits a buildable scaffold.
-type AppEntryFramework = NonNullable<
-  NonNullable<Manifest["apps"]>[number]["framework"]
->;
+// the generator still emits a buildable scaffold. The vocabulary itself
+// (`ManifestAppFramework`) is declared in `manifest-app.dto.ts` — this context's
+// own, not indexed out of the engine's manifest type (HEX-004).
 
-function mapUiFramework(ui: BoundedContext["uiFramework"]): AppEntryFramework {
+function mapUiFramework(
+  ui: BoundedContext["uiFramework"],
+): ManifestAppFramework {
   switch (ui) {
     case "Next.js":
       return "next.js";
@@ -51,7 +55,7 @@ function mapUiFramework(ui: BoundedContext["uiFramework"]): AppEntryFramework {
  * `deriveApps` reads `infrastructureTarget` (the live selector); the legacy
  * `apiFramework` is only a fallback for manifests that predate it.
  */
-function frameworkForContext(bc: BoundedContext): AppEntryFramework {
+function frameworkForContext(bc: BoundedContext): ManifestAppFramework {
   // infrastructureTarget wins when set. A value MUST NOT be silently overridden
   // by a legacy apiFramework — unknown/"none" values fall through to plain-ts.
   switch (bc.infrastructureTarget) {
@@ -91,9 +95,9 @@ function frameworkForContext(bc: BoundedContext): AppEntryFramework {
  * requested. Ties are broken deterministically by the order below.
  */
 function pickPreferredFramework(
-  frameworks: readonly AppEntryFramework[],
-  preferenceOrder: readonly AppEntryFramework[],
-): AppEntryFramework {
+  frameworks: readonly ManifestAppFramework[],
+  preferenceOrder: readonly ManifestAppFramework[],
+): ManifestAppFramework {
   for (const candidate of preferenceOrder) {
     if (frameworks.includes(candidate)) return candidate;
   }
@@ -546,7 +550,7 @@ function slugifyContextName(name: string): string {
 function deriveApps(
   boundedContexts: readonly BoundedContext[],
   allowSharedUi: boolean,
-): NonNullable<Manifest["apps"]> {
+): ManifestAppEntry[] {
   const nonShared = boundedContexts.filter(
     (bc) => !bc.name.toLowerCase().includes("shared"),
   );

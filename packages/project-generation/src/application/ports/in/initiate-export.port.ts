@@ -1,5 +1,5 @@
 import type { Result } from "@hexagen/shared";
-import type { Manifest } from "@hexagen/sync";
+import type { GenerationManifest } from "../../generation-manifest.js";
 import type {
   GitHubExportConfig,
   ExportResult,
@@ -10,7 +10,7 @@ export type ExportTarget = "zip" | "github";
 
 export interface WorkspaceRef {
   projectId: string;
-  manifest: Manifest;
+  manifest: GenerationManifest;
 }
 
 export interface ExportIntent {

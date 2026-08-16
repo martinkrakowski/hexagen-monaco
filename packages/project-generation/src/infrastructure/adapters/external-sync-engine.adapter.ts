@@ -3,6 +3,7 @@ import type {
   ExternalProjectGeneratorPort,
   GeneratorError,
 } from "../../application/ports/out/external-project-generator.port.js";
+import type { GenerationManifest } from "../../application/generation-manifest.js";
 import { Project } from "../../domain/entities/project.js";
 import type { Result } from "@hexagen/shared";
 import fs from "node:fs/promises";
@@ -26,10 +27,17 @@ function generateId(): string {
 export class ExternalSyncEngineAdapter implements ExternalProjectGeneratorPort {
   async generateAt(
     targetRoot: string,
-    manifest: Manifest,
+    manifest: GenerationManifest,
   ): Promise<Result<Project, GeneratorError>> {
     try {
       await fs.mkdir(targetRoot, { recursive: true });
+
+      // The one place the engine's manifest dialect is named (HEX-004). This is
+      // an assignment, not a cast, and that is the point: it is the compile-time
+      // proof that the context-owned `GenerationManifest` is still something the
+      // engine accepts. Turning it into `as Manifest` would silence exactly the
+      // drift this boundary exists to catch.
+      const engineManifest: Manifest = manifest;
 
       const engine = new SyncEngine(
         {
@@ -41,7 +49,7 @@ export class ExternalSyncEngineAdapter implements ExternalProjectGeneratorPort {
           mode: "external",
           logger: noopLogger,
         },
-        { targetRoot, manifest },
+        { targetRoot, manifest: engineManifest },
       );
       const summary = await engine.run();
       // Failed-soft generators (caught into result.error, e.g. tsconfig/apps)
@@ -59,7 +67,10 @@ export class ExternalSyncEngineAdapter implements ExternalProjectGeneratorPort {
       }
 
       const files = await this.collectFileTree(targetRoot);
-      const projectName = (manifest.system as string) ?? "generated-project";
+      // No cast: `system` is a declared `string | undefined` on the DTO, so the
+      // fallback is the only narrowing needed. An `as string` here would also
+      // suppress the type error if the field's shape ever changed.
+      const projectName = manifest.system ?? "generated-project";
       const project = Project.create({
         id: generateId(),
         name: projectName,

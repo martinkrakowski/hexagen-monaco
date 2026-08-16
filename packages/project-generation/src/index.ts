@@ -12,6 +12,12 @@ export type {
   GenerateProjectInput,
   GenerateProjectOutput,
 } from "./application/generate-project-use-case.js";
+/**
+ * The manifest shape this context's ports speak (HEX-004). Exported so callers
+ * can name it without reaching for the engine's `Manifest` — an engine manifest
+ * is assignable to it, so existing call sites need no change.
+ */
+export type { GenerationManifest } from "./application/generation-manifest.js";
 
 export type { RunProjectGenerationPort } from "./application/ports/in/generate-project.port.js";
 export type {

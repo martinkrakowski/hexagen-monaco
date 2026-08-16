@@ -19,7 +19,7 @@ import type {
   ProjectWorkspacePort,
 } from "./ports/out/project-workspace.port.js";
 import { toWorkspaceSegments } from "../domain/workspace-path.js";
-import type { Manifest } from "@hexagen/sync";
+import type { GenerationManifest } from "./generation-manifest.js";
 import type { Result } from "@hexagen/shared";
 
 /**
@@ -101,7 +101,7 @@ export class ExportError extends Error {
 }
 
 export interface GenerateProjectInput {
-  manifest: Manifest;
+  manifest: GenerationManifest;
   exportConfig: ExportConfig;
   /**
    * Per-template wizard answers. When present (and a materializer is wired),
