@@ -4,9 +4,19 @@ import type { Manifest } from "../../types/manifest.js";
 import type { WorkspaceFileProviderPort } from "../ports/out/workspace-file-provider.port.js";
 import type { SymbolReferenceProviderPort } from "../ports/out/symbol-reference-provider.port.js";
 import { validateRequest } from "../../domain/services/impact-request-validator.js";
-import { determineLayer, determinePackageName } from "../../domain/services/layer-classifier.js";
+import {
+  determineLayer,
+  determinePackageName,
+} from "../../domain/services/layer-classifier.js";
 import { assessArchitecturalImpact } from "../../domain/services/architectural-boundary-checker.js";
-import type { RefactoringType, Layer, FileToModify, CrossPackageDependency, ArchitecturalImpact, ImpactAnalysisResult } from "../../domain/services/impact-analysis.types.js";
+import type {
+  RefactoringType,
+  Layer,
+  FileToModify,
+  CrossPackageDependency,
+  ArchitecturalImpact,
+  ImpactAnalysisResult,
+} from "../../domain/services/impact-analysis.types.js";
 
 export interface ImpactAnalysisRequest {
   type: RefactoringType;
@@ -14,6 +24,26 @@ export interface ImpactAnalysisRequest {
   newName?: string;
   newLocation?: string;
 }
+
+/**
+ * The ts-morph project settings this analyser parses consumer workspaces with.
+ *
+ * Exported so the parser contract can be pinned by a test against the *same*
+ * object production uses, rather than a copy that silently drifts. See
+ * `__tests__/refactoring/modern-typescript-syntax.test.ts` (AUD-012): the
+ * engine is published and points at arbitrary user code, so the TypeScript
+ * version ts-morph bundles has to be at least as new as the one this repo
+ * compiles with — ts-morph 22 bundled TS 5.4.2 and could not parse TS 5.9
+ * syntax at all.
+ */
+export const REFACTORING_IMPACT_COMPILER_OPTIONS = {
+  skipAddingFilesFromTsConfig: true,
+  compilerOptions: {
+    target: 99,
+    module: 99,
+    moduleResolution: 100,
+  },
+} as const;
 
 export class RefactoringImpactUseCase {
   private project: Project;
@@ -24,14 +54,7 @@ export class RefactoringImpactUseCase {
     private readonly fileProvider: WorkspaceFileProviderPort,
     private readonly symbolProvider: SymbolReferenceProviderPort,
   ) {
-    this.project = new Project({
-      skipAddingFilesFromTsConfig: true,
-      compilerOptions: {
-        target: 99,
-        module: 99,
-        moduleResolution: 100,
-      },
-    });
+    this.project = new Project({ ...REFACTORING_IMPACT_COMPILER_OPTIONS });
   }
 
   async analyze(
@@ -49,11 +72,21 @@ export class RefactoringImpactUseCase {
 
       const filesToModify = this.classifyFiles(references, request.target);
 
-      const crossPackageDeps = this.detectCrossPackageDependencies(filesToModify, request.target);
+      const crossPackageDeps = this.detectCrossPackageDependencies(
+        filesToModify,
+        request.target,
+      );
 
-      const architecturalImpact = this.assessImpact(filesToModify, crossPackageDeps);
+      const architecturalImpact = this.assessImpact(
+        filesToModify,
+        crossPackageDeps,
+      );
 
-      const warnings = this.generateWarnings(filesToModify, crossPackageDeps, architecturalImpact);
+      const warnings = this.generateWarnings(
+        filesToModify,
+        crossPackageDeps,
+        architecturalImpact,
+      );
 
       const estimatedChanges = this.estimateChanges(filesToModify);
 
@@ -124,13 +157,19 @@ export class RefactoringImpactUseCase {
     return sourceFiles.filter((sf) => sf.getFullText().includes(symbolName));
   }
 
-  private classifyFiles(files: SourceFile[], symbolName: string): FileToModify[] {
+  private classifyFiles(
+    files: SourceFile[],
+    symbolName: string,
+  ): FileToModify[] {
     return files.map((file) => {
       const filePath = file.getFilePath();
       const relativePath = filePath.replace(`${this.workspaceRoot}/`, "");
       const layer = determineLayer(relativePath);
       const packageName = determinePackageName(relativePath);
-      const reason = this.symbolProvider.getModificationReason(file, symbolName);
+      const reason = this.symbolProvider.getModificationReason(
+        file,
+        symbolName,
+      );
 
       return {
         path: relativePath,
@@ -198,21 +237,29 @@ export class RefactoringImpactUseCase {
     }
 
     if (crossPackageDeps.length > 0) {
-      warnings.push(`This refactoring affects ${crossPackageDeps.length} cross-package dependencies`);
+      warnings.push(
+        `This refactoring affects ${crossPackageDeps.length} cross-package dependencies`,
+      );
     }
 
     if (files.length > 20) {
-      warnings.push(`This refactoring will modify ${files.length} files (large scope)`);
+      warnings.push(
+        `This refactoring will modify ${files.length} files (large scope)`,
+      );
     }
 
     const domainFiles = files.filter((f) => f.layer === "domain");
     if (domainFiles.length > 0) {
-      warnings.push(`This refactoring affects ${domainFiles.length} domain layer files (high risk)`);
+      warnings.push(
+        `This refactoring affects ${domainFiles.length} domain layer files (high risk)`,
+      );
     }
 
     const testFiles = files.filter((f) => f.layer === "test");
     if (testFiles.length > 0) {
-      warnings.push(`This refactoring will require updating ${testFiles.length} test files`);
+      warnings.push(
+        `This refactoring will require updating ${testFiles.length} test files`,
+      );
     }
 
     return warnings;
