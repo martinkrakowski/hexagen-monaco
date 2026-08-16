@@ -8,7 +8,8 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import { classifyAdobeError, FireflyError } from "../errors/firefly-errors";
+import { toCreativeServiceError } from "../errors/to-creative-service-error";
+import { CreativeServiceError } from "../../../domain/errors/creative-service-error";
 import { ok, err, type Result } from "../../../shared/result";
 
 /**
@@ -32,11 +33,11 @@ const CREATIVE_PRODUCTION_BASE = normalizeBase(
 export class CreativeProductionAdapter implements CreativeProductionPort {
   async runWorkflow(
     req: RunWorkflowRequest,
-  ): Promise<Result<AssetResult[], FireflyError>> {
+  ): Promise<Result<AssetResult[], CreativeServiceError>> {
     // A batch with no assets would submit an empty job the API rejects — guard
     // up front rather than spending a round-trip to discover it.
     if (req.assets.length === 0) {
-      return err(new FireflyError("runWorkflow requires at least one asset."));
+      return err(new CreativeServiceError("unknown", "runWorkflow requires at least one asset."));
     }
     try {
       // Presign each asset's input + output up front; the workflow runs over the
@@ -67,7 +68,7 @@ export class CreativeProductionAdapter implements CreativeProductionPort {
       // resolves a jobId-only handle in webhook mode and would fail in polling builds.
       if (!handle.statusUrl) {
         return err(
-          new FireflyError(
+          new CreativeServiceError("unknown", 
             "Creative Production submit response had no status URL to track the job.",
           ),
         );
@@ -77,7 +78,7 @@ export class CreativeProductionAdapter implements CreativeProductionPort {
       const done = await jobPort.poll(handle);
       if (done.status !== "succeeded") {
         return err(
-          new FireflyError(
+          new CreativeServiceError("unknown", 
             done.error ?? "Creative Production job did not succeed.",
           ),
         );
@@ -93,7 +94,7 @@ export class CreativeProductionAdapter implements CreativeProductionPort {
       // service exists to provide.
       if (done.outputs.length !== req.assets.length) {
         return err(
-          new FireflyError(
+          new CreativeServiceError("unknown", 
             `Creative Production returned ${done.outputs.length} outputs for ${req.assets.length} assets.`,
           ),
         );
@@ -113,7 +114,7 @@ export class CreativeProductionAdapter implements CreativeProductionPort {
       });
       return ok(results);
     } catch (error) {
-      return err(classifyAdobeError(error));
+      return err(toCreativeServiceError(error));
     }
   }
 }

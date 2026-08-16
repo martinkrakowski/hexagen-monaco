@@ -1,6 +1,6 @@
+import { LLMError } from "../../../domain/errors/llm-error";
 import {
   LLMAuthError,
-  LLMError,
   LLMRateLimitError,
   LLMServiceError,
 } from "./llm-errors";

@@ -1,7 +1,5 @@
 import type { Result } from "../../../shared/result";
-// Type-only import of the infrastructure error (erased at compile) — the deliberate
-// domain→infra decoupling for the port's failure channel, not an oversight.
-import type { FireflyError } from "../../../infrastructure/adobe/errors/firefly-errors";
+import type { CreativeServiceError } from "../../errors/creative-service-error";
 
 /**
  * Outbound port for the Adobe Illustrator API (image.adobe.io).
@@ -43,9 +41,9 @@ export interface ScaleVectorRequest extends IllustratorRequest {
 
 export interface IllustratorPort {
   /** Render an artboard to a raster/PDF at a given scale. */
-  renderArtboard(req: RenderArtboardRequest): Promise<Result<string, FireflyError>>;
+  renderArtboard(req: RenderArtboardRequest): Promise<Result<string, CreativeServiceError>>;
   /** Merge variable data into a template document. */
-  dataMerge(req: DataMergeRequest): Promise<Result<string, FireflyError>>;
+  dataMerge(req: DataMergeRequest): Promise<Result<string, CreativeServiceError>>;
   /** Scale a vector to an arbitrary size and rasterise. */
-  scaleVector(req: ScaleVectorRequest): Promise<Result<string, FireflyError>>;
+  scaleVector(req: ScaleVectorRequest): Promise<Result<string, CreativeServiceError>>;
 }

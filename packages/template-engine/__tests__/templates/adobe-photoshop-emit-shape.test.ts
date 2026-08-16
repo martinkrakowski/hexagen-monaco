@@ -102,10 +102,21 @@ describe("adobe-photoshop template — emit shape", () => {
     ]) {
       assert.ok(port.includes(`${method}(`), `port must declare ${method}`);
     }
-    assert.match(port, /import type \{\s*FireflyError\s*\}/);
+    // ADR-0053: the failure channel is a DOMAIN union the port owns. The
+    // vendor error classes stay in infrastructure and are mapped at the
+    // adapter boundary, so the port names no infrastructure symbol at all —
+    // a type-only import would still be a compile-time domain→infra edge.
+    assert.match(
+      port,
+      /import type \{\s*CreativeServiceError\s*\} from "\.\.\/\.\.\/errors\/creative-service-error"/,
+    );
     assert.ok(
-      !/^import \{[^}]*FireflyError/m.test(port),
-      "must not value-import FireflyError",
+      !/infrastructure\//.test(port),
+      "port must not reference infrastructure/ (ADR-0053 §3)",
+    );
+    assert.ok(
+      !/\bFireflyError\b/.test(port),
+      "port must not name the vendor error class",
     );
   });
 

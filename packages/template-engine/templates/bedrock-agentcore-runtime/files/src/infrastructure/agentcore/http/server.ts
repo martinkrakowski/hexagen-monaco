@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInvocationHandler } from "./invocations.handler";
 import { handlePing } from "./ping.handler";
-import type { AgentRuntimePort } from "../runtime/payload";
+import type { AgentRuntimePort } from "../../../application/ports/agent-runtime.port";
 
 /**
  * AgentCore Runtime container entrypoint.

@@ -39,25 +39,8 @@ export interface InvocationErrorResponse {
   readonly sessionId?: string;
 }
 
-/**
- * Application use-case the runtime drives. Implemented by your agent (e.g. a
- * LangGraph graph, a tool-calling loop, a single LLM call) and injected into the
- * server — the inbound HTTP adapter depends only on this port, never on a
- * concrete agent. `runStream` is optional; when absent, `stream: true` requests
- * fall back to a single `run()` result.
- */
-export interface AgentRunInput {
-  readonly prompt: string;
-  readonly sessionId: string;
-  readonly metadata?: Record<string, unknown>;
-}
-
-export interface AgentRunResult {
-  readonly output: string;
-  readonly metadata?: Record<string, unknown>;
-}
-
-export interface AgentRuntimePort {
-  run(input: AgentRunInput): Promise<AgentRunResult>;
-  runStream?(input: AgentRunInput): AsyncIterable<string>;
-}
+// The port the runtime drives (`AgentRuntimePort` and its `AgentRunInput` /
+// `AgentRunResult` companions) is NOT declared here: it is an application
+// contract and lives at `src/application/ports/agent-runtime.port.ts`
+// (ADR-0053). What stays in this module is the HTTP wire envelope above, which
+// is infrastructure by definition.

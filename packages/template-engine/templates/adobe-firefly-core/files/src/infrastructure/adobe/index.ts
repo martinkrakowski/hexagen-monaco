@@ -29,6 +29,15 @@ export {
   classifyAdobeError,
 } from "./errors/firefly-errors";
 export type { AdobeErrorLike } from "./errors/firefly-errors";
+export { toCreativeServiceError } from "./errors/to-creative-service-error";
+
+// The out-ports' failure channel is domain-owned (ADR-0053); re-exported here so
+// service adapters and callers keep a single import for the foundation.
+export { CreativeServiceError } from "../../domain/errors/creative-service-error";
+export type {
+  CreativeServiceErrorKind,
+  CreativeServiceErrorOptions,
+} from "../../domain/errors/creative-service-error";
 
 export type {
   FireflyAuthPort,

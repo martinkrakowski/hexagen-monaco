@@ -12,7 +12,8 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import { classifyAdobeError, FireflyError } from "../errors/firefly-errors";
+import { toCreativeServiceError } from "../errors/to-creative-service-error";
+import { CreativeServiceError } from "../../../domain/errors/creative-service-error";
 import { ok, err, type Result } from "../../../shared/result";
 
 /**
@@ -38,7 +39,7 @@ const DEFAULT_MODEL =
 export class FireflyMediaAdapter implements MediaGenerationPort {
   async textToVideo(
     req: TextToVideoRequest,
-  ): Promise<Result<string, FireflyError>> {
+  ): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const output = await getStoragePresigner().presignOutput(req.outputHref);
       return {
@@ -50,7 +51,7 @@ export class FireflyMediaAdapter implements MediaGenerationPort {
 
   async imageToVideo(
     req: ImageToVideoRequest,
-  ): Promise<Result<string, FireflyError>> {
+  ): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const storage = getStoragePresigner();
       const input = await storage.presignInput(req.inputHref);
@@ -67,7 +68,7 @@ export class FireflyMediaAdapter implements MediaGenerationPort {
 
   async translateAudioVideo(
     req: TranslateAudioVideoRequest,
-  ): Promise<Result<string, FireflyError>> {
+  ): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const storage = getStoragePresigner();
       const input = await storage.presignInput(req.inputHref);
@@ -88,7 +89,7 @@ export class FireflyMediaAdapter implements MediaGenerationPort {
 
   async generateSpeech(
     req: GenerateSpeechRequest,
-  ): Promise<Result<string, FireflyError>> {
+  ): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const output = await getStoragePresigner().presignOutput(req.outputHref);
       const body: Record<string, unknown> = {
@@ -102,7 +103,7 @@ export class FireflyMediaAdapter implements MediaGenerationPort {
 
   async soundEffect(
     req: SoundEffectRequest,
-  ): Promise<Result<string, FireflyError>> {
+  ): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const output = await getStoragePresigner().presignOutput(req.outputHref);
       return {
@@ -114,7 +115,7 @@ export class FireflyMediaAdapter implements MediaGenerationPort {
 
   private async run(
     build: () => Promise<{ path: string; body: unknown }>,
-  ): Promise<Result<string, FireflyError>> {
+  ): Promise<Result<string, CreativeServiceError>> {
     try {
       const { path, body } = await build();
       const handle = toJobHandle(await fireflyClient.post(path, body));
@@ -122,7 +123,7 @@ export class FireflyMediaAdapter implements MediaGenerationPort {
       // collide in webhook mode — fail here with a precise error.
       if (!handle.jobId) {
         return err(
-          new FireflyError("Media submit response did not include a job id."),
+          new CreativeServiceError("unknown", "Media submit response did not include a job id."),
         );
       }
       // Long (minutes) jobs: await transparently polls or resolves a webhook.
@@ -130,12 +131,12 @@ export class FireflyMediaAdapter implements MediaGenerationPort {
       const href = done.outputs[0]?.href;
       if (done.status !== "succeeded" || !href) {
         return err(
-          new FireflyError(done.error ?? "Media job did not produce an output."),
+          new CreativeServiceError("unknown", done.error ?? "Media job did not produce an output."),
         );
       }
       return ok(href);
     } catch (error) {
-      return err(classifyAdobeError(error));
+      return err(toCreativeServiceError(error));
     }
   }
 }

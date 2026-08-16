@@ -22,16 +22,17 @@ export {
   isVisionModel,
 } from "./constants/capabilities";
 
+// The failure union is domain-owned (ADR-0053); the transport specialisations
+// stay in infrastructure. Re-exported together so callers keep one import.
+export { LLMError, isRetryable } from "../../domain/errors/llm-error";
+export type { LLMErrorKind } from "../../domain/errors/llm-error";
 export {
-  LLMError,
   LLMAuthError,
   LLMRateLimitError,
   LLMServiceError,
   LLMTimeoutError,
   LLMParsingError,
-  isRetryable,
 } from "./errors/llm-errors";
-export type { LLMErrorKind } from "./errors/llm-errors";
 
 export { withRetry } from "./utils/retry";
 export { withTimeout } from "./utils/timeout";

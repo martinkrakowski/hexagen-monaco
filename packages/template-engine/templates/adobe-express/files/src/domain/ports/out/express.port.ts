@@ -1,7 +1,5 @@
 import type { Result } from "../../../shared/result";
-// Type-only import of the infrastructure error (erased at compile) — the deliberate
-// domain→infra decoupling for the port's failure channel, not an oversight.
-import type { FireflyError } from "../../../infrastructure/adobe/errors/firefly-errors";
+import type { CreativeServiceError } from "../../errors/creative-service-error";
 
 /**
  * Outbound port for the Adobe Express API (batch automation).
@@ -43,5 +41,5 @@ export interface ExpressAutomationPort {
    * Render a batch of variants from a published Express template. Resolves to
    * one output href per item, in the same order as `req.items`.
    */
-  renderBatch(req: RenderBatchRequest): Promise<Result<string[], FireflyError>>;
+  renderBatch(req: RenderBatchRequest): Promise<Result<string[], CreativeServiceError>>;
 }

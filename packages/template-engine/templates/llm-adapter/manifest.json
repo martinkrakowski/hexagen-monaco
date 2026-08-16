@@ -84,6 +84,7 @@
     "LLM_MAX_RETRIES"
   ],
   "outputs": [
+    "src/domain/errors/llm-error.ts",
     "src/domain/ports/out/llm-client.port.ts",
     "src/infrastructure/llm/constants/models.ts",
     "src/infrastructure/llm/constants/capabilities.ts",

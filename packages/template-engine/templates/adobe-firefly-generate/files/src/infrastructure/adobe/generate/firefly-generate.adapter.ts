@@ -9,11 +9,9 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import {
-  classifyAdobeError,
-  FireflyError,
-  FireflyValidationError,
-} from "../errors/firefly-errors";
+import { FireflyValidationError } from "../errors/firefly-errors";
+import { toCreativeServiceError } from "../errors/to-creative-service-error";
+import { CreativeServiceError } from "../../../domain/errors/creative-service-error";
 import { ok, err, type Result } from "../../../shared/result";
 
 /**
@@ -42,7 +40,7 @@ function resolveDefaultSize(raw: string | undefined): string {
 }
 
 export class FireflyGenerateAdapter implements ImageGenerationPort {
-  async textToImage(req: TextToImageRequest): Promise<Result<string[], FireflyError>> {
+  async textToImage(req: TextToImageRequest): Promise<Result<string[], CreativeServiceError>> {
     return this.run(async () => {
       const output = await getStoragePresigner().presignOutput(req.outputHref);
       const body = this.applyOptions({ prompt: req.prompt, output: external(output.href) }, req);
@@ -50,15 +48,15 @@ export class FireflyGenerateAdapter implements ImageGenerationPort {
     });
   }
 
-  async generativeFill(req: ImageEditRequest): Promise<Result<string[], FireflyError>> {
+  async generativeFill(req: ImageEditRequest): Promise<Result<string[], CreativeServiceError>> {
     return this.edit("/v3/images/fill-async", req);
   }
 
-  async generativeExpand(req: ImageEditRequest): Promise<Result<string[], FireflyError>> {
+  async generativeExpand(req: ImageEditRequest): Promise<Result<string[], CreativeServiceError>> {
     return this.edit("/v3/images/expand-async", req);
   }
 
-  async imageToImage(req: ImageEditRequest): Promise<Result<string[], FireflyError>> {
+  async imageToImage(req: ImageEditRequest): Promise<Result<string[], CreativeServiceError>> {
     // Conditioned generation: the source image is a reference, not a mask target.
     return this.run(async () => {
       const storage = getStoragePresigner();
@@ -73,7 +71,7 @@ export class FireflyGenerateAdapter implements ImageGenerationPort {
     });
   }
 
-  async styleTransfer(req: ImageEditRequest): Promise<Result<string[], FireflyError>> {
+  async styleTransfer(req: ImageEditRequest): Promise<Result<string[], CreativeServiceError>> {
     return this.run(async () => {
       const storage = getStoragePresigner();
       const input = await storage.presignInput(req.inputHref);
@@ -88,7 +86,7 @@ export class FireflyGenerateAdapter implements ImageGenerationPort {
   }
 
   /** Shared flow for the mask-style edits (fill / expand). */
-  private async edit(path: string, req: ImageEditRequest): Promise<Result<string[], FireflyError>> {
+  private async edit(path: string, req: ImageEditRequest): Promise<Result<string[], CreativeServiceError>> {
     return this.run(async () => {
       const storage = getStoragePresigner();
       const input = await storage.presignInput(req.inputHref);
@@ -108,26 +106,26 @@ export class FireflyGenerateAdapter implements ImageGenerationPort {
   /** Submit → await → collect output hrefs. Presigning happens inside `build`. */
   private async run(
     build: () => Promise<{ path: string; body: unknown }>,
-  ): Promise<Result<string[], FireflyError>> {
+  ): Promise<Result<string[], CreativeServiceError>> {
     try {
       const { path, body } = await build();
       const handle = toJobHandle(await fireflyClient.post(path, body));
       if (!handle.jobId) {
-        return err(new FireflyError("Generate submit response did not include a job id."));
+        return err(new CreativeServiceError("unknown", "Generate submit response did not include a job id."));
       }
       const done = await jobPort.await(handle);
       if (done.status !== "succeeded") {
-        return err(new FireflyError(done.error ?? "Generate job did not succeed."));
+        return err(new CreativeServiceError("unknown", done.error ?? "Generate job did not succeed."));
       }
       const hrefs = done.outputs
         .map((output) => output.href)
         .filter((href): href is string => Boolean(href));
       if (hrefs.length === 0) {
-        return err(new FireflyError("Generate job produced no output."));
+        return err(new CreativeServiceError("unknown", "Generate job produced no output."));
       }
       return ok(hrefs);
     } catch (error) {
-      return err(classifyAdobeError(error));
+      return err(toCreativeServiceError(error));
     }
   }
 

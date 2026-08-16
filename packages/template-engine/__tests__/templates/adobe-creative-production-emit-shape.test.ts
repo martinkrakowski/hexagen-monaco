@@ -95,7 +95,9 @@ describe("adobe-creative-production template — emit shape", () => {
     const port = await read(root, `${PORTS}/creative-production.port.ts`);
     assert.ok(port.includes("runWorkflow("), "port must declare runWorkflow");
     // per-asset result array, in request order
-    assert.ok(port.includes("Promise<Result<AssetResult[], FireflyError>>"));
+    assert.ok(
+      port.includes("Promise<Result<AssetResult[], CreativeServiceError>>"),
+    );
     // AssetResult is a discriminated union so succeeded⇒outputHref / failed⇒error
     // are compile-time enforced (not optional fields guarded at runtime)
     assert.ok(port.includes("export type AssetResult ="));
@@ -105,10 +107,21 @@ describe("adobe-creative-production template — emit shape", () => {
       !port.includes("readonly outputHref?:"),
       "outputHref must be required on the succeeded arm",
     );
-    assert.match(port, /import type \{\s*FireflyError\s*\}/);
+    // ADR-0053: the failure channel is a DOMAIN union the port owns. The
+    // vendor error classes stay in infrastructure and are mapped at the
+    // adapter boundary, so the port names no infrastructure symbol at all —
+    // a type-only import would still be a compile-time domain→infra edge.
+    assert.match(
+      port,
+      /import type \{\s*CreativeServiceError\s*\} from "\.\.\/\.\.\/errors\/creative-service-error"/,
+    );
     assert.ok(
-      !/^import \{[^}]*FireflyError/m.test(port),
-      "must not value-import FireflyError",
+      !/infrastructure\//.test(port),
+      "port must not reference infrastructure/ (ADR-0053 §3)",
+    );
+    assert.ok(
+      !/\bFireflyError\b/.test(port),
+      "port must not name the vendor error class",
     );
   });
 

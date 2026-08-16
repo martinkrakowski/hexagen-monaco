@@ -9,7 +9,8 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import { classifyAdobeError, FireflyError } from "../errors/firefly-errors";
+import { toCreativeServiceError } from "../errors/to-creative-service-error";
+import { CreativeServiceError } from "../../../domain/errors/creative-service-error";
 import { ok, err, type Result } from "../../../shared/result";
 
 /**
@@ -34,7 +35,7 @@ const DEFAULT_FORMAT: "jpeg" | "png" =
   rawDefaultFormat === "jpeg" || rawDefaultFormat === "png" ? rawDefaultFormat : "{output_format}";
 
 export class LightroomAdapter implements LightroomPort {
-  async autoTone(req: LightroomRequest): Promise<Result<string, FireflyError>> {
+  async autoTone(req: LightroomRequest): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const { input, output } = await this.presignIO(req);
       return {
@@ -44,7 +45,7 @@ export class LightroomAdapter implements LightroomPort {
     });
   }
 
-  async applyPreset(req: ApplyPresetRequest): Promise<Result<string, FireflyError>> {
+  async applyPreset(req: ApplyPresetRequest): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const storage = getStoragePresigner();
       const input = await storage.presignInput(req.inputHref);
@@ -61,7 +62,7 @@ export class LightroomAdapter implements LightroomPort {
     });
   }
 
-  async edit(req: EditRequest): Promise<Result<string, FireflyError>> {
+  async edit(req: EditRequest): Promise<Result<string, CreativeServiceError>> {
     return this.run(async () => {
       const { input, output } = await this.presignIO(req);
       return {
@@ -84,7 +85,7 @@ export class LightroomAdapter implements LightroomPort {
 
   private async run(
     build: () => Promise<{ path: string; body: unknown }>,
-  ): Promise<Result<string, FireflyError>> {
+  ): Promise<Result<string, CreativeServiceError>> {
     try {
       const { path, body } = await build();
       const handle = toJobHandle(await fireflyClient.post(path, body));
@@ -94,22 +95,22 @@ export class LightroomAdapter implements LightroomPort {
       // rather than routing through the job port's await — which only resolves a
       // jobId-only handle in webhook mode and would fail in polling builds.
       if (!handle.statusUrl) {
-        return err(new FireflyError("Lightroom submit response had no status URL to track the job."));
+        return err(new CreativeServiceError("unknown", "Lightroom submit response had no status URL to track the job."));
       }
       const done = await jobPort.poll(handle);
       if (done.status !== "succeeded") {
-        return err(new FireflyError(done.error ?? "Lightroom job did not succeed."));
+        return err(new CreativeServiceError("unknown", done.error ?? "Lightroom job did not succeed."));
       }
       // `done.outputs` is a non-optional JobOutput[] (parseJobResult always returns
       // an array), so `[0]?.href` is enough — an empty array yields the no-output
       // path below; no `?.` on `outputs` itself is needed.
       const href = done.outputs[0]?.href;
       if (!href) {
-        return err(new FireflyError("Lightroom job produced no output."));
+        return err(new CreativeServiceError("unknown", "Lightroom job produced no output."));
       }
       return ok(href);
     } catch (error) {
-      return err(classifyAdobeError(error));
+      return err(toCreativeServiceError(error));
     }
   }
 }

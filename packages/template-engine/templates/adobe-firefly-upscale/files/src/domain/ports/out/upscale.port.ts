@@ -1,7 +1,5 @@
 import type { Result } from "../../../shared/result";
-// Type-only import of the infrastructure error (erased at compile) — the accepted
-// pattern for typing a port's failure channel without runtime domain→infra coupling.
-import type { FireflyError } from "../../../infrastructure/adobe/errors/firefly-errors";
+import type { CreativeServiceError } from "../../errors/creative-service-error";
 
 /**
  * Outbound port for the Firefly Upscale service.
@@ -21,5 +19,5 @@ export interface UpscaleRequest {
 
 export interface UpscalePort {
   /** Upscale `inputHref` into `outputHref`; resolves to the output href on success. */
-  upscale(req: UpscaleRequest): Promise<Result<string, FireflyError>>;
+  upscale(req: UpscaleRequest): Promise<Result<string, CreativeServiceError>>;
 }

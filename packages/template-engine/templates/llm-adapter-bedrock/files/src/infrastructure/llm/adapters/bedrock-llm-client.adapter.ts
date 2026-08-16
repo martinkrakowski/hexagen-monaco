@@ -10,7 +10,7 @@ import type {
   LLMCallOptions,
   LLMResponse,
 } from "../../../domain/ports/out/llm-client.port";
-import type { LLMError } from "../errors/llm-errors";
+import type { LLMError } from "../../../domain/errors/llm-error";
 import { classifyAwsError } from "../errors/bedrock-errors";
 import { withRetry } from "../utils/retry";
 import { withTimeout } from "../utils/timeout";

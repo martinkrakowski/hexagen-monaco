@@ -1,7 +1,5 @@
 import type { Result } from "../../../shared/result";
-// Type-only import of the infrastructure error (erased at compile) — the deliberate
-// domain→infra decoupling for the port's failure channel, not an oversight.
-import type { FireflyError } from "../../../infrastructure/adobe/errors/firefly-errors";
+import type { CreativeServiceError } from "../../errors/creative-service-error";
 
 /**
  * Outbound port for the Adobe Creative Production API (batch automation).
@@ -58,5 +56,5 @@ export interface CreativeProductionPort {
    */
   runWorkflow(
     req: RunWorkflowRequest,
-  ): Promise<Result<AssetResult[], FireflyError>>;
+  ): Promise<Result<AssetResult[], CreativeServiceError>>;
 }

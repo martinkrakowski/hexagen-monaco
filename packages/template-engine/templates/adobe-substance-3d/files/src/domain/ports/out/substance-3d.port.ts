@@ -1,7 +1,5 @@
 import type { Result } from "../../../shared/result";
-// Type-only import of the infrastructure error (erased at compile) — the deliberate
-// domain→infra decoupling for the port's failure channel, not an oversight.
-import type { FireflyError } from "../../../infrastructure/adobe/errors/firefly-errors";
+import type { CreativeServiceError } from "../../errors/creative-service-error";
 
 /**
  * Outbound port for the Adobe Substance 3D API (image.adobe.io).
@@ -37,9 +35,9 @@ export interface RelightRequest extends Substance3DRequest {
 
 export interface Substance3DPort {
   /** Render a scene to an image. */
-  render(req: RenderRequest): Promise<Result<string, FireflyError>>;
+  render(req: RenderRequest): Promise<Result<string, CreativeServiceError>>;
   /** Composite a render over a background plate. */
-  composite(req: CompositeRequest): Promise<Result<string, FireflyError>>;
+  composite(req: CompositeRequest): Promise<Result<string, CreativeServiceError>>;
   /** Relight a scene with a new lighting environment. */
-  relight(req: RelightRequest): Promise<Result<string, FireflyError>>;
+  relight(req: RelightRequest): Promise<Result<string, CreativeServiceError>>;
 }

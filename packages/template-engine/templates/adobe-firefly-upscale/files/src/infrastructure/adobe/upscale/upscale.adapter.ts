@@ -7,11 +7,9 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import {
-  classifyAdobeError,
-  FireflyError,
-  FireflyValidationError,
-} from "../errors/firefly-errors";
+import { FireflyValidationError } from "../errors/firefly-errors";
+import { toCreativeServiceError } from "../errors/to-creative-service-error";
+import { CreativeServiceError } from "../../../domain/errors/creative-service-error";
 import { ok, err, type Result } from "../../../shared/result";
 
 /**
@@ -21,7 +19,7 @@ import { ok, err, type Result } from "../../../shared/result";
  * the async upscale job through the shared `fireflyClient`, awaits completion via
  * `FireflyJobPort` (polling or webhook, transparently), and returns the output
  * href. All failures are converted to a `Result` at this boundary — the foundation
- * throws typed `FireflyError`s, the port surfaces them.
+ * throws typed `CreativeServiceError`s, the port surfaces them.
  */
 // The install default is always a valid select value ("2"/"4"); fall back to it
 // if ADOBE_UPSCALE_FACTOR is unset or misconfigured, so a bad env never yields
@@ -41,7 +39,7 @@ function isValidFactor(factor: number): boolean {
 const DEFAULT_FACTOR = resolveDefaultFactor();
 
 export class FireflyUpscaleAdapter implements UpscalePort {
-  async upscale(req: UpscaleRequest): Promise<Result<string, FireflyError>> {
+  async upscale(req: UpscaleRequest): Promise<Result<string, CreativeServiceError>> {
     const factor = req.factor ?? DEFAULT_FACTOR;
     if (!isValidFactor(factor)) {
       // Don't send NaN/0/negative to the API — fail fast with a config error.
@@ -66,17 +64,17 @@ export class FireflyUpscaleAdapter implements UpscalePort {
       // empty 202 body) can't be correlated and would collide in webhook mode.
       // The job port also guards this, but failing here gives a precise error.
       if (!handle.jobId) {
-        return err(new FireflyError("Upscale submit response did not include a job id."));
+        return err(new CreativeServiceError("unknown", "Upscale submit response did not include a job id."));
       }
 
       const done = await jobPort.await(handle);
       const href = done.outputs[0]?.href;
       if (done.status !== "succeeded" || !href) {
-        return err(new FireflyError(done.error ?? "Upscale job did not produce an output"));
+        return err(new CreativeServiceError("unknown", done.error ?? "Upscale job did not produce an output"));
       }
       return ok(href);
     } catch (error) {
-      return err(classifyAdobeError(error));
+      return err(toCreativeServiceError(error));
     }
   }
 }

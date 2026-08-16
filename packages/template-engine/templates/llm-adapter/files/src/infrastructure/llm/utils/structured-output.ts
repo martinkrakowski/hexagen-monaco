@@ -2,7 +2,7 @@ import type { ZodSchema } from "zod";
 import { LLMParsingError } from "../errors/llm-errors";
 import type { LLMClientPort, LLMCallOptions } from "../../../domain/ports/out/llm-client.port";
 import type { Result } from "../../../../shared/result";
-import type { LLMError } from "../errors/llm-errors";
+import type { LLMError } from "../../../domain/errors/llm-error";
 
 const JSON_FENCE_RE = /```(?:json)?\s*([\s\S]*?)```/i;
 

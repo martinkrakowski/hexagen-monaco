@@ -4,7 +4,7 @@ import type {
   LLMCallOptions,
   LLMResponse,
 } from "../../../domain/ports/out/llm-client.port";
-import type { LLMError } from "../errors/llm-errors";
+import type { LLMError } from "../../../domain/errors/llm-error";
 import { MODELS } from "../constants/models";
 import { XaiLLMClientAdapter } from "../adapters/xai-llm-client.adapter";
 import { OpenAILLMClientAdapter } from "../adapters/openai-llm-client.adapter";

@@ -8,7 +8,8 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import { classifyAdobeError, FireflyError } from "../errors/firefly-errors";
+import { toCreativeServiceError } from "../errors/to-creative-service-error";
+import { CreativeServiceError } from "../../../domain/errors/creative-service-error";
 import { ok, err, type Result } from "../../../shared/result";
 
 /**
@@ -36,7 +37,7 @@ function resolveMinConfidence(raw: string | undefined): number {
 }
 
 export class FireflyContentTaggingAdapter implements ContentTaggingPort {
-  async tag(inputHref: string): Promise<Result<ContentTaggingResult, FireflyError>> {
+  async tag(inputHref: string): Promise<Result<ContentTaggingResult, CreativeServiceError>> {
     try {
       const input = await getStoragePresigner().presignInput(inputHref);
       const response = await fireflyClient.post<unknown>(ENDPOINT, {
@@ -54,21 +55,21 @@ export class FireflyContentTaggingAdapter implements ContentTaggingPort {
       if (isAsync) {
         const done = await jobPort.await(handle);
         if (done.status !== "succeeded") {
-          return err(new FireflyError(done.error ?? "Content tagging job did not succeed."));
+          return err(new CreativeServiceError("unknown", done.error ?? "Content tagging job did not succeed."));
         }
         const data = done.outputs[0]?.data;
         if (data === undefined) {
           // A succeeded job with no data means the provider payload shape changed —
           // surface it rather than masking it as an empty success. Do NOT fall back
           // to the submit response on the async path.
-          return err(new FireflyError(done.error ?? "Content tagging job produced no output data."));
+          return err(new CreativeServiceError("unknown", done.error ?? "Content tagging job produced no output data."));
         }
         payload = data;
       }
 
       return ok({ tags: extractTags(payload), raw: payload });
     } catch (error) {
-      return err(classifyAdobeError(error));
+      return err(toCreativeServiceError(error));
     }
   }
 }
