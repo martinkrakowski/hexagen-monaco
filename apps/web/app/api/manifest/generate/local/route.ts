@@ -11,12 +11,14 @@ import {
   createProjectDescription,
   type ProjectDescription,
 } from "@hexagen/agentic-interaction";
-import { LLMProviderSelectorAdapter } from "@hexagen/agentic-interaction";
-import { EnvironmentSecretVaultAdapter } from "@hexagen/agentic-interaction";
-import type { WebLLMAdapter, DomainModelId } from "@hexagen/local-llm";
-import { InMemoryTransactionManager } from "@hexagen/transaction-system";
+import { isSameOrigin } from "../../../../lib/request-guards";
 import { logger } from "../../../../../lib/structured-logger";
-import { createStage6ValidatorConfig } from "../../../../lib/wire.server";
+import {
+  createGenerationTransactionManager,
+  createLLMProviderSelector,
+  createStage6ValidatorConfig,
+  createWebLLMAdapter,
+} from "../../../../lib/wire.server";
 
 interface GenerateManifestRequestBody {
   description: string;
@@ -72,6 +74,16 @@ type GenerateManifestResponse =
 export async function POST(
   request: NextRequest,
 ): Promise<NextResponse<GenerateManifestResponse>> {
+  // Same-origin gate (D1), ahead of the rate limiter — see the sibling
+  // /api/manifest/generate route. The wildcard-CORS preflight this family
+  // carried is gone.
+  if (!isSameOrigin(request)) {
+    return NextResponse.json(
+      { success: false, error: "Cross-origin request rejected" },
+      { status: 403 },
+    );
+  }
+
   // Rate limiting
   const rateCheck = checkRateLimit(request, 10, 60 * 1000);
   if (!rateCheck.allowed) {
@@ -140,49 +152,21 @@ export async function POST(
       );
     }
 
-    // Wire up dependencies
-    const secretVault = new EnvironmentSecretVaultAdapter();
+    // Dependencies come from the composition root (HEX-003). The WebLLM load,
+    // the secret vault, the selector adapter's second hard-coded fallback chain
+    // (openai → anthropic only, blind to the LLM_API_KEY / Inception providers
+    // wire.server's chain carries) and the transaction manager were all built
+    // here. Failure posture is unchanged: a WebLLM load error yields null and
+    // the selector falls through to the cloud chain.
+    const webLlmAdapter = await createWebLLMAdapter(body.modelId);
 
-    let webLlmAdapter: WebLLMAdapter | null = null;
-    try {
-      const { WebLLMAdapter: Adapter } = await import("@hexagen/local-llm");
-      webLlmAdapter = new Adapter({
-        defaultModelId: (body.modelId as DomainModelId) || undefined,
-      });
-    } catch (error) {
-      logger.warn("WebLLM adapter initialization failed:", { error });
-    }
-
-    // Configure the selector adapter with fallback chain
-    const selectorAdapter = new LLMProviderSelectorAdapter({
+    const selectorAdapter = createLLMProviderSelector({
       webLlmAdapter,
       preferLocal: true,
       validateLocalLLM: true,
-      fallbackChain: {
-        primary: {
-          providerId: "openai" as const,
-          baseUrl: "https://api.openai.com/v1",
-          model: "gpt-4o",
-          apiKeyEnvVar: "OPENAI_API_KEY",
-          temperature: 0.3,
-          maxTokens: 4000,
-        },
-        fallbacks: [
-          {
-            providerId: "anthropic" as const,
-            baseUrl: "https://api.anthropic.com/v1",
-            model: "claude-3-5-sonnet-20241022",
-            apiKeyEnvVar: "ANTHROPIC_API_KEY",
-            temperature: 0.3,
-            maxTokens: 4000,
-          },
-        ],
-      },
-      secretVault,
     });
 
-    // Create transaction manager
-    const transactionManager = new InMemoryTransactionManager();
+    const transactionManager = createGenerationTransactionManager();
 
     // Create and execute use case
     logger.info(
@@ -258,17 +242,5 @@ export async function POST(
   }
 }
 
-/**
- * OPTIONS /api/manifest/generate/local
- * Handle CORS preflight requests
- */
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    },
-  });
-}
+// No OPTIONS handler — same-origin only; see the sibling /api/manifest/generate
+// route for why the wildcard-CORS preflight was removed rather than narrowed.

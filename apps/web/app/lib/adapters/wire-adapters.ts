@@ -7,22 +7,41 @@ import type {
   ArchitectureGraphProviderPort,
   LinterReportProviderPort,
 } from "@hexagen/sync";
-import type { ManifestBoundedContext } from "@hexagen/project-configuration";
+import type {
+  Manifest,
+  ManifestBoundedContext,
+} from "@hexagen/project-configuration";
 import { type ArchitectureGraph } from "@hexagen/visualization";
 import { findMonorepoRoot } from "../monorepo-root";
+import { logger } from "../../../lib/structured-logger";
+
+/**
+ * The workspace's merged manifest, read once and in one place.
+ *
+ * The three adapters below all need the same document and used to spell the
+ * same three steps out each: anchor on the monorepo root (AUD-002 —
+ * `process.cwd()` is `apps/web` under the standalone build, so the read would
+ * miss and every caller would silently degrade), join `.architecture/manifest
+ * .yaml`, merge the split contexts. Three copies of an anchor is how the
+ * AUD-002 fix drifts; one is how it does not.
+ *
+ * Deliberately NOT memoized: `/api/architecture/modify/accept` rewrites this
+ * file at runtime, so a process-lifetime cache here would serve a stale
+ * manifest with no invalidation signal to hang a refresh on.
+ *
+ * Throws whatever the anchor or the loader throws — each caller below keeps its
+ * own degradation posture for that failure.
+ */
+async function readMergedManifest(): Promise<Manifest> {
+  const workspaceRoot = findMonorepoRoot();
+  const manifestPath = path.join(workspaceRoot, ".architecture/manifest.yaml");
+  return mergeSplitManifest(workspaceRoot, manifestPath);
+}
 
 export class ManifestProviderAdapter {
   async getManifest(): Promise<ProjectSpecLike> {
     try {
-      // Anchor on the monorepo root, not process.cwd() (which is apps/web under
-      // the standalone build) — otherwise the manifest read fails and the catch
-      // below silently degrades this provider to an empty context list.
-      const workspaceRoot = findMonorepoRoot();
-      const manifestPath = path.join(
-        workspaceRoot,
-        ".architecture/manifest.yaml",
-      );
-      const manifest = await mergeSplitManifest(workspaceRoot, manifestPath);
+      const manifest = await readMergedManifest();
 
       return {
         boundedContexts:
@@ -37,21 +56,45 @@ export class ManifestProviderAdapter {
   }
 }
 
+/**
+ * Reads the workspace's merged manifest DOCUMENT (HEX-034).
+ *
+ * `ManifestProviderAdapter` above deliberately projects the manifest down to
+ * `ProjectSpecLike` (ids + names) for the prompt-compiler seam. Consumers that
+ * need the manifest's own shape — the LLM governance-context route projects
+ * port ownership out of `layers.application.ports` — were reaching for
+ * `mergeSplitManifest` themselves, each with its own workspace-root walk. This
+ * adapter is the one place that read happens for them.
+ *
+ * Returns `null` rather than throwing when the manifest cannot be located or
+ * merged: an absent/ill-formed manifest is a degraded-but-serviceable state for
+ * read-only display consumers, exactly as it was when they caught it inline.
+ */
+export class ServerMergedManifestProviderAdapter {
+  async getMergedManifest(): Promise<Manifest | null> {
+    try {
+      return await readMergedManifest();
+    } catch (error) {
+      // The `null` contract stays — but it must not be silent. The consumer
+      // turns `null` into an empty 200, so without this an unsupported schema
+      // version, a missing context file, a missing workspace-config side-car, a
+      // validation failure and a `MonorepoRootNotFoundError` all present to an
+      // operator as an empty governance panel and nothing else.
+      logger.warn("Merged manifest read failed; serving empty context", {
+        error,
+      });
+      return null;
+    }
+  }
+}
+
 export class ServerArchitectureGraphProviderAdapter implements ArchitectureGraphProviderPort {
   async getArchitectureGraph(
     _projectId: string,
   ): Promise<Result<ArchitectureGraph>> {
     void _projectId;
     try {
-      // Same monorepo-root anchor as ManifestProviderAdapter — process.cwd()
-      // would resolve the wrong directory under the standalone build and the
-      // catch below would return an empty graph instead of the real one.
-      const workspaceRoot = findMonorepoRoot();
-      const manifestPath = path.join(
-        workspaceRoot,
-        ".architecture/manifest.yaml",
-      );
-      const manifest = await mergeSplitManifest(workspaceRoot, manifestPath);
+      const manifest = await readMergedManifest();
 
       const nodes =
         manifest.bounded_contexts?.map((ctx: ManifestBoundedContext) => ({

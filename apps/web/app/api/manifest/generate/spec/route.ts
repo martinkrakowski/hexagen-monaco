@@ -9,12 +9,13 @@ import {
   type StructuredConfigGenerationCallbacks,
 } from "@hexagen/agentic-interaction";
 import {
+  createGenerationTransactionManager,
   createLLMProviderSelector,
   createStage6ReviewerConfig,
   createStage6ValidatorConfig,
 } from "../../../../lib/wire.server";
+import { isSameOrigin } from "../../../../lib/request-guards";
 import { logger } from "../../../../../lib/structured-logger";
-import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 
 interface SpecRequestBody {
   config: string;
@@ -105,6 +106,18 @@ function countsFromParsed(parsed: Record<string, unknown>): {
 }
 
 export async function POST(request: NextRequest) {
+  // Same-origin gate (D1), ahead of the rate limiter. Emitted in this route's
+  // native ndjson error channel.
+  if (!isSameOrigin(request)) {
+    return new Response(
+      JSON.stringify({
+        type: "error",
+        message: "Cross-origin request rejected",
+      }) + "\n",
+      { status: 403, headers: { "Content-Type": "application/x-ndjson" } },
+    );
+  }
+
   // Rate limiting
   const rateCheck = checkRateLimit(request, 10, 60 * 1000);
   if (!rateCheck.allowed) {
@@ -234,7 +247,8 @@ export async function POST(request: NextRequest) {
           validateLocalLLM: false,
         });
 
-        const transactionManager = new InMemoryTransactionManager();
+        // HEX-003: from the composition root, not `new`-ed here.
+        const transactionManager = createGenerationTransactionManager();
         const classifyUseCase = new ClassifyContextTypeUseCase(llmAdapter);
         // LLM_ESCALATION_MODEL is opt-in: only set this when you know the
         // configured provider (LLM_BASE_URL) hosts the named model. Setting
@@ -302,7 +316,6 @@ export async function POST(request: NextRequest) {
       "Content-Type": "application/x-ndjson",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
-      "Access-Control-Allow-Origin": "*",
       // Rate limit info for clients to understand endpoint constraints
       "X-RateLimit-Limit": process.env.LLM_RATE_LIMIT || "unlimited",
       "X-RateLimit-Window": "60s",
@@ -311,13 +324,5 @@ export async function POST(request: NextRequest) {
   });
 }
 
-export async function OPTIONS() {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    },
-  });
-}
+// No OPTIONS handler — same-origin only; see the sibling /api/manifest/generate
+// route for why the wildcard-CORS preflight was removed rather than narrowed.
