@@ -78,6 +78,28 @@ const JEST_PACKAGE =
 /** Binaries whose invocation from a script means Jest is being run. */
 const JEST_BINARY = /^(jest|jest-cli)$/;
 
+/**
+ * Manifest keys that ARE Jest configuration.
+ *
+ * `package.json`'s `"jest"` key is not a lesser form of `jest.config.js` — it is
+ * one of the two locations Jest's own docs give for a config, interchangeable
+ * with the file. So the file walk above, which only sees `jest.*` FILENAMES,
+ * covers exactly half of "Jest config lives here": a package can carry a
+ * complete preset/testEnvironment/setupFiles block with no `jest.*` file
+ * anywhere and read as a fully configured second test stack.
+ *
+ * Checked as a key list rather than `"jest" in pkg` so the reason is nameable
+ * and a second key (should Jest ever grow one) is a one-line addition.
+ */
+const JEST_MANIFEST_KEYS = ["jest"] as const;
+
+/** The Jest-config keys a parsed manifest carries. */
+function jestConfigKeys(pkg: Json): string[] {
+  return JEST_MANIFEST_KEYS.filter(
+    (key) => pkg[key] !== undefined && pkg[key] !== null,
+  );
+}
+
 type Json = Record<string, unknown>;
 
 type Found = {
@@ -251,17 +273,21 @@ describe("no Jest residue", () => {
     );
   });
 
-  it("no manifest declares a Jest package or runs a Jest binary", async () => {
+  it("no manifest declares a Jest package, runs a Jest binary, or carries Jest config", async () => {
     const { manifests } = await walk();
     const violations: string[] = [];
     for (const file of manifests) {
-      const pkg = (await readJsonc(file)) as {
+      const manifest = await readJsonc(file);
+      for (const key of jestConfigKeys(manifest))
+        violations.push(`${rel(file)}: carries a "${key}" config block`);
+      const pkg = manifest as {
         dependencies?: Record<string, string>;
         devDependencies?: Record<string, string>;
         peerDependencies?: Record<string, string>;
         optionalDependencies?: Record<string, string>;
         scripts?: Record<string, string>;
       };
+
       const declared = [
         ...Object.keys(pkg.dependencies ?? {}),
         ...Object.keys(pkg.devDependencies ?? {}),
@@ -280,8 +306,9 @@ describe("no Jest residue", () => {
     assert.deepEqual(
       violations,
       [],
-      `Jest packages and scripts must not reappear — Vitest is the runner ` +
-        `(ADR-0044, AGENTS.md §Tech Stack).\n\n` +
+      `Jest packages, scripts, and config must not reappear — Vitest is the ` +
+        `runner (ADR-0044, AGENTS.md §Tech Stack). A \`"jest"\` key in a ` +
+        `manifest is Jest config just as much as a \`jest.config.js\` is.\n\n` +
         violations.map((v) => `  - ${v}`).join("\n"),
     );
   });
@@ -322,6 +349,37 @@ describe("no Jest residue", () => {
       `wrongly flagged as Jest: ${allowed.join(", ")}. ` +
         `\`@testing-library/jest-dom\` in particular is a Vitest-compatible ` +
         `matcher library — this guard bans a dependency, not a name.`,
+    );
+  });
+
+  it("sees Jest config carried in a manifest, not only in a jest.* file", () => {
+    // The bypass this closes: Jest's docs give `package.json`'s `"jest"` key and
+    // a `jest.config.*` file as equal config locations, so a guard that walks
+    // filenames alone lets a whole configured Jest back in under a manifest key.
+    const configured = jestConfigKeys({
+      name: "@hexagen/example",
+      jest: { preset: "ts-jest", testEnvironment: "jsdom" },
+    });
+    assert.deepEqual(
+      configured,
+      ["jest"],
+      `a "jest" config block in a manifest went unseen — it is a Jest config ` +
+        `location, equal in standing to jest.config.js`,
+    );
+
+    // An empty block still configures Jest (it selects all defaults), so
+    // falsiness must not be read as absence.
+    assert.deepEqual(jestConfigKeys({ jest: {} }), ["jest"]);
+
+    // A manifest merely NAMED after the runner, or one whose Jest residue is a
+    // dependency, is this matcher's business to ignore — deps are matched above.
+    assert.deepEqual(
+      jestConfigKeys({
+        name: "jest-lookalike",
+        devDependencies: { vitest: "^4.1.9" },
+      }),
+      [],
+      "matched something that is not a manifest-level Jest config block",
     );
   });
 
