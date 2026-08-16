@@ -61,14 +61,19 @@ const SKIP_DIRS = new Set([
 /**
  * Package names that mean "Jest is installed here".
  *
+ * `@[scope]/jest` covers the third-party transform adapters (`@swc/jest`,
+ * `@sucrase/jest-plugin`'s cousins) — a package can only be named that to plug
+ * INTO Jest, so its presence means a Jest run is being configured somewhere.
+ *
  * Deliberately NOT matched: `@testing-library/jest-dom`. Despite the name it is
  * a DOM matcher library (`expect.extend`) that supports Vitest as a first-class
  * target and pulls in no Jest runtime — banning it would be banning a name, not
- * a dependency. If it is ever unused it should be dropped as dead weight, which
- * is a different assertion than this one.
+ * a dependency. It is excluded by construction (the scoped rule matches only an
+ * exact `/jest` tail, not `/jest-*`), and asserted below so a widened pattern
+ * cannot quietly start banning it.
  */
 const JEST_PACKAGE =
-  /^(jest|@types\/jest|@jest\/[^/]+|jest-[^/]+|ts-jest|babel-jest|jest-cli)$/;
+  /^(jest|jest-cli|ts-jest|babel-jest|jest-[^/]+|@types\/jest|@jest\/[^/]+|@[^/]+\/jest)$/;
 
 /** Binaries whose invocation from a script means Jest is being run. */
 const JEST_BINARY = /^(jest|jest-cli)$/;
@@ -85,7 +90,15 @@ type Found = {
 const rel = (absolute: string) =>
   path.relative(REPO_ROOT, absolute).split(path.sep).join("/");
 
-async function walk(): Promise<Found> {
+/**
+ * One traversal per run, shared by every assertion below. The tree is read-only
+ * for the duration of a test run, so re-walking it four times would buy nothing
+ * but I/O — and this walk is the guard's slowest part.
+ */
+let discovery: Promise<Found> | undefined;
+const walk = (): Promise<Found> => (discovery ??= traverse());
+
+async function traverse(): Promise<Found> {
   const found: Found = { jestNamedFiles: [], manifests: [], tsconfigs: [] };
   const visit = async (dir: string): Promise<void> => {
     for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
@@ -179,25 +192,33 @@ async function readJsonc(file: string): Promise<Json> {
 }
 
 /**
- * The binaries a script command invokes. Same shape as the sibling
- * workspace-tool-declaration guard: `&&` / `||` / `;` / `|` chains and leading
- * `VAR=value` assignments, because `build && jest` hides what a bare `jest` shows.
+ * The Jest binaries a script command runs, in whatever position they appear.
+ *
+ * The sibling workspace-tool-declaration guard resolves the ONE binary each
+ * segment invokes, because it asks "is this command's tool declared?". This
+ * guard asks the opposite question — "does Jest run anywhere in here?" — and
+ * command position is not where the answer lives. `jest` reaches the shell as a
+ * bare word, behind a launcher (`npx jest`, `yarn dlx jest`), as a path
+ * (`./node_modules/.bin/jest`), as an argument to another runtime
+ * (`node ./node_modules/.bin/jest`), and on Windows with a `.cmd` tail. Chasing
+ * each form through a positional parser is how a bypass survives; scanning every
+ * token for a Jest basename has no positions to miss.
+ *
+ * The trade-off is a possible false positive — a literal argument that happens
+ * to be exactly `jest`. That failure is loud, visible in the violation message,
+ * and one line to adjudicate. A silent bypass is neither.
  */
-function invokedBinaries(command: string): string[] {
-  const bins: string[] = [];
-  for (const segment of command.split(/&&|\|\||;|\|/)) {
-    const tokens = segment.trim().split(/\s+/).filter(Boolean);
-    let i = 0;
-    while (i < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i])) i++;
-    let bin = tokens[i];
-    if (!bin) continue;
-    // `npx jest` / `yarn jest` run Jest just as surely as a bare invocation.
-    if ((bin === "npx" || bin === "yarn" || bin === "pnpm") && tokens[i + 1])
-      bin = tokens[i + 1];
-    if (bin.includes("/") || bin.includes("\\")) continue;
-    bins.push(bin);
+function jestBinariesInvoked(command: string): string[] {
+  const hits: string[] = [];
+  for (const token of command.split(/\s+/).filter(Boolean)) {
+    // Basename across both separators, minus a Windows launcher suffix.
+    const base = (token.split(/[\\/]/).pop() ?? "").replace(
+      /\.(cmd|ps1|exe|bat)$/i,
+      "",
+    );
+    if (JEST_BINARY.test(base)) hits.push(base);
   }
-  return bins;
+  return hits;
 }
 
 describe("no Jest residue", () => {
@@ -252,10 +273,8 @@ describe("no Jest residue", () => {
           violations.push(`${rel(file)}: declares "${dep}"`);
       }
       for (const [name, command] of Object.entries(pkg.scripts ?? {})) {
-        for (const bin of invokedBinaries(command)) {
-          if (JEST_BINARY.test(bin))
-            violations.push(`${rel(file)}: script "${name}" invokes "${bin}"`);
-        }
+        for (const bin of jestBinariesInvoked(command))
+          violations.push(`${rel(file)}: script "${name}" invokes "${bin}"`);
       }
     }
     assert.deepEqual(
@@ -264,6 +283,70 @@ describe("no Jest residue", () => {
       `Jest packages and scripts must not reappear — Vitest is the runner ` +
         `(ADR-0044, AGENTS.md §Tech Stack).\n\n` +
         violations.map((v) => `  - ${v}`).join("\n"),
+    );
+  });
+
+  /**
+   * The two matchers above are the whole guard: everything else is a file walk.
+   * A gap in either is invisible — the suite stays green while checking less —
+   * so they are exercised directly rather than only through the repo's current
+   * (clean) state, which cannot demonstrate a detection that does not exist.
+   */
+  it("recognises Jest packages, including scoped adapters, but not jest-dom", () => {
+    const banned = [
+      "jest",
+      "jest-cli",
+      "ts-jest",
+      "babel-jest",
+      "jest-environment-jsdom",
+      "@types/jest",
+      "@jest/globals",
+      "@swc/jest",
+    ].filter((name) => !JEST_PACKAGE.test(name));
+    assert.deepEqual(
+      banned,
+      [],
+      `not recognised as Jest: ${banned.join(", ")}`,
+    );
+
+    const allowed = [
+      "@testing-library/jest-dom",
+      "vitest",
+      "@vitest/coverage-v8",
+      "jsdom",
+      "@types/jsdom",
+    ].filter((name) => JEST_PACKAGE.test(name));
+    assert.deepEqual(
+      allowed,
+      [],
+      `wrongly flagged as Jest: ${allowed.join(", ")}. ` +
+        `\`@testing-library/jest-dom\` in particular is a Vitest-compatible ` +
+        `matcher library — this guard bans a dependency, not a name.`,
+    );
+  });
+
+  it("sees a Jest invocation wherever in a command it hides", () => {
+    const missed = [
+      "jest",
+      "jest --config jest.config.cjs",
+      "npx jest",
+      "yarn dlx jest --ci",
+      "tsc && jest",
+      "./node_modules/.bin/jest",
+      "node ./node_modules/.bin/jest --runInBand",
+      "node_modules\\.bin\\jest.cmd",
+    ].filter((command) => jestBinariesInvoked(command).length === 0);
+    assert.deepEqual(missed, [], `Jest invocation not detected in: ${missed}`);
+
+    const falsePositives = [
+      "vitest run",
+      "vitest run __tests__/no-jest-residue.guard.test.ts",
+      "eslint src --rulesdir ./jest-rules",
+    ].filter((command) => jestBinariesInvoked(command).length > 0);
+    assert.deepEqual(
+      falsePositives,
+      [],
+      `wrongly read as a Jest invocation: ${falsePositives}`,
     );
   });
 
