@@ -62,12 +62,16 @@ interface RunResult {
   stderr: string;
 }
 
-function runLinter(root: string, ...args: string[]): Promise<RunResult> {
+function runLinterFrom(
+  cwd: string,
+  root: string,
+  ...args: string[]
+): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     execFile(
       process.execPath,
       [CLI, "--root", root, ...args],
-      { cwd: root, timeout: 120_000, maxBuffer: 10 * 1024 * 1024 },
+      { cwd, timeout: 120_000, maxBuffer: 10 * 1024 * 1024 },
       (error, stdout, stderr) => {
         // A non-numeric code means the process never ran to completion (spawn
         // failure, timeout, signal) — rejecting keeps such a case from
@@ -88,6 +92,11 @@ function runLinter(root: string, ...args: string[]): Promise<RunResult> {
       },
     );
   });
+}
+
+/** The common case: cwd IS the project root. */
+function runLinter(root: string, ...args: string[]): Promise<RunResult> {
+  return runLinterFrom(root, root, ...args);
 }
 
 function describeResult(r: RunResult): string {
@@ -422,6 +431,96 @@ describe(
             // Each line parses on its own → a fixed violation is a one-line diff.
             JSON.parse(line.trim().replace(/,$/, ""));
           }
+        });
+      });
+
+      // `--root` exists precisely so the linter can be pointed at a project the
+      // caller is NOT standing in. A `--baseline` resolved against cwd would
+      // then read/write a file beside the caller instead of inside that
+      // project — enforcing against an absent baseline (everything fails) or
+      // scattering baselines into unrelated directories.
+      it("a relative --baseline resolves from the project root, not cwd", async () => {
+        await withFixture(VIOLATORS, async (root) => {
+          // A fresh empty dir, so "nothing landed here" is a real assertion.
+          const elsewhere = await fs.mkdtemp(
+            path.join(await fs.realpath(os.tmpdir()), "hexagen-lint-cwd-"),
+          );
+          const seed = await runLinterFrom(
+            elsewhere,
+            root,
+            "--baseline",
+            "ci/arch-lint-baseline.json",
+            "--update-baseline",
+          );
+          assert.equal(seed.code, 0, describeResult(seed));
+
+          const written = path.join(root, "ci", "arch-lint-baseline.json");
+          const baseline = JSON.parse(await fs.readFile(written, "utf8"));
+          assert.equal(baseline.entries.length, 3, JSON.stringify(baseline));
+          // Nothing was written next to the caller.
+          await assert.rejects(
+            () => fs.access(path.join(elsewhere, "ci")),
+            "the baseline must not land beside cwd",
+          );
+
+          // …and enforcement reads back the same file from the same cwd.
+          const green = await runLinterFrom(
+            elsewhere,
+            root,
+            "--baseline",
+            "ci/arch-lint-baseline.json",
+          );
+          assert.equal(green.code, 0, describeResult(green));
+          assert.match(
+            green.stdout + green.stderr,
+            /Ratchet: 3 known violation\(s\) suppressed/,
+            describeResult(green),
+          );
+          await cleanup(elsewhere);
+        });
+      });
+
+      it("an absolute --baseline is honoured as given", async () => {
+        await withFixture(VIOLATORS, async (root) => {
+          const abs = path.join(root, "ci", "abs-baseline.json");
+          const seed = await runLinterFrom(
+            await fs.realpath(os.tmpdir()),
+            root,
+            "--baseline",
+            abs,
+            "--update-baseline",
+          );
+          assert.equal(seed.code, 0, describeResult(seed));
+          const baseline = JSON.parse(await fs.readFile(abs, "utf8"));
+          assert.equal(baseline.entries.length, 3, JSON.stringify(baseline));
+        });
+      });
+
+      it("--baseline with no value is FATAL, not a silent fall back to the default", async () => {
+        await withFixture(VIOLATORS, async (root) => {
+          const r = await runLinter(root, "--baseline");
+          assert.notEqual(r.code, 0, describeResult(r));
+          assert.match(
+            r.stderr,
+            /FATAL ERROR: --baseline requires a path argument/,
+            describeResult(r),
+          );
+          // A following flag is a missing value too, not a filename.
+          const flagAsValue = await runLinter(
+            root,
+            "--baseline",
+            "--update-baseline",
+          );
+          assert.notEqual(flagAsValue.code, 0, describeResult(flagAsValue));
+          assert.match(
+            flagAsValue.stderr,
+            /FATAL ERROR: --baseline requires a path argument/,
+            describeResult(flagAsValue),
+          );
+          await assert.rejects(
+            () => fs.access(path.join(root, "--update-baseline")),
+            "a flag must never be taken as a baseline filename",
+          );
         });
       });
     });

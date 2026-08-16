@@ -45,7 +45,9 @@ HEXAGEN_ROOT=./path/to/project npx hexagen-lint
 # Validate against a specific manifest file
 npx hexagen-lint --manifest ./.architecture/manifest.yaml
 
-# Use a baseline file other than .architecture/arch-lint-baseline.json
+# Use a baseline file other than .architecture/arch-lint-baseline.json.
+# A relative path resolves from the project root (--root/HEXAGEN_ROOT), not the
+# current directory, so this names the same file wherever the run starts from.
 npx hexagen-lint --baseline ./ci/arch-lint-baseline.json
 
 # (Re)write the baseline from the current run instead of enforcing against it

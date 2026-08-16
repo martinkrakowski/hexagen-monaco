@@ -130,12 +130,28 @@ const TSCONFIG_PATH = path.join(ROOT_DIR, "tsconfig.base.json");
 // `--baseline <path>` overrides the location; `--update-baseline` rewrites the
 // file from the current run instead of enforcing against it (seeding, and
 // deliberate regeneration). The baseline is resolved from ROOT_DIR so a
-// generated project inherits the same convention with zero configuration.
+// generated project inherits the same convention with zero configuration, and
+// so `--root <elsewhere> --baseline ci/base.json` names a file inside the
+// project being linted rather than one beside whatever cwd the run started in.
+// An absolute `--baseline` is honoured as given (path.resolve keeps it).
+//
+// A `--baseline` with no value is FATAL rather than a silent fall back to the
+// default path: enforcing against a different file than the one the caller
+// named is exactly the "reported a pass it never verified" failure the
+// fail-closed contract below exists to prevent.
 const baselineArgIndex = process.argv.indexOf("--baseline");
-const BASELINE_PATH =
-  baselineArgIndex !== -1 && process.argv[baselineArgIndex + 1]
-    ? path.resolve(process.argv[baselineArgIndex + 1])
-    : path.join(ROOT_DIR, ...DEFAULT_BASELINE_RELATIVE_PATH.split("/"));
+const baselineArg =
+  baselineArgIndex !== -1 ? process.argv[baselineArgIndex + 1] : undefined;
+if (baselineArgIndex !== -1 && (!baselineArg || baselineArg.startsWith("-"))) {
+  logger.error("FATAL ERROR: --baseline requires a path argument.");
+  logger.error(
+    "  Refusing to fall back to the default baseline: that would enforce against a different file than the one requested.",
+  );
+  process.exit(1);
+}
+const BASELINE_PATH = baselineArg
+  ? path.resolve(ROOT_DIR, baselineArg)
+  : path.join(ROOT_DIR, ...DEFAULT_BASELINE_RELATIVE_PATH.split("/"));
 const UPDATE_BASELINE = process.argv.includes("--update-baseline");
 
 // ─── Load Manifest (Strict Mode) ────────────────────────────────────────────
