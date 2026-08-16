@@ -188,7 +188,7 @@ Hexagen-Monaco is a modular monolith. Thirty-four bounded contexts live across f
 | **Shared-Kernel**  | core-domain               | Cross-plane domain primitives                                                                  |
 | **Shared-Kernel**  | shared                    | Type-only utilities permitted in any plane                                                     |
 
-Three runtime surfaces expose the governance planes: `apps/web` (Next.js visual control plane), `apps/tui` (Ink terminal control plane), `apps/api-gateway` (HTTP surface for the canvas).
+Two runtime surfaces expose the governance planes: `apps/web` (Next.js visual control plane, which also serves the HTTP API under `app/api`) and `apps/tui` (Ink terminal control plane).
 
 ## Enforcement Stack
 
@@ -320,17 +320,33 @@ bounded_contexts:
 Tests run in CI only. Local pre-commits run lint and typecheck (~2–5s); the full suite runs against a clean GitHub Actions environment. The test runner is **Vitest** (ADR-0044); assertions are `node:assert/strict` or Vitest `expect()` — both are fine.
 
 ```bash
-yarn test                                       # full suite, every workspace
+yarn test                                       # every workspace that defines a test task
 yarn workspace @hexagen/web-driver test         # one workspace
 yarn workspace @hexagen/web-driver exec vitest  # one workspace, watch mode
 ```
 
 `yarn test` is `turbo test`, and Turbo rejects unrecognised flags rather than forwarding
 them — `yarn test --watch` and `yarn test --coverage` both fail with `unexpected argument`.
-Use the per-workspace forms above, or `yarn test -- <flag>` to pass a flag through to every
-workspace's Vitest. **There is no coverage tooling wired in this repo**: no provider is
-installed and no Vitest coverage config exists anywhere. That is a recorded, deliberate
-deferral with a re-open trigger, not an oversight — see decision **D4** in
+Use the per-workspace forms above, or `yarn test -- <flag>` to pass the flag through to the
+test tasks Turbo selects.
+
+**`yarn test` is not "every workspace".** Turbo runs the `test` script of each workspace that
+defines one and silently no-ops the rest, so the command's scope is not visible in its own
+output. To see the real scope:
+
+```bash
+yarn turbo run test --dry=json | jq -r '.tasks[] | select(.task=="test") | "\(.package)\t\(.command)"'
+```
+
+Workspaces printing `<NONEXISTENT>` have no `test` script and are contributing nothing. As of
+2026-08-16 that is 3 of 39 — `@hexagen/shared`, `@hexagen/model-settings` and
+`@hexagen/runtime`. Closing that gap is remediation item **8.11**.
+
+**There is no coverage tooling wired in this repo**: no provider is installed and no Vitest
+coverage config exists anywhere. That is a recorded, deliberate deferral with a re-open
+trigger, not an oversight — and the no-op workspaces above are precisely why, since a
+coverage percentage would only instrument the files a runner loads and would therefore
+*improve* as that gap widened. See decision **D4** in
 [`docs/planning/2026-08-15-architecture-remediation-execution-runbook.md`](docs/planning/2026-08-15-architecture-remediation-execution-runbook.md).
 
 The [`.github/workflows/sync-integrity.yml`](.github/workflows/sync-integrity.yml) workflow runs on every PR and on pushes to `main` / `develop`:
