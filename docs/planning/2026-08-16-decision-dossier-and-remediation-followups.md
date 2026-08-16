@@ -1,6 +1,7 @@
 # Decision Dossier & Remediation Follow-Ups
 
-**Date:** 2026-08-16 · **Status:** Proposed. Six decisions ready to resolve; nine new findings, four of them defects.
+**Date:** 2026-08-16 · **Status:** Proposed. Six decisions ready to resolve; ten new findings, four of them defects.
+**§2.5 is retracted** — see the note there; it would have hidden 14 real defects.
 **Origin:** four parallel read-only investigations commissioned to unblock the architecture-remediation arc's
 outstanding decision gates (D3, D4, D6, ADR-0049, HEX-018, `zod`-in-domain), plus item 5.2's missing scope.
 
@@ -207,11 +208,24 @@ mechanism exists. **Delete it.**
 Build + `turbo run typecheck` only. Not raised in any plan document. If there is appetite for one
 verification investment in this arc, this outranks coverage.
 
-### 2.5 Half the ratchet baseline is template payload — a one-edit 30 → ~12
+### 2.5 ~~Half the ratchet baseline is template payload — a one-edit 30 → ~12~~ · **RETRACTED**
 
-**15 of 30 entries** are files under `packages/template-engine/templates/**` — scaffolding _text_ emitted
-into generated projects, outside that package's tsconfig `include`. Excluding `**/templates/**` from the
-linter's scan clears them in one edit and makes the ratchet's remaining signal meaningful.
+> **RETRACTED 2026-08-16, before this document was actioned.** The recommendation was to exclude
+> `**/templates/**` from the linter scan, clearing 15 entries at a stroke. **That would have hidden 14 real
+> defects.** Item 5.9 (PR #481) landed while this dossier was in review and _fixed_ those 14
+> `cross-layer-relative-import` entries — they were genuine layering violations in template **ports** that
+> are emitted into customer projects, not scaffolding noise. The baseline went **30 → 16 by repair, not by
+> exclusion**, and only **one** template entry remains (a `zod` finding belonging to §1.6).
+>
+> §5's own risk note warned that template payload ships into generated projects and deserves its own check
+> rather than being assumed away — and this recommendation contradicted it. The lesson generalises:
+> **"outside the tsconfig" is not the same as "not real code."** Emitted templates are compiled by
+> _consumers_, so a layering violation there is a defect this repo exports.
+
+**What stands:** 15 of 30 entries were under `packages/template-engine/templates/**`. **What was wrong:**
+treating that as grounds for exclusion. Do **not** narrow the linter's scan. If template scanning is ever
+reconsidered, the burden is to show the emitted output is checked somewhere else — and today it is not;
+see §2.11.
 
 ### 2.6 Three `zod` findings are `import type` — erased at compile time
 
@@ -247,6 +261,18 @@ entirely. That single omission disarms `generateStubs`, `generator.sync.layers`,
 and the linter's `required-communication` rule for this repo. No ADR or comment explains it. **Upstream of
 several "nothing happens" verdicts in §1.5** — worth its own item.
 
+### 2.11 Template manifests have no npm-dependency mechanism · **blocks First-Run-Green coverage**
+
+Found while building item 5.9. No template manifest can declare an npm dependency — verified: **no template
+declares one, and nothing in the emitted `package.json` provides `zod`**. So any template importing `zod`
+(every Adobe template, `llm-adapter`, `bedrock-agentcore-runtime` — which also needs
+`@aws-sdk/client-bedrock-runtime`) fails `yarn typecheck` in a generated project before its own code runs.
+
+**Consequence:** those templates **cannot be added to a capstone fixture**, so First-Run-Green structurally
+cannot cover them. That is why 5.9's acceptance had to fall back to a bundle-backed guard suite. The gap is
+not 5.9's — it is a missing feature of the template format, and it silently caps what the capstone harness
+can ever verify.
+
 ---
 
 ## 3. Escalations — decisions only a human can make
@@ -270,9 +296,9 @@ several "nothing happens" verdicts in §1.5** — worth its own item.
 ## 4. Sequencing
 
 ```text
-Now, no gate:        2.5 (exclude templates → baseline 30→~12)
-                     2.2, 2.3 (defects, self-contained)
+Now, no gate:        2.2, 2.3 (defects, self-contained)
                      5.2 (spec ready — see the investigation record)
+                     2.11 (template npm-dependency mechanism)
 After D3:            4.5 delete api-gateway  → unblocks Phase 8's dependency
 After ADR-0049:      3.3 MOD-005 resolves or dissolves; 6.4(e) in or struck
 After D6:            4.7 + the 0.10.0 release
@@ -281,8 +307,9 @@ After `zod`:         allowlist amendment + the 3-entry burn-down
 Independent:         2.4 (tests in publish.yml) — arguably ahead of all of it
 ```
 
-**2.5 first.** It is one edit, needs no decision, and halves the baseline — which makes every later
-burn-down signal legible instead of lost among template noise.
+**2.2 and 2.3 first.** Both are self-contained defects needing no decision. The baseline has already
+halved (30 → 16) via item 5.9 repairing template ports properly — see the §2.5 retraction for why
+repair was the right mechanism and scan-exclusion was not.
 
 ## 5. Risks
 
