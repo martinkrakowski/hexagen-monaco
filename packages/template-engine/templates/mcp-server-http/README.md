@@ -78,7 +78,7 @@ vars would be the proper static fix — an engine follow-up, not this addon.)
 | `transport/register-transports.ts` | **re-emit** — registers stdio + streamable-http                                                                                                     |
 | `guard.ts`                         | `assertSafeTransport` — refuses streamable-http without an auth mode                                                                                |
 | `auth/bearer.ts` / `auth/oauth.ts` | gated on `auth`; `http.ts` imports the chosen one via `{auth}`                                                                                      |
-| `*.test.ts` (guard, bearer, oauth) | `node:test`; pattern-gated behind `--with-tests` (`99-gap-analysis.md`)                                                                             |
+| `*.test.ts` (guard, bearer, oauth) | Vitest; pattern-gated behind `--with-tests` (`99-gap-analysis.md`)                                                                                  |
 | `.env.mcp-http.example`            | `MCP_HTTP_PORT`/`MCP_AUTH_MODE` seeded from the answers                                                                                             |
 
 ## SDK

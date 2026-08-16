@@ -1,5 +1,14 @@
 # Sync Toolchain Remediation — Development Plan
 
+> **⚠️ Historical record — the test-runner mandate below is superseded.** This plan
+> repeatedly mandates `node:test` + `tsx --test` and says "never vitest/jest/`expect()`".
+> That was the house rule on 2026-06-11; **ADR-0044 made Vitest the monorepo runner**, and
+> the migration is complete. The `node:test` mandate in §Overview, the exit-code contract
+> suite, and §House-rule gates is **no longer in force** — read those as the runner that
+> was current when the plan was written, not as guidance to follow. The rest of the plan
+> (dead-generator finding, mkdir accounting, version inlining, governance gates) stands.
+> Assertions are unaffected: `node:assert/strict` is still fine, per AGENTS.md.
+
 **Status:** Proposed — ready to execute. Not started.
 **Date:** 2026-06-11 · **Amended same day** after a four-review pass — test-runner mandate (`node:test`, never vitest), dead-generator finding reshaping B2, `layer-folders` mkdir accounting + dry-run gap, build-time version inlining for A3, consumer-resolved-commander candidate for A1, and the AGENTS.md governance gates (manifest mapping, protected files, frozen contexts).
 **Source:** [sync-toolchain-rca-and-remediation.md](./sync-toolchain-rca-and-remediation.md) (the RCA; findings #1–#9 referenced throughout as "RCA #n").
