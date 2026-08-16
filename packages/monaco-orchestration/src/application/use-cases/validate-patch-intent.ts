@@ -1,4 +1,4 @@
-import type { ValidatePatchIntentPort } from "../ports/in/validate-patch-intent.port";
+import type { ValidatePatchIntentPort } from "../ports/out/validate-patch-intent.port";
 
 export class ValidatePatchIntentUseCase {
   constructor(private readonly port: ValidatePatchIntentPort) {}

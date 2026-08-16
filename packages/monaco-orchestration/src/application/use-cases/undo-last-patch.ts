@@ -1,4 +1,4 @@
-import type { UndoLastPatchPort } from "../ports/in/undo-last-patch.port";
+import type { UndoLastPatchPort } from "../ports/out/undo-last-patch.port";
 
 export class UndoLastPatchUseCase {
   constructor(private readonly port: UndoLastPatchPort) {}

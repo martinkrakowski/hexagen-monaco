@@ -1,4 +1,4 @@
-import type { ApplySemanticPatchPort } from "../ports/in/apply-semantic-patch.port";
+import type { ApplySemanticPatchPort } from "../ports/out/apply-semantic-patch.port";
 
 export class ApplySemanticPatchUseCase {
   constructor(private readonly port: ApplySemanticPatchPort) {}

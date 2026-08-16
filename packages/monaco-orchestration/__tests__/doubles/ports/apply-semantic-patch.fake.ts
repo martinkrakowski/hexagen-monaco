@@ -1,4 +1,4 @@
-import { ApplySemanticPatchPort } from "../../../src/application/ports/in/apply-semantic-patch.port";
+import { ApplySemanticPatchPort } from "../../../src/application/ports/out/apply-semantic-patch.port";
 /**
  * In‑memory fake for `ApplySemanticPatchPort`.
  *
