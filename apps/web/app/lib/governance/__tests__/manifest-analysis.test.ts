@@ -1,5 +1,6 @@
 import { describe, it, beforeAll } from "vitest";
 import assert from "node:assert/strict";
+import ts from "typescript";
 import {
   analyzeManifest,
   MANIFEST_KEY_PATHS,
@@ -186,30 +187,102 @@ describe("analyzeManifest — every key it reads is a key the manifest provides"
   it("keeps the declared set honest: every read goes through readPath", async () => {
     // The guard above is only as good as the claim that `MANIFEST_KEY_PATHS` is
     // exhaustive. A hand-rolled `raw.layers?.domain?.adapters` would bypass it
-    // and reintroduce the defect under a green guard, so assert the source has
-    // no direct manifest-key property access left in it.
+    // and reintroduce the defect under a green guard.
+    //
+    // This walks the module's AST rather than scanning its text. The first
+    // version of this guard was a line regex for `.layers` / `?.layers`, and
+    // review correctly showed it could be sidestepped by `raw["layers"]` or by
+    // destructuring — both of which are direct manifest-key reads that
+    // `MANIFEST_KEY_PATHS` would then not describe. Parsing the module sees
+    // bracket reads and destructured binds, and it also drops the two hacks the
+    // regex needed: comments are not AST nodes (the module documents the old,
+    // wrong keys in prose), and `CONTEXT_KEY_PATHS.adapters` is exempted by
+    // inspecting the object being accessed instead of string-replacing it out
+    // of the source first — an exclusion list that would have needed touching
+    // every time the module named one of these identifiers legitimately.
+    //
+    // Residual limit, stated plainly: a fully dynamic read (`raw[someVar]`) is
+    // not decidable statically. `readPath` IS that dynamic read, and it is the
+    // one sanctioned accessor. This guard's job is to stop a SECOND, hand-rolled
+    // accessor from appearing, not to prove the module never indexes computed.
     const { readFile } = await import("node:fs/promises");
     const { join } = await import("node:path");
-    const source = await readFile(
-      join(__dirname, "..", "manifest-analysis.ts"),
-      "utf-8",
+    const modulePath = join(__dirname, "..", "manifest-analysis.ts");
+    const source = await readFile(modulePath, "utf-8");
+    const sourceFile = ts.createSourceFile(
+      modulePath,
+      source,
+      ts.ScriptTarget.Latest,
+      /* setParentNodes */ true,
+      ts.ScriptKind.TS,
     );
-    const code = source
-      // Strip comments — the module documents the old, wrong keys in prose.
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/\/\/.*$/gm, "")
-      // Strip lookups INTO the declared set: `CONTEXT_KEY_PATHS.adapters` is
-      // the sanctioned accessor, not a manifest property read.
-      .replace(/CONTEXT_KEY_PATHS\.\w+/g, "");
-    const manifestKeyAccess =
-      /[.?]\s*(layers|adapters|dependencies|depends_on|bounded_contexts|use_cases|entities|value_objects|relationships|wiring)\b/;
-    const offending = code
-      .split("\n")
-      .filter((line) => manifestKeyAccess.test(line));
+
+    /** Key names that only ever appear in a manifest document. */
+    const manifestKeys = new Set([
+      "layers",
+      "adapters",
+      "dependencies",
+      "depends_on",
+      "bounded_contexts",
+      "use_cases",
+      "entities",
+      "value_objects",
+      "relationships",
+      "wiring",
+    ]);
+    /** Reads INTO the declared set are the sanctioned accessor, not manifest
+     * property reads: `CONTEXT_KEY_PATHS.adapters` names a key path, it does
+     * not pull `adapters` off a parsed manifest node. */
+    const declaredSetIdentifier = "CONTEXT_KEY_PATHS";
+
+    const offending: string[] = [];
+    const flag = (node: ts.Node, description: string): void => {
+      const { line } = sourceFile.getLineAndCharacterOfPosition(
+        node.getStart(sourceFile),
+      );
+      offending.push(`${modulePath}:${line + 1} — ${description}`);
+    };
+
+    const visit = (node: ts.Node): void => {
+      // `x.layers` and `x?.layers`
+      if (
+        ts.isPropertyAccessExpression(node) &&
+        manifestKeys.has(node.name.text) &&
+        node.expression.getText(sourceFile) !== declaredSetIdentifier
+      ) {
+        flag(node, node.getText(sourceFile));
+      }
+      // `x["layers"]` and `x?.["layers"]` — the bypass the regex could not see.
+      if (ts.isElementAccessExpression(node)) {
+        const arg = node.argumentExpression;
+        const literalKey =
+          ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg)
+            ? arg.text
+            : undefined;
+        if (literalKey !== undefined && manifestKeys.has(literalKey)) {
+          flag(node, node.getText(sourceFile));
+        }
+      }
+      // `const { layers } = x` / `const { depends_on: deps } = x` — the other
+      // bypass the regex could not see.
+      if (ts.isBindingElement(node) && ts.isObjectBindingPattern(node.parent)) {
+        const bound = node.propertyName ?? node.name;
+        const key =
+          ts.isIdentifier(bound) || ts.isStringLiteral(bound)
+            ? bound.text
+            : undefined;
+        if (key !== undefined && manifestKeys.has(key)) {
+          flag(node, `destructured \`${key}\``);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+
     assert.deepEqual(
       offending,
       [],
-      "manifest keys must be reached via readPath(CONTEXT_KEY_PATHS.*), not direct property access — otherwise MANIFEST_KEY_PATHS stops being the complete read set",
+      "manifest keys must be reached via readPath(CONTEXT_KEY_PATHS.*) — not property access, bracket access, or destructuring — otherwise MANIFEST_KEY_PATHS stops being the complete read set",
     );
   });
 });
