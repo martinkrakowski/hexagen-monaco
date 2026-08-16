@@ -1,0 +1,110 @@
+name: "Lint & Boundaries"
+
+# Plan item 2.3 / AUD-019: the "3-layer information state firewall" had no CI
+# job at all. Nothing under .github/workflows/ invoked eslint, lint:arch, or
+# scripts/validate-ui-boundary.sh — the sole `eslint` string in capstone.yml is
+# a comment describing a fixture's dev-deps, not an invocation. Enforcement was
+# the pre-commit lint-staged hook, which any `--no-verify` bypasses, and
+# validate-ui-boundary.sh has claimed "Run in CI as part of the merge gate" in
+# its own header since it was written (scripts/validate-ui-boundary.sh:10) — a
+# role no workflow granted it. This workflow grants it.
+#
+# PARTIAL against item 2.3. Two of the three legs ship here:
+#   Layer 2 — workspace eslint  → "Run ESLint (all workspaces)"
+#   Layer 3 — structural checks → "Verify UI Boundary (firewall layer 3)"
+# The arch-lint ratchet leg is DEFERRED: its baseline is item 2.2's output
+# (.architecture/arch-lint-baseline.json), which does not exist on main yet.
+# It lands as a third step here once 2.2 merges — do not mark 2.3 done until
+# that step exists.
+#
+# Deliberately its own workflow rather than more steps on sync-integrity.yml:
+# it can be made a required check on its own, it fails in parallel with the
+# build/sync gate instead of behind two full builds, and it gives the ratchet
+# leg an obvious home.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+# Read-only: this workflow lints and publishes nothing.
+permissions:
+  contents: read
+
+# A superseded push doesn't need to finish linting.
+concurrency:
+  group: "lint-${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    name: "ESLint + UI boundary"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      # Corepack must be enabled BEFORE setup-node: setup-node@v5's environment
+      # probe runs `yarn` (e.g. `yarn cache dir`), and the repo pins yarn@4 via
+      # packageManager — classic global yarn errors on that. Enabling Corepack
+      # first makes `yarn` resolve to the pinned 4.12.0 shim during the probe.
+      - name: "Enable Corepack"
+        run: corepack enable
+
+      - name: "Prepare Yarn"
+        run: corepack prepare yarn@4.12.0 --activate
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22.7"
+
+      - name: "Install Dependencies"
+        run: yarn install --immutable
+
+      # `turbo run lint` silently skips any workspace with no `lint` script —
+      # a package can drop out of the firewall by deleting one line of JSON and
+      # the job still reports success. This asserts the skip set is exactly the
+      # documented one, so the hole is pinned instead of silent and a NEW
+      # unlinted package fails the build.
+      - name: "Verify Lint Coverage"
+        run: node scripts/check-lint-coverage.mjs
+
+      # Layer 2. Runs eslint in every workspace that has a lint script, via the
+      # same `turbo lint` the root `lint` script uses. `dependsOn: ["^build"]`
+      # in turbo.json means dependency builds run first; that is the graph's
+      # requirement, not an extra step here.
+      #
+      # SCOPE NOTE — this gates ERRORS, not warnings. The generated per-package
+      # flat configs downgrade no-explicit-any and no-unused-vars to "warn",
+      # and eslint exits 0 on warnings, so those do not block. Ratcheting to
+      # --max-warnings=0 is a policy change with a large existing backlog and
+      # belongs in its own item; it is not silently assumed here.
+      - name: "Run ESLint (all workspaces)"
+        run: yarn turbo run lint --output-logs=full --log-order=stream
+
+      # Layer 3. Structural checks that eslint cannot express: kernel-package
+      # imports and semantic state tokens leaking into packages/ui, runtime
+      # imports of @internal ACL types (ADR-0021) in apps/web, and cross-slice
+      # imports between apps/web/features slices. Exits 1 on a violation and 2
+      # if its own blocklist fails to parse — an unparsed rule set is never
+      # reported as compliant.
+      - name: "Verify UI Boundary (firewall layer 3)"
+        run: bash scripts/validate-ui-boundary.sh
+
+      # DEFERRED — arch-lint ratchet (item 2.3, third leg). Blocked on item 2.2
+      # (PR #459): the ratchet compares against .architecture/arch-lint-baseline.json,
+      # which is 2.2's output and is not on main. Add here once 2.2 lands:
+      #
+      #   - name: "Verify Architecture Lint Ratchet"
+      #     run: yarn lint:arch  # + the ratchet comparison 2.2 defines
+      #
+      # sync-integrity.yml already runs the arch-linter for real via
+      # `sync --strict` (AUD-010 fix), so architecture is not unguarded in the
+      # meantime — what is missing is the no-new-violations ratchet.
