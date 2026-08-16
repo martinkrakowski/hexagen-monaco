@@ -1,4 +1,4 @@
-import type { IPolicyEvaluator } from "../../application/ports/in/policy-evaluator.port.js";
+import type { IPolicyEvaluator } from "../../application/ports/out/policy-evaluator.port.js";
 import type { ComplianceReport } from "../../domain/entities/compliance-report.js";
 import type { PolicyViolationError } from "../../domain/entities/compliance-report.js";
 import type { AssembledManifest } from "@hexagen/shared";

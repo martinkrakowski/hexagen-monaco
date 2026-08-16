@@ -68,3 +68,63 @@ export function parseImportedManifest(
   }
   return { ok: true, manifest: parsed.data as Record<string, unknown> };
 }
+
+/**
+ * The imported-vs-wizard decision itself (REA-005). Three surfaces used to
+ * carry a private copy of this `isImportedFormState` → `parseImportedManifest`
+ * sequence — the export/publish provider, the code-view generation hook and
+ * the architecture-ZIP download — so the fail-closed invariant could drift in
+ * one without the others noticing. It is decided here once.
+ *
+ * `yamlContent` is returned alongside the parsed object because the two
+ * consumers need different shapes of the SAME decision: the HTTP payload paths
+ * want the parsed `manifest` object the routes accept, while the architecture
+ * ZIP writes the stored YAML text verbatim (re-dumping the parsed object would
+ * churn formatting/comments for no gain). Splitting that into two resolvers
+ * would recreate the divergence this consolidates.
+ */
+export type ImportedManifestResolution =
+  | { ok: true; imported: false }
+  | {
+      ok: true;
+      imported: true;
+      manifest: Record<string, unknown>;
+      yamlContent: string;
+    }
+  | { ok: false; message: string };
+
+export function resolveImportedManifest(
+  formState: unknown,
+  savedManifestYaml: string | null | undefined,
+): ImportedManifestResolution {
+  if (!isImportedFormState(formState)) return { ok: true, imported: false };
+  const parsed = parseImportedManifest(savedManifestYaml);
+  if (!parsed.ok) return { ok: false, message: parsed.message };
+  return {
+    ok: true,
+    imported: true,
+    manifest: parsed.manifest,
+    // parseImportedManifest only succeeds on a non-empty string.
+    yamlContent: savedManifestYaml as string,
+  };
+}
+
+/**
+ * The request-body view of {@link resolveImportedManifest}: the optional
+ * `manifest` field the export/generate routes read ahead of their degraded
+ * `wizardToManifest(body.wizardData)` fallback. Wizard-authored projects
+ * contribute no extra field, so their request stays byte-identical.
+ */
+export function resolveImportedManifestPayload(
+  formState: unknown,
+  savedManifestYaml: string | null | undefined,
+):
+  | { ok: true; extra: Record<string, unknown> }
+  | { ok: false; message: string } {
+  const resolved = resolveImportedManifest(formState, savedManifestYaml);
+  if (!resolved.ok) return { ok: false, message: resolved.message };
+  return {
+    ok: true,
+    extra: resolved.imported ? { manifest: resolved.manifest } : {},
+  };
+}

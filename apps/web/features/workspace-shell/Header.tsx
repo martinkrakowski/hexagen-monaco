@@ -7,10 +7,10 @@ import { ProjectMenu } from "./ProjectMenu";
 import { ExportStatusStrip } from "./ExportStatusStrip";
 import { ExportDialog } from "../export/ExportDialog";
 import { PublishSettingsDialog } from "../export/PublishSettingsDialog";
-import {
-  useProjectExport,
-  isGithubExportActive,
-} from "@/contexts/ExportContext";
+import { useZipExport } from "@/contexts/ZipExportContext";
+import { useGithubPublish } from "@/contexts/GithubPublishContext";
+import { useProjectExportRecord } from "@/contexts/ProjectExportRecordContext";
+import { isPublishDialogOpen } from "@/contexts/export-state";
 import type { ExportDialogPhase } from "../export/ExportDialog";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 
@@ -38,31 +38,33 @@ export function Header({
 }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
   const { activeWorkspace } = useActiveWorkspace();
-  const exportFlow = useProjectExport();
+  const zip = useZipExport();
+  const publish = useGithubPublish();
+  const { connectedRepo } = useProjectExportRecord();
 
-  const isExporting = exportFlow.state.kind === "exporting";
+  // The menu's single "busy" affordance still spans both flows — the Header is
+  // the one component that legitimately composes them.
+  const isExporting = zip.state.kind === "exporting" || publish.isPublishing;
 
-  // Derive the GitHub dialog's panel + data from the export state machine.
-  const s = exportFlow.state;
+  // Derive the GitHub dialog's panel + data from the publish state machine.
+  const s = publish.state;
   const dialogPhase: ExportDialogPhase =
-    s.kind === "exporting" && s.destination === "github"
+    s.kind === "publishing"
       ? "submitting"
-      : s.kind === "success" && s.destination === "github"
+      : s.kind === "success"
         ? "success"
-        : s.kind === "error" && s.destination === "github"
+        : s.kind === "error"
           ? "error"
           : "form";
-  const dialogError =
-    s.kind === "error" && s.destination === "github" ? s.message : null;
+  const dialogError = s.kind === "error" ? s.message : null;
   // The actionable code (workflow_scope_required / reauth_required) gates the
   // dialog's Reconnect/sign-in affordance; generic failures carry none.
-  const dialogErrorCode =
-    s.kind === "error" && s.destination === "github" ? (s.code ?? null) : null;
+  const dialogErrorCode = s.kind === "error" ? (s.code ?? null) : null;
   // Provide a success payload whenever the github flow succeeds — even if the
   // structured githubLink is absent — so phase="success" never renders a blank
   // body. owner/repo/url are optional; the dialog falls back to `message`.
   const dialogSuccess =
-    s.kind === "success" && s.destination === "github"
+    s.kind === "success"
       ? {
           message: s.message,
           owner: s.githubLink?.owner,
@@ -118,17 +120,13 @@ export function Header({
             <ProjectMenu
               onNewProject={onNewProject}
               onNavigateToProjects={onNavigateToProjects}
-              onExportZip={() => void exportFlow.exportZip()}
-              onRequestGithubExport={() =>
-                void exportFlow.requestGithubExport()
-              }
-              onOpenPublishSettings={() =>
-                void exportFlow.openPublishSettings()
-              }
-              canExport={exportFlow.canExport}
+              onExportZip={() => void zip.exportZip()}
+              onRequestGithubExport={() => void publish.requestGithubExport()}
+              onOpenPublishSettings={() => void publish.openPublishSettings()}
+              canExport={zip.canExport}
               isExporting={isExporting}
-              isAuthenticated={exportFlow.isAuthenticated}
-              connectedRepo={exportFlow.connectedRepo}
+              isAuthenticated={publish.isAuthenticated}
+              connectedRepo={connectedRepo}
             />
             <button
               type="button"
@@ -146,20 +144,17 @@ export function Header({
         </div>
       </header>
 
-      <ExportStatusStrip
-        state={exportFlow.state}
-        onDismiss={exportFlow.dismissStatus}
-      />
+      <ExportStatusStrip state={zip.state} onDismiss={zip.dismissStatus} />
 
       <ExportDialog
         key={activeWorkspace?.name ?? ""}
-        open={isGithubExportActive(s) && s.kind !== "settings-open"}
+        open={isPublishDialogOpen(s)}
         phase={dialogPhase}
-        onClose={exportFlow.closeDialog}
-        onSubmit={exportFlow.submitGithubExport}
-        onRetry={() => void exportFlow.retryGithubExport()}
-        onBackToForm={exportFlow.showGithubDialog}
-        onReconnect={() => exportFlow.reconnectGithub()}
+        onClose={publish.closeDialog}
+        onSubmit={publish.submitGithubExport}
+        onRetry={() => void publish.retryGithubExport()}
+        onBackToForm={publish.showGithubDialog}
+        onReconnect={() => publish.reconnectGithub()}
         initialRepoName={activeWorkspace?.name ?? ""}
         error={dialogError}
         errorCode={dialogErrorCode}
@@ -173,8 +168,8 @@ export function Header({
         defaultMessage={s.kind === "settings-open" ? s.defaultMessage : ""}
         defaultRemember={s.kind === "settings-open" ? s.defaultRemember : false}
         hasEditorEdits={s.kind === "settings-open" ? s.hasEditorEdits : false}
-        onClose={exportFlow.closeDialog}
-        onSubmit={(p) => void exportFlow.submitPublishSettings(p)}
+        onClose={publish.closeDialog}
+        onSubmit={(p) => void publish.submitPublishSettings(p)}
       />
     </div>
   );

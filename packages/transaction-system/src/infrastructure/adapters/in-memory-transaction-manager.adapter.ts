@@ -14,6 +14,27 @@ import type { SpeculativeStateMachinePort } from "../../application/ports/out/sp
 import type { SemanticCachePort } from "../../application/ports/out/semantic-cache.port.js";
 
 /**
+ * A transaction that has reached `committed`, `rolled_back` or `failed` is
+ * FINAL. `commit()`/`rollback()` refuse to re-write it and return `null`.
+ *
+ * Without this, the accept and reject sagas both read `speculative`, both do
+ * their (awaited) filesystem work, and both then wrote a terminal status
+ * unconditionally — last write wins. The resulting status could contradict the
+ * manifest on disk: a `committed` transaction whose manifest had been restored,
+ * or a `rolled_back` one whose patches were still applied. Refusing the second
+ * terminal write makes the loser detectable, which is what lets the sagas
+ * reconcile the manifest with the status that actually stuck.
+ *
+ * It also releases the backpressure slot exactly once per transaction, instead
+ * of once per terminal call.
+ */
+function isTerminal(status: TransactionStatus): boolean {
+  return (
+    status === "committed" || status === "rolled_back" || status === "failed"
+  );
+}
+
+/**
  * In-memory Transaction Manager — stores transactions in a Map and
  * orchestrates backpressure control, speculative state, and semantic caching.
  */
@@ -111,6 +132,7 @@ export class InMemoryTransactionManager implements TransactionManagerPort {
   commit(transactionId: string): Transaction | null {
     const tx = this.transactions.get(transactionId);
     if (!tx) return null;
+    if (isTerminal(tx.status)) return null;
 
     if (this.speculativeStateMachine) {
       const snapshotId = tx.metadata.snapshotId as string | undefined;
@@ -132,6 +154,7 @@ export class InMemoryTransactionManager implements TransactionManagerPort {
   rollback(transactionId: string, _reason?: string): Transaction | null {
     const tx = this.transactions.get(transactionId);
     if (!tx) return null;
+    if (isTerminal(tx.status)) return null;
 
     if (this.speculativeStateMachine) {
       const snapshotId = tx.metadata.snapshotId as string | undefined;

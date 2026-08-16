@@ -50,6 +50,24 @@ import {
 
 const logger = createConsoleLogger();
 
+// ─── Exit-code vocabulary ───────────────────────────────────────────────────
+//
+//   0  ran to completion, tree is compliant
+//   1  ran to completion, found violations NOT in the baseline
+//   2  COULD NOT RUN — nothing was checked, so trust nothing
+//
+// 2 exists because 1 used to mean both "found violations" and every fail-closed
+// abort in this file (no project root, missing/unloadable manifest, a config or
+// baseline that exists but will not parse). A caller that cannot tell those
+// apart cannot tell "the gate found problems" from "the gate never ran", which
+// is the same class of defect as reporting a pass you never verified. The
+// launcher at `bin/lint-arch.mjs` uses 2 for the same meaning when this file's
+// build output is missing entirely.
+//
+// The aborts themselves are unchanged and still non-zero, so anything that only
+// asks "did this succeed?" behaves exactly as before.
+const EXIT_COULD_NOT_RUN = 2;
+
 // ─── Dynamic Project Root Discovery ─────────────────────────────────────────
 
 function findProjectRoot(): string {
@@ -95,7 +113,7 @@ function findProjectRoot(): string {
   logger.error(
     "Please run this command from within a HexaGen project, or specify the root using --root <path> or the HEXAGEN_ROOT environment variable.",
   );
-  process.exit(1);
+  process.exit(EXIT_COULD_NOT_RUN);
 }
 
 const ROOT_DIR = findProjectRoot();
@@ -147,7 +165,7 @@ if (baselineArgIndex !== -1 && (!baselineArg || baselineArg.startsWith("-"))) {
   logger.error(
     "  Refusing to fall back to the default baseline: that would enforce against a different file than the one requested.",
   );
-  process.exit(1);
+  process.exit(EXIT_COULD_NOT_RUN);
 }
 const BASELINE_PATH = baselineArg
   ? path.resolve(ROOT_DIR, baselineArg)
@@ -161,7 +179,7 @@ if (!fs.existsSync(MANIFEST_PATH)) {
     `FATAL ERROR: Architecture manifest not found at ${MANIFEST_PATH}`,
   );
   logger.error("The linter requires a manifest to validate against. Aborting.");
-  process.exit(1);
+  process.exit(EXIT_COULD_NOT_RUN);
 }
 
 let manifest: Manifest;
@@ -175,7 +193,7 @@ try {
   if (error.message) {
     logger.error(`  ${error.message}`);
   }
-  process.exit(1);
+  process.exit(EXIT_COULD_NOT_RUN);
 }
 
 // ─── Dynamic Scope and Workspace Path ───────────────────────────────────────
@@ -232,7 +250,7 @@ function useOptionalConfig<T>(
       logger.error(
         "  Refusing to fall back to defaults: that would silently disable the rules this file declares and still report compliance.",
       );
-      process.exit(1);
+      process.exit(EXIT_COULD_NOT_RUN);
   }
 }
 
@@ -275,7 +293,7 @@ function loadBaseline(filePath: string): BaselineEntry[] {
     logger.error(
       "  Refusing to fall back: an unreadable baseline would silently change what the ratchet enforces.",
     );
-    process.exit(1);
+    process.exit(EXIT_COULD_NOT_RUN);
   }
 }
 
