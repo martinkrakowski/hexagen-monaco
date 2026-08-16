@@ -1,5 +1,18 @@
 import type { ProjectConfig } from "@hexagen/project-configuration";
-import { deriveWorkspaceName } from "@hexagen/manifest-generation";
+// Narrow subpath, not the package root barrel. `main` reached this function via
+// the root `@hexagen/manifest-generation` barrel from
+// `features/landing/domain/createBlankProjectConfig.ts`, whose only consumer was
+// the landing "Start Blank" stream. Unifying that preset with `emptyFormValues`
+// here put the import in front of ~15 wizard-side readers
+// (`useWizardForm`, `useProjectLifecycle`, `analyzeManifestCompleteness`,
+// `genesisProjectSettingsStore`, the `app/projects/new/name` route) that
+// previously had NO manifest-generation coupling at all. The root barrel
+// re-exports the client/server generation use-cases and the YAML view parser, so
+// it transitively drags `js-yaml` and `@hexagen/agentic-interaction` in behind a
+// 25-line pure string slugifier — and the package declares no `sideEffects: false`,
+// so a bundler cannot prove those re-exports away. The subpath below is a
+// first-class entry in the package's `exports` map and pulls the leaf module only.
+import { deriveWorkspaceName } from "@hexagen/manifest-generation/domain/value-objects/workspace-name-deriver";
 
 /**
  * The single default `ProjectConfig` preset every "new project" entry point
