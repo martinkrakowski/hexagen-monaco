@@ -112,6 +112,18 @@ Modify `useProjectLifecycle.handleDiscardAndNew()`:
 
 This ordering prevents race condition where new project initializes before old project data is purged.
 
+> **Amended 2026-08-15 (plan item 5.3(c), ADR-0051 §Consequences).** §1.3's
+> "Subscribes to `ProjectDiscarded` event via EventBus" and §1.4's implied
+> subscriber-driven cleanup no longer describe the code. `ProjectDiscarded` is
+> now **announcement-only** and has no subscribers; the purge cascade is owned
+> by the `discardProject` use case
+> (`apps/web/app/lib/use-cases/project-lifecycle.use-case.ts`), which publishes
+> the event and then awaits the purge. The subscriber lived in the client
+> composition root and `discardProject` also purged inline, so every discard
+> purged chat persistence twice — the subscriber was removed rather than the
+> inline purge. The §1.4 ordering guarantee is unchanged and now enforced
+> inside `discardProject`. Do not reintroduce a purging subscriber.
+
 ### 1.5 Hydration Guard
 
 **Rationale**: Reject stale drafts that survive purge race
