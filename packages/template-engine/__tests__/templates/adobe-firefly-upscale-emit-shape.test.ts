@@ -139,7 +139,10 @@ describe("adobe-firefly-upscale template — emit shape", () => {
     // a misconfigured env / bad req.factor must not reach the API as NaN/0
     assert.ok(adapter.includes("isValidFactor"));
     assert.ok(adapter.includes("Number.isFinite"));
-    assert.ok(adapter.includes("FireflyValidationError"));
+    // …and fails with the port's own failure type, not the vendor class: this
+    // branch returns before the try/catch, so nothing maps it (ADR-0053 §1).
+    assert.match(adapter, /new CreativeServiceError\(\s*"invalid-request"/);
+    assert.ok(!adapter.includes("FireflyValidationError"));
     const env = await read(root, ".env.adobe-upscale.example");
     assert.ok(env.includes("ADOBE_UPSCALE_FACTOR=2"));
   });

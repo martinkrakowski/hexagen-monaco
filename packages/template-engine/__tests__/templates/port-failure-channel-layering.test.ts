@@ -218,6 +218,56 @@ describe("emitted templates — ports own their failure channel (ADR-0053)", () 
     }
   });
 
+  it("emits no err(...) carrying anything but the port's own failure type", async () => {
+    // The mapping assertion above only proves `toCreativeServiceError` is CALLED
+    // somewhere in the file — it says nothing about the branches that never reach
+    // the `catch`. A pre-validation early return (`err(new FireflyValidationError(…))`
+    // before the `try`) satisfied every arm above while still emitting a vendor
+    // class through a port typed `Result<T, CreativeServiceError>`: a compile
+    // error in the generated project and the exact leak ADR-0053 §1 forbids.
+    // So check the argument of EVERY `err(` in a port-typed adapter, not just the
+    // catch path.
+    const ALLOWED = new Set(["CreativeServiceError", "toCreativeServiceError"]);
+    const files = await allFiles();
+    const adapters = [...files.entries()].filter(
+      ([key, content]) =>
+        /::src\/infrastructure\//.test(key) &&
+        /Result<[^>]*CreativeServiceError>/.test(content),
+    );
+    assert.ok(adapters.length > 0, "expected port-typed adapters to emit");
+
+    const leaks: string[] = [];
+    let inspected = 0;
+    for (const [key, content] of adapters) {
+      // `\s*` spans newlines, so the multi-line `err(\n  new X(…)` form is covered.
+      for (const match of content.matchAll(
+        /\berr\(\s*(new\s+)?([A-Za-z_$][\w$]*)/g,
+      )) {
+        inspected += 1;
+        const identifier = match[2];
+        if (!ALLOWED.has(identifier)) {
+          leaks.push(`${key} → err(${match[1] ?? ""}${identifier}…)`);
+        }
+      }
+    }
+
+    assert.deepStrictEqual(
+      leaks,
+      [],
+      "ADR-0053 §1: every failure a port-typed adapter returns must already be a " +
+        "CreativeServiceError — construct one directly for client-side validation, " +
+        "or map the vendor error with toCreativeServiceError(). A validation branch " +
+        "that returns a vendor class bypasses the boundary mapping:\n" +
+        leaks.join("\n"),
+    );
+    // Anti-stub: a materializer emitting nothing, or a regex that matches
+    // nothing, would also report zero leaks.
+    assert.ok(
+      inspected >= 40,
+      `expected >= 40 inspected err(…) call sites, saw ${inspected}`,
+    );
+  });
+
   it("declares AgentRuntimePort outside the infrastructure layer", async () => {
     const files = await allFiles();
     // Deduplicated by emitted path: one template declares the port, but every

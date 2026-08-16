@@ -7,7 +7,6 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import { FireflyValidationError } from "../errors/firefly-errors";
 import { toCreativeServiceError } from "../errors/to-creative-service-error";
 import { CreativeServiceError } from "../../../domain/errors/creative-service-error";
 import { ok, err, type Result } from "../../../shared/result";
@@ -43,10 +42,13 @@ function resolveCandidates(raw: string | undefined): number {
 export class FireflyCompositeAdapter implements CompositePort {
   async composite(req: CompositeRequest): Promise<Result<string[], CreativeServiceError>> {
     // Validate the caller's count up front (the env default is already validated)
-    // rather than letting an out-of-range value reach the API as a 400.
+    // rather than letting an out-of-range value reach the API as a 400. This
+    // returns the port's own failure type directly: the request never reached the
+    // vendor, so there is no vendor error to map (ADR-0053 §1).
     if (req.numVariations !== undefined && !isValidCandidates(req.numVariations)) {
       return err(
-        new FireflyValidationError(
+        new CreativeServiceError(
+          "invalid-request",
           `Invalid candidate count ${JSON.stringify(req.numVariations)} — must be an integer between 1 and 10.`,
         ),
       );

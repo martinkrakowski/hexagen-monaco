@@ -7,7 +7,6 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import { FireflyValidationError } from "../errors/firefly-errors";
 import { toCreativeServiceError } from "../errors/to-creative-service-error";
 import { CreativeServiceError } from "../../../domain/errors/creative-service-error";
 import { ok, err, type Result } from "../../../shared/result";
@@ -43,8 +42,13 @@ export class FireflyUpscaleAdapter implements UpscalePort {
     const factor = req.factor ?? DEFAULT_FACTOR;
     if (!isValidFactor(factor)) {
       // Don't send NaN/0/negative to the API — fail fast with a config error.
+      // The request never reached the vendor, so the port's own failure type is
+      // returned directly rather than mapped from one (ADR-0053 §1).
       return err(
-        new FireflyValidationError(`Invalid upscale factor ${JSON.stringify(req.factor)} — must be a positive number.`),
+        new CreativeServiceError(
+          "invalid-request",
+          `Invalid upscale factor ${JSON.stringify(req.factor)} — must be a positive number.`,
+        ),
       );
     }
 

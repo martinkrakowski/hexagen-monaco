@@ -150,6 +150,10 @@ describe("adobe-firefly-composite template — emit shape", () => {
     // the caller's count is validated too (fail fast, not a downstream 400)
     assert.ok(adapter.includes("isValidCandidates(req.numVariations)"));
     assert.ok(adapter.includes("Invalid candidate count"));
+    // …and fails with the port's own failure type, not the vendor class: this
+    // branch returns before the try/catch, so nothing maps it (ADR-0053 §1).
+    assert.match(adapter, /new CreativeServiceError\(\s*"invalid-request"/);
+    assert.ok(!adapter.includes("FireflyValidationError"));
     assert.ok(adapter.includes('Number("2")'));
     assert.ok(!adapter.includes("{default_candidates}"));
     const env = await read(root, ".env.adobe-composite.example");

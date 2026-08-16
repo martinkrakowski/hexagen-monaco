@@ -143,7 +143,10 @@ describe("adobe-illustrator template — emit shape", () => {
     );
     // scaleVector fails fast when no dimension is supplied (guaranteed API 400)
     assert.ok(adapter.includes("scaleVector requires at least one"));
-    assert.ok(adapter.includes("FireflyValidationError"));
+    // …with the port's own failure type: this branch returns before the
+    // try/catch, so no boundary mapping runs on it (ADR-0053 §1).
+    assert.match(adapter, /new CreativeServiceError\(\s*"invalid-request"/);
+    assert.ok(!adapter.includes("FireflyValidationError"));
   });
 
   it("validates the format env and interpolates the defaults", async () => {

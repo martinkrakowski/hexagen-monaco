@@ -10,7 +10,6 @@ import { fireflyClient } from "../http/firefly-client";
 import { jobPort } from "../jobs/job-port";
 import { toJobHandle } from "../jobs/job-result";
 import { getStoragePresigner } from "../storage/passthrough-storage.adapter";
-import { FireflyValidationError } from "../errors/firefly-errors";
 import { toCreativeServiceError } from "../errors/to-creative-service-error";
 import { CreativeServiceError } from "../../../domain/errors/creative-service-error";
 import { ok, err, type Result } from "../../../shared/result";
@@ -69,10 +68,15 @@ export class IllustratorAdapter implements IllustratorPort {
 
   async scaleVector(req: ScaleVectorRequest): Promise<Result<string, CreativeServiceError>> {
     // Fail fast on an empty target: the API rejects scaling with no dimensions,
-    // so surface a clear validation error rather than a downstream 400.
+    // so surface a clear validation error rather than a downstream 400. The
+    // request never reached the vendor, so the port's own failure type is
+    // returned directly rather than mapped from one (ADR-0053 §1).
     if (req.scale === undefined && req.width === undefined && req.height === undefined) {
       return err(
-        new FireflyValidationError("scaleVector requires at least one of scale, width, or height."),
+        new CreativeServiceError(
+          "invalid-request",
+          "scaleVector requires at least one of scale, width, or height.",
+        ),
       );
     }
     return this.run(async () => {
