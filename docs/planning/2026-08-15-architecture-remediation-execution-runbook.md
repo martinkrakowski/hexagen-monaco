@@ -46,11 +46,23 @@ Jest residue, `engines.node`, ts-morph alignment, `Error.cause`, and HEX-038.
 
 **Nothing in Phases 2–4 is blocked on engineering. What remains is blocked on decisions:**
 
-| Item                          | Blocked on                                | Note                                                                                                                    |
-| ----------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| **4.7**                       | **D6** — sync publish-surface semver      | release-gated                                                                                                           |
-| ~~**3.3 MOD-005 leg**~~       | ~~**ADR-0049** branch selection~~         | ✅ **Dissolved** — ADR-0049 accepted as **Option B**; `packages/security` deleted, so there is no tsconfig to reconcile |
-| 11 of the 16 baseline entries | **`zod` in domain** — accept or burn down | baselined, not allowlisted; ADR-0054 seeds only js-yaml/manifest                                                        |
+| Item                          | Blocked on                                  | Note                                                                                                                    |
+| ----------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **4.7**                       | **D6** — sync publish-surface semver        | release-gated                                                                                                           |
+| ~~**3.3 MOD-005 leg**~~       | ~~**ADR-0049** branch selection~~           | ✅ **Dissolved** — ADR-0049 accepted as **Option B**; `packages/security` deleted, so there is no tsconfig to reconcile |
+| **8.11**                      | ~~**D4** — coverage posture~~ **unblocked** | **no decision left.** See the 8.11 leg breakdown below                                                                  |
+| 11 of the 16 baseline entries | **`zod` in domain** — accept or burn down   | baselined, not allowlisted; ADR-0054 seeds only js-yaml/manifest                                                        |
+
+**8.11, leg by leg** — the item has three, and none is decision-blocked as of 2026-08-16:
+
+| 8.11 leg                                   | State                                                                                                        |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| coverage posture                           | ✅ **decided — no gate** (D4, §2); a deferral with a re-open trigger                                          |
+| replace the `apps/api-gateway` `echo` stub | ✅ **dissolved** — 4.5 deleted the package (D3 resolved as delete), so there is no stub left to replace       |
+| missing `test` targets                     | ⏳ **open engineering**, not a decision — `shared`, `model-settings`, `runtime`; the only remaining 8.11 work |
+
+Measured on this branch: of the 38 workspaces, **35 define a real `test` script** and exactly
+those three define none. `apps/tui` has one (`vitest run`); `llm-driver` was done in 3.5.
 
 **Release gates pending** (repo PRs landed; nothing published, tagged or deployed): #457
 (`engines.node` floor), #459 (three new arch-linter rule classes + empty-by-default
@@ -78,7 +90,8 @@ this arc kept surfacing. Tracked in
 - **`RefactoringImpactUseCase` discards syntactic diagnostics entirely**, so an unparseable
   consumer file yields a confident, wrong impact report. #466 fixed the compiler version that
   exposed this; it did not fix the class.
-- **`typecheck:test` covers 15 of 39 workspaces** (40 before `api-gateway` was deleted). Real today, and it widens automatically as
+- **`typecheck:test` covers 15 of 38 workspaces** (40 before `api-gateway` and `security` were
+  deleted; re-counted 2026-08-16). Real today, and it widens automatically as
   workspaces gain the script — `apps/web` alone is ~1200 never-type-checked fixtures.
 
 ### Cross-phase gating (the hard constraints)
@@ -94,14 +107,14 @@ this arc kept surfacing. Tracked in
 
 ## 2. Decision & release gate ledger
 
-| Gate   | Question                    | Blocks   | Status                                                               |
-| ------ | --------------------------- | -------- | -------------------------------------------------------------------- |
-| **D1** | modify-family gate          | 1.3      | ✅ Resolved — same-origin + rate limit (shipped in #443)             |
-| **D2** | BYOK persistence backend    | 1.4      | ✅ Resolved — better-sqlite3, volume-backed (shipped in #442)        |
-| **D3** | api-gateway delete-vs-wire  | **4.5**  | ✅ **Resolved — delete** (dossier §1.1); 4.5 prepared, gates Phase 8 |
-| **D4** | coverage posture            | **8.11** | ⛔ **Open**                                                          |
-| **D5** | TypeScript 6 upgrade        | none     | ⛔ Open — 3.1 deletes the pin regardless; upgrade is its own arc     |
-| **D6** | sync publish-surface semver | **4.7**  | ⛔ **Open** — release-gated                                          |
+| Gate   | Question                    | Blocks   | Status                                                                         |
+| ------ | --------------------------- | -------- | ------------------------------------------------------------------------------ |
+| **D1** | modify-family gate          | 1.3      | ✅ Resolved — same-origin + rate limit (shipped in #443)                       |
+| **D2** | BYOK persistence backend    | 1.4      | ✅ Resolved — better-sqlite3, volume-backed (shipped in #442)                  |
+| **D3** | api-gateway delete-vs-wire  | **4.5**  | ✅ **Resolved — delete** (dossier §1.1); 4.5 landed, Phase 8 ungated           |
+| **D4** | coverage posture            | **8.11** | ✅ **Resolved — no coverage gate.** Deferral with a re-open trigger; see below |
+| **D5** | TypeScript 6 upgrade        | none     | ⛔ Open — 3.1 deletes the pin regardless; upgrade is its own arc               |
+| **D6** | sync publish-surface semver | **4.7**  | ⛔ **Open** — release-gated                                                    |
 
 _ADR 0.3 (security bounded-context fate) ~~independently gates 6.6 and the conditional
 MOD-005 leg of 3.3~~ is **resolved**: **ADR-0049 accepted as Option B** (amended
@@ -113,6 +126,72 @@ superseded — the value objects were deleted outright rather than moved into
 `@hexagen/governance`, since moving zero-consumer code into a registered context would
 hand the Wave-2 ratchet unused types to police. Reasoning:
 `docs/planning/2026-08-16-decision-dossier-and-remediation-followups.md` §1.2._
+
+### D4 — coverage posture: **no gate.** A deferral, not a rejection
+
+**Decided 2026-08-16.** Dossier §1.4 of
+`docs/planning/2026-08-16-decision-dossier-and-remediation-followups.md` carries the full
+argument; this is the ledger entry. **No ADR** — a deferral belongs in the ledger, and an
+ADR would claim more permanence than the decision has.
+
+**Why not now.** Coverage instruments _the files the runner loads_. Workspaces with no tests
+load nothing, so they contribute nothing to the denominator: **the metric rises as the gap
+worsens.** Verified by counting the tree rather than copied forward — `packages/shared` (50
+source files), `packages/model-settings` (15) and `packages/runtime` (9) carry **no `test`
+script and zero test files**. Source counts are `.ts` **and** `.tsx` under `src/`;
+`model-settings` is 7 `.ts` plus 8 `.tsx` React components, which is why a `*.ts`-only count
+reads 7 and understates it. Of the 38 workspaces, **35 define a real `test` script** and
+exactly those three define none.
+
+A fourth case existed when this was decided and has since been removed: `apps/api-gateway`'s
+`test` script was the literal stub `echo "No tests configured"`, which `turbo test` counts as
+a pass. **4.5 deleted the workspace** (D3, below), so the stub is gone — but the shape it
+demonstrated is the reason the re-open trigger and the check sketch below both insist on
+rejecting a target that satisfies the runner without doing the work.
+
+A number that improves when `packages/shared` stays untested is not a check whose scope is
+visible in its output — and that is this arc's own thesis, so adopting one here would be
+self-refuting.
+
+Independently, item **8.10 deletes 24 mock-testing suites**. Any baseline taken before that
+lands is invalidated by the arc's own work, and until it lands the number **rewards keeping
+the suites the audit called fabricated**.
+
+**Shipped instead** (the honesty half — a dead gate is worse than no gate): the root
+`coverage` script (`c8 --lines 80 --functions 80 --branches 80 --statements 80 turbo test`)
+and the `c8` devDependency are deleted — nothing in any script, workflow or doc invoked
+them, and no `.c8rc` / `.nycrc` / Vitest coverage config has ever existed. `README.md`'s
+`yarn test --coverage` is gone: `yarn test` is `turbo test`, and Turbo **rejects** unknown
+flags (`unexpected argument '--coverage' found`) rather than forwarding them, so the line
+failed before Vitest ever saw it — and there was no provider for Vitest to use either. Its
+sibling `yarn test --watch` failed identically and was replaced in the same edit.
+
+**Re-open trigger — all three must hold:**
+
+1. **8.10's mock-suite purge has landed**, so a baseline survives the arc's own deletions;
+2. **FU-1 has brought `typecheck:test` to every workspace that has tests**
+   (`docs/planning/2026-08-16-verification-coverage-followups.md`; 15 of 38 today);
+3. **every workspace with source has a real `test` target** — a target that runs Vitest, not
+   `echo "No tests configured"`.
+
+**When re-opened, copy `scripts/check-lint-coverage.mjs`'s shape.** That script is the
+in-repo precedent for making a gate's scope visible, and its three moves transfer directly:
+
+- **Enumerate from `package.json`'s `workspaces` globs and assert the skip set is _exactly_ a
+  named constant** (`UNLINTED` there; the coverage equivalent is the set of workspaces
+  outside the denominator). Drift in **either** direction fails: an undeclared skip **and** a
+  stale entry that has since gained the script both exit 1, so the exemption list cannot rot
+  into a permanent excuse.
+- **Reject targets that satisfy the runner without doing the work.** `invokesEslint()` exists
+  because `"lint": "echo ok"` passes `turbo run lint`; the coverage check needs the same
+  guard against `echo "No tests configured"`.
+- **Print the number before enforcing it** — `Lint coverage: N/M workspaces …` on every run,
+  and `exit 2` (not 1) when the check _cannot_ run, so "could not measure" never reads as
+  "measured, and it was fine".
+
+Order matters: **land the report, watch it for a wave, then set a threshold.** A percentage
+whose denominator is not asserted is the failure class this arc has spent eight phases
+removing.
 
 ### D3 — decision record (2026-08-16): delete `apps/api-gateway`
 
@@ -253,7 +332,10 @@ plans so each phase fires the moment its gate clears:
   and the web classifier). Re-exports kept one release; no-behavior-change contract.
 - **Phase 8** — web/React splits + real contract tests (echo-fake purge). Many items
   independent (8.3/8.4/8.6–8.9); 8.12 is one small PR each (a–h). web vitest runs from
-  `apps/web` cwd; 8.11's coverage posture is blocked by D4.
+  `apps/web` cwd. 8.11's coverage posture is **no longer blocked** — D4 resolved as **no
+  coverage gate** (§2, a deferral with a re-open trigger), and 4.5 dissolved the api-gateway
+  stub leg; what remains of 8.11 is engineering, not a decision: real `test` targets for
+  `shared`, `model-settings` and `runtime`.
 
 ---
 
@@ -273,6 +355,17 @@ plans so each phase fires the moment its gate clears:
 ---
 
 ## 8. Change log
+
+- **2026-08-16 (latest)** — **D4 resolved: no coverage gate** (§2). A deferral with a
+  three-condition re-open trigger, recorded in the ledger rather than an ADR. The dead root
+  `c8` script and its devDependency were deleted (nothing invoked them; no coverage config
+  has ever existed in this repo), and `README.md`'s `yarn test --coverage` — which fails at
+  Turbo's argument parser, before Vitest is even reached — was replaced with the
+  per-workspace forms that work. The no-tests claim was re-verified by counting the tree:
+  of 38 workspaces, 35 define a real `test` script and `shared`, `model-settings` and
+  `runtime` define none. The fourth case at decision time, `apps/api-gateway`'s passing
+  `echo` stub, was removed by 4.5 in the interval. **8.11 is no longer decision-blocked** —
+  its remaining work is the three missing test targets.
 
 - **2026-08-16 (later)** — **D3 resolved as delete; item 4.5 prepared.** `apps/api-gateway`
   and its `.architecture` app file are gone, together with the root `dev:api` script, the
