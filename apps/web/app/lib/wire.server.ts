@@ -46,7 +46,6 @@ import type {
 } from "@hexagen/agentic-interaction";
 import type { LocalLLMProviderPort } from "@hexagen/local-llm";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm";
-import type { DomainModelId } from "@hexagen/local-llm";
 import type { ArchitectureGraphLike } from "@hexagen/prompt-compiler";
 import type { LinterReportLike } from "@hexagen/core-domain";
 import {
@@ -370,14 +369,20 @@ export const createWebLLMAdapter = async (
   defaultModelId?: string,
 ): Promise<(LocalLLMProviderPort & SendStructuredRequestPort) | null> => {
   try {
-    const { WebLLMAdapter } = await import("@hexagen/local-llm");
+    const { WebLLMAdapter, isDomainModelId } =
+      await import("@hexagen/local-llm");
     return new WebLLMAdapter({
-      // `DomainModelId` is a string-literal union and the id arrives from an
-      // HTTP body, so this is the boundary conversion — the same one the route
-      // did inline. An absent/unknown id leaves the adapter on its own default.
-      defaultModelId: (defaultModelId || undefined) as
-        | DomainModelId
-        | undefined,
+      // The id arrives from an HTTP body, so this is the boundary conversion.
+      // `DomainModelId` is a runtime string ENUM, not a string-literal union, so
+      // a cast checked nothing: the route's inline version stored any non-empty
+      // string and `initialize()` then failed with `Unknown model ID: ...`
+      // instead of applying the adapter's own default. `isDomainModelId` is the
+      // package's own guard, taken off the SAME dynamic import — a static value
+      // import of it would pull the WebLLM bundle into every server path's
+      // module graph and defeat the lazy load this factory exists to preserve.
+      defaultModelId: isDomainModelId(defaultModelId)
+        ? defaultModelId
+        : undefined,
     });
   } catch (error) {
     logger.warn("WebLLM adapter initialization failed:", { error });

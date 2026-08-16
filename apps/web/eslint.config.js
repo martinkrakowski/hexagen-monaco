@@ -149,6 +149,13 @@ export default [
         {
           paths: [
             {
+              // Subsumed TODAY by the `@hexagen/local-llm` pattern below, which
+              // bans the package outright. Kept anyway: that pattern enforces
+              // HEX-003 (adapter construction belongs to wire.server) and this
+              // entry enforces ADR-0021 (two @internal names). Different rules,
+              // different owners, different reasons to change — dropping this
+              // one would make the family's ADR-0021 standing depend on an
+              // unrelated rule staying maximally broad.
               name: "@hexagen/local-llm",
               importNames: ["LLMMessage", "LocalLLMProviderPort"],
               allowTypeImports: true,
@@ -167,6 +174,18 @@ export default [
               allowTypeImports: true,
               message:
                 "Adapters are composed in app/lib/wire.server.ts, not in a route (HEX-003). Import the use case here and take its collaborators from a wire.server factory.",
+            },
+            {
+              // The pattern below fences `@hexagen/project-configuration/server`,
+              // which is where `mergeSplitManifest` is exported from today. Name
+              // it on the package ROOT as well so the ratchet survives a future
+              // re-export from the root barrel — a barrel change must not
+              // silently hand these handlers the manifest loader back.
+              name: "@hexagen/project-configuration",
+              importNames: ["mergeSplitManifest"],
+              allowTypeImports: true,
+              message:
+                "Workspace discovery and manifest merging belong to a wire.server-provided adapter, not to an HTTP handler (HEX-034). Use getMergedManifestProvider().",
             },
           ],
           patterns: [

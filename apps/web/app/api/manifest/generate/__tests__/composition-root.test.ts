@@ -154,7 +154,7 @@ function ctorArgsFor(name: string): unknown[] {
 }
 
 test("/api/manifest/generate takes both the LLM port and the transaction manager from wire.server", async () => {
-  const { POST } = await import("../route.ts");
+  const { POST } = await import("../route");
   const res = await POST(
     post("/api/manifest/generate", "10.61.0.1", {
       description: "an online shop with billing and shipping",
@@ -171,7 +171,7 @@ test("/api/manifest/generate takes both the LLM port and the transaction manager
 });
 
 test("/api/manifest/generate/local takes both from wire.server too", async () => {
-  const { POST } = await import("../local/route.ts");
+  const { POST } = await import("../local/route");
   const res = await POST(
     post("/api/manifest/generate/local", "10.61.0.2", {
       description: "an online shop with billing and shipping",
@@ -188,7 +188,7 @@ test("/api/manifest/generate/local takes both from wire.server too", async () =>
 });
 
 test("/api/manifest/generate/stage takes its transaction manager from wire.server", async () => {
-  const { POST } = await import("../stage/route.ts");
+  const { POST } = await import("../stage/route");
   const res = await POST(
     post("/api/manifest/generate/stage", "10.61.0.3", {
       description: "an online shop with billing and shipping",
@@ -203,7 +203,7 @@ test("/api/manifest/generate/stage takes its transaction manager from wire.serve
 });
 
 test("/api/manifest/generate/spec takes its transaction manager from wire.server", async () => {
-  const { POST } = await import("../spec/route.ts");
+  const { POST } = await import("../spec/route");
   const res = await POST(
     post("/api/manifest/generate/spec", "10.61.0.4", { config: "{}" }),
   );
@@ -234,35 +234,35 @@ const FAMILY: Array<{
 }> = [
   {
     label: "generate",
-    load: () => import("../route.ts"),
+    load: () => import("../route"),
     path: "/api/manifest/generate",
     body: { description: DESCRIPTION },
     n: 1,
   },
   {
     label: "generate/local",
-    load: () => import("../local/route.ts"),
+    load: () => import("../local/route"),
     path: "/api/manifest/generate/local",
     body: { description: DESCRIPTION },
     n: 2,
   },
   {
     label: "generate/stage",
-    load: () => import("../stage/route.ts"),
+    load: () => import("../stage/route"),
     path: "/api/manifest/generate/stage",
     body: { description: DESCRIPTION },
     n: 3,
   },
   {
     label: "generate/spec",
-    load: () => import("../spec/route.ts"),
+    load: () => import("../spec/route"),
     path: "/api/manifest/generate/spec",
     body: { config: "{}" },
     n: 4,
   },
   {
     label: "generate/spec/convert",
-    load: () => import("../spec/convert/route.ts"),
+    load: () => import("../spec/convert/route"),
     path: "/api/manifest/generate/spec/convert",
     body: { looseSpec: "a shop with billing" },
     n: 5,

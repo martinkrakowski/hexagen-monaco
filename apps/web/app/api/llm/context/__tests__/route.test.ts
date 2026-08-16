@@ -56,10 +56,13 @@ afterEach(() => {
 
 test("projects the manifest the composition root returned, not one read off disk", async () => {
   wire.getMergedManifest.mockResolvedValue(FIXTURE);
-  const { GET } = await import("../route.ts");
+  const { GET } = await import("../route");
 
   const res = await GET();
   expect(res.status).toBe(200);
+  // The cache header is part of the route's observable contract, and it is
+  // asymmetric with the degraded path below on purpose.
+  expect(res.headers.get("cache-control")).toBe("public, max-age=3600");
   const payload = await res.json();
 
   expect(payload.system).toBe("fixture-system");
@@ -80,12 +83,39 @@ test("projects the manifest the composition root returned, not one read off disk
   );
 });
 
+test("bounded-context types follow the canonical vocabulary, not a hand-written subset", async () => {
+  // `generic` is a canonical BOUNDED_CONTEXT_TYPES value that `mergeSplitManifest`
+  // accepts, so it must reach the assistant verbatim — collapsing it to
+  // "supporting" would tell the model the wrong thing about the architecture.
+  // `nonsense` never survives the loader's enum; the projection still refuses to
+  // emit it, because callers can hand it a manifest the loader never saw.
+  wire.getMergedManifest.mockResolvedValue({
+    system: "s",
+    bounded_contexts: [
+      { name: "reporting", type: "generic" },
+      { name: "junk", type: "nonsense" },
+      { name: "unspecified" },
+    ],
+  } as unknown as Manifest);
+  const { GET } = await import("../route");
+
+  const payload = await (await GET()).json();
+  expect(payload.boundedContexts).toEqual([
+    { name: "reporting", type: "generic" },
+    { name: "junk", type: "supporting" },
+    { name: "unspecified", type: "supporting" },
+  ]);
+});
+
 test("an unavailable manifest degrades to the empty payload with 200", async () => {
   wire.getMergedManifest.mockResolvedValue(null);
-  const { GET } = await import("../route.ts");
+  const { GET } = await import("../route");
 
   const res = await GET();
   expect(res.status).toBe(200);
+  // A degraded payload must NOT inherit the hour-long cache: a shared cache
+  // would pin the empty context for an hour past the manifest coming back.
+  expect(res.headers.get("cache-control")).not.toBe("public, max-age=3600");
   const payload = await res.json();
   expect(payload.system).toBe("");
   expect(payload.boundedContexts).toEqual([]);
@@ -94,7 +124,7 @@ test("an unavailable manifest degrades to the empty payload with 200", async () 
 
 test("a provider that throws is a 500, not a silently-empty payload", async () => {
   wire.getMergedManifest.mockRejectedValue(new Error("disk on fire"));
-  const { GET } = await import("../route.ts");
+  const { GET } = await import("../route");
 
   const res = await GET();
   expect(res.status).toBe(500);
