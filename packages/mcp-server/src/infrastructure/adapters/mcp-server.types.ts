@@ -25,7 +25,21 @@ import type { GenerateTopologyToolUseCase } from "../../application/use-cases/ge
 import type { GenerateAdaptersToolUseCase } from "../../application/use-cases/generate-adapters-tool.use-case.js";
 import type { GenerateManifestPipelineToolUseCase } from "../../application/use-cases/generate-manifest-pipeline-tool.use-case.js";
 
-export interface MCPServerAdapterDependencies {
+/**
+ * The manifest-structure tool family (remediation item 6.5(a) / HEX-019):
+ * create + remove context/port/adapter, add-dependency, diff-manifest.
+ */
+export interface ManifestStructureToolDependencies {
+  addDependencyToolUseCase: AddDependencyToolUseCase;
+  createPortToolUseCase: CreatePortToolUseCase;
+  createAdapterToolUseCase: CreateAdapterToolUseCase;
+  removePortToolUseCase: RemovePortToolUseCase;
+  removeContextToolUseCase: RemoveContextToolUseCase;
+  createContextToolUseCase: CreateContextToolUseCase;
+  diffManifestToolUseCase: DiffManifestToolUseCase;
+}
+
+export interface MCPServerAdapterDependencies extends ManifestStructureToolDependencies {
   getManifestResourceUseCase: GetManifestResourceUseCase;
   getGraphResourceUseCase: GetGraphResourceUseCase;
   getLinterReportResourceUseCase: GetLinterReportResourceUseCase;
