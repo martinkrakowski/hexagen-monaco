@@ -18,10 +18,20 @@ export interface TemplateBundle {
 }
 
 /**
- * Reserved framework namespace under `templates/`: directories whose name starts
- * with `__` (today only `__example__`, the engine's end-to-end fixture) are
- * deliberately not shipped, even though they carry a valid manifest.json.
+ * Templates that are deliberately not shipped: real templates, carrying a real
+ * manifest.json, that exist for the engine's own tests. Today that is only
+ * `__example__`, the end-to-end fixture.
+ *
+ * This is a **closed set of names, not a `__` prefix rule.** A prefix rule is an
+ * open-ended skip list wearing a namespace costume: any directory could opt out
+ * of every check in this file just by being named `__something`, and since
+ * `templates/` is copied verbatim into the published CLI, opting out of the
+ * check is opting into the tarball. Adding a fixture is therefore a deliberate
+ * edit here, visible in a diff, rather than a directory nobody reviews.
  */
+const RESERVED_TEMPLATE_DIRS: ReadonlySet<string> = new Set(["__example__"]);
+
+/** Names that *look* reserved, so the stray report can say why they are not. */
 const RESERVED_PREFIX = "__";
 
 /**
@@ -33,12 +43,24 @@ const RESERVED_PREFIX = "__";
  */
 const TEMPLATE_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-async function hasManifest(dir: string): Promise<boolean> {
+/**
+ * Whether `<dir>/manifest.json` is something `buildTemplateBundle` can actually
+ * read. `fs.stat` succeeds for a *directory* named `manifest.json`, so the
+ * regular-file check is what keeps discovery's contract ("a directory holding a
+ * manifest.json") true — without it the builder accepts the entry and then dies
+ * on `EISDIR` further downstream, naming a path instead of the mistake.
+ * Symlinks are followed deliberately: `readFile` follows them too, so the
+ * predicate models the read that will actually happen.
+ */
+async function manifestState(
+  dir: string,
+): Promise<"file" | "missing" | "not-a-file"> {
   try {
-    await fs.stat(path.join(dir, "manifest.json"));
-    return true;
+    const stats = await fs.stat(path.join(dir, "manifest.json"));
+    return stats.isFile() ? "file" : "not-a-file";
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    // A dangling symlink also lands here, and "missing" is the honest reading.
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return "missing";
     throw err; // permissions / IO faults must surface, not read as "not a template"
   }
 }
@@ -59,6 +81,11 @@ async function hasManifest(dir: string): Promise<boolean> {
  * Every enumeration of `templates/` must go through this function — the bundle
  * build and the template guard suite previously walked the same directory under
  * different rules, and that divergence is what let a stray directory through.
+ *
+ * Every directory is validated, including the reserved fixtures in
+ * {@link RESERVED_TEMPLATE_DIRS}: those are withheld from the returned ids
+ * *after* being checked, never exempted from the check. Nothing under
+ * `templates/` can escape the rule by how it is named.
  */
 export async function discoverTemplateIds(
   templatesDir: string = DEFAULT_TEMPLATES_DIR,
@@ -73,13 +100,28 @@ export async function discoverTemplateIds(
     // for a symlink to a directory — symlinks are not followed, matching the
     // lstat-based payload budget.
     if (!e.isDirectory()) continue;
-    if (e.name.startsWith(RESERVED_PREFIX)) continue;
 
-    if (!TEMPLATE_ID.test(e.name)) {
-      strays.push(`${e.name} — not a kebab-case template id`);
-    } else if (!(await hasManifest(path.join(templatesDir, e.name)))) {
+    // A reserved fixture is still a template and is still validated as one; it
+    // is simply withheld from the returned ids. Nothing gets to skip validation
+    // by how it is named — that is the hole this function exists to close.
+    const reserved = RESERVED_TEMPLATE_DIRS.has(e.name);
+
+    if (!reserved && !TEMPLATE_ID.test(e.name)) {
+      strays.push(
+        e.name.startsWith(RESERVED_PREFIX)
+          ? `${e.name} — reserved "${RESERVED_PREFIX}" prefix, but not one of the ` +
+              `known fixtures (${[...RESERVED_TEMPLATE_DIRS].join(", ")})`
+          : `${e.name} — not a kebab-case template id`,
+      );
+      continue;
+    }
+
+    const manifest = await manifestState(path.join(templatesDir, e.name));
+    if (manifest === "missing") {
       strays.push(`${e.name} — no manifest.json`);
-    } else {
+    } else if (manifest === "not-a-file") {
+      strays.push(`${e.name} — manifest.json is not a regular file`);
+    } else if (!reserved) {
       ids.push(e.name);
     }
   }
@@ -90,10 +132,12 @@ export async function discoverTemplateIds(
         strays.length === 1 ? "y" : "ies"
       } that ${strays.length === 1 ? "is" : "are"} not a template:\n  ` +
         strays.join("\n  ") +
-        `\nEverything under templates/ ships to customers. Add a manifest.json to make ` +
-        `it a template, rename it with the reserved "${RESERVED_PREFIX}" prefix if it is ` +
-        `a fixture, or move it out of templates/ (tooling and editor config belongs at ` +
-        `the repository root).`,
+        `\nEverything under templates/ ships to customers — the published CLI copies ` +
+        `this directory verbatim. Add a manifest.json to make it a template, or move ` +
+        `it out of templates/ (tooling and editor config belongs at the repository ` +
+        `root). A fixture that must live here but must not ship has to be named in ` +
+        `RESERVED_TEMPLATE_DIRS in build-template-bundle.ts; a "${RESERVED_PREFIX}" ` +
+        `prefix on its own exempts nothing.`,
     );
   }
 

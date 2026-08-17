@@ -104,11 +104,81 @@ describe("discoverTemplateIds", () => {
     });
   });
 
-  it("excludes the reserved __ namespace without failing", async () => {
+  it("excludes the named reserved fixture without failing", async () => {
     await template("rate-limiting");
     await template("__example__", "__example__");
 
     assert.deepStrictEqual(await discoverTemplateIds(dir), ["rate-limiting"]);
+  });
+
+  it("rejects a __-prefixed directory that is not a known fixture", async () => {
+    // The namespace-bypass hole: a `__` prefix must not be a way to opt out of
+    // the check. templates/ is copied verbatim into the published CLI, so a
+    // directory that skips validation skips straight into the tarball.
+    await template("rate-limiting");
+    await fs.mkdir(path.join(dir, "__scratch"));
+    await fs.writeFile(
+      path.join(dir, "__scratch", "SHOULD_NEVER_SHIP.txt"),
+      "payload\n",
+    );
+
+    await assert.rejects(discoverTemplateIds(dir), (err: Error) => {
+      assert.match(err.message, /__scratch/);
+      assert.match(err.message, /not one of the known fixtures/);
+      return true;
+    });
+  });
+
+  it("rejects a __-prefixed stray even when it carries a valid manifest", async () => {
+    await template("rate-limiting");
+    await template("__scratch-copy", "scratch-copy");
+
+    await assert.rejects(discoverTemplateIds(dir), /__scratch-copy/);
+  });
+
+  it("validates the reserved fixture too, rather than exempting it", async () => {
+    await template("rate-limiting");
+    await fs.mkdir(path.join(dir, "__example__"));
+
+    await assert.rejects(discoverTemplateIds(dir), (err: Error) => {
+      assert.match(err.message, /__example__ — no manifest\.json/);
+      return true;
+    });
+  });
+
+  it("rejects a directory whose manifest.json is itself a directory", async () => {
+    // fs.stat() succeeds for a directory, so an existence-only check accepts
+    // this and buildTemplateBundle then dies on EISDIR naming a path instead of
+    // the mistake.
+    await template("rate-limiting");
+    await fs.mkdir(path.join(dir, "weird-template", "manifest.json"), {
+      recursive: true,
+    });
+
+    await assert.rejects(discoverTemplateIds(dir), (err: Error) => {
+      assert.match(
+        err.message,
+        /weird-template — manifest\.json is not a regular file/,
+      );
+      return true;
+    });
+  });
+
+  it("accepts a manifest.json reached through a symlink, as readFile would", async () => {
+    await template("rate-limiting");
+    await fs.mkdir(path.join(dir, "linked-template", "files"), {
+      recursive: true,
+    });
+    await fs.writeFile(path.join(dir, "real-manifest.json"), MANIFEST, "utf-8");
+    await fs.symlink(
+      path.join(dir, "real-manifest.json"),
+      path.join(dir, "linked-template", "manifest.json"),
+    );
+
+    assert.deepStrictEqual(await discoverTemplateIds(dir), [
+      "linked-template",
+      "rate-limiting",
+    ]);
   });
 
   it("ignores stray files, which cannot become a template id", async () => {
@@ -130,6 +200,13 @@ describe("buildTemplateBundle", () => {
     await fs.mkdir(path.join(dir, ".greptile"));
 
     await assert.rejects(buildTemplateBundle(dir), /\.greptile/);
+  });
+
+  it("refuses to build while an unrecognised __-prefixed directory sits there", async () => {
+    await template("rate-limiting");
+    await fs.mkdir(path.join(dir, "__scratch"));
+
+    await assert.rejects(buildTemplateBundle(dir), /__scratch/);
   });
 
   it("bundles the discovered templates when the directory is clean", async () => {
