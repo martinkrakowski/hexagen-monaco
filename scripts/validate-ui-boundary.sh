@@ -412,6 +412,13 @@ echo "  ($neutral_pinned_count pre-existing neutral→slice import(s) pinned —
 # shape catches is exempted BY NAME below, where the exemption is visible and
 # goes stale loudly.
 #
+# The modifier prefix is a REPEATED alternation, `((export|default|declare) )*`,
+# not an optional `(export )?`. TypeScript allows the keywords to stack and to
+# appear without `export` — `export default interface FooProps`,
+# `export declare interface FooProps`, `declare interface FooProps` — and an
+# `export`-only prefix skipped all three silently while the other 28 contracts
+# held PROPS_SCANNED above its floor.
+#
 # BRAND DETECTION. The brand must be found in *type position*: the window is
 # stripped of `//` comments and then required to match
 # `(extends|=|&|\|) NoSemanticState<`. A bare `grep NoSemanticState` over the
@@ -452,14 +459,14 @@ while IFS= read -r file; do
     [ -n "$decl" ] || continue
     decl_lines="${decl_lines}${decl}
 "
-  done < <(grep -nE "^[[:space:]]*(export[[:space:]]+)?(interface|type)[[:space:]]+[A-Za-z0-9_]*Props([^A-Za-z0-9_]|\$)" "$file" 2>/dev/null || true)
+  done < <(grep -nE "^[[:space:]]*((export|default|declare)[[:space:]]+)*(interface|type)[[:space:]]+[A-Za-z0-9_]*Props([^A-Za-z0-9_]|\$)" "$file" 2>/dev/null || true)
   decl_index=0
   while IFS= read -r decl; do
     [ -n "$decl" ] || continue
     decl_index=$((decl_index + 1))
     lineno="${decl%%:*}"
     name="$(printf '%s' "$decl" |
-      sed -E 's/^[0-9]+:[[:space:]]*(export[[:space:]]+)?(interface|type)[[:space:]]+([A-Za-z0-9_]*Props).*/\3/')"
+      sed -E 's/^[0-9]+:[[:space:]]*((export|default|declare)[[:space:]]+)*(interface|type)[[:space:]]+([A-Za-z0-9_]*Props).*/\4/')"
 
     if printf '%s' "$PROP_UTILITY_EXEMPTIONS" | grep -Fxq "${rel_file}|${name}"; then
       PROP_UTILITY_HITS="${PROP_UTILITY_HITS}${rel_file}|${name}
