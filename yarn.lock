@@ -1038,7 +1038,6 @@ __metadata:
     eslint: "npm:^8.57.0"
     js-yaml: "npm:^4.1.1"
     typescript: "npm:^5.4.5"
-    vitest: "npm:^4.1.9"
   languageName: unknown
   linkType: soft
 
@@ -1241,7 +1240,6 @@ __metadata:
     eslint: "npm:^8.57.0"
     js-yaml: "npm:^4.1.1"
     typescript: "npm:^5.4.5"
-    vitest: "npm:^4.1.9"
   languageName: unknown
   linkType: soft
 

@@ -15,8 +15,6 @@
     "build": "tsc",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest watch",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
@@ -27,7 +25,6 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.0.0",
     "eslint": "^8.57.0",
-    "typescript": "^5.4.5",
-    "vitest": "^4.1.9"
+    "typescript": "^5.4.5"
   }
 }
