@@ -21,12 +21,14 @@ layers:
       - RenderManifestUseCase
     ports:
       in:
+        # ValidateSpecUseCase and RenderManifestUseCase implement these, so
+        # they are genuinely inbound under ADR-0048.
         - ValidateSpecPort
         - RenderManifestPort
-        - TelemetryPort
-        - GenerateProjectPort
       out:
         - DownloadProviderPort
+        - TelemetryPort
+        - GenerateProjectPort
   infrastructure:
     adapters: []
 plane: core
