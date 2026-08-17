@@ -266,6 +266,31 @@ export default [
           ],
         },
       ],
+      // DYNAMIC imports are invisible to `no-restricted-imports`: its visitors
+      // are ImportDeclaration / ExportNamedDeclaration / ExportAllDeclaration
+      // only, so `await import("./distill")` sailed straight through the fence
+      // above (measured — static re-exports and type-only imports DO hit it, so
+      // the dynamic form is the whole gap). Two selectors, because a computed
+      // specifier cannot be pattern-matched at all: the first catches every legal
+      // literal spelling by its trailing segment, the second requires the
+      // specifier to BE a literal so nothing hides behind a template literal or a
+      // variable. `no-restricted-syntax` is unset for this directory app-wide
+      // (measured), so unlike `no-restricted-imports` above there is no
+      // options-replacement trap to guard against here.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "ImportExpression > Literal[value=/(^|\\/)(distill|usePlanningFinalize)$/]",
+          message:
+            "GOD-007: a dynamic import does not escape the fence. The finalize/distill view-model belongs to usePlanningFinalize, not to the planning loop — compose the two hooks at the plan host (PlanPhaseView).",
+        },
+        {
+          selector: "ImportExpression > .source:not(Literal)",
+          message:
+            "GOD-007: a computed dynamic-import specifier cannot be fenced. Spell it as a string literal inside plan-phase/session/ so the boundary stays checkable.",
+        },
+      ],
     },
   },
   {
