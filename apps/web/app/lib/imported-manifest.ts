@@ -37,16 +37,53 @@ export type ImportedManifestParseResult =
   | { ok: true; manifest: Record<string, unknown> }
   | { ok: false; message: string };
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
- * Parse + schema-validate a stored `manifestYaml` into the parsed `Manifest`
- * object the export/generate routes accept in their `manifest` field (the
- * routes type it as an OBJECT, not YAML text — `body.manifest ?? wizardToManifest(...)`).
+ * Overlay schema-normalized values onto the raw mapping so known fields are
+ * canonicalized (e.g. `"Core"` → `"core"`) without dropping keys the schema
+ * does not declare.
+ */
+export function mergeLosslessManifest(
+  raw: Record<string, unknown>,
+  normalized: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...raw };
+  for (const [key, normVal] of Object.entries(normalized)) {
+    const rawVal = raw[key];
+    if (isPlainObject(normVal) && isPlainObject(rawVal)) {
+      out[key] = mergeLosslessManifest(rawVal, normVal);
+    } else if (Array.isArray(normVal) && Array.isArray(rawVal)) {
+      const length = Math.max(normVal.length, rawVal.length);
+      const merged: unknown[] = [];
+      for (let i = 0; i < length; i += 1) {
+        const n = normVal[i];
+        const r = rawVal[i];
+        if (isPlainObject(n) && isPlainObject(r)) {
+          merged.push(mergeLosslessManifest(r, n));
+        } else if (i < normVal.length) {
+          merged.push(n);
+        } else {
+          merged.push(r);
+        }
+      }
+      out[key] = merged;
+    } else {
+      out[key] = normVal;
+    }
+  }
+  return out;
+}
+
+/**
+ * Parse a stored `manifestYaml` into the object the export/generate routes
+ * accept in their `manifest` field.
  *
- * Fail closed: a YAML error or `ManifestSchema` failure returns `ok: false`
- * with the blocking copy — callers must abort, never fall back to the
- * degraded wizard projection. The schema's normalized output (`parsed.data`)
- * is returned so case-drifted enums (e.g. `"Core"`) reach the generator in
- * canonical form, same as the accept-time parse.
+ * Fail closed only on a true parse failure (empty input, YAML syntax error,
+ * or a non-mapping document). An unimplemented / schema-unknown shape is
+ * returned as the raw mapping so known fields are never dropped.
  */
 export function parseImportedManifest(
   manifestYaml: string | null | undefined,
@@ -62,11 +99,31 @@ export function parseImportedManifest(
   } catch {
     return { ok: false, message: IMPORTED_MANIFEST_CORRUPT_MESSAGE };
   }
-  const parsed = ManifestSchema.safeParse(loaded);
-  if (!parsed.success) {
+  if (!isPlainObject(loaded)) {
     return { ok: false, message: IMPORTED_MANIFEST_CORRUPT_MESSAGE };
   }
-  return { ok: true, manifest: parsed.data as Record<string, unknown> };
+  return { ok: true, manifest: losslessManifest(loaded) };
+}
+
+function losslessManifest(
+  raw: Record<string, unknown>,
+): Record<string, unknown> {
+  const parsed = ManifestSchema.safeParse(raw);
+  if (parsed.success) {
+    return mergeLosslessManifest(raw, parsed.data as Record<string, unknown>);
+  }
+  const knownOnly: Record<string, unknown> = {};
+  for (const key of Object.keys(ManifestSchema.shape)) {
+    if (key in raw) knownOnly[key] = raw[key];
+  }
+  const knownParsed = ManifestSchema.safeParse(knownOnly);
+  if (knownParsed.success) {
+    return mergeLosslessManifest(
+      raw,
+      knownParsed.data as Record<string, unknown>,
+    );
+  }
+  return raw;
 }
 
 /**

@@ -27,6 +27,8 @@ services:
       # BYOK key-metadata + revocation SQLite DB, on the same durable volume so
       # revocations survive redeploys (AUD-007).
       - BYOK_DB_PATH=/data/byok.db
+      # Accounts, saved projects, run history, entitlements (single-tenant).
+      - PLATFORM_DB_PATH=/data/platform.db
     # The quota DB persists across redeploys here: image reload + `up -d`
     # recreate the container, not the named volume.
     volumes:

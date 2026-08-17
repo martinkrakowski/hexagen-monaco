@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { logger } from "../../lib/structured-logger";
+import { persistStageTelemetry } from "../../app/lib/persist-run-telemetry";
 import type { StagedPhase, StageProgress } from "./staged-generation-types";
 
 /** Stage-6 review findings on the produced manifest — advisory, not a failure. */
@@ -400,6 +401,12 @@ export function useStagedGenerationStream(
                   } else if (type === "stage-telemetry") {
                     if (isStageTelemetry(event.telemetry)) {
                       const telemetry = event.telemetry;
+                      persistStageTelemetry(telemetry, {
+                        projectId:
+                          typeof body.projectId === "string"
+                            ? body.projectId
+                            : undefined,
+                      });
                       // Key by the guard-validated `telemetry.stage` rather than
                       // an unchecked `event.stage as number` cast: the server
                       // emits `event.stage = telemetry.stage` (pipeline-selection
