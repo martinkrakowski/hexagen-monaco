@@ -1,5 +1,20 @@
 # Positioning Plan — Validation & Adversarial Review
 
+> **Status banner (2026-08-17, added after two further review rounds):** this document is the
+> **first-round** review, preserved verbatim as a historical record — do not act on it directly.
+> Several of its findings were later corrected or superseded by the
+> [independent review](./2026-08-17-positioning-plan-independent-review.md) and its §8 adjudication:
+> the **quota finding (§2.3 / A7)** is wrong as stated (5 unconditional routes, not 6;
+> `extract-decisions` honors the session gate; BYOK is never metered; the spec→convert
+> double-charge is the recorded, closed **quota-D2** decision — no quota code changes are
+> scheduled); the **"exactly two blockers" framing (§4)** understates the FDE gap (the independent
+> review adds the zero-file false-green, the unguarded `tsconfig.base.json` crash, and per-PR
+> ratchet work as N1/N5/N3); and the **D-1 option table (§5)** is a false dichotomy — the
+> adjudicated recommendation is a three-layer fair-source structure (FSL wedge + proprietary
+> platform + ToS free tier), with a consulting-path alternative (proprietary + engagement grant).
+> The execution document is the [runbook](./2026-08-17-fde-gtm-development-runbook.md), which
+> reflects the fully adjudicated state.
+
 **Date:** 2026-08-17
 **Subject:** [`2026-08-17-conformance-positioning-plan.md`](./2026-08-17-conformance-positioning-plan.md) (the "conformance repositioning" strategy draft)
 **Method:** Two independent verification sweeps against the tree (branch `fix/dead-code-cleanup-review-remediation`, main @ `bf8af9bd`): one over claimed existing assets, one over claimed missing infrastructure. Every verdict below cites files. Where the plan and the tree disagree, the tree is recorded.
