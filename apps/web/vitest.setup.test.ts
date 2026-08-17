@@ -31,6 +31,29 @@ function storageDescriptor(name: string): PropertyDescriptor | undefined {
   return Object.getOwnPropertyDescriptor(globalThis, name);
 }
 
+describe("vitest.setup.ts React act environment", () => {
+  /**
+   * The DEFECT this pins: nothing in the repo set `IS_REACT_ACT_ENVIRONMENT`, so
+   * React 19 emitted "The current testing environment is not configured to
+   * support act(...)" — 54 times in one CI run on `main`, from the two
+   * governance-chat suites, which import `act` straight from "react".
+   * @testing-library/react sets the flag only around its own operations and
+   * restores it afterwards, so a direct `act()` call sits outside that window
+   * and gets no guarantee that effects are flushed before the assertions run.
+   * The suites passed either way, which is the problem: they stopped proving
+   * what their names claim, and the warning taught readers to skim stderr.
+   */
+  it("declares the environment act-capable, so a direct React act() flushes", () => {
+    assert.equal(
+      (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT,
+      true,
+      "vitest.setup.ts must set IS_REACT_ACT_ENVIRONMENT = true; without it " +
+        "React's act() warns and does not guarantee flushing for any suite that " +
+        "imports act from 'react' rather than from @testing-library/react",
+    );
+  });
+});
+
 describe("vitest.setup.ts storage globals", () => {
   it("installs them as data properties, not through Vitest's stub registry", () => {
     for (const name of ["localStorage", "sessionStorage"]) {

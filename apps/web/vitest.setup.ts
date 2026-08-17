@@ -6,6 +6,17 @@ import { cleanup } from "@testing-library/react";
 // spam CI logs — the same reason the old test-setup.ts set it).
 (process.env as Record<string, string | undefined>).NODE_ENV ??= "test";
 
+// React 19's `act()` warns "The current testing environment is not configured to
+// support act(...)" unless this flag is true. @testing-library/react sets it
+// around its OWN operations and restores the previous value afterwards, so a
+// suite that imports `act` straight from "react" — as the governance-chat suites
+// do — is outside that window and gets no guarantee that effects and state
+// updates are flushed before the assertions run. The tests still pass; they just
+// stop proving what their names claim, and the warning trains readers to ignore
+// stderr. Set it once, for the whole environment, which is the documented
+// configuration for a React test runner.
+(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+
 // The host's localStorage/sessionStorage throw a SecurityError under Vitest
 // ("Cannot initialize local storage without a `--localstorage-file` path" — the
 // Node >= 24 built-in, exposed as a *getter* on globalThis that refuses without
