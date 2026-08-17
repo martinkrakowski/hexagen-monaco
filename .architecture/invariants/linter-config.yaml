@@ -15,6 +15,10 @@ subpath_conventions:
     allowed_consumers:
       - agentic-interaction
       - manifest-generation
+      # Item 8.9 moved ModelSettingsView's transport into a container that
+      # resolves the local-LLM client subpath. Warn-level, so this suppresses
+      # 9 advisory lines rather than unblocking a gate.
+      - model-settings
     enforcement: warn
 
 global_whitelist:
