@@ -32,8 +32,8 @@ import { fileURLToPath } from "node:url";
  * identically, so `tsc` cannot catch a misfiled contract. The complementary
  * compile-time half of this guard lives in production code, in
  * `src/infrastructure/adapters/mcp-server.types.ts`
- * (`ManifestStructureDepsAreInboundPorts`), because this package has no
- * `typecheck:test` script — nothing type-checks `__tests__/` at all.
+ * (`ManifestStructureDepsAreInboundPorts`), where it fails `yarn build` rather
+ * than only a test-side type check.
  */
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));

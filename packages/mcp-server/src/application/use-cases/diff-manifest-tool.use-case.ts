@@ -1,19 +1,13 @@
-import type { ManifestDiff } from "@hexagen/project-configuration";
 import { formatDiff } from "@hexagen/project-configuration";
 import type { Result } from "@hexagen/shared";
+import type {
+  DiffManifestToolInput,
+  DiffManifestToolPort,
+  DiffManifestToolResult,
+} from "../ports/in/diff-manifest-tool.port.js";
 import type { ManifestDiffPort } from "../ports/out/manifest-diff.port.js";
 
-export interface DiffManifestToolInput {
-  compare_source?: "git_head" | "file";
-  file_path?: string;
-}
-
-export interface DiffManifestToolResult {
-  diff: ManifestDiff;
-  formatted: string;
-}
-
-export class DiffManifestToolUseCase {
+export class DiffManifestToolUseCase implements DiffManifestToolPort {
   constructor(private readonly manifestDiffPort: ManifestDiffPort) {}
 
   async execute(

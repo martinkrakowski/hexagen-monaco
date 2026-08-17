@@ -1,20 +1,12 @@
 import type { EventBusPort } from "@hexagen/messaging";
+import type {
+  RemovePortInput,
+  RemovePortOutput,
+  RemovePortToolPort,
+} from "../ports/in/remove-port-tool.port.js";
 import type { ManifestWritePort } from "../ports/out/manifest-write.port.js";
 
-export interface RemovePortInput {
-  context_name: string;
-  port_name: string;
-  direction: "inbound" | "outbound";
-  dry_run?: boolean;
-}
-
-export interface RemovePortOutput {
-  dryRun: boolean;
-  removed: boolean;
-  message: string;
-}
-
-export class RemovePortToolUseCase {
+export class RemovePortToolUseCase implements RemovePortToolPort {
   constructor(
     private readonly manifestWritePort: ManifestWritePort,
     private readonly eventBusPort: EventBusPort,

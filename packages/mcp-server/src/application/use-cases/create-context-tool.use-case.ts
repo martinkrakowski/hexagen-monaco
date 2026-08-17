@@ -4,23 +4,14 @@ import {
   type BoundedContextType,
 } from "@hexagen/shared";
 import type {
+  CreateContextInput,
+  CreateContextOutput,
+  CreateContextToolPort,
+} from "../ports/in/create-context-tool.port.js";
+import type {
   ManifestWritePort,
   RegisterBoundedContextCommand,
 } from "../ports/out/manifest-write.port.js";
-
-export interface CreateContextInput {
-  name: string;
-  type: BoundedContextType;
-  description?: string;
-  dry_run?: boolean;
-}
-
-export interface CreateContextOutput {
-  dryRun: boolean;
-  registered: boolean;
-  alreadyExisted: boolean;
-  message: string;
-}
 
 function validateContextName(name: string): {
   valid: boolean;
@@ -46,7 +37,7 @@ function validateContextName(name: string): {
   return { valid: errors.length === 0, errors };
 }
 
-export class CreateContextToolUseCase {
+export class CreateContextToolUseCase implements CreateContextToolPort {
   constructor(
     private readonly manifestWritePort: ManifestWritePort,
     private readonly eventBusPort: EventBusPort,
