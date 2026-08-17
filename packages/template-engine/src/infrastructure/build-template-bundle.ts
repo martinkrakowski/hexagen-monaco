@@ -44,22 +44,22 @@ const RESERVED_PREFIX = "__";
 const TEMPLATE_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
- * Whether `<dir>/manifest.json` is something `buildTemplateBundle` can actually
- * read. `fs.stat` succeeds for a *directory* named `manifest.json`, so the
- * regular-file check is what keeps discovery's contract ("a directory holding a
- * manifest.json") true — without it the builder accepts the entry and then dies
- * on `EISDIR` further downstream, naming a path instead of the mistake.
- * Symlinks are followed deliberately: `readFile` follows them too, so the
- * predicate models the read that will actually happen.
+ * Whether `<dir>/manifest.json` is a regular file, i.e. something
+ * `buildTemplateBundle` can actually read.
+ *
+ * `fs.stat` succeeds for a *directory* named `manifest.json`, so an
+ * existence-only check accepts the entry and the builder then dies on `EISDIR`
+ * further downstream, naming a path instead of the mistake. `lstat` rather than
+ * `stat` so a symlinked manifest is reported here too, under the same
+ * no-symlinks-under-`templates/` rule discovery applies to every other entry.
  */
 async function manifestState(
   dir: string,
 ): Promise<"file" | "missing" | "not-a-file"> {
   try {
-    const stats = await fs.stat(path.join(dir, "manifest.json"));
+    const stats = await fs.lstat(path.join(dir, "manifest.json"));
     return stats.isFile() ? "file" : "not-a-file";
   } catch (err) {
-    // A dangling symlink also lands here, and "missing" is the honest reading.
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return "missing";
     throw err; // permissions / IO faults must surface, not read as "not a template"
   }
@@ -82,10 +82,12 @@ async function manifestState(
  * build and the template guard suite previously walked the same directory under
  * different rules, and that divergence is what let a stray directory through.
  *
- * Every directory is validated, including the reserved fixtures in
+ * Every entry is validated, including the reserved fixtures in
  * {@link RESERVED_TEMPLATE_DIRS}: those are withheld from the returned ids
  * *after* being checked, never exempted from the check. Nothing under
- * `templates/` can escape the rule by how it is named.
+ * `templates/` can escape the rule by how it is named, and nothing is ignored —
+ * a stray file or symlink is reported too, because a verbatim copy ships what it
+ * is handed rather than what this function returns.
  */
 export async function discoverTemplateIds(
   templatesDir: string = DEFAULT_TEMPLATES_DIR,
@@ -95,11 +97,24 @@ export async function discoverTemplateIds(
   const strays: string[] = [];
 
   for (const e of entries) {
-    // Only a directory can be read as a template id, so a stray *file* here
-    // (README.md, .DS_Store) is harmless and ignored. `isDirectory()` is false
-    // for a symlink to a directory — symlinks are not followed, matching the
-    // lstat-based payload budget.
-    if (!e.isDirectory()) continue;
+    // A symlink is checked first, because isDirectory()/isFile() are both false
+    // for one and it would otherwise fall through unreported. A link is not
+    // payload: it names a target that need not even live under templates/, so
+    // it is a way to put content in the shipped directory that no check here
+    // ever looks at.
+    if (e.isSymbolicLink()) {
+      strays.push(
+        `${e.name} — a symlink; templates/ holds literal payload only`,
+      );
+      continue;
+    }
+    // A stray *file* cannot be read as a template id, but `templates/` is copied
+    // verbatim into the published CLI, so an ignored file is not a harmless file
+    // — it is a shipped one. Nothing lives here but templates.
+    if (!e.isDirectory()) {
+      strays.push(`${e.name} — a file, not a template directory`);
+      continue;
+    }
 
     // A reserved fixture is still a template and is still validated as one; it
     // is simply withheld from the returned ids. Nothing gets to skip validation
@@ -128,14 +143,15 @@ export async function discoverTemplateIds(
 
   if (strays.length > 0) {
     throw new Error(
-      `${templatesDir} contains ${strays.length} director${
+      `${templatesDir} contains ${strays.length} entr${
         strays.length === 1 ? "y" : "ies"
       } that ${strays.length === 1 ? "is" : "are"} not a template:\n  ` +
         strays.join("\n  ") +
         `\nEverything under templates/ ships to customers — the published CLI copies ` +
-        `this directory verbatim. Add a manifest.json to make it a template, or move ` +
-        `it out of templates/ (tooling and editor config belongs at the repository ` +
-        `root). A fixture that must live here but must not ship has to be named in ` +
+        `this directory verbatim, so anything ignored here is shipped, not skipped. ` +
+        `Make it a kebab-case directory with a manifest.json, or move it out of ` +
+        `templates/ (tooling, editor config and notes belong at the repository root). ` +
+        `A fixture that must live here but must not ship has to be named in ` +
         `RESERVED_TEMPLATE_DIRS in build-template-bundle.ts; a "${RESERVED_PREFIX}" ` +
         `prefix on its own exempts nothing.`,
     );
@@ -165,6 +181,18 @@ async function collectFiles(
     });
   for (const e of entries) {
     const full = path.join(dir, e.name);
+    // Same no-symlinks rule discovery applies at the top level, enforced here
+    // because this is where the divergence bit: `readFile` dereferences a link
+    // and inlines the *target's* bytes into the bundle, while the payload-budget
+    // guard measures the link itself with `lstat`. A 1 MB file behind a symlink
+    // was measured as 80 bytes — the budget cannot enforce what it cannot see.
+    if (e.isSymbolicLink()) {
+      throw new Error(
+        `${full} is a symlink. templates/ holds literal payload only: readFile ` +
+          `would inline the link target's bytes into the bundle while the payload ` +
+          `budget measures only the link. Replace it with a real file.`,
+      );
+    }
     if (e.isDirectory()) {
       await collectFiles(full, filesDir, id, out);
     } else {

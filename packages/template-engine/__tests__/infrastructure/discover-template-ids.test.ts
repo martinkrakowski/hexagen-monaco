@@ -99,7 +99,7 @@ describe("discoverTemplateIds", () => {
     await assert.rejects(discoverTemplateIds(dir), (err: Error) => {
       assert.match(err.message, /\.vscode/);
       assert.match(err.message, /Scratch Copy/);
-      assert.match(err.message, /2 directories/);
+      assert.match(err.message, /2 entries/);
       return true;
     });
   });
@@ -164,29 +164,59 @@ describe("discoverTemplateIds", () => {
     });
   });
 
-  it("accepts a manifest.json reached through a symlink, as readFile would", async () => {
+  it("rejects a manifest.json that is a symlink, under the same no-symlinks rule", async () => {
     await template("rate-limiting");
     await fs.mkdir(path.join(dir, "linked-template", "files"), {
       recursive: true,
     });
-    await fs.writeFile(path.join(dir, "real-manifest.json"), MANIFEST, "utf-8");
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), "outside-"));
+    await fs.writeFile(path.join(outside, "manifest.json"), MANIFEST, "utf-8");
     await fs.symlink(
-      path.join(dir, "real-manifest.json"),
+      path.join(outside, "manifest.json"),
       path.join(dir, "linked-template", "manifest.json"),
     );
 
-    assert.deepStrictEqual(await discoverTemplateIds(dir), [
-      "linked-template",
-      "rate-limiting",
-    ]);
+    await assert.rejects(discoverTemplateIds(dir), (err: Error) => {
+      assert.match(
+        err.message,
+        /linked-template — manifest\.json is not a regular file/,
+      );
+      return true;
+    });
+
+    await fs.rm(outside, { recursive: true, force: true });
   });
 
-  it("ignores stray files, which cannot become a template id", async () => {
+  it("reports a stray file, because a verbatim copy ships it", async () => {
+    // Not "harmless because it cannot become a template id": packages/sync
+    // cpSyncs templates/ into the published tarball, so a file ignored here is
+    // a file shipped.
     await template("rate-limiting");
-    await fs.writeFile(path.join(dir, "README.md"), "notes\n", "utf-8");
-    await fs.writeFile(path.join(dir, ".DS_Store"), "\0", "utf-8");
+    await fs.writeFile(path.join(dir, "leftover-notes.md"), "notes\n", "utf-8");
 
-    assert.deepStrictEqual(await discoverTemplateIds(dir), ["rate-limiting"]);
+    await assert.rejects(discoverTemplateIds(dir), (err: Error) => {
+      assert.match(
+        err.message,
+        /leftover-notes\.md — a file, not a template directory/,
+      );
+      return true;
+    });
+  });
+
+  it("reports a symlink at the top level, which no other check would see", async () => {
+    // A link can point anywhere, including outside templates/ entirely, so it
+    // is content in the shipped directory that nothing here validates.
+    await template("rate-limiting");
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), "outside-"));
+    await fs.writeFile(path.join(outside, "manifest.json"), MANIFEST, "utf-8");
+    await fs.symlink(outside, path.join(dir, "smuggled"));
+
+    await assert.rejects(discoverTemplateIds(dir), (err: Error) => {
+      assert.match(err.message, /smuggled — a symlink/);
+      return true;
+    });
+
+    await fs.rm(outside, { recursive: true, force: true });
   });
 
   it("fails rather than passing vacuously when nothing is discovered", async () => {
@@ -207,6 +237,27 @@ describe("buildTemplateBundle", () => {
     await fs.mkdir(path.join(dir, "__scratch"));
 
     await assert.rejects(buildTemplateBundle(dir), /__scratch/);
+  });
+
+  it("refuses to inline a symlink inside files/**, which the budget cannot measure", async () => {
+    // readFile dereferences the link and inlines the target's bytes, while the
+    // payload-budget guard lstats the link itself: measured 80 bytes against
+    // 1_000_002 bundled. Rejecting the symlink is what keeps the two agreeing.
+    await template("rate-limiting");
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), "outside-"));
+    const big = path.join(outside, "big-payload.bin");
+    await fs.writeFile(big, "X".repeat(1024), "utf-8");
+    await fs.symlink(
+      big,
+      path.join(dir, "rate-limiting", "files", "linked.bin"),
+    );
+
+    await assert.rejects(buildTemplateBundle(dir), (err: Error) => {
+      assert.match(err.message, /linked\.bin is a symlink/);
+      return true;
+    });
+
+    await fs.rm(outside, { recursive: true, force: true });
   });
 
   it("bundles the discovered templates when the directory is clean", async () => {
