@@ -4,7 +4,7 @@
 **Status:** Accepted
 **Type:** Product
 **Runbook ID:** D-0
-**Relates to:** [`2026-08-17-fde-gtm-development-runbook.md`](../../docs/planning/2026-08-17-fde-gtm-development-runbook.md) Phase −1; [`2026-08-17-remaining-work-summary.md`](../../docs/planning/2026-08-17-remaining-work-summary.md) (architecture-remediation Phases 6–8 inventory); ADR-0060 (D-3), ADR-0061 (D-1)
+**Relates to:** [`2026-08-17-fde-gtm-development-runbook.md`](../../docs/planning/2026-08-17-fde-gtm-development-runbook.md) Phase −1; `docs/planning/2026-08-17-remaining-work-summary.md` (untracked architecture-remediation Phases 6–8 inventory); ADR-0060 (D-3), ADR-0061 (D-1)
 
 > Numbering note: the highest pre-existing record was ADR-0058; this ADR opens the Phase −1 positioning batch (ADR-0059 through ADR-0064). The historical ADR-0009/0010 numbering collisions are not reused.
 

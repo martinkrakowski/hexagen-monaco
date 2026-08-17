@@ -5,7 +5,8 @@
 # Hexagen-Monaco <br> Governance Engine for Human and Agentic Systems
 
 [![Architectural Integrity Check](https://github.com/martinkrakowski/hexagen-monaco/actions/workflows/sync-integrity.yml/badge.svg)](https://github.com/martinkrakowski/hexagen-monaco/actions/workflows/sync-integrity.yml)
-[![License: Source-Available](https://img.shields.io/badge/License-Source--Available-orange.svg)](./LICENSE)
+[![License: FSL-1.1-Apache-2.0 (wedge)](<https://img.shields.io/badge/License-FSL--1.1--Apache--2.0%20(wedge)-blue.svg>)](./packages/sync/LICENSE)
+[![License: Source-Available (platform)](<https://img.shields.io/badge/License-Source--Available%20(platform)-orange.svg>)](./LICENSE)
 
 **Architecture should compile**
 

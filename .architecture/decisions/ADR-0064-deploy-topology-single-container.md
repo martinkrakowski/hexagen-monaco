@@ -31,6 +31,7 @@ Two same-day options: delete the k8s manifests, or fix them so they cannot be ap
 - a `PersistentVolumeClaim` mounted at `/data`
 - `QUOTA_DB_PATH=/data/quota.db` and `BYOK_DB_PATH=/data/byok.db` (the same env names and paths `quota-store` / `byok-store` and `deploy/docker-compose.prod.yml` already use)
 - `strategy: Recreate`, so a rolling update cannot deadlock on the `ReadWriteOnce` volume
+- pod `securityContext.fsGroup` / `runAsUser` / `runAsGroup`: `1001` (the image `USER nextjs`), so the PVC is writable — a k8s volume does not inherit the Dockerfile `chown` that makes the compose named volume work
 
 A second replica, a shared SQLite, or a Postgres cutover is out of scope. Those are Phase 2, and they require amending this ADR first. ADR-0063 continues to freeze metering _behavior_; this ADR only makes the existing SQLite files survive a pod.
 
