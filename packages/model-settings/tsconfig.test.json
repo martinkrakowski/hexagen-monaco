@@ -7,10 +7,5 @@
     "skipLibCheck": true,
     "moduleResolution": "bundler"
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "__tests__/**/*.ts",
-    "__tests__/**/*.tsx"
-  ]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "__tests__/**/*.ts"]
 }
