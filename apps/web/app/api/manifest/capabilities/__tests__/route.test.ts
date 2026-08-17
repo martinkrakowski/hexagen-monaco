@@ -92,4 +92,30 @@ describe("GET /api/manifest/capabilities — hasByokKey is per-provider", () => 
     assert.equal(byProvider.cohere.hasByokKey, false);
     assert.equal(byProvider.cohere.status, "no_keys_configured");
   });
+
+  it("treats a revoked per-provider key as absent", async () => {
+    getServerSession.mockResolvedValue({ user: { sub: "user-1" } });
+    hasKeys.mockResolvedValue(ok(true));
+    findByUserAndProvider.mockImplementation(
+      async (_userId: string, provider: string) => {
+        if (provider === "openai") {
+          return ok({
+            ...key("openai"),
+            revokedAt: "2026-02-01T00:00:00.000Z",
+            revokedBy: "user-1",
+          });
+        }
+        return ok(null);
+      },
+    );
+
+    const res = await GET();
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    const openai = body.capabilities.find(
+      (c: { provider: string }) => c.provider === "openai",
+    );
+    assert.equal(openai.hasByokKey, false);
+    assert.equal(openai.status, "no_keys_configured");
+  });
 });

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   matchingImportScope,
   resolveLintScope,
+  resolvedPathIsWorkspaceImport,
   scopesToTry,
   unscopedContextImport,
 } from "../src/resolve-scope.js";
@@ -59,5 +60,25 @@ describe("scope-prefix decoupling (unscoped / multi-scoped)", () => {
     assert.equal(unscopedContextImport("billing", names), "billing");
     assert.equal(unscopedContextImport("js-yaml", names), null);
     assert.equal(unscopedContextImport("@acme/billing", names), null);
+  });
+});
+
+describe("resolvedPathIsWorkspaceImport", () => {
+  it("rejects unresolved specifiers and node_modules hits", () => {
+    const roots = ["/repo/packages/zod"];
+    assert.equal(resolvedPathIsWorkspaceImport(undefined, roots), false);
+    assert.equal(
+      resolvedPathIsWorkspaceImport("/repo/node_modules/zod/index.js", roots),
+      false,
+    );
+  });
+
+  it("accepts a path that lives under a context root", () => {
+    assert.equal(
+      resolvedPathIsWorkspaceImport("/repo/packages/zod/src/index.ts", [
+        "/repo/packages/zod",
+      ]),
+      true,
+    );
   });
 });

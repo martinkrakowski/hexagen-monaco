@@ -4,7 +4,10 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import yaml from "js-yaml";
-import { runBootstrap } from "../../../src/commands/bootstrap/index.js";
+import {
+  bootstrapCommand,
+  runBootstrap,
+} from "../../../src/commands/bootstrap/index.js";
 
 async function makeRepo(): Promise<string> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-bootstrap-"));
@@ -128,6 +131,72 @@ describe("hexagen bootstrap", () => {
       assert.deepEqual(
         manifest.bounded_contexts.map((c) => c.name),
         ["billing"],
+      );
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("dry-run does not print Wrote: and does not write files", async () => {
+    const root = await makeRepo();
+    const logs: string[] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => {
+      logs.push(args.map(String).join(" "));
+    };
+    try {
+      await bootstrapCommand({ root, yes: true, dryRun: true });
+      const text = logs.join("\n");
+      assert.doesNotMatch(text, /^Wrote:/m);
+      assert.match(text, /Would write/i);
+      await assert.rejects(
+        fs.stat(path.join(root, ".architecture", "manifest.yaml")),
+      );
+    } finally {
+      console.log = originalLog;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to overwrite a populated ratchet baseline without --force", async () => {
+    const root = await makeRepo();
+    try {
+      const first = await runBootstrap({ root, yes: true });
+      assert.equal(
+        first.success,
+        true,
+        first.success ? "" : first.error.message,
+      );
+      const baselinePath = path.join(
+        root,
+        ".architecture",
+        "arch-lint-baseline.json",
+      );
+      await fs.writeFile(
+        baselinePath,
+        JSON.stringify({
+          version: 1,
+          entries: [
+            { rule: "npm-package-in-domain", file: "x.ts", specifier: "zod" },
+          ],
+        }),
+        "utf8",
+      );
+      const second = await runBootstrap({ root, yes: true });
+      assert.equal(second.success, false);
+      if (!second.success) {
+        assert.match(second.error.message, /--force|baseline|overwrite/i);
+      }
+      const kept = JSON.parse(await fs.readFile(baselinePath, "utf8")) as {
+        entries: unknown[];
+      };
+      assert.equal(kept.entries.length, 1);
+
+      const forced = await runBootstrap({ root, yes: true, force: true });
+      assert.equal(
+        forced.success,
+        true,
+        forced.success ? "" : forced.error.message,
       );
     } finally {
       await fs.rm(root, { recursive: true, force: true });

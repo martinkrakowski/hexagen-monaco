@@ -237,5 +237,87 @@ describe(
         await cleanup(root);
       }
     });
+
+    it("does not report npm-package-in-domain for an extra-scope workspace import", async () => {
+      // Manifest scope is @acme-app; workspace packages live under @acme.
+      // After adopt/bootstrap this is the common shape. depends_on grants the
+      // edge; the npm-package check must not fire on the extra scope.
+      const root = await createFixture({
+        "tsconfig.json": TSCONFIG,
+        ".architecture/manifest.yaml": `system: acme-app
+scope: acme-app
+architecture: modular-monolith
+bounded_contexts:
+  - name: billing
+    type: core
+    description: Billing
+    depends_on: [orders]
+    layers:
+      domain: {}
+  - name: orders
+    type: core
+    description: Orders
+    layers:
+      domain: {}
+`,
+        ".architecture/layout.yaml": `contexts:
+  billing:
+    root: packages/billing
+    layers:
+      domain: [src/core]
+  orders:
+    root: packages/orders
+    layers:
+      domain: [src/core]
+`,
+        "packages/billing/package.json": `{ "name": "@acme/billing" }\n`,
+        "packages/orders/package.json": `{ "name": "@acme/orders" }\n`,
+        "packages/billing/src/core/invoice.ts": `import { x } from "@acme/orders";\nexport const invoice = x;\n`,
+        "packages/orders/src/core/index.ts": `export const x = 1;\n`,
+      });
+      try {
+        const r = await runLinter(root);
+        assert.doesNotMatch(
+          r.stdout + r.stderr,
+          /npm-package-in-domain|npm package '@acme\/orders'/,
+          describeResult(r),
+        );
+      } finally {
+        await cleanup(root);
+      }
+    });
+
+    it('does not treat import "zod" as a cross-package import when a context is named zod', async () => {
+      const root = await createFixture({
+        "tsconfig.json": TSCONFIG,
+        ".architecture/manifest.yaml": `system: acme-app
+scope: acme
+architecture: modular-monolith
+bounded_contexts:
+  - name: billing
+    type: core
+    description: Billing
+    layers:
+      domain: {}
+  - name: zod
+    type: core
+    description: Zod context
+    layers:
+      domain: {}
+`,
+        "packages/billing/src/domain/model.ts": `import { z } from "zod";\nexport const schema = z;\n`,
+        "packages/zod/src/domain/index.ts": `export const local = 1;\n`,
+      });
+      try {
+        const r = await runLinter(root);
+        assert.doesNotMatch(
+          r.stdout + r.stderr,
+          /Boundary Violation|cross-package-import/,
+          describeResult(r),
+        );
+      } finally {
+        await cleanup(root);
+      }
+    });
   },
 );

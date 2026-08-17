@@ -5,7 +5,11 @@
  */
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
-import { loadLayoutConfig, parseLayoutConfig } from "../src/layout-config.js";
+import {
+  loadLayoutConfig,
+  matchesIgnorePattern,
+  parseLayoutConfig,
+} from "../src/layout-config.js";
 
 function readerOf(contents: string) {
   return async (): Promise<string> => contents;
@@ -82,6 +86,11 @@ describe("parseLayoutConfig — misspellings fail loudly", () => {
     }
   });
 
+  it("rejects an empty ignore pattern", () => {
+    const parsed = parseLayoutConfig({ ignore: [""] });
+    assert.equal(parsed.ok, false);
+  });
+
   it("rejects a misspelled hexagonal layer name", () => {
     const parsed = parseLayoutConfig({
       contexts: {
@@ -127,5 +136,18 @@ describe("loadLayoutConfig", () => {
   it("treats an empty file as an empty (non-fatal) config", async () => {
     const r = await loadLayoutConfig(PATH, readerOf(""));
     assert.deepEqual(r, { kind: "loaded", value: {} });
+  });
+});
+
+describe("matchesIgnorePattern — path-segment boundary", () => {
+  it("does not treat 'src' as a prefix of 'src-gen/' or 'srcfoo.ts'", () => {
+    assert.equal(matchesIgnorePattern("src-gen/x.ts", ["src"]), false);
+    assert.equal(matchesIgnorePattern("srcfoo.ts", ["src"]), false);
+  });
+
+  it("matches a directory prefix with or without a trailing slash", () => {
+    assert.equal(matchesIgnorePattern("src/x.ts", ["src"]), true);
+    assert.equal(matchesIgnorePattern("src/x.ts", ["src/"]), true);
+    assert.equal(matchesIgnorePattern("src", ["src"]), true);
   });
 });

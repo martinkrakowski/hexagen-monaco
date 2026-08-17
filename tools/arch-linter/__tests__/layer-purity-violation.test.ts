@@ -143,6 +143,24 @@ describe("checkCrossLayerRelativeImport", () => {
     workspacesDir: WS,
   };
 
+  it("classifies a layout-mapped target (src/core → src/db) as a cross-layer import", () => {
+    const v = checkCrossLayerRelativeImport({
+      filePath: "/repo/packages/billing/src/core/invoice.ts",
+      moduleSpecifier: "../db/client.js",
+      sourceLayer: "domain",
+      allowed: [`${SCOPE}/shared`],
+      scope: SCOPE,
+      workspacesDir: WS,
+      contextRootAbs: "/repo/packages/billing",
+      layerDirs: {
+        domain: ["src/core"],
+        infrastructure: ["src/db"],
+      },
+    });
+    assert.equal(v?.rule, "cross-layer-relative-import");
+    assert.match(v!.detail, /into 'infrastructure'/);
+  });
+
   it("flags a domain file reaching into infrastructure", () => {
     const v = checkCrossLayerRelativeImport({
       ...base,

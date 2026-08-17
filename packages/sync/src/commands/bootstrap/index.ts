@@ -30,10 +30,12 @@ export interface BootstrapOptions {
   stdinJson?: boolean;
   llm?: boolean;
   dryRun?: boolean;
+  force?: boolean;
 }
 
 export interface BootstrapResult {
   files: string[];
+  wrote: boolean;
 }
 
 const EMPTY_BASELINE = `{
@@ -242,14 +244,47 @@ export async function runBootstrap(
     ];
 
     if (options.dryRun === true) {
-      return ok({ files });
+      return ok({ files, wrote: false });
+    }
+
+    if (options.force !== true) {
+      const blockers: string[] = [];
+      for (const file of files) {
+        try {
+          await fs.stat(file);
+        } catch {
+          continue;
+        }
+        if (path.basename(file) === "arch-lint-baseline.json") {
+          try {
+            const parsed = JSON.parse(await fs.readFile(file, "utf8")) as {
+              entries?: unknown[];
+            };
+            if (Array.isArray(parsed.entries) && parsed.entries.length > 0) {
+              blockers.push(file);
+            }
+            continue;
+          } catch {
+            blockers.push(file);
+            continue;
+          }
+        }
+        blockers.push(file);
+      }
+      if (blockers.length > 0) {
+        return err(
+          new Error(
+            `Refusing to overwrite existing architecture files (including a populated ratchet baseline). Re-run with --force to replace:\n${blockers.map((b) => `  ${b}`).join("\n")}`,
+          ),
+        );
+      }
     }
 
     await fs.mkdir(archDir, { recursive: true });
     await fs.writeFile(files[0], emitManifest(answers), "utf8");
     await fs.writeFile(files[1], emitLayout(answers, detection), "utf8");
     await fs.writeFile(files[2], EMPTY_BASELINE, "utf8");
-    return ok({ files });
+    return ok({ files, wrote: true });
   } catch (e) {
     return err(e instanceof Error ? e : new Error(String(e)));
   }
@@ -262,6 +297,7 @@ export async function bootstrapCommand(options: {
   stdinJson?: boolean;
   llm?: boolean;
   dryRun?: boolean;
+  force?: boolean;
 }): Promise<void> {
   const result = await runBootstrap({
     root: path.resolve(options.root ?? process.cwd()),
@@ -270,19 +306,28 @@ export async function bootstrapCommand(options: {
     stdinJson: options.stdinJson,
     llm: options.llm,
     dryRun: options.dryRun,
+    force: options.force,
   });
   if (!result.success) {
     console.error(`❌ ${result.error.message}`);
     process.exitCode = 1;
     return;
   }
-  console.log("Wrote:");
+  if (result.value.wrote) {
+    console.log("Wrote:");
+    for (const file of result.value.files) {
+      console.log(`  ${file}`);
+    }
+    console.log(
+      "These files are ratified starting points, not inferred truth. Review them, then run hexagen-lint.",
+    );
+    return;
+  }
+  console.log("Would write:");
   for (const file of result.value.files) {
     console.log(`  ${file}`);
   }
-  console.log(
-    "These files are ratified starting points, not inferred truth. Review them, then run hexagen-lint.",
-  );
+  console.log("Dry-run: no files were written.");
 }
 
 export const bootstrapCommander = new Command("bootstrap")
@@ -298,6 +343,7 @@ export const bootstrapCommander = new Command("bootstrap")
   .option("--stdin-json", "Read the same JSON answers document from stdin")
   .option("--llm", "Reserved — not wired yet")
   .option("--dry-run", "Resolve answers without writing files")
+  .option("--force", "Overwrite existing manifest, layout, or baseline files")
   .action(
     async (opts: {
       root?: string;
@@ -306,6 +352,7 @@ export const bootstrapCommander = new Command("bootstrap")
       stdinJson?: boolean;
       llm?: boolean;
       dryRun?: boolean;
+      force?: boolean;
     }) => {
       await bootstrapCommand(opts);
     },

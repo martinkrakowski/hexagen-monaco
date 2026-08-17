@@ -20,12 +20,14 @@ import {
 import {
   matchingImportScope,
   resolveLintScope,
+  resolvedPathIsWorkspaceImport,
   scopesToTry,
   unscopedContextImport,
 } from "./resolve-scope.js";
 import {
   isEmptyLayout,
   loadLayoutConfig,
+  matchesIgnorePattern,
   type LayoutConfig,
 } from "./layout-config.js";
 import {
@@ -411,11 +413,23 @@ function contextRootAbs(moduleName: string): string {
 
 function isIgnoredFile(filePath: string): boolean {
   if (!layout?.ignore || layout.ignore.length === 0) return false;
-  const rel = toRelativePosix(filePath);
-  return layout.ignore.some((pattern) => {
-    const normalized = pattern.replace(/\\/g, "/").replace(/^\/+/, "");
-    return rel === normalized || rel.startsWith(normalized);
-  });
+  return matchesIgnorePattern(toRelativePosix(filePath), layout.ignore);
+}
+
+function layoutTargetLayerAllowed(
+  importPath: string,
+  allowed: string[],
+): boolean {
+  if (!layout?.contexts) return false;
+  for (const [name, ctx] of Object.entries(layout.contexts)) {
+    const layer = resolveFileHexagonalLayer(importPath, {
+      contextRootAbs: contextRootAbs(name),
+      layerDirs: ctx.layers,
+      layerNames: LAYER_NAMES,
+    });
+    if (layer && allowed.includes(layer)) return true;
+  }
+  return false;
 }
 
 function checkArchitecturalIntegrity(): {
@@ -452,6 +466,7 @@ function checkArchitecturalIntegrity(): {
     }),
   ];
   const importScopes = scopesToTry(resolveLintScope(manifest), extraScopes);
+  const contextRoots = modules.map((m) => contextRootAbs(m.name));
   let filesScanned = 0;
 
   /** Record a violation. `specifier` is "" for findings with no import. */
@@ -534,9 +549,17 @@ function checkArchitecturalIntegrity(): {
         }
 
         const scopedImport = matchingImportScope(moduleSpecifier, importScopes);
-        const unscopedImport = scopedImport
+        const unscopedCandidate = scopedImport
           ? null
           : unscopedContextImport(moduleSpecifier, contextNames);
+        const resolvedImportPath = imp
+          .getModuleSpecifierSourceFile()
+          ?.getFilePath();
+        const unscopedImport =
+          unscopedCandidate &&
+          resolvedPathIsWorkspaceImport(resolvedImportPath, contextRoots)
+            ? unscopedCandidate
+            : null;
         const importedPkg = scopedImport
           ? moduleSpecifier.slice(scopedImport.length + 1).split("/")[0]
           : unscopedImport;
@@ -585,7 +608,13 @@ function checkArchitecturalIntegrity(): {
               : null;
 
         if (fileLayer === "domain") {
-          const allowed = getLayerAllowedImports(filePath, layerRules, SCOPE);
+          const allowed = getLayerAllowedImports(
+            ctxLayers
+              ? path.join(modulePath, "src", fileLayer, "__layout_probe__.ts")
+              : filePath,
+            layerRules,
+            SCOPE,
+          );
           const domainFinding = (detail: string, rule: string) =>
             record(
               rule,
@@ -612,6 +641,8 @@ function checkArchitecturalIntegrity(): {
               scope: SCOPE,
               workspacesDir,
               layerNames: LAYER_NAMES,
+              contextRootAbs: modulePath,
+              layerDirs: ctxLayers,
             });
             if (crossLayer) {
               errors.push(domainFinding(crossLayer.detail, crossLayer.rule));
@@ -620,12 +651,13 @@ function checkArchitecturalIntegrity(): {
             const sourceFile = imp.getModuleSpecifierSourceFile();
             if (sourceFile) {
               const importPath = sourceFile.getFilePath();
-              const isAllowed = importPathSatisfiesLayers(
-                importPath,
-                allowed,
-                SCOPE,
-                workspacesDir,
-              );
+              const isAllowed =
+                importPathSatisfiesLayers(
+                  importPath,
+                  allowed,
+                  SCOPE,
+                  workspacesDir,
+                ) || layoutTargetLayerAllowed(importPath, allowed);
               if (!isAllowed && !importPath.includes("/node_modules/")) {
                 errors.push(
                   domainFinding(
@@ -642,7 +674,7 @@ function checkArchitecturalIntegrity(): {
             const builtin = checkNodeBuiltinInLayer("domain", moduleSpecifier);
             if (builtin) {
               errors.push(domainFinding(builtin.detail, builtin.rule));
-            } else {
+            } else if (!scopedImport && !unscopedImport) {
               const npmPackage = checkNpmPackageInDomain({
                 moduleSpecifier,
                 contextName: moduleName,
@@ -657,7 +689,13 @@ function checkArchitecturalIntegrity(): {
         }
 
         if (fileLayer === "application") {
-          const allowed = getLayerAllowedImports(filePath, layerRules, SCOPE);
+          const allowed = getLayerAllowedImports(
+            ctxLayers
+              ? path.join(modulePath, "src", fileLayer, "__layout_probe__.ts")
+              : filePath,
+            layerRules,
+            SCOPE,
+          );
           const applicationFinding = (detail: string, rule: string) =>
             record(
               rule,
@@ -681,6 +719,8 @@ function checkArchitecturalIntegrity(): {
               allowed,
               scope: SCOPE,
               workspacesDir,
+              contextRootAbs: modulePath,
+              layerDirs: ctxLayers,
               // Deliberately NOT threading `isSharedKernelAllowed` here. That
               // flag short-circuits `${scope}/shared` to "allowed" for ANY
               // import path, which is sound for a package specifier (the grant
@@ -712,13 +752,14 @@ function checkArchitecturalIntegrity(): {
           const sourceFile = imp.getModuleSpecifierSourceFile();
           if (sourceFile) {
             const importPath = sourceFile.getFilePath();
-            const isAllowed = importPathSatisfiesLayers(
-              importPath,
-              allowed,
-              SCOPE,
-              workspacesDir,
-              isSharedKernelAllowed(layerRules),
-            );
+            const isAllowed =
+              importPathSatisfiesLayers(
+                importPath,
+                allowed,
+                SCOPE,
+                workspacesDir,
+                isSharedKernelAllowed(layerRules),
+              ) || layoutTargetLayerAllowed(importPath, allowed);
             if (!isAllowed && !importPath.includes("/node_modules/")) {
               errors.push(
                 applicationFinding(

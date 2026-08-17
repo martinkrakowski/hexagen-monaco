@@ -80,3 +80,23 @@ export function unscopedContextImport(
   const head = moduleSpecifier.split("/")[0];
   return head && contextNames.has(head) ? head : null;
 }
+
+/**
+ * An unscoped specifier is a workspace import only when it actually
+ * resolves inside a known context root — not when it merely shares a name
+ * with a context (`zod`, `logger`, `ui`).
+ */
+export function resolvedPathIsWorkspaceImport(
+  resolvedPath: string | undefined,
+  contextRoots: readonly string[],
+): boolean {
+  if (!resolvedPath) return false;
+  const posix = resolvedPath.replace(/\\/g, "/");
+  if (posix.includes("/node_modules/") || posix.includes("/node_modules\\")) {
+    return false;
+  }
+  return contextRoots.some((root) => {
+    const r = root.replace(/\\/g, "/").replace(/\/+$/, "");
+    return posix === r || posix.startsWith(`${r}/`);
+  });
+}

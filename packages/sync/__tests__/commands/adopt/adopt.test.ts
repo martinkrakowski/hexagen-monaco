@@ -74,8 +74,33 @@ describe("hexagen adopt", () => {
     try {
       const result = await runAdopt({ root, yes: false });
       assert.equal(result.success, false);
+      if (!result.success) {
+        assert.match(result.error.message, /--yes/);
+        assert.doesNotMatch(result.error.message, /TTY/);
+      }
       const layoutPath = path.join(root, ".architecture", "layout.yaml");
       await assert.rejects(fs.stat(layoutPath));
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("prints a dry-run preview without --yes and does not write", async () => {
+    const root = await makeRepo();
+    try {
+      const result = await runAdopt({ root, dryRun: true });
+      assert.equal(
+        result.success,
+        true,
+        result.success ? "" : result.error.message,
+      );
+      if (result.success) {
+        assert.equal(result.value.wrote, false);
+        assert.match(result.value.nextSteps.join("\n"), /Dry-run/);
+      }
+      await assert.rejects(
+        fs.stat(path.join(root, ".architecture", "layout.yaml")),
+      );
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

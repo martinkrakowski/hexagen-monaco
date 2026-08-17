@@ -200,6 +200,8 @@ export interface CrossLayerRelativeInput {
   workspacesDir: string;
   sharedKernelAllowed?: boolean;
   layerNames?: readonly string[];
+  contextRootAbs?: string;
+  layerDirs?: Readonly<Record<string, readonly string[]>>;
 }
 
 /**
@@ -230,12 +232,18 @@ export function checkCrossLayerRelativeImport(
     workspacesDir,
     sharedKernelAllowed = false,
     layerNames = DEFAULT_LAYER_NAMES,
+    contextRootAbs,
+    layerDirs,
   } = input;
 
   if (!isRelativeSpecifier(moduleSpecifier)) return null;
 
   const targetPath = resolveRelativeImportPath(filePath, moduleSpecifier);
-  const targetLayer = detectLayer(targetPath, layerNames);
+  const targetLayer = resolveFileHexagonalLayer(targetPath, {
+    contextRootAbs,
+    layerDirs,
+    layerNames,
+  });
   if (targetLayer === null) return null;
   if (targetLayer === sourceLayer) return null;
 

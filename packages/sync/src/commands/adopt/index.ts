@@ -42,14 +42,6 @@ export async function runAdopt(
   options: AdoptOptions,
 ): Promise<Result<AdoptResult, Error>> {
   try {
-    if (options.yes !== true) {
-      return err(
-        new Error(
-          "Refusing to write layout.yaml without ratification. Re-run with --yes (tests / CI) or answer the prompts in a TTY.",
-        ),
-      );
-    }
-
     const detection = await detectWorkspaces(options.root);
     if (detection.packages.length === 0) {
       return err(
@@ -68,6 +60,14 @@ export async function runAdopt(
         wrote: false,
         nextSteps: ["Dry-run: layout.yaml was not written.", contents],
       });
+    }
+
+    if (options.yes !== true) {
+      return err(
+        new Error(
+          "Refusing to write layout.yaml without ratification. Re-run with --yes, or pass --dry-run to preview.",
+        ),
+      );
     }
 
     await fs.mkdir(path.dirname(layoutPath), { recursive: true });

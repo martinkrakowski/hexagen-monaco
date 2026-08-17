@@ -93,6 +93,7 @@ export { loadOptionalYamlConfig } from "./optional-yaml-config.js";
 export { resolveLintScope } from "./resolve-scope.js";
 export {
   matchingImportScope,
+  resolvedPathIsWorkspaceImport,
   scopesToTry,
   unscopedContextImport,
 } from "./resolve-scope.js";
@@ -108,6 +109,7 @@ export {
   LayoutConfigSchema,
   isEmptyLayout,
   loadLayoutConfig,
+  matchesIgnorePattern,
   parseLayoutConfig,
 } from "./layout-config.js";
 

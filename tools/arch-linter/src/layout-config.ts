@@ -35,7 +35,7 @@ const ContextLayoutSchema = z
 export const LayoutConfigSchema = z
   .object({
     contexts: z.record(z.string().min(1), ContextLayoutSchema).optional(),
-    ignore: z.array(z.string()).optional(),
+    ignore: z.array(z.string().min(1)).optional(),
     tsconfig: z.string().optional(),
     scopes: z.array(z.string().min(1)).optional(),
   })
@@ -57,6 +57,22 @@ export function parseLayoutConfig(value: unknown): LayoutParseResult {
   const result = LayoutConfigSchema.safeParse(value);
   if (result.success) return { ok: true, value: result.data };
   return { ok: false, reason: formatZodIssue(result.error.issues[0]) };
+}
+
+/** Path-segment ignore match: `src` does not match `src-gen/` or `srcfoo.ts`. */
+export function matchesIgnorePattern(
+  relativePosix: string,
+  patterns: readonly string[],
+): boolean {
+  return patterns.some((pattern) => {
+    const normalized = pattern.replace(/\\/g, "/").replace(/^\/+/, "");
+    if (normalized.length === 0) return false;
+    const prefix = normalized.endsWith("/") ? normalized : `${normalized}/`;
+    return (
+      relativePosix === normalized.replace(/\/+$/, "") ||
+      relativePosix.startsWith(prefix)
+    );
+  });
 }
 
 export function isEmptyLayout(config: LayoutConfig): boolean {
