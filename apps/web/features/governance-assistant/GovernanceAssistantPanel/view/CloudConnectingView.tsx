@@ -1,10 +1,12 @@
 "use client";
 
-import { CloudModelSettingsView } from "../CloudModelSettingsView";
-import { PanelFooter } from "../governance";
-import { useSecretVault } from "@/lib/vault-context";
+import type { UserSecretVaultPort } from "@hexagen/web-driver";
+import { CloudModelSettingsView } from "../../CloudModelSettingsView";
+import { PanelFooter } from "../../governance";
 
 interface CloudConnectingViewProps {
+  /** Injected by the boundary — this view no longer reads SecretVaultContext. */
+  vault: UserSecretVaultPort;
   onModeChange: (mode: "local" | "cloud") => void;
   onCloudConnect: (provider: string, model: string) => Promise<void>;
   isConnecting: boolean;
@@ -13,14 +15,13 @@ interface CloudConnectingViewProps {
 }
 
 export function CloudConnectingView({
+  vault,
   onModeChange,
   onCloudConnect,
   isConnecting,
   connectionError,
   onRetryConnection,
 }: CloudConnectingViewProps) {
-  const vault = useSecretVault();
-
   return (
     <div className="flex flex-col h-full">
       <div className="flex border-b border-border shrink-0">

@@ -1,7 +1,7 @@
 "use client";
 
-import { StatusSummaryCard } from "../governance";
-import type { StatusSectionProps } from "./types";
+import { StatusSummaryCard } from "../../governance";
+import type { StatusSectionProps } from "../types";
 
 export function StatusSection({ violations, suggestions }: StatusSectionProps) {
   return (

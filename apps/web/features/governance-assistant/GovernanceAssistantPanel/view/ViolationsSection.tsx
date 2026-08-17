@@ -1,7 +1,7 @@
 "use client";
 
-import { SectionLabel, ViolationItem } from "../governance";
-import type { ViolationsSectionProps } from "./types";
+import { SectionLabel, ViolationItem } from "../../governance";
+import type { ViolationsSectionProps } from "../types";
 
 export function ViolationsSection({
   violations,

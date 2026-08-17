@@ -1,7 +1,7 @@
 "use client";
 
-import { SuggestionItem } from "../governance";
-import type { SuggestionsSectionProps } from "./types";
+import { SuggestionItem } from "../../governance";
+import type { SuggestionsSectionProps } from "../types";
 
 export function SuggestionsSection({
   suggestions,

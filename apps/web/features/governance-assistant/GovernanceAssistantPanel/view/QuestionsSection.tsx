@@ -6,8 +6,8 @@ import {
   ThinkingIndicator,
   ThreadEntry,
   FollowUpTag,
-} from "../governance";
-import type { QuestionsSectionProps } from "./types";
+} from "../../governance";
+import type { QuestionsSectionProps } from "../types";
 import type { GovernanceEntry } from "@hexagen/local-llm";
 
 export function QuestionsSection({
