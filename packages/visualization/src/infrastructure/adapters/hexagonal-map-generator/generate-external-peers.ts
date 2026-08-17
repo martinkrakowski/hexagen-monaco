@@ -1,26 +1,26 @@
 import type {
-  BoundedContext,
-  ExternalContext,
-} from "@hexagen/project-configuration";
+  MapContextInput,
+  MapPeerInput,
+} from "../../../application/ports/in/hexagonal-map-input.js";
 import type {
-  HexagonEdge,
-  HexagonNodeType,
-  HexagonNodeWithLayout,
-} from "../../../domain/index.js";
+  RenderableHexagonEdge,
+  RenderableHexagonNode,
+} from "../../../application/ports/in/renderable-graph.js";
+import type { HexagonNodeType } from "../../../domain/index.js";
 
 import { LAYOUT_CONFIG } from "./config.js";
 
 interface GenerateExternalPeersOptions {
-  externalContexts: ExternalContext[];
-  boundedContexts: BoundedContext[];
+  externalContexts: readonly MapPeerInput[];
+  boundedContexts: readonly MapContextInput[];
   groupX: number;
   groupWidth: number;
   canvasCenterY: number;
 }
 
 interface ExternalPeersOutput {
-  nodes: HexagonNodeWithLayout[];
-  edges: HexagonEdge[];
+  nodes: RenderableHexagonNode[];
+  edges: RenderableHexagonEdge[];
 }
 
 export function generateExternalPeers({
@@ -30,10 +30,10 @@ export function generateExternalPeers({
   groupWidth,
   canvasCenterY,
 }: GenerateExternalPeersOptions): ExternalPeersOutput {
-  const nodes: HexagonNodeWithLayout[] = [];
-  const edges: HexagonEdge[] = [];
+  const nodes: RenderableHexagonNode[] = [];
+  const edges: RenderableHexagonEdge[] = [];
 
-  externalContexts.forEach((bc: ExternalContext, index: number) => {
+  externalContexts.forEach((bc: MapPeerInput, index: number) => {
     const isUpstream =
       bc.relationshipType === "U" || bc.relationshipType === "OHS";
     const peerOffsetX = isUpstream
@@ -50,13 +50,13 @@ export function generateExternalPeers({
       isPeer: true,
       stats: {
         aggregates: bc.entityNames?.length ?? 0,
-        aggregateItems: bc.entityNames ?? [],
+        aggregateItems: [...(bc.entityNames ?? [])],
         valueObjects: 0,
         valueObjectItems: [],
         events: 0,
         eventItems: [],
         services: bc.useCaseNames?.length ?? 0,
-        serviceItems: bc.useCaseNames ?? [],
+        serviceItems: [...(bc.useCaseNames ?? [])],
       },
     });
 

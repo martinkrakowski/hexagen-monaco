@@ -1,27 +1,26 @@
-import type { WizardData } from "@hexagen/project-configuration";
+import type { HexagonalMapInput } from "../../../application/ports/in/hexagonal-map-input.js";
 import type {
-  HexagonEdge,
-  HexagonNodeWithLayout,
-} from "../../../domain/index.js";
+  RenderableHexagonEdge,
+  RenderableHexagonNode,
+} from "../../../application/ports/in/renderable-graph.js";
 
 import { LAYOUT_CONFIG } from "./config.js";
 import { generateBoundedContextNodes } from "./generate-bounded-context-nodes.js";
 import { generateExternalPeers } from "./generate-external-peers.js";
 import { generatePeerMappingEdges } from "./generate-peer-mapping-edges.js";
 
-export function generateHexagonalContextMap(wizardData: WizardData): {
-  nodes: HexagonNodeWithLayout[];
-  edges: HexagonEdge[];
+export function generateHexagonalContextMap(map: HexagonalMapInput): {
+  nodes: RenderableHexagonNode[];
+  edges: RenderableHexagonEdge[];
 } {
-  const nodes: HexagonNodeWithLayout[] = [];
-  const edges: HexagonEdge[] = [];
+  const nodes: RenderableHexagonNode[] = [];
+  const edges: RenderableHexagonEdge[] = [];
 
-  const boundedContexts = wizardData.boundedContexts ?? [];
-  const externalContexts = wizardData.externalContexts ?? [];
-  const peerMappings = wizardData.peerMappings ?? [];
+  const boundedContexts = map.contexts;
+  const externalContexts = map.peers;
+  const peerMappings = map.peerMappings;
 
   const contextCount = boundedContexts.length;
-  const canvasCenterX = LAYOUT_CONFIG.CENTER_X;
   const canvasCenterY = LAYOUT_CONFIG.CENTER_Y;
   const groupWidth = Math.max(
     LAYOUT_CONFIG.GROUP_MIN_WIDTH,

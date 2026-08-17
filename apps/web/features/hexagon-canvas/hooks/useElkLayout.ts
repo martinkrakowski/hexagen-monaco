@@ -1,5 +1,8 @@
 import { useCallback, useRef } from "react";
-import type { HexagonNode, HexagonEdge } from "@hexagen/visualization";
+import type {
+  RenderableHexagonNode,
+  RenderableHexagonEdge,
+} from "@hexagen/visualization";
 import { getSolveGraphLayoutUseCase } from "@/lib/wire";
 
 export interface LayoutResponse {
@@ -30,27 +33,25 @@ export function useElkLayout() {
 
   const calculateLayout = useCallback(
     async (
-      nodes: HexagonNode[],
-      edges: HexagonEdge[],
+      nodes: RenderableHexagonNode[],
+      edges: RenderableHexagonEdge[],
       direction: "RIGHT" | "DOWN" | "LEFT" | "UP" = "RIGHT",
     ): Promise<LayoutResponse> => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       try {
-        const layoutNodes: LayoutNode[] = nodes.map((node) => {
-          const layoutNode = node as HexagonNode & {
-            parentId?: string;
-            side?: "north" | "south" | "east" | "west";
-          };
-          return {
-            id: node.id,
-            width: (layoutNode as { style?: { width?: number } }).style?.width ?? 180,
-            height: (layoutNode as { style?: { height?: number } }).style?.height ?? 100,
-            parentId: layoutNode.parentId,
-            type: node.type,
-            side: layoutNode.side,
-          };
-        });
+        // Three casts used to stand here — `node as HexagonNode & { parentId
+        // … }` plus one per `style` read — because `parentId` / `side` / `style`
+        // were reachable only through a type this hook's parameter did not
+        // name. Naming `RenderableHexagonNode` removed all three (HEX-030).
+        const layoutNodes: LayoutNode[] = nodes.map((node) => ({
+          id: node.id,
+          width: node.style?.width ?? 180,
+          height: node.style?.height ?? 100,
+          parentId: node.parentId,
+          type: node.type,
+          side: node.side,
+        }));
 
         const layoutEdges: LayoutEdge[] = edges.map((edge) => ({
           id: edge.id,
@@ -58,9 +59,14 @@ export function useElkLayout() {
           target: edge.target,
         }));
 
-        const graphDirection = direction === "RIGHT" || direction === "LEFT" ? "LR" : "TB";
+        const graphDirection =
+          direction === "RIGHT" || direction === "LEFT" ? "LR" : "TB";
 
-        const result = await useCaseRef.current.execute(layoutNodes, layoutEdges, graphDirection);
+        const result = await useCaseRef.current.execute(
+          layoutNodes,
+          layoutEdges,
+          graphDirection,
+        );
 
         return { positions: [...result.positions] };
       } catch (error) {

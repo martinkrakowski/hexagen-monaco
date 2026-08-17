@@ -1,16 +1,16 @@
-import type { WizardData } from "@hexagen/project-configuration";
+import type { HexagonalMapInput } from "./hexagonal-map-input.js";
 import type {
-  HexagonEdge,
-  HexagonNodeWithLayout,
-} from "../../../domain/index.js";
+  RenderableHexagonEdge,
+  RenderableHexagonNode,
+} from "./renderable-graph.js";
 
 export interface GenerateHexagonalMapInput {
-  wizardData: WizardData;
+  map: HexagonalMapInput;
 }
 
 export interface GenerateHexagonalMapOutput {
-  nodes: HexagonNodeWithLayout[];
-  edges: HexagonEdge[];
+  nodes: RenderableHexagonNode[];
+  edges: RenderableHexagonEdge[];
 }
 
 export interface GenerateHexagonalMapPort {

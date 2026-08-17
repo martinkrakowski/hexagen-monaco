@@ -2,4 +2,6 @@
 
 export * from "./export-graph-image.port.js";
 export * from "./generate-hexagonal-map.port.js";
+export * from "./hexagonal-map-input.js";
 export * from "./render-hexagon-canvas.port.js";
+export * from "./renderable-graph.js";
