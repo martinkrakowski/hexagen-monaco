@@ -1,8 +1,8 @@
 "use client";
 
-import { CloudChatInterface } from "../CloudChatInterface";
-import { PanelFooter } from "../governance";
-import type { CloudChatMessage } from "../hooks/useCloudLlm";
+import { CloudChatInterface } from "../../CloudChatInterface";
+import { PanelFooter } from "../../governance";
+import type { CloudChatMessage } from "../types";
 
 interface CloudChatViewProps {
   onModeChange: (mode: "local" | "cloud") => void;

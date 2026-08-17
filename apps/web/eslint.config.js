@@ -113,6 +113,98 @@ export default [
     },
   },
   {
+    // REA-001 / REA-002 / REA-006 — the governance assistant's `view/` tree is
+    // presentational: it renders what the boundary hands it and raises intents.
+    // `GovernanceAssistantPanel.tsx` is the boundary that owns the local-engine
+    // subscription, the cloud transport, the secret vault and the single
+    // capability probe.
+    //
+    // The fence is on the DIRECTORY, so a view added to `view/` later inherits
+    // it instead of quietly escaping a hand-kept file list — and it is in the
+    // shipped lint config rather than a test, because a lint rule cannot be
+    // satisfied by deleting an assertion.
+    //
+    // Note there is deliberately no `allowTypeImports` escape hatch on the
+    // hooks pattern: the two transport-shaped types the views legitimately need
+    // (`CloudChatMessage`, `ConnectionState`) are re-exported from
+    // `GovernanceAssistantPanel/types.ts`, which is outside the fence. A type
+    // re-export erases at build time; an allowance would have to be trusted.
+    //
+    // Flat config replaces (does not merge) a rule's options, so the
+    // `@hexagen/local-llm` ACL entry from the `features/**` block above is
+    // repeated here — dropping it would silently exempt this directory from
+    // ADR-0021.
+    files: [
+      "features/governance-assistant/GovernanceAssistantPanel/view/**/*.{ts,tsx}",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@hexagen/local-llm",
+              importNames: ["LLMMessage", "LocalLLMProviderPort"],
+              allowTypeImports: true,
+              message:
+                'LLMMessage and LocalLLMProviderPort are @internal. Use SendStructuredRequestPort, ModelLifecyclePort, or LLMRequest["messages"] instead. See ADR 0021.',
+            },
+          ],
+          patterns: [
+            {
+              // `no-restricted-imports` matches the import STRING, not the
+              // resolved module, so every spelling has to be listed. tsconfig
+              // maps `@/*` onto `app/*` among others, and the alias form is the
+              // dominant idiom in `features/`. `wire*` rather than
+              // `wire.client` because `app/lib/wire.ts` is a barrel that
+              // re-exports it.
+              group: [
+                "**/wire",
+                "**/wire.*",
+                "@/lib/wire",
+                "@/lib/wire.*",
+                "**/adapters/*",
+                "**/adapters/*/*",
+              ],
+              message:
+                "REA-001: a governance view must not reach the client DI container or an adapter. Read it in GovernanceAssistantPanel and pass the result down as props.",
+            },
+            {
+              group: [
+                "**/local-llm-context",
+                "**/vault-context",
+                "@/lib/local-llm-context",
+                "@/lib/vault-context",
+              ],
+              message:
+                "REA-001: engine state and the secret vault are subscribed to once in GovernanceAssistantPanel. Take them as props (`lifecycle`, `vault`) instead of reading the context here.",
+            },
+            {
+              group: [
+                "**/lib/manifest-generation",
+                "**/lib/manifest-generation/*",
+                "@/lib/manifest-generation",
+                "@/lib/manifest-generation/*",
+              ],
+              message:
+                "REA-006: getCapabilities() runs once per panel mount, in useServerCapabilities. Take the names as the `capabilities` prop.",
+            },
+            {
+              group: [
+                "../../hooks/*",
+                "../../../hooks/*",
+                "**/governance-assistant/hooks/*",
+                "@/governance-assistant/hooks/*",
+              ],
+              message:
+                "REA-001: the governance-assistant hooks are transports (engine, cloud chat, capability probe, Q&A thread). They belong to the boundary; import the types you need from GovernanceAssistantPanel/types.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["app/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [

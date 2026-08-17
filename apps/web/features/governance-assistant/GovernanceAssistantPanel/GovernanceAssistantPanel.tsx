@@ -8,6 +8,7 @@ import {
 } from "@/lib/local-llm-context";
 import { useCloudLLM } from "../hooks/useCloudLlm";
 import { useCloudConnection } from "../hooks/useCloudConnection";
+import { useServerCapabilities } from "../hooks/useServerCapabilities";
 import { useSecretVault } from "@/lib/vault-context";
 import { getClientProviders } from "@hexagen/local-llm";
 import type { PrebakedQuestion } from "@hexagen/prompt-compiler";
@@ -17,15 +18,11 @@ import type {
   CloudModelConfig,
   DomainModelId,
 } from "@hexagen/local-llm";
-import { StepPills, PanelFooter } from "../governance";
 import { hasServerLLMAccessKey } from "../../../app/lib/wire";
-import { getCapabilities } from "@/lib/manifest-generation";
 
-import { StatusSection } from "./StatusSection";
-import { ViolationsSection } from "./ViolationsSection";
-import { SuggestionsSection } from "./SuggestionsSection";
-import { QuestionsSection } from "./QuestionsSection";
-import { ModeWrapper } from "./ModeWrapper";
+import { ModeWrapper } from "./view/ModeWrapper";
+import { GovernanceQaView } from "./view/GovernanceQaView";
+import { selectLocalLifecycle, lifecycleOwnsThePanel } from "./lifecycle";
 import type {
   GovernanceAssistantPanelProps,
   PanelView,
@@ -34,14 +31,35 @@ import type {
 import type { CloudChatMessage } from "../hooks/useCloudLlm";
 import type { ConnectionState } from "../hooks/useCloudConnection";
 
+/**
+ * Transport boundary for the governance assistant (REA-001).
+ *
+ * Everything that talks to the outside world lives here — the local engine
+ * subscription, the cloud connection and chat transport, the secret vault, the
+ * server capability probe, and the Q&A thread hook — and leaves as plain props.
+ * `view/` renders; it holds no transport, and a lint fence on that directory
+ * keeps it that way.
+ *
+ * The panel's own state is view routing: `mode` (local vs cloud) and
+ * `panelView` (Q&A vs model settings). That is this slice's equivalent of the
+ * prop-injected router used elsewhere in `apps/web` — the children receive the
+ * current destination and raise navigation intents, they never decide where to
+ * go.
+ */
 export function GovernanceAssistantPanel({
   wizardData,
   currentStepIndex,
   violations,
   suggestions,
-  onRefresh,
-  isLoading,
 }: GovernanceAssistantPanelProps) {
+  // `onRefresh` and `isLoading` are deliberately not destructured: nothing in
+  // this panel reads them. They were threaded through `ModeWrapper` and
+  // `LocalModeView` to no consumer at all, which also means
+  // `GovernancePanelWrapper`'s `handleRefresh` — the ONLY caller of
+  // `useGovernanceData().refresh`, and therefore the only thing that would ever
+  // populate `violations` / `suggestions` — is never invoked. Both props stay on
+  // the interface because deciding what that surface should do is a product
+  // question, not a refactor; see the PR notes.
   const {
     activeItem,
     selectItem,
@@ -74,23 +92,15 @@ export function GovernanceAssistantPanel({
   } = useLocalLLMConfig();
 
   const [panelView, setPanelView] = useState<PanelView>("main");
-  const [serverModelName, setServerModelName] = useState<string>("gpt-4o-mini");
-
-  useEffect(() => {
-    getCapabilities()
-      .then((res) => {
-        if (res.activeModelName) {
-          setServerModelName(res.activeModelName);
-        }
-      })
-      .catch(() => {});
-  }, []);
-
   const [followUpQuestions, setFollowUpQuestions] = useState<
     PrebakedQuestion[]
   >([]);
   const [mode, setMode] = useState<LLMMode>("local");
   const autoNavigatedToSettings = useRef(false);
+
+  // The panel's only capability probe. Both the footer label and the settings
+  // card read the names from here (REA-006).
+  const capabilities = useServerCapabilities();
 
   const cloudLLM = useCloudLLM();
   const cloudConnection = useCloudConnection();
@@ -105,7 +115,12 @@ export function GovernanceAssistantPanel({
     cloudLLM.setVault(vault);
   }, [cloudLLM, vault]);
 
-  const { status, autoLoading } = llmEngineState;
+  const { status } = llmEngineState;
+  const serverAssistantAvailable = hasServerLLMAccessKey();
+  const lifecycle = selectLocalLifecycle(
+    llmEngineState,
+    serverAssistantAvailable,
+  );
 
   const handleOpenSettings = useCallback(() => {
     autoNavigatedToSettings.current = false;
@@ -113,10 +128,10 @@ export function GovernanceAssistantPanel({
   }, []);
 
   const handleBackFromSettings = useCallback(() => {
-    if (status === "requires_model" && !hasServerLLMAccessKey()) return;
+    if (status === "requires_model" && !serverAssistantAvailable) return;
     autoNavigatedToSettings.current = false;
     setPanelView("main");
-  }, [status]);
+  }, [status, serverAssistantAvailable]);
 
   const handleCloudConnect = useCallback(
     async (provider: string, model: string) => {
@@ -156,7 +171,7 @@ export function GovernanceAssistantPanel({
   const handleResetConfig = useCallback(() => {
     resetLocalAIConfig();
     returnToModelSettings();
-  }, [returnToModelSettings]);
+  }, [resetLocalAIConfig, returnToModelSettings]);
 
   const questions = useMemo(() => getQuestions(), [getQuestions]);
   const displayQuestions = activeItem ? questions : stepQuestions;
@@ -171,11 +186,11 @@ export function GovernanceAssistantPanel({
   }, [messages]);
 
   useEffect(() => {
-    if (llmEngineState.status === "ready" && autoNavigatedToSettings.current) {
+    if (status === "ready" && autoNavigatedToSettings.current) {
       setPanelView("main");
       autoNavigatedToSettings.current = false;
     }
-  }, [llmEngineState.status]);
+  }, [status]);
 
   useEffect(() => {
     if (isStreaming) return;
@@ -185,7 +200,6 @@ export function GovernanceAssistantPanel({
     }
   }, [isStreaming, getFollowUpQuestions, conversationThread]);
 
-  // Handle question click
   const handleQuestionClick = useCallback(
     (q: PrebakedQuestion) => {
       expandAccordion(q.id);
@@ -193,7 +207,6 @@ export function GovernanceAssistantPanel({
     [expandAccordion],
   );
 
-  // Handle follow-up click
   const handleFollowUpClick = useCallback(
     (q: PrebakedQuestion) => {
       setFollowUpQuestions([]);
@@ -209,13 +222,13 @@ export function GovernanceAssistantPanel({
   useEffect(() => {
     if (
       status === "requires_model" &&
-      !hasServerLLMAccessKey() &&
+      !serverAssistantAvailable &&
       panelView !== "model-settings"
     ) {
       setPanelView("model-settings");
       autoNavigatedToSettings.current = true;
     }
-  }, [status, panelView]);
+  }, [status, panelView, serverAssistantAvailable]);
 
   useEffect(() => {
     if (
@@ -228,29 +241,10 @@ export function GovernanceAssistantPanel({
     }
   }, [panelView, status]);
 
-  // Show/hide state calculations
-  const showUnavailable =
-    (status === "no_webgpu" || status === "unsupported_browser") &&
-    !hasServerLLMAccessKey();
-  const showWakingUp =
-    status === "loading_vram" && autoLoading && !hasServerLLMAccessKey();
-  const showProgress =
-    (status === "downloading" || (status === "loading_vram" && !autoLoading)) &&
-    !hasServerLLMAccessKey();
-  const showError = status === "error" && !hasServerLLMAccessKey();
-  const showRequiresModel =
-    status === "requires_model" && !hasServerLLMAccessKey();
-  const showBootSpinner =
-    (status === "unavailable" || status === "opt_in") &&
-    !hasServerLLMAccessKey();
+  const engineBusy = status === "downloading" || status === "loading_vram";
 
-  // Handle mode wrapper states
   if (
-    showBootSpinner ||
-    showUnavailable ||
-    showWakingUp ||
-    showProgress ||
-    showError ||
+    lifecycleOwnsThePanel(lifecycle) ||
     panelView === "model-settings" ||
     mode === "cloud"
   ) {
@@ -269,7 +263,7 @@ export function GovernanceAssistantPanel({
     return (
       <ModeWrapper
         mode={mode}
-        panelView={panelView}
+        vault={vault}
         onModeChange={setMode}
         cloudConnectionState={cloudConnection.state as ConnectionState}
         cloudConnectionError={cloudConnection.error}
@@ -283,21 +277,18 @@ export function GovernanceAssistantPanel({
         onAbort={cloudLLM.abort}
         onClear={cloudLLM.clearMessages}
         modelName={modelName}
-        llmEngineState={llmEngineState}
-        showBootSpinner={showBootSpinner}
-        showUnavailable={showUnavailable}
-        showWakingUp={showWakingUp}
-        showProgress={showProgress}
-        showError={showError}
-        showRequiresModel={showRequiresModel}
-        onRefresh={onRefresh}
-        isLoading={isLoading}
+        lifecycle={lifecycle}
+        isLoading={engineBusy}
+        capabilities={capabilities}
+        serverAssistantAvailable={serverAssistantAvailable}
+        loadedModel={loadedModel}
+        loadedModelId={llmEngineState.loadedModelId}
+        messagesLength={messages.length}
         onCancelDownload={cancelDownload}
         onOpenSettings={handleOpenSettings}
+        onInitModel={initializeModel}
         onBackFromSettings={handleBackFromSettings}
         onSwitchToCloud={handleSwitchToCloud}
-        loadedModel={loadedModel}
-        messagesLength={messages.length}
         onSwitchModel={switchModel as (modelId: DomainModelId) => Promise<void>}
         onDeleteModel={
           deleteCachedModel as (modelId: DomainModelId) => Promise<void>
@@ -305,57 +296,36 @@ export function GovernanceAssistantPanel({
         hasModelInCache={
           hasModelInCache as (modelId: DomainModelId) => Promise<boolean>
         }
-        onInitModel={initializeModel}
         onResetConfig={handleResetConfig}
       />
     );
   }
 
-  // Main view
   return (
-    <div className="h-full flex flex-col bg-card">
-      <StepPills currentStepIndex={currentStepIndex} />
-      <div className="h-px mx-5 mb-3 bg-gradient-to-r from-transparent via-border to-transparent" />
-
-      <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-5">
-        <StatusSection violations={violations} suggestions={suggestions} />
-        <ViolationsSection
-          violations={violations}
-          activeItem={activeItem}
-          onSelectViolation={(v) => selectItem({ type: "violation", item: v })}
-        />
-        <SuggestionsSection
-          suggestions={suggestions}
-          activeItem={activeItem}
-          onSelectSuggestion={(s) =>
-            selectItem({ type: "suggestion", item: s })
-          }
-        />
-        <QuestionsSection
-          displayQuestions={displayQuestions}
-          activeItem={activeItem}
-          isStreaming={isStreaming}
-          isExpanded={(id) => expandedQuestionId === id}
-          onQuestionClick={handleQuestionClick}
-          conversationThread={conversationThread}
-          lastAssistantMessage={lastAssistantMessage}
-          regeneratingEntryId={regeneratingEntryId}
-          onRegenerate={regenerateAnswer}
-          followUpQuestions={followUpQuestions}
-          onFollowUpClick={handleFollowUpClick}
-          threadLoaded={threadLoaded}
-        />
-      </div>
-
-      <PanelFooter
-        modelId={llmEngineState.loadedModelId}
-        modelLabel={hasServerLLMAccessKey() ? serverModelName : undefined}
-        onOpenSettings={handleOpenSettings}
-        isLoading={
-          llmEngineState.status === "downloading" ||
-          llmEngineState.status === "loading_vram"
-        }
-      />
-    </div>
+    <GovernanceQaView
+      currentStepIndex={currentStepIndex}
+      violations={violations}
+      suggestions={suggestions}
+      activeItem={activeItem}
+      onSelectViolation={(v) => selectItem({ type: "violation", item: v })}
+      onSelectSuggestion={(s) => selectItem({ type: "suggestion", item: s })}
+      displayQuestions={displayQuestions}
+      isStreaming={isStreaming}
+      isExpanded={(id) => expandedQuestionId === id}
+      onQuestionClick={handleQuestionClick}
+      conversationThread={conversationThread}
+      lastAssistantMessage={lastAssistantMessage}
+      regeneratingEntryId={regeneratingEntryId}
+      onRegenerate={regenerateAnswer}
+      followUpQuestions={followUpQuestions}
+      onFollowUpClick={handleFollowUpClick}
+      threadLoaded={threadLoaded}
+      footerModelId={llmEngineState.loadedModelId}
+      footerModelLabel={
+        serverAssistantAvailable ? capabilities.chatModelName : undefined
+      }
+      footerIsLoading={engineBusy}
+      onOpenSettings={handleOpenSettings}
+    />
   );
 }

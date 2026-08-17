@@ -3,13 +3,31 @@ import type {
   AISuggestion,
   PrebakedQuestion,
 } from "@hexagen/prompt-compiler";
-import type {
-  LLMEngineState,
-  DomainModelId,
-  ModelMetadata,
-} from "@hexagen/local-llm";
-import type { CloudChatMessage } from "../hooks/useCloudLlm";
-import type { ConnectionState } from "../hooks/useCloudConnection";
+
+/**
+ * Transport-shaped types the presentational `view/` tree needs.
+ *
+ * They are re-exported from here rather than imported from `../hooks/*`
+ * directly because `view/**` is lint-fenced against that directory — a fence
+ * with no `allowTypeImports` escape hatch, so it cannot be widened by accident.
+ * A type re-export is erased at build time and carries no transport with it.
+ */
+export type { CloudChatMessage } from "../hooks/useCloudLlm";
+export type { ConnectionState } from "../hooks/useCloudConnection";
+
+export interface ServerCapabilityNames {
+  /**
+   * Model answering governance Q&A. `undefined` until the capability probe
+   * resolves — deliberately, so no surface prints a name the server never
+   * confirmed.
+   */
+  chatModelName?: string;
+  /**
+   * Manifest generation may run on a different provider chain than the
+   * assistant's Q&A model; the settings card surfaces both when they differ.
+   */
+  generationModelName?: string;
+}
 
 export interface GovernanceAssistantPanelProps {
   wizardData: unknown;
@@ -61,42 +79,4 @@ export interface QuestionsSectionProps {
   followUpQuestions: PrebakedQuestion[];
   onFollowUpClick: (q: PrebakedQuestion) => void;
   threadLoaded: boolean;
-}
-
-export interface ModeWrapperProps {
-  mode: LLMMode;
-  panelView: PanelView;
-  onModeChange: (mode: LLMMode) => void;
-  cloudConnectionState: ConnectionState;
-  cloudConnectionError: { message: string; retryable: boolean } | null;
-  onCloudConnect: (provider: string, model: string) => Promise<void>;
-  onCloudDisconnect: () => void;
-  onRetryConnection: () => void;
-  cloudMessages: CloudChatMessage[];
-  cloudLLMStatus: string;
-  cloudLLMError: string | null;
-  onSendMessage: (content: string) => void;
-  onAbort: () => void;
-  onClear: () => void;
-  modelName: string;
-  llmEngineState: LLMEngineState;
-  showBootSpinner: boolean;
-  showUnavailable: boolean;
-  showWakingUp: boolean;
-  showProgress: boolean;
-  showError: boolean;
-  showRequiresModel: boolean;
-  onRefresh: () => void;
-  isLoading: boolean;
-  onCancelDownload: () => void;
-  onOpenSettings: () => void;
-  onBackFromSettings: () => void;
-  onSwitchToCloud: () => void;
-  loadedModel: ModelMetadata | null;
-  messagesLength: number;
-  onSwitchModel: (modelId: DomainModelId) => Promise<void>;
-  onDeleteModel: (modelId: DomainModelId) => Promise<void>;
-  hasModelInCache: (modelId: DomainModelId) => Promise<boolean>;
-  onInitModel: () => void;
-  onResetConfig?: () => void;
 }
