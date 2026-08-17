@@ -372,6 +372,30 @@ describe("HEX-019 — transaction-lifecycle tools bind to inbound ports", () => 
       ).toEqual([]);
     });
 
+    it("is not thrown off by a regex literal before a class", () => {
+      // A quote inside a regex literal reads as an opening quote to anything
+      // that scans characters rather than parsing them, which blanks the class
+      // that follows.
+      expect(
+        implementedContractsOf(
+          "const quoted = /[\"']/;\nexport class Foo implements FooPort {}",
+        ),
+      ).toEqual(["FooPort"]);
+    });
+
+    it("reads a class expression and a nested class, not only a top-level declaration", () => {
+      expect(
+        implementedContractsOf(
+          "const C = class Inner implements InnerPort {};",
+        ),
+      ).toEqual(["InnerPort"]);
+      expect(
+        implementedContractsOf(
+          "export class Outer {\n  m() {\n    class Inner implements InnerPort {}\n  }\n}",
+        ),
+      ).toEqual(["InnerPort"]);
+    });
+
     it("reads a header that carries a base class before implements", () => {
       expect(
         implementedContractsOf(
