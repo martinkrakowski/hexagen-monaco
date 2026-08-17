@@ -36,7 +36,6 @@ This package enforces a strict firewall against information-state pollution:
 This package MUST NOT import from:
 
 - `@hexagen/core-domain` (kernel types)
-- `@hexagen/architectural-enforcement`
 - `@hexagen/local-llm`
 - `@hexagen/agentic-interaction`
 - Feature slices (`apps/web/features/*`)

@@ -5,7 +5,6 @@
 
 kernel_packages:
   - "@hexagen/core-domain"
-  - "@hexagen/architectural-enforcement"
   - "@hexagen/intent-compiler"
   - "@hexagen/transaction-system"
   - "@hexagen/prompt-compiler"
