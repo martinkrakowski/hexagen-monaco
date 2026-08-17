@@ -12,6 +12,7 @@ layers:
       - GetInvariantsResourceUseCase
       - GetLinterConfigResourceUseCase
       - GetWorkspaceContextResourceUseCase
+      - CreateContextToolUseCase
       - DiffManifestToolUseCase
       - AuditBoundariesToolUseCase
       - ScaffoldModuleToolUseCase
@@ -33,6 +34,16 @@ layers:
     ports:
       in:
         - MCPServerPort
+        # Manifest-structure tool family (item 6.5a / HEX-019). Each is
+        # implemented by its use case and called by the tool handler, with no
+        # infrastructure implementer — inbound under ADR-0048.
+        - CreateContextToolPort
+        - RemoveContextToolPort
+        - CreatePortToolPort
+        - RemovePortToolPort
+        - CreateAdapterToolPort
+        - AddDependencyToolPort
+        - DiffManifestToolPort
       out:
         - ProjectConfigurationReadPort
         - ManifestWritePort
