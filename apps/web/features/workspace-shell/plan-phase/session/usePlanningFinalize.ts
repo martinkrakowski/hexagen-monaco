@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import type { PlanningSessionSnapshot } from "./planning-session";
 import { streamChatTurn } from "./stream-chat-turn";
@@ -106,8 +112,23 @@ export function usePlanningFinalize(
   // StrictMode remount) would otherwise wipe a live review — the exact lift
   // this hook exists to provide. Keyed on the VALUE, so only a real discard
   // tears down.
+  //
+  // LAYOUT effect, deliberately (same reason as `useProjectSettingsAutosave`):
+  // the review textarea and its Confirm button are interactive the moment they
+  // commit. A discard arrives from a discrete click (attach / end / reset), so
+  // React renders and COMMITS synchronously and the browser may paint before a
+  // passive effect's Scheduler task runs. In that gap the pane showed the old
+  // session's review while `activeLayerId`/`turns` already pointed at the new
+  // one, and `LiveSessionSection.handleFinalizeConfirm` gates only on
+  // `finalize.phase === "review" && activeLayerId` — a click landing there
+  // would have filed the OLD spec text against the NEW layer. As a layout
+  // effect the teardown lands in that same commit, so the stale review is
+  // never painted and never clickable. No SSR concern: the plan phase renders
+  // only for a client-loaded saved project (`ProjectWorkspace.planPhaseActive`),
+  // which is also why `useProjectSettingsAutosave` can be a layout effect in
+  // this same subtree.
   const seenEpochRef = useRef(discardEpoch);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (seenEpochRef.current === discardEpoch) return;
     seenEpochRef.current = discardEpoch;
     teardown();
@@ -134,8 +155,29 @@ export function usePlanningFinalize(
       }),
       model,
       signal: abortController.signal,
-      onChunk: (content) => setState({ phase: "distilling", content }),
+      onChunk: (content) => {
+        // Same revalidation as after the await: a chunk decoded from a buffer
+        // that was already in flight when the discard landed must not drag the
+        // pane back into the distilling phase (Abandon button included) for a
+        // session that no longer exists.
+        if (abortController.signal.aborted) return;
+        setState({ phase: "distilling", content });
+      },
     });
+    // REVALIDATE before publishing. `result.aborted` is not sufficient: the
+    // stream can settle NON-abortively even though the abort landed while it
+    // was in flight, in which case both publishes below would put finalize
+    // state back on screen for a session that no longer exists.
+    //  - `{ok:true}`: the terminal `done` frame was already buffered when the
+    //    abort arrived, so the read loop completes normally.
+    //  - `{ok:false, aborted:false}`: `stream-chat-turn.ts` (the `!response.ok`
+    //    arm) awaits `response.json()` inside a catch that SWALLOWS the
+    //    AbortError and returns `aborted: false` — an HTTP-error response plus
+    //    a concurrent discard reaches here as an ordinary failure.
+    // The signal is the record of the discard, so gate on it directly rather
+    // than duplicating session identity into finalize state (that would add a
+    // third member to a deliberately two-member seam).
+    if (abortController.signal.aborted) return;
     // Only clear the ref if it is still OURS: an abandon+restart during the
     // await means a newer distill owns it now, and wiping that controller
     // would make the new run uncancellable.
@@ -143,7 +185,10 @@ export function usePlanningFinalize(
       distillAbortRef.current = null;
     }
     if (!result.ok) {
-      if (result.aborted) return; // abandoned — teardown already handled it
+      // Subsumed by the signal check above (the only signal this stream can be
+      // aborted by is ours), and kept as the narrower, self-evident statement
+      // of the same rule: an aborted distill never publishes.
+      if (result.aborted) return;
       setState({ phase: "error", message: result.error });
       await cancelFinalize();
       return;

@@ -1,8 +1,12 @@
 import { describe, it, vi, beforeEach, afterEach } from "vitest";
 import assert from "node:assert/strict";
+import { createElement, useState } from "react";
+import { flushSync } from "react-dom";
+import { createRoot } from "react-dom/client";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import type { ProjectLayer, ProjectLayerTurn } from "@hexagen/shared";
 
+import type { UsePlanningFinalizeReturn } from "../session/usePlanningFinalize";
 import { usePlanningFinalize } from "../session/usePlanningFinalize";
 import { usePlanningSession } from "../session/usePlanningSession";
 import type { PlanningSessionSnapshot } from "../session/planning-session";
@@ -29,6 +33,11 @@ const originalFetch = global.fetch;
 
 type Script =
   | { kind: "reply"; content: string }
+  // The two NON-abortive settlements of an ABORTED stream — the shapes that
+  // reach `usePlanningFinalize` when a discard lands mid-distill but
+  // `streamChatTurn` still returns `aborted: false`. See the two cases below.
+  | { kind: "reply-after-abort"; content: string }
+  | { kind: "http-error-json-hang"; status: number }
   | { kind: "error-frame"; message: string }
   | { kind: "hang" }; // resolves only by abort
 
@@ -37,6 +46,30 @@ function sseBody(frames: string[]): ReadableStream<Uint8Array> {
   let index = 0;
   return new ReadableStream({
     pull(controller) {
+      if (index < frames.length) {
+        controller.enqueue(encoder.encode(frames[index] + "\n"));
+        index++;
+      } else {
+        controller.close();
+      }
+    },
+  });
+}
+
+/** A body that enqueues its frames only once `signal` aborts, then closes. */
+function sseBodyOnAbort(
+  signal: AbortSignal | null | undefined,
+  frames: string[],
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  let index = 0;
+  return new ReadableStream({
+    async pull(controller) {
+      if (!signal?.aborted) {
+        await new Promise<void>((resolve) =>
+          signal?.addEventListener("abort", () => resolve()),
+        );
+      }
       if (index < frames.length) {
         controller.enqueue(encoder.encode(frames[index] + "\n"));
         index++;
@@ -66,6 +99,38 @@ function installFetch() {
             reject(new DOMException("Aborted", "AbortError")),
           );
         });
+      }
+      if (script.kind === "reply-after-abort") {
+        // The terminal `done` frame is already buffered when the abort lands,
+        // so `streamChatTurn`'s read loop completes NORMALLY and returns
+        // `{ok:true}` on a stream whose signal is aborted. Modelled by a body
+        // that only yields once the signal fires (a signal-unaware source, as a
+        // buffered one is).
+        return {
+          ok: true,
+          status: 200,
+          body: sseBodyOnAbort(init?.signal, [
+            `data: ${JSON.stringify({ type: "chunk", content: script.content })}`,
+            `data: ${JSON.stringify({ type: "done" })}`,
+          ]),
+        } as unknown as Response;
+      }
+      if (script.kind === "http-error-json-hang") {
+        // `stream-chat-turn.ts`'s `!response.ok` arm awaits `response.json()`
+        // inside a `catch {}` that SWALLOWS the AbortError, then returns
+        // `{ok:false, aborted:false}`. An HTTP-error response plus a discard
+        // during the body read therefore reaches the hook as an ORDINARY
+        // failure, with no `aborted` flag to gate on.
+        return {
+          ok: false,
+          status: script.status,
+          json: () =>
+            new Promise((_resolve, reject) => {
+              init?.signal?.addEventListener("abort", () =>
+                reject(new DOMException("Aborted", "AbortError")),
+              );
+            }),
+        } as unknown as Response;
       }
       const frames =
         script.kind === "error-frame"
@@ -328,6 +393,75 @@ describe("usePlanningFinalize (in isolation — no planning loop)", () => {
     assert.deepStrictEqual(result.current.state, { phase: "idle" });
   });
 
+  it("a distill that SUCCEEDS after a discard does not republish the review", async () => {
+    // A discard aborts the stream, but abort is not a guarantee the stream
+    // settles abortively: if the terminal `done` frame was already buffered,
+    // `streamChatTurn` returns `{ok:true}` and `result.aborted` is false. The
+    // spec then belongs to a session that is gone — republishing it would put a
+    // Confirm-able review back on screen whose `activeLayerId`/`turns` now come
+    // from whatever session was attached instead.
+    const { result, rerender } = renderFinalize();
+    scripts = [
+      { kind: "reply-after-abort", content: "spec for a dead session" },
+    ];
+    let distilling!: Promise<void>;
+    await act(async () => {
+      distilling = result.current.start();
+    });
+    await waitFor(() =>
+      assert.strictEqual(result.current.state.phase, "distilling"),
+    );
+
+    act(() => {
+      rerender({ epoch: 1 });
+    });
+    assert.strictEqual(requests[0].signal?.aborted, true);
+    await act(async () => {
+      await distilling;
+    });
+    assert.deepStrictEqual(
+      result.current.state,
+      { phase: "idle" },
+      "a discarded distill must not publish its review",
+    );
+  });
+
+  it("a distill that fails NON-abortively after a discard does not republish an error", async () => {
+    // The reachable half: `stream-chat-turn.ts`'s `!response.ok` arm awaits
+    // `response.json()` in a `catch {}` that swallows the AbortError and
+    // returns `aborted: false`, so an HTTP-error response racing a discard
+    // arrives as an ordinary failure. Publishing it would strand the discarded
+    // session's pane in the error phase (with a Retry) and fire cancelFinalize
+    // against whatever session is tracked now.
+    const { result, session, rerender } = renderFinalize();
+    scripts = [{ kind: "http-error-json-hang", status: 503 }];
+    let distilling!: Promise<void>;
+    await act(async () => {
+      distilling = result.current.start();
+    });
+    await waitFor(() =>
+      assert.strictEqual(result.current.state.phase, "distilling"),
+    );
+
+    act(() => {
+      rerender({ epoch: 1 });
+    });
+    assert.strictEqual(requests[0].signal?.aborted, true);
+    await act(async () => {
+      await distilling;
+    });
+    assert.deepStrictEqual(
+      result.current.state,
+      { phase: "idle" },
+      "a discarded distill must not publish an error phase",
+    );
+    assert.strictEqual(
+      session.cancelFinalize.mock.calls.length,
+      0,
+      "no status write against a session that was already discarded",
+    );
+  });
+
   it("re-renders do not drop a live review — only a discard does", async () => {
     // The A2 lift itself, and the anti-vacuity arm for the epoch test above:
     // a teardown that fired on every commit would satisfy that test while
@@ -352,6 +486,90 @@ describe("usePlanningFinalize (in isolation — no planning loop)", () => {
       phase: "review",
       text: "kept spec",
     });
+  });
+});
+
+// ── Commit timing of the discard teardown ───────────────────────────────────
+
+/** `waitFor` without RTL's act wrapper — this suite's timing test runs with the
+ *  act environment deliberately off. */
+async function pollUntil(
+  predicate: () => boolean,
+  timeoutMs = 2000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error("pollUntil timed out");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+describe("discard teardown lands in the SAME commit", () => {
+  it("no committed frame exposes a Confirm-able review from the discarded session", async () => {
+    // WHY this is not just a style preference: a discard arrives from a
+    // discrete click (attach / end / reset), which React renders and COMMITS
+    // synchronously. A passive effect would run one Scheduler task later — and
+    // the browser may paint in between. That painted frame showed the previous
+    // session's review while `activeLayerId`/`turns` already pointed at the new
+    // session, and `LiveSessionSection.handleFinalizeConfirm` gates only on
+    // `finalize.phase === "review" && activeLayerId`, so a click landing there
+    // filed the OLD spec text against the NEW layer.
+    //
+    // `flushSync` reproduces that discrete-click commit. This runs with the act
+    // ENVIRONMENT OFF on purpose: inside `act`, React flushes passive effects at
+    // every boundary, which erases the very distinction being measured (this
+    // test passes with either effect kind when wrapped in act — verified). With
+    // the flag off, passive effects go through the real Scheduler task, so
+    // "already torn down when flushSync returns" is true only for a layout
+    // effect.
+    const actEnvKey = "IS_REACT_ACT_ENVIRONMENT";
+    const globals = globalThis as unknown as Record<string, unknown>;
+    const previousActEnv = globals[actEnvKey];
+    globals[actEnvKey] = false;
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      const snapshot = convergedSnapshot();
+      let api!: UsePlanningFinalizeReturn;
+      let bump!: () => void;
+      function Harness() {
+        const [epoch, setEpoch] = useState(0);
+        bump = () => setEpoch((previous) => previous + 1);
+        api = usePlanningFinalize({
+          readSession: () => snapshot,
+          discardEpoch: epoch,
+          beginFinalize: async () => {},
+          cancelFinalize: async () => {},
+          model: "test-model",
+        });
+        return null;
+      }
+      flushSync(() => root.render(createElement(Harness)));
+
+      // Get to the phase that actually carries the hazard: `review` is the one
+      // with a Confirm button.
+      scripts = [{ kind: "reply", content: "spec of the OLD session" }];
+      await api.start();
+      await pollUntil(() => api.state.phase === "review");
+
+      // The discrete-click commit (attach / end / reset).
+      flushSync(() => bump());
+
+      // `api.state` here is what React has COMMITTED — the frame the browser can
+      // paint and a click can hit. As a passive effect the teardown's
+      // `setState({phase:"idle"})` is merely SCHEDULED at this point, so this
+      // reads `{phase:"review", text:"spec of the OLD session"}` (measured).
+      assert.deepStrictEqual(
+        api.state,
+        { phase: "idle" },
+        "no committed frame may expose finalize state from the discarded session",
+      );
+    } finally {
+      flushSync(() => root.unmount());
+      container.remove();
+      globals[actEnvKey] = previousActEnv;
+    }
   });
 });
 
