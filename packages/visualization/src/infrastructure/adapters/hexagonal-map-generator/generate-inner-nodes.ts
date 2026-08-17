@@ -1,28 +1,28 @@
-import type { BoundedContext } from "@hexagen/project-configuration";
+import type { MapContextInput } from "../../../application/ports/in/hexagonal-map-input.js";
 import type {
-  HexagonEdge,
-  HexagonNodeType,
-  HexagonNodeWithLayout,
-} from "../../../domain/index.js";
+  RenderableHexagonEdge,
+  RenderableHexagonNode,
+} from "../../../application/ports/in/renderable-graph.js";
+import type { HexagonNodeType } from "../../../domain/index.js";
 
 import { LAYOUT_CONFIG } from "./config.js";
 
 interface InnerNodesOutput {
-  nodes: HexagonNodeWithLayout[];
-  edges: HexagonEdge[];
+  nodes: RenderableHexagonNode[];
+  edges: RenderableHexagonEdge[];
   domainNodeId: string;
   useCasesNodeId: string;
 }
 
 function generateInnerNodes(
-  ctx: BoundedContext,
+  ctx: MapContextInput,
   contextId: string,
   hexX: number,
   hexY: number,
   isRootContext: boolean,
 ): InnerNodesOutput {
-  const nodes: HexagonNodeWithLayout[] = [];
-  const edges: HexagonEdge[] = [];
+  const nodes: RenderableHexagonNode[] = [];
+  const edges: RenderableHexagonEdge[] = [];
 
   const entityItems = ctx.coreDomainEntities ?? ctx.entities ?? [];
   const useCaseItems = ctx.useCases ?? [];
@@ -34,7 +34,6 @@ function generateInnerNodes(
     type: "inner" as HexagonNodeType,
     parentId: contextId,
     extent: "parent",
-    draggable: false,
     position: {
       x: isRootContext
         ? LAYOUT_CONFIG.DOMAIN_NODE_X
@@ -52,7 +51,6 @@ function generateInnerNodes(
     type: "inner" as HexagonNodeType,
     parentId: contextId,
     extent: "parent",
-    draggable: false,
     position: {
       x: isRootContext
         ? LAYOUT_CONFIG.USECASES_NODE_X
@@ -79,7 +77,6 @@ function generateInnerNodes(
       id: entityId,
       label: name,
       type: "entity" as HexagonNodeType,
-      draggable: true,
       position: { x: posX, y: posY },
     });
     edges.push({
@@ -109,7 +106,6 @@ function generateInnerNodes(
       id: useCaseId,
       label: name,
       type: "use-case" as HexagonNodeType,
-      draggable: true,
       position: { x: posX, y: posY },
     });
     edges.push({

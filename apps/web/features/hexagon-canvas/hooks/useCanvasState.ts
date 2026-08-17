@@ -1,16 +1,14 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type {
-  HexagonNode,
-  HexagonEdge,
+  RenderableHexagonNode,
+  RenderableHexagonEdge,
   CanvasViewport,
 } from "@hexagen/visualization";
 import {
   RenderHexagonCanvasUseCase,
   createCanvasViewport,
-  createDefaultHexagonNode,
 } from "@hexagen/visualization";
-import { nodeKindFromHexagonType } from "@hexagen/ui-projection-compiler";
 import {
   getArchitectureGraphProvider,
   getGenerateHexagonalMapUseCase,
@@ -22,17 +20,12 @@ import {
   useCanvasGraphStore,
   generateManifestHash,
 } from "../stores/useCanvasGraphStore";
+import { useCanvasGraphMutations } from "./useCanvasGraphMutations";
 import { useElkLayout } from "./useElkLayout";
 import { canvasRedrawKey } from "../canvas-redraw-key";
-import { computeAddOnOverlay } from "../addon-overlay";
 import { addOnName } from "../addon-overlay-presentation";
-import {
-  annotateCompassNodes,
-  buildStripChips,
-  placeStripChips,
-  overlayContextsFrom,
-  type AddOnChipNode,
-} from "../addon-overlay-nodes";
+import { placeStripChips } from "../addon-overlay-nodes";
+import { compileWizardGraph } from "../compile-wizard-graph";
 import { TEMPLATE_MANIFESTS } from "@/generated/template-manifest.generated";
 
 interface GraphState {
@@ -41,18 +34,18 @@ interface GraphState {
 }
 
 interface UseCanvasStateResult {
-  nodes: HexagonNode[];
-  edges: HexagonEdge[];
+  nodes: RenderableHexagonNode[];
+  edges: RenderableHexagonEdge[];
   viewport: CanvasViewport;
   selectedNodeId?: string;
   isLayoutCalculating: boolean;
-  onNodeDragStop: (node: HexagonNode) => void;
-  onNodeDoubleClick: (node: HexagonNode) => void;
+  onNodeDragStop: (node: RenderableHexagonNode) => void;
+  onNodeDoubleClick: (node: RenderableHexagonNode) => void;
   onAddNode: () => void;
   onExportImage: () => void;
   onUpdateNode: (
     nodeId: string,
-    updates: Pick<HexagonNode, "label" | "type">,
+    updates: Pick<RenderableHexagonNode, "label" | "type">,
   ) => void;
   onCloseEditor: () => void;
   clearCanvasLayout: () => Promise<void>;
@@ -98,7 +91,6 @@ export function useCanvasState(
     manifestHash,
     isLayoutCalculating,
     setGraph,
-    updateNodePosition,
     setManifestHash,
     setLayoutCalculating,
   } = useCanvasGraphStore(
@@ -108,7 +100,6 @@ export function useCanvasState(
       manifestHash: s.manifestHash,
       isLayoutCalculating: s.isLayoutCalculating,
       setGraph: s.setGraph,
-      updateNodePosition: s.updateNodePosition,
       setManifestHash: s.setManifestHash,
       setLayoutCalculating: s.setLayoutCalculating,
     })),
@@ -129,7 +120,7 @@ export function useCanvasState(
    * Apply saved positions from legacy persistence
    */
   const applySavedPositions = useCallback(
-    (nodes: HexagonNode[]): HexagonNode[] => {
+    (nodes: RenderableHexagonNode[]): RenderableHexagonNode[] => {
       if (!layoutLoaded || Object.keys(nodePositions).length === 0) {
         return nodes;
       }
@@ -149,9 +140,9 @@ export function useCanvasState(
    */
   const calculateElkLayout = useCallback(
     async (
-      nodes: HexagonNode[],
-      edges: HexagonEdge[],
-    ): Promise<HexagonNode[]> => {
+      nodes: RenderableHexagonNode[],
+      edges: RenderableHexagonEdge[],
+    ): Promise<RenderableHexagonNode[]> => {
       try {
         setLayoutCalculating(true);
         const result = await calculateLayout(nodes, edges, "RIGHT");
@@ -174,12 +165,8 @@ export function useCanvasState(
         // so applying it to the perimeter would misplace every compass node.
         // See docs/architectural-reviews/HEXAGONAL-LAYOUT-REMEDIATION-2026-04-29.md.
         return nodes.map((node) => {
-          const nodeWithLayout = node as HexagonNode & {
-            parentId?: string;
-            side?: "north" | "south" | "east" | "west";
-          };
           // Any root-level node (no parentId) is generator-positioned.
-          const isRootLevel = !nodeWithLayout.parentId;
+          const isRootLevel = !node.parentId;
           // Domain / UseCases column labels live INSIDE the hex (parentId set
           // to the bounded-context id). They are laid out by the generator at
           // the bottom band of the hex (DOMAIN_NODE_X/Y, USECASES_NODE_X/Y).
@@ -204,67 +191,25 @@ export function useCanvasState(
   );
 
   /**
-   * Regenerate a fresh, compiled graph from wizardData.
-   * Does NOT run ELK — caller decides whether to run layout or apply saved
-   * positions. Returns null when wizardData has no bounded contexts.
+   * Bind the pure {@link compileWizardGraph} to this app's collaborators.
    *
-   * Uses wizardDataRef to avoid destabilizing dependents when wizardData
-   * identity changes on every parent render (e.g. every keystroke in wizard).
-   * The wizardData *content* change is handled by the useEffect that triggers
-   * loadGraph.
+   * The compile itself moved out of this hook (REA-004) — what is left here is
+   * the wiring, resolved at call time from the container so the callback stays
+   * referentially stable. It still reads `wizardDataRef` rather than
+   * `wizardData` so it does not destabilize its dependents when the wizard's
+   * object identity churns on every keystroke; the *content* change is what
+   * the `loadGraph` effect keys on.
    */
-  const regenerateGraphFromWizard = useCallback((): {
-    nodes: HexagonNode[];
-    edges: HexagonEdge[];
-    chips: AddOnChipNode[];
-  } | null => {
-    const wd = wizardDataRef.current;
-    if (!wd?.boundedContexts?.length) {
-      return null;
-    }
-    const generateMap = getGenerateHexagonalMapUseCase();
-    const { nodes, edges } = generateMap.execute({ wizardData: wd });
-    const mapNodeVisualUseCase = getMapNodeVisualUseCase();
-
-    const compiledNodes = nodes.map((node) => {
-      const needsCompilation = [
-        "entity",
-        "use-case",
-        "port",
-        "adapter",
-      ].includes(node.type ?? "");
-      if (needsCompilation && mapNodeVisualUseCase) {
-        const kind = nodeKindFromHexagonType(node.type, node.side);
-        const projection = mapNodeVisualUseCase.execute({
-          nodeId: node.id,
-          kind,
-          label: node.label,
-          category: node.category,
-        });
-        return {
-          ...node,
-          category: projection.category,
-          compilerCategory: projection.category,
-          variant: projection.variant,
-        };
-      }
-      return node;
-    });
-
-    // Add-on overlay (web-only; @hexagen/visualization stays add-on-agnostic):
-    // annotate declared compass adapters in place, and build strip chips for
-    // platform-zone / shared-kernel add-ons (positioned post-layout).
-    const overlayContexts = overlayContextsFrom(wd.boundedContexts ?? []);
-    const overlay = computeAddOnOverlay(
-      wd.addOnsAnswers ?? {},
-      (id) => TEMPLATE_MANIFESTS[id],
-      overlayContexts,
-    );
-    annotateCompassNodes(compiledNodes, overlay, overlayContexts);
-    const chips = buildStripChips(overlay, addOnName);
-
-    return { nodes: compiledNodes, edges, chips };
-  }, []);
+  const regenerateGraphFromWizard = useCallback(
+    () =>
+      compileWizardGraph(wizardDataRef.current, {
+        generateMap: getGenerateHexagonalMapUseCase(),
+        mapNodeVisual: getMapNodeVisualUseCase(),
+        templateManifestOf: (id) => TEMPLATE_MANIFESTS[id],
+        addOnDisplayName: addOnName,
+      }),
+    [],
+  );
 
   /**
    * Load and process graph data
@@ -293,7 +238,7 @@ export function useCanvasState(
 
       const manifestChanged = manifestHash !== null && manifestHash !== newHash;
 
-      let finalNodes: HexagonNode[];
+      let finalNodes: RenderableHexagonNode[];
       if (manifestChanged || Object.keys(nodePositions).length === 0) {
         finalNodes = await calculateElkLayout(compiledNodes, edges);
       } else {
@@ -307,7 +252,7 @@ export function useCanvasState(
       if (placedChips.length > 0) {
         finalNodes = [
           ...finalNodes,
-          ...(placedChips as unknown as HexagonNode[]),
+          ...(placedChips as unknown as RenderableHexagonNode[]),
         ];
       }
 
@@ -375,59 +320,25 @@ export function useCanvasState(
     }
   }, [layoutLoaded, wizardDataHash, loadGraph]);
 
-  /**
-   * Handle node drag stop - update both stores
-   */
-  const onNodeDragStop = useCallback(
-    (node: HexagonNode) => {
-      // Update legacy persistence
-      legacyUpdatePosition(node.id, node.position);
+  // Graph edits (REA-004): extracted, store-subscription-free, and stable for
+  // the session. This hook keeps only the selection bookkeeping that belongs to
+  // its own local state.
+  const {
+    onNodeDragStop: mutateNodePosition,
+    onAddNode: addEntityNode,
+    onUpdateNode,
+  } = useCanvasGraphMutations({ persistNodePosition: legacyUpdatePosition });
 
-      // Update Zustand store (will be recorded in history)
-      updateNodePosition(node.id, node.position);
-    },
-    [legacyUpdatePosition, updateNodePosition],
-  );
-
-  const onNodeDoubleClick = useCallback((node: HexagonNode) => {
+  const onNodeDoubleClick = useCallback((node: RenderableHexagonNode) => {
     setState((prev) => ({ ...prev, selectedNodeId: node.id }));
   }, []);
 
-  /**
-   * Add a new entity node. Reads current nodes/edges from the store at
-   * invocation time to avoid depending on array identity in the dep list.
-   */
   const onAddNode = useCallback(() => {
-    const { nodes: currentNodes, edges: currentEdges } =
-      useCanvasGraphStore.getState();
-    const root = currentNodes.find((n) => n.id === "root-core");
-    const anchor = root ?? currentNodes[0];
-    const position = anchor
-      ? { x: anchor.position.x + 220, y: anchor.position.y + 220 }
-      : { x: 100, y: 100 };
-    const newNode = createDefaultHexagonNode("entity", "New Node", position);
-
-    setGraph([...currentNodes, newNode], currentEdges);
-    setState((prev) => ({ ...prev, selectedNodeId: newNode.id }));
-  }, [setGraph]);
+    const newNodeId = addEntityNode();
+    setState((prev) => ({ ...prev, selectedNodeId: newNodeId }));
+  }, [addEntityNode]);
 
   const onExportImage = useCallback(() => {}, []);
-
-  /**
-   * Update a node's label/type. Reads current nodes/edges from the store at
-   * invocation time to avoid depending on array identity in the dep list.
-   */
-  const onUpdateNode = useCallback(
-    (nodeId: string, updates: Pick<HexagonNode, "label" | "type">) => {
-      const { nodes: currentNodes, edges: currentEdges } =
-        useCanvasGraphStore.getState();
-      const updatedNodes = currentNodes.map((n) =>
-        n.id === nodeId ? { ...n, ...updates } : n,
-      );
-      setGraph(updatedNodes, currentEdges);
-    },
-    [setGraph],
-  );
 
   const onCloseEditor = useCallback(() => {
     setState((prev) => ({ ...prev, selectedNodeId: undefined }));
@@ -474,18 +385,20 @@ export function useCanvasState(
     setGraph(laidOutNodes, currentEdges);
   }, [calculateElkLayout, setGraph]);
 
-  if (error) {
-    return { error };
-  }
-
-  return useMemo(
+  // NOTE: this `useMemo` used to sit AFTER an `if (error) return { error }`
+  // early return. Going from no-error to error therefore rendered one fewer
+  // hook than the previous render, which React rejects outright
+  // ("Rendered fewer hooks than expected") — so the very path that reports a
+  // load failure crashed the tree instead of showing it. Every hook now runs
+  // before any return.
+  const result = useMemo(
     () => ({
       nodes,
       edges,
       viewport: state.viewport,
       selectedNodeId: state.selectedNodeId,
       isLayoutCalculating,
-      onNodeDragStop,
+      onNodeDragStop: mutateNodePosition,
       onNodeDoubleClick,
       onAddNode,
       onExportImage,
@@ -500,7 +413,7 @@ export function useCanvasState(
       state.viewport,
       state.selectedNodeId,
       isLayoutCalculating,
-      onNodeDragStop,
+      mutateNodePosition,
       onNodeDoubleClick,
       onAddNode,
       onExportImage,
@@ -510,6 +423,12 @@ export function useCanvasState(
       recalculateLayout,
     ],
   );
+
+  if (error) {
+    return { error };
+  }
+
+  return result;
 }
 
 // Made with Bob

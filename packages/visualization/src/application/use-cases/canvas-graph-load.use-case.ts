@@ -1,11 +1,16 @@
-import type { WizardData } from "@hexagen/project-configuration";
 import type { HexagonNode, HexagonEdge } from "../../domain/index.js";
 import type { IArchitectureGraphProviderPort } from "../ports/out/architecture-graph-provider-port.port.js";
 import type { GenerateHexagonalMapPort } from "../ports/in/generate-hexagonal-map.port.js";
+import type { HexagonalMapInput } from "../ports/in/hexagonal-map-input.js";
 
 export interface CanvasGraphLoadInput {
   projectId?: string;
-  wizardData?: WizardData;
+  /**
+   * The map to draw. Was `wizardData: WizardData` (HEX-021) — this layer now
+   * speaks only its own vocabulary; `wizardDataToHexagonalMapInput` in
+   * infrastructure is what turns a wizard document into one of these.
+   */
+  map?: HexagonalMapInput;
 }
 
 export interface CanvasGraphLoadOutput {
@@ -22,11 +27,14 @@ export class CanvasGraphLoadUseCase {
 
   async execute(
     input: CanvasGraphLoadInput,
-  ): Promise<{ success: true; data: CanvasGraphLoadOutput } | { success: false; error: Error }> {
+  ): Promise<
+    | { success: true; data: CanvasGraphLoadOutput }
+    | { success: false; error: Error }
+  > {
     try {
-      if (input.wizardData?.boundedContexts?.length) {
+      if (input.map?.contexts.length) {
         const result = this.hexMapGenerator.execute({
-          wizardData: input.wizardData,
+          map: input.map,
         });
 
         return {
@@ -42,11 +50,13 @@ export class CanvasGraphLoadUseCase {
       if (!input.projectId) {
         return {
           success: false,
-          error: new Error("Either projectId or wizardData must be provided"),
+          error: new Error("Either projectId or map must be provided"),
         };
       }
 
-      const graphResult = await this.graphProvider.getArchitectureGraph(input.projectId);
+      const graphResult = await this.graphProvider.getArchitectureGraph(
+        input.projectId,
+      );
 
       if (!graphResult.success) {
         return {

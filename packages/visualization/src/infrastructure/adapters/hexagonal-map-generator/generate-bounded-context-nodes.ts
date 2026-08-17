@@ -1,16 +1,16 @@
-import type { BoundedContext } from "@hexagen/project-configuration";
+import type { MapContextInput } from "../../../application/ports/in/hexagonal-map-input.js";
 import type {
-  HexagonNodeType,
-  HexagonNodeWithLayout,
-  HexagonEdge,
-} from "../../../domain/index.js";
+  RenderableHexagonEdge,
+  RenderableHexagonNode,
+} from "../../../application/ports/in/renderable-graph.js";
+import type { HexagonNodeType } from "../../../domain/index.js";
 
 import { LAYOUT_CONFIG, staggerYFor } from "./config.js";
 import { generateInnerNodes } from "./generate-inner-nodes.js";
 import { generateCompassNodes } from "./generate-compass-nodes.js";
 
 interface GenerateBoundedContextNodesOptions {
-  ctx: BoundedContext;
+  ctx: MapContextInput;
   index: number;
   contextCount: number;
   groupX: number;
@@ -19,8 +19,8 @@ interface GenerateBoundedContextNodesOptions {
 }
 
 interface BoundedContextOutput {
-  nodes: HexagonNodeWithLayout[];
-  edges: HexagonEdge[];
+  nodes: RenderableHexagonNode[];
+  edges: RenderableHexagonEdge[];
 }
 
 export function generateBoundedContextNodes({
@@ -31,8 +31,8 @@ export function generateBoundedContextNodes({
   groupY,
   groupWidth,
 }: GenerateBoundedContextNodesOptions): BoundedContextOutput {
-  const nodes: HexagonNodeWithLayout[] = [];
-  const edges: HexagonEdge[] = [];
+  const nodes: RenderableHexagonNode[] = [];
+  const edges: RenderableHexagonEdge[] = [];
 
   const entityItems = ctx.coreDomainEntities ?? ctx.entities ?? [];
   const useCaseItems = ctx.useCases ?? [];
@@ -62,17 +62,18 @@ export function generateBoundedContextNodes({
     label: ctx.name || `Context ${index + 1}`,
     position: { x: hexX, y: hexY },
     isRoot: isRootContext,
-    draggable: true,
     style: { width: hexDimension, height: hexDimension },
+    // Copied, not aliased: `MapContextInput`'s collections are `readonly` and
+    // still owned by the caller, and `stats` is part of the graph we return.
     stats: {
       aggregates: entityItems.length,
-      aggregateItems: entityItems,
+      aggregateItems: [...entityItems],
       valueObjects: valueObjectItems.length,
-      valueObjectItems,
+      valueObjectItems: [...valueObjectItems],
       events: eventItems.length,
-      eventItems,
+      eventItems: [...eventItems],
       services: useCaseItems.length,
-      serviceItems: useCaseItems,
+      serviceItems: [...useCaseItems],
     },
   });
 

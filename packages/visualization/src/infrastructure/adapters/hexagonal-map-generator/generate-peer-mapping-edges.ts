@@ -1,24 +1,24 @@
 import type {
-  BoundedContext,
-  PeerMapping,
-} from "@hexagen/project-configuration";
+  MapContextInput,
+  MapPeerMappingInput,
+} from "../../../application/ports/in/hexagonal-map-input.js";
 import type {
-  HexagonEdge,
-  HexagonNodeWithLayout,
-} from "../../../domain/index.js";
+  RenderableHexagonEdge,
+  RenderableHexagonNode,
+} from "../../../application/ports/in/renderable-graph.js";
 
 interface GeneratePeerMappingEdgesOptions {
-  peerMappings: PeerMapping[];
-  boundedContexts: BoundedContext[];
-  existingNodes: readonly HexagonNodeWithLayout[];
+  peerMappings: readonly MapPeerMappingInput[];
+  boundedContexts: readonly MapContextInput[];
+  existingNodes: readonly RenderableHexagonNode[];
 }
 
 export function generatePeerMappingEdges({
   peerMappings,
   boundedContexts,
   existingNodes,
-}: GeneratePeerMappingEdgesOptions): HexagonEdge[] {
-  const edges: HexagonEdge[] = [];
+}: GeneratePeerMappingEdgesOptions): RenderableHexagonEdge[] {
+  const edges: RenderableHexagonEdge[] = [];
 
   peerMappings.forEach((mapping, index) => {
     const consumerId = mapping.consumerContext;
@@ -50,12 +50,11 @@ export function generatePeerMappingEdges({
       label: `${consumerCtx?.name ?? "?"} → ${providerCtx?.name ?? "?"} (${patternAbbrev})`,
       type: "smoothstep",
       animated: true,
-      style: {
-        stroke: "#64748b",
-        strokeWidth: "4",
-        strokeDasharray: "5,5",
-      },
-      markerEnd: "url(#arrow)",
+      // The `style: { stroke: "#64748b", strokeWidth: "4", strokeDasharray:
+      // "5,5" }` and `markerEnd: "url(#arrow)"` that used to be set here were
+      // dead: `useCanvasConfig.mapToFlowEdge` builds its own stroke and marker
+      // from `isSharedKernel` and the source node's variant, and never reads
+      // either field. They went with the CSS fields removed from `HexagonEdge`.
     });
   });
 

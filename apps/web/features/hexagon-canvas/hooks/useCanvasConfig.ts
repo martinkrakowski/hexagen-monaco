@@ -17,16 +17,12 @@ import {
   ADDON_STRIP_LABEL_TYPE,
 } from "../addon-overlay-nodes";
 import type {
-  HexagonNode as HexagonNodeData,
-  HexagonEdge,
-  HexagonNodeWithLayout,
+  RenderableHexagonNode as HexagonNodeData,
+  RenderableHexagonEdge as HexagonEdge,
 } from "@hexagen/visualization";
 
 type HexagonNodeDataRecord = HexagonNodeData & Record<string, unknown>;
 type HexagonFlowNode = FlowNode<HexagonNodeDataRecord>;
-type NodeWithVariant = HexagonNodeData & {
-  variant?: { hexColor?: string };
-};
 
 export const nodeTypes: NodeTypes = {
   hexagon: UnifiedBoundedContext,
@@ -38,7 +34,10 @@ export const nodeTypes: NodeTypes = {
 } as unknown as NodeTypes;
 
 function toFlowNode(node: HexagonNodeData): HexagonFlowNode {
-  const n = node as HexagonNodeWithLayout;
+  // Was `const n = node as HexagonNodeWithLayout` — the cast existed only
+  // because `extent` / `style` / `parentId` lived on a type the store did not
+  // name. Kept as an alias so the body below reads unchanged.
+  const n = node;
   const rawType = node.type as string;
   let nodeType:
     | "hexagon"
@@ -122,11 +121,9 @@ function mapToFlowNodes(
 }
 
 function getEdgeColor(sourceNode: HexagonNodeData | undefined): string {
-  if (
-    sourceNode?.type === "port" &&
-    (sourceNode as NodeWithVariant).variant?.hexColor
-  ) {
-    return (sourceNode as NodeWithVariant).variant!.hexColor!;
+  const hexColor = sourceNode?.variant?.hexColor;
+  if (sourceNode?.type === "port" && hexColor) {
+    return hexColor;
   }
   return "hsl(var(--foreground) / 0.35)";
 }

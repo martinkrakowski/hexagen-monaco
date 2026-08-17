@@ -1,28 +1,28 @@
-import type { BoundedContext } from "@hexagen/project-configuration";
+import type { MapContextInput } from "../../../application/ports/in/hexagonal-map-input.js";
 import type {
-  HexagonEdge,
-  HexagonNodeType,
-  HexagonNodeWithLayout,
-} from "../../../domain/index.js";
+  RenderableHexagonEdge,
+  RenderableHexagonNode,
+} from "../../../application/ports/in/renderable-graph.js";
+import type { HexagonNodeType } from "../../../domain/index.js";
 
 import { LAYOUT_CONFIG } from "./config.js";
 
 const EAST_OUTBOUND_PORTS = new Set<string>(["relational-db", "document-db"]);
 
 interface CompassOutput {
-  nodes: HexagonNodeWithLayout[];
-  edges: HexagonEdge[];
+  nodes: RenderableHexagonNode[];
+  edges: RenderableHexagonEdge[];
 }
 
 function generateCompassNodes(
-  ctx: BoundedContext,
+  ctx: MapContextInput,
   contextId: string,
   hexX: number,
   hexY: number,
   hexDimension: number,
 ): CompassOutput {
-  const nodes: HexagonNodeWithLayout[] = [];
-  const edges: HexagonEdge[] = [];
+  const nodes: RenderableHexagonNode[] = [];
+  const edges: RenderableHexagonEdge[] = [];
 
   const apiLabel = ctx.infrastructureTarget
     ? ctx.infrastructureTarget.charAt(0).toUpperCase() +

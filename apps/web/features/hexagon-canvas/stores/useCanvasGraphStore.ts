@@ -1,14 +1,23 @@
 import { create } from "zustand";
 import { temporal } from "zundo";
-import type { HexagonNode, HexagonEdge } from "@hexagen/visualization";
+import type {
+  RenderableHexagonNode,
+  RenderableHexagonEdge,
+} from "@hexagen/visualization";
 
 /**
  * Structural state for the canvas graph.
  * Separated from ephemeral UI state (selection, hover) for clean undo/redo.
+ *
+ * Typed on the *renderable* node/edge (HEX-030), not the domain ones: this
+ * store feeds React Flow, so what it holds legitimately carries `extent`,
+ * `style` and `variant`. Before the split those fields sat on the domain type
+ * and every reader in this slice recovered them with a cast — `node as
+ * HexagonNodeWithLayout`. Naming the right type here is what removed the casts.
  */
 export interface CanvasGraphState {
-  nodes: HexagonNode[];
-  edges: HexagonEdge[];
+  nodes: RenderableHexagonNode[];
+  edges: RenderableHexagonEdge[];
   manifestHash: string | null;
   isLayoutCalculating: boolean;
 }
@@ -17,9 +26,12 @@ export interface CanvasGraphState {
  * Actions for modifying the canvas graph state.
  */
 export interface CanvasGraphActions {
-  setNodes: (nodes: HexagonNode[]) => void;
-  setEdges: (edges: HexagonEdge[]) => void;
-  setGraph: (nodes: HexagonNode[], edges: HexagonEdge[]) => void;
+  setNodes: (nodes: RenderableHexagonNode[]) => void;
+  setEdges: (edges: RenderableHexagonEdge[]) => void;
+  setGraph: (
+    nodes: RenderableHexagonNode[],
+    edges: RenderableHexagonEdge[],
+  ) => void;
   updateNodePosition: (
     nodeId: string,
     position: { x: number; y: number },

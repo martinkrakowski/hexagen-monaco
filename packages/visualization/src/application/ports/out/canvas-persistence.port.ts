@@ -18,7 +18,10 @@ export interface CanvasPersistencePort {
   saveCanvasState(state: CanvasPersistenceState): Promise<void>;
   loadCanvasState(): Promise<CanvasPersistenceState | null>;
   clearCanvasState(): Promise<void>;
-  saveNodePosition(nodeId: string, position: { x: number; y: number }): Promise<void>;
+  saveNodePosition(
+    nodeId: string,
+    position: { x: number; y: number },
+  ): Promise<void>;
   getNodePosition(nodeId: string): Promise<{ x: number; y: number } | null>;
   clearNodePosition(nodeId: string): Promise<void>;
   saveManifestHash(hash: string): Promise<void>;
