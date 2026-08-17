@@ -17,7 +17,17 @@ import {
   buildManifestImportGrants,
   isCrossPackageViolation,
 } from "./cross-package-violation.js";
-import { resolveLintScope } from "./resolve-scope.js";
+import {
+  matchingImportScope,
+  resolveLintScope,
+  scopesToTry,
+  unscopedContextImport,
+} from "./resolve-scope.js";
+import {
+  isEmptyLayout,
+  loadLayoutConfig,
+  type LayoutConfig,
+} from "./layout-config.js";
 import {
   checkUnexpectedMarker,
   checkMissingMarker,
@@ -39,6 +49,7 @@ import {
   checkNodeBuiltinInLayer,
   checkNpmPackageInDomain,
   DEFAULT_LAYER_NAMES,
+  resolveFileHexagonalLayer,
 } from "./layer-purity-violation.js";
 import type { BaselineEntry, ViolationRecord } from "./ratchet-baseline.js";
 import {
@@ -82,10 +93,14 @@ function findProjectRoot(): string {
     return path.resolve(process.env.HEXAGEN_ROOT);
   }
 
-  // C. Walk up from cwd() to find .architecture/manifest.yaml
+  // C. Walk up from cwd() to find .architecture/manifest.yaml or layout.yaml
   let dir = process.cwd();
   while (dir !== path.dirname(dir)) {
-    if (fs.existsSync(path.join(dir, ".architecture", "manifest.yaml"))) {
+    const archDir = path.join(dir, ".architecture");
+    if (
+      fs.existsSync(path.join(archDir, "manifest.yaml")) ||
+      fs.existsSync(path.join(archDir, "layout.yaml"))
+    ) {
       return dir;
     }
     dir = path.dirname(dir);
@@ -141,7 +156,14 @@ const LINTER_CONFIG_PATH = path.join(
   "invariants",
   "linter-config.yaml",
 );
-const TSCONFIG_PATH = path.join(ROOT_DIR, "tsconfig.base.json");
+const LAYOUT_PATH = path.join(ROOT_DIR, ".architecture", "layout.yaml");
+const tsconfigArgIndex = process.argv.indexOf("--tsconfig");
+const tsconfigArg =
+  tsconfigArgIndex !== -1 ? process.argv[tsconfigArgIndex + 1] : undefined;
+if (tsconfigArgIndex !== -1 && (!tsconfigArg || tsconfigArg.startsWith("-"))) {
+  logger.error("FATAL ERROR: --tsconfig requires a path argument.");
+  process.exit(EXIT_COULD_NOT_RUN);
+}
 
 // ─── Ratchet baseline (ADR-0054 §1) ─────────────────────────────────────────
 //
@@ -266,6 +288,27 @@ const linterConfig = useOptionalConfig(
   "linter-config.yaml",
 );
 
+const layoutLoad = await loadLayoutConfig(LAYOUT_PATH, readUtf8);
+let layout: LayoutConfig | undefined;
+switch (layoutLoad.kind) {
+  case "missing":
+    layout = undefined;
+    break;
+  case "invalid":
+    logger.error(
+      `FATAL ERROR: layout.yaml exists but could not be loaded from ${LAYOUT_PATH}`,
+    );
+    logger.error(`  ${layoutLoad.reason}`);
+    logger.error(
+      "  Refusing to continue: a misspelled mapping would silently produce a partial report.",
+    );
+    process.exit(EXIT_COULD_NOT_RUN);
+    break;
+  case "loaded":
+    layout = isEmptyLayout(layoutLoad.value) ? undefined : layoutLoad.value;
+    break;
+}
+
 /**
  * Load the committed baseline.
  *
@@ -301,9 +344,35 @@ const baselineEntries = UPDATE_BASELINE ? [] : loadBaseline(BASELINE_PATH);
 
 // ─── TypeScript Project ─────────────────────────────────────────────────────
 
-const project = new Project({
-  tsConfigFilePath: TSCONFIG_PATH,
-});
+function resolveTsconfigPath(): string {
+  if (tsconfigArg) return path.resolve(ROOT_DIR, tsconfigArg);
+  if (layout?.tsconfig) return path.resolve(ROOT_DIR, layout.tsconfig);
+  const base = path.join(ROOT_DIR, "tsconfig.base.json");
+  if (fs.existsSync(base)) return base;
+  return path.join(ROOT_DIR, "tsconfig.json");
+}
+
+const TSCONFIG_PATH = resolveTsconfigPath();
+
+let project: Project;
+try {
+  if (!fs.existsSync(TSCONFIG_PATH)) {
+    throw new Error(`tsconfig not found at ${TSCONFIG_PATH}`);
+  }
+  project = new Project({
+    tsConfigFilePath: TSCONFIG_PATH,
+  });
+} catch (e) {
+  const message = e instanceof Error ? e.message : String(e);
+  logger.error(
+    `FATAL ERROR: Could not load TypeScript project from ${TSCONFIG_PATH}`,
+  );
+  logger.error(`  ${message}`);
+  logger.error(
+    "  Pass --tsconfig <path>, set layout.yaml `tsconfig:`, or add a tsconfig.json at the project root.",
+  );
+  process.exit(EXIT_COULD_NOT_RUN);
+}
 
 // ─── Helper Functions ───────────────────────────────────────────────────────
 
@@ -334,10 +403,56 @@ const LAYER_NAMES: readonly string[] = [
   ]),
 ];
 
-function checkArchitecturalIntegrity() {
+function contextRootAbs(moduleName: string): string {
+  const mapped = layout?.contexts?.[moduleName]?.root;
+  if (mapped) return path.resolve(ROOT_DIR, mapped);
+  return path.join(PKG_ROOT_PATH, moduleName);
+}
+
+function isIgnoredFile(filePath: string): boolean {
+  if (!layout?.ignore || layout.ignore.length === 0) return false;
+  const rel = toRelativePosix(filePath);
+  return layout.ignore.some((pattern) => {
+    const normalized = pattern.replace(/\\/g, "/").replace(/^\/+/, "");
+    return rel === normalized || rel.startsWith(normalized);
+  });
+}
+
+function checkArchitecturalIntegrity(): {
+  errors: ViolationRecord[];
+  filesScanned: number;
+} {
   const errors: ViolationRecord[] = [];
   const warnings: string[] = [];
-  const modules = manifest.bounded_contexts ?? [];
+  const modules: readonly {
+    name: string;
+    type?: string;
+    depends_on?: string[];
+  }[] = manifest.bounded_contexts ?? [];
+  const contextNames = new Set<string>(modules.map((m) => m.name));
+  const extraScopes = [
+    ...(layout?.scopes ?? []),
+    ...Object.values(layout?.contexts ?? {}).flatMap((ctx) => {
+      const pkgJson = path.join(
+        path.resolve(ROOT_DIR, ctx.root),
+        "package.json",
+      );
+      if (!fs.existsSync(pkgJson)) return [];
+      try {
+        const name = (
+          JSON.parse(fs.readFileSync(pkgJson, "utf8")) as { name?: string }
+        ).name;
+        if (typeof name === "string" && name.startsWith("@")) {
+          return [name.slice(1).split("/")[0]];
+        }
+      } catch {
+        return [];
+      }
+      return [];
+    }),
+  ];
+  const importScopes = scopesToTry(resolveLintScope(manifest), extraScopes);
+  let filesScanned = 0;
 
   /** Record a violation. `specifier` is "" for findings with no import. */
   const record = (
@@ -360,7 +475,7 @@ function checkArchitecturalIntegrity() {
 
   modules.forEach((moduleInfo) => {
     const moduleName = moduleInfo.name;
-    const modulePath = path.join(PKG_ROOT_PATH, moduleName);
+    const modulePath = contextRootAbs(moduleName);
 
     if (!fs.existsSync(modulePath)) {
       return;
@@ -380,6 +495,10 @@ function checkArchitecturalIntegrity() {
       if (filePath.includes("/dist/") || filePath.includes("\\dist\\")) {
         return;
       }
+      if (isIgnoredFile(filePath)) {
+        return;
+      }
+      filesScanned += 1;
 
       const isTestDbl = isTestDoubleOrTest(filePath);
 
@@ -389,10 +508,13 @@ function checkArchitecturalIntegrity() {
 
         if (isTestDbl) return;
 
+        const matchedScope =
+          matchingImportScope(moduleSpecifier, importScopes) ?? SCOPE;
+
         const subpathResult = isSubpathViolation(
           moduleName,
           moduleSpecifier,
-          SCOPE,
+          matchedScope,
           linterConfig,
         );
         if (subpathResult?.violation) {
@@ -411,35 +533,58 @@ function checkArchitecturalIntegrity() {
           return;
         }
 
-        if (moduleSpecifier.startsWith(SCOPE + "/")) {
-          const importedPkg = moduleSpecifier.split("/")[1];
-          if (importedPkg && importedPkg !== moduleName) {
-            if (
-              isCrossPackageViolation(
-                moduleName,
+        const scopedImport = matchingImportScope(moduleSpecifier, importScopes);
+        const unscopedImport = scopedImport
+          ? null
+          : unscopedContextImport(moduleSpecifier, contextNames);
+        const importedPkg = scopedImport
+          ? moduleSpecifier.slice(scopedImport.length + 1).split("/")[0]
+          : unscopedImport;
+        const crossPkgSpecifier = scopedImport
+          ? moduleSpecifier
+          : unscopedImport
+            ? `${SCOPE}/${unscopedImport}`
+            : null;
+        const crossPkgScope = scopedImport ?? SCOPE;
+        if (importedPkg && importedPkg !== moduleName && crossPkgSpecifier) {
+          if (
+            isCrossPackageViolation(
+              moduleName,
+              crossPkgSpecifier,
+              crossPkgScope,
+              linterConfig,
+              manifestGrants,
+            )
+          ) {
+            errors.push(
+              record(
+                "cross-package-import",
+                filePath,
                 moduleSpecifier,
-                SCOPE,
-                linterConfig,
-                manifestGrants,
-              )
-            ) {
-              errors.push(
-                record(
-                  "cross-package-import",
-                  filePath,
-                  moduleSpecifier,
-                  `Boundary Violation in [${moduleName}]:
+                `Boundary Violation in [${moduleName}]:
   File: ${path.relative(ROOT_DIR, filePath)}
   Illegal import from another module: '${moduleSpecifier}'
   Not declared in '${moduleName}' depends_on (manifest) nor allowed by linter-config (global_whitelist / package_rules).
               `.trim(),
-                ),
-              );
-            }
+              ),
+            );
           }
         }
 
-        if (filePath.includes("/domain/")) {
+        const ctxLayers = layout?.contexts?.[moduleName]?.layers;
+        const fileLayer = ctxLayers
+          ? resolveFileHexagonalLayer(filePath, {
+              contextRootAbs: modulePath,
+              layerDirs: ctxLayers,
+              layerNames: LAYER_NAMES,
+            })
+          : filePath.includes("/domain/")
+            ? "domain"
+            : filePath.includes("/application/")
+              ? "application"
+              : null;
+
+        if (fileLayer === "domain") {
           const allowed = getLayerAllowedImports(filePath, layerRules, SCOPE);
           const domainFinding = (detail: string, rule: string) =>
             record(
@@ -511,7 +656,7 @@ function checkArchitecturalIntegrity() {
           }
         }
 
-        if (filePath.includes("/application/")) {
+        if (fileLayer === "application") {
           const allowed = getLayerAllowedImports(filePath, layerRules, SCOPE);
           const applicationFinding = (detail: string, rule: string) =>
             record(
@@ -590,6 +735,7 @@ function checkArchitecturalIntegrity() {
     moduleSourceFiles.forEach((file) => {
       const filePath = file.getFilePath();
       if (filePath.includes("/dist/") || filePath.includes("\\dist\\")) return;
+      if (isIgnoredFile(filePath)) return;
 
       const fileText = file.getFullText();
       const markerViolation = checkUnexpectedMarker(
@@ -613,7 +759,7 @@ function checkArchitecturalIntegrity() {
   // ─── Server Marker Backward Check (per-package) ───────────────────────────
   modules.forEach((moduleInfo) => {
     const moduleName = moduleInfo.name;
-    const modulePath = path.join(PKG_ROOT_PATH, moduleName);
+    const modulePath = contextRootAbs(moduleName);
     if (!fs.existsSync(modulePath)) return;
 
     const pkgJsonPath = path.join(modulePath, "package.json");
@@ -666,14 +812,20 @@ function checkArchitecturalIntegrity() {
     crossContextEdges,
     PKG_ROOT_PATH,
     (p) => fs.existsSync(p),
+    { advisory: layout !== undefined },
   );
   for (const v of commViolations) {
-    errors.push({
-      rule: "required-communication",
-      file: v.missingPort,
-      specifier: v.transport,
-      message: `Required Communication Violation:\n ${v.message}`,
-    });
+    const message = `Required Communication Violation:\n ${v.message}`;
+    if (v.enforcement === "warn") {
+      warnings.push(message);
+    } else {
+      errors.push({
+        rule: "required-communication",
+        file: v.missingPort,
+        specifier: v.transport,
+        message,
+      });
+    }
   }
 
   if (warnings.length > 0) {
@@ -681,7 +833,7 @@ function checkArchitecturalIntegrity() {
     warnings.forEach((w) => logger.warn(` - ${w}`));
   }
 
-  return errors;
+  return { errors, filesScanned };
 }
 
 // ─── Ratchet reporting ──────────────────────────────────────────────────────
@@ -737,6 +889,16 @@ function reportAndExit(violations: ViolationRecord[]): void {
   );
 }
 
+function abortIfVacuous(filesScanned: number): void {
+  logger.info(`Files scanned: ${filesScanned}`);
+  if (filesScanned > 0) return;
+  logger.error("FATAL ERROR: Zero resolvable source files were scanned.");
+  logger.error(
+    "  The linter did not check any code — this is not a pass. Check that context directories exist, tsconfig includes them, and layout.yaml roots are correct.",
+  );
+  process.exit(EXIT_COULD_NOT_RUN);
+}
+
 /** `--update-baseline`: rewrite the file from this run, then exit 0. */
 function writeBaseline(violations: ViolationRecord[]): void {
   fs.mkdirSync(path.dirname(BASELINE_PATH), { recursive: true });
@@ -751,7 +913,8 @@ function writeBaseline(violations: ViolationRecord[]): void {
 logger.info("Running Architectural Integrity Linter...");
 logger.info(`Project root: ${ROOT_DIR}`);
 logger.info(`Scope: ${SCOPE}`);
-const foundViolations = checkArchitecturalIntegrity();
+const { errors: foundViolations, filesScanned } = checkArchitecturalIntegrity();
+abortIfVacuous(filesScanned);
 if (UPDATE_BASELINE) {
   writeBaseline(foundViolations);
 } else {

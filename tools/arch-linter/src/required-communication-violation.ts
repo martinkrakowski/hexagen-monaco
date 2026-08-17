@@ -19,7 +19,7 @@ import * as path from "node:path";
 
 export interface RequiredCommunicationViolation {
   type: "missing-transport";
-  enforcement: "error";
+  enforcement: "error" | "warn";
   consumer: string;
   provider: string;
   transport: string;
@@ -111,6 +111,7 @@ export function checkRequiredCommunication(
   edges: CrossContextEdgeInput[] | undefined,
   pkgRootPath: string,
   fileExists: (absPath: string) => boolean,
+  options?: { advisory?: boolean },
 ): RequiredCommunicationViolation[] {
   if (!Array.isArray(edges)) return [];
 
@@ -125,6 +126,8 @@ export function checkRequiredCommunication(
   // its basename IS that segment — reported and baselined paths therefore match
   // the project's real layout instead of assuming `packages/`.
   const wsDir = path.basename(root);
+  const enforcement: RequiredCommunicationViolation["enforcement"] =
+    options?.advisory === true ? "warn" : "error";
   const violations: RequiredCommunicationViolation[] = [];
   for (const edge of edges) {
     const { consumer, provider, transport } = edge;
@@ -135,7 +138,7 @@ export function checkRequiredCommunication(
       if (absPath !== root && !absPath.startsWith(root + path.sep)) {
         violations.push({
           type: "missing-transport",
-          enforcement: "error",
+          enforcement,
           consumer,
           provider,
           transport,
@@ -147,7 +150,7 @@ export function checkRequiredCommunication(
       if (!fileExists(absPath)) {
         violations.push({
           type: "missing-transport",
-          enforcement: "error",
+          enforcement,
           consumer,
           provider,
           transport,

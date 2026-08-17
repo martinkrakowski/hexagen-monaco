@@ -56,18 +56,69 @@ export function toWorkspaceRelativePosixPath(
   return [...ascend, ...fileSegments.slice(shared)].join("/");
 }
 
-export function determineLayer(relativePath: string): Layer {
+/** Optional layout.yaml mapping — config-driven mode alongside convention. */
+export interface LayerLayoutConfig {
+  contexts?: Record<
+    string,
+    {
+      root: string;
+      layers?: Record<string, readonly string[]>;
+    }
+  >;
+}
+
+function posix(value: string): string {
+  return value.replace(/\\/g, "/");
+}
+
+function stripSlashes(value: string): string {
+  return posix(value).replace(/\/+$/, "");
+}
+
+function matchLayoutContext(
+  relativePath: string,
+  layout: LayerLayoutConfig,
+): {
+  name: string;
+  root: string;
+  rel: string;
+  layers?: Record<string, readonly string[]>;
+} | null {
+  const file = posix(relativePath);
+  for (const [name, ctx] of Object.entries(layout.contexts ?? {})) {
+    const root = stripSlashes(ctx.root);
+    if (file === root || file.startsWith(`${root}/`)) {
+      const rel = file === root ? "" : file.slice(root.length + 1);
+      return { name, root, rel, layers: ctx.layers };
+    }
+  }
+  return null;
+}
+
+function layerFromLayoutDirs(
+  rel: string,
+  layers: Record<string, readonly string[]>,
+): Layer | null {
+  let best: { layer: Layer; len: number } | null = null;
+  for (const [layer, dirs] of Object.entries(layers)) {
+    for (const dir of dirs) {
+      const normalized = posix(dir).replace(/^\/+|\/+$/g, "");
+      if (rel === normalized || rel.startsWith(`${normalized}/`)) {
+        if (!best || normalized.length > best.len) {
+          best = { layer: layer as Layer, len: normalized.length };
+        }
+      }
+    }
+  }
+  return best?.layer ?? null;
+}
+
+export function determineLayer(
+  relativePath: string,
+  layout?: LayerLayoutConfig,
+): Layer {
   if (relativePath.includes("/__tests__/")) {
     return "test";
-  }
-  if (relativePath.includes("/domain/")) {
-    return "domain";
-  }
-  if (relativePath.includes("/application/")) {
-    return "application";
-  }
-  if (relativePath.includes("/infrastructure/")) {
-    return "infrastructure";
   }
   if (relativePath.includes(".architecture/manifest.yaml")) {
     return "manifest";
@@ -78,10 +129,35 @@ export function determineLayer(relativePath: string): Layer {
   ) {
     return "config";
   }
+
+  if (layout?.contexts) {
+    const matched = matchLayoutContext(relativePath, layout);
+    if (matched?.layers) {
+      const fromLayout = layerFromLayoutDirs(matched.rel, matched.layers);
+      if (fromLayout) return fromLayout;
+    }
+  }
+
+  if (relativePath.includes("/domain/")) {
+    return "domain";
+  }
+  if (relativePath.includes("/application/")) {
+    return "application";
+  }
+  if (relativePath.includes("/infrastructure/")) {
+    return "infrastructure";
+  }
   return "unknown";
 }
 
-export function determinePackageName(relativePath: string): string {
+export function determinePackageName(
+  relativePath: string,
+  layout?: LayerLayoutConfig,
+): string {
+  if (layout?.contexts) {
+    const matched = matchLayoutContext(relativePath, layout);
+    if (matched) return matched.name;
+  }
   const match = relativePath.match(/^(?:packages|apps)\/([^/]+)/);
   return match ? match[1] : "unknown";
 }

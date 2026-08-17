@@ -18,6 +18,7 @@ import {
   isNodeBuiltinSpecifier,
   isWorkspaceSpecifier,
   npmPackageNameOf,
+  resolveFileHexagonalLayer,
   resolveRelativeImportPath,
 } from "../src/layer-purity-violation.js";
 
@@ -86,6 +87,41 @@ describe("detectLayer", () => {
     assert.equal(detectLayer("/repo/packages/x/src/config.ts"), null);
     // 'domain-events' is not the 'domain' layer.
     assert.equal(detectLayer("/repo/packages/x/src/domain-events/e.ts"), null);
+  });
+});
+
+describe("resolveFileHexagonalLayer — layout-mapped directories", () => {
+  const ctx = "/repo/packages/billing";
+  const layers = {
+    domain: ["src/core"],
+    application: ["src/services"],
+    infrastructure: ["src/db", "src/http"],
+  };
+
+  it("maps src/core to domain and src/services to application", () => {
+    assert.equal(
+      resolveFileHexagonalLayer(`${ctx}/src/core/invoice.ts`, {
+        contextRootAbs: ctx,
+        layerDirs: layers,
+      }),
+      "domain",
+    );
+    assert.equal(
+      resolveFileHexagonalLayer(`${ctx}/src/services/charge.ts`, {
+        contextRootAbs: ctx,
+        layerDirs: layers,
+      }),
+      "application",
+    );
+  });
+
+  it("falls back to path-segment detection when no layer dirs are given", () => {
+    assert.equal(
+      resolveFileHexagonalLayer(`${ctx}/src/domain/invoice.ts`, {
+        contextRootAbs: ctx,
+      }),
+      "domain",
+    );
   });
 });
 

@@ -55,6 +55,7 @@ export type {
   DomainPackageAllowlistEntry,
   CrossLayerRelativeInput,
   DomainPackageInput,
+  FileLayerResolution,
 } from "./layer-purity-violation.js";
 export {
   DEFAULT_LAYER_NAMES,
@@ -62,6 +63,7 @@ export {
   checkNodeBuiltinInLayer,
   checkNpmPackageInDomain,
   detectLayer,
+  resolveFileHexagonalLayer,
   isDomainPackageAllowed,
   isNodeBuiltinSpecifier,
   isRelativeSpecifier,
@@ -89,6 +91,25 @@ export type { OptionalYamlConfig } from "./optional-yaml-config.js";
 export { loadOptionalYamlConfig } from "./optional-yaml-config.js";
 
 export { resolveLintScope } from "./resolve-scope.js";
+export {
+  matchingImportScope,
+  scopesToTry,
+  unscopedContextImport,
+} from "./resolve-scope.js";
+
+export type {
+  LayoutConfig,
+  ContextLayout,
+  HexagonalLayerName,
+  LayoutParseResult,
+} from "./layout-config.js";
+export {
+  HEXAGONAL_LAYER_NAMES,
+  LayoutConfigSchema,
+  isEmptyLayout,
+  loadLayoutConfig,
+  parseLayoutConfig,
+} from "./layout-config.js";
 
 export type { LoggerPort } from "./logger.js";
 export { createConsoleLogger } from "./logger.js";
