@@ -205,12 +205,10 @@ export const getLintValidation = (): CliLintValidationAdapter => {
 // Governance API Wiring (HEX-016)
 // ============================================================================
 //
-// The governance route family used to construct these two collaborators inline:
-// `refresh` shelled out to `yarn lint:arch` with `child_process.exec` and wrote
-// its own temp files, and both `refresh` and `suggestions` carried their own
-// copy of the `ServerLLMAdapter` + `GenerateSuggestionUseCase` wiring. They now
-// depend on `ManifestLintPort` / `SuggestionPort` and get their adapters from
-// here — this file is the single server composition root for those paths.
+// Server composition root for the governance API family (HEX-016).
+// `SuggestionPort` is used by `POST /api/governance/suggestions`.
+// `ManifestLintPort` is still constructed here; no route currently calls it
+// after `POST /api/governance/refresh` was retired as unused transport.
 
 let _manifestLint: ManifestLintPort | null = null;
 
@@ -219,15 +217,12 @@ let _manifestLint: ManifestLintPort | null = null;
  * monorepo root — and with it `.architecture/manifest.yaml` and the root
  * `lint:arch` script — was not found on disk.
  *
- * `getManifestLint()` is called in the route's ARGUMENT list, i.e. before
- * `handleGovernanceRefresh` reaches its mutation gate or its `try`. Letting
- * `findMonorepoRoot()` throw there produced a framework 500 that bypassed both
- * the 403 for a cross-origin caller and the `lintError` field the whole port
- * exists to populate — a linter that cannot run, once again escaping as
- * something other than "the linter could not run". The standalone production
- * image makes this reachable rather than hypothetical: `apps/web/Dockerfile`'s
- * runtime stage copies only `.next/standalone` and `.next/static`, so no
- * `.architecture/` marker is present to walk up to.
+ * Callers evaluate `getManifestLint()` before any handler `try`, so a throw
+ * from `findMonorepoRoot()` would become a framework 500 instead of the
+ * `unavailable` outcome the port exists to populate. The standalone image
+ * makes this reachable: `apps/web/Dockerfile`'s runtime stage copies only
+ * `.next/standalone` and `.next/static`, so no `.architecture/` marker is
+ * present to walk up to.
  *
  * The reason carried to the client is the error's path-free `clientMessage`;
  * the detailed message embeds an absolute server path and is logged only.
@@ -263,7 +258,7 @@ export const getManifestLint = (): ManifestLintPort => {
 
 let _governanceSuggestions: SuggestionPort | null = null;
 
-/** The one suggestion implementation shared by `refresh` and `suggestions`. */
+/** The one suggestion implementation for `POST /api/governance/suggestions`. */
 export const getGovernanceSuggestions = (): SuggestionPort => {
   if (!_governanceSuggestions) {
     _governanceSuggestions = new LlmSuggestionAdapter();

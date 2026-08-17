@@ -13,13 +13,8 @@ import type {
  * The only implementation of {@link SuggestionPort}: prompt the configured
  * cloud model for architectural suggestions.
  *
- * This is the second half of HEX-016's "LLM adapter construction" — and the
- * duplication that made the port worth having. `governance/refresh` and
- * `governance/suggestions` each carried a hand-rolled copy of this wiring
- * (resolve the key, read three env vars, `new ServerLLMAdapter`, `new
- * GenerateSuggestionUseCase` with an inline stub engine, build the prompt, map
- * the result). The copies had drifted, exactly as the status/violations copies
- * AUD-005 collapsed had:
+ * HEX-016's LLM adapter. The copies that used to live in each route had
+ * drifted, exactly as the status/violations copies AUD-005 collapsed had:
  *
  *   - `refresh` passed `context: { projectManifest }`, `suggestions` passed
  *     `context: {}`;

@@ -149,44 +149,41 @@ Mutation tools write to the manifest directly, behind deterministic fail-closed 
 
 ## Architecture Topology
 
-Hexagen-Monaco is a modular monolith. Thirty-four bounded contexts live across five planes; the manifest at `.architecture/manifest.yaml` is the single source of truth.
+Hexagen-Monaco is a modular monolith. Thirty-three bounded contexts live across five planes; the manifest at `.architecture/manifest.yaml` is the single source of truth.
 
-| Plane              | Context                   | Responsibility                                                                                 |
-| ------------------ | ------------------------- | ---------------------------------------------------------------------------------------------- |
-| **Core**           | project-configuration     | Governance core; manifest parsing and topology validation                                      |
-| **Core**           | wizard-orchestration      | Deterministic UI engine; `Intent → Use Case → Projection`                                      |
-| **Core**           | monaco-orchestration      | Semantic patching via `ts-morph`, confidence-gated mutations                                   |
-| **Core**           | project-generation        | Hexagonal boilerplate generation from manifest specs                                           |
-| **Core**           | governance                | Decisions, invariants, and architectural policy state                                          |
-| **Core**           | ai-pipeline               | Staged generation pipeline orchestration                                                       |
-| **Core**           | transaction-system        | Speculative state machine, backpressure, semantic caching (frozen)                             |
-| **Core**           | intent-compiler           | Compiles user intent into structured use-case input                                            |
-| **Core**           | layout-engine             | Deterministic layout for visualization projections                                             |
-| **Core**           | ui-projection-compiler    | Compiles projection specs into renderable UI trees                                             |
-| **Core**           | prompt-compiler           | Compiles prompts; ACL between domain and LLM ports                                             |
-| **Core**           | manifest-generation       | Manifest synthesis from architectural specs                                                    |
-| **Core**           | llm-driver                | Domain-side driver for LLM-backed use cases                                                    |
-| **Core**           | report-governance         | Governance reporting and remediation audit trail                                               |
-| **Core**           | byok                      | Bring-your-own-key secret handling for cloud LLMs                                              |
-| **Core**           | architectural-enforcement | Architectural enforcement tooling (ESLint plugin + arch-linter boundaries)                     |
-| **Core**           | code-generation           | Code-generation tooling (folded into sync + project-generation)                                |
-| **Probabilistic**  | agentic-interaction       | Outbound LLM ports, R16-R18 quality controls, retry + escalation                               |
-| **Probabilistic**  | mcp-server                | Stdio MCP server; 7 governance reads, 19 tools (mutations behind deterministic write gates)    |
-| **Probabilistic**  | local-llm                 | WebGPU/WebLLM inference, IndexedDB model + chat persistence                                    |
-| **Probabilistic**  | reconciliation-engine     | Reconciles agent proposals against current manifest state                                      |
-| **Projection**     | web-driver                | Next.js application shell; HITL canvas host                                                    |
-| **Projection**     | ui                        | Shared React components for projection planes                                                  |
-| **Projection**     | visualization             | Architecture graph rendering (React Flow)                                                      |
-| **Projection**     | model-settings            | Model configuration and provider selection UI                                                  |
-| **Infrastructure** | sync                      | Manifest-to-workspace synchronization engine                                                   |
-| **Infrastructure** | template-engine           | Add-on template system — manifest-driven scaffolds, dependency resolution, idempotent emission |
-| **Infrastructure** | persistence               | Storage adapters (Drizzle, IndexedDB)                                                          |
-| **Infrastructure** | messaging                 | Cross-context event delivery                                                                   |
-| **Infrastructure** | external-integration      | Outbound adapters to external APIs                                                             |
-| **Infrastructure** | deployment                | Build and release artifacts                                                                    |
-| **Infrastructure** | runtime                   | Process and worker lifecycle                                                                   |
-| **Shared-Kernel**  | core-domain               | Cross-plane domain primitives                                                                  |
-| **Shared-Kernel**  | shared                    | Type-only utilities permitted in any plane                                                     |
+| Plane              | Context                | Responsibility                                                                                 |
+| ------------------ | ---------------------- | ---------------------------------------------------------------------------------------------- |
+| **Core**           | project-configuration  | Governance core; manifest parsing and topology validation                                      |
+| **Core**           | wizard-orchestration   | Deterministic UI engine; `Intent → Use Case → Projection`                                      |
+| **Core**           | monaco-orchestration   | Semantic patching via `ts-morph`, confidence-gated mutations                                   |
+| **Core**           | project-generation     | Hexagonal boilerplate generation from manifest specs                                           |
+| **Core**           | governance             | Decisions, invariants, and architectural policy state                                          |
+| **Core**           | ai-pipeline            | Staged generation pipeline orchestration                                                       |
+| **Core**           | transaction-system     | Speculative state machine, backpressure, semantic caching (frozen)                             |
+| **Core**           | layout-engine          | Deterministic layout for visualization projections                                             |
+| **Core**           | ui-projection-compiler | Compiles projection specs into renderable UI trees                                             |
+| **Core**           | prompt-compiler        | Compiles prompts; ACL between domain and LLM ports                                             |
+| **Core**           | manifest-generation    | Manifest synthesis from architectural specs                                                    |
+| **Core**           | llm-driver             | Domain-side driver for LLM-backed use cases                                                    |
+| **Core**           | report-governance      | Governance reporting and remediation audit trail                                               |
+| **Core**           | byok                   | Bring-your-own-key secret handling for cloud LLMs                                              |
+| **Probabilistic**  | agentic-interaction    | Outbound LLM ports, R16-R18 quality controls, retry + escalation                               |
+| **Probabilistic**  | mcp-server             | Stdio MCP server; 7 governance reads, 19 tools (mutations behind deterministic write gates)    |
+| **Probabilistic**  | local-llm              | WebGPU/WebLLM inference, IndexedDB model + chat persistence                                    |
+| **Probabilistic**  | reconciliation-engine  | Reconciles agent proposals against current manifest state                                      |
+| **Projection**     | web-driver             | Next.js application shell; HITL canvas host                                                    |
+| **Projection**     | ui                     | Shared React components for projection planes                                                  |
+| **Projection**     | visualization          | Architecture graph rendering (React Flow)                                                      |
+| **Projection**     | model-settings         | Model configuration and provider selection UI                                                  |
+| **Infrastructure** | sync                   | Manifest-to-workspace synchronization engine                                                   |
+| **Infrastructure** | template-engine        | Add-on template system — manifest-driven scaffolds, dependency resolution, idempotent emission |
+| **Infrastructure** | persistence            | Storage adapters (Drizzle, IndexedDB)                                                          |
+| **Infrastructure** | messaging              | Cross-context event delivery                                                                   |
+| **Infrastructure** | external-integration   | Outbound adapters to external APIs                                                             |
+| **Infrastructure** | deployment             | Build and release artifacts                                                                    |
+| **Infrastructure** | runtime                | Process and worker lifecycle                                                                   |
+| **Shared-Kernel**  | core-domain            | Cross-plane domain primitives                                                                  |
+| **Shared-Kernel**  | shared                 | Type-only utilities permitted in any plane                                                     |
 
 Two runtime surfaces expose the governance planes: `apps/web` (Next.js visual control plane, which also serves the HTTP API under `app/api`) and `apps/tui` (Ink terminal control plane).
 
@@ -346,7 +343,7 @@ Workspaces printing `<NONEXISTENT>` have no `test` script and are contributing n
 coverage config exists anywhere. That is a recorded, deliberate deferral with a re-open
 trigger, not an oversight — and the no-op workspaces above are precisely why, since a
 coverage percentage would only instrument the files a runner loads and would therefore
-*improve* as that gap widened. See decision **D4** in
+_improve_ as that gap widened. See decision **D4** in
 [`docs/planning/2026-08-15-architecture-remediation-execution-runbook.md`](docs/planning/2026-08-15-architecture-remediation-execution-runbook.md).
 
 The [`.github/workflows/sync-integrity.yml`](.github/workflows/sync-integrity.yml) workflow runs on every PR and on pushes to `main` / `develop`:

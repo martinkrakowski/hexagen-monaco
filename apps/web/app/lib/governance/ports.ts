@@ -1,14 +1,11 @@
 /**
- * Outbound ports for the governance API family (HEX-016, structural half).
+ * Outbound ports for the remaining governance routes (HEX-016). YAML parsing
+ * lives in the pure `analyzeManifest` function (`./manifest-analysis`).
+ * Subprocess linting and LLM suggestion go through these ports; adapters live
+ * in `./adapters` and are constructed in `app/lib/wire.server.ts`.
  *
- * `governance/refresh` used to own four I/O concerns inline: it `exec`'d
- * `yarn lint:arch` through a shell, wrote and unlinked a temp manifest, parsed
- * YAML, and `new`'d `ServerLLMAdapter` + `GenerateSuggestionUseCase`. Item 1.6
- * (PR #444) took the YAML half: every manifest parse in this family now goes
- * through the pure `analyzeManifest` function in `./manifest-analysis`. This
- * module takes the other two — subprocess/filesystem and LLM — and puts them
- * behind ports whose adapters live in `./adapters` and are constructed in the
- * composition root (`app/lib/wire.server.ts`).
+ * `POST /api/governance/refresh` used to own all four concerns inline and has
+ * been retired. `ManifestLintPort` remains the lint seam; no route calls it.
  *
  * NOTE (no YAML port, deliberately). The review's HEX-016 lists "YAML parsing"
  * as a fourth concern, but the audit adjudicated the sibling finding HEX-026 —

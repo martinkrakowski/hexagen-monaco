@@ -1083,22 +1083,6 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@hexagen/intent-compiler@workspace:packages/intent-compiler":
-  version: 0.0.0-use.local
-  resolution: "@hexagen/intent-compiler@workspace:packages/intent-compiler"
-  dependencies:
-    "@hexagen/core-domain": "workspace:*"
-    "@hexagen/shared": "workspace:*"
-    "@typescript-eslint/eslint-plugin": "npm:^8.57.0"
-    "@typescript-eslint/parser": "npm:^8.57.0"
-    eslint: "npm:^8.57.0"
-    eslint-config-prettier: "npm:^10.1.8"
-    tsx: "npm:^4.21.0"
-    typescript: "npm:^5.4.5"
-    vitest: "npm:^4.1.9"
-  languageName: unknown
-  linkType: soft
-
 "@hexagen/layout-engine@workspace:*, @hexagen/layout-engine@workspace:packages/layout-engine":
   version: 0.0.0-use.local
   resolution: "@hexagen/layout-engine@workspace:packages/layout-engine"

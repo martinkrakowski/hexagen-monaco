@@ -72,9 +72,11 @@ At publication and consumption, Node.js ESM module resolution takes over. Two ar
    ```
    | Package    | Resolution | Why                                    |
    | ---------- | ---------- | -------------------------------------- |
-   | sync (CLI) | NodeNext   | Direct Node execution; npm-published  |
+   | sync (CLI) | bundler    | Source stays bundler; tsup emits ESM   |
    | All others | bundler    | Consumed via bundled webpack context |
    ```
+
+   Footnote (2026-08-17): an earlier draft of this table listed `sync (CLI) | NodeNext`. That row described Approach 1, which this ADR rejected. The selected approach keeps **source** at `moduleResolution: bundler` / `module: Preserve` (`packages/sync/tsconfig.json`); NodeNext remains only on `packages/sync/tsconfig.test.json`, plus the other Node-executed workspaces `apps/tui` and `tools/arch-linter` (see the 2026-08-17 amendment on ADR-0050). AGENTS.md's Module Resolution appendix is the same policy.
 
    Reversing this requires new architecture justification. We have none.
 

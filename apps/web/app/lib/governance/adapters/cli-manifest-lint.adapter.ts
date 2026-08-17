@@ -10,11 +10,10 @@ import type { ManifestLintOutcome, ManifestLintPort } from "../ports";
  * The only implementation of {@link ManifestLintPort}: hand the candidate
  * manifest to the `arch-linter` CLI and classify what comes back.
  *
- * Everything the `governance/refresh` route used to do inline lives here —
- * temp-file creation, the subprocess, the cleanup — so the route imports
- * neither `node:child_process` nor `node:fs` (enforced by the
+ * Temp-file creation, the subprocess, and cleanup live here so no governance
+ * route imports `node:child_process` or `node:fs` (enforced by the
  * `no-restricted-imports` block for `app/api/governance/**` in
- * `apps/web/eslint.config.js`).
+ * `apps/web/eslint.config.js`). No route currently calls this adapter.
  *
  * Three behaviours changed in the move, each a defect in the inline version:
  *

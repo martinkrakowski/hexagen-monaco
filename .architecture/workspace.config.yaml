@@ -245,11 +245,6 @@ monorepo:
               - '@hexagen/report-governance'
               - '@hexagen/transaction-system'
 
-          - name: 'intent-compiler'
-            allowed_imports:
-              - '@hexagen/shared'
-              - '@hexagen/core-domain'
-
           - name: 'ui-projection-compiler'
             allowed_imports:
               - '@hexagen/shared'
@@ -267,7 +262,6 @@ monorepo:
             allowed_imports:
               - '@hexagen/shared'
               - '@hexagen/core-domain'
-              - '@hexagen/intent-compiler'
               - '@hexagen/sync'
 
           - name: 'prompt-compiler'

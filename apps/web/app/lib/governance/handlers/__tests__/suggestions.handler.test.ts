@@ -164,8 +164,7 @@ describe("POST /api/governance/suggestions", () => {
   });
 
   it("rejects a cross-origin POST with 403 before calling the suggestion port", async () => {
-    // This route reaches the same LLM as `governance/refresh` on the caller's
-    // word alone. #443 gated `refresh` for that reason and missed this sibling.
+    // This route reaches the LLM on the caller's word alone.
     const { deps: d, suggest } = deps();
     const req = new NextRequest("http://localhost/api/governance/suggestions", {
       method: "POST",

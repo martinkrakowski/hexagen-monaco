@@ -129,11 +129,6 @@ bounded_contexts:
     plane: core
     status: active
     file: contexts/core/ai-pipeline/context.yaml
-  - name: intent-compiler
-    type: core
-    plane: core
-    status: active
-    file: contexts/core/intent-compiler/context.yaml
   - name: layout-engine
     type: core
     plane: core

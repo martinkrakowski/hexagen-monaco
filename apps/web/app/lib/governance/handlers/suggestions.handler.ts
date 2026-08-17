@@ -12,10 +12,9 @@ import type { AISuggestion, SuggestionPort } from "../ports";
 /**
  * The `POST /api/governance/suggestions` handler.
  *
- * Shares one {@link SuggestionPort} with `governance/refresh` instead of
- * carrying a second, drifted copy of the LLM wiring (HEX-016). The response
- * shape is unchanged — `{ suggestions }`, plus `error` when no model ran —
- * because `useGovernanceData` reads exactly those two fields.
+ * `POST /api/governance/suggestions` (HEX-016). Response shape is
+ * `{ suggestions }` plus `error` when no model ran — `useGovernanceData`
+ * reads exactly those two fields.
  */
 
 export interface GovernanceSuggestionsDeps {
@@ -32,13 +31,9 @@ export async function handleGovernanceSuggestions(
   deps: GovernanceSuggestionsDeps,
 ): Promise<NextResponse> {
   // Same-origin + rate-limit gate (D1), before the body is decoded and before
-  // any model is called. #443 put this on the four modify routes and on
-  // `governance/refresh` for exactly the reason that applies here — the route
-  // "call[s] the LLM" — but this sibling was missed: it reaches the same
-  // `SuggestionPort`, per request, on the caller's word alone. It shares the
-  // `mutation` limiter bucket with `refresh` so the two cannot be alternated to
-  // double the budget. `useGovernanceData` calls this same-origin, so the only
-  // traffic the gate turns away is traffic that was never the UI's.
+  // any model is called. This route reaches `SuggestionPort` on the caller's
+  // word alone. `useGovernanceData` calls it same-origin, so the only traffic
+  // the gate turns away is traffic that was never the UI's.
   const gate = guardMutation(request);
   if (gate) return gate;
 

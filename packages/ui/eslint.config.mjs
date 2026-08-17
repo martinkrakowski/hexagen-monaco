@@ -46,8 +46,6 @@ export default [
                 "@hexagen/local-llm/*",
                 "@hexagen/agentic-interaction",
                 "@hexagen/agentic-interaction/*",
-                "@hexagen/intent-compiler",
-                "@hexagen/intent-compiler/*",
                 "@hexagen/transaction-system",
                 "@hexagen/transaction-system/*",
                 "@hexagen/reconciliation-engine",

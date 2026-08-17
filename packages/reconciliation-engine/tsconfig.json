@@ -13,7 +13,6 @@
   "exclude": ["node_modules", "dist", ".turbo", "src/__tests__"],
   "references": [
     { "path": "../../packages/core-domain" },
-    { "path": "../../packages/intent-compiler" },
     { "path": "../../packages/prompt-compiler" },
     { "path": "../../packages/shared" }
   ]
