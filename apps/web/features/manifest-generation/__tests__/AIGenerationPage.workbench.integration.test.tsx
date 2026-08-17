@@ -195,14 +195,28 @@ const submitComposer = () => {
 /**
  * Settle the page's asynchronous MOUNT effects.
  *
- * `AIGenerationPage` starts three promises on mount that each end in a
- * `setState`: the capability probe (`getCapabilities()` → the pending-forever
- * fetch stub, which still rejects/settles a tick later), the flow machine's
- * `createApiKeyManager(getSecretVault())`, and `useWebGPUDetection`'s
- * `Promise.all([detect(), profile()])`. None of them settles inside `render`'s
- * synchronous `act` window, so tests whose bodies returned without awaiting
- * anything left React updating outside `act()` — three warnings apiece, 15
- * across this file — and asserted against pre-flush markup.
+ * Under this harness TWO mount promises reach a `setState`, and between them
+ * they produce three un-acted updates per test:
+ *
+ *   - the flow machine's `createApiKeyManager(getSecretVault())` →
+ *     `setApiKeyManager` — one update;
+ *   - `useWebGPUDetection`'s `Promise.all([detect(), profile()])` →
+ *     `setResult`, whose `isLoading` flip then drives
+ *     `useModelSelectionFlowEffects`' `setFlowState(hardwareCapabilities)` —
+ *     two updates.
+ *
+ * The capability probe is NOT one of them here, despite also starting on
+ * mount: `useCapabilityProbe` awaits `getCapabilities()`, which awaits the
+ * `pendingForever` stub above — `new Promise(() => {})`, which never resolves
+ * and never rejects — so neither the resolve nor the catch arm of the probe
+ * ever calls `setCapabilities`. Measured by suppressing one source at a time
+ * on this file: both live = 15 warnings; `setApiKeyManager` suppressed = 10;
+ * `setResult` suppressed = 5.
+ *
+ * Neither settling promise lands inside `render`'s synchronous `act` window,
+ * so tests whose bodies returned without awaiting anything left React updating
+ * outside `act()` — three warnings apiece, 15 across this file — and asserted
+ * against pre-flush markup.
  *
  * Tests that already `await waitFor(...)` never had the problem: RTL's async
  * wrapper owns the act environment for the duration of the wait.
