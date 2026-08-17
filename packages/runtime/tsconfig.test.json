@@ -7,5 +7,5 @@
     "skipLibCheck": true,
     "moduleResolution": "bundler"
   },
-  "include": ["src/**/*.ts", "__tests__/**/*.ts", "tests/**/*.ts"]
+  "include": ["src/**/*.ts", "__tests__/**/*.ts"]
 }

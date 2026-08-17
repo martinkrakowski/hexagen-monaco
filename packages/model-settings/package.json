@@ -14,7 +14,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src"
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest watch"
   },
   "dependencies": {
     "@hexagen/local-llm": "workspace:*",
@@ -22,10 +25,16 @@
     "lucide-react": "^1.11.0"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.2.3",
     "eslint": "^8.57.0",
+    "jsdom": "^26.1.0",
     "react": "^19.0.0",
-    "typescript": "^5.4.5"
+    "react-dom": "19.2.5",
+    "typescript": "^5.4.5",
+    "vitest": "^4.1.9"
   },
   "peerDependencies": {
     "react": "^19.0.0"
