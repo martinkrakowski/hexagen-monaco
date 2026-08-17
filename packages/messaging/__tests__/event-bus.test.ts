@@ -111,4 +111,68 @@ describe("event-bus", () => {
       source: "test",
     });
   });
+
+  // The adapter's `publish` swallows handler exceptions on purpose — its own
+  // comment says "Handlers must not throw; errors are silently ignored to
+  // protect other subscribers". Nothing verified either half of that claim.
+  it("should keep delivering to later subscribers when an earlier one throws", () => {
+    const eventBus6 = new InMemoryEventBusAdapter();
+    const delivered: string[] = [];
+
+    eventBus6.subscribe("test-event", () => {
+      throw new Error("first subscriber exploded");
+    });
+    eventBus6.subscribe("test-event", () => {
+      delivered.push("second");
+    });
+
+    assert.doesNotThrow(
+      () =>
+        eventBus6.publish({
+          type: "test-event",
+          payload: { message: "resilient" },
+          timestamp: Date.now(),
+          source: "test",
+        }),
+      "A throwing subscriber must not propagate out of publish",
+    );
+
+    assert.deepStrictEqual(
+      delivered,
+      ["second"],
+      "A throwing subscriber must not stop delivery to the rest",
+    );
+  });
+
+  // Only the closure returned by `subscribe` was covered; `unsubscribe` is a
+  // separate method on EventBusPort and had no test of its own.
+  it("should stop delivery via the explicit unsubscribe method", () => {
+    const eventBus7 = new InMemoryEventBusAdapter();
+    const removed: string[] = [];
+    const kept: string[] = [];
+
+    const removedHandler = () => removed.push("removed");
+    eventBus7.subscribe("test-event", removedHandler);
+    eventBus7.subscribe("test-event", () => kept.push("kept"));
+
+    eventBus7.unsubscribe("test-event", removedHandler);
+
+    eventBus7.publish({
+      type: "test-event",
+      payload: { message: "targeted" },
+      timestamp: Date.now(),
+      source: "test",
+    });
+
+    assert.strictEqual(
+      removed.length,
+      0,
+      "The unsubscribed handler must not receive",
+    );
+    assert.deepStrictEqual(
+      kept,
+      ["kept"],
+      "unsubscribe must remove only the handler it was given",
+    );
+  });
 });
