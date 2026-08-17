@@ -16,11 +16,15 @@ layers:
       - UndoLastPatchUseCase
       - ProjectCurrentBufferStateUseCase
     ports:
-      in:
+      # No inbound ports: no use case in this context implements a port — all
+      # four take one by constructor injection, so under ADR-0048 they are
+      # driven. See ADR-0057: this list is a curated ownership registry and
+      # accuracy is the invariant, so an empty `in:` is omitted rather than
+      # carried as an empty key.
+      out:
+        - TsMorphPort
         - ValidatePatchIntentPort
         - UndoLastPatchPort
         - ProjectCurrentBufferStatePort
         - ApplySemanticPatchPort
-      out:
-        - TsMorphPort
 plane: core

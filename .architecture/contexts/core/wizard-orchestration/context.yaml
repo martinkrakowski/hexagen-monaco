@@ -17,15 +17,21 @@ layers:
       - ValidateStepUseCase
     ports:
       in:
-        - ProcessIntentPort
-        - ProjectWizardStatePort
-        - ValidateStepPort
+        # IProjectWizardController is implemented by the React UI and a test
+        # fake — both drivers, not infrastructure — so it is genuinely inbound.
+        # The three ActiveWorkspacePort contracts have no in-tree implementer
+        # and no in-tree consumer, so ADR-0048's test fires in neither
+        # direction; their authoring commit records the React context as the
+        # adapter, which is a driving adapter.
         - IProjectWizardController
         - QueryActiveWorkspacePort
         - SetActiveWorkspacePort
         - ClearActiveWorkspacePort
       out:
         - WizardCompletionSignalPort
+        - ProcessIntentPort
+        - ProjectWizardStatePort
+        - ValidateStepPort
 depends_on:
   - messaging
 plane: core
