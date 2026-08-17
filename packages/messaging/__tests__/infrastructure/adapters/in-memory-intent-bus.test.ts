@@ -1,5 +1,5 @@
-import assert from "node:assert/strict";
-import { describe, it } from "vitest";
+import type { Result } from "@hexagen/shared";
+import { describe, expect, it } from "vitest";
 import type {
   Intent,
   IntentBusPort,
@@ -30,6 +30,12 @@ const intent = <T>(type: string, payload: T): Intent<T> => ({
   correlationId: `cid-${type}`,
 });
 
+/** Assert the failure arm and hand back its error, which `Result` cannot narrow to. */
+const errorOf = (result: Result<unknown>): unknown => {
+  expect(result.success, "the dispatch was expected to fail").toBe(false);
+  return (result as { success: false; error: unknown }).error;
+};
+
 describe("InMemoryIntentBusAdapter (IntentBusPort contract)", () => {
   it("routes a dispatched intent to the handler registered for its type", async () => {
     const bus = newBus();
@@ -44,9 +50,9 @@ describe("InMemoryIntentBusAdapter (IntentBusPort contract)", () => {
       intent("add", { n: 41 }),
     );
 
-    assert.deepEqual(result, { success: true, value: 42 });
-    assert.equal(seen.length, 1, "the handler must be invoked exactly once");
-    assert.equal(seen[0]!.correlationId, "cid-add");
+    expect(result).toEqual({ success: true, value: 42 });
+    expect(seen, "the handler must be invoked exactly once").toHaveLength(1);
+    expect(seen[0]!.correlationId).toBe("cid-add");
   });
 
   it("dispatches only to the handler whose type matches", async () => {
@@ -64,50 +70,47 @@ describe("InMemoryIntentBusAdapter (IntentBusPort contract)", () => {
 
     await bus.dispatch(intent("wanted", {}));
 
-    assert.deepEqual(
+    expect(
       invoked,
-      ["wanted"],
       "a dispatch must not fan out to handlers of other intent types",
-    );
+    ).toEqual(["wanted"]);
   });
 
   it("rejects a second registration for an already-registered type", () => {
     const bus = newBus();
     bus.register("duplicate", async () => ({ success: true, value: null }));
 
-    assert.throws(
+    expect(
       () =>
         bus.register("duplicate", async () => ({ success: true, value: null })),
-      /Intent handler already registered for type: duplicate/,
       "single-ownership of an intent type must be enforced at registration",
-    );
+    ).toThrow(/Intent handler already registered for type: duplicate/);
   });
 
   it("keeps the first handler after a rejected duplicate registration", async () => {
     const bus = newBus();
     bus.register("owned", async () => ({ success: true, value: "first" }));
 
-    assert.throws(() =>
+    expect(() =>
       bus.register("owned", async () => ({ success: true, value: "second" })),
-    );
+    ).toThrow();
 
     const result = await bus.dispatch<unknown, string>(intent("owned", {}));
-    assert.deepEqual(
+    expect(
       result,
-      { success: true, value: "first" },
       "the rejected registration must not have overwritten the incumbent",
-    );
+    ).toEqual({ success: true, value: "first" });
   });
 
   it("returns a failure Result — rather than throwing — for an unhandled type", async () => {
     const bus = newBus();
 
-    const result = await bus.dispatch(intent("nobody-handles-this", {}));
+    const error = errorOf(
+      await bus.dispatch(intent("nobody-handles-this", {})),
+    );
 
-    assert.equal(result.success, false);
-    assert.ok(result.success === false && result.error instanceof Error);
-    assert.match(
-      (result as { error: Error }).error.message,
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(
       /No handler registered for intent type: nobody-handles-this/,
     );
   });
@@ -121,11 +124,11 @@ describe("InMemoryIntentBusAdapter (IntentBusPort contract)", () => {
 
     const result = await bus.dispatch(intent("boom", {}));
 
-    assert.deepEqual(
+    expect(
       result,
-      { success: false, error: thrown },
       "the original Error must survive, not be re-wrapped",
-    );
+    ).toEqual({ success: false, error: thrown });
+    expect((result as { error: unknown }).error).toBe(thrown);
   });
 
   it("converts a handler that throws a non-Error into a failure Result with an Error", async () => {
@@ -134,14 +137,10 @@ describe("InMemoryIntentBusAdapter (IntentBusPort contract)", () => {
       throw "not an error object";
     });
 
-    const result = await bus.dispatch(intent("string-throw", {}));
+    const error = errorOf(await bus.dispatch(intent("string-throw", {})));
 
-    assert.equal(result.success, false);
-    assert.ok(result.success === false && result.error instanceof Error);
-    assert.equal(
-      (result as { error: Error }).error.message,
-      "not an error object",
-    );
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("not an error object");
   });
 
   it("stops routing to a handler once its type is unregistered", async () => {
@@ -156,8 +155,8 @@ describe("InMemoryIntentBusAdapter (IntentBusPort contract)", () => {
     bus.unregister("transient");
     const afterUnregister = await bus.dispatch(intent("transient", {}));
 
-    assert.equal(invocations, 1, "the handler must not run after unregister");
-    assert.equal(afterUnregister.success, false);
+    expect(invocations, "the handler must not run after unregister").toBe(1);
+    expect(afterUnregister.success).toBe(false);
   });
 
   it("frees the type for re-registration after unregister", async () => {
@@ -165,32 +164,31 @@ describe("InMemoryIntentBusAdapter (IntentBusPort contract)", () => {
     bus.register("reusable", async () => ({ success: true, value: "old" }));
     bus.unregister("reusable");
 
-    assert.doesNotThrow(
+    expect(
       () =>
         bus.register("reusable", async () => ({
           success: true,
           value: "new",
         })),
       "unregister must release the single-ownership slot, not merely stop routing",
-    );
+    ).not.toThrow();
 
     const result = await bus.dispatch<unknown, string>(intent("reusable", {}));
-    assert.deepEqual(result, { success: true, value: "new" });
+    expect(result).toEqual({ success: true, value: "new" });
   });
 
   it("lists exactly the currently registered intent types", () => {
     const bus = newBus();
-    assert.deepEqual(
+    expect(
       bus.listRegistered(),
-      [],
       "a fresh bus must report no registrations",
-    );
+    ).toEqual([]);
 
     bus.register("first", async () => ({ success: true, value: null }));
     bus.register("second", async () => ({ success: true, value: null }));
-    assert.deepEqual([...bus.listRegistered()].sort(), ["first", "second"]);
+    expect([...bus.listRegistered()].sort()).toEqual(["first", "second"]);
 
     bus.unregister("first");
-    assert.deepEqual(bus.listRegistered(), ["second"]);
+    expect(bus.listRegistered()).toEqual(["second"]);
   });
 });

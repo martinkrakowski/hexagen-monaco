@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { InMemoryEventBusAdapter } from "../src/infrastructure/adapters/in-memory-event-bus.adapter";
 
 describe("event-bus", () => {
@@ -126,7 +126,7 @@ describe("event-bus", () => {
       delivered.push("second");
     });
 
-    assert.doesNotThrow(
+    expect(
       () =>
         eventBus6.publish({
           type: "test-event",
@@ -135,13 +135,12 @@ describe("event-bus", () => {
           source: "test",
         }),
       "A throwing subscriber must not propagate out of publish",
-    );
+    ).not.toThrow();
 
-    assert.deepStrictEqual(
+    expect(
       delivered,
-      ["second"],
       "A throwing subscriber must not stop delivery to the rest",
-    );
+    ).toEqual(["second"]);
   });
 
   // Only the closure returned by `subscribe` was covered; `unsubscribe` is a
@@ -164,15 +163,12 @@ describe("event-bus", () => {
       source: "test",
     });
 
-    assert.strictEqual(
-      removed.length,
+    expect(removed, "The unsubscribed handler must not receive").toHaveLength(
       0,
-      "The unsubscribed handler must not receive",
     );
-    assert.deepStrictEqual(
+    expect(
       kept,
-      ["kept"],
       "unsubscribe must remove only the handler it was given",
-    );
+    ).toEqual(["kept"]);
   });
 });
