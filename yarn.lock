@@ -1002,20 +1002,6 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@hexagen/architectural-enforcement@workspace:packages/architectural-enforcement":
-  version: 0.0.0-use.local
-  resolution: "@hexagen/architectural-enforcement@workspace:packages/architectural-enforcement"
-  dependencies:
-    "@hexagen/shared": "workspace:*"
-    "@types/js-yaml": "npm:^4.0.9"
-    "@types/node": "npm:^20.0.0"
-    eslint: "npm:^8.57.0"
-    js-yaml: "npm:^4.1.1"
-    typescript: "npm:^5.4.5"
-    vitest: "npm:^4.1.9"
-  languageName: unknown
-  linkType: soft
-
 "@hexagen/byok@workspace:*, @hexagen/byok@workspace:packages/byok":
   version: 0.0.0-use.local
   resolution: "@hexagen/byok@workspace:packages/byok"
@@ -1023,20 +1009,6 @@ __metadata:
     "@hexagen/shared": "workspace:*"
     eslint: "npm:^8.57.0"
     tsx: "npm:^4.21.0"
-    typescript: "npm:^5.4.5"
-    vitest: "npm:^4.1.9"
-  languageName: unknown
-  linkType: soft
-
-"@hexagen/code-generation@workspace:packages/code-generation":
-  version: 0.0.0-use.local
-  resolution: "@hexagen/code-generation@workspace:packages/code-generation"
-  dependencies:
-    "@hexagen/shared": "workspace:*"
-    "@types/js-yaml": "npm:^4.0.9"
-    "@types/node": "npm:^20.0.0"
-    eslint: "npm:^8.57.0"
-    js-yaml: "npm:^4.1.1"
     typescript: "npm:^5.4.5"
     vitest: "npm:^4.1.9"
   languageName: unknown
