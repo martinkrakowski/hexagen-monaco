@@ -281,9 +281,16 @@ export async function runBootstrap(
     }
 
     await fs.mkdir(archDir, { recursive: true });
-    await fs.writeFile(files[0], emitManifest(answers), "utf8");
-    await fs.writeFile(files[1], emitLayout(answers, detection), "utf8");
-    await fs.writeFile(files[2], EMPTY_BASELINE, "utf8");
+    for (const [i, content] of [
+      emitManifest(answers),
+      emitLayout(answers, detection),
+      EMPTY_BASELINE,
+    ].entries()) {
+      await fs.writeFile(`${files[i]}.tmp`, content, "utf8");
+    }
+    for (const f of files) {
+      await fs.rename(`${f}.tmp`, f);
+    }
     return ok({ files, wrote: true });
   } catch (e) {
     return err(e instanceof Error ? e : new Error(String(e)));

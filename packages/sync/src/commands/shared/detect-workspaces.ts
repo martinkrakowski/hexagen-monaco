@@ -51,13 +51,18 @@ async function pathExists(p: string): Promise<boolean> {
 }
 
 async function expandGlob(root: string, glob: string): Promise<string[]> {
-  if (glob.endsWith("/*")) {
+  if (glob.endsWith("/*") && !glob.slice(0, -2).includes("*")) {
     const dir = path.join(root, glob.slice(0, -2));
     if (!(await pathExists(dir))) return [];
     const entries = await fs.readdir(dir, { withFileTypes: true });
     return entries
       .filter((e) => e.isDirectory() && !e.name.startsWith("."))
       .map((e) => path.join(glob.slice(0, -2), e.name));
+  }
+  if (glob.includes("*")) {
+    throw new Error(
+      `Complex globs like '${glob}' are not supported. Only simple trailing '/*' globs are currently supported.`,
+    );
   }
   const abs = path.join(root, glob);
   return (await pathExists(abs)) ? [glob] : [];
@@ -108,6 +113,7 @@ export async function detectWorkspaces(
   // A non-workspace repo still has itself as a candidate.
   const candidates = relRoots.length > 0 ? relRoots : ["."];
   const packages: DetectedPackage[] = [];
+  const seenNames = new Set<string>();
 
   for (const rel of candidates) {
     const abs = path.join(root, rel);
@@ -121,8 +127,17 @@ export async function detectWorkspaces(
       packageName = undefined;
     }
     const dirName = rel === "." ? path.basename(root) : path.basename(rel);
+    const name = contextNameFrom(packageName, dirName);
+
+    if (seenNames.has(name)) {
+      throw new Error(
+        `Duplicate context name '${name}' detected. Ensure packages have unique unscoped names or different directory names.`,
+      );
+    }
+    seenNames.add(name);
+
     packages.push({
-      name: contextNameFrom(packageName, dirName),
+      name,
       root: rel === "." ? "." : rel.split(path.sep).join("/"),
       packageName,
       layers: await detectLayers(abs),

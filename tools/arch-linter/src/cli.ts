@@ -853,7 +853,7 @@ function checkArchitecturalIntegrity(): {
     crossContextEdges,
     PKG_ROOT_PATH,
     (p) => fs.existsSync(p),
-    { advisory: layout !== undefined },
+    { advisory: false },
   );
   for (const v of commViolations) {
     const message = `Required Communication Violation:\n ${v.message}`;
