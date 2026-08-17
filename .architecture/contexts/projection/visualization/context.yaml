@@ -13,12 +13,21 @@ layers:
     use_cases:
       - RenderHexagonCanvasUseCase
       - ExportGraphImageUseCase
+      - CanvasGraphLoadUseCase
     ports:
       in:
         - RenderHexagonCanvasPort
         - ExportGraphImagePort
       out:
         - IArchitectureGraphProviderPort
+        # Driven, per ADR-0048's rule of thumb: an infrastructure adapter
+        # implements it (HexagonalMapGeneratorAdapter, in this package's
+        # infrastructure/adapters/hexagonal-map-generator/) and the use case
+        # takes it as a constructor dependency (CanvasGraphLoadUseCase). Same
+        # test that keeps TransactionManagerPort off mcp-server's inbound list.
+        # The interface file still sits under application/ports/in/ — a HEX-018
+        # relocation for a code PR, not something this registry edit can fix.
+        - GenerateHexagonalMapPort
 depends_on:
   - project-configuration
 plane: projection
