@@ -208,7 +208,7 @@ The manifest is versioned and diffable. Three tracking surfaces support change r
 
 ## Generator Add-On Templates
 
-Beyond scaffolding the architecture, HexaGen ships **44 opt-in add-on templates** — production-ready infrastructure slices a generated project can apply at any time. Each template is self-contained: it declares its own questions, dependencies, output files, required env vars, and post-install checklist, then emits typed, hexagonal-architecture-aligned code into the project.
+Beyond scaffolding the architecture, Hexagen-Monaco ships **44 opt-in add-on templates** — production-ready infrastructure slices a generated project can apply at any time. Each template is self-contained: it declares its own questions, dependencies, output files, required env vars, and post-install checklist, then emits typed, hexagonal-architecture-aligned code into the project.
 
 ```bash
 npx hexagen templates list             # list available templates (✅ marks installed)
@@ -370,16 +370,22 @@ All steps must pass before merging to `main`.
 
 ---
 
+## For existing `@hexagen-monaco/sync` users
+
+Generation stays. If you installed the CLI to scaffold Hexagonal monorepos, that path remains supported. The product headline is now architectural conformance — the same engine that emits a layout also checks that the tree still matches it. 0.10.0 is an unpublished breaking minor: a project that passed the linter on 0.9.x can fail on 0.10.0. That candor is the contract going forward.
+
 ## License
 
-HexaGen Monaco is a source-available, proprietary product owned by Krakowski Cloud Solutions, LLC. It is licensed under the [Source-Available Evaluation License](./LICENSE).
+Hexagen-Monaco is a three-layer product (ADR-0061).
 
-**What this means:**
+**Wedge.** `@hexagen-monaco/arch-linter`, `@hexagen-monaco/sync`, and the future adopt / bootstrap / report commands and CI action are licensed under the [Functional Source License, Version 1.1, Apache 2.0 Future License](./packages/sync/LICENSE) (FSL-1.1-Apache-2.0). Internal use — including commercial internal use — is permitted. Offering a competing product or service on the wedge is not. Each published version converts to Apache-2.0 two years after it is made available.
 
-- You can read the source code, run it locally, and use it freely for internal evaluation and non-commercial academic research.
-- You **cannot** use this software in a commercial production deployment, or offer it as a managed service.
-- This software does **not** transition to an open-source license.
+**Platform.** The web app, staged generation, hosted history, and the agent-constraint pack remain proprietary under the [Source-Available Evaluation License](./LICENSE). New packages default to this license unless they are deliberately placed in the wedge.
 
-For commercial licensing, enterprise support, and access to the automated brownfield ingestion engine, please contact Krakowski Cloud Solutions, LLC.
+Already-published npm tarballs at version 0.9.0 and earlier stay on the evaluation license forever. The FSL relicense applies from the next published release.
+
+The **Hexagen-Monaco** name is a trademark of Krakowski Cloud Solutions, LLC and is independent of the code licenses.
+
+For commercial licensing, enterprise support, and assisted brownfield adoption tooling, open a GitHub issue at https://github.com/martinkrakowski/hexagen-monaco/issues with the title prefix `[commercial]`.
 
 Maintained by Martin Krakowski

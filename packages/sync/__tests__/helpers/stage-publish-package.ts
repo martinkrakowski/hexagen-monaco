@@ -41,6 +41,8 @@ export async function stagePublishedManifest(
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "prepublish-fixture-"));
   await fs.mkdir(path.join(dir, "dist"), { recursive: true });
   await fs.writeFile(path.join(dir, "dist", "index.js"), "export {};\n");
+  // Staging requires a package-local LICENSE.
+  await fs.writeFile(path.join(dir, "LICENSE"), "FIXTURE-LICENSE\n");
   await fs.writeFile(
     path.join(dir, "package.json"),
     JSON.stringify(

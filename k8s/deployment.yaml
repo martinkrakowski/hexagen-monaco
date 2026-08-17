@@ -7,7 +7,9 @@ metadata:
     tier: frontend
   namespace: ${K8S_NAMESPACE}
 spec:
-  replicas: 2
+  replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: hexagen-web
@@ -29,6 +31,13 @@ spec:
           env:
             - name: NODE_ENV
               value: "production"
+            - name: QUOTA_DB_PATH
+              value: "/data/quota.db"
+            - name: BYOK_DB_PATH
+              value: "/data/byok.db"
+          volumeMounts:
+            - name: quota-data
+              mountPath: /data
           resources:
             requests:
               memory: "256Mi"
@@ -48,6 +57,22 @@ spec:
               port: http
             initialDelaySeconds: 5
             periodSeconds: 5
+      volumes:
+        - name: quota-data
+          persistentVolumeClaim:
+            claimName: hexagen-monaco-quota-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hexagen-monaco-quota-data
+  namespace: ${K8S_NAMESPACE}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
 ---
 apiVersion: v1
 kind: Service

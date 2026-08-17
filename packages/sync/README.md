@@ -224,4 +224,6 @@ The source `packages/sync/package.json` is never mutated by this process.
 
 ## License
 
-Source-Available Evaluation License — proprietary to Krakowski Cloud Solutions, LLC. Free to read, run locally, and evaluate for internal/non-commercial use; **not** licensed for commercial production deployment. See [LICENSE](./LICENSE).
+Licensed under the Functional Source License, Version 1.1, Apache 2.0 Future License (FSL-1.1-Apache-2.0). See [LICENSE](./LICENSE). Internal use — including commercial internal use — is permitted; competing use is not. Each published version converts to Apache-2.0 two years after it is made available. Published tarballs ≤0.9.0 remain under the evaluation license forever.
+
+The Hexagen-Monaco name is a trademark of Krakowski Cloud Solutions, LLC.
