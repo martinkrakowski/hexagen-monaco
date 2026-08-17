@@ -1,7 +1,11 @@
 import { describe, it } from "vitest";
 import assert from "node:assert";
 import type { EventBusPort } from "@hexagen/messaging";
-import { type ArchitectureGraph, type LinterReport } from "@hexagen/shared";
+// The graph and report shapes live where `ArchitectureQueryPort` reads them
+// from; `@hexagen/shared` has not exported either name for some time, which
+// nothing noticed while this package had no `typecheck:test`.
+import type { LinterReport } from "@hexagen/governance";
+import type { ArchitectureGraph } from "@hexagen/visualization";
 import { AddDependencyToolUseCase } from "../../src/application/use-cases/add-dependency-tool.use-case.js";
 import { AuditBoundariesToolUseCase } from "../../src/application/use-cases/audit-boundaries-tool.use-case.js";
 import { CreateAdapterToolUseCase } from "../../src/application/use-cases/create-adapter-tool.use-case.js";

@@ -1,20 +1,12 @@
 import type { EventBusPort } from "@hexagen/messaging";
 import type {
-  AddDependencyCommand,
-  ManifestWritePort,
-} from "../ports/out/manifest-write.port.js";
+  AddDependencyInput,
+  AddDependencyOutput,
+  AddDependencyToolPort,
+} from "../ports/in/add-dependency-tool.port.js";
+import type { ManifestWritePort } from "../ports/out/manifest-write.port.js";
 
-export interface AddDependencyInput extends AddDependencyCommand {
-  dry_run?: boolean;
-}
-
-export interface AddDependencyOutput {
-  dryRun: boolean;
-  updated: boolean;
-  message: string;
-}
-
-export class AddDependencyToolUseCase {
+export class AddDependencyToolUseCase implements AddDependencyToolPort {
   constructor(
     private readonly manifestWritePort: ManifestWritePort,
     private readonly eventBusPort: EventBusPort,

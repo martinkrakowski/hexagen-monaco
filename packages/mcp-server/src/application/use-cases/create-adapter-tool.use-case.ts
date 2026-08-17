@@ -1,19 +1,12 @@
+import type {
+  CreateAdapterInput,
+  CreateAdapterOutput,
+  CreateAdapterToolPort,
+} from "../ports/in/create-adapter-tool.port.js";
 import type { ManifestWritePort } from "../ports/out/manifest-write.port.js";
 import type { ScaffoldingPort } from "../ports/out/scaffolding.port.js";
 
-export interface CreateAdapterInput {
-  port_name: string;
-  infrastructure_name: string;
-  dry_run?: boolean;
-}
-
-export interface CreateAdapterOutput {
-  dryRun: boolean;
-  fileCreated?: string;
-  message: string;
-}
-
-export class CreateAdapterToolUseCase {
+export class CreateAdapterToolUseCase implements CreateAdapterToolPort {
   constructor(
     private readonly scaffoldingPort: ScaffoldingPort,
     private readonly manifestWritePort: ManifestWritePort,

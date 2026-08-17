@@ -1,6 +1,7 @@
 import { describe, it } from "vitest";
 import assert from "node:assert";
 import type { EventBusPort } from "@hexagen/messaging";
+import type { Result } from "@hexagen/shared";
 import type { ManifestWritePort } from "../../src/application/ports/out/manifest-write.port.js";
 import { CreateContextToolUseCase } from "../../src/application/use-cases/create-context-tool.use-case.js";
 
@@ -14,7 +15,11 @@ class ManifestWriteFake implements ManifestWritePort {
   async addDependency() {
     return { success: true as const, value: { updated: true } };
   }
-  async registerBoundedContext() {
+  // Declared on the port's own return type, not narrowed to the success arm,
+  // so the error-returning subclass below is a legal override.
+  async registerBoundedContext(): Promise<
+    Result<{ registered: boolean; alreadyExisted: boolean }>
+  > {
     return {
       success: true as const,
       value: { registered: true, alreadyExisted: false },

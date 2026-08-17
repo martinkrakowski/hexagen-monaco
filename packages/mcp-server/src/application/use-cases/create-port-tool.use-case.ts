@@ -1,20 +1,12 @@
+import type {
+  CreatePortInput,
+  CreatePortOutput,
+  CreatePortToolPort,
+} from "../ports/in/create-port-tool.port.js";
 import type { ManifestWritePort } from "../ports/out/manifest-write.port.js";
 import type { ScaffoldingPort } from "../ports/out/scaffolding.port.js";
 
-export interface CreatePortInput {
-  domain_name: string;
-  port_name: string;
-  type: "inbound" | "outbound";
-  dry_run?: boolean;
-}
-
-export interface CreatePortOutput {
-  dryRun: boolean;
-  fileCreated?: string;
-  message: string;
-}
-
-export class CreatePortToolUseCase {
+export class CreatePortToolUseCase implements CreatePortToolPort {
   constructor(
     private readonly scaffoldingPort: ScaffoldingPort,
     private readonly manifestWritePort: ManifestWritePort,
