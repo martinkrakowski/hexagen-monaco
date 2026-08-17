@@ -134,7 +134,15 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        git fetch --no-tags --prune --depth=1 origin "\${{ github.base_ref }}"
+        # Two-dot git diff base HEAD only needs both tips present, but a
+        # depth-1 fetch of the base on a shallow HEAD still cannot resolve
+        # objects when the runner checked out a single commit. Unshallow when
+        # needed so --pr-diff rename detection can run (fail-closed otherwise).
+        if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+          git fetch --unshallow --no-tags --prune origin "\${{ github.base_ref }}"
+        else
+          git fetch --no-tags --prune origin "\${{ github.base_ref }}"
+        fi
 
     - name: Run hexagen-lint --ratchet
       id: lint
@@ -207,13 +215,23 @@ const headers = {
 };
 
 async function listComments() {
-  const res = await fetch(\`\${api}/issues/\${pr}/comments?per_page=100\`, {
-    headers,
-  });
-  if (!res.ok) {
-    throw new Error(\`list comments \${res.status}\`);
+  const all = [];
+  for (let page = 1; ; page += 1) {
+    const res = await fetch(
+      \`\${api}/issues/\${pr}/comments?per_page=100&page=\${page}\`,
+      { headers },
+    );
+    if (!res.ok) {
+      throw new Error(\`list comments \${res.status}\`);
+    }
+    const batch = /** @type {Array<{ id: number; body?: string }>} */ (
+      await res.json()
+    );
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    all.push(...batch);
+    if (batch.length < 100) break;
   }
-  return /** @type {Array<{ id: number; body?: string }>} */ (await res.json());
+  return all;
 }
 
 const comments = await listComments();

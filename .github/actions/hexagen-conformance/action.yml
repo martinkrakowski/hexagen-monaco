@@ -44,7 +44,15 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        git fetch --no-tags --prune --depth=1 origin "${{ github.base_ref }}"
+        # Two-dot `git diff ${base} HEAD` only needs both tips present, but a
+        # depth-1 fetch of the base on a shallow HEAD still cannot resolve
+        # objects when the runner checked out a single commit. Unshallow when
+        # needed so --pr-diff rename detection can run (fail-closed otherwise).
+        if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+          git fetch --unshallow --no-tags --prune origin "${{ github.base_ref }}"
+        else
+          git fetch --no-tags --prune origin "${{ github.base_ref }}"
+        fi
 
     - name: Run hexagen-lint --ratchet
       id: lint

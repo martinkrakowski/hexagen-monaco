@@ -949,10 +949,19 @@ function reportAndExit(violations: ViolationRecord[]): void {
         .relative(ROOT_DIR, BASELINE_PATH)
         .split(path.sep)
         .join("/");
-      const baseText = showFileAtRef(ROOT_DIR, baseRef, baselineRel);
+      const shown = showFileAtRef(ROOT_DIR, baseRef, baselineRel);
+      if (shown.kind === "error") {
+        logger.error(
+          `FATAL ERROR: could not read base-ref baseline at ${baseRef}:${baselineRel}`,
+        );
+        logger.error(`  ${shown.message}`);
+        process.exit(EXIT_COULD_NOT_RUN);
+      }
       let baseBaseline: BaselineEntry[] = [];
       try {
-        baseBaseline = parseBaseBaselineText(baseText);
+        baseBaseline = parseBaseBaselineText(
+          shown.kind === "ok" ? shown.text : null,
+        );
       } catch (e) {
         logger.error(
           `FATAL ERROR: base-ref baseline at ${baseRef}:${baselineRel} could not be parsed.`,
@@ -960,9 +969,14 @@ function reportAndExit(violations: ViolationRecord[]): void {
         logger.error(`  ${(e as Error).message}`);
         process.exit(EXIT_COULD_NOT_RUN);
       }
-      const renames = parseRenameNameStatus(
-        renameNameStatus(ROOT_DIR, baseRef),
-      );
+      let renameOutput: string;
+      try {
+        renameOutput = renameNameStatus(ROOT_DIR, baseRef);
+      } catch (e) {
+        logger.error(`FATAL ERROR: ${(e as Error).message}`);
+        process.exit(EXIT_COULD_NOT_RUN);
+      }
+      const renames = parseRenameNameStatus(renameOutput);
       const pr = computePrDiff({
         currentViolations: violations,
         currentBaseline: baselineEntries,

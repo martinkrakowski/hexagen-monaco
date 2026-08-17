@@ -208,6 +208,45 @@ describe("MCP mutation tools require transaction approval", () => {
     assert.deepEqual(h.write.writes, ["removeContext"]);
   });
 
+  it("refuses a second accept on a committed transaction and does not write again", async () => {
+    const h = harness();
+    const proposed = await new CreateContextToolUseCase(h.tm).execute({
+      name: "local-llm",
+      type: "core",
+    });
+    const first = await h.accept.execute({
+      transaction_id: proposed.transactionId ?? "",
+    });
+    assert.equal(first.success, true);
+    assert.deepEqual(h.write.writes, ["registerBoundedContext"]);
+    const second = await h.accept.execute({
+      transaction_id: proposed.transactionId ?? "",
+    });
+    assert.equal(second.success, false);
+    assert.match(String(second.error), /already committed/);
+    assert.deepEqual(h.write.writes, ["registerBoundedContext"]);
+    assert.equal(h.scaffolding.writes.length, 0);
+  });
+
+  it("refuses accept after reject and never writes", async () => {
+    const h = harness();
+    const proposed = await new CreatePortToolUseCase(h.tm).execute({
+      domain_name: "billing",
+      port_name: "PayPort",
+      type: "outbound",
+    });
+    const rejected = await h.reject.execute({
+      transaction_id: proposed.transactionId ?? "",
+    });
+    assert.equal(rejected.success, true);
+    const accepted = await h.accept.execute({
+      transaction_id: proposed.transactionId ?? "",
+    });
+    assert.equal(accepted.success, false);
+    assert.equal(h.write.writes.length, 0);
+    assert.equal(h.scaffolding.writes.length, 0);
+  });
+
   it("scaffold-module does not write until accept", async () => {
     const h = harness();
     const proposed = await new ScaffoldModuleToolUseCase(h.tm).execute({

@@ -1,5 +1,8 @@
 import { describe, it } from "vitest";
 import assert from "node:assert";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   HEXAGEN_CONFORMANCE_ACTION_YML,
   HEXAGEN_CONFORMANCE_ACTION_YML_PATH,
@@ -10,6 +13,11 @@ import {
   hexagenConformanceActionFiles,
   shouldInjectSyncIntegrityWorkflow,
 } from "../../src/domain/sync-integrity-workflow.js";
+
+const REPO_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../..",
+);
 
 describe("sync-integrity workflow content", () => {
   it("targets .github/workflows/sync-integrity.yml", () => {
@@ -113,5 +121,39 @@ describe("shouldInjectSyncIntegrityWorkflow", () => {
 
   it("requires a yarn or yarn@ boundary (no loose substring match)", () => {
     assert.strictEqual(shouldInjectSyncIntegrityWorkflow("yarnlike@1"), false);
+  });
+});
+
+describe("vendored hexagen-conformance action stays aligned with the in-repo action", () => {
+  const inRepoAction = readFileSync(
+    path.join(REPO_ROOT, ".github/actions/hexagen-conformance/action.yml"),
+    "utf8",
+  );
+  const inRepoComment = readFileSync(
+    path.join(
+      REPO_ROOT,
+      ".github/actions/hexagen-conformance/post-comment.mjs",
+    ),
+    "utf8",
+  );
+
+  it("shares --pr-diff, comment marker, pagination, and unshallow fetch", () => {
+    for (const blob of [inRepoAction, HEXAGEN_CONFORMANCE_ACTION_YML]) {
+      assert.ok(blob.includes("--pr-diff"), "action must append --pr-diff");
+      assert.ok(
+        blob.includes("--comment-file"),
+        "action must write a comment file",
+      );
+      assert.ok(blob.includes("--unshallow"), "shallow clones must unshallow");
+      assert.ok(
+        !/git fetch --no-tags --prune --depth=1 origin/.test(blob),
+        "depth-1 base fetch is the merge-base failure mode",
+      );
+    }
+    for (const blob of [inRepoComment, HEXAGEN_CONFORMANCE_COMMENT_SCRIPT]) {
+      assert.ok(blob.includes("<!-- hexagen-conformance -->"));
+      assert.ok(blob.includes("page="), "comment lookup must paginate");
+      assert.ok(blob.includes("!body.trim()"), "clean PRs must stay silent");
+    }
   });
 });

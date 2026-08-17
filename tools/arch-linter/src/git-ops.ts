@@ -43,24 +43,45 @@ export function stagedFiles(root: string): string[] {
     .filter((line) => line.length > 0);
 }
 
+export type ShowFileResult =
+  | { kind: "ok"; text: string }
+  | { kind: "missing" }
+  | { kind: "error"; message: string };
+
+/** Path absent at the ref — not a failed git invocation. */
+export function isMissingAtRefMessage(message: string): boolean {
+  return (
+    /does not exist in /i.test(message) ||
+    /exists on disk, but not in /i.test(message)
+  );
+}
+
 export function showFileAtRef(
   root: string,
   ref: string,
   relativePath: string,
-): string | null {
+): ShowFileResult {
   const result = gitText(root, ["show", `${ref}:${relativePath}`]);
-  if (!result.ok) return null;
-  return result.text;
+  if (result.ok) return { kind: "ok", text: result.text };
+  if (isMissingAtRefMessage(result.message)) return { kind: "missing" };
+  return { kind: "error", message: result.message };
+}
+
+/**
+ * Two-dot tree comparison against the same tip `git show` reads.
+ * Triple-dot needs a merge-base and fails on a depth-1 checkout of both tips.
+ */
+export function renameDiffArgs(baseRef: string): string[] {
+  return ["diff", "--name-status", "--find-renames", baseRef, "HEAD"];
 }
 
 export function renameNameStatus(root: string, baseRef: string): string {
-  const result = gitText(root, [
-    "diff",
-    "--name-status",
-    "--find-renames",
-    `${baseRef}...HEAD`,
-  ]);
-  if (!result.ok) return "";
+  const result = gitText(root, renameDiffArgs(baseRef));
+  if (!result.ok) {
+    throw new Error(
+      `--pr-diff could not list renames against ${baseRef}: ${result.message}`,
+    );
+  }
   return result.text;
 }
 

@@ -38,13 +38,23 @@ const headers = {
 };
 
 async function listComments() {
-  const res = await fetch(`${api}/issues/${pr}/comments?per_page=100`, {
-    headers,
-  });
-  if (!res.ok) {
-    throw new Error(`list comments ${res.status}`);
+  const all = [];
+  for (let page = 1; ; page += 1) {
+    const res = await fetch(
+      `${api}/issues/${pr}/comments?per_page=100&page=${page}`,
+      { headers },
+    );
+    if (!res.ok) {
+      throw new Error(`list comments ${res.status}`);
+    }
+    const batch = /** @type {Array<{ id: number; body?: string }>} */ (
+      await res.json()
+    );
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    all.push(...batch);
+    if (batch.length < 100) break;
   }
-  return /** @type {Array<{ id: number; body?: string }>} */ (await res.json());
+  return all;
 }
 
 const comments = await listComments();

@@ -13,6 +13,12 @@ import type {
 import type { ManifestWritePort } from "../ports/out/manifest-write.port.js";
 import type { ScaffoldingPort } from "../ports/out/scaffolding.port.js";
 
+function isTerminalStatus(status: string): boolean {
+  return (
+    status === "committed" || status === "rolled_back" || status === "failed"
+  );
+}
+
 /**
  * AcceptTransactionToolUseCase — apply a pending manifest mutation, then
  * mark the transaction committed.
@@ -38,6 +44,15 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
         return {
           success: false,
           error: new Error(`Transaction ${input.transaction_id} not found`),
+        };
+      }
+
+      if (isTerminalStatus(tx.status)) {
+        return {
+          success: false,
+          error: new Error(
+            `Transaction ${input.transaction_id} is already ${tx.status}; refusing to apply`,
+          ),
         };
       }
 
