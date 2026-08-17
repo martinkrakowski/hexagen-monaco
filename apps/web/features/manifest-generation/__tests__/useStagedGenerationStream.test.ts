@@ -463,7 +463,14 @@ test("aborts stream on cancel", async () => {
     });
     act(() => result.current.cancel());
 
-    const generateResult = await generatePromise!;
+    // The abort unwinds the read loop asynchronously and the hook writes its
+    // final phase as the promise settles — awaiting it bare left that update
+    // outside act(). Awaiting INSIDE an async act flushes it before the
+    // assertion reads the result.
+    let generateResult!: Awaited<typeof generatePromise>;
+    await act(async () => {
+      generateResult = await generatePromise!;
+    });
     assert.strictEqual(generateResult.phase, "idle");
   } finally {
     global.fetch = originalFetch;

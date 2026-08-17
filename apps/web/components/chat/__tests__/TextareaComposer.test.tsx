@@ -234,13 +234,23 @@ describe("TextareaComposer", () => {
     assert.strictEqual(calls.length, 0);
   });
 
-  it("preventDefaults Enter only when it will actually submit", () => {
+  it("preventDefaults Enter only when it will actually submit", async () => {
     render(<TextareaComposer onSubmit={async () => true} />);
-    const textarea = screen.getByRole("textbox");
+    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: "ready" } });
     // A valid submit swallows the newline: fireEvent returns false (canceled).
     const canceled = fireEvent.keyDown(textarea, { key: "Enter" });
     assert.strictEqual(canceled, false);
+    // …and the submit it started is asynchronous. Settling it here is what the
+    // two un-wrapped-update warnings from this test were about: `setIsSubmitting`
+    // and the accepted-draft clear both landed after the test body returned.
+    // Waiting for the cleared draft also pins the submit actually completed —
+    // previously this test asserted only on the synchronous preventDefault.
+    await waitFor(() => assert.strictEqual(textarea.value, ""));
+    assert.strictEqual(
+      screen.getByRole("button", { name: "Send" }).hasAttribute("disabled"),
+      true,
+    );
   });
 
   it("does not crash (or leave the composer locked) when onSubmit rejects", async () => {

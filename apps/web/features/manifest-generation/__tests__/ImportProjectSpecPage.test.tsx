@@ -2,7 +2,7 @@ import React from "react";
 import { fileURLToPath } from "node:url";
 import { describe, it, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import assert from "node:assert";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ImportProjectSpecPage from "../ImportProjectSpecPage";
 import { usePendingManifest } from "../store/usePendingManifest";
@@ -98,8 +98,16 @@ describe("ImportProjectSpecPage", () => {
     assert.ok(true);
   });
 
-  it("Initial state: file input rendered, no warning banner", () => {
+  it("Initial state: file input rendered, no warning banner", async () => {
     render(<ImportProjectSpecPage />);
+    // The page probes GET /api/manifest/capabilities on mount and stores the
+    // answer. That promise settles after this test's synchronous body, so the
+    // assertions used to read pre-probe state while React updated outside
+    // act(). Settle it here — the initial-render claims below then hold against
+    // the state the user actually sees.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     // getBy*/queryBy* throw (on miss / on multiple respectively), so the old
     // `getByLabelText(...) || getByText(...)` never reached its fallback. Use
     // queryAllBy* (returns [] on miss, never throws) for a real either/or — the
@@ -483,10 +491,20 @@ describe("ImportProjectSpecPage", () => {
       // poll, NOT RTL waitFor: waitFor issued here deadlocks against the
       // just-released stream continuation (the fork never reports a timeout
       // and vitest SIGKILLs it); the manual poll settles on the first tick.
+      //
+      // Each TICK is its own `await act(async …)`, not the whole loop: React
+      // flushes an async act scope when it EXITS, so polling the DOM from
+      // inside one loop-wide scope reads a tree that has not re-rendered yet
+      // and never observes the run settling. Per-tick scopes flush the frames
+      // the released stream delivers before `settled` is read — which is what
+      // the 22 un-wrapped updates this test emitted were telling us: the poll
+      // was reading between flushes.
       releaseDone();
       let settled = false;
       for (let i = 0; i < 50 && !settled; i++) {
-        await new Promise((r) => setTimeout(r, 20));
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 20));
+        });
         settled = screen.queryByText(/validating manifest/i) === null;
       }
       assert.ok(settled, "the run settled after the stream was released");
