@@ -22,41 +22,40 @@ being run. Update the status table and change log as phases progress.
 
 ## 1. Status at a glance
 
-| Phase | Scope                             | State                                   | Evidence                                                                                                                                                                                                       |
-| ----- | --------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **0** | ADRs 0.1–0.8 (ADR-0047…0054)      | ✅ **Merged**                           | PR #439 (`cd331ae6`); ADR 0.8 accepted → unblocks Phase 2                                                                                                                                                      |
-| **1** | Prod triage 1.1–1.6               | ✅ **Merged**                           | #440 `AUD-001`, #441 `AUD-002`, #442 `AUD-007`, #443 `AUD-003/006`, #444 `AUD-005` — all on `main`                                                                                                             |
-| **2** | Enforcement ratchet (AUD-010/011) | ✅ **COMPLETE**                         | **2.1 #452** (`edbe7c2c`), **2.2 #459** (`6a08bc00`), **2.3 #462+#465** (`6942751d`, `b3f79dd6`), **2.4 #460** (`ce53bca2`), **2.5 #448** (`0a22a53d`) — **Phase 2 is green; Waves 5–8 unblocked**             |
-| **3** | Toolchain honesty (3.1–3.5)       | ✅ **COMPLETE**                         | **3.1 #445** (`fcbe7cfc`), **3.2 #461** (`c5298c1a`), **3.3 #457** (`c299d967`, MOD-004; MOD-005 leg **struck** — ADR-0049 Option B deleted the package), **3.4 #466** (`03b1369f`), **3.5 #449** (`50081c51`) |
-| **4** | Dead-code deletion (4.1–4.7)      | 🔄 **6 of 7 — only 4.7 remains, on D6** | **4.1 #450**, **4.2 #446**, **4.3 #453**, **4.4 #451**, **4.5 #484** (`bd70b502`, D3 resolved as delete), **4.6 #447+#458** (`497c227e`); **4.7 ⇐ D6**                                                         |
-| **5** | Port identity / app I/O           | 🔄 **10 of 11 — only 5.2 remains**      | #469, #470, #471, #472, #474, #475, #476, #477, #478, #479, #481 — see §5                                                                                                                                      |
-| **6** | Web routes / package fates        | 🟢 **UNBLOCKED**                        | ⇐ 5.5 ✅ (#469) + ADRs 0.2/0.4 — **0.3 resolved** (Option B): **6.6 executed** by the `packages/security` deletion; **6.4(e) struck**                                                                          |
-| **7** | Staged-gen GOD-001 arc            | ⛔ **Design-ready**                     | strict serial 7.1→7.2→7.3→7.4/7.5→7.6                                                                                                                                                                          |
-| **8** | Web/React + test reality          | 🟢 **UNBLOCKED**                        | ⇐ 7.1, 6.7(b), 4.3 ✅, **4.5 ✅** (D3 resolved — delete), 5.2                                                                                                                                                  |
+| Phase | Scope                             | State                              | Evidence                                                                                                                                                                                                          |
+| ----- | --------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **0** | ADRs 0.1–0.8 (ADR-0047…0054)      | ✅ **Merged**                      | PR #439 (`cd331ae6`); ADR 0.8 accepted → unblocks Phase 2                                                                                                                                                         |
+| **1** | Prod triage 1.1–1.6               | ✅ **Merged**                      | #440 `AUD-001`, #441 `AUD-002`, #442 `AUD-007`, #443 `AUD-003/006`, #444 `AUD-005` — all on `main`                                                                                                                |
+| **2** | Enforcement ratchet (AUD-010/011) | ✅ **COMPLETE**                    | **2.1 #452** (`edbe7c2c`), **2.2 #459** (`6a08bc00`), **2.3 #462+#465** (`6942751d`, `b3f79dd6`), **2.4 #460** (`ce53bca2`), **2.5 #448** (`0a22a53d`) — **Phase 2 is green; Waves 5–8 unblocked**                |
+| **3** | Toolchain honesty (3.1–3.5)       | ✅ **COMPLETE**                    | **3.1 #445** (`fcbe7cfc`), **3.2 #461** (`c5298c1a`), **3.3 #457** (`c299d967`, MOD-004; MOD-005 leg **struck** — ADR-0049 Option B deleted the package), **3.4 #466** (`03b1369f`), **3.5 #449** (`50081c51`)    |
+| **4** | Dead-code deletion (4.1–4.7)      | ✅ **COMPLETE**                    | **4.1 #450**, **4.2 #446**, **4.3 #453**, **4.4 #451**, **4.5 #484** (`bd70b502`, D3 = delete), **4.6 #447+#458** (`497c227e`), **4.7 #485** (`a727df4d` — D6 resolved; barrel unexported, no `/testing` subpath) |
+| **5** | Port identity / app I/O           | ✅ **COMPLETE**                    | #469–#481 plus **5.2 #490** (`f131544e`, HEX-004 BC-owned DTO)                                                                                                                                                    |
+| **6** | Web routes / package fates        | 🔄 **5 of 7 — 6.5 and 6.7 remain** | **6.1 #494**, **6.2 #498**, **6.3 #493**, **6.4(a–d)** #497/#501/#500/#499 + manifests #506, **6.6** = `packages/security` deletion #483; **6.4(e) struck**; **6.5 ⏳**, **6.7 ⏳**                               |
+| **7** | Staged-gen GOD-001 arc            | ⛔ **Design-ready**                | strict serial 7.1→7.2→7.3→7.4/7.5→7.6                                                                                                                                                                             |
+| **8** | Web/React + test reality          | 🔄 **3 of 12**                     | **8.3 #495**, **8.4 #492**, **8.5** folded into #495 (REA-005); 8.10 ⇐ 6.7(b). See §5 for the live wavefront                                                                                                      |
 
 Also merged earlier in the arc: PR #437 (plan, `c9a14f48`), PR #438 (implementation
 prompt, `edccc02c`).
 
 ### Open items, exactly
 
-**Phases 2, 3 and 4's buildable set are done.** Verified against `main` (`cf7ccc4e`) by
-checking the code, not this document: the strict CI gate, the 34-entry ratchet baseline, all
-three legs of the lint job, `typecheck:test` in CI, the arch-linter split, the TS6 pin, the
-Jest residue, `engines.node`, ts-morph alignment, `Error.cause`, and HEX-038.
+**Phases 0–5 are complete. Nothing in the arc is decision-blocked any more** — D3, D4, D6,
+ADR-0049, HEX-018 and the `zod` disposition were all resolved on 2026-08-16.
 
-**Nothing in Phases 2–4 is blocked on engineering. What remains is blocked on decisions:**
+| Item                | State                                                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| ~~**4.7** ⇐ D6~~    | ✅ **Done** — #485; the barrel is trimmed and ADR-0056 records that the binary, not the barrel, is the published contract |
+| ~~**8.11** ⇐ D4~~   | ✅ **Decided — no gate**; one engineering leg remains (below)                                                             |
+| ~~`zod` in domain~~ | ✅ **Resolved** — #489 allowlisted the seven parsing carriers and burned down three; **baseline is now 4 entries**        |
 
-| Item                          | Blocked on                                  | Note                                                                                                                    |
-| ----------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| **4.7**                       | **D6** — sync publish-surface semver        | release-gated                                                                                                           |
-| ~~**3.3 MOD-005 leg**~~       | ~~**ADR-0049** branch selection~~           | ✅ **Dissolved** — ADR-0049 accepted as **Option B**; `packages/security` deleted, so there is no tsconfig to reconcile |
-| **8.11**                      | ~~**D4** — coverage posture~~ **unblocked** | **no decision left.** See the 8.11 leg breakdown below                                                                  |
-| 11 of the 16 baseline entries | **`zod` in domain** — accept or burn down   | baselined, not allowlisted; ADR-0054 seeds only js-yaml/manifest                                                        |
+**The ratchet baseline stands at 4** — 3 `node-builtin-in-layer` and 1 `npm-package-in-domain`
+(a single template `zod` entry, left baselined with a `note` because the allowlist is keyed by
+bounded context and would grant `template-engine`'s whole domain). It began this arc at 34.
 
 **8.11, leg by leg** — the item has three, and none is decision-blocked as of 2026-08-16:
 
-| 8.11 leg                                   | State                                                                                                        |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| 8.11 leg                                   | State                                                                                                         |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
 | coverage posture                           | ✅ **decided — no gate** (D4, §2); a deferral with a re-open trigger                                          |
 | replace the `apps/api-gateway` `echo` stub | ✅ **dissolved** — 4.5 deleted the package (D3 resolved as delete), so there is no stub left to replace       |
 | missing `test` targets                     | ⏳ **open engineering**, not a decision — `shared`, `model-settings`, `runtime`; the only remaining 8.11 work |
@@ -64,9 +63,15 @@ Jest residue, `engines.node`, ts-morph alignment, `Error.cause`, and HEX-038.
 Measured on this branch: of the 38 workspaces, **35 define a real `test` script** and exactly
 those three define none. `apps/tui` has one (`vitest run`); `llm-driver` was done in 3.5.
 
-**Release gates pending** (repo PRs landed; nothing published, tagged or deployed): #457
-(`engines.node` floor), #459 (three new arch-linter rule classes + empty-by-default
-allowlist), #466 (ts-morph major + a Windows path fix in the published engine).
+**Release gates pending** (repo PRs landed; **nothing published, tagged or deployed**;
+`git tag -l "v0.10*"` is empty): #457 (`engines.node` floor), #459 (three new arch-linter rule
+classes), #466 (ts-morph major + a Windows path fix), #470/#474/#476/#479/#481 (bundled into
+the published `dist` via workspace inlining), **#485** (the `0.10.0` bump itself, CHANGELOG,
+ADR-0056 and the public-surface contract test), and **#507** (template discovery, which
+governs what reaches the tarball).
+
+`0.10.0` is **staged and ready**; the publish and the `vX.Y.Z` tag push both wait on explicit
+go-ahead. The Node-20 drop is the loudest change in it.
 
 **Repo settings only a human can change:** mark `Lint & Boundaries / ESLint + UI boundary`
 a required check, or the new lint workflow gates nothing in practice.
@@ -85,21 +90,39 @@ this arc kept surfacing. Tracked in
   level but returns early on any non-relative specifier, so the boundary it enforces has been
   half-open since it was written. Two violations also sit silenced by inline
   `eslint-disable`, so `eslint features` reports 0 errors across 508 files.
-- **`validate-ui-boundary.sh` cannot see `lib/` → `features/` or `app/` → `features/` edges** —
-  it iterates only slice directories. That invariant is held by convention.
+- ~~**`validate-ui-boundary.sh` cannot see `lib/` → `features/` or `app/` → `features/`
+  edges**~~ — ✅ **closed by #495's check 7**, which is shrink-only and fails on a _stale_ pin.
+  It caught one the day it landed (#502).
 - **`RefactoringImpactUseCase` discards syntactic diagnostics entirely**, so an unparseable
   consumer file yields a confident, wrong impact report. #466 fixed the compiler version that
   exposed this; it did not fix the class.
 - **`typecheck:test` covers 15 of 38 workspaces** (40 before `api-gateway` and `security` were
-  deleted; re-counted 2026-08-16). Real today, and it widens automatically as
-  workspaces gain the script — `apps/web` alone is ~1200 never-type-checked fixtures.
+  deleted; re-counted 2026-08-16). It widens automatically as workspaces gain the script.
+- **`apps/web` test sources are type-checked nowhere.** Its `tsconfig.json` excludes
+  `**/*.test.ts(x)` and it has no `typecheck:test` script, so CI's test-typecheck step skips
+  the workspace entirely. Lifting the exclusions surfaces **114 pre-existing errors**
+  (measured 2026-08-16). This is the concrete shape of the item above, not a separate finding.
+- **A test suite can pass with its subject inverted.** `useModelSelectionFlowState`'s 21 tests
+  stay green when the hook's initial state is flipped `idle` → `error`; ~15 assert only that a
+  value exists or a function is callable. Tracked as **issue #510**, with that mutation as the
+  acceptance check.
+- **Vitest's `agent` reporter hides console output from passing tests.** Vitest 4 auto-selects
+  it on `CLAUDECODE` / `AI_AGENT` / `CURSOR_AGENT`, and it runs `silent: "passed-only"` — so
+  any evidence gathered in an AI-assisted shell was systematically incomplete. ✅ **Closed by
+  #509**, which pins `reporters` (and re-adds `github-actions` explicitly, since Vitest
+  appends it only when `reporters` is empty). Worth keeping recorded: it invalidated several
+  "zero warnings locally" claims made during this arc.
 
 ### Cross-phase gating (the hard constraints)
 
-- **Phase 2 gates Phases 5–8.** The ratchet baseline is item 2.2's artifact; every
-  later boundary PR shrinks it. **Do not begin Wave 5 until Wave 2 is green on `main`.**
-- **Phase 7 is strictly serial** internally: 7.1 → 7.2 → 7.3 → 7.4/7.5 → 7.6.
-- **Phase 8 depends on** 7.1, 6.7(b), 4.3, 4.5, 5.2; **Phase 6 depends on** 5.5.
+- **Phase 2 gates Phases 5–8** — satisfied; the baseline is down from 34 to 4.
+- **Phase 7 is strictly serial** internally: 7.1 → 7.2 → 7.3 → 7.4/7.5 → 7.6. It is the one
+  phase that cannot be fanned out, which is why it is scheduled last.
+- **8.10 depends on 6.7(b)** — deleting the two frozen no-code packages removes some of the
+  echo-fake suites 8.10 would otherwise rewrite. **Land 6.7(b) first.** 14 files still
+  reference `EchoFakePort`; the `code-generation` and `deployment` doubles are the
+  empty-subclass shape #501 already deleted two instances of.
+- Phase 8's other dependencies (7.1, 4.3, 4.5, 5.2) and Phase 6's (5.5) are **all satisfied**.
 - **ADR gates** (all ADRs 0.1–0.8 are accepted): items name their ADR prereq in the
   plan's dependency column.
 
@@ -281,36 +304,53 @@ For every item and sub-PR:
 
 ---
 
-## 5. Current wavefront — Phase 5
+## 5. Current wavefront — Phase 6 tail, then Phase 8, Phase 7 last
 
-**Phases 2/3/4 are closed except for decision-blocked items (§1). Phase 5 is the wavefront.**
+**Phases 0–5 are complete.** Two Phase-6 items remain, Phase 8 is 3 of 12, and Phase 7 has not
+started.
 
-**Entry gate satisfied.** Phase 2 went green on `main` at `b3f79dd6` — the arch-lint ratchet
-runs in CI against the 34-entry baseline, so every Wave 5+ boundary PR now has an artifact to
-burn its own entries out of. That was the whole reason Wave 5 was held.
+### Order, and why
 
-**Phase 5 build notes carried from §6:**
+```text
+Wave A (serial-ish)   6.7(b)  → 8.10      # 6.7(b) deletes suites 8.10 would otherwise rewrite
+Wave A (parallel)     6.5(a) 6.5(b) 6.5(c)
+Wave B (parallel)     8.1 8.2 8.6 8.7 8.8 8.9 8.12(a–h)  # independent of each other
+Wave C (serial)       7.1 → 7.2 → 7.3 → 7.4/7.5 → 7.6
+```
 
-- **5.3 is three sequential sub-PRs by one worker** — local-llm → migrate `wire.server.ts:526`
-  off `createDefaultFallbackChain` then delete it (`buildStagedGenerationFallbackChain`
-  **stays**) → extract the `wire.client` `ProjectDiscarded` purge into `discardProject`.
-- **5.1 / 5.4 are port-touching** → worker-prepared, Primary-landed (§3).
-- **Do NOT swap in project-configuration's looser `Manifest` type in 5.2** — refuted.
-- **Each Phase 5 PR deletes its own entries from `.architecture/arch-lint-baseline.json`.**
-  That burn-down is the ratchet's purpose. Note the baseline does **not** fail on a stale
-  entry (§"Known gaps"), so un-pinning is a review duty, not an automatic one.
+- **6.7(b) before 8.10** is the only hard ordering left in Phases 6/8. Deleting
+  `architectural-enforcement` and `code-generation` (16 tracked files each, frozen, no runtime
+  code) removes echo-fake suites 8.10 would otherwise spend effort rewriting.
+- **6.5 is one PR per tool family**, not one 25-class PR: (a) manifest-structure, (b)
+  transaction lifecycle, (c) generation & scaffold. Verified 2026-08-16 that
+  `packages/mcp-server` still declares a single port, so none of this has begun.
+- **6.7(a) carries the twice-bitten trap**: a new sync emitter must be gated for **both**
+  self-regen and external modes. Two prior PRs missed the second.
+- **Phase 8's remaining items are largely independent** (8.1, 8.2, 8.6–8.9, 8.12) and fan out
+  freely. 8.11's surviving leg is small: `shared`, `model-settings` and `runtime` define no
+  `test` script at all.
+- **Phase 7 is last because it cannot be parallelised** — strict serial, refuter-mandatory on
+  every PR, with wire-compat against the `/stage` adapter and the web classifier.
 
-**Ordering constraint from adjacent work:** FU-3 (cross-slice extraction) also targets
-`apps/web/features/**`, which **Phase 8** touches. Three of nine pins remain, all belonging to
-one unlanded extraction. Land FU-3 before Phase 8 starts, or fold it in deliberately — do not
-let the two collide by accident.
+### Standing build notes
 
-**Historical snapshot — the Phase 2/3/4 wavefront (2026-08-15 → 16).** Approach: maximal-parallel
-implementation of gate-satisfied items in isolated worktrees, with read-only design-scouts for
-5–8 alongside. Ran as three waves of build agents plus per-PR review adjudication, landing
-#445–#467. Ordering notes that governed it — 2.1+2.3 sharing workflow files, 3.1 before 3.2,
-2.3's ratchet leg deferred behind 2.2's baseline — are retained only as a record of how those
-PRs were sequenced.
+- **Each PR deletes its own ratchet-baseline entries.** The baseline does **not** fail on a
+  stale entry, so un-pinning is a review duty. It stands at 4.
+- **Port-touching changes are worker-prepared, Primary-landed** (§3), and `.architecture/**`
+  edits are Primary-only — workers report the change needed and it is applied separately, as
+  #506 did for the four 6.4 legs.
+- **Measure with the reporter forced.** `vitest` in an AI-assisted shell hides console output
+  from passing tests; #509 pinned `reporters`, but any ad-hoc `npx vitest` invocation outside
+  the repo config is still exposed.
+
+**Historical — the Phase 2/3/4 wavefront (2026-08-15 → 16).** Maximal-parallel implementation
+of gate-satisfied items in isolated worktrees, with read-only design scouts running ahead.
+Landed #445–#467. Ordering notes that governed it — 2.1+2.3 sharing workflow files, 3.1 before
+3.2, 2.3's ratchet leg deferred behind 2.2's baseline — are retained only as a record.
+
+**Historical — Phase 5 and the Phase 6 head (2026-08-16).** #469–#481 for Phase 5, #490 for
+5.2, then #493/#494/#498 and the four 6.4 legs #497/#499/#500/#501 with their manifest
+corrections in #506.
 
 ## 6. Phases 5–8 — design-ready behind gates
 
@@ -355,6 +395,28 @@ plans so each phase fires the moment its gate clears:
 ---
 
 ## 8. Change log
+
+### 2026-08-16 — refresh after Phases 4, 5 and the Phase 6 head
+
+Corrected four places where this document had gone stale against `main`, each verified in the
+tree rather than from a PR description:
+
+- **4.7 marked done** (#485). The runbook still had it blocked on D6; D6 resolved as ship
+  `0.10.0` + unexport, and the barrel is trimmed.
+- **5.2 marked done** (#490) — Phase 5 is complete at 11 of 11.
+- **`zod` marked resolved** (#489). The runbook still said "11 of 16 baseline entries"; the
+  **baseline is 4**, and one of those is the single template entry deliberately left pinned.
+- **Phase 6 restated as 5 of 7** and Phase 8 as 3 of 12, replacing two bare "UNBLOCKED" rows
+  that said nothing about progress.
+
+Added to §"Known gaps", all found on 2026-08-16: `apps/web` test sources are type-checked
+nowhere (114 errors surface when the exclusions are lifted); a suite that passes with its
+subject inverted (issue #510); and Vitest's `agent` reporter hiding console output from
+passing tests, which invalidated several "zero warnings locally" claims made earlier in this
+arc before #509 closed it. Marked the `lib/` → `features/` gap closed by #495's check 7.
+
+§5 now describes the real wavefront — 6.7(b) before 8.10, 6.5 as three tool-family PRs, Phase
+8's independent set, Phase 7 last and serial — and the Phase 5 material moved to history.
 
 - **2026-08-16 (latest)** — **D4 resolved: no coverage gate** (§2). A deferral with a
   three-condition re-open trigger, recorded in the ledger rather than an ADR. The dead root
