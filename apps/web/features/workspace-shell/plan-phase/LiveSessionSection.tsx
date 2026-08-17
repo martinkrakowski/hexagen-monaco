@@ -8,6 +8,7 @@ import type { ProjectLayer } from "@hexagen/shared";
 import { PlanTurnList } from "./PlanTurnList";
 import { ChatMarkdown } from "@/chat/ChatMarkdown";
 import type { UsePlanningSessionReturn } from "./session/usePlanningSession";
+import type { FinalizeUiState } from "./session/usePlanningFinalize";
 import { STATUS_LABELS, statusChipClass } from "./session-status-presentation";
 // Cross-slice import is allowed here: workspace-shell is the composition root
 // (exempt from no-feature-slice-imports), and the finalize hand-off must use
@@ -20,6 +21,16 @@ export interface LiveSessionSectionProps {
   /** The session loop, owned by the plan host (which also filters the active
    * layer out of the archive list — one hook instance, no duplicate render). */
   session: UsePlanningSessionReturn;
+  /**
+   * The finalize view-model, owned by `usePlanningFinalize` at the plan host
+   * (GOD-007). Passed as STATE + two intents rather than the whole hook on
+   * purpose: `start` is deliberately absent, so this component is structurally
+   * incapable of kicking off a distill. The Finalize action lives in the shell
+   * footer (locked decision §5 Q2) and nowhere else.
+   */
+  finalize: FinalizeUiState;
+  onAbandonFinalize: () => void;
+  onFinalizeReviewTextChange: (text: string) => void;
   /** Prop-injected navigation (repo convention — testable without a router). */
   onNavigateToImport: () => void;
   /** Opens the inline add-session view. Plan §3.2: "The EMPTY MAIN VIEW keeps
@@ -38,12 +49,20 @@ export interface LiveSessionSectionProps {
  *
  * Deliberately STATELESS about drafts and finalize: the seed/steering
  * composer lives in the host (pinned under the pane) and the finalize state
- * lives in usePlanningSession — a view switch unmounts this component, and
+ * lives in usePlanningFinalize — a view switch unmounts this component, and
  * neither typed drafts nor a distill in progress may die with it.
  */
 export function LiveSessionSection(props: LiveSessionSectionProps) {
-  const { projectId, layers, session, onNavigateToImport, onAddSession } =
-    props;
+  const {
+    projectId,
+    layers,
+    session,
+    finalize,
+    onAbandonFinalize,
+    onFinalizeReviewTextChange,
+    onNavigateToImport,
+    onAddSession,
+  } = props;
 
   const {
     sessionState,
@@ -56,9 +75,6 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
     resume,
     forceConverge,
     end,
-    finalize,
-    abandonFinalize,
-    setFinalizeReviewText,
     reset,
   } = session;
 
@@ -315,11 +331,7 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
                 {finalize.content}
               </pre>
             )}
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => void abandonFinalize()}
-            >
+            <Button size="sm" variant="secondary" onClick={onAbandonFinalize}>
               Cancel
             </Button>
           </div>
@@ -336,7 +348,7 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
             </p>
             <Textarea
               value={finalize.text}
-              onChange={(e) => setFinalizeReviewText(e.target.value)}
+              onChange={(e) => onFinalizeReviewTextChange(e.target.value)}
               aria-label="Distilled spec"
               rows={12}
               className="font-mono text-xs"
@@ -349,10 +361,7 @@ export function LiveSessionSection(props: LiveSessionSectionProps) {
                 <CheckCheck className="w-4 h-4 mr-2" />
                 Confirm and continue to import
               </Button>
-              <Button
-                variant="secondary"
-                onClick={() => void abandonFinalize()}
-              >
+              <Button variant="secondary" onClick={onAbandonFinalize}>
                 Cancel
               </Button>
             </div>

@@ -30,6 +30,7 @@ import {
 } from "./AddPlanningSessionView";
 import { LiveSessionSection } from "./LiveSessionSection";
 import { usePlanningSession } from "./session/usePlanningSession";
+import { usePlanningFinalize } from "./session/usePlanningFinalize";
 import { canConsumeSteering } from "./session/planning-session";
 import type { NewProjectLayer } from "@/hooks/useSavedProjects";
 
@@ -148,6 +149,20 @@ export function PlanPhaseView({
     addLayer,
     appendLayerTurn,
     updateLayer,
+  });
+
+  // GOD-007 / item 8.6: the finalize/distill view-model is its OWN hook,
+  // composed here rather than folded into the loop hook. Both are mounted at
+  // the plan host for the whole phase, so the A2 state lift is unchanged — a
+  // right-pane view switch still cannot lose an in-flight distill or an edited
+  // review. `discardEpoch` is the whole seam: the loop hook announces that the
+  // tracked session is void (attach/end/reset) and the finalize hook decides
+  // what that means for its own state.
+  const finalize = usePlanningFinalize({
+    readSession: session.readSession,
+    discardEpoch: session.discardEpoch,
+    beginFinalize: session.beginFinalize,
+    cancelFinalize: session.cancelFinalize,
   });
 
   // View-union guards on the URL-derived selection: the active session's
@@ -426,12 +441,12 @@ export function PlanPhaseView({
     // router.replace inside selectLive only rewrites ?layer=, never the
     // route (no auto-navigation).
     selectLive();
-    void session.startFinalize();
+    void finalize.start();
   };
 
   const showFinalizeAction =
     sessionStatus === "converged" &&
-    (session.finalize.phase === "idle" || session.finalize.phase === "error");
+    (finalize.state.phase === "idle" || finalize.state.phase === "error");
   const footer = showFinalizeAction ? (
     // ml-auto: the footer's left side stays empty (locked §5 Q2 — the action
     // sits right, where the wizard's forward action lives).
@@ -516,6 +531,9 @@ export function PlanPhaseView({
                 projectId={loadedProject.id}
                 layers={layers}
                 session={session}
+                finalize={finalize.state}
+                onAbandonFinalize={() => void finalize.abandon()}
+                onFinalizeReviewTextChange={finalize.setReviewText}
                 onNavigateToImport={onNavigateToImport}
                 onAddSession={openAddSession}
               />

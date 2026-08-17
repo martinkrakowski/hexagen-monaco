@@ -205,6 +205,95 @@ export default [
     },
   },
   {
+    // GOD-007 (item 8.6) — the plan-phase session directory. `usePlanningSession`
+    // owned the proposer⇄critic loop, the layer-turn persistence, the session
+    // control plane AND the finalize/distill view-model. The last of those is
+    // now `usePlanningFinalize`, and `./distill` (prompt builder + fence
+    // stripper) is its private collaborator.
+    //
+    // Fenced on the DIRECTORY rather than a file list, so a new module dropped
+    // into `session/` inherits the constraint instead of quietly escaping it.
+    // `usePlanningFinalize.ts` is the single exemption — it IS the distill's
+    // owner. It lives here rather than in a test because a lint rule cannot be
+    // satisfied by deleting an assertion; the companion type-level lock is the
+    // `?: never` finalize surface on `UsePlanningSessionReturn`.
+    //
+    // Flat config REPLACES (does not merge) a rule's options, so the app-wide
+    // `@hexagen/local-llm` ACL entry from the `features/**` block above is
+    // repeated here — dropping it would silently exempt this directory from
+    // ADR-0021.
+    files: ["features/workspace-shell/plan-phase/session/**/*.{ts,tsx}"],
+    ignores: [
+      "features/workspace-shell/plan-phase/session/usePlanningFinalize.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@hexagen/local-llm",
+              importNames: ["LLMMessage", "LocalLLMProviderPort"],
+              allowTypeImports: true,
+              message:
+                'LLMMessage and LocalLLMProviderPort are @internal. Use SendStructuredRequestPort, ModelLifecyclePort, or LLMRequest["messages"] instead. See ADR 0021.',
+            },
+          ],
+          patterns: [
+            {
+              // `no-restricted-imports` matches the import STRING, not the
+              // resolved file, so every spelling of a target has to be listed.
+              // `**/plan-phase/session/<mod>` is the load-bearing one: it covers
+              // the deep-relative form AND every `@/…` alias depth. The
+              // `@/*/plan-phase/session/<mod>` entry is a redundant belt (it
+              // matches only the single-segment alias root). All five legal
+              // spellings are pinned by
+              // `__tests__/planning-session-finalize-fence.guard.test.ts` — do
+              // not narrow this list without running it.
+              group: [
+                "./distill",
+                "../distill",
+                "**/plan-phase/session/distill",
+                "@/*/plan-phase/session/distill",
+                "./usePlanningFinalize",
+                "../usePlanningFinalize",
+                "**/plan-phase/session/usePlanningFinalize",
+                "@/*/plan-phase/session/usePlanningFinalize",
+              ],
+              message:
+                "GOD-007: the finalize/distill view-model belongs to usePlanningFinalize, not to the planning loop. Compose the two hooks at the plan host (PlanPhaseView) — the loop's only outbound seam is readSession + discardEpoch.",
+            },
+          ],
+        },
+      ],
+      // DYNAMIC imports are invisible to `no-restricted-imports`: its visitors
+      // are ImportDeclaration / ExportNamedDeclaration / ExportAllDeclaration
+      // only, so `await import("./distill")` sailed straight through the fence
+      // above (measured — static re-exports and type-only imports DO hit it, so
+      // the dynamic form is the whole gap). Two selectors, because a computed
+      // specifier cannot be pattern-matched at all: the first catches every legal
+      // literal spelling by its trailing segment, the second requires the
+      // specifier to BE a literal so nothing hides behind a template literal or a
+      // variable. `no-restricted-syntax` is unset for this directory app-wide
+      // (measured), so unlike `no-restricted-imports` above there is no
+      // options-replacement trap to guard against here.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "ImportExpression > Literal[value=/(^|\\/)(distill|usePlanningFinalize)$/]",
+          message:
+            "GOD-007: a dynamic import does not escape the fence. The finalize/distill view-model belongs to usePlanningFinalize, not to the planning loop — compose the two hooks at the plan host (PlanPhaseView).",
+        },
+        {
+          selector: "ImportExpression > .source:not(Literal)",
+          message:
+            "GOD-007: a computed dynamic-import specifier cannot be fenced. Spell it as a string literal inside plan-phase/session/ so the boundary stays checkable.",
+        },
+      ],
+    },
+  },
+  {
     files: ["app/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [

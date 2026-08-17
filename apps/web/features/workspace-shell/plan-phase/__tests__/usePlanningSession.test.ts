@@ -723,224 +723,116 @@ describe("usePlanningSession", () => {
     assert.strictEqual(result.current.sessionState?.status, "converged");
   });
 
-  // ── Finalize lift (Plan Workbench A2) ─────────────────────────────────────
-  // The finalize UI state + distill abort ref moved INTO the hook so a
-  // right-pane view switch (which unmounts the live panel) cannot lose an
-  // in-flight distill or an edited review. The distill rides the same scripted
-  // fetch queue as loop turns — it is one more /api/llm/chat request.
+  // ── The finalize seam (GOD-007 / item 8.6) ────────────────────────────────
+  // The finalize/distill view-model moved OUT of this hook into
+  // usePlanningFinalize (see usePlanningFinalize.test.ts). What stays here is
+  // the seam the two hooks share: a ref-fresh snapshot for out-of-render
+  // readers, and a counter announcing that the tracked session is void.
 
-  describe("finalize lift (A2)", () => {
-    async function convergeSession() {
-      scripts = [
-        { kind: "reply", content: "Proposal v1" },
-        { kind: "reply", content: CONVERGED_CRITIQUE },
-      ];
-      const session = renderSession();
-      await act(async () => {
-        await session.result.current.start("seed");
-      });
-      await waitFor(() =>
-        assert.strictEqual(
-          session.result.current.sessionState?.status,
-          "converged",
-        ),
-      );
-      return session;
-    }
+  it("readSession() reports the ref-fresh status, seed and transcript", async () => {
+    scripts = [
+      { kind: "reply", content: "Proposal v1" },
+      { kind: "reply", content: CONVERGED_CRITIQUE },
+    ];
+    const { result } = renderSession();
+    assert.strictEqual(
+      result.current.readSession(),
+      null,
+      "no session tracked yet",
+    );
 
-    it("startFinalize persists finalizing, streams the distill, and lands in review with fences stripped", async () => {
-      const { result, mutations } = await convergeSession();
-      scripts = [
-        { kind: "reply", content: "```yaml\nname: app\ncontexts: []\n```" },
-      ];
-      await act(async () => {
-        await result.current.startFinalize();
-      });
-      assert.strictEqual(result.current.sessionState?.status, "finalizing");
-      assert.deepStrictEqual(result.current.finalize, {
-        phase: "review",
-        text: "name: app\ncontexts: []",
-      });
-      assert.ok(
-        mutations.updateLayer.mock.calls.some(
-          (c) => c[2].status === "finalizing",
-        ),
-        "finalizing status persisted before the distill",
-      );
-      // The distill request (3rd chat call) folds seed + final proposal.
-      assert.strictEqual(requests.length, 3);
-      assert.match(requests[2].message, /seed/);
-      assert.match(requests[2].message, /Proposal v1/);
+    await act(async () => {
+      await result.current.start("seed brief");
     });
+    await waitFor(() =>
+      assert.strictEqual(result.current.sessionState?.status, "converged"),
+    );
 
-    it("a double-click starts exactly ONE distill and ONE finalizing write", async () => {
-      const { result, mutations } = await convergeSession();
-      scripts = [{ kind: "reply", content: "spec" }];
-      await act(async () => {
-        const first = result.current.startFinalize();
-        const second = result.current.startFinalize();
-        await Promise.all([first, second]);
-      });
-      assert.strictEqual(requests.length, 3, "one distill request only");
-      assert.strictEqual(
-        mutations.updateLayer.mock.calls.filter(
-          (c) => c[2].status === "finalizing",
-        ).length,
-        1,
-      );
-      assert.deepStrictEqual(result.current.finalize, {
-        phase: "review",
-        text: "spec",
-      });
+    const snapshot = result.current.readSession();
+    assert.ok(snapshot);
+    assert.strictEqual(snapshot.status, "converged");
+    assert.strictEqual(snapshot.seed, "seed brief");
+    assert.deepStrictEqual(
+      snapshot.turns.map((t) => t.content),
+      ["seed brief", "Proposal v1", CONVERGED_CRITIQUE],
+    );
+
+    act(() => {
+      result.current.reset();
     });
+    assert.strictEqual(result.current.readSession(), null);
+  });
 
-    it("a failed distill lands in the error phase, reverts to converged, and is retryable", async () => {
-      const { result, mutations } = await convergeSession();
-      scripts = [{ kind: "error-frame", message: "Daily quota exceeded" }];
-      await act(async () => {
-        await result.current.startFinalize();
-      });
-      assert.strictEqual(result.current.finalize.phase, "error");
-      assert.match(
-        result.current.finalize.phase === "error"
-          ? result.current.finalize.message
-          : "",
-        /quota/i,
-      );
-      // The failed finalize auto-cancels: converged again, and PERSISTED so a
-      // reload doesn't resurrect a phantom "finalizing" layer.
-      assert.strictEqual(result.current.sessionState?.status, "converged");
-      const statusWrites = mutations.updateLayer.mock.calls.map(
-        (c) => c[2].status,
-      );
-      assert.ok(statusWrites.includes("converged"));
+  it("discardEpoch bumps on attach, end and reset — and on nothing else", async () => {
+    scripts = [
+      { kind: "reply", content: "Proposal v1" },
+      { kind: "reply", content: CONVERGED_CRITIQUE },
+    ];
+    const { result } = renderSession();
+    const initial = result.current.discardEpoch;
 
-      // Retry succeeds (the distill abort ref was identity-guard cleared).
-      scripts = [{ kind: "reply", content: "spec after retry" }];
-      await act(async () => {
-        await result.current.startFinalize();
-      });
-      assert.deepStrictEqual(result.current.finalize, {
-        phase: "review",
-        text: "spec after retry",
-      });
+    await act(async () => {
+      await result.current.start("seed");
     });
+    await waitFor(() =>
+      assert.strictEqual(result.current.sessionState?.status, "converged"),
+    );
 
-    it("abandonFinalize during the distill aborts the stream and returns to converged/idle; retry works", async () => {
-      const { result } = await convergeSession();
-      scripts = [{ kind: "hang" }];
-      let finalizing!: Promise<void>;
-      await act(async () => {
-        finalizing = result.current.startFinalize();
-      });
-      await waitFor(() =>
-        assert.strictEqual(result.current.finalize.phase, "distilling"),
-      );
-      assert.strictEqual(requests[2].signal?.aborted, false);
-
-      await act(async () => {
-        await result.current.abandonFinalize();
-        await finalizing;
-      });
-      assert.strictEqual(
-        requests[2].signal?.aborted,
-        true,
-        "abandon aborts the in-flight distill stream",
-      );
-      assert.deepStrictEqual(result.current.finalize, { phase: "idle" });
-      assert.strictEqual(result.current.sessionState?.status, "converged");
-
-      scripts = [{ kind: "reply", content: "second attempt" }];
-      await act(async () => {
-        await result.current.startFinalize();
-      });
-      assert.deepStrictEqual(result.current.finalize, {
-        phase: "review",
-        text: "second attempt",
-      });
+    // Control arm (anti-vacuity for the three bumps below): an epoch that
+    // moved on ordinary control actions would satisfy every "it bumped"
+    // assertion while wiping a live finalize review on each of them — exactly
+    // the A2 lift this seam has to preserve.
+    await act(async () => {
+      await result.current.addSteering("more detail");
     });
-
-    it("unmount aborts an in-flight distill stream (no zombie distill)", async () => {
-      const { result, unmount } = await convergeSession();
-      scripts = [{ kind: "hang" }];
-      await act(async () => {
-        void result.current.startFinalize();
-      });
-      await waitFor(() => assert.strictEqual(requests.length, 3));
-      assert.strictEqual(requests[2].signal?.aborted, false);
-
-      unmount();
-      assert.strictEqual(
-        requests[2].signal?.aborted,
-        true,
-        "teardown aborts the distill fetch",
-      );
+    await act(async () => {
+      await result.current.beginFinalize();
     });
+    await act(async () => {
+      await result.current.cancelFinalize();
+    });
+    await act(async () => {
+      await result.current.forceConverge();
+    });
+    assert.strictEqual(
+      result.current.discardEpoch,
+      initial,
+      "steering, finalize begin/cancel and force-converge keep the session tracked",
+    );
 
-    it("attach() discards finalize progress belonging to the previous session", async () => {
-      const { result } = await convergeSession();
-      scripts = [{ kind: "hang" }];
-      await act(async () => {
-        void result.current.startFinalize();
-      });
-      await waitFor(() =>
-        assert.strictEqual(result.current.finalize.phase, "distilling"),
-      );
+    const beforeEnd = result.current.discardEpoch;
+    await act(async () => {
+      await result.current.end();
+    });
+    assert.ok(
+      result.current.discardEpoch > beforeEnd,
+      "end() discards the tracked session",
+    );
 
-      const archived: ProjectLayer = {
-        id: "L-old",
+    const beforeReset = result.current.discardEpoch;
+    act(() => {
+      result.current.reset();
+    });
+    assert.ok(
+      result.current.discardEpoch > beforeReset,
+      "reset() discards the tracked session",
+    );
+
+    const beforeAttach = result.current.discardEpoch;
+    act(() => {
+      result.current.attach({
+        id: "L-other",
         kind: "brainstorm",
-        title: "Old session",
+        title: "Another session",
         createdAt: 1,
         updatedAt: 2,
-        status: "done",
-        turns: [{ id: "t1", author: "You", content: "old", role: "human" }],
-      };
-      act(() => {
-        result.current.attach(archived);
+        status: "converged",
+        turns: [{ id: "t1", author: "You", content: "other", role: "human" }],
       });
-      assert.strictEqual(requests[2].signal?.aborted, true);
-      assert.deepStrictEqual(result.current.finalize, { phase: "idle" });
-      assert.strictEqual(result.current.activeLayerId, "L-old");
     });
-
-    it("setFinalizeReviewText edits the review; a stale edit after abandon is a no-op", async () => {
-      const { result } = await convergeSession();
-      scripts = [{ kind: "reply", content: "original spec" }];
-      await act(async () => {
-        await result.current.startFinalize();
-      });
-      act(() => {
-        result.current.setFinalizeReviewText("edited spec");
-      });
-      assert.deepStrictEqual(result.current.finalize, {
-        phase: "review",
-        text: "edited spec",
-      });
-
-      await act(async () => {
-        await result.current.abandonFinalize();
-      });
-      // A keystroke flushed after the abandon must not resurrect the review.
-      act(() => {
-        result.current.setFinalizeReviewText("stale keystroke");
-      });
-      assert.deepStrictEqual(result.current.finalize, { phase: "idle" });
-    });
-
-    it("end() during the review tears the finalize down (terminal done, idle finalize)", async () => {
-      const { result } = await convergeSession();
-      scripts = [{ kind: "reply", content: "spec" }];
-      await act(async () => {
-        await result.current.startFinalize();
-      });
-      assert.strictEqual(result.current.finalize.phase, "review");
-
-      await act(async () => {
-        await result.current.end();
-      });
-      assert.strictEqual(result.current.sessionState?.status, "done");
-      assert.deepStrictEqual(result.current.finalize, { phase: "idle" });
-    });
+    assert.ok(
+      result.current.discardEpoch > beforeAttach,
+      "attach() replaces the tracked session",
+    );
   });
 });
