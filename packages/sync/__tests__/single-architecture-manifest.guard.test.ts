@@ -1,6 +1,7 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
-import { promises as fs } from "node:fs";
+import { promises as fs, type Dirent } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -65,6 +66,9 @@ const CANONICAL = ".architecture/manifest.yaml";
  * worktree and report ITS second manifest as this tree's, which is both wrong
  * and unfixable from here. (Mirrors the same exclusion in
  * `no-jest-residue.guard.test.ts`.)
+ *
+ * This list is the ONLY way a directory goes unscanned. Everything else must be
+ * readable — see `findArchitectureManifests`.
  */
 const SKIP_DIRS = new Set([
   "node_modules",
@@ -78,28 +82,69 @@ const SKIP_DIRS = new Set([
   "coverage",
 ]);
 
-const rel = (absolute: string) =>
-  path.relative(REPO_ROOT, absolute).split(path.sep).join("/");
+/**
+ * How a directory is listed. Injectable for one reason only: the failure policy
+ * below is about unreadable directories, and "unreadable" is a permission fact
+ * that does not reproduce identically everywhere (a `chmod 000` denies nothing
+ * to a root-owned CI container). Injecting the reader pins the POLICY the same
+ * way on every machine; `findArchitectureManifests` is exercised against the
+ * real filesystem by every other test in this file.
+ */
+type ReadDirectory = (dir: string) => Promise<Dirent[]>;
+
+const readDirectory: ReadDirectory = (dir) =>
+  fs.readdir(dir, { withFileTypes: true });
 
 /**
- * Every `<dir>/.architecture/manifest.yaml` in the tree.
+ * Every `<dir>/.architecture/manifest.yaml` beneath `root`.
  *
  * Matched on the EXACT filename. `.architecture/manifest.yaml.pre-split-backup`
  * is a deliberate artifact of the `manifest split` command and must not be
  * caught by a prefix match — it is a backup, not a second source of truth.
+ *
+ * An unreadable directory REJECTS. This is the whole reliability contract of
+ * the guard, so it is worth stating why: a walk that swallows a `readdir`
+ * failure and returns nothing for that subtree does not report "no manifest
+ * here", it reports "I did not look" — in the same shape. The suite then goes
+ * green over a partial scan while a second manifest sits inside the subtree
+ * that was skipped, which is precisely the vacuous pass this guard exists to
+ * prevent. The anchor test below cannot cover for it either: the anchor only
+ * proves the ROOT was reachable, and the root stays readable while any other
+ * subtree is not.
+ *
+ * Nothing is quietly tolerated, not even ENOENT: with symlinks never traversed
+ * and build/vendor trees excluded by name, every remaining directory here is a
+ * real source directory that the checkout is expected to be able to read. A
+ * directory that legitimately must not be entered belongs in `SKIP_DIRS`, with
+ * a reason, where the exclusion is visible.
  */
-async function findArchitectureManifests(): Promise<string[]> {
+async function findArchitectureManifests(
+  root: string,
+  readDir: ReadDirectory = readDirectory,
+): Promise<string[]> {
   const found: string[] = [];
+  const relative = (absolute: string) =>
+    path.relative(root, absolute).split(path.sep).join("/") || ".";
+
   const visit = async (dir: string): Promise<void> => {
-    let entries;
+    let entries: Dirent[];
     try {
-      entries = await fs.readdir(dir, { withFileTypes: true });
-    } catch {
-      // An unreadable directory is a directory this guard is not checking, but
-      // it is not evidence of a violation either. The anchor test below is what
-      // catches a walk that reaches too little to mean anything.
-      return;
+      entries = await readDir(dir);
+    } catch (cause) {
+      const code =
+        (cause as NodeJS.ErrnoException | undefined)?.code ?? "unknown error";
+      throw new Error(
+        `Could not read '${relative(dir)}' (${code}) while searching for ` +
+          `architecture manifests under ${root}.\n\n` +
+          `An unreadable directory is not an empty one. Treating it as empty ` +
+          `would let this guard pass while never scanning that subtree — a ` +
+          `second manifest inside it would go unreported, which is the exact ` +
+          `failure the guard is here to catch. Make the directory readable, ` +
+          `or add it to SKIP_DIRS with a reason so the exclusion is visible.`,
+        { cause },
+      );
     }
+
     for (const entry of entries) {
       const absolute = path.join(dir, entry.name);
       if (entry.isDirectory()) {
@@ -107,6 +152,8 @@ async function findArchitectureManifests(): Promise<string[]> {
         await visit(absolute);
         continue;
       }
+      // Symlinks are deliberately not followed: `isDirectory()` is false for
+      // them, so they are neither traversed nor matched.
       if (!entry.isFile()) continue;
       if (
         entry.name === "manifest.yaml" &&
@@ -116,20 +163,25 @@ async function findArchitectureManifests(): Promise<string[]> {
       }
     }
   };
-  await visit(REPO_ROOT);
-  return found.map(rel).sort();
+
+  await visit(root);
+  return found.map(relative).sort();
 }
 
 /** One traversal per run, shared by the assertions below. */
 let discovery: Promise<string[]> | undefined;
 const walk = (): Promise<string[]> =>
-  (discovery ??= findArchitectureManifests());
+  (discovery ??= findArchitectureManifests(REPO_ROOT));
 
 describe("exactly one .architecture/manifest.yaml", () => {
   it("discovery reaches the whole repo", async () => {
     // An anchor, not a magic number: if the walk cannot see the root manifest
     // it is rooted somewhere unexpected, and the assertion below would pass
     // vacuously while checking nothing.
+    //
+    // Note what this does NOT cover: the root manifest stays visible while any
+    // OTHER subtree is unreadable, so a partial scan sails past this assertion.
+    // Fail-closed traversal in `findArchitectureManifests` is what covers that.
     const manifests = await walk();
     assert.ok(
       manifests.includes(CANONICAL),
@@ -176,10 +228,17 @@ describe("exactly one .architecture/manifest.yaml", () => {
       ".architecture",
       "manifest.yaml.pre-split-backup",
     );
+    // Only "the file is not there" means absent. A permission or IO error here
+    // is not evidence of absence, and swallowing it would silently skip the
+    // assertion below — the same shape of quiet degradation the traversal
+    // above refuses.
     const backupExists = await fs
       .access(backup)
       .then(() => true)
-      .catch(() => false);
+      .catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") return false;
+        throw error;
+      });
     if (backupExists) {
       assert.ok(
         !manifests.includes(`${CANONICAL}.pre-split-backup`),
@@ -195,6 +254,114 @@ describe("exactly one .architecture/manifest.yaml", () => {
     assert.ok(
       manifests.every((m) => m.endsWith(`/${CANONICAL}`) || m === CANONICAL),
       `matched a path outside a .architecture/ directory: ${manifests.join(", ")}`,
+    );
+  });
+});
+
+/**
+ * The traversal's own behaviour, on throwaway fixtures under `os.tmpdir()`
+ * (never inside the repo, so these can never perturb the assertions above).
+ *
+ * The guard's value is entirely in what its walk can still see, and the repo's
+ * clean state proves neither the detection nor the failure policy: a walk that
+ * found nothing and a walk that looked nowhere are the same green.
+ */
+describe("the manifest walk", () => {
+  const withFixture = async (
+    build: (root: string) => Promise<void>,
+    assertOn: (root: string) => Promise<void>,
+  ) => {
+    const root = await fs.mkdtemp(
+      path.join(os.tmpdir(), "single-manifest-guard-"),
+    );
+    try {
+      await build(root);
+      await assertOn(root);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  };
+
+  const writeManifest = async (root: string, ...segments: string[]) => {
+    const dir = path.join(root, ...segments, ".architecture");
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, "manifest.yaml"), "system: fixture\n");
+  };
+
+  it("finds a nested copy, spares the split backup, and skips node_modules", async () => {
+    await withFixture(
+      async (root) => {
+        await writeManifest(root);
+        await writeManifest(root, "packages", "ui");
+        await fs.writeFile(
+          path.join(root, ".architecture", "manifest.yaml.pre-split-backup"),
+          "system: fixture-backup\n",
+        );
+        // A published package inside node_modules legitimately ships one.
+        await writeManifest(root, "node_modules", "@hexagen", "sync");
+      },
+      async (root) => {
+        assert.deepEqual(await findArchitectureManifests(root), [
+          ".architecture/manifest.yaml",
+          "packages/ui/.architecture/manifest.yaml",
+        ]);
+      },
+    );
+  });
+
+  it("rejects on an unreadable subtree instead of reporting a partial scan", async () => {
+    await withFixture(
+      async (root) => {
+        await writeManifest(root);
+        // The duplicate hides inside the subtree that cannot be read. A
+        // swallowing walk returns the single root manifest here and the suite
+        // goes green over a repo that has two.
+        await writeManifest(root, "sealed");
+      },
+      async (root) => {
+        const denied: NodeJS.ErrnoException = Object.assign(
+          new Error(`EACCES: permission denied, scandir '${root}/sealed'`),
+          { code: "EACCES" },
+        );
+        const readDir: ReadDirectory = async (dir) =>
+          path.basename(dir) === "sealed"
+            ? Promise.reject(denied)
+            : fs.readdir(dir, { withFileTypes: true });
+
+        await assert.rejects(
+          findArchitectureManifests(root, readDir),
+          (error: Error) => {
+            assert.match(error.message, /sealed/);
+            assert.match(error.message, /EACCES/);
+            return true;
+          },
+          "an unreadable directory must fail the walk, not shrink its result",
+        );
+      },
+    );
+  });
+
+  it("rejects on a real filesystem error rather than returning empty", async () => {
+    // The same policy, with no injection involved: a genuine errno from the
+    // real `fs.readdir` must surface instead of producing an empty result that
+    // reads exactly like a clean repo.
+    await withFixture(
+      async () => {},
+      async (root) => {
+        const missing = path.join(root, "does-not-exist");
+        await assert.rejects(
+          findArchitectureManifests(missing),
+          (error: Error) => {
+            assert.match(error.message, /ENOENT/);
+            assert.equal(
+              (error.cause as NodeJS.ErrnoException).code,
+              "ENOENT",
+              "the originating errno must stay attached as the cause",
+            );
+            return true;
+          },
+        );
+      },
     );
   });
 });
