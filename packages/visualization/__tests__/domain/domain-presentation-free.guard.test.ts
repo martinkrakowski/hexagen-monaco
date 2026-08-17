@@ -146,6 +146,23 @@ function parse(filePath: string, source: string): ts.SourceFile {
  * A `PropertyAssignment` — the `document: 1` in an object *value* — is not a
  * declaration in any of those senses and is not collected, which is what keeps
  * a config literal or a returned object out of the scan.
+ *
+ * ## Names the walk cannot read, and why it fails instead of shrugging
+ *
+ * `interface X { ["style"]?: … }` is legal TypeScript — a computed member name
+ * over a literal type — and `keyof X` still resolves it to `"style"`. A walk
+ * that only reads `Identifier` and `StringLiteral` names discards the whole
+ * `ComputedPropertyName` and reports the layer clean. Literal computed names
+ * are therefore unwrapped below and treated exactly like plain ones.
+ *
+ * A computed name that is *not* a literal — `[STYLE_KEY]`, `[Tokens.style]`,
+ * `[Symbol.iterator]` — cannot be resolved by syntax alone; it needs a type
+ * checker this walk deliberately does not build. Rather than let that be the
+ * remaining way through, such a name is collected separately and asserted to
+ * be absent: a domain type may not declare a member under a name the guard
+ * cannot read. There are none today, so the ratchet costs nothing now and
+ * leaves no residue. A `#private` class field is not part of the type surface
+ * and is skipped.
  */
 const MEMBER_MODIFIERS = new Set<ts.SyntaxKind>([
   ts.SyntaxKind.PublicKeyword,
@@ -161,8 +178,16 @@ function isParameterProperty(node: ts.Node): node is ts.ParameterDeclaration {
   );
 }
 
-function declaredPropertyNames(file: ts.SourceFile): string[] {
+interface DeclaredMembers {
+  /** Member names the walk resolved to a string. */
+  names: string[];
+  /** Computed names it could not resolve, as written. */
+  unresolvedComputed: string[];
+}
+
+function declaredMembers(file: ts.SourceFile): DeclaredMembers {
   const names: string[] = [];
+  const unresolvedComputed: string[] = [];
 
   const visit = (node: ts.Node): void => {
     if (
@@ -171,24 +196,40 @@ function declaredPropertyNames(file: ts.SourceFile): string[] {
       isParameterProperty(node)
     ) {
       const { name } = node;
-      if (ts.isIdentifier(name) || ts.isStringLiteral(name)) {
+      if (
+        ts.isIdentifier(name) ||
+        ts.isStringLiteral(name) ||
+        ts.isNumericLiteral(name)
+      ) {
         names.push(name.text);
+      } else if (ts.isComputedPropertyName(name)) {
+        const { expression } = name;
+        if (
+          ts.isStringLiteralLike(expression) ||
+          ts.isNumericLiteral(expression)
+        ) {
+          names.push(expression.text);
+        } else {
+          unresolvedComputed.push(`[${expression.getText(file)}]`);
+        }
       }
     }
     ts.forEachChild(node, visit);
   };
 
   visit(file);
-  return names;
+  return { names, unresolvedComputed };
+}
+
+function declaredPropertyNames(file: ts.SourceFile): string[] {
+  return declaredMembers(file).names;
 }
 
 describe("the domain layer declares no renderer vocabulary", () => {
   const files = typeScriptFilesUnder(DOMAIN_DIR);
   const declarations = files.map((filePath) => ({
     filePath,
-    names: declaredPropertyNames(
-      parse(filePath, readFileSync(filePath, "utf8")),
-    ),
+    ...declaredMembers(parse(filePath, readFileSync(filePath, "utf8"))),
   }));
 
   /**
@@ -255,6 +296,34 @@ describe("the domain layer declares no renderer vocabulary", () => {
         `src/application/ports/in/renderable-graph.ts — or delete it if, like\n` +
         `\`draggable\` and \`markerEnd\`, no renderer actually reads it.\n\n` +
         violations.map((v) => `  - ${v}`).join("\n"),
+    );
+  });
+
+  /**
+   * Fail closed. The assertion above can only judge names it managed to read;
+   * a computed member name that is not a literal — `[STYLE_KEY]`,
+   * `[Tokens.style]` — is not readable without a type checker, so allowing one
+   * would leave "spell it as a constant" as the way through. There are none in
+   * the domain today, so this forbids a shape rather than fixing a violation.
+   */
+  it("declares no member under a name the guard cannot read", () => {
+    const unreadable: string[] = [];
+    for (const { filePath, unresolvedComputed } of declarations) {
+      for (const written of unresolvedComputed) {
+        unreadable.push(
+          `${path.relative(PACKAGE_ROOT, filePath)} declares \`${written}\``,
+        );
+      }
+    }
+
+    assert.deepEqual(
+      unreadable,
+      [],
+      `A domain type declares a member under a computed name this guard cannot\n` +
+        `resolve, so it cannot tell whether the name is renderer vocabulary.\n` +
+        `Write the member with a literal name — \`style\` or \`["style"]\` — or,\n` +
+        `if the indirection is load-bearing, teach this walk to resolve it.\n\n` +
+        unreadable.map((v) => `  - ${v}`).join("\n"),
     );
   });
 
@@ -355,6 +424,59 @@ describe("the domain layer declares no renderer vocabulary", () => {
         names.filter((n) => RENDERER_MEMBER_NAMES.has(n)).sort(),
         ["className", "extent", "markerEnd", "style", "zIndex"],
       );
+    });
+
+    /**
+     * `interface X { ["style"]?: … }` compiles, and `keyof X` reads it as
+     * `"style"` — so a walk that drops `ComputedPropertyName` reports clean
+     * while the field is there. Literal computed names unwrap to the same
+     * string as a plain member.
+     */
+    it("unwraps literal computed member names", () => {
+      const { names, unresolvedComputed } = declaredMembers(
+        parse(
+          "computed.ts",
+          [
+            "export interface Node {",
+            '  ["style"]?: { zIndex?: number };',
+            "  [`className`]?: string;",
+            "  id: string;",
+            "}",
+          ].join("\n"),
+        ),
+      );
+
+      assert.deepEqual(names.sort(), ["className", "id", "style", "zIndex"]);
+      assert.deepEqual(unresolvedComputed, []);
+    });
+
+    /**
+     * And a computed name that syntax cannot resolve is reported rather than
+     * dropped, so "spell it as a constant" is not the remaining way through.
+     */
+    it("reports computed member names it cannot resolve, instead of dropping them", () => {
+      const { names, unresolvedComputed } = declaredMembers(
+        parse(
+          "indirect.ts",
+          [
+            'const STYLE_KEY = "style";',
+            "declare const Tokens: Record<string, string>;",
+            "export interface Node {",
+            "  [STYLE_KEY]?: { width?: number };",
+            "  [Tokens.className]?: string;",
+            "  id: string;",
+            "}",
+          ].join("\n"),
+        ),
+      );
+
+      // The readable member is still collected; the two indirect ones are not
+      // silently lost.
+      assert.deepEqual(names.sort(), ["id", "width"]);
+      assert.deepEqual(unresolvedComputed.sort(), [
+        "[STYLE_KEY]",
+        "[Tokens.className]",
+      ]);
     });
   });
 });
