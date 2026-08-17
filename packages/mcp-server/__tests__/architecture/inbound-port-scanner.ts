@@ -113,11 +113,24 @@ export function importMapOf(source: string): Map<string, string> {
   return map;
 }
 
-/** Every contract named in an `implements` clause in one source file. */
+/**
+ * Every contract named in an `implements` clause in one source file.
+ *
+ * Between the class name and `implements` the header may carry type parameters
+ * (`class Foo<T> implements FooPort`) and a base class (`class Foo extends Base
+ * implements FooPort`). A matcher that demands `implements` immediately after
+ * the name skips both, and a skipped class is invisible to every direction
+ * assertion built on this reader. Measured: a second class in a scanned module,
+ * declared `class SmuggledGenericUseCase<T> implements TransactionManagerPort`,
+ * left the transaction-lifecycle guard 11/11 green while inverting exactly the
+ * direction its third claim exists to forbid. `[^{;]*?` spans that header
+ * without being able to cross into a class body or the next statement, so the
+ * widening cannot pull an `implements` out of unrelated source.
+ */
 export function implementedContractsOf(source: string): string[] {
   const contracts: string[] = [];
   for (const match of source.matchAll(
-    /\bclass\s+[A-Za-z0-9_$]+\s+implements\s+([^{]+)\{/g,
+    /\bclass\s+[A-Za-z0-9_$]+[^{;]*?\bimplements\s+([^{]+)\{/g,
   )) {
     for (const raw of match[1].split(",")) {
       const name = raw.trim().replace(/<.*$/, "");

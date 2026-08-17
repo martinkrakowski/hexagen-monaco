@@ -56,8 +56,9 @@ import {
  * `src/infrastructure/adapters/mcp-server.types.ts`
  * (`TransactionLifecycleDepsAreInboundPorts`), where it fails `yarn build`
  * rather than only a test-side type check. The shared readers live in
- * `./inbound-port-scanner.ts`; their behaviour is pinned by the
- * matchers-themselves block of the sibling guard.
+ * `./inbound-port-scanner.ts`; the specifier and type matchers are pinned by
+ * the matchers-themselves block of the sibling guard, the interface-header and
+ * class-header readers by the two blocks at the bottom of this file.
  */
 
 /** The four tools of remediation item 6.5(b), by use-case module basename. */
@@ -299,6 +300,62 @@ describe("HEX-019 — transaction-lifecycle tools bind to inbound ports", () => 
       expect(interfaceFieldsOf(source, "Bag")).toEqual([
         { field: "a", type: "APort" },
       ]);
+    });
+  });
+
+  describe("the class-header reader, against the shapes it must not skip", () => {
+    /**
+     * A class the reader skips is invisible to all three claims above, and the
+     * skip is silent: with a second class present in the module, the
+     * per-module "has an implements clause" assertion is already satisfied by
+     * the first one. Measured before the matcher was widened — adding
+     * `class SmuggledGenericUseCase<T> implements TransactionManagerPort` to
+     * `accept-transaction-tool.use-case.ts` left this guard 11/11 green while
+     * inverting the very direction the third claim forbids.
+     */
+    it("reads a generic class header", () => {
+      expect(
+        implementedContractsOf("export class Foo<T> implements FooPort {"),
+      ).toEqual(["FooPort"]);
+      expect(
+        implementedContractsOf(
+          "export class Foo<T extends Map<string, number>> implements FooPort {",
+        ),
+      ).toEqual(["FooPort"]);
+    });
+
+    it("reads a header that carries a base class before implements", () => {
+      expect(
+        implementedContractsOf(
+          "export class Foo extends Base implements FooPort {",
+        ),
+      ).toEqual(["FooPort"]);
+      expect(
+        implementedContractsOf(
+          "export class Foo<T>\n  extends Base<T>\n  implements APort, BPort<T>\n{",
+        ),
+      ).toEqual(["APort", "BPort"]);
+    });
+
+    it("still reads the plain header, and reaches no further than one", () => {
+      expect(
+        implementedContractsOf("export class Foo implements FooPort {"),
+      ).toEqual(["FooPort"]);
+
+      // The widening must not let a header matcher run past a class body and
+      // adopt an `implements` that belongs to no class.
+      expect(
+        implementedContractsOf(
+          [
+            "export class Alpha {",
+            "  private readonly x = 1;",
+            "  run(): void {}",
+            "}",
+            "",
+            "// a comment mentioning implements SomethingPort {",
+          ].join("\n"),
+        ),
+      ).toEqual([]);
     });
   });
 });
