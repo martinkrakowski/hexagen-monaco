@@ -42,11 +42,18 @@ correct findings here have carried remedies worse than the defect they reported.
 
 ### Assertion style is settled
 
-`expect()` and `node:assert/strict` are **both permitted** (ADR-0044 §2), and
-`assert.*` is **retained codebase-wide** (`AGENTS.md`). The rule in ADR-0044 §3
-is **per file** — a single file should not mix the two, but the repo as a whole
-legitimately uses both. Do not propose migrating `assert.*` to `expect()` and do
-not treat `assert.*` as legacy.
+ADR-0044 **Decision item 2** permits `expect()` in Vitest files and **retains**
+existing `node:assert/strict`; `AGENTS.md:38` records both as fine, with
+`assert.*` retained codebase-wide. **Decision item 3** is labelled a
+**per-runner** rule — _"a Vitest file may use `expect()` or `assert.*`; new
+tests should prefer `expect()`"_ — which is a **permission, not an exclusivity
+constraint**. Mixing the two styles within one file is **not** a violation, and
+nothing else in the ADR makes it one; its Consequences call the coexistence of
+two assertion styles an accepted cost. The only binding part is the preference
+for `expect()` in **new** tests.
+
+Do not propose migrating `assert.*` to `expect()` and do not treat it as legacy.
+(ADR-0044 has no numbered sections — cite Decision items, not `§N`.)
 
 ### The manifest is a registry, not an inventory
 

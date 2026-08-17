@@ -34,6 +34,12 @@ reviews:
           most often because a mock replaced the very subject under test.
         - An exit code that cannot distinguish "ran and found problems" from
           "could not run".
+        - A **parser or matcher inside a check** that misses a legal syntax
+          form — missed import forms (named, default, namespace, type-position,
+          dynamic, template-literal specifiers), a regex that stops at the
+          first delimiter, a string scan a legal rewrite would evade. A blind
+          spot in a verifier is worth more than the same bug in ordinary code,
+          because it under-reports silently and is trusted while doing it.
 
         When you propose a fix, please state what it does to inputs the current
         code already handles — particularly whether it converts a loud failure
@@ -42,12 +48,17 @@ reviews:
 
     - path: "**/*.{test,spec}.{ts,tsx}"
       instructions: |
-        **Assertion style is settled — do not flag it.** `expect()` and
-        `node:assert/strict` are BOTH permitted (ADR-0044 §2), and `assert.*`
-        is retained codebase-wide (`AGENTS.md`). The rule in ADR-0044 §3 is
-        **per file**: one file should not mix the two styles, but the repo as a
-        whole legitimately uses both. Do not propose migrating `assert.*` to
-        `expect()`, and do not treat `assert.*` as legacy.
+        **Assertion style is settled — do not flag it.** ADR-0044 **Decision
+        item 2** permits `expect()` in Vitest files and **retains** existing
+        `node:assert/strict`; `AGENTS.md:38` records both as fine, with
+        `assert.*` retained codebase-wide. **Decision item 3** is labelled a
+        **per-runner** rule — "a Vitest file may use `expect()` or `assert.*`;
+        new tests should prefer `expect()`" — which is a **permission, not an
+        exclusivity constraint**. Mixing the two styles within one file is
+        **not** a violation, and nothing else in the ADR makes it one. The only
+        binding part is the preference for `expect()` in **new** tests. Do not
+        propose migrating `assert.*` to `expect()`, and do not treat it as
+        legacy. (ADR-0044 has no numbered sections — cite Decision items.)
 
         Tests run on Vitest (ADR-0044). `apps/web` tests must be run from the
         `apps/web` working directory.

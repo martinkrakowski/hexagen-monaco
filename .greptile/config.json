@@ -39,7 +39,7 @@
     },
     {
       "id": "assertion-style-is-settled",
-      "rule": "Do NOT flag assertion style. `expect()` and `node:assert/strict` are both permitted (ADR-0044 §2) and `assert.*` is retained codebase-wide (AGENTS.md). The rule in ADR-0044 §3 is per FILE — one file should not mix them, but the repo legitimately uses both. Never propose migrating `assert.*` to `expect()` or treat it as legacy.",
+      "rule": "Do NOT flag assertion style. ADR-0044 Decision item 2 permits `expect()` and RETAINS existing `node:assert/strict`; AGENTS.md:38 records both as fine, with `assert.*` retained codebase-wide. Decision item 3 is labelled a PER-RUNNER rule ('a Vitest file may use expect() or assert.*; new tests should prefer expect()') and is a PERMISSION, not an exclusivity constraint: mixing the two styles within one file is NOT a violation, and nothing else in the ADR makes it one. Only the preference for expect() in NEW tests is binding. Never propose migrating `assert.*` to `expect()` or treat it as legacy. ADR-0044 has no numbered sections — cite Decision items, not §N.",
       "scope": ["**/__tests__/**", "**/*.{test,spec}.{ts,tsx}"],
       "severity": "low",
       "enabled": true
