@@ -35,6 +35,14 @@ import type {
  * optional member — and a silently-renamed `persistenceAdapter` would blank a
  * whole compass side with no error anywhere. The `keyof … extends keyof …`
  * witnesses close that second direction, in production code, at compile time.
+ *
+ * `keyof` is top-level only, so one witness per interface is not enough: it
+ * proves `portConfiguration` still exists without saying anything about what is
+ * inside it. Renaming `PortConfigurationSchema`'s `inboundPorts` upstream left
+ * `yarn typecheck` green here while `generate-compass-nodes.ts` — which reads
+ * `ctx.portConfiguration?.inboundPorts ?? []` — silently emitted zero north
+ * compass nodes. Every nested object the DTO declares therefore gets its own
+ * witness below, and any nested object added later needs one too.
  */
 
 /**
@@ -50,11 +58,23 @@ type EveryKeyIsSuppliedBy<Dto, Source> = [
   ? true
   : ["fields missing upstream:", Exclude<keyof Dto, keyof Source>];
 
+/**
+ * The nested object behind an optional member, with `undefined` stripped so
+ * `keyof` sees the members rather than `never`. Indexing is deliberate: if the
+ * member itself disappears upstream, this stops compiling here too.
+ */
+type Inside<T, K extends keyof T> = NonNullable<T[K]>;
+
 export const WIZARD_STILL_SUPPLIES_EVERY_MAPPED_FIELD: [
   EveryKeyIsSuppliedBy<MapContextInput, BoundedContext>,
   EveryKeyIsSuppliedBy<MapPeerInput, ExternalContext>,
   EveryKeyIsSuppliedBy<MapPeerMappingInput, PeerMapping>,
-] = [true, true, true];
+  // Nested: `keyof MapContextInput` above sees only `portConfiguration`.
+  EveryKeyIsSuppliedBy<
+    Inside<MapContextInput, "portConfiguration">,
+    Inside<BoundedContext, "portConfiguration">
+  >,
+] = [true, true, true, true];
 
 /**
  * Project a wizard document onto the subset a hexagonal context map is drawn

@@ -29,9 +29,10 @@ import ts from "typescript";
  * Parsed, not grepped, for the reason spelled out at length in the application
  * guard: a substring scan matches the word `style` in a comment and misses
  * nothing useful in exchange. This walk reads property *declarations* only —
- * `interface X { style: … }` and `type X = { style: … }` — so a comment, a
- * string literal, a local variable and a function parameter named `style` are
- * all invisible.
+ * `interface X { style: … }`, `type X = { style: … }`, `class X { style: … }`
+ * and a `constructor(readonly style: …)` parameter property — so a comment, a
+ * string literal, a local variable and a plain function parameter named `style`
+ * are all invisible.
  */
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -125,19 +126,50 @@ function parse(filePath: string, source: string): ts.SourceFile {
 }
 
 /**
- * Every property name declared by a type in this file: interface members and
- * the members of inline / aliased object type literals, at any nesting depth
+ * Every property name declared by a type in this file, at any nesting depth
  * (`style?: { zIndex?: number }` must yield both `style` and `zIndex`).
  *
- * `PropertySignature` only. A `PropertyAssignment` — the `document: 1` in an
- * object *value* — is not a type declaration and is not collected, which is
- * what keeps a config literal or a returned object out of the scan.
+ * Three declaration forms, because a domain type is not always an interface:
+ *
+ *  - `PropertySignature` — `interface X { style: … }` and the members of
+ *    inline / aliased object type literals.
+ *  - `PropertyDeclaration` — `class X { style?: … }`. The domain is all
+ *    interfaces and functions today, so this collects nothing right now; it is
+ *    here because "declare it on a class instead" is otherwise a way through
+ *    the guard, and a guard with a known bypass is worth less than its lines.
+ *  - A constructor **parameter property** — `constructor(readonly style: …)`,
+ *    which declares a public member from a parameter position. Only parameters
+ *    carrying `public` / `private` / `protected` / `readonly` count: a plain
+ *    function parameter named `style` declares nothing and must stay invisible,
+ *    which the decoy case below pins.
+ *
+ * A `PropertyAssignment` — the `document: 1` in an object *value* — is not a
+ * declaration in any of those senses and is not collected, which is what keeps
+ * a config literal or a returned object out of the scan.
  */
+const MEMBER_MODIFIERS = new Set<ts.SyntaxKind>([
+  ts.SyntaxKind.PublicKeyword,
+  ts.SyntaxKind.PrivateKeyword,
+  ts.SyntaxKind.ProtectedKeyword,
+  ts.SyntaxKind.ReadonlyKeyword,
+]);
+
+function isParameterProperty(node: ts.Node): node is ts.ParameterDeclaration {
+  return (
+    ts.isParameter(node) &&
+    (node.modifiers ?? []).some((m) => MEMBER_MODIFIERS.has(m.kind))
+  );
+}
+
 function declaredPropertyNames(file: ts.SourceFile): string[] {
   const names: string[] = [];
 
   const visit = (node: ts.Node): void => {
-    if (ts.isPropertySignature(node)) {
+    if (
+      ts.isPropertySignature(node) ||
+      ts.isPropertyDeclaration(node) ||
+      isParameterProperty(node)
+    ) {
       const { name } = node;
       if (ts.isIdentifier(name) || ts.isStringLiteral(name)) {
         names.push(name.text);
@@ -277,6 +309,48 @@ describe("the domain layer declares no renderer vocabulary", () => {
         "width",
         "zIndex",
       ]);
+      assert.deepEqual(
+        names.filter((n) => RENDERER_MEMBER_NAMES.has(n)).sort(),
+        ["className", "extent", "markerEnd", "style", "zIndex"],
+      );
+    });
+
+    /**
+     * The declaration forms that are not `interface` members. The domain has no
+     * class today, so this is the only place these shapes are exercised — which
+     * is the point: without it, moving a domain type to a class would carry
+     * renderer vocabulary straight past a guard that still reported clean.
+     */
+    it("catches class properties and constructor parameter properties", () => {
+      const file = parse(
+        "class-violation.ts",
+        [
+          "export class Node {",
+          "  id!: string;",
+          '  extent?: "parent";',
+          "  style?: { zIndex?: number };",
+          "  constructor(",
+          "    public readonly className: string,",
+          "    private markerEnd: string,",
+          "    notAMember: string,",
+          "  ) {",
+          "    this.id = className + markerEnd + notAMember;",
+          "  }",
+          "}",
+        ].join("\n"),
+      );
+
+      const names = declaredPropertyNames(file);
+      assert.deepEqual(names.sort(), [
+        "className",
+        "extent",
+        "id",
+        "markerEnd",
+        "style",
+        "zIndex",
+      ]);
+      // The plain parameter declares no member and must not be reported.
+      assert.ok(!names.includes("notAMember"));
       assert.deepEqual(
         names.filter((n) => RENDERER_MEMBER_NAMES.has(n)).sort(),
         ["className", "extent", "markerEnd", "style", "zIndex"],
