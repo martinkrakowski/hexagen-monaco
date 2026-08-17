@@ -99,9 +99,13 @@ export function usePlanningFinalize(
     };
   }, []);
 
-  // Discard reconcile. Compared against the last SEEN epoch rather than run on
-  // every commit: an unconditional teardown would wipe the review on any
-  // re-render, which is exactly the lift this hook exists to provide.
+  // Discard reconcile. The comparison against the last SEEN epoch is the
+  // load-bearing part, not the dependency array: today's deps happen to be
+  // stable, so React would skip the effect anyway, but ANY future re-run for a
+  // non-discard reason (a dependency added here or to `teardown`, a
+  // StrictMode remount) would otherwise wipe a live review — the exact lift
+  // this hook exists to provide. Keyed on the VALUE, so only a real discard
+  // tears down.
   const seenEpochRef = useRef(discardEpoch);
   useEffect(() => {
     if (seenEpochRef.current === discardEpoch) return;

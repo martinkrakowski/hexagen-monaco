@@ -328,9 +328,17 @@ describe("usePlanningFinalize (in isolation — no planning loop)", () => {
     assert.deepStrictEqual(result.current.state, { phase: "idle" });
   });
 
-  it("an unchanged discard epoch does NOT drop a review across re-renders", async () => {
-    // Anti-vacuity for the epoch test above: a teardown that fired on every
-    // render would satisfy it while destroying the lift the hook exists for.
+  it("re-renders do not drop a live review — only a discard does", async () => {
+    // The A2 lift itself, and the anti-vacuity arm for the epoch test above:
+    // a teardown that fired on every commit would satisfy that test while
+    // destroying the property this hook exists to provide.
+    //
+    // Named for what it actually pins. Two things hold it up together — the
+    // discard effect's dependency array (React skips an effect whose deps are
+    // unchanged) and the `seenEpochRef` comparison inside it. Removing ONLY
+    // the comparison leaves this green, because the deps are stable today;
+    // removing it while the effect re-runs for any other reason (a dependency
+    // added to the effect or to `teardown`, a StrictMode remount) fails here.
     const { result, rerender } = renderFinalize();
     scripts = [{ kind: "reply", content: "kept spec" }];
     await act(async () => {
