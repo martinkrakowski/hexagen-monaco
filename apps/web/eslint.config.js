@@ -243,6 +243,13 @@ export default [
             {
               // `no-restricted-imports` matches the import STRING, not the
               // resolved file, so every spelling of a target has to be listed.
+              // `**/plan-phase/session/<mod>` is the load-bearing one: it covers
+              // the deep-relative form AND every `@/…` alias depth. The
+              // `@/*/plan-phase/session/<mod>` entry is a redundant belt (it
+              // matches only the single-segment alias root). All five legal
+              // spellings are pinned by
+              // `__tests__/planning-session-finalize-fence.guard.test.ts` — do
+              // not narrow this list without running it.
               group: [
                 "./distill",
                 "../distill",

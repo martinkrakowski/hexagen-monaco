@@ -53,28 +53,46 @@ async function restrictedImportMessages(
     .map((m) => m.message);
 }
 
-describe("plan-phase session/ finalize fence (GOD-007)", () => {
-  it("bans the distill module from the session directory", async () => {
-    const messages = await restrictedImportMessages(
-      'import { buildDistillPrompt } from "./distill";\nexport const p = buildDistillPrompt;\n',
-      PROBE,
-    );
-    assert.ok(
-      messages.some((m) => /GOD-007/.test(m)),
-      `expected a GOD-007 no-restricted-imports error, got: ${JSON.stringify(messages)}`,
-    );
-  });
+/**
+ * Every legal SPELLING of the two fenced modules, from inside `session/`.
+ * `no-restricted-imports` matches the import STRING, not the resolved file, so
+ * a fence is only as wide as its list of spellings — and probing just the
+ * `./x` form would leave the deep-relative and `@/` alias forms free to be
+ * narrowed away while this suite stayed green.
+ *
+ * `@/*` maps to `./features/*` AND to five other roots (see apps/web/tsconfig
+ * `paths`), so BOTH alias depths below resolve to the fenced module and both
+ * have to be covered.
+ *
+ * Measured on the shipped config: `**\/plan-phase/session/<mod>` is the
+ * load-bearing spelling — it alone covers rows 3-5. `@/*\/plan-phase/session/
+ * <mod>` is a redundant belt that only ever matches row 4. Dropping the `**`
+ * entry and keeping the `@/*` one leaves rows 3 and 5 ALLOWED (verified), which
+ * is exactly the silent narrowing these rows now catch.
+ */
+const FENCED_SPELLINGS = (module: string) => [
+  `./${module}`,
+  `../${module}`,
+  `../../plan-phase/session/${module}`,
+  `@/workspace-shell/plan-phase/session/${module}`,
+  `@/features/workspace-shell/plan-phase/session/${module}`,
+];
 
-  it("bans the finalize hook from the session directory", async () => {
-    const messages = await restrictedImportMessages(
-      'import { usePlanningFinalize } from "./usePlanningFinalize";\nexport const h = usePlanningFinalize;\n',
-      PROBE,
-    );
-    assert.ok(
-      messages.some((m) => /GOD-007/.test(m)),
-      `expected a GOD-007 no-restricted-imports error, got: ${JSON.stringify(messages)}`,
-    );
-  });
+describe("plan-phase session/ finalize fence (GOD-007)", () => {
+  for (const module of ["distill", "usePlanningFinalize"]) {
+    for (const spelling of FENCED_SPELLINGS(module)) {
+      it(`bans "${spelling}" from the session directory`, async () => {
+        const messages = await restrictedImportMessages(
+          `import * as fenced from "${spelling}";\nexport const f = fenced;\n`,
+          PROBE,
+        );
+        assert.ok(
+          messages.some((m) => /GOD-007/.test(m)),
+          `expected a GOD-007 no-restricted-imports error, got: ${JSON.stringify(messages)}`,
+        );
+      });
+    }
+  }
 
   it("keeps the ADR-0021 @hexagen/local-llm ACL inside the scoped block", async () => {
     // Flat config REPLACES `no-restricted-imports` options rather than merging
