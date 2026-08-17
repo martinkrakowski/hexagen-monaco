@@ -3,8 +3,8 @@ import * as yaml from "js-yaml";
 /**
  * Single source of truth for manifest-derived governance analysis.
  *
- * Before this module the `governance/status`, `governance/violations`, and
- * `governance/refresh` routes each re-parsed the manifest YAML and re-counted
+ * Before this module the `governance/status` and `governance/violations`
+ * routes each re-parsed the manifest YAML and re-counted
  * ports/adapters their own way, with mutually divergent semantics (AUD-005):
  *   - `status` counted `application.ports.in/out` as ARRAYS (`.length`);
  *   - `violations` counted them as OBJECTS (`Object.keys().length`);

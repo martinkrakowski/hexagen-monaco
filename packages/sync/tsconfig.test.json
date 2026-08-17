@@ -5,7 +5,8 @@
     "rootDir": "../..",
     "composite": false,
     "skipLibCheck": true,
-    "moduleResolution": "NodeNext"
+    "moduleResolution": "NodeNext",
+    "module": "NodeNext"
   },
   "include": [
     "src/**/*.ts",

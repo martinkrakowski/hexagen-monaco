@@ -67,6 +67,10 @@ The system is organized into four planes:
 
 Projection and probabilistic planes may not import from each other. All cross-plane communication flows through the kernel.
 
+## Amendment — 2026-08-17: `intent-compiler` is no longer a living kernel package
+
+Q1 and Q7 name `intent-compiler` as the deterministic compiler and a kernel-plane member. ADR-0058 deleted that package (active, implemented, zero live consumers). The hybrid-controller model in Q1 is unchanged — the kernel remains the authority for DomainAST mutations — but the named compiler is gone. Q7's kernel list should be read without `intent-compiler`. Do not restore the package to satisfy this list.
+
 ### Q8 — LLM ACL
 
 All LLM inputs must pass through `prompt-compiler`'s `SendStructuredRequestPort`. Raw `LLMMessage[]` construction outside the compilation pipeline is forbidden. The `WebLLMAdapter` implements `SendStructuredRequestPort` and validates responses against Zod schemas.

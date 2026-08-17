@@ -66,3 +66,22 @@ None of the above overrides ADR-0026. The generator changes in Decision 1 alter 
 - **The linter must tolerate opted-out layers.** After Decision 1, the arch-linter must not require a `domain/` (or other) layer folder on a context or shared-kernel that legitimately has none (e.g. the flat `core-domain`/`runtime` shape) — the enforcement-posture ADR (0.8) and its layer-rules changes carry this so the ratchet does not re-flag the corrected state.
 - **No regression in hand-written safety.** Because Decision 5 leaves ADR-0026's guarantees intact, a user who hand-authors a non-`@generated` barrel keeps it across `yarn sync` and `yarn sync --force`.
 - **Implementation is Wave 6, item 6.7(a)–(d)** of `docs/planning/2026-08-14-architecture-remediation-plan.md` (row at line 288; Wave-0 slot 0.4 at line 138); this ADR is a decision input only. Human acceptance is via PR merge (Status: Proposed).
+
+## Amendment — 2026-08-17: Decision 4's "single NodeNext outlier" premise is withdrawn
+
+Decision 4 treated `tools/arch-linter/tsconfig.json` as the one NodeNext hold-out against a bundler-resolved `tsconfig.base.json`, and scheduled an alignment of that file to bundler as part of 6.7(d).
+
+That premise is false on the tree. The workspaces Node executes directly are:
+
+| Workspace                  | Config                             | Resolution                                                                                                       |
+| -------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `@hexagen/sync` **source** | `packages/sync/tsconfig.json`      | `bundler` + `module: Preserve` — **ADR-0009 / AGENTS.md**. tsup emits the published ESM; source is not NodeNext. |
+| `@hexagen/sync` **tests**  | `packages/sync/tsconfig.test.json` | `NodeNext`                                                                                                       |
+| `@hexagen/tui`             | `apps/tui/tsconfig.json`           | `NodeNext`                                                                                                       |
+| `@hexagen/arch-linter`     | `tools/arch-linter/tsconfig.json`  | `NodeNext`                                                                                                       |
+
+6.7(d) (#517) reconciled `tsconfig.base.json` `references` and added the HEX-035 guard. It did **not** flip arch-linter (or tui, or sync tests) to bundler, and that flip is not required: no arch-linter rule demands NodeNext on sync, and accepted ADR-0009 already decided sync _source_ stays bundler.
+
+**Decision 4 is therefore narrowed.** After a package deletion, drop that package's `tsconfig.base.json` reference (the HEX-035 half). Do **not** "align" Node-executed workspaces to bundler. The NodeNext hold-outs above are the documented exceptions, not drift. A later change to tui or arch-linter resolution is its own decision; it is not implied here.
+
+ADR-0009's older problem-statement table that listed `sync (CLI) \| NodeNext` is a leftover of Approach 1 and is footnoted there; Approach 2 and AGENTS.md are the governing text.

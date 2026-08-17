@@ -12,7 +12,6 @@
 import { describe, it, vi } from "vitest";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { NextRequest } from "next/server";
 import { MonorepoRootNotFoundError } from "../../monorepo-root";
 import { getGovernanceSuggestions, getManifestLint } from "../../wire.server";
 import { CliManifestLintAdapter } from "../adapters/cli-manifest-lint.adapter";
@@ -33,13 +32,11 @@ describe("governance composition root", () => {
   });
 
   it("returns an unavailable port, not a throw, when the monorepo root cannot be resolved", async () => {
-    // `getManifestLint()` is evaluated in the route's ARGUMENT list, before the
-    // handler reaches its mutation gate or its `try`. A throw there is a
-    // framework 500 that bypasses both the 403 and `lintError` — a linter that
-    // cannot run, escaping as something other than "the linter could not run".
-    // Reachable in the standalone image: `apps/web/Dockerfile`'s runtime stage
-    // copies only `.next/standalone` and `.next/static`, so there is no
-    // `.architecture/` marker to walk up to.
+    // A throw from `getManifestLint()` is a framework 500 that bypasses the
+    // `unavailable` outcome the port exists to populate. Reachable in the
+    // standalone image: `apps/web/Dockerfile`'s runtime stage copies only
+    // `.next/standalone` and `.next/static`, so there is no `.architecture/`
+    // marker to walk up to.
     // The filesystem root: `findMonorepoRoot` walks up from here, finds no
     // `.architecture/manifest.yaml`, and hits its `parent === current` stop.
     const filesystemRoot = path.parse(process.cwd()).root;
@@ -58,25 +55,5 @@ describe("governance composition root", () => {
       cwd.mockRestore();
       vi.resetModules();
     }
-  });
-
-  it("reaches the handler through the real route module", async () => {
-    // Loads `route.ts` with nothing mocked, so the shim's imports, the
-    // composition root and the handler are all the production ones. A
-    // cross-origin POST is used because the D1 gate short-circuits before any
-    // I/O — this asserts the wiring, not the linter.
-    const { POST } = await import("../../../api/governance/refresh/route");
-    const res = await POST(
-      new NextRequest("http://localhost/api/governance/refresh", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          origin: "http://evil.example",
-          host: "localhost",
-        },
-        body: JSON.stringify({ manifestYaml: "bounded_contexts: []" }),
-      }),
-    );
-    assert.equal(res.status, 403);
   });
 });

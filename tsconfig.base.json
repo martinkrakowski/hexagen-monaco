@@ -25,7 +25,6 @@
     { "path": "./packages/eslint-plugin-ui" },
     { "path": "./packages/external-integration" },
     { "path": "./packages/governance" },
-    { "path": "./packages/intent-compiler" },
     { "path": "./packages/layout-engine" },
     { "path": "./packages/llm-driver" },
     { "path": "./packages/local-llm" },
