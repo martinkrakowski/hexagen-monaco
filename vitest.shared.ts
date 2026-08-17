@@ -36,6 +36,32 @@ export const baseConfig = defineConfig({
     // so be explicit: never treat built output (`dist` — e.g. sync's emitted
     // scaffold `.test.ts`) or package-root `templates/` scaffold data as tests.
     exclude: [...configDefaults.exclude, "**/dist/**", "templates/**"],
+    // Vitest 4 auto-selects the `agent` reporter when std-env's `isAgent` is
+    // true (`AI_AGENT` / `CLAUDECODE` / `CURSOR_AGENT` / … are set), and that
+    // reporter is MinimalReporter — `silent: "passed-only"` — so it drops every
+    // console line a PASSING test produced. Warnings that only appear on a
+    // passing run therefore vanish in any AI-assisted shell while CI, on the
+    // same commit, reports them: `apps/web` measured 0 locally against 81 in CI
+    // for exactly this reason (#509). A defect class that exists only in CI logs
+    // is a defect class nobody fixes, so every workspace reports like CI does.
+    //
+    // The `github-actions` reporter is re-added explicitly: Vitest appends it
+    // only when `reporters` is otherwise EMPTY, so pinning a reporter without
+    // this would silently drop CI's failure annotations.
+    //
+    // Gated on `CI` rather than `GITHUB_ACTIONS` because `turbo.json` already
+    // declares `CI` in `globalEnv` and is never-edit here, so `GITHUB_ACTIONS`
+    // would fail `turbo/no-undeclared-env-vars` at the repo root. (`apps/web`
+    // uses `GITHUB_ACTIONS` because its own ESLint config does not load the
+    // turbo plugin — an inconsistency, not a licence.) The substitution is safe:
+    // this repo's only CI is GitHub Actions, and the reporter emits workflow
+    // commands that are inert anywhere else.
+    // Truthiness, not `=== "true"`: this repo's own production code tests
+    // `if (process.env.CI)` (`sync/src/commands/shared/spinner.ts`,
+    // `prompt-service.ts`) and its tests set `CI = "1"`. A strict comparison
+    // here would disagree with the repo's own idiom and silently drop CI's
+    // annotations on any runner that sets `CI=1`.
+    reporters: process.env.CI ? ["default", "github-actions"] : ["default"],
   },
   resolve: {
     // NodeNext barrels import `./x/index.js` against `.ts` sources; mirror the
