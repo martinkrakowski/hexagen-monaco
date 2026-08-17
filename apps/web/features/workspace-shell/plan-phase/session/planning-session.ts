@@ -51,6 +51,21 @@ export interface PlanningSessionState {
   >;
 }
 
+/**
+ * A REF-FRESH view of the tracked session for readers that run OUTSIDE the
+ * render cycle (GOD-007 / item 8.6: `usePlanningFinalize` gates the distill on
+ * the status and builds the distill prompt from the seed + transcript, and a
+ * click handler must see what storage has, not what the last commit had).
+ *
+ * Declared in this pure module on purpose: it is the ONLY type the loop hook
+ * and the finalize hook share, so neither has to import the other.
+ */
+export interface PlanningSessionSnapshot {
+  readonly status: SessionStatus;
+  readonly seed: string;
+  readonly turns: readonly ProjectLayerTurn[];
+}
+
 export type PlanningSessionEvent =
   /** A proposer/reviser turn was durably persisted. */
   | { readonly type: "PROPOSAL_DONE" }

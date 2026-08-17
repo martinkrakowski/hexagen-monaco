@@ -16,12 +16,12 @@ import {
   roleForStatus,
   sessionStateFromLayer,
   type ModelRole,
+  type PlanningSessionSnapshot,
   type PlanningSessionState,
 } from "./planning-session";
 import { buildFold } from "./fold";
 import { parseVerdict } from "./verdict";
 import { streamChatTurn } from "./stream-chat-turn";
-import { buildDistillPrompt, stripYamlFences } from "./distill";
 
 import { MODEL_NAME } from "./model";
 
@@ -31,18 +31,27 @@ export interface StreamingDraft {
 }
 
 /**
- * Finalize UI state, LIFTED into the hook (Plan Workbench A2): the workbench's
- * right pane switches between a live view and archived-layer readers, and a
- * view switch unmounts the live panel — component-local finalize state (and
- * the distill abort ref) would be lost mid-distill/mid-review. The hook stays
- * mounted at the plan host across view switches, so finalize progress
- * survives them.
+ * GOD-007 / item 8.6 — STRUCTURAL fence, not a comment.
+ *
+ * The finalize/distill view-model (`FinalizeUiState`, the distill abort
+ * controller, `startFinalize` / `abandonFinalize` / `setFinalizeReviewText`)
+ * used to live in this hook alongside the proposer⇄critic loop, the layer-turn
+ * persistence and the session control plane. It now lives in
+ * `usePlanningFinalize`, composed beside this hook by the plan host.
+ *
+ * Declaring the moved members `?: never` makes putting them back a COMPILE
+ * error: the hook's return literal would have to assign a `FinalizeUiState` to
+ * an `undefined`-typed property, and any consumer reading `session.finalize`
+ * gets `undefined` rather than a state machine. `apps/web/eslint.config.js`
+ * carries the matching import fence (`session/` may not import `./distill` or
+ * `./usePlanningFinalize`).
  */
-export type FinalizeUiState =
-  | { readonly phase: "idle" }
-  | { readonly phase: "distilling"; readonly content: string }
-  | { readonly phase: "review"; readonly text: string }
-  | { readonly phase: "error"; readonly message: string };
+interface NoFinalizeSurface {
+  readonly finalize?: never;
+  readonly startFinalize?: never;
+  readonly abandonFinalize?: never;
+  readonly setFinalizeReviewText?: never;
+}
 
 export interface UsePlanningSessionOptions {
   readonly projectId: string | null;
@@ -69,7 +78,7 @@ export interface UsePlanningSessionOptions {
   readonly logger?: Pick<Console, "warn">;
 }
 
-export interface UsePlanningSessionReturn {
+export interface UsePlanningSessionReturn extends NoFinalizeSurface {
   /** null until a session is started or attached. */
   readonly sessionState: PlanningSessionState | null;
   readonly activeLayerId: string | null;
@@ -94,19 +103,24 @@ export interface UsePlanningSessionReturn {
   beginFinalize: () => Promise<void>;
   /** finalizing → converged (finalize review cancelled/failed). */
   cancelFinalize: () => Promise<void>;
-  /** Lifted finalize UI state — survives right-pane view switches. */
-  readonly finalize: FinalizeUiState;
-  /** converged → distill stream → editable review (or error + auto-cancel). */
-  startFinalize: () => Promise<void>;
-  /** Abort any in-flight distill, drop the review, return to converged. */
-  abandonFinalize: () => Promise<void>;
-  /** Edit the distilled spec while in the review phase (no-op otherwise). */
-  setFinalizeReviewText: (text: string) => void;
   /** Detach from a finished session so a new one can be started. The layer
    * stays persisted; only the hook's tracking is cleared. */
   reset: () => void;
   /** Persisted turns as the loop sees them (fresh, not render-cycle bound). */
   readonly turns: readonly ProjectLayerTurn[];
+  /**
+   * Ref-fresh snapshot of the tracked session for readers that run outside the
+   * render cycle (`usePlanningFinalize`'s converged gate and distill fold).
+   */
+  readonly readSession: () => PlanningSessionSnapshot | null;
+  /**
+   * Bumped whenever the tracked session is DISCARDED — attach (a different
+   * session takes over), end (terminal) or reset (detached). Anything derived
+   * from the discarded session, notably a finalize review or an in-flight
+   * distill, is void from that point on. Published as a plain counter so this
+   * hook announces the fact without knowing who acts on it.
+   */
+  readonly discardEpoch: number;
 }
 
 /**
@@ -136,7 +150,9 @@ export function usePlanningSession(
   const [isRunning, setIsRunning] = useState(false);
   const [turns, setTurns] = useState<readonly ProjectLayerTurn[]>([]);
   const [seed, setSeed] = useState("");
-  const [finalize, setFinalize] = useState<FinalizeUiState>({ phase: "idle" });
+  // See UsePlanningSessionReturn.discardEpoch — the one outbound signal that
+  // the tracked session (and anything derived from it) is void.
+  const [discardEpoch, setDiscardEpoch] = useState(0);
 
   // Loop-owned mirrors: the async loop can't read React state mid-flight.
   const stateRef = useRef<PlanningSessionState | null>(null);
@@ -144,10 +160,6 @@ export function usePlanningSession(
   const turnsRef = useRef<readonly ProjectLayerTurn[]>([]);
   const seedRef = useRef("");
   const abortRef = useRef<AbortController | null>(null);
-  // The finalize distill's own abort controller. Doubles as the re-entrancy
-  // guard for startFinalize (claimed SYNCHRONOUSLY before its first await),
-  // and lets abandon/end/unmount kill an in-flight distill stream.
-  const distillAbortRef = useRef<AbortController | null>(null);
   // Monotonic generation: bumping it supersedes (cancels) any running loop.
   const generationRef = useRef(0);
   // The turn persist currently in flight (if any). A superseding control
@@ -172,18 +184,29 @@ export function usePlanningSession(
       generationRef.current += 1;
       abortRef.current?.abort();
       abortRef.current = null;
-      // Also kill an in-flight distill stream (same zombie-stream rationale).
-      // The layer keeps its persisted "finalizing" status; on the next attach
-      // sessionStateFromLayer recovers it as converged, so Finalize is simply
-      // re-runnable.
-      distillAbortRef.current?.abort();
-      distillAbortRef.current = null;
     };
   }, []);
 
   const applyState = useCallback((next: PlanningSessionState) => {
     stateRef.current = next;
     setSessionState(next);
+  }, []);
+
+  // Announce that the tracked session is void. Callers bump this INSTEAD of
+  // reaching into a finalize teardown — this hook does not know a finalize
+  // view-model exists (GOD-007).
+  const discardSession = useCallback(() => {
+    setDiscardEpoch((epoch) => epoch + 1);
+  }, []);
+
+  const readSession = useCallback((): PlanningSessionSnapshot | null => {
+    const current = stateRef.current;
+    if (!current) return null;
+    return {
+      status: current.status,
+      seed: seedRef.current,
+      turns: turnsRef.current,
+    };
   }, []);
 
   const pushTurn = useCallback((turn: ProjectLayerTurn) => {
@@ -364,14 +387,6 @@ export function usePlanningSession(
     [projectId, addLayer, applyState, runLoop],
   );
 
-  // Abort any in-flight distill and drop the finalize UI state (idle). Used by
-  // attach/end/reset — every path that discards the tracked session's review.
-  const teardownFinalize = useCallback(() => {
-    distillAbortRef.current?.abort();
-    distillAbortRef.current = null;
-    setFinalize({ phase: "idle" });
-  }, []);
-
   const attach = useCallback(
     (layer: ProjectLayer) => {
       // Attaching replaces any tracked session; supersede a running loop and
@@ -379,7 +394,7 @@ export function usePlanningSession(
       generationRef.current += 1;
       abortRef.current?.abort();
       abortRef.current = null;
-      teardownFinalize();
+      discardSession();
       setIsRunning(false);
       setDraft(null);
       layerIdRef.current = layer.id;
@@ -391,7 +406,7 @@ export function usePlanningSession(
       setTurns(layer.turns);
       applyState(sessionStateFromLayer(layer));
     },
-    [applyState, teardownFinalize],
+    [applyState, discardSession],
   );
 
   // A control action can land while the loop is awaiting appendLayerTurn —
@@ -483,12 +498,12 @@ export function usePlanningSession(
   );
 
   const end = useCallback(async () => {
-    // End must also tear down any finalize in progress: an in-flight distill
-    // completing into the review of an already-ended session would let
+    // End must also void anything derived from the session: an in-flight
+    // distill completing into the review of an already-ended session would let
     // Confirm hand off without any layer left to link.
-    teardownFinalize();
+    discardSession();
     await transitionAndStop({ type: "END" });
-  }, [teardownFinalize, transitionAndStop]);
+  }, [discardSession, transitionAndStop]);
 
   const beginFinalize = useCallback(async () => {
     const current = stateRef.current;
@@ -513,67 +528,17 @@ export function usePlanningSession(
     await persistStatus({ status: "converged" });
   }, [applyState, persistStatus]);
 
-  // Finalize (decided open question Q4): ONE stateless chat call distills the
-  // converged session into importable spec text, reviewed by the human before
-  // the explicit confirm hands off to the import flow (owned by the caller).
-  const startFinalize = useCallback(async () => {
-    const current = stateRef.current;
-    if (!current || current.status !== "converged") return;
-    // Re-entrancy guard, claimed SYNCHRONOUSLY before the first await: the
-    // Finalize button stays clickable through `await beginFinalize()`, so a
-    // double-click would otherwise start two concurrent distills.
-    if (distillAbortRef.current) return;
-    const abortController = new AbortController();
-    distillAbortRef.current = abortController;
-    await beginFinalize();
-    // Abandoned/ended while beginFinalize was in flight — that path already
-    // reset the UI; don't flash "distilling" over it.
-    if (abortController.signal.aborted) return;
-    setFinalize({ phase: "distilling", content: "" });
-    const result = await streamChatTurn({
-      message: buildDistillPrompt({
-        seed: seedRef.current,
-        turns: turnsRef.current,
-      }),
-      model,
-      signal: abortController.signal,
-      onChunk: (content) => setFinalize({ phase: "distilling", content }),
-    });
-    // Only clear the ref if it is still OURS: an abandon+restart during the
-    // await means a newer distill owns it now, and wiping that controller
-    // would make the new run uncancellable (mirrors the abortRef identity
-    // guard in runLoop).
-    if (distillAbortRef.current === abortController) {
-      distillAbortRef.current = null;
-    }
-    if (!result.ok) {
-      if (result.aborted) return; // abandoned — teardown already handled it
-      setFinalize({ phase: "error", message: result.error });
-      await cancelFinalize();
-      return;
-    }
-    setFinalize({ phase: "review", text: stripYamlFences(result.content) });
-  }, [beginFinalize, cancelFinalize, model]);
-
-  const abandonFinalize = useCallback(async () => {
-    teardownFinalize();
-    await cancelFinalize();
-  }, [teardownFinalize, cancelFinalize]);
-
-  const setFinalizeReviewText = useCallback((text: string) => {
-    // Guarded to the review phase so a stale keystroke (e.g. flushed after an
-    // abandon) can't resurrect a dropped review.
-    setFinalize((prev) =>
-      prev.phase === "review" ? { phase: "review", text } : prev,
-    );
-  }, []);
+  // NOTE: the distill/review half of finalize (the streamed spec, the editable
+  // review, their abort controller) is NOT here — it is `usePlanningFinalize`,
+  // composed beside this hook by the plan host (GOD-007 / item 8.6). The only
+  // seam is `discardEpoch` + `readSession` below.
 
   const reset = useCallback(() => {
     generationRef.current += 1;
     abortRef.current?.abort();
     abortRef.current = null;
     pendingAppendRef.current = null;
-    teardownFinalize();
+    discardSession();
     setIsRunning(false);
     setDraft(null);
     stateRef.current = null;
@@ -584,7 +549,7 @@ export function usePlanningSession(
     setTurns([]);
     seedRef.current = "";
     setSeed("");
-  }, [teardownFinalize]);
+  }, [discardSession]);
 
   return {
     sessionState,
@@ -602,10 +567,8 @@ export function usePlanningSession(
     end,
     beginFinalize,
     cancelFinalize,
-    finalize,
-    startFinalize,
-    abandonFinalize,
-    setFinalizeReviewText,
     reset,
+    readSession,
+    discardEpoch,
   };
 }

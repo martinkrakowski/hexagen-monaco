@@ -28,6 +28,17 @@ vi.mock("../session/usePlanningSession", () => ({
   usePlanningSession: () => planningSession.current,
 }));
 
+// GOD-007 / item 8.6: the finalize view-model is its own hook, composed beside
+// the loop hook by PlanPhaseView. Mocked separately here — the seams this
+// suite pins (footer visibility, the selectLive-before-start ordering) are
+// exactly the wiring BETWEEN the two.
+const planningFinalize = vi.hoisted(() => ({
+  current: {} as Record<string, unknown>,
+}));
+vi.mock("../session/usePlanningFinalize", () => ({
+  usePlanningFinalize: () => planningFinalize.current,
+}));
+
 // Selection lives in the `?layer=` URL param (PR B): replace the inert global
 // next/navigation stub with the stateful one, so a row click — which only
 // calls router.replace — actually re-renders the view, and deep links can be
@@ -98,11 +109,19 @@ function makeSession(overrides: Record<string, unknown> = {}) {
     end: vi.fn(async () => {}),
     beginFinalize: vi.fn(async () => {}),
     cancelFinalize: vi.fn(async () => {}),
-    finalize: { phase: "idle" },
-    startFinalize: vi.fn(async () => {}),
-    abandonFinalize: vi.fn(async () => {}),
-    setFinalizeReviewText: vi.fn(),
     reset: vi.fn(),
+    readSession: vi.fn(() => null),
+    discardEpoch: 0,
+    ...overrides,
+  };
+}
+
+function makeFinalize(overrides: Record<string, unknown> = {}) {
+  return {
+    state: { phase: "idle" },
+    start: vi.fn(async () => {}),
+    abandon: vi.fn(async () => {}),
+    setReviewText: vi.fn(),
     ...overrides,
   };
 }
@@ -144,6 +163,7 @@ beforeEach(() => {
     clearLayersPersistError: vi.fn(),
   };
   planningSession.current = makeSession();
+  planningFinalize.current = makeFinalize();
 });
 
 describe("PlanPhaseView archive filter (single hook instance)", () => {
@@ -753,7 +773,7 @@ describe("PlanPhaseView composer modes", () => {
 });
 
 describe("PlanPhaseView shell footer (locked §5 Q2)", () => {
-  it("is empty until converged; when converged it offers Finalize wired to the lifted startFinalize", async () => {
+  it("is empty until converged; when converged it offers Finalize wired to the lifted distill", async () => {
     const session = makeSession({
       activeLayerId: "L-active",
       sessionState: {
@@ -788,23 +808,25 @@ describe("PlanPhaseView shell footer (locked §5 Q2)", () => {
     fireEvent.click(finalizeButton);
     await waitFor(() =>
       assert.equal(
-        (converged.startFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
+        (planningFinalize.current.start as ReturnType<typeof vi.fn>).mock.calls
+          .length,
         1,
       ),
     );
   });
 
   it("offers Finalize again after a failed distillation (converged + finalize error)", async () => {
-    // §5 Q2's error half: a failed distill leaves finalize.phase at "error"
-    // (only attach/end/reset clear it), and the in-pane alert's "you can
-    // retry" copy points at the SHELL FOOTER button — the only retry
-    // affordance on screen. It must render and re-fire startFinalize.
-    const errored = makeSession({
+    // §5 Q2's error half: a failed distill leaves the finalize phase at
+    // "error" (only a discard — attach/end/reset — clears it), and the in-pane
+    // alert's "you can retry" copy points at the SHELL FOOTER button, the only
+    // retry affordance on screen. It must render and re-fire the distill.
+    planningSession.current = makeSession({
       activeLayerId: "L-active",
       sessionState: { status: "converged", round: 2, maxRounds: 4 },
-      finalize: { phase: "error", message: "model unavailable" },
     });
-    planningSession.current = errored;
+    planningFinalize.current = makeFinalize({
+      state: { phase: "error", message: "model unavailable" },
+    });
     render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
     const retryButton = Array.from(document.querySelectorAll("button")).find(
       (b) => /Finalize → Generate manifest/.test(b.textContent || ""),
@@ -816,14 +838,15 @@ describe("PlanPhaseView shell footer (locked §5 Q2)", () => {
     fireEvent.click(retryButton);
     await waitFor(() =>
       assert.equal(
-        (errored.startFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
+        (planningFinalize.current.start as ReturnType<typeof vi.fn>).mock.calls
+          .length,
         1,
       ),
     );
   });
 
   it("Finalize fired from a READER view brings the live view forward and clears ?layer= (replace, never push)", async () => {
-    // handleFinalize deliberately calls selectLive() before startFinalize():
+    // handleFinalize deliberately calls selectLive() before finalize.start():
     // the distill streams into the LIVE view's panels and must be on-screen.
     // Since PR B that switch is URL-backed, so it must also clear the
     // now-dead ?layer= param — every other footer test fires Finalize from
@@ -853,7 +876,8 @@ describe("PlanPhaseView shell footer (locked §5 Q2)", () => {
     assert.equal(navState.pushCalls.length, 0, "cleared via replace only");
     await waitFor(() =>
       assert.equal(
-        (converged.startFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
+        (planningFinalize.current.start as ReturnType<typeof vi.fn>).mock.calls
+          .length,
         1,
       ),
     );
@@ -863,7 +887,9 @@ describe("PlanPhaseView shell footer (locked §5 Q2)", () => {
     planningSession.current = makeSession({
       activeLayerId: "L-active",
       sessionState: { status: "converged", round: 2, maxRounds: 4 },
-      finalize: { phase: "review", text: "name: spec" },
+    });
+    planningFinalize.current = makeFinalize({
+      state: { phase: "review", text: "name: spec" },
     });
     render(<PlanPhaseView onNavigateToImport={vi.fn()} />);
     assert.equal(

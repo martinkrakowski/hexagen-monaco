@@ -205,6 +205,63 @@ export default [
     },
   },
   {
+    // GOD-007 (item 8.6) — the plan-phase session directory. `usePlanningSession`
+    // owned the proposer⇄critic loop, the layer-turn persistence, the session
+    // control plane AND the finalize/distill view-model. The last of those is
+    // now `usePlanningFinalize`, and `./distill` (prompt builder + fence
+    // stripper) is its private collaborator.
+    //
+    // Fenced on the DIRECTORY rather than a file list, so a new module dropped
+    // into `session/` inherits the constraint instead of quietly escaping it.
+    // `usePlanningFinalize.ts` is the single exemption — it IS the distill's
+    // owner. It lives here rather than in a test because a lint rule cannot be
+    // satisfied by deleting an assertion; the companion type-level lock is the
+    // `?: never` finalize surface on `UsePlanningSessionReturn`.
+    //
+    // Flat config REPLACES (does not merge) a rule's options, so the app-wide
+    // `@hexagen/local-llm` ACL entry from the `features/**` block above is
+    // repeated here — dropping it would silently exempt this directory from
+    // ADR-0021.
+    files: ["features/workspace-shell/plan-phase/session/**/*.{ts,tsx}"],
+    ignores: [
+      "features/workspace-shell/plan-phase/session/usePlanningFinalize.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@hexagen/local-llm",
+              importNames: ["LLMMessage", "LocalLLMProviderPort"],
+              allowTypeImports: true,
+              message:
+                'LLMMessage and LocalLLMProviderPort are @internal. Use SendStructuredRequestPort, ModelLifecyclePort, or LLMRequest["messages"] instead. See ADR 0021.',
+            },
+          ],
+          patterns: [
+            {
+              // `no-restricted-imports` matches the import STRING, not the
+              // resolved file, so every spelling of a target has to be listed.
+              group: [
+                "./distill",
+                "../distill",
+                "**/plan-phase/session/distill",
+                "@/*/plan-phase/session/distill",
+                "./usePlanningFinalize",
+                "../usePlanningFinalize",
+                "**/plan-phase/session/usePlanningFinalize",
+                "@/*/plan-phase/session/usePlanningFinalize",
+              ],
+              message:
+                "GOD-007: the finalize/distill view-model belongs to usePlanningFinalize, not to the planning loop. Compose the two hooks at the plan host (PlanPhaseView) — the loop's only outbound seam is readSession + discardEpoch.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["app/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [

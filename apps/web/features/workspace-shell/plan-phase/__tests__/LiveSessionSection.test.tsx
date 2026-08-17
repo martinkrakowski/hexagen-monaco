@@ -6,14 +6,20 @@ import type { ProjectLayer } from "@hexagen/shared";
 
 import { LiveSessionSection } from "../LiveSessionSection";
 import type { UsePlanningSessionReturn } from "../session/usePlanningSession";
+import type { FinalizeUiState } from "../session/usePlanningFinalize";
 import type { PlanningSessionState } from "../session/planning-session";
 import { usePendingManifest } from "../../../manifest-generation/store/usePendingManifest";
 
 // A2: LiveSessionSection is the workbench right pane's LIVE view and is
 // deliberately STATELESS about drafts and finalize — the composer lives in the
-// host and the finalize state lives in usePlanningSession. This suite drives
-// it purely through the session prop; the full finalize FLOW (real hook) is
-// pinned in PlanWorkbench.test.tsx.
+// host and the finalize state lives in usePlanningFinalize. This suite drives
+// it purely through props; the full finalize FLOW (real hooks) is pinned in
+// usePlanningFinalize.test.ts and PlanWorkbench.test.tsx.
+//
+// GOD-007 note: the finalize half arrives as STATE + two intents, and there is
+// deliberately no `start` among them — this view cannot begin a distill, which
+// is why the "no Finalize button HERE" rule below is structural rather than a
+// convention.
 
 const bodyText = () => (document.body.textContent || "").replace(/\s+/g, " ");
 
@@ -51,11 +57,9 @@ function makeSession(
     end: vi.fn(async () => {}),
     beginFinalize: vi.fn(async () => {}),
     cancelFinalize: vi.fn(async () => {}),
-    finalize: { phase: "idle" },
-    startFinalize: vi.fn(async () => {}),
-    abandonFinalize: vi.fn(async () => {}),
-    setFinalizeReviewText: vi.fn(),
     reset: vi.fn(),
+    readSession: vi.fn(() => null),
+    discardEpoch: 0,
     ...overrides,
   };
 }
@@ -84,6 +88,9 @@ function layer(partial: Partial<ProjectLayer>): ProjectLayer {
 
 function renderSection(props: {
   session: UsePlanningSessionReturn;
+  finalize?: FinalizeUiState;
+  onAbandonFinalize?: () => void;
+  onFinalizeReviewTextChange?: (text: string) => void;
   layers?: readonly ProjectLayer[];
   onNavigateToImport?: () => void;
   onAddSession?: () => void;
@@ -93,6 +100,9 @@ function renderSection(props: {
       projectId="p1"
       layers={props.layers ?? []}
       session={props.session}
+      finalize={props.finalize ?? { phase: "idle" }}
+      onAbandonFinalize={props.onAbandonFinalize ?? vi.fn()}
+      onFinalizeReviewTextChange={props.onFinalizeReviewTextChange ?? vi.fn()}
       onNavigateToImport={props.onNavigateToImport ?? vi.fn()}
       onAddSession={props.onAddSession}
     />,
@@ -245,13 +255,17 @@ describe("LiveSessionSection", () => {
     noButton(/Finalize/);
   });
 
-  it("distilling: renders the streamed content and Cancel wired to abandonFinalize", async () => {
+  it("distilling: renders the streamed content and Cancel raises the abandon intent", async () => {
     const session = makeSession({
       sessionState: state({ status: "finalizing", round: 2 }),
       activeLayerId: "L1",
-      finalize: { phase: "distilling", content: "name: partial-spec" },
     });
-    renderSection({ session });
+    const onAbandonFinalize = vi.fn();
+    renderSection({
+      session,
+      finalize: { phase: "distilling", content: "name: partial-spec" },
+      onAbandonFinalize,
+    });
 
     const distilling = document.querySelector(
       '[data-testid="finalize-distilling"]',
@@ -265,21 +279,25 @@ describe("LiveSessionSection", () => {
     assert.match(bodyText(), /name: partial-spec/);
     fireEvent.click(button(/^\s*Cancel\s*$/));
     await waitFor(() =>
-      assert.strictEqual(
-        (session.abandonFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
-        1,
-      ),
+      assert.strictEqual(onAbandonFinalize.mock.calls.length, 1),
     );
   });
 
-  it("review: shows the lifted text, forwards edits to setFinalizeReviewText, and Cancel abandons", async () => {
+  it("review: shows the lifted text, forwards edits as an intent, and Cancel abandons", async () => {
     const session = makeSession({
       sessionState: state({ status: "finalizing", round: 2 }),
       activeLayerId: "L1",
-      finalize: { phase: "review", text: "name: distilled-app" },
     });
     const onNavigateToImport = vi.fn();
-    renderSection({ session, onNavigateToImport });
+    const onAbandonFinalize = vi.fn();
+    const onFinalizeReviewTextChange = vi.fn();
+    renderSection({
+      session,
+      finalize: { phase: "review", text: "name: distilled-app" },
+      onNavigateToImport,
+      onAbandonFinalize,
+      onFinalizeReviewTextChange,
+    });
 
     const review = document.querySelector(
       'textarea[aria-label="Distilled spec"]',
@@ -287,10 +305,9 @@ describe("LiveSessionSection", () => {
     assert.strictEqual(review.value, "name: distilled-app");
 
     fireEvent.change(review, { target: { value: "name: edited" } });
-    assert.deepStrictEqual(
-      (session.setFinalizeReviewText as ReturnType<typeof vi.fn>).mock.calls,
-      [["name: edited"]],
-    );
+    assert.deepStrictEqual(onFinalizeReviewTextChange.mock.calls, [
+      ["name: edited"],
+    ]);
 
     // Review shown ≠ hand-off: nothing moves before Confirm.
     assert.strictEqual(onNavigateToImport.mock.calls.length, 0);
@@ -299,10 +316,7 @@ describe("LiveSessionSection", () => {
 
     fireEvent.click(button(/^\s*Cancel\s*$/));
     await waitFor(() =>
-      assert.strictEqual(
-        (session.abandonFinalize as ReturnType<typeof vi.fn>).mock.calls.length,
-        1,
-      ),
+      assert.strictEqual(onAbandonFinalize.mock.calls.length, 1),
     );
     assert.strictEqual(onNavigateToImport.mock.calls.length, 0);
   });
@@ -323,9 +337,12 @@ describe("LiveSessionSection", () => {
       activeLayerId: "L42",
       seed: "the brief",
       turns,
-      finalize: { phase: "review", text: "name: edited-by-human" },
     });
-    renderSection({ session, onNavigateToImport });
+    renderSection({
+      session,
+      finalize: { phase: "review", text: "name: edited-by-human" },
+      onNavigateToImport,
+    });
 
     fireEvent.click(button(/Confirm and continue to import/));
 
@@ -357,8 +374,8 @@ describe("LiveSessionSection", () => {
       session: makeSession({
         sessionState: state({ status: "converged" }),
         activeLayerId: "L1",
-        finalize: { phase: "error", message: "model unavailable" },
       }),
+      finalize: { phase: "error", message: "model unavailable" },
     });
     const alert = document.querySelector('[role="alert"]');
     assert.match(alert?.textContent ?? "", /model unavailable/);
@@ -369,9 +386,11 @@ describe("LiveSessionSection", () => {
     const session = makeSession({
       sessionState: state({ status: "finalizing" }),
       activeLayerId: "L1",
+    });
+    renderSection({
+      session,
       finalize: { phase: "review", text: "name: spec" },
     });
-    renderSection({ session });
 
     fireEvent.click(button(/End session/));
     await waitFor(() =>
