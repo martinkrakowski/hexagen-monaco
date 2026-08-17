@@ -3,11 +3,11 @@
 subpath_conventions:
   server:
     allowed_consumers:
-      - sync
-      - mcp-server
-      - tui
-      - project-generation
-      - arch-linter
+    - sync
+    - mcp-server
+    - tui
+    - project-generation
+    - arch-linter
   enforcement: error
   require_marker: true
   marker_exclusions: []
@@ -22,8 +22,8 @@ subpath_conventions:
     enforcement: warn
 
 global_whitelist:
-  - "@hexagen/shared"
-  - "@hexagen/shared/**"
+  - '@hexagen/shared'
+  - '@hexagen/shared/**'
 
 # Exceptions to the domain npm-package ban (ADR-0054 §2c). A bare npm package
 # imported inside a `domain/` layer is a violation unless it is listed here for
@@ -41,15 +41,15 @@ global_whitelist:
 # merely re-validated the repo's OWN in-process port results were deleted rather
 # than listed here — see the amendment for which, and why.
 domain_package_allowlist:
-  - package: "manifest-generation"
+  - package: 'manifest-generation'
     allowed_packages:
       # HEX-026 disposition (AUDIT-2026-08-14 §2): YAML text is this domain's
       # core artifact — line-ranged, format-controlled dump, the same class as
       # the Zod parsing the files already do. Recorded as an accepted exception
       # instead of a codec port.
-      - "js-yaml"
+      - 'js-yaml'
 
-  - package: "project-configuration"
+  - package: 'project-configuration'
     allowed_packages:
       # `manifest-schema.ts` and `workspace-config.schema.ts` ARE the parser for
       # `.architecture/manifest.yaml` and `workspace.config.yaml`. Re-hosting
@@ -57,31 +57,31 @@ domain_package_allowlist:
       # cross-field refinement and structured `issues[].path` for this repo's
       # most central type — and the repo would still hand-write the JSON Schema
       # beside it, since no `zod-to-json-schema` is installed.
-      - "zod"
+      - 'zod'
 
-  - package: "agentic-interaction"
+  - package: 'agentic-interaction'
     allowed_packages:
       # `apply-repair-ops-to-yaml.ts` / `render-yaml.ts` — identical in kind to
       # the manifest-generation grant above: line-ranged, format-controlled YAML
       # is the artifact this domain manipulates. Listed so this one package is
       # not adjudicated two ways (js-yaml allowlisted, zod baselined).
-      - "js-yaml"
+      - 'js-yaml'
       # `manifest-draft.schema.ts` validates the LLM's manifest-draft JSON at the
       # model boundary; `manifest-draft.types.ts` derives the domain types from
       # it via `z.infer`, which is what keeps the parser and the type from
       # drifting apart.
-      - "zod"
+      - 'zod'
 
-  - package: "shared"
+  - package: 'shared'
     allowed_packages:
       # `bounded-context-type.ts` is the single source of truth for the
       # bounded-context-type vocabulary, and its schema is deliberately
       # case-insensitive (`z.preprocess` → trim + lowercase) because
       # LLM-generated manifests vary casing. The preprocessing IS the exception's
       # justification: it is a parser for untrusted input, not a type alias.
-      - "zod"
+      - 'zod'
 
-  - package: "local-llm"
+  - package: 'local-llm'
     allowed_packages:
       # `llm-request.vo.ts` carries the response schema an LLM call must validate
       # against (`schema: ZodSchema`). The value object exists to transport that
@@ -91,155 +91,155 @@ domain_package_allowlist:
       # deliberately does NOT exempt `import type`. A domain contract written in
       # terms of a third-party type still forces `zod` into package.json and onto
       # every implementer, so the exception is recorded rather than hidden.
-      - "zod"
+      - 'zod'
 
-  - package: "prompt-compiler"
+  - package: 'prompt-compiler'
     allowed_packages:
       # `structured-output-schema.ts` pairs an LLM structured-output request with
       # the `z.ZodTypeAny` its response is parsed against — the same carrier role
       # as local-llm's, one stage earlier in the pipeline.
-      - "zod"
+      - 'zod'
 
 test_double_rules:
   allowed_cross_package_imports: true
 
 package_rules:
-  - name: "web-driver"
+  - name: 'web-driver'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/visualization"
-      - "@hexagen/agentic-interaction"
-      - "@hexagen/byok"
+      - '@hexagen/shared'
+      - '@hexagen/visualization'
+      - '@hexagen/agentic-interaction'
+      - '@hexagen/byok'
     composition_root_exceptions:
       - apps/web/app/lib/wire.ts
       - apps/web/app/lib/wire.client.ts
       - apps/web/app/lib/wire.server.ts
 
-  - name: "sync"
+  - name: 'sync'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/project-configuration"
-      - "@hexagen/visualization"
-      - "@hexagen/governance"
-      - "@hexagen/core-domain"
-      - "@hexagen/template-engine"
+      - '@hexagen/shared'
+      - '@hexagen/project-configuration'
+      - '@hexagen/visualization'
+      - '@hexagen/governance'
+      - '@hexagen/core-domain'
+      - '@hexagen/template-engine'
 
-  - name: "project-generation"
+  - name: 'project-generation'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/sync"
+      - '@hexagen/shared'
+      - '@hexagen/sync'
 
-  - name: "project-configuration"
+  - name: 'project-configuration'
     allowed_imports:
-      - "@hexagen/shared"
+      - '@hexagen/shared'
 
-  - name: "visualization"
+  - name: 'visualization'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/project-configuration"
+      - '@hexagen/shared'
+      - '@hexagen/project-configuration'
 
-  - name: "mcp-server"
+  - name: 'mcp-server'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/messaging"
-      - "@hexagen/project-configuration"
-      - "@hexagen/governance"
-      - "@hexagen/visualization"
-      - "@hexagen/report-governance"
-      - "@hexagen/transaction-system"
-      - "@hexagen/agentic-interaction"
+      - '@hexagen/shared'
+      - '@hexagen/messaging'
+      - '@hexagen/project-configuration'
+      - '@hexagen/governance'
+      - '@hexagen/visualization'
+      - '@hexagen/report-governance'
+      - '@hexagen/transaction-system'
+      - '@hexagen/agentic-interaction'
 
-  - name: "intent-compiler"
+  - name: 'intent-compiler'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
 
-  - name: "ui-projection-compiler"
+  - name: 'ui-projection-compiler'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
 
-  - name: "layout-engine"
+  - name: 'layout-engine'
     allowed_imports: []
 
-  - name: "runtime"
+  - name: 'runtime'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
 
-  - name: "transaction-system"
+  - name: 'transaction-system'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
-      - "@hexagen/intent-compiler"
-      - "@hexagen/sync"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
+      - '@hexagen/intent-compiler'
+      - '@hexagen/sync'
 
-  - name: "prompt-compiler"
+  - name: 'prompt-compiler'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
-      - "@hexagen/project-configuration"
-      - "@hexagen/visualization"
-      - "@hexagen/governance"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
+      - '@hexagen/project-configuration'
+      - '@hexagen/visualization'
+      - '@hexagen/governance'
 
-  - name: "local-llm"
+  - name: 'local-llm'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/prompt-compiler"
-      - "@hexagen/project-configuration"
-      - "@hexagen/visualization"
-      - "@hexagen/governance"
+      - '@hexagen/shared'
+      - '@hexagen/prompt-compiler'
+      - '@hexagen/project-configuration'
+      - '@hexagen/visualization'
+      - '@hexagen/governance'
 
-  - name: "reconciliation-engine"
+  - name: 'reconciliation-engine'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
 
-  - name: "ai-pipeline"
+  - name: 'ai-pipeline'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
 
-  - name: "agentic-interaction"
+  - name: 'agentic-interaction'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
-      - "@hexagen/local-llm"
-      - "@hexagen/project-configuration"
-      - "@hexagen/ai-pipeline"
-      - "@hexagen/prompt-compiler"
-      - "@hexagen/reconciliation-engine"
-      - "@hexagen/transaction-system"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
+      - '@hexagen/local-llm'
+      - '@hexagen/project-configuration'
+      - '@hexagen/ai-pipeline'
+      - '@hexagen/prompt-compiler'
+      - '@hexagen/reconciliation-engine'
+      - '@hexagen/transaction-system'
 
-  - name: "wizard-orchestration"
+  - name: 'wizard-orchestration'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/messaging"
-      - "@hexagen/project-configuration"
-      - "@hexagen/sync"
+      - '@hexagen/shared'
+      - '@hexagen/messaging'
+      - '@hexagen/project-configuration'
+      - '@hexagen/sync'
 
-  - name: "external-integration"
+  - name: 'external-integration'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/project-generation"
+      - '@hexagen/shared'
+      - '@hexagen/project-generation'
 
-  - name: "model-settings"
+  - name: 'model-settings'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/ui"
-      - "@hexagen/local-llm"
+      - '@hexagen/shared'
+      - '@hexagen/ui'
+      - '@hexagen/local-llm'
 
-  - name: "manifest-generation"
+  - name: 'manifest-generation'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
-      - "@hexagen/agentic-interaction"
-      - "@hexagen/local-llm"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
+      - '@hexagen/agentic-interaction'
+      - '@hexagen/local-llm'
 
-  - name: "llm-driver"
+  - name: 'llm-driver'
     allowed_imports:
-      - "@hexagen/shared"
-      - "@hexagen/core-domain"
-      - "@hexagen/local-llm"
-      - "@hexagen/byok"
-      - "@hexagen/agentic-interaction"
+      - '@hexagen/shared'
+      - '@hexagen/core-domain'
+      - '@hexagen/local-llm'
+      - '@hexagen/byok'
+      - '@hexagen/agentic-interaction'
