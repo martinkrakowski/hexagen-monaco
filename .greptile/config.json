@@ -1,0 +1,69 @@
+{
+  "strictness": 2,
+  "commentTypes": ["logic", "syntax", "style"],
+  "ignorePatterns": "**/*.generated.*\n**/generated/**\n**/dist/**\nyarn.lock",
+  "instructions": "This monorepo is mid-way through an architecture-remediation arc whose thesis is that a check must not report more confidence than it has earned. Findings in that class are the most valuable ones available here, and the rules below make the specific shapes explicit. When you propose a fix, say what it does to inputs the current code already handles — particularly whether it turns a loud failure into a quiet one. Several correct findings in this repo have carried remedies worse than the defect they reported. Rules cite the ADR that owns them rather than restating it; see .greptile/rules.md and the files listed in .greptile/files.json.",
+  "rules": [
+    {
+      "id": "gate-can-pass-without-running",
+      "rule": "Flag any gate, guard, script or CI step that can report success when it did not actually run: a swallowed module-resolution error, a package filter that matches nothing and exits 0, a `continue-on-error` on a step described as a gate, or an exit code that cannot distinguish 'ran and found problems' from 'could not run'. This repo has shipped several of these and treats them as high severity.",
+      "scope": [
+        "scripts/**",
+        ".github/workflows/**",
+        "tools/**",
+        "**/package.json"
+      ],
+      "severity": "high",
+      "enabled": true
+    },
+    {
+      "id": "guard-needs-anti-vacuity-floor",
+      "rule": "A guard that asserts a population is clean must first assert the population is non-empty. Without that floor it goes green the moment its discovery pattern drifts. Flag any scan-then-assert test lacking one. Measured twice here: a drifted pattern with a neutered floor passed green over an empty population.",
+      "scope": ["**/__tests__/**", "**/*.{test,spec}.{ts,tsx}"],
+      "severity": "high",
+      "enabled": true
+    },
+    {
+      "id": "test-subject-replaced-by-mock",
+      "rule": "Flag a test that would still pass if the behaviour it names were removed — most often because a mock replaced the very subject under test, or because the assertion only proves a test double behaves like a test double. A green line that looks like coverage is worse than an absent one.",
+      "scope": ["**/__tests__/**", "**/*.{test,spec}.{ts,tsx}"],
+      "severity": "high",
+      "enabled": true
+    },
+    {
+      "id": "verifier-parser-blind-spot",
+      "rule": "When the code under review is itself a check — a guard, lint rule, CI script or schema — a parser or matcher that misses a legal syntax form is worth more than the same bug in ordinary code, because a verifier with a blind spot under-reports silently and is trusted while doing it. Flag missed import forms (named, default, namespace, type-position, dynamic, template-literal specifiers), regexes that stop at the first delimiter, and string scans that a legal rewrite would evade.",
+      "scope": ["**/__tests__/**", "tools/**", "scripts/**"],
+      "severity": "high",
+      "enabled": true
+    },
+    {
+      "id": "assertion-style-is-settled",
+      "rule": "Do NOT flag assertion style. ADR-0044 Decision item 2 permits `expect()` and RETAINS existing `node:assert/strict`; AGENTS.md:38 records both as fine, with `assert.*` retained codebase-wide. Decision item 3 is labelled a PER-RUNNER rule ('a Vitest file may use expect() or assert.*; new tests should prefer expect()') and is a PERMISSION, not an exclusivity constraint: mixing the two styles within one file is NOT a violation, and nothing else in the ADR makes it one. Only the preference for expect() in NEW tests is binding. Never propose migrating `assert.*` to `expect()` or treat it as legacy. ADR-0044 has no numbered sections — cite Decision items, not §N.",
+      "scope": ["**/__tests__/**", "**/*.{test,spec}.{ts,tsx}"],
+      "severity": "low",
+      "enabled": true
+    },
+    {
+      "id": "manifest-is-registry-not-inventory",
+      "rule": "`.architecture/**` is human-authored — do not propose edits to manifest.yaml, any context.yaml, or invariants/**. Its `layers.*.ports` and `layers.*.adapters` are a curated ownership registry, not a file inventory (ADR-0057): the filesystem is the authoritative inventory. ACCURACY is the invariant, so a phantom or misattributed entry is a real defect. COMPLETENESS is not — a port file with no entry is expected and is not a finding.",
+      "scope": [".architecture/**"],
+      "severity": "medium",
+      "enabled": true
+    },
+    {
+      "id": "flat-config-repetition-is-deliberate",
+      "rule": "Do NOT flag repeated `no-restricted-imports` entries across scoped ESLint blocks as duplication. Flat config REPLACES rule options rather than merging them, so a narrowly-scoped block silently drops every entry the broader block declared for the files it matches; deduplicating one already caused a real regression on main here. Note also that the rule matches the import STRING, not the resolved module, so a pattern must cover the relative form, the `@/`-alias form, and any barrel that re-exports the fenced module.",
+      "scope": ["**/eslint.config.{js,mjs}"],
+      "severity": "medium",
+      "enabled": true
+    },
+    {
+      "id": "generated-barrels-are-not-hand-edited",
+      "rule": "Some `index.ts` barrels carry an `@generated` marker and are emitted by @hexagen/sync. Do not propose hand-edits to a generated barrel — the next sync run reverts them. If an export surface is wrong, the generator or the source module is the place to fix it.",
+      "scope": ["**/index.ts"],
+      "severity": "low",
+      "enabled": true
+    }
+  ]
+}

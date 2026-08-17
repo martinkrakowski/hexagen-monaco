@@ -1,0 +1,28 @@
+{
+  "strictness": 1,
+  "commentTypes": ["logic", "syntax"],
+  "instructions": "This package emits code into customer projects, and `templates/` is that payload. It sits outside this repo's tsconfig, so it is never type-checked here and never runs in this repo's test suite — it is compiled by consumers instead. 'Outside the build' is therefore not a reason to treat a defect there as cosmetic: a layering violation, a wrong type, or an undeclared dependency in those files is one this product exports to its users, and it surfaces as a broken generated project rather than as a failure here. Review this package more strictly than the host codebase, not less. Style comments are switched off so the extra scrutiny lands on correctness. This config sits at the package root rather than inside `templates/` on purpose: every directory under `templates/` is enumerated as a template id by the guard suite and by the bundle generator, so a config folder there is read as a malformed template — and the bundle generator's filter excludes only `__`-prefixed names, so it would have shipped this file to customers.",
+  "rules": [
+    {
+      "id": "template-ports-own-their-failure-channel",
+      "rule": "A port emitted into a generated project must not import from `infrastructure/`, and must not return a vendor error class through a signature typed on the domain's own failure type (ADR-0053). This exact defect shipped to customers in 14 template files and was caught only by hand — nothing in this repo's CI compiles these sources.",
+      "scope": ["templates/**/files/src/**"],
+      "severity": "high",
+      "enabled": true
+    },
+    {
+      "id": "template-dependencies-must-be-providable",
+      "rule": "Flag any import in template payload of an npm package the generated project's own package.json will not provide. Template manifests currently have no mechanism to declare npm dependencies, so such an import fails `yarn typecheck` in the generated project before the customer's own code runs. Naming the package and the template is more useful than a generic warning.",
+      "scope": ["templates/**/files/**"],
+      "severity": "high",
+      "enabled": true
+    },
+    {
+      "id": "templates-dir-holds-only-templates",
+      "rule": "`packages/template-engine/templates/` is a data directory: every child directory is enumerated as a template id and must contain a `manifest.json`. Flag any non-template directory added there — tooling config, docs, scratch folders. The bundle generator filters only `__`-prefixed names, so a dot-directory is not excluded and would be shipped inside the published package.",
+      "scope": ["templates/**"],
+      "severity": "high",
+      "enabled": true
+    }
+  ]
+}

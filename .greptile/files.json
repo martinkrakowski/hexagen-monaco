@@ -1,0 +1,32 @@
+{
+  "files": [
+    {
+      "path": "../AGENTS.md",
+      "description": "Canonical convention document for this repo — tech decisions, coding standards, testing and commit conventions. The source of truth a rule should be checked against before it is enforced."
+    },
+    {
+      "path": "../.architecture/decisions/ADR-0057-manifest-layer-lists-are-a-curated-ownership-registry.md",
+      "description": "Why the manifest's layers.*.ports / adapters lists are a curated ownership registry rather than a file inventory: accuracy is the invariant, completeness is not."
+    },
+    {
+      "path": "../.architecture/decisions/ADR-0048-inbound-vs-outbound-port-directory-convention.md",
+      "description": "Port direction. A contract implemented by an infrastructure adapter, or injected into a use case as a dependency, is outbound (ports/out); a contract a use case itself implements is inbound."
+    },
+    {
+      "path": "../.architecture/decisions/ADR-0044-vitest-test-runner.md",
+      "description": "Test runner and assertion policy. §2 permits expect(); §3 makes the choice per file; assert.* is retained codebase-wide and is not legacy."
+    },
+    {
+      "path": "../.architecture/decisions/ADR-0054-arch-lint-enforcement-posture-ratchet-and-layer-coverage.md",
+      "description": "Arch-lint enforcement posture: the ratchet baseline shrinks and never grows, and the domain npm-package allowlist is deliberately short and justified per entry."
+    },
+    {
+      "path": "../.architecture/decisions/ADR-0021-prompt-compilation-llm-acl.md",
+      "description": "The @internal ACL over @hexagen/local-llm. Explains why a local-llm restriction is repeated inside narrowly-scoped ESLint blocks rather than being duplication."
+    },
+    {
+      "path": "../.architecture/decisions/ADR-0056-published-contract-is-the-binary-barrel-is-provisional.md",
+      "description": "The published contract of @hexagen-monaco/sync is the hexagen binary; the root barrel is provisional under 0.x and removals ride a minor, never a patch."
+    }
+  ]
+}
