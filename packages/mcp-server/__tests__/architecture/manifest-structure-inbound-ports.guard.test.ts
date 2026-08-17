@@ -26,7 +26,13 @@ import { fileURLToPath } from "node:url";
  * green no-op over an empty set — the failure mode this arc keeps finding.
  * Both halves also fail loudly when a contract name cannot be tied to an import
  * statement, rather than silently skipping it: an unparsed import form must not
- * be indistinguishable from a correctly filed port.
+ * be indistinguishable from a correctly filed port. That rule extends to the
+ * *declared type* as well — a field typed on anything but a single named
+ * contract (a union, an array, a generic) is reported, not skipped, because a
+ * skipped field leaves the population count unchanged and escapes every
+ * direction assertion. A last matchers-themselves block pins both readers: the
+ * `ports/in` segment match (barrels included, near-misses excluded) and the
+ * refusal to judge a compound type.
  *
  * It is source-text based on purpose. `ports/in` and `ports/out` type-check
  * identically, so `tsc` cannot catch a misfiled contract. The complementary
@@ -47,8 +53,35 @@ const DEPS_FILE = path.join(
   "mcp-server.types.ts",
 );
 
-/** Path segment every inbound-port specifier must contain, relative or not. */
-const INBOUND_SEGMENT = "/ports/in/";
+/**
+ * `ports/in` as a *path segment*, not as a substring. A file specifier
+ * (`../ports/in/create-port-tool.port.js`) and a directory barrel
+ * (`../ports/in`) are both legal inbound imports — a trailing-slash substring
+ * test silently misfiles the barrel — while near-misses such as `ports/input`
+ * or `ports/in-memory` must not match. Same rule as `isPortDirectionSpecifier`
+ * in `packages/project-configuration/__tests__/architecture/port-direction.guard.test.ts`.
+ */
+const INBOUND_SEGMENT = /(^|\/)ports\/in(\/|$)/;
+
+function isInboundSpecifier(specifier: string): boolean {
+  return INBOUND_SEGMENT.test(specifier.replace(/\\/g, "/"));
+}
+
+/**
+ * A declared type this guard can tie to exactly one import: a single
+ * identifier, optionally namespace-qualified. Anything compound — a union, an
+ * intersection, an array, a generic application — is **reported, not skipped**.
+ * A field whose type the scanner cannot read is precisely where a concrete
+ * use-case class hides: `x: SomeToolUseCase[]` was measured escaping both this
+ * guard (6/6 green) and the compile-time `ManifestStructureDepsAreInboundPorts`
+ * check, because a homomorphic mapped type over an array is the identity.
+ */
+const SINGLE_CONTRACT_TYPE = /^[A-Za-z0-9_$]+(?:\.[A-Za-z0-9_$]+)*$/;
+
+/** Every identifier occurring anywhere in a declared type's source text. */
+function identifiersOf(typeText: string): string[] {
+  return typeText.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) ?? [];
+}
 
 /** The seven tools of remediation item 6.5(a), by use-case module basename. */
 const MANIFEST_STRUCTURE_USE_CASE_MODULES = [
@@ -127,7 +160,16 @@ function implementedContractsOf(source: string): string[] {
   return contracts;
 }
 
-/** Field name → declared type name, for one interface body. */
+/**
+ * Field name → declared type *source text*, for one interface body.
+ *
+ * The type is captured verbatim up to the `;` rather than as a bare identifier.
+ * A narrower capture would skip any field carrying a compound type, and a
+ * skipped field is invisible to both the population count and the direction
+ * assertions below — the exact hole through which `x: SomeToolUseCase[]` was
+ * measured passing this guard. Reading the whole type keeps every field in the
+ * population; `SINGLE_CONTRACT_TYPE` then decides whether it can be judged.
+ */
 function interfaceFieldsOf(
   source: string,
   interfaceName: string,
@@ -139,9 +181,9 @@ function interfaceFieldsOf(
 
   const fields: Array<{ field: string; type: string }> = [];
   for (const match of body[1].matchAll(
-    /^\s*([A-Za-z0-9_$]+)\??\s*:\s*([A-Za-z0-9_$.]+)\s*;/gm,
+    /^\s*(?:readonly\s+)?([A-Za-z0-9_$]+)\??\s*:\s*([^;]+);/gm,
   )) {
-    fields.push({ field: match[1], type: match[2] });
+    fields.push({ field: match[1], type: match[2].trim() });
   }
   return fields;
 }
@@ -208,7 +250,7 @@ describe("HEX-019 — manifest-structure tools bind to inbound ports", () => {
           const specifier = imports.get(contract);
           if (specifier === undefined) continue;
           checked += 1;
-          if (!specifier.includes(INBOUND_SEGMENT)) {
+          if (!isInboundSpecifier(specifier)) {
             misfiled.push(`${module}: ${contract} <- ${specifier}`);
           }
         }
@@ -239,11 +281,17 @@ describe("HEX-019 — manifest-structure tools bind to inbound ports", () => {
       expect(fields).toHaveLength(MANIFEST_STRUCTURE_USE_CASE_MODULES.length);
 
       const offenders = fields.map(({ field, type }) => {
+        // A type the scanner cannot tie to one import is reported, never
+        // skipped: silence here is indistinguishable from a correctly filed
+        // port, and is where a concrete use-case class would hide.
+        if (!SINGLE_CONTRACT_TYPE.test(type)) {
+          return `${field}: ${type} <- compound type, not a single named contract`;
+        }
         const specifier = imports.get(type);
         if (specifier === undefined) {
           return `${field}: ${type} <- unresolved import`;
         }
-        return specifier.includes(INBOUND_SEGMENT)
+        return isInboundSpecifier(specifier)
           ? null
           : `${field}: ${type} <- ${specifier}`;
       });
@@ -258,11 +306,69 @@ describe("HEX-019 — manifest-structure tools bind to inbound ports", () => {
 
       expect(fields).toHaveLength(MANIFEST_STRUCTURE_USE_CASE_MODULES.length);
 
+      // Scans every identifier in the declared type, so a concrete class
+      // smuggled inside a union, an array or a generic is caught too.
       const concrete = fields
-        .filter(({ type }) => imports.get(type)?.includes(".use-case.js"))
+        .filter(({ type }) =>
+          identifiersOf(type).some((name) =>
+            imports.get(name)?.includes(".use-case.js"),
+          ),
+        )
         .map(({ field, type }) => `${field}: ${type}`);
 
       expect(concrete).toEqual([]);
+    });
+  });
+
+  describe("the matchers themselves", () => {
+    it("reads ports/in as a path segment, file specifier or directory barrel", () => {
+      expect(isInboundSpecifier("../ports/in/create-port-tool.port.js")).toBe(
+        true,
+      );
+      expect(
+        isInboundSpecifier("../../application/ports/in/mcp-server.port.js"),
+      ).toBe(true);
+      expect(isInboundSpecifier("../ports/in")).toBe(true);
+      expect(isInboundSpecifier("./ports/in/index.js")).toBe(true);
+      expect(isInboundSpecifier("..\\ports\\in\\index.js")).toBe(true);
+    });
+
+    it("does not match a near-miss segment", () => {
+      expect(isInboundSpecifier("../ports/input/foo.port.js")).toBe(false);
+      expect(isInboundSpecifier("../ports/in-memory/logger.js")).toBe(false);
+      expect(isInboundSpecifier("../ports/inbound/foo.port.js")).toBe(false);
+      expect(isInboundSpecifier("../ports/out/manifest-write.port.js")).toBe(
+        false,
+      );
+      expect(
+        isInboundSpecifier("../use-cases/create-port-tool.use-case.js"),
+      ).toBe(false);
+    });
+
+    it("refuses to judge a type it cannot tie to a single import", () => {
+      expect(SINGLE_CONTRACT_TYPE.test("CreatePortToolPort")).toBe(true);
+      expect(SINGLE_CONTRACT_TYPE.test("Ports.CreatePortToolPort")).toBe(true);
+      expect(SINGLE_CONTRACT_TYPE.test("CreatePortToolUseCase[]")).toBe(false);
+      expect(SINGLE_CONTRACT_TYPE.test("CreatePortToolPort | undefined")).toBe(
+        false,
+      );
+      expect(SINGLE_CONTRACT_TYPE.test("Promise<CreatePortToolPort>")).toBe(
+        false,
+      );
+    });
+
+    it("finds a concrete class hidden inside a compound type", () => {
+      const imports = new Map([
+        [
+          "CreatePortToolUseCase",
+          "../../application/use-cases/create-port-tool.use-case.js",
+        ],
+      ]);
+      const hidden = identifiersOf("CreatePortToolUseCase[]").some((name) =>
+        imports.get(name)?.includes(".use-case.js"),
+      );
+
+      expect(hidden).toBe(true);
     });
   });
 });

@@ -1,8 +1,5 @@
 import type { EventBusPort } from "@hexagen/messaging";
-import {
-  BOUNDED_CONTEXT_TYPES,
-  type BoundedContextType,
-} from "@hexagen/shared";
+import { BOUNDED_CONTEXT_TYPES } from "@hexagen/shared";
 import type {
   CreateContextInput,
   CreateContextOutput,
