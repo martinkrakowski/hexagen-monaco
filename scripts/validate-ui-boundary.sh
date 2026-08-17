@@ -385,6 +385,146 @@ done < <(printf '%s' "$NEUTRAL_FEATURE_BASELINE")
 neutral_pinned_count="$(printf '%s' "$NEUTRAL_FEATURE_BASELINE" | grep -c . || true)"
 echo "  ($neutral_pinned_count pre-existing neutral→slice import(s) pinned — shrink, do not grow)"
 
+# Check 8: every component prop type in packages/ui carries the
+# NoSemanticState brand (HEX-031 / DESIGN.md §3.4).
+#
+# DESIGN.md §3.4 says "All @hexagen/ui component props **must** extend
+# NoSemanticState<T>", but nothing enforced the requirement, so Dialog, Tabs,
+# Accordion, Skeleton and CopyButton shipped prop types that accept
+# `loading`/`error`/`status`/`data` freely. Check 3 above is the complement,
+# not a substitute: it only fires once someone has actually WRITTEN a
+# forbidden token, whereas §3.4 makes the missing brand itself the defect —
+# the brand is what turns the next such prop into a compile error at the call
+# site rather than a lint finding after the fact.
+#
+# SCOPE. A declaration is in scope when it is an `interface`/`type` whose name
+# ends in `Props` — nothing more. An earlier revision additionally required a
+# same-line `extends`, `=` or `{`, which silently skipped two legal TypeScript
+# forms and reported them as compliant:
+#
+#   export interface FooProps<T> extends Bar {}   // generic component contract
+#   export interface FooProps                     // prettier-wrapped heritage
+#     extends Bar {}
+#
+# Both are component contracts, and a skipped declaration is worse than a
+# missing check because the gate prints "scanned" and a green tick over it.
+# Scope is therefore purely name-shaped, and the one type-level *utility* that
+# shape catches is exempted BY NAME below, where the exemption is visible and
+# goes stale loudly.
+#
+# The modifier prefix is a REPEATED alternation, `((export|default|declare) )*`,
+# not an optional `(export )?`. TypeScript allows the keywords to stack and to
+# appear without `export` — `export default interface FooProps`,
+# `export declare interface FooProps`, `declare interface FooProps` — and an
+# `export`-only prefix skipped all three silently while the other 28 contracts
+# held PROPS_SCANNED above its floor.
+#
+# BRAND DETECTION. The brand must be found in *type position*: the window is
+# stripped of `//` comments and then required to match
+# `(extends|=|&|\|) NoSemanticState<`. A bare `grep NoSemanticState` over the
+# window (the earlier revision) accepted a comment or a string literal
+# mentioning the token, so `// NoSemanticState is not needed here` above an
+# unbranded interface passed the gate — and CopyButton.tsx really does carry
+# such a comment two lines above its declaration.
+#
+# WINDOW. Prettier wraps long heritage clauses and union arms onto following
+# lines (`AccordionRootProps =` / `| NoSemanticState<{`), so the window runs to
+# 4 lines — but it is also cut at the line before the NEXT prop declaration in
+# the same file, so a branded neighbour can never satisfy an unbranded
+# declaration that happens to sit directly above it.
+#
+# There is deliberately NO baseline of unbranded types: every component prop
+# type in packages/ui/src is branded today, and a baseline here would be a
+# standing invitation to add the next unbranded one.
+
+# Type-level utilities that are NOT component contracts. `AllowedProps<T>` is a
+# mapped type living in the module that DEFINES the brand — branding it would
+# be circular. Entries are "<path-from-repo-root>|<TypeName>". A stale entry
+# (declaration renamed or deleted) fails, so an exemption cannot rot into
+# permanent permission.
+PROP_UTILITY_EXEMPTIONS="
+packages/ui/src/types/forbidden-brand.ts|AllowedProps
+"
+PROP_UTILITY_HITS=""
+
+echo ""
+echo "Checking NoSemanticState brand on packages/ui prop types (DESIGN.md §3.4)..."
+PROPS_SCANNED=0
+while IFS= read -r file; do
+  [ -n "$file" ] || continue
+  rel_file="${file#"$ROOT_DIR"/}"
+  file_lines="$(wc -l <"$file" | tr -d '[:space:]')"
+  decl_lines=""
+  while IFS= read -r decl; do
+    [ -n "$decl" ] || continue
+    decl_lines="${decl_lines}${decl}
+"
+  done < <(grep -nE "^[[:space:]]*((export|default|declare)[[:space:]]+)*(interface|type)[[:space:]]+[A-Za-z0-9_]*Props([^A-Za-z0-9_]|\$)" "$file" 2>/dev/null || true)
+  decl_index=0
+  while IFS= read -r decl; do
+    [ -n "$decl" ] || continue
+    decl_index=$((decl_index + 1))
+    lineno="${decl%%:*}"
+    name="$(printf '%s' "$decl" |
+      sed -E 's/^[0-9]+:[[:space:]]*((export|default|declare)[[:space:]]+)*(interface|type)[[:space:]]+([A-Za-z0-9_]*Props).*/\4/')"
+
+    if printf '%s' "$PROP_UTILITY_EXEMPTIONS" | grep -Fxq "${rel_file}|${name}"; then
+      PROP_UTILITY_HITS="${PROP_UTILITY_HITS}${rel_file}|${name}
+"
+      continue
+    fi
+
+    PROPS_SCANNED=$((PROPS_SCANNED + 1))
+
+    # Cut the window at the line before the next prop declaration so a branded
+    # neighbour cannot vouch for an unbranded declaration above it.
+    next_lineno="$(printf '%s' "$decl_lines" |
+      sed -n "$((decl_index + 1))p" | cut -d: -f1)"
+    window_end=$((lineno + 3))
+    if [ -n "$next_lineno" ] && [ "$next_lineno" -le "$window_end" ]; then
+      window_end=$((next_lineno - 1))
+    fi
+    [ "$window_end" -gt "$file_lines" ] && window_end="$file_lines"
+
+    # `//` comments stripped, then newlines folded, so a wrapped
+    # `=\n  | NoSemanticState<{` still reads as one anchored match while a
+    # commented-out or quoted mention of the token does not.
+    if sed -n "${lineno},${window_end}p" "$file" |
+      sed -E 's://.*$::' |
+      tr '\n' ' ' |
+      grep -qE '(extends|=|&|\|)[[:space:]]*NoSemanticState[[:space:]]*<'; then
+      continue
+    fi
+    echo "  ❌ Prop type without NoSemanticState brand: $name"
+    echo "     → ${rel_file}:${lineno}"
+    echo "     DESIGN.md §3.4: every @hexagen/ui prop type must extend"
+    echo "     NoSemanticState<T> so information state cannot reach presentation."
+    VIOLATIONS=$((VIOLATIONS + 1))
+  done < <(printf '%s' "$decl_lines")
+done < <(find "$UI_SRC" \( -name '*.ts' -o -name '*.tsx' \) 2>/dev/null || true)
+
+while IFS= read -r pinned; do
+  [ -n "$pinned" ] || continue
+  if ! printf '%s' "$PROP_UTILITY_HITS" | grep -Fxq "$pinned"; then
+    echo "  ❌ Stale prop-utility exemption — this declaration no longer exists:"
+    echo "     → ${pinned}"
+    echo "     Remove it from PROP_UTILITY_EXEMPTIONS in $(basename "${BASH_SOURCE[0]}")."
+    VIOLATIONS=$((VIOLATIONS + 1))
+  fi
+done < <(printf '%s' "$PROP_UTILITY_EXEMPTIONS")
+
+# Anti-vacuity: this check scans a population, so a broken pattern (renamed
+# directory, tightened regex, `find` returning nothing) would report a clean
+# sweep of zero files. packages/ui has had double-digit prop types since the
+# design-system split; refuse to certify compliance below that.
+if [ "$PROPS_SCANNED" -lt 10 ]; then
+  echo "  ❌ Only ${PROPS_SCANNED} prop type(s) scanned under ${UI_SRC}."
+  echo "     The brand check found essentially nothing to check — treat that as"
+  echo "     a broken scan, not as compliance."
+  exit 2
+fi
+echo "  ($PROPS_SCANNED prop type(s) scanned)"
+
 echo ""
 echo "============================================================"
 if [ "$VIOLATIONS" -gt 0 ]; then

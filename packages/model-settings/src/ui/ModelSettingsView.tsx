@@ -5,19 +5,25 @@ import {
   LOCAL_MODELS,
   getModelDescriptor,
   recommendModel,
-} from "@hexagen/local-llm";
-import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
+} from "@hexagen/local-llm/client";
+import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm/client";
 import { useHardwareDetection } from "./useHardwareDetection";
-import { Cloud, CheckCircle2 } from "lucide-react";
 
 import {
-  ModelSettingsHeader,
-  WarningBanner,
-  ModelTierSection,
-  CloudModelsSection,
-  StorageFooter,
-} from "./index";
+  ModelSettingsPanel,
+  type ModelTierGroup,
+} from "./model-settings/model-settings-panel";
 
+/**
+ * HEX-022 — this is the CONTAINER half of the model settings screen. It owns
+ * every seam the presentational half must not have: the cache probe, the
+ * engine switch/delete transports, hardware detection and the recommendation
+ * use case. It renders `ModelSettingsPanel`, whose props type structurally
+ * refuses all four (see `NoModelTransport`).
+ *
+ * The public prop signature is unchanged, so the split is invisible to the
+ * three call sites that mount this component.
+ */
 interface ModelSettingsViewProps {
   currentModelId: DomainModelId | null;
   loadedModel: ModelMetadata | null;
@@ -102,6 +108,24 @@ function modelSettingsReducer(
       return state;
   }
 }
+
+/**
+ * Tier layout, projected from the catalog once. Empty tiers are dropped here
+ * rather than guarded at each render site, which is why the panel can render
+ * `tiers.map(...)` unconditionally.
+ */
+const TIER_ORDER: ReadonlyArray<{ title: string; tier: string }> = [
+  { title: "Desktop", tier: "desktop-high" },
+  { title: "Compact", tier: "desktop-compact" },
+  { title: "Ultra-Light", tier: "ultra-light" },
+];
+
+const MODEL_TIERS: readonly ModelTierGroup[] = TIER_ORDER.map(
+  ({ title, tier }) => ({
+    title,
+    descriptors: LOCAL_MODELS.filter((m) => m.tier === tier),
+  }),
+).filter((group) => group.descriptors.length > 0);
 
 export function ModelSettingsView({
   currentModelId,
@@ -350,181 +374,47 @@ export function ModelSettingsView({
     ? (downloadProgress ?? 0)
     : (simulatedDownload?.progress ?? 0);
 
-  // Only render the two-column generation/Q&A split when the models actually
-  // differ — when the staged chain head equals the chat model, a split layout
-  // would name the same model twice.
-  const showSplit =
-    Boolean(generationModelName) && generationModelName !== serverModelName;
-
   return (
-    <div className="h-full flex flex-col bg-card">
-      {!hideHeader && <ModelSettingsHeader onBack={onBack} />}
-
-      {requiresModelWarning && <WarningBanner />}
-
-      <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-5 mx-auto max-w-2xl w-full">
-        {hasServerApiKey && (
-          <div className="mb-6 p-5 rounded-lg border border-primary/30 bg-card relative overflow-hidden animate-fade-in-up">
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/5 to-transparent animate-shimmer-slow" />
-            <div className="relative z-10 flex items-start gap-4">
-              <div className="p-2 rounded-md bg-primary/15 text-primary">
-                <Cloud className="h-6 w-6" />
-              </div>
-              <div className="flex-1 space-y-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-foreground flex items-center gap-1.5 text-base">
-                    Environment LLM Active
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-success/10 text-success">
-                      Active
-                    </span>
-                  </h3>
-                </div>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {showSplit
-                    ? "Server-side cloud LLMs are configured in the environment. Manifest generation and the assistant's question answering are served by separate models."
-                    : "A server-side cloud LLM key is configured in the environment variables. The application will use this for high-performance manifest generation."}
-                </p>
-                <div className="pt-3 grid grid-cols-2 gap-4 text-xs">
-                  {showSplit ? (
-                    <>
-                      <div>
-                        <span className="text-muted-foreground block font-medium">
-                          Manifest Generation
-                        </span>
-                        <span className="font-mono text-foreground font-semibold">
-                          {generationModelName}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground block font-medium">
-                          Assistant Q&amp;A
-                        </span>
-                        <span className="font-mono text-foreground font-semibold">
-                          {serverModelName ?? "Configured by environment"}
-                        </span>
-                      </div>
-                    </>
-                  ) : (
-                    <div>
-                      <span className="text-muted-foreground block font-medium">
-                        Model Name
-                      </span>
-                      <span className="font-mono text-foreground font-semibold">
-                        {serverModelName ?? "Configured by environment"}
-                      </span>
-                    </div>
-                  )}
-                  {/* In split mode this is the 3rd cell of a 2-col grid —
-                      span the full row so it doesn't sit as an orphan. */}
-                  <div className={showSplit ? "col-span-2" : undefined}>
-                    <span className="text-muted-foreground block font-medium">
-                      Status
-                    </span>
-                    <span className="text-success font-medium flex items-center gap-1">
-                      <CheckCircle2 className="h-3 w-3" /> Ready
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-        {LOCAL_MODELS.some((m) => m.tier === "desktop-high") && (
-          <ModelTierSection
-            title="Desktop"
-            descriptors={LOCAL_MODELS.filter((m) => m.tier === "desktop-high")}
-            currentModelId={currentModelId}
-            selectedModelId={selectedModelId}
-            confirmDeleteId={confirmDeleteId}
-            pendingSwitchId={pendingSwitchId}
-            recommendedModelId={recommendedModelId}
-            cacheStatusMap={cacheStatus}
-            onSelectModel={handleSelectModel}
-            onDelete={setConfirmDeleteId}
-            onConfirmDelete={(id) => handleDelete(id)}
-            onCancelDelete={() => setConfirmDeleteId(null)}
-            onConfirmSwitch={handleConfirmSwitch}
-            onCancelSwitch={() => setPendingSwitchId(null)}
-            currentModelDisplayName={currentModelDisplayName}
-            isLoading={isLoading}
-            isSwitching={isSwitching}
-            isDeleting={isDeleting}
-            error={error}
-            loadedModel={loadedModel}
-            compatibilityIssue={undefined}
-            downloadingModelId={actualDownloadingModelId}
-            downloadProgress={actualDownloadProgress}
-          />
-        )}
-
-        {LOCAL_MODELS.some((m) => m.tier === "desktop-compact") && (
-          <ModelTierSection
-            title="Compact"
-            descriptors={LOCAL_MODELS.filter(
-              (m) => m.tier === "desktop-compact",
-            )}
-            currentModelId={currentModelId}
-            selectedModelId={selectedModelId}
-            confirmDeleteId={confirmDeleteId}
-            pendingSwitchId={pendingSwitchId}
-            recommendedModelId={recommendedModelId}
-            cacheStatusMap={cacheStatus}
-            onSelectModel={handleSelectModel}
-            onDelete={setConfirmDeleteId}
-            onConfirmDelete={(id) => handleDelete(id)}
-            onCancelDelete={() => setConfirmDeleteId(null)}
-            onConfirmSwitch={handleConfirmSwitch}
-            onCancelSwitch={() => setPendingSwitchId(null)}
-            currentModelDisplayName={currentModelDisplayName}
-            isLoading={isLoading}
-            isSwitching={isSwitching}
-            isDeleting={isDeleting}
-            error={error}
-            loadedModel={loadedModel}
-            compatibilityIssue={undefined}
-            downloadingModelId={actualDownloadingModelId}
-            downloadProgress={actualDownloadProgress}
-          />
-        )}
-
-        {LOCAL_MODELS.some((m) => m.tier === "ultra-light") && (
-          <ModelTierSection
-            title="Ultra-Light"
-            descriptors={LOCAL_MODELS.filter((m) => m.tier === "ultra-light")}
-            currentModelId={currentModelId}
-            selectedModelId={selectedModelId}
-            confirmDeleteId={confirmDeleteId}
-            pendingSwitchId={pendingSwitchId}
-            recommendedModelId={recommendedModelId}
-            cacheStatusMap={cacheStatus}
-            onSelectModel={handleSelectModel}
-            onDelete={setConfirmDeleteId}
-            onConfirmDelete={(id) => handleDelete(id)}
-            onCancelDelete={() => setConfirmDeleteId(null)}
-            onConfirmSwitch={handleConfirmSwitch}
-            onCancelSwitch={() => setPendingSwitchId(null)}
-            currentModelDisplayName={currentModelDisplayName}
-            isLoading={isLoading}
-            isSwitching={isSwitching}
-            isDeleting={isDeleting}
-            error={error}
-            loadedModel={loadedModel}
-            compatibilityIssue={undefined}
-            downloadingModelId={actualDownloadingModelId}
-            downloadProgress={actualDownloadProgress}
-          />
-        )}
-
-        <CloudModelsSection onSwitchToCloud={onSwitchToCloud} />
-      </div>
-
-      <StorageFooter
-        totalCached={totalCached}
-        totalCachedSize={totalCachedSize}
-        currentModelId={currentModelId}
-        isLoading={isLoading}
-        onResetConfig={onResetConfig}
-      />
-    </div>
+    <ModelSettingsPanel
+      tiers={MODEL_TIERS}
+      currentModelId={currentModelId}
+      currentModelDisplayName={currentModelDisplayName}
+      selectedModelId={selectedModelId}
+      loadedModel={loadedModel}
+      recommendedModelId={recommendedModelId}
+      cacheStatusMap={cacheStatus}
+      totalCached={totalCached}
+      totalCachedSize={totalCachedSize}
+      confirmDeleteId={confirmDeleteId}
+      pendingSwitchId={pendingSwitchId}
+      isLoading={isLoading}
+      isSwitching={isSwitching}
+      isDeleting={isDeleting}
+      error={error}
+      downloadingModelId={actualDownloadingModelId}
+      downloadProgress={actualDownloadProgress}
+      hasServerApiKey={hasServerApiKey}
+      serverModelName={serverModelName}
+      generationModelName={generationModelName}
+      hideHeader={hideHeader}
+      requiresModelWarning={requiresModelWarning}
+      // The async orchestration stays here; the panel only ever sees
+      // fire-and-forget intents.
+      onSelectModel={(modelId) => {
+        void handleSelectModel(modelId);
+      }}
+      onRequestDelete={setConfirmDeleteId}
+      onConfirmDelete={(modelId) => {
+        void handleDelete(modelId);
+      }}
+      onCancelDelete={() => setConfirmDeleteId(null)}
+      onConfirmSwitch={() => {
+        void handleConfirmSwitch();
+      }}
+      onCancelSwitch={() => setPendingSwitchId(null)}
+      onBack={onBack}
+      onResetConfig={onResetConfig}
+      onSwitchToCloud={onSwitchToCloud}
+    />
   );
 }

@@ -4,10 +4,14 @@ import { useState, useCallback } from "react";
 import { Copy, Check } from "lucide-react";
 import { Button } from "./Button.js";
 import type { ButtonProps } from "./Button.js";
+import type { NoSemanticState } from "../types/forbidden-brand.js";
 
-export interface CopyButtonProps extends Omit<
-  ButtonProps,
-  "onClick" | "children"
+// `Omit` over an already-branded `ButtonProps` happens to carry the brand
+// symbol through, so this type was accidentally compliant. Re-applying
+// NoSemanticState makes the guarantee load-bearing rather than incidental:
+// if ButtonProps ever stops being branded, this declaration still is.
+export interface CopyButtonProps extends NoSemanticState<
+  Omit<ButtonProps, "onClick" | "children">
 > {
   text: string;
   label?: string;

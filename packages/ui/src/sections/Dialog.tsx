@@ -2,10 +2,11 @@
 
 import * as React from "react";
 import { cn } from "../lib/utils.js";
+import type { NoSemanticState } from "../types/forbidden-brand.js";
 
 const DialogIdContext = React.createContext<string>("");
 
-interface DialogProps {
+export type DialogProps = NoSemanticState<{
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
@@ -15,7 +16,7 @@ interface DialogProps {
    * programmatically via the `open` prop still works.
    */
   dismissible?: boolean;
-}
+}>;
 
 function Dialog({ open, onClose, children, dismissible = true }: DialogProps) {
   const dialogRef = React.useRef<HTMLDialogElement>(null);
@@ -77,7 +78,9 @@ function Dialog({ open, onClose, children, dismissible = true }: DialogProps) {
 }
 Dialog.displayName = "Dialog";
 
-type DialogContentProps = React.HTMLAttributes<HTMLDivElement>;
+export type DialogContentProps = NoSemanticState<
+  React.HTMLAttributes<HTMLDivElement>
+>;
 
 const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
   ({ className, children, ...props }, ref) => (
@@ -97,7 +100,9 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
 );
 DialogContent.displayName = "DialogContent";
 
-type DialogHeaderProps = React.HTMLAttributes<HTMLDivElement>;
+export type DialogHeaderProps = NoSemanticState<
+  React.HTMLAttributes<HTMLDivElement>
+>;
 
 const DialogHeader = React.forwardRef<HTMLDivElement, DialogHeaderProps>(
   ({ className, ...props }, ref) => (
@@ -110,30 +115,37 @@ const DialogHeader = React.forwardRef<HTMLDivElement, DialogHeaderProps>(
 );
 DialogHeader.displayName = "DialogHeader";
 
-const DialogTitle = React.forwardRef<
-  HTMLHeadingElement,
+export type DialogTitleProps = NoSemanticState<
   React.HTMLAttributes<HTMLHeadingElement>
->(({ className, children, ...props }, ref) => {
-  const id = React.useContext(DialogIdContext);
-  return (
-    <h2
-      ref={ref}
-      id={id || undefined}
-      className={cn(
-        "text-lg font-semibold leading-none tracking-tight",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </h2>
-  );
-});
+>;
+
+const DialogTitle = React.forwardRef<HTMLHeadingElement, DialogTitleProps>(
+  ({ className, children, ...props }, ref) => {
+    const id = React.useContext(DialogIdContext);
+    return (
+      <h2
+        ref={ref}
+        id={id || undefined}
+        className={cn(
+          "text-lg font-semibold leading-none tracking-tight",
+          className,
+        )}
+        {...props}
+      >
+        {children}
+      </h2>
+    );
+  },
+);
 DialogTitle.displayName = "DialogTitle";
+
+export type DialogDescriptionProps = NoSemanticState<
+  React.HTMLAttributes<HTMLParagraphElement>
+>;
 
 const DialogDescription = React.forwardRef<
   HTMLParagraphElement,
-  React.HTMLAttributes<HTMLParagraphElement>
+  DialogDescriptionProps
 >(({ className, ...props }, ref) => (
   <p
     ref={ref}
@@ -143,7 +155,9 @@ const DialogDescription = React.forwardRef<
 ));
 DialogDescription.displayName = "DialogDescription";
 
-type DialogFooterProps = React.HTMLAttributes<HTMLDivElement>;
+export type DialogFooterProps = NoSemanticState<
+  React.HTMLAttributes<HTMLDivElement>
+>;
 
 const DialogFooter = React.forwardRef<HTMLDivElement, DialogFooterProps>(
   ({ className, ...props }, ref) => (

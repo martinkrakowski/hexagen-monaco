@@ -1,22 +1,29 @@
 import { ModelCard, type ModelCardStatus } from "./model-card";
-import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
+import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm/client";
 
-interface ModelTierSectionProps {
+/**
+ * The catalog fields this section renders. Structural on purpose: the tier
+ * list is projected by the container, so the presentational tree never has to
+ * reach for `LOCAL_MODELS` itself.
+ */
+export interface ModelTierDescriptor {
+  readonly modelId: DomainModelId;
+  readonly displayName: string;
+  readonly description: string;
+  readonly downloadSizeGB: number;
+  readonly vramRequiredMB: number;
+  readonly codingRating: number;
+}
+
+export interface ModelTierSectionProps {
   title: string;
-  descriptors: Array<{
-    modelId: DomainModelId;
-    displayName: string;
-    description: string;
-    downloadSizeGB: number;
-    vramRequiredMB: number;
-    codingRating: number;
-  }>;
+  descriptors: readonly ModelTierDescriptor[];
   currentModelId: DomainModelId | null;
   selectedModelId: DomainModelId | null;
   confirmDeleteId: DomainModelId | null;
   pendingSwitchId: DomainModelId | null;
   recommendedModelId: DomainModelId | null;
-  cacheStatusMap: Map<
+  cacheStatusMap: ReadonlyMap<
     DomainModelId,
     { isCached: boolean; isChecking: boolean }
   >;

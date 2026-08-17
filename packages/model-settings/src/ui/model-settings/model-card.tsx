@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
+import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm/client";
 
 export type ModelCardStatus =
   | { status: "default" }

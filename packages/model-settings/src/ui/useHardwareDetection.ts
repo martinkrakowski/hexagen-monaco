@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import type { HardwareProfile } from "@hexagen/local-llm";
+import type { HardwareProfile } from "@hexagen/local-llm/client";
 
 const HARDWARE_PROFILE_CACHE_KEY = "hexagen:local-llm:hardware-profile";
 

@@ -9,6 +9,7 @@ import {
 } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "../lib/utils.js";
+import type { NoSemanticState } from "../types/forbidden-brand.js";
 
 // ─── Root context ──────────────────────────────────────────────────────────────
 
@@ -51,11 +52,14 @@ function useAccordionItemContext(): string {
 
 // ─── Root ───────────────────────────────────────────────────────────────────────
 
-type RootProps = {
-  children: ReactNode;
-  className?: string;
-} & (
-  | {
+// The brand is applied to each arm rather than to the union as a whole:
+// `NoSemanticState<A | B>` is `Omit<A | B, …> & Brand`, and `Omit` over a
+// union collapses it into a single object type, which would destroy the
+// `type: "single" | "multiple"` discriminant the Root body narrows on.
+export type AccordionRootProps =
+  | NoSemanticState<{
+      children: ReactNode;
+      className?: string;
       /** Only one item open at a time. `collapsible` (default true) allows the
        * open item to close, leaving none open. */
       type?: "single";
@@ -63,18 +67,19 @@ type RootProps = {
       defaultValue?: string;
       value?: string;
       onValueChange?: (value: string) => void;
-    }
-  | {
+    }>
+  | NoSemanticState<{
+      children: ReactNode;
+      className?: string;
       /** Any number of items open independently. */
       type: "multiple";
       collapsible?: never;
       defaultValue?: string[];
       value?: string[];
       onValueChange?: (value: string[]) => void;
-    }
-);
+    }>;
 
-function Root(props: RootProps) {
+function Root(props: AccordionRootProps) {
   const { children, className } = props;
   const type = props.type ?? "single";
   // Stable per-instance prefix so two Roots reusing the same item value emit
@@ -153,15 +158,13 @@ function Root(props: RootProps) {
 
 // ─── Item ─────────────────────────────────────────────────────────────────────
 
-function Item({
-  value,
-  children,
-  className,
-}: {
+export type AccordionItemProps = NoSemanticState<{
   value: string;
   children: ReactNode;
   className?: string;
-}) {
+}>;
+
+function Item({ value, children, className }: AccordionItemProps) {
   const { isOpen } = useAccordionContext();
   return (
     <AccordionItemContext.Provider value={value}>
@@ -177,6 +180,11 @@ function Item({
 
 // ─── Trigger ──────────────────────────────────────────────────────────────────
 
+export type AccordionTriggerProps = NoSemanticState<{
+  children: ReactNode;
+  className?: string;
+}>;
+
 /**
  * The accordion header's interactive button (WAI-ARIA accordion pattern: it
  * carries `aria-expanded` and `aria-controls` for its panel).
@@ -188,13 +196,7 @@ function Item({
  * The Trigger deliberately renders only the `<button>`, because the right
  * heading level depends on where the accordion sits in the document.
  */
-function Trigger({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
+function Trigger({ children, className }: AccordionTriggerProps) {
   const { isOpen, toggle, isToggleDisabled, triggerId, contentId } =
     useAccordionContext();
   const value = useAccordionItemContext();
@@ -262,13 +264,12 @@ function Trigger({
 
 // ─── Content ─────────────────────────────────────────────────────────────────
 
-function Content({
-  children,
-  className,
-}: {
+export type AccordionContentProps = NoSemanticState<{
   children: ReactNode;
   className?: string;
-}) {
+}>;
+
+function Content({ children, className }: AccordionContentProps) {
   const { isOpen, triggerId, contentId } = useAccordionContext();
   const value = useAccordionItemContext();
   if (!isOpen(value)) return null;
