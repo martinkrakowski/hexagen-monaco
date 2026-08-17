@@ -49,7 +49,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   sync-check:

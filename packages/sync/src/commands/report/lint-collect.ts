@@ -22,16 +22,13 @@ export function createSpawnLintCollector(workspaceRoot: string): LintCollector {
       if (bin === null) return empty(false);
       const command = archLinterCommand(bin);
       try {
-        const output = execFileSync(
-          "sh",
-          ["-c", `${command} --json --ratchet`],
-          {
-            cwd: workspaceRoot,
-            encoding: "utf8",
-            stdio: ["ignore", "pipe", "pipe"],
-            timeout: 120_000,
-          },
-        );
+        const output = execFileSync(command, ["--json", "--ratchet"], {
+          cwd: workspaceRoot,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+          timeout: 120_000,
+          shell: process.platform === "win32",
+        });
         return parseLintJson(output);
       } catch (error) {
         const err = error as { stdout?: string; status?: number };

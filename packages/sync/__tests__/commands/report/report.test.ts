@@ -47,7 +47,7 @@ describe("generateContextMapMermaid", () => {
   it("emits a flowchart of depends_on and a classDiagram of ports", () => {
     const mermaid = generateContextMapMermaid(manifest);
     assert.match(mermaid, /flowchart LR/);
-    assert.match(mermaid, /billing --> shared/);
+    assert.match(mermaid, /ctx0 --> ctx1/);
     assert.match(mermaid, /classDiagram/);
     assert.match(mermaid, /\+ChargePort/);
     assert.match(mermaid, /-LedgerPort/);

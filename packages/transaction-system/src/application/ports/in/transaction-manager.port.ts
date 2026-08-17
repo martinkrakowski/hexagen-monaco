@@ -45,4 +45,19 @@ export interface TransactionManagerPort {
    * as {@link commit} — unknown id, or already terminal.
    */
   rollback(transactionId: string, reason?: string): Transaction | null;
+
+  /**
+   * Mark a transaction as failed due to execution error.
+   */
+  fail(transactionId: string, reason?: string): Transaction | null;
+
+  /**
+   * Atomically transition a transaction from expectedStatus to newStatus.
+   * Returns `null` if the transaction is missing or its current status != expectedStatus.
+   */
+  compareAndSetStatus(
+    transactionId: string,
+    expectedStatus: TransactionStatus,
+    newStatus: TransactionStatus,
+  ): Transaction | null;
 }

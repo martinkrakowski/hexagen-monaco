@@ -56,16 +56,36 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
         };
       }
 
+      const claimed = this.transactionManager.compareAndSetStatus(
+        input.transaction_id,
+        "pending",
+        "speculative",
+      );
+
+      if (!claimed) {
+        return {
+          success: false,
+          error: new Error(
+            `Transaction ${input.transaction_id} could not be claimed for processing`,
+          ),
+        };
+      }
+
       const previousStatus = tx.status;
-      const pending = readPendingMutation(tx);
+      const pending = readPendingMutation(claimed);
       let applied: AcceptTransactionToolResult["applied"];
 
-      if (pending) {
-        applied = await applyPendingManifestMutation(pending, {
-          manifestWrite: this.manifestWritePort,
-          scaffolding: this.scaffoldingPort,
-          eventBus: this.eventBusPort,
-        });
+      try {
+        if (pending) {
+          applied = await applyPendingManifestMutation(pending, {
+            manifestWrite: this.manifestWritePort,
+            scaffolding: this.scaffoldingPort,
+            eventBus: this.eventBusPort,
+          });
+        }
+      } catch (error) {
+        this.transactionManager.fail(input.transaction_id, String(error));
+        return { success: false, error: error as Error };
       }
 
       const committed = this.transactionManager.commit(input.transaction_id);

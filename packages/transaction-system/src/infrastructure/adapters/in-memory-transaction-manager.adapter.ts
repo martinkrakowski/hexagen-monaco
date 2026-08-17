@@ -172,4 +172,32 @@ export class InMemoryTransactionManager implements TransactionManagerPort {
 
     return updated;
   }
+
+  fail(transactionId: string, _reason?: string): Transaction | null {
+    const tx = this.transactions.get(transactionId);
+    if (!tx) return null;
+    if (isTerminal(tx.status)) return null;
+    if (this.speculativeStateMachine) {
+      const snapshotId = tx.metadata.snapshotId as string | undefined;
+      if (snapshotId)
+        this.speculativeStateMachine.rollbackSpeculative(snapshotId);
+    }
+    const updated = transitionTransaction(tx, "failed");
+    this.transactions.set(transactionId, updated);
+    if (this.backpressureController)
+      this.backpressureController.complete(tx.intentId);
+    return updated;
+  }
+
+  compareAndSetStatus(
+    transactionId: string,
+    expectedStatus: TransactionStatus,
+    newStatus: TransactionStatus,
+  ): Transaction | null {
+    const tx = this.transactions.get(transactionId);
+    if (!tx || tx.status !== expectedStatus) return null;
+    const updated = transitionTransaction(tx, newStatus);
+    this.transactions.set(transactionId, updated);
+    return updated;
+  }
 }
