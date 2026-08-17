@@ -42,8 +42,6 @@ export default [
               group: [
                 "@hexagen/core-domain",
                 "@hexagen/core-domain/*",
-                "@hexagen/architectural-enforcement",
-                "@hexagen/architectural-enforcement/*",
                 "@hexagen/local-llm",
                 "@hexagen/local-llm/*",
                 "@hexagen/agentic-interaction",

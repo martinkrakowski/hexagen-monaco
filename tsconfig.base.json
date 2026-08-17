@@ -18,8 +18,6 @@
   },
   "references": [
     { "path": "./packages/agentic-interaction" },
-    { "path": "./packages/architectural-enforcement" },
-    { "path": "./packages/code-generation" },
     { "path": "./packages/core-domain" },
     { "path": "./packages/deployment" },
     { "path": "./packages/eslint-plugin-ui" },

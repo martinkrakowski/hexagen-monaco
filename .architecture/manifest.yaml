@@ -109,18 +109,6 @@ bounded_contexts:
     plane: probabilistic
     status: active
     file: contexts/probabilistic/mcp-server/context.yaml
-  - name: architectural-enforcement
-    type: supporting
-    plane: core
-    status: frozen
-    frozen_since: '2026-05-12'
-    file: contexts/core/architectural-enforcement/context.yaml
-  - name: code-generation
-    type: supporting
-    plane: core
-    status: frozen
-    frozen_since: '2026-05-12'
-    file: contexts/core/code-generation/context.yaml
   - name: deployment
     type: supporting
     plane: infrastructure
