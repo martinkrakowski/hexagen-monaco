@@ -5,8 +5,20 @@ export { FileDropZone } from "./FileDropZone.js";
 export type { FileDropZoneProps } from "./FileDropZone.js";
 
 export { Tabs } from "./Tabs.js";
+export type {
+  TabsRootProps,
+  TabsListProps,
+  TabsTriggerProps,
+  TabsContentProps,
+} from "./Tabs.js";
 
 export { Accordion } from "./Accordion.js";
+export type {
+  AccordionRootProps,
+  AccordionItemProps,
+  AccordionTriggerProps,
+  AccordionContentProps,
+} from "./Accordion.js";
 
 export { Tooltip } from "./Tooltip.js";
 export type { TooltipProps } from "./Tooltip.js";

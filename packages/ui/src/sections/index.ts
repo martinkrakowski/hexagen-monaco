@@ -6,3 +6,11 @@ export {
   DialogDescription,
   DialogFooter,
 } from "./Dialog.js";
+export type {
+  DialogProps,
+  DialogContentProps,
+  DialogHeaderProps,
+  DialogTitleProps,
+  DialogDescriptionProps,
+  DialogFooterProps,
+} from "./Dialog.js";

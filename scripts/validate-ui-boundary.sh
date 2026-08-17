@@ -385,6 +385,62 @@ done < <(printf '%s' "$NEUTRAL_FEATURE_BASELINE")
 neutral_pinned_count="$(printf '%s' "$NEUTRAL_FEATURE_BASELINE" | grep -c . || true)"
 echo "  ($neutral_pinned_count pre-existing neutral→slice import(s) pinned — shrink, do not grow)"
 
+# Check 8: every component prop type in packages/ui carries the
+# NoSemanticState brand (HEX-031 / DESIGN.md §3.4).
+#
+# DESIGN.md §3.4 says "All @hexagen/ui component props **must** extend
+# NoSemanticState<T>", but nothing enforced the requirement, so Dialog, Tabs,
+# Accordion, Skeleton and CopyButton shipped prop types that accept
+# `loading`/`error`/`status`/`data` freely. Check 3 above is the complement,
+# not a substitute: it only fires once someone has actually WRITTEN a
+# forbidden token, whereas §3.4 makes the missing brand itself the defect —
+# the brand is what turns the next such prop into a compile error at the call
+# site rather than a lint finding after the fact.
+#
+# A declaration is in scope when its name ends in `Props` and is followed by
+# `extends`, `=` or `{`. Generic prop *utilities* (`AllowedProps<T>` in
+# types/forbidden-brand.ts) are excluded by that same rule — the name is
+# followed by `<` — because a type-level helper is not a component contract.
+#
+# There is deliberately NO baseline: every prop type in packages/ui/src is
+# branded today, and an exemption list here would be a standing invitation to
+# add the next unbranded one.
+echo ""
+echo "Checking NoSemanticState brand on packages/ui prop types (DESIGN.md §3.4)..."
+PROPS_SCANNED=0
+while IFS= read -r file; do
+  [ -n "$file" ] || continue
+  while IFS= read -r decl; do
+    [ -n "$decl" ] || continue
+    PROPS_SCANNED=$((PROPS_SCANNED + 1))
+    lineno="${decl%%:*}"
+    name="$(printf '%s' "$decl" |
+      sed -E 's/^[0-9]+:[[:space:]]*(export[[:space:]]+)?(interface|type)[[:space:]]+([A-Za-z0-9_]+Props).*/\3/')"
+    # The brand usually sits on the declaration line (`extends NoSemanticState<`)
+    # but prettier wraps long heritage clauses, so allow the next two lines.
+    if sed -n "${lineno},$((lineno + 2))p" "$file" | grep -q "NoSemanticState"; then
+      continue
+    fi
+    echo "  ❌ Prop type without NoSemanticState brand: $name"
+    echo "     → ${file#"$ROOT_DIR"/}:${lineno}"
+    echo "     DESIGN.md §3.4: every @hexagen/ui prop type must extend"
+    echo "     NoSemanticState<T> so information state cannot reach presentation."
+    VIOLATIONS=$((VIOLATIONS + 1))
+  done < <(grep -nE "^[[:space:]]*(export[[:space:]]+)?(interface|type)[[:space:]]+[A-Za-z0-9_]+Props[[:space:]]*(extends|=|\{)" "$file" 2>/dev/null || true)
+done < <(find "$UI_SRC" \( -name '*.ts' -o -name '*.tsx' \) 2>/dev/null || true)
+
+# Anti-vacuity: this check scans a population, so a broken pattern (renamed
+# directory, tightened regex, `find` returning nothing) would report a clean
+# sweep of zero files. packages/ui has had double-digit prop types since the
+# design-system split; refuse to certify compliance below that.
+if [ "$PROPS_SCANNED" -lt 10 ]; then
+  echo "  ❌ Only ${PROPS_SCANNED} prop type(s) scanned under ${UI_SRC}."
+  echo "     The brand check found essentially nothing to check — treat that as"
+  echo "     a broken scan, not as compliance."
+  exit 2
+fi
+echo "  ($PROPS_SCANNED prop type(s) scanned)"
+
 echo ""
 echo "============================================================"
 if [ "$VIOLATIONS" -gt 0 ]; then

@@ -12,6 +12,84 @@ export default tseslint.config(
     },
   },
   {
+    // HEX-022 — @hexagen/local-llm's root barrel re-exports `infrastructure/`
+    // (IndexedDB adapters, the WebLLM engine, the provider chain), so a UI
+    // package importing it drags the whole runtime into its dependency graph
+    // for the sake of a catalog constant and two type aliases. `/client` is
+    // the browser-safe surface: domain value objects, the model catalog, the
+    // inbound ports and the pure recommendation use case.
+    files: ['src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              // No `allowTypeImports` exemption: `/client` re-exports every
+              // value object this package needs, so a type-only import of the
+              // root barrel is a spelling choice, not a necessity — and the
+              // exemption is exactly how the root barrel would creep back.
+              name: '@hexagen/local-llm',
+              message:
+                'HEX-022: import from "@hexagen/local-llm/client". The root barrel re-exports infrastructure/ (IDB adapters, WebLLM engine) into a presentation package.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // HEX-022 — `model-settings-panel.tsx` is the presentational half: it
+    // renders an already-resolved projection and raises intents. Its props
+    // type already refuses the four transport props (`NoModelTransport`), and
+    // this fence closes the other door: a component that cannot hold state or
+    // run an effect cannot start, retry or poll anything, whatever it is
+    // handed. The fence is a hard error rather than a convention because the
+    // effect that HEX-022 flagged (`hasModelInCache` in a `useEffect`) was
+    // written into this exact render tree once already.
+    //
+    // Flat config REPLACES a rule's options rather than merging them, so the
+    // package-wide `@hexagen/local-llm` root-barrel entry above is repeated
+    // here verbatim — dropping it would silently exempt this file from the
+    // very rule the rest of the package is held to.
+    files: ['src/ui/model-settings/model-settings-panel.tsx'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@hexagen/local-llm',
+              message:
+                'HEX-022: import from "@hexagen/local-llm/client". The root barrel re-exports infrastructure/ (IDB adapters, WebLLM engine) into a presentation package.',
+            },
+            {
+              name: 'react',
+              importNames: [
+                'useState',
+                'useReducer',
+                'useEffect',
+                'useLayoutEffect',
+                'useSyncExternalStore',
+                'useTransition',
+                'useDeferredValue',
+              ],
+              message:
+                'HEX-022: ModelSettingsPanel is presentation-only. State acquisition and effects belong in ModelSettingsView (the container); take the resolved value as a prop and raise an intent instead.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['**/useHardwareDetection', '**/useHardwareDetection.js'],
+              message:
+                'HEX-022: hardware detection is acquisition, not presentation. The container resolves it and passes `recommendedModelId` down.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Generated port stubs start life as empty interfaces the owner fills in;
     // scoped to the port-stub naming convention so the rule still guards the
     // rest of the codebase.

@@ -1,5 +1,5 @@
 import { useState, memo } from "react";
-import type { DomainModelId } from "@hexagen/local-llm";
+import type { DomainModelId } from "@hexagen/local-llm/client";
 import { ModelFooterIndicator } from "../ModelFooterIndicator";
 
 interface StorageFooterProps {

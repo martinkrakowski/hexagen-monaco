@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { cn } from "../lib/utils.js";
+import type { NoSemanticState } from "../types/forbidden-brand.js";
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 
@@ -21,13 +22,13 @@ function useTabsContext(): TabsContextValue {
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
-interface RootProps {
+export type TabsRootProps = NoSemanticState<{
   defaultTab?: string;
   value?: string;
   onValueChange?: (value: string) => void;
   children: ReactNode;
   className?: string;
-}
+}>;
 
 function Root({
   defaultTab,
@@ -35,7 +36,7 @@ function Root({
   onValueChange,
   children,
   className,
-}: RootProps) {
+}: TabsRootProps) {
   const [internalTab, setInternalTab] = useState(defaultTab ?? "");
   const activeTab = value ?? internalTab;
   const handleSetActiveTab = (tab: string) => {
@@ -56,13 +57,12 @@ function Root({
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
-function List({
-  children,
-  className,
-}: {
+export type TabsListProps = NoSemanticState<{
   children: ReactNode;
   className?: string;
-}) {
+}>;
+
+function List({ children, className }: TabsListProps) {
   return (
     <div
       role="tablist"
@@ -78,13 +78,13 @@ function List({
 
 // ─── Trigger ──────────────────────────────────────────────────────────────────
 
-interface TriggerProps {
+export type TabsTriggerProps = NoSemanticState<{
   value: string;
   children: ReactNode;
   className?: string;
-}
+}>;
 
-function Trigger({ value, children, className }: TriggerProps) {
+function Trigger({ value, children, className }: TabsTriggerProps) {
   const { activeTab, setActiveTab } = useTabsContext();
   const isActive = activeTab === value;
 
@@ -141,13 +141,13 @@ function Trigger({ value, children, className }: TriggerProps) {
 
 // ─── Content ─────────────────────────────────────────────────────────────────
 
-interface ContentProps {
+export type TabsContentProps = NoSemanticState<{
   value: string;
   children: ReactNode;
   className?: string;
-}
+}>;
 
-function Content({ value, children, className }: ContentProps) {
+function Content({ value, children, className }: TabsContentProps) {
   const { activeTab } = useTabsContext();
   if (activeTab !== value) return null;
   return (
