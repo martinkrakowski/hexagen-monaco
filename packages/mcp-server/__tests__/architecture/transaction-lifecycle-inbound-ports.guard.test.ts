@@ -324,6 +324,54 @@ describe("HEX-019 — transaction-lifecycle tools bind to inbound ports", () => 
       ).toEqual(["FooPort"]);
     });
 
+    it("reads a header whose type parameter is constrained by an object type", () => {
+      // The constraint contains the very `{` and `;` a regex has to stop on.
+      expect(
+        implementedContractsOf(
+          "export class Foo<T extends { value: string }> implements FooPort {",
+        ),
+      ).toEqual(["FooPort"]);
+      expect(
+        implementedContractsOf(
+          "export class Foo<T extends { a: string; b: number }> implements FooPort {",
+        ),
+      ).toEqual(["FooPort"]);
+      expect(
+        implementedContractsOf(
+          "export class Foo<T = () => void> implements FooPort {",
+        ),
+      ).toEqual(["FooPort"]);
+    });
+
+    it("splits contracts on commas between them, not inside their type arguments", () => {
+      expect(
+        implementedContractsOf(
+          "export class Foo<X, Y> implements APort<X, Y>, BPort {",
+        ),
+      ).toEqual(["APort", "BPort"]);
+    });
+
+    it("does not read a class mentioned in a comment or built in a template", () => {
+      // Both shapes exist in this package already: a doc comment in
+      // mcp-server.types.ts, and a generated-code template in
+      // sync-engine.adapter.ts.
+      expect(
+        implementedContractsOf(
+          "/** for a class Foo implements FooPort { */\nexport const x = 1;",
+        ),
+      ).toEqual([]);
+      expect(
+        implementedContractsOf(
+          "// class Foo implements FooPort {\nexport const x = 1;",
+        ),
+      ).toEqual([]);
+      expect(
+        implementedContractsOf(
+          "const emitted = `export class Foo implements FooPort {`;",
+        ),
+      ).toEqual([]);
+    });
+
     it("reads a header that carries a base class before implements", () => {
       expect(
         implementedContractsOf(

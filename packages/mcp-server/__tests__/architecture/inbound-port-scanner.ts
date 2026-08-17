@@ -114,29 +114,159 @@ export function importMapOf(source: string): Map<string, string> {
 }
 
 /**
+ * Source with every comment and string/template literal blanked to spaces,
+ * newlines and offsets preserved, so a `class …` mention in prose or in a
+ * generated-code template cannot be read as a declaration. Both shapes are in
+ * this repository already: `mcp-server.types.ts` says "for a class type lists"
+ * in a doc comment, and `sync-engine.adapter.ts` emits
+ * `` `export class ${name}Adapter {` `` from a template literal.
+ *
+ * A regex literal containing a quote (`/["']/`) would be mis-read as opening a
+ * string. That direction fails *loud*, not silent: blanking too much can only
+ * hide a class, and a hidden class in a scanned module empties that module's
+ * implemented-contract set, which the per-module population assertion in each
+ * guard rejects.
+ */
+function blankNonCode(source: string): string {
+  const out = source.split("");
+  const blank = (from: number, to: number): void => {
+    for (let k = from; k < to && k < out.length; k += 1) {
+      if (out[k] !== "\n") out[k] = " ";
+    }
+  };
+
+  let i = 0;
+  while (i < source.length) {
+    const two = source.slice(i, i + 2);
+    if (two === "//") {
+      const end = source.indexOf("\n", i);
+      const stop = end === -1 ? source.length : end;
+      blank(i, stop);
+      i = stop;
+      continue;
+    }
+    if (two === "/*") {
+      const end = source.indexOf("*/", i + 2);
+      const stop = end === -1 ? source.length : end + 2;
+      blank(i, stop);
+      i = stop;
+      continue;
+    }
+    const quote = source[i];
+    if (quote === '"' || quote === "'" || quote === "`") {
+      let j = i + 1;
+      while (j < source.length) {
+        if (source[j] === "\\") {
+          j += 2;
+          continue;
+        }
+        if (source[j] === quote) {
+          j += 1;
+          break;
+        }
+        j += 1;
+      }
+      blank(i, j);
+      i = j;
+      continue;
+    }
+    i += 1;
+  }
+
+  return out.join("");
+}
+
+/**
+ * One class header, from just after the class name up to the `{` that opens its
+ * body, with everything nested inside `<…>` blanked. Returns `null` when there
+ * is no body to reach.
+ *
+ * A regex cannot do this. Between the name and `implements` a header may carry
+ * type parameters (`class Foo<T>`), a base class (`class Foo extends Base`),
+ * and a type parameter whose constraint is an object type
+ * (`class Foo<T extends { value: string }>`) — the last one contains the very
+ * `{` and `;` a regex has to use as its stopping marks. Walking the header with
+ * an angle-bracket depth ends that whole family instead of widening a pattern
+ * once per shape: the brace that stops the walk is only the brace at depth 0.
+ * Blanking the nested spans also means `implements A<X, Y>, B` splits into
+ * `A` and `B` rather than on the comma inside `A`'s type arguments.
+ */
+function classHeaderAfterName(source: string, from: number): string | null {
+  let angle = 0;
+  let header = "";
+
+  for (let i = from; i < source.length; i += 1) {
+    const ch = source[i];
+
+    // An arrow in a default type argument (`<T = () => void>`) is not a closing
+    // angle bracket.
+    if (ch === "=" && source[i + 1] === ">") {
+      header += "  ";
+      i += 1;
+      continue;
+    }
+    if (ch === "<") {
+      angle += 1;
+      header += " ";
+      continue;
+    }
+    if (ch === ">") {
+      if (angle > 0) angle -= 1;
+      header += " ";
+      continue;
+    }
+    if (ch === "{") {
+      if (angle === 0) return header;
+      let brace = 1;
+      i += 1;
+      for (; i < source.length && brace > 0; i += 1) {
+        if (source[i] === "{") brace += 1;
+        else if (source[i] === "}") brace -= 1;
+      }
+      i -= 1;
+      header += " ";
+      continue;
+    }
+    // A declaration that ends before any body is not a class this reader judges.
+    if (ch === ";" && angle === 0) return null;
+
+    header += angle === 0 ? ch : " ";
+  }
+
+  return null;
+}
+
+/**
  * Every contract named in an `implements` clause in one source file.
  *
- * Between the class name and `implements` the header may carry type parameters
- * (`class Foo<T> implements FooPort`) and a base class (`class Foo extends Base
- * implements FooPort`). A matcher that demands `implements` immediately after
- * the name skips both, and a skipped class is invisible to every direction
- * assertion built on this reader. Measured: a second class in a scanned module,
- * declared `class SmuggledGenericUseCase<T> implements TransactionManagerPort`,
- * left the transaction-lifecycle guard 11/11 green while inverting exactly the
- * direction its third claim exists to forbid. `[^{;]*?` spans that header
- * without being able to cross into a class body or the next statement, so the
- * widening cannot pull an `implements` out of unrelated source.
+ * A class this reader skips is invisible to every direction assertion built on
+ * it, and the skip is silent whenever another class in the same module already
+ * satisfies the per-module population assertion. Measured against the earlier
+ * `implements`-must-follow-the-name matcher: a second class declared
+ * `class SmuggledGenericUseCase<T> implements TransactionManagerPort` in
+ * `accept-transaction-tool.use-case.ts` left the transaction-lifecycle guard
+ * 11/11 green while inverting exactly the direction its third claim forbids.
  */
 export function implementedContractsOf(source: string): string[] {
+  const code = blankNonCode(source);
   const contracts: string[] = [];
-  for (const match of source.matchAll(
-    /\bclass\s+[A-Za-z0-9_$]+[^{;]*?\bimplements\s+([^{]+)\{/g,
-  )) {
-    for (const raw of match[1].split(",")) {
-      const name = raw.trim().replace(/<.*$/, "");
+
+  for (const match of code.matchAll(/\bclass\s+[A-Za-z0-9_$]+/g)) {
+    const header = classHeaderAfterName(
+      code,
+      (match.index ?? 0) + match[0].length,
+    );
+    if (header === null) continue;
+
+    const clause = /\bimplements\b([^]*)$/.exec(header);
+    if (!clause) continue;
+
+    for (const raw of clause[1].split(",")) {
+      const name = raw.trim();
       if (name) contracts.push(name);
     }
   }
+
   return contracts;
 }
 
