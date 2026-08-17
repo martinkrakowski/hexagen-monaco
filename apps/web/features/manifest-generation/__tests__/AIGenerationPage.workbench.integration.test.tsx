@@ -192,6 +192,41 @@ const submitComposer = () => {
   fireEvent.submit(composerTextarea().closest("form") as HTMLFormElement);
 };
 
+/**
+ * Settle the page's asynchronous MOUNT effects.
+ *
+ * Under this harness TWO mount promises reach a `setState`, and between them
+ * they produce three un-acted updates per test:
+ *
+ *   - the flow machine's `createApiKeyManager(getSecretVault())` →
+ *     `setApiKeyManager` — one update;
+ *   - `useWebGPUDetection`'s `Promise.all([detect(), profile()])` →
+ *     `setResult`, whose `isLoading` flip then drives
+ *     `useModelSelectionFlowEffects`' `setFlowState(hardwareCapabilities)` —
+ *     two updates.
+ *
+ * The capability probe is NOT one of them here, despite also starting on
+ * mount: `useCapabilityProbe` awaits `getCapabilities()`, which awaits the
+ * `pendingForever` stub above — `new Promise(() => {})`, which never resolves
+ * and never rejects — so neither the resolve nor the catch arm of the probe
+ * ever calls `setCapabilities`. Measured by suppressing one source at a time
+ * on this file: both live = 15 warnings; `setApiKeyManager` suppressed = 10;
+ * `setResult` suppressed = 5.
+ *
+ * Neither settling promise lands inside `render`'s synchronous `act` window,
+ * so tests whose bodies returned without awaiting anything left React updating
+ * outside `act()` — three warnings apiece, 15 across this file — and asserted
+ * against pre-flush markup.
+ *
+ * Tests that already `await waitFor(...)` never had the problem: RTL's async
+ * wrapper owns the act environment for the duration of the wait.
+ */
+const settleMountEffects = async () => {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+};
+
 beforeEach(() => {
   // Module-scoped genesis stores would otherwise bleed between tests.
   clearGenesisFormValues();
@@ -208,6 +243,7 @@ beforeEach(() => {
 describe("AIGenerationPage — Plan Workbench C1", () => {
   it("mounts the shared two-pane workbench: settings seeded from ?name=, genesis Section B without Add planning session, and the composer as the generate affordance", async () => {
     render(<AIGenerationPage llmContext={makeLlmContext()} />);
+    await settleMountEffects();
 
     // Left column: both shared accordion sections, open by default.
     assert.ok(screen.getByRole("button", { name: /project settings/i }));
@@ -254,8 +290,9 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     assert.equal(caption.getAttribute("aria-atomic"), "true");
   });
 
-  it("keeps the min-length gate: a too-short description disables Generate, shows the amber caption, and a forced submit does not start generation", () => {
+  it("keeps the min-length gate: a too-short description disables Generate, shows the amber caption, and a forced submit does not start generation", async () => {
     render(<AIGenerationPage llmContext={makeLlmContext()} />);
+    await settleMountEffects();
 
     fireEvent.change(composerTextarea(), { target: { value: "too short" } });
 
@@ -567,7 +604,7 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     assert.equal(loadGenesisFormValues(null), null);
   });
 
-  it("gates Section B's Source row on origin: an import-flow leftover stays hidden, a genesis-origin spec renders its first-line excerpt", () => {
+  it("gates Section B's Source row on origin: an import-flow leftover stays hidden, a genesis-origin spec renders its first-line excerpt", async () => {
     // A pending manifest from the IMPORT flow (e.g. abandoned mid-accept) is
     // wrong-flow provenance — its spec text must not surface as a genesis
     // "Source". Only originPath "/projects/new/ai" feeds the row.
@@ -584,6 +621,7 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
     const { unmount } = render(
       <AIGenerationPage llmContext={makeLlmContext()} />,
     );
+    await settleMountEffects();
     assert.equal(screen.queryByText("Source"), null);
     assert.equal(screen.queryByText("# Import spec leftover"), null);
     unmount();
@@ -601,6 +639,7 @@ describe("AIGenerationPage — Plan Workbench C1", () => {
       );
 
     render(<AIGenerationPage llmContext={makeLlmContext()} />);
+    await settleMountEffects();
     assert.ok(screen.getByText("Source"));
     assert.ok(screen.getByText("# Vellum spec"));
     assert.equal(screen.queryByText(/second line is not excerpted/), null);
@@ -636,8 +675,9 @@ describe("AIGenerationPage — Plan Workbench C2", () => {
     fireEvent.click(nextButton);
   };
 
-  it("relocates the generation options into a third left-column accordion section, below the two shared ones — and the example cards stay in the main body", () => {
+  it("relocates the generation options into a third left-column accordion section, below the two shared ones — and the example cards stay in the main body", async () => {
     render(<AIGenerationPage llmContext={makeLlmContext()} />);
+    await settleMountEffects();
 
     // The section exists as an accordion trigger + open-by-default panel,
     // ORDERED after Project settings and Sessions & sources.
@@ -907,7 +947,7 @@ describe("AIGenerationPage — Plan Workbench C2", () => {
     assert.equal(state.projectName, "test-system");
   });
 
-  it("non-idle flow states drop the generationOptions slot: the interstitial fills the main view with NO Generation options section and no composer", () => {
+  it("non-idle flow states drop the generationOptions slot: the interstitial fills the main view with NO Generation options section and no composer", async () => {
     // No in-page interaction reaches the StateView interstitials through
     // this harness (the closest paths stay idle), so force the machine's
     // returned state via the passthrough shim — the slots contract under
@@ -921,6 +961,7 @@ describe("AIGenerationPage — Plan Workbench C2", () => {
       isModelReady: false,
     };
     render(<AIGenerationPage llmContext={makeLlmContext()} />);
+    await settleMountEffects();
 
     // The interstitial is the main view…
     assert.ok(screen.getByText("engine exploded"));

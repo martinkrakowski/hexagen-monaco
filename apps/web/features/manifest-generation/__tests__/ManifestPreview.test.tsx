@@ -65,9 +65,15 @@ describe("ManifestPreview", () => {
       />,
     );
 
-    const mermaidTab = screen.getByRole("button", { name: /mermaid/i });
-    mermaidTab.click();
-    assert.ok(screen.getByText(/mermaid/i));
+    // `element.click()` is a bare DOM dispatch: the resulting setActiveTab
+    // landed outside act(), which is what the un-wrapped-update warning from
+    // this test reported. fireEvent is act-wrapped, so the tab panel below has
+    // actually re-rendered by the time it is queried.
+    fireEvent.click(screen.getByRole("button", { name: /mermaid/i }));
+    // Assert on the PANEL, not on the tab label: the old `getByText(/mermaid/i)`
+    // matched the trigger button itself and would have passed even if the tab
+    // never switched.
+    assert.ok(screen.getByText("Mermaid Class Diagram"));
   });
 });
 

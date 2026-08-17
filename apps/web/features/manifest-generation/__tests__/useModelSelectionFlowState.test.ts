@@ -35,32 +35,50 @@ describe("useModelSelectionFlowState", () => {
     vi.restoreAllMocks();
   });
 
+  /**
+   * Mount the hook and settle its asynchronous mount effects.
+   *
+   * `useModelSelectionFlowEffects` starts two promises on mount that each end
+   * in a `setState`: `createApiKeyManager(getSecretVault()).then(setApiKeyManager)`
+   * and, via `useWebGPUDetection`, `Promise.all([detect(), profile()]).then(setResult)`
+   * — the latter then feeds a third `setFlowState` for `hardwareCapabilities`.
+   * Neither settles inside `renderHook`'s synchronous `act` window, so every
+   * test that mounted the hook and returned synchronously left React updating
+   * outside `act()` (two warnings per test, 40 across this file) and asserted
+   * against pre-flush state.
+   *
+   * Draining a macrotask inside `await act(async …)` settles both chains — and
+   * every microtask they queue — before the assertions run, so `result.current`
+   * is the state the component would actually render with.
+   */
+  async function renderFlowState() {
+    const view = renderHook(() => useModelSelectionFlowState(llmContext));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    return view;
+  }
+
   describe("Initial State", () => {
-    it("should start in idle state", () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+    it("should start in idle state", async () => {
+      const { result } = await renderFlowState();
       // NOTE: Full state validation requires DI with mock.module support (Node.js v22.7.0 limitation)
       // Test validates hook accepts llmContext parameter and initializes
       assert.ok(typeof result.current[0] === "object");
       assert.ok(result.current[0].state !== undefined);
     });
 
-    it("should detect unsupported WebGPU and transition to unsupported", () => {
+    it("should detect unsupported WebGPU and transition to unsupported", async () => {
       // NOTE: WebGPU detection testing requires mock.module support
       // Test validates hook initialization and state structure
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+      const { result } = await renderFlowState();
       assert.ok(typeof result.current[0].state === "string");
     });
 
-    it("should set webgpu_unavailable error code when WebGPU is not supported", () => {
+    it("should set webgpu_unavailable error code when WebGPU is not supported", async () => {
       // NOTE: WebGPU error code assignment requires mock environment
       // Test validates error code property structure
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+      const { result } = await renderFlowState();
       assert.ok(
         result.current[0].errorCode === undefined ||
           typeof result.current[0].errorCode === "string",
@@ -69,10 +87,8 @@ describe("useModelSelectionFlowState", () => {
   });
 
   describe("State Transitions", () => {
-    it("should transition idle → model_selection (user clicks prefer local)", () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+    it("should transition idle → model_selection (user clicks prefer local)", async () => {
+      const { result } = await renderFlowState();
       const { transitionTo } = result.current[1];
 
       act(() => {
@@ -84,10 +100,8 @@ describe("useModelSelectionFlowState", () => {
       assert.ok(typeof transitionTo === "function");
     });
 
-    it("should transition model_selection → model_downloading (user selects model)", () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+    it("should transition model_selection → model_downloading (user selects model)", async () => {
+      const { result } = await renderFlowState();
       const { transitionTo } = result.current[1];
 
       // NOTE: Full model selection requires proper DI and async setup
@@ -101,9 +115,7 @@ describe("useModelSelectionFlowState", () => {
     });
 
     it("should transition model_downloading → generating (model ready)", async () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+      const { result } = await renderFlowState();
 
       // NOTE: Full state transitions require DI initialization
       // Test validates hook state structure
@@ -111,9 +123,7 @@ describe("useModelSelectionFlowState", () => {
     });
 
     it("should transition model_downloading → error (download fails)", async () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+      const { result } = await renderFlowState();
 
       // NOTE: Error transitions require DI with proper mocks
       // Test validates hook structure
@@ -124,10 +134,8 @@ describe("useModelSelectionFlowState", () => {
       );
     });
 
-    it("should transition generating → error (generation fails)", () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+    it("should transition generating → error (generation fails)", async () => {
+      const { result } = await renderFlowState();
       const { setError } = result.current[1];
 
       act(() => {
@@ -138,10 +146,8 @@ describe("useModelSelectionFlowState", () => {
       assert.ok(typeof setError === "function");
     });
 
-    it("should transition error → idle (user retries)", () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+    it("should transition error → idle (user retries)", async () => {
+      const { result } = await renderFlowState();
       const { setError, retryGeneration } = result.current[1];
 
       // First go to error state
@@ -158,10 +164,8 @@ describe("useModelSelectionFlowState", () => {
       assert.ok(typeof retryGeneration === "function");
     });
 
-    it("should transition to interrupted state (user cancels download)", () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+    it("should transition to interrupted state (user cancels download)", async () => {
+      const { result } = await renderFlowState();
       const { cancelModelDownload } = result.current[1];
 
       // NOTE: Full cancel flow requires DI and async operations
@@ -176,20 +180,16 @@ describe("useModelSelectionFlowState", () => {
       assert.ok(mockCancelDownload.mock.calls.length > 0);
     });
 
-    it("should transition to unsupported state (WebGPU not available)", () => {
+    it("should transition to unsupported state (WebGPU not available)", async () => {
       // NOTE: WebGPU state testing requires mock environment
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+      const { result } = await renderFlowState();
       act(() => {});
       // Verify state property exists
       assert.ok(typeof result.current[0].state === "string");
     });
 
-    it("should regenerate manifest transitioning to generating", () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+    it("should regenerate manifest transitioning to generating", async () => {
+      const { result } = await renderFlowState();
       const { setError, regenerateManifest } = result.current[1];
 
       // Regenerate is reached from the inline error / retry paths
@@ -208,9 +208,7 @@ describe("useModelSelectionFlowState", () => {
 
   describe("Actions", () => {
     it("should validate API key with correct format", async () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+      const { result } = await renderFlowState();
       const { validateApiKey } = result.current[1];
 
       // NOTE: Full API key validation testing requires DI environment
@@ -218,10 +216,8 @@ describe("useModelSelectionFlowState", () => {
       assert.ok(typeof validateApiKey === "function");
     });
 
-    it("should select local model with remember=true/false", () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+    it("should select local model with remember=true/false", async () => {
+      const { result } = await renderFlowState();
       const { selectLocalModel } = result.current[1];
 
       // NOTE: Full model selection requires DI and async operations
@@ -229,10 +225,8 @@ describe("useModelSelectionFlowState", () => {
       assert.ok(typeof selectLocalModel === "function");
     });
 
-    it("should cancel model download", () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+    it("should cancel model download", async () => {
+      const { result } = await renderFlowState();
       const { cancelModelDownload } = result.current[1];
 
       // NOTE: Full cancel flow requires DI and async setup
@@ -247,10 +241,8 @@ describe("useModelSelectionFlowState", () => {
       assert.ok(mockCancelDownload.mock.calls.length > 0);
     });
 
-    it("should skip AI setup", () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+    it("should skip AI setup", async () => {
+      const { result } = await renderFlowState();
       const { skipAiSetup } = result.current[1];
 
       act(() => {
@@ -261,10 +253,8 @@ describe("useModelSelectionFlowState", () => {
       assert.ok(typeof skipAiSetup === "function");
     });
 
-    it("should clear error and return to idle", () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+    it("should clear error and return to idle", async () => {
+      const { result } = await renderFlowState();
       const { setError, clearError } = result.current[1];
 
       act(() => {
@@ -279,10 +269,8 @@ describe("useModelSelectionFlowState", () => {
       assert.ok(typeof clearError === "function");
     });
 
-    it("should restart from selection", () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+    it("should restart from selection", async () => {
+      const { result } = await renderFlowState();
       const { setError, restartFromSelection } = result.current[1];
 
       act(() => {
@@ -297,10 +285,8 @@ describe("useModelSelectionFlowState", () => {
       assert.ok(typeof restartFromSelection === "function");
     });
 
-    it("should proceed to wizard", () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+    it("should proceed to wizard", async () => {
+      const { result } = await renderFlowState();
       const { proceedToWizard } = result.current[1];
 
       act(() => {
@@ -311,10 +297,8 @@ describe("useModelSelectionFlowState", () => {
       assert.ok(typeof proceedToWizard === "function");
     });
 
-    it("should set error with error code", () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+    it("should set error with error code", async () => {
+      const { result } = await renderFlowState();
       const { setError } = result.current[1];
 
       act(() => {
@@ -330,9 +314,7 @@ describe("useModelSelectionFlowState", () => {
     });
 
     it("should set key_invalid_format error code when cloud key validation fails", async () => {
-      const { result } = renderHook(() =>
-        useModelSelectionFlowState(llmContext),
-      );
+      const { result } = await renderFlowState();
       const { selectCloudProvider } = result.current[1];
 
       await act(async () => {
