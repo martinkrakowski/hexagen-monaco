@@ -12,6 +12,8 @@ export interface CreateAdapterOutput {
   dryRun: boolean;
   fileCreated?: string;
   message: string;
+  pendingApproval?: boolean;
+  transactionId?: string;
 }
 
 export interface CreateAdapterToolPort {

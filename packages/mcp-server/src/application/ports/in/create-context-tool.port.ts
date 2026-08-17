@@ -16,6 +16,8 @@ export interface CreateContextOutput {
   registered: boolean;
   alreadyExisted: boolean;
   message: string;
+  pendingApproval?: boolean;
+  transactionId?: string;
 }
 
 export interface CreateContextToolPort {

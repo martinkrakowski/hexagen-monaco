@@ -1,26 +1,32 @@
-import type { TransactionManagerPort } from "@hexagen/transaction-system";
+import type { EventBusPort } from "@hexagen/messaging";
 import type { Result } from "@hexagen/shared";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
+import {
+  applyPendingManifestMutation,
+  readPendingMutation,
+} from "../pending-manifest-mutation.js";
 import type {
   AcceptTransactionToolInput,
   AcceptTransactionToolPort,
   AcceptTransactionToolResult,
 } from "../ports/in/accept-transaction-tool.port.js";
+import type { ManifestWritePort } from "../ports/out/manifest-write.port.js";
+import type { ScaffoldingPort } from "../ports/out/scaffolding.port.js";
 
 /**
- * AcceptTransactionToolUseCase — Mark transaction as accepted via MCP
+ * AcceptTransactionToolUseCase — apply a pending manifest mutation, then
+ * mark the transaction committed.
  *
- * This tool only transitions the transaction state to "committed".
- * The actual patch application should be done by the web API accept endpoint.
- *
- * Use this when you want to programmatically accept a transaction that
- * has already been applied and validated.
- *
- * ADR-0048: implements the inbound `AcceptTransactionToolPort` the MCP handler
- * calls; is handed the outbound `TransactionManagerPort` an infrastructure
- * adapter implements.
+ * Mutation tools no longer write the manifest themselves. Accept is the only
+ * path that calls ManifestWritePort / ScaffoldingPort for those seven tools.
  */
 export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
-  constructor(private readonly transactionManager: TransactionManagerPort) {}
+  constructor(
+    private readonly transactionManager: TransactionManagerPort,
+    private readonly manifestWritePort: ManifestWritePort,
+    private readonly scaffoldingPort: ScaffoldingPort,
+    private readonly eventBusPort: EventBusPort,
+  ) {}
 
   async execute(
     input: AcceptTransactionToolInput,
@@ -36,8 +42,17 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
       }
 
       const previousStatus = tx.status;
+      const pending = readPendingMutation(tx);
+      let applied: AcceptTransactionToolResult["applied"];
 
-      // Commit the transaction
+      if (pending) {
+        applied = await applyPendingManifestMutation(pending, {
+          manifestWrite: this.manifestWritePort,
+          scaffolding: this.scaffoldingPort,
+          eventBus: this.eventBusPort,
+        });
+      }
+
       const committed = this.transactionManager.commit(input.transaction_id);
 
       if (!committed) {
@@ -53,6 +68,7 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
           transaction: committed,
           previous_status: previousStatus,
           new_status: committed.status,
+          applied,
         },
       };
     } catch (error) {
@@ -63,5 +79,3 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
     }
   }
 }
-
-// Made with Bob

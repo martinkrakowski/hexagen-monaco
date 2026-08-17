@@ -13,6 +13,8 @@ export interface RemovePortOutput {
   dryRun: boolean;
   removed: boolean;
   message: string;
+  pendingApproval?: boolean;
+  transactionId?: string;
 }
 
 export interface RemovePortToolPort {

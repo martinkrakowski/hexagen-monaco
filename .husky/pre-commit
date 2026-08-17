@@ -1,3 +1,11 @@
 npx lint-staged
 yarn turbo lint
 yarn turbo typecheck
+
+# Architectural boundary check on staged files. Skip when the linter is
+# unbuilt (fresh clone) so the hook does not become a false "could not run"
+# wall; CI still runs the full ratchet.
+if [ -f tools/arch-linter/dist/cli.js ]; then
+  yarn lint:arch -- --staged --ratchet || exit 1
+fi
+

@@ -16,6 +16,8 @@ export interface AddDependencyOutput {
   dryRun: boolean;
   updated: boolean;
   message: string;
+  pendingApproval?: boolean;
+  transactionId?: string;
 }
 
 export interface AddDependencyToolPort {

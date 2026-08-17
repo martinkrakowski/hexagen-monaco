@@ -56,12 +56,25 @@ import {
 import type { BaselineEntry, ViolationRecord } from "./ratchet-baseline.js";
 import {
   DEFAULT_BASELINE_RELATIVE_PATH,
+  mergeSuppressionMetadata,
   parseBaseline,
   partitionAgainstBaseline,
   serializeBaseline,
 } from "./ratchet-baseline.js";
+import {
+  computePrDiff,
+  formatPrComment,
+  parseBaseBaselineText,
+  parseRenameNameStatus,
+} from "./pr-diff.js";
+import {
+  renameNameStatus,
+  resolveBaseRef,
+  showFileAtRef,
+  stagedFiles,
+} from "./git-ops.js";
 
-const logger = createConsoleLogger();
+const logger = createConsoleLogger(process.argv.includes("--json"));
 
 // ─── Exit-code vocabulary ───────────────────────────────────────────────────
 //
@@ -195,6 +208,33 @@ const BASELINE_PATH = baselineArg
   ? path.resolve(ROOT_DIR, baselineArg)
   : path.join(ROOT_DIR, ...DEFAULT_BASELINE_RELATIVE_PATH.split("/"));
 const UPDATE_BASELINE = process.argv.includes("--update-baseline");
+// `--ratchet` is the documented public name for the default baseline mode.
+// It is accepted so CI / the composite action can name the contract; the
+// linter already ratchets whenever a baseline file is present.
+const RATCHET = process.argv.includes("--ratchet");
+void RATCHET;
+const STAGED = process.argv.includes("--staged");
+const PR_DIFF = process.argv.includes("--pr-diff");
+const JSON_MODE = process.argv.includes("--json");
+const baseRefArgIndex = process.argv.indexOf("--base-ref");
+const baseRefArg =
+  baseRefArgIndex !== -1 ? process.argv[baseRefArgIndex + 1] : undefined;
+if (baseRefArgIndex !== -1 && (!baseRefArg || baseRefArg.startsWith("-"))) {
+  logger.error("FATAL ERROR: --base-ref requires a git ref argument.");
+  process.exit(EXIT_COULD_NOT_RUN);
+}
+const commentFileArgIndex = process.argv.indexOf("--comment-file");
+const commentFileArg =
+  commentFileArgIndex !== -1
+    ? process.argv[commentFileArgIndex + 1]
+    : undefined;
+if (
+  commentFileArgIndex !== -1 &&
+  (!commentFileArg || commentFileArg.startsWith("-"))
+) {
+  logger.error("FATAL ERROR: --comment-file requires a path argument.");
+  process.exit(EXIT_COULD_NOT_RUN);
+}
 
 // ─── Load Manifest (Strict Mode) ────────────────────────────────────────────
 
@@ -890,10 +930,76 @@ function checkArchitecturalIntegrity(): {
  * something until it also re-ran the tool.
  */
 function reportAndExit(violations: ViolationRecord[]): void {
-  const { fresh, baselined, stale } = partitionAgainstBaseline(
+  const { fresh, baselined, stale, expired } = partitionAgainstBaseline(
     violations,
     baselineEntries,
   );
+
+  let introduced: ViolationRecord[] = [];
+  let baselineGrowth: BaselineEntry[] = [];
+
+  if (PR_DIFF) {
+    const baseRef = resolveBaseRef(baseRefArg);
+    if (!baseRef) {
+      logger.info(
+        "Ratchet --pr-diff: no --base-ref / GITHUB_BASE_REF; skipping per-PR diff and baseline-growth check.",
+      );
+    } else {
+      const baselineRel = path
+        .relative(ROOT_DIR, BASELINE_PATH)
+        .split(path.sep)
+        .join("/");
+      const baseText = showFileAtRef(ROOT_DIR, baseRef, baselineRel);
+      let baseBaseline: BaselineEntry[] = [];
+      try {
+        baseBaseline = parseBaseBaselineText(baseText);
+      } catch (e) {
+        logger.error(
+          `FATAL ERROR: base-ref baseline at ${baseRef}:${baselineRel} could not be parsed.`,
+        );
+        logger.error(`  ${(e as Error).message}`);
+        process.exit(EXIT_COULD_NOT_RUN);
+      }
+      const renames = parseRenameNameStatus(
+        renameNameStatus(ROOT_DIR, baseRef),
+      );
+      const pr = computePrDiff({
+        currentViolations: violations,
+        currentBaseline: baselineEntries,
+        baseBaseline,
+        renames,
+      });
+      introduced = pr.introduced;
+      baselineGrowth = pr.baselineGrowth;
+      if (renames.length > 0) {
+        logger.info(
+          `Ratchet --pr-diff: remapped ${renames.length} rename(s) against ${baseRef}.`,
+        );
+      }
+    }
+  }
+
+  if (commentFileArg) {
+    const body = formatPrComment({
+      introduced,
+      baselineGrowth,
+      expired,
+    });
+    fs.writeFileSync(commentFileArg, body ?? "", "utf8");
+  }
+
+  if (JSON_MODE) {
+    process.stdout.write(
+      `${JSON.stringify({
+        fresh,
+        baselined,
+        stale,
+        expired,
+        introduced,
+        baselineGrowth,
+      })}\n`,
+    );
+  }
 
   if (baselined.length > 0) {
     logger.info(
@@ -912,6 +1018,28 @@ function reportAndExit(violations: ViolationRecord[]): void {
     );
   }
 
+  if (expired.length > 0) {
+    logger.error(
+      `Ratchet: ${expired.length} expired suppression${expired.length === 1 ? "" : "s"} — remove or renew them:`,
+    );
+    expired.forEach((entry) =>
+      logger.error(
+        ` - ${entry.rule} ${entry.file}${entry.specifier ? ` (${entry.specifier})` : ""} expired ${entry.expires}${entry.reason ? ` — ${entry.reason}` : ""}`,
+      ),
+    );
+  }
+
+  if (baselineGrowth.length > 0) {
+    logger.error(
+      `Ratchet: baseline grew by ${baselineGrowth.length} ${baselineGrowth.length === 1 ? "entry" : "entries"} against the base branch. The baseline may only shrink:`,
+    );
+    baselineGrowth.forEach((entry) =>
+      logger.error(
+        ` - ${entry.rule} ${entry.file}${entry.specifier ? ` (${entry.specifier})` : ""}`,
+      ),
+    );
+  }
+
   if (fresh.length > 0) {
     logger.error("Architectural Integrity Check Failed. Found violations:");
     fresh.forEach((e) => logger.error(` - ${e.message}`));
@@ -920,6 +1048,9 @@ function reportAndExit(violations: ViolationRecord[]): void {
         "These are NEW violations, measured against the committed baseline. The baseline may only shrink — fix the violation instead of adding an entry.",
       );
     }
+  }
+
+  if (fresh.length > 0 || expired.length > 0 || baselineGrowth.length > 0) {
     process.exit(1);
   }
 
@@ -942,10 +1073,14 @@ function abortIfVacuous(filesScanned: number): void {
 
 /** `--update-baseline`: rewrite the file from this run, then exit 0. */
 function writeBaseline(violations: ViolationRecord[]): void {
+  const previous = fs.existsSync(BASELINE_PATH)
+    ? parseBaseline(fs.readFileSync(BASELINE_PATH, "utf8")).entries
+    : [];
+  const merged = mergeSuppressionMetadata(violations, previous);
   fs.mkdirSync(path.dirname(BASELINE_PATH), { recursive: true });
-  fs.writeFileSync(BASELINE_PATH, serializeBaseline(violations), "utf8");
+  fs.writeFileSync(BASELINE_PATH, serializeBaseline(merged), "utf8");
   logger.info(
-    `Wrote ${violations.length} violation(s) to ${path.relative(ROOT_DIR, BASELINE_PATH)}. Review the diff: this file may only shrink.`,
+    `Wrote ${merged.length} violation(s) to ${path.relative(ROOT_DIR, BASELINE_PATH)}. Review the diff: this file may only shrink.`,
   );
 }
 
@@ -954,8 +1089,24 @@ function writeBaseline(violations: ViolationRecord[]): void {
 logger.info("Running Architectural Integrity Linter...");
 logger.info(`Project root: ${ROOT_DIR}`);
 logger.info(`Scope: ${SCOPE}`);
-const { errors: foundViolations, filesScanned } = checkArchitecturalIntegrity();
+const integrity = checkArchitecturalIntegrity();
+const filesScanned = integrity.filesScanned;
+let foundViolations = integrity.errors;
 abortIfVacuous(filesScanned);
+if (STAGED) {
+  let staged: string[];
+  try {
+    staged = stagedFiles(ROOT_DIR);
+  } catch (e) {
+    logger.error(`FATAL ERROR: ${(e as Error).message}`);
+    process.exit(EXIT_COULD_NOT_RUN);
+  }
+  const stagedSet = new Set(staged);
+  foundViolations = foundViolations.filter((v) => stagedSet.has(v.file));
+  logger.info(
+    `Ratchet --staged: ${staged.length} staged path(s), ${foundViolations.length} finding(s) on staged files.`,
+  );
+}
 if (UPDATE_BASELINE) {
   writeBaseline(foundViolations);
 } else {

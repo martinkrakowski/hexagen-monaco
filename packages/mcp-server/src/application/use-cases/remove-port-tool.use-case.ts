@@ -1,16 +1,16 @@
-import type { EventBusPort } from "@hexagen/messaging";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
+import {
+  PENDING_MANIFEST_MUTATION_KEY,
+  type PendingManifestMutation,
+} from "../pending-manifest-mutation.js";
 import type {
   RemovePortInput,
   RemovePortOutput,
   RemovePortToolPort,
 } from "../ports/in/remove-port-tool.port.js";
-import type { ManifestWritePort } from "../ports/out/manifest-write.port.js";
 
 export class RemovePortToolUseCase implements RemovePortToolPort {
-  constructor(
-    private readonly manifestWritePort: ManifestWritePort,
-    private readonly eventBusPort: EventBusPort,
-  ) {}
+  constructor(private readonly transactionManager: TransactionManagerPort) {}
 
   async execute(input: RemovePortInput): Promise<RemovePortOutput> {
     if (!input.context_name.trim() || !input.port_name.trim()) {
@@ -25,33 +25,21 @@ export class RemovePortToolUseCase implements RemovePortToolPort {
       };
     }
 
-    const result = await this.manifestWritePort.removePort({
-      contextName: input.context_name,
-      portName: input.port_name,
-      direction: input.direction === "inbound" ? "in" : "out",
-    });
-
-    if (!result.success) {
-      throw result.error;
-    }
-
-    this.eventBusPort.publish({
-      type: "PortRemoved",
-      payload: {
-        contextName: input.context_name,
-        portName: input.port_name,
-        direction: input.direction,
-      },
-      timestamp: Date.now(),
-      source: "mcp-server",
-    });
+    const mutation: PendingManifestMutation = {
+      kind: "remove-port",
+      input,
+    };
+    const tx = this.transactionManager.begin(
+      `mcp:remove-port:${input.context_name}/${input.port_name}`,
+      { [PENDING_MANIFEST_MUTATION_KEY]: mutation },
+    );
 
     return {
       dryRun: false,
-      removed: result.value.removed,
-      message: result.value.removed
-        ? `Port ${input.port_name} removed from ${input.context_name}.`
-        : `Port ${input.port_name} was not found in ${input.context_name}.`,
+      removed: false,
+      pendingApproval: true,
+      transactionId: tx.id,
+      message: `Proposed removal of port ${input.port_name}. Accept via hexagen_accept_transaction (${tx.id}) to write the manifest.`,
     };
   }
 }

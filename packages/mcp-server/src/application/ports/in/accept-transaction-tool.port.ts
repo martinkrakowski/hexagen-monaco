@@ -26,6 +26,7 @@ export interface AcceptTransactionToolResult {
   transaction: Transaction;
   previous_status: string;
   new_status: string;
+  applied?: { message: string; details: Record<string, unknown> };
 }
 
 export interface AcceptTransactionToolPort {

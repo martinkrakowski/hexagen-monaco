@@ -14,6 +14,7 @@ import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import {
   BASELINE_VERSION,
+  mergeSuppressionMetadata,
   parseBaseline,
   partitionAgainstBaseline,
   serializeBaseline,
@@ -82,6 +83,46 @@ describe("serializeBaseline", () => {
     ]);
     assert.doesNotMatch(text, /SHOULD-NOT-BE-PERSISTED/);
   });
+
+  it("persists reason and expires when present", () => {
+    const text = serializeBaseline([
+      {
+        rule: "r",
+        file: "f.ts",
+        specifier: "s",
+        reason: "tracked debt",
+        expires: "2027-01-15",
+      },
+    ]);
+    assert.match(text, /"reason":"tracked debt"/);
+    assert.match(text, /"expires":"2027-01-15"/);
+    assert.deepEqual(parseBaseline(text).entries[0], {
+      rule: "r",
+      file: "f.ts",
+      specifier: "s",
+      reason: "tracked debt",
+      expires: "2027-01-15",
+    });
+  });
+});
+
+describe("mergeSuppressionMetadata", () => {
+  it("copies reason and expires from the previous file for matching keys", () => {
+    const merged = mergeSuppressionMetadata(
+      [entry("r", "f.ts", "s")],
+      [
+        {
+          rule: "r",
+          file: "f.ts",
+          specifier: "s",
+          reason: "keep me",
+          expires: "2027-01-15",
+        },
+      ],
+    );
+    assert.equal(merged[0]?.reason, "keep me");
+    assert.equal(merged[0]?.expires, "2027-01-15");
+  });
 });
 
 describe("parseBaseline — fail closed", () => {
@@ -102,6 +143,36 @@ describe("parseBaseline — fail closed", () => {
 
   it("rejects a future baseline version rather than half-reading it", () => {
     rejects('{"version":99,"entries":[]}', /unsupported baseline version 99/);
+  });
+
+  it("rejects unknown entry fields instead of silently dropping them", () => {
+    rejects(
+      '{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","note":"informal"}]}',
+      /unknown field\(s\) 'note'/,
+    );
+  });
+
+  it("rejects an empty reason and a malformed expires date", () => {
+    rejects(
+      '{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","reason":"  "}]}',
+      /empty or non-string 'reason'/,
+    );
+    rejects(
+      '{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","expires":"soon"}]}',
+      /expires' must be YYYY-MM-DD/,
+    );
+    rejects(
+      '{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","expires":"2026-02-30"}]}',
+      /not a real calendar date/,
+    );
+  });
+
+  it("accepts optional reason and expires and keeps them on the entry", () => {
+    const parsed = parseBaseline(
+      '{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","reason":"tracked debt","expires":"2027-01-15"}]}',
+    );
+    assert.equal(parsed.entries[0]?.reason, "tracked debt");
+    assert.equal(parsed.entries[0]?.expires, "2027-01-15");
   });
 });
 
@@ -157,5 +228,62 @@ describe("partitionAgainstBaseline", () => {
     );
     assert.equal(fresh.length, 1);
     assert.equal(stale.length, 0);
+  });
+
+  it("treats an expired suppression as a gate failure, not a suppress", () => {
+    const now = new Date("2026-08-17T12:00:00.000Z");
+    const { fresh, baselined, expired } = partitionAgainstBaseline(
+      [violation("npm-package-in-domain", "a.ts", "zod")],
+      [
+        {
+          rule: "npm-package-in-domain",
+          file: "a.ts",
+          specifier: "zod",
+          reason: "was accepted",
+          expires: "2026-01-01",
+        },
+      ],
+      now,
+    );
+    assert.equal(fresh.length, 1);
+    assert.equal(baselined.length, 0);
+    assert.equal(expired.length, 1);
+    assert.equal(expired[0]?.expires, "2026-01-01");
+  });
+
+  it("fails the gate on an expired entry even when the finding is gone", () => {
+    const now = new Date("2026-08-17T12:00:00.000Z");
+    const { stale, expired } = partitionAgainstBaseline(
+      [],
+      [
+        {
+          rule: "npm-package-in-domain",
+          file: "a.ts",
+          specifier: "zod",
+          expires: "2026-01-01",
+        },
+      ],
+      now,
+    );
+    assert.equal(stale.length, 0);
+    assert.equal(expired.length, 1);
+  });
+
+  it("keeps a same-day expiry valid through the end of that UTC day", () => {
+    const now = new Date("2026-08-17T23:59:59.000Z");
+    const { baselined, expired } = partitionAgainstBaseline(
+      [violation("npm-package-in-domain", "a.ts", "zod")],
+      [
+        {
+          rule: "npm-package-in-domain",
+          file: "a.ts",
+          specifier: "zod",
+          expires: "2026-08-17",
+        },
+      ],
+      now,
+    );
+    assert.equal(baselined.length, 1);
+    assert.equal(expired.length, 0);
   });
 });

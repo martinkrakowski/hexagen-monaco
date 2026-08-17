@@ -1,8 +1,13 @@
 import { describe, it } from "vitest";
 import assert from "node:assert";
 import {
+  HEXAGEN_CONFORMANCE_ACTION_YML,
+  HEXAGEN_CONFORMANCE_ACTION_YML_PATH,
+  HEXAGEN_CONFORMANCE_COMMENT_SCRIPT,
+  HEXAGEN_CONFORMANCE_COMMENT_SCRIPT_PATH,
   SYNC_INTEGRITY_WORKFLOW,
   SYNC_INTEGRITY_WORKFLOW_PATH,
+  hexagenConformanceActionFiles,
   shouldInjectSyncIntegrityWorkflow,
 } from "../../src/domain/sync-integrity-workflow.js";
 
@@ -54,6 +59,33 @@ describe("sync-integrity workflow content", () => {
 
   it("runs the generated project's sync:check script", () => {
     assert.ok(SYNC_INTEGRITY_WORKFLOW.includes("yarn sync:check"));
+  });
+
+  it("uses the vendored hexagen-conformance action (0.10.0 contract)", () => {
+    assert.ok(
+      SYNC_INTEGRITY_WORKFLOW.includes(
+        "uses: ./.github/actions/hexagen-conformance",
+      ),
+    );
+    assert.ok(SYNC_INTEGRITY_WORKFLOW.includes("yarn hexagen-lint --ratchet"));
+    assert.match(SYNC_INTEGRITY_WORKFLOW, /0\.10\.0 unpublished/);
+    assert.ok(!SYNC_INTEGRITY_WORKFLOW.includes("v0.9.0"));
+  });
+
+  it("vendors the composite action files next to the workflow", () => {
+    const files = hexagenConformanceActionFiles();
+    assert.deepEqual(
+      files.map((f) => f.path),
+      [
+        HEXAGEN_CONFORMANCE_ACTION_YML_PATH,
+        HEXAGEN_CONFORMANCE_COMMENT_SCRIPT_PATH,
+      ],
+    );
+    assert.ok(HEXAGEN_CONFORMANCE_ACTION_YML.includes("${{ github.token }}"));
+    assert.ok(HEXAGEN_CONFORMANCE_ACTION_YML.includes("--pr-diff"));
+    assert.ok(
+      HEXAGEN_CONFORMANCE_COMMENT_SCRIPT.includes("hexagen-conformance"),
+    );
   });
 
   it("pins actions at @v5 (Node-24-ready), with no @v4 left", () => {

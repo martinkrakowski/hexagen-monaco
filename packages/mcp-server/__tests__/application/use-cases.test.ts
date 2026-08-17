@@ -1,6 +1,6 @@
 import { describe, it } from "vitest";
 import assert from "node:assert";
-import type { EventBusPort } from "@hexagen/messaging";
+import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 // The graph and report shapes live where `ArchitectureQueryPort` reads them
 // from; `@hexagen/shared` has not exported either name for some time, which
 // nothing noticed while this package had no `typecheck:test`.
@@ -150,24 +150,11 @@ class ManifestWriteFake implements ManifestWritePort {
   }
 }
 
-class EventBusFake implements EventBusPort {
-  subscribe(): () => void {
-    return () => {};
-  }
-
-  publish(): void {}
-
-  unsubscribe(): void {}
-
-  clear(): void {}
-}
-
 describe("use cases", () => {
   const projectRead = new ProjectConfigurationReadFake();
   const sync = new SyncEngineFake();
   const linter = new LinterFake();
   const manifestWrite = new ManifestWriteFake();
-  const eventBus = new EventBusFake();
 
   it("should return manifest data", async () => {
     const manifestResult = await new GetManifestResourceUseCase(
@@ -200,9 +187,7 @@ describe("use cases", () => {
 
   it("should scaffold module in dry_run mode", async () => {
     const scaffoldResult = await new ScaffoldModuleToolUseCase(
-      sync as ScaffoldingPort,
-      manifestWrite,
-      eventBus,
+      new InMemoryTransactionManager(),
     ).execute({
       name: "mcp-server",
       layer: "infrastructure",
@@ -212,40 +197,41 @@ describe("use cases", () => {
     assert.strictEqual(scaffoldResult.dryRun, true);
   });
 
-  it("should add dependency", async () => {
+  it("should propose a dependency without writing", async () => {
     const dependencyResult = await new AddDependencyToolUseCase(
       manifestWrite,
-      eventBus,
+      new InMemoryTransactionManager(),
     ).execute({
       sourceModule: "mcp-server",
       targetModule: "sync",
       dry_run: false,
     });
-    assert.strictEqual(dependencyResult.updated, true);
+    assert.strictEqual(dependencyResult.updated, false);
+    assert.strictEqual(dependencyResult.pendingApproval, true);
   });
 
-  it("should create port", async () => {
+  it("should propose a port without writing", async () => {
     const createPortResult = await new CreatePortToolUseCase(
-      sync as ScaffoldingPort,
-      manifestWrite,
+      new InMemoryTransactionManager(),
     ).execute({
       domain_name: "billing",
       port_name: "PaymentGatewayPort",
       type: "outbound",
       dry_run: false,
     });
-    assert.ok(createPortResult.fileCreated);
+    assert.strictEqual(createPortResult.fileCreated, undefined);
+    assert.strictEqual(createPortResult.pendingApproval, true);
   });
 
-  it("should create adapter", async () => {
+  it("should propose an adapter without writing", async () => {
     const createAdapterResult = await new CreateAdapterToolUseCase(
-      sync as ScaffoldingPort,
-      manifestWrite,
+      new InMemoryTransactionManager(),
     ).execute({
       port_name: "PaymentGatewayPort",
       infrastructure_name: "stripe-billing",
       dry_run: false,
     });
-    assert.ok(createAdapterResult.fileCreated);
+    assert.strictEqual(createAdapterResult.fileCreated, undefined);
+    assert.strictEqual(createAdapterResult.pendingApproval, true);
   });
 });

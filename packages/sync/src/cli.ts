@@ -19,6 +19,7 @@ import { refactorCommander } from "./commands/arch/refactor.js";
 import { manifestCommander } from "./commands/manifest/index.js";
 import { adoptCommander } from "./commands/adopt/index.js";
 import { bootstrapCommander } from "./commands/bootstrap/index.js";
+import { runReportCommand } from "./commands/report/index.js";
 import { resolveToolchainVersion } from "./toolchain-version.js";
 import type { LoggerPort } from "@hexagen/shared";
 
@@ -223,6 +224,39 @@ function buildProgram(): Command {
     )
     .action(async () => {
       await validateTemplatesCommand();
+    });
+
+  // hexagen report [--handoff]
+  // 0.10.0 unpublished contract — not present on the published 0.9.0 tarball.
+  program
+    .command("report")
+    .description(
+      "Write a self-contained HTML/Markdown engagement report (context map, drift, ratchet trend, suppression ledger)",
+    )
+    .option("--format <html|md|both>", "Output format (default both)", "both")
+    .option(
+      "--out <dir>",
+      "Directory for hexagen-report.html / hexagen-report.md (default: project root)",
+    )
+    .option(
+      "--handoff",
+      "Also write hexagen-handoff.zip (report + manifest + layout + baseline + ledger)",
+    )
+    .option(
+      "--handoff-out <path>",
+      "Handoff zip path (default: <out>/hexagen-handoff.zip)",
+    )
+    .action(async (options) => {
+      const format = options.format as string;
+      if (format !== "html" && format !== "md" && format !== "both") {
+        throw new Error("--format must be html, md, or both");
+      }
+      await runReportCommand({
+        format,
+        out: options.out as string | undefined,
+        handoff: Boolean(options.handoff),
+        handoffOut: options.handoffOut as string | undefined,
+      });
     });
 
   return program;
