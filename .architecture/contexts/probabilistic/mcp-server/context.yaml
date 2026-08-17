@@ -44,6 +44,15 @@ layers:
         - CreateAdapterToolPort
         - AddDependencyToolPort
         - DiffManifestToolPort
+        # Transaction-lifecycle tool family (item 6.5b / HEX-019). Same test:
+        # implemented by its use case, called by the tool handler, no
+        # infrastructure implementer. The driven collaborator stays
+        # TransactionManagerPort, which transaction-system owns and which is
+        # outbound here — deliberately not listed.
+        - AcceptTransactionToolPort
+        - RejectTransactionToolPort
+        - GetTransactionToolPort
+        - ListTransactionsToolPort
       out:
         - ProjectConfigurationReadPort
         - ManifestWritePort

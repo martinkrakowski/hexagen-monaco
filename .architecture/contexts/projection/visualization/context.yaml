@@ -13,10 +13,12 @@ layers:
     use_cases:
       - RenderHexagonCanvasUseCase
       - ExportGraphImageUseCase
+      - CanvasGraphLoadUseCase
     ports:
       in:
         - RenderHexagonCanvasPort
         - ExportGraphImagePort
+        - GenerateHexagonalMapPort
       out:
         - IArchitectureGraphProviderPort
 depends_on:
