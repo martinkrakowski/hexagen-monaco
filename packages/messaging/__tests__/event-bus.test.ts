@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { InMemoryEventBusAdapter } from "../src/infrastructure/adapters/in-memory-event-bus.adapter";
 
 describe("event-bus", () => {
@@ -110,5 +110,65 @@ describe("event-bus", () => {
       timestamp: Date.now(),
       source: "test",
     });
+  });
+
+  // The adapter's `publish` swallows handler exceptions on purpose — its own
+  // comment says "Handlers must not throw; errors are silently ignored to
+  // protect other subscribers". Nothing verified either half of that claim.
+  it("should keep delivering to later subscribers when an earlier one throws", () => {
+    const eventBus6 = new InMemoryEventBusAdapter();
+    const delivered: string[] = [];
+
+    eventBus6.subscribe("test-event", () => {
+      throw new Error("first subscriber exploded");
+    });
+    eventBus6.subscribe("test-event", () => {
+      delivered.push("second");
+    });
+
+    expect(
+      () =>
+        eventBus6.publish({
+          type: "test-event",
+          payload: { message: "resilient" },
+          timestamp: Date.now(),
+          source: "test",
+        }),
+      "A throwing subscriber must not propagate out of publish",
+    ).not.toThrow();
+
+    expect(
+      delivered,
+      "A throwing subscriber must not stop delivery to the rest",
+    ).toEqual(["second"]);
+  });
+
+  // Only the closure returned by `subscribe` was covered; `unsubscribe` is a
+  // separate method on EventBusPort and had no test of its own.
+  it("should stop delivery via the explicit unsubscribe method", () => {
+    const eventBus7 = new InMemoryEventBusAdapter();
+    const removed: string[] = [];
+    const kept: string[] = [];
+
+    const removedHandler = () => removed.push("removed");
+    eventBus7.subscribe("test-event", removedHandler);
+    eventBus7.subscribe("test-event", () => kept.push("kept"));
+
+    eventBus7.unsubscribe("test-event", removedHandler);
+
+    eventBus7.publish({
+      type: "test-event",
+      payload: { message: "targeted" },
+      timestamp: Date.now(),
+      source: "test",
+    });
+
+    expect(removed, "The unsubscribed handler must not receive").toHaveLength(
+      0,
+    );
+    expect(
+      kept,
+      "unsubscribe must remove only the handler it was given",
+    ).toEqual(["kept"]);
   });
 });
