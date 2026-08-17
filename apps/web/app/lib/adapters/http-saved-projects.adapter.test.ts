@@ -84,9 +84,58 @@ describe("HttpSavedProjectsAdapter", () => {
     const created = await port.createProjectRecord(sample);
     assert.equal(created.success, true);
   });
+
+  it("saveProjects replaces the remote list, deleting ids absent from the new array", async () => {
+    const kept = sample;
+    const dropped: SavedProject = {
+      ...sample,
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "gone",
+    };
+    const methods: string[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      methods.push(`${init?.method ?? "GET"} ${String(url)}`);
+      if (String(url) === "/api/projects" && init?.method === "PUT") {
+        return new Response(JSON.stringify({ projects: [kept] }), {
+          status: 200,
+        });
+      }
+      return new Response("nope", { status: 500 });
+    }) as unknown as typeof fetch;
+    const port = new HttpSavedProjectsAdapter(fetchImpl);
+    const written = await port.saveProjects([kept]);
+    assert.equal(written.success, true);
+    assert.deepEqual(methods, ["PUT /api/projects"]);
+    const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body)) as {
+      projects: SavedProject[];
+    };
+    assert.deepEqual(
+      body.projects.map((p) => p.id),
+      [kept.id],
+    );
+    assert.ok(!body.projects.some((p) => p.id === dropped.id));
+  });
 });
 
 describe("CachedSavedProjectsAdapter", () => {
+  it("lifts a non-empty cache onto an empty remote instead of wiping it", async () => {
+    const cache = memoryPort([sample]);
+    const remote = memoryPort([]);
+    const port = new CachedSavedProjectsAdapter(cache, remote);
+    const loaded = await port.loadProjects();
+    assert.equal(loaded.success, true);
+    if (loaded.success) assert.equal(loaded.value[0]?.id, sample.id);
+    const remoteAfter = await remote.loadProjects();
+    assert.equal(remoteAfter.success, true);
+    if (remoteAfter.success) {
+      assert.equal(remoteAfter.value.length, 1);
+      assert.equal(remoteAfter.value[0]?.id, sample.id);
+    }
+    const cacheAfter = await cache.loadProjects();
+    assert.equal(cacheAfter.success, true);
+    if (cacheAfter.success) assert.equal(cacheAfter.value[0]?.id, sample.id);
+  });
+
   it("prefers the remote list and falls back to the cache", async () => {
     const cache = memoryPort([]);
     const remote = memoryPort([sample]);

@@ -27,3 +27,5 @@ export {
   type DailyRunCount,
   type StageTelemetryInput,
 } from "./run-history-store";
+export { requirePersistenceOwner } from "./require-owner";
+export { resolvePlatformDbPath, LOCAL_PLATFORM_DB_PATH } from "./platform-db";

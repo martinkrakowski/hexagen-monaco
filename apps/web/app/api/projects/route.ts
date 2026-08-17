@@ -1,13 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { guardMutation, readJsonBody } from "../../lib/request-guards";
 import { getPlatformStore } from "../../../lib/platform";
 import { parseSavedProjectBody } from "../../../lib/platform/saved-project-body";
+import {
+  PROJECT_MUTATION_GUARD,
+  requirePersistenceOwner,
+} from "../../../lib/platform/require-owner";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const loaded = await getPlatformStore().projects.loadProjects();
+export async function GET(request: NextRequest) {
+  const owner = await requirePersistenceOwner(request);
+  if (!owner.ok) return owner.response;
+
+  const loaded = await getPlatformStore()
+    .projectsFor(owner.ownerId)
+    .loadProjects();
   if (!loaded.success) {
     return NextResponse.json(
       {
@@ -22,7 +32,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const gate = guardMutation(request);
+  const owner = await requirePersistenceOwner(request);
+  if (!owner.ok) return owner.response;
+  const gate = guardMutation(request, PROJECT_MUTATION_GUARD);
   if (gate) return gate;
 
   const parsedBody = await readJsonBody(request);
@@ -39,9 +51,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const created = await getPlatformStore().projects.createProjectRecord(
-    parsedProject.project,
-  );
+  const created = await getPlatformStore()
+    .projectsFor(owner.ownerId)
+    .createProjectRecord(parsedProject.project);
   if (!created.success) {
     const status = created.error.kind === "Conflict" ? 409 : 500;
     return NextResponse.json(
@@ -54,4 +66,59 @@ export async function POST(request: NextRequest) {
     );
   }
   return NextResponse.json(created.value, { status: 201 });
+}
+
+const replaceBodySchema = z.object({
+  projects: z.array(z.unknown()),
+});
+
+export async function PUT(request: NextRequest) {
+  const owner = await requirePersistenceOwner(request);
+  if (!owner.ok) return owner.response;
+  const gate = guardMutation(request, PROJECT_MUTATION_GUARD);
+  if (gate) return gate;
+
+  const parsedBody = await readJsonBody(request);
+  if (!parsedBody.ok) return parsedBody.response;
+  const parsed = replaceBodySchema.safeParse(parsedBody.body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      {
+        error: "validation",
+        message: "Invalid saved project list",
+        statusCode: 400,
+      },
+      { status: 400 },
+    );
+  }
+  const projects = [];
+  for (const entry of parsed.data.projects) {
+    const project = parseSavedProjectBody(entry);
+    if (!project.ok) {
+      return NextResponse.json(
+        {
+          error: "validation",
+          message: project.message,
+          statusCode: 400,
+        },
+        { status: 400 },
+      );
+    }
+    projects.push(project.project);
+  }
+
+  const written = await getPlatformStore()
+    .projectsFor(owner.ownerId)
+    .saveProjects(projects);
+  if (!written.success) {
+    return NextResponse.json(
+      {
+        error: written.error.kind,
+        message: written.error.message,
+        statusCode: 500,
+      },
+      { status: 500 },
+    );
+  }
+  return NextResponse.json({ projects });
 }

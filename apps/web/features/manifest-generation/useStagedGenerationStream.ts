@@ -189,6 +189,7 @@ export function useStagedGenerationStream(
       setAdapterCount(0);
       setIsGenerating(true);
 
+      const runId = crypto.randomUUID();
       const controller = new AbortController();
       abortRef.current = controller;
 
@@ -402,6 +403,7 @@ export function useStagedGenerationStream(
                     if (isStageTelemetry(event.telemetry)) {
                       const telemetry = event.telemetry;
                       persistStageTelemetry(telemetry, {
+                        runId,
                         projectId:
                           typeof body.projectId === "string"
                             ? body.projectId

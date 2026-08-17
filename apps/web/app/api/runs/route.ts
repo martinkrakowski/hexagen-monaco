@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { guardMutation, readJsonBody } from "../../lib/request-guards";
 import { getPlatformStore } from "../../../lib/platform";
+import {
+  PROJECT_MUTATION_GUARD,
+  requirePersistenceOwner,
+} from "../../../lib/platform/require-owner";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +31,9 @@ const persistBodySchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
+  const owner = await requirePersistenceOwner(request);
+  if (!owner.ok) return owner.response;
+
   const projectId = request.nextUrl.searchParams.get("projectId") ?? undefined;
   if (projectId) {
     const parsed = z.string().uuid().safeParse(projectId);
@@ -37,15 +44,17 @@ export async function GET(request: NextRequest) {
       );
     }
   }
-  const store = getPlatformStore();
+  const runs = getPlatformStore().runsFor(owner.ownerId);
   return NextResponse.json({
-    events: store.runs.list({ projectId, limit: 100 }),
-    trend: store.runs.trend(14),
+    events: runs.list({ projectId, limit: 100 }),
+    trend: runs.trend(14),
   });
 }
 
 export async function POST(request: NextRequest) {
-  const gate = guardMutation(request);
+  const owner = await requirePersistenceOwner(request);
+  if (!owner.ok) return owner.response;
+  const gate = guardMutation(request, PROJECT_MUTATION_GUARD);
   if (gate) return gate;
 
   const parsedBody = await readJsonBody(request);
@@ -57,6 +66,8 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
-  const recorded = getPlatformStore().runs.record(parsed.data);
+  const recorded = getPlatformStore()
+    .runsFor(owner.ownerId)
+    .record(parsed.data);
   return NextResponse.json(recorded, { status: 201 });
 }

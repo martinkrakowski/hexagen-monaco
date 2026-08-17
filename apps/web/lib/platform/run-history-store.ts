@@ -111,14 +111,15 @@ export interface RunHistoryRepository {
 
 export function createRunHistoryRepository(
   db: Database.Database,
+  ownerId: string,
 ): RunHistoryRepository {
   const insert = db.prepare(`
     INSERT INTO run_events (
-      id, run_id, project_id, stage, label, model, refiner_model,
+      id, owner_id, run_id, project_id, stage, label, model, refiner_model,
       duration_ms, retry_count, input_tokens, output_tokens,
       served_from_cache, used_llm, summary, cost_cents, created_at
     ) VALUES (
-      @id, @run_id, @project_id, @stage, @label, @model, @refiner_model,
+      @id, @owner_id, @run_id, @project_id, @stage, @label, @model, @refiner_model,
       @duration_ms, @retry_count, @input_tokens, @output_tokens,
       @served_from_cache, @used_llm, @summary, @cost_cents, @created_at
     )
@@ -128,7 +129,8 @@ export function createRunHistoryRepository(
   );
   const selectRecent = db.prepare(`
     SELECT * FROM run_events
-     WHERE (@project_id IS NULL OR project_id = @project_id)
+     WHERE owner_id = @owner_id
+       AND (@project_id IS NULL OR project_id = @project_id)
      ORDER BY created_at DESC
      LIMIT @limit
   `);
@@ -138,7 +140,7 @@ export function createRunHistoryRepository(
       COUNT(DISTINCT run_id) AS runs,
       COALESCE(SUM(cost_cents), 0) AS cost_cents
     FROM run_events
-     WHERE created_at >= @since
+     WHERE owner_id = @owner_id AND created_at >= @since
      GROUP BY day
      ORDER BY day ASC
   `);
@@ -194,6 +196,7 @@ export function createRunHistoryRepository(
       };
       insert.run({
         id: record.id,
+        owner_id: ownerId,
         run_id: record.runId,
         project_id: record.projectId,
         stage: record.stage,
@@ -214,6 +217,7 @@ export function createRunHistoryRepository(
     },
     list(options = {}) {
       const rows = selectRecent.all({
+        owner_id: ownerId,
         project_id: options.projectId ?? null,
         limit: options.limit ?? 100,
       }) as RunEventRow[];
@@ -221,7 +225,7 @@ export function createRunHistoryRepository(
     },
     trend(days = 14) {
       const since = Date.now() - days * 24 * 60 * 60 * 1000;
-      const rows = selectTrend.all({ since }) as Array<{
+      const rows = selectTrend.all({ owner_id: ownerId, since }) as Array<{
         day: string;
         runs: number;
         cost_cents: number;

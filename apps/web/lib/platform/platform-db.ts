@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 
 /**
  * Single-tenant-per-deployment: one sqlite file per container — do not add
@@ -52,18 +53,21 @@ export function openPlatformDb(dbPath: string): Database.Database {
     );
 
     CREATE TABLE IF NOT EXISTS saved_projects (
-      id TEXT PRIMARY KEY,
+      id TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
       name TEXT NOT NULL,
       payload TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
-      ord INTEGER NOT NULL
+      ord INTEGER NOT NULL,
+      PRIMARY KEY (owner_id, id)
     );
     CREATE INDEX IF NOT EXISTS idx_saved_projects_ord
-      ON saved_projects (ord);
+      ON saved_projects (owner_id, ord);
 
     CREATE TABLE IF NOT EXISTS run_events (
       id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
       run_id TEXT NOT NULL,
       project_id TEXT,
       stage INTEGER NOT NULL,
@@ -85,7 +89,9 @@ export function openPlatformDb(dbPath: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_run_events_run
       ON run_events (run_id);
     CREATE INDEX IF NOT EXISTS idx_run_events_project
-      ON run_events (project_id);
+      ON run_events (owner_id, project_id);
+    CREATE INDEX IF NOT EXISTS idx_run_events_owner
+      ON run_events (owner_id, created_at DESC);
 
     CREATE TABLE IF NOT EXISTS model_prices (
       model TEXT PRIMARY KEY,
@@ -106,7 +112,30 @@ export function openPlatformDb(dbPath: string): Database.Database {
     );
   `);
   seedModelPrices(db);
+  ensureOwnerColumns(db);
   return db;
+}
+
+function tableHasColumn(
+  db: Database.Database,
+  table: string,
+  column: string,
+): boolean {
+  const cols = db.pragma(`table_info(${table})`) as Array<{ name: string }>;
+  return cols.some((col) => col.name === column);
+}
+
+function ensureOwnerColumns(db: Database.Database): void {
+  if (!tableHasColumn(db, "saved_projects", "owner_id")) {
+    db.exec(
+      "ALTER TABLE saved_projects ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''",
+    );
+  }
+  if (!tableHasColumn(db, "run_events", "owner_id")) {
+    db.exec(
+      "ALTER TABLE run_events ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''",
+    );
+  }
 }
 
 function seedModelPrices(db: Database.Database): void {
@@ -122,9 +151,16 @@ function seedModelPrices(db: Database.Database): void {
   seed.run("openai/gpt-4o", 2.5, 10.0, now);
 }
 
-const DEFAULT_DB_PATH =
-  process.env.NODE_ENV === "production" ? "/data/platform.db" : ":memory:";
+export const LOCAL_PLATFORM_DB_PATH = join(
+  tmpdir(),
+  "hexagen-monaco-platform.db",
+);
 
-export function resolvePlatformDbPath(): string {
-  return process.env.PLATFORM_DB_PATH ?? DEFAULT_DB_PATH;
+export function resolvePlatformDbPath(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  if (env.PLATFORM_DB_PATH) return env.PLATFORM_DB_PATH;
+  if (env.NODE_ENV === "production") return "/data/platform.db";
+  if (env.NODE_ENV === "test") return ":memory:";
+  return LOCAL_PLATFORM_DB_PATH;
 }

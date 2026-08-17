@@ -13,9 +13,9 @@ import {
 
 export interface PlatformStore {
   readonly auth: AuthRepository;
-  readonly projects: SavedProjectsPersistencePort;
-  readonly runs: RunHistoryRepository;
   readonly billing: EntitlementRepository;
+  projectsFor(ownerId: string): SavedProjectsPersistencePort;
+  runsFor(ownerId: string): RunHistoryRepository;
   close(): void;
 }
 
@@ -23,9 +23,13 @@ export function createPlatformStore(dbPath: string): PlatformStore {
   const db = openPlatformDb(dbPath);
   return {
     auth: createAuthRepository(db),
-    projects: createSavedProjectsStore(db),
-    runs: createRunHistoryRepository(db),
     billing: createEntitlementRepository(db),
+    projectsFor(ownerId) {
+      return createSavedProjectsStore(db, ownerId);
+    },
+    runsFor(ownerId) {
+      return createRunHistoryRepository(db, ownerId);
+    },
     close() {
       db.close();
     },

@@ -3,6 +3,10 @@ import { projectIdSchema } from "../../../lib/schemas/project-id-schema";
 import { guardMutation, readJsonBody } from "../../../lib/request-guards";
 import { getPlatformStore } from "../../../../lib/platform";
 import { parseSavedProjectBody } from "../../../../lib/platform/saved-project-body";
+import {
+  PROJECT_MUTATION_GUARD,
+  requirePersistenceOwner,
+} from "../../../../lib/platform/require-owner";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,14 +23,19 @@ function invalidId() {
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const owner = await requirePersistenceOwner(request);
+  if (!owner.ok) return owner.response;
+
   const { projectId } = await params;
   const parsed = projectIdSchema.safeParse(projectId);
   if (!parsed.success) return invalidId();
 
-  const loaded = await getPlatformStore().projects.loadProjects();
+  const loaded = await getPlatformStore()
+    .projectsFor(owner.ownerId)
+    .loadProjects();
   if (!loaded.success) {
     return NextResponse.json(
       {
@@ -55,7 +64,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
-  const gate = guardMutation(request);
+  const owner = await requirePersistenceOwner(request);
+  if (!owner.ok) return owner.response;
+  const gate = guardMutation(request, PROJECT_MUTATION_GUARD);
   if (gate) return gate;
 
   const { projectId } = await params;
@@ -86,7 +97,7 @@ export async function PUT(
     );
   }
 
-  const port = getPlatformStore().projects;
+  const port = getPlatformStore().projectsFor(owner.ownerId);
   const updated = await port.updateProjectRecord(parsedId.data, () => {
     return parsedProject.project;
   });
@@ -121,16 +132,18 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
-  const gate = guardMutation(request);
+  const owner = await requirePersistenceOwner(request);
+  if (!owner.ok) return owner.response;
+  const gate = guardMutation(request, PROJECT_MUTATION_GUARD);
   if (gate) return gate;
 
   const { projectId } = await params;
   const parsed = projectIdSchema.safeParse(projectId);
   if (!parsed.success) return invalidId();
 
-  const deleted = await getPlatformStore().projects.deleteProjectRecord(
-    parsed.data,
-  );
+  const deleted = await getPlatformStore()
+    .projectsFor(owner.ownerId)
+    .deleteProjectRecord(parsed.data);
   if (!deleted.success) {
     return NextResponse.json(
       {

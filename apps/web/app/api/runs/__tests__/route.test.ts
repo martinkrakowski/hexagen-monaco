@@ -1,6 +1,10 @@
-import { afterEach, beforeEach, describe, it } from "vitest";
+import { afterEach, beforeEach, describe, it, vi } from "vitest";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
+
+vi.mock("next-auth/jwt", () => ({ getToken: vi.fn() }));
+
+import { getToken } from "next-auth/jwt";
 import { GET, POST } from "../route";
 import { closePlatformStore } from "../../../../lib/platform";
 
@@ -18,8 +22,17 @@ const telemetry = {
 };
 
 describe("/api/runs", () => {
-  beforeEach(() => closePlatformStore());
+  beforeEach(() => {
+    closePlatformStore();
+    vi.mocked(getToken).mockResolvedValue({ sub: "user-a" } as never);
+  });
   afterEach(() => closePlatformStore());
+
+  it("rejects a missing JWT with 401", async () => {
+    vi.mocked(getToken).mockResolvedValue(null);
+    const res = await GET(new NextRequest("http://localhost/api/runs"));
+    assert.equal(res.status, 401);
+  });
 
   it("persists telemetry and returns it with a trend, without a 501", async () => {
     const created = await POST(
@@ -41,5 +54,9 @@ describe("/api/runs", () => {
     };
     assert.equal(body.events.length, 1);
     assert.ok(Array.isArray(body.trend));
+
+    vi.mocked(getToken).mockResolvedValue({ sub: "user-b" } as never);
+    const other = await GET(new NextRequest("http://localhost/api/runs"));
+    assert.equal((await other.json()).events.length, 0);
   });
 });

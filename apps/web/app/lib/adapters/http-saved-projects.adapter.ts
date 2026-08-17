@@ -90,13 +90,11 @@ export class HttpSavedProjectsAdapter implements SavedProjectsPersistencePort {
   async saveProjects(
     projects: SavedProject[],
   ): Promise<Result<void, PersistenceError>> {
-    for (const project of projects) {
-      const result = await this.request(`/api/projects/${project.id}`, {
-        method: "PUT",
-        body: JSON.stringify(project),
-      });
-      if (!result.success) return result;
-    }
+    const result = await this.request("/api/projects", {
+      method: "PUT",
+      body: JSON.stringify({ projects }),
+    });
+    if (!result.success) return result;
     return { success: true, value: undefined };
   }
 
@@ -156,11 +154,19 @@ export class CachedSavedProjectsAdapter implements SavedProjectsPersistencePort 
 
   async loadProjects(): Promise<Result<SavedProject[], PersistenceError>> {
     const remote = await this.remote.loadProjects();
-    if (remote.success) {
-      await this.cache.saveProjects(remote.value);
-      return remote;
+    if (!remote.success) return this.cache.loadProjects();
+    // An empty successful remote is a fresh store, not "delete everything":
+    // lift the local cache onto the server and keep it. Only a non-empty
+    // remote snapshot is treated as the intended authoritative list.
+    if (remote.value.length === 0) {
+      const cached = await this.cache.loadProjects();
+      if (cached.success && cached.value.length > 0) {
+        await this.remote.saveProjects(cached.value);
+        return cached;
+      }
     }
-    return this.cache.loadProjects();
+    await this.cache.saveProjects(remote.value);
+    return remote;
   }
 
   async saveProjects(

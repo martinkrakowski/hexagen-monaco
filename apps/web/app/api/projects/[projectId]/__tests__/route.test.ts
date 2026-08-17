@@ -1,7 +1,11 @@
-import { afterEach, beforeEach, describe, it } from "vitest";
+import { afterEach, beforeEach, describe, it, vi } from "vitest";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import type { SavedProject } from "@hexagen/shared";
+
+vi.mock("next-auth/jwt", () => ({ getToken: vi.fn() }));
+
+import { getToken } from "next-auth/jwt";
 import { DELETE, GET, PUT } from "../route";
 import {
   closePlatformStore,
@@ -37,9 +41,18 @@ function put(id: string, body: unknown): NextRequest {
 describe("GET/PUT /api/projects/[projectId]", () => {
   beforeEach(() => {
     closePlatformStore();
+    vi.mocked(getToken).mockResolvedValue({ sub: "user-a" } as never);
   });
   afterEach(() => {
     closePlatformStore();
+  });
+
+  it("rejects a missing JWT with 401", async () => {
+    vi.mocked(getToken).mockResolvedValue(null);
+    const res = await GET(get(ID), {
+      params: Promise.resolve({ projectId: ID }),
+    });
+    assert.equal(res.status, 401);
   });
 
   it("rejects an invalid project id with 400, never 501", async () => {
@@ -60,7 +73,7 @@ describe("GET/PUT /api/projects/[projectId]", () => {
     assert.notEqual(body.error, "not_implemented");
   });
 
-  it("PUT upserts and GET returns the stored project", async () => {
+  it("PUT upserts and GET returns the stored project for the JWT owner only", async () => {
     const written = await PUT(put(ID, sample()), {
       params: Promise.resolve({ projectId: ID }),
     });
@@ -76,6 +89,13 @@ describe("GET/PUT /api/projects/[projectId]", () => {
     assert.equal(body.id, ID);
     assert.equal(body.manifestYaml.includes("system: shop"), true);
 
+    vi.mocked(getToken).mockResolvedValue({ sub: "user-b" } as never);
+    const other = await GET(get(ID), {
+      params: Promise.resolve({ projectId: ID }),
+    });
+    assert.equal(other.status, 404);
+
+    vi.mocked(getToken).mockResolvedValue({ sub: "user-a" } as never);
     const renamed = { ...sample(), name: "renamed", updatedAt: 2 };
     const updated = await PUT(put(ID, renamed), {
       params: Promise.resolve({ projectId: ID }),
@@ -83,9 +103,14 @@ describe("GET/PUT /api/projects/[projectId]", () => {
     assert.equal(updated.status, 200);
     assert.equal(((await updated.json()) as SavedProject).name, "renamed");
 
-    const fromStore = await getPlatformStore().projects.loadProjects();
+    const fromStore = await getPlatformStore()
+      .projectsFor("user-a")
+      .loadProjects();
     assert.equal(fromStore.success, true);
-    if (fromStore.success) assert.equal(fromStore.value[0]?.name, "renamed");
+    if (fromStore.success) {
+      const row = fromStore.value.find((p) => p.id === ID);
+      assert.equal(row?.name, "renamed");
+    }
 
     const deleted = await DELETE(get(ID), {
       params: Promise.resolve({ projectId: ID }),

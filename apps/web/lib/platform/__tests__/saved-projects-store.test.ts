@@ -21,12 +21,13 @@ describe("sqlite SavedProjectsPersistencePort", () => {
     const a = project("11111111-1111-4111-8111-111111111111", "alpha");
     const b = project("22222222-2222-4222-8222-222222222222", "beta");
 
-    const createdA = await store.projects.createProjectRecord(a);
-    const createdB = await store.projects.createProjectRecord(b);
+    const projects = store.projectsFor("owner-a");
+    const createdA = await projects.createProjectRecord(a);
+    const createdB = await projects.createProjectRecord(b);
     assert.equal(createdA.success, true);
     assert.equal(createdB.success, true);
 
-    const loaded = await store.projects.loadProjects();
+    const loaded = await projects.loadProjects();
     assert.equal(loaded.success, true);
     if (!loaded.success) return;
     assert.deepEqual(
@@ -34,34 +35,31 @@ describe("sqlite SavedProjectsPersistencePort", () => {
       [b.id, a.id],
     );
 
-    const duplicate = await store.projects.createProjectRecord(a);
+    const duplicate = await projects.createProjectRecord(a);
     assert.equal(duplicate.success, false);
     if (!duplicate.success) assert.equal(duplicate.error.kind, "Conflict");
 
-    const updated = await store.projects.updateProjectRecord(
-      a.id,
-      (current) => ({
-        ...current,
-        name: "alpha-renamed",
-        updatedAt: 9,
-      }),
-    );
+    const updated = await projects.updateProjectRecord(a.id, (current) => ({
+      ...current,
+      name: "alpha-renamed",
+      updatedAt: 9,
+    }));
     assert.equal(updated.success, true);
     if (updated.success) assert.equal(updated.value.name, "alpha-renamed");
 
-    const missing = await store.projects.updateProjectRecord(
+    const missing = await projects.updateProjectRecord(
       "33333333-3333-4333-8333-333333333333",
       (p) => p,
     );
     assert.equal(missing.success, false);
     if (!missing.success) assert.equal(missing.error.kind, "NotFound");
 
-    const deleted = await store.projects.deleteProjectRecord(a.id);
+    const deleted = await projects.deleteProjectRecord(a.id);
     assert.equal(deleted.success, true);
-    const again = await store.projects.deleteProjectRecord(a.id);
+    const again = await projects.deleteProjectRecord(a.id);
     assert.equal(again.success, true);
 
-    const after = await store.projects.loadProjects();
+    const after = await projects.loadProjects();
     assert.equal(after.success, true);
     if (after.success) {
       assert.deepEqual(
@@ -76,10 +74,11 @@ describe("sqlite SavedProjectsPersistencePort", () => {
     const store = createPlatformStore(":memory:");
     const a = project("11111111-1111-4111-8111-111111111111", "a");
     const b = project("22222222-2222-4222-8222-222222222222", "b");
-    await store.projects.createProjectRecord(a);
-    const written = await store.projects.saveProjects([a, b]);
+    const projects = store.projectsFor("owner-a");
+    await projects.createProjectRecord(a);
+    const written = await projects.saveProjects([a, b]);
     assert.equal(written.success, true);
-    const loaded = await store.projects.loadProjects();
+    const loaded = await projects.loadProjects();
     assert.equal(loaded.success, true);
     if (loaded.success) {
       assert.deepEqual(
@@ -87,6 +86,16 @@ describe("sqlite SavedProjectsPersistencePort", () => {
         ["a", "b"],
       );
     }
+    store.close();
+  });
+
+  it("does not leak one owner's projects to another", async () => {
+    const store = createPlatformStore(":memory:");
+    const a = project("11111111-1111-4111-8111-111111111111", "alpha");
+    await store.projectsFor("owner-a").createProjectRecord(a);
+    const other = await store.projectsFor("owner-b").loadProjects();
+    assert.equal(other.success, true);
+    if (other.success) assert.deepEqual(other.value, []);
     store.close();
   });
 });

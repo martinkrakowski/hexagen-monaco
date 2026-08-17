@@ -56,34 +56,38 @@ function parsePayload(row: ProjectRow): Result<SavedProject, PersistenceError> {
 
 export function createSavedProjectsStore(
   db: Database.Database,
+  ownerId: string,
 ): SavedProjectsPersistencePort {
   const selectAll = db.prepare(
-    "SELECT id, name, payload, created_at, updated_at, ord FROM saved_projects ORDER BY ord ASC",
+    "SELECT id, name, payload, created_at, updated_at, ord FROM saved_projects WHERE owner_id = ? ORDER BY ord ASC",
   );
   const selectOne = db.prepare(
-    "SELECT id, name, payload, created_at, updated_at, ord FROM saved_projects WHERE id = ?",
+    "SELECT id, name, payload, created_at, updated_at, ord FROM saved_projects WHERE owner_id = ? AND id = ?",
   );
   const minOrd = db.prepare(
-    "SELECT COALESCE(MIN(ord), 0) AS min_ord FROM saved_projects",
+    "SELECT COALESCE(MIN(ord), 0) AS min_ord FROM saved_projects WHERE owner_id = ?",
   );
   const insert = db.prepare(`
-    INSERT INTO saved_projects (id, name, payload, created_at, updated_at, ord)
-    VALUES (@id, @name, @payload, @created_at, @updated_at, @ord)
+    INSERT INTO saved_projects (id, owner_id, name, payload, created_at, updated_at, ord)
+    VALUES (@id, @owner_id, @name, @payload, @created_at, @updated_at, @ord)
   `);
   const update = db.prepare(`
     UPDATE saved_projects
        SET name = @name, payload = @payload, updated_at = @updated_at
-     WHERE id = @id
+     WHERE owner_id = @owner_id AND id = @id
   `);
-  const remove = db.prepare("DELETE FROM saved_projects WHERE id = ?");
-  const clear = db.prepare("DELETE FROM saved_projects");
+  const remove = db.prepare(
+    "DELETE FROM saved_projects WHERE owner_id = ? AND id = ?",
+  );
+  const clear = db.prepare("DELETE FROM saved_projects WHERE owner_id = ?");
 
   const replaceAll = db.transaction((projects: SavedProject[]) => {
-    clear.run();
+    clear.run(ownerId);
     for (let i = 0; i < projects.length; i += 1) {
       const project = projects[i];
       insert.run({
         id: project.id,
+        owner_id: ownerId,
         name: project.name,
         payload: JSON.stringify(project),
         created_at: project.createdAt,
@@ -96,7 +100,7 @@ export function createSavedProjectsStore(
   return {
     async loadProjects() {
       try {
-        const rows = selectAll.all() as ProjectRow[];
+        const rows = selectAll.all(ownerId) as ProjectRow[];
         const projects: SavedProject[] = [];
         for (const row of rows) {
           const parsed = parsePayload(row);
@@ -134,7 +138,9 @@ export function createSavedProjectsStore(
 
     async createProjectRecord(project) {
       try {
-        const existing = selectOne.get(project.id) as ProjectRow | undefined;
+        const existing = selectOne.get(ownerId, project.id) as
+          | ProjectRow
+          | undefined;
         if (existing) {
           return {
             success: false,
@@ -144,9 +150,10 @@ export function createSavedProjectsStore(
             ),
           };
         }
-        const { min_ord } = minOrd.get() as { min_ord: number };
+        const { min_ord } = minOrd.get(ownerId) as { min_ord: number };
         insert.run({
           id: project.id,
+          owner_id: ownerId,
           name: project.name,
           payload: JSON.stringify(project),
           created_at: project.createdAt,
@@ -168,7 +175,7 @@ export function createSavedProjectsStore(
 
     async updateProjectRecord(id, updater) {
       try {
-        const row = selectOne.get(id) as ProjectRow | undefined;
+        const row = selectOne.get(ownerId, id) as ProjectRow | undefined;
         if (!row) {
           return {
             success: false,
@@ -183,6 +190,7 @@ export function createSavedProjectsStore(
         }
         update.run({
           id,
+          owner_id: ownerId,
           name: updated.name,
           payload: JSON.stringify(updated),
           updated_at: updated.updatedAt,
@@ -202,7 +210,7 @@ export function createSavedProjectsStore(
 
     async deleteProjectRecord(id) {
       try {
-        remove.run(id);
+        remove.run(ownerId, id);
         return { success: true, value: undefined };
       } catch (cause) {
         return {
