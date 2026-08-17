@@ -1,19 +1,10 @@
-import type {
-  Transaction,
-  TransactionManagerPort,
-} from "@hexagen/transaction-system";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
 import type { Result } from "@hexagen/shared";
-
-export interface AcceptTransactionToolInput {
-  transaction_id: string;
-  reason?: string;
-}
-
-export interface AcceptTransactionToolResult {
-  transaction: Transaction;
-  previous_status: string;
-  new_status: string;
-}
+import type {
+  AcceptTransactionToolInput,
+  AcceptTransactionToolPort,
+  AcceptTransactionToolResult,
+} from "../ports/in/accept-transaction-tool.port.js";
 
 /**
  * AcceptTransactionToolUseCase — Mark transaction as accepted via MCP
@@ -23,8 +14,12 @@ export interface AcceptTransactionToolResult {
  *
  * Use this when you want to programmatically accept a transaction that
  * has already been applied and validated.
+ *
+ * ADR-0048: implements the inbound `AcceptTransactionToolPort` the MCP handler
+ * calls; is handed the outbound `TransactionManagerPort` an infrastructure
+ * adapter implements.
  */
-export class AcceptTransactionToolUseCase {
+export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
   constructor(private readonly transactionManager: TransactionManagerPort) {}
 
   async execute(

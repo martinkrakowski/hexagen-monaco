@@ -1,27 +1,22 @@
-import type {
-  Transaction,
-  TransactionStatus,
-  TransactionManagerPort,
-} from "@hexagen/transaction-system";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
 import type { Result } from "@hexagen/shared";
-
-export interface ListTransactionsToolInput {
-  status?: TransactionStatus;
-}
-
-export interface ListTransactionsToolResult {
-  transactions: Transaction[];
-  count: number;
-  filtered_by_status?: TransactionStatus;
-}
+import type {
+  ListTransactionsToolInput,
+  ListTransactionsToolPort,
+  ListTransactionsToolResult,
+} from "../ports/in/list-transactions-tool.port.js";
 
 /**
  * ListTransactionsToolUseCase — List all transactions via MCP
  *
  * Allows AI agents to query all transactions, optionally filtered by status.
  * Useful for discovering pending transactions that need review.
+ *
+ * ADR-0048: implements the inbound `ListTransactionsToolPort` the MCP handler
+ * calls; is handed the outbound `TransactionManagerPort` an infrastructure
+ * adapter implements.
  */
-export class ListTransactionsToolUseCase {
+export class ListTransactionsToolUseCase implements ListTransactionsToolPort {
   constructor(private readonly transactionManager: TransactionManagerPort) {}
 
   async execute(
