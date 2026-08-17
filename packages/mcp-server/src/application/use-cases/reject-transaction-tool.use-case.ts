@@ -1,20 +1,10 @@
-import type {
-  Transaction,
-  TransactionManagerPort,
-} from "@hexagen/transaction-system";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
 import type { Result } from "@hexagen/shared";
-
-export interface RejectTransactionToolInput {
-  transaction_id: string;
-  reason?: string;
-}
-
-export interface RejectTransactionToolResult {
-  transaction: Transaction;
-  previous_status: string;
-  new_status: string;
-  reason: string;
-}
+import type {
+  RejectTransactionToolInput,
+  RejectTransactionToolPort,
+  RejectTransactionToolResult,
+} from "../ports/in/reject-transaction-tool.port.js";
 
 /**
  * RejectTransactionToolUseCase — Mark transaction as rejected via MCP
@@ -23,8 +13,12 @@ export interface RejectTransactionToolResult {
  * The actual manifest restoration should be done by the web API reject endpoint.
  *
  * Use this when you want to programmatically reject a transaction.
+ *
+ * ADR-0048: implements the inbound `RejectTransactionToolPort` the MCP handler
+ * calls; is handed the outbound `TransactionManagerPort` an infrastructure
+ * adapter implements.
  */
-export class RejectTransactionToolUseCase {
+export class RejectTransactionToolUseCase implements RejectTransactionToolPort {
   constructor(private readonly transactionManager: TransactionManagerPort) {}
 
   async execute(

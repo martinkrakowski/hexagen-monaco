@@ -1,8 +1,12 @@
+import type { AcceptTransactionToolPort } from "../../application/ports/in/accept-transaction-tool.port.js";
 import type { AddDependencyToolPort } from "../../application/ports/in/add-dependency-tool.port.js";
 import type { CreateAdapterToolPort } from "../../application/ports/in/create-adapter-tool.port.js";
 import type { CreateContextToolPort } from "../../application/ports/in/create-context-tool.port.js";
 import type { CreatePortToolPort } from "../../application/ports/in/create-port-tool.port.js";
 import type { DiffManifestToolPort } from "../../application/ports/in/diff-manifest-tool.port.js";
+import type { GetTransactionToolPort } from "../../application/ports/in/get-transaction-tool.port.js";
+import type { ListTransactionsToolPort } from "../../application/ports/in/list-transactions-tool.port.js";
+import type { RejectTransactionToolPort } from "../../application/ports/in/reject-transaction-tool.port.js";
 import type { RemoveContextToolPort } from "../../application/ports/in/remove-context-tool.port.js";
 import type { RemovePortToolPort } from "../../application/ports/in/remove-port-tool.port.js";
 import type { AuditBoundariesToolUseCase } from "../../application/use-cases/audit-boundaries-tool.use-case.js";
@@ -17,10 +21,6 @@ import type { InitializeFeatureWorktreeToolUseCase } from "../../application/use
 import type { LogAgentRemediationToolUseCase } from "../../application/use-cases/log-agent-remediation-tool.use-case.js";
 import type { ScaffoldModuleToolUseCase } from "../../application/use-cases/scaffold-module-tool.use-case.js";
 import type { SubmitArchitecturalSpecToolUseCase } from "../../application/use-cases/submit-architectural-spec-tool.use-case.js";
-import type { GetTransactionToolUseCase } from "../../application/use-cases/get-transaction-tool.use-case.js";
-import type { ListTransactionsToolUseCase } from "../../application/use-cases/list-transactions-tool.use-case.js";
-import type { AcceptTransactionToolUseCase } from "../../application/use-cases/accept-transaction-tool.use-case.js";
-import type { RejectTransactionToolUseCase } from "../../application/use-cases/reject-transaction-tool.use-case.js";
 import type { GenerateTopologyToolUseCase } from "../../application/use-cases/generate-topology-tool.use-case.js";
 import type { GenerateAdaptersToolUseCase } from "../../application/use-cases/generate-adapters-tool.use-case.js";
 import type { GenerateManifestPipelineToolUseCase } from "../../application/use-cases/generate-manifest-pipeline-tool.use-case.js";
@@ -45,7 +45,35 @@ export interface ManifestStructureToolDependencies {
   diffManifestToolUseCase: DiffManifestToolPort;
 }
 
-export interface MCPServerAdapterDependencies extends ManifestStructureToolDependencies {
+/**
+ * The transaction-lifecycle tool family (remediation item 6.5(b) / HEX-019):
+ * accept, reject, get and list transaction.
+ *
+ * Only the *inbound* half moves here. The family's driven collaborator —
+ * `TransactionManagerPort` from `@hexagen/transaction-system`, implemented by
+ * the `InMemoryTransactionManager` adapter — is an existing port and is reused
+ * unchanged; it stays a constructor dependency of the four use cases and is
+ * deliberately absent from this bag. A handler holding the manager directly
+ * would drive the transaction store past the use case, which is the coupling
+ * this item removes rather than relocates.
+ *
+ * Field names are left as they were, for the same reason the (a) family's were:
+ * renaming them to `*ToolPort` forces an edit to `src/index.ts`, which cannot
+ * currently be committed (`turbo/no-undeclared-env-vars` errors there on two
+ * pre-existing OPENAI_* reads, and the fix would be a `turbo.json` edit). The
+ * types, not the identifiers, carry the direction claim.
+ */
+export interface TransactionLifecycleToolDependencies {
+  getTransactionToolUseCase: GetTransactionToolPort;
+  listTransactionsToolUseCase: ListTransactionsToolPort;
+  acceptTransactionToolUseCase: AcceptTransactionToolPort;
+  rejectTransactionToolUseCase: RejectTransactionToolPort;
+}
+
+export interface MCPServerAdapterDependencies
+  extends
+    ManifestStructureToolDependencies,
+    TransactionLifecycleToolDependencies {
   getManifestResourceUseCase: GetManifestResourceUseCase;
   getGraphResourceUseCase: GetGraphResourceUseCase;
   getLinterReportResourceUseCase: GetLinterReportResourceUseCase;
@@ -58,10 +86,6 @@ export interface MCPServerAdapterDependencies extends ManifestStructureToolDepen
   initializeFeatureWorktreeToolUseCase: InitializeFeatureWorktreeToolUseCase;
   submitArchitecturalSpecToolUseCase: SubmitArchitecturalSpecToolUseCase;
   logAgentRemediationToolUseCase: LogAgentRemediationToolUseCase;
-  getTransactionToolUseCase: GetTransactionToolUseCase;
-  listTransactionsToolUseCase: ListTransactionsToolUseCase;
-  acceptTransactionToolUseCase: AcceptTransactionToolUseCase;
-  rejectTransactionToolUseCase: RejectTransactionToolUseCase;
   generateTopologyToolUseCase: GenerateTopologyToolUseCase;
   generateAdaptersToolUseCase: GenerateAdaptersToolUseCase;
   generateManifestPipelineToolUseCase: GenerateManifestPipelineToolUseCase;
@@ -87,6 +111,22 @@ type Expect<T extends true> = T;
 
 export type ManifestStructureDepsAreInboundPorts = Expect<
   StructurallySatisfiable<ManifestStructureToolDependencies> extends ManifestStructureToolDependencies
+    ? true
+    : false
+>;
+
+/**
+ * Same check for the transaction-lifecycle family (item 6.5(b)).
+ *
+ * Note what this does *not* catch, so nobody mistakes it for the whole guard:
+ * a homomorphic mapped type over an array is the identity, so
+ * `x: SomeToolUseCase[]` satisfies it. The source-text guard in
+ * `__tests__/architecture/transaction-lifecycle-inbound-ports.guard.test.ts`
+ * covers that hole by reading declared types verbatim and reporting any it
+ * cannot tie to a single named contract. Neither half is sufficient alone.
+ */
+export type TransactionLifecycleDepsAreInboundPorts = Expect<
+  StructurallySatisfiable<TransactionLifecycleToolDependencies> extends TransactionLifecycleToolDependencies
     ? true
     : false
 >;

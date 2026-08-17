@@ -1,25 +1,22 @@
-import type {
-  Transaction,
-  TransactionManagerPort,
-} from "@hexagen/transaction-system";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
 import type { Result } from "@hexagen/shared";
-
-export interface GetTransactionToolInput {
-  transaction_id: string;
-}
-
-export interface GetTransactionToolResult {
-  transaction: Transaction | null;
-  found: boolean;
-}
+import type {
+  GetTransactionToolInput,
+  GetTransactionToolPort,
+  GetTransactionToolResult,
+} from "../ports/in/get-transaction-tool.port.js";
 
 /**
  * GetTransactionToolUseCase — Query transaction state via MCP
  *
  * Allows AI agents to inspect transaction status, metadata, and patches
  * before deciding whether to accept or reject.
+ *
+ * ADR-0048: implements the inbound `GetTransactionToolPort` the MCP handler
+ * calls; is handed the outbound `TransactionManagerPort` an infrastructure
+ * adapter implements.
  */
-export class GetTransactionToolUseCase {
+export class GetTransactionToolUseCase implements GetTransactionToolPort {
   constructor(private readonly transactionManager: TransactionManagerPort) {}
 
   async execute(
