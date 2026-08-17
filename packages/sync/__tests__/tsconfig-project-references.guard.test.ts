@@ -83,15 +83,29 @@ async function workspaceGroups(): Promise<string[]> {
   return patterns.map((p) => p.slice(0, -2));
 }
 
+/** The errno of a Node filesystem error, or `undefined` if it carries none. */
+function errnoOf(err: unknown): string | undefined {
+  const code = (err as { code?: unknown } | null)?.code;
+  return typeof code === "string" ? code : undefined;
+}
+
+/**
+ * The only errnos that legitimately mean "there is no manifest here, so this is
+ * not a workspace". Every other failure means discovery was DEGRADED, not that
+ * the directory was judged — see the fail-closed note in `workspacesIn`.
+ */
+const ABSENT = new Set(["ENOENT", "ENOTDIR"]);
+
 /** Repo-relative directories of every workspace under `group/`. */
 async function workspacesIn(group: string): Promise<string[]> {
   const groupDir = path.join(REPO_ROOT, group);
   let entries: string[];
   try {
     entries = await fs.readdir(groupDir);
-  } catch {
+  } catch (err) {
     assert.fail(
-      `workspace pattern "${group}/*" points at ${group}/, which does not exist`,
+      `workspace pattern "${group}/*" points at ${group}/, which could not be ` +
+        `read (${errnoOf(err) ?? "no errno"}): ${String(err)}`,
     );
   }
   const found: string[] = [];
@@ -99,7 +113,21 @@ async function workspacesIn(group: string): Promise<string[]> {
     const manifest = path.join(groupDir, entry, "package.json");
     try {
       await fs.access(manifest);
-    } catch {
+    } catch (err) {
+      // FAIL CLOSED. Only absence means "stray directory". Any other errno
+      // (EACCES, EIO, ELOOP…) means we could not tell — and treating "could not
+      // tell" as "not a workspace" drops the directory from `expected`, which
+      // makes an UNREFERENCED workspace vanish from `missing` and turns this
+      // guard green on exactly the drift it exists to catch. A completeness
+      // guard that silently checks less is worse than one that stops.
+      const code = errnoOf(err);
+      assert.ok(
+        code !== undefined && ABSENT.has(code),
+        `could not determine whether ${group}/${entry} is a workspace: ` +
+          `${code ?? "no errno"} reading ${group}/${entry}/package.json. ` +
+          `Skipping it would drop it from the expected set and let this guard ` +
+          `pass on an incomplete scan (${String(err)}).`,
+      );
       continue; // stray directory, not a workspace
     }
     found.push(`${group}/${entry}`);
@@ -185,19 +213,27 @@ describe("tsconfig.base.json project references", () => {
 
   it("every referenced project directory has a tsconfig.json", async () => {
     const references = await declaredReferences();
+    // This loop already fails closed — an unreadable target lands in `broken`
+    // like a missing one. It records the errno only so the report says why,
+    // rather than calling an EACCES a missing file.
     const broken: string[] = [];
     for (const ref of references) {
       try {
         await fs.access(path.join(REPO_ROOT, ref, "tsconfig.json"));
-      } catch {
-        broken.push(ref);
+      } catch (err) {
+        const code = errnoOf(err);
+        broken.push(
+          ABSENT.has(code ?? "")
+            ? `${ref}/tsconfig.json is missing`
+            : `${ref}/tsconfig.json could not be read (${code ?? "no errno"})`,
+        );
       }
     }
     assert.deepEqual(
       broken,
       [],
       `A project reference must point at a directory containing a tsconfig.json:\n` +
-        broken.map((b) => `  - ${b}/tsconfig.json is missing`).join("\n"),
+        broken.map((b) => `  - ${b}`).join("\n"),
     );
   });
 
