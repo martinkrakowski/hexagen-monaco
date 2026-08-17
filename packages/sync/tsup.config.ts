@@ -152,6 +152,13 @@ export default defineConfig({
    * Post-build: copy template-engine templates into dist/templates/ so that
    * resolveTemplatesDir() can find them both in the monorepo and in a published
    * package (the staging script copies dist/ recursively, so dist/templates/ ships).
+   *
+   * This copy is verbatim and unfiltered: whatever sits under templates/ ends up
+   * in the published tarball. What keeps a stray directory (tooling config, a
+   * scratch copy) out of it is the CI gate in template-engine —
+   * `discoverTemplateIds()` fails the bundle build and the template guard suite
+   * by name for anything under templates/ that is not a template. Do not add a
+   * second, differently-worded filter here; make that function authoritative.
    */
   async onSuccess() {
     const { cpSync, rmSync } = await import("node:fs");

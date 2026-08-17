@@ -4,6 +4,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateManifest, outputPath } from "../../src/domain/index.js";
+// Same enumeration the shipped bundle is built from — this guard used to walk
+// templates/ under its own rules, and the two filters disagreeing is what let a
+// stray directory reach the build.
+import { discoverTemplateIds } from "../../src/infrastructure/build-template-bundle.js";
 
 const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -54,18 +58,8 @@ const COLLISION_PRONE: ReadonlyArray<{
 const SOFT_LIMIT_BYTES = 5 * 1024 * 1024;
 const HARD_LIMIT_BYTES = 15 * 1024 * 1024;
 
-async function listTemplateIds(): Promise<string[]> {
-  const entries = await fs.readdir(TEMPLATES_DIR, { withFileTypes: true });
-  const ids = entries
-    .filter((e) => e.isDirectory() && e.name !== "__example__")
-    .map((e) => e.name)
-    .sort();
-  // A guard that scans nothing must fail loudly, not pass vacuously.
-  if (ids.length === 0) {
-    throw new Error(`No templates discovered under ${TEMPLATES_DIR}`);
-  }
-  return ids;
-}
+const listTemplateIds = (): Promise<string[]> =>
+  discoverTemplateIds(TEMPLATES_DIR);
 
 async function outputsFor(id: string): Promise<string[]> {
   const manifest = validateManifest(
