@@ -56,8 +56,12 @@ export const baseConfig = defineConfig({
     // turbo plugin — an inconsistency, not a licence.) The substitution is safe:
     // this repo's only CI is GitHub Actions, and the reporter emits workflow
     // commands that are inert anywhere else.
-    reporters:
-      process.env.CI === "true" ? ["default", "github-actions"] : ["default"],
+    // Truthiness, not `=== "true"`: this repo's own production code tests
+    // `if (process.env.CI)` (`sync/src/commands/shared/spinner.ts`,
+    // `prompt-service.ts`) and its tests set `CI = "1"`. A strict comparison
+    // here would disagree with the repo's own idiom and silently drop CI's
+    // annotations on any runner that sets `CI=1`.
+    reporters: process.env.CI ? ["default", "github-actions"] : ["default"],
   },
   resolve: {
     // NodeNext barrels import `./x/index.js` against `.ts` sources; mirror the

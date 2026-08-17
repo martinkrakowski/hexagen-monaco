@@ -38,24 +38,17 @@ export default mergeConfig(
       setupFiles: ["./vitest.setup.ts"],
       // Pin the reporter instead of letting Vitest choose one.
       //
-      // Vitest 4 auto-selects the `agent` reporter when std-env's `isAgent` is
-      // true (`AI_AGENT` / `CLAUDECODE` / `CURSOR_AGENT` / … are set), and that
-      // reporter is MinimalReporter — `silent: "passed-only"`, so it drops every
-      // console line a PASSING test produced. This workspace's whole diagnostic
-      // surface lives there: React's "not wrapped in act(...)" warnings, MSW's
-      // unhandled-request notices, React key/prop warnings. Under the agent
-      // reporter a full `apps/web` run printed a clean summary and nothing else
-      // while CI, running the same commit, reported 81 un-wrapped state updates.
-      // A defect class that only exists in CI logs is a defect class nobody
-      // fixes, so this app always reports like CI does.
+      // The reporter pin lives in `vitest.shared.ts` for the whole repo. It is
+      // deliberately NOT repeated here: `mergeConfig` CONCATENATES arrays, so a
+      // local `reporters` would produce `["default", "default", …]` and run the
+      // default reporter twice.
       //
-      // The `github-actions` reporter is re-added explicitly: Vitest only
-      // appends it when `reporters` is otherwise EMPTY, so pinning a reporter
-      // would silently drop CI's failure annotations.
-      reporters:
-        process.env.GITHUB_ACTIONS === "true"
-          ? ["default", "github-actions"]
-          : ["default"],
+      // Why it exists, since this workspace is where it was found: Vitest 4
+      // auto-selects the `agent` reporter when std-env's `isAgent` is true
+      // (`AI_AGENT` / `CLAUDECODE` / `CURSOR_AGENT` / …), and that reporter runs
+      // `silent: "passed-only"` — dropping every console line a PASSING test
+      // produced. A full `apps/web` run printed a clean summary and nothing else
+      // while CI, on the same commit, reported 81 un-wrapped state updates.
     },
   }),
 );
