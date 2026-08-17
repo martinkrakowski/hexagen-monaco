@@ -139,6 +139,34 @@ describe("GovernanceQaView — Q&A renders from props alone (REA-001)", () => {
 
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps the route into model settings when no model name is known", () => {
+    // The state a server-assistant deployment is in for as long as the
+    // capability probe is in flight — and permanently if it fails: no local
+    // model loaded, so `footerModelId` is null, and no confirmed server name,
+    // so `footerModelLabel` is undefined. The footer previously papered over
+    // this by asserting a hard-coded "gpt-4o-mini"; not asserting a name must
+    // not cost the user the only way out of the Q&A view.
+    forbidNetwork();
+    const onOpenSettings = vi.fn();
+
+    render(
+      <GovernanceQaView
+        {...qaProps({
+          footerModelId: null,
+          footerModelLabel: undefined,
+          onOpenSettings,
+        })}
+      />,
+    );
+
+    const settings = screen.getByRole("button", { name: /manage models/i });
+    settings.click();
+
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    // …and it still names no model it has not been told about.
+    expect(screen.queryByText(/gpt-4o-mini/i)).toBeNull();
+  });
 });
 
 describe("LocalModeView — one discriminant selects one card (REA-002)", () => {
