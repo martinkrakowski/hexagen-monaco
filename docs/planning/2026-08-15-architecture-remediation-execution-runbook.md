@@ -1,7 +1,9 @@
 # Architecture Remediation — Execution Runbook (live)
 
-**Date:** 2026-08-16 · **Status:** **Phases 0–3 COMPLETE; Phase 4 complete except D6.**
-Phase 2 went green at `b3f79dd6` — **Phases 5–8 are unblocked**. Phase 5 is the wavefront.
+**Date:** 2026-08-16 · **Status:** **Phases 0–5 COMPLETE.** Phase 6 is 5 of 7, Phase 8 is 3 of
+12, Phase 7 has not started. Phase 2 went green at `b3f79dd6`, so nothing is gate-blocked; no
+decision is open either (D6 resolved by #485, D3/D4 on 2026-08-16). **Phase 6's tail is the
+wavefront** — see §5.
 
 This is the **live operating runbook** for executing the architecture-remediation
 arc. It is the companion to — not a replacement for — the two canonical documents,
@@ -96,22 +98,31 @@ this arc kept surfacing. Tracked in
 - **`RefactoringImpactUseCase` discards syntactic diagnostics entirely**, so an unparseable
   consumer file yields a confident, wrong impact report. #466 fixed the compiler version that
   exposed this; it did not fix the class.
-- **`typecheck:test` covers 15 of 38 workspaces** (40 before `api-gateway` and `security` were
-  deleted; re-counted 2026-08-16). It widens automatically as workspaces gain the script.
+- **`typecheck:test` covers 16 of 38 workspaces** (40 before `api-gateway` and `security` were
+  deleted; re-counted from the tree 2026-08-16 — every one of the 16 runs
+  `tsc -p tsconfig.test.json --noEmit`). It widens automatically as workspaces gain the
+  script, and narrows with #512, which deletes two of the 16.
 - **`apps/web` test sources are type-checked nowhere.** Its `tsconfig.json` excludes
-  `**/*.test.ts(x)` and it has no `typecheck:test` script, so CI's test-typecheck step skips
-  the workspace entirely. Lifting the exclusions surfaces **114 pre-existing errors**
-  (measured 2026-08-16). This is the concrete shape of the item above, not a separate finding.
+  `**/*.test.ts(x)` / `**/*.spec.ts(x)` and it has no `typecheck:test` script, so CI's
+  test-typecheck step skips the workspace entirely. Lifting the exclusions surfaces **110
+  pre-existing errors across 29 test files** — re-measured 2026-08-16 with a throwaway
+  tsconfig that extends `apps/web/tsconfig.json` and overrides `exclude`; the top codes are
+  `TS2339` (28), `TS18048` (23) and `TS2739` (10). This is the concrete shape of the item
+  above, not a separate finding.
 - **A test suite can pass with its subject inverted.** `useModelSelectionFlowState`'s 21 tests
   stay green when the hook's initial state is flipped `idle` → `error`; ~15 assert only that a
   value exists or a function is callable. Tracked as **issue #510**, with that mutation as the
   acceptance check.
 - **Vitest's `agent` reporter hides console output from passing tests.** Vitest 4 auto-selects
   it on `CLAUDECODE` / `AI_AGENT` / `CURSOR_AGENT`, and it runs `silent: "passed-only"` — so
-  any evidence gathered in an AI-assisted shell was systematically incomplete. ✅ **Closed by
-  #509**, which pins `reporters` (and re-adds `github-actions` explicitly, since Vitest
-  appends it only when `reporters` is empty). Worth keeping recorded: it invalidated several
-  "zero warnings locally" claims made during this arc.
+  any evidence gathered in an AI-assisted shell was systematically incomplete. **Closed for
+  `apps/web` only** by #509, which pins `reporters` there (and re-adds `github-actions`
+  explicitly, since Vitest appends it only when `reporters` is empty). **Open everywhere
+  else:** the repo has 33 Vitest configs and the other 32 all re-export `vitest.shared.ts`,
+  which carries no `reporters` pin — `git grep -n reporters` matches only
+  `apps/web/vitest.config.ts` — so any non-web workspace run in an AI-assisted shell still
+  auto-selects the agent reporter and still hides passing tests' console output. Worth keeping
+  recorded: it invalidated several "zero warnings locally" claims made during this arc.
 
 ### Cross-phase gating (the hard constraints)
 
@@ -119,10 +130,18 @@ this arc kept surfacing. Tracked in
 - **Phase 7 is strictly serial** internally: 7.1 → 7.2 → 7.3 → 7.4/7.5 → 7.6. It is the one
   phase that cannot be fanned out, which is why it is scheduled last.
 - **8.10 depends on 6.7(b)** — deleting the two frozen no-code packages removes some of the
-  echo-fake suites 8.10 would otherwise rewrite. **Land 6.7(b) first.** 14 files still
-  reference `EchoFakePort`; the `code-generation` and `deployment` doubles are the
-  empty-subclass shape #501 already deleted two instances of.
-- Phase 8's other dependencies (7.1, 4.3, 4.5, 5.2) and Phase 6's (5.5) are **all satisfied**.
+  echo-fake suites 8.10 would otherwise rewrite. **Land 6.7(b) first.** Grepping the tree for
+  `EchoFakePort` returns **16 files on `main`**: **13 under `packages/`** — 12 doubles plus
+  the shared definition in `packages/shared/src/testing/index.ts` — and 3 documentation/ADR
+  references (ADR-0050, the audit, the plan). 6.7(b) deletes six of the doubles with their
+  packages, leaving **10** (7 under `packages/`). The `code-generation` and `deployment`
+  doubles are the empty-subclass shape #501 already deleted two instances of. Re-grep before
+  relying on these: **#512 is the open 6.7(b) PR** and moves them the moment it lands.
+- **8.1 depends on 7.1 and 8.2 depends on 8.1** (plan, Wave-8 dependency column: 8.1 ⇐ "7.1
+  protocol shape", 8.2 ⇐ "8.1, 4.3"). **7.1 has not started**, so these two are the only
+  Phase-8 items that are _not_ free to begin; §5 schedules them behind 7.1, not in the
+  fan-out wave.
+- Phase 8's other dependencies (4.3, 4.5, 5.2) and Phase 6's (5.5) are **all satisfied**.
 - **ADR gates** (all ADRs 0.1–0.8 are accepted): items name their ADR prereq in the
   plan's dependency column.
 
@@ -130,14 +149,14 @@ this arc kept surfacing. Tracked in
 
 ## 2. Decision & release gate ledger
 
-| Gate   | Question                    | Blocks   | Status                                                                         |
-| ------ | --------------------------- | -------- | ------------------------------------------------------------------------------ |
-| **D1** | modify-family gate          | 1.3      | ✅ Resolved — same-origin + rate limit (shipped in #443)                       |
-| **D2** | BYOK persistence backend    | 1.4      | ✅ Resolved — better-sqlite3, volume-backed (shipped in #442)                  |
-| **D3** | api-gateway delete-vs-wire  | **4.5**  | ✅ **Resolved — delete** (dossier §1.1); 4.5 landed, Phase 8 ungated           |
-| **D4** | coverage posture            | **8.11** | ✅ **Resolved — no coverage gate.** Deferral with a re-open trigger; see below |
-| **D5** | TypeScript 6 upgrade        | none     | ⛔ Open — 3.1 deletes the pin regardless; upgrade is its own arc               |
-| **D6** | sync publish-surface semver | **4.7**  | ⛔ **Open** — release-gated                                                    |
+| Gate   | Question                    | Blocks   | Status                                                                                                                                                                      |
+| ------ | --------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **D1** | modify-family gate          | 1.3      | ✅ Resolved — same-origin + rate limit (shipped in #443)                                                                                                                    |
+| **D2** | BYOK persistence backend    | 1.4      | ✅ Resolved — better-sqlite3, volume-backed (shipped in #442)                                                                                                               |
+| **D3** | api-gateway delete-vs-wire  | **4.5**  | ✅ **Resolved — delete** (dossier §1.1); 4.5 landed, Phase 8 ungated                                                                                                        |
+| **D4** | coverage posture            | **8.11** | ✅ **Resolved — no coverage gate.** Deferral with a re-open trigger; see below                                                                                              |
+| **D5** | TypeScript 6 upgrade        | none     | ⛔ Open — 3.1 deletes the pin regardless; upgrade is its own arc                                                                                                            |
+| **D6** | sync publish-surface semver | **4.7**  | ✅ **Resolved — ship `0.10.0` + unexport** (ADR-0056; landed in #485). The **npm publish and the `vX.Y.Z` tag push stay release-gated**, but 4.7 is done and blocks nothing |
 
 _ADR 0.3 (security bounded-context fate) ~~independently gates 6.6 and the conditional
 MOD-005 leg of 3.3~~ is **resolved**: **ADR-0049 accepted as Option B** (amended
@@ -193,7 +212,7 @@ sibling `yarn test --watch` failed identically and was replaced in the same edit
 
 1. **8.10's mock-suite purge has landed**, so a baseline survives the arc's own deletions;
 2. **FU-1 has brought `typecheck:test` to every workspace that has tests**
-   (`docs/planning/2026-08-16-verification-coverage-followups.md`; 15 of 38 today);
+   (`docs/planning/2026-08-16-verification-coverage-followups.md`; 16 of 38 today);
 3. **every workspace with source has a real `test` target** — a target that runs Vitest, not
    `echo "No tests configured"`.
 
@@ -311,24 +330,39 @@ started.
 
 ### Order, and why
 
+Phase 6's two open items are **6.5 (a–c)** and **6.7 (a–d)** — all seven legs, not just the
+one 8.10 waits on. Phase 8's nine open items are 8.1, 8.2, 8.6–8.12.
+
 ```text
-Wave A (serial-ish)   6.7(b)  → 8.10      # 6.7(b) deletes suites 8.10 would otherwise rewrite
-Wave A (parallel)     6.5(a) 6.5(b) 6.5(c)
-Wave B (parallel)     8.1 8.2 8.6 8.7 8.8 8.9 8.12(a–h)  # independent of each other
+Wave A (serial)       6.7(b) → 8.10              # 6.7(b) deletes suites 8.10 would otherwise rewrite
+Wave A (parallel)     6.5(a) 6.5(b) 6.5(c)  6.7(a) 6.7(c) 6.7(d)
+Wave B (parallel)     8.6 8.7 8.8 8.9 8.11 8.12(a–h)   # no dependency on each other or on Phase 7
 Wave C (serial)       7.1 → 7.2 → 7.3 → 7.4/7.5 → 7.6
+                      7.1 → 8.1 → 8.2            # 8.1 needs 7.1's protocol shape; 8.2 needs 8.1
 ```
 
-- **6.7(b) before 8.10** is the only hard ordering left in Phases 6/8. Deleting
+**Phase 6 is not complete until all four 6.7 legs land**, so finishing Waves A–C as written
+above is what closes it — 6.7(b) is merely the one with a downstream consumer.
+
+- **6.7(b) before 8.10** is the only hard ordering left _inside_ Phases 6/8. Deleting
   `architectural-enforcement` and `code-generation` (16 tracked files each, frozen, no runtime
   code) removes echo-fake suites 8.10 would otherwise spend effort rewriting.
 - **6.5 is one PR per tool family**, not one 25-class PR: (a) manifest-structure, (b)
   transaction lifecycle, (c) generation & scaffold. Verified 2026-08-16 that
-  `packages/mcp-server` still declares a single port, so none of this has begun.
+  `packages/mcp-server` still declares a single port, so none of this has begun — though
+  **#513 is now open for 6.5(a)**.
+- **6.7's four legs** (plan, Wave-6 row): (a) the sync generator stops emitting unused layer
+  folders; (b) remove the two frozen no-code packages; (c) `core-domain` / `runtime` re-export
+  real modules; (d) `tsconfig.base.json` references reconciled, including the arch-linter
+  NodeNext outlier. **(d) is gated on 6.6**, which #483 executed, so all four are schedulable
+  now. (a), (c) and (d) have no consumer waiting on them, which is why they sit in the
+  parallel lane rather than the serial one.
 - **6.7(a) carries the twice-bitten trap**: a new sync emitter must be gated for **both**
   self-regen and external modes. Two prior PRs missed the second.
-- **Phase 8's remaining items are largely independent** (8.1, 8.2, 8.6–8.9, 8.12) and fan out
-  freely. 8.11's surviving leg is small: `shared`, `model-settings` and `runtime` define no
-  `test` script at all.
+- **Phase 8's fan-out set is 8.6–8.9, 8.11 and 8.12** — independent of each other and of Phase 7. **8.1 and 8.2 are not in it:** 8.1 consumes 7.1's structured-advisory protocol shape and
+  8.2 builds on 8.1, so starting either before 7.1 lands means writing against the protocol
+  7.1 replaces. 8.11's surviving leg is small: `shared`, `model-settings` and `runtime` define
+  no `test` script at all.
 - **Phase 7 is last because it cannot be parallelised** — strict serial, refuter-mandatory on
   every PR, with wire-compat against the `/stage` adapter and the web classifier.
 
@@ -340,8 +374,10 @@ Wave C (serial)       7.1 → 7.2 → 7.3 → 7.4/7.5 → 7.6
   edits are Primary-only — workers report the change needed and it is applied separately, as
   #506 did for the four 6.4 legs.
 - **Measure with the reporter forced.** `vitest` in an AI-assisted shell hides console output
-  from passing tests; #509 pinned `reporters`, but any ad-hoc `npx vitest` invocation outside
-  the repo config is still exposed.
+  from passing tests. #509 pinned `reporters` **in `apps/web` only** — every other workspace
+  config re-exports the unpinned `vitest.shared.ts`, and ad-hoc `npx vitest` invocations
+  outside the repo config are exposed too. Outside `apps/web`, pass `--reporter=default`
+  before trusting a "no warnings" observation.
 
 **Historical — the Phase 2/3/4 wavefront (2026-08-15 → 16).** Maximal-parallel implementation
 of gate-satisfied items in isolated worktrees, with read-only design scouts running ahead.
@@ -410,13 +446,22 @@ tree rather than from a PR description:
   that said nothing about progress.
 
 Added to §"Known gaps", all found on 2026-08-16: `apps/web` test sources are type-checked
-nowhere (114 errors surface when the exclusions are lifted); a suite that passes with its
-subject inverted (issue #510); and Vitest's `agent` reporter hiding console output from
-passing tests, which invalidated several "zero warnings locally" claims made earlier in this
-arc before #509 closed it. Marked the `lib/` → `features/` gap closed by #495's check 7.
+nowhere (110 errors across 29 files surface when the exclusions are lifted); a suite that
+passes with its subject inverted (issue #510); and Vitest's `agent` reporter hiding console
+output from passing tests, which invalidated several "zero warnings locally" claims made
+earlier in this arc. #509 closed that last one **for `apps/web` only** — the other 32 Vitest
+configs re-export an unpinned `vitest.shared.ts`, so the gap is scoped, not shut. Marked the
+`lib/` → `features/` gap closed by #495's check 7.
 
-§5 now describes the real wavefront — 6.7(b) before 8.10, 6.5 as three tool-family PRs, Phase
-8's independent set, Phase 7 last and serial — and the Phase 5 material moved to history.
+§5 now describes the real wavefront — 6.7(b) before 8.10, all four 6.7 legs scheduled, 6.5 as
+three tool-family PRs, Phase 8's genuine fan-out set with 8.1/8.2 held behind 7.1, Phase 7
+last and serial — and the Phase 5 material moved to history.
+
+Review-round corrections to this PR's own figures, each re-measured rather than argued:
+`EchoFakePort` is **16 files on `main`** (13 under `packages/`), not 14 — the original came
+from a planning doc instead of a grep, which is the failure this refresh exists to correct.
+`typecheck:test` covers **16** of 38 workspaces, not 15. The `apps/web` figure is **110**, not 114. The header blurb and the D6 ledger row, both left stale, now agree with §1: **D6 is
+resolved** (#485) and Phase 6's tail is the wavefront.
 
 - **2026-08-16 (latest)** — **D4 resolved: no coverage gate** (§2). A deferral with a
   three-condition re-open trigger, recorded in the ledger rather than an ADR. The dead root
