@@ -20,6 +20,19 @@ function persistError(
   return { kind, message };
 }
 
+export interface OwnerInitializedPort {
+  isOwnerInitialized(): boolean;
+}
+
+export function isOwnerInitializedPort(
+  port: SavedProjectsPersistencePort,
+): port is SavedProjectsPersistencePort & OwnerInitializedPort {
+  return (
+    "isOwnerInitialized" in port &&
+    typeof (port as OwnerInitializedPort).isOwnerInitialized === "function"
+  );
+}
+
 function asProjects(value: unknown): SavedProject[] {
   if (Array.isArray(value)) return value as SavedProject[];
   if (
@@ -33,8 +46,28 @@ function asProjects(value: unknown): SavedProject[] {
   return [];
 }
 
-export class HttpSavedProjectsAdapter implements SavedProjectsPersistencePort {
+function asInitialized(value: unknown, projects: SavedProject[]): boolean {
+  if (
+    value &&
+    typeof value === "object" &&
+    "initialized" in value &&
+    typeof (value as { initialized: unknown }).initialized === "boolean"
+  ) {
+    return (value as { initialized: boolean }).initialized;
+  }
+  return projects.length > 0;
+}
+
+export class HttpSavedProjectsAdapter
+  implements SavedProjectsPersistencePort, OwnerInitializedPort
+{
+  private ownerInitialized = false;
+
   constructor(private readonly fetchImpl: typeof fetch = fetch) {}
+
+  isOwnerInitialized(): boolean {
+    return this.ownerInitialized;
+  }
 
   private async request(
     url: string,
@@ -84,7 +117,9 @@ export class HttpSavedProjectsAdapter implements SavedProjectsPersistencePort {
   async loadProjects(): Promise<Result<SavedProject[], PersistenceError>> {
     const result = await this.request("/api/projects");
     if (!result.success) return result;
-    return { success: true, value: asProjects(result.value) };
+    const projects = asProjects(result.value);
+    this.ownerInitialized = asInitialized(result.value, projects);
+    return { success: true, value: projects };
   }
 
   async saveProjects(
@@ -95,6 +130,7 @@ export class HttpSavedProjectsAdapter implements SavedProjectsPersistencePort {
       body: JSON.stringify({ projects }),
     });
     if (!result.success) return result;
+    this.ownerInitialized = true;
     return { success: true, value: undefined };
   }
 
@@ -106,6 +142,7 @@ export class HttpSavedProjectsAdapter implements SavedProjectsPersistencePort {
       body: JSON.stringify(project),
     });
     if (!result.success) return result;
+    this.ownerInitialized = true;
     return { success: true, value: (result.value as SavedProject) ?? project };
   }
 
@@ -155,10 +192,13 @@ export class CachedSavedProjectsAdapter implements SavedProjectsPersistencePort 
   async loadProjects(): Promise<Result<SavedProject[], PersistenceError>> {
     const remote = await this.remote.loadProjects();
     if (!remote.success) return this.cache.loadProjects();
-    // An empty successful remote is a fresh store, not "delete everything":
-    // lift the local cache onto the server and keep it. Only a non-empty
-    // remote snapshot is treated as the intended authoritative list.
-    if (remote.value.length === 0) {
+    const initialized = isOwnerInitializedPort(this.remote)
+      ? this.remote.isOwnerInitialized()
+      : remote.value.length > 0;
+    // First-deploy / first-sign-in only: an uninitialized empty remote is
+    // not an intentional delete. After the owner has replaced once, empty
+    // remote wins so a stale IDB cannot resurrect deleted projects.
+    if (remote.value.length === 0 && !initialized) {
       const cached = await this.cache.loadProjects();
       if (cached.success && cached.value.length > 0) {
         await this.remote.saveProjects(cached.value);

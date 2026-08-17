@@ -44,7 +44,12 @@ describe("GET/POST/PUT /api/projects", () => {
   it("lists an empty array then the created project", async () => {
     const empty = await GET(get());
     assert.equal(empty.status, 200);
-    assert.deepEqual((await empty.json()).projects, []);
+    const emptyBody = (await empty.json()) as {
+      projects: SavedProject[];
+      initialized: boolean;
+    };
+    assert.deepEqual(emptyBody.projects, []);
+    assert.equal(emptyBody.initialized, false);
 
     const created = await POST(
       new NextRequest("http://localhost/api/projects", {
@@ -83,5 +88,20 @@ describe("GET/POST/PUT /api/projects", () => {
       body.projects.map((p) => p.id),
       [ID],
     );
+
+    const emptied = await PUT(
+      new NextRequest("http://localhost/api/projects", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projects: [] }),
+      }),
+    );
+    assert.equal(emptied.status, 200);
+    const afterEmpty = (await (await GET(get())).json()) as {
+      projects: SavedProject[];
+      initialized: boolean;
+    };
+    assert.deepEqual(afterEmpty.projects, []);
+    assert.equal(afterEmpty.initialized, true);
   });
 });

@@ -10,17 +10,21 @@ import {
   createEntitlementRepository,
   type EntitlementRepository,
 } from "./billing";
+import { createOwnerStateStore } from "./owner-state";
 
 export interface PlatformStore {
   readonly auth: AuthRepository;
   readonly billing: EntitlementRepository;
   projectsFor(ownerId: string): SavedProjectsPersistencePort;
   runsFor(ownerId: string): RunHistoryRepository;
+  isProjectsInitialized(ownerId: string): boolean;
+  markProjectsInitialized(ownerId: string): void;
   close(): void;
 }
 
 export function createPlatformStore(dbPath: string): PlatformStore {
   const db = openPlatformDb(dbPath);
+  const ownerState = createOwnerStateStore(db);
   return {
     auth: createAuthRepository(db),
     billing: createEntitlementRepository(db),
@@ -29,6 +33,12 @@ export function createPlatformStore(dbPath: string): PlatformStore {
     },
     runsFor(ownerId) {
       return createRunHistoryRepository(db, ownerId);
+    },
+    isProjectsInitialized(ownerId) {
+      return ownerState.isInitialized(ownerId);
+    },
+    markProjectsInitialized(ownerId) {
+      ownerState.markInitialized(ownerId);
     },
     close() {
       db.close();

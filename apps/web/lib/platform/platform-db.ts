@@ -4,8 +4,8 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
 /**
- * Single-tenant-per-deployment: one sqlite file per container — do not add
- * row-level tenancy or assume replicas > 1.
+ * One sqlite file per container; rows are scoped by JWT `sub` (`owner_id`).
+ * Do not assume replicas > 1.
  */
 
 export function openPlatformDb(dbPath: string): Database.Database {
@@ -98,6 +98,11 @@ export function openPlatformDb(dbPath: string): Database.Database {
       usd_per_1k_input REAL NOT NULL,
       usd_per_1k_output REAL NOT NULL,
       updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS project_owner_state (
+      owner_id TEXT PRIMARY KEY,
+      initialized INTEGER NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS entitlements (

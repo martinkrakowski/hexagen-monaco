@@ -19,14 +19,22 @@ const sample: SavedProject = {
   manifestYaml: "system: shop\n",
 };
 
-function memoryPort(seed: SavedProject[] = []): SavedProjectsPersistencePort {
+function memoryPort(
+  seed: SavedProject[] = [],
+  options: { initialized?: boolean } = {},
+): SavedProjectsPersistencePort & { isOwnerInitialized(): boolean } {
   let rows = [...seed];
+  let initialized = options.initialized ?? seed.length > 0;
   return {
+    isOwnerInitialized() {
+      return initialized;
+    },
     async loadProjects() {
       return { success: true, value: [...rows] };
     },
     async saveProjects(projects) {
       rows = [...projects];
+      initialized = true;
       return { success: true, value: undefined };
     },
     async createProjectRecord(project) {
@@ -37,6 +45,7 @@ function memoryPort(seed: SavedProject[] = []): SavedProjectsPersistencePort {
         };
       }
       rows = [project, ...rows];
+      initialized = true;
       return { success: true, value: project };
     },
     async updateProjectRecord(id, updater) {
@@ -134,6 +143,21 @@ describe("CachedSavedProjectsAdapter", () => {
     const cacheAfter = await cache.loadProjects();
     assert.equal(cacheAfter.success, true);
     if (cacheAfter.success) assert.equal(cacheAfter.value[0]?.id, sample.id);
+  });
+
+  it("does not lift cache onto an initialized empty remote", async () => {
+    const cache = memoryPort([sample]);
+    const remote = memoryPort([], { initialized: true });
+    const port = new CachedSavedProjectsAdapter(cache, remote);
+    const loaded = await port.loadProjects();
+    assert.equal(loaded.success, true);
+    if (loaded.success) assert.deepEqual(loaded.value, []);
+    const remoteAfter = await remote.loadProjects();
+    assert.equal(remoteAfter.success, true);
+    if (remoteAfter.success) assert.deepEqual(remoteAfter.value, []);
+    const cacheAfter = await cache.loadProjects();
+    assert.equal(cacheAfter.success, true);
+    if (cacheAfter.success) assert.deepEqual(cacheAfter.value, []);
   });
 
   it("prefers the remote list and falls back to the cache", async () => {

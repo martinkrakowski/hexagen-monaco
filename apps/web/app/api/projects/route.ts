@@ -15,9 +15,8 @@ export async function GET(request: NextRequest) {
   const owner = await requirePersistenceOwner(request);
   if (!owner.ok) return owner.response;
 
-  const loaded = await getPlatformStore()
-    .projectsFor(owner.ownerId)
-    .loadProjects();
+  const store = getPlatformStore();
+  const loaded = await store.projectsFor(owner.ownerId).loadProjects();
   if (!loaded.success) {
     return NextResponse.json(
       {
@@ -28,7 +27,10 @@ export async function GET(request: NextRequest) {
       { status: 500 },
     );
   }
-  return NextResponse.json({ projects: loaded.value });
+  return NextResponse.json({
+    projects: loaded.value,
+    initialized: store.isProjectsInitialized(owner.ownerId),
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -65,6 +67,7 @@ export async function POST(request: NextRequest) {
       { status },
     );
   }
+  getPlatformStore().markProjectsInitialized(owner.ownerId);
   return NextResponse.json(created.value, { status: 201 });
 }
 
@@ -120,5 +123,6 @@ export async function PUT(request: NextRequest) {
       { status: 500 },
     );
   }
-  return NextResponse.json({ projects });
+  getPlatformStore().markProjectsInitialized(owner.ownerId);
+  return NextResponse.json({ projects, initialized: true });
 }

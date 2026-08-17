@@ -97,11 +97,13 @@ export async function PUT(
     );
   }
 
-  const port = getPlatformStore().projectsFor(owner.ownerId);
+  const store = getPlatformStore();
+  const port = store.projectsFor(owner.ownerId);
   const updated = await port.updateProjectRecord(parsedId.data, () => {
     return parsedProject.project;
   });
   if (updated.success) {
+    store.markProjectsInitialized(owner.ownerId);
     return NextResponse.json(updated.value);
   }
   if (updated.error.kind === "NotFound") {
@@ -116,6 +118,7 @@ export async function PUT(
         { status: 500 },
       );
     }
+    store.markProjectsInitialized(owner.ownerId);
     return NextResponse.json(created.value, { status: 201 });
   }
   return NextResponse.json(
@@ -141,7 +144,8 @@ export async function DELETE(
   const parsed = projectIdSchema.safeParse(projectId);
   if (!parsed.success) return invalidId();
 
-  const deleted = await getPlatformStore()
+  const store = getPlatformStore();
+  const deleted = await store
     .projectsFor(owner.ownerId)
     .deleteProjectRecord(parsed.data);
   if (!deleted.success) {
@@ -154,5 +158,6 @@ export async function DELETE(
       { status: 500 },
     );
   }
+  store.markProjectsInitialized(owner.ownerId);
   return NextResponse.json({ ok: true });
 }
