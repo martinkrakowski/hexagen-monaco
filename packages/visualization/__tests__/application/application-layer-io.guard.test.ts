@@ -44,10 +44,15 @@ const APPLICATION_DIR = path.join(PACKAGE_ROOT, "src", "application");
  * Non-relative specifiers the application layer may import. A RATCHET: entries
  * come off as edges are inverted, and are not added to hide a new one.
  *
- *  - `@hexagen/project-configuration` — a declared workspace dependency
- *    supplying the `WizardData` vocabulary as types only.
+ * It is now EMPTY. `@hexagen/project-configuration` came off with HEX-021: the
+ * inbound port was typed on `WizardData`, so the contract could not compile
+ * without another context's root aggregate. It is replaced by
+ * `HexagonalMapInput`, a DTO this context owns, and the wizard vocabulary is
+ * reached only from `infrastructure/adapters/hexagonal-map-generator/
+ * wizard-data-to-map-input.ts`. This is the ratchet turning, exactly as the
+ * comment above promised — do not put it back.
  */
-const ALLOWED_PACKAGES = new Set(["@hexagen/project-configuration"]);
+const ALLOWED_PACKAGES = new Set<string>([]);
 
 /**
  * Ambient host capabilities the application layer must reach through a port.

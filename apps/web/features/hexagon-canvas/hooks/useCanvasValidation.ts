@@ -2,10 +2,7 @@
 
 import { useCallback } from "react";
 import { type IsValidConnection } from "@xyflow/react";
-import type {
-  HexagonNode as HexagonNodeData,
-  HexagonNodeWithLayout,
-} from "@hexagen/visualization";
+import type { RenderableHexagonNode as HexagonNodeData } from "@hexagen/visualization";
 
 export function useCanvasValidation(
   nodes: HexagonNodeData[],
@@ -23,9 +20,7 @@ export function useCanvasValidation(
 
       const targetNode = nodes.find((n) => n.id === connection.target);
       if (targetNode?.id === "root-core") {
-        const sourceNode = nodes.find((n) => n.id === connection.source) as
-          | HexagonNodeWithLayout
-          | undefined;
+        const sourceNode = nodes.find((n) => n.id === connection.source);
         const sourceSide = sourceNode?.side;
         return !sourceSide || sourceSide === targetHandle;
       }

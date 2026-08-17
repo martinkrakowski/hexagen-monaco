@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { WizardData } from "@hexagen/project-configuration";
 import {
   HexagonalMapGeneratorAdapter,
+  wizardDataToHexagonalMapInput,
   type HexagonNode,
 } from "@hexagen/visualization";
 import {
@@ -52,7 +53,7 @@ describe("addon-overlay-nodes", () => {
 
     // Real generator output — this pins compassNodeIdFor to the id scheme.
     const { nodes } = new HexagonalMapGeneratorAdapter().execute({
-      wizardData,
+      map: wizardDataToHexagonalMapInput(wizardData),
     });
     const contexts = overlayContextsFrom(wizardData.boundedContexts);
     const overlay = computeAddOnOverlay(

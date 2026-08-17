@@ -45,29 +45,40 @@ export interface HexagonNode {
   boundedContextId?: string;
 }
 
-export interface NodeVisualProps {
-  readonly headerBg: string;
-  readonly bodyBg: string;
-  readonly border: string;
-  readonly handleColor: string;
-  readonly headerText: string;
-  readonly hexColor: string;
-  readonly structuralHandleColor?: string;
-  readonly publishedEventHandleColor?: string;
-  readonly subscribedEventHandleColor?: string;
-}
-
+/**
+ * A node plus the graph annotations a *layout* needs — containment, compass
+ * placement, and the DDD classification a renderer keys off.
+ *
+ * What is deliberately NOT here (HEX-030). This type used to also carry
+ * `extent: "parent"`, `draggable`, `style` and a `variant` bag of CSS colour
+ * tokens. Each of those is vocabulary owned by React Flow or by CSS: `extent`
+ * is React Flow's prop name *and* its literal value, `draggable` is a React
+ * Flow node prop, `style` is a CSS box, and `variant` held Tailwind class
+ * strings and `#rrggbb` literals. None of them survives swapping the renderer,
+ * which is the test this file applies. They now live in
+ * `application/ports/in/renderable-graph.ts` as `HexagonNodePresentation`, and
+ * a compile-time witness there fails the build if any of them comes back.
+ *
+ * What stays, and why:
+ *  - `parentId` — containment. A nested graph is still nested in Graphviz.
+ *  - `isRoot` / `isPeer` — DDD classification of the context itself.
+ *  - `side` — the hexagonal compass (north = primary adapter, …). This repo's
+ *    own architectural vocabulary; the renderer merely honours it.
+ *  - `category` / `compilerCategory` — `primary-adapter` / `secondary-port`.
+ *    Hexagonal-architecture terms, not style names.
+ *  - `stats` — counts of aggregates, value objects, events and services.
+ *
+ * `position` stays on {@link HexagonNode} for the same reason: it is a graph
+ * coordinate produced by ELK, persisted, and mutated by drag. It is geometry,
+ * not styling, and the finding's own recommendation keeps it.
+ */
 export interface HexagonNodeWithLayout extends HexagonNode {
   parentId?: string;
-  extent?: "parent";
   isRoot?: boolean;
   isPeer?: boolean;
   side?: "north" | "south" | "east" | "west";
-  draggable?: boolean;
   category?: string;
-  variant?: NodeVisualProps;
   compilerCategory?: string;
-  style?: { width?: number; height?: number; zIndex?: number };
   stats?: {
     aggregates: number;
     aggregateItems: string[];

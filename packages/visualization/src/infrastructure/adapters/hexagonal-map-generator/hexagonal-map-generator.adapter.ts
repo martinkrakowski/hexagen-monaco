@@ -8,6 +8,6 @@ import { generateHexagonalContextMap } from "./generate-hexagonal-context-map.js
 
 export class HexagonalMapGeneratorAdapter implements GenerateHexagonalMapPort {
   execute(input: GenerateHexagonalMapInput): GenerateHexagonalMapOutput {
-    return generateHexagonalContextMap(input.wizardData);
+    return generateHexagonalContextMap(input.map);
   }
 }
