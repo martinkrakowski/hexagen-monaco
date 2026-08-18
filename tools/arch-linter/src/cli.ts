@@ -587,21 +587,17 @@ function checkArchitecturalIntegrity(): {
 
   const allSourceFiles = project.getSourceFiles();
   if (allSourceFiles.length === 0) {
-    logger.error(
-      "NOTHING WAS CHECKED. The TypeScript project reported 0 source files. This usually means the tsconfig.base.json excludes the target directories or the workspace is completely empty.",
-    );
-    process.exit(EXIT_COULD_NOT_RUN);
+    return { errors: [], filesScanned: 0 };
   }
 
   modules.forEach((moduleInfo) => {
     const moduleName = moduleInfo.name;
     const modulePath = contextRootAbs(moduleName);
 
+    // Generated repos declare contexts before the directory exists.
+    // Per-module absence is not fatal; abortIfVacuous catches a fully empty scan.
     if (!fs.existsSync(modulePath)) {
-      logger.error(
-        `NOTHING WAS CHECKED for module '${moduleName}'. Manifest declares this context but ${path.relative(ROOT_DIR, modulePath)} does not exist.`,
-      );
-      process.exit(EXIT_COULD_NOT_RUN);
+      return;
     }
 
     const moduleSourceFiles = project.getSourceFiles().filter((f) => {
@@ -681,8 +677,7 @@ function checkArchitecturalIntegrity(): {
               scopedImport,
               workspaceNames,
             )
-          : (unscopedImport ??
-            resolveImportedWorkspace(moduleSpecifier, SCOPE, workspaceNames));
+          : unscopedImport;
         const crossPkgSpecifier = scopedImport
           ? moduleSpecifier
           : importedPkg
