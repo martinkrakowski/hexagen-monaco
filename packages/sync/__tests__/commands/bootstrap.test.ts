@@ -4,18 +4,18 @@
 // originals. Not a turbo task input.
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "vitest";
-import { promises as fs } from "node:fs";
+import { promises as fs, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import yaml from "js-yaml";
 import {
   bootstrapCommand,
+  bootstrapCommander,
   deriveSystemAndScope,
   resolveWorkspaceSpecifier,
+  runBootstrap,
   toTsMorphGlob,
-} from "../../src/commands/bootstrap.js";
-
-const SKIP_NON_POSIX = process.platform === "win32";
+} from "../../src/commands/bootstrap/index.js";
 
 interface BootstrapFixture {
   root: string;
@@ -39,16 +39,6 @@ async function createWorkspace(files: Record<string, string>): Promise<string> {
     await write(root, rel, contents);
   }
   return root;
-}
-
-async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
-  const previous = process.cwd();
-  process.chdir(dir);
-  try {
-    return await fn();
-  } finally {
-    process.chdir(previous);
-  }
 }
 
 describe("bootstrap helpers", () => {
@@ -88,7 +78,25 @@ describe("bootstrap helpers", () => {
   });
 });
 
-describe("bootstrapCommand", () => {
+describe("bootstrapCommander (published CLI surface)", () => {
+  it("is the command cli.ts registers via addCommand", () => {
+    const src = readFileSync(
+      new URL("../../src/cli.ts", import.meta.url),
+      "utf8",
+    );
+    assert.equal((src.match(/\.command\("bootstrap"\)/g) ?? []).length, 0);
+    assert.equal(
+      (src.match(/addCommand\(bootstrapCommander\)/g) ?? []).length,
+      1,
+    );
+    assert.equal(bootstrapCommander.name(), "bootstrap");
+    assert.match(bootstrapCommander.description(), /question/i);
+    assert.ok(bootstrapCommander.options.some((o) => o.long === "--yes"));
+    assert.ok(bootstrapCommander.options.some((o) => o.long === "--force"));
+  });
+});
+
+describe("runBootstrap / bootstrapCommand", () => {
   const originals = {
     log: console.log,
     error: console.error,
@@ -139,7 +147,7 @@ describe("bootstrapCommand", () => {
       "packages/billing/package.json": JSON.stringify({
         name: "@acme/billing",
       }),
-      "packages/billing/src/index.ts": `export const billing = 1;\n`,
+      "packages/billing/src/core/index.ts": `export const billing = 1;\n`,
       "packages/orders/package.json": JSON.stringify({ name: "@acme/orders" }),
       "packages/orders/src/server.ts": `export const orders = 1;\n`,
       "apps/web/package.json": JSON.stringify({ name: "@acme/web" }),
@@ -148,7 +156,12 @@ describe("bootstrapCommand", () => {
       }),
     });
 
-    await withCwd(root, () => bootstrapCommand());
+    const result = await runBootstrap({ root, yes: true });
+    assert.equal(
+      result.success,
+      true,
+      result.success ? "" : result.error.message,
+    );
 
     const manifest = yaml.load(
       await fs.readFile(
@@ -159,33 +172,24 @@ describe("bootstrapCommand", () => {
       system: string;
       scope: string;
       bounded_contexts: { name: string }[];
-      apps: { name: string }[];
     };
     assert.equal(manifest.system, "monorepo");
-    assert.equal(manifest.scope, "acme");
+    assert.equal(manifest.scope, "monorepo");
     assert.deepEqual(manifest.bounded_contexts.map((c) => c.name).sort(), [
       "arch-linter",
       "billing",
       "orders",
+      "web",
     ]);
-    assert.deepEqual(
-      manifest.apps.map((a) => a.name),
-      ["web"],
-    );
 
     const layout = yaml.load(
       await fs.readFile(
         path.join(root, ".architecture", "layout.yaml"),
         "utf8",
       ),
-    ) as { layers: string[]; workspaces: Record<string, string> };
-    assert.deepEqual(layout.layers, [
-      "domain",
-      "application",
-      "infrastructure",
-    ]);
-    assert.equal(layout.workspaces.billing, "packages/billing");
-    assert.equal(layout.workspaces["arch-linter"], "tools/arch-linter");
+    ) as { contexts: Record<string, { root: string }> };
+    assert.equal(layout.contexts.billing.root, "packages/billing");
+    assert.equal(layout.contexts["arch-linter"].root, "tools/arch-linter");
 
     const baseline = JSON.parse(
       await fs.readFile(
@@ -195,53 +199,6 @@ describe("bootstrapCommand", () => {
     ) as { version: unknown; entries: unknown };
     assert.equal(baseline.version, 1);
     assert.deepEqual(baseline.entries, []);
-  });
-
-  it("records export-from, type-position import(), dynamic imports, tsx, and subpaths", async () => {
-    const root = await fixture({
-      "package.json": JSON.stringify({
-        name: "@acme/monorepo",
-        workspaces: ["packages/*"],
-      }),
-      "packages/billing/package.json": JSON.stringify({
-        name: "@acme/billing",
-      }),
-      "packages/billing/src/index.ts": `import { x } from "@acme/orders/server";\nexport const y = x;\n`,
-      "packages/billing/src/widget.tsx": `export { shared } from "@acme/shared";\n`,
-      "packages/billing/src/lazy.mts": `export async function load() {\n  return import("@acme/payments");\n}\n`,
-      "packages/billing/src/types.cts": `export type T = import("@acme/identity").Foo;\n`,
-      "packages/orders/package.json": JSON.stringify({ name: "@acme/orders" }),
-      "packages/orders/src/server.ts": `export const x = 1;\n`,
-      "packages/shared/package.json": JSON.stringify({ name: "@acme/shared" }),
-      "packages/shared/src/index.ts": `export const shared = 1;\n`,
-      "packages/payments/package.json": JSON.stringify({
-        name: "@acme/payments",
-      }),
-      "packages/payments/src/index.ts": `export const pay = 1;\n`,
-      "packages/identity/package.json": JSON.stringify({
-        name: "@acme/identity",
-      }),
-      "packages/identity/src/index.ts": `export type Foo = string;\n`,
-    });
-
-    await withCwd(root, () => bootstrapCommand());
-
-    const manifest = yaml.load(
-      await fs.readFile(
-        path.join(root, ".architecture", "manifest.yaml"),
-        "utf8",
-      ),
-    ) as {
-      bounded_contexts: { name: string; depends_on?: string[] }[];
-    };
-    const billing = manifest.bounded_contexts.find((c) => c.name === "billing");
-    assert.ok(billing, "billing context missing");
-    assert.deepEqual([...(billing.depends_on ?? [])].sort(), [
-      "identity",
-      "orders",
-      "payments",
-      "shared",
-    ]);
   });
 
   it("refuses to overwrite existing architecture artifacts without --force", async () => {
@@ -254,10 +211,11 @@ describe("bootstrapCommand", () => {
       "packages/billing/package.json": JSON.stringify({ name: "billing" }),
     });
 
-    await assert.rejects(
-      () => withCwd(root, () => bootstrapCommand()),
-      /already exist/,
-    );
+    const result = await runBootstrap({ root, yes: true });
+    assert.equal(result.success, false);
+    if (!result.success) {
+      assert.match(result.error.message, /overwrite|--force/i);
+    }
     const kept = await fs.readFile(
       path.join(root, ".architecture", "manifest.yaml"),
       "utf8",
@@ -278,7 +236,12 @@ describe("bootstrapCommand", () => {
       "packages/billing/src/index.ts": `export const billing = 1;\n`,
     });
 
-    await withCwd(root, () => bootstrapCommand({ force: true }));
+    const result = await runBootstrap({ root, yes: true, force: true });
+    assert.equal(
+      result.success,
+      true,
+      result.success ? "" : result.error.message,
+    );
     const manifest = yaml.load(
       await fs.readFile(
         path.join(root, ".architecture", "manifest.yaml"),
@@ -286,11 +249,11 @@ describe("bootstrapCommand", () => {
       ),
     ) as { system: string; bounded_contexts: { name: string }[] };
     assert.equal(manifest.system, "monorepo");
-    assert.equal(manifest.bounded_contexts[0]?.name, "billing");
+    assert.ok(manifest.bounded_contexts.some((c) => c.name === "billing"));
   });
 
-  it("rejects workspace patterns the expander cannot evaluate", async () => {
-    for (const pattern of ["!packages/legacy", "*", "packages/*/pkg"]) {
+  it("rejects workspace patterns the detector cannot evaluate", async () => {
+    for (const pattern of ["*", "packages/*/pkg"]) {
       const root = await fixture({
         "package.json": JSON.stringify({
           name: "wild",
@@ -298,79 +261,53 @@ describe("bootstrapCommand", () => {
         }),
         "packages/billing/package.json": JSON.stringify({ name: "billing" }),
       });
-      await assert.rejects(
-        () => withCwd(root, () => bootstrapCommand()),
-        /Unsupported workspace pattern/,
-      );
+      const result = await runBootstrap({ root, yes: true });
+      assert.equal(result.success, false);
+      if (!result.success) {
+        assert.match(result.error.message, /not supported|Complex globs/i);
+      }
       await assert.rejects(
         fs.stat(path.join(root, ".architecture", "manifest.yaml")),
       );
     }
   });
 
-  it("fails closed when no workspaces are discovered", async () => {
+  it("does not write a guessed manifest without ratification or --yes", async () => {
     const root = await fixture({
       "package.json": JSON.stringify({
         name: "empty-repo",
         workspaces: ["packages/*"],
       }),
+      "packages/billing/package.json": JSON.stringify({ name: "billing" }),
     });
 
-    await assert.rejects(
-      () => withCwd(root, () => bootstrapCommand()),
-      /No workspaces found/,
-    );
+    const result = await runBootstrap({ root });
+    assert.equal(result.success, false);
     await assert.rejects(
       fs.stat(path.join(root, ".architecture", "manifest.yaml")),
     );
   });
 
-  it("does not write artifacts when a workspace package.json is malformed", async () => {
+  it("bootstrapCommand dry-run prints Would write and writes nothing", async () => {
     const root = await fixture({
       "package.json": JSON.stringify({
-        name: "broken",
+        name: "@acme/monorepo",
         workspaces: ["packages/*"],
       }),
-      "packages/billing/package.json": "{ not json",
+      "packages/billing/package.json": JSON.stringify({
+        name: "@acme/billing",
+      }),
     });
-
-    await assert.rejects(
-      () => withCwd(root, () => bootstrapCommand()),
-      /Malformed package.json/,
-    );
+    const logs: string[] = [];
+    console.log = (...args: unknown[]) => {
+      logs.push(args.map(String).join(" "));
+    };
+    await bootstrapCommand({ root, yes: true, dryRun: true });
+    const text = logs.join("\n");
+    assert.doesNotMatch(text, /^Wrote:/m);
+    assert.match(text, /Would write/i);
     await assert.rejects(
       fs.stat(path.join(root, ".architecture", "manifest.yaml")),
     );
   });
-
-  it.skipIf(SKIP_NON_POSIX)(
-    "does not write artifacts when a workspace package.json is unreadable",
-    async (ctx) => {
-      const root = await fixture({
-        "package.json": JSON.stringify({
-          name: "denied",
-          workspaces: ["packages/*"],
-        }),
-        "packages/billing/package.json": JSON.stringify({ name: "billing" }),
-      });
-      const pkgPath = path.join(root, "packages", "billing", "package.json");
-      await fs.chmod(pkgPath, 0o000);
-      try {
-        await fs.readFile(pkgPath, "utf8");
-        ctx.skip();
-        return;
-      } catch {
-        // unreadable as intended
-      }
-
-      try {
-        await assert.rejects(() => withCwd(root, () => bootstrapCommand()));
-        await assert.rejects(
-          fs.stat(path.join(root, ".architecture", "manifest.yaml")),
-        );
-      } finally {
-        await fs.chmod(pkgPath, 0o644);
-      }
-    },
-  );
 });

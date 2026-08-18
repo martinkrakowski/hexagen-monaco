@@ -1,4 +1,13 @@
 /* eslint-disable no-console */
+/**
+ * `hexagen bootstrap` is ratification-driven. It writes a starting
+ * `manifest.yaml` + `layout.yaml` + empty baseline from questions, `--yes`,
+ * `--answers`, or `--stdin-json`. It does **not** scan the TypeScript import
+ * graph and does **not** auto-fill `depends_on`. Callers who need declared
+ * edges must supply `contexts[].dependsOn` in an answers file. The retired
+ * Phase-0 module (`commands/bootstrap.ts`) inferred edges via ts-morph; that
+ * path is gone on purpose, not silently.
+ */
 import { Command } from "commander";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -54,6 +63,46 @@ function sanitizeScope(raw: string): string {
     .slice(0, 214)
     .replace(/^[._-]+|[._-]+$/g, "");
   return cleaned.length > 0 ? cleaned : "generated-project";
+}
+
+/** ts-morph globs reject native Windows separators. Folded from the retired Phase-0 module. */
+export function toTsMorphGlob(absPath: string): string {
+  return absPath.replace(/\\/g, "/");
+}
+
+export function resolveWorkspaceSpecifier(
+  specifier: string,
+  packageNames: Iterable<string>,
+): string | undefined {
+  const names = [...packageNames].sort((a, b) => b.length - a.length);
+  for (const name of names) {
+    if (specifier === name || specifier.startsWith(`${name}/`)) {
+      return name;
+    }
+  }
+  return undefined;
+}
+
+export function deriveSystemAndScope(pkgName: string | undefined): {
+  system: string;
+  scope: string;
+} {
+  if (!pkgName || pkgName.trim().length === 0) {
+    return { system: "generated-project", scope: "generated-project" };
+  }
+  if (pkgName.startsWith("@")) {
+    const withoutAt = pkgName.slice(1);
+    const slash = withoutAt.indexOf("/");
+    if (slash === -1) {
+      const scope = sanitizeScope(withoutAt);
+      return { system: scope, scope };
+    }
+    const scope = sanitizeScope(withoutAt.slice(0, slash));
+    const system = withoutAt.slice(slash + 1) || scope;
+    return { system, scope };
+  }
+  const scope = sanitizeScope(pkgName);
+  return { system: pkgName, scope };
 }
 
 async function readAnswers(
@@ -339,7 +388,7 @@ export async function bootstrapCommand(options: {
 
 export const bootstrapCommander = new Command("bootstrap")
   .description(
-    "Propose candidate bounded contexts as questions and emit manifest.yaml + layout.yaml + arch-lint-baseline.json after ratification",
+    "Propose candidate bounded contexts as questions and emit manifest.yaml + layout.yaml + arch-lint-baseline.json after ratification. Does not infer depends_on from the import graph; supply contexts[].dependsOn in --answers if you need declared edges.",
   )
   .option("--root <path>", "Project root (defaults to cwd)")
   .option("--yes", "Accept every detected candidate (for tests / CI)")

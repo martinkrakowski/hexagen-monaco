@@ -1,5 +1,12 @@
 # 2026-08-18 Architecture Remediation Completion Plan (Phases 6–8)
 
+> **Superseded as a work queue.** Phase-8 rows below were already stale on the day this
+> file landed (`#516`–`#526` closed 8.6–8.11 and 8.12(e)). The live remaining-work
+> plan and runbook are
+> [`2026-08-18-remaining-work-plan.md`](./2026-08-18-remaining-work-plan.md) and
+> [`2026-08-18-remaining-work-execution-runbook.md`](./2026-08-18-remaining-work-execution-runbook.md).
+> Keep this file as provenance; do not schedule from it.
+
 ## 1. Executive Summary
 
 As of 2026-08-17, Phases 0–5 of the architecture remediation arc are **COMPLETE**. The focus now shifts exclusively to concluding the remaining waves (Phases 6, 8, and 7, in that execution order).
