@@ -1,4 +1,13 @@
 /* eslint-disable no-console */
+/**
+ * `hexagen bootstrap` is ratification-driven. It writes a starting
+ * `manifest.yaml` + `layout.yaml` + empty baseline from questions, `--yes`,
+ * `--answers`, or `--stdin-json`. It does **not** scan the TypeScript import
+ * graph and does **not** auto-fill `depends_on`. Callers who need declared
+ * edges must supply `contexts[].dependsOn` in an answers file. The retired
+ * Phase-0 module (`commands/bootstrap.ts`) inferred edges via ts-morph; that
+ * path is gone on purpose, not silently.
+ */
 import { Command } from "commander";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -379,7 +388,7 @@ export async function bootstrapCommand(options: {
 
 export const bootstrapCommander = new Command("bootstrap")
   .description(
-    "Propose candidate bounded contexts as questions and emit manifest.yaml + layout.yaml + arch-lint-baseline.json after ratification",
+    "Propose candidate bounded contexts as questions and emit manifest.yaml + layout.yaml + arch-lint-baseline.json after ratification. Does not infer depends_on from the import graph; supply contexts[].dependsOn in --answers if you need declared edges.",
   )
   .option("--root <path>", "Project root (defaults to cwd)")
   .option("--yes", "Accept every detected candidate (for tests / CI)")

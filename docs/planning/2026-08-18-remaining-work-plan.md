@@ -301,16 +301,16 @@ Closed findings from the Aug 14 plan are omitted. This is the leftover set only.
 
 ### Wave 0 exit checklist (all required)
 
-- [ ] **D-C0** amendment merged. ADR-0059 body names capacity-freed as the resume trigger and retires pay-gate / kill-criterion as resume triggers.
-- [ ] **DOC-1** merged. `CHANGELOG.md` §0.11.0 matches ADR-0066.
-- [ ] **DOC-2** merged. `bootstrap.test.ts` imports the surviving commander module; `cli.ts` still registers it once.
-- [ ] Required checks (`Lint & Boundaries / ESLint + UI boundary` among them) were **green** on those three PRs.
+- [x] **D-C0** amendment lands in **#535**. ADR-0059 body names capacity-freed as the resume trigger and retires pay-gate / kill-criterion as resume triggers.
+- [x] **DOC-1** lands in **#535**. `CHANGELOG.md` §0.11.0 matches ADR-0066.
+- [x] **DOC-2** lands in **#535**. `bootstrap.test.ts` imports the surviving commander module; `cli.ts` still registers it once.
+- [ ] Required checks (`Lint & Boundaries / ESLint + UI boundary` among them) were **green** on #535.
 - [ ] **Then** enable branch protection. Not before.
 
 ### After Wave 0
 
-- **Wave A0** can start today, in parallel with Wave 0 docs. It is not parked.
-- **Wave A1** starts only after D-C0 is on `main`.
+- **Wave A0** can start today. It is not parked.
+- **Wave A1** starts only after **#535** is on `main`.
 - **Wave D’s 7.1** starts only after **8.12(h)** lands, not after “Waves A–C” as a blanket.
 - **6.7(a)** starts only after **6.7(a)-FIX** is on `main`.
 - **6.7(c)** starts only after **6.7(c)-SCOUT** is on `main`.

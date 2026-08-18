@@ -1,7 +1,7 @@
 # Remaining work — execution runbook (live)
 
-**Date:** 2026-08-18 · **Status:** Wave 0 + Wave A0 are the wavefront. Wave A1 waits on **D-C0**.
-**Baseline:** `main` @ `08024dd3` (`v0.11.0`). Zero PRs open.
+**Date:** 2026-08-18 · **Status:** Wave 0 lands in **#535**. Wave A0 is the engineering wavefront. Wave A1 waits on #535 merging. **Next owner action:** enable branch protection after #535 is green on `main`.
+**Baseline:** `main` @ `08024dd3` (`v0.11.0`) plus #535 (`chore/remaining-work-wave-0`).
 
 This is the **live operating runbook** for the leftover work from the 2026-08-14 through
 2026-08-18 planning window. It is the companion to — not a replacement for — the plan:
@@ -53,15 +53,15 @@ If a landing does not delete its own keys, the trajectory stalls. That is a revi
 
 ## 2. Open items, exactly
 
-Measured on `08024dd3`. A plan row that disagrees with the tree loses.
+Measured on `08024dd3` + #535. A plan row that disagrees with the tree loses.
 
-### Wave 0 (human + docs)
+### Wave 0 (human + docs) — lands in #535
 
-| Item      | State          | Why it is still open                                                                                                     |
-| --------- | -------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **D-C0**  | ⛔ not started | ADR-0059 still names pay-gate / kill-criterion as resume triggers. The amendment must retire those as _resume_ triggers. |
-| **DOC-1** | ⛔ not started | `CHANGELOG.md` §0.11.0 still claims both public packages ship FSL.                                                       |
-| **DOC-2** | ⛔ not started | Dual `bootstrap.ts` vs `bootstrap/index.ts`. Test file still covers the file to fold.                                    |
+| Item      | State                | Evidence                                                                                                                                          |
+| --------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **D-C0**  | ✅ **lands in #535** | ADR-0059 amendment: capacity-freed is the resume trigger; pay-gate / kill-criterion retired as _resume_ triggers.                                 |
+| **DOC-1** | ✅ **lands in #535** | `CHANGELOG.md` §0.11.0: arch-linter FSL, sync stays evaluation (ADR-0066).                                                                        |
+| **DOC-2** | ✅ **lands in #535** | `commands/bootstrap.ts` deleted. Helpers and `bootstrapCommander` live on `commands/bootstrap/index.ts`. `bootstrap.test.ts` imports that module. |
 
 ### Wave A0 — not parked
 
@@ -107,35 +107,31 @@ Measured on `08024dd3`. A plan row that disagrees with the tree loses.
 
 ## 3. Decision ledger
 
-| Gate                                | Blocks                           | Status                                                                                                                                                                          | As of      |
-| ----------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| **D-C0** unpark 6–8                 | Wave A1 / C / D / remaining 8.12 | ⛔ **Open** — amendment must **supersede** ADR-0059’s pay-gate / kill-criterion resume triggers and name **capacity-freed**. Capacity is the _argument_, not a silent override. | 2026-08-18 |
-| **D-L1** changelog vs ADR-0066      | DOC-1                            | ⛔ **Open** — changelog follows 0066.                                                                                                                                           | 2026-08-18 |
-| **D-E1** Node 22.7 / 22.12 / 24     | 6.7(a) **tag**, not the PR       | ⛔ **Open**                                                                                                                                                                     | 2026-08-18 |
-| **D-T11** template pin + audit      | DOS-2.11                         | ⛔ **Open** — item does not start until written.                                                                                                                                | 2026-08-18 |
-| **D-V1…D-V4** version splits        | T5.2–T5.5                        | ⛔ **Open** — human. T5.1 shipped.                                                                                                                                              | 2026-08-15 |
-| **D-R1a** stale-fatal               | RI-1.2                           | ⛔ **Open** — ship RI-1.3 first.                                                                                                                                                | 2026-08-16 |
-| **D-R1** refuse vs warn             | RI-2.3                           | ⛔ **Open** — stay at warn until a major.                                                                                                                                       | 2026-08-16 |
-| D1 / D2 / D3 / D4 / D6              | historical                       | ✅ Resolved                                                                                                                                                                     | 2026-08-16 |
-| D5 TypeScript 6                     | none                             | ⛔ Own arc                                                                                                                                                                      | 2026-08-16 |
-| ADR-0049 / HEX-018 registry / `zod` | historical                       | ✅ Resolved                                                                                                                                                                     | 2026-08-16 |
-| D-S1 (FU-3 meaning)                 | FU-3                             | ✅ all nine genuine debt                                                                                                                                                        | 2026-08-16 |
-| FDE D-0…D-4 / quota-D2              | positioning                      | ✅ ADRs 0059–0066. Live license = **0066**.                                                                                                                                     | 2026-08-18 |
+| Gate                                | Blocks                           | Status                                                                                                                        | As of      |
+| ----------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| **D-C0** unpark 6–8                 | Wave A1 / C / D / remaining 8.12 | ✅ **Resolved in #535** — ADR-0059 amendment names **capacity-freed**; pay-gate / kill-criterion stay FDE product gates only. | 2026-08-18 |
+| **D-L1** changelog vs ADR-0066      | DOC-1                            | ✅ **Resolved in #535** — changelog follows 0066.                                                                             | 2026-08-18 |
+| **D-E1** Node 22.7 / 22.12 / 24     | 6.7(a) **tag**, not the PR       | ⛔ **Open**                                                                                                                   | 2026-08-18 |
+| **D-T11** template pin + audit      | DOS-2.11                         | ⛔ **Open** — item does not start until written.                                                                              | 2026-08-18 |
+| **D-V1…D-V4** version splits        | T5.2–T5.5                        | ⛔ **Open** — human. T5.1 shipped.                                                                                            | 2026-08-15 |
+| **D-R1a** stale-fatal               | RI-1.2                           | ⛔ **Open** — ship RI-1.3 first.                                                                                              | 2026-08-16 |
+| **D-R1** refuse vs warn             | RI-2.3                           | ⛔ **Open** — stay at warn until a major.                                                                                     | 2026-08-16 |
+| D1 / D2 / D3 / D4 / D6              | historical                       | ✅ Resolved                                                                                                                   | 2026-08-16 |
+| D5 TypeScript 6                     | none                             | ⛔ Own arc                                                                                                                    | 2026-08-16 |
+| ADR-0049 / HEX-018 registry / `zod` | historical                       | ✅ Resolved                                                                                                                   | 2026-08-16 |
+| D-S1 (FU-3 meaning)                 | FU-3                             | ✅ all nine genuine debt                                                                                                      | 2026-08-16 |
+| FDE D-0…D-4 / quota-D2              | positioning                      | ✅ ADRs 0059–0066. Live license = **0066**.                                                                                   | 2026-08-18 |
 
 ---
 
 ## 4. What to start now
 
 ```text
-Wave 0 (serial, then protect):
-  1. D-C0   ADR-0059 amendment (trigger rewrite)
-  2. DOC-1  changelog license sentence
-  3. DOC-2  fold bootstrap; migrate bootstrap.test.ts imports
-  4. Confirm Lint & Boundaries was green on (1)–(3)
-  5. THEN enable branch protection
-  6. THEN Wave A1
+Owner, after #535 is green and merged:
+  enable branch protection (Lint & Boundaries / ESLint + UI boundary)
+  THEN Wave A1
 
-Wave A0 (parallel with Wave 0; not parked):
+Wave A0 (not parked; can start now):
   T4.1 + T4.2   (one PR ok)
   T4.3  T4.4
   FU-2
@@ -146,14 +142,13 @@ Wave A0 (parallel with Wave 0; not parked):
 
 Human, not same-day as protection:
   #510 / #521 / #428 triage
-  D-L1 confirm with DOC-1
   D-T11 write-up (before anyone starts DOS-2.11)
 
-After D-C0 — Wave A1, ≤4 labeled PRs:
+After #535 merge — Wave A1, ≤4 labeled PRs:
   6.5(c)   8.12(b)(c)(d)(f)(g)(i)   VIZ-1
 
 Do not start:
-  Wave A1 / 6.7* / 7.* / 8.12(h)   before D-C0
+  Wave A1 / 6.7* / 7.* / 8.12(h)   before #535 merges
   8.1 / 8.2                        before 7.1
   8.12(a)                          before 8.12(h)
   7.1                              before 8.12(h)
@@ -164,7 +159,7 @@ Do not start:
   T5.*                             before D-V*
   RI-1.2                           before D-R1a
   DOS-2.11                         before D-T11
-  branch protection                before Wave 0 is green
+  branch protection                before #535 is green on main
   Phase 3 / 4 / Stripe / --llm
   a 0.9.x patch, or FSL republish of sync@0.11.0
 ```
@@ -284,3 +279,7 @@ Absorbed two reviews. Material deltas:
 - Manifest-edits column on every wave table. Decision-ledger timestamps.
 
 Rejected as over-scope for this arc: implementing a new `@canary` publisher (use existing `next`), CodeRabbit 80% pause, CLI crash reporting, client manifest backup.
+
+### 2026-08-18 — Wave 0 landed in #535
+
+D-C0, DOC-1, and DOC-2 land in this PR. Next owner action is enable branch protection after the required checks are green on `main`. Wave A0 remains the engineering wavefront; Wave A1 waits on the merge.
