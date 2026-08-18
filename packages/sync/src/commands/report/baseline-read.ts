@@ -50,7 +50,7 @@ export function parseReportBaseline(text: string): ReportBaselineFile {
         throw new Error(`baseline entry ${index} has unrecognized key '${k}'`);
     }
 
-    for (const field of ["rule", "file", "specifier"] as const) {
+    for (const field of ["rule", "file"] as const) {
       if (
         typeof candidate[field] !== "string" ||
         !(candidate[field] as string).trim()
@@ -60,10 +60,13 @@ export function parseReportBaseline(text: string): ReportBaselineFile {
         );
       }
     }
+    if (typeof candidate.specifier !== "string") {
+      throw new Error(`baseline entry ${index} has no string 'specifier'`);
+    }
     const parsed: ReportBaselineEntry = {
       rule: (candidate.rule as string).trim(),
       file: (candidate.file as string).trim(),
-      specifier: (candidate.specifier as string).trim(),
+      specifier: candidate.specifier,
     };
 
     if ("reason" in candidate) {
@@ -92,9 +95,15 @@ export function parseReportBaseline(text: string): ReportBaselineFile {
           `baseline entry ${index} has invalid 'expires' (want YYYY-MM-DD)`,
         );
       }
-      const m = parseInt(match[2]!, 10);
-      const d = parseInt(match[3]!, 10);
-      if (m < 1 || m > 12 || d < 1 || d > 31) {
+      const year = parseInt(match[1]!, 10);
+      const month = parseInt(match[2]!, 10);
+      const day = parseInt(match[3]!, 10);
+      const utc = new Date(Date.UTC(year, month - 1, day));
+      if (
+        utc.getUTCFullYear() !== year ||
+        utc.getUTCMonth() !== month - 1 ||
+        utc.getUTCDate() !== day
+      ) {
         throw new Error(
           `baseline entry ${index} has invalid calendar date '${candidate.expires}'`,
         );

@@ -49,6 +49,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   sync-check:
@@ -203,6 +204,10 @@ try {
   body = readFileSync(file, "utf8");
 } catch {
   body = "";
+}
+
+if (body.trim() && !body.includes(MARKER)) {
+  body = \`\${MARKER}\\n\${body}\`;
 }
 
 const api = \`https://api.github.com/repos/\${repo}\`;

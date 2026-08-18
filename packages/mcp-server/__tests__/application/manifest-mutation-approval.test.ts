@@ -16,6 +16,7 @@ import { RejectTransactionToolUseCase } from "../../src/application/use-cases/re
 import { RemoveContextToolUseCase } from "../../src/application/use-cases/remove-context-tool.use-case.js";
 import { RemovePortToolUseCase } from "../../src/application/use-cases/remove-port-tool.use-case.js";
 import { ScaffoldModuleToolUseCase } from "../../src/application/use-cases/scaffold-module-tool.use-case.js";
+import { applyPendingManifestMutation } from "../../src/application/pending-manifest-mutation.js";
 import type { ManifestWritePort } from "../../src/application/ports/out/manifest-write.port.js";
 import type { ScaffoldingPort } from "../../src/application/ports/out/scaffolding.port.js";
 
@@ -261,5 +262,50 @@ describe("MCP mutation tools require transaction approval", () => {
     assert.equal(accepted.success, true);
     assert.deepEqual(h.scaffolding.writes, ["scaffoldModule"]);
     assert.deepEqual(h.write.writes, ["registerBoundedContext"]);
+  });
+
+  it("does not publish effect events for no-op add/remove results", async () => {
+    const events = new EventBusFake();
+    const write = new ManifestWriteSpy();
+    write.addDependency = async () => ({
+      success: true as const,
+      value: { updated: false },
+    });
+    write.removePort = async () => ({
+      success: true as const,
+      value: { removed: false },
+    });
+    write.removeContext = async () => ({
+      success: true as const,
+      value: { removed: false },
+    });
+    const ports = {
+      manifestWrite: write,
+      scaffolding: new ScaffoldingSpy(),
+      eventBus: events,
+    };
+    await applyPendingManifestMutation(
+      {
+        kind: "add-dependency",
+        input: { sourceModule: "a", targetModule: "b" },
+      },
+      ports,
+    );
+    await applyPendingManifestMutation(
+      {
+        kind: "remove-port",
+        input: {
+          context_name: "a",
+          port_name: "P",
+          direction: "outbound",
+        },
+      },
+      ports,
+    );
+    await applyPendingManifestMutation(
+      { kind: "remove-context", input: { context_name: "a" } },
+      ports,
+    );
+    assert.equal(events.published.length, 0);
   });
 });

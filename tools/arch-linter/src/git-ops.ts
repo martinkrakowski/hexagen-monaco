@@ -27,13 +27,18 @@ export function gitText(
   }
 }
 
-export function stagedFiles(root: string): string[] {
-  const result = gitText(root, [
+export function stagedDiffArgs(): string[] {
+  return [
     "diff",
     "--cached",
     "--name-only",
     "--diff-filter=ACMR",
-  ]);
+    "--relative",
+  ];
+}
+
+export function stagedFiles(root: string): string[] {
+  const result = gitText(root, stagedDiffArgs());
   if (!result.ok) {
     throw new Error(`--staged requires a git work tree: ${result.message}`);
   }
@@ -95,6 +100,6 @@ export function resolveBaseRef(
 ): string | null {
   const raw = (explicit ?? env["GITHUB_BASE_REF"] ?? "").trim();
   if (!raw) return null;
-  if (raw.includes("/") || raw.startsWith("origin/")) return raw;
+  if (raw.startsWith("origin/") || raw.startsWith("refs/")) return raw;
   return `origin/${raw}`;
 }

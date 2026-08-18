@@ -107,18 +107,22 @@ async function applyAddDependency(
     targetModule: input.targetModule,
   });
   if (!result.success) throw result.error;
-  ports.eventBus.publish({
-    type: "DependencyAdded",
-    payload: {
-      source: input.sourceModule,
-      target: input.targetModule,
-      relationship: "depends_on",
-    },
-    timestamp: Date.now(),
-    source: "mcp-server",
-  });
+  if (result.value.updated) {
+    ports.eventBus.publish({
+      type: "DependencyAdded",
+      payload: {
+        source: input.sourceModule,
+        target: input.targetModule,
+        relationship: "depends_on",
+      },
+      timestamp: Date.now(),
+      source: "mcp-server",
+    });
+  }
   return {
-    message: "Dependency updated.",
+    message: result.value.updated
+      ? "Dependency updated."
+      : "Dependency already present.",
     details: { updated: result.value.updated },
   };
 }
@@ -176,16 +180,18 @@ async function applyRemovePort(
     direction: input.direction === "inbound" ? "in" : "out",
   });
   if (!result.success) throw result.error;
-  ports.eventBus.publish({
-    type: "PortRemoved",
-    payload: {
-      contextName: input.context_name,
-      portName: input.port_name,
-      direction: input.direction,
-    },
-    timestamp: Date.now(),
-    source: "mcp-server",
-  });
+  if (result.value.removed) {
+    ports.eventBus.publish({
+      type: "PortRemoved",
+      payload: {
+        contextName: input.context_name,
+        portName: input.port_name,
+        direction: input.direction,
+      },
+      timestamp: Date.now(),
+      source: "mcp-server",
+    });
+  }
   return {
     message: result.value.removed
       ? `Port ${input.port_name} removed from ${input.context_name}.`
@@ -202,12 +208,14 @@ async function applyRemoveContext(
     contextName: input.context_name,
   });
   if (!result.success) throw result.error;
-  ports.eventBus.publish({
-    type: "ContextRemoved",
-    payload: { contextName: input.context_name },
-    timestamp: Date.now(),
-    source: "mcp-server",
-  });
+  if (result.value.removed) {
+    ports.eventBus.publish({
+      type: "ContextRemoved",
+      payload: { contextName: input.context_name },
+      timestamp: Date.now(),
+      source: "mcp-server",
+    });
+  }
   return {
     message: result.value.removed
       ? `Context ${input.context_name} removed from manifest.`

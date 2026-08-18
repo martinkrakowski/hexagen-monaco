@@ -17,12 +17,12 @@ The runbook’s Phases −1, 0, 1, and 2 were implemented in isolated worktrees,
 
 Phase −1 decisions were recorded using the runbook’s recommended answers so Phases 0–2 could proceed in parallel. Those answers are now ADRs on #528. Override them there if any call is wrong; later PRs assumed them.
 
-| Phase | PR                                                                 | Additions / deletions | Review rounds | Verdict |
-| ----- | ------------------------------------------------------------------ | --------------------: | ------------: | ------- |
-| −1    | [#528](https://github.com/martinkrakowski/hexagen-monaco/pull/528) |            +693 / −32 |             2 | Approve |
-| 0     | [#529](https://github.com/martinkrakowski/hexagen-monaco/pull/529) |         +2,425 / −112 |             2 | Approve |
-| 1     | [#530](https://github.com/martinkrakowski/hexagen-monaco/pull/530) |         +3,573 / −598 |             2 | Approve |
-| 2     | [#531](https://github.com/martinkrakowski/hexagen-monaco/pull/531) |          +3,356 / −47 |             3 | Approve |
+| Phase | PR                                                                 | Additions / deletions | Review rounds | Verdict                                    |
+| ----- | ------------------------------------------------------------------ | --------------------: | ------------: | ------------------------------------------ |
+| −1    | [#528](https://github.com/martinkrakowski/hexagen-monaco/pull/528) |            +693 / −32 |             2 | Approve                                    |
+| 0     | [#529](https://github.com/martinkrakowski/hexagen-monaco/pull/529) |         +2,425 / −112 |             2 | Approve                                    |
+| 1     | [#530](https://github.com/martinkrakowski/hexagen-monaco/pull/530) |         +3,573 / −598 |             2 | Approve                                    |
+| 2     | [#531](https://github.com/martinkrakowski/hexagen-monaco/pull/531) |          +3,356 / −47 |             3 | Unverified (full monorepo gate not re-run) |
 
 Merge from the bottom of the stack upward: **#528 → #529 → #530 → #531**. Do not merge without a human read. License files on #528 are **release-gated** — they apply from the next published release; do not push a `vX.Y.Z` tag.
 
@@ -268,7 +268,7 @@ Checked on every PR’s review:
 - Phase 0’s first implementer died on an API capacity 500 and was retried.
 - Every open issue — bugs, suggestions, nits — was fixed or `wontfix`’d with a technical reason before the PR was marked complete.
 - Stack conflict on #530 resolved by the orchestrator (keep adopt + bootstrap + report; staged filter after vacuous-run abort).
-- Pre-commit on the stacked #530 tip ran turbo lint + typecheck (61 tasks) and `yarn lint:arch` (4 suppressions, compliant). The stacked #531 tip was not re-gated as a whole-monorepo build in the orchestrator session; it cherry-picked cleanly onto that #530 tip and had passed `yarn workspace web lint` + `typecheck` in its worktree.
+- Pre-commit on the stacked #530 tip ran turbo lint + typecheck (61 tasks) and `yarn lint:arch` (4 suppressions, compliant). The stacked #531 tip was **not** re-gated as `yarn build && yarn typecheck && yarn lint` then `yarn test`; do not treat the stack as Approve until that gate is recorded.
 
 ---
 

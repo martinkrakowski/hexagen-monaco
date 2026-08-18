@@ -194,6 +194,7 @@ export class InMemoryTransactionManager implements TransactionManagerPort {
     expectedStatus: TransactionStatus,
     newStatus: TransactionStatus,
   ): Transaction | null {
+    if (isTerminal(expectedStatus) || isTerminal(newStatus)) return null;
     const tx = this.transactions.get(transactionId);
     if (!tx || tx.status !== expectedStatus) return null;
     const updated = transitionTransaction(tx, newStatus);

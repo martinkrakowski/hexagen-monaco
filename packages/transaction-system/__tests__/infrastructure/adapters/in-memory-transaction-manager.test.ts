@@ -282,4 +282,31 @@ describe("InMemoryTransactionManager", () => {
       );
     });
   });
+
+  describe("compareAndSetStatus()", () => {
+    it("claims pending → speculative", () => {
+      const tx = manager.begin("intent-1");
+      const claimed = manager.compareAndSetStatus(
+        tx.id,
+        "pending",
+        "speculative",
+      );
+      assert.equal(claimed?.status, "speculative");
+    });
+
+    it("refuses a terminal source or target", () => {
+      const tx = manager.begin("intent-1");
+      manager.commit(tx.id);
+      assert.equal(
+        manager.compareAndSetStatus(tx.id, "committed", "pending"),
+        null,
+      );
+      const open = manager.begin("intent-2");
+      assert.equal(
+        manager.compareAndSetStatus(open.id, "pending", "committed"),
+        null,
+      );
+      assert.equal(manager.get(open.id)?.status, "pending");
+    });
+  });
 });

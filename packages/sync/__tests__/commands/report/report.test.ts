@@ -13,6 +13,7 @@ import { renderReportHtml } from "../../../src/commands/report/render-html.js";
 import { renderReportMarkdown } from "../../../src/commands/report/render-markdown.js";
 import { reportCommand } from "../../../src/commands/report/index.js";
 import { writeZipStore } from "../../../src/commands/report/zip-store.js";
+import { parseReportBaseline } from "../../../src/commands/report/baseline-read.js";
 import type {
   GitReader,
   LintCollector,
@@ -42,6 +43,32 @@ const silentGit: GitReader = {
   logFollow: () => [],
   show: () => null,
 };
+
+describe("parseReportBaseline", () => {
+  it("accepts an empty specifier used for non-import findings", () => {
+    const parsed = parseReportBaseline(
+      '{"version":1,"entries":[{"rule":"r","file":"a.ts","specifier":""}]}',
+    );
+    assert.equal(parsed.entries[0]?.specifier, "");
+  });
+
+  it("rejects impossible calendar dates", () => {
+    assert.throws(
+      () =>
+        parseReportBaseline(
+          '{"version":1,"entries":[{"rule":"r","file":"a.ts","specifier":"s","expires":"2026-02-31"}]}',
+        ),
+      /invalid calendar date/,
+    );
+    assert.throws(
+      () =>
+        parseReportBaseline(
+          '{"version":1,"entries":[{"rule":"r","file":"a.ts","specifier":"s","expires":"2026-04-31"}]}',
+        ),
+      /invalid calendar date/,
+    );
+  });
+});
 
 describe("generateContextMapMermaid", () => {
   it("emits a flowchart of depends_on and a classDiagram of ports", () => {

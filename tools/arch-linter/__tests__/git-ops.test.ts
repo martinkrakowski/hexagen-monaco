@@ -10,6 +10,7 @@ import {
   renameNameStatus,
   resolveBaseRef,
   showFileAtRef,
+  stagedDiffArgs,
 } from "../src/git-ops.js";
 
 describe("resolveBaseRef", () => {
@@ -24,6 +25,21 @@ describe("resolveBaseRef", () => {
       resolveBaseRef(undefined, { GITHUB_BASE_REF: "main" }),
       "origin/main",
     );
+  });
+
+  it("prefixes slash-containing branch names with origin/", () => {
+    assert.equal(resolveBaseRef("release/1.0", {}), "origin/release/1.0");
+    assert.equal(
+      resolveBaseRef(undefined, { GITHUB_BASE_REF: "feat/x" }),
+      "origin/feat/x",
+    );
+    assert.equal(resolveBaseRef("refs/heads/main", {}), "refs/heads/main");
+  });
+});
+
+describe("stagedDiffArgs", () => {
+  it("asks git for paths relative to cwd so --staged matches ROOT_DIR keys", () => {
+    assert.ok(stagedDiffArgs().includes("--relative"));
   });
 });
 

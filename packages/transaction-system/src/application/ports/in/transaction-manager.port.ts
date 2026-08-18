@@ -53,7 +53,9 @@ export interface TransactionManagerPort {
 
   /**
    * Atomically transition a transaction from expectedStatus to newStatus.
-   * Returns `null` if the transaction is missing or its current status != expectedStatus.
+   * Returns `null` if the transaction is missing, its current status !=
+   * expectedStatus, or either status is terminal. Terminal writes must go
+   * through {@link commit}, {@link rollback}, or {@link fail}.
    */
   compareAndSetStatus(
     transactionId: string,
