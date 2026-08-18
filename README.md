@@ -373,7 +373,7 @@ All steps must pass before merging to `main`.
 
 ## For existing `@hexagen-monaco/sync` users
 
-Generation stays. If you installed the CLI to scaffold Hexagonal monorepos, that path remains supported. The product headline is now architectural conformance — the same engine that emits a layout also checks that the tree still matches it. 0.10.0 is an unpublished breaking minor: a project that passed the linter on 0.9.x can fail on 0.10.0. That candor is the contract going forward.
+Generation stays. If you installed the CLI to scaffold Hexagonal monorepos, that path remains supported. The product headline is now architectural conformance — the same engine that emits a layout also checks that the tree still matches it. 0.11.0 is a breaking minor: a project that passed the linter on 0.9.x can fail on 0.11.0. That candor is the contract going forward.
 
 ## License
 
@@ -383,7 +383,7 @@ Hexagen-Monaco is a three-layer product (ADR-0061, ADR-0066).
 
 **Platform.** `@hexagen-monaco/sync` (the generator), the web app, staged generation, hosted history, and the agent-constraint pack remain proprietary under the [Source-Available Evaluation License](./LICENSE). New packages default to this license unless they are deliberately placed in the wedge.
 
-Already-published npm tarballs at version 0.9.0 and earlier stay on the evaluation license forever. The FSL relicense applies from the next published release.
+Already-published npm tarballs at version 0.9.0 and earlier stay on the evaluation license forever. From 0.11.0, the wedge packages ship under FSL-1.1-Apache-2.0.
 
 The **Hexagen-Monaco** name is a trademark of Krakowski Cloud Solutions, LLC and is independent of the code licenses.
 

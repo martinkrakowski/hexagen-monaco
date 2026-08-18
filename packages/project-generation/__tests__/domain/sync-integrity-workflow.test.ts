@@ -69,7 +69,7 @@ describe("sync-integrity workflow content", () => {
     assert.ok(SYNC_INTEGRITY_WORKFLOW.includes("yarn sync:check"));
   });
 
-  it("uses the vendored hexagen-conformance action (0.10.0 contract)", () => {
+  it("uses the vendored hexagen-conformance action (0.11.0 contract)", () => {
     assert.ok(
       SYNC_INTEGRITY_WORKFLOW.includes(
         "uses: ./.github/actions/hexagen-conformance",
@@ -77,7 +77,7 @@ describe("sync-integrity workflow content", () => {
     );
     assert.ok(SYNC_INTEGRITY_WORKFLOW.includes("yarn hexagen-lint --ratchet"));
     assert.match(SYNC_INTEGRITY_WORKFLOW, /pull-requests:\s*write/);
-    assert.match(SYNC_INTEGRITY_WORKFLOW, /0\.10\.0 unpublished/);
+    assert.match(SYNC_INTEGRITY_WORKFLOW, /0\.11\.0/);
     assert.ok(!SYNC_INTEGRITY_WORKFLOW.includes("v0.9.0"));
   });
 

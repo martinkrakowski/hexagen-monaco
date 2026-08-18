@@ -54,7 +54,7 @@ npx hexagen-lint --baseline ./ci/arch-lint-baseline.json
 npx hexagen-lint --update-baseline
 
 # Explicit ratchet (the default when a baseline file is present).
-# 0.10.0 unpublished contract — not on the published 0.9.0 tarball:
+# 0.11.0 contract — not on the published 0.9.0 tarball:
 #   --pr-diff           only this PR's new findings vs the base-branch baseline
 #   --base-ref <ref>    git ref for --pr-diff (or GITHUB_BASE_REF)
 #   --staged            only findings on git-staged files

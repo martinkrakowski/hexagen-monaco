@@ -22,9 +22,8 @@
  * Mirrors the live `ci-github-actions` `ci.yml` template, which documents the
  * same hazard.
  *
- * Version pin: this workflow is the 0.10.0 unpublished contract. The published
- * 0.9.0 tarball does not include --pr-diff / report / adopt. Do not tag a
- * vX.Y.Z release from this change.
+ * Version pin: this workflow is the 0.11.0 contract. The published 0.9.0
+ * tarball does not include --pr-diff / report / adopt.
  */
 export const SYNC_INTEGRITY_WORKFLOW_PATH =
   ".github/workflows/sync-integrity.yml";
@@ -83,9 +82,9 @@ jobs:
       - name: "Install Dependencies"
         run: yarn install --immutable
 
-      # 0.10.0 unpublished contract: hexagen-lint --ratchet + yarn sync:check
-      # with per-PR baseline diff. The published 0.9.0 tarball does not have
-      # --pr-diff / report / adopt — this workflow is emitted by the 0.10.0 tree.
+      # 0.11.0 contract: hexagen-lint --ratchet + yarn sync:check with per-PR
+      # baseline diff. The published 0.9.0 tarball does not have --pr-diff /
+      # report / adopt — this workflow is emitted by the 0.11.0 tree.
       - name: "Hexagen Conformance"
         uses: ./.github/actions/hexagen-conformance
         with:
@@ -95,9 +94,8 @@ jobs:
 
 export const HEXAGEN_CONFORMANCE_ACTION_YML = `# Hexagen conformance composite action.
 #
-# Contract version: 0.10.0 (unpublished). Pin by commit SHA until 0.10.0 is
-# published. The published 0.9.0 tarball does NOT include adopt, report, or
-# per-PR baseline diffing.
+# Contract version: 0.11.0. The published 0.9.0 tarball does NOT include
+# adopt, report, or per-PR baseline diffing.
 name: "Hexagen Conformance"
 description: >
   Run hexagen-lint --ratchet (per-PR baseline diff + machine-enforced

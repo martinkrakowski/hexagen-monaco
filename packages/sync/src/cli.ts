@@ -200,7 +200,7 @@ function buildProgram(): Command {
     });
 
   // hexagen report [--handoff]
-  // 0.10.0 unpublished contract — not present on the published 0.9.0 tarball.
+  // 0.11.0 contract — not present on the published 0.9.0 tarball.
   program
     .command("report")
     .description(

@@ -3,13 +3,17 @@
 Release notes for the co-published `@hexagen-monaco/sync` and
 `@hexagen-monaco/arch-linter` packages (they share one version, tagged `vX.Y.Z`).
 
-## 0.10.0
+## 0.11.0
+
+Prepared as 0.10.0 in #485; **never tagged or published**. Shipped as **0.11.0**
+so the number matches the tree that also carries the post-#485 FDE, adopt, and
+bootstrap work. There is no `@hexagen-monaco/sync@0.10.0` on npm.
 
 **Read the first two sections before upgrading.** This is a **minor**, not a
 patch, and deliberately so: under 0.x semver a caret range resolves
-`^0.9.0` → `>=0.9.0 <0.10.0`, so a patch would have pushed every change below
-into every already-generated project automatically on its next install. The
-minor is the fence. Generated projects pin `^<engine version>` for both
+`^0.9.0` → `>=0.9.0 <0.10.0`, so a 0.9.x patch would have pushed every change
+below into every already-generated project automatically on its next install.
+The minor is the fence. Generated projects pin `^<engine version>` for both
 packages, so a project scaffolded by 0.9.x stays on 0.9.x until someone
 changes that pin on purpose.
 
@@ -17,9 +21,8 @@ changes that pin on purpose.
 
 Already-published tarballs of `@hexagen-monaco/sync` and
 `@hexagen-monaco/arch-linter` at **≤0.9.0** remain under the Source-Available
-Evaluation License **forever**. From the next release that is actually
-published, those two packages ship under FSL-1.1-Apache-2.0. This note records
-the boundary; it is not itself a release.
+Evaluation License **forever**. From **0.11.0**, those two packages ship under
+FSL-1.1-Apache-2.0.
 
 ### ⚠️ Node 20 is no longer supported
 
@@ -47,11 +50,10 @@ none of these ever produced output:
   `linter-config.yaml`; **generated projects get an empty allowlist by
   default** (ADR-0054 §4), so a project that needs an exception must state it.
 
-### FDE kit (unpublished 0.10.0 contract)
+### FDE kit
 
-Not in the published 0.9.0 tarball. Do not assume 0.9.0 has these commands
-or flags; pin the in-repo GitHub Action by commit SHA until 0.10.0 is
-actually published. Do not push a `vX.Y.Z` tag from this work.
+Not in the published 0.9.0 tarball. 0.9.0 does not have these commands or
+flags.
 
 - `hexagen report` / `hexagen report --handoff` — HTML/Markdown engagement
   artifact (context map, drift vs baseline, git ratchet trend, suppression
@@ -63,7 +65,7 @@ actually published. Do not push a `vX.Y.Z` tag from this work.
 - Composite action `.github/actions/hexagen-conformance` wraps the linter
   ratchet + `sync --check`. Generated projects vendor that action.
 
-**A project that passed the linter on 0.9.x can therefore fail on 0.10.0** —
+**A project that passed the linter on 0.9.x can therefore fail on 0.11.0** —
 in `hexagen-lint` directly, in the `architectural-integrity` CI workflow, and
 in `hexagen sync`, which runs the linter for you. The findings are real (they
 were always violations; the linter simply could not see them), so the fix is
@@ -110,6 +112,16 @@ edit rather than a judgement call.
 The linter gains an opt-in **ratchet baseline** (`ratchet-baseline.ts`) and
 **optional YAML config** loading, so a project can adopt a stricter posture
 incrementally instead of in one jump — see ADR-0054.
+
+- **`hexagen adopt` / `hexagen bootstrap`** (#529, #533) — assisted brownfield
+  adoption and greenfield bootstrap. The published CLI registers `bootstrap`
+  once, via `program.addCommand(bootstrapCommander)`.
+- **FDE kit wiring** (#530) — `hexagen report` / `--handoff`,
+  `hexagen-lint --ratchet --pr-diff`, and the vendored
+  `.github/actions/hexagen-conformance` composite action.
+- **arch-linter CLI harden** (#533) — missing declared module dirs skip (DoD
+  for generated repos); unscoped name collisions are workspace imports only
+  when the resolved path is one; ignore-only modules still fail vacuity.
 
 ## 0.9.0
 
