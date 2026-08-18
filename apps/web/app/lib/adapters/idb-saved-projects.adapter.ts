@@ -13,6 +13,7 @@ import type {
 } from "@hexagen/shared";
 
 const SAVED_PROJECTS_KEY = "hexagen:saved-projects";
+const SAVED_PROJECTS_OWNER_KEY = "hexagen:saved-projects-owner";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -471,6 +472,21 @@ export function normalizeLoadedProjects(
 
 export class IDBSavedProjectsAdapter implements SavedProjectsPersistencePort {
   constructor(private readonly logger?: LoggerPort) {}
+
+  async getCacheOwner(): Promise<string | null> {
+    try {
+      const value = await get(SAVED_PROJECTS_OWNER_KEY);
+      return typeof value === "string" && value.length > 0 ? value : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async setCacheOwner(ownerId: string | null): Promise<void> {
+    await this.enqueueWrite(async () => {
+      await set(SAVED_PROJECTS_OWNER_KEY, ownerId);
+    });
+  }
 
   /**
    * In-tab write serialization: every write is a get-then-set on ONE IDB key,

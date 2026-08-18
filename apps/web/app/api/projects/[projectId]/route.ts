@@ -22,6 +22,29 @@ function invalidId() {
   );
 }
 
+function parseIfMatch(
+  request: NextRequest,
+): { ok: true; expected?: number } | { ok: false; response: NextResponse } {
+  const raw = request.headers.get("If-Match");
+  if (raw == null || raw === "" || raw === "*") return { ok: true };
+  const trimmed = raw.trim().replace(/^W\//, "").replaceAll('"', "");
+  const expected = Number(trimmed);
+  if (!Number.isFinite(expected)) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          error: "validation",
+          message: "Invalid If-Match precondition",
+          statusCode: 400,
+        },
+        { status: 400 },
+      ),
+    };
+  }
+  return { ok: true, expected };
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> },
@@ -97,14 +120,25 @@ export async function PUT(
     );
   }
 
+  const precondition = parseIfMatch(request);
+  if (!precondition.ok) return precondition.response;
+
   const store = getPlatformStore();
   const port = store.projectsFor(owner.ownerId);
-  const updated = await port.updateProjectRecord(parsedId.data, () => {
-    return parsedProject.project;
-  });
+  const updated = port.putProject(parsedProject.project, precondition.expected);
   if (updated.success) {
     store.markProjectsInitialized(owner.ownerId);
     return NextResponse.json(updated.value);
+  }
+  if (updated.error.kind === "Conflict") {
+    return NextResponse.json(
+      {
+        error: "Conflict",
+        message: updated.error.message,
+        statusCode: 409,
+      },
+      { status: 409 },
+    );
   }
   if (updated.error.kind === "NotFound") {
     const created = await port.createProjectRecord(parsedProject.project);

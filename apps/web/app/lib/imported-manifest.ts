@@ -102,7 +102,25 @@ export function parseImportedManifest(
   if (!isPlainObject(loaded)) {
     return { ok: false, message: IMPORTED_MANIFEST_CORRUPT_MESSAGE };
   }
+  // Unknown keys stay lossless; a known key with the wrong runtime type
+  // (e.g. `apps: {}`) must not reach generators that assume schema types.
+  if (hasInvalidKnownFieldType(loaded)) {
+    return { ok: false, message: IMPORTED_MANIFEST_CORRUPT_MESSAGE };
+  }
   return { ok: true, manifest: losslessManifest(loaded) };
+}
+
+function hasInvalidKnownFieldType(raw: Record<string, unknown>): boolean {
+  const shape = ManifestSchema.shape as Record<
+    string,
+    { safeParse: (value: unknown) => { success: boolean } }
+  >;
+  for (const key of Object.keys(shape)) {
+    if (!Object.prototype.hasOwnProperty.call(raw, key)) continue;
+    const field = shape[key];
+    if (!field.safeParse(raw[key]).success) return true;
+  }
+  return false;
 }
 
 function losslessManifest(

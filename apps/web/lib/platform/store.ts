@@ -1,7 +1,9 @@
-import type { SavedProjectsPersistencePort } from "@hexagen/shared";
 import { openPlatformDb, resolvePlatformDbPath } from "./platform-db";
 import { createAuthRepository, type AuthRepository } from "./auth-store";
-import { createSavedProjectsStore } from "./saved-projects-store";
+import {
+  createSavedProjectsStore,
+  type SavedProjectsStore,
+} from "./saved-projects-store";
 import {
   createRunHistoryRepository,
   type RunHistoryRepository,
@@ -15,7 +17,7 @@ import { createOwnerStateStore } from "./owner-state";
 export interface PlatformStore {
   readonly auth: AuthRepository;
   readonly billing: EntitlementRepository;
-  projectsFor(ownerId: string): SavedProjectsPersistencePort;
+  projectsFor(ownerId: string): SavedProjectsStore;
   runsFor(ownerId: string): RunHistoryRepository;
   isProjectsInitialized(ownerId: string): boolean;
   markProjectsInitialized(ownerId: string): void;

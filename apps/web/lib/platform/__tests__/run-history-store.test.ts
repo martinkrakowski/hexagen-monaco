@@ -60,4 +60,28 @@ describe("run history + price table", () => {
     assert.equal(store.runsFor("owner-b").list().length, 0);
     store.close();
   });
+
+  it("upserts the same owner/run/stage so reconnects do not double cost", () => {
+    const store = createPlatformStore(":memory:");
+    const runs = store.runsFor("owner-a");
+    const day = Date.UTC(2026, 7, 17, 12, 0, 0);
+    runs.record({
+      runId: "run-1",
+      telemetry,
+      now: day,
+    });
+    runs.record({
+      runId: "run-1",
+      telemetry: { ...telemetry, durationMs: 2400 },
+      now: day + 10,
+    });
+    const listed = runs.list({ limit: 10 });
+    assert.equal(listed.length, 1);
+    assert.equal(listed[0]?.durationMs, 2400);
+    const trend = runs.trend(30);
+    assert.equal(trend.length, 1);
+    assert.equal(trend[0]?.runs, 1);
+    assert.equal(trend[0]?.costCents, 75);
+    store.close();
+  });
 });

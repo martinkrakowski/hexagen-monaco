@@ -54,10 +54,21 @@ function parsePayload(row: ProjectRow): Result<SavedProject, PersistenceError> {
   }
 }
 
+export interface SavedProjectsStore extends SavedProjectsPersistencePort {
+  /**
+   * Replace one row. When `expectedUpdatedAt` is set, the write is rejected
+   * with `Conflict` unless that value still matches the stored row (If-Match).
+   */
+  putProject(
+    project: SavedProject,
+    expectedUpdatedAt?: number,
+  ): Result<SavedProject, PersistenceError>;
+}
+
 export function createSavedProjectsStore(
   db: Database.Database,
   ownerId: string,
-): SavedProjectsPersistencePort {
+): SavedProjectsStore {
   const selectAll = db.prepare(
     "SELECT id, name, payload, created_at, updated_at, ord FROM saved_projects WHERE owner_id = ? ORDER BY ord ASC",
   );
@@ -75,6 +86,11 @@ export function createSavedProjectsStore(
     UPDATE saved_projects
        SET name = @name, payload = @payload, updated_at = @updated_at
      WHERE owner_id = @owner_id AND id = @id
+  `);
+  const updateIfMatch = db.prepare(`
+    UPDATE saved_projects
+       SET name = @name, payload = @payload, updated_at = @updated_at
+     WHERE owner_id = @owner_id AND id = @id AND updated_at = @expected_updated_at
   `);
   const remove = db.prepare(
     "DELETE FROM saved_projects WHERE owner_id = ? AND id = ?",
@@ -188,13 +204,20 @@ export function createSavedProjectsStore(
         if (updated === parsed.value) {
           return { success: true, value: parsed.value };
         }
-        update.run({
+        const written = updateIfMatch.run({
           id,
           owner_id: ownerId,
           name: updated.name,
           payload: JSON.stringify(updated),
           updated_at: updated.updatedAt,
+          expected_updated_at: parsed.value.updatedAt,
         });
+        if (written.changes === 0) {
+          return {
+            success: false,
+            error: persistError("Conflict", "Project was updated elsewhere"),
+          };
+        }
         return { success: true, value: updated };
       } catch (cause) {
         return {
@@ -218,6 +241,56 @@ export function createSavedProjectsStore(
           error: persistError(
             "SerializationFailed",
             "Failed to delete saved project",
+            cause,
+          ),
+        };
+      }
+    },
+
+    putProject(project, expectedUpdatedAt) {
+      try {
+        const existing = selectOne.get(ownerId, project.id) as
+          | ProjectRow
+          | undefined;
+        if (!existing) {
+          return {
+            success: false,
+            error: persistError(
+              "NotFound",
+              `No saved project with id ${project.id}`,
+            ),
+          };
+        }
+        const params = {
+          id: project.id,
+          owner_id: ownerId,
+          name: project.name,
+          payload: JSON.stringify(project),
+          updated_at: project.updatedAt,
+          expected_updated_at: expectedUpdatedAt,
+        };
+        const written =
+          expectedUpdatedAt === undefined
+            ? update.run(params)
+            : updateIfMatch.run(params);
+        if (written.changes === 0) {
+          return {
+            success: false,
+            error: persistError(
+              expectedUpdatedAt === undefined ? "NotFound" : "Conflict",
+              expectedUpdatedAt === undefined
+                ? `No saved project with id ${project.id}`
+                : "Project was updated elsewhere",
+            ),
+          };
+        }
+        return { success: true, value: project };
+      } catch (cause) {
+        return {
+          success: false,
+          error: persistError(
+            "SerializationFailed",
+            "Failed to replace saved project",
             cause,
           ),
         };

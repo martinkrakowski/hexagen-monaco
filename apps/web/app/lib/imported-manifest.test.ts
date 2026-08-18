@@ -80,6 +80,14 @@ describe("parseImportedManifest", () => {
     assert.strictEqual(result.manifest.system, "shop");
   });
 
+  it("fails closed when a known field has the wrong runtime type", () => {
+    const result = parseImportedManifest(
+      ["system: shop", "bounded_contexts: []", "apps: {}"].join("\n"),
+    );
+    assert.ok(!result.ok);
+    assert.strictEqual(result.message, IMPORTED_MANIFEST_CORRUPT_MESSAGE);
+  });
+
   it("does not drop schema-known or extra fields on a real manifest", () => {
     const result = parseImportedManifest(
       [
