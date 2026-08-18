@@ -56,10 +56,33 @@ export function toWorkspaceRelativePosixPath(
   return [...ascend, ...fileSegments.slice(shared)].join("/");
 }
 
-export function determineLayer(relativePath: string): Layer {
+export interface LayoutConfig {
+  contexts?: string;
+  root?: string;
+  layers?: string[];
+  ignore?: string[];
+}
+
+export function determineLayer(
+  relativePath: string,
+  config?: LayoutConfig,
+): Layer | "unknown" | "ignored" {
+  if (config?.ignore?.some((ig) => relativePath.includes(ig))) {
+    return "ignored";
+  }
+
   if (relativePath.includes("/__tests__/")) {
     return "test";
   }
+
+  if (config?.layers) {
+    for (const layer of config.layers) {
+      if (relativePath.includes(`/${layer}/`)) {
+        return layer as Layer;
+      }
+    }
+  }
+
   if (relativePath.includes("/domain/")) {
     return "domain";
   }

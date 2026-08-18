@@ -1,6 +1,19 @@
-export type RefactoringType = "rename-port" | "rename-use-case" | "rename-entity" | "move-use-case" | "extract-port";
+export type RefactoringType =
+  | "rename-port"
+  | "rename-use-case"
+  | "rename-entity"
+  | "move-use-case"
+  | "extract-port";
 
-export type Layer = "domain" | "application" | "infrastructure" | "test" | "manifest" | "config" | "unknown";
+export type Layer =
+  | "domain"
+  | "application"
+  | "infrastructure"
+  | "test"
+  | "manifest"
+  | "config"
+  | "unknown"
+  | "ignored";
 
 export interface FileToModify {
   path: string;
