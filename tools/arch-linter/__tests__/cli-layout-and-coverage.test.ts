@@ -201,6 +201,43 @@ bounded_contexts:
       }
     });
 
+    it("fails closed when one module is checkable and another is ignore-only", async () => {
+      const root = await createFixture({
+        "packages/billing/src/index.ts": `export const billing = 1;\n`,
+        ".architecture/layout.yaml": "ignore:\n  - packages/orders\n",
+      });
+      try {
+        const r = await runLinter(root);
+        assert.equal(r.code, 2, describeResult(r));
+        assert.match(
+          r.stderr,
+          /NOTHING WAS CHECKED for module 'orders'/,
+          describeResult(r),
+        );
+      } finally {
+        await cleanup(root);
+      }
+    });
+
+    it("loads a custom context layer name such as services", async () => {
+      const root = await createFixture({
+        "packages/billing/src/services/charge.ts": `export const charge = 1;\n`,
+        ".architecture/layout.yaml":
+          "contexts:\n  billing:\n    root: packages/billing\n    layers:\n      services: [src/services]\n",
+      });
+      try {
+        const r = await runLinter(root);
+        assert.notEqual(r.code, 2, describeResult(r));
+        assert.doesNotMatch(
+          r.stderr,
+          /invalid|unrecognized/i,
+          describeResult(r),
+        );
+      } finally {
+        await cleanup(root);
+      }
+    });
+
     it("fails closed when a checked module directory matches no source files", async () => {
       const root = await createFixture({
         "packages/billing/README.md": "no typescript here\n",

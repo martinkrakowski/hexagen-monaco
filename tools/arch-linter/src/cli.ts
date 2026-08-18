@@ -611,23 +611,23 @@ function checkArchitecturalIntegrity(): {
       return fp === modulePath || fp.startsWith(modulePath + path.sep);
     });
 
-    if (moduleSourceFiles.length === 0) {
+    const checkedModuleSourceFiles = moduleSourceFiles.filter((file) => {
+      const filePath = file.getFilePath();
+      if (filePath.includes("/dist/") || filePath.includes("\\dist\\")) {
+        return false;
+      }
+      return !isIgnoredFile(filePath);
+    });
+
+    if (checkedModuleSourceFiles.length === 0) {
       logger.error(
-        `NOTHING WAS CHECKED for module '${moduleName}'. The module directory exists at ${path.relative(ROOT_DIR, modulePath)} but the TypeScript project matched 0 source files.`,
+        `NOTHING WAS CHECKED for module '${moduleName}'. The module directory exists at ${path.relative(ROOT_DIR, modulePath)} but 0 source files remain after excluding dist/ and layout.yaml ignore.`,
       );
       process.exit(EXIT_COULD_NOT_RUN);
     }
 
-    moduleSourceFiles.forEach((file) => {
+    checkedModuleSourceFiles.forEach((file) => {
       const filePath = file.getFilePath();
-
-      // Skip build artifacts in dist/ directories
-      if (filePath.includes("/dist/") || filePath.includes("\\dist\\")) {
-        return;
-      }
-      if (isIgnoredFile(filePath)) {
-        return;
-      }
       filesScanned += 1;
 
       const isTestDbl = isTestDoubleOrTest(filePath);

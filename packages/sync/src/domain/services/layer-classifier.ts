@@ -111,14 +111,29 @@ function matchLayoutContext(
   const contexts = contextMap(layout);
   if (!contexts) return null;
   const file = posix(relativePath);
+  let best: {
+    name: string;
+    root: string;
+    rel: string;
+    layers?: Record<string, readonly string[]>;
+    len: number;
+  } | null = null;
   for (const [name, ctx] of Object.entries(contexts)) {
     const root = stripSlashes(ctx.root);
     if (file === root || file.startsWith(`${root}/`)) {
-      const rel = file === root ? "" : file.slice(root.length + 1);
-      return { name, root, rel, layers: ctx.layers };
+      if (!best || root.length > best.len) {
+        const rel = file === root ? "" : file.slice(root.length + 1);
+        best = { name, root, rel, layers: ctx.layers, len: root.length };
+      }
     }
   }
-  return null;
+  if (!best) return null;
+  return {
+    name: best.name,
+    root: best.root,
+    rel: best.rel,
+    layers: best.layers,
+  };
 }
 
 function layerFromLayoutDirs(
