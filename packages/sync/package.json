@@ -3,7 +3,7 @@
   "version": "0.10.0",
   "type": "module",
   "description": "HexaGen Sync Engine — Generate and sync modular monorepos",
-  "license": "FSL-1.1-Apache-2.0",
+  "license": "FSL-1.1-ALv2",
   "engines": {
     "node": ">=22.7.0"
   },

@@ -43,7 +43,11 @@ describe("prepare-publish-package LICENSE staging", () => {
       } catch (error) {
         threw = true;
         const err = error as { status?: number; stderr?: string };
-        assert.notEqual(err.status, 0, "missing LICENSE must be a hard error");
+        assert.equal(
+          err.status,
+          1,
+          "missing LICENSE must be a hard error exit 1",
+        );
         assert.match(
           String(err.stderr ?? ""),
           /package-local LICENSE/,
@@ -72,8 +76,37 @@ describe("prepare-publish-package LICENSE staging", () => {
     }
   });
 
+  it("fails when the package-local LICENSE is empty or whitespace", async () => {
+    const dir = await makeFixture({ license: "   \n  " });
+    try {
+      let threw = false;
+      try {
+        execFileSync("node", [SCRIPT, dir], {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+      } catch (error) {
+        threw = true;
+        const err = error as { status?: number; stderr?: string };
+        assert.equal(
+          err.status,
+          1,
+          "empty LICENSE must be a hard error exit 1",
+        );
+        assert.match(String(err.stderr ?? ""), /is empty or whitespace-only/);
+      }
+      assert.equal(
+        threw,
+        true,
+        "staging must not succeed with an empty LICENSE",
+      );
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("copies the package-local LICENSE verbatim", async () => {
-    const marker = "PACKAGE-LOCAL-FSL-MARKER\n";
+    const marker = "PACKAGE-LOCAL-FSL-MARKER\nValid Clause...";
     const dir = await makeFixture({ license: marker });
     try {
       execFileSync("node", [SCRIPT, dir], { stdio: "ignore" });
@@ -87,14 +120,27 @@ describe("prepare-publish-package LICENSE staging", () => {
     }
   });
 
-  it("published wedge packages carry a package-local LICENSE", async () => {
+  it("published wedge packages carry a full package-local LICENSE with FSL clauses", async () => {
     for (const rel of ["packages/sync/LICENSE", "tools/arch-linter/LICENSE"]) {
       const abs = path.join(REPO_ROOT, rel);
       const text = await fs.readFile(abs, "utf8");
-      assert.match(
-        text,
-        /FSL-1\.1-Apache-2\.0/,
-        `${rel} must be the FSL text, not the root evaluation license`,
+      assert.match(text, /Functional Source License, Version 1\.1/i);
+      assert.match(text, /Apache License, Version 2\.0/);
+      assert.match(text, /If You violate this License/);
+    }
+  });
+
+  it("verifies package.json uses FSL-1.1-ALv2 in published packages", async () => {
+    for (const rel of [
+      "packages/sync/package.json",
+      "tools/arch-linter/package.json",
+    ]) {
+      const abs = path.join(REPO_ROOT, rel);
+      const pkg = JSON.parse(await fs.readFile(abs, "utf8"));
+      assert.equal(
+        pkg.license,
+        "FSL-1.1-ALv2",
+        `${rel} must have FSL-1.1-ALv2 license field`,
       );
     }
   });

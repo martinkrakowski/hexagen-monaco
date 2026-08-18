@@ -12,7 +12,7 @@
 
 Two calendars were live on the same tree on the same day:
 
-1. **Architecture-remediation** — Phases 0–5 are complete. Phase 6 still has three legs (6.5(c), 6.7(a), 6.7(c)). Phase 7 has not started (7.1 → 7.6, strictly serial). Phase 8 has eight remaining legs (8.12(a–h), then 8.1 → 8.2). Recorded in `docs/planning/2026-08-17-remaining-work-summary.md`.
+1. **Architecture-remediation** — Phases 0–5 are complete. Phase 6 still has three legs (6.5(c), 6.7(a), 6.7(c)). Phase 7 has not started (7.1 → 7.6, strictly serial). Phase 8 has nine remaining legs (8.6–8.12, then 8.1 → 8.2). Recorded in `docs/planning/2026-08-17-remaining-work-summary.md`.
 2. **Conformance positioning** — the runbook wants Phase −1 this week and 3–5 weeks of Phase 0 immediately, then Phase 1 and (if D-3 is business) Phase 2.
 
 A solo founder cannot run both at full speed. Leaving the choice implicit is how Phase 0 would stretch until it is no longer a kill-question, and how remediation would stall mid-fence. The three options were: park remediation Phases 6–8; finish the small remaining remediation legs first; or accept Phase 0 as part-time and stretch its calendar.
