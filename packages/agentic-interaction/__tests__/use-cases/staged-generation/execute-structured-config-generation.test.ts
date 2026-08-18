@@ -127,6 +127,21 @@ function createMockTransactionManager(): TransactionManagerPort {
       if (tx) tx.status = "rolled_back";
       return tx as any;
     },
+    fail: (txId: string) => {
+      const tx = transactions.get(txId);
+      if (tx) tx.status = "failed";
+      return tx as any;
+    },
+    compareAndSetStatus: (
+      txId: string,
+      expectedStatus: string,
+      newStatus: string,
+    ) => {
+      const tx = transactions.get(txId);
+      if (!tx || tx.status !== expectedStatus) return null;
+      tx.status = newStatus;
+      return tx as any;
+    },
   } as unknown as TransactionManagerPort;
 }
 
@@ -181,6 +196,12 @@ test("records non-zero context/port/adapter counts in begin() metadata (A2 count
       return { id: `txn-${intentId}`, intentId, status: "pending" };
     },
     transition: (txId: string, status: string) => ({ id: txId, status }),
+    get: () => null,
+    list: () => [],
+    commit: () => null,
+    rollback: () => null,
+    fail: () => null,
+    compareAndSetStatus: () => null,
   } as unknown as TransactionManagerPort;
 
   const useCase = new ExecuteStructuredConfigGenerationUseCase(

@@ -382,6 +382,8 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
     list: async () => [],
     commit: async () => {},
     rollback: async () => {},
+    fail: async () => {},
+    compareAndSetStatus: async () => null,
   } as any;
 
   test("fails with invalid YAML", async () => {
