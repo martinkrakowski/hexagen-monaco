@@ -39,6 +39,13 @@ export const BASELINE_ENTRY_FIELDS = [
   "expires",
 ] as const;
 
+/**
+ * Pre-suppression field on `main` baselines. Parsed as `reason` when `reason`
+ * is absent so `--ratchet --pr-diff` can read `origin/main` without a FATAL.
+ * Never written back — `persistableEntry` emits `reason` only.
+ */
+export const LEGACY_NOTE_FIELD = "note";
+
 export type BaselineEntryField = (typeof BASELINE_ENTRY_FIELDS)[number];
 
 export interface BaselineEntry {
@@ -201,12 +208,14 @@ function parseBaselineEntry(entry: unknown, index: number): BaselineEntry {
     throw new Error(`entry ${index} is not an object`);
   }
   const candidate = entry as Record<string, unknown>;
-  const unknown = Object.keys(candidate).filter(
-    (key) => !(BASELINE_ENTRY_FIELDS as readonly string[]).includes(key),
-  );
+  const allowed = new Set<string>([
+    ...BASELINE_ENTRY_FIELDS,
+    LEGACY_NOTE_FIELD,
+  ]);
+  const unknown = Object.keys(candidate).filter((key) => !allowed.has(key));
   if (unknown.length > 0) {
     throw new Error(
-      `entry ${index} has unknown field(s) ${unknown.map((k) => `'${k}'`).join(", ")} (allowed: ${BASELINE_ENTRY_FIELDS.join(", ")})`,
+      `entry ${index} has unknown field(s) ${unknown.map((k) => `'${k}'`).join(", ")} (allowed: ${[...BASELINE_ENTRY_FIELDS, LEGACY_NOTE_FIELD].join(", ")})`,
     );
   }
   for (const field of ["rule", "file", "specifier"] as const) {
@@ -227,6 +236,11 @@ function parseBaselineEntry(entry: unknown, index: number): BaselineEntry {
       throw new Error(`entry ${index} has empty or non-string 'reason'`);
     }
     parsed.reason = candidate.reason;
+  } else if ("note" in candidate) {
+    if (typeof candidate.note !== "string" || candidate.note.trim() === "") {
+      throw new Error(`entry ${index} has empty or non-string 'note'`);
+    }
+    parsed.reason = candidate.note;
   }
   if ("expires" in candidate) {
     if (typeof candidate.expires !== "string") {

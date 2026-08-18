@@ -147,9 +147,24 @@ describe("parseBaseline — fail closed", () => {
 
   it("rejects unknown entry fields instead of silently dropping them", () => {
     rejects(
-      '{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","note":"informal"}]}',
-      /unknown field\(s\) 'note'/,
+      '{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","extra":"informal"}]}',
+      /unknown field\(s\) 'extra'/,
     );
+  });
+
+  it("treats legacy 'note' as reason so origin/main baselines still parse", () => {
+    const parsed = parseBaseline(
+      '{"version":1,"entries":[{"rule":"npm-package-in-domain","file":"pkg/x.ts","specifier":"zod","note":"ADR-0054 amendment"}]}',
+    );
+    assert.equal(parsed.entries[0]?.reason, "ADR-0054 amendment");
+    assert.equal(parsed.entries[0] && "note" in parsed.entries[0], false);
+  });
+
+  it("prefers reason when both reason and legacy note are present", () => {
+    const parsed = parseBaseline(
+      '{"version":1,"entries":[{"rule":"r","file":"f.ts","specifier":"s","reason":"canonical","note":"legacy"}]}',
+    );
+    assert.equal(parsed.entries[0]?.reason, "canonical");
   });
 
   it("rejects an empty reason and a malformed expires date", () => {

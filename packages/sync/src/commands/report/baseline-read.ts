@@ -43,6 +43,7 @@ export function parseReportBaseline(text: string): ReportBaselineFile {
       "specifier",
       "reason",
       "expires",
+      "note",
     ]);
     for (const k of Object.keys(candidate)) {
       if (!allowedKeys.has(k))
@@ -72,6 +73,13 @@ export function parseReportBaseline(text: string): ReportBaselineFile {
         );
       }
       parsed.reason = candidate.reason.trim();
+    } else if ("note" in candidate) {
+      if (typeof candidate.note !== "string" || !candidate.note.trim()) {
+        throw new Error(
+          `baseline entry ${index} has empty or non-string 'note'`,
+        );
+      }
+      parsed.reason = candidate.note.trim();
     }
 
     if ("expires" in candidate) {
