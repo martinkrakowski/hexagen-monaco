@@ -30,6 +30,7 @@ This page provides a human-friendly index into the Architecture Decision Records
 | 0023–0039 | Later ADRs (2026-05)                      | Accepted | 2026-05 | Sync unification, state machines, subpath conventions, local-llm, server markers, template interpolation / GitHub Actions passthrough, etc. | Browse [.architecture/decisions/](../.architecture/decisions/)                         |
 | 0040      | Driver Context is LLM-emittable           | Accepted | 2026-06 | LLM may classify a context as "driver"; extends ADR-0009                                                                                    | [0040](../.architecture/decisions/ADR-0040-driver-context-llm-emittable.md)            |
 | 0058      | Unconsumed implemented-context deletion   | Accepted | 2026-08 | Active + implemented + zero consumers + no retaining ADR → delete; closes HEX-032 by removing `@hexagen/intent-compiler`                    | [0058](../.architecture/decisions/ADR-0058-unconsumed-implemented-context-deletion.md) |
+| 0065      | Single-Container Compose Deployment       | Accepted | 2026-08 | Removed k8s manifests in favor of a single-container compose deployment until Phase 2 multi-tenancy                                         | [0065](../.architecture/decisions/ADR-0065-single-container-compose-deployment.md)     |
 
 > **Note:** This index is intentionally curated for human readers. For the complete raw list, see the `.architecture/decisions/` directory.
 
