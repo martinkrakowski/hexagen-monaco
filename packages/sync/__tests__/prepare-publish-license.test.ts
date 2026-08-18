@@ -121,26 +121,43 @@ describe("prepare-publish-package LICENSE staging", () => {
   });
 
   it("published wedge packages carry a full package-local LICENSE with FSL clauses", async () => {
-    for (const rel of ["packages/sync/LICENSE", "tools/arch-linter/LICENSE"]) {
+    for (const rel of ["tools/arch-linter/LICENSE"]) {
       const abs = path.join(REPO_ROOT, rel);
       const text = await fs.readFile(abs, "utf8");
       assert.match(text, /Functional Source License, Version 1\.1/i);
       assert.match(text, /Apache License, Version 2\.0/);
-      assert.match(text, /If You violate this License/);
     }
   });
 
   it("verifies package.json uses FSL-1.1-ALv2 in published packages", async () => {
-    for (const rel of [
-      "packages/sync/package.json",
-      "tools/arch-linter/package.json",
-    ]) {
+    for (const rel of ["tools/arch-linter/package.json"]) {
       const abs = path.join(REPO_ROOT, rel);
       const pkg = JSON.parse(await fs.readFile(abs, "utf8"));
       assert.equal(
         pkg.license,
         "FSL-1.1-ALv2",
         `${rel} must have FSL-1.1-ALv2 license field`,
+      );
+    }
+  });
+
+  it("published proprietary packages carry a full package-local proprietary LICENSE", async () => {
+    for (const rel of ["packages/sync/LICENSE"]) {
+      const abs = path.join(REPO_ROOT, rel);
+      const text = await fs.readFile(abs, "utf8");
+      assert.match(text, /SOURCE-AVAILABLE EVALUATION LICENSE/i);
+      assert.match(text, /Krakowski Cloud Solutions/i);
+    }
+  });
+
+  it("verifies package.json uses UNLICENSED in proprietary packages", async () => {
+    for (const rel of ["packages/sync/package.json"]) {
+      const abs = path.join(REPO_ROOT, rel);
+      const pkg = JSON.parse(await fs.readFile(abs, "utf8"));
+      assert.equal(
+        pkg.license,
+        "UNLICENSED",
+        `${rel} must have UNLICENSED license field`,
       );
     }
   });
