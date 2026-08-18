@@ -11,6 +11,7 @@ export interface AdoptOptions {
   yes?: boolean;
   dryRun?: boolean;
   invokeLint?: boolean;
+  force?: boolean;
 }
 
 export interface AdoptResult {
@@ -71,6 +72,20 @@ export async function runAdopt(
     }
 
     await fs.mkdir(path.dirname(layoutPath), { recursive: true });
+
+    const exists = await fs
+      .stat(layoutPath)
+      .then(() => true)
+      .catch(() => false);
+
+    if (exists && options.force !== true) {
+      return err(
+        new Error(
+          `Refusing to overwrite existing ${layoutPath}. Pass --force to overwrite.`,
+        ),
+      );
+    }
+
     await fs.writeFile(layoutPath, contents, "utf8");
 
     const hasManifest = await fs
@@ -101,12 +116,14 @@ export async function adoptCommand(options: {
   yes?: boolean;
   dryRun?: boolean;
   invokeLint?: boolean;
+  force?: boolean;
 }): Promise<void> {
   const result = await runAdopt({
     root: path.resolve(options.root ?? process.cwd()),
     yes: options.yes,
     dryRun: options.dryRun,
     invokeLint: options.invokeLint,
+    force: options.force,
   });
   if (!result.success) {
     console.error(`❌ ${result.error.message}`);
@@ -125,6 +142,7 @@ export const adoptCommander = new Command("adopt")
   .option("--root <path>", "Project root (defaults to cwd)")
   .option("--yes", "Accept detected mappings without prompting")
   .option("--dry-run", "Print the proposed layout.yaml without writing")
+  .option("--force", "Overwrite existing layout.yaml")
   .option(
     "--invoke-lint",
     "Print the hexagen-lint invocation to run after writing layout.yaml",
@@ -135,6 +153,7 @@ export const adoptCommander = new Command("adopt")
       yes?: boolean;
       dryRun?: boolean;
       invokeLint?: boolean;
+      force?: boolean;
     }) => {
       await adoptCommand(opts);
     },

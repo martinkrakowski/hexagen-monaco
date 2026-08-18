@@ -2,7 +2,7 @@
   "name": "@hexagen/arch-linter",
   "version": "0.10.0",
   "description": "HexaGen architecture linter and manifest validation",
-  "license": "FSL-1.1-Apache-2.0",
+  "license": "FSL-1.1-ALv2",
   "type": "module",
   "engines": {
     "node": ">=22.7.0"
