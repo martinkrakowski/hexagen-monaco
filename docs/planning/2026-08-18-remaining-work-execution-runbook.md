@@ -65,14 +65,14 @@ Measured on `08024dd3` + #535. A plan row that disagrees with the tree loses.
 
 ### Wave A0 — not parked
 
-| Item                | State          | Notes                                                                          |
-| ------------------- | -------------- | ------------------------------------------------------------------------------ |
-| **T4.1–T4.4**       | ⛔ not started | Guard still inspects workspace `scripts` only. T4.4 is the permanent CI owner. |
-| **FU-2**            | ⛔ not started | Jest guard does not scan `.github/workflows/`.                                 |
-| **RI-1.3**          | 🔄 partial     | Run already prints suppressed count; stale vs fresh not equally visible.       |
-| **RI-2.1 / RI-2.2** | ⛔ not started | `RefactoringImpactUseCase` still ignores syntactic diagnostics.                |
-| **DOS-2.1**         | ⛔ not started | `.slice(0, 10)` in both prompt-compiler adapters.                              |
-| **FU-1.1**          | ⛔ not started | `packages/local-llm` config exists; script missing.                            |
+| Item                | State          | Notes                                                                                                                                                                                         |
+| ------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **T4.1–T4.4**       | ⛔ not started | Guard still inspects workspace `scripts` only. T4.4 is the permanent CI owner. Landing requires a failing-first undeclared-binary fixture and a non-zero discovery floor (empty scan = fail). |
+| **FU-2**            | ⛔ not started | Jest guard does not scan `.github/workflows/`. Same anti-vacuity + RED fixture (`npx jest` in a workflow). Empty workflow scan = fail.                                                        |
+| **RI-1.3**          | 🔄 partial     | Run already prints suppressed count; stale vs fresh not equally visible.                                                                                                                      |
+| **RI-2.1 / RI-2.2** | ⛔ not started | `RefactoringImpactUseCase` still ignores syntactic diagnostics.                                                                                                                               |
+| **DOS-2.1**         | ⛔ not started | `.slice(0, 10)` in both prompt-compiler adapters.                                                                                                                                             |
+| **FU-1.1**          | ⛔ not started | `packages/local-llm` config exists; script missing.                                                                                                                                           |
 
 ### Blocked on D-C0 (Wave A1 / C / D / remaining 8.12)
 
@@ -197,6 +197,8 @@ yarn build && yarn typecheck && yarn lint && yarn test
 # plus, if ports / adapters / .architecture/ moved:
 yarn lint:arch
 ```
+
+The landing record **must quote the `yarn test` suite count** (files and tests). A gate with no count is not a record.
 
 Published-closure items (6.7(a), RI-2, anything under `packages/sync` or `tools/arch-linter` that ships):
 

@@ -21,10 +21,17 @@ changes that pin on purpose.
 
 Already-published tarballs of `@hexagen-monaco/sync` and
 `@hexagen-monaco/arch-linter` at **≤0.9.0** remain under the Source-Available
-Evaluation License **forever**. From **0.11.0**, `@hexagen-monaco/arch-linter`
-ships under FSL-1.1-Apache-2.0. `@hexagen-monaco/sync` stays under the
-Source-Available Evaluation License (ADR-0066). Do not treat a changelog
-correction as a relicense of the published `0.11.0` tarball.
+Evaluation License **forever**.
+
+**Published `0.11.0` tarballs (what `npm view` serves today):**
+`@hexagen-monaco/arch-linter@0.11.0` `license` is `FSL-1.1-ALv2`
+(FSL-1.1-Apache-2.0 family);
+`@hexagen-monaco/sync@0.11.0` `license` is `UNLICENSED` (Source-Available
+Evaluation License, ADR-0066). This changelog edit does not change either
+published tarball.
+
+Later source-tree edits follow the same split unless a later release notes
+otherwise.
 
 ### ⚠️ Node 20 is no longer supported
 

@@ -4,7 +4,7 @@
 // originals. Not a turbo task input.
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "vitest";
-import { promises as fs } from "node:fs";
+import { promises as fs, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import yaml from "js-yaml";
@@ -80,6 +80,15 @@ describe("bootstrap helpers", () => {
 
 describe("bootstrapCommander (published CLI surface)", () => {
   it("is the command cli.ts registers via addCommand", () => {
+    const src = readFileSync(
+      new URL("../../src/cli.ts", import.meta.url),
+      "utf8",
+    );
+    assert.equal((src.match(/\.command\("bootstrap"\)/g) ?? []).length, 0);
+    assert.equal(
+      (src.match(/addCommand\(bootstrapCommander\)/g) ?? []).length,
+      1,
+    );
     assert.equal(bootstrapCommander.name(), "bootstrap");
     assert.match(bootstrapCommander.description(), /question/i);
     assert.ok(bootstrapCommander.options.some((o) => o.long === "--yes"));
