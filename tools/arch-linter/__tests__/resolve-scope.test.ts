@@ -1,6 +1,12 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
-import { resolveLintScope } from "../src/resolve-scope.js";
+import {
+  matchingImportScope,
+  resolveLintScope,
+  resolvedPathIsWorkspaceImport,
+  scopesToTry,
+  unscopedContextImport,
+} from "../src/resolve-scope.js";
 
 // The linter's scope resolution MUST agree with @hexagen/sync's resolveScope,
 // or it validates imports against the wrong namespace.
@@ -29,6 +35,50 @@ describe("resolveLintScope (parity with @hexagen/sync resolveScope)", () => {
     assert.equal(
       resolveLintScope({ scope: "hexagen", system: "hexagen-monaco" }),
       "hexagen",
+    );
+  });
+});
+
+describe("scope-prefix decoupling (unscoped / multi-scoped)", () => {
+  it("tries the primary scope plus extras from layout", () => {
+    assert.deepEqual(scopesToTry("acme", ["other", "@acme"]), [
+      "@acme",
+      "@other",
+    ]);
+  });
+
+  it("matches a specifier against any known scope", () => {
+    assert.equal(
+      matchingImportScope("@other/auth", ["@acme", "@other"]),
+      "@other",
+    );
+    assert.equal(matchingImportScope("js-yaml", ["@acme"]), null);
+  });
+
+  it("treats a bare specifier as a workspace import only when it is a known context", () => {
+    const names = new Set(["billing", "orders"]);
+    assert.equal(unscopedContextImport("billing", names), "billing");
+    assert.equal(unscopedContextImport("js-yaml", names), null);
+    assert.equal(unscopedContextImport("@acme/billing", names), null);
+  });
+});
+
+describe("resolvedPathIsWorkspaceImport", () => {
+  it("rejects unresolved specifiers and node_modules hits", () => {
+    const roots = ["/repo/packages/zod"];
+    assert.equal(resolvedPathIsWorkspaceImport(undefined, roots), false);
+    assert.equal(
+      resolvedPathIsWorkspaceImport("/repo/node_modules/zod/index.js", roots),
+      false,
+    );
+  });
+
+  it("accepts a path that lives under a context root", () => {
+    assert.equal(
+      resolvedPathIsWorkspaceImport("/repo/packages/zod/src/index.ts", [
+        "/repo/packages/zod",
+      ]),
+      true,
     );
   });
 });

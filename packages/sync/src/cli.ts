@@ -17,6 +17,8 @@ import { validateTemplatesCommand } from "./commands/add/validate.js";
 import { editCommander } from "./commands/arch/edit.js";
 import { refactorCommander } from "./commands/arch/refactor.js";
 import { manifestCommander } from "./commands/manifest/index.js";
+import { adoptCommander } from "./commands/adopt/index.js";
+import { bootstrapCommander } from "./commands/bootstrap/index.js";
 import { resolveToolchainVersion } from "./toolchain-version.js";
 import type { LoggerPort } from "@hexagen/shared";
 
@@ -170,6 +172,8 @@ function buildProgram(): Command {
   archCommand.addCommand(refactorCommander);
 
   program.addCommand(manifestCommander);
+  program.addCommand(adoptCommander);
+  program.addCommand(bootstrapCommander);
 
   // hexagen templates list / info
   const templatesCommand = program

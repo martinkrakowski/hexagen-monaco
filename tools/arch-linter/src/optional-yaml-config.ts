@@ -48,6 +48,7 @@ function messageOf(e: unknown): string {
 export async function loadOptionalYamlConfig<T>(
   filePath: string,
   readFile: (path: string) => Promise<string>,
+  parse?: (value: unknown) => T,
 ): Promise<OptionalYamlConfig<T>> {
   let contents: string;
   try {
@@ -84,6 +85,14 @@ export async function loadOptionalYamlConfig<T>(
         Array.isArray(parsed) ? "a sequence" : typeof parsed
       }`,
     };
+  }
+
+  if (parse) {
+    try {
+      return { kind: "loaded", value: parse(parsed) };
+    } catch (e) {
+      return { kind: "invalid", reason: messageOf(e) };
+    }
   }
 
   return { kind: "loaded", value: parsed as T };

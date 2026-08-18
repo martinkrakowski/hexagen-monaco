@@ -21,10 +21,7 @@ export type CapabilityProbeResult = {
  * Resolve which tier can provide an API key for the given provider.
  * Tier chain: env keys → BYOK keys → error
  *
- * Note: `hasByokKey` is an aggregate across ALL providers (returns true if user has ANY BYOK key).
- * This means if a user has only an OpenAI BYOK key, the Anthropic row will incorrectly show `hasByokKey: true`.
- * For Phase 1, this is acceptable because `canGenerate` (top-level) is the source of truth for button gating.
- * Phase 2 will refine per-provider cardinality tracking if multi-key support is added.
+ * `hasByokKey` is per-provider: a key stored for OpenAI must not light up Anthropic.
  */
 function resolveTierForProvider(
   provider: ByokProvider,
@@ -84,18 +81,7 @@ export async function GET() {
     });
   }
 
-  // Check if user has any BYOK keys (requires authentication)
   const metadataAdapter = getMetadataAdapter();
-  const byokResult = await metadataAdapter.hasKeys(session.user.sub);
-
-  if (!byokResult.success) {
-    return NextResponse.json(
-      { error: byokResult.error.message },
-      { status: 500 },
-    );
-  }
-
-  const hasByokKeys = byokResult.value;
 
   // Check for server-side environment keys
   const serverKeyEnvVars: Record<ByokProvider, string> = {
@@ -104,24 +90,28 @@ export async function GET() {
     cohere: process.env.COHERE_API_KEY ?? "",
   };
 
-  // Build capability probe result for each provider
-  const capabilities: CapabilityProbeResult[] = BYOK_PROVIDERS.map(
-    (provider) => {
-      const hasServerKey = serverKeyEnvVars[provider].length > 0;
-      const status = resolveTierForProvider(
-        provider,
-        hasServerKey,
-        hasByokKeys,
+  const capabilities: CapabilityProbeResult[] = [];
+  for (const provider of BYOK_PROVIDERS) {
+    const byokResult = await metadataAdapter.findByUserAndProvider(
+      session.user.sub,
+      provider,
+    );
+    if (!byokResult.success) {
+      return NextResponse.json(
+        { error: byokResult.error.message },
+        { status: 500 },
       );
-
-      return {
-        provider,
-        hasServerKey,
-        hasByokKey: hasByokKeys,
-        status,
-      };
-    },
-  );
+    }
+    const metadata = byokResult.value;
+    const hasByokKey = metadata !== null && metadata.revokedAt === null;
+    const hasServerKey = serverKeyEnvVars[provider].length > 0;
+    capabilities.push({
+      provider,
+      hasServerKey,
+      hasByokKey,
+      status: resolveTierForProvider(provider, hasServerKey, hasByokKey),
+    });
+  }
 
   const generationModelName = resolveActiveGenerationModel() ?? undefined;
 

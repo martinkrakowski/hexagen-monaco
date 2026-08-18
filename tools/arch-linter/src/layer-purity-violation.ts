@@ -130,6 +130,55 @@ export function detectLayer(
   return found;
 }
 
+export interface FileLayerResolution {
+  contextRootAbs?: string;
+  layerDirs?: Readonly<Record<string, readonly string[]>>;
+  layerNames?: readonly string[];
+}
+
+function posixJoinRoot(root: string): string {
+  return root.replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+/**
+ * Hexagonal layer a file belongs to. When `layerDirs` is set (layout.yaml),
+ * directory lists like `src/core` map onto `domain` even if no `/domain/`
+ * segment exists. Otherwise falls back to `detectLayer`.
+ */
+export function resolveFileHexagonalLayer(
+  filePath: string,
+  options: FileLayerResolution = {},
+): string | null {
+  const {
+    contextRootAbs,
+    layerDirs,
+    layerNames = DEFAULT_LAYER_NAMES,
+  } = options;
+
+  if (layerDirs && contextRootAbs) {
+    const posixFile = filePath.replace(/\\/g, "/");
+    const posixRoot = posixJoinRoot(contextRootAbs);
+    if (posixFile === posixRoot || posixFile.startsWith(`${posixRoot}/`)) {
+      const rel =
+        posixFile === posixRoot ? "" : posixFile.slice(posixRoot.length + 1);
+      let best: { layer: string; len: number } | null = null;
+      for (const [layer, dirs] of Object.entries(layerDirs)) {
+        for (const dir of dirs) {
+          const normalized = dir.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+          if (rel === normalized || rel.startsWith(`${normalized}/`)) {
+            if (!best || normalized.length > best.len) {
+              best = { layer, len: normalized.length };
+            }
+          }
+        }
+      }
+      if (best) return best.layer;
+    }
+  }
+
+  return detectLayer(filePath, layerNames);
+}
+
 /** Absolute path a relative specifier points at, extension-agnostic. */
 export function resolveRelativeImportPath(
   fromFilePath: string,
@@ -151,6 +200,8 @@ export interface CrossLayerRelativeInput {
   workspacesDir: string;
   sharedKernelAllowed?: boolean;
   layerNames?: readonly string[];
+  contextRootAbs?: string;
+  layerDirs?: Readonly<Record<string, readonly string[]>>;
 }
 
 /**
@@ -181,12 +232,18 @@ export function checkCrossLayerRelativeImport(
     workspacesDir,
     sharedKernelAllowed = false,
     layerNames = DEFAULT_LAYER_NAMES,
+    contextRootAbs,
+    layerDirs,
   } = input;
 
   if (!isRelativeSpecifier(moduleSpecifier)) return null;
 
   const targetPath = resolveRelativeImportPath(filePath, moduleSpecifier);
-  const targetLayer = detectLayer(targetPath, layerNames);
+  const targetLayer = resolveFileHexagonalLayer(targetPath, {
+    contextRootAbs,
+    layerDirs,
+    layerNames,
+  });
   if (targetLayer === null) return null;
   if (targetLayer === sourceLayer) return null;
 

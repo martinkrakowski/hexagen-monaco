@@ -18,6 +18,7 @@ import {
   isNodeBuiltinSpecifier,
   isWorkspaceSpecifier,
   npmPackageNameOf,
+  resolveFileHexagonalLayer,
   resolveRelativeImportPath,
 } from "../src/layer-purity-violation.js";
 
@@ -89,6 +90,41 @@ describe("detectLayer", () => {
   });
 });
 
+describe("resolveFileHexagonalLayer — layout-mapped directories", () => {
+  const ctx = "/repo/packages/billing";
+  const layers = {
+    domain: ["src/core"],
+    application: ["src/services"],
+    infrastructure: ["src/db", "src/http"],
+  };
+
+  it("maps src/core to domain and src/services to application", () => {
+    assert.equal(
+      resolveFileHexagonalLayer(`${ctx}/src/core/invoice.ts`, {
+        contextRootAbs: ctx,
+        layerDirs: layers,
+      }),
+      "domain",
+    );
+    assert.equal(
+      resolveFileHexagonalLayer(`${ctx}/src/services/charge.ts`, {
+        contextRootAbs: ctx,
+        layerDirs: layers,
+      }),
+      "application",
+    );
+  });
+
+  it("falls back to path-segment detection when no layer dirs are given", () => {
+    assert.equal(
+      resolveFileHexagonalLayer(`${ctx}/src/domain/invoice.ts`, {
+        contextRootAbs: ctx,
+      }),
+      "domain",
+    );
+  });
+});
+
 describe("resolveRelativeImportPath", () => {
   it("resolves against the importing file's directory", () => {
     assert.equal(
@@ -106,6 +142,24 @@ describe("checkCrossLayerRelativeImport", () => {
     scope: SCOPE,
     workspacesDir: WS,
   };
+
+  it("classifies a layout-mapped target (src/core → src/db) as a cross-layer import", () => {
+    const v = checkCrossLayerRelativeImport({
+      filePath: "/repo/packages/billing/src/core/invoice.ts",
+      moduleSpecifier: "../db/client.js",
+      sourceLayer: "domain",
+      allowed: [`${SCOPE}/shared`],
+      scope: SCOPE,
+      workspacesDir: WS,
+      contextRootAbs: "/repo/packages/billing",
+      layerDirs: {
+        domain: ["src/core"],
+        infrastructure: ["src/db"],
+      },
+    });
+    assert.equal(v?.rule, "cross-layer-relative-import");
+    assert.match(v!.detail, /into 'infrastructure'/);
+  });
 
   it("flags a domain file reaching into infrastructure", () => {
     const v = checkCrossLayerRelativeImport({
