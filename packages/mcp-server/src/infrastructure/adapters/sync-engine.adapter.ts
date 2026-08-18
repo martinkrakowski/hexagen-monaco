@@ -24,6 +24,18 @@ function toKebabCase(input: string): string {
     .toLowerCase();
 }
 
+function resolveInsideWorkspace(
+  workspaceRoot: string,
+  relativePath: string,
+): string | null {
+  const trimmed = relativePath.trim();
+  if (!trimmed || path.isAbsolute(trimmed)) return null;
+  const root = path.resolve(workspaceRoot);
+  const resolved = path.resolve(root, trimmed);
+  if (resolved === root || !resolved.startsWith(root + path.sep)) return null;
+  return resolved;
+}
+
 export class SyncEngineAdapter
   implements ArchitectureQueryPort, ScaffoldingPort
 {
@@ -320,6 +332,42 @@ export class SyncEngineAdapter
           fileCreated: path.relative(this.workspaceRoot, filePath),
         },
       };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error : new Error(String(error)),
+      };
+    }
+  }
+
+  async deleteCreatedFiles(
+    paths: string[],
+  ): Promise<Result<{ deleted: string[] }>> {
+    try {
+      const resolved: { rel: string; abs: string }[] = [];
+      for (const rel of paths) {
+        const abs = resolveInsideWorkspace(this.workspaceRoot, rel);
+        if (!abs) {
+          return {
+            success: false,
+            error: new Error(
+              `Refusing to delete path outside workspace: ${rel}`,
+            ),
+          };
+        }
+        resolved.push({ rel, abs });
+      }
+      const deleted: string[] = [];
+      for (const { rel, abs } of resolved) {
+        try {
+          await fs.unlink(abs);
+          deleted.push(rel);
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (code !== "ENOENT") throw error;
+        }
+      }
+      return { success: true, value: { deleted } };
     } catch (error) {
       return {
         success: false,

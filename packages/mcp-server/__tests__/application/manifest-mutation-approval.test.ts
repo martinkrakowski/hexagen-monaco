@@ -62,6 +62,7 @@ class ManifestWriteSpy implements ManifestWritePort {
 
 class ScaffoldingSpy implements ScaffoldingPort {
   writes: string[] = [];
+  deleted: string[] = [];
   async scaffoldModule() {
     this.writes.push("scaffoldModule");
     return {
@@ -76,6 +77,10 @@ class ScaffoldingSpy implements ScaffoldingPort {
   async createAdapter() {
     this.writes.push("createAdapter");
     return { success: true as const, value: { fileCreated: "a.ts" } };
+  }
+  async deleteCreatedFiles(paths: string[]) {
+    this.deleted.push(...paths);
+    return { success: true as const, value: { deleted: [...paths] } };
   }
 }
 
@@ -307,5 +312,99 @@ describe("MCP mutation tools require transaction approval", () => {
       ports,
     );
     assert.equal(events.published.length, 0);
+  });
+
+  it("compensates create-port files when registerPort fails", async () => {
+    const h = harness();
+    h.write.registerPort = async () => {
+      h.write.writes.push("registerPort");
+      return {
+        success: false as const,
+        error: new Error("manifest register failed"),
+      };
+    };
+    const proposed = await new CreatePortToolUseCase(h.tm).execute({
+      domain_name: "billing",
+      port_name: "PayPort",
+      type: "outbound",
+    });
+    const accepted = await h.accept.execute({
+      transaction_id: proposed.transactionId ?? "",
+    });
+    assert.equal(accepted.success, false);
+    assert.deepEqual(h.scaffolding.writes, ["createPort"]);
+    assert.deepEqual(h.scaffolding.deleted, ["p.ts"]);
+    assert.deepEqual(h.write.writes, ["registerPort"]);
+    assert.equal(h.tm.get(proposed.transactionId ?? "")?.status, "failed");
+  });
+
+  it("compensates create-adapter files when registerAdapter fails", async () => {
+    const h = harness();
+    h.write.registerAdapter = async () => {
+      h.write.writes.push("registerAdapter");
+      return {
+        success: false as const,
+        error: new Error("adapter register failed"),
+      };
+    };
+    const proposed = await new CreateAdapterToolUseCase(h.tm).execute({
+      port_name: "PayPort",
+      infrastructure_name: "stripe",
+    });
+    const accepted = await h.accept.execute({
+      transaction_id: proposed.transactionId ?? "",
+    });
+    assert.equal(accepted.success, false);
+    assert.deepEqual(h.scaffolding.writes, ["createAdapter"]);
+    assert.deepEqual(h.scaffolding.deleted, ["a.ts"]);
+    assert.deepEqual(h.write.writes, ["registerAdapter"]);
+    assert.equal(h.tm.get(proposed.transactionId ?? "")?.status, "failed");
+  });
+
+  it("compensates scaffold-module files when registerBoundedContext fails", async () => {
+    const h = harness();
+    h.write.registerBoundedContext = async () => {
+      h.write.writes.push("registerBoundedContext");
+      return {
+        success: false as const,
+        error: new Error("context register failed"),
+      };
+    };
+    const proposed = await new ScaffoldModuleToolUseCase(h.tm).execute({
+      name: "billing",
+      layer: "domain",
+    });
+    const accepted = await h.accept.execute({
+      transaction_id: proposed.transactionId ?? "",
+    });
+    assert.equal(accepted.success, false);
+    assert.deepEqual(h.scaffolding.writes, ["scaffoldModule"]);
+    assert.deepEqual(h.scaffolding.deleted, ["packages/x/src/index.ts"]);
+    assert.deepEqual(h.write.writes, ["registerBoundedContext"]);
+    assert.equal(h.tm.get(proposed.transactionId ?? "")?.status, "failed");
+  });
+
+  it("does not compensate or register when scaffolding itself fails", async () => {
+    const h = harness();
+    h.scaffolding.createPort = async () => {
+      h.scaffolding.writes.push("createPort");
+      return {
+        success: false as const,
+        error: new Error("disk full"),
+      };
+    };
+    const proposed = await new CreatePortToolUseCase(h.tm).execute({
+      domain_name: "billing",
+      port_name: "PayPort",
+      type: "outbound",
+    });
+    const accepted = await h.accept.execute({
+      transaction_id: proposed.transactionId ?? "",
+    });
+    assert.equal(accepted.success, false);
+    assert.deepEqual(h.scaffolding.writes, ["createPort"]);
+    assert.deepEqual(h.scaffolding.deleted, []);
+    assert.deepEqual(h.write.writes, []);
+    assert.equal(h.tm.get(proposed.transactionId ?? "")?.status, "failed");
   });
 });

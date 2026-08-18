@@ -96,6 +96,10 @@ class SyncEngineFake implements ArchitectureQueryPort, ScaffoldingPort {
       value: { fileCreated: `adapters/${command.portName}.adapter.ts` },
     };
   }
+
+  async deleteCreatedFiles(paths: string[]) {
+    return { success: true as const, value: { deleted: [...paths] } };
+  }
 }
 
 class LinterFake implements LinterPort {
