@@ -17,7 +17,9 @@
  *        - Retains only fields meaningful to an external consumer
  *   3. Copies `<package>/dist/` into `<package>/publish/dist/`
  *   4. Copies `<package>/README.md` if present
- *   5. Copies a LICENSE from either the package dir or the repo root
+ *   5. Copies `<package>/LICENSE`. A missing package-local LICENSE is a hard
+ *      error — the repo-root LICENSE is the proprietary platform license and
+ *      must not be silently shipped into a published tarball.
  *
  * Usage:
  *   node scripts/prepare-publish-package.js [package-dir]
@@ -31,17 +33,12 @@
  *
  * Exit codes:
  *   0  Success
- *   1  Invalid package dir or missing dist/
+ *   1  Invalid package dir, missing dist/, or missing package-local LICENSE
  *   2  Package.json malformed or missing required fields
  */
 
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const REPO_ROOT = path.resolve(__dirname, "..");
 
 // Internal monorepo scope → published npm scope. `@hexagen` was unavailable on
 // npm, so the tooling publishes under `@hexagen-monaco`.
@@ -214,15 +211,23 @@ function prepare(packageDir) {
     fs.copyFileSync(readmePath, path.join(publishDir, "README.md"));
   }
 
-  // 4. Copy LICENSE — prefer package-local, fall back to repo root
+  // 4. Copy LICENSE — package-local only. The repo-root LICENSE is the
+  // proprietary platform grant; silently falling back to it would ship the
+  // wrong terms into FSL wedge tarballs (ADR-0061).
   const packageLicense = path.join(absPackageDir, "LICENSE");
-  const rootLicense = path.join(REPO_ROOT, "LICENSE");
-  let licenseSource = null;
-  if (fs.existsSync(packageLicense)) licenseSource = packageLicense;
-  else if (fs.existsSync(rootLicense)) licenseSource = rootLicense;
-  if (licenseSource) {
-    fs.copyFileSync(licenseSource, path.join(publishDir, "LICENSE"));
+  if (!fs.existsSync(packageLicense)) {
+    console.error(
+      `❌ No package-local LICENSE at ${packageLicense}. ` +
+        `Refusing to fall back to the repo-root platform LICENSE.`,
+    );
+    process.exit(1);
   }
+  const licenseContent = fs.readFileSync(packageLicense, "utf8");
+  if (!licenseContent.trim()) {
+    console.error(`❌ Package-local LICENSE at ${packageLicense} is empty or whitespace-only.`);
+    process.exit(1);
+  }
+  fs.copyFileSync(packageLicense, path.join(publishDir, "LICENSE"));
 
   // Summary
   const fileCount = countFiles(publishDir);
@@ -245,11 +250,6 @@ function prepare(packageDir) {
   if (!readmeIncluded) {
     console.log(
       `   ⚠  No README.md at package root — consumers may need context`,
-    );
-  }
-  if (!licenseSource) {
-    console.log(
-      `   ⚠  No LICENSE file found — neither package-local nor repo-root`,
     );
   }
   console.log(``);
