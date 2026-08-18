@@ -22,7 +22,6 @@ import { bootstrapCommander } from "./commands/bootstrap/index.js";
 import { runReportCommand } from "./commands/report/index.js";
 import { resolveToolchainVersion } from "./toolchain-version.js";
 import type { LoggerPort } from "@hexagen/shared";
-import { bootstrapCommand } from "./commands/bootstrap.js";
 
 function createLogger(): LoggerPort {
   return {
@@ -122,20 +121,6 @@ function buildProgram(): Command {
         console.error(`Fatal sync error: ${message}`);
         process.exitCode = 1;
       }
-    });
-
-  // Task 0.2: Bootstrap command
-  program
-    .command("bootstrap")
-    .description(
-      "Bootstrap a new HexaGen architecture manifest from workspaces",
-    )
-    .option(
-      "--force",
-      "Overwrite existing .architecture/manifest.yaml, layout.yaml, and baseline",
-    )
-    .action(async (options: { force?: boolean }) => {
-      await bootstrapCommand({ force: options.force ?? false });
     });
 
   const archCommand = program
