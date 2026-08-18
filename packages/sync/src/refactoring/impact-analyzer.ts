@@ -12,6 +12,7 @@ import type { Manifest } from "../types/manifest.js";
 import type { ImpactAnalysisResult } from "../domain/services/impact-analysis.types.js";
 import { FileSystemWorkspaceAdapter } from "../infrastructure/adapters/file-system-workspace.adapter.js";
 import { TsMorphSymbolIndexAdapter } from "../infrastructure/adapters/ts-morph-symbol-index.adapter.js";
+import { loadLayoutConfig } from "../infrastructure/config/load-layout-config.js";
 import { RefactoringImpactUseCase } from "../application/use-cases/refactoring-impact.use-case.js";
 import type { ImpactAnalysisRequest } from "../application/use-cases/refactoring-impact.use-case.js";
 import type { WorkspaceFileProviderPort } from "../application/ports/out/workspace-file-provider.port.js";
@@ -35,11 +36,15 @@ export class ImpactAnalyzer {
     private readonly manifest: Manifest,
   ) {
     this.fileProvider = new FileSystemWorkspaceAdapter(workspaceRoot);
+    const layoutFile = loadLayoutConfig(workspaceRoot);
     this.useCase = new RefactoringImpactUseCase(
       workspaceRoot,
       manifest,
       this.fileProvider,
       new TsMorphSymbolIndexAdapter(),
+      layoutFile
+        ? { layers: layoutFile.layers, ignore: layoutFile.ignore }
+        : undefined,
     );
   }
 

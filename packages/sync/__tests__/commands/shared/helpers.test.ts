@@ -17,7 +17,10 @@ import {
   formatBold,
   formatSection,
 } from "../../../src/commands/shared/error-formatter.js";
-import { findProjectRoot } from "../../../src/commands/shared/project-root.js";
+import {
+  findProjectRoot,
+  findWorkspaceRoot,
+} from "../../../src/commands/shared/project-root.js";
 import { PromptService } from "../../../src/commands/shared/prompt-service.js";
 import { confirm } from "../../../src/commands/shared/confirm.js";
 import {
@@ -194,6 +197,59 @@ describe("findProjectRoot", () => {
       "utf8",
     );
     assert.equal(findProjectRoot(tmpRoot), null);
+  });
+});
+
+describe("findWorkspaceRoot", () => {
+  let tmpRoot: string;
+
+  beforeEach(async () => {
+    tmpRoot = await fs.realpath(
+      await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-ws-root-")),
+    );
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  it("returns a workspace with package.json workspaces and no manifest", async () => {
+    await fs.writeFile(
+      path.join(tmpRoot, "package.json"),
+      JSON.stringify({
+        name: "greenfield",
+        private: true,
+        workspaces: ["packages/*"],
+      }),
+      "utf8",
+    );
+    assert.equal(findProjectRoot(tmpRoot), null);
+    assert.equal(findWorkspaceRoot(tmpRoot), tmpRoot);
+  });
+
+  it("prefers an existing HexaGen manifest over a parent workspaces field", async () => {
+    await fs.writeFile(
+      path.join(tmpRoot, "package.json"),
+      JSON.stringify({ name: "root", workspaces: ["packages/*"] }),
+      "utf8",
+    );
+    const nested = path.join(tmpRoot, "customer");
+    await fs.mkdir(path.join(nested, ".architecture"), { recursive: true });
+    await fs.writeFile(
+      path.join(nested, ".architecture", "manifest.yaml"),
+      "bounded_contexts: []\n",
+      "utf8",
+    );
+    assert.equal(findWorkspaceRoot(nested), nested);
+  });
+
+  it("fails loudly when the nearest package.json is unreadable", async () => {
+    await fs.writeFile(
+      path.join(tmpRoot, "package.json"),
+      "{ not json",
+      "utf8",
+    );
+    assert.throws(() => findWorkspaceRoot(tmpRoot), /Unreadable package.json/);
   });
 });
 

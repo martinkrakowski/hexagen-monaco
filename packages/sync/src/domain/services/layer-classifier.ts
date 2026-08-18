@@ -56,7 +56,23 @@ export function toWorkspaceRelativePosixPath(
   return [...ascend, ...fileSegments.slice(shared)].join("/");
 }
 
-/** Optional layout.yaml mapping — config-driven mode alongside convention. */
+/** Flat `layers:` / `ignore:` list from the sync layout.yaml schema. */
+export interface LayoutConfig {
+  contexts?:
+    | string
+    | Record<
+        string,
+        {
+          root: string;
+          layers?: Record<string, readonly string[]>;
+        }
+      >;
+  root?: string;
+  layers?: string[];
+  ignore?: string[];
+}
+
+/** Optional per-context directory map — config-driven mode alongside convention. */
 export interface LayerLayoutConfig {
   contexts?: Record<
     string,
@@ -75,24 +91,49 @@ function stripSlashes(value: string): string {
   return posix(value).replace(/\/+$/, "");
 }
 
+function contextMap(
+  config?: LayoutConfig | LayerLayoutConfig,
+): LayerLayoutConfig["contexts"] {
+  const raw = config?.contexts;
+  if (!raw || typeof raw === "string") return undefined;
+  return raw;
+}
+
 function matchLayoutContext(
   relativePath: string,
-  layout: LayerLayoutConfig,
+  layout: LayoutConfig | LayerLayoutConfig,
 ): {
   name: string;
   root: string;
   rel: string;
   layers?: Record<string, readonly string[]>;
 } | null {
+  const contexts = contextMap(layout);
+  if (!contexts) return null;
   const file = posix(relativePath);
-  for (const [name, ctx] of Object.entries(layout.contexts ?? {})) {
+  let best: {
+    name: string;
+    root: string;
+    rel: string;
+    layers?: Record<string, readonly string[]>;
+    len: number;
+  } | null = null;
+  for (const [name, ctx] of Object.entries(contexts)) {
     const root = stripSlashes(ctx.root);
     if (file === root || file.startsWith(`${root}/`)) {
-      const rel = file === root ? "" : file.slice(root.length + 1);
-      return { name, root, rel, layers: ctx.layers };
+      if (!best || root.length > best.len) {
+        const rel = file === root ? "" : file.slice(root.length + 1);
+        best = { name, root, rel, layers: ctx.layers, len: root.length };
+      }
     }
   }
-  return null;
+  if (!best) return null;
+  return {
+    name: best.name,
+    root: best.root,
+    rel: best.rel,
+    layers: best.layers,
+  };
 }
 
 function layerFromLayoutDirs(
@@ -115,11 +156,28 @@ function layerFromLayoutDirs(
 
 export function determineLayer(
   relativePath: string,
-  layout?: LayerLayoutConfig,
+  config?: LayoutConfig | LayerLayoutConfig,
 ): Layer {
+  if (
+    config &&
+    "ignore" in config &&
+    config.ignore?.some((ig) => relativePath.includes(ig))
+  ) {
+    return "ignored";
+  }
+
   if (relativePath.includes("/__tests__/")) {
     return "test";
   }
+
+  if (config && "layers" in config && config.layers) {
+    for (const layer of config.layers) {
+      if (relativePath.includes(`/${layer}/`)) {
+        return layer;
+      }
+    }
+  }
+
   if (relativePath.includes(".architecture/manifest.yaml")) {
     return "manifest";
   }
@@ -130,8 +188,8 @@ export function determineLayer(
     return "config";
   }
 
-  if (layout?.contexts) {
-    const matched = matchLayoutContext(relativePath, layout);
+  if (config) {
+    const matched = matchLayoutContext(relativePath, config);
     if (matched?.layers) {
       const fromLayout = layerFromLayoutDirs(matched.rel, matched.layers);
       if (fromLayout) return fromLayout;
@@ -152,12 +210,12 @@ export function determineLayer(
 
 export function determinePackageName(
   relativePath: string,
-  layout?: LayerLayoutConfig,
+  layout?: LayoutConfig | LayerLayoutConfig,
 ): string {
-  if (layout?.contexts) {
+  if (layout) {
     const matched = matchLayoutContext(relativePath, layout);
     if (matched) return matched.name;
   }
-  const match = relativePath.match(/^(?:packages|apps)\/([^/]+)/);
+  const match = relativePath.match(/^(?:packages|apps|tools)\/([^/]+)/);
   return match ? match[1] : "unknown";
 }

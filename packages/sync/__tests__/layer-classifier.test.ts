@@ -81,6 +81,50 @@ describe("determinePackageName — layout-aware mode", () => {
     );
   });
 
+  it("selects the deepest matching context regardless of declaration order", () => {
+    const nestedFile = "packages/billing/src/core/invoice.ts";
+    const broadFirst = {
+      contexts: {
+        monorepo: { root: "packages" },
+        billing: {
+          root: "packages/billing",
+          layers: { domain: ["src/core"] },
+        },
+      },
+    };
+    const nestedFirst = {
+      contexts: {
+        billing: {
+          root: "packages/billing",
+          layers: { domain: ["src/core"] },
+        },
+        monorepo: { root: "packages" },
+      },
+    };
+    assert.equal(determinePackageName(nestedFile, broadFirst), "billing");
+    assert.equal(determinePackageName(nestedFile, nestedFirst), "billing");
+    assert.equal(determineLayer(nestedFile, broadFirst), "domain");
+    assert.equal(determineLayer(nestedFile, nestedFirst), "domain");
+    assert.equal(
+      determinePackageName("packages/auth/src/user.ts", broadFirst),
+      "monorepo",
+    );
+  });
+
+  it("maps a custom context layer name such as services", () => {
+    assert.equal(
+      determineLayer("packages/billing/src/services/charge.ts", {
+        contexts: {
+          billing: {
+            root: "packages/billing",
+            layers: { services: ["src/services"] },
+          },
+        },
+      }),
+      "services",
+    );
+  });
+
   it("keeps the packages/apps convention when no layout is given", () => {
     assert.equal(
       determinePackageName("packages/billing/src/domain/invoice.ts"),

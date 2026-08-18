@@ -10,6 +10,7 @@ import {
   determineLayer,
   determinePackageName,
   toWorkspaceRelativePosixPath,
+  type LayoutConfig,
 } from "../../domain/services/layer-classifier.js";
 import { assessArchitecturalImpact } from "../../domain/services/architectural-boundary-checker.js";
 import type {
@@ -46,6 +47,7 @@ export class RefactoringImpactUseCase {
     private readonly manifest: Manifest,
     private readonly fileProvider: WorkspaceFileProviderPort,
     private readonly symbolIndex: SymbolReferenceIndexPort,
+    private readonly layoutConfig?: LayoutConfig,
   ) {}
 
   async analyze(
@@ -165,7 +167,7 @@ export class RefactoringImpactUseCase {
       return {
         path: relativePath,
         reason: reference.reason,
-        layer: determineLayer(relativePath),
+        layer: determineLayer(relativePath, this.layoutConfig),
         packageName: determinePackageName(relativePath),
       };
     });

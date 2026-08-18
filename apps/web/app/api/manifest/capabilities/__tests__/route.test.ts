@@ -1,121 +1,155 @@
-import { describe, it, vi, beforeEach } from "vitest";
-import assert from "node:assert/strict";
-import { ok } from "@hexagen/shared";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-type ByokProvider = "openai" | "anthropic" | "cohere";
-type KeyMetadata = {
-  keyId: string;
-  userId: string;
-  provider: ByokProvider;
-  keyVersion: number;
-  createdAt: string;
-  revokedAt: string | null;
-  revokedBy: string | null;
-};
-
-const getServerSession = vi.fn();
-const findByUserAndProvider = vi.fn();
-const hasKeys = vi.fn();
-const resolveActiveGenerationModel = vi.fn(() => undefined);
+const mocks = vi.hoisted(() => {
+  return {
+    getServerSession: vi.fn(),
+    getMetadataAdapter: vi.fn(),
+    findByUserAndProvider: vi.fn(),
+    resolveActiveGenerationModel: vi.fn(),
+  };
+});
 
 vi.mock("next-auth", () => ({
-  getServerSession: (...args: unknown[]) => getServerSession(...args),
+  getServerSession: mocks.getServerSession,
 }));
-vi.mock("@/lib/auth.js", () => ({ authOptions: {} }));
-vi.mock("@hexagen/byok", () => ({
-  BYOK_PROVIDERS: ["openai", "anthropic", "cohere"],
+
+vi.mock("@/lib/auth.js", () => ({
+  authOptions: {},
 }));
+
 vi.mock("@/lib/byok-wire.js", () => ({
-  getMetadataAdapter: () => ({
-    findByUserAndProvider: (...args: unknown[]) =>
-      findByUserAndProvider(...args),
-    hasKeys: (...args: unknown[]) => hasKeys(...args),
-  }),
-}));
-vi.mock("../../../../lib/wire.server", () => ({
-  resolveActiveGenerationModel: () => resolveActiveGenerationModel(),
+  getMetadataAdapter: mocks.getMetadataAdapter,
 }));
 
-import { GET } from "../route";
+vi.mock("../../../lib/wire.server", () => ({
+  resolveActiveGenerationModel: mocks.resolveActiveGenerationModel,
+}));
 
-function key(provider: "openai" | "anthropic" | "cohere"): KeyMetadata {
-  return {
-    keyId: `${provider}-key`,
-    userId: "user-1",
-    provider,
-    keyVersion: 1,
-    createdAt: "2026-01-01T00:00:00.000Z",
-    revokedAt: null,
-    revokedBy: null,
-  };
-}
+const originalEnv = { ...process.env };
 
-describe("GET /api/manifest/capabilities — hasByokKey is per-provider", () => {
-  beforeEach(() => {
-    getServerSession.mockReset();
-    findByUserAndProvider.mockReset();
-    hasKeys.mockReset();
-    resolveActiveGenerationModel.mockReset();
-    resolveActiveGenerationModel.mockReturnValue(undefined);
-    delete process.env.OPENAI_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.COHERE_API_KEY;
+beforeEach(() => {
+  vi.clearAllMocks();
+  process.env.OPENAI_API_KEY = "";
+  process.env.ANTHROPIC_API_KEY = "";
+  process.env.COHERE_API_KEY = "";
+
+  mocks.getMetadataAdapter.mockReturnValue({
+    findByUserAndProvider: mocks.findByUserAndProvider,
   });
 
-  it("reports hasByokKey only for the provider the user actually stored", async () => {
-    getServerSession.mockResolvedValue({ user: { sub: "user-1" } });
-    // Aggregate would lie: user has ANY key, so every row would be true.
-    hasKeys.mockResolvedValue(ok(true));
-    findByUserAndProvider.mockImplementation(
-      async (_userId: string, provider: string) => {
-        if (provider === "openai") return ok(key("openai"));
-        return ok(null);
-      },
-    );
+  mocks.resolveActiveGenerationModel.mockReturnValue("test-model");
+});
 
-    const res = await GET();
-    assert.equal(res.status, 200);
-    const body = await res.json();
-    const byProvider = Object.fromEntries(
-      body.capabilities.map(
-        (c: { provider: string; hasByokKey: boolean; status: string }) => [
-          c.provider,
-          c,
-        ],
-      ),
-    );
+afterEach(() => {
+  vi.restoreAllMocks();
+  process.env = { ...originalEnv };
+});
 
-    assert.equal(byProvider.openai.hasByokKey, true);
-    assert.equal(byProvider.openai.status, "byok_key");
-    assert.equal(byProvider.anthropic.hasByokKey, false);
-    assert.equal(byProvider.anthropic.status, "no_keys_configured");
-    assert.equal(byProvider.cohere.hasByokKey, false);
-    assert.equal(byProvider.cohere.status, "no_keys_configured");
-  });
+test("hasByokKey correctly reflects per-provider status rather than an aggregate", async () => {
+  mocks.getServerSession.mockResolvedValue({ user: { sub: "test-user-1" } });
 
-  it("treats a revoked per-provider key as absent", async () => {
-    getServerSession.mockResolvedValue({ user: { sub: "user-1" } });
-    hasKeys.mockResolvedValue(ok(true));
-    findByUserAndProvider.mockImplementation(
-      async (_userId: string, provider: string) => {
-        if (provider === "openai") {
-          return ok({
-            ...key("openai"),
-            revokedAt: "2026-02-01T00:00:00.000Z",
-            revokedBy: "user-1",
-          });
-        }
-        return ok(null);
-      },
-    );
+  mocks.findByUserAndProvider.mockImplementation(
+    async (userId: string, provider: string) => {
+      if (provider === "openai") {
+        return { success: true, value: { revokedAt: null } }; // active key
+      }
+      return { success: true, value: null }; // no key
+    },
+  );
 
-    const res = await GET();
-    assert.equal(res.status, 200);
-    const body = await res.json();
-    const openai = body.capabilities.find(
-      (c: { provider: string }) => c.provider === "openai",
-    );
-    assert.equal(openai.hasByokKey, false);
-    assert.equal(openai.status, "no_keys_configured");
-  });
+  const { GET } = await import("../route");
+
+  const res = await GET();
+  expect(res.status).toBe(200);
+
+  const payload = await res.json();
+
+  const openaiCap = payload.capabilities.find(
+    (c: { provider: string }) => c.provider === "openai",
+  );
+  const anthropicCap = payload.capabilities.find(
+    (c: { provider: string }) => c.provider === "anthropic",
+  );
+
+  expect(openaiCap.hasByokKey).toBe(true);
+  expect(anthropicCap.hasByokKey).toBe(false);
+  expect(openaiCap.status).toBe("byok_key");
+  expect(anthropicCap.status).toBe("no_keys_configured");
+});
+
+test("a revoked provider key is treated as no_keys_configured", async () => {
+  mocks.getServerSession.mockResolvedValue({ user: { sub: "test-user-1" } });
+
+  mocks.findByUserAndProvider.mockImplementation(
+    async (_userId: string, provider: string) => {
+      if (provider === "openai") {
+        return { success: true, value: { revokedAt: null } };
+      }
+      if (provider === "anthropic") {
+        return {
+          success: true,
+          value: { revokedAt: "2026-08-01T00:00:00.000Z" },
+        };
+      }
+      return { success: true, value: null };
+    },
+  );
+
+  const { GET } = await import("../route");
+
+  const res = await GET();
+  expect(res.status).toBe(200);
+
+  const payload = await res.json();
+  const openaiCap = payload.capabilities.find(
+    (c: { provider: string }) => c.provider === "openai",
+  );
+  const anthropicCap = payload.capabilities.find(
+    (c: { provider: string }) => c.provider === "anthropic",
+  );
+
+  expect(openaiCap.hasByokKey).toBe(true);
+  expect(openaiCap.status).toBe("byok_key");
+  expect(anthropicCap.hasByokKey).toBe(false);
+  expect(anthropicCap.status).toBe("no_keys_configured");
+});
+
+test("a provider lookup Result error returns HTTP 500", async () => {
+  mocks.getServerSession.mockResolvedValue({ user: { sub: "test-user-1" } });
+
+  mocks.findByUserAndProvider.mockImplementation(
+    async (_userId: string, _provider: string) => {
+      return { success: false, error: new Error("db down") };
+    },
+  );
+
+  const { GET } = await import("../route");
+
+  const res = await GET();
+  expect(res.status).toBe(500);
+
+  const payload = await res.json();
+  expect(payload.error).toBe("Unable to check BYOK key status");
+});
+
+test("metadata-store error messages are not returned to the client", async () => {
+  mocks.getServerSession.mockResolvedValue({ user: { sub: "test-user-1" } });
+
+  const internal =
+    "SQLITE_ERROR: no such table metadata_keys at /var/db/byok.sqlite";
+  mocks.findByUserAndProvider.mockImplementation(
+    async (_userId: string, _provider: string) => {
+      return { success: false, error: new Error(internal) };
+    },
+  );
+
+  const { GET } = await import("../route");
+
+  const res = await GET();
+  expect(res.status).toBe(500);
+
+  const body = JSON.stringify(await res.json());
+  expect(body).not.toContain(internal);
+  expect(body).not.toContain("SQLITE_ERROR");
+  expect(body).not.toContain("/var/db/byok.sqlite");
 });

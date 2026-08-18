@@ -1,4 +1,4 @@
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import { execSync } from "child_process";
 
@@ -50,6 +50,41 @@ export function findProjectRoot(from: string): string | null {
     const manifestPath = join(current, ".architecture", "manifest.yaml");
     if (existsSync(manifestPath)) {
       return current;
+    }
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return null;
+}
+
+/**
+ * Workspace root for commands that must run *before* a manifest exists
+ * (`hexagen bootstrap`). Prefers an existing HexaGen project (manifest
+ * present) and otherwise walks up for a `package.json` that declares
+ * `workspaces`.
+ */
+export function findWorkspaceRoot(from: string): string | null {
+  const withManifest = findProjectRoot(from);
+  if (withManifest) return withManifest;
+
+  let current = from;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const pkgPath = join(current, "package.json");
+    if (existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as {
+          workspaces?: unknown;
+        };
+        if (pkg.workspaces) return current;
+      } catch (e) {
+        throw new Error(
+          `Unreadable package.json at ${pkgPath}: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
+        );
+      }
     }
     const parent = dirname(current);
     if (parent === current) break;

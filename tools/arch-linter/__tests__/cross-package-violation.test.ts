@@ -17,6 +17,7 @@ import {
   buildManifestImportGrants,
   isCrossPackageViolation,
   isGlobalWhitelisted,
+  resolveImportedWorkspace,
   type ManifestImportGrants,
 } from "../src/cross-package-violation.js";
 
@@ -59,6 +60,7 @@ describe("isCrossPackageViolation — manifest depends_on (ADR-0043)", () => {
       isCrossPackageViolation(
         "billing",
         "@acme/orders",
+        "orders",
         SCOPE,
         NO_CONFIG,
         grants,
@@ -72,6 +74,7 @@ describe("isCrossPackageViolation — manifest depends_on (ADR-0043)", () => {
       isCrossPackageViolation(
         "billing",
         "@acme/orders/domain/invoice",
+        "orders",
         SCOPE,
         NO_CONFIG,
         grants,
@@ -86,6 +89,7 @@ describe("isCrossPackageViolation — manifest depends_on (ADR-0043)", () => {
       isCrossPackageViolation(
         "orders",
         "@acme/billing",
+        "billing",
         SCOPE,
         NO_CONFIG,
         grants,
@@ -99,6 +103,7 @@ describe("isCrossPackageViolation — manifest depends_on (ADR-0043)", () => {
       isCrossPackageViolation(
         "orders",
         "@acme/billing",
+        "billing",
         SCOPE,
         NO_CONFIG,
         grantsOf([{ name: "billing", type: "core", depends_on: ["orders"] }]),
@@ -121,6 +126,7 @@ describe("isCrossPackageViolation — shared-kernel grant", () => {
       isCrossPackageViolation(
         "billing",
         "@acme/core-domain",
+        "core-domain",
         SCOPE,
         config,
         grants,
@@ -139,6 +145,7 @@ describe("isCrossPackageViolation — invariants config remains operative", () =
       isCrossPackageViolation(
         "billing",
         "@acme/telemetry/traces",
+        "telemetry",
         SCOPE,
         config,
         NO_GRANTS,
@@ -155,6 +162,7 @@ describe("isCrossPackageViolation — invariants config remains operative", () =
       isCrossPackageViolation(
         "billing",
         "@acme/orders",
+        "orders",
         SCOPE,
         config,
         NO_GRANTS,
@@ -171,7 +179,14 @@ describe("isCrossPackageViolation — invariants config remains operative", () =
       package_rules: [{ name: "billing", cannot_import: ["orders"] }],
     };
     assert.equal(
-      isCrossPackageViolation("billing", "@acme/orders", SCOPE, config, grants),
+      isCrossPackageViolation(
+        "billing",
+        "@acme/orders",
+        "orders",
+        SCOPE,
+        config,
+        grants,
+      ),
       true,
     );
   });
@@ -184,6 +199,7 @@ describe("isCrossPackageViolation — invariants config remains operative", () =
       isCrossPackageViolation(
         "billing",
         "@acme/payments",
+        "payments",
         SCOPE,
         config,
         NO_GRANTS,
@@ -194,6 +210,7 @@ describe("isCrossPackageViolation — invariants config remains operative", () =
       isCrossPackageViolation(
         "billing",
         "@acme/orders",
+        "orders",
         SCOPE,
         config,
         NO_GRANTS,
@@ -213,6 +230,7 @@ describe("isCrossPackageViolation — invariants config remains operative", () =
       isCrossPackageViolation(
         "billing",
         "@acme/payments",
+        "payments",
         SCOPE,
         config,
         grants,
@@ -228,6 +246,7 @@ describe("isCrossPackageViolation — non-cross-package cases", () => {
       isCrossPackageViolation(
         "billing",
         "node:path",
+        "",
         SCOPE,
         NO_CONFIG,
         NO_GRANTS,
@@ -238,6 +257,7 @@ describe("isCrossPackageViolation — non-cross-package cases", () => {
       isCrossPackageViolation(
         "billing",
         "@acme/billing/domain",
+        "billing",
         SCOPE,
         NO_CONFIG,
         NO_GRANTS,
@@ -254,6 +274,7 @@ describe("isCrossPackageViolation — non-cross-package cases", () => {
       isCrossPackageViolation(
         "billing",
         "@acme-monaco/foo",
+        "foo",
         SCOPE,
         NO_CONFIG,
         NO_GRANTS,
@@ -267,6 +288,7 @@ describe("isCrossPackageViolation — non-cross-package cases", () => {
       isCrossPackageViolation(
         "billing",
         "@acme/shared",
+        "shared",
         SCOPE,
         NO_CONFIG,
         NO_GRANTS,
@@ -278,11 +300,97 @@ describe("isCrossPackageViolation — non-cross-package cases", () => {
       isCrossPackageViolation(
         "billing",
         "@acme/orders",
+        "orders",
         SCOPE,
         NO_CONFIG,
         NO_GRANTS,
       ),
       true,
+    );
+  });
+});
+
+describe("resolveImportedWorkspace", () => {
+  const workspaces = new Set(["billing", "orders"]);
+
+  it("resolves scoped package roots and subpaths", () => {
+    assert.equal(
+      resolveImportedWorkspace("@acme/orders", SCOPE, workspaces),
+      "orders",
+    );
+    assert.equal(
+      resolveImportedWorkspace("@acme/orders/server", SCOPE, workspaces),
+      "orders",
+    );
+  });
+
+  it("resolves unscoped workspace names and subpaths", () => {
+    assert.equal(
+      resolveImportedWorkspace("orders", SCOPE, workspaces),
+      "orders",
+    );
+    assert.equal(
+      resolveImportedWorkspace("orders/server", SCOPE, workspaces),
+      "orders",
+    );
+  });
+
+  it("leaves other-scope and unscoped npm packages unresolved", () => {
+    assert.equal(
+      resolveImportedWorkspace("express", SCOPE, workspaces),
+      undefined,
+    );
+    assert.equal(
+      resolveImportedWorkspace("@other/orders", SCOPE, workspaces),
+      undefined,
+    );
+    assert.equal(
+      resolveImportedWorkspace("node:fs", SCOPE, workspaces),
+      undefined,
+    );
+  });
+
+  it("treats same-scope @scope/pkg as workspace-shaped even if undeclared", () => {
+    assert.equal(
+      resolveImportedWorkspace("@acme/external", SCOPE, workspaces),
+      "external",
+    );
+  });
+});
+
+describe("isCrossPackageViolation — unscoped workspace imports", () => {
+  const workspaces = new Set(["billing", "orders"]);
+
+  it("an undeclared unscoped workspace import is a violation", () => {
+    const importedPkg = resolveImportedWorkspace("orders", SCOPE, workspaces);
+    assert.equal(importedPkg, "orders");
+    assert.equal(
+      isCrossPackageViolation(
+        "billing",
+        "orders",
+        importedPkg!,
+        SCOPE,
+        NO_CONFIG,
+        NO_GRANTS,
+      ),
+      true,
+    );
+  });
+
+  it("a declared unscoped workspace import is allowed", () => {
+    const grants = grantsOf([
+      { name: "billing", type: "core", depends_on: ["orders"] },
+    ]);
+    assert.equal(
+      isCrossPackageViolation(
+        "billing",
+        "orders/server",
+        "orders",
+        SCOPE,
+        NO_CONFIG,
+        grants,
+      ),
+      false,
     );
   });
 });

@@ -39,10 +39,11 @@ function resolveTierForProvider(
 
 export async function GET() {
   const session = await getServerSession(authOptions);
+  const userId = session?.user?.sub;
 
   // If no session, return minimal capabilities (only server env keys)
   // User may not be authenticated yet; BYOK check requires auth
-  if (!session || !session.user?.sub) {
+  if (!userId) {
     // Check for server-side environment keys (public information)
     const serverKeyEnvVars: Record<ByokProvider, string> = {
       openai: process.env.OPENAI_API_KEY ?? "",
@@ -82,6 +83,27 @@ export async function GET() {
   }
 
   const metadataAdapter = getMetadataAdapter();
+  const byokResults = await Promise.all(
+    BYOK_PROVIDERS.map((p) => metadataAdapter.findByUserAndProvider(userId, p)),
+  );
+
+  const errorResult = byokResults.find((r) => !r.success);
+  if (errorResult && !errorResult.success) {
+    return NextResponse.json(
+      { error: "Unable to check BYOK key status" },
+      { status: 500 },
+    );
+  }
+
+  const hasByokKeyMap = BYOK_PROVIDERS.reduce(
+    (acc, p, i) => {
+      const res = byokResults[i];
+      acc[p] =
+        res.success && res.value !== null && res.value.revokedAt === null;
+      return acc;
+    },
+    {} as Record<ByokProvider, boolean>,
+  );
 
   // Check for server-side environment keys
   const serverKeyEnvVars: Record<ByokProvider, string> = {
@@ -90,28 +112,21 @@ export async function GET() {
     cohere: process.env.COHERE_API_KEY ?? "",
   };
 
-  const capabilities: CapabilityProbeResult[] = [];
-  for (const provider of BYOK_PROVIDERS) {
-    const byokResult = await metadataAdapter.findByUserAndProvider(
-      session.user.sub,
-      provider,
-    );
-    if (!byokResult.success) {
-      return NextResponse.json(
-        { error: byokResult.error.message },
-        { status: 500 },
-      );
-    }
-    const metadata = byokResult.value;
-    const hasByokKey = metadata !== null && metadata.revokedAt === null;
-    const hasServerKey = serverKeyEnvVars[provider].length > 0;
-    capabilities.push({
-      provider,
-      hasServerKey,
-      hasByokKey,
-      status: resolveTierForProvider(provider, hasServerKey, hasByokKey),
-    });
-  }
+  // Build capability probe result for each provider
+  const capabilities: CapabilityProbeResult[] = BYOK_PROVIDERS.map(
+    (provider) => {
+      const hasServerKey = serverKeyEnvVars[provider].length > 0;
+      const hasByokKey = hasByokKeyMap[provider];
+      const status = resolveTierForProvider(provider, hasServerKey, hasByokKey);
+
+      return {
+        provider,
+        hasServerKey,
+        hasByokKey,
+        status,
+      };
+    },
+  );
 
   const generationModelName = resolveActiveGenerationModel() ?? undefined;
 

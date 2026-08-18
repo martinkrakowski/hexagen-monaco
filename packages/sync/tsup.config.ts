@@ -125,7 +125,7 @@ export default defineConfig({
    * ("Dynamic require of fs is not supported"). Listed explicitly so it never
    * depends on tsup's "dependencies are external by default" behaviour.
    */
-  external: ["commander", "js-yaml", "ts-morph"],
+  external: ["commander", "js-yaml", "ts-morph", "zod"],
 
   /**
    * Build-time constants (PR-A3, RCA #1).

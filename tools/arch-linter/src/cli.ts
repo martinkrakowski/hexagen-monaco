@@ -16,6 +16,7 @@ import { isSubpathViolation } from "./subpath-violation.js";
 import {
   buildManifestImportGrants,
   isCrossPackageViolation,
+  resolveImportedWorkspace,
 } from "./cross-package-violation.js";
 import {
   matchingImportScope,
@@ -324,6 +325,60 @@ const layerRules = useOptionalConfig(
   "layer-rules.yaml",
 );
 
+const LAYOUT_CONFIG_PATH = path.join(ROOT_DIR, ".architecture", "layout.yaml");
+const layoutConfig = (useOptionalConfig(
+  await loadOptionalYamlConfig<{ layers?: unknown }>(
+    LAYOUT_CONFIG_PATH,
+    readUtf8,
+  ),
+  LAYOUT_CONFIG_PATH,
+  "layout.yaml",
+) || {}) as { layers?: unknown };
+
+/**
+ * `layers` absent → hexagonal defaults. `layers` present but not an array of
+ * nonempty strings (e.g. `layers: domain`) is FATAL: `layers?.[0]` on a string
+ * is the first character and would silently skip every purity check.
+ */
+function resolveLayoutLayers(raw: { layers?: unknown }): {
+  domain: string;
+  application: string;
+  all: readonly string[];
+} {
+  if (raw.layers === undefined) {
+    return {
+      domain: "domain",
+      application: "application",
+      all: [],
+    };
+  }
+  const layers = raw.layers;
+  if (
+    !Array.isArray(layers) ||
+    layers.length === 0 ||
+    layers.some((layer) => typeof layer !== "string" || layer.trim() === "")
+  ) {
+    logger.error(
+      "FATAL ERROR: layout.yaml 'layers' must be a non-empty array of nonempty strings.",
+    );
+    logger.error(
+      "  Refusing to default: a scalar such as `layers: domain` would be read as the character 'd' and skip every layer check.",
+    );
+    process.exit(EXIT_COULD_NOT_RUN);
+  }
+  const namedDomain = layers.find((layer) => layer === "domain");
+  const namedApplication = layers.find((layer) => layer === "application");
+  return {
+    domain: namedDomain ?? layers[0],
+    application: namedApplication ?? layers[1] ?? "application",
+    all: layers,
+  };
+}
+
+const layoutLayers = resolveLayoutLayers(layoutConfig);
+const DOMAIN_LAYER = layoutLayers.domain;
+const APPLICATION_LAYER = layoutLayers.application;
+
 const linterConfig = useOptionalConfig(
   await loadOptionalYamlConfig<LinterConfig>(LINTER_CONFIG_PATH, readUtf8),
   LINTER_CONFIG_PATH,
@@ -442,6 +497,7 @@ const LAYER_NAMES: readonly string[] = [
     ...Object.keys(layerRules.layers ?? {})
       .filter((name) => !name.includes("/"))
       .map((name) => name),
+    ...layoutLayers.all,
   ]),
 ];
 
@@ -527,11 +583,19 @@ function checkArchitecturalIntegrity(): {
   // invariants config remains operative as additional constraints inside
   // isCrossPackageViolation.
   const manifestGrants = buildManifestImportGrants(modules);
+  const workspaceNames = new Set(modules.map((moduleInfo) => moduleInfo.name));
+
+  const allSourceFiles = project.getSourceFiles();
+  if (allSourceFiles.length === 0) {
+    return { errors: [], filesScanned: 0 };
+  }
 
   modules.forEach((moduleInfo) => {
     const moduleName = moduleInfo.name;
     const modulePath = contextRootAbs(moduleName);
 
+    // Generated repos declare contexts before the directory exists.
+    // Per-module absence is not fatal; abortIfVacuous catches a fully empty scan.
     if (!fs.existsSync(modulePath)) {
       return;
     }
@@ -543,16 +607,23 @@ function checkArchitecturalIntegrity(): {
       return fp === modulePath || fp.startsWith(modulePath + path.sep);
     });
 
-    moduleSourceFiles.forEach((file) => {
+    const checkedModuleSourceFiles = moduleSourceFiles.filter((file) => {
       const filePath = file.getFilePath();
-
-      // Skip build artifacts in dist/ directories
       if (filePath.includes("/dist/") || filePath.includes("\\dist\\")) {
-        return;
+        return false;
       }
-      if (isIgnoredFile(filePath)) {
-        return;
-      }
+      return !isIgnoredFile(filePath);
+    });
+
+    if (checkedModuleSourceFiles.length === 0) {
+      logger.error(
+        `NOTHING WAS CHECKED for module '${moduleName}'. The module directory exists at ${path.relative(ROOT_DIR, modulePath)} but 0 source files remain after excluding dist/ and layout.yaml ignore.`,
+      );
+      process.exit(EXIT_COULD_NOT_RUN);
+    }
+
+    checkedModuleSourceFiles.forEach((file) => {
+      const filePath = file.getFilePath();
       filesScanned += 1;
 
       const isTestDbl = isTestDoubleOrTest(filePath);
@@ -601,12 +672,16 @@ function checkArchitecturalIntegrity(): {
             ? unscopedCandidate
             : null;
         const importedPkg = scopedImport
-          ? moduleSpecifier.slice(scopedImport.length + 1).split("/")[0]
+          ? resolveImportedWorkspace(
+              moduleSpecifier,
+              scopedImport,
+              workspaceNames,
+            )
           : unscopedImport;
         const crossPkgSpecifier = scopedImport
           ? moduleSpecifier
-          : unscopedImport
-            ? `${SCOPE}/${unscopedImport}`
+          : importedPkg
+            ? `${SCOPE}/${importedPkg}`
             : null;
         const crossPkgScope = scopedImport ?? SCOPE;
         if (importedPkg && importedPkg !== moduleName && crossPkgSpecifier) {
@@ -614,6 +689,7 @@ function checkArchitecturalIntegrity(): {
             isCrossPackageViolation(
               moduleName,
               crossPkgSpecifier,
+              importedPkg,
               crossPkgScope,
               linterConfig,
               manifestGrants,
@@ -641,9 +717,9 @@ function checkArchitecturalIntegrity(): {
               layerDirs: ctxLayers,
               layerNames: LAYER_NAMES,
             })
-          : filePath.includes("/domain/")
+          : filePath.includes(`/${DOMAIN_LAYER}/`)
             ? "domain"
-            : filePath.includes("/application/")
+            : filePath.includes(`/${APPLICATION_LAYER}/`)
               ? "application"
               : null;
 

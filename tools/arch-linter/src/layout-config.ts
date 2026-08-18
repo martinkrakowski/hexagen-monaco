@@ -21,14 +21,10 @@ export const HEXAGONAL_LAYER_NAMES = [
 
 export type HexagonalLayerName = (typeof HEXAGONAL_LAYER_NAMES)[number];
 
-const HexagonalLayerNameSchema = z.enum(HEXAGONAL_LAYER_NAMES);
-
 const ContextLayoutSchema = z
   .object({
     root: z.string().min(1),
-    layers: z
-      .record(HexagonalLayerNameSchema, z.array(z.string().min(1)))
-      .optional(),
+    layers: z.record(z.string().min(1), z.array(z.string().min(1))).optional(),
   })
   .strict();
 
@@ -38,6 +34,10 @@ export const LayoutConfigSchema = z
     ignore: z.array(z.string().min(1)).optional(),
     tsconfig: z.string().optional(),
     scopes: z.array(z.string().min(1)).optional(),
+    // Positional hexagonal roles (first = domain, second = application) used
+    // when `contexts.*.layers` is absent. Named "domain"/"application" win
+    // regardless of order.
+    layers: z.array(z.string().min(1)).optional(),
   })
   .strict();
 
@@ -80,7 +80,8 @@ export function isEmptyLayout(config: LayoutConfig): boolean {
     config.contexts === undefined &&
     config.ignore === undefined &&
     config.tsconfig === undefined &&
-    config.scopes === undefined
+    config.scopes === undefined &&
+    config.layers === undefined
   );
 }
 

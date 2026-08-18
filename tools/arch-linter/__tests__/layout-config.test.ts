@@ -91,18 +91,38 @@ describe("parseLayoutConfig — misspellings fail loudly", () => {
     assert.equal(parsed.ok, false);
   });
 
-  it("rejects a misspelled hexagonal layer name", () => {
+  it("rejects an empty context layer name or empty layer path", () => {
+    const emptyName = parseLayoutConfig({
+      contexts: {
+        billing: { root: "packages/billing", layers: { "": ["src/core"] } },
+      },
+    });
+    assert.equal(emptyName.ok, false);
+    const emptyDir = parseLayoutConfig({
+      contexts: {
+        billing: {
+          root: "packages/billing",
+          layers: { services: [""] },
+        },
+      },
+    });
+    assert.equal(emptyDir.ok, false);
+  });
+
+  it("accepts an arbitrary context layer name such as services", () => {
     const parsed = parseLayoutConfig({
       contexts: {
         billing: {
           root: "packages/billing",
-          layers: { domaine: ["src/core"] },
+          layers: { services: ["src/services"] },
         },
       },
     });
-    assert.equal(parsed.ok, false);
-    if (!parsed.ok) {
-      assert.match(parsed.reason, /domaine|domain|invalid/i);
+    assert.equal(parsed.ok, true);
+    if (parsed.ok) {
+      assert.deepEqual(parsed.value.contexts?.billing.layers?.services, [
+        "src/services",
+      ]);
     }
   });
 });

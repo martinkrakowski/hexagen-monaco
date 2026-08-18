@@ -55,7 +55,7 @@ export const LINTER_DIST = path.join(
   "cli.js",
 );
 // Externalized by tsup (ADR-0009) — must be resolvable next to the copied dist.
-export const EXTERNALS = ["commander", "js-yaml", "ts-morph"];
+export const EXTERNALS = ["commander", "js-yaml", "ts-morph", "zod"];
 
 export const SKIP_NON_POSIX = process.platform === "win32";
 

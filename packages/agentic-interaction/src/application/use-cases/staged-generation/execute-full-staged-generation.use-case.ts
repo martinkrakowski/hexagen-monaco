@@ -13,7 +13,8 @@
  * (the blueprint): same callback surface, same per-stage progress/error
  * protocol, same begin→speculative transaction ending. Where the blueprint
  * derives stages 0–2 deterministically from a structured config, this
- * orchestrator runs the per-stage LLM use-cases.
+ * orchestrator runs the per-stage LLM use-cases that were written for the
+ * staged pipeline but never wired (normalizer-rewire dev plan, A1).
  */
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";

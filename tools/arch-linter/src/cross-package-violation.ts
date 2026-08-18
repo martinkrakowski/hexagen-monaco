@@ -99,9 +99,60 @@ function getPackageRestrictions(
   };
 }
 
+/**
+ * Resolve a module specifier to a workspace / bounded-context identity.
+ *
+ * Scoped `@scope/pkg` and `@scope/pkg/subpath` keep the historical split.
+ * Unscoped `pkg` / `pkg/subpath` resolve only when `pkg` is a known workspace
+ * (so `express` stays external). Other scopes (`@other/pkg`) stay unresolved.
+ */
+export function resolveImportedWorkspace(
+  moduleSpecifier: string,
+  scope: string,
+  workspaceNames: ReadonlySet<string>,
+): string | undefined {
+  if (
+    moduleSpecifier.startsWith(".") ||
+    moduleSpecifier.startsWith("/") ||
+    moduleSpecifier.startsWith("node:")
+  ) {
+    return undefined;
+  }
+
+  if (moduleSpecifier.startsWith(`${scope}/`)) {
+    const name = moduleSpecifier.slice(scope.length + 1).split("/")[0];
+    // Same-scope `@scope/pkg` is workspace-shaped even when `pkg` is not
+    // yet a declared context. Requiring membership hid `@acme/orders` from
+    // both the cross-package ladder and npm-package-in-domain.
+    return name || undefined;
+  }
+
+  if (moduleSpecifier.startsWith("@")) {
+    return undefined;
+  }
+
+  const name = moduleSpecifier.split("/")[0];
+  if (name && workspaceNames.has(name)) return name;
+  return undefined;
+}
+
+function isInternalWorkspaceSpecifier(
+  moduleSpecifier: string,
+  importedPkg: string,
+  scope: string,
+): boolean {
+  if (!importedPkg) return false;
+  if (moduleSpecifier.startsWith(`${scope}/`)) return true;
+  return (
+    moduleSpecifier === importedPkg ||
+    moduleSpecifier.startsWith(`${importedPkg}/`)
+  );
+}
+
 export function isCrossPackageViolation(
   fromPackage: string,
   moduleSpecifier: string,
+  importedPkg: string,
   scope: string,
   config: LinterConfig,
   grants: ManifestImportGrants,
@@ -109,10 +160,13 @@ export function isCrossPackageViolation(
   // Slash boundary: a prefix-sibling scope (e.g. @hexagen-monaco/* under scope
   // @hexagen, or @hexagenic/*) is NOT in-scope — same doctrine as the tooling
   // allowlist in namespacing.test.ts and the subpath rule's `^${scope}/` anchor.
-  if (!moduleSpecifier.startsWith(scope + "/")) return false;
+  // Resolved unscoped workspace identities (`orders`, `orders/server`) are
+  // in-scope even without the `@scope/` prefix.
+  if (!isInternalWorkspaceSpecifier(moduleSpecifier, importedPkg, scope)) {
+    return false;
+  }
   if (isGlobalWhitelisted(moduleSpecifier, scope, config)) return false;
 
-  const importedPkg = moduleSpecifier.split("/")[1];
   if (!importedPkg || importedPkg === fromPackage) return false;
 
   const { cannotImport, allowedImports, restrictedTo } = getPackageRestrictions(
