@@ -127,8 +127,12 @@ function buildProgram(): Command {
     .description(
       "Bootstrap a new HexaGen architecture manifest from workspaces",
     )
-    .action(async () => {
-      await bootstrapCommand();
+    .option(
+      "--force",
+      "Overwrite existing .architecture/manifest.yaml, layout.yaml, and baseline",
+    )
+    .action(async (options: { force?: boolean }) => {
+      await bootstrapCommand({ force: options.force ?? false });
     });
 
   const archCommand = program

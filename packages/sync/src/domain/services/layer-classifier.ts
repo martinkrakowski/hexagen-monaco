@@ -66,7 +66,7 @@ export interface LayoutConfig {
 export function determineLayer(
   relativePath: string,
   config?: LayoutConfig,
-): Layer | "unknown" | "ignored" {
+): Layer {
   if (config?.ignore?.some((ig) => relativePath.includes(ig))) {
     return "ignored";
   }
@@ -78,7 +78,7 @@ export function determineLayer(
   if (config?.layers) {
     for (const layer of config.layers) {
       if (relativePath.includes(`/${layer}/`)) {
-        return layer as Layer;
+        return layer;
       }
     }
   }
@@ -105,6 +105,6 @@ export function determineLayer(
 }
 
 export function determinePackageName(relativePath: string): string {
-  const match = relativePath.match(/^(?:packages|apps)\/([^/]+)/);
+  const match = relativePath.match(/^(?:packages|apps|tools)\/([^/]+)/);
   return match ? match[1] : "unknown";
 }

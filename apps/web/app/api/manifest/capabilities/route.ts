@@ -89,7 +89,7 @@ export async function GET() {
   const errorResult = byokResults.find((r) => !r.success);
   if (errorResult && !errorResult.success) {
     return NextResponse.json(
-      { error: errorResult.error.message },
+      { error: "Unable to check BYOK key status" },
       { status: 500 },
     );
   }

@@ -16,6 +16,7 @@ import { isSubpathViolation } from "./subpath-violation.js";
 import {
   buildManifestImportGrants,
   isCrossPackageViolation,
+  resolveImportedWorkspace,
 } from "./cross-package-violation.js";
 import { resolveLintScope } from "./resolve-scope.js";
 import {
@@ -260,20 +261,57 @@ const layerRules = useOptionalConfig(
   "layer-rules.yaml",
 );
 
-const LAYOUT_CONFIG_PATH = path.join(
-  path.join(ROOT_DIR, ".architecture", "invariants"),
-  "layout.yaml",
-);
+const LAYOUT_CONFIG_PATH = path.join(ROOT_DIR, ".architecture", "layout.yaml");
 const layoutConfig = (useOptionalConfig(
-  await loadOptionalYamlConfig<{ layers?: string[] }>(
+  await loadOptionalYamlConfig<{ layers?: unknown }>(
     LAYOUT_CONFIG_PATH,
     readUtf8,
   ),
   LAYOUT_CONFIG_PATH,
   "layout.yaml",
-) || {}) as { layers?: string[] };
-const DOMAIN_LAYER = layoutConfig.layers?.[0] || "domain";
-const APPLICATION_LAYER = layoutConfig.layers?.[1] || "application";
+) || {}) as { layers?: unknown };
+
+/**
+ * `layers` absent → hexagonal defaults. `layers` present but not an array of
+ * nonempty strings (e.g. `layers: domain`) is FATAL: `layers?.[0]` on a string
+ * is the first character and would silently skip every purity check.
+ */
+function resolveLayoutLayers(raw: { layers?: unknown }): {
+  domain: string;
+  application: string;
+  all: readonly string[];
+} {
+  if (raw.layers === undefined) {
+    return {
+      domain: "domain",
+      application: "application",
+      all: [],
+    };
+  }
+  const layers = raw.layers;
+  if (
+    !Array.isArray(layers) ||
+    layers.length === 0 ||
+    layers.some((layer) => typeof layer !== "string" || layer.trim() === "")
+  ) {
+    logger.error(
+      "FATAL ERROR: layout.yaml 'layers' must be a non-empty array of nonempty strings.",
+    );
+    logger.error(
+      "  Refusing to default: a scalar such as `layers: domain` would be read as the character 'd' and skip every layer check.",
+    );
+    process.exit(EXIT_COULD_NOT_RUN);
+  }
+  return {
+    domain: layers[0],
+    application: layers[1] ?? "application",
+    all: layers,
+  };
+}
+
+const layoutLayers = resolveLayoutLayers(layoutConfig);
+const DOMAIN_LAYER = layoutLayers.domain;
+const APPLICATION_LAYER = layoutLayers.application;
 
 const linterConfig = useOptionalConfig(
   await loadOptionalYamlConfig<LinterConfig>(LINTER_CONFIG_PATH, readUtf8),
@@ -322,12 +360,6 @@ if (!fs.existsSync(TSCONFIG_PATH)) {
   );
   process.exit(EXIT_COULD_NOT_RUN);
 }
-if (!fs.existsSync(TSCONFIG_PATH)) {
-  logger.error(
-    `Could not find ${path.relative(ROOT_DIR, TSCONFIG_PATH)}. Cannot initialize ts-morph project.`,
-  );
-  process.exit(EXIT_COULD_NOT_RUN);
-}
 const project = new Project({
   tsConfigFilePath: TSCONFIG_PATH,
 });
@@ -358,6 +390,7 @@ const LAYER_NAMES: readonly string[] = [
     ...Object.keys(layerRules.layers ?? {})
       .filter((name) => !name.includes("/"))
       .map((name) => name),
+    ...layoutLayers.all,
   ]),
 ];
 
@@ -384,6 +417,7 @@ function checkArchitecturalIntegrity() {
   // invariants config remains operative as additional constraints inside
   // isCrossPackageViolation.
   const manifestGrants = buildManifestImportGrants(modules);
+  const workspaceNames = new Set(modules.map((moduleInfo) => moduleInfo.name));
 
   const allSourceFiles = project.getSourceFiles();
   if (allSourceFiles.length === 0) {
@@ -407,6 +441,13 @@ function checkArchitecturalIntegrity() {
       // whose names share a prefix (e.g. 'ui' matching 'ui-projection-compiler').
       return fp === modulePath || fp.startsWith(modulePath + path.sep);
     });
+
+    if (moduleSourceFiles.length === 0) {
+      logger.error(
+        `NOTHING WAS CHECKED for module '${moduleName}'. The module directory exists at ${path.relative(ROOT_DIR, modulePath)} but the TypeScript project matched 0 source files.`,
+      );
+      process.exit(EXIT_COULD_NOT_RUN);
+    }
 
     moduleSourceFiles.forEach((file) => {
       const filePath = file.getFilePath();
@@ -446,32 +487,34 @@ function checkArchitecturalIntegrity() {
           return;
         }
 
-        if (moduleSpecifier.startsWith(SCOPE + "/")) {
-          const importedPkg = moduleSpecifier.split("/")[1];
-          if (importedPkg && importedPkg !== moduleName) {
-            if (
-              isCrossPackageViolation(
-                moduleName,
+        const importedPkg = resolveImportedWorkspace(
+          moduleSpecifier,
+          SCOPE,
+          workspaceNames,
+        );
+        if (importedPkg && importedPkg !== moduleName) {
+          if (
+            isCrossPackageViolation(
+              moduleName,
+              moduleSpecifier,
+              importedPkg,
+              SCOPE,
+              linterConfig,
+              manifestGrants,
+            )
+          ) {
+            errors.push(
+              record(
+                "cross-package-import",
+                filePath,
                 moduleSpecifier,
-                importedPkg,
-                SCOPE,
-                linterConfig,
-                manifestGrants,
-              )
-            ) {
-              errors.push(
-                record(
-                  "cross-package-import",
-                  filePath,
-                  moduleSpecifier,
-                  `Boundary Violation in [${moduleName}]:
+                `Boundary Violation in [${moduleName}]:
   File: ${path.relative(ROOT_DIR, filePath)}
   Illegal import from another module: '${moduleSpecifier}'
   Not declared in '${moduleName}' depends_on (manifest) nor allowed by linter-config (global_whitelist / package_rules).
               `.trim(),
-                ),
-              );
-            }
+              ),
+            );
           }
         }
 

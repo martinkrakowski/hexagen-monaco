@@ -17,6 +17,7 @@ import {
   buildManifestImportGrants,
   isCrossPackageViolation,
   isGlobalWhitelisted,
+  resolveImportedWorkspace,
   type ManifestImportGrants,
 } from "../src/cross-package-violation.js";
 
@@ -305,6 +306,84 @@ describe("isCrossPackageViolation — non-cross-package cases", () => {
         NO_GRANTS,
       ),
       true,
+    );
+  });
+});
+
+describe("resolveImportedWorkspace", () => {
+  const workspaces = new Set(["billing", "orders"]);
+
+  it("resolves scoped package roots and subpaths", () => {
+    assert.equal(
+      resolveImportedWorkspace("@acme/orders", SCOPE, workspaces),
+      "orders",
+    );
+    assert.equal(
+      resolveImportedWorkspace("@acme/orders/server", SCOPE, workspaces),
+      "orders",
+    );
+  });
+
+  it("resolves unscoped workspace names and subpaths", () => {
+    assert.equal(
+      resolveImportedWorkspace("orders", SCOPE, workspaces),
+      "orders",
+    );
+    assert.equal(
+      resolveImportedWorkspace("orders/server", SCOPE, workspaces),
+      "orders",
+    );
+  });
+
+  it("leaves external packages unresolved", () => {
+    assert.equal(
+      resolveImportedWorkspace("express", SCOPE, workspaces),
+      undefined,
+    );
+    assert.equal(
+      resolveImportedWorkspace("@other/orders", SCOPE, workspaces),
+      undefined,
+    );
+    assert.equal(
+      resolveImportedWorkspace("node:fs", SCOPE, workspaces),
+      undefined,
+    );
+  });
+});
+
+describe("isCrossPackageViolation — unscoped workspace imports", () => {
+  const workspaces = new Set(["billing", "orders"]);
+
+  it("an undeclared unscoped workspace import is a violation", () => {
+    const importedPkg = resolveImportedWorkspace("orders", SCOPE, workspaces);
+    assert.equal(importedPkg, "orders");
+    assert.equal(
+      isCrossPackageViolation(
+        "billing",
+        "orders",
+        importedPkg!,
+        SCOPE,
+        NO_CONFIG,
+        NO_GRANTS,
+      ),
+      true,
+    );
+  });
+
+  it("a declared unscoped workspace import is allowed", () => {
+    const grants = grantsOf([
+      { name: "billing", type: "core", depends_on: ["orders"] },
+    ]);
+    assert.equal(
+      isCrossPackageViolation(
+        "billing",
+        "orders/server",
+        "orders",
+        SCOPE,
+        NO_CONFIG,
+        grants,
+      ),
+      false,
     );
   });
 });

@@ -77,7 +77,44 @@ test("hasByokKey correctly reflects per-provider status rather than an aggregate
   expect(anthropicCap.status).toBe("no_keys_configured");
 });
 
-test("a provider that throws is a 500", async () => {
+test("a revoked provider key is treated as no_keys_configured", async () => {
+  mocks.getServerSession.mockResolvedValue({ user: { sub: "test-user-1" } });
+
+  mocks.findByUserAndProvider.mockImplementation(
+    async (_userId: string, provider: string) => {
+      if (provider === "openai") {
+        return { success: true, value: { revokedAt: null } };
+      }
+      if (provider === "anthropic") {
+        return {
+          success: true,
+          value: { revokedAt: "2026-08-01T00:00:00.000Z" },
+        };
+      }
+      return { success: true, value: null };
+    },
+  );
+
+  const { GET } = await import("../route");
+
+  const res = await GET();
+  expect(res.status).toBe(200);
+
+  const payload = await res.json();
+  const openaiCap = payload.capabilities.find(
+    (c: { provider: string }) => c.provider === "openai",
+  );
+  const anthropicCap = payload.capabilities.find(
+    (c: { provider: string }) => c.provider === "anthropic",
+  );
+
+  expect(openaiCap.hasByokKey).toBe(true);
+  expect(openaiCap.status).toBe("byok_key");
+  expect(anthropicCap.hasByokKey).toBe(false);
+  expect(anthropicCap.status).toBe("no_keys_configured");
+});
+
+test("a provider lookup Result error returns HTTP 500", async () => {
   mocks.getServerSession.mockResolvedValue({ user: { sub: "test-user-1" } });
 
   mocks.findByUserAndProvider.mockImplementation(
@@ -92,5 +129,27 @@ test("a provider that throws is a 500", async () => {
   expect(res.status).toBe(500);
 
   const payload = await res.json();
-  expect(payload.error).toBe("db down");
+  expect(payload.error).toBe("Unable to check BYOK key status");
+});
+
+test("metadata-store error messages are not returned to the client", async () => {
+  mocks.getServerSession.mockResolvedValue({ user: { sub: "test-user-1" } });
+
+  const internal =
+    "SQLITE_ERROR: no such table metadata_keys at /var/db/byok.sqlite";
+  mocks.findByUserAndProvider.mockImplementation(
+    async (_userId: string, _provider: string) => {
+      return { success: false, error: new Error(internal) };
+    },
+  );
+
+  const { GET } = await import("../route");
+
+  const res = await GET();
+  expect(res.status).toBe(500);
+
+  const body = JSON.stringify(await res.json());
+  expect(body).not.toContain(internal);
+  expect(body).not.toContain("SQLITE_ERROR");
+  expect(body).not.toContain("/var/db/byok.sqlite");
 });

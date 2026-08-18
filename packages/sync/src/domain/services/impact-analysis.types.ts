@@ -5,15 +5,12 @@ export type RefactoringType =
   | "move-use-case"
   | "extract-port";
 
-export type Layer =
-  | "domain"
-  | "application"
-  | "infrastructure"
-  | "test"
-  | "manifest"
-  | "config"
-  | "unknown"
-  | "ignored";
+/**
+ * Conventional hexagonal names, plus any `layout.yaml`-configured layer.
+ * Configured names are first-class Layer values — they must not be forced
+ * through an `as Layer` assertion.
+ */
+export type Layer = string;
 
 export interface FileToModify {
   path: string;
