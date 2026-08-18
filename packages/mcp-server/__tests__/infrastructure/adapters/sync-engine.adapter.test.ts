@@ -110,6 +110,7 @@ describe("SyncEngineAdapter", () => {
       ]);
       assert.equal(result.success, false);
       if (!result.success) {
+        assert.ok(result.error instanceof Error);
         assert.match(result.error.message, /outside workspace/);
       }
       const kept = await fs.readFile(outside, "utf-8");

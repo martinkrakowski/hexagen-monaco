@@ -42,11 +42,11 @@ class ManifestWriteSpy implements ManifestWritePort {
       value: { registered: true, alreadyExisted: false },
     };
   }
-  async registerPort() {
+  async registerPort(): Promise<Result<{ registered: boolean }>> {
     this.writes.push("registerPort");
     return { success: true as const, value: { registered: true } };
   }
-  async registerAdapter() {
+  async registerAdapter(): Promise<Result<{ registered: boolean }>> {
     this.writes.push("registerAdapter");
     return { success: true as const, value: { registered: true } };
   }
@@ -70,7 +70,7 @@ class ScaffoldingSpy implements ScaffoldingPort {
       value: { filesCreated: ["packages/x/src/index.ts"] },
     };
   }
-  async createPort() {
+  async createPort(): Promise<Result<{ fileCreated: string }>> {
     this.writes.push("createPort");
     return { success: true as const, value: { fileCreated: "p.ts" } };
   }
