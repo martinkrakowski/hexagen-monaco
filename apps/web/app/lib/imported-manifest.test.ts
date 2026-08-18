@@ -74,10 +74,47 @@ describe("parseImportedManifest", () => {
     assert.strictEqual(result.message, IMPORTED_MANIFEST_CORRUPT_MESSAGE);
   });
 
-  it("fails closed on schema-invalid YAML (missing bounded_contexts)", () => {
+  it("keeps a schema-unknown shape instead of failing closed", () => {
     const result = parseImportedManifest("system: shop\n");
+    assert.ok(result.ok);
+    assert.strictEqual(result.manifest.system, "shop");
+  });
+
+  it("fails closed when a known field has the wrong runtime type", () => {
+    const result = parseImportedManifest(
+      ["system: shop", "bounded_contexts: []", "apps: {}"].join("\n"),
+    );
     assert.ok(!result.ok);
     assert.strictEqual(result.message, IMPORTED_MANIFEST_CORRUPT_MESSAGE);
+  });
+
+  it("does not drop schema-known or extra fields on a real manifest", () => {
+    const result = parseImportedManifest(
+      [
+        "system: shop",
+        "bounded_contexts:",
+        "  - name: billing",
+        "    type: Core",
+        "    depends_on: [catalog]",
+        "    layers:",
+        "      application:",
+        "        ports:",
+        "          in: [ProcessPaymentPort]",
+        "          out: [PaymentGatewayPort]",
+        "custom_policy: keep-me",
+      ].join("\n"),
+    );
+    assert.ok(result.ok);
+    assert.strictEqual(result.manifest.system, "shop");
+    assert.strictEqual(result.manifest.custom_policy, "keep-me");
+    const contexts = result.manifest.bounded_contexts as Array<{
+      name: string;
+      type?: string;
+      depends_on?: string[];
+    }>;
+    assert.strictEqual(contexts[0]?.name, "billing");
+    assert.strictEqual(contexts[0]?.type, "core");
+    assert.deepStrictEqual(contexts[0]?.depends_on, ["catalog"]);
   });
 
   it("fails closed on empty / null / undefined input", () => {
@@ -118,8 +155,8 @@ describe("resolveImportedManifest", () => {
     assert.strictEqual(result.yamlContent, VALID_MANIFEST_YAML);
   });
 
-  it("imported formState + corrupt manifest → fails closed, never a wizard fallback", () => {
-    for (const yamlText of ["system: [unclosed", "system: shop\n", "", null]) {
+  it("imported formState + unparseable manifest → fails closed, never a wizard fallback", () => {
+    for (const yamlText of ["system: [unclosed", "", null]) {
       const result = resolveImportedManifest(
         { manifestSource: "imported" },
         yamlText,
@@ -127,6 +164,16 @@ describe("resolveImportedManifest", () => {
       assert.ok(!result.ok, `expected fail-closed for ${String(yamlText)}`);
       assert.strictEqual(result.message, IMPORTED_MANIFEST_CORRUPT_MESSAGE);
     }
+  });
+
+  it("imported formState + schema-unknown shape stays lossless", () => {
+    const result = resolveImportedManifest(
+      { manifestSource: "imported" },
+      "system: shop\n",
+    );
+    assert.ok(result.ok);
+    assert.ok(result.imported);
+    assert.strictEqual(result.manifest.system, "shop");
   });
 });
 

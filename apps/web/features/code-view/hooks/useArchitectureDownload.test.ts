@@ -72,11 +72,23 @@ describe("resolveArchitectureManifestYaml", () => {
   });
 
   it("fails closed for an imported project with corrupt saved YAML", () => {
-    for (const bad of ["a: [unclosed", "", null, undefined, "system: only\n"]) {
+    for (const bad of ["a: [unclosed", "", null, undefined]) {
       const result = resolveArchitectureManifestYaml(importedWizardData, bad);
       assert.ok(!result.ok, `expected fail-closed for ${JSON.stringify(bad)}`);
       assert.strictEqual(result.message, IMPORTED_MANIFEST_CORRUPT_MESSAGE);
     }
+  });
+
+  it("returns schema-unknown imported YAML verbatim (not corrupt)", () => {
+    // Same contract as parseImportedManifest: fail closed only on a true
+    // parse failure. `{ system: "only" }` is a mapping, so it stays lossless.
+    const yamlText = "system: only\n";
+    const result = resolveArchitectureManifestYaml(
+      importedWizardData,
+      yamlText,
+    );
+    assert.ok(result.ok);
+    assert.strictEqual(result.yamlContent, yamlText);
   });
 
   it("dumps the wizardToManifest projection for wizard-authored data (savedManifestYaml ignored)", () => {
