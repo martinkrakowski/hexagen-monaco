@@ -16,6 +16,7 @@ import { RejectTransactionToolUseCase } from "../../src/application/use-cases/re
 import { RemoveContextToolUseCase } from "../../src/application/use-cases/remove-context-tool.use-case.js";
 import { RemovePortToolUseCase } from "../../src/application/use-cases/remove-port-tool.use-case.js";
 import { ScaffoldModuleToolUseCase } from "../../src/application/use-cases/scaffold-module-tool.use-case.js";
+import { applyPendingManifestMutation } from "../../src/application/pending-manifest-mutation.js";
 import type { ManifestWritePort } from "../../src/application/ports/out/manifest-write.port.js";
 import type { ScaffoldingPort } from "../../src/application/ports/out/scaffolding.port.js";
 
@@ -41,11 +42,11 @@ class ManifestWriteSpy implements ManifestWritePort {
       value: { registered: true, alreadyExisted: false },
     };
   }
-  async registerPort() {
+  async registerPort(): Promise<Result<{ registered: boolean }>> {
     this.writes.push("registerPort");
     return { success: true as const, value: { registered: true } };
   }
-  async registerAdapter() {
+  async registerAdapter(): Promise<Result<{ registered: boolean }>> {
     this.writes.push("registerAdapter");
     return { success: true as const, value: { registered: true } };
   }
@@ -61,6 +62,7 @@ class ManifestWriteSpy implements ManifestWritePort {
 
 class ScaffoldingSpy implements ScaffoldingPort {
   writes: string[] = [];
+  deleted: string[] = [];
   async scaffoldModule() {
     this.writes.push("scaffoldModule");
     return {
@@ -68,13 +70,17 @@ class ScaffoldingSpy implements ScaffoldingPort {
       value: { filesCreated: ["packages/x/src/index.ts"] },
     };
   }
-  async createPort() {
+  async createPort(): Promise<Result<{ fileCreated: string }>> {
     this.writes.push("createPort");
     return { success: true as const, value: { fileCreated: "p.ts" } };
   }
   async createAdapter() {
     this.writes.push("createAdapter");
     return { success: true as const, value: { fileCreated: "a.ts" } };
+  }
+  async deleteCreatedFiles(paths: string[]) {
+    this.deleted.push(...paths);
+    return { success: true as const, value: { deleted: [...paths] } };
   }
 }
 
@@ -261,5 +267,144 @@ describe("MCP mutation tools require transaction approval", () => {
     assert.equal(accepted.success, true);
     assert.deepEqual(h.scaffolding.writes, ["scaffoldModule"]);
     assert.deepEqual(h.write.writes, ["registerBoundedContext"]);
+  });
+
+  it("does not publish effect events for no-op add/remove results", async () => {
+    const events = new EventBusFake();
+    const write = new ManifestWriteSpy();
+    write.addDependency = async () => ({
+      success: true as const,
+      value: { updated: false },
+    });
+    write.removePort = async () => ({
+      success: true as const,
+      value: { removed: false },
+    });
+    write.removeContext = async () => ({
+      success: true as const,
+      value: { removed: false },
+    });
+    const ports = {
+      manifestWrite: write,
+      scaffolding: new ScaffoldingSpy(),
+      eventBus: events,
+    };
+    await applyPendingManifestMutation(
+      {
+        kind: "add-dependency",
+        input: { sourceModule: "a", targetModule: "b" },
+      },
+      ports,
+    );
+    await applyPendingManifestMutation(
+      {
+        kind: "remove-port",
+        input: {
+          context_name: "a",
+          port_name: "P",
+          direction: "outbound",
+        },
+      },
+      ports,
+    );
+    await applyPendingManifestMutation(
+      { kind: "remove-context", input: { context_name: "a" } },
+      ports,
+    );
+    assert.equal(events.published.length, 0);
+  });
+
+  it("compensates create-port files when registerPort fails", async () => {
+    const h = harness();
+    h.write.registerPort = async () => {
+      h.write.writes.push("registerPort");
+      return {
+        success: false as const,
+        error: new Error("manifest register failed"),
+      };
+    };
+    const proposed = await new CreatePortToolUseCase(h.tm).execute({
+      domain_name: "billing",
+      port_name: "PayPort",
+      type: "outbound",
+    });
+    const accepted = await h.accept.execute({
+      transaction_id: proposed.transactionId ?? "",
+    });
+    assert.equal(accepted.success, false);
+    assert.deepEqual(h.scaffolding.writes, ["createPort"]);
+    assert.deepEqual(h.scaffolding.deleted, ["p.ts"]);
+    assert.deepEqual(h.write.writes, ["registerPort"]);
+    assert.equal(h.tm.get(proposed.transactionId ?? "")?.status, "failed");
+  });
+
+  it("compensates create-adapter files when registerAdapter fails", async () => {
+    const h = harness();
+    h.write.registerAdapter = async () => {
+      h.write.writes.push("registerAdapter");
+      return {
+        success: false as const,
+        error: new Error("adapter register failed"),
+      };
+    };
+    const proposed = await new CreateAdapterToolUseCase(h.tm).execute({
+      port_name: "PayPort",
+      infrastructure_name: "stripe",
+    });
+    const accepted = await h.accept.execute({
+      transaction_id: proposed.transactionId ?? "",
+    });
+    assert.equal(accepted.success, false);
+    assert.deepEqual(h.scaffolding.writes, ["createAdapter"]);
+    assert.deepEqual(h.scaffolding.deleted, ["a.ts"]);
+    assert.deepEqual(h.write.writes, ["registerAdapter"]);
+    assert.equal(h.tm.get(proposed.transactionId ?? "")?.status, "failed");
+  });
+
+  it("compensates scaffold-module files when registerBoundedContext fails", async () => {
+    const h = harness();
+    h.write.registerBoundedContext = async () => {
+      h.write.writes.push("registerBoundedContext");
+      return {
+        success: false as const,
+        error: new Error("context register failed"),
+      };
+    };
+    const proposed = await new ScaffoldModuleToolUseCase(h.tm).execute({
+      name: "billing",
+      layer: "domain",
+    });
+    const accepted = await h.accept.execute({
+      transaction_id: proposed.transactionId ?? "",
+    });
+    assert.equal(accepted.success, false);
+    assert.deepEqual(h.scaffolding.writes, ["scaffoldModule"]);
+    assert.deepEqual(h.scaffolding.deleted, ["packages/x/src/index.ts"]);
+    assert.deepEqual(h.write.writes, ["registerBoundedContext"]);
+    assert.equal(h.tm.get(proposed.transactionId ?? "")?.status, "failed");
+  });
+
+  it("does not compensate or register when scaffolding itself fails", async () => {
+    const h = harness();
+    h.scaffolding.createPort = async () => {
+      h.scaffolding.writes.push("createPort");
+      return {
+        success: false as const,
+        error: new Error("disk full"),
+      };
+    };
+    const proposed = await new CreatePortToolUseCase(h.tm).execute({
+      domain_name: "billing",
+      port_name: "PayPort",
+      type: "outbound",
+    });
+    const accepted = await h.accept.execute({
+      transaction_id: proposed.transactionId ?? "",
+    });
+    assert.equal(accepted.success, false);
+    assert.deepEqual(h.scaffolding.writes, ["createPort"]);
+    assert.deepEqual(h.scaffolding.deleted, []);
+    assert.deepEqual(h.write.writes, []);
+    assert.equal(h.tm.get(proposed.transactionId ?? "")?.status, "failed");
   });
 });

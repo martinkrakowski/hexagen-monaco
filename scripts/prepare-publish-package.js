@@ -222,6 +222,11 @@ function prepare(packageDir) {
     );
     process.exit(1);
   }
+  const licenseContent = fs.readFileSync(packageLicense, "utf8");
+  if (!licenseContent.trim()) {
+    console.error(`❌ Package-local LICENSE at ${packageLicense} is empty or whitespace-only.`);
+    process.exit(1);
+  }
   fs.copyFileSync(packageLicense, path.join(publishDir, "LICENSE"));
 
   // Summary

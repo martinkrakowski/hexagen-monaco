@@ -144,4 +144,18 @@ describe("parseBaseBaselineText", () => {
     assert.deepEqual(parseBaseBaselineText(null), []);
     assert.deepEqual(parseBaseBaselineText("   "), []);
   });
+
+  it("parses a main-shaped baseline whose last entry still uses note", () => {
+    const mainShaped = `{
+  "version": 1,
+  "entries": [
+    {"rule":"node-builtin-in-layer","file":"a.ts","specifier":"node:path"},
+    {"rule":"npm-package-in-domain","file":"b.ts","specifier":"zod","note":"ADR-0054 amendment 2026-08-16"}
+  ]
+}
+`;
+    const entries = parseBaseBaselineText(mainShaped);
+    assert.equal(entries.length, 2);
+    assert.equal(entries[1]?.reason, "ADR-0054 amendment 2026-08-16");
+  });
 });

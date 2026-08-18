@@ -157,6 +157,12 @@ function createRecordingTransactionManager(): RecordingTransactionManager {
     list: () => [...txns.values()],
     commit: (transactionId) => setStatus(transactionId, "committed"),
     rollback: (transactionId) => setStatus(transactionId, "rolled_back"),
+    fail: (transactionId) => setStatus(transactionId, "failed"),
+    compareAndSetStatus: (transactionId, expectedStatus, newStatus) => {
+      const txn = txns.get(transactionId);
+      if (!txn || txn.status !== expectedStatus) return null;
+      return setStatus(transactionId, newStatus);
+    },
   };
 }
 

@@ -39,7 +39,7 @@ export function renderReportHtml(report: EngagementReport): string {
   ${
     report.drift.collected
       ? `<table><thead><tr><th>Fresh</th><th>Suppressed</th><th>Stale</th><th>Expired</th></tr></thead><tbody><tr><td>${report.drift.fresh.length}</td><td>${report.drift.baselined.length}</td><td>${report.drift.stale.length}</td><td>${report.drift.expired.length}</td></tr></tbody></table>`
-      : "<p>Live linter output was not collected.</p>"
+      : `<p>Live linter output was not collected${report.drift.failureReason ? ` (${escapeHtml(report.drift.failureReason)})` : ""}.</p>`
   }
   <h2>Ratchet trend</h2>
   <table><thead><tr><th>When</th><th>Entries</th><th>Commit</th></tr></thead><tbody>

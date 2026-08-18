@@ -893,7 +893,7 @@ function checkArchitecturalIntegrity(): {
     crossContextEdges,
     PKG_ROOT_PATH,
     (p) => fs.existsSync(p),
-    { advisory: layout !== undefined },
+    { advisory: false },
   );
   for (const v of commViolations) {
     const message = `Required Communication Violation:\n ${v.message}`;
@@ -941,9 +941,10 @@ function reportAndExit(violations: ViolationRecord[]): void {
   if (PR_DIFF) {
     const baseRef = resolveBaseRef(baseRefArg);
     if (!baseRef) {
-      logger.info(
-        "Ratchet --pr-diff: no --base-ref / GITHUB_BASE_REF; skipping per-PR diff and baseline-growth check.",
+      logger.error(
+        "FATAL ERROR: --pr-diff requires --base-ref or GITHUB_BASE_REF. Refusing to report a clean per-PR diff that never ran.",
       );
+      process.exit(EXIT_COULD_NOT_RUN);
     } else {
       const baselineRel = path
         .relative(ROOT_DIR, BASELINE_PATH)
@@ -1087,12 +1088,29 @@ function abortIfVacuous(filesScanned: number): void {
 
 /** `--update-baseline`: rewrite the file from this run, then exit 0. */
 function writeBaseline(violations: ViolationRecord[]): void {
-  const previous = fs.existsSync(BASELINE_PATH)
-    ? parseBaseline(fs.readFileSync(BASELINE_PATH, "utf8")).entries
-    : [];
+  let previous: BaselineEntry[] = [];
+  if (fs.existsSync(BASELINE_PATH)) {
+    try {
+      previous = parseBaseline(fs.readFileSync(BASELINE_PATH, "utf8")).entries;
+    } catch (e) {
+      logger.error(
+        `FATAL ERROR: --update-baseline could not parse ${BASELINE_PATH}`,
+      );
+      logger.error(`  ${(e as Error).message}`);
+      process.exit(EXIT_COULD_NOT_RUN);
+    }
+  }
   const merged = mergeSuppressionMetadata(violations, previous);
-  fs.mkdirSync(path.dirname(BASELINE_PATH), { recursive: true });
-  fs.writeFileSync(BASELINE_PATH, serializeBaseline(merged), "utf8");
+  try {
+    fs.mkdirSync(path.dirname(BASELINE_PATH), { recursive: true });
+    fs.writeFileSync(BASELINE_PATH, serializeBaseline(merged), "utf8");
+  } catch (e) {
+    logger.error(
+      `FATAL ERROR: --update-baseline could not write ${BASELINE_PATH}`,
+    );
+    logger.error(`  ${(e as Error).message}`);
+    process.exit(EXIT_COULD_NOT_RUN);
+  }
   logger.info(
     `Wrote ${merged.length} violation(s) to ${path.relative(ROOT_DIR, BASELINE_PATH)}. Review the diff: this file may only shrink.`,
   );

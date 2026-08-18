@@ -35,8 +35,11 @@ export function renderReportMarkdown(report: EngagementReport): string {
   lines.push("## Drift vs baseline");
   lines.push("");
   if (!report.drift.collected) {
+    const why =
+      report.drift.failureReason ??
+      "hexagen-lint missing, unbuilt, or failed to start";
     lines.push(
-      "Live linter output was not collected (hexagen-lint missing, unbuilt, or failed to start). The suppression ledger below is still the committed baseline.",
+      `Live linter output was not collected (${why}). The suppression ledger below is still the committed baseline.`,
     );
   } else {
     lines.push(`| Fresh (regressions) | Suppressed | Stale | Expired |`);

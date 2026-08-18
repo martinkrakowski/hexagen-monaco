@@ -35,6 +35,8 @@ const mockTransactionManager: TransactionManagerPort = {
   list: vi.fn(() => []),
   commit: vi.fn(() => null),
   rollback: vi.fn(() => null),
+  fail: vi.fn(() => null),
+  compareAndSetStatus: vi.fn(() => null),
 };
 
 // Stages 3/4 get a non-port response -> 0 ports/adapters parsed, so the

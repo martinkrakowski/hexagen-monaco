@@ -27,7 +27,8 @@ engagement mode. Hexagen does **not** claim an air-gap product.
 | -------------------------------------------------- | ------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Cloud generation (OpenRouter / server-paid models) | Hexagen server → provider | Server-held provider key                          | Metered. This is the hosted product, not the FDE kit.                                                                                                   |
 | BYOK chat / generation                             | Hexagen server → provider | Client-held key, encrypted at rest in the browser | **Server-side proxy** (ADR-0030). The key is never stored in plaintext on the server, but **prompts transit Hexagen's server**. This is not an air-gap. |
-| `/api/manifest/generate/local` with `preferLocal`  | Still the server          | Same as cloud if local cannot run                 | WebLLM cannot run server-side. `preferLocal` **falls back to the cloud chain on the server**. Do not describe this route as "local-only".               |
+| Browser WebLLM (`preferLocal` success)             | Stays in the browser      | No server key                                     | `useStagedManifestGeneration` runs the client use case with **no HTTP call**. This is the only LLM path that does not transit Hexagen.                  |
+| `/api/manifest/generate/local` fallback            | Hexagen server            | Same as cloud if local cannot run                 | Used when WebLLM cannot run. **Server-mediated.** Do not describe the HTTP route as "local-only".                                                       |
 
 ## BYOK in one sentence
 
@@ -40,5 +41,7 @@ transit Hexagen. Never describe BYOK as air-gapped, on-prem-only, or
 ## Honest sentence for procurement
 
 The day-one FDE motion (lint / adopt / report / baseline) is deterministic and
-local. Optional LLM features are named, off by default in engagement mode, and
-when they run they go through Hexagen's server — including BYOK.
+local. Optional LLM features are named and off by default in engagement mode.
+Successful in-browser WebLLM (`preferLocal`) does not call Hexagen's server.
+Server-mediated and fallback paths — including BYOK and
+`/api/manifest/generate/local` — go through Hexagen's server.

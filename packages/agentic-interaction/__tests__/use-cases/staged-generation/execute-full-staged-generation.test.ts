@@ -151,6 +151,21 @@ function createMockTransactionManager(opts?: {
       calls.push({ method: "rollback", args: [transactionId] });
       return { id: transactionId, status: "rolled-back" };
     },
+    fail: (transactionId: string) => {
+      calls.push({ method: "fail", args: [transactionId] });
+      return { id: transactionId, status: "failed" };
+    },
+    compareAndSetStatus: (
+      transactionId: string,
+      expectedStatus: string,
+      newStatus: string,
+    ) => {
+      calls.push({
+        method: "compareAndSetStatus",
+        args: [transactionId, expectedStatus, newStatus],
+      });
+      return { id: transactionId, status: newStatus };
+    },
   } as unknown as TransactionManagerPort;
   return { manager, calls };
 }

@@ -29,6 +29,10 @@ try {
   body = "";
 }
 
+if (body.trim() && !body.includes(MARKER)) {
+  body = `${MARKER}\n${body}`;
+}
+
 const api = `https://api.github.com/repos/${repo}`;
 const headers = {
   Accept: "application/vnd.github+json",

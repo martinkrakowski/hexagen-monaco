@@ -26,6 +26,8 @@ export interface DriftSummary {
   stale: ReportBaselineEntry[];
   expired: ReportBaselineEntry[];
   collected: boolean;
+  /** Set when collect() failed; renderers must not claim a missing binary. */
+  failureReason?: string;
 }
 
 export interface EngagementReport {

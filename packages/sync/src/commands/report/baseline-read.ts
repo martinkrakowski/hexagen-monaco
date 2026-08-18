@@ -37,23 +37,75 @@ export function parseReportBaseline(text: string): ReportBaselineFile {
       throw new Error(`baseline entry ${index} is not an object`);
     }
     const candidate = entry as Record<string, unknown>;
-    for (const field of ["rule", "file", "specifier"] as const) {
-      if (typeof candidate[field] !== "string") {
-        throw new Error(`baseline entry ${index} has no string '${field}'`);
+    const allowedKeys = new Set([
+      "rule",
+      "file",
+      "specifier",
+      "reason",
+      "expires",
+      "note",
+    ]);
+    for (const k of Object.keys(candidate)) {
+      if (!allowedKeys.has(k))
+        throw new Error(`baseline entry ${index} has unrecognized key '${k}'`);
+    }
+
+    for (const field of ["rule", "file"] as const) {
+      if (
+        typeof candidate[field] !== "string" ||
+        !(candidate[field] as string).trim()
+      ) {
+        throw new Error(
+          `baseline entry ${index} has no valid string '${field}'`,
+        );
       }
     }
-    const parsed: ReportBaselineEntry = {
-      rule: candidate.rule as string,
-      file: candidate.file as string,
-      specifier: candidate.specifier as string,
-    };
-    if (typeof candidate.reason === "string" && candidate.reason.trim()) {
-      parsed.reason = candidate.reason;
+    if (typeof candidate.specifier !== "string") {
+      throw new Error(`baseline entry ${index} has no string 'specifier'`);
     }
-    if (typeof candidate.expires === "string") {
-      if (!EXPIRES_RE.test(candidate.expires)) {
+    const parsed: ReportBaselineEntry = {
+      rule: (candidate.rule as string).trim(),
+      file: (candidate.file as string).trim(),
+      specifier: candidate.specifier,
+    };
+
+    if ("reason" in candidate) {
+      if (typeof candidate.reason !== "string" || !candidate.reason.trim()) {
+        throw new Error(
+          `baseline entry ${index} has empty or non-string 'reason'`,
+        );
+      }
+      parsed.reason = candidate.reason.trim();
+    } else if ("note" in candidate) {
+      if (typeof candidate.note !== "string" || !candidate.note.trim()) {
+        throw new Error(
+          `baseline entry ${index} has empty or non-string 'note'`,
+        );
+      }
+      parsed.reason = candidate.note.trim();
+    }
+
+    if ("expires" in candidate) {
+      if (typeof candidate.expires !== "string") {
+        throw new Error(`baseline entry ${index} 'expires' is not a string`);
+      }
+      const match = EXPIRES_RE.exec(candidate.expires);
+      if (!match) {
         throw new Error(
           `baseline entry ${index} has invalid 'expires' (want YYYY-MM-DD)`,
+        );
+      }
+      const year = parseInt(match[1]!, 10);
+      const month = parseInt(match[2]!, 10);
+      const day = parseInt(match[3]!, 10);
+      const utc = new Date(Date.UTC(year, month - 1, day));
+      if (
+        utc.getUTCFullYear() !== year ||
+        utc.getUTCMonth() !== month - 1 ||
+        utc.getUTCDate() !== day
+      ) {
+        throw new Error(
+          `baseline entry ${index} has invalid calendar date '${candidate.expires}'`,
         );
       }
       parsed.expires = candidate.expires;

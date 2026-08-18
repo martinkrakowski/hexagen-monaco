@@ -76,6 +76,7 @@ describe("sync-integrity workflow content", () => {
       ),
     );
     assert.ok(SYNC_INTEGRITY_WORKFLOW.includes("yarn hexagen-lint --ratchet"));
+    assert.match(SYNC_INTEGRITY_WORKFLOW, /pull-requests:\s*write/);
     assert.match(SYNC_INTEGRITY_WORKFLOW, /0\.10\.0 unpublished/);
     assert.ok(!SYNC_INTEGRITY_WORKFLOW.includes("v0.9.0"));
   });
@@ -154,6 +155,10 @@ describe("vendored hexagen-conformance action stays aligned with the in-repo act
       assert.ok(blob.includes("<!-- hexagen-conformance -->"));
       assert.ok(blob.includes("page="), "comment lookup must paginate");
       assert.ok(blob.includes("!body.trim()"), "clean PRs must stay silent");
+      assert.ok(
+        blob.includes("!body.includes(MARKER)"),
+        "posted bodies must own the marker",
+      );
     }
   });
 });

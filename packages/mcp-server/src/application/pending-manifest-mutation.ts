@@ -107,20 +107,43 @@ async function applyAddDependency(
     targetModule: input.targetModule,
   });
   if (!result.success) throw result.error;
-  ports.eventBus.publish({
-    type: "DependencyAdded",
-    payload: {
-      source: input.sourceModule,
-      target: input.targetModule,
-      relationship: "depends_on",
-    },
-    timestamp: Date.now(),
-    source: "mcp-server",
-  });
+  if (result.value.updated) {
+    ports.eventBus.publish({
+      type: "DependencyAdded",
+      payload: {
+        source: input.sourceModule,
+        target: input.targetModule,
+        relationship: "depends_on",
+      },
+      timestamp: Date.now(),
+      source: "mcp-server",
+    });
+  }
   return {
-    message: "Dependency updated.",
+    message: result.value.updated
+      ? "Dependency updated."
+      : "Dependency already present.",
     details: { updated: result.value.updated },
   };
+}
+
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+async function compensateCreatedFiles(
+  scaffolding: ScaffoldingPort,
+  paths: string[],
+  cause: unknown,
+): Promise<void> {
+  const unique = [...new Set(paths.filter((p) => p.length > 0))];
+  if (unique.length === 0) return;
+  const compensated = await scaffolding.deleteCreatedFiles(unique);
+  if (!compensated.success) {
+    throw new Error(
+      `${asError(cause).message}; also failed to compensate scaffolded files: ${asError(compensated.error).message}`,
+    );
+  }
 }
 
 async function applyCreatePort(
@@ -138,7 +161,14 @@ async function applyCreatePort(
     portName: input.port_name,
     direction: input.type === "inbound" ? "in" : "out",
   });
-  if (!registerResult.success) throw registerResult.error;
+  if (!registerResult.success) {
+    await compensateCreatedFiles(
+      ports.scaffolding,
+      [fileResult.value.fileCreated],
+      registerResult.error,
+    );
+    throw asError(registerResult.error);
+  }
   return {
     message: `Port ${input.port_name} created and registered in manifest.`,
     details: { fileCreated: fileResult.value.fileCreated },
@@ -159,7 +189,14 @@ async function applyCreateAdapter(
     adapterName: input.port_name.replace(/Port$/, "") + "Adapter",
     portName: input.port_name,
   });
-  if (!registerResult.success) throw registerResult.error;
+  if (!registerResult.success) {
+    await compensateCreatedFiles(
+      ports.scaffolding,
+      [fileResult.value.fileCreated],
+      registerResult.error,
+    );
+    throw asError(registerResult.error);
+  }
   return {
     message: `Adapter for ${input.port_name} created and registered in manifest.`,
     details: { fileCreated: fileResult.value.fileCreated },
@@ -176,16 +213,18 @@ async function applyRemovePort(
     direction: input.direction === "inbound" ? "in" : "out",
   });
   if (!result.success) throw result.error;
-  ports.eventBus.publish({
-    type: "PortRemoved",
-    payload: {
-      contextName: input.context_name,
-      portName: input.port_name,
-      direction: input.direction,
-    },
-    timestamp: Date.now(),
-    source: "mcp-server",
-  });
+  if (result.value.removed) {
+    ports.eventBus.publish({
+      type: "PortRemoved",
+      payload: {
+        contextName: input.context_name,
+        portName: input.port_name,
+        direction: input.direction,
+      },
+      timestamp: Date.now(),
+      source: "mcp-server",
+    });
+  }
   return {
     message: result.value.removed
       ? `Port ${input.port_name} removed from ${input.context_name}.`
@@ -202,12 +241,14 @@ async function applyRemoveContext(
     contextName: input.context_name,
   });
   if (!result.success) throw result.error;
-  ports.eventBus.publish({
-    type: "ContextRemoved",
-    payload: { contextName: input.context_name },
-    timestamp: Date.now(),
-    source: "mcp-server",
-  });
+  if (result.value.removed) {
+    ports.eventBus.publish({
+      type: "ContextRemoved",
+      payload: { contextName: input.context_name },
+      timestamp: Date.now(),
+      source: "mcp-server",
+    });
+  }
   return {
     message: result.value.removed
       ? `Context ${input.context_name} removed from manifest.`
@@ -229,7 +270,14 @@ async function applyScaffoldModule(
     name: input.name,
     type: input.context_type ?? "core",
   });
-  if (!registerResult.success) throw registerResult.error;
+  if (!registerResult.success) {
+    await compensateCreatedFiles(
+      ports.scaffolding,
+      scaffoldResult.value.filesCreated,
+      registerResult.error,
+    );
+    throw asError(registerResult.error);
+  }
   ports.eventBus.publish({
     type: "ModuleScaffolded",
     payload: { moduleName: input.name, layer: input.layer },

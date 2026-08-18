@@ -96,6 +96,10 @@ class SyncEngineFake implements ArchitectureQueryPort, ScaffoldingPort {
       value: { fileCreated: `adapters/${command.portName}.adapter.ts` },
     };
   }
+
+  async deleteCreatedFiles(paths: string[]) {
+    return { success: true as const, value: { deleted: [...paths] } };
+  }
 }
 
 class LinterFake implements LinterPort {
@@ -111,6 +115,8 @@ class LinterFake implements LinterPort {
 }
 
 class ManifestWriteFake implements ManifestWritePort {
+  addDependencyCalls = 0;
+
   async validateDependency(_command: AddDependencyCommand) {
     void _command;
     return { success: true as const, value: { valid: true, errors: [] } };
@@ -118,6 +124,7 @@ class ManifestWriteFake implements ManifestWritePort {
 
   async addDependency(_command: AddDependencyCommand) {
     void _command;
+    this.addDependencyCalls += 1;
     return { success: true as const, value: { updated: true } };
   }
 
@@ -208,6 +215,7 @@ describe("use cases", () => {
     });
     assert.strictEqual(dependencyResult.updated, false);
     assert.strictEqual(dependencyResult.pendingApproval, true);
+    assert.strictEqual(manifestWrite.addDependencyCalls, 0);
   });
 
   it("should propose a port without writing", async () => {
