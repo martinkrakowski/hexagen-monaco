@@ -1,16 +1,16 @@
-import type { EventBusPort } from "@hexagen/messaging";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
+import {
+  PENDING_MANIFEST_MUTATION_KEY,
+  type PendingManifestMutation,
+} from "../pending-manifest-mutation.js";
 import type {
   RemoveContextInput,
   RemoveContextOutput,
   RemoveContextToolPort,
 } from "../ports/in/remove-context-tool.port.js";
-import type { ManifestWritePort } from "../ports/out/manifest-write.port.js";
 
 export class RemoveContextToolUseCase implements RemoveContextToolPort {
-  constructor(
-    private readonly manifestWritePort: ManifestWritePort,
-    private readonly eventBusPort: EventBusPort,
-  ) {}
+  constructor(private readonly transactionManager: TransactionManagerPort) {}
 
   async execute(input: RemoveContextInput): Promise<RemoveContextOutput> {
     if (!input.context_name.trim()) {
@@ -25,29 +25,21 @@ export class RemoveContextToolUseCase implements RemoveContextToolPort {
       };
     }
 
-    const result = await this.manifestWritePort.removeContext({
-      contextName: input.context_name,
-    });
-
-    if (!result.success) {
-      throw result.error;
-    }
-
-    this.eventBusPort.publish({
-      type: "ContextRemoved",
-      payload: {
-        contextName: input.context_name,
-      },
-      timestamp: Date.now(),
-      source: "mcp-server",
-    });
+    const mutation: PendingManifestMutation = {
+      kind: "remove-context",
+      input,
+    };
+    const tx = this.transactionManager.begin(
+      `mcp:remove-context:${input.context_name}`,
+      { [PENDING_MANIFEST_MUTATION_KEY]: mutation },
+    );
 
     return {
       dryRun: false,
-      removed: result.value.removed,
-      message: result.value.removed
-        ? `Context ${input.context_name} removed from manifest.`
-        : `Context ${input.context_name} was not found in manifest.`,
+      removed: false,
+      pendingApproval: true,
+      transactionId: tx.id,
+      message: `Proposed removal of context ${input.context_name}. Accept via hexagen_accept_transaction (${tx.id}) to write the manifest.`,
     };
   }
 }

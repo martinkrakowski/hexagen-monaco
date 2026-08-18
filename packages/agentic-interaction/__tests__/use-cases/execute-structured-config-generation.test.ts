@@ -94,6 +94,21 @@ function createMockTransactionManager(): TransactionManagerPort {
       if (tx) tx.status = "rolled_back";
       return tx as any;
     },
+    fail: (txId: string) => {
+      const tx = transactions.get(txId);
+      if (tx) tx.status = "failed";
+      return tx as any;
+    },
+    compareAndSetStatus: (
+      txId: string,
+      expectedStatus: string,
+      newStatus: string,
+    ) => {
+      const tx = transactions.get(txId);
+      if (!tx || tx.status !== expectedStatus) return null;
+      tx.status = newStatus;
+      return tx as any;
+    },
   } as unknown as TransactionManagerPort;
 }
 

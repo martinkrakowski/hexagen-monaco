@@ -7,6 +7,7 @@ import { InMemoryAddOnMaterializerDouble } from "../doubles/in-memory-add-on-mat
 import { InMemoryProjectWorkspacePortDouble } from "../doubles/in-memory-project-workspace.double.js";
 import type { ExportConfig } from "../../src/application/ports/out/project-exporter.port.js";
 import {
+  HEXAGEN_CONFORMANCE_ACTION_YML_PATH,
   SYNC_INTEGRITY_WORKFLOW,
   SYNC_INTEGRITY_WORKFLOW_PATH,
 } from "../../src/domain/sync-integrity-workflow.js";
@@ -69,6 +70,7 @@ describe("GenerateProjectUseCase — driven through an in-memory workspace", () 
       workspace.entries.get(SYNC_INTEGRITY_WORKFLOW_PATH),
       SYNC_INTEGRITY_WORKFLOW,
     );
+    assert.ok(workspace.entries.has(HEXAGEN_CONFORMANCE_ACTION_YML_PATH));
     assert.equal(workspace.entries.get("README.md"), "# From add-on");
     assert.equal(
       workspace.entries.get("src/nested/feature.ts"),

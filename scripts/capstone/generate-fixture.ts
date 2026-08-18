@@ -26,6 +26,7 @@ import { ExternalSyncEngineAdapter } from "../../packages/project-generation/src
 import {
   SYNC_INTEGRITY_WORKFLOW,
   SYNC_INTEGRITY_WORKFLOW_PATH,
+  hexagenConformanceActionFiles,
   shouldInjectSyncIntegrityWorkflow,
 } from "../../packages/project-generation/src/domain/sync-integrity-workflow.js";
 import { createInMemoryMaterializer } from "../../packages/template-engine/src/in-memory.js";
@@ -334,6 +335,11 @@ async function main(): Promise<void> {
     const dest = path.join(targetDir, SYNC_INTEGRITY_WORKFLOW_PATH);
     await fs.mkdir(path.dirname(dest), { recursive: true });
     await fs.writeFile(dest, SYNC_INTEGRITY_WORKFLOW, "utf-8");
+    for (const file of hexagenConformanceActionFiles()) {
+      const actionDest = path.join(targetDir, file.path);
+      await fs.mkdir(path.dirname(actionDest), { recursive: true });
+      await fs.writeFile(actionDest, file.content, "utf-8");
+    }
   }
 
   // 3. Add-on materialization, template-overrides-core (mirrors

@@ -74,18 +74,32 @@ export {
 
 export type {
   BaselineEntry,
+  BaselineEntryField,
   BaselineFile,
   PartitionResult,
   ViolationRecord,
 } from "./ratchet-baseline.js";
 export {
+  BASELINE_ENTRY_FIELDS,
   BASELINE_VERSION,
   DEFAULT_BASELINE_RELATIVE_PATH,
+  isSuppressionExpired,
+  mergeSuppressionMetadata,
   parseBaseline,
+  parseExpiresDate,
   partitionAgainstBaseline,
   serializeBaseline,
   violationKey,
 } from "./ratchet-baseline.js";
+
+export type { PrDiffInput, PrDiffResult, Rename } from "./pr-diff.js";
+export {
+  computePrDiff,
+  formatPrComment,
+  parseBaseBaselineText,
+  parseRenameNameStatus,
+  remapEntry,
+} from "./pr-diff.js";
 
 export type { OptionalYamlConfig } from "./optional-yaml-config.js";
 export { loadOptionalYamlConfig } from "./optional-yaml-config.js";

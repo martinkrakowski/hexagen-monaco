@@ -1,4 +1,8 @@
-import type { EventBusPort } from "@hexagen/messaging";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
+import {
+  PENDING_MANIFEST_MUTATION_KEY,
+  type PendingManifestMutation,
+} from "../pending-manifest-mutation.js";
 import type {
   AddDependencyInput,
   AddDependencyOutput,
@@ -9,7 +13,7 @@ import type { ManifestWritePort } from "../ports/out/manifest-write.port.js";
 export class AddDependencyToolUseCase implements AddDependencyToolPort {
   constructor(
     private readonly manifestWritePort: ManifestWritePort,
-    private readonly eventBusPort: EventBusPort,
+    private readonly transactionManager: TransactionManagerPort,
   ) {}
 
   async execute(input: AddDependencyInput): Promise<AddDependencyOutput> {
@@ -34,30 +38,21 @@ export class AddDependencyToolUseCase implements AddDependencyToolPort {
       };
     }
 
-    const applyResult = await this.manifestWritePort.addDependency({
-      sourceModule: input.sourceModule,
-      targetModule: input.targetModule,
-    });
-
-    if (!applyResult.success) {
-      throw applyResult.error;
-    }
-
-    this.eventBusPort.publish({
-      type: "DependencyAdded",
-      payload: {
-        source: input.sourceModule,
-        target: input.targetModule,
-        relationship: "depends_on",
-      },
-      timestamp: Date.now(),
-      source: "mcp-server",
-    });
+    const mutation: PendingManifestMutation = {
+      kind: "add-dependency",
+      input,
+    };
+    const tx = this.transactionManager.begin(
+      `mcp:add-dependency:${input.sourceModule}->${input.targetModule}`,
+      { [PENDING_MANIFEST_MUTATION_KEY]: mutation },
+    );
 
     return {
       dryRun: false,
-      updated: applyResult.value.updated,
-      message: "Dependency updated.",
+      updated: false,
+      pendingApproval: true,
+      transactionId: tx.id,
+      message: `Proposed dependency. Accept via hexagen_accept_transaction (${tx.id}) to write the manifest.`,
     };
   }
 }

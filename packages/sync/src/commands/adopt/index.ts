@@ -116,12 +116,14 @@ export async function adoptCommand(options: {
   yes?: boolean;
   dryRun?: boolean;
   invokeLint?: boolean;
+  force?: boolean;
 }): Promise<void> {
   const result = await runAdopt({
     root: path.resolve(options.root ?? process.cwd()),
     yes: options.yes,
     dryRun: options.dryRun,
     invokeLint: options.invokeLint,
+    force: options.force,
   });
   if (!result.success) {
     console.error(`❌ ${result.error.message}`);

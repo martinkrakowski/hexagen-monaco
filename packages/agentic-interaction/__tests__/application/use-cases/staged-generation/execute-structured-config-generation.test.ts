@@ -35,6 +35,8 @@ const mockTransactionManager: TransactionManagerPort = {
   list: vi.fn(() => []),
   commit: vi.fn(() => null),
   rollback: vi.fn(() => null),
+  fail: vi.fn(() => null),
+  compareAndSetStatus: vi.fn(() => null),
 };
 
 // Mock the LLM port (implements SendStructuredRequestPort)

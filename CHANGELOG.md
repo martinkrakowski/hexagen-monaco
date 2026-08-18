@@ -47,6 +47,22 @@ none of these ever produced output:
   `linter-config.yaml`; **generated projects get an empty allowlist by
   default** (ADR-0054 §4), so a project that needs an exception must state it.
 
+### FDE kit (unpublished 0.10.0 contract)
+
+Not in the published 0.9.0 tarball. Do not assume 0.9.0 has these commands
+or flags; pin the in-repo GitHub Action by commit SHA until 0.10.0 is
+actually published. Do not push a `vX.Y.Z` tag from this work.
+
+- `hexagen report` / `hexagen report --handoff` — HTML/Markdown engagement
+  artifact (context map, drift vs baseline, git ratchet trend, suppression
+  ledger) and a zip of report + manifest + layout + baseline + ledger.
+- `hexagen-lint --ratchet --pr-diff` — per-PR violation comment (silent when
+  clean), rename-aware identity remapping, machine-enforced baseline growth.
+- Baseline entries accept optional `reason` and `expires` (`YYYY-MM-DD`);
+  unknown fields are rejected; expired suppressions fail the gate.
+- Composite action `.github/actions/hexagen-conformance` wraps the linter
+  ratchet + `sync --check`. Generated projects vendor that action.
+
 **A project that passed the linter on 0.9.x can therefore fail on 0.10.0** —
 in `hexagen-lint` directly, in the `architectural-integrity` CI workflow, and
 in `hexagen sync`, which runs the linter for you. The findings are real (they

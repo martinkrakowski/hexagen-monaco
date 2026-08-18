@@ -71,6 +71,16 @@ function createMockTransactionManager(): TransactionManagerPort {
     commit: (transactionId: string) => setStatus(transactionId, "committed"),
     rollback: (transactionId: string) =>
       setStatus(transactionId, "rolled_back"),
+    fail: (transactionId: string) => setStatus(transactionId, "failed"),
+    compareAndSetStatus: (
+      transactionId: string,
+      expectedStatus: TransactionStatus,
+      newStatus: TransactionStatus,
+    ) => {
+      const txn = txns.get(transactionId);
+      if (!txn || txn.status !== expectedStatus) return null;
+      return setStatus(transactionId, newStatus);
+    },
   };
 }
 

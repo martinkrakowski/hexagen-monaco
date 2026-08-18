@@ -28,9 +28,11 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-# Read-only: this workflow lints and publishes nothing.
+# contents:read for checkout. pull-requests:write so the conformance
+# action can comment only THIS PR's new violations (silent when clean).
 permissions:
   contents: read
+  pull-requests: write
 
 # A superseded push doesn't need to finish linting.
 concurrency:
@@ -45,6 +47,7 @@ jobs:
       - name: "Checkout Repository"
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       # Corepack must be enabled BEFORE setup-node: setup-node@v5's environment
@@ -152,8 +155,8 @@ jobs:
 
       # Layer 1. The architecture ratchet (ADR-0054 §1). Fails on any boundary
       # violation NOT already recorded in .architecture/arch-lint-baseline.json;
-      # the 34 accepted entries stay suppressed so `main` is not red-walled
-      # while Waves 5-8 burn them down.
+      # the 4 accepted entries stay suppressed so `main` is not red-walled
+      # while remaining debt is burnt down.
       #
       # The baseline path is passed explicitly even though it is also the CLI
       # default: this step then names the exact file it enforces against, and a
@@ -162,12 +165,9 @@ jobs:
       # linter enforces EVERYTHING and this step goes red — deleting the
       # baseline cannot buy an amnesty.
       #
-      # NOT gated here: baseline GROWTH, and stale entries. A baselined
-      # violation that no longer reproduces is warned about in this step's log
-      # but exits 0 (see reportAndExit in tools/arch-linter/src/cli.ts) — the
-      # file's monotone-decreasing property is review-enforced by ADR-0054 §1,
-      # not machine-enforced. Read the "no longer reproduces" warnings and
-      # delete those lines in the PR that fixed them.
+      # Baseline GROWTH is now machine-enforced on pull_request via --pr-diff
+      # (diff against the base-branch baseline, rename-aware). Stale entries
+      # still warn and exit 0 — delete them in the PR that fixed them.
       #
       # Overlaps sync-integrity.yml's "Verify Architecture (arch-linter,
       # strict)" deliberately. That step shells out to the linter through
@@ -177,4 +177,7 @@ jobs:
       # naming the baseline it enforces. This step invokes the linter directly,
       # names the file, and fails in parallel with that job.
       - name: "Verify Architecture Lint Ratchet"
-        run: yarn lint:arch --baseline .architecture/arch-lint-baseline.json
+        uses: ./.github/actions/hexagen-conformance
+        with:
+          lint-command: yarn lint:arch -- --baseline .architecture/arch-lint-baseline.json --ratchet --pr-diff
+          skip-sync-check: "true"

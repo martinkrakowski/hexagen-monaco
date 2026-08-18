@@ -12,6 +12,7 @@ import type { Project } from "../domain/entities/project.js";
 import {
   SYNC_INTEGRITY_WORKFLOW,
   SYNC_INTEGRITY_WORKFLOW_PATH,
+  hexagenConformanceActionFiles,
   shouldInjectSyncIntegrityWorkflow,
 } from "../domain/sync-integrity-workflow.js";
 import type {
@@ -177,14 +178,16 @@ export class GenerateProjectUseCase {
           input.manifest.monorepo?.packageManager,
         )
       ) {
-        await this.writeIntoWorkspace(
-          workspace,
-          SYNC_INTEGRITY_WORKFLOW_PATH,
-          SYNC_INTEGRITY_WORKFLOW,
-        );
-        project = project.withAdditionalFiles(
-          new Map([[SYNC_INTEGRITY_WORKFLOW_PATH, SYNC_INTEGRITY_WORKFLOW]]),
-        );
+        const injected = new Map<string, string>([
+          [SYNC_INTEGRITY_WORKFLOW_PATH, SYNC_INTEGRITY_WORKFLOW],
+        ]);
+        for (const file of hexagenConformanceActionFiles()) {
+          injected.set(file.path, file.content);
+        }
+        for (const [relPath, content] of injected) {
+          await this.writeIntoWorkspace(workspace, relPath, content);
+        }
+        project = project.withAdditionalFiles(injected);
       }
 
       const addOnsAnswers = input.addOnsAnswers;
