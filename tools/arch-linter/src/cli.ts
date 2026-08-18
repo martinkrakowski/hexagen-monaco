@@ -260,6 +260,21 @@ const layerRules = useOptionalConfig(
   "layer-rules.yaml",
 );
 
+const LAYOUT_CONFIG_PATH = path.join(
+  path.join(ROOT_DIR, ".architecture", "invariants"),
+  "layout.yaml",
+);
+const layoutConfig = (useOptionalConfig(
+  await loadOptionalYamlConfig<{ layers?: string[] }>(
+    LAYOUT_CONFIG_PATH,
+    readUtf8,
+  ),
+  LAYOUT_CONFIG_PATH,
+  "layout.yaml",
+) || {}) as { layers?: string[] };
+const DOMAIN_LAYER = layoutConfig.layers?.[0] || "domain";
+const APPLICATION_LAYER = layoutConfig.layers?.[1] || "application";
+
 const linterConfig = useOptionalConfig(
   await loadOptionalYamlConfig<LinterConfig>(LINTER_CONFIG_PATH, readUtf8),
   LINTER_CONFIG_PATH,
@@ -301,6 +316,18 @@ const baselineEntries = UPDATE_BASELINE ? [] : loadBaseline(BASELINE_PATH);
 
 // ─── TypeScript Project ─────────────────────────────────────────────────────
 
+if (!fs.existsSync(TSCONFIG_PATH)) {
+  logger.error(
+    `Could not find ${path.relative(ROOT_DIR, TSCONFIG_PATH)}. Cannot initialize ts-morph project.`,
+  );
+  process.exit(EXIT_COULD_NOT_RUN);
+}
+if (!fs.existsSync(TSCONFIG_PATH)) {
+  logger.error(
+    `Could not find ${path.relative(ROOT_DIR, TSCONFIG_PATH)}. Cannot initialize ts-morph project.`,
+  );
+  process.exit(EXIT_COULD_NOT_RUN);
+}
 const project = new Project({
   tsConfigFilePath: TSCONFIG_PATH,
 });
@@ -357,6 +384,14 @@ function checkArchitecturalIntegrity() {
   // invariants config remains operative as additional constraints inside
   // isCrossPackageViolation.
   const manifestGrants = buildManifestImportGrants(modules);
+
+  const allSourceFiles = project.getSourceFiles();
+  if (allSourceFiles.length === 0) {
+    logger.error(
+      "NOTHING WAS CHECKED. The TypeScript project reported 0 source files. This usually means the tsconfig.base.json excludes the target directories or the workspace is completely empty.",
+    );
+    process.exit(EXIT_COULD_NOT_RUN);
+  }
 
   modules.forEach((moduleInfo) => {
     const moduleName = moduleInfo.name;
@@ -418,6 +453,7 @@ function checkArchitecturalIntegrity() {
               isCrossPackageViolation(
                 moduleName,
                 moduleSpecifier,
+                importedPkg,
                 SCOPE,
                 linterConfig,
                 manifestGrants,
@@ -439,7 +475,7 @@ function checkArchitecturalIntegrity() {
           }
         }
 
-        if (filePath.includes("/domain/")) {
+        if (filePath.includes(`/${DOMAIN_LAYER}/`)) {
           const allowed = getLayerAllowedImports(filePath, layerRules, SCOPE);
           const domainFinding = (detail: string, rule: string) =>
             record(
@@ -511,7 +547,7 @@ function checkArchitecturalIntegrity() {
           }
         }
 
-        if (filePath.includes("/application/")) {
+        if (filePath.includes(`/${APPLICATION_LAYER}/`)) {
           const allowed = getLayerAllowedImports(filePath, layerRules, SCOPE);
           const applicationFinding = (detail: string, rule: string) =>
             record(

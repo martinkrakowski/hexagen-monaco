@@ -102,6 +102,7 @@ function getPackageRestrictions(
 export function isCrossPackageViolation(
   fromPackage: string,
   moduleSpecifier: string,
+  importedPkg: string,
   scope: string,
   config: LinterConfig,
   grants: ManifestImportGrants,
@@ -112,7 +113,6 @@ export function isCrossPackageViolation(
   if (!moduleSpecifier.startsWith(scope + "/")) return false;
   if (isGlobalWhitelisted(moduleSpecifier, scope, config)) return false;
 
-  const importedPkg = moduleSpecifier.split("/")[1];
   if (!importedPkg || importedPkg === fromPackage) return false;
 
   const { cannotImport, allowedImports, restrictedTo } = getPackageRestrictions(

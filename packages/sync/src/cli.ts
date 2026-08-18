@@ -19,6 +19,7 @@ import { refactorCommander } from "./commands/arch/refactor.js";
 import { manifestCommander } from "./commands/manifest/index.js";
 import { resolveToolchainVersion } from "./toolchain-version.js";
 import type { LoggerPort } from "@hexagen/shared";
+import { bootstrapCommand } from "./commands/bootstrap.js";
 
 function createLogger(): LoggerPort {
   return {
@@ -44,11 +45,6 @@ const logger = createLogger();
 function buildProgram(): Command {
   const program = new Command();
 
-  // PR-A3 (RCA #1): the version is a build-injected constant in dist (tsup
-  // define) and a validated package.json read under src execution — the old
-  // readVersion() helper here silently fell back to "0.0.0", which both lied
-  // in `--version` output and masked the broken-bundle case. A failure to
-  // resolve now crashes the CLI loudly instead of reporting a fake version.
   program
     .name("hexagen")
     .description("HexaGen Monaco — Generate and sync modular monorepos")
@@ -81,10 +77,6 @@ function buildProgram(): Command {
       "Migration-report destination, resolved against the workspace root (absolute paths allowed; parent dirs are created). Real runs default to SYNC-MIGRATION-REPORT.md; --dry-run writes no report unless this is set.",
     )
     .action(async (options) => {
-      // --check is resolved here at the CLI boundary (PR-B2, RCA #5): it is
-      // exactly a --dry-run whose totalOps drives the exit code, so the engine
-      // never learns about it — `run()` reports, the CLI decides (A1 doctrine,
-      // same as the Fatal-error path below).
       const check = options.check ?? false;
       const flags = {
         dryRun: (options.dryRun || options.check) ?? false,
@@ -101,25 +93,12 @@ function buildProgram(): Command {
       try {
         const engine = new SyncEngine(flags);
         const summary = await engine.run();
-        // B-1 (PR-B2 review): a failed-soft generator (caught into
-        // result.error, Wave-2e contract) plans zero ops, so it is invisible
-        // to the drift branch below — without this check a run that could not
-        // even plan a file exited 0 with `Total ops : 0`, on real runs,
-        // --dry-run and --check alike. Errors are a failure, not drift: this
-        // branch applies to EVERY mode (A1 honest-exit doctrine), while the
-        // drift branch stays --check-only.
         if (summary.errors > 0) {
           console.error(
             `Sync incomplete: ${summary.errors} generator failure(s) — see the FAILED row(s) above.`,
           );
           process.exitCode = 1;
         }
-        // A missing manifest is a precondition failure, not drift (it plans
-        // zero ops, so the drift branch below would silently pass it). cwd-first
-        // root resolution (Wave C) makes a wrong-root, manifest-less run
-        // reachable just by standing in the wrong directory — a verification
-        // gate must refuse to certify a tree it never measured. --check only;
-        // plain --dry-run keeps its empty-manifest preview tolerance.
         if (check && summary.manifestMissing) {
           console.error(
             "Manifest not found — `--check` cannot verify drift without a manifest at " +
@@ -138,10 +117,18 @@ function buildProgram(): Command {
         const message =
           err instanceof Error ? err.message : "Unknown fatal error";
         console.error(`Fatal sync error: ${message}`);
-        // exitCode (not process.exit) lets stdio flush and the event loop
-        // drain; the process exits non-zero once teardown completes.
         process.exitCode = 1;
       }
+    });
+
+  // Task 0.2: Bootstrap command
+  program
+    .command("bootstrap")
+    .description(
+      "Bootstrap a new HexaGen architecture manifest from workspaces",
+    )
+    .action(async () => {
+      await bootstrapCommand();
     });
 
   const archCommand = program
@@ -171,7 +158,6 @@ function buildProgram(): Command {
 
   program.addCommand(manifestCommander);
 
-  // hexagen templates list / info
   const templatesCommand = program
     .command("templates")
     .description("Manage and inspect add-on templates");
@@ -190,7 +176,6 @@ function buildProgram(): Command {
       await templateInfoCommand(id);
     });
 
-  // hexagen add <template-id>
   program
     .command("add <ids...>")
     .description("Apply one or more add-on templates to the current project")
@@ -211,7 +196,6 @@ function buildProgram(): Command {
       },
     );
 
-  // hexagen validate templates
   program
     .command("validate-templates")
     .description(
@@ -226,9 +210,6 @@ function buildProgram(): Command {
 
 const program = buildProgram();
 
-// parseAsync (not parse): every subcommand action is async, and parse() does
-// not await them — a rejected action became an unhandled rejection instead of
-// landing in this catch. Top-level await is safe here (ESM, es2022).
 try {
   await program.parseAsync(process.argv);
 } catch (err) {

@@ -59,6 +59,7 @@ describe("isCrossPackageViolation — manifest depends_on (ADR-0043)", () => {
       isCrossPackageViolation(
         "billing",
         "@acme/orders",
+        "orders",
         SCOPE,
         NO_CONFIG,
         grants,
@@ -72,6 +73,7 @@ describe("isCrossPackageViolation — manifest depends_on (ADR-0043)", () => {
       isCrossPackageViolation(
         "billing",
         "@acme/orders/domain/invoice",
+        "orders",
         SCOPE,
         NO_CONFIG,
         grants,
@@ -86,6 +88,7 @@ describe("isCrossPackageViolation — manifest depends_on (ADR-0043)", () => {
       isCrossPackageViolation(
         "orders",
         "@acme/billing",
+        "billing",
         SCOPE,
         NO_CONFIG,
         grants,
@@ -99,6 +102,7 @@ describe("isCrossPackageViolation — manifest depends_on (ADR-0043)", () => {
       isCrossPackageViolation(
         "orders",
         "@acme/billing",
+        "billing",
         SCOPE,
         NO_CONFIG,
         grantsOf([{ name: "billing", type: "core", depends_on: ["orders"] }]),
@@ -121,6 +125,7 @@ describe("isCrossPackageViolation — shared-kernel grant", () => {
       isCrossPackageViolation(
         "billing",
         "@acme/core-domain",
+        "core-domain",
         SCOPE,
         config,
         grants,
@@ -139,6 +144,7 @@ describe("isCrossPackageViolation — invariants config remains operative", () =
       isCrossPackageViolation(
         "billing",
         "@acme/telemetry/traces",
+        "telemetry",
         SCOPE,
         config,
         NO_GRANTS,
@@ -155,6 +161,7 @@ describe("isCrossPackageViolation — invariants config remains operative", () =
       isCrossPackageViolation(
         "billing",
         "@acme/orders",
+        "orders",
         SCOPE,
         config,
         NO_GRANTS,
@@ -171,7 +178,14 @@ describe("isCrossPackageViolation — invariants config remains operative", () =
       package_rules: [{ name: "billing", cannot_import: ["orders"] }],
     };
     assert.equal(
-      isCrossPackageViolation("billing", "@acme/orders", SCOPE, config, grants),
+      isCrossPackageViolation(
+        "billing",
+        "@acme/orders",
+        "orders",
+        SCOPE,
+        config,
+        grants,
+      ),
       true,
     );
   });
@@ -184,6 +198,7 @@ describe("isCrossPackageViolation — invariants config remains operative", () =
       isCrossPackageViolation(
         "billing",
         "@acme/payments",
+        "payments",
         SCOPE,
         config,
         NO_GRANTS,
@@ -194,6 +209,7 @@ describe("isCrossPackageViolation — invariants config remains operative", () =
       isCrossPackageViolation(
         "billing",
         "@acme/orders",
+        "orders",
         SCOPE,
         config,
         NO_GRANTS,
@@ -213,6 +229,7 @@ describe("isCrossPackageViolation — invariants config remains operative", () =
       isCrossPackageViolation(
         "billing",
         "@acme/payments",
+        "payments",
         SCOPE,
         config,
         grants,
@@ -228,6 +245,7 @@ describe("isCrossPackageViolation — non-cross-package cases", () => {
       isCrossPackageViolation(
         "billing",
         "node:path",
+        "",
         SCOPE,
         NO_CONFIG,
         NO_GRANTS,
@@ -238,6 +256,7 @@ describe("isCrossPackageViolation — non-cross-package cases", () => {
       isCrossPackageViolation(
         "billing",
         "@acme/billing/domain",
+        "billing",
         SCOPE,
         NO_CONFIG,
         NO_GRANTS,
@@ -254,6 +273,7 @@ describe("isCrossPackageViolation — non-cross-package cases", () => {
       isCrossPackageViolation(
         "billing",
         "@acme-monaco/foo",
+        "foo",
         SCOPE,
         NO_CONFIG,
         NO_GRANTS,
@@ -267,6 +287,7 @@ describe("isCrossPackageViolation — non-cross-package cases", () => {
       isCrossPackageViolation(
         "billing",
         "@acme/shared",
+        "shared",
         SCOPE,
         NO_CONFIG,
         NO_GRANTS,
@@ -278,6 +299,7 @@ describe("isCrossPackageViolation — non-cross-package cases", () => {
       isCrossPackageViolation(
         "billing",
         "@acme/orders",
+        "orders",
         SCOPE,
         NO_CONFIG,
         NO_GRANTS,
