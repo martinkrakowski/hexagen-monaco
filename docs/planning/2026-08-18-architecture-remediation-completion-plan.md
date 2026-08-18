@@ -5,7 +5,7 @@
 As of 2026-08-17, Phases 0–5 of the architecture remediation arc are **COMPLETE**. The focus now shifts exclusively to concluding the remaining waves (Phases 6, 8, and 7, in that execution order).
 
 - **Phase 6 (Web routes / package fates):** 5 of 7 items complete. Remaining: **6.5 (a–c)** and **6.7 (a–d)**.
-- **Phase 8 (Web/React decomposition + test reality):** 3 of 12 items complete. Remaining: **8.1, 8.2, 8.6–8.9, 8.11, 8.12(a–h)**.
+- **Phase 8 (Web/React decomposition + test reality):** 3 of 12 items complete at the 2026-08-16 runbook snapshot (8.3, 8.4, 8.5). **8.10 (AUD-018) has since landed** in #516 and is not remaining work. Remaining: **8.1, 8.2, 8.6–8.9, 8.11, 8.12(a–h)**.
 - **Phase 7 (Staged-generation decomposition):** 0 of 6 items complete. Has not started.
 
 ## 2. Execution Order & Wave Strategy
@@ -16,7 +16,7 @@ The remaining wavefront is structured into three execution waves based on inter-
 
 Phase 6 must be closed out first.
 
-- **Serial Requirement:** **6.7(b)** (remove frozen no-code packages) must land before **8.10** can be considered fully resolved, as 6.7(b) deletes the mock-testing suites that 8.10 would otherwise rewrite.
+- **Serial Requirement (landed):** **6.7(b)** (#512) deleted the two frozen no-code packages and their echo-fake suites; **8.10** (#516) then purged the remaining six mock-testing suites, retired `EchoFakePort`, and added live-adapter contract tests in `messaging`. Neither item is remaining work.
 - **Parallel Lanes:**
   - **6.5:** `mcp-server` tools onto inbound ports. One PR per tool family: (a) manifest-structure, (b) transaction lifecycle, (c) generation & scaffold.
   - **6.7:** Empty barrels per ADR 0.4: (a) sync generator stops emitting unused layer folders, (c) core-domain/runtime re-export real modules, (d) `tsconfig.base.json` references reconciled.
