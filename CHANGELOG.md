@@ -17,12 +17,14 @@ The minor is the fence. Generated projects pin `^<engine version>` for both
 packages, so a project scaffolded by 0.9.x stays on 0.9.x until someone
 changes that pin on purpose.
 
-### License boundary (ADR-0061)
+### License boundary (ADR-0061, ADR-0066)
 
 Already-published tarballs of `@hexagen-monaco/sync` and
 `@hexagen-monaco/arch-linter` at **≤0.9.0** remain under the Source-Available
-Evaluation License **forever**. From **0.11.0**, those two packages ship under
-FSL-1.1-Apache-2.0.
+Evaluation License **forever**. From **0.11.0**, `@hexagen-monaco/arch-linter`
+ships under FSL-1.1-Apache-2.0. `@hexagen-monaco/sync` stays under the
+Source-Available Evaluation License (ADR-0066). Do not treat a changelog
+correction as a relicense of the published `0.11.0` tarball.
 
 ### ⚠️ Node 20 is no longer supported
 

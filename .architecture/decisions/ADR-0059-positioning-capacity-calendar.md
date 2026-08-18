@@ -4,7 +4,7 @@
 **Status:** Accepted
 **Type:** Product
 **Runbook ID:** D-0
-**Relates to:** [`2026-08-17-fde-gtm-development-runbook.md`](../../docs/planning/2026-08-17-fde-gtm-development-runbook.md) Phase −1; `docs/planning/2026-08-17-remaining-work-summary.md` (untracked architecture-remediation Phases 6–8 inventory); ADR-0060 (D-3), ADR-0061 (D-1)
+**Relates to:** [`2026-08-17-fde-gtm-development-runbook.md`](../../docs/planning/2026-08-17-fde-gtm-development-runbook.md) Phase −1; [`2026-08-18-remaining-work-plan.md`](../../docs/planning/2026-08-18-remaining-work-plan.md) (D-C0); `docs/planning/2026-08-17-remaining-work-summary.md` (point-in-time Phases 6–8 inventory); ADR-0060 (D-3), ADR-0061 (D-1)
 
 > Numbering note: the highest pre-existing record was ADR-0058; this ADR opens the Phase −1 positioning batch (ADR-0059 through ADR-0064). The historical ADR-0009/0010 numbering collisions are not reused.
 
@@ -38,3 +38,17 @@ Rejected alternatives:
 - Reviewers treat positioning PRs as the in-flight work. A remediation PR against a parked phase needs an explicit reopen, not a drive-by.
 - The ratchet baseline, the published-package floor, and the fence already built in Waves 0–5 remain in force. Parking implementation does not park enforcement.
 - Capacity is no longer a planning-doc footnote. Reopening remediation Phases 6–8, or stretching Phase 0, requires amending this ADR.
+
+## Amendment — 2026-08-18: capacity-freed is the resume trigger
+
+Positioning Phases −1, 0 (code), 1, and 2 have landed (`#528`–`#531`, `#533`, `#534`) and shipped as `v0.11.0`. Remaining FDE work is owner-only (Phase 0.3 trial, Phase 1/2 commercial gates). Phase 3 (inference) and Phase 4 (enterprise) stay parked.
+
+**This amendment is the resume.** Remaining architecture-remediation legs (6.5(c), 6.7(a), 6.7(c), Phase 7, remaining 8.12 / 8.1 / 8.2, plus the satellite leftover queue in [`2026-08-18-remaining-work-plan.md`](../../docs/planning/2026-08-18-remaining-work-plan.md)) are the **active engineering calendar**.
+
+**Capacity-freed is the resume trigger.** The original Decision's other two resume conditions — positioning Phase 2's pay-gate ("someone pays for hosted history") and Phase 0's kill criterion ("the engine only lands on Hexagen-generated code") — are **retired as resume triggers**. They remain FDE _product_ gates and do not block engineering. A future reader cannot re-litigate unparking by pointing at an unpaid invoice or a missing trial log.
+
+Consequences of this amendment:
+
+- Reviewers treat remaining-work PRs (Wave A1 and later in the 2026-08-18 plan) as the in-flight engineering. Positioning Phases 3–4 still need an explicit reopen.
+- Parking implementation never parked enforcement. The ratchet, the published-package floor, and Waves 0–5 stay in force.
+- A further calendar flip (re-parking 6–8, or unparking FDE 3–4) requires another amendment to this ADR.

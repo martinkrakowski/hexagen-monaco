@@ -56,6 +56,46 @@ function sanitizeScope(raw: string): string {
   return cleaned.length > 0 ? cleaned : "generated-project";
 }
 
+/** ts-morph globs reject native Windows separators. Folded from the retired Phase-0 module. */
+export function toTsMorphGlob(absPath: string): string {
+  return absPath.replace(/\\/g, "/");
+}
+
+export function resolveWorkspaceSpecifier(
+  specifier: string,
+  packageNames: Iterable<string>,
+): string | undefined {
+  const names = [...packageNames].sort((a, b) => b.length - a.length);
+  for (const name of names) {
+    if (specifier === name || specifier.startsWith(`${name}/`)) {
+      return name;
+    }
+  }
+  return undefined;
+}
+
+export function deriveSystemAndScope(pkgName: string | undefined): {
+  system: string;
+  scope: string;
+} {
+  if (!pkgName || pkgName.trim().length === 0) {
+    return { system: "generated-project", scope: "generated-project" };
+  }
+  if (pkgName.startsWith("@")) {
+    const withoutAt = pkgName.slice(1);
+    const slash = withoutAt.indexOf("/");
+    if (slash === -1) {
+      const scope = sanitizeScope(withoutAt);
+      return { system: scope, scope };
+    }
+    const scope = sanitizeScope(withoutAt.slice(0, slash));
+    const system = withoutAt.slice(slash + 1) || scope;
+    return { system, scope };
+  }
+  const scope = sanitizeScope(pkgName);
+  return { system: pkgName, scope };
+}
+
 async function readAnswers(
   options: BootstrapOptions,
 ): Promise<Result<BootstrapAnswers | null, Error>> {
