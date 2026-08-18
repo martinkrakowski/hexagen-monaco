@@ -45,6 +45,16 @@ const silentGit: GitReader = {
 };
 
 describe("parseReportBaseline", () => {
+  it("parses a version-1 entry with a non-empty specifier", () => {
+    const parsed = parseReportBaseline(
+      '{"version":1,"entries":[{"rule":"r","file":"a.ts","specifier":"zod"}]}',
+    );
+    assert.deepEqual(parsed, {
+      version: 1,
+      entries: [{ rule: "r", file: "a.ts", specifier: "zod" }],
+    });
+  });
+
   it("accepts an empty specifier used for non-import findings", () => {
     const parsed = parseReportBaseline(
       '{"version":1,"entries":[{"rule":"r","file":"a.ts","specifier":""}]}',

@@ -1101,8 +1101,16 @@ function writeBaseline(violations: ViolationRecord[]): void {
     }
   }
   const merged = mergeSuppressionMetadata(violations, previous);
-  fs.mkdirSync(path.dirname(BASELINE_PATH), { recursive: true });
-  fs.writeFileSync(BASELINE_PATH, serializeBaseline(merged), "utf8");
+  try {
+    fs.mkdirSync(path.dirname(BASELINE_PATH), { recursive: true });
+    fs.writeFileSync(BASELINE_PATH, serializeBaseline(merged), "utf8");
+  } catch (e) {
+    logger.error(
+      `FATAL ERROR: --update-baseline could not write ${BASELINE_PATH}`,
+    );
+    logger.error(`  ${(e as Error).message}`);
+    process.exit(EXIT_COULD_NOT_RUN);
+  }
   logger.info(
     `Wrote ${merged.length} violation(s) to ${path.relative(ROOT_DIR, BASELINE_PATH)}. Review the diff: this file may only shrink.`,
   );

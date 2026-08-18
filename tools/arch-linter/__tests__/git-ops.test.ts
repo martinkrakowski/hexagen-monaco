@@ -11,6 +11,7 @@ import {
   resolveBaseRef,
   showFileAtRef,
   stagedDiffArgs,
+  stagedFiles,
 } from "../src/git-ops.js";
 
 describe("resolveBaseRef", () => {
@@ -40,6 +41,35 @@ describe("resolveBaseRef", () => {
 describe("stagedDiffArgs", () => {
   it("asks git for paths relative to cwd so --staged matches ROOT_DIR keys", () => {
     assert.ok(stagedDiffArgs().includes("--relative"));
+    assert.ok(stagedDiffArgs().includes("-z"));
+  });
+});
+
+describe("stagedFiles", () => {
+  it("keeps leading spaces, trailing spaces, and newlines in staged paths", () => {
+    const tmp = mkdtempSync(path.join(os.tmpdir(), "hexagen-git-staged-"));
+    try {
+      execFileSync("git", ["init"], { cwd: tmp, stdio: "ignore" });
+      execFileSync("git", ["config", "user.email", "t@example.com"], {
+        cwd: tmp,
+        stdio: "ignore",
+      });
+      execFileSync("git", ["config", "user.name", "t"], {
+        cwd: tmp,
+        stdio: "ignore",
+      });
+      const names = [" leading.txt", "trailing.txt ", "has\nnewline.txt"];
+      for (const name of names) {
+        writeFileSync(path.join(tmp, name), "x\n");
+      }
+      execFileSync("git", ["add", "--", ...names], {
+        cwd: tmp,
+        stdio: "ignore",
+      });
+      assert.deepEqual(stagedFiles(tmp).sort(), [...names].sort());
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });
 

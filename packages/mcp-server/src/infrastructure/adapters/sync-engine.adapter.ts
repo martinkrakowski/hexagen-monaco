@@ -24,16 +24,47 @@ function toKebabCase(input: string): string {
     .toLowerCase();
 }
 
-function resolveInsideWorkspace(
+function isStrictDescendant(rootReal: string, candidate: string): boolean {
+  return candidate.startsWith(rootReal + path.sep);
+}
+
+async function resolveInsideWorkspace(
   workspaceRoot: string,
   relativePath: string,
-): string | null {
+): Promise<string | null> {
   const trimmed = relativePath.trim();
   if (!trimmed || path.isAbsolute(trimmed)) return null;
-  const root = path.resolve(workspaceRoot);
-  const resolved = path.resolve(root, trimmed);
-  if (resolved === root || !resolved.startsWith(root + path.sep)) return null;
-  return resolved;
+  let rootReal: string;
+  try {
+    rootReal = await fs.realpath(workspaceRoot);
+  } catch {
+    return null;
+  }
+  const lexical = path.resolve(rootReal, trimmed);
+  if (!isStrictDescendant(rootReal, lexical)) return null;
+
+  // Physical parent: `link/file.ts` must not delete a target outside
+  // the workspace when `link` is a symlink.
+  const parent = path.dirname(lexical);
+  let parentReal: string;
+  try {
+    parentReal = await fs.realpath(parent);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return lexical;
+    return null;
+  }
+  if (parentReal !== rootReal && !isStrictDescendant(rootReal, parentReal)) {
+    return null;
+  }
+  const candidate = path.join(parentReal, path.basename(lexical));
+  try {
+    const fileReal = await fs.realpath(candidate);
+    if (!isStrictDescendant(rootReal, fileReal)) return null;
+    return fileReal;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return candidate;
+    return null;
+  }
 }
 
 export class SyncEngineAdapter
@@ -346,7 +377,7 @@ export class SyncEngineAdapter
     try {
       const resolved: { rel: string; abs: string }[] = [];
       for (const rel of paths) {
-        const abs = resolveInsideWorkspace(this.workspaceRoot, rel);
+        const abs = await resolveInsideWorkspace(this.workspaceRoot, rel);
         if (!abs) {
           return {
             success: false,

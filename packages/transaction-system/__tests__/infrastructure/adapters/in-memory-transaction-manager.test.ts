@@ -292,6 +292,12 @@ describe("InMemoryTransactionManager", () => {
         "speculative",
       );
       assert.equal(claimed?.status, "speculative");
+      assert.equal(manager.get(tx.id)?.status, "speculative");
+      assert.equal(
+        manager.compareAndSetStatus(tx.id, "pending", "speculative"),
+        null,
+      );
+      assert.equal(manager.get(tx.id)?.status, "speculative");
     });
 
     it("refuses a terminal source or target", () => {

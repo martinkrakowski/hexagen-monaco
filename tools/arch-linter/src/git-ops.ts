@@ -34,6 +34,7 @@ export function stagedDiffArgs(): string[] {
     "--name-only",
     "--diff-filter=ACMR",
     "--relative",
+    "-z",
   ];
 }
 
@@ -42,10 +43,7 @@ export function stagedFiles(root: string): string[] {
   if (!result.ok) {
     throw new Error(`--staged requires a git work tree: ${result.message}`);
   }
-  return result.text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
+  return result.text.split("\0").filter((line) => line.length > 0);
 }
 
 export type ShowFileResult =
