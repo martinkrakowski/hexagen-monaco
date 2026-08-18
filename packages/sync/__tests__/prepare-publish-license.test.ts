@@ -76,8 +76,11 @@ describe("prepare-publish-package LICENSE staging", () => {
     }
   });
 
-  it("fails when the package-local LICENSE is empty or whitespace", async () => {
-    const dir = await makeFixture({ license: "   \n  " });
+  it.each([
+    { label: "empty", license: "" },
+    { label: "whitespace-only", license: "   \n  " },
+  ])("fails when the package-local LICENSE is $label", async ({ license }) => {
+    const dir = await makeFixture({ license });
     try {
       let threw = false;
       try {
@@ -91,14 +94,14 @@ describe("prepare-publish-package LICENSE staging", () => {
         assert.equal(
           err.status,
           1,
-          "empty LICENSE must be a hard error exit 1",
+          "empty or whitespace-only LICENSE must be a hard error exit 1",
         );
         assert.match(String(err.stderr ?? ""), /is empty or whitespace-only/);
       }
       assert.equal(
         threw,
         true,
-        "staging must not succeed with an empty LICENSE",
+        "staging must not succeed with an empty or whitespace-only LICENSE",
       );
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
