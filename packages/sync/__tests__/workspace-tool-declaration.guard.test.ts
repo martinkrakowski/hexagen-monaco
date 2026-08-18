@@ -92,6 +92,109 @@ const NOT_A_PACKAGE_BIN = new Set([
   "docker",
   "git",
   "python3",
+  // Shell grammar — not binaries. Needed once this guard reads .sh / workflow
+  // `run:` lines rather than only package.json script strings.
+  "if",
+  "then",
+  "else",
+  "elif",
+  "fi",
+  "for",
+  "while",
+  "until",
+  "do",
+  "done",
+  "case",
+  "esac",
+  "in",
+  "select",
+  "function",
+  "time",
+  "[[",
+  "[",
+  "]",
+  "]]",
+  "!",
+  "declare",
+  "local",
+  "return",
+  "trap",
+  "read",
+  "source",
+  "set",
+  "unset",
+  "export",
+  "shift",
+  "getopts",
+  "wait",
+  // Host / CI tools. Not node_modules bins; cannot be declared in package.json.
+  "awk",
+  "printf",
+  "command",
+  "type",
+  "curl",
+  "wget",
+  "tar",
+  "gzip",
+  "ssh",
+  "scp",
+  "sudo",
+  "tee",
+  "xargs",
+  "head",
+  "tail",
+  "wc",
+  "sort",
+  "uniq",
+  "tr",
+  "cut",
+  "date",
+  "sleep",
+  "kill",
+  "env",
+  "uname",
+  "dirname",
+  "basename",
+  "readlink",
+  "realpath",
+  "mktemp",
+  "ln",
+  "touch",
+  "stat",
+  "cmp",
+  "diff",
+  "jq",
+  "yq",
+  "kubectl",
+  "helm",
+  "gh",
+  "sha256sum",
+  "md5sum",
+  "envsubst",
+  "actionlint",
+  "continue",
+  "break",
+  "next",
+]);
+
+/**
+ * Bins that are never declared in this repo today. If they appear as the
+ * command in a root script or workflow, that is the T4.4 finding. Tokens that
+ * are neither these nor a root-declared bin (awk variables, `git` subcommands
+ * after a broken split) are ignored — a shell AST is out of scope.
+ */
+const UNDECLARED_PACKAGE_BINS = new Set([
+  "mocha",
+  "jest",
+  "jest-cli",
+  "webpack",
+  "rollup",
+  "esbuild",
+  "nx",
+  "pnpm",
+  "bun",
+  "gulp",
+  "grunt",
 ]);
 
 /**
@@ -239,10 +342,210 @@ function invokedBinaries(command: string): string[] {
     if (!bin) continue;
     // Path-ish invocations (./scripts/x.sh, dist/cli.js) are files, not bins.
     if (bin.includes("/") || bin.includes("\\")) continue;
+    if (bin.startsWith("$") || bin.startsWith("`") || bin.startsWith("("))
+      continue;
     if (NOT_A_PACKAGE_BIN.has(bin)) continue;
     bins.push(bin);
   }
   return bins;
+}
+
+async function walkFiles(
+  dir: string,
+  predicate: (name: string) => boolean,
+): Promise<string[]> {
+  const found: string[] = [];
+  const visit = async (current: string): Promise<void> => {
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await fs.readdir(current, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const absolute = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        await visit(absolute);
+        continue;
+      }
+      if (entry.isFile() && predicate(entry.name)) found.push(absolute);
+    }
+  };
+  await visit(dir);
+  return found;
+}
+
+const rel = (absolute: string) =>
+  path.relative(REPO_ROOT, absolute).split(path.sep).join("/");
+
+/** Shell functions defined in a file so their later calls are not bins. */
+function definedFunctions(source: string): Set<string> {
+  const names = new Set<string>();
+  for (const match of source.matchAll(
+    /^([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)/gm,
+  )) {
+    names.add(match[1]);
+  }
+  for (const match of source.matchAll(
+    /^function\s+([A-Za-z_][A-Za-z0-9_]*)/gm,
+  )) {
+    names.add(match[1]);
+  }
+  return names;
+}
+
+function commandLinesFromShell(source: string): string[] {
+  const logical: string[] = [];
+  let buffer = "";
+  for (const line of source.split("\n")) {
+    const continued = /\\$/.test(line);
+    const piece = continued ? line.slice(0, -1) : line;
+    buffer = buffer ? `${buffer} ${piece.trim()}` : piece;
+    if (!continued) {
+      logical.push(buffer);
+      buffer = "";
+    }
+  }
+  if (buffer) logical.push(buffer);
+  return logical.flatMap((line) => {
+    const withoutComment = line.replace(/(^|\s)#.*$/, "$1");
+    const trimmed = withoutComment.trim();
+    if (!trimmed) return [];
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(trimmed)) return [];
+    if (/^[A-Za-z_][A-Za-z0-9_]*\s*\(\s*\)/.test(trimmed)) return [];
+    if (/^function\s+/.test(trimmed)) return [];
+    return [trimmed];
+  });
+}
+
+/**
+ * Package-bin invocations in a script or workflow `run:` line.
+ *
+ * Stricter than `invokedBinaries`: does not split on a bare `|` / `;` inside
+ * ANSI color assignments, ignores flags and punctuation, and only accepts a
+ * token that could be an npm bin name.
+ */
+function invokedRootBins(command: string): string[] {
+  const bins: string[] = [];
+  for (const segment of command.split(/\s*(?:&&|\|\|)\s*|\s+;\s+|\s+\|\s+/)) {
+    const tokens = segment.trim().split(/\s+/).filter(Boolean);
+    let i = 0;
+    while (i < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i])) i++;
+    const bin = tokens[i];
+    if (!bin) continue;
+    if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(bin)) continue;
+    if (NOT_A_PACKAGE_BIN.has(bin)) continue;
+    bins.push(bin);
+  }
+  return bins;
+}
+
+/**
+ * `run:` steps only. `uses:` is an action, not a package bin.
+ * Block scalars (`|`, `>`) collect following indented lines.
+ */
+function extractWorkflowRunCommands(source: string): string[] {
+  const commands: string[] = [];
+  const lines = source.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(/^(\s*)(?:-\s+)?run:\s*(.*)$/);
+    if (!match) continue;
+    const indent = match[1].length;
+    const rest = match[2];
+    if (/^[|>][+-]?$/.test(rest)) {
+      const block: string[] = [];
+      for (let j = i + 1; j < lines.length; j++) {
+        if (lines[j].trim() === "") {
+          block.push("");
+          continue;
+        }
+        const nextIndent = (lines[j].match(/^(\s*)/) ?? ["", ""])[1].length;
+        if (nextIndent <= indent) break;
+        block.push(lines[j].slice(indent + 2));
+      }
+      commands.push(block.join("\n"));
+      continue;
+    }
+    if (rest) commands.push(rest.replace(/^['"]|['"]$/g, ""));
+  }
+  return commands;
+}
+
+function lintStagedCommands(pkg: { "lint-staged"?: unknown }): string[] {
+  const cfg = pkg["lint-staged"];
+  if (!cfg || typeof cfg !== "object") return [];
+  const commands: string[] = [];
+  for (const value of Object.values(cfg as Record<string, unknown>)) {
+    if (typeof value === "string") commands.push(value);
+    else if (Array.isArray(value)) {
+      for (const entry of value) {
+        if (typeof entry === "string") commands.push(entry);
+      }
+    }
+  }
+  return commands;
+}
+
+function nodeSpawnedCommands(source: string): string[] {
+  const commands: string[] = [];
+  const patterns = [
+    /spawnSync\(\s*["']([^"']+)["']/g,
+    /execSync\(\s*["'`]([^"'`]+)["'`]/g,
+    /\bsh\(\s*["'`]([^"'`]+)["'`]/g,
+  ];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) commands.push(match[1]);
+  }
+  return commands;
+}
+
+async function rootWorkspace(): Promise<Workspace> {
+  const raw = await fs.readFile(path.join(REPO_ROOT, "package.json"), "utf8");
+  const pkg = JSON.parse(raw) as {
+    name?: string;
+    scripts?: Record<string, string>;
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+    peerDependencies?: Record<string, string>;
+  };
+  return {
+    dir: ".",
+    name: pkg.name ?? "hexagen-monaco",
+    scripts: pkg.scripts ?? {},
+    declared: new Set([
+      ...Object.keys(pkg.dependencies ?? {}),
+      ...Object.keys(pkg.devDependencies ?? {}),
+      ...Object.keys(pkg.peerDependencies ?? {}),
+    ]),
+  };
+}
+
+function undeclaredInCommands(
+  commands: string[],
+  available: Set<string>,
+  skip: Set<string>,
+  locator: string,
+  opts: { shellSource?: boolean } = {},
+): string[] {
+  const violations: string[] = [];
+  for (const command of commands) {
+    for (const bin of invokedRootBins(command)) {
+      if (skip.has(bin)) continue;
+      if (
+        opts.shellSource &&
+        !available.has(bin) &&
+        !UNDECLARED_PACKAGE_BINS.has(bin)
+      ) {
+        continue;
+      }
+      if (!available.has(bin)) {
+        violations.push(
+          `${locator} invokes "${bin}" but no root dependency provides it`,
+        );
+      }
+    }
+  }
+  return violations;
 }
 
 describe("workspace tool declaration", () => {
@@ -285,6 +588,138 @@ describe("workspace tool declaration", () => {
       `Workspaces must declare the binaries their scripts invoke.\n` +
         `Relying on hoisting means the script only works under a runner that injects the\n` +
         `root node_modules/.bin (Turbo), and fails under \`yarn workspace <pkg> <script>\`.\n\n` +
+        violations.map((v) => `  - ${v}`).join("\n"),
+    );
+  });
+});
+
+describe("root lint-staged, scripts/, and workflow tool declaration (T4.3 / T4.4)", () => {
+  it("extracts workflow run steps and ignores uses: actions", () => {
+    const source = [
+      "jobs:",
+      "  lint:",
+      "    steps:",
+      "      - uses: actions/checkout@v4",
+      "      - name: one-liner",
+      "        run: eslint --fix",
+      "      - name: block",
+      "        run: |",
+      "          yarn install --immutable",
+      "          mocha --ci",
+      "      - name: quoted",
+      "        run: 'prettier --write .'",
+    ].join("\n");
+    assert.deepEqual(extractWorkflowRunCommands(source), [
+      "eslint --fix",
+      "yarn install --immutable\nmocha --ci",
+      "prettier --write .",
+    ]);
+  });
+
+  it("flags an undeclared package bin and ignores yarn / host tools", () => {
+    const available = new Set(["eslint", "prettier"]);
+    const skip = new Set<string>();
+    assert.deepEqual(
+      undeclaredInCommands(
+        ["eslint --fix", "yarn mocha --ci", "npx jest", "curl -sSfL"],
+        available,
+        skip,
+        "fixture",
+      ),
+      [],
+    );
+    assert.deepEqual(
+      undeclaredInCommands(["mocha --ci"], available, skip, "fixture.yml"),
+      ['fixture.yml invokes "mocha" but no root dependency provides it'],
+    );
+  });
+
+  it("every lint-staged command is a declared root package bin", async () => {
+    const raw = await fs.readFile(path.join(REPO_ROOT, "package.json"), "utf8");
+    const pkg = JSON.parse(raw) as { "lint-staged"?: unknown };
+    const commands = lintStagedCommands(pkg);
+    assert.ok(
+      commands.length > 0,
+      "root package.json has no lint-staged commands — this guard would check nothing",
+    );
+    const root = await rootWorkspace();
+    const available = await declaredBins(root);
+    const violations = undeclaredInCommands(
+      commands,
+      available,
+      new Set(),
+      "package.json lint-staged",
+    );
+    assert.deepEqual(violations, [], violations.join("\n"));
+  });
+
+  it("undeclared binaries in scripts/ and .github/workflows fail", async () => {
+    const scriptFiles = await walkFiles(
+      path.join(REPO_ROOT, "scripts"),
+      (name) => /\.(sh|js|mjs|cjs|ts)$/.test(name),
+    );
+    const workflowFiles = await walkFiles(
+      path.join(REPO_ROOT, ".github", "workflows"),
+      (name) => /\.ya?ml$/.test(name),
+    );
+    assert.ok(
+      scriptFiles.some(
+        (file) => rel(file) === "scripts/validate-ui-boundary.sh",
+      ),
+      `scripts/ discovery found ${scriptFiles.length} files and missed validate-ui-boundary.sh`,
+    );
+    assert.ok(
+      workflowFiles.some((file) => rel(file) === ".github/workflows/lint.yml"),
+      `workflow discovery found ${workflowFiles.length} files and missed lint.yml`,
+    );
+
+    const root = await rootWorkspace();
+    const available = await declaredBins(root);
+    const violations: string[] = [];
+
+    for (const file of scriptFiles) {
+      const source = await fs.readFile(file, "utf8");
+      const skip = definedFunctions(source);
+      const locator = rel(file);
+      if (/\.sh$/.test(file)) {
+        violations.push(
+          ...undeclaredInCommands(
+            commandLinesFromShell(source),
+            available,
+            skip,
+            locator,
+            { shellSource: true },
+          ),
+        );
+      } else {
+        violations.push(
+          ...undeclaredInCommands(
+            nodeSpawnedCommands(source),
+            available,
+            skip,
+            locator,
+          ),
+        );
+      }
+    }
+
+    for (const file of workflowFiles) {
+      const source = await fs.readFile(file, "utf8");
+      violations.push(
+        ...undeclaredInCommands(
+          extractWorkflowRunCommands(source),
+          available,
+          new Set(),
+          rel(file),
+        ),
+      );
+    }
+
+    assert.deepEqual(
+      violations,
+      [],
+      `Root-owned scripts and workflows must invoke declared package bins ` +
+        `(or an allow-listed host/CI tool), not ambient runner PATH.\n\n` +
         violations.map((v) => `  - ${v}`).join("\n"),
     );
   });
