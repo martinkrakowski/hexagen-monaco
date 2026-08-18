@@ -1,5 +1,6 @@
 import type { NextAuthOptions, Profile } from "next-auth";
 import GitHubProvider from "next-auth/providers/github";
+import { createNextAuthAdapter, getPlatformStore } from "../../lib/platform";
 
 // GitHub's OAuth profile includes `login` (username) in addition to `name`
 // (display name). NextAuth's base Profile type does not model this field.
@@ -8,6 +9,9 @@ interface GitHubProfile extends Profile {
 }
 
 export const authOptions: NextAuthOptions = {
+  adapter: createNextAuthAdapter(() => getPlatformStore().auth),
+  session: { strategy: "jwt" },
+  pages: { signIn: "/auth/signin" },
   providers: [
     GitHubProvider({
       clientId: process.env.GITHUB_ID ?? "",

@@ -1,6 +1,6 @@
 # @hexagen-monaco/arch-linter
 
-> Architecture linter for HexaGen Monaco projects — validates your
+> Architecture linter for Hexagen-Monaco projects — validates your
 > `.architecture/manifest.yaml` and enforces Hexagonal-architecture boundaries
 > across a generated monorepo.
 
@@ -26,7 +26,7 @@ It installs a single binary, `hexagen-lint`.
 
 ## Usage
 
-Run it from anywhere inside a HexaGen project:
+Run it from anywhere inside a Hexagen-Monaco project:
 
 ```bash
 npx hexagen-lint
@@ -52,7 +52,19 @@ npx hexagen-lint --baseline ./ci/arch-lint-baseline.json
 
 # (Re)write the baseline from the current run instead of enforcing against it
 npx hexagen-lint --update-baseline
+
+# Explicit ratchet (the default when a baseline file is present).
+# 0.10.0 unpublished contract — not on the published 0.9.0 tarball:
+#   --pr-diff           only this PR's new findings vs the base-branch baseline
+#   --base-ref <ref>    git ref for --pr-diff (or GITHUB_BASE_REF)
+#   --staged            only findings on git-staged files
+#   --json              machine-readable partition on stdout
+#   --comment-file PATH write a PR comment body (empty when clean)
+npx hexagen-lint --ratchet --pr-diff
 ```
+
+Each baseline entry may carry optional `reason` and `expires` (`YYYY-MM-DD`).
+Unknown fields are a parse error. An expired suppression fails the gate.
 
 It exits non-zero on violations, so it drops straight into CI:
 
@@ -180,4 +192,6 @@ cleanly and is treated as a legitimate empty config, not an error.
 
 ## License
 
-Source-Available Evaluation License — proprietary to Krakowski Cloud Solutions, LLC. Free to read, run locally, and evaluate for internal/non-commercial use; **not** licensed for commercial production deployment. See [LICENSE](./LICENSE).
+Licensed under the Functional Source License, Version 1.1, Apache 2.0 Future License (FSL-1.1-Apache-2.0). See [LICENSE](./LICENSE). Internal use — including commercial internal use — is permitted; competing use is not. Each published version converts to Apache-2.0 two years after it is made available. Published tarballs ≤0.9.0 remain under the evaluation license forever.
+
+The Hexagen-Monaco name is a trademark of Krakowski Cloud Solutions, LLC.

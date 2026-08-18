@@ -1,16 +1,16 @@
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
+import {
+  PENDING_MANIFEST_MUTATION_KEY,
+  type PendingManifestMutation,
+} from "../pending-manifest-mutation.js";
 import type {
   CreateAdapterInput,
   CreateAdapterOutput,
   CreateAdapterToolPort,
 } from "../ports/in/create-adapter-tool.port.js";
-import type { ManifestWritePort } from "../ports/out/manifest-write.port.js";
-import type { ScaffoldingPort } from "../ports/out/scaffolding.port.js";
 
 export class CreateAdapterToolUseCase implements CreateAdapterToolPort {
-  constructor(
-    private readonly scaffoldingPort: ScaffoldingPort,
-    private readonly manifestWritePort: ManifestWritePort,
-  ) {}
+  constructor(private readonly transactionManager: TransactionManagerPort) {}
 
   async execute(input: CreateAdapterInput): Promise<CreateAdapterOutput> {
     if (!input.port_name.trim() || !input.infrastructure_name.trim()) {
@@ -28,29 +28,20 @@ export class CreateAdapterToolUseCase implements CreateAdapterToolPort {
       };
     }
 
-    const fileResult = await this.scaffoldingPort.createAdapter({
-      portName: input.port_name,
-      infrastructureName: input.infrastructure_name,
-    });
-
-    if (!fileResult.success) {
-      throw fileResult.error;
-    }
-
-    const registerResult = await this.manifestWritePort.registerAdapter({
-      contextName: input.infrastructure_name,
-      adapterName: input.port_name.replace(/Port$/, "") + "Adapter",
-      portName: input.port_name,
-    });
-
-    if (!registerResult.success) {
-      throw registerResult.error;
-    }
+    const mutation: PendingManifestMutation = {
+      kind: "create-adapter",
+      input,
+    };
+    const tx = this.transactionManager.begin(
+      `mcp:create-adapter:${input.infrastructure_name}/${input.port_name}`,
+      { [PENDING_MANIFEST_MUTATION_KEY]: mutation },
+    );
 
     return {
       dryRun: false,
-      fileCreated: fileResult.value.fileCreated,
-      message: `Adapter for ${input.port_name} created and registered in manifest.`,
+      pendingApproval: true,
+      transactionId: tx.id,
+      message: `Proposed adapter for ${input.port_name}. Accept via hexagen_accept_transaction (${tx.id}) to write the manifest.`,
     };
   }
 }

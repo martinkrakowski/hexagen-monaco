@@ -47,6 +47,10 @@ import { InMemoryEventBusAdapter } from "./infrastructure/adapters/in-memory-eve
 import { OpenAIManifestGenerationAdapter } from "./infrastructure/adapters/manifest-generation.adapter.js";
 import { ReportGovernanceAdapter } from "./infrastructure/adapters/report-governance.adapter.js";
 
+function envOptional(name: string): string | undefined {
+  return process.env[name];
+}
+
 export interface MCPCompositionRoot {
   projectConfigurationReadPort: ProjectConfigurationReadPort;
   governanceReadPort: GovernanceReadPort;
@@ -71,8 +75,8 @@ export function createDefaultMCPCompositionRoot(
   const manifestGenerationPort = new OpenAIManifestGenerationAdapter(
     {
       apiKey: process.env.OPENAI_API_KEY ?? "",
-      baseUrl: process.env.OPENAI_BASE_URL,
-      model: process.env.OPENAI_MODEL,
+      baseUrl: envOptional("OPENAI_BASE_URL"),
+      model: envOptional("OPENAI_MODEL"),
     },
     manifestWritePort,
     eventBusPort,
@@ -120,33 +124,26 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
     root.linterPort,
   );
   const scaffoldModuleToolUseCase = new ScaffoldModuleToolUseCase(
-    root.scaffoldingPort,
-    root.manifestWritePort,
-    root.eventBusPort,
+    root.transactionManagerPort,
   );
   const addDependencyToolUseCase = new AddDependencyToolUseCase(
     root.manifestWritePort,
-    root.eventBusPort,
+    root.transactionManagerPort,
   );
   const createPortToolUseCase = new CreatePortToolUseCase(
-    root.scaffoldingPort,
-    root.manifestWritePort,
+    root.transactionManagerPort,
   );
   const createAdapterToolUseCase = new CreateAdapterToolUseCase(
-    root.scaffoldingPort,
-    root.manifestWritePort,
+    root.transactionManagerPort,
   );
   const removePortToolUseCase = new RemovePortToolUseCase(
-    root.manifestWritePort,
-    root.eventBusPort,
+    root.transactionManagerPort,
   );
   const removeContextToolUseCase = new RemoveContextToolUseCase(
-    root.manifestWritePort,
-    root.eventBusPort,
+    root.transactionManagerPort,
   );
   const createContextToolUseCase = new CreateContextToolUseCase(
-    root.manifestWritePort,
-    root.eventBusPort,
+    root.transactionManagerPort,
   );
   const diffManifestToolUseCase = new DiffManifestToolUseCase(
     root.manifestDiffPort,
@@ -166,6 +163,9 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
   );
   const acceptTransactionToolUseCase = new AcceptTransactionToolUseCase(
     root.transactionManagerPort,
+    root.manifestWritePort,
+    root.scaffoldingPort,
+    root.eventBusPort,
   );
   const rejectTransactionToolUseCase = new RejectTransactionToolUseCase(
     root.transactionManagerPort,

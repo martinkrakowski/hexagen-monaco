@@ -289,6 +289,25 @@ describe("bootstrapCommand", () => {
     assert.equal(manifest.bounded_contexts[0]?.name, "billing");
   });
 
+  it("rejects workspace patterns the expander cannot evaluate", async () => {
+    for (const pattern of ["!packages/legacy", "*", "packages/*/pkg"]) {
+      const root = await fixture({
+        "package.json": JSON.stringify({
+          name: "wild",
+          workspaces: [pattern],
+        }),
+        "packages/billing/package.json": JSON.stringify({ name: "billing" }),
+      });
+      await assert.rejects(
+        () => withCwd(root, () => bootstrapCommand()),
+        /Unsupported workspace pattern/,
+      );
+      await assert.rejects(
+        fs.stat(path.join(root, ".architecture", "manifest.yaml")),
+      );
+    }
+  });
+
   it("fails closed when no workspaces are discovered", async () => {
     const root = await fixture({
       "package.json": JSON.stringify({
@@ -326,7 +345,7 @@ describe("bootstrapCommand", () => {
 
   it.skipIf(SKIP_NON_POSIX)(
     "does not write artifacts when a workspace package.json is unreadable",
-    async () => {
+    async (ctx) => {
       const root = await fixture({
         "package.json": JSON.stringify({
           name: "denied",
@@ -338,7 +357,8 @@ describe("bootstrapCommand", () => {
       await fs.chmod(pkgPath, 0o000);
       try {
         await fs.readFile(pkgPath, "utf8");
-        return; // platform ignored the mode — cannot prove the failure path
+        ctx.skip();
+        return;
       } catch {
         // unreadable as intended
       }

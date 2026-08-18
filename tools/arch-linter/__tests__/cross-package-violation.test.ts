@@ -345,6 +345,10 @@ describe("resolveImportedWorkspace", () => {
       undefined,
     );
     assert.equal(
+      resolveImportedWorkspace("@acme/external", SCOPE, workspaces),
+      undefined,
+    );
+    assert.equal(
       resolveImportedWorkspace("node:fs", SCOPE, workspaces),
       undefined,
     );

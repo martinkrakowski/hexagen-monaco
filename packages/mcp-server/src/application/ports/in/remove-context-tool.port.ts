@@ -11,6 +11,8 @@ export interface RemoveContextOutput {
   dryRun: boolean;
   removed: boolean;
   message: string;
+  pendingApproval?: boolean;
+  transactionId?: string;
 }
 
 export interface RemoveContextToolPort {

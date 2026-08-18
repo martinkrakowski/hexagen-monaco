@@ -179,6 +179,8 @@ function createMockDeps(
     list: () => [],
     commit: () => makeTransaction({ status: "committed" }),
     rollback: () => makeTransaction({ status: "rolled_back" }),
+    fail: () => makeTransaction({ status: "failed" }),
+    compareAndSetStatus: () => makeTransaction({ status: "speculative" }),
   };
 
   return {
@@ -361,6 +363,8 @@ describe("modify-architecture", () => {
         list: () => [],
         commit: () => makeTransaction({ status: "committed" }),
         rollback: () => makeTransaction({ status: "rolled_back" }),
+        fail: () => makeTransaction({ status: "failed" }),
+        compareAndSetStatus: () => makeTransaction({ status: "speculative" }),
       },
     });
     const useCase = new ModifyArchitectureUseCase(deps);

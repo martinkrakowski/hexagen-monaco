@@ -78,8 +78,12 @@ export function findWorkspaceRoot(from: string): string | null {
           workspaces?: unknown;
         };
         if (pkg.workspaces) return current;
-      } catch {
-        // Unreadable or invalid package.json — keep walking.
+      } catch (e) {
+        throw new Error(
+          `Unreadable package.json at ${pkgPath}: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
+        );
       }
     }
     const parent = dirname(current);

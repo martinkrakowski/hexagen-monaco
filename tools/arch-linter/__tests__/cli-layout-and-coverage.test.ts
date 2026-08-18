@@ -154,6 +154,53 @@ describe(
       }
     });
 
+    it("keeps named domain/application roles when the list is reordered", async () => {
+      const root = await createFixture({
+        ".architecture/layout.yaml": "layers:\n  - services\n  - domain\n",
+        "packages/billing/src/domain/entity.ts": `import fs from "node:fs";\nexport const entity = fs;\n`,
+      });
+      try {
+        const r = await runLinter(root);
+        assert.equal(r.code, 1, describeResult(r));
+        assert.match(
+          r.stderr,
+          /node-builtin-in-layer|node:fs/,
+          describeResult(r),
+        );
+      } finally {
+        await cleanup(root);
+      }
+    });
+
+    it("fails closed when a manifest context has no directory", async () => {
+      const root = await createFixture({
+        "packages/billing/src/index.ts": `export const billing = 1;\n`,
+        ".architecture/manifest.yaml": `system: acme-app
+scope: acme
+architecture: modular-monolith
+bounded_contexts:
+  - name: billing
+    type: core
+    description: Billing
+    layers:
+      domain: {}
+  - name: ghost
+    type: core
+    description: Missing
+    layers:
+      domain: {}
+`,
+      });
+      try {
+        const r = await runLinter(root);
+        assert.equal(r.code, 2, describeResult(r));
+        assert.match(r.stderr, /does not exist/, describeResult(r));
+        assert.match(r.stderr, /ghost/, describeResult(r));
+      } finally {
+        await cleanup(root);
+      }
+    });
+
     it("fails closed when a checked module directory matches no source files", async () => {
       const root = await createFixture({
         "packages/billing/README.md": "no typescript here\n",

@@ -234,6 +234,8 @@ export interface GuardMutationOptions {
   maxRequests?: number;
   /** Fixed-window length in ms (default 60_000). */
   windowMs?: number;
+  /** Rate-limit namespace so families do not share one budget. */
+  keyPrefix?: string;
 }
 
 /**
@@ -259,7 +261,11 @@ export function guardMutation(
     );
   }
 
-  const { maxRequests = 20, windowMs = 60_000 } = options;
+  const {
+    maxRequests = 20,
+    windowMs = 60_000,
+    keyPrefix = "mutation",
+  } = options;
   // Namespace the mutation family under its own key so it never shares a budget
   // with the IP-keyed manifest routes or the `chat:`/`extract:` limiters.
   const rate = checkRateLimit(
@@ -267,7 +273,7 @@ export function guardMutation(
     maxRequests,
     windowMs,
     undefined,
-    "mutation",
+    keyPrefix,
   );
   if (!rate.allowed) {
     return NextResponse.json(

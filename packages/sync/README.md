@@ -1,6 +1,6 @@
 # @hexagen-monaco/sync
 
-> The HexaGen Monaco sync engine — a CLI that generates and maintains modular, Hexagonal-architecture monorepos from a single `manifest.yaml`.
+> The Hexagen-Monaco sync engine — a CLI that generates and maintains modular, Hexagonal-architecture monorepos from a single `manifest.yaml`.
 
 ---
 
@@ -15,7 +15,7 @@ pnpm add @hexagen-monaco/sync
 ```
 
 `@hexagen-monaco/sync` ships as a self-contained ESM package with only two runtime
-dependencies (`commander`, `js-yaml`). All internal HexaGen packages
+dependencies (`commander`, `js-yaml`). All internal Hexagen-Monaco packages
 (`@hexagen/governance`, `@hexagen/project-configuration`,
 `@hexagen/shared`, `@hexagen/visualization`) are bundled into the published
 artifact — consumers never see them in their `node_modules`.
@@ -224,4 +224,6 @@ The source `packages/sync/package.json` is never mutated by this process.
 
 ## License
 
-Source-Available Evaluation License — proprietary to Krakowski Cloud Solutions, LLC. Free to read, run locally, and evaluate for internal/non-commercial use; **not** licensed for commercial production deployment. See [LICENSE](./LICENSE).
+Licensed under the Source-Available Evaluation License. See [LICENSE](./LICENSE).
+
+The Hexagen-Monaco name is a trademark of Krakowski Cloud Solutions, LLC.

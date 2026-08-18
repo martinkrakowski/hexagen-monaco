@@ -24,6 +24,49 @@ function toKebabCase(input: string): string {
     .toLowerCase();
 }
 
+function isStrictDescendant(rootReal: string, candidate: string): boolean {
+  return candidate.startsWith(rootReal + path.sep);
+}
+
+async function resolveInsideWorkspace(
+  workspaceRoot: string,
+  relativePath: string,
+): Promise<string | null> {
+  const trimmed = relativePath.trim();
+  if (!trimmed || path.isAbsolute(trimmed)) return null;
+  let rootReal: string;
+  try {
+    rootReal = await fs.realpath(workspaceRoot);
+  } catch {
+    return null;
+  }
+  const lexical = path.resolve(rootReal, trimmed);
+  if (!isStrictDescendant(rootReal, lexical)) return null;
+
+  // Physical parent: `link/file.ts` must not delete a target outside
+  // the workspace when `link` is a symlink.
+  const parent = path.dirname(lexical);
+  let parentReal: string;
+  try {
+    parentReal = await fs.realpath(parent);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return lexical;
+    return null;
+  }
+  if (parentReal !== rootReal && !isStrictDescendant(rootReal, parentReal)) {
+    return null;
+  }
+  const candidate = path.join(parentReal, path.basename(lexical));
+  try {
+    const fileReal = await fs.realpath(candidate);
+    if (!isStrictDescendant(rootReal, fileReal)) return null;
+    return fileReal;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return candidate;
+    return null;
+  }
+}
+
 export class SyncEngineAdapter
   implements ArchitectureQueryPort, ScaffoldingPort
 {
@@ -320,6 +363,42 @@ export class SyncEngineAdapter
           fileCreated: path.relative(this.workspaceRoot, filePath),
         },
       };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error : new Error(String(error)),
+      };
+    }
+  }
+
+  async deleteCreatedFiles(
+    paths: string[],
+  ): Promise<Result<{ deleted: string[] }>> {
+    try {
+      const resolved: { rel: string; abs: string }[] = [];
+      for (const rel of paths) {
+        const abs = await resolveInsideWorkspace(this.workspaceRoot, rel);
+        if (!abs) {
+          return {
+            success: false,
+            error: new Error(
+              `Refusing to delete path outside workspace: ${rel}`,
+            ),
+          };
+        }
+        resolved.push({ rel, abs });
+      }
+      const deleted: string[] = [];
+      for (const { rel, abs } of resolved) {
+        try {
+          await fs.unlink(abs);
+          deleted.push(rel);
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (code !== "ENOENT") throw error;
+        }
+      }
+      return { success: true, value: { deleted } };
     } catch (error) {
       return {
         success: false,

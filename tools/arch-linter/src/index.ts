@@ -55,6 +55,7 @@ export type {
   DomainPackageAllowlistEntry,
   CrossLayerRelativeInput,
   DomainPackageInput,
+  FileLayerResolution,
 } from "./layer-purity-violation.js";
 export {
   DEFAULT_LAYER_NAMES,
@@ -62,6 +63,7 @@ export {
   checkNodeBuiltinInLayer,
   checkNpmPackageInDomain,
   detectLayer,
+  resolveFileHexagonalLayer,
   isDomainPackageAllowed,
   isNodeBuiltinSpecifier,
   isRelativeSpecifier,
@@ -72,23 +74,58 @@ export {
 
 export type {
   BaselineEntry,
+  BaselineEntryField,
   BaselineFile,
   PartitionResult,
   ViolationRecord,
 } from "./ratchet-baseline.js";
 export {
+  BASELINE_ENTRY_FIELDS,
   BASELINE_VERSION,
   DEFAULT_BASELINE_RELATIVE_PATH,
+  isSuppressionExpired,
+  mergeSuppressionMetadata,
   parseBaseline,
+  parseExpiresDate,
   partitionAgainstBaseline,
   serializeBaseline,
   violationKey,
 } from "./ratchet-baseline.js";
 
+export type { PrDiffInput, PrDiffResult, Rename } from "./pr-diff.js";
+export {
+  computePrDiff,
+  formatPrComment,
+  parseBaseBaselineText,
+  parseRenameNameStatus,
+  remapEntry,
+} from "./pr-diff.js";
+
 export type { OptionalYamlConfig } from "./optional-yaml-config.js";
 export { loadOptionalYamlConfig } from "./optional-yaml-config.js";
 
 export { resolveLintScope } from "./resolve-scope.js";
+export {
+  matchingImportScope,
+  resolvedPathIsWorkspaceImport,
+  scopesToTry,
+  unscopedContextImport,
+} from "./resolve-scope.js";
+
+export type {
+  LayoutConfig,
+  ContextLayout,
+  HexagonalLayerName,
+  LayoutParseResult,
+} from "./layout-config.js";
+export {
+  HEXAGONAL_LAYER_NAMES,
+  LayoutConfigSchema,
+  isEmptyLayout,
+  loadLayoutConfig,
+  matchesIgnorePattern,
+  parseLayoutConfig,
+} from "./layout-config.js";
 
 export type { LoggerPort } from "./logger.js";
 export { createConsoleLogger } from "./logger.js";

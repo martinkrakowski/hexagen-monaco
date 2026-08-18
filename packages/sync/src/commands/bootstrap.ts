@@ -149,10 +149,13 @@ async function expandWorkspaceGlob(
   root: string,
   pattern: string,
 ): Promise<Result<string[], Error>> {
+  const supportedWildcard =
+    pattern.endsWith("/*") && !pattern.slice(0, -2).includes("*");
   if (
-    pattern.includes("**") ||
+    pattern.startsWith("!") ||
     pattern.includes("{") ||
-    pattern.includes("[")
+    pattern.includes("[") ||
+    (pattern.includes("*") && !supportedWildcard)
   ) {
     return err(
       new Error(

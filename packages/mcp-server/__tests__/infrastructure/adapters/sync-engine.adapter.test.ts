@@ -69,4 +69,71 @@ describe("SyncEngineAdapter", () => {
       await fs.rm(noManifestDir, { recursive: true, force: true });
     });
   });
+
+  describe("deleteCreatedFiles", () => {
+    it("deletes workspace-relative files created by scaffolding", async () => {
+      const adapter = new SyncEngineAdapter(tmpDir);
+      const created = await adapter.createPort({
+        domainName: "billing",
+        portName: "PayPort",
+        type: "outbound",
+      });
+      assert.equal(created.success, true);
+      if (!created.success) return;
+      const abs = path.join(tmpDir, created.value.fileCreated);
+      await fs.access(abs);
+      const deleted = await adapter.deleteCreatedFiles([
+        created.value.fileCreated,
+      ]);
+      assert.equal(deleted.success, true);
+      if (deleted.success) {
+        assert.deepEqual(deleted.value.deleted, [created.value.fileCreated]);
+      }
+      await assert.rejects(fs.access(abs), { code: "ENOENT" });
+    });
+
+    it("treats a missing file as already compensated", async () => {
+      const adapter = new SyncEngineAdapter(tmpDir);
+      const result = await adapter.deleteCreatedFiles(["gone.ts"]);
+      assert.equal(result.success, true);
+      if (result.success) {
+        assert.deepEqual(result.value.deleted, []);
+      }
+    });
+
+    it("refuses a symlink that points outside the workspace", async () => {
+      const adapter = new SyncEngineAdapter(tmpDir);
+      const outsideDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), "hexagen-mcp-outside-"),
+      );
+      const outsideFile = path.join(outsideDir, "generated.ts");
+      await fs.writeFile(outsideFile, "secret\n", "utf-8");
+      await fs.symlink(outsideDir, path.join(tmpDir, "link"));
+      const result = await adapter.deleteCreatedFiles(["link/generated.ts"]);
+      assert.equal(result.success, false);
+      if (!result.success) {
+        assert.ok(result.error instanceof Error);
+        assert.match(result.error.message, /outside workspace/);
+      }
+      assert.equal(await fs.readFile(outsideFile, "utf-8"), "secret\n");
+      await fs.rm(outsideDir, { recursive: true, force: true });
+    });
+
+    it("refuses a path that escapes the workspace", async () => {
+      const adapter = new SyncEngineAdapter(tmpDir);
+      const outside = path.join(tmpDir, "..", "escape-hexagen.txt");
+      await fs.writeFile(outside, "keep\n", "utf-8");
+      const result = await adapter.deleteCreatedFiles([
+        "../escape-hexagen.txt",
+      ]);
+      assert.equal(result.success, false);
+      if (!result.success) {
+        assert.ok(result.error instanceof Error);
+        assert.match(result.error.message, /outside workspace/);
+      }
+      const kept = await fs.readFile(outside, "utf-8");
+      assert.equal(kept, "keep\n");
+      await fs.rm(outside, { force: true });
+    });
+  });
 });

@@ -1,7 +1,9 @@
-import type { EventBusPort } from "@hexagen/messaging";
 import type { BoundedContextType } from "@hexagen/shared";
-import type { ManifestWritePort } from "../ports/out/manifest-write.port.js";
-import type { ScaffoldingPort } from "../ports/out/scaffolding.port.js";
+import type { TransactionManagerPort } from "@hexagen/transaction-system";
+import {
+  PENDING_MANIFEST_MUTATION_KEY,
+  type PendingManifestMutation,
+} from "../pending-manifest-mutation.js";
 
 export interface ScaffoldModuleInput {
   name: string;
@@ -15,14 +17,12 @@ export interface ScaffoldModuleOutput {
   message: string;
   filesCreated: string[];
   registeredInManifest: boolean;
+  pendingApproval?: boolean;
+  transactionId?: string;
 }
 
 export class ScaffoldModuleToolUseCase {
-  constructor(
-    private readonly scaffoldingPort: ScaffoldingPort,
-    private readonly manifestWritePort: ManifestWritePort,
-    private readonly eventBusPort: EventBusPort,
-  ) {}
+  constructor(private readonly transactionManager: TransactionManagerPort) {}
 
   async execute(input: ScaffoldModuleInput): Promise<ScaffoldModuleOutput> {
     if (!input.name.trim()) {
@@ -38,48 +38,24 @@ export class ScaffoldModuleToolUseCase {
       };
     }
 
-    const scaffoldResult = await this.scaffoldingPort.scaffoldModule({
-      name: input.name,
-      layer: input.layer,
-    });
-
-    if (!scaffoldResult.success) {
-      throw scaffoldResult.error;
-    }
-
-    const registerResult = await this.manifestWritePort.registerBoundedContext({
-      name: input.name,
-      type: input.context_type ?? "core",
-    });
-
-    if (!registerResult.success) {
-      throw registerResult.error;
-    }
-
-    this.eventBusPort.publish({
-      type: "ModuleScaffolded",
-      payload: {
-        moduleName: input.name,
-        layer: input.layer,
+    const mutation: PendingManifestMutation = {
+      kind: "scaffold-module",
+      input,
+    };
+    const tx = this.transactionManager.begin(
+      `mcp:scaffold-module:${input.name}`,
+      {
+        [PENDING_MANIFEST_MUTATION_KEY]: mutation,
       },
-      timestamp: Date.now(),
-      source: "mcp-server",
-    });
-
-    const { filesCreated } = scaffoldResult.value;
-    const { registered, alreadyExisted } = registerResult.value;
-
-    const manifestNote = alreadyExisted
-      ? " (already in manifest)"
-      : registered
-        ? " and registered in manifest"
-        : "";
+    );
 
     return {
       dryRun: false,
-      message: `Scaffolded module ${input.name}${manifestNote}.`,
-      filesCreated,
-      registeredInManifest: registered,
+      message: `Proposed scaffold of module ${input.name}. Accept via hexagen_accept_transaction (${tx.id}) to write the manifest.`,
+      filesCreated: [],
+      registeredInManifest: false,
+      pendingApproval: true,
+      transactionId: tx.id,
     };
   }
 }

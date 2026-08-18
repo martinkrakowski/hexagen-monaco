@@ -18,7 +18,19 @@ import {
   isCrossPackageViolation,
   resolveImportedWorkspace,
 } from "./cross-package-violation.js";
-import { resolveLintScope } from "./resolve-scope.js";
+import {
+  matchingImportScope,
+  resolveLintScope,
+  resolvedPathIsWorkspaceImport,
+  scopesToTry,
+  unscopedContextImport,
+} from "./resolve-scope.js";
+import {
+  isEmptyLayout,
+  loadLayoutConfig,
+  matchesIgnorePattern,
+  type LayoutConfig,
+} from "./layout-config.js";
 import {
   checkUnexpectedMarker,
   checkMissingMarker,
@@ -40,16 +52,30 @@ import {
   checkNodeBuiltinInLayer,
   checkNpmPackageInDomain,
   DEFAULT_LAYER_NAMES,
+  resolveFileHexagonalLayer,
 } from "./layer-purity-violation.js";
 import type { BaselineEntry, ViolationRecord } from "./ratchet-baseline.js";
 import {
   DEFAULT_BASELINE_RELATIVE_PATH,
+  mergeSuppressionMetadata,
   parseBaseline,
   partitionAgainstBaseline,
   serializeBaseline,
 } from "./ratchet-baseline.js";
+import {
+  computePrDiff,
+  formatPrComment,
+  parseBaseBaselineText,
+  parseRenameNameStatus,
+} from "./pr-diff.js";
+import {
+  renameNameStatus,
+  resolveBaseRef,
+  showFileAtRef,
+  stagedFiles,
+} from "./git-ops.js";
 
-const logger = createConsoleLogger();
+const logger = createConsoleLogger(process.argv.includes("--json"));
 
 // ─── Exit-code vocabulary ───────────────────────────────────────────────────
 //
@@ -83,10 +109,14 @@ function findProjectRoot(): string {
     return path.resolve(process.env.HEXAGEN_ROOT);
   }
 
-  // C. Walk up from cwd() to find .architecture/manifest.yaml
+  // C. Walk up from cwd() to find .architecture/manifest.yaml or layout.yaml
   let dir = process.cwd();
   while (dir !== path.dirname(dir)) {
-    if (fs.existsSync(path.join(dir, ".architecture", "manifest.yaml"))) {
+    const archDir = path.join(dir, ".architecture");
+    if (
+      fs.existsSync(path.join(archDir, "manifest.yaml")) ||
+      fs.existsSync(path.join(archDir, "layout.yaml"))
+    ) {
       return dir;
     }
     dir = path.dirname(dir);
@@ -142,7 +172,14 @@ const LINTER_CONFIG_PATH = path.join(
   "invariants",
   "linter-config.yaml",
 );
-const TSCONFIG_PATH = path.join(ROOT_DIR, "tsconfig.base.json");
+const LAYOUT_PATH = path.join(ROOT_DIR, ".architecture", "layout.yaml");
+const tsconfigArgIndex = process.argv.indexOf("--tsconfig");
+const tsconfigArg =
+  tsconfigArgIndex !== -1 ? process.argv[tsconfigArgIndex + 1] : undefined;
+if (tsconfigArgIndex !== -1 && (!tsconfigArg || tsconfigArg.startsWith("-"))) {
+  logger.error("FATAL ERROR: --tsconfig requires a path argument.");
+  process.exit(EXIT_COULD_NOT_RUN);
+}
 
 // ─── Ratchet baseline (ADR-0054 §1) ─────────────────────────────────────────
 //
@@ -172,6 +209,33 @@ const BASELINE_PATH = baselineArg
   ? path.resolve(ROOT_DIR, baselineArg)
   : path.join(ROOT_DIR, ...DEFAULT_BASELINE_RELATIVE_PATH.split("/"));
 const UPDATE_BASELINE = process.argv.includes("--update-baseline");
+// `--ratchet` is the documented public name for the default baseline mode.
+// It is accepted so CI / the composite action can name the contract; the
+// linter already ratchets whenever a baseline file is present.
+const RATCHET = process.argv.includes("--ratchet");
+void RATCHET;
+const STAGED = process.argv.includes("--staged");
+const PR_DIFF = process.argv.includes("--pr-diff");
+const JSON_MODE = process.argv.includes("--json");
+const baseRefArgIndex = process.argv.indexOf("--base-ref");
+const baseRefArg =
+  baseRefArgIndex !== -1 ? process.argv[baseRefArgIndex + 1] : undefined;
+if (baseRefArgIndex !== -1 && (!baseRefArg || baseRefArg.startsWith("-"))) {
+  logger.error("FATAL ERROR: --base-ref requires a git ref argument.");
+  process.exit(EXIT_COULD_NOT_RUN);
+}
+const commentFileArgIndex = process.argv.indexOf("--comment-file");
+const commentFileArg =
+  commentFileArgIndex !== -1
+    ? process.argv[commentFileArgIndex + 1]
+    : undefined;
+if (
+  commentFileArgIndex !== -1 &&
+  (!commentFileArg || commentFileArg.startsWith("-"))
+) {
+  logger.error("FATAL ERROR: --comment-file requires a path argument.");
+  process.exit(EXIT_COULD_NOT_RUN);
+}
 
 // ─── Load Manifest (Strict Mode) ────────────────────────────────────────────
 
@@ -302,9 +366,11 @@ function resolveLayoutLayers(raw: { layers?: unknown }): {
     );
     process.exit(EXIT_COULD_NOT_RUN);
   }
+  const namedDomain = layers.find((layer) => layer === "domain");
+  const namedApplication = layers.find((layer) => layer === "application");
   return {
-    domain: layers[0],
-    application: layers[1] ?? "application",
+    domain: namedDomain ?? layers[0],
+    application: namedApplication ?? layers[1] ?? "application",
     all: layers,
   };
 }
@@ -318,6 +384,27 @@ const linterConfig = useOptionalConfig(
   LINTER_CONFIG_PATH,
   "linter-config.yaml",
 );
+
+const layoutLoad = await loadLayoutConfig(LAYOUT_PATH, readUtf8);
+let layout: LayoutConfig | undefined;
+switch (layoutLoad.kind) {
+  case "missing":
+    layout = undefined;
+    break;
+  case "invalid":
+    logger.error(
+      `FATAL ERROR: layout.yaml exists but could not be loaded from ${LAYOUT_PATH}`,
+    );
+    logger.error(`  ${layoutLoad.reason}`);
+    logger.error(
+      "  Refusing to continue: a misspelled mapping would silently produce a partial report.",
+    );
+    process.exit(EXIT_COULD_NOT_RUN);
+    break;
+  case "loaded":
+    layout = isEmptyLayout(layoutLoad.value) ? undefined : layoutLoad.value;
+    break;
+}
 
 /**
  * Load the committed baseline.
@@ -354,15 +441,35 @@ const baselineEntries = UPDATE_BASELINE ? [] : loadBaseline(BASELINE_PATH);
 
 // ─── TypeScript Project ─────────────────────────────────────────────────────
 
-if (!fs.existsSync(TSCONFIG_PATH)) {
+function resolveTsconfigPath(): string {
+  if (tsconfigArg) return path.resolve(ROOT_DIR, tsconfigArg);
+  if (layout?.tsconfig) return path.resolve(ROOT_DIR, layout.tsconfig);
+  const base = path.join(ROOT_DIR, "tsconfig.base.json");
+  if (fs.existsSync(base)) return base;
+  return path.join(ROOT_DIR, "tsconfig.json");
+}
+
+const TSCONFIG_PATH = resolveTsconfigPath();
+
+let project: Project;
+try {
+  if (!fs.existsSync(TSCONFIG_PATH)) {
+    throw new Error(`tsconfig not found at ${TSCONFIG_PATH}`);
+  }
+  project = new Project({
+    tsConfigFilePath: TSCONFIG_PATH,
+  });
+} catch (e) {
+  const message = e instanceof Error ? e.message : String(e);
   logger.error(
-    `Could not find ${path.relative(ROOT_DIR, TSCONFIG_PATH)}. Cannot initialize ts-morph project.`,
+    `FATAL ERROR: Could not load TypeScript project from ${TSCONFIG_PATH}`,
+  );
+  logger.error(`  ${message}`);
+  logger.error(
+    "  Pass --tsconfig <path>, set layout.yaml `tsconfig:`, or add a tsconfig.json at the project root.",
   );
   process.exit(EXIT_COULD_NOT_RUN);
 }
-const project = new Project({
-  tsConfigFilePath: TSCONFIG_PATH,
-});
 
 // ─── Helper Functions ───────────────────────────────────────────────────────
 
@@ -394,10 +501,69 @@ const LAYER_NAMES: readonly string[] = [
   ]),
 ];
 
-function checkArchitecturalIntegrity() {
+function contextRootAbs(moduleName: string): string {
+  const mapped = layout?.contexts?.[moduleName]?.root;
+  if (mapped) return path.resolve(ROOT_DIR, mapped);
+  return path.join(PKG_ROOT_PATH, moduleName);
+}
+
+function isIgnoredFile(filePath: string): boolean {
+  if (!layout?.ignore || layout.ignore.length === 0) return false;
+  return matchesIgnorePattern(toRelativePosix(filePath), layout.ignore);
+}
+
+function layoutTargetLayerAllowed(
+  importPath: string,
+  allowed: string[],
+): boolean {
+  if (!layout?.contexts) return false;
+  for (const [name, ctx] of Object.entries(layout.contexts)) {
+    const layer = resolveFileHexagonalLayer(importPath, {
+      contextRootAbs: contextRootAbs(name),
+      layerDirs: ctx.layers,
+      layerNames: LAYER_NAMES,
+    });
+    if (layer && allowed.includes(layer)) return true;
+  }
+  return false;
+}
+
+function checkArchitecturalIntegrity(): {
+  errors: ViolationRecord[];
+  filesScanned: number;
+} {
   const errors: ViolationRecord[] = [];
   const warnings: string[] = [];
-  const modules = manifest.bounded_contexts ?? [];
+  const modules: readonly {
+    name: string;
+    type?: string;
+    depends_on?: string[];
+  }[] = manifest.bounded_contexts ?? [];
+  const contextNames = new Set<string>(modules.map((m) => m.name));
+  const extraScopes = [
+    ...(layout?.scopes ?? []),
+    ...Object.values(layout?.contexts ?? {}).flatMap((ctx) => {
+      const pkgJson = path.join(
+        path.resolve(ROOT_DIR, ctx.root),
+        "package.json",
+      );
+      if (!fs.existsSync(pkgJson)) return [];
+      try {
+        const name = (
+          JSON.parse(fs.readFileSync(pkgJson, "utf8")) as { name?: string }
+        ).name;
+        if (typeof name === "string" && name.startsWith("@")) {
+          return [name.slice(1).split("/")[0]];
+        }
+      } catch {
+        return [];
+      }
+      return [];
+    }),
+  ];
+  const importScopes = scopesToTry(resolveLintScope(manifest), extraScopes);
+  const contextRoots = modules.map((m) => contextRootAbs(m.name));
+  let filesScanned = 0;
 
   /** Record a violation. `specifier` is "" for findings with no import. */
   const record = (
@@ -429,10 +595,13 @@ function checkArchitecturalIntegrity() {
 
   modules.forEach((moduleInfo) => {
     const moduleName = moduleInfo.name;
-    const modulePath = path.join(PKG_ROOT_PATH, moduleName);
+    const modulePath = contextRootAbs(moduleName);
 
     if (!fs.existsSync(modulePath)) {
-      return;
+      logger.error(
+        `NOTHING WAS CHECKED for module '${moduleName}'. Manifest declares this context but ${path.relative(ROOT_DIR, modulePath)} does not exist.`,
+      );
+      process.exit(EXIT_COULD_NOT_RUN);
     }
 
     const moduleSourceFiles = project.getSourceFiles().filter((f) => {
@@ -456,6 +625,10 @@ function checkArchitecturalIntegrity() {
       if (filePath.includes("/dist/") || filePath.includes("\\dist\\")) {
         return;
       }
+      if (isIgnoredFile(filePath)) {
+        return;
+      }
+      filesScanned += 1;
 
       const isTestDbl = isTestDoubleOrTest(filePath);
 
@@ -465,10 +638,13 @@ function checkArchitecturalIntegrity() {
 
         if (isTestDbl) return;
 
+        const matchedScope =
+          matchingImportScope(moduleSpecifier, importScopes) ?? SCOPE;
+
         const subpathResult = isSubpathViolation(
           moduleName,
           moduleSpecifier,
-          SCOPE,
+          matchedScope,
           linterConfig,
         );
         if (subpathResult?.violation) {
@@ -487,18 +663,39 @@ function checkArchitecturalIntegrity() {
           return;
         }
 
-        const importedPkg = resolveImportedWorkspace(
-          moduleSpecifier,
-          SCOPE,
-          workspaceNames,
-        );
-        if (importedPkg && importedPkg !== moduleName) {
+        const scopedImport = matchingImportScope(moduleSpecifier, importScopes);
+        const unscopedCandidate = scopedImport
+          ? null
+          : unscopedContextImport(moduleSpecifier, contextNames);
+        const resolvedImportPath = imp
+          .getModuleSpecifierSourceFile()
+          ?.getFilePath();
+        const unscopedImport =
+          unscopedCandidate &&
+          resolvedPathIsWorkspaceImport(resolvedImportPath, contextRoots)
+            ? unscopedCandidate
+            : null;
+        const importedPkg = scopedImport
+          ? resolveImportedWorkspace(
+              moduleSpecifier,
+              scopedImport,
+              workspaceNames,
+            )
+          : (unscopedImport ??
+            resolveImportedWorkspace(moduleSpecifier, SCOPE, workspaceNames));
+        const crossPkgSpecifier = scopedImport
+          ? moduleSpecifier
+          : importedPkg
+            ? `${SCOPE}/${importedPkg}`
+            : null;
+        const crossPkgScope = scopedImport ?? SCOPE;
+        if (importedPkg && importedPkg !== moduleName && crossPkgSpecifier) {
           if (
             isCrossPackageViolation(
               moduleName,
-              moduleSpecifier,
+              crossPkgSpecifier,
               importedPkg,
-              SCOPE,
+              crossPkgScope,
               linterConfig,
               manifestGrants,
             )
@@ -518,8 +715,27 @@ function checkArchitecturalIntegrity() {
           }
         }
 
-        if (filePath.includes(`/${DOMAIN_LAYER}/`)) {
-          const allowed = getLayerAllowedImports(filePath, layerRules, SCOPE);
+        const ctxLayers = layout?.contexts?.[moduleName]?.layers;
+        const fileLayer = ctxLayers
+          ? resolveFileHexagonalLayer(filePath, {
+              contextRootAbs: modulePath,
+              layerDirs: ctxLayers,
+              layerNames: LAYER_NAMES,
+            })
+          : filePath.includes(`/${DOMAIN_LAYER}/`)
+            ? "domain"
+            : filePath.includes(`/${APPLICATION_LAYER}/`)
+              ? "application"
+              : null;
+
+        if (fileLayer === "domain") {
+          const allowed = getLayerAllowedImports(
+            ctxLayers
+              ? path.join(modulePath, "src", fileLayer, "__layout_probe__.ts")
+              : filePath,
+            layerRules,
+            SCOPE,
+          );
           const domainFinding = (detail: string, rule: string) =>
             record(
               rule,
@@ -546,6 +762,8 @@ function checkArchitecturalIntegrity() {
               scope: SCOPE,
               workspacesDir,
               layerNames: LAYER_NAMES,
+              contextRootAbs: modulePath,
+              layerDirs: ctxLayers,
             });
             if (crossLayer) {
               errors.push(domainFinding(crossLayer.detail, crossLayer.rule));
@@ -554,12 +772,13 @@ function checkArchitecturalIntegrity() {
             const sourceFile = imp.getModuleSpecifierSourceFile();
             if (sourceFile) {
               const importPath = sourceFile.getFilePath();
-              const isAllowed = importPathSatisfiesLayers(
-                importPath,
-                allowed,
-                SCOPE,
-                workspacesDir,
-              );
+              const isAllowed =
+                importPathSatisfiesLayers(
+                  importPath,
+                  allowed,
+                  SCOPE,
+                  workspacesDir,
+                ) || layoutTargetLayerAllowed(importPath, allowed);
               if (!isAllowed && !importPath.includes("/node_modules/")) {
                 errors.push(
                   domainFinding(
@@ -576,7 +795,7 @@ function checkArchitecturalIntegrity() {
             const builtin = checkNodeBuiltinInLayer("domain", moduleSpecifier);
             if (builtin) {
               errors.push(domainFinding(builtin.detail, builtin.rule));
-            } else {
+            } else if (!scopedImport && !unscopedImport) {
               const npmPackage = checkNpmPackageInDomain({
                 moduleSpecifier,
                 contextName: moduleName,
@@ -590,8 +809,14 @@ function checkArchitecturalIntegrity() {
           }
         }
 
-        if (filePath.includes(`/${APPLICATION_LAYER}/`)) {
-          const allowed = getLayerAllowedImports(filePath, layerRules, SCOPE);
+        if (fileLayer === "application") {
+          const allowed = getLayerAllowedImports(
+            ctxLayers
+              ? path.join(modulePath, "src", fileLayer, "__layout_probe__.ts")
+              : filePath,
+            layerRules,
+            SCOPE,
+          );
           const applicationFinding = (detail: string, rule: string) =>
             record(
               rule,
@@ -615,6 +840,8 @@ function checkArchitecturalIntegrity() {
               allowed,
               scope: SCOPE,
               workspacesDir,
+              contextRootAbs: modulePath,
+              layerDirs: ctxLayers,
               // Deliberately NOT threading `isSharedKernelAllowed` here. That
               // flag short-circuits `${scope}/shared` to "allowed" for ANY
               // import path, which is sound for a package specifier (the grant
@@ -646,13 +873,14 @@ function checkArchitecturalIntegrity() {
           const sourceFile = imp.getModuleSpecifierSourceFile();
           if (sourceFile) {
             const importPath = sourceFile.getFilePath();
-            const isAllowed = importPathSatisfiesLayers(
-              importPath,
-              allowed,
-              SCOPE,
-              workspacesDir,
-              isSharedKernelAllowed(layerRules),
-            );
+            const isAllowed =
+              importPathSatisfiesLayers(
+                importPath,
+                allowed,
+                SCOPE,
+                workspacesDir,
+                isSharedKernelAllowed(layerRules),
+              ) || layoutTargetLayerAllowed(importPath, allowed);
             if (!isAllowed && !importPath.includes("/node_modules/")) {
               errors.push(
                 applicationFinding(
@@ -669,6 +897,7 @@ function checkArchitecturalIntegrity() {
     moduleSourceFiles.forEach((file) => {
       const filePath = file.getFilePath();
       if (filePath.includes("/dist/") || filePath.includes("\\dist\\")) return;
+      if (isIgnoredFile(filePath)) return;
 
       const fileText = file.getFullText();
       const markerViolation = checkUnexpectedMarker(
@@ -692,7 +921,7 @@ function checkArchitecturalIntegrity() {
   // ─── Server Marker Backward Check (per-package) ───────────────────────────
   modules.forEach((moduleInfo) => {
     const moduleName = moduleInfo.name;
-    const modulePath = path.join(PKG_ROOT_PATH, moduleName);
+    const modulePath = contextRootAbs(moduleName);
     if (!fs.existsSync(modulePath)) return;
 
     const pkgJsonPath = path.join(modulePath, "package.json");
@@ -745,14 +974,20 @@ function checkArchitecturalIntegrity() {
     crossContextEdges,
     PKG_ROOT_PATH,
     (p) => fs.existsSync(p),
+    { advisory: false },
   );
   for (const v of commViolations) {
-    errors.push({
-      rule: "required-communication",
-      file: v.missingPort,
-      specifier: v.transport,
-      message: `Required Communication Violation:\n ${v.message}`,
-    });
+    const message = `Required Communication Violation:\n ${v.message}`;
+    if (v.enforcement === "warn") {
+      warnings.push(message);
+    } else {
+      errors.push({
+        rule: "required-communication",
+        file: v.missingPort,
+        specifier: v.transport,
+        message,
+      });
+    }
   }
 
   if (warnings.length > 0) {
@@ -760,7 +995,7 @@ function checkArchitecturalIntegrity() {
     warnings.forEach((w) => logger.warn(` - ${w}`));
   }
 
-  return errors;
+  return { errors, filesScanned };
 }
 
 // ─── Ratchet reporting ──────────────────────────────────────────────────────
@@ -776,10 +1011,91 @@ function checkArchitecturalIntegrity() {
  * something until it also re-ran the tool.
  */
 function reportAndExit(violations: ViolationRecord[]): void {
-  const { fresh, baselined, stale } = partitionAgainstBaseline(
+  const { fresh, baselined, stale, expired } = partitionAgainstBaseline(
     violations,
     baselineEntries,
   );
+
+  let introduced: ViolationRecord[] = [];
+  let baselineGrowth: BaselineEntry[] = [];
+
+  if (PR_DIFF) {
+    const baseRef = resolveBaseRef(baseRefArg);
+    if (!baseRef) {
+      logger.error(
+        "FATAL ERROR: --pr-diff requires --base-ref or GITHUB_BASE_REF. Refusing to report a clean per-PR diff that never ran.",
+      );
+      process.exit(EXIT_COULD_NOT_RUN);
+    } else {
+      const baselineRel = path
+        .relative(ROOT_DIR, BASELINE_PATH)
+        .split(path.sep)
+        .join("/");
+      const shown = showFileAtRef(ROOT_DIR, baseRef, baselineRel);
+      if (shown.kind === "error") {
+        logger.error(
+          `FATAL ERROR: could not read base-ref baseline at ${baseRef}:${baselineRel}`,
+        );
+        logger.error(`  ${shown.message}`);
+        process.exit(EXIT_COULD_NOT_RUN);
+      }
+      let baseBaseline: BaselineEntry[] = [];
+      try {
+        baseBaseline = parseBaseBaselineText(
+          shown.kind === "ok" ? shown.text : null,
+        );
+      } catch (e) {
+        logger.error(
+          `FATAL ERROR: base-ref baseline at ${baseRef}:${baselineRel} could not be parsed.`,
+        );
+        logger.error(`  ${(e as Error).message}`);
+        process.exit(EXIT_COULD_NOT_RUN);
+      }
+      let renameOutput: string;
+      try {
+        renameOutput = renameNameStatus(ROOT_DIR, baseRef);
+      } catch (e) {
+        logger.error(`FATAL ERROR: ${(e as Error).message}`);
+        process.exit(EXIT_COULD_NOT_RUN);
+      }
+      const renames = parseRenameNameStatus(renameOutput);
+      const pr = computePrDiff({
+        currentViolations: violations,
+        currentBaseline: baselineEntries,
+        baseBaseline,
+        renames,
+      });
+      introduced = pr.introduced;
+      baselineGrowth = pr.baselineGrowth;
+      if (renames.length > 0) {
+        logger.info(
+          `Ratchet --pr-diff: remapped ${renames.length} rename(s) against ${baseRef}.`,
+        );
+      }
+    }
+  }
+
+  if (commentFileArg) {
+    const body = formatPrComment({
+      introduced,
+      baselineGrowth,
+      expired,
+    });
+    fs.writeFileSync(commentFileArg, body ?? "", "utf8");
+  }
+
+  if (JSON_MODE) {
+    process.stdout.write(
+      `${JSON.stringify({
+        fresh,
+        baselined,
+        stale,
+        expired,
+        introduced,
+        baselineGrowth,
+      })}\n`,
+    );
+  }
 
   if (baselined.length > 0) {
     logger.info(
@@ -798,6 +1114,28 @@ function reportAndExit(violations: ViolationRecord[]): void {
     );
   }
 
+  if (expired.length > 0) {
+    logger.error(
+      `Ratchet: ${expired.length} expired suppression${expired.length === 1 ? "" : "s"} — remove or renew them:`,
+    );
+    expired.forEach((entry) =>
+      logger.error(
+        ` - ${entry.rule} ${entry.file}${entry.specifier ? ` (${entry.specifier})` : ""} expired ${entry.expires}${entry.reason ? ` — ${entry.reason}` : ""}`,
+      ),
+    );
+  }
+
+  if (baselineGrowth.length > 0) {
+    logger.error(
+      `Ratchet: baseline grew by ${baselineGrowth.length} ${baselineGrowth.length === 1 ? "entry" : "entries"} against the base branch. The baseline may only shrink:`,
+    );
+    baselineGrowth.forEach((entry) =>
+      logger.error(
+        ` - ${entry.rule} ${entry.file}${entry.specifier ? ` (${entry.specifier})` : ""}`,
+      ),
+    );
+  }
+
   if (fresh.length > 0) {
     logger.error("Architectural Integrity Check Failed. Found violations:");
     fresh.forEach((e) => logger.error(` - ${e.message}`));
@@ -806,6 +1144,9 @@ function reportAndExit(violations: ViolationRecord[]): void {
         "These are NEW violations, measured against the committed baseline. The baseline may only shrink — fix the violation instead of adding an entry.",
       );
     }
+  }
+
+  if (fresh.length > 0 || expired.length > 0 || baselineGrowth.length > 0) {
     process.exit(1);
   }
 
@@ -816,12 +1157,43 @@ function reportAndExit(violations: ViolationRecord[]): void {
   );
 }
 
+function abortIfVacuous(filesScanned: number): void {
+  logger.info(`Files scanned: ${filesScanned}`);
+  if (filesScanned > 0) return;
+  logger.error("FATAL ERROR: Zero resolvable source files were scanned.");
+  logger.error(
+    "  The linter did not check any code — this is not a pass. Check that context directories exist, tsconfig includes them, and layout.yaml roots are correct.",
+  );
+  process.exit(EXIT_COULD_NOT_RUN);
+}
+
 /** `--update-baseline`: rewrite the file from this run, then exit 0. */
 function writeBaseline(violations: ViolationRecord[]): void {
-  fs.mkdirSync(path.dirname(BASELINE_PATH), { recursive: true });
-  fs.writeFileSync(BASELINE_PATH, serializeBaseline(violations), "utf8");
+  let previous: BaselineEntry[] = [];
+  if (fs.existsSync(BASELINE_PATH)) {
+    try {
+      previous = parseBaseline(fs.readFileSync(BASELINE_PATH, "utf8")).entries;
+    } catch (e) {
+      logger.error(
+        `FATAL ERROR: --update-baseline could not parse ${BASELINE_PATH}`,
+      );
+      logger.error(`  ${(e as Error).message}`);
+      process.exit(EXIT_COULD_NOT_RUN);
+    }
+  }
+  const merged = mergeSuppressionMetadata(violations, previous);
+  try {
+    fs.mkdirSync(path.dirname(BASELINE_PATH), { recursive: true });
+    fs.writeFileSync(BASELINE_PATH, serializeBaseline(merged), "utf8");
+  } catch (e) {
+    logger.error(
+      `FATAL ERROR: --update-baseline could not write ${BASELINE_PATH}`,
+    );
+    logger.error(`  ${(e as Error).message}`);
+    process.exit(EXIT_COULD_NOT_RUN);
+  }
   logger.info(
-    `Wrote ${violations.length} violation(s) to ${path.relative(ROOT_DIR, BASELINE_PATH)}. Review the diff: this file may only shrink.`,
+    `Wrote ${merged.length} violation(s) to ${path.relative(ROOT_DIR, BASELINE_PATH)}. Review the diff: this file may only shrink.`,
   );
 }
 
@@ -830,7 +1202,24 @@ function writeBaseline(violations: ViolationRecord[]): void {
 logger.info("Running Architectural Integrity Linter...");
 logger.info(`Project root: ${ROOT_DIR}`);
 logger.info(`Scope: ${SCOPE}`);
-const foundViolations = checkArchitecturalIntegrity();
+const integrity = checkArchitecturalIntegrity();
+const filesScanned = integrity.filesScanned;
+let foundViolations = integrity.errors;
+abortIfVacuous(filesScanned);
+if (STAGED) {
+  let staged: string[];
+  try {
+    staged = stagedFiles(ROOT_DIR);
+  } catch (e) {
+    logger.error(`FATAL ERROR: ${(e as Error).message}`);
+    process.exit(EXIT_COULD_NOT_RUN);
+  }
+  const stagedSet = new Set(staged);
+  foundViolations = foundViolations.filter((v) => stagedSet.has(v.file));
+  logger.info(
+    `Ratchet --staged: ${staged.length} staged path(s), ${foundViolations.length} finding(s) on staged files.`,
+  );
+}
 if (UPDATE_BASELINE) {
   writeBaseline(foundViolations);
 } else {

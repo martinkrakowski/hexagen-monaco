@@ -12,6 +12,10 @@ import { RecordingExporterDouble } from "../doubles/recording-exporter.double.js
 import type { Manifest } from "@hexagen/sync";
 import type { ExportConfig } from "../../src/application/ports/out/project-exporter.port.js";
 import {
+  HEXAGEN_CONFORMANCE_ACTION_YML,
+  HEXAGEN_CONFORMANCE_ACTION_YML_PATH,
+  HEXAGEN_CONFORMANCE_COMMENT_SCRIPT,
+  HEXAGEN_CONFORMANCE_COMMENT_SCRIPT_PATH,
   SYNC_INTEGRITY_WORKFLOW,
   SYNC_INTEGRITY_WORKFLOW_PATH,
 } from "../../src/domain/sync-integrity-workflow.js";
@@ -418,6 +422,14 @@ describe("GenerateProjectUseCase — sync-integrity workflow injection", () => {
     assert.strictEqual(
       recorder.getCapturedFiles().get(SYNC_INTEGRITY_WORKFLOW_PATH),
       SYNC_INTEGRITY_WORKFLOW,
+    );
+    assert.strictEqual(
+      result.value.project.files.get(HEXAGEN_CONFORMANCE_ACTION_YML_PATH),
+      HEXAGEN_CONFORMANCE_ACTION_YML,
+    );
+    assert.strictEqual(
+      recorder.getCapturedFiles().get(HEXAGEN_CONFORMANCE_COMMENT_SCRIPT_PATH),
+      HEXAGEN_CONFORMANCE_COMMENT_SCRIPT,
     );
     // Injection is silent — no warnings/errors.
     assert.strictEqual(result.value.warnings, undefined);

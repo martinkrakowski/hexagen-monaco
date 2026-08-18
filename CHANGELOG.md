@@ -13,6 +13,14 @@ minor is the fence. Generated projects pin `^<engine version>` for both
 packages, so a project scaffolded by 0.9.x stays on 0.9.x until someone
 changes that pin on purpose.
 
+### License boundary (ADR-0061)
+
+Already-published tarballs of `@hexagen-monaco/sync` and
+`@hexagen-monaco/arch-linter` at **≤0.9.0** remain under the Source-Available
+Evaluation License **forever**. From the next release that is actually
+published, those two packages ship under FSL-1.1-Apache-2.0. This note records
+the boundary; it is not itself a release.
+
 ### ⚠️ Node 20 is no longer supported
 
 `engines.node` moves from `>=20` to **`>=22.7.0`** for **both** packages
@@ -38,6 +46,22 @@ none of these ever produced output:
   class reads a declarative `domain_package_allowlist` from
   `linter-config.yaml`; **generated projects get an empty allowlist by
   default** (ADR-0054 §4), so a project that needs an exception must state it.
+
+### FDE kit (unpublished 0.10.0 contract)
+
+Not in the published 0.9.0 tarball. Do not assume 0.9.0 has these commands
+or flags; pin the in-repo GitHub Action by commit SHA until 0.10.0 is
+actually published. Do not push a `vX.Y.Z` tag from this work.
+
+- `hexagen report` / `hexagen report --handoff` — HTML/Markdown engagement
+  artifact (context map, drift vs baseline, git ratchet trend, suppression
+  ledger) and a zip of report + manifest + layout + baseline + ledger.
+- `hexagen-lint --ratchet --pr-diff` — per-PR violation comment (silent when
+  clean), rename-aware identity remapping, machine-enforced baseline growth.
+- Baseline entries accept optional `reason` and `expires` (`YYYY-MM-DD`);
+  unknown fields are rejected; expired suppressions fail the gate.
+- Composite action `.github/actions/hexagen-conformance` wraps the linter
+  ratchet + `sync --check`. Generated projects vendor that action.
 
 **A project that passed the linter on 0.9.x can therefore fail on 0.10.0** —
 in `hexagen-lint` directly, in the `architectural-integrity` CI workflow, and

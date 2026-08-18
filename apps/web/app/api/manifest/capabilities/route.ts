@@ -20,6 +20,8 @@ export type CapabilityProbeResult = {
 /**
  * Resolve which tier can provide an API key for the given provider.
  * Tier chain: env keys → BYOK keys → error
+ *
+ * `hasByokKey` is per-provider: a key stored for OpenAI must not light up Anthropic.
  */
 function resolveTierForProvider(
   provider: ByokProvider,
@@ -80,7 +82,6 @@ export async function GET() {
     });
   }
 
-  // Check if user has any BYOK keys (requires authentication)
   const metadataAdapter = getMetadataAdapter();
   const byokResults = await Promise.all(
     BYOK_PROVIDERS.map((p) => metadataAdapter.findByUserAndProvider(userId, p)),

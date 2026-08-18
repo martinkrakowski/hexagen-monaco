@@ -26,4 +26,9 @@ export interface ScaffoldingPort {
   createAdapter(
     command: CreateAdapterCommand,
   ): Promise<Result<{ fileCreated: string }>>;
+  /**
+   * Compensator for createPort / createAdapter / scaffoldModule.
+   * Deletes only workspace-relative paths previously returned as created.
+   */
+  deleteCreatedFiles(paths: string[]): Promise<Result<{ deleted: string[] }>>;
 }

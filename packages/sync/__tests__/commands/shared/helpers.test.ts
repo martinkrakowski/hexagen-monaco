@@ -242,6 +242,15 @@ describe("findWorkspaceRoot", () => {
     );
     assert.equal(findWorkspaceRoot(nested), nested);
   });
+
+  it("fails loudly when the nearest package.json is unreadable", async () => {
+    await fs.writeFile(
+      path.join(tmpRoot, "package.json"),
+      "{ not json",
+      "utf8",
+    );
+    assert.throws(() => findWorkspaceRoot(tmpRoot), /Unreadable package.json/);
+  });
 });
 
 // ---------------------------------------------------------------------------

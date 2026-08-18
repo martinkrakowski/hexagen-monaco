@@ -63,6 +63,10 @@ import {
 } from "@hexagen/web-driver";
 import { IDBWizardDraftAdapter } from "./adapters/idb-wizard-draft.adapter";
 import { IDBSavedProjectsAdapter } from "./adapters/idb-saved-projects.adapter";
+import {
+  CachedSavedProjectsAdapter,
+  HttpSavedProjectsAdapter,
+} from "./adapters/http-saved-projects.adapter";
 import { IDBEditorWorkspaceAdapter } from "./adapters/idb-editor-workspace.adapter";
 import type { StorageQuotaMonitor } from "@hexagen/web-driver";
 import { getStorageQuotaMonitor as createStorageQuotaMonitor } from "@hexagen/web-driver";
@@ -129,9 +133,12 @@ export const wireDependencies = () => {
     canvasLayoutAdapter satisfies CanvasLayoutPersistencePort,
   );
 
-  // Saved projects persistence port → IDB-backed adapter. The logger surfaces
-  // load-time normalization notices (schema-drift fallbacks / dropped garbage).
-  const savedProjectsAdapter = new IDBSavedProjectsAdapter(createWebLogger());
+  // Saved projects: server sqlite is authoritative; IDB is the local cache.
+  const localSavedProjects = new IDBSavedProjectsAdapter(createWebLogger());
+  const savedProjectsAdapter = new CachedSavedProjectsAdapter(
+    localSavedProjects,
+    new HttpSavedProjectsAdapter(),
+  );
   registry.set(
     PORT_NAMES.SAVED_PROJECTS_PERSISTENCE,
     savedProjectsAdapter satisfies SavedProjectsPersistencePort,

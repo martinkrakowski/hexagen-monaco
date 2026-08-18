@@ -59,7 +59,18 @@ export function ProjectsLandingShell() {
       title="Projects"
       footer={
         <>
-          <span />
+          <div className="flex flex-wrap gap-2">
+            <Link href="/projects/history">
+              <Button variant="outline" size="sm">
+                Run history
+              </Button>
+            </Link>
+            <Link href="/auth/signin">
+              <Button variant="outline" size="sm">
+                Sign in
+              </Button>
+            </Link>
+          </div>
           <Link href="/projects/new">
             <Button size="sm">
               <Plus className="h-4 w-4 mr-2" />

@@ -35,4 +35,10 @@ describe("authOptions GitHub provider", () => {
       `scope "${scope}" is missing "workflow" — published trees may contain .github/workflows/*`,
     );
   });
+
+  it("keeps JWT sessions and a dedicated sign-in page", () => {
+    assert.equal(authOptions.session?.strategy, "jwt");
+    assert.equal(authOptions.pages?.signIn, "/auth/signin");
+    assert.ok(authOptions.adapter);
+  });
 });

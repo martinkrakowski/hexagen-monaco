@@ -204,4 +204,12 @@ describe("checkRequiredCommunication — positive cross-context enforcement", ()
       );
     }
   });
+
+  it("degrades to advisory (warn) when the repo is layout-mapped", () => {
+    const v = checkRequiredCommunication([eventBusEdge], PKG, () => false, {
+      advisory: true,
+    });
+    assert.ok(v.length > 0);
+    assert.ok(v.every((x) => x.enforcement === "warn"));
+  });
 });

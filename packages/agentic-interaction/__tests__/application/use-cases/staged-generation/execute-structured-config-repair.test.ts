@@ -27,6 +27,8 @@ const mockTransactionManager = {
   list: vi.fn(() => []),
   commit: vi.fn(() => null),
   rollback: vi.fn(() => null),
+  fail: vi.fn(() => null),
+  compareAndSetStatus: vi.fn(() => null),
 } as unknown as TransactionManagerPort;
 
 // Stage-6 LLM judge always "passes" — the deterministic R01 (banned context

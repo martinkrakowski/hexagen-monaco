@@ -121,7 +121,7 @@ export function resolveImportedWorkspace(
 
   if (moduleSpecifier.startsWith(`${scope}/`)) {
     const name = moduleSpecifier.slice(scope.length + 1).split("/")[0];
-    return name || undefined;
+    return name && workspaceNames.has(name) ? name : undefined;
   }
 
   if (moduleSpecifier.startsWith("@")) {

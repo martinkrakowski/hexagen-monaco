@@ -372,16 +372,18 @@ describe("ExecuteStructuredConfigGenerationUseCase", () => {
   } as any;
 
   const mockTransactionManager = {
-    begin: async (intentId: string) => ({
+    begin: (intentId: string) => ({
       id: `txn-${intentId}`,
       intentId,
       status: "pending" as const,
     }),
-    transition: async () => {},
-    get: async () => null,
-    list: async () => [],
-    commit: async () => {},
-    rollback: async () => {},
+    transition: () => null,
+    get: () => null,
+    list: () => [],
+    commit: () => null,
+    rollback: () => null,
+    fail: () => null,
+    compareAndSetStatus: () => null,
   } as any;
 
   test("fails with invalid YAML", async () => {

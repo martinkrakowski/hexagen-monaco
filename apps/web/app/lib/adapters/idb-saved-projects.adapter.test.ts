@@ -814,6 +814,22 @@ describe("IDBSavedProjectsAdapter.updateProjectRecord (read-merge-write)", () =>
   });
 });
 
+describe("IDBSavedProjectsAdapter cache owner stamp", () => {
+  beforeEach(() => {
+    idb.store.clear();
+    idb.getDelay = null;
+  });
+
+  it("round-trips an authenticated owner id separately from the project list", async () => {
+    const adapter = new IDBSavedProjectsAdapter();
+    assert.equal(await adapter.getCacheOwner(), null);
+    await adapter.setCacheOwner("owner-a");
+    assert.equal(await adapter.getCacheOwner(), "owner-a");
+    await adapter.setCacheOwner(null);
+    assert.equal(await adapter.getCacheOwner(), null);
+  });
+});
+
 /** Minimal LoggerPort capturing warn messages for salvage-logging assertions. */
 function warnCollector() {
   const warns: string[] = [];

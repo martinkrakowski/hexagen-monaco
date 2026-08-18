@@ -1,6 +1,12 @@
 import { test, vi } from "vitest";
 import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
+
+vi.mock("../../../app/lib/persist-run-telemetry", () => ({
+  persistStageTelemetry: vi.fn(),
+}));
+
+import { persistStageTelemetry } from "../../../app/lib/persist-run-telemetry";
 import { useStagedGenerationStream } from "../useStagedGenerationStream";
 
 const originalFetch = global.fetch;
@@ -342,6 +348,43 @@ test("a stage-telemetry event without a prior stage-start yields a well-formed e
     assert.strictEqual(entry.label, "Manifest Repair");
     assert.ok(Array.isArray(entry.chunks));
     assert.strictEqual(entry.telemetry?.modelName, "openai/gpt-4o");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("one generate() pass shares a single runId across stage-telemetry persists", async () => {
+  const persist = vi.mocked(persistStageTelemetry);
+  persist.mockClear();
+  const telemetry = {
+    durationMs: 5,
+    usedLLM: true,
+    retryCount: 0,
+    inputTokensEstimate: 1,
+    outputTokensActual: 1,
+    servedFromCache: false,
+    summary: "x",
+  };
+  const lines = [
+    `{"type":"stage-telemetry","telemetry":${JSON.stringify({ ...telemetry, stage: 0, label: "A" })}}`,
+    `{"type":"stage-telemetry","telemetry":${JSON.stringify({ ...telemetry, stage: 1, label: "B" })}}`,
+    '{"type":"done","yaml":"m","contextCount":1,"portCount":1,"adapterCount":1}',
+  ];
+  global.fetch = mockFetchWithSSE(lines);
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+    await act(async () => {
+      await result.current.generate({ description: "test" });
+    });
+    assert.equal(persist.mock.calls.length, 2);
+    const first = persist.mock.calls[0]?.[1]?.runId;
+    const second = persist.mock.calls[1]?.[1]?.runId;
+    assert.equal(typeof first, "string");
+    assert.ok(first);
+    assert.equal(first, second);
   } finally {
     global.fetch = originalFetch;
   }
