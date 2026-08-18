@@ -1,6 +1,6 @@
 # @hexagen-monaco/arch-linter
 
-> Architecture linter for HexaGen Monaco projects — validates your
+> Architecture linter for Hexagen-Monaco projects — validates your
 > `.architecture/manifest.yaml` and enforces Hexagonal-architecture boundaries
 > across a generated monorepo.
 
@@ -26,7 +26,7 @@ It installs a single binary, `hexagen-lint`.
 
 ## Usage
 
-Run it from anywhere inside a HexaGen project:
+Run it from anywhere inside a Hexagen-Monaco project:
 
 ```bash
 npx hexagen-lint

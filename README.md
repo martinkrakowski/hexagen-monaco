@@ -377,16 +377,16 @@ Generation stays. If you installed the CLI to scaffold Hexagonal monorepos, that
 
 ## License
 
-Hexagen-Monaco is a three-layer product (ADR-0061).
+Hexagen-Monaco is a three-layer product (ADR-0061, ADR-0066).
 
-**Wedge.** `@hexagen-monaco/arch-linter`, `@hexagen-monaco/sync`, and the future adopt / bootstrap / report commands and CI action are licensed under the [Functional Source License, Version 1.1, Apache 2.0 Future License](./packages/sync/LICENSE) (FSL-1.1-Apache-2.0). Internal use — including commercial internal use — is permitted. Offering a competing product or service on the wedge is not. Each published version converts to Apache-2.0 two years after it is made available.
+**Wedge.** `@hexagen-monaco/arch-linter` and the future adopt / bootstrap / report commands and CI action are licensed under the [Functional Source License, Version 1.1, Apache 2.0 Future License](./tools/arch-linter/LICENSE) (FSL-1.1-Apache-2.0). Internal use — including commercial internal use — is permitted. Offering a competing product or service on the wedge is not. Each published version converts to Apache-2.0 two years after it is made available.
 
-**Platform.** The web app, staged generation, hosted history, and the agent-constraint pack remain proprietary under the [Source-Available Evaluation License](./LICENSE). New packages default to this license unless they are deliberately placed in the wedge.
+**Platform.** `@hexagen-monaco/sync` (the generator), the web app, staged generation, hosted history, and the agent-constraint pack remain proprietary under the [Source-Available Evaluation License](./LICENSE). New packages default to this license unless they are deliberately placed in the wedge.
 
 Already-published npm tarballs at version 0.9.0 and earlier stay on the evaluation license forever. The FSL relicense applies from the next published release.
 
 The **Hexagen-Monaco** name is a trademark of Krakowski Cloud Solutions, LLC and is independent of the code licenses.
 
-For commercial licensing, enterprise support, and assisted brownfield adoption tooling, open a GitHub issue at https://github.com/martinkrakowski/hexagen-monaco/issues with the title prefix `[commercial]`.
+For commercial licensing, enterprise support, and assisted brownfield adoption tooling, open a GitHub issue at https://github.com/martinkrakowski/hexagen-monaco/issues with the title prefix `[commercial]` or email commercial@hexagen.dev.
 
 Maintained by Martin Krakowski
