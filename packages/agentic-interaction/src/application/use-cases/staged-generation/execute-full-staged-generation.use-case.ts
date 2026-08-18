@@ -15,10 +15,6 @@
  * derives stages 0–2 deterministically from a structured config, this
  * orchestrator runs the per-stage LLM use-cases that were written for the
  * staged pipeline but never wired (normalizer-rewire dev plan, A1).
- *
- * NOT yet routed: the live /api/manifest/generate/stage route still runs the
- * inline-prompt stub (ExecuteStagedGenerationUseCase). Cutover is A3
- * (feature flag + canary); this class ships dark in A1.
  */
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";

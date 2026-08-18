@@ -20,11 +20,6 @@ export type CapabilityProbeResult = {
 /**
  * Resolve which tier can provide an API key for the given provider.
  * Tier chain: env keys → BYOK keys → error
- *
- * Note: `hasByokKey` is an aggregate across ALL providers (returns true if user has ANY BYOK key).
- * This means if a user has only an OpenAI BYOK key, the Anthropic row will incorrectly show `hasByokKey: true`.
- * For Phase 1, this is acceptable because `canGenerate` (top-level) is the source of truth for button gating.
- * Phase 2 will refine per-provider cardinality tracking if multi-key support is added.
  */
 function resolveTierForProvider(
   provider: ByokProvider,
@@ -42,10 +37,11 @@ function resolveTierForProvider(
 
 export async function GET() {
   const session = await getServerSession(authOptions);
+  const userId = session?.user?.sub;
 
   // If no session, return minimal capabilities (only server env keys)
   // User may not be authenticated yet; BYOK check requires auth
-  if (!session || !session.user?.sub) {
+  if (!userId) {
     // Check for server-side environment keys (public information)
     const serverKeyEnvVars: Record<ByokProvider, string> = {
       openai: process.env.OPENAI_API_KEY ?? "",
@@ -86,16 +82,27 @@ export async function GET() {
 
   // Check if user has any BYOK keys (requires authentication)
   const metadataAdapter = getMetadataAdapter();
-  const byokResult = await metadataAdapter.hasKeys(session.user.sub);
+  const byokResults = await Promise.all(
+    BYOK_PROVIDERS.map((p) => metadataAdapter.findByUserAndProvider(userId, p)),
+  );
 
-  if (!byokResult.success) {
+  const errorResult = byokResults.find((r) => !r.success);
+  if (errorResult && !errorResult.success) {
     return NextResponse.json(
-      { error: byokResult.error.message },
+      { error: errorResult.error.message },
       { status: 500 },
     );
   }
 
-  const hasByokKeys = byokResult.value;
+  const hasByokKeyMap = BYOK_PROVIDERS.reduce(
+    (acc, p, i) => {
+      const res = byokResults[i];
+      acc[p] =
+        res.success && res.value !== null && res.value.revokedAt === null;
+      return acc;
+    },
+    {} as Record<ByokProvider, boolean>,
+  );
 
   // Check for server-side environment keys
   const serverKeyEnvVars: Record<ByokProvider, string> = {
@@ -108,16 +115,13 @@ export async function GET() {
   const capabilities: CapabilityProbeResult[] = BYOK_PROVIDERS.map(
     (provider) => {
       const hasServerKey = serverKeyEnvVars[provider].length > 0;
-      const status = resolveTierForProvider(
-        provider,
-        hasServerKey,
-        hasByokKeys,
-      );
+      const hasByokKey = hasByokKeyMap[provider];
+      const status = resolveTierForProvider(provider, hasServerKey, hasByokKey);
 
       return {
         provider,
         hasServerKey,
-        hasByokKey: hasByokKeys,
+        hasByokKey,
         status,
       };
     },
