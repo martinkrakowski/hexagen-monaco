@@ -121,7 +121,10 @@ export function resolveImportedWorkspace(
 
   if (moduleSpecifier.startsWith(`${scope}/`)) {
     const name = moduleSpecifier.slice(scope.length + 1).split("/")[0];
-    return name && workspaceNames.has(name) ? name : undefined;
+    // Same-scope `@scope/pkg` is workspace-shaped even when `pkg` is not
+    // yet a declared context. Requiring membership hid `@acme/orders` from
+    // both the cross-package ladder and npm-package-in-domain.
+    return name || undefined;
   }
 
   if (moduleSpecifier.startsWith("@")) {

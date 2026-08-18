@@ -335,7 +335,7 @@ describe("resolveImportedWorkspace", () => {
     );
   });
 
-  it("leaves external packages unresolved", () => {
+  it("leaves other-scope and unscoped npm packages unresolved", () => {
     assert.equal(
       resolveImportedWorkspace("express", SCOPE, workspaces),
       undefined,
@@ -345,12 +345,15 @@ describe("resolveImportedWorkspace", () => {
       undefined,
     );
     assert.equal(
-      resolveImportedWorkspace("@acme/external", SCOPE, workspaces),
-      undefined,
-    );
-    assert.equal(
       resolveImportedWorkspace("node:fs", SCOPE, workspaces),
       undefined,
+    );
+  });
+
+  it("treats same-scope @scope/pkg as workspace-shaped even if undeclared", () => {
+    assert.equal(
+      resolveImportedWorkspace("@acme/external", SCOPE, workspaces),
+      "external",
     );
   });
 });
