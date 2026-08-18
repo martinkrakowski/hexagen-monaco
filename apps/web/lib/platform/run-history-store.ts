@@ -123,6 +123,21 @@ export function createRunHistoryRepository(
       @duration_ms, @retry_count, @input_tokens, @output_tokens,
       @served_from_cache, @used_llm, @summary, @cost_cents, @created_at
     )
+    ON CONFLICT(owner_id, run_id, stage) DO UPDATE SET
+      project_id = excluded.project_id,
+      label = excluded.label,
+      model = excluded.model,
+      refiner_model = excluded.refiner_model,
+      duration_ms = excluded.duration_ms,
+      retry_count = excluded.retry_count,
+      input_tokens = excluded.input_tokens,
+      output_tokens = excluded.output_tokens,
+      served_from_cache = excluded.served_from_cache,
+      used_llm = excluded.used_llm,
+      summary = excluded.summary,
+      cost_cents = excluded.cost_cents,
+      created_at = excluded.created_at
+    RETURNING *
   `);
   const selectPrice = db.prepare(
     "SELECT usd_per_1k_input, usd_per_1k_output FROM model_prices WHERE model = ?",
@@ -194,7 +209,7 @@ export function createRunHistoryRepository(
         costCents,
         createdAt: now,
       };
-      insert.run({
+      const stored = insert.get({
         id: record.id,
         owner_id: ownerId,
         run_id: record.runId,
@@ -212,8 +227,8 @@ export function createRunHistoryRepository(
         summary: record.summary,
         cost_cents: record.costCents,
         created_at: record.createdAt,
-      });
-      return record;
+      }) as RunEventRow;
+      return rowToRecord(stored);
     },
     list(options = {}) {
       const rows = selectRecent.all({

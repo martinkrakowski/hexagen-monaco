@@ -51,47 +51,28 @@ export function openPlatformDb(dbPath: string): Database.Database {
       expires TEXT NOT NULL,
       PRIMARY KEY (identifier, token)
     );
-
-    CREATE TABLE IF NOT EXISTS saved_projects (
-      id TEXT NOT NULL,
-      owner_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      payload TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      ord INTEGER NOT NULL,
-      PRIMARY KEY (owner_id, id)
-    );
+  `);
+  // Owner columns / composite PKs must exist before any index that names
+  // them. CREATE TABLE IF NOT EXISTS is a no-op on a pre-owner legacy
+  // table, so migrate those tables first (PR review: index-before-column).
+  migrateSavedProjects(db);
+  migrateRunEvents(db);
+  db.exec(`
+    DROP INDEX IF EXISTS idx_saved_projects_ord;
     CREATE INDEX IF NOT EXISTS idx_saved_projects_ord
       ON saved_projects (owner_id, ord);
 
-    CREATE TABLE IF NOT EXISTS run_events (
-      id TEXT PRIMARY KEY,
-      owner_id TEXT NOT NULL,
-      run_id TEXT NOT NULL,
-      project_id TEXT,
-      stage INTEGER NOT NULL,
-      label TEXT NOT NULL,
-      model TEXT,
-      refiner_model TEXT,
-      duration_ms INTEGER NOT NULL,
-      retry_count INTEGER NOT NULL,
-      input_tokens INTEGER NOT NULL,
-      output_tokens INTEGER NOT NULL,
-      served_from_cache INTEGER NOT NULL,
-      used_llm INTEGER NOT NULL,
-      summary TEXT NOT NULL,
-      cost_cents INTEGER,
-      created_at INTEGER NOT NULL
-    );
     CREATE INDEX IF NOT EXISTS idx_run_events_created
       ON run_events (created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_run_events_run
       ON run_events (run_id);
+    DROP INDEX IF EXISTS idx_run_events_project;
     CREATE INDEX IF NOT EXISTS idx_run_events_project
       ON run_events (owner_id, project_id);
     CREATE INDEX IF NOT EXISTS idx_run_events_owner
       ON run_events (owner_id, created_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_run_events_run_stage
+      ON run_events (owner_id, run_id, stage);
 
     CREATE TABLE IF NOT EXISTS model_prices (
       model TEXT PRIMARY KEY,
@@ -117,8 +98,16 @@ export function openPlatformDb(dbPath: string): Database.Database {
     );
   `);
   seedModelPrices(db);
-  ensureOwnerColumns(db);
   return db;
+}
+
+function tableExists(db: Database.Database, table: string): boolean {
+  const row = db
+    .prepare(
+      "SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ?",
+    )
+    .get(table) as { ok: number } | undefined;
+  return row !== undefined;
 }
 
 function tableHasColumn(
@@ -130,17 +119,107 @@ function tableHasColumn(
   return cols.some((col) => col.name === column);
 }
 
-function ensureOwnerColumns(db: Database.Database): void {
-  if (!tableHasColumn(db, "saved_projects", "owner_id")) {
-    db.exec(
-      "ALTER TABLE saved_projects ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''",
-    );
+function primaryKeyColumns(db: Database.Database, table: string): string[] {
+  const cols = db.pragma(`table_info(${table})`) as Array<{
+    name: string;
+    pk: number;
+  }>;
+  return cols
+    .filter((col) => col.pk > 0)
+    .sort((a, b) => a.pk - b.pk)
+    .map((col) => col.name);
+}
+
+const SAVED_PROJECTS_DDL = `
+  id TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  ord INTEGER NOT NULL,
+  PRIMARY KEY (owner_id, id)
+`;
+
+function migrateSavedProjects(db: Database.Database): void {
+  if (!tableExists(db, "saved_projects")) {
+    db.exec(`CREATE TABLE saved_projects (${SAVED_PROJECTS_DDL})`);
+    return;
+  }
+  const hasOwner = tableHasColumn(db, "saved_projects", "owner_id");
+  const pk = primaryKeyColumns(db, "saved_projects");
+  const compositePk = pk.length === 2 && pk[0] === "owner_id" && pk[1] === "id";
+  if (hasOwner && compositePk) return;
+
+  db.exec(`CREATE TABLE saved_projects_migrated (${SAVED_PROJECTS_DDL})`);
+  if (hasOwner) {
+    db.exec(`
+      INSERT INTO saved_projects_migrated
+        (id, owner_id, name, payload, created_at, updated_at, ord)
+      SELECT id, owner_id, name, payload, created_at, updated_at, ord
+        FROM saved_projects
+    `);
+  } else {
+    db.exec(`
+      INSERT INTO saved_projects_migrated
+        (id, owner_id, name, payload, created_at, updated_at, ord)
+      SELECT id, '', name, payload, created_at, updated_at, ord
+        FROM saved_projects
+    `);
+  }
+  db.exec(`
+    DROP TABLE saved_projects;
+    ALTER TABLE saved_projects_migrated RENAME TO saved_projects;
+  `);
+}
+
+function migrateRunEvents(db: Database.Database): void {
+  if (!tableExists(db, "run_events")) {
+    db.exec(`
+      CREATE TABLE run_events (
+        id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        run_id TEXT NOT NULL,
+        project_id TEXT,
+        stage INTEGER NOT NULL,
+        label TEXT NOT NULL,
+        model TEXT,
+        refiner_model TEXT,
+        duration_ms INTEGER NOT NULL,
+        retry_count INTEGER NOT NULL,
+        input_tokens INTEGER NOT NULL,
+        output_tokens INTEGER NOT NULL,
+        served_from_cache INTEGER NOT NULL,
+        used_llm INTEGER NOT NULL,
+        summary TEXT NOT NULL,
+        cost_cents INTEGER,
+        created_at INTEGER NOT NULL
+      )
+    `);
+    return;
   }
   if (!tableHasColumn(db, "run_events", "owner_id")) {
     db.exec(
       "ALTER TABLE run_events ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''",
     );
   }
+  // Unique (owner_id, run_id, stage) is required for reconnect upserts.
+  // Drop the older row when two events share that key.
+  db.exec(`
+    DELETE FROM run_events
+     WHERE id IN (
+       SELECT a.id
+         FROM run_events a
+         JOIN run_events b
+           ON a.owner_id = b.owner_id
+          AND a.run_id = b.run_id
+          AND a.stage = b.stage
+          AND (
+            a.created_at < b.created_at
+            OR (a.created_at = b.created_at AND a.id < b.id)
+          )
+     )
+  `);
 }
 
 function seedModelPrices(db: Database.Database): void {

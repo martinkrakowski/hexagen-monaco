@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     projects: loaded.value,
     initialized: store.isProjectsInitialized(owner.ownerId),
+    ownerId: owner.ownerId,
   });
 }
 

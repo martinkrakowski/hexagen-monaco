@@ -117,4 +117,35 @@ describe("GET/PUT /api/projects/[projectId]", () => {
     });
     assert.equal(deleted.status, 200);
   });
+
+  it("PUT with a stale If-Match returns 409 and keeps the current row", async () => {
+    await PUT(put(ID, sample()), {
+      params: Promise.resolve({ projectId: ID }),
+    });
+    const winner = { ...sample(), name: "winner", updatedAt: 2 };
+    const first = await PUT(
+      new NextRequest(`http://localhost/api/projects/${ID}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "If-Match": "1" },
+        body: JSON.stringify(winner),
+      }),
+      { params: Promise.resolve({ projectId: ID }) },
+    );
+    assert.equal(first.status, 200);
+
+    const stale = await PUT(
+      new NextRequest(`http://localhost/api/projects/${ID}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "If-Match": "1" },
+        body: JSON.stringify({ ...sample(), name: "stale", updatedAt: 3 }),
+      }),
+      { params: Promise.resolve({ projectId: ID }) },
+    );
+    assert.equal(stale.status, 409);
+
+    const read = await GET(get(ID), {
+      params: Promise.resolve({ projectId: ID }),
+    });
+    assert.equal(((await read.json()) as SavedProject).name, "winner");
+  });
 });

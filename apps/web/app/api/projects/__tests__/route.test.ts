@@ -47,9 +47,11 @@ describe("GET/POST/PUT /api/projects", () => {
     const emptyBody = (await empty.json()) as {
       projects: SavedProject[];
       initialized: boolean;
+      ownerId: string;
     };
     assert.deepEqual(emptyBody.projects, []);
     assert.equal(emptyBody.initialized, false);
+    assert.equal(emptyBody.ownerId, "user-a");
 
     const created = await POST(
       new NextRequest("http://localhost/api/projects", {

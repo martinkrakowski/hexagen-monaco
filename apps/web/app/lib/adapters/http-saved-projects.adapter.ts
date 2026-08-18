@@ -20,6 +20,18 @@ function persistError(
   return { kind, message };
 }
 
+export const UNAUTHENTICATED_SAVED_PROJECTS_MESSAGE = "Sign in required";
+
+export function isUnauthenticatedPersistenceError(
+  error: PersistenceError,
+): boolean {
+  return (
+    error.kind === "Unknown" &&
+    (error.message === UNAUTHENTICATED_SAVED_PROJECTS_MESSAGE ||
+      /request failed \(40[13]\)/.test(error.message))
+  );
+}
+
 export interface OwnerInitializedPort {
   isOwnerInitialized(): boolean;
 }
@@ -30,6 +42,35 @@ export function isOwnerInitializedPort(
   return (
     "isOwnerInitialized" in port &&
     typeof (port as OwnerInitializedPort).isOwnerInitialized === "function"
+  );
+}
+
+export interface RemoteOwnerPort {
+  currentOwnerId(): string | null;
+}
+
+export function isRemoteOwnerPort(
+  port: SavedProjectsPersistencePort,
+): port is SavedProjectsPersistencePort & RemoteOwnerPort {
+  return (
+    "currentOwnerId" in port &&
+    typeof (port as RemoteOwnerPort).currentOwnerId === "function"
+  );
+}
+
+export interface CacheOwnerPort {
+  getCacheOwner(): Promise<string | null>;
+  setCacheOwner(ownerId: string | null): Promise<void>;
+}
+
+export function isCacheOwnerPort(
+  port: SavedProjectsPersistencePort,
+): port is SavedProjectsPersistencePort & CacheOwnerPort {
+  const candidate = port as SavedProjectsPersistencePort &
+    Partial<CacheOwnerPort>;
+  return (
+    typeof candidate.getCacheOwner === "function" &&
+    typeof candidate.setCacheOwner === "function"
   );
 }
 
@@ -58,15 +99,33 @@ function asInitialized(value: unknown, projects: SavedProject[]): boolean {
   return projects.length > 0;
 }
 
+function asOwnerId(value: unknown): string | null {
+  if (
+    value &&
+    typeof value === "object" &&
+    "ownerId" in value &&
+    typeof (value as { ownerId: unknown }).ownerId === "string"
+  ) {
+    const ownerId = (value as { ownerId: string }).ownerId.trim();
+    return ownerId.length > 0 ? ownerId : null;
+  }
+  return null;
+}
+
 export class HttpSavedProjectsAdapter
-  implements SavedProjectsPersistencePort, OwnerInitializedPort
+  implements SavedProjectsPersistencePort, OwnerInitializedPort, RemoteOwnerPort
 {
   private ownerInitialized = false;
+  private ownerId: string | null = null;
 
   constructor(private readonly fetchImpl: typeof fetch = fetch) {}
 
   isOwnerInitialized(): boolean {
     return this.ownerInitialized;
+  }
+
+  currentOwnerId(): string | null {
+    return this.ownerId;
   }
 
   private async request(
@@ -81,6 +140,15 @@ export class HttpSavedProjectsAdapter
           ...(init?.headers ?? {}),
         },
       });
+      if (response.status === 401 || response.status === 403) {
+        return {
+          success: false,
+          error: persistError(
+            "Unknown",
+            UNAUTHENTICATED_SAVED_PROJECTS_MESSAGE,
+          ),
+        };
+      }
       if (response.status === 404) {
         return {
           success: false,
@@ -119,6 +187,7 @@ export class HttpSavedProjectsAdapter
     if (!result.success) return result;
     const projects = asProjects(result.value);
     this.ownerInitialized = asInitialized(result.value, projects);
+    this.ownerId = asOwnerId(result.value);
     return { success: true, value: projects };
   }
 
@@ -150,19 +219,31 @@ export class HttpSavedProjectsAdapter
     id: string,
     updater: (project: SavedProject) => SavedProject,
   ): Promise<Result<SavedProject, PersistenceError>> {
-    const loaded = await this.request(`/api/projects/${id}`);
-    if (!loaded.success) return loaded;
-    const current = loaded.value as SavedProject;
-    const updated = updater(current);
-    if (updated === current) return { success: true, value: current };
-    const written = await this.request(`/api/projects/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(updated),
-    });
-    if (!written.success) return written;
+    const maxAttempts = 3;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const loaded = await this.request(`/api/projects/${id}`);
+      if (!loaded.success) return loaded;
+      const current = loaded.value as SavedProject;
+      const updated = updater(current);
+      if (updated === current) return { success: true, value: current };
+      const written = await this.request(`/api/projects/${id}`, {
+        method: "PUT",
+        headers: { "If-Match": String(current.updatedAt) },
+        body: JSON.stringify(updated),
+      });
+      if (written.success) {
+        return {
+          success: true,
+          value: (written.value as SavedProject) ?? updated,
+        };
+      }
+      if (written.error.kind !== "Conflict" || attempt === maxAttempts - 1) {
+        return written;
+      }
+    }
     return {
-      success: true,
-      value: (written.value as SavedProject) ?? updated,
+      success: false,
+      error: persistError("Conflict", "Project was updated elsewhere"),
     };
   }
 
@@ -195,17 +276,31 @@ export class CachedSavedProjectsAdapter implements SavedProjectsPersistencePort 
     const initialized = isOwnerInitializedPort(this.remote)
       ? this.remote.isOwnerInitialized()
       : remote.value.length > 0;
+    const remoteOwner = isRemoteOwnerPort(this.remote)
+      ? this.remote.currentOwnerId()
+      : null;
+    const cacheOwner = isCacheOwnerPort(this.cache)
+      ? await this.cache.getCacheOwner()
+      : null;
     // First-deploy / first-sign-in only: an uninitialized empty remote is
     // not an intentional delete. After the owner has replaced once, empty
     // remote wins so a stale IDB cannot resurrect deleted projects.
+    // Never lift a cache stamped for a different authenticated owner.
     if (remote.value.length === 0 && !initialized) {
       const cached = await this.cache.loadProjects();
       if (cached.success && cached.value.length > 0) {
+        if (cacheOwner && cacheOwner !== remoteOwner) {
+          await this.cache.saveProjects([]);
+          await this.stampCacheOwner(remoteOwner);
+          return remote;
+        }
         await this.remote.saveProjects(cached.value);
+        await this.stampCacheOwner(remoteOwner);
         return cached;
       }
     }
     await this.cache.saveProjects(remote.value);
+    await this.stampCacheOwner(remoteOwner);
     return remote;
   }
 
@@ -213,8 +308,14 @@ export class CachedSavedProjectsAdapter implements SavedProjectsPersistencePort 
     projects: SavedProject[],
   ): Promise<Result<void, PersistenceError>> {
     const remote = await this.remote.saveProjects(projects);
-    const local = await this.cache.saveProjects(projects);
-    return remote.success ? remote : local;
+    if (remote.success) {
+      await this.cache.saveProjects(projects);
+      return remote;
+    }
+    if (isUnauthenticatedPersistenceError(remote.error)) {
+      return this.cache.saveProjects(projects);
+    }
+    return remote;
   }
 
   async createProjectRecord(
@@ -231,7 +332,10 @@ export class CachedSavedProjectsAdapter implements SavedProjectsPersistencePort 
       }
       return remote;
     }
-    return this.cache.createProjectRecord(project);
+    if (isUnauthenticatedPersistenceError(remote.error)) {
+      return this.cache.createProjectRecord(project);
+    }
+    return remote;
   }
 
   async updateProjectRecord(
@@ -243,14 +347,29 @@ export class CachedSavedProjectsAdapter implements SavedProjectsPersistencePort 
       await this.cache.updateProjectRecord(id, () => remote.value);
       return remote;
     }
-    return this.cache.updateProjectRecord(id, updater);
+    if (isUnauthenticatedPersistenceError(remote.error)) {
+      return this.cache.updateProjectRecord(id, updater);
+    }
+    return remote;
   }
 
   async deleteProjectRecord(
     id: string,
   ): Promise<Result<void, PersistenceError>> {
     const remote = await this.remote.deleteProjectRecord(id);
-    const local = await this.cache.deleteProjectRecord(id);
-    return remote.success ? remote : local;
+    if (remote.success) {
+      await this.cache.deleteProjectRecord(id);
+      return remote;
+    }
+    if (isUnauthenticatedPersistenceError(remote.error)) {
+      return this.cache.deleteProjectRecord(id);
+    }
+    return remote;
+  }
+
+  private async stampCacheOwner(ownerId: string | null): Promise<void> {
+    if (isCacheOwnerPort(this.cache)) {
+      await this.cache.setCacheOwner(ownerId);
+    }
   }
 }
