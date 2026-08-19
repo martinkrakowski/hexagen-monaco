@@ -1,8 +1,8 @@
-import type { MapContextInput } from "../../../application/ports/in/hexagonal-map-input.js";
+import type { MapContextInput } from "../../../application/ports/out/hexagonal-map-input.js";
 import type {
   RenderableHexagonEdge,
   RenderableHexagonNode,
-} from "../../../application/ports/in/renderable-graph.js";
+} from "../../../application/ports/out/renderable-graph.js";
 import type { HexagonNodeType } from "../../../domain/index.js";
 
 import { LAYOUT_CONFIG, staggerYFor } from "./config.js";

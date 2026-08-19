@@ -10,7 +10,7 @@ import type {
   MapContextInput,
   MapPeerInput,
   MapPeerMappingInput,
-} from "../../../application/ports/in/hexagonal-map-input.js";
+} from "../../../application/ports/out/hexagonal-map-input.js";
 
 /**
  * The one place in `@hexagen/visualization` that speaks the wizard vocabulary.

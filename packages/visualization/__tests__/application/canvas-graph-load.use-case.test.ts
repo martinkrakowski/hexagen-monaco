@@ -7,7 +7,7 @@ import type {
   ArchitectureGraphData,
   IArchitectureGraphProviderPort,
 } from "../../src/application/ports/out/architecture-graph-provider-port.port.js";
-import type { HexagonalMapInput } from "../../src/application/ports/in/hexagonal-map-input.js";
+import type { HexagonalMapInput } from "../../src/application/ports/out/hexagonal-map-input.js";
 import { HexagonalMapGeneratorAdapter } from "../../src/infrastructure/adapters/hexagonal-map-generator/index.js";
 import type { Result } from "../../src/application/result.js";
 

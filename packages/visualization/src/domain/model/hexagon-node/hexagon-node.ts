@@ -56,7 +56,7 @@ export interface HexagonNode {
  * Flow node prop, `style` is a CSS box, and `variant` held Tailwind class
  * strings and `#rrggbb` literals. None of them survives swapping the renderer,
  * which is the test this file applies. They now live in
- * `application/ports/in/renderable-graph.ts` as `HexagonNodePresentation`, and
+ * `application/ports/out/renderable-graph.ts` as `HexagonNodePresentation`, and
  * a compile-time witness there fails the build if any of them comes back.
  *
  * What stays, and why:
