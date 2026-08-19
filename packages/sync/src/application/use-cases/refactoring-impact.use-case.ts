@@ -35,11 +35,12 @@ export interface ImpactAnalysisRequest {
  * The TypeScript parser sits behind `SymbolReferenceIndexPort` (HEX-013, item
  * 5.7): this use case no longer constructs a ts-morph `Project` and no AST node
  * ever reaches it. What crosses the boundary is `SymbolReferenceDto` — a file
- * path and a reason sentence — from which every downstream step
- * (classification, cross-package detection, boundary assessment, warnings) is
- * derived by string work alone. Enumerating which files to hand the index
- * stays here, because that is exactly such string work and it is where the
- * exclusions (`node_modules`, build output, `.d.ts`) are decided.
+ * path, a reason sentence, and optional syntactic diagnostics — from which
+ * every downstream step (classification, cross-package detection, boundary
+ * assessment, warnings) is derived by string work alone. Enumerating which
+ * files to hand the index stays here, because that is exactly such string
+ * work and it is where the exclusions (`node_modules`, build output, `.d.ts`)
+ * are decided.
  */
 export class RefactoringImpactUseCase {
   constructor(
@@ -79,6 +80,7 @@ export class RefactoringImpactUseCase {
         filesToModify,
         crossPackageDeps,
         architecturalImpact,
+        references,
       );
 
       const estimatedChanges = this.estimateChanges(filesToModify);
@@ -222,6 +224,7 @@ export class RefactoringImpactUseCase {
     files: FileToModify[],
     crossPackageDeps: CrossPackageDependency[],
     architecturalImpact: ArchitecturalImpact,
+    references: readonly SymbolReferenceDto[],
   ): string[] {
     const warnings: string[] = [];
 
@@ -252,6 +255,26 @@ export class RefactoringImpactUseCase {
     if (testFiles.length > 0) {
       warnings.push(
         `This refactoring will require updating ${testFiles.length} test files`,
+      );
+    }
+
+    // RI-2.1: one warning per unparseable file, named. Semantic errors
+    // never reach this field — the adapter collects syntactic diagnostics
+    // only. A missing "could not parse" is how a truncated AST used to
+    // look like a clean report.
+    for (const reference of references) {
+      if (
+        reference.diagnostics === undefined ||
+        reference.diagnostics.length === 0
+      ) {
+        continue;
+      }
+      const relativePath = toWorkspaceRelativePosixPath(
+        this.workspaceRoot,
+        reference.filePath,
+      );
+      warnings.push(
+        `Could not parse ${relativePath} (syntactic); impact for this file is incomplete`,
       );
     }
 

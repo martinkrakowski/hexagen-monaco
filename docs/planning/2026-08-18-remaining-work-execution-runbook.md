@@ -1,7 +1,7 @@
 # Remaining work — execution runbook (live)
 
-**Date:** 2026-08-19 · **Status:** Wave 0 on `main` (**#535**). Wave A0 T4/FU-2 on `main` (**#536** @ `f94cffbb`). RI-1.3 in flight. Wave A1 unblocked by D-C0; **next owner action:** enable branch protection, then open A1 PRs.
-**Baseline:** `main` @ `f94cffbb` (`v0.11.0` + #535 + #536).
+**Date:** 2026-08-19 · **Status:** Wave 0 on `main` (**#535**). Wave A0 T4/FU-2/RI-1.3 on `main` (**#536**, **#537** @ `a12eff6e`). RI-2.1+2.2 in flight. Wave A1 unblocked by D-C0; **next owner action:** enable branch protection, then open A1 PRs.
+**Baseline:** `main` @ `a12eff6e` (`v0.11.0` + #535 + #536 + #537).
 
 This is the **live operating runbook** for the leftover work from the 2026-08-14 through
 2026-08-18 planning window. It is the companion to — not a replacement for — the plan:
@@ -40,7 +40,7 @@ Today **4** entries. Started the remediation arc at 34.
 
 | After                                       | Expected remaining | Which keys leave                                                                       |
 | ------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------- |
-| today (`f94cffbb`)                          | **4**              | —                                                                                      |
+| today (`a12eff6e`)                          | **4**              | —                                                                                      |
 | 8.12(b)                                     | **2**              | `template-engine` `conflict-path.ts` / `output-path-safety.ts` `node:path`             |
 | 8.12(i)                                     | **1**              | `migrate-manifest.use-case.ts` `node:util`                                             |
 | DOS-2.11 (then burn the template `zod` row) | **0**              | template payload `zod` — only after the emitted `package.json` can actually provide it |
@@ -53,7 +53,7 @@ If a landing does not delete its own keys, the trajectory stalls. That is a revi
 
 ## 2. Open items, exactly
 
-Measured on `f94cffbb`. A plan row that disagrees with the tree loses.
+Measured on `a12eff6e`. A plan row that disagrees with the tree loses.
 
 ### Wave 0 (human + docs) — merged #535
 
@@ -69,8 +69,8 @@ Measured on `f94cffbb`. A plan row that disagrees with the tree loses.
 | ------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------- |
 | **T4.1–T4.4**       | ✅ **on `main`** | #536. Workflow `run:` + lint-staged use a root-declared-bin floor. `scripts/*.sh` uses a known-bad-name list. |
 | **FU-2**            | ✅ **on `main`** | #536. Jest guard scans workflow `run:` steps. Empty scan fails.                                               |
-| **RI-1.3**          | 🔄 **in flight** | Every ratchet run must print `N suppressed / M stale / K fresh`, including zeros.                             |
-| **RI-2.1 / RI-2.2** | ⛔ not started   | `RefactoringImpactUseCase` still ignores syntactic diagnostics.                                               |
+| **RI-1.3**          | ✅ **on `main`** | #537. `Ratchet: N suppressed / M stale / K fresh` on every human `yarn lint:arch` run, including zeros.       |
+| **RI-2.1 / RI-2.2** | 🔄 **in flight** | Optional `diagnostics` on `SymbolReferenceDto`; syntactic only; named-file warning.                           |
 | **DOS-2.1**         | ⛔ not started   | `.slice(0, 10)` in both prompt-compiler adapters.                                                             |
 | **FU-1.1**          | ⛔ not started   | `packages/local-llm` config exists; script missing.                                                           |
 
@@ -114,7 +114,7 @@ Measured on `f94cffbb`. A plan row that disagrees with the tree loses.
 | **D-E1** Node 22.7 / 22.12 / 24     | 6.7(a) **tag**, not the PR       | ⛔ **Open**                                                                                                                   | 2026-08-18 |
 | **D-T11** template pin + audit      | DOS-2.11                         | ⛔ **Open** — item does not start until written.                                                                              | 2026-08-18 |
 | **D-V1…D-V4** version splits        | T5.2–T5.5                        | ⛔ **Open** — human. T5.1 shipped.                                                                                            | 2026-08-15 |
-| **D-R1a** stale-fatal               | RI-1.2                           | ⛔ **Open** — ship RI-1.3 first.                                                                                              | 2026-08-16 |
+| **D-R1a** stale-fatal               | RI-1.2                           | ⛔ **Open** — RI-1.3 is on `main`; decide after counts have been visible.                                                     | 2026-08-19 |
 | **D-R1** refuse vs warn             | RI-2.3                           | ⛔ **Open** — stay at warn until a major.                                                                                     | 2026-08-16 |
 | D1 / D2 / D3 / D4 / D6              | historical                       | ✅ Resolved                                                                                                                   | 2026-08-16 |
 | D5 TypeScript 6                     | none                             | ⛔ Own arc                                                                                                                    | 2026-08-16 |
@@ -132,7 +132,7 @@ Owner, now that #535 is on main:
   THEN Wave A1
 
 Wave A0 remaining (after T4 / FU-2 / RI-1.3):
-  RI-2.1 + RI-2.2
+  RI-2.1 + RI-2.2   ← this PR
   DOS-2.1
   FU-1.1
 
@@ -287,3 +287,7 @@ D-C0, DOC-1, and DOC-2 land in this PR. Next owner action is enable branch prote
 ### 2026-08-19 — #536 merged; Wave A0 RI-1.3
 
 `main` @ `f94cffbb`. T4.1–T4.4 and FU-2 are on `main`. RI-1.3 prints `N suppressed / M stale / K fresh` on every ratchet run, including zeros. Remaining A0: RI-2.1+2.2, DOS-2.1, FU-1.1.
+
+### 2026-08-19 — #537 merged; Wave A0 RI-2.1 + RI-2.2
+
+`main` @ `a12eff6e`. RI-1.3 is on `main`. RI-2.1+2.2 surfaces syntactic diagnostics through `ImpactAnalysisResult.warnings`, naming the unparseable file. Semantic errors stay out. Remaining A0: DOS-2.1, FU-1.1.

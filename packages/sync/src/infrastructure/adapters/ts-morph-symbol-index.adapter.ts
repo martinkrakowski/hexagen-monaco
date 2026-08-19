@@ -1,4 +1,4 @@
-import { Project, SyntaxKind, type SourceFile } from "ts-morph";
+import { Project, SyntaxKind, ts, type SourceFile } from "ts-morph";
 import type {
   SymbolReferenceDto,
   SymbolReferenceIndexPort,
@@ -34,7 +34,7 @@ export const REFACTORING_IMPACT_COMPILER_OPTIONS = {
  *
  * This is the only place in `packages/sync` outside `src/refactoring/`'s own
  * rewrite patterns that knows the analyser is built on ts-morph. Everything it
- * hands back across the boundary is a `SymbolReferenceDto` of two strings.
+ * hands back across the boundary is a `SymbolReferenceDto` of strings.
  *
  * The reason ladder below is lifted verbatim (order included) from the
  * `DefaultSymbolReferenceProvider` that used to live inside
@@ -61,14 +61,35 @@ export class TsMorphSymbolIndexAdapter implements SymbolReferenceIndexPort {
     return this.project
       .getSourceFiles()
       .filter((file) => file.getFullText().includes(symbolName))
-      .map((file) => ({
-        // `getFilePath()` returns a StandardizedFilePath: absolute and
-        // slash-separated even on Windows. That is exactly the dialect the DTO
-        // promises, so it crosses the boundary unmodified.
-        filePath: file.getFilePath(),
-        reason: describeReference(file, symbolName),
-      }));
+      .map((file) => {
+        const diagnostics = syntacticDiagnosticsOf(this.project, file);
+        return {
+          // `getFilePath()` returns a StandardizedFilePath: absolute and
+          // slash-separated even on Windows. That is exactly the dialect the DTO
+          // promises, so it crosses the boundary unmodified.
+          filePath: file.getFilePath(),
+          reason: describeReference(file, symbolName),
+          ...(diagnostics.length > 0 ? { diagnostics } : {}),
+        };
+      });
   }
+}
+
+/**
+ * RI-2.1: syntactic diagnostics only. `getPreEmitDiagnostics` includes
+ * semantic errors (unresolved types, missing modules) that flood a
+ * consumer workspace and train people to ignore the warning channel.
+ */
+function syntacticDiagnosticsOf(
+  project: Project,
+  file: SourceFile,
+): readonly string[] {
+  return project
+    .getProgram()
+    .compilerObject.getSyntacticDiagnostics(file.compilerNode)
+    .map((diagnostic) =>
+      ts.flattenDiagnosticMessageText(diagnostic.messageText, " "),
+    );
 }
 
 /** The one sentence the impact report shows for a referencing file. */
