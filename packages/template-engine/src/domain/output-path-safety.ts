@@ -14,6 +14,11 @@
  * `path.posix.normalize` then reject `..` / `../…`.
  */
 export function isContainedRelativePath(rel: string): boolean {
+  // Native `path.join` on Windows treats `\` as a separator and `C:` as a
+  // drive. The domain cannot import `node:path`; rejecting those forms here
+  // is what keeps `file-system-template-file-loader` from joining an
+  // escape that the posix walk would otherwise see as a single segment.
+  if (rel.includes("\\") || /^[A-Za-z]:/.test(rel)) return false;
   if (rel.startsWith("/")) return false;
   let depth = 0;
   for (const raw of rel.split("/")) {

@@ -61,6 +61,19 @@ describe("isContainedRelativePath", () => {
       );
     }
   });
+
+  it("rejects Windows separators and drive-absolutes that native path.join would honor", () => {
+    // posix.normalize treats `..\..\outside.txt` as a single segment and
+    // would accept it; FileSystemTemplateFileLoader then path.join's it.
+    for (const p of [
+      "..\\..\\outside.txt",
+      "foo\\..\\..\\outside.txt",
+      "C:\\Windows\\system.ini",
+      "C:/Windows/system.ini",
+    ]) {
+      assert.equal(isContainedRelativePath(p), false, p);
+    }
+  });
 });
 
 describe("output-path-safety.ts — domain stays builtin-free", () => {
