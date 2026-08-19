@@ -174,6 +174,50 @@ function operationContractsFor(provider: BoundedContext): string[] {
 }
 
 /**
+ * Scaffold defaults every wizard-generated manifest carries under
+ * `monorepo.workspaceDefaults`. Named (GOD-008 residue) so scaffold policy
+ * is a named value, not an anonymous object inside `wizardToManifest`.
+ * Emitted values, versions, and structure must stay identical to this object.
+ */
+export const DEFAULT_WORKSPACE_DEFAULTS = {
+  tsConfig: {
+    extends: "../../tsconfig.base.json",
+    compilerOptions: {
+      rootDir: "src",
+      outDir: "dist",
+      composite: true,
+      declaration: true,
+      emitDeclarationOnly: true,
+      declarationMap: true,
+      tsBuildInfoFile: "./dist/.tsbuildinfo",
+    },
+    // Without an explicit `include`, tsc compiles every .ts under the
+    // package dir — including emitted config files and, worse, nothing
+    // at all when rootDir constraints bite (F2). The sync tsconfig
+    // generator only emits `include` when the template declares it.
+    include: ["src"],
+  },
+  packageJson: {
+    scripts: {
+      build: "tsc",
+      lint: "eslint src --ext .ts,.tsx",
+      typecheck: "tsc --noEmit",
+    },
+    // Must satisfy the imports of the EMITTED eslint.config.js
+    // (`@eslint/js` + `typescript-eslint`) so each workspace lints
+    // standalone via `yarn workspace <pkg> lint` — not only when turbo
+    // happens to hoist compatible bins from an app scaffold (F8). Pins
+    // mirror apps-framework-templates.ts.
+    devDependencies: {
+      typescript: "^5.5.4",
+      eslint: "^9.0.0",
+      "@eslint/js": "^9.0.0",
+      "typescript-eslint": "^8.0.0",
+    },
+  },
+};
+
+/**
  * Phase 3 — for a strict template, materialize cross-context transport from the
  * wizard's peer mappings, one edge per mapping (consumer → provider). The
  * transport ports/adapters/contracts are written by the dedicated
@@ -353,43 +397,9 @@ export function wizardToManifest(
       linker: "node-modules",
       buildTool: "turbo",
       workspaces: ["apps/*", "packages/*"],
-      workspaceDefaults: {
-        tsConfig: {
-          extends: "../../tsconfig.base.json",
-          compilerOptions: {
-            rootDir: "src",
-            outDir: "dist",
-            composite: true,
-            declaration: true,
-            emitDeclarationOnly: true,
-            declarationMap: true,
-            tsBuildInfoFile: "./dist/.tsbuildinfo",
-          },
-          // Without an explicit `include`, tsc compiles every .ts under the
-          // package dir — including emitted config files and, worse, nothing
-          // at all when rootDir constraints bite (F2). The sync tsconfig
-          // generator only emits `include` when the template declares it.
-          include: ["src"],
-        },
-        packageJson: {
-          scripts: {
-            build: "tsc",
-            lint: "eslint src --ext .ts,.tsx",
-            typecheck: "tsc --noEmit",
-          },
-          // Must satisfy the imports of the EMITTED eslint.config.js
-          // (`@eslint/js` + `typescript-eslint`) so each workspace lints
-          // standalone via `yarn workspace <pkg> lint` — not only when turbo
-          // happens to hoist compatible bins from an app scaffold (F8). Pins
-          // mirror apps-framework-templates.ts.
-          devDependencies: {
-            typescript: "^5.5.4",
-            eslint: "^9.0.0",
-            "@eslint/js": "^9.0.0",
-            "typescript-eslint": "^8.0.0",
-          },
-        },
-      },
+      // Clone so a consumer mutating one result cannot poison the next
+      // call (the named constant stays the source of values).
+      workspaceDefaults: structuredClone(DEFAULT_WORKSPACE_DEFAULTS),
       turboConfig: {
         globalDependencies: ["**/.env.*"],
         pipeline: {
