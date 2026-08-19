@@ -1,7 +1,7 @@
 # Remaining work — development plan
 
-**Date:** 2026-08-18 · **Status:** Wave 0 on `main` (**#535** @ `0151eb94`). Wave A0 in flight (T4 / FU-2). Remaining 6–8 is the active engineering calendar (ADR-0059 amendment).
-**Baseline:** `main` @ `0151eb94` (`v0.11.0` + #535)
+**Date:** 2026-08-19 · **Status:** Wave 0 on `main` (**#535**). Wave A0 T4/FU-2 on `main` (**#536** @ `f94cffbb`). RI-1.3 in flight. Remaining 6–8 is the active engineering calendar (ADR-0059 amendment).
+**Baseline:** `main` @ `f94cffbb` (`v0.11.0` + #535 + #536)
 **Companion (live status):** [`2026-08-18-remaining-work-execution-runbook.md`](./2026-08-18-remaining-work-execution-runbook.md)
 
 Locators are durable (file + symbol), not line numbers, per planning house style.

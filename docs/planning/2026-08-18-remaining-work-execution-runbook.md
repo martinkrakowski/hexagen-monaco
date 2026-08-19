@@ -1,7 +1,7 @@
 # Remaining work — execution runbook (live)
 
-**Date:** 2026-08-18 · **Status:** Wave 0 is on `main` (**#535** @ `0151eb94`). Wave A0 is the engineering wavefront (T4 / FU-2 in flight). Wave A1 is unblocked by D-C0; **next owner action:** enable branch protection, then open A1 PRs.
-**Baseline:** `main` @ `0151eb94` (`v0.11.0` + #535).
+**Date:** 2026-08-19 · **Status:** Wave 0 on `main` (**#535**). Wave A0 T4/FU-2 on `main` (**#536** @ `f94cffbb`). RI-1.3 in flight. Wave A1 unblocked by D-C0; **next owner action:** enable branch protection, then open A1 PRs.
+**Baseline:** `main` @ `f94cffbb` (`v0.11.0` + #535 + #536).
 
 This is the **live operating runbook** for the leftover work from the 2026-08-14 through
 2026-08-18 planning window. It is the companion to — not a replacement for — the plan:
@@ -53,7 +53,7 @@ If a landing does not delete its own keys, the trajectory stalls. That is a revi
 
 ## 2. Open items, exactly
 
-Measured on `0151eb94`. A plan row that disagrees with the tree loses.
+Measured on `f94cffbb`. A plan row that disagrees with the tree loses.
 
 ### Wave 0 (human + docs) — merged #535
 
@@ -65,14 +65,14 @@ Measured on `0151eb94`. A plan row that disagrees with the tree loses.
 
 ### Wave A0 — not parked
 
-| Item                | State            | Notes                                                                                                                                                                                           |
-| ------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **T4.1–T4.4**       | 🔄 **in flight** | Workflow `run:` + lint-staged use a root-declared-bin floor. `scripts/*.sh` uses a known-bad-name list (`UNDECLARED_PACKAGE_BINS`) — a full bash AST is out of scope. Discovery floor non-zero. |
-| **FU-2**            | 🔄 **in flight** | Jest guard scans workflow `run:` steps. Empty workflow scan = fail. Mutation: `npx jest` in `lint.yml` reddens; restore byte-identical.                                                         |
-| **RI-1.3**          | 🔄 partial       | Run already prints suppressed count; stale vs fresh not equally visible.                                                                                                                        |
-| **RI-2.1 / RI-2.2** | ⛔ not started   | `RefactoringImpactUseCase` still ignores syntactic diagnostics.                                                                                                                                 |
-| **DOS-2.1**         | ⛔ not started   | `.slice(0, 10)` in both prompt-compiler adapters.                                                                                                                                               |
-| **FU-1.1**          | ⛔ not started   | `packages/local-llm` config exists; script missing.                                                                                                                                             |
+| Item                | State            | Notes                                                                                                         |
+| ------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| **T4.1–T4.4**       | ✅ **on `main`** | #536. Workflow `run:` + lint-staged use a root-declared-bin floor. `scripts/*.sh` uses a known-bad-name list. |
+| **FU-2**            | ✅ **on `main`** | #536. Jest guard scans workflow `run:` steps. Empty scan fails.                                               |
+| **RI-1.3**          | 🔄 **in flight** | Every ratchet run must print `N suppressed / M stale / K fresh`, including zeros.                             |
+| **RI-2.1 / RI-2.2** | ⛔ not started   | `RefactoringImpactUseCase` still ignores syntactic diagnostics.                                               |
+| **DOS-2.1**         | ⛔ not started   | `.slice(0, 10)` in both prompt-compiler adapters.                                                             |
+| **FU-1.1**          | ⛔ not started   | `packages/local-llm` config exists; script missing.                                                           |
 
 ### Wave A1 / C / D / remaining 8.12 (D-C0 done; 8.12(h) still gates 7.1)
 
@@ -131,8 +131,7 @@ Owner, now that #535 is on main:
   enable branch protection (Lint & Boundaries / ESLint + UI boundary)
   THEN Wave A1
 
-Wave A0 remaining (after T4 / FU-2):
-  RI-1.3
+Wave A0 remaining (after T4 / FU-2 / RI-1.3):
   RI-2.1 + RI-2.2
   DOS-2.1
   FU-1.1
@@ -284,3 +283,7 @@ D-C0, DOC-1, and DOC-2 land in this PR. Next owner action is enable branch prote
 ### 2026-08-18 — #535 merged; Wave A0 T4 / FU-2
 
 `main` @ `0151eb94`. T4.1/T4.2 audit: **zero** undeclared package binaries in `scripts/` and workflow `run:` steps (host/CI tools: `docker`, `kubectl`, `yq`, `envsubst`, `actionlint` pinned in-job). T4.3/T4.4/FU-2 encode that as CI guards. Remaining A0: RI-1.3, RI-2.1+2.2, DOS-2.1, FU-1.1.
+
+### 2026-08-19 — #536 merged; Wave A0 RI-1.3
+
+`main` @ `f94cffbb`. T4.1–T4.4 and FU-2 are on `main`. RI-1.3 prints `N suppressed / M stale / K fresh` on every ratchet run, including zeros. Remaining A0: RI-2.1+2.2, DOS-2.1, FU-1.1.
