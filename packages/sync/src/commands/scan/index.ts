@@ -45,12 +45,13 @@ export interface ScanResult {
   nextSteps: string[];
 }
 
-async function pathExists(target: string): Promise<boolean> {
+async function pathExists(target: string): Promise<Result<boolean, Error>> {
   try {
     await fs.stat(target);
-    return true;
-  } catch {
-    return false;
+    return ok(true);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return ok(false);
+    return err(e instanceof Error ? e : new Error(String(e)));
   }
 }
 
@@ -61,13 +62,17 @@ function lintVerdict(exitCode: number): string {
   if (exitCode === 1) {
     return "Architecture check found violations (exit 1). See hexagen-lint output.";
   }
-  return "Architecture check could not run or scanned zero files (exit 2). This is not a pass.";
+  return `Architecture check could not run or scanned zero files (exit ${exitCode}). This is not a pass.`;
 }
 
 /**
  * Spawn the installed `hexagen-lint` bin against `root`. Missing bin, spawn
  * failure, signal-kill, and timeout are all "could not run" (exit 2) — never
  * a silent pass. Vacuous scans reuse the linter's own exit 2.
+ *
+ * Posix-only (no shell). A Windows `.cmd` shim is not launched; `shell: true`
+ * would reintroduce the quoting bug other execFile call sites exist to avoid.
+ * CI is Ubuntu — win32 is unsupported here rather than half-supported.
  */
 export function invokeHexagenLint(root: string): number {
   const bin = resolveArchLinterBin(root);
@@ -109,8 +114,9 @@ async function previewScan(
   if (!adopted.success) return adopted;
 
   const nextSteps = [...adopted.value.nextSteps];
-  const manifestExists = await pathExists(manifestPath);
-  if (!manifestExists && options.skipBootstrap !== true) {
+  const manifestLookup = await pathExists(manifestPath);
+  if (!manifestLookup.success) return manifestLookup;
+  if (!manifestLookup.value && options.skipBootstrap !== true) {
     const detection = await detectWorkspaces(root);
     nextSteps.push("Proposed bootstrap answers (not written):");
     nextSteps.push(`  system: ${detection.system}`);
@@ -122,6 +128,7 @@ async function previewScan(
       root,
       yes: true,
       dryRun: true,
+      skipLayout: true,
     });
     if (!bootstrapped.success) return bootstrapped;
     nextSteps.push("Would write:");
@@ -160,7 +167,9 @@ export async function runScan(
       );
     }
 
-    const layoutExists = await pathExists(layoutPath);
+    const layoutLookup = await pathExists(layoutPath);
+    if (!layoutLookup.success) return layoutLookup;
+    const layoutExists = layoutLookup.value;
     const nextSteps: string[] = [];
     let wroteLayout = false;
 
@@ -184,14 +193,17 @@ export async function runScan(
       );
     }
 
-    const manifestExistsBefore = await pathExists(manifestPath);
+    const manifestLookup = await pathExists(manifestPath);
+    if (!manifestLookup.success) return manifestLookup;
     let wroteManifest = false;
-    if (!manifestExistsBefore && options.skipBootstrap !== true) {
+    if (!manifestLookup.value && options.skipBootstrap !== true) {
       const bootstrapped = await runBootstrap({
         root,
         yes: true,
-        // layout.yaml is already present from adopt (or a previous run).
-        force: true,
+        force: options.force,
+        // Scan owns layout.yaml via adopt. Bootstrap writes the missing
+        // manifest (and an empty baseline if that is not already populated).
+        skipLayout: true,
       });
       if (!bootstrapped.success) return bootstrapped;
       wroteManifest = bootstrapped.value.wrote;
@@ -208,9 +220,10 @@ export async function runScan(
     nextSteps.push(lintVerdict(lintExitCode));
 
     const reportPaths: string[] = [];
-    const manifestExistsNow = await pathExists(manifestPath);
+    const manifestNow = await pathExists(manifestPath);
+    if (!manifestNow.success) return manifestNow;
     if (options.noReport !== true) {
-      if (!manifestExistsNow) {
+      if (!manifestNow.value) {
         nextSteps.push(
           "Skipped report — no .architecture/manifest.yaml (omit --skip-bootstrap, or run hexagen bootstrap --yes).",
         );
@@ -224,8 +237,10 @@ export async function runScan(
           nextSteps.push(`Wrote ${written.markdownPath}`);
           nextSteps.push(`Wrote ${written.htmlPath}`);
         } catch (e) {
-          nextSteps.push(
-            `Report failed: ${e instanceof Error ? e.message : String(e)}`,
+          return err(
+            new Error(
+              `Report failed: ${e instanceof Error ? e.message : String(e)}`,
+            ),
           );
         }
       }

@@ -40,6 +40,11 @@ export interface BootstrapOptions {
   llm?: boolean;
   dryRun?: boolean;
   force?: boolean;
+  /**
+   * When true, do not write `layout.yaml` and do not treat an existing layout
+   * as a blocker. Used by `hexagen scan`, which owns layout via adopt.
+   */
+  skipLayout?: boolean;
 }
 
 export interface BootstrapResult {
@@ -288,7 +293,9 @@ export async function runBootstrap(
     const archDir = path.join(options.root, ".architecture");
     const files = [
       path.join(archDir, "manifest.yaml"),
-      path.join(archDir, "layout.yaml"),
+      ...(options.skipLayout === true
+        ? []
+        : [path.join(archDir, "layout.yaml")]),
       path.join(archDir, "arch-lint-baseline.json"),
     ];
 
@@ -301,8 +308,9 @@ export async function runBootstrap(
       for (const file of files) {
         try {
           await fs.stat(file);
-        } catch {
-          continue;
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code === "ENOENT") continue;
+          return err(e instanceof Error ? e : new Error(String(e)));
         }
         if (path.basename(file) === "arch-lint-baseline.json") {
           try {
@@ -330,11 +338,12 @@ export async function runBootstrap(
     }
 
     await fs.mkdir(archDir, { recursive: true });
-    for (const [i, content] of [
+    const contents = [
       emitManifest(answers),
-      emitLayout(answers, detection),
+      ...(options.skipLayout === true ? [] : [emitLayout(answers, detection)]),
       EMPTY_BASELINE,
-    ].entries()) {
+    ];
+    for (const [i, content] of contents.entries()) {
       await fs.writeFile(`${files[i]}.tmp`, content, "utf8");
     }
     for (const f of files) {

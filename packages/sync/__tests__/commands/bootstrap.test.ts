@@ -252,6 +252,50 @@ describe("runBootstrap / bootstrapCommand", () => {
     assert.ok(manifest.bounded_contexts.some((c) => c.name === "billing"));
   });
 
+  it("skipLayout writes a missing manifest without replacing layout.yaml", async () => {
+    const custom = "contexts:\n  leftover: { root: packages/old }\n";
+    const root = await fixture({
+      "package.json": JSON.stringify({
+        name: "acme-app",
+        workspaces: ["packages/*"],
+      }),
+      ".architecture/layout.yaml": custom,
+      "packages/billing/package.json": JSON.stringify({ name: "billing" }),
+      "packages/billing/src/index.ts": "export const billing = 1;\n",
+    });
+
+    const result = await runBootstrap({
+      root,
+      yes: true,
+      skipLayout: true,
+    });
+    assert.equal(
+      result.success,
+      true,
+      result.success ? "" : result.error.message,
+    );
+    assert.equal(
+      await fs.readFile(
+        path.join(root, ".architecture", "layout.yaml"),
+        "utf8",
+      ),
+      custom,
+    );
+    const manifest = yaml.load(
+      await fs.readFile(
+        path.join(root, ".architecture", "manifest.yaml"),
+        "utf8",
+      ),
+    ) as { bounded_contexts: { name: string }[] };
+    assert.ok(manifest.bounded_contexts.some((c) => c.name === "billing"));
+    if (result.success) {
+      assert.equal(
+        result.value.files.some((f) => path.basename(f) === "layout.yaml"),
+        false,
+      );
+    }
+  });
+
   it("rejects workspace patterns the detector cannot evaluate", async () => {
     for (const pattern of ["*", "packages/*/pkg"]) {
       const root = await fixture({

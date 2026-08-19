@@ -351,4 +351,148 @@ process.exit(2);
       await fs.rm(root, { recursive: true, force: true });
     }
   });
+
+  it("keeps an existing layout.yaml when bootstrapping a missing manifest without --force", async () => {
+    const root = await makeRepo();
+    try {
+      const layoutPath = path.join(root, ".architecture", "layout.yaml");
+      const custom = "contexts:\n  leftover: { root: packages/old }\n";
+      await fs.mkdir(path.dirname(layoutPath), { recursive: true });
+      await fs.writeFile(layoutPath, custom, "utf8");
+
+      const result = await runScan({
+        root,
+        yes: true,
+        noReport: true,
+        lint: silentLint,
+      });
+      assert.equal(
+        result.success,
+        true,
+        result.success ? "" : result.error.message,
+      );
+      assert.equal(await fs.readFile(layoutPath, "utf8"), custom);
+      await fs.stat(path.join(root, ".architecture", "manifest.yaml"));
+      if (result.success) {
+        assert.match(result.value.nextSteps.join("\n"), /Kept existing/i);
+      }
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to wipe a populated ratchet baseline when bootstrapping without --force", async () => {
+    const root = await makeRepo();
+    try {
+      const archDir = path.join(root, ".architecture");
+      const layoutPath = path.join(archDir, "layout.yaml");
+      const baselinePath = path.join(archDir, "arch-lint-baseline.json");
+      const custom = "contexts:\n  leftover: { root: packages/old }\n";
+      await fs.mkdir(archDir, { recursive: true });
+      await fs.writeFile(layoutPath, custom, "utf8");
+      await fs.writeFile(
+        baselinePath,
+        `${JSON.stringify({ version: 1, entries: [{ rule: "kept" }] }, null, 2)}\n`,
+        "utf8",
+      );
+
+      const result = await runScan({
+        root,
+        yes: true,
+        noReport: true,
+        lint: silentLint,
+      });
+      assert.equal(result.success, false);
+      if (!result.success) {
+        assert.match(result.error.message, /overwrite|--force|baseline/i);
+      }
+      assert.equal(await fs.readFile(layoutPath, "utf8"), custom);
+      assert.match(await fs.readFile(baselinePath, "utf8"), /kept/);
+      await assert.rejects(fs.stat(path.join(archDir, "manifest.yaml")));
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports the actual unexpected linter exit code, not a hardcoded 2", async () => {
+    const root = await makeRepo();
+    try {
+      const result = await runScan({
+        root,
+        yes: true,
+        noReport: true,
+        lint: () => 3,
+      });
+      assert.equal(
+        result.success,
+        true,
+        result.success ? "" : result.error.message,
+      );
+      if (result.success) {
+        assert.equal(result.value.lintExitCode, 3);
+        const text = result.value.nextSteps.join("\n");
+        assert.match(text, /exit 3/);
+        assert.doesNotMatch(text, /exit 2/);
+        assert.doesNotMatch(text, /check passed|compliant/i);
+      }
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails the scan when report generation throws", async () => {
+    const root = await makeRepo();
+    try {
+      const result = await runScan({
+        root,
+        yes: true,
+        lint: silentLint,
+        report: async () => {
+          throw new Error("disk full");
+        },
+      });
+      assert.equal(result.success, false);
+      if (!result.success) {
+        assert.match(result.error.message, /Report failed: disk full/);
+      }
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "does not treat an EACCES layout lookup as absence",
+    async () => {
+      const root = await makeRepo();
+      const archDir = path.join(root, ".architecture");
+      await fs.mkdir(archDir, { recursive: true });
+      await fs.chmod(archDir, 0o000);
+      try {
+        let lookupCode: string | undefined;
+        try {
+          await fs.stat(path.join(archDir, "layout.yaml"));
+        } catch (e) {
+          lookupCode = (e as NodeJS.ErrnoException).code;
+        }
+        assert.equal(
+          lookupCode,
+          "EACCES",
+          "unsearchable .architecture must surface EACCES (this host is not root / ACL-bypass)",
+        );
+        const result = await runScan({
+          root,
+          yes: true,
+          noReport: true,
+          lint: silentLint,
+        });
+        assert.equal(result.success, false);
+        if (!result.success) {
+          assert.match(result.error.message, /EACCES/);
+        }
+      } finally {
+        await fs.chmod(archDir, 0o755).catch(() => {});
+        await fs.rm(root, { recursive: true, force: true });
+      }
+    },
+  );
 });
