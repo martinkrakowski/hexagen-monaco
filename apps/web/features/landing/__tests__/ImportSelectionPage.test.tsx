@@ -12,6 +12,7 @@ describe("ImportSelectionPage", () => {
     // chrome also renders a Back button. The former manifest + spec options are
     // now a single "Import Manifest or Spec" row (auto-detected on upload).
     assert.ok(screen.getByText("Import Manifest or Spec"));
+    assert.ok(screen.getByText("Scan existing project"));
     assert.ok(screen.getByText("Import from GitHub"));
   });
 

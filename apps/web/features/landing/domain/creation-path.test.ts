@@ -54,8 +54,8 @@ describe("creation-path domain", () => {
   });
 
   describe("IMPORT_SUB_OPTIONS", () => {
-    it("has exactly 2 sub-options", () => {
-      assert.strictEqual(IMPORT_SUB_OPTIONS.length, 2);
+    it("has exactly 3 sub-options", () => {
+      assert.strictEqual(IMPORT_SUB_OPTIONS.length, 3);
     });
 
     it("has unique ids", () => {
@@ -64,7 +64,7 @@ describe("creation-path domain", () => {
     });
 
     it("covers all ImportSubOptionId values", () => {
-      const expected: ImportSubOptionId[] = ["spec", "github"];
+      const expected: ImportSubOptionId[] = ["spec", "scan", "github"];
       const actual = IMPORT_SUB_OPTIONS.map((o) => o.id);
       assert.deepStrictEqual(actual.sort(), expected.sort());
     });
@@ -91,7 +91,14 @@ describe("creation-path domain", () => {
       assert.strictEqual(github!.status, "coming-soon");
     });
 
-    it("manifest and spec sub-options are available", () => {
+    it("scan sub-option is available and routes through the name step", () => {
+      const scan = IMPORT_SUB_OPTIONS.find((o) => o.id === "scan");
+      assert.ok(scan);
+      assert.strictEqual(scan.status, "available");
+      assert.strictEqual(scan.href, "/projects/new/name?path=scan");
+    });
+
+    it("manifest, spec, and scan sub-options are available", () => {
       for (const option of IMPORT_SUB_OPTIONS) {
         if (option.id === "github") continue;
         assert.strictEqual(
