@@ -1,5 +1,6 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
 import {
   wizardToManifest,
@@ -71,20 +72,29 @@ describe("wizardToManifest — monorepo workspace defaults", () => {
     }
   });
 
-  it("emits the named DEFAULT_WORKSPACE_DEFAULTS object, not an inline copy (GOD-008 residue)", () => {
+  it("emits a clone of DEFAULT_WORKSPACE_DEFAULTS, not a shared mutable instance", async () => {
     const out = wizardToManifest(minimalWizard());
     const emitted = (
       out.monorepo as { workspaceDefaults?: unknown } | undefined
     )?.workspaceDefaults;
-    assert.equal(
+    assert.notEqual(
       emitted,
       DEFAULT_WORKSPACE_DEFAULTS,
-      "wizardToManifest must emit the named DEFAULT_WORKSPACE_DEFAULTS object — an inline copy with the same values would still pass deepEqual and undo GOD-008",
+      "each result must own its workspaceDefaults — sharing the export leaks mutations across calls",
     );
     assert.deepEqual(
       emitted,
       DEFAULT_WORKSPACE_DEFAULTS,
       "emitted workspaceDefaults values must match DEFAULT_WORKSPACE_DEFAULTS",
+    );
+    const src = await readFile(
+      new URL("../../application/wizard-to-manifest.ts", import.meta.url),
+      "utf8",
+    );
+    assert.match(
+      src,
+      /workspaceDefaults:\s*structuredClone\(\s*DEFAULT_WORKSPACE_DEFAULTS\s*\)/,
+      "must clone the named constant — an inline copy with the same values would still pass deepEqual and undo GOD-008",
     );
   });
 

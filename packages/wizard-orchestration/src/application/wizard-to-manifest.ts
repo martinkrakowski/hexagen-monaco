@@ -397,7 +397,9 @@ export function wizardToManifest(
       linker: "node-modules",
       buildTool: "turbo",
       workspaces: ["apps/*", "packages/*"],
-      workspaceDefaults: DEFAULT_WORKSPACE_DEFAULTS,
+      // Clone so a consumer mutating one result cannot poison the next
+      // call (the named constant stays the source of values).
+      workspaceDefaults: structuredClone(DEFAULT_WORKSPACE_DEFAULTS),
       turboConfig: {
         globalDependencies: ["**/.env.*"],
         pipeline: {
