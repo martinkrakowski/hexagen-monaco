@@ -8,7 +8,7 @@ import { useSavedProjects } from "@/hooks/useSavedProjects";
 import { logger } from "../../../../lib/structured-logger";
 
 /** Streams that route through the shared Project Name step. */
-type NamedPath = "blank" | "ai" | "spec";
+type NamedPath = "blank" | "ai" | "spec" | "scan";
 
 const PATH_COPY: Record<NamedPath, { title: string; description: string }> = {
   blank: {
@@ -26,10 +26,17 @@ const PATH_COPY: Record<NamedPath, { title: string; description: string }> = {
     description:
       "Name it before importing your manifest or spec. Used for your saved project and generated workspace.",
   },
+  scan: {
+    title: "Name your project",
+    description:
+      "Name it before scanning a zip of an existing TypeScript repo. Used for your saved project and generated workspace.",
+  },
 };
 
 function isNamedPath(value: string | null): value is NamedPath {
-  return value === "blank" || value === "ai" || value === "spec";
+  return (
+    value === "blank" || value === "ai" || value === "spec" || value === "scan"
+  );
 }
 
 /**
@@ -94,6 +101,8 @@ export function NameStepClient() {
         router.push(`/projects/new/ai?name=${encoded}`);
       } else if (path === "spec") {
         router.push(`/projects/new/import/spec?name=${encoded}`);
+      } else if (path === "scan") {
+        router.push(`/projects/new/import/scan?name=${encoded}`);
       }
     },
     [path, router, saveProject],
@@ -102,7 +111,7 @@ export function NameStepClient() {
   const handleBack = useCallback(() => {
     // Import sub-paths return to the import method picker; blank/ai return to the
     // top-level creation path selection.
-    if (path === "spec") {
+    if (path === "spec" || path === "scan") {
       router.push("/projects/new/import");
     } else {
       router.push("/projects/new");

@@ -5,8 +5,9 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { ImportOptionRow } from "../ImportOptionRow";
 import { IMPORT_SUB_OPTIONS } from "../../domain/creation-path";
 
-const mockAvailableOption = IMPORT_SUB_OPTIONS[0]; // "spec" — consolidated import, available
-const mockComingSoonOption = IMPORT_SUB_OPTIONS[1]; // github — coming-soon
+const mockAvailableOption = IMPORT_SUB_OPTIONS.find((o) => o.id === "spec")!;
+const mockComingSoonOption = IMPORT_SUB_OPTIONS.find((o) => o.id === "github")!;
+const mockScanOption = IMPORT_SUB_OPTIONS.find((o) => o.id === "scan")!;
 
 describe("ImportOptionRow", () => {
   it("renders available row as button", () => {
@@ -103,5 +104,18 @@ describe("ImportOptionRow", () => {
     fireEvent.click(button);
     assert.strictEqual(mockPush.mock.calls.length, 1);
     assert.strictEqual(mockPush.mock.calls[0][0], mockAvailableOption.href);
+  });
+
+  it("scan option is available and navigates to the name step", () => {
+    const mockPush = vi.fn();
+    render(
+      <ImportOptionRow option={mockScanOption} router={{ push: mockPush }} />,
+    );
+    const button = screen.getByRole("button");
+    fireEvent.click(button);
+    assert.strictEqual(
+      mockPush.mock.calls[0][0],
+      "/projects/new/name?path=scan",
+    );
   });
 });

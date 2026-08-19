@@ -13,7 +13,7 @@ export interface CreationPathOption {
 }
 
 /** Sub-option identifiers for the import creation path */
-export type ImportSubOptionId = "spec" | "github";
+export type ImportSubOptionId = "spec" | "scan" | "github";
 
 /** A selectable import sub-option under the import creation path */
 export interface ImportSubOption {
@@ -39,6 +39,17 @@ export const IMPORT_SUB_OPTIONS: readonly ImportSubOption[] = [
     // name to the importer via `?name=`. The importer auto-detects manifest vs spec.
     href: "/projects/new/name?path=spec",
     iconName: "FileCode",
+    status: "available",
+  },
+  {
+    id: "scan",
+    label: "Scan existing project",
+    description:
+      "Upload a zip of a TypeScript repo. We map workspaces, write a layout, optionally bootstrap a manifest, and run hexagen-lint.",
+    detail:
+      "Assisted brownfield adoption — not automated ingestion, not inference. You ratify by uploading; the engine does not guess depends_on from the import graph.",
+    href: "/projects/new/name?path=scan",
+    iconName: "FolderSearch",
     status: "available",
   },
   {
@@ -113,7 +124,7 @@ export const CREATION_PATH_OPTIONS: readonly CreationPathOption[] = [
     id: "import",
     label: "Import",
     description:
-      "Import an existing manifest, upload a structured domain spec, or connect a GitHub repository.",
+      "Import an existing manifest, upload a structured domain spec, or scan a zip of a TypeScript repo.",
     colorTheme: "info",
     iconName: "Upload",
     isRecommended: false,

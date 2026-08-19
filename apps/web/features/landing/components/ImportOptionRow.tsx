@@ -1,6 +1,12 @@
 "use client";
 
-import { FileCode, Braces, GitBranch, ChevronRight } from "lucide-react";
+import {
+  FileCode,
+  Braces,
+  GitBranch,
+  ChevronRight,
+  FolderSearch,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import type { ImportSubOption } from "@/landing/domain/creation-path";
@@ -11,6 +17,7 @@ const iconMap = {
   FileCode,
   Braces,
   GitBranch,
+  FolderSearch,
   Github: GitBranch, // Github icon removed in lucide-react v0.400+
 } as const;
 
