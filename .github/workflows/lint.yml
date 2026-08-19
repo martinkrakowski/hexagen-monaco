@@ -178,9 +178,11 @@ jobs:
       # linter enforces EVERYTHING and this step goes red — deleting the
       # baseline cannot buy an amnesty.
       #
-      # Baseline GROWTH is now machine-enforced on pull_request via --pr-diff
-      # (diff against the base-branch baseline, rename-aware). Stale entries
-      # still warn and exit 0 — delete them in the PR that fixed them.
+      # Baseline GROWTH is machine-enforced on pull_request. Do NOT put
+      # `--pr-diff` in lint-command: hexagen-conformance appends
+      # `--pr-diff --base-ref origin/<base>` only when the event is
+      # pull_request. Hardcoding --pr-diff here FATALS on push to main
+      # (no GITHUB_BASE_REF). Stale entries still warn and exit 0.
       #
       # Overlaps sync-integrity.yml's "Verify Architecture (arch-linter,
       # strict)" deliberately. That step shells out to the linter through
@@ -192,5 +194,5 @@ jobs:
       - name: "Verify Architecture Lint Ratchet"
         uses: ./.github/actions/hexagen-conformance
         with:
-          lint-command: yarn lint:arch -- --baseline .architecture/arch-lint-baseline.json --ratchet --pr-diff
+          lint-command: yarn lint:arch -- --baseline .architecture/arch-lint-baseline.json --ratchet
           skip-sync-check: "true"
