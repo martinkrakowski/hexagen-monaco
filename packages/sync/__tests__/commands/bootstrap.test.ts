@@ -252,6 +252,139 @@ describe("runBootstrap / bootstrapCommand", () => {
     assert.ok(manifest.bounded_contexts.some((c) => c.name === "billing"));
   });
 
+  it("skipLayout writes a missing manifest without replacing layout.yaml", async () => {
+    const custom = "contexts:\n  leftover: { root: packages/old }\n";
+    const root = await fixture({
+      "package.json": JSON.stringify({
+        name: "acme-app",
+        workspaces: ["packages/*"],
+      }),
+      ".architecture/layout.yaml": custom,
+      "packages/billing/package.json": JSON.stringify({ name: "billing" }),
+      "packages/billing/src/index.ts": "export const billing = 1;\n",
+    });
+
+    const result = await runBootstrap({
+      root,
+      yes: true,
+      skipLayout: true,
+    });
+    assert.equal(
+      result.success,
+      true,
+      result.success ? "" : result.error.message,
+    );
+    assert.equal(
+      await fs.readFile(
+        path.join(root, ".architecture", "layout.yaml"),
+        "utf8",
+      ),
+      custom,
+    );
+    const manifest = yaml.load(
+      await fs.readFile(
+        path.join(root, ".architecture", "manifest.yaml"),
+        "utf8",
+      ),
+    ) as { bounded_contexts: { name: string }[] };
+    assert.ok(manifest.bounded_contexts.some((c) => c.name === "billing"));
+    if (result.success) {
+      assert.equal(
+        result.value.files.some((f) => path.basename(f) === "layout.yaml"),
+        false,
+      );
+    }
+  });
+
+  it("refuses to replace a dangling manifest.yaml symlink without --force", async () => {
+    const root = await fixture({
+      "package.json": JSON.stringify({
+        name: "acme-app",
+        workspaces: ["packages/*"],
+      }),
+      "packages/billing/package.json": JSON.stringify({ name: "billing" }),
+      "packages/billing/src/index.ts": "export const billing = 1;\n",
+    });
+    const archDir = path.join(root, ".architecture");
+    await fs.mkdir(archDir, { recursive: true });
+    const manifestPath = path.join(archDir, "manifest.yaml");
+    await fs.symlink("missing-target", manifestPath);
+
+    const result = await runBootstrap({
+      root,
+      yes: true,
+      skipLayout: true,
+    });
+    assert.equal(result.success, false);
+    if (!result.success) {
+      assert.match(result.error.message, /overwrite|--force/i);
+    }
+    const st = await fs.lstat(manifestPath);
+    assert.equal(st.isSymbolicLink(), true);
+    assert.equal(await fs.readlink(manifestPath), "missing-target");
+  });
+
+  it("refuses to replace a dangling arch-lint-baseline.json symlink without --force", async () => {
+    const root = await fixture({
+      "package.json": JSON.stringify({
+        name: "acme-app",
+        workspaces: ["packages/*"],
+      }),
+      "packages/billing/package.json": JSON.stringify({ name: "billing" }),
+      "packages/billing/src/index.ts": "export const billing = 1;\n",
+    });
+    const archDir = path.join(root, ".architecture");
+    await fs.mkdir(archDir, { recursive: true });
+    const baselinePath = path.join(archDir, "arch-lint-baseline.json");
+    await fs.symlink("missing-baseline", baselinePath);
+
+    const result = await runBootstrap({
+      root,
+      yes: true,
+      skipLayout: true,
+    });
+    assert.equal(result.success, false);
+    if (!result.success) {
+      assert.match(result.error.message, /overwrite|--force/i);
+    }
+    const st = await fs.lstat(baselinePath);
+    assert.equal(st.isSymbolicLink(), true);
+    assert.equal(await fs.readlink(baselinePath), "missing-baseline");
+  });
+
+  it("refuses to replace a live manifest.yaml symlink without --force", async () => {
+    const root = await fixture({
+      "package.json": JSON.stringify({
+        name: "acme-app",
+        workspaces: ["packages/*"],
+      }),
+      "packages/billing/package.json": JSON.stringify({ name: "billing" }),
+      "packages/billing/src/index.ts": "export const billing = 1;\n",
+    });
+    const archDir = path.join(root, ".architecture");
+    await fs.mkdir(archDir, { recursive: true });
+    const target = path.join(archDir, "real-manifest.yaml");
+    const manifestPath = path.join(archDir, "manifest.yaml");
+    await fs.writeFile(
+      target,
+      "system: keep-me\nbounded_contexts: []\n",
+      "utf8",
+    );
+    await fs.symlink("real-manifest.yaml", manifestPath);
+
+    const result = await runBootstrap({
+      root,
+      yes: true,
+      skipLayout: true,
+    });
+    assert.equal(result.success, false);
+    if (!result.success) {
+      assert.match(result.error.message, /overwrite|--force/i);
+    }
+    assert.equal((await fs.lstat(manifestPath)).isSymbolicLink(), true);
+    assert.match(await fs.readFile(manifestPath, "utf8"), /keep-me/);
+  });
+
   it("rejects workspace patterns the detector cannot evaluate", async () => {
     for (const pattern of ["*", "packages/*/pkg"]) {
       const root = await fixture({
