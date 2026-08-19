@@ -2,8 +2,6 @@
   "version": 1,
   "entries": [
     {"rule":"node-builtin-in-layer","file":"packages/sync/src/application/use-cases/migrate-manifest.use-case.ts","specifier":"node:util"},
-    {"rule":"node-builtin-in-layer","file":"packages/template-engine/src/domain/conflict-path.ts","specifier":"node:path"},
-    {"rule":"node-builtin-in-layer","file":"packages/template-engine/src/domain/output-path-safety.ts","specifier":"node:path"},
     {"rule":"npm-package-in-domain","file":"packages/template-engine/templates/llm-adapter/files/src/domain/ports/out/llm-client.port.ts","specifier":"zod","reason":"ADR-0054 amendment 2026-08-16. Template PAYLOAD, emitted into customer projects, so a real defect this repo exports (see dossier 2.5 RETRACTION) - deliberately NOT allowlisted: an allowlist entry would grant zod to template-engine's OWN domain too, and would record as 'accepted' something that is merely unfixed. The port's callStructured(schema: ZodSchema<T>) writes an emitted out-port's contract in terms of a third-party type. Not burnable in this PR: the fix spans all 8 template files typed on zod, and is blocked upstream anyway by dossier 2.11 - template manifests have no npm-dependency mechanism, so nothing in the emitted package.json provides zod and the generated project cannot typecheck regardless. Stays baselined so it keeps failing loudly once that feature lands."}
   ]
 }
