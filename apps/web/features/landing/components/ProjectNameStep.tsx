@@ -6,6 +6,7 @@ import { Button, Input, Label } from "@hexagen/ui";
 import { ProjectsShellWithFreeTier } from "@/ProjectsShellWithFreeTier";
 import { CreationStepIndicator } from "@/landing/components/CreationStepIndicator";
 import { CREATION_STEPS } from "@/landing/domain/creation-path";
+import { MAX_PROJECT_NAME_CHARS } from "@/lib/project-scan/limits";
 
 interface ProjectNameStepProps {
   /** Heading shown above the input (e.g. "Name your project"). */
@@ -41,7 +42,11 @@ export function ProjectNameStep({
 }: ProjectNameStepProps) {
   const [name, setName] = useState(defaultValue);
   const trimmed = name.trim();
-  const canContinue = trimmed.length > 0 && !busy;
+  const nameTooLong = trimmed.length > MAX_PROJECT_NAME_CHARS;
+  const canContinue = trimmed.length > 0 && !nameTooLong && !busy;
+  const nameError = nameTooLong
+    ? `Project name exceeds ${MAX_PROJECT_NAME_CHARS} characters`
+    : error;
 
   const handleSubmit = () => {
     if (!canContinue) return;
@@ -90,16 +95,17 @@ export function ProjectNameStep({
                 placeholder="My Project"
                 disabled={busy}
                 autoFocus
-                aria-invalid={error ? true : undefined}
+                maxLength={MAX_PROJECT_NAME_CHARS}
+                aria-invalid={nameError ? true : undefined}
               />
             </div>
 
-            {error && (
+            {nameError && (
               <div
                 role="alert"
                 className="mt-6 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive text-center"
               >
-                {error}
+                {nameError}
               </div>
             )}
           </div>

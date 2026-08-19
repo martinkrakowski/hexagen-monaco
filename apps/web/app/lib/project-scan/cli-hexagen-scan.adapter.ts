@@ -1,20 +1,29 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { findMonorepoRoot } from "../monorepo-root";
 import { classifyScanExit } from "./classify-scan-exit";
 import { hexagenScanArgv, resolveHexagenBin } from "./hexagen-bin";
+import {
+  MAX_SCAN_ERROR_CHARS,
+  MAX_SCAN_LAYOUT_EXCERPT_CHARS,
+  MAX_SCAN_REPORT_CHARS,
+  SCAN_TIMEOUT_MS,
+} from "./limits";
 import type { ProjectScanResponse } from "./types";
 import {
+  DEFAULT_ZIP_UNPACK_LIMITS,
   EmptyZipError,
   InvalidZipError,
+  ZipResourceLimitError,
   ZipSlipError,
   unpackZipToDir,
+  type ZipUnpackLimits,
 } from "./zip-unpack";
 
-export { ZipSlipError, EmptyZipError, InvalidZipError };
+export { ZipSlipError, EmptyZipError, InvalidZipError, ZipResourceLimitError };
 
 /**
  * Unpack a zip to a temp dir and spawn `hexagen scan --yes --root <tmp>` via
@@ -31,9 +40,7 @@ export { ZipSlipError, EmptyZipError, InvalidZipError };
 const defaultExecFileAsync = promisify(execFile);
 
 const MAX_SCAN_STDIO_BYTES = 16 * 1024 * 1024;
-const SCAN_TIMEOUT_MS = 60_000;
 const MAXBUFFER_ERROR_CODE = "ERR_CHILD_PROCESS_STDIO_MAXBUFFER";
-const LAYOUT_EXCERPT_CHARS = 8_000;
 
 const REPORT_CANDIDATES = [
   path.join(".architecture", "HEXAGEN-SCAN-REPORT.md"),
@@ -56,10 +63,29 @@ interface ExecFailure extends Error {
 
 export type ScanZipOutcome =
   | { kind: "scanned"; result: ProjectScanResponse }
-  | { kind: "rejected"; reason: "zip-slip" | "invalid-zip"; message: string };
+  | {
+      kind: "rejected";
+      reason: "zip-slip" | "invalid-zip" | "zip-too-large";
+      message: string;
+    };
 
 function clip(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}\n…` : text;
+}
+
+/** Read at most `maxChars` (plus one byte to detect truncation). Never slurps. */
+async function readTextClipped(
+  filePath: string,
+  maxChars: number,
+): Promise<string> {
+  const handle = await open(filePath, "r");
+  try {
+    const buf = Buffer.alloc(maxChars + 1);
+    const { bytesRead } = await handle.read(buf, 0, buf.length, 0);
+    return clip(buf.subarray(0, bytesRead).toString("utf8"), maxChars);
+  } finally {
+    await handle.close();
+  }
 }
 
 function messageOf(error: unknown): string {
@@ -95,7 +121,7 @@ async function collectArtifacts(
       if (typeof parsed === "object" && parsed !== null) {
         const rec = parsed as Record<string, unknown>;
         if (typeof rec.layout === "string") {
-          layoutExcerpt = clip(rec.layout, LAYOUT_EXCERPT_CHARS);
+          layoutExcerpt = clip(rec.layout, MAX_SCAN_LAYOUT_EXCERPT_CHARS);
         }
         if (
           typeof rec.filesScanned === "number" &&
@@ -104,10 +130,10 @@ async function collectArtifacts(
           filesScanned = rec.filesScanned;
         }
         if (typeof rec.reportMarkdown === "string") {
-          reportMarkdown = rec.reportMarkdown;
+          reportMarkdown = clip(rec.reportMarkdown, MAX_SCAN_REPORT_CHARS);
         }
         if (typeof rec.error === "string") {
-          parsedError = rec.error;
+          parsedError = clip(rec.error, MAX_SCAN_ERROR_CHARS);
         }
       }
     } catch {
@@ -117,11 +143,10 @@ async function collectArtifacts(
 
   if (layoutExcerpt === null) {
     try {
-      const text = await readFile(
+      layoutExcerpt = await readTextClipped(
         path.join(root, ".architecture", "layout.yaml"),
-        "utf8",
+        MAX_SCAN_LAYOUT_EXCERPT_CHARS,
       );
-      layoutExcerpt = clip(text, LAYOUT_EXCERPT_CHARS);
     } catch {
       // layout.yaml is optional until the CLI writes it.
     }
@@ -130,7 +155,10 @@ async function collectArtifacts(
   if (reportMarkdown === null) {
     for (const rel of REPORT_CANDIDATES) {
       try {
-        reportMarkdown = await readFile(path.join(root, rel), "utf8");
+        reportMarkdown = await readTextClipped(
+          path.join(root, rel),
+          MAX_SCAN_REPORT_CHARS,
+        );
         break;
       } catch {
         // try next candidate
@@ -172,6 +200,7 @@ export class CliHexagenScanAdapter {
   async scanZip(input: {
     zip: Buffer;
     projectName: string;
+    unpackLimits?: ZipUnpackLimits;
   }): Promise<ScanZipOutcome> {
     let dir: string;
     try {
@@ -187,7 +216,11 @@ export class CliHexagenScanAdapter {
 
     try {
       try {
-        await unpackZipToDir(input.zip, dir);
+        await unpackZipToDir(
+          input.zip,
+          dir,
+          input.unpackLimits ?? DEFAULT_ZIP_UNPACK_LIMITS,
+        );
       } catch (error) {
         if (error instanceof ZipSlipError) {
           return {
@@ -200,6 +233,13 @@ export class CliHexagenScanAdapter {
           return {
             kind: "rejected",
             reason: "invalid-zip",
+            message: error.message,
+          };
+        }
+        if (error instanceof ZipResourceLimitError) {
+          return {
+            kind: "rejected",
+            reason: "zip-too-large",
             message: error.message,
           };
         }
@@ -236,6 +276,8 @@ export class CliHexagenScanAdapter {
       let exitCode: number | string | null = 0;
 
       try {
+        // 45s child vs 60s route maxDuration — unpack, cleanup, and JSON
+        // must still fit after execFile returns (including on timeout).
         const result = await this.execFileAsync(file, args, {
           cwd: dir,
           timeout: SCAN_TIMEOUT_MS,
@@ -281,7 +323,9 @@ export class CliHexagenScanAdapter {
           filesScanned: artifacts.filesScanned,
           reportMarkdown: artifacts.reportMarkdown,
           errorMessage:
-            errorMessage && errorMessage.length > 0 ? errorMessage : null,
+            errorMessage && errorMessage.length > 0
+              ? clip(errorMessage, MAX_SCAN_ERROR_CHARS)
+              : null,
         },
       };
     } finally {

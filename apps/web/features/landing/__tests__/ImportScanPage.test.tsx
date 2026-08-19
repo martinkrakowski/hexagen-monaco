@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ImportScanPage } from "../ImportScanPage";
+import { MAX_PROJECT_NAME_CHARS } from "@/lib/project-scan/limits";
 
 const routerReplace = vi.hoisted(() => vi.fn());
 const searchParams = vi.hoisted(() => new URLSearchParams("name=Demo"));
@@ -66,6 +67,25 @@ describe("ImportScanPage", () => {
     const fetchMock = vi.mocked(fetch);
     assert.equal(fetchMock.mock.calls.length, 1);
     assert.equal(fetchMock.mock.calls[0]?.[0], "/api/projects/scan");
+  });
+
+  it("does not upload when the carried name exceeds the scan limit", async () => {
+    searchParams.set("name", "x".repeat(MAX_PROJECT_NAME_CHARS + 1));
+    const user = userEvent.setup();
+    render(<ImportScanPage />);
+    const input = screen.getByLabelText(/upload a zip/i);
+    await user.upload(
+      input,
+      new File(["PK"], "repo.zip", { type: "application/zip" }),
+    );
+    const run = screen.getByRole("button", { name: /run scan/i });
+    assert.equal((run as HTMLButtonElement).disabled, true);
+    assert.ok(screen.getByRole("alert"));
+    assert.match(
+      screen.getByRole("alert").textContent || "",
+      new RegExp(`exceeds ${MAX_PROJECT_NAME_CHARS}`),
+    );
+    assert.equal(vi.mocked(fetch).mock.calls.length, 0);
   });
 
   it("surfaces a rejected zip (zip-slip) without spinning", async () => {

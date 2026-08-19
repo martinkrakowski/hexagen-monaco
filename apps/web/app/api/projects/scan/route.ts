@@ -3,6 +3,7 @@ import { guardMutation } from "@/lib/request-guards";
 import { CliHexagenScanAdapter } from "@/lib/project-scan/cli-hexagen-scan.adapter";
 import {
   MAX_PROJECT_NAME_CHARS,
+  MAX_SCAN_REQUEST_BYTES,
   MAX_SCAN_ZIP_BYTES,
 } from "@/lib/project-scan/limits";
 import { logger } from "../../../../lib/structured-logger";
@@ -30,6 +31,32 @@ function isUploadedFile(value: FormDataEntryValue | null): value is File {
   );
 }
 
+/**
+ * Reject oversized bodies *before* `formData()` materializes the multipart
+ * payload. Content-Length can be omitted (chunked); the zip-part size check
+ * below still applies after parse. A present, non-numeric header is 400.
+ */
+function rejectOversizedRequest(request: NextRequest): NextResponse | null {
+  const raw = request.headers.get("content-length");
+  if (raw === null) return null;
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    return NextResponse.json(
+      { error: "Invalid Content-Length" },
+      { status: 400 },
+    );
+  }
+  if (Number(trimmed) > MAX_SCAN_REQUEST_BYTES) {
+    return NextResponse.json(
+      {
+        error: `Request body is too large (exceeds ${MAX_SCAN_REQUEST_BYTES.toLocaleString()} bytes)`,
+      },
+      { status: 413 },
+    );
+  }
+  return null;
+}
+
 function isZipFile(file: File): boolean {
   const name = file.name.toLowerCase();
   if (name.endsWith(".zip")) return true;
@@ -44,6 +71,9 @@ function isZipFile(file: File): boolean {
 export async function POST(request: NextRequest) {
   const gate = guardMutation(request, SCAN_MUTATION_GUARD);
   if (gate) return gate;
+
+  const oversized = rejectOversizedRequest(request);
+  if (oversized) return oversized;
 
   let form: FormData;
   try {

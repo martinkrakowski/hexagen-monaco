@@ -2,7 +2,10 @@ import { beforeEach, describe, it, vi } from "vitest";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import type { ProjectScanResponse } from "@/lib/project-scan/types";
-import { MAX_PROJECT_NAME_CHARS } from "@/lib/project-scan/limits";
+import {
+  MAX_PROJECT_NAME_CHARS,
+  MAX_SCAN_REQUEST_BYTES,
+} from "@/lib/project-scan/limits";
 
 const scanZip = vi.hoisted(() => vi.fn());
 
@@ -33,6 +36,8 @@ async function postForm(fields: {
   name?: string;
   zip?: File;
   origin?: string;
+  contentLength?: string;
+  onFormData?: () => void;
 }): Promise<Response> {
   const form = {
     get(key: string): FormDataEntryValue | null {
@@ -47,6 +52,9 @@ async function postForm(fields: {
   } as FormData;
   const headers = new Headers();
   if (fields.origin) headers.set("origin", fields.origin);
+  if (fields.contentLength !== undefined) {
+    headers.set("content-length", fields.contentLength);
+  }
   const request = new NextRequest("http://localhost/api/projects/scan", {
     method: "POST",
     headers,
@@ -55,7 +63,10 @@ async function postForm(fields: {
   // attached, and `vi.spyOn(request, "formData")` does not stick on NextRequest.
   // Hand the fields in directly; the production route still calls request.formData().
   Object.defineProperty(request, "formData", {
-    value: async () => form,
+    value: async () => {
+      fields.onFormData?.();
+      return form;
+    },
   });
   return POST(request);
 }
@@ -99,6 +110,52 @@ describe("POST /api/projects/scan", () => {
     });
     assert.equal(res.status, 400);
     assert.equal(scanZip.mock.calls.length, 0);
+  });
+
+  it("413s an oversized Content-Length before parsing the body", async () => {
+    let formDataCalled = false;
+    const res = await postForm({
+      name: "Demo",
+      zip: dummyZip(),
+      contentLength: String(MAX_SCAN_REQUEST_BYTES + 1),
+      onFormData: () => {
+        formDataCalled = true;
+      },
+    });
+    assert.equal(res.status, 413);
+    assert.equal(formDataCalled, false);
+    assert.equal(scanZip.mock.calls.length, 0);
+  });
+
+  it("400s a non-numeric Content-Length before parsing the body", async () => {
+    let formDataCalled = false;
+    const res = await postForm({
+      name: "Demo",
+      zip: dummyZip(),
+      contentLength: "not-a-number",
+      onFormData: () => {
+        formDataCalled = true;
+      },
+    });
+    assert.equal(res.status, 400);
+    assert.equal(formDataCalled, false);
+    assert.equal(scanZip.mock.calls.length, 0);
+  });
+
+  it("400s zip-too-large from the adapter", async () => {
+    scanZip.mockResolvedValue({
+      kind: "rejected",
+      reason: "zip-too-large",
+      message: "Zip has too many entries (exceeds 1) and was rejected",
+    });
+    const res = await postForm({
+      name: "Demo",
+      zip: dummyZip(),
+    });
+    assert.equal(res.status, 400);
+    const body = (await res.json()) as { error: string; reason: string };
+    assert.equal(body.reason, "zip-too-large");
+    assert.match(body.error, /too many entries/i);
   });
 
   it("400s zip-slip from the adapter without treating it as a scan verdict", async () => {

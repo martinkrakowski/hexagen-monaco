@@ -8,6 +8,7 @@ import { ProjectsShellWithFreeTier } from "@/ProjectsShellWithFreeTier";
 import { CreationStepIndicator } from "@/landing/components/CreationStepIndicator";
 import { ScanResultPanel } from "@/landing/components/ScanResultPanel";
 import { CREATION_STEPS } from "@/landing/domain/creation-path";
+import { MAX_PROJECT_NAME_CHARS } from "@/lib/project-scan/limits";
 import type { ProjectScanResponse } from "@/lib/project-scan/types";
 
 function isScanResponse(value: unknown): value is ProjectScanResponse {
@@ -24,6 +25,7 @@ export function ImportScanPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const carriedName = searchParams.get("name")?.trim() || "";
+  const nameTooLong = carriedName.length > MAX_PROJECT_NAME_CHARS;
 
   const [file, setFile] = useState<File | null>(null);
   const [running, setRunning] = useState(false);
@@ -44,7 +46,7 @@ export function ImportScanPage() {
   };
 
   const handleScan = useCallback(async () => {
-    if (!file || !carriedName || running) return;
+    if (!file || !carriedName || running || nameTooLong) return;
     setClientError(null);
     setResult(null);
     setRunning(true);
@@ -80,13 +82,13 @@ export function ImportScanPage() {
     } finally {
       setRunning(false);
     }
-  }, [file, carriedName, running]);
+  }, [file, carriedName, running, nameTooLong]);
 
   if (!carriedName) {
     return null;
   }
 
-  const canRun = Boolean(file) && !running;
+  const canRun = Boolean(file) && !running && !nameTooLong;
 
   return (
     <ProjectsShellWithFreeTier
@@ -160,12 +162,13 @@ export function ImportScanPage() {
                 <p className="text-sm text-foreground">Selected: {file.name}</p>
               )}
 
-              {clientError && (
+              {(clientError || nameTooLong) && (
                 <div
                   role="alert"
                   className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
                 >
-                  {clientError}
+                  {clientError ??
+                    `Project name exceeds ${MAX_PROJECT_NAME_CHARS} characters`}
                 </div>
               )}
 

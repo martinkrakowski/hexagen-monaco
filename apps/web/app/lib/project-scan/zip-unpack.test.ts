@@ -7,6 +7,7 @@ import JSZip from "jszip";
 import {
   EmptyZipError,
   InvalidZipError,
+  ZipResourceLimitError,
   ZipSlipError,
   assertSafeZipEntry,
   isUnsafeZipEntry,
@@ -99,6 +100,58 @@ describe("unpackZipToDir", () => {
       await assert.rejects(
         () => unpackZipToDir(Buffer.from("not a zip"), dir),
         InvalidZipError,
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  const tight = {
+    maxEntries: 2,
+    maxEntryBytes: 16,
+    maxUncompressedBytes: 24,
+  } as const;
+
+  it("rejects when entry count exceeds the limit before writing", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "hexagen-scan-entries-"));
+    try {
+      const buf = await zipBuffer({ a: "1", b: "2", c: "3" });
+      await assert.rejects(
+        () => unpackZipToDir(buf, dir, tight),
+        ZipResourceLimitError,
+      );
+      await assert.rejects(() => readFile(path.join(dir, "a")));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects when a single entry exceeds the per-file uncompressed limit", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "hexagen-scan-entry-"));
+    try {
+      const buf = await zipBuffer({ "big.txt": "x".repeat(32) });
+      await assert.rejects(
+        () => unpackZipToDir(buf, dir, tight),
+        (err: unknown) =>
+          err instanceof ZipResourceLimitError && err.limit === "entry-bytes",
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects when aggregate uncompressed size exceeds the limit", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "hexagen-scan-agg-"));
+    try {
+      const buf = await zipBuffer({
+        a: "xxxxxxxxxxxxxxxx",
+        b: "yyyyyyyyyyyyyyyy",
+      });
+      await assert.rejects(
+        () => unpackZipToDir(buf, dir, tight),
+        (err: unknown) =>
+          err instanceof ZipResourceLimitError &&
+          err.limit === "uncompressed-bytes",
       );
     } finally {
       await rm(dir, { recursive: true, force: true });
