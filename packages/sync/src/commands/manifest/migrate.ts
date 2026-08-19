@@ -9,6 +9,7 @@
 import { Command } from "commander";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { isDeepStrictEqual } from "node:util";
 import { findWorkspaceRoot } from "../../sync-engine-init.js";
 import { MigrateManifestUseCase } from "../../application/use-cases/migrate-manifest.use-case.js";
 
@@ -34,7 +35,9 @@ export const manifestMigrateCommander = new Command("migrate")
         throw new Error(`Failed to read ${manifestPath}. Does it exist?`);
       }
 
-      const result = new MigrateManifestUseCase().execute(content);
+      const result = new MigrateManifestUseCase(isDeepStrictEqual).execute(
+        content,
+      );
 
       const from =
         result.fromVersion === undefined

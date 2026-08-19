@@ -18,16 +18,20 @@
  * use-case refuses instead of writing a corrupted manifest.
  *
  * `currentVersion`/`migrations` are constructor-injectable for tests only —
- * production callers use the defaults. (With CURRENT = 1 and an empty
- * registry, the walk and the re-stamp arms are exercised by injecting a fake
- * version-2 migration; the registry PATTERN is this PR's deliverable.)
+ * production callers use those defaults. Deep equality is required at every
+ * construction site so this module never imports `node:util`; the CLI wires
+ * `isDeepStrictEqual`. (With CURRENT = 1 and an empty registry, the walk
+ * and the re-stamp arms are exercised by injecting a fake version-2
+ * migration; the registry PATTERN is this PR's deliverable.)
  */
 import yaml from "js-yaml";
-import { isDeepStrictEqual } from "node:util";
 import {
   CURRENT_MANIFEST_SCHEMA_VERSION,
   readManifestSchemaVersion,
 } from "@hexagen/project-configuration";
+
+/** Deep equality used by the stamp-only invariant. */
+export type DeepEqual = (left: unknown, right: unknown) => boolean;
 
 export interface ManifestMigration {
   /** The schemaVersion this migration upgrades TO (applied when stamped version < toVersion). */
@@ -60,6 +64,7 @@ export interface MigrateManifestResult {
 
 export class MigrateManifestUseCase {
   constructor(
+    private readonly deepEqual: DeepEqual,
     private readonly currentVersion: number = CURRENT_MANIFEST_SCHEMA_VERSION,
     private readonly migrations: readonly ManifestMigration[] = MANIFEST_MIGRATIONS,
   ) {}
@@ -156,7 +161,7 @@ export class MigrateManifestUseCase {
       const reparsed = yaml.load(after);
       stampedCleanly =
         readManifestSchemaVersion(reparsed) === this.currentVersion &&
-        isDeepStrictEqual(
+        this.deepEqual(
           {
             ...(yaml.load(before) as object),
             schemaVersion: this.currentVersion,

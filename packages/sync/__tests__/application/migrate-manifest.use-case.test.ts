@@ -13,10 +13,14 @@
  *
  * The registry is EMPTY at schema version 1, so the walk and the
  * replace-stamp arms are pinned via the constructor-injected
- * currentVersion/migrations test seam (production callers use the defaults).
+ * currentVersion/migrations test seam (production callers use those
+ * defaults). Deep equality is required: tests inject `isDeepStrictEqual`
+ * the same way the CLI composition root does.
  */
 import { describe, it } from "vitest";
 import assert from "node:assert";
+import { readFile } from "node:fs/promises";
+import { isDeepStrictEqual } from "node:util";
 import {
   MigrateManifestUseCase,
   MANIFEST_MIGRATIONS,
@@ -47,7 +51,9 @@ describe("MigrateManifestUseCase (production defaults)", () => {
   });
 
   it("stamps a legacy manifest above the first content line, preserving every comment", () => {
-    const result = new MigrateManifestUseCase().execute(LEGACY_DOC);
+    const result = new MigrateManifestUseCase(isDeepStrictEqual).execute(
+      LEGACY_DOC,
+    );
 
     assert.strictEqual(result.fromVersion, undefined);
     assert.strictEqual(result.toVersion, CURRENT_MANIFEST_SCHEMA_VERSION);
@@ -66,8 +72,12 @@ describe("MigrateManifestUseCase (production defaults)", () => {
   });
 
   it("is idempotent: migrating the migrated text changes nothing, byte-for-byte", () => {
-    const once = new MigrateManifestUseCase().execute(LEGACY_DOC);
-    const twice = new MigrateManifestUseCase().execute(once.content);
+    const once = new MigrateManifestUseCase(isDeepStrictEqual).execute(
+      LEGACY_DOC,
+    );
+    const twice = new MigrateManifestUseCase(isDeepStrictEqual).execute(
+      once.content,
+    );
 
     assert.strictEqual(twice.changed, false);
     assert.strictEqual(twice.content, once.content);
@@ -77,7 +87,7 @@ describe("MigrateManifestUseCase (production defaults)", () => {
 
   it("handles a document-start marker: the stamp goes after `---`, before the first key", () => {
     const doc = ["---", "# leading comment", "system: x", ""].join("\n");
-    const result = new MigrateManifestUseCase().execute(doc);
+    const result = new MigrateManifestUseCase(isDeepStrictEqual).execute(doc);
     assert.strictEqual(
       result.content,
       [
@@ -93,7 +103,7 @@ describe("MigrateManifestUseCase (production defaults)", () => {
   it("refuses a manifest from a newer toolchain — migration only goes forward", () => {
     const doc = `schemaVersion: ${CURRENT_MANIFEST_SCHEMA_VERSION + 1}\nsystem: x\n`;
     assert.throws(
-      () => new MigrateManifestUseCase().execute(doc),
+      () => new MigrateManifestUseCase(isDeepStrictEqual).execute(doc),
       (err: Error) => {
         assert.match(err.message, /newer than this toolchain supports/);
         assert.match(err.message, /Migration only goes forward/);
@@ -104,22 +114,41 @@ describe("MigrateManifestUseCase (production defaults)", () => {
 
   it("rejects a corrupted stamp, an empty document, and a non-mapping root", () => {
     assert.throws(
-      () => new MigrateManifestUseCase().execute('schemaVersion: "two"\n'),
+      () =>
+        new MigrateManifestUseCase(isDeepStrictEqual).execute(
+          'schemaVersion: "two"\n',
+        ),
       /expected a positive integer/,
     );
     assert.throws(
-      () => new MigrateManifestUseCase().execute("# only comments\n"),
+      () =>
+        new MigrateManifestUseCase(isDeepStrictEqual).execute(
+          "# only comments\n",
+        ),
       /Manifest file is empty/,
     );
     assert.throws(
-      () => new MigrateManifestUseCase().execute("- just\n- a\n- list\n"),
+      () =>
+        new MigrateManifestUseCase(isDeepStrictEqual).execute(
+          "- just\n- a\n- list\n",
+        ),
       /must be a YAML mapping/,
     );
   });
 
   it("refuses (guided, no parser stack) when the textual stamp cannot land cleanly — flow-style root", () => {
     assert.throws(
-      () => new MigrateManifestUseCase().execute("{system: x, version: y}\n"),
+      () =>
+        new MigrateManifestUseCase(isDeepStrictEqual).execute(
+          "{system: x, version: y}\n",
+        ),
+      /Could not stamp schemaVersion .* by hand/s,
+    );
+  });
+
+  it("uses the injected equality function for the stamp-only invariant", () => {
+    assert.throws(
+      () => new MigrateManifestUseCase(() => false).execute(LEGACY_DOC),
       /Could not stamp schemaVersion .* by hand/s,
     );
   });
@@ -128,7 +157,7 @@ describe("MigrateManifestUseCase (production defaults)", () => {
 describe("MigrateManifestUseCase (injected registry — the walk and re-stamp arms)", () => {
   // A future toolchain at schema 3 with two registered key migrations,
   // deliberately registered out of order to pin the ascending sort.
-  const v3 = new MigrateManifestUseCase(3, [
+  const v3 = new MigrateManifestUseCase(isDeepStrictEqual, 3, [
     {
       toVersion: 3,
       description: "rename colour → color",
@@ -195,5 +224,19 @@ describe("MigrateManifestUseCase (injected registry — the walk and re-stamp ar
     const twice = v3.execute(once.content);
     assert.strictEqual(twice.changed, false);
     assert.strictEqual(twice.content, once.content);
+  });
+});
+
+describe("migrate-manifest.use-case.ts — application stays builtin-free", () => {
+  it("imports no node: builtin", async () => {
+    const url = new URL(
+      "../../src/application/use-cases/migrate-manifest.use-case.ts",
+      import.meta.url,
+    );
+    const source = await readFile(url, "utf-8");
+    const builtinImports = [
+      ...source.matchAll(/from\s+["'](node:[^"']+)["']/g),
+    ].map((m) => m[1]);
+    assert.deepStrictEqual(builtinImports, []);
   });
 });
