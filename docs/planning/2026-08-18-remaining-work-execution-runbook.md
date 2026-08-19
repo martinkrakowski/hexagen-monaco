@@ -57,22 +57,22 @@ Measured on `0151eb94`. A plan row that disagrees with the tree loses.
 
 ### Wave 0 (human + docs) — merged #535
 
-| Item      | State            | Evidence                                                                                                                                          |
-| --------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **D-C0**  | ✅ **on `main`** | ADR-0059 amendment: capacity-freed is the resume trigger; pay-gate / kill-criterion retired as _resume_ triggers.                                 |
-| **DOC-1** | ✅ **on `main`** | `CHANGELOG.md` §0.11.0: published `arch-linter@0.11.0` is `FSL-1.1-ALv2`; sync stays `UNLICENSED` (ADR-0066).                                     |
-| **DOC-2** | ✅ **on `main`** | `commands/bootstrap.ts` deleted. Helpers and `bootstrapCommander` live on `commands/bootstrap/index.ts`. `bootstrap.test.ts` imports that module. |
+| Item      | State            | Evidence                                                                                                                                             |
+| --------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **D-C0**  | ✅ **on `main`** | ADR-0059 amendment: capacity-freed is the resume trigger; pay-gate / kill-criterion retired as _resume_ triggers.                                    |
+| **DOC-1** | ✅ **on `main`** | `CHANGELOG.md` §0.11.0: published `arch-linter@0.11.0` is `FSL-1.1-ALv2`; sync stays Source-Available Evaluation (npm field `UNLICENSED`, ADR-0066). |
+| **DOC-2** | ✅ **on `main`** | `commands/bootstrap.ts` deleted. Helpers and `bootstrapCommander` live on `commands/bootstrap/index.ts`. `bootstrap.test.ts` imports that module.    |
 
 ### Wave A0 — not parked
 
-| Item                | State            | Notes                                                                                                                                                                              |
-| ------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **T4.1–T4.4**       | 🔄 **in flight** | Audit: zero undeclared package bins in `scripts/` and workflow `run:` steps. Guard now covers lint-staged, `scripts/`, and `.github/workflows/**` with a non-zero discovery floor. |
-| **FU-2**            | 🔄 **in flight** | Jest guard scans workflow `run:` steps. Empty workflow scan = fail. Mutation: `npx jest` in `lint.yml` reddens; restore byte-identical.                                            |
-| **RI-1.3**          | 🔄 partial       | Run already prints suppressed count; stale vs fresh not equally visible.                                                                                                           |
-| **RI-2.1 / RI-2.2** | ⛔ not started   | `RefactoringImpactUseCase` still ignores syntactic diagnostics.                                                                                                                    |
-| **DOS-2.1**         | ⛔ not started   | `.slice(0, 10)` in both prompt-compiler adapters.                                                                                                                                  |
-| **FU-1.1**          | ⛔ not started   | `packages/local-llm` config exists; script missing.                                                                                                                                |
+| Item                | State            | Notes                                                                                                                                                                                           |
+| ------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **T4.1–T4.4**       | 🔄 **in flight** | Workflow `run:` + lint-staged use a root-declared-bin floor. `scripts/*.sh` uses a known-bad-name list (`UNDECLARED_PACKAGE_BINS`) — a full bash AST is out of scope. Discovery floor non-zero. |
+| **FU-2**            | 🔄 **in flight** | Jest guard scans workflow `run:` steps. Empty workflow scan = fail. Mutation: `npx jest` in `lint.yml` reddens; restore byte-identical.                                                         |
+| **RI-1.3**          | 🔄 partial       | Run already prints suppressed count; stale vs fresh not equally visible.                                                                                                                        |
+| **RI-2.1 / RI-2.2** | ⛔ not started   | `RefactoringImpactUseCase` still ignores syntactic diagnostics.                                                                                                                                 |
+| **DOS-2.1**         | ⛔ not started   | `.slice(0, 10)` in both prompt-compiler adapters.                                                                                                                                               |
+| **FU-1.1**          | ⛔ not started   | `packages/local-llm` config exists; script missing.                                                                                                                                             |
 
 ### Wave A1 / C / D / remaining 8.12 (D-C0 done; 8.12(h) still gates 7.1)
 

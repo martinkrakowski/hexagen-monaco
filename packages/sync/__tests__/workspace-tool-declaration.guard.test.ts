@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { extractWorkflowRunCommands } from "./helpers/workflow-run-commands.js";
 
 /**
  * Repo-wide guard: a workspace that invokes a binary from its own `scripts`
@@ -178,10 +179,15 @@ const NOT_A_PACKAGE_BIN = new Set([
 ]);
 
 /**
- * Bins that are never declared in this repo today. If they appear as the
- * command in a root script or workflow, that is the T4.4 finding. Tokens that
- * are neither these nor a root-declared bin (awk variables, `git` subcommands
- * after a broken split) are ignored — a shell AST is out of scope.
+ * Known-bad package bins for the `.sh` path only (`shellSource: true`).
+ *
+ * A full declared-bin floor on bash sources is not viable: awk programs,
+ * function names, and `git` subcommands after `$(...)` look like first tokens.
+ * Measured when this guard first grew. Workflow `run:` steps and lint-staged
+ * use the open root-declared floor instead.
+ *
+ * Add a name here when an audit finds a new undeclared package bin in `scripts/*.sh`.
+ * Do not treat this set as the workflow floor.
  */
 const UNDECLARED_PACKAGE_BINS = new Set([
   "mocha",
@@ -359,8 +365,10 @@ async function walkFiles(
     let entries: import("node:fs").Dirent[];
     try {
       entries = await fs.readdir(current, { withFileTypes: true });
-    } catch {
-      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") return;
+      throw error;
     }
     for (const entry of entries) {
       const absolute = path.join(current, entry.name);
@@ -382,12 +390,12 @@ const rel = (absolute: string) =>
 function definedFunctions(source: string): Set<string> {
   const names = new Set<string>();
   for (const match of source.matchAll(
-    /^([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)/gm,
+    /^(?:local\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)/gm,
   )) {
     names.add(match[1]);
   }
   for (const match of source.matchAll(
-    /^function\s+([A-Za-z_][A-Za-z0-9_]*)/gm,
+    /^(?:local\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)/gm,
   )) {
     names.add(match[1]);
   }
@@ -427,7 +435,12 @@ function commandLinesFromShell(source: string): string[] {
  */
 function invokedRootBins(command: string): string[] {
   const bins: string[] = [];
-  for (const segment of command.split(/\s*(?:&&|\|\|)\s*|\s+;\s+|\s+\|\s+/)) {
+  // Newlines are operators here: a `run: |` block is one string with
+  // one command per line. Unspaced `;` is a real shell separator; tokens
+  // that fail the package-bin shape (ANSI fragments after `;31m`) are dropped.
+  for (const segment of command.split(
+    /\s*(?:&&|\|\|)\s*|[\n;]|\s*\|\s*|\s+&\s+/,
+  )) {
     const tokens = segment.trim().split(/\s+/).filter(Boolean);
     let i = 0;
     while (i < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i])) i++;
@@ -438,37 +451,6 @@ function invokedRootBins(command: string): string[] {
     bins.push(bin);
   }
   return bins;
-}
-
-/**
- * `run:` steps only. `uses:` is an action, not a package bin.
- * Block scalars (`|`, `>`) collect following indented lines.
- */
-function extractWorkflowRunCommands(source: string): string[] {
-  const commands: string[] = [];
-  const lines = source.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const match = lines[i].match(/^(\s*)(?:-\s+)?run:\s*(.*)$/);
-    if (!match) continue;
-    const indent = match[1].length;
-    const rest = match[2];
-    if (/^[|>][+-]?$/.test(rest)) {
-      const block: string[] = [];
-      for (let j = i + 1; j < lines.length; j++) {
-        if (lines[j].trim() === "") {
-          block.push("");
-          continue;
-        }
-        const nextIndent = (lines[j].match(/^(\s*)/) ?? ["", ""])[1].length;
-        if (nextIndent <= indent) break;
-        block.push(lines[j].slice(indent + 2));
-      }
-      commands.push(block.join("\n"));
-      continue;
-    }
-    if (rest) commands.push(rest.replace(/^['"]|['"]$/g, ""));
-  }
-  return commands;
 }
 
 function lintStagedCommands(pkg: { "lint-staged"?: unknown }): string[] {
@@ -487,6 +469,9 @@ function lintStagedCommands(pkg: { "lint-staged"?: unknown }): string[] {
 }
 
 function nodeSpawnedCommands(source: string): string[] {
+  // Floor, not a JS AST: the three call shapes this repo's scripts/ actually
+  // use. `exec(`, `spawn(`, and multi-arg `spawnSync("mocha", …)` are not
+  // scanned — add a pattern if an audit finds one.
   const commands: string[] = [];
   const patterns = [
     /spawnSync\(\s*["']([^"']+)["']/g,
@@ -608,11 +593,15 @@ describe("root lint-staged, scripts/, and workflow tool declaration (T4.3 / T4.4
       "          mocha --ci",
       "      - name: quoted",
       "        run: 'prettier --write .'",
+      "      - name: indented-block",
+      "        run: |2",
+      "            mocha --ci",
     ].join("\n");
     assert.deepEqual(extractWorkflowRunCommands(source), [
       "eslint --fix",
       "yarn install --immutable\nmocha --ci",
       "prettier --write .",
+      "  mocha --ci",
     ]);
   });
 
@@ -630,6 +619,40 @@ describe("root lint-staged, scripts/, and workflow tool declaration (T4.3 / T4.4
     );
     assert.deepEqual(
       undeclaredInCommands(["mocha --ci"], available, skip, "fixture.yml"),
+      ['fixture.yml invokes "mocha" but no root dependency provides it'],
+    );
+  });
+
+  it("flags mocha on a later line of a run: | block", () => {
+    const source = [
+      "jobs:",
+      "  lint:",
+      "    steps:",
+      "      - run: |",
+      "          yarn install --immutable",
+      "          mocha --ci",
+    ].join("\n");
+    const available = new Set(["eslint", "prettier"]);
+    const violations = undeclaredInCommands(
+      extractWorkflowRunCommands(source),
+      available,
+      new Set(),
+      "fixture.yml",
+    );
+    assert.deepEqual(violations, [
+      'fixture.yml invokes "mocha" but no root dependency provides it',
+    ]);
+  });
+
+  it("flags mocha after an unspaced semicolon", () => {
+    const available = new Set(["eslint"]);
+    assert.deepEqual(
+      undeclaredInCommands(
+        ["echo ready;mocha --ci"],
+        available,
+        new Set(),
+        "fixture.yml",
+      ),
       ['fixture.yml invokes "mocha" but no root dependency provides it'],
     );
   });

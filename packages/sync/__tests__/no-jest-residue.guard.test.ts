@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { extractWorkflowRunCommands } from "./helpers/workflow-run-commands.js";
 
 /**
  * Repo-wide guard: this monorepo runs Vitest (ADR-0044) and must carry no Jest.
@@ -173,37 +174,6 @@ async function traverse(): Promise<Found> {
   };
   await visit(REPO_ROOT);
   return found;
-}
-
-/**
- * `run:` steps only. Comments and `uses:` actions are not invocations.
- * Same block-scalar rule as the workspace-tool-declaration sibling.
- */
-function extractWorkflowRunCommands(source: string): string[] {
-  const commands: string[] = [];
-  const lines = source.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const match = lines[i].match(/^(\s*)(?:-\s+)?run:\s*(.*)$/);
-    if (!match) continue;
-    const indent = match[1].length;
-    const rest = match[2];
-    if (/^[|>][+-]?$/.test(rest)) {
-      const block: string[] = [];
-      for (let j = i + 1; j < lines.length; j++) {
-        if (lines[j].trim() === "") {
-          block.push("");
-          continue;
-        }
-        const nextIndent = (lines[j].match(/^(\s*)/) ?? ["", ""])[1].length;
-        if (nextIndent <= indent) break;
-        block.push(lines[j].slice(indent + 2));
-      }
-      commands.push(block.join("\n"));
-      continue;
-    }
-    if (rest) commands.push(rest.replace(/^['"]|['"]$/g, ""));
-  }
-  return commands;
 }
 
 /**
