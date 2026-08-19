@@ -1,0 +1,8 @@
+# Maps this library's real directories onto one context so hexagen-lint
+# scans lib/ instead of the conventional packages/<ctx>/src/domain layout.
+contexts:
+  string-kit:
+    root: .
+    layers:
+      domain: [lib]
+tsconfig: tsconfig.json
