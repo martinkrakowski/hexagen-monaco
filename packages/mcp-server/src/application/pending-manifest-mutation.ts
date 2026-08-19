@@ -1,5 +1,4 @@
 import type { EventBusPort } from "@hexagen/messaging";
-import type { BoundedContextType } from "@hexagen/shared";
 import type { Transaction } from "@hexagen/transaction-system";
 import type { AddDependencyInput } from "./ports/in/add-dependency-tool.port.js";
 import type { CreateAdapterInput } from "./ports/in/create-adapter-tool.port.js";
@@ -7,15 +6,9 @@ import type { CreateContextInput } from "./ports/in/create-context-tool.port.js"
 import type { CreatePortInput } from "./ports/in/create-port-tool.port.js";
 import type { RemoveContextInput } from "./ports/in/remove-context-tool.port.js";
 import type { RemovePortInput } from "./ports/in/remove-port-tool.port.js";
+import type { ScaffoldModuleInput } from "./ports/in/scaffold-module-tool.port.js";
 import type { ManifestWritePort } from "./ports/out/manifest-write.port.js";
 import type { ScaffoldingPort } from "./ports/out/scaffolding.port.js";
-
-export interface ScaffoldModuleMutationInput {
-  name: string;
-  layer: "domain" | "application" | "infrastructure";
-  context_type?: BoundedContextType;
-  dry_run?: boolean;
-}
 
 export const PENDING_MANIFEST_MUTATION_KEY = "hexagenPendingManifestMutation";
 
@@ -26,7 +19,7 @@ export type PendingManifestMutation =
   | { kind: "create-adapter"; input: CreateAdapterInput }
   | { kind: "remove-port"; input: RemovePortInput }
   | { kind: "remove-context"; input: RemoveContextInput }
-  | { kind: "scaffold-module"; input: ScaffoldModuleMutationInput };
+  | { kind: "scaffold-module"; input: ScaffoldModuleInput };
 
 export function readPendingMutation(
   tx: Transaction,
@@ -258,7 +251,7 @@ async function applyRemoveContext(
 }
 
 async function applyScaffoldModule(
-  input: ScaffoldModuleMutationInput,
+  input: ScaffoldModuleInput,
   ports: ApplyMutationPorts,
 ): Promise<AppliedMutation> {
   const scaffoldResult = await ports.scaffolding.scaffoldModule({

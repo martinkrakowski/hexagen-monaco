@@ -1,10 +1,11 @@
-import type { ManifestGenerationPort } from "../ports/out/manifest-generation.port.js";
 import type {
   GenerateManifestPipelineInput,
   GenerateManifestPipelineOutput,
-} from "./generate-manifest-pipeline-tool.types.js";
+  GenerateManifestPipelineToolPort,
+} from "../ports/in/generate-manifest-pipeline-tool.port.js";
+import type { ManifestGenerationPort } from "../ports/out/manifest-generation.port.js";
 
-export class GenerateManifestPipelineToolUseCase {
+export class GenerateManifestPipelineToolUseCase implements GenerateManifestPipelineToolPort {
   constructor(private readonly port: ManifestGenerationPort) {}
 
   async execute(

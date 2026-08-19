@@ -4,11 +4,15 @@ import type { CreateAdapterToolPort } from "../../application/ports/in/create-ad
 import type { CreateContextToolPort } from "../../application/ports/in/create-context-tool.port.js";
 import type { CreatePortToolPort } from "../../application/ports/in/create-port-tool.port.js";
 import type { DiffManifestToolPort } from "../../application/ports/in/diff-manifest-tool.port.js";
+import type { GenerateAdaptersToolPort } from "../../application/ports/in/generate-adapters-tool.port.js";
+import type { GenerateManifestPipelineToolPort } from "../../application/ports/in/generate-manifest-pipeline-tool.port.js";
+import type { GenerateTopologyToolPort } from "../../application/ports/in/generate-topology-tool.port.js";
 import type { GetTransactionToolPort } from "../../application/ports/in/get-transaction-tool.port.js";
 import type { ListTransactionsToolPort } from "../../application/ports/in/list-transactions-tool.port.js";
 import type { RejectTransactionToolPort } from "../../application/ports/in/reject-transaction-tool.port.js";
 import type { RemoveContextToolPort } from "../../application/ports/in/remove-context-tool.port.js";
 import type { RemovePortToolPort } from "../../application/ports/in/remove-port-tool.port.js";
+import type { ScaffoldModuleToolPort } from "../../application/ports/in/scaffold-module-tool.port.js";
 import type { AuditBoundariesToolUseCase } from "../../application/use-cases/audit-boundaries-tool.use-case.js";
 import type { GetGraphResourceUseCase } from "../../application/use-cases/get-graph-resource.use-case.js";
 import type { GetDecisionsResourceUseCase } from "../../application/use-cases/get-decisions-resource.use-case.js";
@@ -19,11 +23,7 @@ import type { GetManifestResourceUseCase } from "../../application/use-cases/get
 import type { GetWorkspaceContextResourceUseCase } from "../../application/use-cases/get-workspace-context-resource.use-case.js";
 import type { InitializeFeatureWorktreeToolUseCase } from "../../application/use-cases/initialize-feature-worktree-tool.use-case.js";
 import type { LogAgentRemediationToolUseCase } from "../../application/use-cases/log-agent-remediation-tool.use-case.js";
-import type { ScaffoldModuleToolUseCase } from "../../application/use-cases/scaffold-module-tool.use-case.js";
 import type { SubmitArchitecturalSpecToolUseCase } from "../../application/use-cases/submit-architectural-spec-tool.use-case.js";
-import type { GenerateTopologyToolUseCase } from "../../application/use-cases/generate-topology-tool.use-case.js";
-import type { GenerateAdaptersToolUseCase } from "../../application/use-cases/generate-adapters-tool.use-case.js";
-import type { GenerateManifestPipelineToolUseCase } from "../../application/use-cases/generate-manifest-pipeline-tool.use-case.js";
 
 /**
  * The manifest-structure tool family (remediation item 6.5(a) / HEX-019):
@@ -70,10 +70,34 @@ export interface TransactionLifecycleToolDependencies {
   rejectTransactionToolUseCase: RejectTransactionToolPort;
 }
 
+/**
+ * The generation & scaffold tool family (remediation item 6.5(c) / HEX-019):
+ * scaffold-module, generate-topology, generate-adapters,
+ * generate-manifest-pipeline.
+ *
+ * Only the *inbound* half moves here. Driven collaborators stay outbound:
+ * `TransactionManagerPort` (scaffold) and `ManifestGenerationPort` (the three
+ * generate tools). They remain constructor dependencies of the use cases and
+ * are deliberately absent from this bag — a handler holding either would drive
+ * the collaborator past the use case.
+ *
+ * Field names are left as they were, for the same reason the (a) and (b)
+ * families' were: renaming them to `*ToolPort` forces an edit to
+ * `src/index.ts`, which cannot currently be committed. The types, not the
+ * identifiers, carry the direction claim.
+ */
+export interface GenerationScaffoldToolDependencies {
+  scaffoldModuleToolUseCase: ScaffoldModuleToolPort;
+  generateTopologyToolUseCase: GenerateTopologyToolPort;
+  generateAdaptersToolUseCase: GenerateAdaptersToolPort;
+  generateManifestPipelineToolUseCase: GenerateManifestPipelineToolPort;
+}
+
 export interface MCPServerAdapterDependencies
   extends
     ManifestStructureToolDependencies,
-    TransactionLifecycleToolDependencies {
+    TransactionLifecycleToolDependencies,
+    GenerationScaffoldToolDependencies {
   getManifestResourceUseCase: GetManifestResourceUseCase;
   getGraphResourceUseCase: GetGraphResourceUseCase;
   getLinterReportResourceUseCase: GetLinterReportResourceUseCase;
@@ -82,13 +106,9 @@ export interface MCPServerAdapterDependencies
   getLinterConfigResourceUseCase: GetLinterConfigResourceUseCase;
   getWorkspaceContextResourceUseCase: GetWorkspaceContextResourceUseCase;
   auditBoundariesToolUseCase: AuditBoundariesToolUseCase;
-  scaffoldModuleToolUseCase: ScaffoldModuleToolUseCase;
   initializeFeatureWorktreeToolUseCase: InitializeFeatureWorktreeToolUseCase;
   submitArchitecturalSpecToolUseCase: SubmitArchitecturalSpecToolUseCase;
   logAgentRemediationToolUseCase: LogAgentRemediationToolUseCase;
-  generateTopologyToolUseCase: GenerateTopologyToolUseCase;
-  generateAdaptersToolUseCase: GenerateAdaptersToolUseCase;
-  generateManifestPipelineToolUseCase: GenerateManifestPipelineToolUseCase;
 }
 
 /**
@@ -127,6 +147,21 @@ export type ManifestStructureDepsAreInboundPorts = Expect<
  */
 export type TransactionLifecycleDepsAreInboundPorts = Expect<
   StructurallySatisfiable<TransactionLifecycleToolDependencies> extends TransactionLifecycleToolDependencies
+    ? true
+    : false
+>;
+
+/**
+ * Same check for the generation & scaffold family (item 6.5(c)).
+ *
+ * Same hole as (b): a homomorphic mapped type over an array is the identity, so
+ * `x: SomeToolUseCase[]` satisfies it. The source-text guard in
+ * `__tests__/architecture/generation-scaffold-inbound-ports.guard.test.ts`
+ * covers that hole by reading declared types verbatim and reporting any it
+ * cannot tie to a single named contract. Neither half is sufficient alone.
+ */
+export type GenerationScaffoldDepsAreInboundPorts = Expect<
+  StructurallySatisfiable<GenerationScaffoldToolDependencies> extends GenerationScaffoldToolDependencies
     ? true
     : false
 >;

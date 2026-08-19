@@ -1,10 +1,11 @@
-import type { ManifestGenerationPort } from "../ports/out/manifest-generation.port.js";
 import type {
   GenerateAdaptersInput,
   GenerateAdaptersOutput,
-} from "./generate-adapters-tool.types.js";
+  GenerateAdaptersToolPort,
+} from "../ports/in/generate-adapters-tool.port.js";
+import type { ManifestGenerationPort } from "../ports/out/manifest-generation.port.js";
 
-export class GenerateAdaptersToolUseCase {
+export class GenerateAdaptersToolUseCase implements GenerateAdaptersToolPort {
   constructor(private readonly port: ManifestGenerationPort) {}
 
   async execute(input: GenerateAdaptersInput): Promise<GenerateAdaptersOutput> {
