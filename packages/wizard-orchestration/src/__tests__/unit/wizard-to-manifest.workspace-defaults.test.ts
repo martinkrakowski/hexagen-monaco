@@ -1,7 +1,10 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 
-import { wizardToManifest } from "../../application/wizard-to-manifest";
+import {
+  wizardToManifest,
+  DEFAULT_WORKSPACE_DEFAULTS,
+} from "../../application/wizard-to-manifest";
 
 // Emission defaults for the monorepo block (F2/F8/F15 — vellum findings).
 // These are the values every wizard-generated manifest carries; the sync
@@ -66,6 +69,23 @@ describe("wizardToManifest — monorepo workspace defaults", () => {
         `${stale} is the legacy eslintrc toolchain — the flat config imports typescript-eslint instead`,
       );
     }
+  });
+
+  it("emits the named DEFAULT_WORKSPACE_DEFAULTS object, not an inline copy (GOD-008 residue)", () => {
+    const out = wizardToManifest(minimalWizard());
+    const emitted = (
+      out.monorepo as { workspaceDefaults?: unknown } | undefined
+    )?.workspaceDefaults;
+    assert.equal(
+      emitted,
+      DEFAULT_WORKSPACE_DEFAULTS,
+      "wizardToManifest must emit the named DEFAULT_WORKSPACE_DEFAULTS object — an inline copy with the same values would still pass deepEqual and undo GOD-008",
+    );
+    assert.deepEqual(
+      emitted,
+      DEFAULT_WORKSPACE_DEFAULTS,
+      "emitted workspaceDefaults values must match DEFAULT_WORKSPACE_DEFAULTS",
+    );
   });
 
   it("turboConfig pipeline typecheck keeps ^build (F15 makes this pipeline live — TS6305 guard)", () => {
