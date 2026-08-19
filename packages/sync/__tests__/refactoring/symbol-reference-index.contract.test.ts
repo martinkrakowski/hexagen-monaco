@@ -208,6 +208,42 @@ describe("TsMorphSymbolIndexAdapter satisfies SymbolReferenceIndexPort", () => {
       );
     });
   });
+
+  it("attaches syntactic diagnostics on an unparseable file that names the symbol (RI-2.1)", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      const references = await indexAndQuery(
+        workspaceRoot,
+        {
+          "packages/orders/src/broken-port.ts":
+            "export class OrderRepositoryPort { constructor( private readonly ",
+          "packages/orders/src/clean-port.ts":
+            "export interface OrderRepositoryPort { findAll(): Promise<void>; }\n",
+          "packages/orders/src/semantic-only.ts":
+            "export function boot(repo: OrderRepositoryPort): MissingType { return repo; }\n",
+        },
+        "OrderRepositoryPort",
+      );
+
+      const byName = Object.fromEntries(
+        references.map((ref) => [path.posix.basename(ref.filePath), ref]),
+      );
+
+      assert.ok(
+        (byName["broken-port.ts"]?.diagnostics?.length ?? 0) > 0,
+        `unparseable file must carry syntactic diagnostics; got ${JSON.stringify(byName["broken-port.ts"])}`,
+      );
+      assert.equal(
+        byName["clean-port.ts"]?.diagnostics,
+        undefined,
+        "a clean file must omit diagnostics — otherwise a hard-coded array satisfies the broken-file arm",
+      );
+      assert.equal(
+        byName["semantic-only.ts"]?.diagnostics,
+        undefined,
+        "unresolved types are semantic, not syntactic — collecting them would flood consumer workspaces",
+      );
+    });
+  });
 });
 
 /**
@@ -374,6 +410,43 @@ describe("RefactoringImpactUseCase consumes the port's DTOs", () => {
     assert.ok(
       result.value.warnings.some((w) => w.includes("domain layer files")),
       `expected a domain-risk warning, got ${JSON.stringify(result.value.warnings)}`,
+    );
+  });
+
+  it("names the unparseable file in warnings when the DTO carries diagnostics (RI-2.1)", async () => {
+    const index = new RecordingSymbolIndex([
+      {
+        filePath: `${ROOT}/packages/orders/src/domain/broken.ts`,
+        reason: "sentinel-broken-reason",
+        diagnostics: ["'}' expected."],
+      },
+      {
+        filePath: `${ROOT}/packages/orders/src/domain/clean.ts`,
+        reason: "sentinel-clean-reason",
+      },
+    ]);
+
+    const result = await buildUseCase(index).analyze({
+      type: "rename-port",
+      target: "OrderRepositoryPort",
+      newName: "OrderStorePort",
+    });
+
+    assert.ok(
+      result.success,
+      `analyse failed: ${result.success ? "" : String(result.error)}`,
+    );
+    assert.ok(
+      result.value.warnings.some((warning) =>
+        warning.includes("packages/orders/src/domain/broken.ts"),
+      ),
+      `expected the named file in warnings, got ${JSON.stringify(result.value.warnings)}`,
+    );
+    assert.ok(
+      !result.value.warnings.some((warning) =>
+        warning.includes("packages/orders/src/domain/clean.ts"),
+      ),
+      `a DTO without diagnostics must not produce a parse warning; got ${JSON.stringify(result.value.warnings)}`,
     );
   });
 

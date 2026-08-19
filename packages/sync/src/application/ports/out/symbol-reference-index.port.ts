@@ -29,15 +29,10 @@
  * exactly; collapsing it into one call would quietly change what a second
  * `analyze()` on the same instance sees.
  *
- * EXTENSION POINT (RI-2). `SymbolReferenceDto` is a per-file RECORD rather
- * than a bare `path -> reason` pair precisely so the known defect tracked as
- * RI-2 in `docs/planning/2026-08-16-ratchet-and-parser-integrity-plan.md` —
- * the analyser discards syntactic diagnostics, so an unparseable consumer file
- * yields a confident, wrong report — can be fixed additively: an optional
- * `diagnostics` field here, populated by the adapter, consumed by
- * `generateWarnings`. No such field is added today, because a field no
- * producer fills and no consumer reads is not a fix; the point is only that
- * the shape leaves room for one.
+ * RI-2.1. `diagnostics` is optional and syntactic-only. Semantic errors
+ * (unresolved types, missing modules) are not collected — a consumer
+ * workspace with those would flood the warning channel. An empty or
+ * omitted array means "I could read this file".
  */
 
 /** One file that mentions the symbol under analysis. Plain data, no AST. */
@@ -58,6 +53,12 @@ export interface SymbolReferenceDto {
    * the user as `FileToModify.reason`.
    */
   readonly reason: string;
+
+  /**
+   * Syntactic diagnostics from the parser for this file. Absent or empty
+   * when the file parsed. Never semantic diagnostics.
+   */
+  readonly diagnostics?: readonly string[];
 }
 
 /** A parsed, queryable index of workspace source files. */

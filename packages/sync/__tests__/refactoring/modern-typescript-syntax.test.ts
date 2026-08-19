@@ -187,11 +187,9 @@ describe("refactoring-impact parses >=TS 5.5 syntax (AUD-012)", () => {
   // ImpactAnalyzer -> RefactoringImpactUseCase -> TsMorphSymbolIndexAdapter ->
   // ts-morph rather than through a hand-built Project the production path never
   // touches.
-  // Follow-up worth a human decision (RI-2): the analyser discards syntactic
-  // diagnostics entirely, so an unparseable consumer file yields a confident
-  // but wrong report with no warning. Out of scope for AUD-012 and for
-  // HEX-013 — see the SymbolReferenceIndexPort header for why the DTO shape
-  // leaves room for it.
+  // RI-2.2 control lives on this liveness arm: a clean parse must not emit
+  // a "Could not parse" warning, otherwise a hard-coded warning would
+  // satisfy the broken-syntax arm below.
   it("analyses a workspace containing >=TS 5.5 syntax end to end (liveness)", async () => {
     await withTempWorkspace(async ({ workspaceRoot }) => {
       await writeFixture(
@@ -233,6 +231,53 @@ describe("refactoring-impact parses >=TS 5.5 syntax (AUD-012)", () => {
       assert.strictEqual(
         declaring?.reason,
         "Declares interface OrderRepositoryPort",
+      );
+
+      assert.ok(
+        !result.value.warnings.some((warning) =>
+          /Could not parse/.test(warning),
+        ),
+        `clean files must not emit a parse warning; got ${JSON.stringify(result.value.warnings)}`,
+      );
+    });
+  });
+
+  it("warns with the named file when the workspace contains unparseable syntax (RI-2.2)", async () => {
+    await withTempWorkspace(async ({ workspaceRoot }) => {
+      await writeFixture(
+        workspaceRoot,
+        "packages/orders/src/order-repository.port.ts",
+        `export interface OrderRepositoryPort { findAll(): Promise<void>; }\n`,
+      );
+      await writeFixture(
+        workspaceRoot,
+        "packages/orders/src/broken-port.ts",
+        `export class OrderRepositoryPort { constructor( private readonly `,
+      );
+
+      const result = await new ImpactAnalyzer(workspaceRoot, MANIFEST).analyze({
+        type: "rename-port",
+        target: "OrderRepositoryPort",
+        newName: "OrderStorePort",
+      });
+
+      assert.ok(
+        result.success,
+        `analyse failed: ${result.success ? "" : String(result.error)}`,
+      );
+      assert.ok(
+        result.value.warnings.some((warning) =>
+          /Could not parse packages\/orders\/src\/broken-port\.ts \(syntactic\)/.test(
+            warning,
+          ),
+        ),
+        `expected a named-file syntactic warning, got ${JSON.stringify(result.value.warnings)}`,
+      );
+      assert.ok(
+        !result.value.warnings.some((warning) =>
+          warning.includes("order-repository.port.ts"),
+        ),
+        `the clean sibling must not be named as unparseable; got ${JSON.stringify(result.value.warnings)}`,
       );
     });
   });
