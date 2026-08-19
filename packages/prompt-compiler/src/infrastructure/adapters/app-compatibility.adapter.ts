@@ -1,29 +1,7 @@
-import type { BoundedContextType } from "@hexagen/shared";
+import type { EditorState } from "../../domain/editor-state";
+import type { GovernancePayload } from "../../domain/governance-payload";
+import type { ChatMessage } from "../../domain/chat-message";
 import { formatPortOwnershipLines } from "./format-port-ownership";
-
-export interface GovernancePayload {
-  system: string;
-  scope: string;
-  architecture: string;
-  boundedContexts: Array<{
-    name: string;
-    type: BoundedContextType;
-  }>;
-  ports: Record<string, string>;
-  invariants: Array<{
-    name: string;
-    priority: "critical" | "high" | "medium";
-  }>;
-  timestamp: string;
-}
-
-export interface EditorState {
-  filename: string;
-  language: string;
-  content: string;
-  lineStart: number;
-  lineEnd: number;
-}
 
 export function buildGroundedSystemPrompt(input: {
   governance: GovernancePayload;
@@ -116,12 +94,6 @@ export function chunkEditorBuffer(
 
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
-}
-
-export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
 }
 
 export function prunedHistoryWindow(
