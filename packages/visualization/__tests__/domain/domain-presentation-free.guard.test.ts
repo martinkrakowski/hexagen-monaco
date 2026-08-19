@@ -19,7 +19,7 @@ import ts from "typescript";
  *
  * Two layers of protection, and this is the second one. The first is
  * `DOMAIN_GRAPH_CARRIES_NO_PRESENTATION` in
- * `src/application/ports/in/renderable-graph.ts` — a compile-time assignment in
+ * `src/application/ports/out/renderable-graph.ts` — a compile-time assignment in
  * production code asserting the domain and presentation key sets are disjoint.
  * That one is exact but closed: it can only notice the four names the
  * presentation type already declares. This one is open: it fails on renderer
@@ -293,7 +293,7 @@ describe("the domain layer declares no renderer vocabulary", () => {
       `HEX-030: a domain type is carrying renderer vocabulary.\n` +
         `These names introduce no import, so \`yarn lint:arch\` cannot see them.\n` +
         `Put the field on HexagonNodePresentation / HexagonEdgePresentation in\n` +
-        `src/application/ports/in/renderable-graph.ts — or delete it if, like\n` +
+        `src/application/ports/out/renderable-graph.ts — or delete it if, like\n` +
         `\`draggable\` and \`markerEnd\`, no renderer actually reads it.\n\n` +
         violations.map((v) => `  - ${v}`).join("\n"),
     );

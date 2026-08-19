@@ -1,8 +1,8 @@
-import type { HexagonalMapInput } from "../../../application/ports/in/hexagonal-map-input.js";
+import type { HexagonalMapInput } from "../../../application/ports/out/hexagonal-map-input.js";
 import type {
   RenderableHexagonEdge,
   RenderableHexagonNode,
-} from "../../../application/ports/in/renderable-graph.js";
+} from "../../../application/ports/out/renderable-graph.js";
 
 import { LAYOUT_CONFIG } from "./config.js";
 import { generateBoundedContextNodes } from "./generate-bounded-context-nodes.js";

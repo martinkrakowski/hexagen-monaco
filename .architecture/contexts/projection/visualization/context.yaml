@@ -25,8 +25,7 @@ layers:
         # infrastructure/adapters/hexagonal-map-generator/) and the use case
         # takes it as a constructor dependency (CanvasGraphLoadUseCase). Same
         # test that keeps TransactionManagerPort off mcp-server's inbound list.
-        # The interface file still sits under application/ports/in/ — a HEX-018
-        # relocation for a code PR, not something this registry edit can fix.
+        # Interface: application/ports/out/generate-hexagonal-map.port.ts (HEX-018).
         - GenerateHexagonalMapPort
 depends_on:
   - project-configuration

@@ -2,4 +2,7 @@
 
 export * from "./architecture-graph-provider-port.port.js";
 export * from "./canvas-persistence.port.js";
+export * from "./generate-hexagonal-map.port.js";
 export * from "./graph-image-renderer.port.js";
+export * from "./hexagonal-map-input.js";
+export * from "./renderable-graph.js";

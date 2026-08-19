@@ -1,10 +1,10 @@
 import type { IArchitectureGraphProviderPort } from "../ports/out/architecture-graph-provider-port.port.js";
-import type { GenerateHexagonalMapPort } from "../ports/in/generate-hexagonal-map.port.js";
-import type { HexagonalMapInput } from "../ports/in/hexagonal-map-input.js";
+import type { GenerateHexagonalMapPort } from "../ports/out/generate-hexagonal-map.port.js";
+import type { HexagonalMapInput } from "../ports/out/hexagonal-map-input.js";
 import type {
   RenderableHexagonEdge,
   RenderableHexagonNode,
-} from "../ports/in/renderable-graph.js";
+} from "../ports/out/renderable-graph.js";
 
 export interface CanvasGraphLoadInput {
   projectId?: string;

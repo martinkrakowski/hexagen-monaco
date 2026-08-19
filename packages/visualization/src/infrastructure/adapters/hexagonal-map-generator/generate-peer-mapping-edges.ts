@@ -1,11 +1,11 @@
 import type {
   MapContextInput,
   MapPeerMappingInput,
-} from "../../../application/ports/in/hexagonal-map-input.js";
+} from "../../../application/ports/out/hexagonal-map-input.js";
 import type {
   RenderableHexagonEdge,
   RenderableHexagonNode,
-} from "../../../application/ports/in/renderable-graph.js";
+} from "../../../application/ports/out/renderable-graph.js";
 
 interface GeneratePeerMappingEdgesOptions {
   peerMappings: readonly MapPeerMappingInput[];

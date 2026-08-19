@@ -2,7 +2,7 @@ import type {
   GenerateHexagonalMapPort,
   GenerateHexagonalMapInput,
   GenerateHexagonalMapOutput,
-} from "../../../application/ports/in/generate-hexagonal-map.port.js";
+} from "../../../application/ports/out/generate-hexagonal-map.port.js";
 
 import { generateHexagonalContextMap } from "./generate-hexagonal-context-map.js";
 
