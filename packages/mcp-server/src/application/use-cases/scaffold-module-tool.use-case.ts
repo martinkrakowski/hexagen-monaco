@@ -1,27 +1,20 @@
-import type { BoundedContextType } from "@hexagen/shared";
 import type { TransactionManagerPort } from "@hexagen/transaction-system";
 import {
   PENDING_MANIFEST_MUTATION_KEY,
   type PendingManifestMutation,
 } from "../pending-manifest-mutation.js";
+import type {
+  ScaffoldModuleInput,
+  ScaffoldModuleOutput,
+  ScaffoldModuleToolPort,
+} from "../ports/in/scaffold-module-tool.port.js";
 
-export interface ScaffoldModuleInput {
-  name: string;
-  layer: "domain" | "application" | "infrastructure";
-  context_type?: BoundedContextType;
-  dry_run?: boolean;
-}
+export type {
+  ScaffoldModuleInput,
+  ScaffoldModuleOutput,
+} from "../ports/in/scaffold-module-tool.port.js";
 
-export interface ScaffoldModuleOutput {
-  dryRun: boolean;
-  message: string;
-  filesCreated: string[];
-  registeredInManifest: boolean;
-  pendingApproval?: boolean;
-  transactionId?: string;
-}
-
-export class ScaffoldModuleToolUseCase {
+export class ScaffoldModuleToolUseCase implements ScaffoldModuleToolPort {
   constructor(private readonly transactionManager: TransactionManagerPort) {}
 
   async execute(input: ScaffoldModuleInput): Promise<ScaffoldModuleOutput> {

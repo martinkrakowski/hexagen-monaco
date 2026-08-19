@@ -53,6 +53,15 @@ layers:
         - RejectTransactionToolPort
         - GetTransactionToolPort
         - ListTransactionsToolPort
+        # Generation & scaffold tool family (item 6.5c / HEX-019). Same test:
+        # implemented by its use case, called by the tool handler, no
+        # infrastructure implementer. ScaffoldModuleToolUseCase is still
+        # handed TransactionManagerPort as a driven collaborator — outbound
+        # here, deliberately not listed.
+        - ScaffoldModuleToolPort
+        - GenerateTopologyToolPort
+        - GenerateAdaptersToolPort
+        - GenerateManifestPipelineToolPort
       out:
         - ProjectConfigurationReadPort
         - ManifestWritePort

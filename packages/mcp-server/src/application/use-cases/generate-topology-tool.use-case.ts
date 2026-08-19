@@ -1,10 +1,11 @@
-import type { ManifestGenerationPort } from "../ports/out/manifest-generation.port.js";
 import type {
   GenerateTopologyInput,
   GenerateTopologyOutput,
-} from "./generate-topology-tool.types.js";
+  GenerateTopologyToolPort,
+} from "../ports/in/generate-topology-tool.port.js";
+import type { ManifestGenerationPort } from "../ports/out/manifest-generation.port.js";
 
-export class GenerateTopologyToolUseCase {
+export class GenerateTopologyToolUseCase implements GenerateTopologyToolPort {
   constructor(private readonly port: ManifestGenerationPort) {}
 
   async execute(input: GenerateTopologyInput): Promise<GenerateTopologyOutput> {
