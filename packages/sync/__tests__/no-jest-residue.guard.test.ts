@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { extractWorkflowRunCommands } from "./helpers/workflow-run-commands.js";
 
 /**
  * Repo-wide guard: this monorepo runs Vitest (ADR-0044) and must carry no Jest.
@@ -126,6 +127,7 @@ type Found = {
   jestNamedFiles: string[];
   manifests: string[];
   tsconfigs: string[];
+  workflows: string[];
 };
 
 const rel = (absolute: string) =>
@@ -140,7 +142,12 @@ let discovery: Promise<Found> | undefined;
 const walk = (): Promise<Found> => (discovery ??= traverse());
 
 async function traverse(): Promise<Found> {
-  const found: Found = { jestNamedFiles: [], manifests: [], tsconfigs: [] };
+  const found: Found = {
+    jestNamedFiles: [],
+    manifests: [],
+    tsconfigs: [],
+    workflows: [],
+  };
   const visit = async (dir: string): Promise<void> => {
     for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
       const absolute = path.join(dir, entry.name);
@@ -157,6 +164,12 @@ async function traverse(): Promise<Found> {
       if (entry.name === "package.json") found.manifests.push(absolute);
       if (/^tsconfig(\..+)?\.json$/.test(entry.name))
         found.tsconfigs.push(absolute);
+      if (
+        /\.ya?ml$/.test(entry.name) &&
+        rel(absolute).startsWith(".github/workflows/")
+      ) {
+        found.workflows.push(absolute);
+      }
     }
   };
   await visit(REPO_ROOT);
@@ -269,7 +282,7 @@ function jestBinariesInvoked(command: string): string[] {
 
 describe("no Jest residue", () => {
   it("discovery reaches the whole repo", async () => {
-    const { manifests, tsconfigs } = await walk();
+    const { manifests, tsconfigs, workflows } = await walk();
     // Anchors, not magic numbers: the root manifest and the base tsconfig must
     // both be reachable, or the walk is rooted somewhere unexpected and every
     // other assertion below would pass vacuously.
@@ -284,6 +297,11 @@ describe("no Jest residue", () => {
     assert.ok(
       manifests.some((file) => rel(file) === "packages/sync/package.json"),
       `walk did not reach packages/sync, the package this guard lives in`,
+    );
+    assert.ok(
+      workflows.some((file) => rel(file) === ".github/workflows/lint.yml"),
+      `walk found ${workflows.length} workflow files and missed lint.yml — ` +
+        `an empty workflow scan is a fail (FU-2)`,
     );
   });
 
@@ -414,6 +432,50 @@ describe("no Jest residue", () => {
       }),
       [],
       "matched something that is not a manifest-level Jest config block",
+    );
+  });
+
+  it("sees Jest in a workflow run step, including launchers", () => {
+    const source = [
+      "jobs:",
+      "  test:",
+      "    steps:",
+      "      - uses: actions/checkout@v4",
+      "      - run: yarn test",
+      "      - run: |",
+      "          npx jest",
+      "          npm exec jest -- --ci",
+    ].join("\n");
+    const hits =
+      extractWorkflowRunCommands(source).flatMap(jestBinariesInvoked);
+    assert.ok(hits.length >= 2, `expected Jest in the fixture, got ${hits}`);
+    const clean = extractWorkflowRunCommands(
+      "jobs:\n  t:\n    steps:\n      - run: yarn vitest run\n",
+    ).flatMap(jestBinariesInvoked);
+    assert.deepEqual(clean, []);
+  });
+
+  it("no GitHub workflow run step invokes Jest", async () => {
+    const { workflows } = await walk();
+    assert.ok(
+      workflows.length > 0,
+      "walk found zero workflow files — empty scan is a fail (FU-2)",
+    );
+    const violations: string[] = [];
+    for (const file of workflows) {
+      const source = await fs.readFile(file, "utf8");
+      for (const command of extractWorkflowRunCommands(source)) {
+        for (const bin of jestBinariesInvoked(command)) {
+          violations.push(`${rel(file)}: run step invokes "${bin}"`);
+        }
+      }
+    }
+    assert.deepEqual(
+      violations,
+      [],
+      `This repo runs Vitest (ADR-0044). A Jest invocation in ` +
+        `.github/workflows/** is a second test stack coming back through CI.\n\n` +
+        violations.map((v) => `  - ${v}`).join("\n"),
     );
   });
 

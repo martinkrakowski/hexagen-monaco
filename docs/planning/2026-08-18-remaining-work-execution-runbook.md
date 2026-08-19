@@ -1,7 +1,7 @@
 # Remaining work — execution runbook (live)
 
-**Date:** 2026-08-18 · **Status:** Wave 0 lands in **#535**. Wave A0 is the engineering wavefront. Wave A1 waits on #535 merging. **Next owner action:** enable branch protection after #535 is green on `main`.
-**Baseline:** `main` @ `08024dd3` (`v0.11.0`) plus #535 (`chore/remaining-work-wave-0`).
+**Date:** 2026-08-18 · **Status:** Wave 0 is on `main` (**#535** @ `0151eb94`). Wave A0 is the engineering wavefront (T4 / FU-2 in flight). Wave A1 is unblocked by D-C0; **next owner action:** enable branch protection, then open A1 PRs.
+**Baseline:** `main` @ `0151eb94` (`v0.11.0` + #535).
 
 This is the **live operating runbook** for the leftover work from the 2026-08-14 through
 2026-08-18 planning window. It is the companion to — not a replacement for — the plan:
@@ -53,28 +53,28 @@ If a landing does not delete its own keys, the trajectory stalls. That is a revi
 
 ## 2. Open items, exactly
 
-Measured on `08024dd3` + #535. A plan row that disagrees with the tree loses.
+Measured on `0151eb94`. A plan row that disagrees with the tree loses.
 
-### Wave 0 (human + docs) — lands in #535
+### Wave 0 (human + docs) — merged #535
 
-| Item      | State                | Evidence                                                                                                                                          |
-| --------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **D-C0**  | ✅ **lands in #535** | ADR-0059 amendment: capacity-freed is the resume trigger; pay-gate / kill-criterion retired as _resume_ triggers.                                 |
-| **DOC-1** | ✅ **lands in #535** | `CHANGELOG.md` §0.11.0: arch-linter FSL, sync stays evaluation (ADR-0066).                                                                        |
-| **DOC-2** | ✅ **lands in #535** | `commands/bootstrap.ts` deleted. Helpers and `bootstrapCommander` live on `commands/bootstrap/index.ts`. `bootstrap.test.ts` imports that module. |
+| Item      | State            | Evidence                                                                                                                                             |
+| --------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **D-C0**  | ✅ **on `main`** | ADR-0059 amendment: capacity-freed is the resume trigger; pay-gate / kill-criterion retired as _resume_ triggers.                                    |
+| **DOC-1** | ✅ **on `main`** | `CHANGELOG.md` §0.11.0: published `arch-linter@0.11.0` is `FSL-1.1-ALv2`; sync stays Source-Available Evaluation (npm field `UNLICENSED`, ADR-0066). |
+| **DOC-2** | ✅ **on `main`** | `commands/bootstrap.ts` deleted. Helpers and `bootstrapCommander` live on `commands/bootstrap/index.ts`. `bootstrap.test.ts` imports that module.    |
 
 ### Wave A0 — not parked
 
-| Item                | State          | Notes                                                                                                                                                                                         |
-| ------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **T4.1–T4.4**       | ⛔ not started | Guard still inspects workspace `scripts` only. T4.4 is the permanent CI owner. Landing requires a failing-first undeclared-binary fixture and a non-zero discovery floor (empty scan = fail). |
-| **FU-2**            | ⛔ not started | Jest guard does not scan `.github/workflows/`. Same anti-vacuity + RED fixture (`npx jest` in a workflow). Empty workflow scan = fail.                                                        |
-| **RI-1.3**          | 🔄 partial     | Run already prints suppressed count; stale vs fresh not equally visible.                                                                                                                      |
-| **RI-2.1 / RI-2.2** | ⛔ not started | `RefactoringImpactUseCase` still ignores syntactic diagnostics.                                                                                                                               |
-| **DOS-2.1**         | ⛔ not started | `.slice(0, 10)` in both prompt-compiler adapters.                                                                                                                                             |
-| **FU-1.1**          | ⛔ not started | `packages/local-llm` config exists; script missing.                                                                                                                                           |
+| Item                | State            | Notes                                                                                                                                                                                           |
+| ------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **T4.1–T4.4**       | 🔄 **in flight** | Workflow `run:` + lint-staged use a root-declared-bin floor. `scripts/*.sh` uses a known-bad-name list (`UNDECLARED_PACKAGE_BINS`) — a full bash AST is out of scope. Discovery floor non-zero. |
+| **FU-2**            | 🔄 **in flight** | Jest guard scans workflow `run:` steps. Empty workflow scan = fail. Mutation: `npx jest` in `lint.yml` reddens; restore byte-identical.                                                         |
+| **RI-1.3**          | 🔄 partial       | Run already prints suppressed count; stale vs fresh not equally visible.                                                                                                                        |
+| **RI-2.1 / RI-2.2** | ⛔ not started   | `RefactoringImpactUseCase` still ignores syntactic diagnostics.                                                                                                                                 |
+| **DOS-2.1**         | ⛔ not started   | `.slice(0, 10)` in both prompt-compiler adapters.                                                                                                                                               |
+| **FU-1.1**          | ⛔ not started   | `packages/local-llm` config exists; script missing.                                                                                                                                             |
 
-### Blocked on D-C0 (Wave A1 / C / D / remaining 8.12)
+### Wave A1 / C / D / remaining 8.12 (D-C0 done; 8.12(h) still gates 7.1)
 
 | Item                      | State           | Why it is still open                                                                        |
 | ------------------------- | --------------- | ------------------------------------------------------------------------------------------- |
@@ -91,17 +91,17 @@ Measured on `08024dd3` + #535. A plan row that disagrees with the tree loses.
 
 ### Gated / owner
 
-| Item                                | State                           |
-| ----------------------------------- | ------------------------------- |
-| **T5.2–T5.5**                       | ⛔ need D-V1…D-V4               |
-| **RI-1.2**                          | ⛔ need D-R1a                   |
-| **FU-1.2**                          | ⛔ re-measure + e2e required    |
-| **FU-1.3 / FU-1.4**                 | ⛔ after FU-1.1                 |
-| **FU-3 remainder / eslint**         | 🔄 3 pins left                  |
-| **DOS-2.11**                        | ⛔ blocked on D-T11             |
-| FDE 0.3 / Phase 1–2 gates           | ⛔ owner-only                   |
-| Branch protection                   | ⛔ **after** Wave 0, not before |
-| Issues **#510**, **#521**, **#428** | ⛔ OPEN                         |
+| Item                                | State                                          |
+| ----------------------------------- | ---------------------------------------------- |
+| **T5.2–T5.5**                       | ⛔ need D-V1…D-V4                              |
+| **RI-1.2**                          | ⛔ need D-R1a                                  |
+| **FU-1.2**                          | ⛔ re-measure + e2e required                   |
+| **FU-1.3 / FU-1.4**                 | ⛔ after FU-1.1                                |
+| **FU-3 remainder / eslint**         | 🔄 3 pins left                                 |
+| **DOS-2.11**                        | ⛔ blocked on D-T11                            |
+| FDE 0.3 / Phase 1–2 gates           | ⛔ owner-only                                  |
+| Branch protection                   | ⛔ **owner** — Wave 0 is on `main`; enable now |
+| Issues **#510**, **#521**, **#428** | ⛔ OPEN                                        |
 
 ---
 
@@ -127,14 +127,11 @@ Measured on `08024dd3` + #535. A plan row that disagrees with the tree loses.
 ## 4. What to start now
 
 ```text
-Owner, after #535 is green and merged:
+Owner, now that #535 is on main:
   enable branch protection (Lint & Boundaries / ESLint + UI boundary)
   THEN Wave A1
 
-Wave A0 (not parked; can start now):
-  T4.1 + T4.2   (one PR ok)
-  T4.3  T4.4
-  FU-2
+Wave A0 remaining (after T4 / FU-2):
   RI-1.3
   RI-2.1 + RI-2.2
   DOS-2.1
@@ -144,11 +141,10 @@ Human, not same-day as protection:
   #510 / #521 / #428 triage
   D-T11 write-up (before anyone starts DOS-2.11)
 
-After #535 merge — Wave A1, ≤4 labeled PRs:
+Wave A1, ≤4 labeled PRs (D-C0 is done):
   6.5(c)   8.12(b)(c)(d)(f)(g)(i)   VIZ-1
 
 Do not start:
-  Wave A1 / 6.7* / 7.* / 8.12(h)   before #535 merges
   8.1 / 8.2                        before 7.1
   8.12(a)                          before 8.12(h)
   7.1                              before 8.12(h)
@@ -159,7 +155,6 @@ Do not start:
   T5.*                             before D-V*
   RI-1.2                           before D-R1a
   DOS-2.11                         before D-T11
-  branch protection                before #535 is green on main
   Phase 3 / 4 / Stripe / --llm
   a 0.9.x patch, or FSL republish of sync@0.11.0
 ```
@@ -285,3 +280,7 @@ Rejected as over-scope for this arc: implementing a new `@canary` publisher (use
 ### 2026-08-18 — Wave 0 landed in #535
 
 D-C0, DOC-1, and DOC-2 land in this PR. Next owner action is enable branch protection after the required checks are green on `main`. Wave A0 remains the engineering wavefront; Wave A1 waits on the merge.
+
+### 2026-08-18 — #535 merged; Wave A0 T4 / FU-2
+
+`main` @ `0151eb94`. T4.1/T4.2 audit: **zero** undeclared package binaries in `scripts/` and workflow `run:` steps (host/CI tools: `docker`, `kubectl`, `yq`, `envsubst`, `actionlint` pinned in-job). T4.3/T4.4/FU-2 encode that as CI guards. Remaining A0: RI-1.3, RI-2.1+2.2, DOS-2.1, FU-1.1.
