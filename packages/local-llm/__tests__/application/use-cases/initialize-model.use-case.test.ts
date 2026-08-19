@@ -29,20 +29,20 @@ describe("initialize-model.use-case", () => {
 
     assert(
       result.success,
-      `Expected success, got error: ${result.error?.message}`,
+      `Expected success, got error: ${result.success === false && result.error instanceof Error ? result.error.message : "unknown"}`,
     );
     assert(progressCalled, "Expected onProgress to be called");
     assert(
-      result.value?.initialized === true,
+      result.value.initialized === true,
       "Expected initialized to be true",
     );
     assert(
-      result.value?.modelId === MODEL_ID,
-      `Expected modelId '${MODEL_ID}', got '${result.value?.modelId}'`,
+      result.value.modelId === MODEL_ID,
+      `Expected modelId '${MODEL_ID}', got '${result.value.modelId}'`,
     );
     assert(
-      result.value?.phase === "ready",
-      `Expected phase 'ready', got '${result.value?.phase}'`,
+      result.value.phase === "ready",
+      `Expected phase 'ready', got '${result.value.phase}'`,
     );
   });
 
@@ -60,10 +60,13 @@ describe("initialize-model.use-case", () => {
     });
 
     assert(!failResult.success, "Expected failure result");
-    assert(
-      failResult.error?.message === "WebGPU not available",
-      `Expected WebGPU error, got: ${failResult.error?.message}`,
-    );
+    if (!failResult.success) {
+      assert(
+        failResult.error instanceof Error &&
+          failResult.error.message === "WebGPU not available",
+        `Expected WebGPU error, got: ${failResult.error instanceof Error ? failResult.error.message : String(failResult.error)}`,
+      );
+    }
   });
 
   it("should handle null metadata", async () => {
@@ -77,9 +80,12 @@ describe("initialize-model.use-case", () => {
     });
 
     assert(!noMetaResult.success, "Expected failure result when no metadata");
-    assert(
-      noMetaResult.error?.message.includes("no metadata returned"),
-      `Expected 'no metadata returned' error, got: ${noMetaResult.error?.message}`,
-    );
+    if (!noMetaResult.success) {
+      assert(
+        noMetaResult.error instanceof Error &&
+          noMetaResult.error.message.includes("no metadata returned"),
+        `Expected 'no metadata returned' error, got: ${noMetaResult.error instanceof Error ? noMetaResult.error.message : String(noMetaResult.error)}`,
+      );
+    }
   });
 });
