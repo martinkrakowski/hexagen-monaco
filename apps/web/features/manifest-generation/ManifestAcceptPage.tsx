@@ -19,7 +19,7 @@ import { useSavedProjects } from "../../app/hooks/useSavedProjects";
 import { usePendingManifest } from "./store/usePendingManifest";
 import { deriveInitialLayers, sessionMatchesSpec } from "./accept-save-layers";
 import { clearGenesisFormValues } from "./genesis-workbench/genesisProjectSettingsStore";
-import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
+import { ProjectsShellWithFreeTier } from "@/ProjectsShellWithFreeTier";
 import type { ProjectSpec } from "@hexagen/project-configuration";
 import { parseYamlToViewData } from "@hexagen/manifest-generation";
 import { computeHasBlockingFailures } from "./manifest-validation-display";

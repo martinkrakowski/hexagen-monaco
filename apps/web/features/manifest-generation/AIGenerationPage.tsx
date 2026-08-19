@@ -7,7 +7,7 @@ import { usePendingManifest } from "./store/usePendingManifest";
 import { parseManifestToWizardData } from "@hexagen/wizard-orchestration";
 import { deriveWorkspaceName } from "@hexagen/manifest-generation";
 import { setManifestIdentity } from "./manifestIdentity";
-import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
+import { ProjectsShellWithFreeTier } from "@/ProjectsShellWithFreeTier";
 // PlanWorkbench is the shared PRESENTATIONAL two-pane shell (plan §3.1): it
 // reads no app context — this host fills every slot with genesis-owned data,
 // so the alias cross-slice import carries no workspace-shell coupling.

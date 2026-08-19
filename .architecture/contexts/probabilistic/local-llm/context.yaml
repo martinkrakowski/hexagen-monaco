@@ -30,7 +30,7 @@ layers:
         - SendStructuredRequestPort
       out:
         - LocalLLMProviderPort
-        - WebGPUDetectorPort
+        - GraphicsCapabilityPort
         - HardwareProfilerPort
         - ChatPersistencePort
   infrastructure:

@@ -15,7 +15,7 @@ import {
 import type { DomainModelId } from "../../../lib/llm-interfaces";
 import type { LLMEngineStatus, ModelMetadata } from "@hexagen/local-llm";
 import { Button } from "@hexagen/ui";
-import { ModelProgressCard } from "@/governance-assistant/ModelProgressCard";
+import { ModelProgressCard } from "@/ModelProgressCard";
 import { TextareaComposer } from "@/chat/TextareaComposer";
 import { AiReadyIndicator } from "./AiReadyIndicator";
 import { ExampleCardsSection } from "./ExampleCardsSection";

@@ -4,7 +4,7 @@ import { Loader2 } from "lucide-react";
 import type { DomainModelId, ModelMetadata } from "@hexagen/local-llm";
 import { UnavailableCard } from "../../UnavailableCard";
 import { WakingUpCard } from "../../WakingUpCard";
-import { ModelProgressCard } from "../../ModelProgressCard/ModelProgressCard";
+import { ModelProgressCard } from "@/ModelProgressCard";
 import { LocalModeSettingsView } from "./LocalModeSettingsView";
 import type { LocalLifecycle } from "../lifecycle";
 import type { ServerCapabilityNames } from "../types";

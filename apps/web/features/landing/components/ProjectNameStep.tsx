@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { Button, Input, Label } from "@hexagen/ui";
-import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
+import { ProjectsShellWithFreeTier } from "@/ProjectsShellWithFreeTier";
 import { CreationStepIndicator } from "@/landing/components/CreationStepIndicator";
 import { CREATION_STEPS } from "@/landing/domain/creation-path";
 

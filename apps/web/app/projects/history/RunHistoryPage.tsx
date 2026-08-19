@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@hexagen/ui";
-import { ProjectsShell } from "@/landing/ProjectsShell";
+import { ProjectsShell } from "@/ProjectsShell";
 import type { DailyRunCount, RunEventRecord } from "../../../lib/platform";
 
 interface RunsResponse {

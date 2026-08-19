@@ -14,7 +14,7 @@ import type { StageValidationReport } from "./useStagedGenerationStream";
 import { useLooseSpecConversion } from "./useLooseSpecConversion";
 import { Button } from "@hexagen/ui";
 import { ArrowLeft, ArrowRight, RefreshCw } from "lucide-react";
-import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
+import { ProjectsShellWithFreeTier } from "@/ProjectsShellWithFreeTier";
 import { useLLMReadiness } from "./hooks/useLLMReadiness";
 import { usePendingManifest } from "./store/usePendingManifest";
 import {

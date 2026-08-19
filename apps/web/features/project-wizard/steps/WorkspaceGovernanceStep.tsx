@@ -10,7 +10,7 @@ import {
   TemplateSelector,
   PackageManagerSelect,
   NamingConventionsFieldset,
-} from "./workspace-governance-step";
+} from "@/workspace-governance-step";
 
 interface WorkspaceGovernanceStepProps {
   onNext: () => void;
