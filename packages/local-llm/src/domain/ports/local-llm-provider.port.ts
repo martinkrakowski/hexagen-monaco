@@ -52,9 +52,8 @@ export interface LocalLLMProviderPort {
   streamComplete(request: LLMCompletionRequest): AsyncGenerator<Result<string>>;
   getLoadedModel(): ModelMetadata | null;
   /**
-   * Check whether a model's weights are cached locally (IndexedDB or Cache API).
-   * Runs on the main thread — the adapter proxies this to the worker, which
-   * has access to WebLLM's cache utility functions.
+   * Check whether a model's weights are already available in local storage.
+   * Persistence mechanism is an adapter concern.
    */
   hasModelInCache(modelId: DomainModelId): Promise<boolean>;
   /**

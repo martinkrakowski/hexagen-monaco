@@ -30,7 +30,7 @@ import type {
   LocalLLMProviderPort,
   ModelLifecyclePort,
   SendStructuredRequestPort,
-  WebGPUDetectorPort,
+  GraphicsCapabilityPort,
   HardwareProfilerPort,
   ChatPersistencePort,
 } from "@hexagen/local-llm";
@@ -205,7 +205,7 @@ export const wireDependencies = () => {
   // WebGPU Detector → browser capability adapter
   registry.set(
     PORT_NAMES.WEBGPU_DETECTOR,
-    new WebGPUCapabilityAdapter() satisfies WebGPUDetectorPort,
+    new WebGPUCapabilityAdapter() satisfies GraphicsCapabilityPort,
   );
 
   // Hardware Profiler → browser hardware detection adapter
@@ -411,7 +411,7 @@ export const getSendStructuredRequest = () =>
   );
 
 export const getWebGPUDetector = () =>
-  dependencies.get<WebGPUDetectorPort>(PORT_NAMES.WEBGPU_DETECTOR);
+  dependencies.get<GraphicsCapabilityPort>(PORT_NAMES.WEBGPU_DETECTOR);
 
 export const getHardwareProfiler = () =>
   dependencies.get<HardwareProfilerPort>(PORT_NAMES.HARDWARE_PROFILER);

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getWebGPUDetector, getHardwareProfiler } from "../../../app/lib/wire";
-import type { WebGPUCapability } from "@hexagen/local-llm";
+import type { GraphicsCapability } from "@hexagen/local-llm";
 
 export interface GPUDetectionResult {
   /**
@@ -36,7 +36,7 @@ export interface GPUDetectionResult {
   /**
    * Detailed WebGPU capability information
    */
-  capability: WebGPUCapability | null;
+  capability: GraphicsCapability | null;
 
   /**
    * Loading state
@@ -46,7 +46,7 @@ export interface GPUDetectionResult {
 
 /**
  * Hook for detecting WebGPU compatibility and hardware capabilities
- * Integrates with the existing WebGPUDetectorPort and HardwareProfilerPort
+ * Integrates with the existing GraphicsCapabilityPort and HardwareProfilerPort
  */
 export function useWebGPUDetection(): GPUDetectionResult {
   const [result, setResult] = useState<GPUDetectionResult>({

@@ -1,7 +1,7 @@
 import type { Result } from "@hexagen/shared";
 import type {
-  WebGPUCapability,
-  WebGPUDetectorPort,
+  GraphicsCapability,
+  GraphicsCapabilityPort,
 } from "../../domain/ports/index.js";
 
 interface GPU {
@@ -31,8 +31,8 @@ interface NavigatorWithGPU {
   gpu?: GPU;
 }
 
-export class WebGPUCapabilityAdapter implements WebGPUDetectorPort {
-  async detect(): Promise<Result<WebGPUCapability>> {
+export class WebGPUCapabilityAdapter implements GraphicsCapabilityPort {
+  async detect(): Promise<Result<GraphicsCapability>> {
     try {
       // Check typeof on the raw identifier BEFORE any cast.
       // typeof returns "undefined" for undeclared vars without throwing.
@@ -45,8 +45,6 @@ export class WebGPUCapabilityAdapter implements WebGPUDetectorPort {
           success: true,
           value: {
             supported: false,
-            adapter: null,
-            device: null,
             maxTextureSize: null,
             supportsFP16: false,
           },
@@ -64,8 +62,6 @@ export class WebGPUCapabilityAdapter implements WebGPUDetectorPort {
           success: true,
           value: {
             supported: false,
-            adapter: null,
-            device: null,
             maxTextureSize: null,
             supportsFP16: false,
           },
@@ -81,8 +77,6 @@ export class WebGPUCapabilityAdapter implements WebGPUDetectorPort {
         success: true,
         value: {
           supported: true,
-          adapter,
-          device,
           maxTextureSize: device.limits.maxTextureDimension2D,
           supportsFP16,
         },
