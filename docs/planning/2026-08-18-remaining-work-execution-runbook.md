@@ -40,7 +40,7 @@ Today **4** entries. Started the remediation arc at 34.
 
 | After                                       | Expected remaining | Which keys leave                                                                       |
 | ------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------- |
-| today (`08024dd3`)                          | **4**              | —                                                                                      |
+| today (`f94cffbb`)                          | **4**              | —                                                                                      |
 | 8.12(b)                                     | **2**              | `template-engine` `conflict-path.ts` / `output-path-safety.ts` `node:path`             |
 | 8.12(i)                                     | **1**              | `migrate-manifest.use-case.ts` `node:util`                                             |
 | DOS-2.11 (then burn the template `zod` row) | **0**              | template payload `zod` — only after the emitted `package.json` can actually provide it |
