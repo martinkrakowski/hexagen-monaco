@@ -3,6 +3,7 @@ import type {
   BuildSystemInstructionPort,
   BuildSystemInstructionRequest,
 } from "../../application/ports/in/build-system-instruction.port";
+import { formatPortOwnershipLines } from "./format-port-ownership";
 
 /**
  * Adapter that builds grounded system prompts based on project governance and editor context.
@@ -64,10 +65,8 @@ export class GroundedPromptAdapter implements BuildSystemInstructionPort {
         .join("\n") || "  (No critical invariants defined)";
 
     const portList =
-      Object.entries(governancePayload.ports)
-        .slice(0, 10)
-        .map(([port, owner]) => `  - ${port} → ${owner}`)
-        .join("\n") || "  (No port ownership defined)";
+      formatPortOwnershipLines(governancePayload.ports) ||
+      "  (No port ownership defined)";
 
     const systemInstructionContent = `You are the HexaGen Monaco AI Architect, a strict and precise assistant for a Hexagonal Architecture design tool.
 Your role is to assist the user with the currently loaded software project.
@@ -85,7 +84,7 @@ ${contextList}
 CRITICAL INVARIANTS:
 ${invariantList}
 
-PORT OWNERSHIP (selected):
+PORT OWNERSHIP:
 ${portList}
 
 ACTIVE EDITOR CONTEXT
