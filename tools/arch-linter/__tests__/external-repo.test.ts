@@ -209,9 +209,11 @@ describe(
       // external tree. After unused-folder emission stops, this count goes to
       // 0 and 6.7(a) must update the pin — proving the emitter was re-run
       // here, not only against Hexagen self-regen.
-      expect(combined, describeResult(r)).toMatch(
-        /• Layers : [1-9]\d* created/,
-      );
+      // Pin today's deterministic count (12 = declared layers + leaf
+      // .gitkeep ops). A looser `[1-9]\d*` would let a partial 6.7(a)
+      // that still emits some unused folders pass. 6.7(a) must change
+      // this pin to 0 when unused-folder emission stops.
+      expect(combined, describeResult(r)).toMatch(/• Layers : 12 created/);
     });
   },
 );
