@@ -137,6 +137,13 @@ function hasDeclaredNames(value: readonly unknown[] | undefined): boolean {
  * Fail-closed: no context layers means nothing is used. A forgotten
  * caller must not fall back to "mkdir every declared layer" — that was
  * the twice-bitten trap on foreign trees.
+ *
+ * Schema coupling: the keys below are the declared-name lists on
+ * `BoundedContextLayers` (`src/types/manifest/layers.ts`). Adding a new
+ * list field (e.g. `domain_events`) requires updating THAT type and this
+ * predicate together — otherwise a layer that only has the new field is
+ * treated as unused and is not emitted. That fail-closed miss is
+ * intentional; do not replace this with "any non-empty value".
  */
 export function layerDeclaresContent(
   layerName: string,

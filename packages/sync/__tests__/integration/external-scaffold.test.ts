@@ -422,7 +422,12 @@ describe("SyncEngine end-to-end external scaffold", () => {
     // shared has no `layers:` content. generateSharedKernel still writes
     // src/domain/result.ts (the Result kernel, a different owner). 6.7(a)
     // must not also scaffold the unused application / infrastructure trees.
+    // ensurePackageSrcIndex still writes src/index.ts so tsc has an input.
     const sharedRoot = path.join(target, "packages", "shared");
+    assert.ok(
+      await exists(path.join(sharedRoot, "src", "index.ts")),
+      "packages/shared/src/index.ts must exist so tsc include of src/ is non-empty",
+    );
     for (const layer of ["application", "infrastructure"]) {
       const layerDir = path.join(sharedRoot, "src", layer);
       const present = await fs

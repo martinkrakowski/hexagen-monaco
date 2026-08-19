@@ -9,6 +9,7 @@ import { ensureLayerFolders } from "./generators/layer-folders.js";
 import { generateBarrels } from "./generators/barrels.js";
 import { generatePackageJson } from "./generators/package-json.js";
 import { generateTsconfig } from "./generators/tsconfig.js";
+import { ensurePackageSrcIndex } from "./generators/package-src-index.js";
 import { reapLegacyFolders } from "./generators/reap.js";
 import { generateRootFiles } from "./generators/root-files.js";
 import { generateArchitectureFiles } from "./generators/architecture-files.js";
@@ -189,6 +190,11 @@ export class SyncEngine {
         config,
         this.report,
       );
+      const srcIndexResult = await ensurePackageSrcIndex(
+        moduleDir,
+        config,
+        this.report,
+      );
       const eslintResult = await generateEslintConfig(
         moduleDir,
         moduleName,
@@ -209,6 +215,7 @@ export class SyncEngine {
       this.noteFailure("Barrels", barrelResult);
       this.noteFailure("package.json", pkgResult);
       this.noteFailure("tsconfig.json", tsResult);
+      this.noteFailure("src/index.ts", srcIndexResult);
       this.noteFailure("ESLint", eslintResult);
       this.noteFailure("Stubs", stubResult);
 
@@ -219,6 +226,7 @@ export class SyncEngine {
       mergeResult(barrels, barrelResult);
       mergeResult(pkgs, pkgResult);
       mergeResult(tsconfigs, tsResult);
+      mergeResult(tsconfigs, srcIndexResult);
       mergeResult(eslint, eslintResult);
       mergeResult(stubs, stubResult);
     }
