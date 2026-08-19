@@ -307,7 +307,7 @@ export async function runBootstrap(
       const blockers: string[] = [];
       for (const file of files) {
         try {
-          await fs.stat(file);
+          await fs.lstat(file);
         } catch (e) {
           if ((e as NodeJS.ErrnoException).code === "ENOENT") continue;
           return err(e instanceof Error ? e : new Error(String(e)));
