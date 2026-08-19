@@ -38,7 +38,16 @@ describe("SyncEngine idempotency — expected artifacts", () => {
       },
       bounded_contexts: [
         { name: "shared", type: "shared-kernel" },
-        { name: "alpha", type: "core", depends_on: ["shared"] },
+        {
+          name: "alpha",
+          type: "core",
+          depends_on: ["shared"],
+          layers: {
+            domain: { entities: ["Alpha"] },
+            application: { use_cases: ["DoAlpha"] },
+            infrastructure: { adapters: ["AlphaAdapter"] },
+          },
+        },
       ],
     };
 
@@ -57,14 +66,24 @@ describe("SyncEngine idempotency — expected artifacts", () => {
       "packages/shared/package.json",
       "packages/shared/tsconfig.json",
       "packages/shared/src/domain/index.ts",
-      "packages/shared/src/application/index.ts",
-      "packages/shared/src/infrastructure/index.ts",
     ];
 
     for (const rel of expectedFiles) {
       const abs = path.join(fixtureRoot, rel);
       const stat = await fs.stat(abs).catch(() => null);
       assert.ok(stat?.isFile(), `expected generated file to exist: ${rel}`);
+    }
+
+    // shared has no `layers:` content. The Result kernel still owns
+    // src/domain; 6.7(a) must not emit unused application/infrastructure.
+    for (const layer of ["application", "infrastructure"]) {
+      const unused = path.join(fixtureRoot, "packages", "shared", "src", layer);
+      const stat = await fs.stat(unused).catch(() => null);
+      assert.equal(
+        stat,
+        null,
+        `unused shared ${layer} folder must not be emitted (6.7(a))`,
+      );
     }
   });
 

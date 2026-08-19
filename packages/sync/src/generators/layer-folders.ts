@@ -10,9 +10,11 @@ import {
 import { isInScope, safeWriteFileAtomic } from "../fs-utils.js";
 import {
   isSafeLayerFolder,
+  layerDeclaresContent,
   normalizeSubfolder,
   resolveLayerDir,
 } from "../domain/services/layer-dir-resolver.js";
+import type { BoundedContextLayers } from "../types/manifest.js";
 
 // Typed shape for layers from .architecture/manifest.yaml
 interface LayerConfig {
@@ -185,11 +187,19 @@ async function loadYamlSafe<T>(filePath: string): Promise<T | null> {
  * creates an `export {};` barrel in an empty layer directory and migrates the
  * legacy "No exports yet" content). Same single-writer doctrine as
  * cross-context.
+ *
+ * Wave C 6.7(a) / HEX-025 / ADR-0050 Decision 1: a configured layer is
+ * emitted only when `contextLayers` lists real content for it. Unused
+ * layers (missing `layers:`, empty objects, empty arrays) are not created
+ * and not planned as created — on Hexagen self-regen and on foreign trees
+ * alike. Fail-closed when `contextLayers` is omitted. Used-layer
+ * `.gitkeep` / leaf-tracking is unchanged.
  */
 export async function ensureLayerFolders(
   moduleDir: string,
   layers: Record<string, LayerConfig>,
   config: SyncConfig,
+  contextLayers?: BoundedContextLayers,
 ): Promise<GeneratorResult> {
   const result = createEmptyResult();
   const { logger } = config;
@@ -209,6 +219,14 @@ export async function ensureLayerFolders(
   }
 
   for (const [layerName, layerConfig] of Object.entries(layers)) {
+    // Unused layers contribute ZERO ops — not created, not planned as
+    // created. The predicate is YAML-content, not "folder already on
+    // disk": a foreign tree with `generator.sync.layers` armed and no
+    // `layers:` block must stay silent (6.7(a) external-repo gate).
+    if (!layerDeclaresContent(layerName, contextLayers)) {
+      continue;
+    }
+
     // Resolver-validated (review fix): an absolute or `..`-traversing
     // configured folder falls back to the `src/<layer>` convention instead of
     // escaping the package. Every emitter already went through the resolver;

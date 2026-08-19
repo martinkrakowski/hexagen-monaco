@@ -132,7 +132,12 @@ export class SyncEngine {
 
       // Directories only — barrels are single-owned by the recursive pass
       // (see ensureLayerFolders' doc; PR-B2 RCA #5), so no report recorder.
-      const layerResult = await ensureLayerFolders(moduleDir, layers, config);
+      const layerResult = await ensureLayerFolders(
+        moduleDir,
+        layers,
+        config,
+        mod.layers,
+      );
       mergeResult(result, layerResult);
     }
 
