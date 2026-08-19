@@ -390,7 +390,7 @@ describe(
           assert.equal(green.code, 0, describeResult(green));
           assert.match(
             green.stdout + green.stderr,
-            /Ratchet: 3 known violation\(s\) suppressed/,
+            /Ratchet: 3 suppressed \/ 0 stale \/ 0 fresh/,
             describeResult(green),
           );
 
@@ -403,6 +403,11 @@ describe(
           const red = await runLinter(root);
           assert.equal(red.code, 1, describeResult(red));
           assert.match(red.stderr, /clock\.ts/, describeResult(red));
+          assert.match(
+            red.stdout + red.stderr,
+            /Ratchet: 3 suppressed \/ 0 stale \/ 1 fresh/,
+            describeResult(red),
+          );
           assert.match(
             red.stderr,
             /These are NEW violations, measured against the committed baseline/,
@@ -422,6 +427,11 @@ describe(
           async (root) => {
             const r = await runLinter(root);
             assert.equal(r.code, 0, describeResult(r));
+            assert.match(
+              r.stdout + r.stderr,
+              /Ratchet: 0 suppressed \/ 1 stale \/ 0 fresh/,
+              describeResult(r),
+            );
             assert.match(
               r.stdout + r.stderr,
               /1 baseline entry no longer reproduces/,
@@ -519,7 +529,7 @@ describe(
           assert.equal(green.code, 0, describeResult(green));
           assert.match(
             green.stdout + green.stderr,
-            /Ratchet: 3 known violation\(s\) suppressed/,
+            /Ratchet: 3 suppressed \/ 0 stale \/ 0 fresh/,
             describeResult(green),
           );
           await cleanup(elsewhere);

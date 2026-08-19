@@ -1092,11 +1092,11 @@ function reportAndExit(violations: ViolationRecord[]): void {
     );
   }
 
-  if (baselined.length > 0) {
-    logger.info(
-      `Ratchet: ${baselined.length} known violation(s) suppressed by ${path.relative(ROOT_DIR, BASELINE_PATH)}.`,
-    );
-  }
+  // RI-1.3: one line, every run, including zeros. A missing "0 stale"
+  // is how drift hid in the job log when only non-zero buckets printed.
+  logger.info(
+    `Ratchet: ${baselined.length} suppressed / ${stale.length} stale / ${fresh.length} fresh (${path.relative(ROOT_DIR, BASELINE_PATH)})`,
+  );
 
   if (stale.length > 0) {
     logger.warn(
