@@ -1,6 +1,7 @@
 import { describe, it } from "vitest";
 import assert from "node:assert";
 import {
+  layerDeclaresContent,
   normalizeSubfolder,
   resolveEmissionDir,
   resolveLayerDir,
@@ -82,6 +83,93 @@ describe("normalizeSubfolder", () => {
   it("passes genuinely custom subfolders through verbatim", () => {
     assert.equal(normalizeSubfolder("policies"), "policies");
     assert.equal(normalizeSubfolder("Sagas"), "Sagas");
+  });
+});
+
+describe("layerDeclaresContent (6.7(a) unused-layer predicate)", () => {
+  it("is unused when context layers are missing or the layer object is empty", () => {
+    assert.equal(layerDeclaresContent("domain", undefined), false);
+    assert.equal(layerDeclaresContent("domain", {}), false);
+    assert.equal(layerDeclaresContent("domain", { domain: {} }), false);
+    assert.equal(
+      layerDeclaresContent("application", { application: { use_cases: [] } }),
+      false,
+    );
+    assert.equal(
+      layerDeclaresContent("infrastructure", {
+        infrastructure: { adapters: [] },
+      }),
+      false,
+    );
+  });
+
+  it("treats listed entities / ports / adapters / factories as content", () => {
+    assert.equal(
+      layerDeclaresContent("domain", { domain: { entities: ["Money"] } }),
+      true,
+    );
+    assert.equal(
+      layerDeclaresContent("domain", {
+        domain: { value_objects: ["Currency"] },
+      }),
+      true,
+    );
+    assert.equal(
+      layerDeclaresContent("domain", {
+        domain: { domain_services: ["Pricer"] },
+      }),
+      true,
+    );
+    assert.equal(
+      layerDeclaresContent("domain", {
+        domain: { ports: { out: ["Repo"] } },
+      }),
+      true,
+    );
+    assert.equal(
+      layerDeclaresContent("application", {
+        application: { use_cases: ["Charge"] },
+      }),
+      true,
+    );
+    assert.equal(
+      layerDeclaresContent("application", {
+        application: { factories: ["MakeCharge"] },
+      }),
+      true,
+    );
+    assert.equal(
+      layerDeclaresContent("application", {
+        application: { ports: { in: [{ name: "ChargeIn" }] } },
+      }),
+      true,
+    );
+    assert.equal(
+      layerDeclaresContent("infrastructure", {
+        infrastructure: { adapters: ["Pg"] },
+      }),
+      true,
+    );
+  });
+
+  it("does not treat a sibling used layer as making this one used", () => {
+    assert.equal(
+      layerDeclaresContent("infrastructure", {
+        domain: { entities: ["Money"] },
+        application: { use_cases: ["Charge"] },
+        infrastructure: { adapters: [] },
+      }),
+      false,
+    );
+  });
+
+  it("unknown configured layer names are unused (fail-closed)", () => {
+    assert.equal(
+      layerDeclaresContent("presentation", {
+        domain: { entities: ["Money"] },
+      }),
+      false,
+    );
   });
 });
 

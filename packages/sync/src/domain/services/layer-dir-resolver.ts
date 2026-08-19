@@ -25,7 +25,10 @@
  *    kebab-case convention; unknown custom subfolders pass through verbatim.
  */
 
-import type { LayerConfig } from "../../types/manifest.js";
+import type {
+  BoundedContextLayers,
+  LayerConfig,
+} from "../../types/manifest.js";
 
 export type LayerKind = "domain" | "application" | "infrastructure";
 
@@ -118,4 +121,64 @@ export function resolveEmissionDir(
   const slash = site.indexOf("/");
   const layer = site.slice(0, slash) as LayerKind;
   return resolveLayerDir(layers, layer, site.slice(slash + 1));
+}
+
+function hasDeclaredNames(value: readonly unknown[] | undefined): boolean {
+  return Array.isArray(value) && value.length > 0;
+}
+
+/**
+ * Wave C 6.7(a) / HEX-025 / ADR-0050 Decision 1: a configured layer is
+ * *used* only when the bounded-context YAML lists real content
+ * (entities / ports / adapters / …) for it. Empty objects, empty arrays,
+ * a missing `layers:` block, and unknown layer names are unused — the
+ * scaffold must not emit those folders (or plan them as created).
+ *
+ * Fail-closed: no context layers means nothing is used. A forgotten
+ * caller must not fall back to "mkdir every declared layer" — that was
+ * the twice-bitten trap on foreign trees.
+ *
+ * Schema coupling: the keys below are the declared-name lists on
+ * `BoundedContextLayers` (`src/types/manifest/layers.ts`). Adding a new
+ * list field (e.g. `domain_events`) requires updating THAT type and this
+ * predicate together — otherwise a layer that only has the new field is
+ * treated as unused and is not emitted. That fail-closed miss is
+ * intentional; do not replace this with "any non-empty value".
+ */
+export function layerDeclaresContent(
+  layerName: string,
+  contextLayers: BoundedContextLayers | undefined,
+): boolean {
+  if (!contextLayers) return false;
+
+  if (layerName === "domain") {
+    const layer = contextLayers.domain;
+    if (!layer) return false;
+    return (
+      hasDeclaredNames(layer.entities) ||
+      hasDeclaredNames(layer.value_objects) ||
+      hasDeclaredNames(layer.domain_services) ||
+      hasDeclaredNames(layer.ports?.in) ||
+      hasDeclaredNames(layer.ports?.out)
+    );
+  }
+
+  if (layerName === "application") {
+    const layer = contextLayers.application;
+    if (!layer) return false;
+    return (
+      hasDeclaredNames(layer.use_cases) ||
+      hasDeclaredNames(layer.factories) ||
+      hasDeclaredNames(layer.ports?.in) ||
+      hasDeclaredNames(layer.ports?.out)
+    );
+  }
+
+  if (layerName === "infrastructure") {
+    const layer = contextLayers.infrastructure;
+    if (!layer) return false;
+    return hasDeclaredNames(layer.adapters);
+  }
+
+  return false;
 }

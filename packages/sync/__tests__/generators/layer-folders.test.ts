@@ -28,6 +28,7 @@ import os from "node:os";
 import path from "node:path";
 import { ensureLayerFolders } from "../../src/generators/layer-folders.js";
 import type { SyncConfig, LoggerPort } from "../../src/config.js";
+import type { BoundedContextLayers } from "../../src/types/manifest.js";
 
 const silentLogger: LoggerPort = {
   error: () => {},
@@ -47,6 +48,16 @@ const LAYERS = {
     subfolders: ["ports/in", "ports/out", "use-cases"],
   },
   infrastructure: { folder: "src/infrastructure", subfolders: ["adapters"] },
+};
+
+// 6.7(a): existing mkdir/gitkeep pins stay honest for layers that ARE used.
+const USED_CONTEXT_LAYERS: BoundedContextLayers = {
+  domain: { entities: ["Money"] },
+  application: {
+    use_cases: ["Charge"],
+    ports: { in: ["ChargeIn"], out: ["Repo"] },
+  },
+  infrastructure: { adapters: ["Pg"] },
 };
 
 function makeConfig(
@@ -95,7 +106,12 @@ describe("ensureLayerFolders (directories + leaf keeps, probe-first counting)", 
     await withTempWorkspace(async ({ workspaceRoot, moduleDir }) => {
       const config = makeConfig(workspaceRoot);
 
-      const first = await ensureLayerFolders(moduleDir, LAYERS, config);
+      const first = await ensureLayerFolders(
+        moduleDir,
+        LAYERS,
+        config,
+        USED_CONTEXT_LAYERS,
+      );
       assert.strictEqual(
         first.created.length,
         12,
@@ -123,7 +139,12 @@ describe("ensureLayerFolders (directories + leaf keeps, probe-first counting)", 
         "a layer dir WITH configured subfolders is not a leaf — no keep (kept transitively)",
       );
 
-      const second = await ensureLayerFolders(moduleDir, LAYERS, config);
+      const second = await ensureLayerFolders(
+        moduleDir,
+        LAYERS,
+        config,
+        USED_CONTEXT_LAYERS,
+      );
       assert.strictEqual(
         second.totalOps,
         0,
@@ -150,7 +171,12 @@ describe("ensureLayerFolders (directories + leaf keeps, probe-first counting)", 
         only: ["packages/billing/src/domain/index.ts"],
       });
 
-      const result = await ensureLayerFolders(moduleDir, LAYERS, config);
+      const result = await ensureLayerFolders(
+        moduleDir,
+        LAYERS,
+        config,
+        USED_CONTEXT_LAYERS,
+      );
       assert.ok(
         await dirExists(domainDir),
         "the targeted barrel's directory must exist — recursive-barrels can only plan a barrel inside an existing dir",
@@ -191,7 +217,12 @@ describe("ensureLayerFolders (directories + leaf keeps, probe-first counting)", 
         only: ["packages/other"],
       });
 
-      const result = await ensureLayerFolders(moduleDir, LAYERS, config);
+      const result = await ensureLayerFolders(
+        moduleDir,
+        LAYERS,
+        config,
+        USED_CONTEXT_LAYERS,
+      );
       assert.strictEqual(result.totalOps, 0, "zero ops out of scope");
       assert.strictEqual(result.created.length, 0, "nothing created");
       assert.strictEqual(
@@ -206,7 +237,12 @@ describe("ensureLayerFolders (directories + leaf keeps, probe-first counting)", 
     await withTempWorkspace(async ({ workspaceRoot, moduleDir }) => {
       const config = makeConfig(workspaceRoot, { dryRun: true });
 
-      const result = await ensureLayerFolders(moduleDir, LAYERS, config);
+      const result = await ensureLayerFolders(
+        moduleDir,
+        LAYERS,
+        config,
+        USED_CONTEXT_LAYERS,
+      );
       assert.strictEqual(
         result.totalOps,
         12,
@@ -228,7 +264,12 @@ describe("ensureLayerFolders (directories + leaf keeps, probe-first counting)", 
       await fs.writeFile(path.join(domainDir, "money.ts"), "export {};\n");
 
       const config = makeConfig(workspaceRoot);
-      const result = await ensureLayerFolders(moduleDir, LAYERS, config);
+      const result = await ensureLayerFolders(
+        moduleDir,
+        LAYERS,
+        config,
+        USED_CONTEXT_LAYERS,
+      );
 
       assert.strictEqual(
         await fs
@@ -256,7 +297,12 @@ describe("ensureLayerFolders (directories + leaf keeps, probe-first counting)", 
       await fs.writeFile(keepPath, "placeholder — do not remove\n");
 
       const config = makeConfig(workspaceRoot);
-      const result = await ensureLayerFolders(moduleDir, LAYERS, config);
+      const result = await ensureLayerFolders(
+        moduleDir,
+        LAYERS,
+        config,
+        USED_CONTEXT_LAYERS,
+      );
 
       assert.strictEqual(
         await fs.readFile(keepPath, "utf8"),
@@ -301,7 +347,12 @@ describe("ensureLayerFolders (directories + leaf keeps, probe-first counting)", 
         infrastructure: { folder: "/absolute/elsewhere" },
       };
 
-      const result = await ensureLayerFolders(moduleDir, layers, config);
+      const result = await ensureLayerFolders(
+        moduleDir,
+        layers,
+        config,
+        USED_CONTEXT_LAYERS,
+      );
 
       assert.ok(
         await dirExists(path.join(moduleDir, "src/domain")),
@@ -332,6 +383,93 @@ describe("ensureLayerFolders (directories + leaf keeps, probe-first counting)", 
       assert.ok(
         result.created.every((p) => p.startsWith(moduleDir)),
         "every counted write stays inside the module dir",
+      );
+    });
+  });
+
+  it("does not create or plan unused layers when the context lists no content (6.7(a))", async () => {
+    await withTempWorkspace(async ({ workspaceRoot, moduleDir }) => {
+      const config = makeConfig(workspaceRoot);
+
+      const missing = await ensureLayerFolders(moduleDir, LAYERS, config);
+      assert.strictEqual(
+        missing.totalOps,
+        0,
+        "no context layers → emit nothing (fail-closed)",
+      );
+      assert.strictEqual(missing.created.length, 0);
+
+      const empty = await ensureLayerFolders(moduleDir, LAYERS, config, {
+        domain: {},
+        application: { use_cases: [], ports: { in: [] } },
+        infrastructure: { adapters: [] },
+      });
+      assert.strictEqual(
+        empty.totalOps,
+        0,
+        "empty lists / empty objects are unused — not planned as created",
+      );
+      assert.strictEqual(empty.created.length, 0);
+      assert.strictEqual(
+        await dirExists(path.join(moduleDir, "src/domain")),
+        false,
+        "unused domain folder is not materialized",
+      );
+      assert.strictEqual(
+        await dirExists(path.join(moduleDir, "src/application")),
+        false,
+      );
+      assert.strictEqual(
+        await dirExists(path.join(moduleDir, "src/infrastructure")),
+        false,
+      );
+    });
+  });
+
+  it("scaffolds only the used layer; unused siblings stay absent (6.7(a))", async () => {
+    await withTempWorkspace(async ({ workspaceRoot, moduleDir }) => {
+      const config = makeConfig(workspaceRoot);
+      const result = await ensureLayerFolders(moduleDir, LAYERS, config, {
+        domain: { entities: ["Money"] },
+      });
+
+      assert.ok(
+        await dirExists(path.join(moduleDir, "src/domain")),
+        "used domain layer is still scaffolded",
+      );
+      assert.strictEqual(
+        await fs.readFile(path.join(moduleDir, "src/domain/.gitkeep"), "utf8"),
+        "",
+        "used leaf still gets an empty .gitkeep",
+      );
+      assert.strictEqual(
+        await dirExists(path.join(moduleDir, "src/application")),
+        false,
+        "unused application layer is not created",
+      );
+      assert.strictEqual(
+        await dirExists(path.join(moduleDir, "src/infrastructure")),
+        false,
+        "unused infrastructure layer is not created",
+      );
+      assert.strictEqual(
+        result.created.length,
+        2,
+        "used domain dir + leaf keep only",
+      );
+      assert.strictEqual(result.totalOps, 2);
+    });
+  });
+
+  it("dry-run of a context with no used layers plans zero layer ops (6.7(a))", async () => {
+    await withTempWorkspace(async ({ workspaceRoot, moduleDir }) => {
+      const config = makeConfig(workspaceRoot, { dryRun: true });
+      const result = await ensureLayerFolders(moduleDir, LAYERS, config, {});
+      assert.strictEqual(result.totalOps, 0);
+      assert.strictEqual(result.created.length, 0);
+      assert.strictEqual(
+        await dirExists(path.join(moduleDir, "src/domain")),
+        false,
       );
     });
   });

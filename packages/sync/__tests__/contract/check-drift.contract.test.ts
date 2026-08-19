@@ -59,7 +59,8 @@ import {
 
 // Same layers-armed shape as the dry-run purity suite: generator.sync.layers
 // (with subfolders) arms the layer-folder mkdir accounting — the exact RCA #5
-// surface — and billing's layers arm pkgs/tsconfigs/stubs/barrels.
+// surface — and billing lists real layer content so 6.7(a) still scaffolds
+// used folders (the deleted-barrel case below needs a real domain barrel).
 const CHECK_MANIFEST = `system: acme-app
 scope: acme
 architecture: modular-monolith
@@ -88,8 +89,12 @@ bounded_contexts:
     type: core
     description: Billing context
     layers:
-      domain: {}
-      application: {}
+      domain:
+        entities:
+          - Invoice
+      application:
+        use_cases:
+          - Charge
 `;
 
 async function runGitOrThrow(args: string[], cwd: string): Promise<string> {

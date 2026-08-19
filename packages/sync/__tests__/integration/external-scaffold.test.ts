@@ -384,7 +384,8 @@ describe("SyncEngine end-to-end external scaffold", () => {
     // 3. Bounded-context scaffolding
     // -------------------------------------------------------------------
     // All three packages must have package.json / tsconfig.json /
-    // eslint.config.js / three layer barrels.
+    // eslint.config.js. Layer barrels are 6.7(a): only contexts that
+    // list entities/ports/adapters get hexagonal folders.
     for (const bc of ["shared", "orders", "billing"]) {
       const bcRoot = path.join(target, "packages", bc);
       assert.ok(
@@ -406,12 +407,38 @@ describe("SyncEngine end-to-end external scaffold", () => {
         await exists(path.join(bcRoot, "vitest.config.ts")),
         `packages/${bc}/vitest.config.ts must exist (external projects are born-on-Vitest, ADR-0044)`,
       );
+    }
+
+    for (const bc of ["orders", "billing"]) {
+      const bcRoot = path.join(target, "packages", bc);
       for (const layer of ["domain", "application", "infrastructure"]) {
         assert.ok(
           await exists(path.join(bcRoot, "src", layer, "index.ts")),
           `packages/${bc}/src/${layer}/index.ts barrel must exist`,
         );
       }
+    }
+
+    // shared has no `layers:` content. generateSharedKernel still writes
+    // src/domain/result.ts (the Result kernel, a different owner). 6.7(a)
+    // must not also scaffold the unused application / infrastructure trees.
+    // ensurePackageSrcIndex still writes src/index.ts so tsc has an input.
+    const sharedRoot = path.join(target, "packages", "shared");
+    assert.ok(
+      await exists(path.join(sharedRoot, "src", "index.ts")),
+      "packages/shared/src/index.ts must exist so tsc include of src/ is non-empty",
+    );
+    for (const layer of ["application", "infrastructure"]) {
+      const layerDir = path.join(sharedRoot, "src", layer);
+      const present = await fs
+        .stat(layerDir)
+        .then((s) => s.isDirectory())
+        .catch(() => false);
+      assert.strictEqual(
+        present,
+        false,
+        `packages/shared has no layers: content — unused ${layer} folder must not be emitted (6.7(a))`,
+      );
     }
 
     // Pin the Vitest wiring on one BC: a `test` script, a `vitest` devDep,
@@ -631,7 +658,7 @@ describe("SyncEngine end-to-end external scaffold", () => {
     //                + invariants/linter-config.yaml
     //                + generator.config.yaml                              =  4
     //   packages/shared   : package.json + tsconfig.json + eslint.config.js
-    //                     + vitest.config.ts + 3 layer barrels             =  7
+    //                     + vitest.config.ts (no unused layer folders)     =  4
     //   packages/orders   : package.json + tsconfig.json + eslint.config.js
     //                     + vitest.config.ts + 3 layer barrels + 6 stubs
     //                     + at least 5 inner barrels (entities,
