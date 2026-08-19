@@ -16,7 +16,7 @@ describe("Badge component", () => {
   });
 
   it("forwards ref to underlying div element", () => {
-    const ref = React.createRef();
+    const ref = React.createRef<HTMLDivElement>();
     render(React.createElement(Badge, { ref }, "Test"));
     assert.ok(ref.current instanceof HTMLDivElement);
     assert.strictEqual(ref.current?.textContent, "Test");

@@ -16,7 +16,7 @@ describe("Textarea component", () => {
   });
 
   it("forwards ref to underlying textarea element", () => {
-    const ref = React.createRef();
+    const ref = React.createRef<HTMLTextAreaElement>();
     render(React.createElement(Textarea, { ref }));
     assert.ok(ref.current instanceof HTMLTextAreaElement);
   });
@@ -24,6 +24,7 @@ describe("Textarea component", () => {
   it("applies default classes", () => {
     const { container } = render(React.createElement(Textarea, null));
     const textarea = container.querySelector("textarea");
+    assert.ok(textarea instanceof HTMLTextAreaElement);
     assert.match(textarea.className, /flex/);
     assert.match(textarea.className, /min-h-20/);
     assert.match(textarea.className, /w-full/);
@@ -34,6 +35,7 @@ describe("Textarea component", () => {
   it("handles rows prop", () => {
     const { container } = render(React.createElement(Textarea, { rows: 5 }));
     const textarea = container.querySelector("textarea");
+    assert.ok(textarea instanceof HTMLTextAreaElement);
     assert.strictEqual(textarea.rows, 5);
   });
 
@@ -42,6 +44,7 @@ describe("Textarea component", () => {
       React.createElement(Textarea, { disabled: true }),
     );
     const textarea = container.querySelector("textarea");
+    assert.ok(textarea instanceof HTMLTextAreaElement);
     assert.strictEqual(textarea.disabled, true);
     assert.match(textarea.className, /disabled:cursor-not-allowed/);
     assert.match(textarea.className, /disabled:opacity-50/);
@@ -52,6 +55,7 @@ describe("Textarea component", () => {
       React.createElement(Textarea, { className: "custom-textarea" }),
     );
     const textarea = container.querySelector("textarea");
+    assert.ok(textarea instanceof HTMLTextAreaElement);
     assert.match(textarea.className, /custom-textarea/);
     assert.match(textarea.className, /flex/);
   });
@@ -61,6 +65,7 @@ describe("Textarea component", () => {
       React.createElement(Textarea, { placeholder: "Enter text here" }),
     );
     const textarea = container.querySelector("textarea");
+    assert.ok(textarea instanceof HTMLTextAreaElement);
     assert.strictEqual(textarea.placeholder, "Enter text here");
   });
 

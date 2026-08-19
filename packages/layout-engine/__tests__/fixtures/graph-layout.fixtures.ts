@@ -84,8 +84,8 @@ export function generatePropertyTestFixtures() {
  * Validates that a layout result satisfies geometric feasibility properties
  */
 export function validateLayoutFeasibility(
-  nodes: GraphLayoutNode[],
-  positionResult: Array<{ nodeId: string; x: number; y: number }>,
+  nodes: readonly GraphLayoutNode[],
+  positionResult: readonly { nodeId: string; x: number; y: number }[],
 ): {
   isValid: boolean;
   violations: string[];

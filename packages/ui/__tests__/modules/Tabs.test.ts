@@ -2,27 +2,48 @@ import { describe, it, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import React from "react";
 import { render, cleanup, fireEvent } from "@testing-library/react";
-import { Tabs } from "../../src/modules/Tabs.js";
+import { Tabs, type TabsRootProps } from "../../src/modules/Tabs.js";
 
 afterEach(() => {
   cleanup();
 });
 
 describe("Tabs compound component", () => {
-  const createTabs = (props = {}) => {
+  const tabsChildren = [
+    React.createElement(Tabs.List, {
+      key: "list",
+      children: [
+        React.createElement(Tabs.Trigger, {
+          key: "tab1",
+          value: "tab1",
+          children: "Tab 1",
+        }),
+        React.createElement(Tabs.Trigger, {
+          key: "tab2",
+          value: "tab2",
+          children: "Tab 2",
+        }),
+      ],
+    }),
+    React.createElement(Tabs.Content, {
+      key: "content-tab1",
+      value: "tab1",
+      children: "Content 1",
+    }),
+    React.createElement(Tabs.Content, {
+      key: "content-tab2",
+      value: "tab2",
+      children: "Content 2",
+    }),
+  ];
+
+  const createTabs = (props: Omit<TabsRootProps, "children"> = {}) => {
     return render(
-      React.createElement(
-        Tabs.Root,
-        { defaultTab: "tab1", ...props },
-        React.createElement(
-          Tabs.List,
-          null,
-          React.createElement(Tabs.Trigger, { value: "tab1" }, "Tab 1"),
-          React.createElement(Tabs.Trigger, { value: "tab2" }, "Tab 2"),
-        ),
-        React.createElement(Tabs.Content, { value: "tab1" }, "Content 1"),
-        React.createElement(Tabs.Content, { value: "tab2" }, "Content 2"),
-      ),
+      React.createElement(Tabs.Root, {
+        defaultTab: "tab1",
+        ...props,
+        children: tabsChildren,
+      }),
     );
   };
 
@@ -73,23 +94,13 @@ describe("Tabs compound component", () => {
   it("forwards value/onValueChange for controlled mode", () => {
     let changedValue = "";
     const { getByRole } = render(
-      React.createElement(
-        Tabs.Root,
-        {
-          value: "tab2",
-          onValueChange: (val) => {
-            changedValue = val;
-          },
+      React.createElement(Tabs.Root, {
+        value: "tab2",
+        onValueChange: (val) => {
+          changedValue = val;
         },
-        React.createElement(
-          Tabs.List,
-          null,
-          React.createElement(Tabs.Trigger, { value: "tab1" }, "Tab 1"),
-          React.createElement(Tabs.Trigger, { value: "tab2" }, "Tab 2"),
-        ),
-        React.createElement(Tabs.Content, { value: "tab1" }, "Content 1"),
-        React.createElement(Tabs.Content, { value: "tab2" }, "Content 2"),
-      ),
+        children: tabsChildren,
+      }),
     );
     const tab1 = getByRole("tab", { name: "Tab 1" });
     fireEvent.click(tab1);

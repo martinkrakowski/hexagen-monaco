@@ -17,24 +17,51 @@ import {
   createCrossBoundaryRegistry,
   wireWizardToPersistence,
   wireGovernanceToManifestReader,
-  _createFixtureManifest,
-  _createNonCompliantFixtureManifest,
-  _getPersistenceAdapter,
+  createFixtureManifest,
+  createNonCompliantFixtureManifest,
+  getPersistenceAdapter,
   getLinterAdapter,
   type CrossBoundaryManifest,
-} from "../../../../web-driver/src/__tests__/fixtures/cross-boundary-registry";
-import { PORT_NAMES } from "../../../../web-driver/src/infrastructure/constants/port-names";
+} from "../../../../web-driver/src/__tests__/fixtures/cross-boundary-registry.js";
+import { PORT_NAMES } from "../../../../web-driver/src/infrastructure/constants/port-names.js";
 import {
-  _createMockRegistry,
+  createMockRegistry,
   registerMockPort,
-  _getMockPort,
+  getMockPort,
   type PortRegistry,
-} from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock";
+} from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock.js";
 import {
   MockWizardPersistenceAdapter,
   MockProjectGeneratorAdapter,
 } from "../fixtures/wizard-mocks";
-import { createTimeoutAdapter } from "../../../../web-driver/src/__tests__/fixtures/error-adapters";
+import { createTimeoutAdapter } from "../../../../web-driver/src/__tests__/fixtures/error-adapters.js";
+
+type LintOutcome = { isCompliant: boolean; violations: unknown[] };
+
+async function lintFrom(
+  adapter: Record<string, unknown>,
+  manifest: unknown,
+): Promise<LintOutcome> {
+  const lint = adapter.lint;
+  if (typeof lint !== "function") {
+    throw new Error("linter adapter is missing lint()");
+  }
+  const outcome: unknown = await lint(manifest);
+  if (
+    !outcome ||
+    typeof outcome !== "object" ||
+    !("isCompliant" in outcome) ||
+    typeof outcome.isCompliant !== "boolean" ||
+    !("violations" in outcome) ||
+    !Array.isArray(outcome.violations)
+  ) {
+    throw new Error("linter.lint() did not return { isCompliant, violations }");
+  }
+  return {
+    isCompliant: outcome.isCompliant,
+    violations: outcome.violations,
+  };
+}
 
 describe("Project Wizard — Integration Tests (Phase 6C)", () => {
   let registry: PortRegistry;
@@ -91,8 +118,10 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
         generatedManifest.system,
       );
 
-      const linter = getLinterAdapter(registry);
-      const lintResult = await linter.lint(generatedManifest);
+      const lintResult = await lintFrom(
+        getLinterAdapter(registry),
+        generatedManifest,
+      );
 
       assert.strictEqual(lintResult.isCompliant, true);
       assert.strictEqual(lintResult.violations.length, 0);
@@ -117,14 +146,11 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
         persistenceAdapter,
       );
 
-      let result: Record<string, unknown> | null = null;
-      try {
-        result = await (timeoutAdapter as Record<string, unknown>).execute();
-      } catch {
-        void 0;
-      }
-
-      assert.ok((result?.success || result?.error) !== undefined);
+      const timeoutResult = await timeoutAdapter.execute();
+      assert.ok(
+        timeoutResult.success === false || "error" in timeoutResult,
+        "timeout adapter must return a result",
+      );
 
       registerMockPort(
         registry,
@@ -204,8 +230,10 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
         timestamp: Date.now(),
       });
 
-      const linter = getLinterAdapter(registry);
-      const v1LintResult = await linter.lint(v1ManifestNonCompliant);
+      const v1LintResult = await lintFrom(
+        getLinterAdapter(registry),
+        v1ManifestNonCompliant,
+      );
 
       assert.ok(v1LintResult.isCompliant !== undefined);
 
@@ -230,7 +258,10 @@ describe("Project Wizard — Integration Tests (Phase 6C)", () => {
         timestamp: Date.now(),
       });
 
-      const v2LintResult = await linter.lint(v2Manifest);
+      const v2LintResult = await lintFrom(
+        getLinterAdapter(registry),
+        v2Manifest,
+      );
       assert.strictEqual(v2LintResult.isCompliant, true);
       assert.strictEqual(v2LintResult.violations.length, 0);
 

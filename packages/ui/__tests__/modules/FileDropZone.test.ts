@@ -86,6 +86,7 @@ describe("FileDropZone component", () => {
       clicked = true;
     };
     const dropZone = container.querySelector('[role="button"]');
+    assert.ok(dropZone);
     fireEvent.click(dropZone);
     assert.ok(clicked, "clicking drop zone should invoke input.click");
   });
@@ -122,7 +123,7 @@ describe("FileDropZone component", () => {
     fireEvent.change(input, { target: { files: [file] } });
     const error = container.querySelector('[role="alert"]');
     assert.ok(error);
-    assert.match(error.textContent, /Invalid file type/);
+    assert.match(error.textContent ?? "", /Invalid file type/);
   });
 
   it("handles drag over state", () => {
@@ -130,8 +131,9 @@ describe("FileDropZone component", () => {
       React.createElement(FileDropZone, defaultProps),
     );
     const dropZone = container.querySelector('[role="button"]');
+    assert.ok(dropZone);
     fireEvent.dragOver(dropZone);
-    assert.strictEqual(dropZone?.getAttribute("data-drag-over"), "true");
+    assert.strictEqual(dropZone.getAttribute("data-drag-over"), "true");
   });
 
   it("handles drag leave state", () => {
@@ -139,6 +141,7 @@ describe("FileDropZone component", () => {
       React.createElement(FileDropZone, defaultProps),
     );
     const dropZone = container.querySelector('[role="button"]');
+    assert.ok(dropZone);
     fireEvent.dragOver(dropZone);
     fireEvent.dragLeave(dropZone);
     assert.strictEqual(dropZone?.getAttribute("data-drag-over"), "false");

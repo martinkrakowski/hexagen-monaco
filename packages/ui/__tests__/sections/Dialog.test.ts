@@ -47,22 +47,22 @@ describe("Dialog component", () => {
   describe("Dialog", () => {
     it("does not render children when closed", () => {
       const { queryByText } = render(
-        React.createElement(
-          Dialog,
-          { open: false, onClose: () => {} },
-          "Dialog content",
-        ),
+        React.createElement(Dialog, {
+          open: false,
+          onClose: () => {},
+          children: "Dialog content",
+        }),
       );
       assert.strictEqual(queryByText("Dialog content"), null);
     });
 
     it("renders dialog element when open", () => {
       const { container } = render(
-        React.createElement(
-          Dialog,
-          { open: true, onClose: () => {} },
-          "Content",
-        ),
+        React.createElement(Dialog, {
+          open: true,
+          onClose: () => {},
+          children: "Content",
+        }),
       );
       const dialog = container.querySelector("dialog");
       assert.ok(dialog);
@@ -70,11 +70,11 @@ describe("Dialog component", () => {
 
     it("renders children when open", () => {
       const { getByText } = render(
-        React.createElement(
-          Dialog,
-          { open: true, onClose: () => {} },
-          "Dialog content",
-        ),
+        React.createElement(Dialog, {
+          open: true,
+          onClose: () => {},
+          children: "Dialog content",
+        }),
       );
       assert.ok(getByText("Dialog content"));
     });
@@ -82,18 +82,16 @@ describe("Dialog component", () => {
     it("calls onClose on backdrop click", () => {
       let closed = false;
       const { container } = render(
-        React.createElement(
-          Dialog,
-          {
-            open: true,
-            onClose: () => {
-              closed = true;
-            },
+        React.createElement(Dialog, {
+          open: true,
+          onClose: () => {
+            closed = true;
           },
-          "Content",
-        ),
+          children: "Content",
+        }),
       );
       const dialog = container.querySelector("dialog");
+      assert.ok(dialog);
       fireEvent.click(dialog);
       assert.strictEqual(closed, true);
     });
@@ -101,19 +99,17 @@ describe("Dialog component", () => {
     it("does NOT close on backdrop click when dismissible is false", () => {
       let closed = false;
       const { container } = render(
-        React.createElement(
-          Dialog,
-          {
-            open: true,
-            dismissible: false,
-            onClose: () => {
-              closed = true;
-            },
+        React.createElement(Dialog, {
+          open: true,
+          dismissible: false,
+          onClose: () => {
+            closed = true;
           },
-          "Content",
-        ),
+          children: "Content",
+        }),
       );
       const dialog = container.querySelector("dialog");
+      assert.ok(dialog);
       fireEvent.click(dialog);
       assert.strictEqual(closed, false);
     });
@@ -121,17 +117,14 @@ describe("Dialog component", () => {
     it("prevents the Escape (cancel) close when dismissible is false", () => {
       let closed = false;
       const { container } = render(
-        React.createElement(
-          Dialog,
-          {
-            open: true,
-            dismissible: false,
-            onClose: () => {
-              closed = true;
-            },
+        React.createElement(Dialog, {
+          open: true,
+          dismissible: false,
+          onClose: () => {
+            closed = true;
           },
-          "Content",
-        ),
+          children: "Content",
+        }),
       );
       const dialog = container.querySelector("dialog") as HTMLDialogElement;
       const cancelEvent = new Event("cancel", { cancelable: true });
@@ -142,11 +135,11 @@ describe("Dialog component", () => {
 
     it("allows the Escape (cancel) close by default", () => {
       const { container } = render(
-        React.createElement(
-          Dialog,
-          { open: true, onClose: () => {} },
-          "Content",
-        ),
+        React.createElement(Dialog, {
+          open: true,
+          onClose: () => {},
+          children: "Content",
+        }),
       );
       const dialog = container.querySelector("dialog") as HTMLDialogElement;
       const cancelEvent = new Event("cancel", { cancelable: true });
@@ -160,13 +153,21 @@ describe("Dialog component", () => {
         closeCount += 1;
       };
       const { container, rerender } = render(
-        React.createElement(Dialog, { open: true, onClose }, "Content"),
+        React.createElement(Dialog, {
+          open: true,
+          onClose,
+          children: "Content",
+        }),
       );
       // open:true -> false drives the effect's `dialog.close()` branch, which
       // sets closingRef so the native `close` event it triggers must NOT echo
       // back into onClose (otherwise every programmatic close double-fires).
       rerender(
-        React.createElement(Dialog, { open: false, onClose }, "Content"),
+        React.createElement(Dialog, {
+          open: false,
+          onClose,
+          children: "Content",
+        }),
       );
       const dialog = container.querySelector("dialog") as HTMLDialogElement;
       fireEvent(dialog, new Event("close"));

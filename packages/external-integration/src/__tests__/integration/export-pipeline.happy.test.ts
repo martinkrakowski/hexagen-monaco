@@ -13,8 +13,8 @@ import {
   registerMockPort,
   getMockPort,
   type PortRegistry,
-} from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock.ts";
-import type { CrossBoundaryManifest } from "../../../../web-driver/src/__tests__/fixtures/cross-boundary-registry";
+} from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock.js";
+import type { CrossBoundaryManifest } from "../../../../web-driver/src/__tests__/fixtures/cross-boundary-registry.js";
 import {
   MockGitHubProviderAdapter,
   MockCloudStorageAdapter,
@@ -23,7 +23,7 @@ import {
   createExportFixtureManifest,
   collectSSEEvents,
 } from "../fixtures/export-mocks";
-import { PORT_NAMES } from "../../../../web-driver/src/infrastructure/constants/port-names.ts";
+import { PORT_NAMES } from "../../../../web-driver/src/infrastructure/constants/port-names.js";
 
 describe("Export Pipeline — Happy Path", () => {
   let registry: PortRegistry;
@@ -188,6 +188,7 @@ describe("Export Pipeline — Happy Path", () => {
     assert.deepStrictEqual(fixture.system, "test-hexagen-export");
 
     const boundedContexts = (fixture as CrossBoundaryManifest).bounded_contexts;
+    assert.ok(boundedContexts !== undefined);
     assert.strictEqual(Array.isArray(boundedContexts), true);
 
     const contextNames = boundedContexts.map((bc: { name: string }) => bc.name);

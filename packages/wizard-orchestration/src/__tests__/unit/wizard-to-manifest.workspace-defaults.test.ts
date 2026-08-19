@@ -16,6 +16,14 @@ import {
 const asWizard = (x: unknown) =>
   x as unknown as Parameters<typeof wizardToManifest>[0];
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function monorepoOf(out: Record<string, unknown>): Record<string, unknown> {
+  return isRecord(out.monorepo) ? out.monorepo : {};
+}
+
 const minimalWizard = () =>
   asWizard({
     governance: {
@@ -31,8 +39,12 @@ const minimalWizard = () =>
 describe("wizardToManifest — monorepo workspace defaults", () => {
   it("tsConfig declares include:['src'] so tsc has an explicit compile root (F2)", () => {
     const out = wizardToManifest(minimalWizard());
+    const workspaceDefaults = monorepoOf(out).workspaceDefaults;
+    const tsConfig = isRecord(workspaceDefaults)
+      ? workspaceDefaults.tsConfig
+      : undefined;
     assert.deepEqual(
-      out.monorepo?.workspaceDefaults?.tsConfig?.include,
+      isRecord(tsConfig) ? tsConfig.include : undefined,
       ["src"],
       "without an explicit include, the emitted workspace tsconfig compiles nothing deterministic (F2)",
     );
@@ -40,11 +52,13 @@ describe("wizardToManifest — monorepo workspace defaults", () => {
 
   it("packageJson devDependencies satisfy the emitted eslint.config.js imports (F8)", () => {
     const out = wizardToManifest(minimalWizard());
+    const workspaceDefaults = monorepoOf(out).workspaceDefaults;
+    const packageJson = isRecord(workspaceDefaults)
+      ? workspaceDefaults.packageJson
+      : undefined;
     const devDeps = (
-      out.monorepo?.workspaceDefaults?.packageJson as
-        | { devDependencies?: Record<string, string> }
-        | undefined
-    )?.devDependencies;
+      isRecord(packageJson) ? packageJson.devDependencies : undefined
+    ) as Record<string, string> | undefined;
     assert.ok(
       devDeps,
       "workspaceDefaults.packageJson.devDependencies must exist",
@@ -100,15 +114,19 @@ describe("wizardToManifest — monorepo workspace defaults", () => {
 
   it("turboConfig pipeline typecheck keeps ^build (F15 makes this pipeline live — TS6305 guard)", () => {
     const out = wizardToManifest(minimalWizard());
-    const pipeline = out.monorepo?.turboConfig?.pipeline;
-    assert.ok(pipeline, "turboConfig.pipeline must exist");
+    const turboConfig = monorepoOf(out).turboConfig;
+    const pipeline = isRecord(turboConfig) ? turboConfig.pipeline : undefined;
+    assert.ok(isRecord(pipeline), "turboConfig.pipeline must exist");
+    const typecheck = isRecord(pipeline.typecheck)
+      ? pipeline.typecheck
+      : undefined;
     assert.deepEqual(
-      pipeline.typecheck?.dependsOn,
+      typecheck?.dependsOn,
       ["^build"],
       "since F15 this pipeline replaces the built-in turbo.json tasks; typecheck without ^build hits TS6305 on a fresh clone",
     );
     assert.deepEqual(
-      out.monorepo?.turboConfig?.globalDependencies,
+      isRecord(turboConfig) ? turboConfig.globalDependencies : undefined,
       ["**/.env.*"],
       "env files must invalidate the turbo cache",
     );

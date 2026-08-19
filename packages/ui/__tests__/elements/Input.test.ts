@@ -16,7 +16,7 @@ describe("Input component", () => {
   });
 
   it("forwards ref to underlying input element", () => {
-    const ref = React.createRef();
+    const ref = React.createRef<HTMLInputElement>();
     render(React.createElement(Input, { ref }));
     assert.ok(ref.current instanceof HTMLInputElement);
   });
@@ -38,6 +38,7 @@ describe("Input component", () => {
   it("applies input styling classes", () => {
     const { container } = render(React.createElement(Input, {}));
     const input = container.querySelector("input");
+    assert.ok(input instanceof HTMLInputElement);
     assert.match(input.className, /flex/);
     assert.match(input.className, /h-10/);
     assert.match(input.className, /w-full/);
@@ -51,7 +52,8 @@ describe("Input component", () => {
       React.createElement(Input, { disabled: true }),
     );
     const input = container.querySelector("input");
-    assert.strictEqual(input?.disabled, true);
+    assert.ok(input instanceof HTMLInputElement);
+    assert.strictEqual(input.disabled, true);
     assert.match(input.className, /disabled:cursor-not-allowed/);
     assert.match(input.className, /disabled:opacity-50/);
   });
@@ -61,6 +63,7 @@ describe("Input component", () => {
       React.createElement(Input, { className: "custom-input" }),
     );
     const input = container.querySelector("input");
+    assert.ok(input instanceof HTMLInputElement);
     assert.match(input.className, /custom-input/);
   });
 

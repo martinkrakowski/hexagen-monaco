@@ -11,7 +11,7 @@ afterEach(() => {
 describe("Tooltip component", () => {
   it("renders the trigger and hides the tooltip content by default", () => {
     const { getByText, queryByRole } = render(
-      React.createElement(Tooltip, { content: "Tip body" }, "3"),
+      React.createElement(Tooltip, { content: "Tip body", children: "3" }),
     );
     assert.ok(getByText("3"));
     assert.strictEqual(queryByRole("tooltip"), null);
@@ -19,7 +19,7 @@ describe("Tooltip component", () => {
 
   it("shows role=tooltip content on focus and wires aria-describedby", () => {
     const { getByText, getByRole } = render(
-      React.createElement(Tooltip, { content: "Tip body" }, "3"),
+      React.createElement(Tooltip, { content: "Tip body", children: "3" }),
     );
     const trigger = getByText("3");
     fireEvent.focus(trigger);
@@ -30,7 +30,7 @@ describe("Tooltip component", () => {
 
   it("hides on Escape", () => {
     const { getByText, queryByRole } = render(
-      React.createElement(Tooltip, { content: "Tip body" }, "3"),
+      React.createElement(Tooltip, { content: "Tip body", children: "3" }),
     );
     const trigger = getByText("3");
     fireEvent.focus(trigger);
@@ -41,7 +41,7 @@ describe("Tooltip component", () => {
 
   it("uses popover tokens for the content surface", () => {
     const { getByText, getByRole } = render(
-      React.createElement(Tooltip, { content: "Tip body" }, "3"),
+      React.createElement(Tooltip, { content: "Tip body", children: "3" }),
     );
     fireEvent.mouseEnter(getByText("3"));
     const tip = getByRole("tooltip");
@@ -51,7 +51,7 @@ describe("Tooltip component", () => {
 
   it("forwards ref to the wrapper span", () => {
     const ref = React.createRef<HTMLSpanElement>();
-    render(React.createElement(Tooltip, { ref, content: "x" }, "y"));
+    render(React.createElement(Tooltip, { ref, content: "x", children: "y" }));
     assert.ok(ref.current instanceof HTMLSpanElement);
   });
 });

@@ -73,7 +73,7 @@ describe("InMemoryTransactionManager", () => {
     });
 
     it("should be backward compatible without REM or lineage", () => {
-      const metadata = { custom: "data" };
+      const metadata: Record<string, unknown> = { custom: "data" };
       const tx = manager.begin("intent-1", metadata);
 
       assert.deepStrictEqual(tx.metadata, metadata);
