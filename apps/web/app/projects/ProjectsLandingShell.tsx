@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useSavedProjects } from "@/hooks/useSavedProjects";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { ProjectCardGrid } from "@/landing/ProjectCardGrid";
-import { ProjectsShell } from "@/landing/ProjectsShell";
+import { ProjectsShell } from "@/ProjectsShell";
 import Link from "next/link";
 import { Button } from "@hexagen/ui";
 import { Plus } from "lucide-react";

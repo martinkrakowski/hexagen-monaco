@@ -7,7 +7,7 @@ import {
   TemplateSelector,
   PackageManagerSelect,
   NamingConventionsFieldset,
-} from "../../project-wizard/steps/workspace-governance-step";
+} from "@/workspace-governance-step";
 import { useProjectSettingsAutosave } from "./useProjectSettingsAutosave";
 
 interface ProjectSettingsSectionProps {
