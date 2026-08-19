@@ -68,8 +68,21 @@ jobs:
         with:
           node-version: "22.7"
 
+      # Yarn 4 default httpTimeout is 60s. Public-PR hardened mode makes
+      # resolution slower; a single TLS socket stall (YN0001 RequestError)
+      # fails the whole job. Timeout + retries, not a lockfile change.
       - name: "Install Dependencies"
-        run: yarn install --immutable
+        env:
+          YARN_HTTP_TIMEOUT: "120000"
+        run: |
+          for attempt in 1 2 3; do
+            yarn install --immutable && exit 0
+            echo "yarn install failed (attempt ${attempt}/3)"
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep 15
+          done
 
       # `turbo run lint` silently skips any workspace with no `lint` script —
       # a package can drop out of the firewall by deleting one line of JSON and
