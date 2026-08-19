@@ -1,7 +1,7 @@
 # Remaining work — execution runbook (live)
 
-**Date:** 2026-08-19 · **Status:** Wave 0 on `main` (**#535**). Wave A0 T4/FU-2/RI-1.3 on `main` (**#536**, **#537** @ `a12eff6e`). RI-2.1+2.2 in flight. Wave A1 unblocked by D-C0; **next owner action:** enable branch protection, then open A1 PRs.
-**Baseline:** `main` @ `a12eff6e` (`v0.11.0` + #535 + #536 + #537).
+**Date:** 2026-08-19 · **Status:** Wave 0 on `main` (**#535**). Wave A0 T4/FU-2/RI-1.3/RI-2 on `main` (**#536**–**#538** @ `9ad83b6a`). DOS-2.1 in flight. Wave A1 unblocked by D-C0; **next owner action:** enable branch protection, then open A1 PRs.
+**Baseline:** `main` @ `9ad83b6a` (`v0.11.0` + #535–#538).
 
 This is the **live operating runbook** for the leftover work from the 2026-08-14 through
 2026-08-18 planning window. It is the companion to — not a replacement for — the plan:
@@ -40,7 +40,7 @@ Today **4** entries. Started the remediation arc at 34.
 
 | After                                       | Expected remaining | Which keys leave                                                                       |
 | ------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------- |
-| today (`a12eff6e`)                          | **4**              | —                                                                                      |
+| today (`9ad83b6a`)                          | **4**              | —                                                                                      |
 | 8.12(b)                                     | **2**              | `template-engine` `conflict-path.ts` / `output-path-safety.ts` `node:path`             |
 | 8.12(i)                                     | **1**              | `migrate-manifest.use-case.ts` `node:util`                                             |
 | DOS-2.11 (then burn the template `zod` row) | **0**              | template payload `zod` — only after the emitted `package.json` can actually provide it |
@@ -53,7 +53,7 @@ If a landing does not delete its own keys, the trajectory stalls. That is a revi
 
 ## 2. Open items, exactly
 
-Measured on `a12eff6e`. A plan row that disagrees with the tree loses.
+Measured on `9ad83b6a`. A plan row that disagrees with the tree loses.
 
 ### Wave 0 (human + docs) — merged #535
 
@@ -70,8 +70,8 @@ Measured on `a12eff6e`. A plan row that disagrees with the tree loses.
 | **T4.1–T4.4**       | ✅ **on `main`** | #536. Workflow `run:` + lint-staged use a root-declared-bin floor. `scripts/*.sh` uses a known-bad-name list. |
 | **FU-2**            | ✅ **on `main`** | #536. Jest guard scans workflow `run:` steps. Empty scan fails.                                               |
 | **RI-1.3**          | ✅ **on `main`** | #537. `Ratchet: N suppressed / M stale / K fresh` on every human `yarn lint:arch` run, including zeros.       |
-| **RI-2.1 / RI-2.2** | 🔄 **in flight** | Optional `diagnostics` on `SymbolReferenceDto`; syntactic only; named-file warning.                           |
-| **DOS-2.1**         | ⛔ not started   | `.slice(0, 10)` in both prompt-compiler adapters.                                                             |
+| **RI-2.1 / RI-2.2** | ✅ **on `main`** | #538. Syntactic diagnostics on `SymbolReferenceDto`; named-file warning. Semantic errors stay out.            |
+| **DOS-2.1**         | 🔄 **in flight** | Drop the 10-port window in both grounded-prompt adapters. Shared name-sorted formatter.                       |
 | **FU-1.1**          | ⛔ not started   | `packages/local-llm` config exists; script missing.                                                           |
 
 ### Wave A1 / C / D / remaining 8.12 (D-C0 done; 8.12(h) still gates 7.1)
@@ -131,9 +131,8 @@ Owner, now that #535 is on main:
   enable branch protection (Lint & Boundaries / ESLint + UI boundary)
   THEN Wave A1
 
-Wave A0 remaining (after T4 / FU-2 / RI-1.3):
-  RI-2.1 + RI-2.2   ← this PR
-  DOS-2.1
+Wave A0 remaining (after T4 / FU-2 / RI-1.3 / RI-2):
+  DOS-2.1   ← this PR
   FU-1.1
 
 Human, not same-day as protection:
@@ -291,3 +290,7 @@ D-C0, DOC-1, and DOC-2 land in this PR. Next owner action is enable branch prote
 ### 2026-08-19 — #537 merged; Wave A0 RI-2.1 + RI-2.2
 
 `main` @ `a12eff6e`. RI-1.3 is on `main`. RI-2.1+2.2 surfaces syntactic diagnostics through `ImpactAnalysisResult.warnings`, naming the unparseable file. Semantic errors stay out. Remaining A0: DOS-2.1, FU-1.1.
+
+### 2026-08-19 — #538 merged; Wave A0 DOS-2.1
+
+`main` @ `9ad83b6a`. RI-2.1+2.2 is on `main`. DOS-2.1 drops `.slice(0, 10)` in both grounded-prompt adapters and lists ports name-sorted with no cap. Remaining A0: FU-1.1.
