@@ -67,6 +67,14 @@ const CANONICAL = ".architecture/manifest.yaml";
  * and unfixable from here. (Mirrors the same exclusion in
  * `no-jest-residue.guard.test.ts`.)
  *
+ * `__tests__` is skipped because committed synthetic repos live there. Wave C
+ * 6.7(a)-FIX checks in a non-Hexagen tree at
+ * `tools/arch-linter/__tests__/external-repo/` whose own
+ * `.architecture/manifest.yaml` is the subject under test, not a hijacking
+ * copy of *this* repo's manifest. The hazard this guard exists for is a
+ * package-root `.architecture/` (the `packages/ui` incident). A fixture under
+ * `__tests__/` cannot capture walk-up from a package cwd.
+ *
  * This list is the ONLY way a directory goes unscanned. Everything else must be
  * readable — see `findArchitectureManifests`.
  */
@@ -80,6 +88,7 @@ const SKIP_DIRS = new Set([
   ".next",
   ".turbo",
   "coverage",
+  "__tests__",
 ]);
 
 /**
@@ -288,7 +297,7 @@ describe("the manifest walk", () => {
     await fs.writeFile(path.join(dir, "manifest.yaml"), "system: fixture\n");
   };
 
-  it("finds a nested copy, spares the split backup, and skips node_modules", async () => {
+  it("finds a nested copy, spares the split backup, and skips node_modules and __tests__", async () => {
     await withFixture(
       async (root) => {
         await writeManifest(root);
@@ -299,6 +308,15 @@ describe("the manifest walk", () => {
         );
         // A published package inside node_modules legitimately ships one.
         await writeManifest(root, "node_modules", "@hexagen", "sync");
+        // A committed synthetic repo under __tests__ is the 6.7(a)-FIX shape.
+        // Skipping the directory must not also hide a package-root copy.
+        await writeManifest(
+          root,
+          "tools",
+          "arch-linter",
+          "__tests__",
+          "external-repo",
+        );
       },
       async (root) => {
         assert.deepEqual(await findArchitectureManifests(root), [

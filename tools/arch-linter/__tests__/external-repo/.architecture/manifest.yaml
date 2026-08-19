@@ -1,0 +1,25 @@
+# Hand-written adopt-style manifest for a boring Node library.
+# Not a Hexagen-generated app: no @generated markers, no src/domain tree.
+system: acme-string-kit
+scope: acme
+architecture: modular-monolith
+description: Hand-written Node library used as a non-Hexagen external-repo fixture.
+generator:
+  sync:
+    layers:
+      domain:
+        folder: src/domain
+      application:
+        folder: src/application
+        subfolders:
+          - ports/in
+          - ports/out
+          - use-cases
+      infrastructure:
+        folder: src/infrastructure
+        subfolders:
+          - adapters
+bounded_contexts:
+  - name: string-kit
+    type: core
+    description: Hand-written string helpers. Not a Hexagen-generated context.
