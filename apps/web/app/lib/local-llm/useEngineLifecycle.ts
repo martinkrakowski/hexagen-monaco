@@ -8,7 +8,7 @@ import type {
   ModelLifecyclePort,
   ModelMetadata,
   SendStructuredRequestPort,
-  WebGPUDetectorPort,
+  GraphicsCapabilityPort,
 } from "@hexagen/local-llm";
 import { LLM_ENGINE_INITIAL_STATE } from "@hexagen/local-llm";
 import type { Result } from "@hexagen/shared";
@@ -81,7 +81,7 @@ export function useEngineLifecycle(
   const adapterRef = useRef<
     (ModelLifecyclePort & SendStructuredRequestPort) | null
   >(null);
-  const webgpuRef = useRef<WebGPUDetectorPort | null>(null);
+  const webgpuRef = useRef<GraphicsCapabilityPort | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const isInitializingRef = useRef(false);
   const cancelInitRef = useRef<(() => void) | null>(null);

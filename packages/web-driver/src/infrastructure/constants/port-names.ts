@@ -94,8 +94,8 @@ export const PORT_NAMES = {
   // ============================================================================
   // Hardware & Browser Capability Ports
   // ============================================================================
-  /** WebGPU availability detection */
-  WEBGPU_DETECTOR: "WebGPUDetectorPort",
+  /** Graphics acceleration capability detection */
+  WEBGPU_DETECTOR: "GraphicsCapabilityPort",
   /** Hardware profiling (GPU, CPU, memory) */
   HARDWARE_PROFILER: "HardwareProfilerPort",
 
