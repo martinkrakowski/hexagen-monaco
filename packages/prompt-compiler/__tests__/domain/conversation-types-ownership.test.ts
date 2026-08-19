@@ -70,20 +70,17 @@ describe("HEX-029 conversation types live in domain", () => {
     for (const name of TYPE_NAMES) {
       assert.doesNotMatch(
         source,
-        new RegExp(`export interface ${name}\\b`),
-        `${name} must not be declared in the adapter`,
+        new RegExp(`(?:export\\s+)?(?:interface|type)\\s+${name}\\b`),
+        `${name} must not be re-declared in the adapter (exported or local)`,
       );
       assert.match(
         source,
-        new RegExp(`\\b${name}\\b`),
-        `${name} must still be referenced by the adapter`,
+        new RegExp(
+          `import\\s+type\\s*\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\s*["'][^"']*domain/`,
+        ),
+        `${name} must be import type'd from a domain/ module`,
       );
     }
-    assert.match(
-      source,
-      /from ["']\.\.\/\.\.\/domain\//,
-      "adapter must import the types from domain",
-    );
     assert.doesNotMatch(
       source,
       /from\s+["']@hexagen\/local-llm/,
