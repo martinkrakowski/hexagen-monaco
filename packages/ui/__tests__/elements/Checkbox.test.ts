@@ -16,7 +16,7 @@ describe("Checkbox component", () => {
   });
 
   it("forwards ref to underlying input element", () => {
-    const ref = React.createRef();
+    const ref = React.createRef<HTMLInputElement>();
     render(React.createElement(Checkbox, { ref }));
     assert.ok(ref.current instanceof HTMLInputElement);
   });
@@ -26,7 +26,8 @@ describe("Checkbox component", () => {
       React.createElement(Checkbox, { checked: true }),
     );
     const input = container.querySelector('input[type="checkbox"]');
-    assert.strictEqual(input?.checked, true);
+    assert.ok(input instanceof HTMLInputElement);
+    assert.strictEqual(input.checked, true);
   });
 
   it("shows checkmark svg when checked", () => {
@@ -54,6 +55,7 @@ describe("Checkbox component", () => {
       React.createElement(Checkbox, { onCheckedChange: handleChange }),
     );
     const input = container.querySelector('input[type="checkbox"]');
+    assert.ok(input instanceof HTMLInputElement);
     fireEvent.click(input);
     assert.strictEqual(checkedValue, true);
   });
@@ -71,6 +73,7 @@ describe("Checkbox component", () => {
       React.createElement(Checkbox, { disabled: true }),
     );
     const input = container.querySelector('input[type="checkbox"]');
-    assert.strictEqual(input?.disabled, true);
+    assert.ok(input instanceof HTMLInputElement);
+    assert.strictEqual(input.disabled, true);
   });
 });

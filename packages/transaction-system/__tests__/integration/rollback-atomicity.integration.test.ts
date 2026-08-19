@@ -8,13 +8,13 @@ import { NodeKind } from "@hexagen/core-domain";
 import type { DomainAST, ProjectSpecLike } from "@hexagen/core-domain";
 
 const makeManifest = (): ProjectSpecLike => ({
-  boundedContexts: [{ id: "ctx-1", name: "Service1", roleBindings: [] }],
+  boundedContexts: [{ id: "ctx-1", name: "Service1" }],
 });
 
 const makeModifiedManifest = (): ProjectSpecLike => ({
   boundedContexts: [
-    { id: "ctx-1", name: "Service1", roleBindings: [] },
-    { id: "ctx-2", name: "Service2", roleBindings: [] },
+    { id: "ctx-1", name: "Service1" },
+    { id: "ctx-2", name: "Service2" },
   ],
 });
 
@@ -49,10 +49,11 @@ const makeModifiedAst = (): DomainAST => ({
 
 describe("Transaction Rollback Atomicity - Integration Tests", () => {
   let transactionManager: InMemoryTransactionManager;
+  let stateMachine: InMemorySpeculativeStateMachine;
 
   beforeEach(() => {
     const backpressure = new InMemoryBackpressureController(10);
-    const stateMachine = new InMemorySpeculativeStateMachine();
+    stateMachine = new InMemorySpeculativeStateMachine();
     const cache = new InMemorySemanticCache();
 
     transactionManager = new InMemoryTransactionManager({
@@ -95,10 +96,9 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
   describe("Speculative State Cleanup on Rollback", () => {
     it("should cleanup speculative state when rolling back", () => {
       const originalAst = makeAst();
-      const snapshotId = transactionManager["stateMachine"]?.applySpeculative?.(
-        originalAst,
-        { mutation: "test" },
-      );
+      const snapshotId = stateMachine.applySpeculative(originalAst, {
+        mutation: "test",
+      });
 
       if (!snapshotId) {
         assert.ok(true);
@@ -110,8 +110,7 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
 
       transactionManager.rollback(tx.id, "cleanup-test");
 
-      const speculativeState =
-        transactionManager["stateMachine"]?.getSpeculativeState?.(snapshotId);
+      const speculativeState = stateMachine.getSpeculativeState(snapshotId);
       assert.strictEqual(speculativeState, null);
     });
 
@@ -122,10 +121,10 @@ describe("Transaction Rollback Atomicity - Integration Tests", () => {
       const _originalAst = makeAst();
       const modifiedAst = makeModifiedAst();
 
-      const snapshotId = transactionManager["stateMachine"]?.applySpeculative?.(
-        modifiedAst,
-        { mutation: "add-service", manifest: modifiedManifest },
-      );
+      const snapshotId = stateMachine.applySpeculative(modifiedAst, {
+        mutation: "add-service",
+        manifest: modifiedManifest,
+      });
 
       if (!snapshotId) {
         assert.ok(true);

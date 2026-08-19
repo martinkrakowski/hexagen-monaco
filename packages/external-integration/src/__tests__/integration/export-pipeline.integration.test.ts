@@ -20,16 +20,16 @@ import {
   wireExportToGovernance,
   createFixtureManifest,
   createNonCompliantFixtureManifest,
-  _getTransactionManager,
+  getTransactionManager,
   type CrossBoundaryManifest,
-} from "../../../../web-driver/src/__tests__/fixtures/cross-boundary-registry";
-import { PORT_NAMES } from "../../../../web-driver/src/infrastructure/constants/port-names";
+} from "../../../../web-driver/src/__tests__/fixtures/cross-boundary-registry.js";
+import { PORT_NAMES } from "../../../../web-driver/src/infrastructure/constants/port-names.js";
 import {
   registerMockPort,
   getMockPort,
 } from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock";
 
-type IntegrationError = { code: string; message: string };
+type IntegrationError = { code: string; message: string; details?: string };
 
 class MockProjectGeneratorAdapter {
   async generateProject(input: {

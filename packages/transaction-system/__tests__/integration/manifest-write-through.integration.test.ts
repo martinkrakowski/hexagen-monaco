@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it, beforeEach, vi } from "vitest";
 import type { Patch } from "@hexagen/core-domain";
 import type { ManifestMutationPort } from "../../src/application/ports/out/manifest-mutation.port.js";
+import type { Result } from "../../src/application/result.js";
 import type { Manifest } from "@hexagen/sync";
 import { SyncDelegatingManifestMutationAdapter } from "../../src/infrastructure/adapters/sync-delegating-manifest-mutation.adapter.js";
 
@@ -9,13 +10,18 @@ const createMockSync = () => {
   const saved: Array<{ workspaceRoot: string; manifest: unknown }> = [];
   let currentManifest: Record<string, unknown> = { bounded_contexts: [] };
 
-  const loadManifest = vi.fn(async (_workspaceRoot: string) => ({
-    success: true,
-    value: JSON.parse(JSON.stringify(currentManifest)) as Manifest,
-  }));
+  const loadManifest = vi.fn(
+    async (_workspaceRoot: string): Promise<Result<Manifest, Error>> => ({
+      success: true,
+      value: JSON.parse(JSON.stringify(currentManifest)) as Manifest,
+    }),
+  );
 
   const saveManifest = vi.fn(
-    async (workspaceRoot: string, manifest: unknown) => {
+    async (
+      workspaceRoot: string,
+      manifest: Manifest,
+    ): Promise<Result<void, Error>> => {
       saved.push({ workspaceRoot, manifest });
       currentManifest = JSON.parse(JSON.stringify(manifest)) as Record<
         string,
@@ -171,10 +177,12 @@ describe("Manifest Write-Through - Integration Tests", () => {
     });
 
     it("should propagate loadManifest failure without calling saveManifest", async () => {
-      mockSync.loadManifest.mockImplementationOnce(async () => ({
-        success: false,
-        error: new Error(".architecture/manifest.yaml not found"),
-      }));
+      mockSync.loadManifest.mockImplementationOnce(
+        async (): Promise<Result<Manifest, Error>> => ({
+          success: false,
+          error: new Error(".architecture/manifest.yaml not found"),
+        }),
+      );
 
       const patches: Patch[] = [
         {
@@ -333,10 +341,12 @@ describe("Manifest Write-Through - Integration Tests", () => {
 
   describe("Error Propagation", () => {
     it("should propagate saveManifest failure as error result", async () => {
-      mockSync.saveManifest.mockImplementationOnce(async () => ({
-        success: false,
-        error: new Error("disk full"),
-      }));
+      mockSync.saveManifest.mockImplementationOnce(
+        async (): Promise<Result<void, Error>> => ({
+          success: false,
+          error: new Error("disk full"),
+        }),
+      );
 
       const patches: Patch[] = [
         {

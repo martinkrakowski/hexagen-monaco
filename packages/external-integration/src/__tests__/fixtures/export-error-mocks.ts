@@ -25,16 +25,19 @@ import type { SSEEvent } from "./export-mocks";
  *   // result.success === false, statusCode === 401
  */
 export class UnauthorizedGitHubMock {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async authenticate(__token: string): Promise<{
-    success: boolean;
-    statusCode?: number;
-    error?: string;
-  }> {
+  async authenticate(
+    token: string,
+  ): Promise<
+    | { success: true; statusCode?: number }
+    | { success: false; statusCode: number; error: string }
+  > {
     return {
       success: false,
       statusCode: 401,
-      error: "Unauthorized: Invalid token",
+      error:
+        token.length === 0
+          ? "Unauthorized: empty token"
+          : "Unauthorized: Invalid token",
     };
   }
 
@@ -120,7 +123,7 @@ export class TimeoutCloudStorageMock {
     bucket: string;
     key: string;
     body: Buffer;
-  }): Promise<{ success: boolean; error?: string }> {
+  }): Promise<{ success: true } | { success: false; error: string }> {
     await new Promise((resolve) => setTimeout(resolve, this.delayMs));
     return {
       success: false,
@@ -155,7 +158,10 @@ export class NetworkErrorCloudStorageMock {
     bucket: string;
     key: string;
     body: Buffer;
-  }): Promise<{ success: boolean; statusCode?: number; error?: string }> {
+  }): Promise<
+    | { success: true; statusCode?: number }
+    | { success: false; statusCode: number; error: string }
+  > {
     return {
       success: false,
       statusCode: 0, // Network error

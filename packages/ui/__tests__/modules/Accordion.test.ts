@@ -8,24 +8,55 @@ afterEach(() => {
   cleanup();
 });
 
+type AccordionRootInit =
+  | {
+      type?: "single";
+      collapsible?: boolean;
+      defaultValue?: string;
+      value?: string;
+      onValueChange?: (value: string) => void;
+    }
+  | {
+      type: "multiple";
+      defaultValue?: string[];
+      value?: string[];
+      onValueChange?: (value: string[]) => void;
+    };
+
+function accordionItem(value: string, label: string, content: React.ReactNode) {
+  return React.createElement(Accordion.Item, {
+    value,
+    key: value,
+    children: [
+      React.createElement(Accordion.Trigger, {
+        key: `${value}-trigger`,
+        children: label,
+      }),
+      React.createElement(Accordion.Content, {
+        key: `${value}-content`,
+        children: content,
+      }),
+    ],
+  });
+}
+
 // Build a two- (or three-) item accordion without JSX. Each item is
 // [triggerLabel, contentText]; `rootProps` is spread onto <Accordion.Root>.
 function makeAccordion(
-  rootProps: Record<string, unknown>,
+  rootProps: AccordionRootInit,
   items: Array<[string, string]>,
 ) {
-  return React.createElement(
-    Accordion.Root,
-    rootProps,
-    ...items.map(([label, content], i) =>
-      React.createElement(
-        Accordion.Item,
-        { value: `item-${i}`, key: `item-${i}` },
-        React.createElement(Accordion.Trigger, null, label),
-        React.createElement(Accordion.Content, null, content),
-      ),
-    ),
+  const children = items.map(([label, content], i) =>
+    accordionItem(`item-${i}`, label, content),
   );
+  if (rootProps.type === "multiple") {
+    return React.createElement(Accordion.Root, {
+      ...rootProps,
+      type: "multiple",
+      children,
+    });
+  }
+  return React.createElement(Accordion.Root, { ...rootProps, children });
 }
 
 // An outer accordion whose first (open) panel embeds a second Accordion.Root,
@@ -33,41 +64,23 @@ function makeAccordion(
 // header arrow-navigation is scoped to the nearest root and doesn't leak across
 // the nesting boundary.
 function nestedAccordion() {
-  return React.createElement(
-    Accordion.Root,
-    { defaultValue: "outer-0" },
-    React.createElement(
-      Accordion.Item,
-      { value: "outer-0", key: "outer-0" },
-      React.createElement(Accordion.Trigger, null, "Outer-A"),
-      React.createElement(
-        Accordion.Content,
-        null,
-        React.createElement(
-          Accordion.Root,
-          { defaultValue: "inner-0" },
-          React.createElement(
-            Accordion.Item,
-            { value: "inner-0", key: "inner-0" },
-            React.createElement(Accordion.Trigger, null, "Inner-A"),
-            React.createElement(Accordion.Content, null, "Inner-A body"),
-          ),
-          React.createElement(
-            Accordion.Item,
-            { value: "inner-1", key: "inner-1" },
-            React.createElement(Accordion.Trigger, null, "Inner-B"),
-            React.createElement(Accordion.Content, null, "Inner-B body"),
-          ),
-        ),
+  return React.createElement(Accordion.Root, {
+    defaultValue: "outer-0",
+    children: [
+      accordionItem(
+        "outer-0",
+        "Outer-A",
+        React.createElement(Accordion.Root, {
+          defaultValue: "inner-0",
+          children: [
+            accordionItem("inner-0", "Inner-A", "Inner-A body"),
+            accordionItem("inner-1", "Inner-B", "Inner-B body"),
+          ],
+        }),
       ),
-    ),
-    React.createElement(
-      Accordion.Item,
-      { value: "outer-1", key: "outer-1" },
-      React.createElement(Accordion.Trigger, null, "Outer-B"),
-      React.createElement(Accordion.Content, null, "Outer-B body"),
-    ),
-  );
+      accordionItem("outer-1", "Outer-B", "Outer-B body"),
+    ],
+  });
 }
 
 describe("Accordion", () => {
@@ -167,25 +180,14 @@ describe("Accordion", () => {
   it("honors the controlled `value` prop and reports single-string changes", () => {
     const changes: string[] = [];
     const { getByText, queryByText, rerender } = render(
-      React.createElement(
-        Accordion.Root,
-        {
-          value: "item-0",
-          onValueChange: (v: string) => changes.push(v),
-        },
-        React.createElement(
-          Accordion.Item,
-          { value: "item-0" },
-          React.createElement(Accordion.Trigger, null, "First"),
-          React.createElement(Accordion.Content, null, "First body"),
-        ),
-        React.createElement(
-          Accordion.Item,
-          { value: "item-1" },
-          React.createElement(Accordion.Trigger, null, "Second"),
-          React.createElement(Accordion.Content, null, "Second body"),
-        ),
-      ),
+      React.createElement(Accordion.Root, {
+        value: "item-0",
+        onValueChange: (v: string) => changes.push(v),
+        children: [
+          accordionItem("item-0", "First", "First body"),
+          accordionItem("item-1", "Second", "Second body"),
+        ],
+      }),
     );
     // controlled: only item-0 open regardless of clicks until parent updates value
     assert.ok(getByText("First body"));
@@ -197,22 +199,14 @@ describe("Accordion", () => {
 
     // parent moves the controlled value
     rerender(
-      React.createElement(
-        Accordion.Root,
-        { value: "item-1", onValueChange: (v: string) => changes.push(v) },
-        React.createElement(
-          Accordion.Item,
-          { value: "item-0" },
-          React.createElement(Accordion.Trigger, null, "First"),
-          React.createElement(Accordion.Content, null, "First body"),
-        ),
-        React.createElement(
-          Accordion.Item,
-          { value: "item-1" },
-          React.createElement(Accordion.Trigger, null, "Second"),
-          React.createElement(Accordion.Content, null, "Second body"),
-        ),
-      ),
+      React.createElement(Accordion.Root, {
+        value: "item-1",
+        onValueChange: (v: string) => changes.push(v),
+        children: [
+          accordionItem("item-0", "First", "First body"),
+          accordionItem("item-1", "Second", "Second body"),
+        ],
+      }),
     );
     assert.ok(getByText("Second body"));
     assert.strictEqual(queryByText("First body"), null);
@@ -281,25 +275,14 @@ describe("Accordion", () => {
   it("emits array payloads to onValueChange in multiple mode", () => {
     const changes: string[][] = [];
     const { getByText } = render(
-      React.createElement(
-        Accordion.Root,
-        {
-          type: "multiple",
-          onValueChange: (v: string[]) => changes.push(v),
-        },
-        React.createElement(
-          Accordion.Item,
-          { value: "item-0" },
-          React.createElement(Accordion.Trigger, null, "First"),
-          React.createElement(Accordion.Content, null, "First body"),
-        ),
-        React.createElement(
-          Accordion.Item,
-          { value: "item-1" },
-          React.createElement(Accordion.Trigger, null, "Second"),
-          React.createElement(Accordion.Content, null, "Second body"),
-        ),
-      ),
+      React.createElement(Accordion.Root, {
+        type: "multiple",
+        onValueChange: (v: string[]) => changes.push(v),
+        children: [
+          accordionItem("item-0", "First", "First body"),
+          accordionItem("item-1", "Second", "Second body"),
+        ],
+      }),
     );
     fireEvent.click(getByText("First"));
     fireEvent.click(getByText("Second"));
@@ -330,30 +313,20 @@ describe("Accordion", () => {
 
   it("namespaces ids per Root so two Roots reusing a value don't collide", () => {
     const { container } = render(
-      React.createElement(
-        "div",
-        null,
-        React.createElement(
-          Accordion.Root,
-          { defaultValue: "shared" },
-          React.createElement(
-            Accordion.Item,
-            { value: "shared" },
-            React.createElement(Accordion.Trigger, null, "A"),
-            React.createElement(Accordion.Content, null, "A body"),
-          ),
-        ),
-        React.createElement(
-          Accordion.Root,
-          { defaultValue: "shared" },
-          React.createElement(
-            Accordion.Item,
-            { value: "shared" },
-            React.createElement(Accordion.Trigger, null, "B"),
-            React.createElement(Accordion.Content, null, "B body"),
-          ),
-        ),
-      ),
+      React.createElement("div", {
+        children: [
+          React.createElement(Accordion.Root, {
+            key: "root-a",
+            defaultValue: "shared",
+            children: accordionItem("shared", "A", "A body"),
+          }),
+          React.createElement(Accordion.Root, {
+            key: "root-b",
+            defaultValue: "shared",
+            children: accordionItem("shared", "B", "B body"),
+          }),
+        ],
+      }),
     );
     const regions = Array.from(container.querySelectorAll('[role="region"]'));
     assert.strictEqual(regions.length, 2);
@@ -374,11 +347,12 @@ describe("Accordion", () => {
     assert.throws(
       () =>
         render(
-          React.createElement(
-            Accordion.Item,
-            { value: "x" },
-            React.createElement(Accordion.Trigger, null, "Orphan"),
-          ),
+          React.createElement(Accordion.Item, {
+            value: "x",
+            children: React.createElement(Accordion.Trigger, {
+              children: "Orphan",
+            }),
+          }),
         ),
       /must be used inside <Accordion\.Root>/,
     );
@@ -388,11 +362,11 @@ describe("Accordion", () => {
     assert.throws(
       () =>
         render(
-          React.createElement(
-            Accordion.Root,
-            null,
-            React.createElement(Accordion.Content, null, "Orphan body"),
-          ),
+          React.createElement(Accordion.Root, {
+            children: React.createElement(Accordion.Content, {
+              children: "Orphan body",
+            }),
+          }),
         ),
       /must be used inside <Accordion\.Item>/,
     );
@@ -412,26 +386,15 @@ describe("Accordion", () => {
   it("honors a controlled `value` array in multiple mode without self-updating", () => {
     const changes: string[][] = [];
     const tree = (value: string[]) =>
-      React.createElement(
-        Accordion.Root,
-        {
-          type: "multiple",
-          value,
-          onValueChange: (v: string[]) => changes.push(v),
-        },
-        React.createElement(
-          Accordion.Item,
-          { value: "item-0" },
-          React.createElement(Accordion.Trigger, null, "First"),
-          React.createElement(Accordion.Content, null, "First body"),
-        ),
-        React.createElement(
-          Accordion.Item,
-          { value: "item-1" },
-          React.createElement(Accordion.Trigger, null, "Second"),
-          React.createElement(Accordion.Content, null, "Second body"),
-        ),
-      );
+      React.createElement(Accordion.Root, {
+        type: "multiple",
+        value,
+        onValueChange: (v: string[]) => changes.push(v),
+        children: [
+          accordionItem("item-0", "First", "First body"),
+          accordionItem("item-1", "Second", "Second body"),
+        ],
+      });
     const { getByText, queryByText, rerender } = render(tree(["item-0"]));
     // Controlled to a single-element array: only item-0 is open.
     assert.ok(getByText("First body"));

@@ -17,16 +17,16 @@ import {
   wireWizardToPersistence,
   wireGovernanceToManifestReader,
   wireExportToGovernance,
-  _createFixtureManifest,
+  createFixtureManifest,
   type CrossBoundaryManifest,
-} from "../../../../web-driver/src/__tests__/fixtures/cross-boundary-registry";
-import { PORT_NAMES } from "../../../../web-driver/src/infrastructure/constants/port-names";
+} from "../../../../web-driver/src/__tests__/fixtures/cross-boundary-registry.js";
+import { PORT_NAMES } from "../../../../web-driver/src/infrastructure/constants/port-names.js";
 import {
   registerMockPort,
   getMockPort,
-} from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock";
+} from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock.js";
 
-type IntegrationError = { code: string; message: string };
+type IntegrationError = { code: string; message: string; details?: string };
 
 describe("Error Recovery — Integration Tests (Phase 6C)", () => {
   let registry: ReturnType<typeof createCrossBoundaryRegistry>;
@@ -45,9 +45,11 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       };
 
       const flakyWizard = {
-        async generateProject(input: {
-          projectName: string;
-        }): Promise<{ success: boolean; manifest?: unknown; error?: unknown }> {
+        async generateProject(input: { projectName: string }): Promise<{
+          success: boolean;
+          manifest?: { system: string; scope: string };
+          error?: unknown;
+        }> {
           retryState.attempts++;
 
           if (retryState.attempts <= 2) {
@@ -92,7 +94,10 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
         throw lastError;
       };
 
-      const wizard = getMockPort(registry, PORT_NAMES.PROJECT_GENERATOR);
+      const wizard = getMockPort<typeof flakyWizard>(
+        registry,
+        PORT_NAMES.PROJECT_GENERATOR,
+      );
       const result = await retryWithBackoff(
         () => wizard.generateProject({ projectName: "recovery-project" }),
         3,
@@ -100,6 +105,7 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       );
 
       assert.strictEqual(result.success, true);
+      assert.ok(result.manifest);
       assert.strictEqual(result.manifest.system, "recovery-project");
 
       assert.strictEqual(retryState.attempts, 3);
@@ -118,7 +124,7 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       };
 
       const failingWizard = {
-        async generateProject(): Promise<{
+        async generateProject(_input?: { projectName: string }): Promise<{
           success: boolean;
           manifest?: unknown;
           error?: unknown;
@@ -176,20 +182,29 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       registerMockPort(registry, PORT_NAMES.LINTER, gracefulGovernance);
       registerMockPort(registry, PORT_NAMES.SSE_STREAM, defensiveExport);
 
-      const wizard = getMockPort(registry, PORT_NAMES.PROJECT_GENERATOR);
+      const wizard = getMockPort<typeof failingWizard>(
+        registry,
+        PORT_NAMES.PROJECT_GENERATOR,
+      );
       const wizResult = await wizard.generateProject({
         projectName: "test",
       });
 
       assert.strictEqual(wizResult.success, false);
 
-      const governance = getMockPort(registry, PORT_NAMES.LINTER);
+      const governance = getMockPort<typeof gracefulGovernance>(
+        registry,
+        PORT_NAMES.LINTER,
+      );
       const govResult = await governance.scan(null);
 
       assert.strictEqual(govResult.success, false);
       assert.strictEqual(govResult.error?.code, "INVALID_MANIFEST");
 
-      const exporter = getMockPort(registry, PORT_NAMES.SSE_STREAM);
+      const exporter = getMockPort<typeof defensiveExport>(
+        registry,
+        PORT_NAMES.SSE_STREAM,
+      );
       const expResult = await exporter.validateManifest(null);
 
       assert.strictEqual(expResult.success, false);
@@ -223,7 +238,10 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       };
 
       const failingGovernance = {
-        async scan(): Promise<{ success: boolean; error?: IntegrationError }> {
+        async scan(_manifest?: unknown): Promise<{
+          success: boolean;
+          error?: IntegrationError;
+        }> {
           return {
             success: false,
             error: {
@@ -247,19 +265,28 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       registerMockPort(registry, PORT_NAMES.LINTER, failingGovernance);
       registerMockPort(registry, PORT_NAMES.SSE_STREAM, recoveryExport);
 
-      const wizard = getMockPort(registry, PORT_NAMES.PROJECT_GENERATOR);
+      const wizard = getMockPort<typeof workingWizard>(
+        registry,
+        PORT_NAMES.PROJECT_GENERATOR,
+      );
       const wizResult = await wizard.generateProject({
         projectName: "resilient-project",
       });
       assert.strictEqual(wizResult.success, true);
 
-      const governance = getMockPort(registry, PORT_NAMES.LINTER);
+      const governance = getMockPort<typeof failingGovernance>(
+        registry,
+        PORT_NAMES.LINTER,
+      );
       const govResult = await governance.scan(wizResult.manifest);
       assert.strictEqual(govResult.success, false);
 
-      const exporter = getMockPort(registry, PORT_NAMES.SSE_STREAM);
+      const exporter = getMockPort<typeof recoveryExport>(
+        registry,
+        PORT_NAMES.SSE_STREAM,
+      );
       const expResult = await exporter.streamExport({
-        manifest: wizResult.manifest,
+        manifest: wizResult.manifest as CrossBoundaryManifest,
         target: "zip",
       });
       assert.strictEqual(expResult.success, true);
@@ -280,9 +307,12 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
       };
       registerMockPort(registry1, PORT_NAMES.PROJECT_GENERATOR, failingWizard1);
 
-      const wizard1 = getMockPort(registry1, PORT_NAMES.PROJECT_GENERATOR);
+      const wizard1 = getMockPort<typeof failingWizard1>(
+        registry1,
+        PORT_NAMES.PROJECT_GENERATOR,
+      );
       try {
-        await wizard1.generateProject({});
+        await wizard1.generateProject();
       } catch {
         // expected
       }
@@ -293,15 +323,21 @@ describe("Error Recovery — Integration Tests (Phase 6C)", () => {
 
       const workingWizard2 = {
         callCount: 0,
-        async generateProject(): Promise<unknown> {
+        async generateProject(): Promise<{
+          success: boolean;
+          manifest?: unknown;
+        }> {
           this.callCount++;
           return { success: true, manifest: {} };
         },
       };
       registerMockPort(registry2, PORT_NAMES.PROJECT_GENERATOR, workingWizard2);
 
-      const wizard2 = getMockPort(registry2, PORT_NAMES.PROJECT_GENERATOR);
-      const result = await wizard2.generateProject({});
+      const wizard2 = getMockPort<typeof workingWizard2>(
+        registry2,
+        PORT_NAMES.PROJECT_GENERATOR,
+      );
+      const result = await wizard2.generateProject();
 
       assert.strictEqual(result.success, true);
       assert.strictEqual(workingWizard2.callCount, 1);

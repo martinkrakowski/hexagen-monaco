@@ -16,7 +16,7 @@ describe("Button component", () => {
   });
 
   it("forwards ref to underlying button element", () => {
-    const ref = React.createRef();
+    const ref = React.createRef<HTMLButtonElement>();
     render(React.createElement(Button, { ref }, "Test"));
     assert.ok(ref.current instanceof HTMLButtonElement);
     assert.strictEqual(ref.current?.textContent, "Test");
@@ -68,6 +68,7 @@ describe("Button component", () => {
       React.createElement(Button, { disabled: true }, "Disabled"),
     );
     const button = getByRole("button");
+    assert.ok(button instanceof HTMLButtonElement);
     assert.strictEqual(button.disabled, true);
     assert.match(button.className, /disabled:opacity-50/);
     assert.match(button.className, /disabled:pointer-events-none/);
@@ -75,18 +76,18 @@ describe("Button component", () => {
 
   it("forwards standard button HTML attributes", () => {
     const handleClick = () => {};
-    const { getByTestId } = render(
+    const { getByRole } = render(
       React.createElement(
         Button,
         {
           type: "submit",
           onClick: handleClick,
-          "data-testid": "submit-btn",
         },
         "Submit",
       ),
     );
-    const button = getByTestId("submit-btn");
+    const button = getByRole("button", { name: "Submit" });
+    assert.ok(button instanceof HTMLButtonElement);
     assert.strictEqual(button.type, "submit");
     assert.ok(button.onclick);
   });

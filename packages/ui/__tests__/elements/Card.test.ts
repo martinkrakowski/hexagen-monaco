@@ -22,7 +22,7 @@ describe("Card components", () => {
     });
 
     it("forwards ref to underlying div", () => {
-      const ref = React.createRef();
+      const ref = React.createRef<HTMLDivElement>();
       render(React.createElement(Card, { ref }));
       assert.ok(ref.current instanceof HTMLDivElement);
     });
@@ -30,6 +30,7 @@ describe("Card components", () => {
     it("applies card styling classes", () => {
       const { container } = render(React.createElement(Card, null));
       const card = container.querySelector("div");
+      assert.ok(card instanceof HTMLDivElement);
       assert.match(card.className, /rounded-md/);
       assert.match(card.className, /border-border/);
       assert.match(card.className, /bg-card/);
@@ -41,6 +42,7 @@ describe("Card components", () => {
         React.createElement(Card, { className: "custom-card" }),
       );
       const card = container.querySelector("div");
+      assert.ok(card instanceof HTMLDivElement);
       assert.match(card.className, /custom-card/);
     });
   });
@@ -55,6 +57,7 @@ describe("Card components", () => {
     it("applies header styling classes", () => {
       const { container } = render(React.createElement(CardHeader, null));
       const header = container.querySelector("div");
+      assert.ok(header instanceof HTMLDivElement);
       assert.match(header.className, /flex/);
       assert.match(header.className, /flex-col/);
       assert.match(header.className, /space-y-1\.5/);
@@ -63,7 +66,7 @@ describe("Card components", () => {
     });
 
     it("forwards ref", () => {
-      const ref = React.createRef();
+      const ref = React.createRef<HTMLDivElement>();
       render(React.createElement(CardHeader, { ref }));
       assert.ok(ref.current instanceof HTMLDivElement);
     });
@@ -119,7 +122,7 @@ describe("Card components", () => {
     });
 
     it("forwards ref", () => {
-      const ref = React.createRef();
+      const ref = React.createRef<HTMLDivElement>();
       render(React.createElement(CardContent, { ref }));
       assert.ok(ref.current instanceof HTMLDivElement);
     });

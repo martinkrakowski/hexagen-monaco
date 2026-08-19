@@ -165,8 +165,12 @@ describe("Export Pipeline — Error Handling", () => {
     assert.strictEqual(githubAuth.success, true);
     assert.strictEqual(storageUpload.success, false);
     assert.strictEqual(events.length, 2);
-    assert.strictEqual(events[0].type, "success");
-    assert.strictEqual(events[1].success, false);
+    const [firstEvent, secondEvent] = events;
+    assert.ok(firstEvent !== undefined && secondEvent !== undefined);
+    assert.ok("type" in firstEvent);
+    assert.strictEqual(firstEvent.type, "success");
+    assert.ok("success" in secondEvent);
+    assert.strictEqual(secondEvent.success, false);
   });
 
   it("error: network error (ENOTFOUND) during upload", async () => {
@@ -206,9 +210,18 @@ describe("Export Pipeline — Error Handling", () => {
     const events = stream.getEvents();
 
     assert.strictEqual(events.length, 3);
-    assert.strictEqual(events[0].type, "start");
-    assert.strictEqual(events[1].success, false);
-    assert.strictEqual(events[2].type, "retry");
+    const [startEvent, failureEvent, retryEvent] = events;
+    assert.ok(
+      startEvent !== undefined &&
+        failureEvent !== undefined &&
+        retryEvent !== undefined,
+    );
+    assert.ok("type" in startEvent);
+    assert.strictEqual(startEvent.type, "start");
+    assert.ok("success" in failureEvent);
+    assert.strictEqual(failureEvent.success, false);
+    assert.ok("type" in retryEvent);
+    assert.strictEqual(retryEvent.type, "retry");
   });
 
   it("error: export manifest with large context count performance", async () => {

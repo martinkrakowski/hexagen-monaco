@@ -77,9 +77,9 @@ describe("Icon component", () => {
   });
 
   it("returns null for invalid icon name", () => {
-    // @ts-expect-error - testing invalid name
+    const unknownName = "invalid-icon" as Parameters<typeof Icon>[0]["name"];
     const { container } = render(
-      React.createElement(Icon, { name: "invalid-icon" }),
+      React.createElement(Icon, { name: unknownName }),
     );
     const svg = container.querySelector("svg");
     assert.strictEqual(svg, null);

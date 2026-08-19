@@ -19,13 +19,14 @@ import {
   ErrorScenario,
   createDelayedAdapter,
   type PortRegistry,
-} from "../../../../web-driver/src/__tests__/fixtures";
+} from "../../../../web-driver/src/__tests__/fixtures/index.js";
 import {
   MockWizardPersistenceAdapter,
   MockProjectGeneratorAdapter,
   MockFileWriterAdapter,
-} from "../fixtures/wizard-mocks";
-import { PORT_NAMES } from "../../../../web-driver/src/infrastructure/constants/port-names";
+  type WizardSessionState,
+} from "../fixtures/wizard-mocks.js";
+import { PORT_NAMES } from "../../../../web-driver/src/infrastructure/constants/port-names.js";
 
 describe("Project Wizard — Error Handling", () => {
   let registry: PortRegistry;
@@ -58,10 +59,11 @@ describe("Project Wizard — Error Handling", () => {
     );
 
     try {
-      const result = await delayedPersistence.execute?.();
-      assert.ok(result !== undefined);
-      assert.strictEqual(result?.success, false);
-      assert.ok(result?.error.message.includes("3000"));
+      const result = await delayedPersistence.execute();
+      assert.strictEqual(result.success, false);
+      if ("error" in result) {
+        assert.ok(result.error.message.includes("3000"));
+      }
     } catch (error) {
       assert.ok(error !== undefined);
     }
@@ -83,16 +85,13 @@ describe("Project Wizard — Error Handling", () => {
     const failingGenerator = createFailingAdapter(
       "GENERATOR_ERROR",
       "Code generation failed",
-    ) as unknown as MockProjectGeneratorAdapter;
+    );
 
     registerMockPort(registry, PORT_NAMES.PROJECT_GENERATOR, failingGenerator);
 
     try {
-      const result = await (failingGenerator.execute?.() ?? Promise.resolve());
-      assert.ok(result !== undefined);
-      if (result && typeof result === "object" && "success" in result) {
-        assert.strictEqual(result.success, false);
-      }
+      const result = await failingGenerator.execute();
+      assert.strictEqual(result.success, false);
     } catch (error) {
       assert.ok(error !== undefined);
     }
@@ -102,18 +101,14 @@ describe("Project Wizard — Error Handling", () => {
     const permissionErrorAdapter = createFailingAdapter(
       ErrorScenario.WRITE_ERROR,
       "Permission denied (EACCES)",
-    ) as unknown as MockFileWriterAdapter;
+    );
 
     registerMockPort(registry, PORT_NAMES.FILE_WRITER, permissionErrorAdapter);
 
     try {
-      const result = await (permissionErrorAdapter.execute?.() ??
-        Promise.resolve());
-      assert.ok(result !== undefined);
-      if (result && typeof result === "object" && "success" in result) {
-        assert.strictEqual(result.success, false);
-        assert.strictEqual(result.error.code, ErrorScenario.WRITE_ERROR);
-      }
+      const result = await permissionErrorAdapter.execute();
+      assert.strictEqual(result.success, false);
+      assert.strictEqual(result.error.code, ErrorScenario.WRITE_ERROR);
     } catch (error) {
       assert.ok(error !== undefined);
     }
@@ -138,15 +133,12 @@ describe("Project Wizard — Error Handling", () => {
   it("error: session persistence recovery on retry", async () => {
     let attemptCount = 0;
     const retryAdapter = {
-      async saveSession(sessionId: string, state: Record<string, unknown>) {
+      async saveSession(sessionId: string, state: WizardSessionState) {
         attemptCount++;
         if (attemptCount === 1) {
           throw new Error("Transient error");
         }
-        await persistenceAdapter.saveSession(
-          sessionId,
-          state as Parameters<typeof persistenceAdapter.saveSession>[1],
-        );
+        await persistenceAdapter.saveSession(sessionId, state);
       },
     };
 

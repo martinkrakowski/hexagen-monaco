@@ -10,12 +10,12 @@ import type {
  * Returns a simple deterministic layout without invoking dagre.
  */
 export class GraphLayoutPortFake implements GraphLayoutPort {
-  layout(
+  async layout(
     nodes: readonly GraphLayoutNode[],
     edges: readonly GraphLayoutEdge[],
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     direction: "TB" | "LR" = "TB",
-  ): GraphLayoutResult {
+  ): Promise<GraphLayoutResult> {
     // Simple deterministic layout: arrange nodes in a grid
     // This fake exists to allow unit-testing SolveGraphLayoutUseCase logic
     // without depending on dagre. For integration testing, use DagreGraphLayoutAdapter.
@@ -43,11 +43,11 @@ export class IntrospectableGraphLayoutPortFake extends GraphLayoutPortFake {
     direction: "TB" | "LR";
   }> = [];
 
-  override layout(
+  override async layout(
     nodes: readonly GraphLayoutNode[],
     edges: readonly GraphLayoutEdge[],
     direction: "TB" | "LR" = "TB",
-  ): GraphLayoutResult {
+  ): Promise<GraphLayoutResult> {
     this.calls.push({ nodes, edges, direction });
     return super.layout(nodes, edges, direction);
   }

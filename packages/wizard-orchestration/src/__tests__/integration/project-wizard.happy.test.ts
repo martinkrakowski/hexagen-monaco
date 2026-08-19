@@ -13,14 +13,14 @@ import {
   registerMockPort,
   getMockPort,
   type PortRegistry,
-} from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock.ts";
+} from "../../../../web-driver/src/__tests__/fixtures/port-registry.mock.js";
 import {
   MockWizardPersistenceAdapter,
   MockProjectGeneratorAdapter,
   MockFileWriterAdapter,
   createWizardFixtureManifest,
-} from "../fixtures/wizard-mocks";
-import { PORT_NAMES } from "../../../../web-driver/src/infrastructure/constants/port-names.ts";
+} from "../fixtures/wizard-mocks.js";
+import { PORT_NAMES } from "../../../../web-driver/src/infrastructure/constants/port-names.js";
 
 describe("Project Wizard — Happy Path", () => {
   let registry: PortRegistry;
@@ -134,9 +134,9 @@ describe("Project Wizard — Happy Path", () => {
 
     assert.strictEqual(fileWriterAdapter.hasFile("manifest.yaml"), true);
     assert.strictEqual(fileWriterAdapter.hasFile("package.json"), true);
-    assert.ok(
-      fileWriterAdapter.getFile("manifest.yaml").includes("modular-monolith"),
-    );
+    const writtenManifest = fileWriterAdapter.getFile("manifest.yaml");
+    assert.ok(writtenManifest !== undefined);
+    assert.ok(writtenManifest.includes("modular-monolith"));
   });
 
   it("happy path: registry provides mocks without errors", async () => {
