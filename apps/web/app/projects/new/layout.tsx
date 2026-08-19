@@ -2,7 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { useLocalLLMConfig } from "@/lib/local-llm-context";
-import { ModelProgressCard } from "@/governance-assistant/ModelProgressCard";
+import { ModelProgressCard } from "@/ModelProgressCard";
 import {
   LLMLoadingModalProvider,
   useLLMLoadingModalSuppressed,

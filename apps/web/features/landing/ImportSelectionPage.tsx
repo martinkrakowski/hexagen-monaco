@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@hexagen/ui";
-import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
+import { ProjectsShellWithFreeTier } from "@/ProjectsShellWithFreeTier";
 import { CreationStepIndicator } from "@/landing/components/CreationStepIndicator";
 import { ImportOptionRow } from "@/landing/components/ImportOptionRow";
 import {

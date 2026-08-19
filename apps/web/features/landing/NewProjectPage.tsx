@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { FolderOpen } from "lucide-react";
 import { Button } from "@hexagen/ui";
-import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
+import { ProjectsShellWithFreeTier } from "@/ProjectsShellWithFreeTier";
 import { useCreationPaths } from "@/landing/application/useCreationPaths";
 import { usePathNavigation } from "@/landing/application/usePathNavigation";
 import { CreationStepIndicator } from "@/landing/components/CreationStepIndicator";

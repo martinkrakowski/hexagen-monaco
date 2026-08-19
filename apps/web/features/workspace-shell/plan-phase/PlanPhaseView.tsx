@@ -17,7 +17,7 @@ import { useWizardLifecycleContext } from "../contexts/WizardLifecycleContext";
 // Cross-slice import is allowed here: workspace-shell is the composition root
 // (exempt from no-feature-slice-imports) and the plan phase mounts inside the
 // same projects shell chrome as the landing/import screens.
-import { ProjectsShellWithFreeTier } from "@/landing/ProjectsShellWithFreeTier";
+import { ProjectsShellWithFreeTier } from "@/ProjectsShellWithFreeTier";
 import { TextareaComposer } from "@/chat/TextareaComposer";
 import { PlanWorkbench, type WorkbenchMainView } from "./PlanWorkbench";
 import { ProjectSettingsSection } from "./ProjectSettingsSection";

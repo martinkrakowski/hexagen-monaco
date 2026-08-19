@@ -22,7 +22,7 @@ import {
 vi.mock("../ManifestPreview", () => ({
   ManifestPreview: () => <div data-testid="preview" />,
 }));
-vi.mock("@/landing/ProjectsShellWithFreeTier", () => ({
+vi.mock("@/ProjectsShellWithFreeTier", () => ({
   ProjectsShellWithFreeTier: ({
     children,
     footer,
