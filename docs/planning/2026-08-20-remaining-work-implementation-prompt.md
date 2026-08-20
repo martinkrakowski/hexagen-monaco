@@ -42,13 +42,13 @@ sub-agents, phased, gated, and landed — and _which choices must be made by a h
 
 Same roles as the 2026-08-14 prompt §1; restated because they are load-bearing:
 
-| Role                       | Agent shape                                          | Used for                                                                          |
-| -------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------- |
-| **Scout**                  | `subagent_type: Explore`, read-only, **no worktree** | Liveness / zero-consumers / impact proofs; FU-1.2 re-measure; R-6 offender census |
-| **Domain Worker**          | `general-purpose`, `isolation: worktree`             | 8.12(h)/(a), all of Wave D, R-2, R-4                                              |
-| **Adapter/Tooling Worker** | `general-purpose`, `isolation: worktree`             | S-1, S-4 code, R-5, R-6, FU-1.3 batches, FU-1.4, Wave E items                     |
-| **Test/QA Worker**         | `general-purpose` (may share the item's worktree)    | Failing-first tests, contract tests, gate prep                                    |
-| **Refuter panel**          | 2–3 parallel `general-purpose`, majority verdict     | Every Wave D PR; 8.12(h); any published-surface change                            |
+| Role                       | Agent shape                                                | Used for                                                                          |
+| -------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **Scout**                  | `subagent_type: "explore"`, read-only, **no worktree**     | Liveness / zero-consumers / impact proofs; FU-1.2 re-measure; R-6 offender census |
+| **Domain Worker**          | `subagent_type: "general"`, `isolation: worktree`          | 8.12(h)/(a), all of Wave D, R-2, R-4                                              |
+| **Adapter/Tooling Worker** | `subagent_type: "general"`, `isolation: worktree`          | S-1, S-4 code, R-5, R-6, FU-1.3 batches, FU-1.4, Wave E items                     |
+| **Test/QA Worker**         | `subagent_type: "general"` (may share the item's worktree) | Failing-first tests, contract tests, gate prep                                    |
+| **Refuter panel**          | 2–3 parallel `subagent_type: "general"`, majority verdict  | Every Wave D PR; 8.12(h); any published-surface change                            |
 
 Standing rules (do not relax):
 

@@ -3,7 +3,7 @@
 **Date:** 2026-08-20 · **Status:** fresh inventory after the 2026-08-20 archeology audit. Waves 0 / A0 / A1 / C of the predecessor plan are on `main`; Wave B is 2 of 5; Wave D not started; Wave E one batch. **Next owner action: enable branch protection (overdue), decide D-P1, then open the 8.12(h) PR.**
 **Baseline:** `origin/main` @ `4dddf1e1` (#558). Published pair: `@hexagen-monaco/sync@0.11.0` + `@hexagen-monaco/arch-linter@0.11.0`; #554's emitter change is **not yet published**.
 
-Companion plan — [`2026-08-20-remaining-work-plan.md`](./2026-08-20-remaining-work-plan.md). Where the plan is the queue, this file tracks what has landed, what is in flight, and what to start next. Update §1, §3, and §7 as items merge.
+Companion plan — [`2026-08-20-remaining-work-plan.md`](./2026-08-20-remaining-work-plan.md). Where the plan is the queue, this file tracks what has landed, what is in flight, and what to start next. Update §1, §2, §3, and §7 as items merge.
 
 Do **not** schedule from [`2026-08-18-remaining-work-execution-runbook.md`](./2026-08-18-remaining-work-execution-runbook.md) (change log ends at #538; 17 merges stale) or any earlier runbook.
 
