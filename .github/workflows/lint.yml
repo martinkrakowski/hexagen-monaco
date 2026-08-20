@@ -50,20 +50,76 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # Docs-only fast path. Neither ESLint, the UI-boundary script, nor the
+      # arch-lint ratchet parses markdown -- all three read .ts/.tsx source,
+      # .architecture/** YAML, and package.json. A changeset confined to
+      # *.md is a no-op for every check this job runs, so every step below
+      # is skipped when this is true. The JOB still runs and reports success
+      # either way -- only individual steps are conditional -- so a required
+      # branch-protection check never hangs waiting for a workflow that
+      # never triggered (which is what a `paths-ignore` on the trigger would
+      # do instead). fetch-depth: 0 above fetches full history for all
+      # branches and tags, so both SHAs below are always resolvable when the
+      # events provide them.
+      #
+      # Do NOT copy this rule to a workflow that runs `yarn test`: this repo
+      # has real .md test fixtures (e.g.
+      # packages/agentic-interaction/__tests__/**/fixtures/*.md) that a test
+      # suite reads as literal input, so a blanket *.md skip would be wrong
+      # there. It is safe here only because this job never runs tests.
+      - name: "Detect docs-only changeset"
+        id: docs-only
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+            diff_range="${base}...${head}"
+          else
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+            diff_range="${base} ${head}"
+          fi
+
+          # A force-push, a new branch's first push (before = all-zeros), or
+          # any SHA this checkout can't resolve falls back to the full
+          # pipeline -- never skip on a diff that couldn't actually be computed.
+          if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "Base SHA unusable ('$base') -- running the full pipeline."
+            exit 0
+          fi
+
+          changed="$(git diff --name-only $diff_range)"
+          if [ -z "$changed" ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if printf '%s\n' "$changed" | grep -qvE '\.md$'; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "docs_only=true" >> "$GITHUB_OUTPUT"
+            file_count="$(printf '%s\n' "$changed" | wc -l | tr -d ' ')"
+            echo "Docs-only changeset (${file_count} file(s), all *.md) -- skipping lint/build/ratchet."
+          fi
+
       # Corepack must be enabled BEFORE setup-node: setup-node@v5's environment
       # probe runs `yarn` (e.g. `yarn cache dir`), and the repo pins yarn@4 via
       # packageManager — classic global yarn errors on that. Enabling Corepack
       # first makes `yarn` resolve to the pinned yarn@4 shim during the probe.
       - name: "Enable Corepack"
+        if: steps.docs-only.outputs.docs_only != 'true'
         run: corepack enable
 
       # No version literal: `corepack prepare --activate` with no spec reads
       # `packageManager` from the root package.json, so a Yarn bump is a
       # one-line change there and CI cannot drift from the declared pin.
       - name: "Prepare Yarn"
+        if: steps.docs-only.outputs.docs_only != 'true'
         run: corepack prepare --activate
 
       - name: "Setup Node.js"
+        if: steps.docs-only.outputs.docs_only != 'true'
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22.7"
@@ -72,6 +128,7 @@ jobs:
       # resolution slower; a single TLS socket stall (YN0001 RequestError)
       # fails the whole job. Timeout + retries, not a lockfile change.
       - name: "Install Dependencies"
+        if: steps.docs-only.outputs.docs_only != 'true'
         env:
           YARN_HTTP_TIMEOUT: "120000"
         run: |
@@ -90,6 +147,7 @@ jobs:
       # documented one, so the hole is pinned instead of silent and a NEW
       # unlinted package fails the build.
       - name: "Verify Lint Coverage"
+        if: steps.docs-only.outputs.docs_only != 'true'
         run: node scripts/check-lint-coverage.mjs
 
       # Layer 2. Runs eslint in every workspace that has a lint script, via the
@@ -103,6 +161,7 @@ jobs:
       # --max-warnings=0 is a policy change with a large existing backlog and
       # belongs in its own item; it is not silently assumed here.
       - name: "Run ESLint (all workspaces)"
+        if: steps.docs-only.outputs.docs_only != 'true'
         run: yarn turbo run lint --output-logs=full --log-order=stream
 
       # Layer 3. Structural checks that eslint cannot express: kernel-package
@@ -112,6 +171,7 @@ jobs:
       # if its own blocklist fails to parse — an unparsed rule set is never
       # reported as compliant.
       - name: "Verify UI Boundary (firewall layer 3)"
+        if: steps.docs-only.outputs.docs_only != 'true'
         run: bash scripts/validate-ui-boundary.sh
 
       # The arch-linter's real entry point is `dist/cli.js` (tools/arch-linter
@@ -164,6 +224,7 @@ jobs:
       # hits on a hosted runner, so it builds 38 packages from scratch); it is
       # merely no longer paying for a build the ratchet cannot use.
       - name: "Build Packages (arch-linter bin + resolvable workspace targets)"
+        if: steps.docs-only.outputs.docs_only != 'true'
         run: yarn turbo run build --filter='!web' --output-logs=errors-only --log-order=stream
 
       # Layer 1. The architecture ratchet (ADR-0054 §1). Fails on any boundary
@@ -192,6 +253,7 @@ jobs:
       # naming the baseline it enforces. This step invokes the linter directly,
       # names the file, and fails in parallel with that job.
       - name: "Verify Architecture Lint Ratchet"
+        if: steps.docs-only.outputs.docs_only != 'true'
         uses: ./.github/actions/hexagen-conformance
         with:
           lint-command: yarn lint:arch -- --baseline .architecture/arch-lint-baseline.json --ratchet
