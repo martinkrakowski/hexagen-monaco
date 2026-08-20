@@ -61,9 +61,11 @@ Standing rules (do not relax):
 - **Concurrency cap:** ≤4 open `wave-*`-labeled PRs at any time. Hotfixes are
   unlabeled and exempt. Do not spawn a comment-sweeper agent while a builder is running.
 - **Scout before seam edits — as a sub-agent, before the worker exists.** Deletions
-  (R-2, R-4's alias question, anything Wave D removes) need a zero-consumers proof
-  (grep + typecheck) captured for the PR body. If the scout contradicts the plan's
-  premise, **stop and surface; do not proceed.**
+  (R-2, R-4's alias question, anything Wave D removes) need a symbol-aware consumer
+  census (grep **and typecheck**, covering named, default, namespace, type-only, re-export,
+  dynamic, and template-literal references) captured for the PR body. Unresolved dynamic
+  references are inconclusive, not zero consumers. Fail if the scanned population is empty,
+  then run typecheck. If the scout contradicts the plan's premise, **stop and surface; do not proceed.**
 - **Primary-reserved stays reserved:** workers never edit `.architecture/**` or the
   context-YAML family, never run the gate of record, never `git commit`. Workers produce
   unapplied proposals only; the **Primary applies, stages, and lands** all `.architecture/**` and
