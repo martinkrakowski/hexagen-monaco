@@ -28,7 +28,7 @@ Five findings from the exploration change scope materially. They are folded into
 
 ### 1.1 Route map
 
-```
+```text
 /projects/new/import                     ImportSelectionPage  (exists; flip `github` to available)
 /projects/new/name?path=artifacts        NameStepClient       (exists; add "artifacts" to NamedPath)
 /projects/new/name?path=repo             NameStepClient       (exists; add "repo")
@@ -45,7 +45,7 @@ Every leg carries `?name=` per the **carried-name store-key contract** (`feature
 
 One machine spans all tiers; the tier only decides how `scanArtifacts` is obtained.
 
-```
+```text
                     ┌──────────────┐
                     │  tier_pick   │  S1
                     └──────┬───────┘
@@ -95,7 +95,7 @@ Chrome for every screen: `ProjectsShellWithFreeTier` (`title`, `headerContent`, 
 
 **S1 — Entry + tier picker** (`max-w-3xl`)
 
-```
+```text
 ┌ CreationStepIndicator ─ ●Method ─ ●Configure ─ ○Generate ───────────┐
 │                                                                     │
 │           How should we read your codebase?                         │
@@ -104,7 +104,7 @@ Chrome for every screen: `ProjectsShellWithFreeTier` (`title`, `headerContent`, 
 │  ┌─────────────────────────────────────────────────────────────┐    │
 │  │ ◉  Artifacts only                          RECOMMENDED      │    │
 │  │    You run `npx hexagen scan --handoff` locally and upload   │    │
-│  │    the 6-file zip. No source code is uploaded — file paths,  │    │
+│  │    the handoff zip. No source code is uploaded — file paths, │    │
 │  │    package names and rule findings are.                      │    │
 │  │    ┌ leaves your machine ──────────────────────────────┐     │    │
 │  │    │ manifest · layout · baseline · report · ledger    │     │    │
@@ -126,7 +126,7 @@ Component: `ChoiceCardGroup` (BF-2.2) — the `role="radiogroup"` + `<label><inp
 
 **S2 — Scan progress** (streaming, Tier B only; A/C show a determinate 3-step list)
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────┐
 │  Scanning acme/checkout-service @ main                           │
 │                                                                  │
@@ -160,7 +160,7 @@ The last good partial result is written to the draft store (BF-3.4) on every `st
 
 **S3 — Layout ratification** (`max-w-4xl`)
 
-```
+```text
 ┌ 7 packages found. Confirm the ones that are bounded contexts. ───────┐
 │                                                                      │
 │ ☑  packages/orders          → context ⌜orders          ⌟             │
@@ -181,7 +181,7 @@ Rows are `EntityDataGrid` (BF-2.1) with an expandable layer row; layer dirs are 
 
 **S5 — Findings review**
 
-```
+```text
 ┌ 34 findings ───────────────────────────── [group: rule ▾] ──────────┐
 │ ▸ cross-package-import              18   [baseline all…]            │
 │ ▾ npm-package-in-domain              9   [baseline all…]            │
@@ -200,7 +200,7 @@ Grouping is **dynamic over `BaselineEntry.rule` (an open `string`)** — never a
 
 **S7 — Install the gate** (Dialog, mirroring `ExportDialog`'s phase machine)
 
-```
+```text
 ┌ Install the conformance gate ───────────────────────────────┐
 │ ◉ Download a zip                                            │
 │   3 files + your ratified .architecture/. You open the PR   │
@@ -262,14 +262,14 @@ Atomic, independently acceptable. **Size:** XS<½d · S≈1d · M≈2-3d · L≈
 
 ### Contract layer
 
-| ID   | Feature                                                                                                                                                              | Size |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| F-01 | `hexagen scan` emits a single-line JSON envelope on stdout: `{layout, filesScanned, reportMarkdown, error}` — the shape the web adapter already parses.              | S    |
-| F-02 | Report path alignment: adapter probes `hexagen-report.md`; envelope carries the markdown directly.                                                                   | XS   |
-| F-03 | `hexagen scan --handoff [--handoff-out]` produces `hexagen-handoff.zip` via the existing `buildHandoffZip`.                                                          | S    |
-| F-04 | Scan captures `hexagen-lint --json` (drop `stdio:"inherit"`) and adds `findings: {fresh, baselined, stale, expired}` to the envelope and to `ProjectScanResponse`.   | M    |
-| F-05 | `unpackZipToDir` streams entries (`entry.nodeStream()` + aborting byte counter) instead of checking `maxEntryBytes` post-inflation. **Live defect in shipped #558.** | S    |
-| F-06 | Tier-A limit profile: ≤8 entries, small per-entry/total caps, distinct from the 256 MiB scan profile.                                                                | XS   |
+| ID   | Feature                                                                                                                                                                                                                                              | Size |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| F-01 | `hexagen scan` emits a single-line JSON envelope on stdout: `{layout, filesScanned, reportMarkdown, error}` — the shape the web adapter already parses.                                                                                              | S    |
+| F-02 | Report path alignment: adapter probes `hexagen-report.md`; envelope carries the markdown directly.                                                                                                                                                   | XS   |
+| F-03 | `hexagen scan --handoff [--handoff-out]` produces `hexagen-handoff.zip` via the existing `buildHandoffZip`.                                                                                                                                          | S    |
+| F-04 | Scan captures `hexagen-lint --json` (drop `stdio:"inherit"`) and adds `findings: {fresh, baselined, stale, expired}` to the envelope and to `ProjectScanResponse`.                                                                                   | M    |
+| F-05 | `unpackZipToDir` streams entries (`entry.nodeStream()` + aborting byte counter) instead of checking `maxEntryBytes` post-inflation, and rejects a duplicate normalized entry name before the first write. **Both are live defects in shipped #558.** | S    |
+| F-06 | Tier-A limit profile: `maxEntries: 8`, `maxEntryBytes: 1 MiB`, `maxUncompressedBytes: 4 MiB`, distinct from the 256 MiB scan profile.                                                                                                                | XS   |
 
 ### Platform layer
 
@@ -330,13 +330,13 @@ Atomic, independently acceptable. **Size:** XS<½d · S≈1d · M≈2-3d · L≈
 
 ### Phase 0 — Contract truth (no UI; unblocks everything)
 
-| Packet        | Features   | Scope (exclusive file ownership)                                                                                                                          | Mode       | Depends | RED test                                                                                                                                                     |
-| ------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **BF-0.0**    | F-32       | `packages/shared/src/**/scan-envelope.ts` + barrel; golden fixture `__tests__/fixtures/scan-envelope.v1.json`                                             | SEQUENTIAL | —       | Both a producer-shaped and a consumer-shaped object validate against the schema; an unknown field is preserved, a missing `schemaVersion` is rejected.       |
-| **BF-0.1**    | F-01, F-02 | `packages/sync/src/commands/scan/index.ts`, `__tests__/commands/scan/*`; `apps/web/app/lib/project-scan/cli-hexagen-scan.adapter.ts` (parse + probe list) | SEQUENTIAL | BF-0.0  | Stdout's last `{`-line parses to the envelope **and validates against the shared schema**; adapter test asserts `reportMarkdown` non-null for a fixture run. |
-| **BF-0.2**    | F-03       | `packages/sync/src/commands/scan/index.ts` (flags), `commands/report/index.ts` (call-through)                                                             | SEQUENTIAL | BF-0.1  | `scan --handoff` writes a zip containing all 6 entries.                                                                                                      |
-| **BF-0.3**    | F-04       | `packages/sync/src/commands/scan/index.ts` (`invokeHexagenLint`), `apps/web/app/lib/project-scan/types.ts`                                                | SEQUENTIAL | BF-0.2  | Envelope carries `findings.fresh[]` with `{rule,file,specifier,message}`; `ProjectScanResponse.findings` typed and optional.                                 |
-| **BF-0.4** 🔒 | F-05, F-06 | `apps/web/app/lib/project-scan/zip-unpack.ts`, `limits.ts`                                                                                                | PARALLEL   | —       | A 1-entry bomb is rejected **without** full inflation (assert the peak byte counter, not merely that it throws).                                             |
+| Packet        | Features   | Scope (exclusive file ownership)                                                                                                                                                    | Mode       | Depends | RED test                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **BF-0.0**    | F-32       | `packages/shared/src/**/scan-envelope.ts` + barrel; golden fixture `__tests__/fixtures/scan-envelope.v1.json`                                                                       | SEQUENTIAL | —       | Both a producer-shaped and a consumer-shaped object validate against the schema; an unknown field is preserved, a missing `schemaVersion` is rejected.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **BF-0.1**    | F-01, F-02 | `packages/sync/src/commands/scan/index.ts`, `__tests__/commands/scan/*` (producer test); `apps/web/app/lib/project-scan/cli-hexagen-scan.adapter.ts`, `__tests__/*` (consumer test) | SEQUENTIAL | BF-0.0  | Producer test (`packages/sync`): capture stdout and stderr **separately**; assert the exact final stdout line equals `JSON.stringify` of a `schemaVersion`-bearing envelope object, not merely that some line parses as JSON — the test must fail against C-1 because `runScan` today emits no such line at all, not because a later unrelated line happens to parse. Consumer test (`apps/web`): adapter parses that exact fixture and asserts `reportMarkdown` non-null. **Both test files are named here and both must run in the Quality Gate** (§8) — a change that breaks one side without breaking the other is exactly what BF-0.0 exists to catch, so the gate fails unless both suites executed. |
+| **BF-0.2**    | F-03       | `packages/sync/src/commands/scan/index.ts` (flags), `commands/report/index.ts` (call-through)                                                                                       | SEQUENTIAL | BF-0.1  | `scan --handoff` writes a zip containing all 6 entries.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **BF-0.3**    | F-04       | `packages/sync/src/commands/scan/index.ts` (`invokeHexagenLint`), `apps/web/app/lib/project-scan/types.ts`                                                                          | SEQUENTIAL | BF-0.2  | Envelope carries `findings.fresh[]` with `{rule,file,specifier,message}`; `ProjectScanResponse.findings` typed and optional.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **BF-0.4** 🔒 | F-05, F-06 | `apps/web/app/lib/project-scan/zip-unpack.ts`, `limits.ts`                                                                                                                          | PARALLEL   | —       | (1) A 1-entry bomb whose declared size exceeds `maxEntryBytes` is rejected with the running byte counter never exceeding the limit — assert the peak counter value, not merely that the call throws. (2) A fixture archive with two entries sharing the same normalized path is rejected before either is written — assert zero bytes on disk after the call.                                                                                                                                                                                                                                                                                                                                              |
 
 **BF-0.1 absorbs the former BF-0.2** (envelope and report-path are one contract change; splitting them left an incoherent intermediate state on a hot file). Even so, BF-0.1→0.3 still serialize on `scan/index.ts` — schedule them back-to-back with one worker, not three.
 
@@ -413,18 +413,18 @@ BF-4.1 / BF-4.2 / BF-4.4 own disjoint sub-folders → true parallel fan-out once
 
 ### Phase 6 — Install the gate
 
-| Packet        | Features | Scope                                                                                                                                                     | Mode       | Depends          |
-| ------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------------- |
-| **BF-6.1**    | F-11     | `packages/project-generation/src/domain/conformance-gate-files.ts` (generalize `hexagenConformanceActionFiles`); `app/api/projects/install-gate/route.ts` | SEQUENTIAL | —                |
-| **BF-6.2**    | F-21     | `features/brownfield/GateInstall/*`                                                                                                                       | SEQUENTIAL | BF-6.1, BF-2.2   |
-| **BF-6.3** 🔒 | F-12     | `packages/external-integration/src/infrastructure/adapters/github-pull-request.adapter.ts` + port                                                         | SEQUENTIAL | BF-6.1, **D-U3** |
-| **BF-6.4**    | F-22     | `packages/project-generation/src/domain/sync-integrity-workflow.ts` (comment-script constant)                                                             | PARALLEL   | —                |
+| Packet        | Features | Scope                                                                                                                                                                              | Mode       | Depends          |
+| ------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------------- |
+| **BF-6.1**    | F-11     | `packages/project-generation/src/domain/conformance-gate-files.ts` (generalize `hexagenConformanceActionFiles`); `app/api/projects/install-gate/route.ts`                          | SEQUENTIAL | —                |
+| **BF-6.2**    | F-21     | `features/brownfield/GateInstall/*`                                                                                                                                                | SEQUENTIAL | BF-6.1, BF-2.2   |
+| **BF-6.3** 🔒 | F-12     | `packages/external-integration/src/infrastructure/adapters/github-pull-request.adapter.ts` + port                                                                                  | SEQUENTIAL | BF-6.1, **D-U3** |
+| **BF-6.4**    | F-22     | `packages/project-generation/src/domain/sync-integrity-workflow.ts` (comment-script constant); `.github/actions/hexagen-conformance/post-comment.mjs` (this repo's dogfooded copy) | PARALLEL   | —                |
 
 🔒 **BF-6.3 is a security packet.** It opens the product's first repo-_write_ surface beyond the existing publish flow: 3-refuter panel, an explicit threat-model paragraph in the PR body, and a kill switch (env-gated, default off) that survives D-U3.
 
 **One correction to the review on this point:** a feature flag does not "leave the token in the session" as a new risk — the `repo workflow` scope is **already granted today** (`app/lib/auth.ts`) and is already used by `/api/export/github`. BF-6.3 adds a new _use_ of an existing token, not a new grant. That makes the flag meaningful (it bounds the new surface) while correctly locating the standing risk: it predates this plan and belongs to the GitHub-App migration, not here.
 
-**BF-6.4 caveat:** the constant and the dogfooded copy at `.github/actions/hexagen-conformance/post-comment.mjs` have already drifted (0.11.0 vs 0.10.0 headers). Change both or state explicitly why not.
+**BF-6.4 owns both files, not just the constant** — the constant and the dogfooded copy at `.github/actions/hexagen-conformance/post-comment.mjs` have already drifted (0.11.0 vs 0.10.0 headers). Its RED test is a byte-comparison of the two: fails today on the header-comment mismatch, passes once BF-6.4 makes the dogfooded copy re-derive from the constant (or an explicit, tested equality check) rather than existing as an independent hand-maintained file.
 
 ### Phase 7 — Report + persistence
 
@@ -437,7 +437,7 @@ BF-4.1 / BF-4.2 / BF-4.4 own disjoint sub-folders → true parallel fan-out once
 
 ## 5. Dependency DAG and fan-out schedule
 
-```
+```text
 WAVE 0  BF-0.0 (schema) · BF-1.0 (pre-commit gate)  ── land these two first
 
 WAVE 1  (4 concurrent — the cap)
@@ -484,7 +484,7 @@ WAVE 7   BF-7.1 ──▶ BF-7.2
 
 Prepend the standard `[GLOBAL GOVERNANCE]` block from `docs/planning/2026-08-14-architecture-remediation-implementation-prompt.md` §8, then add:
 
-```
+```text
 [BROWNFIELD ARC ADDENDUM]
 - DESIGN.md is binding and must be read before any UI edit. No inline styles.
   No arbitrary Tailwind values except `active:scale-[0.98]`. Spacing only from
@@ -492,9 +492,11 @@ Prepend the standard `[GLOBAL GOVERNANCE]` block from `docs/planning/2026-08-14-
 - Import NoSemanticState from "@hexagen/ui", NOT "@hexagen/ui/types" —
   the ./types subpath does not exist despite DESIGN.md §3.4's example.
 - NEVER import across apps/web/features/* slices. CI check 6 in
-  scripts/validate-ui-boundary.sh fails it, the pre-commit hook does NOT run
-  that check, and both its baselines are shrink-only. If you need a component
-  from another slice, STOP and report — it needs a promotion packet.
+  scripts/validate-ui-boundary.sh fails it, and both its baselines are
+  shrink-only. Before BF-1.0 lands, pre-commit does NOT run this check —
+  a violation only surfaces in CI. After BF-1.0, it runs locally for staged
+  apps/web/{features,app} paths. Either way: if you need a component from
+  another slice, STOP and report — it needs a promotion packet.
 - New shared components go in apps/web/components/ with domain-specific names
   (DESIGN.md §3.2: EntityDataGrid, never Table/List/Box).
 - Do not add a "loading"/"status"/"error"/"data"/"isPending" prop to any
@@ -547,15 +549,25 @@ Read-only `Explore` sub-agents, no worktree: **BF-1.2** (every consumer of the s
 
 ## 8. Verification
 
-Per packet: failing-first RED→GREEN · inverse-edit restores (never `git checkout` — it has eaten uncommitted work here before) · Primary runs `yarn build && yarn typecheck && yarn lint && yarn test` from the main checkout, quoting the suite count in the landing record.
+Per packet: failing-first RED→GREEN · inverse-edit restores (never `git checkout` — it has eaten uncommitted work here before) · Primary runs `yarn build && yarn typecheck && yarn lint && yarn test` from the main checkout, quoting the suite count in the landing record. **Packets that touch the scan envelope (BF-0.1–0.3) additionally require both the `packages/sync` producer test and the `apps/web` consumer test named in BF-0.1 to have run — the gate fails, not warns, if either suite was skipped.**
 
-UI packets additionally require, and **the pre-commit hook runs none of them**:
+UI packets additionally require:
 
 ```bash
 bash scripts/validate-ui-boundary.sh     # cross-slice + neutral-home gates
 node scripts/check-lint-coverage.mjs
 yarn workspace web test
 ```
+
+**Pre-commit coverage, precisely — this is the one place BF-1.0 changes what "the pre-commit hook runs" means, and every other reference to it in this plan (§0 C-5, §6.1's governance addendum) describes the state _before_ BF-1.0 lands:**
+
+| Check                     | In pre-commit before BF-1.0 | In pre-commit after BF-1.0                                |
+| ------------------------- | --------------------------- | --------------------------------------------------------- |
+| `validate-ui-boundary.sh` | No                          | **Yes — gated on staged `apps/web/{features,app}` paths** |
+| `check-lint-coverage.mjs` | No                          | No — CI-only, workspace-addition scope only               |
+| `yarn workspace web test` | No                          | No — deliberately kept CI-only; too slow for every commit |
+
+Once BF-1.0 lands, only `check-lint-coverage.mjs` and the web test suite remain CI-only; `validate-ui-boundary.sh` no longer needs a Primary to remember it.
 
 Packets touching `packages/sync` or `tools/arch-linter` (published surface — BF-0.1…0.3, BF-4.2):
 
@@ -588,7 +600,7 @@ These were absent from rev 1 and are the kind of thing that gets invented three 
 
 ## 10. Risks and what this plan does not do
 
-- **`.architecture/layout.yaml` does not exist in this repo** — it is a foreign-repo feature. No packet may reference it as a local file; the repo's own layout knowledge is `workspace.config.yaml` + `apps/web.app.yaml`.
+- **`.architecture/layout.yaml` does not exist in this repo** — it is a foreign-repo feature. No packet may reference it as a local file; the repo's own layout knowledge is `workspace.config.yaml` + `.architecture/apps/web.app.yaml`.
 - **Branch protection is still off.** Every gate above is informational until an owner enables it — a worker's green report is not a merge guarantee.
 - **The e2e suite is one file with no CI workflow and no `e2e` script.** Do not size any packet on Playwright coverage.
 - **Not built here:** GitHub App tenancy (blocked on hosting H1), org-keyed ScanRecords, GitLab/Bitbucket, in-browser clone, VS Code extension, persistent server-side repo mirrors.
@@ -619,9 +631,30 @@ Two review passes (constructive, then adversarial) against rev 1. Each claim was
 | R-15 | Tier B lint cost is unbounded even for small repos                             | **Partially accepted**                   | The wall-clock kill already bounds it; the size preflight bounds bytes. Named explicitly in the S2 failure table rather than given a new control                                                                                                                                                                                          |
 | R-16 | S3/S5 cognitive load; baseline reasons are opaque to non-experts               | **Deferred, logged**                     | Real, but a copy/onboarding problem best solved against a working flow. Not scoped into a packet; revisit after the first FDE trial                                                                                                                                                                                                       |
 
-### Round 3 — PR #564 review
+### Round 3 — PR #564 human review comment
 
 | #    | Claim                                                                                                                                                                                      | Verdict                                                | Action                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | R-17 | C-1/C-2/C-3 independently reproduced against the source tree                                                                                                                               | **Confirmed by a second party**                        | No change. The critical path (BF-0.1→0.3) stands on verified ground                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | R-18 | The new `apps/web/components/` primitives must honour the forbidden prop names from inception so they can be promoted to `@hexagen/ui` later; "requires strict enforcement during Phase 2" | **Accepted, and the finding is sharper than reported** | Verification showed `apps/web/components/` is covered by **neither** enforcement layer: ESLint's `hexagen-ui` rules bind `app/**` and `features/**` only, and firewall check 3 walks `packages/ui/src` alone. Two pre-existing `w-[85%]` values in `components/chat/ChatMessageList.tsx` have never been flagged. Rather than rely on Phase-2 discipline, **new BF-2.0** sites the primitives in a greenfield `components/primitives/` and scopes both layers to it — zero legacy blast radius. Scoped to a sub-directory deliberately: a blanket check would false-positive on `ErrorBoundary`'s `error` prop, which DESIGN.md explicitly sanctions for boundary components |
+
+### Round 4 — PR #564 bot review (CodeRabbit + Qodo)
+
+Both bots reviewed commit `b8391435` only — Qodo submitted at 22:48:55Z, CodeRabbit at 22:51:55Z, both before commit `76588281` landed at 22:54:49Z. Three CodeRabbit comments carry an automatic "✅ Addressed in commit 7658828" annotation from its own incremental diff-tracking; each was independently re-verified against the current tree rather than trusted, per house rule (adjudicate bots, never act on say-so alone).
+
+| #    | Source     | Claim                                                                                                                                                                                                                            | Verdict                                                                                                                                                                                                                                                                                                              | Action                                                                                                                                                                                                                                                                                                          |
+| ---- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R-19 | Qodo       | Embedded NUL byte in `docs/planning/2026-08-20-brownfield-ui-plan.md`, in the phrase `rule\0file\0specifier`                                                                                                                     | **Confirmed** — a byte-level scan found exactly 2 literal NUL bytes (not the escaped text ` `), left over from an earlier Python string-replacement in this same session. `grep -c` had false-negatived on it, which is itself a small lesson in why the check matters                                                | Replaced with `rule·file·specifier` in both the byte stream and, going forward, in how that phrase gets written                                                                                                                                                                                                 |
+| R-20 | Qodo       | `apps/web.app.yaml` should read `.architecture/apps/web.app.yaml`                                                                                                                                                                | **Confirmed** — `ls .architecture/apps/web.app.yaml` exists; no file at the bare path                                                                                                                                                                                                                                | Path corrected in §9's risks list                                                                                                                                                                                                                                                                               |
+| R-21 | CodeRabbit | MD040: 9 fenced blocks (route maps, wireframes, the DAG, the governance block) have no language tag                                                                                                                              | **Confirmed** — all 9 are ASCII diagrams or plain prose, none are executable code                                                                                                                                                                                                                                    | Tagged ` ```text `                                                                                                                                                                                                                                                                                              |
+| R-22 | CodeRabbit | F-05/F-06's "small per-entry/total caps" is too qualitative for a security-marked packet's RED tests                                                                                                                             | **Accepted** — the packet is 🔒-marked precisely because vague limits produce untestable RED tests                                                                                                                                                                                                                   | F-06 now reads `maxEntries: 8, maxEntryBytes: 1 MiB, maxUncompressedBytes: 4 MiB`; BF-0.4's RED test column names both bounds explicitly                                                                                                                                                                        |
+| R-23 | CodeRabbit | BF-0.0 owns only the shared schema; no packet explicitly assigns the both-suite consumer test files or asserts the gate fails if either suite didn't run                                                                         | **Accepted — auto-"Addressed" annotation was wrong.** Commit `76588281` never touched this region                                                                                                                                                                                                                    | BF-0.1's scope column now names the producer test file (`packages/sync`) and the consumer test file (`apps/web`) explicitly, and states the Quality Gate fails unless both ran; §8 carries the same assertion                                                                                                   |
+| R-24 | CodeRabbit | BF-0.1's RED test ("last stdout line containing `{` parses") can pass on an unrelated log line rather than failing specifically against C-1                                                                                      | **Accepted** — a real precision gap. The old wording would go green if any later JSON-shaped line appeared in output, for the wrong reason                                                                                                                                                                           | Rewritten to require stdout/stderr captured separately and the exact final line asserted equal to the envelope, explicitly noting the test must fail against C-1 because `runScan` emits no such line today, not because a coincidental line happens to parse                                                   |
+| R-25 | CodeRabbit | BF-0.4 names duplicate entry names as a residual defect but its one RED test covers only inflation, not overwrite                                                                                                                | **Accepted** — a real test-coverage gap on a security packet. Two entries sharing a normalized name could silently overwrite `manifest.yaml` or the baseline                                                                                                                                                         | Added a second RED test bullet: two same-named entries reject before either is written, asserted via zero bytes on disk. F-05's description updated to name the duplicate-rejection fix, not just streaming                                                                                                     |
+| R-26 | CodeRabbit | BF-1.0 says pre-commit will run `validate-ui-boundary.sh`; §8 says the pre-commit hook runs none of the listed UI checks — contradiction                                                                                         | **Accepted — auto-"Addressed" annotation was wrong.** Commit `76588281` never touched §8 or BF-1.0's text; the contradiction was real and still present after that commit                                                                                                                                            | §8 now carries a before/after BF-1.0 table for exactly which checks run in pre-commit. The governance addendum (§6.1) updated the same way so it doesn't go stale the moment BF-1.0 lands                                                                                                                       |
+| R-27 | CodeRabbit | BF-6.4 owns only the `sync-integrity-workflow.ts` constant, but its own caveat says the dogfooded `post-comment.mjs` copy has already drifted and must change too — scope/prose mismatch                                         | **Accepted** — a worker following the scope fence literally would leave the documented drift unfixed                                                                                                                                                                                                                 | `post-comment.mjs` added to BF-6.4's scope; RED test is a byte-comparison of the two copies, failing today on the header mismatch                                                                                                                                                                               |
+| R-28 | CodeRabbit | Wave 2 text claims "six ready packets" but only five were listed (`BF-1.4, BF-2.1, BF-2.2, BF-2.3, BF-3.1`)                                                                                                                      | **Confirmed, but already fixed — auto-"Addressed" annotation was correct here.** Adding BF-2.0 in commit `76588281` (for R-18) brought Wave 2 to six packets as a side effect                                                                                                                                        | No further action; noted here so the count's correctness isn't accidental-looking in the historical record                                                                                                                                                                                                      |
+| R-29 | CodeRabbit | The two docs describe the scan-handoff command and entry count differently (`hexagen scan` vs `hexagen scan --handoff`; 4 items vs 6-file claim vs 5 labels)                                                                     | **Accepted — a real, and the most consequential, cross-doc drift.** The decision plan's command and entry description predated this doc's corrections and were never synced back                                                                                                                                     | Decision plan's tier table now names the real command (with the BF-0.2 dependency and today's `hexagen report --handoff` fallback) and the correct 5-label/6-entry set; this doc's S1 wireframe dropped the specific "6-file" claim in favor of the label list alone, since a user doesn't need the exact count |
+| R-30 | CodeRabbit | The parent plan's NDJSON event list (`stage-start\|stage-complete\|stage-telemetry`) and this doc's use of `chunk`/`error` frames look like two different contracts                                                              | **Accepted, low severity** — both events already exist in the hook's real parsed union; nothing was invented, but the parent plan's abbreviated list read as a mismatch                                                                                                                                              | Parent plan's S2 line now states the full 8-event union once and names which subset S2 actually uses                                                                                                                                                                                                            |
+| R-31 | CodeRabbit | The two docs assign different fields to `BootstrapAnswers` (this doc's `{system, scope, architecture, contexts[]}` vs the parent plan's version, which folds in `stdinJson`/`force`/`skipLayout`)                                | **Accepted — real factual error in the parent plan.** Those three fields belong to `BootstrapOptions` (CLI invocation controls), not the answers payload; this doc already had it right                                                                                                                              | Parent plan's S4 line corrected to separate the payload from the invocation options, and to say the API route sets the options server-side                                                                                                                                                                      |
+| R-32 | CodeRabbit | The parent plan requires a `findings.json` file with `{rule, file, specifier, layer}`; this doc's F-04 only carries four of the six `hexagen-lint --json` categories, dropping `introduced`/`baselineGrowth` without explanation | **Accepted — the parent plan's CLI-1 description was stale fiction, predating the exploration that found the real `--json` contract.** This doc's four-field choice was already correct and deliberate — `introduced`/`baselineGrowth` are PR-diff-only fields with no base branch to diff against on a first import | Parent plan's CLI-1 row rewritten to match the verified `hexagen-lint --json` shape and explain why the two PR-diff fields are excluded from the scan envelope, rather than silently differing from this doc                                                                                                    |
