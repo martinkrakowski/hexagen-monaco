@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 import rule from "../../src/rules/no-arbitrary-tailwind-values.js";
 
+import type { TSESLint } from "@typescript-eslint/utils";
+
 function makeVisitor() {
   const reported: string[] = [];
   const context = {
-    report: (args: { data: { value: string } }) =>
-      reported.push(args.data.value),
-  } as never;
+    report: (args: TSESLint.ReportDescriptor<"arbitraryValue">) => {
+      if ("data" in args && args.data && "value" in args.data) {
+        reported.push(String(args.data.value));
+      }
+    },
+  } as unknown as TSESLint.RuleContext<"arbitraryValue", []>;
   const visitor = rule.create(context) as Record<
     string,
     (node: unknown) => void

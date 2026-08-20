@@ -2,11 +2,20 @@ import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 import rule from "../../src/rules/rhf-stable-array-keys.js";
 
+import type { TSESLint } from "@typescript-eslint/utils";
+
 function makeVisitor() {
   const reported: string[] = [];
   const context = {
-    report: (args: { messageId: string }) => reported.push(args.messageId),
-  } as never;
+    report: (
+      args: TSESLint.ReportDescriptor<"missingKey" | "indexKey" | "staticKey">,
+    ) => {
+      reported.push(args.messageId);
+    },
+  } as unknown as TSESLint.RuleContext<
+    "missingKey" | "indexKey" | "staticKey",
+    []
+  >;
   const visitor = rule.create(context) as Record<
     string,
     (node: unknown) => void
