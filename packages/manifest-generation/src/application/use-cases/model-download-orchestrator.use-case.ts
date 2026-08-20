@@ -1,8 +1,20 @@
 import type { DomainModelId } from "@hexagen/local-llm/client";
-import type { GenerateWithAiScreenState } from "../../domain/services/model-selection-state-machine";
 import type { ModelPreferencesPort } from "../ports/out/model-preferences.port";
 import type { ModelVerificationPort } from "../ports/out/model-verification.port";
 import { validateApiKeyFormat } from "../../domain/services/api-key-validation-service";
+
+type GenerateWithAiScreenState =
+  | "idle"
+  | "model_selection"
+  | "model_downloading"
+  | "key_validation"
+  | "generating"
+  | "clarification_needed"
+  | "preview"
+  | "error"
+  | "interrupted"
+  | "unsupported"
+  | "wizard_hydration";
 
 export interface ModelDownloadOrchestratorDeps {
   preferencesPort: ModelPreferencesPort;

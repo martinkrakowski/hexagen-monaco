@@ -57,7 +57,6 @@ describe("GenerateWithAiFlowUseCase", () => {
     const useCase = new GenerateWithAiFlowUseCase(mockUseCase);
 
     const callbacks: GenerateWithAiFlowCallbacks = {
-      onTransitionTo: () => {},
       onError: () => {},
       onSaveGenerationResult: () => {},
       onClarificationNeeded: () => {},
@@ -90,7 +89,6 @@ describe("GenerateWithAiFlowUseCase", () => {
     const useCase = new GenerateWithAiFlowUseCase(mockUseCase);
 
     const callbacks: GenerateWithAiFlowCallbacks = {
-      onTransitionTo: () => {},
       onError: () => {},
       onSaveGenerationResult: () => {},
       onClarificationNeeded: () => {},
@@ -117,7 +115,6 @@ describe("GenerateWithAiFlowUseCase", () => {
     const useCase = new GenerateWithAiFlowUseCase(mockUseCase);
 
     const callbacks: GenerateWithAiFlowCallbacks = {
-      onTransitionTo: () => {},
       onError: () => {},
       onSaveGenerationResult: () => {},
       onClarificationNeeded: () => {},
@@ -143,7 +140,6 @@ describe("GenerateWithAiFlowUseCase", () => {
 
     const steps: string[] = [];
     const callbacks: GenerateWithAiFlowCallbacks = {
-      onTransitionTo: () => {},
       onError: () => {},
       onSaveGenerationResult: () => {},
       onClarificationNeeded: () => {},

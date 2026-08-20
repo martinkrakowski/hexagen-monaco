@@ -5,7 +5,6 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./domain/services/model-selection-state-machine": "./src/domain/services/model-selection-state-machine.ts",
     "./domain/services/api-key-validation-service": "./src/domain/services/api-key-validation-service.ts",
     "./domain/services/model-verification-service": "./src/domain/services/model-verification-service.ts",
     "./domain/services/generation-error-handler": "./src/domain/services/generation-error-handler.ts",

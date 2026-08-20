@@ -1,19 +1,6 @@
 export {
-  modelSelectionMachine,
-  transitionState,
-  canTransition,
-  getInitialState,
-  isTerminalState,
-  isBlockingState,
-} from "./model-selection-state-machine";
-export type {
-  ModelSelectionEvent,
-  GenerateWithAiScreenState,
-} from "./model-selection-state-machine";
-export {
   isModelRecentlyVerified,
   createSmokeTestPredicate,
-  formatVerificationFailure,
 } from "./model-verification-service";
 export {
   validateApiKeyFormat,

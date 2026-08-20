@@ -37,18 +37,6 @@ export type {
   ValidationItem,
 } from "./domain/model/manifest-view-data.js";
 export {
-  modelSelectionMachine,
-  transitionState,
-  canTransition,
-  getInitialState,
-  isTerminalState,
-  isBlockingState,
-} from "./domain/services/model-selection-state-machine.js";
-export type {
-  ModelSelectionEvent,
-  GenerateWithAiScreenState,
-} from "./domain/services/model-selection-state-machine.js";
-export {
   validateApiKeyFormat,
   isValidProvider,
 } from "./domain/services/api-key-validation-service.js";

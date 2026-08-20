@@ -1,4 +1,4 @@
-import type { DomainModelId } from "@hexagen/local-llm/client";
+import type { DomainModelId } from "../../../lib/llm-interfaces";
 
 export type GenerateWithAiScreenState =
   | "idle"
