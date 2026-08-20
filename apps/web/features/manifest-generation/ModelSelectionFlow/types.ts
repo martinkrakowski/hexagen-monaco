@@ -4,7 +4,7 @@ import {
   transitionState,
   type GenerateWithAiScreenState,
   type ModelSelectionEvent,
-} from "@hexagen/manifest-generation";
+} from "./model-selection-state-machine";
 
 export type { GenerateWithAiScreenState };
 export type { DomainModelId };

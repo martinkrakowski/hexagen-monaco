@@ -28,20 +28,6 @@ export function createSmokeTestPredicate(
   };
 }
 
-export function formatVerificationFailure(error: unknown): {
-  message: string;
-  isTimeout: boolean;
-} {
-  const errorMessage = error instanceof Error ? error.message : "Unknown error";
-  const isTimeout = errorMessage.includes("timed out");
-  return {
-    message: isTimeout
-      ? "The model failed to respond in time. It may be corrupted or too slow for this device."
-      : "The model cache appears to be corrupted. You can repair the download.",
-    isTimeout,
-  };
-}
-
 export function createVerificationResult(
   isValid: boolean,
   isTimeout: boolean = false,

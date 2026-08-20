@@ -5,10 +5,8 @@ import type { ApiKeyManager } from "./modelPreferencesStorage";
 import type { ModelSelectionFlowState } from "./types";
 import { deriveStateFromEvent } from "./types";
 import type { GenerateWithAiErrorCode } from "../GenerateWithAi/GenerateWithAiError";
-import {
-  validateApiKeyFormat,
-  type ModelSelectionEvent,
-} from "@hexagen/manifest-generation";
+import { validateApiKeyFormat } from "@hexagen/manifest-generation";
+import type { ModelSelectionEvent } from "./model-selection-state-machine";
 
 interface UseCloudProviderActionsOptions {
   setFlowState: React.Dispatch<React.SetStateAction<ModelSelectionFlowState>>;

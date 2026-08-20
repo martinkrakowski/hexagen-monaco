@@ -1,4 +1,3 @@
-import type { GenerateWithAiScreenState } from "../../domain/services/model-selection-state-machine.js";
 import type {
   ManifestTopologyDraft,
   ClarificationTrigger,
@@ -7,7 +6,6 @@ import type { ClientManifestGenerationPort } from "../ports/in/client-manifest-g
 import { classifyGenerationError } from "../../domain/services/generation-error-handler.js";
 
 export interface GenerateWithAiFlowCallbacks {
-  onTransitionTo(state: GenerateWithAiScreenState): void;
   onError(message: string, code?: string): void;
   onSaveGenerationResult(manifest: string): void;
   onClarificationNeeded(triggers: ClarificationTrigger[]): void;
