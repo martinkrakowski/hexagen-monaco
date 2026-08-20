@@ -299,10 +299,6 @@ export async function runBootstrap(
       path.join(archDir, "arch-lint-baseline.json"),
     ];
 
-    if (options.dryRun === true) {
-      return ok({ files, wrote: false });
-    }
-
     if (options.force !== true) {
       const blockers: string[] = [];
       for (const file of files) {
@@ -335,6 +331,10 @@ export async function runBootstrap(
           ),
         );
       }
+    }
+
+    if (options.dryRun === true) {
+      return ok({ files, wrote: false });
     }
 
     await fs.mkdir(archDir, { recursive: true });

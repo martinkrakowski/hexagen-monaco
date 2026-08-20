@@ -1,7 +1,6 @@
 /* eslint-disable no-console */
 import { Command } from "commander";
 import { spawnSync } from "node:child_process";
-import { promises as fs } from "node:fs";
 import path from "node:path";
 import { resolveArchLinterBin } from "../../arch-linter-bin.js";
 import { err, ok, type Result } from "../../domain/result.js";
@@ -10,6 +9,7 @@ import { runAdopt } from "../adopt/index.js";
 import { runBootstrap } from "../bootstrap/index.js";
 import { reportCommand } from "../report/index.js";
 import { detectWorkspaces } from "../shared/detect-workspaces.js";
+import { lstatExists } from "../shared/lstat-exists.js";
 
 export interface ScanLintRunner {
   (root: string): number | Promise<number>;
@@ -43,16 +43,6 @@ export interface ScanResult {
   lintExitCode: number;
   reportPaths: string[];
   nextSteps: string[];
-}
-
-async function pathExists(target: string): Promise<Result<boolean, Error>> {
-  try {
-    await fs.stat(target);
-    return ok(true);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return ok(false);
-    return err(e instanceof Error ? e : new Error(String(e)));
-  }
 }
 
 function lintVerdict(exitCode: number): string {
@@ -114,7 +104,7 @@ async function previewScan(
   if (!adopted.success) return adopted;
 
   const nextSteps = [...adopted.value.nextSteps];
-  const manifestLookup = await pathExists(manifestPath);
+  const manifestLookup = await lstatExists(manifestPath);
   if (!manifestLookup.success) return manifestLookup;
   if (!manifestLookup.value && options.skipBootstrap !== true) {
     const detection = await detectWorkspaces(root);
@@ -167,7 +157,7 @@ export async function runScan(
       );
     }
 
-    const layoutLookup = await pathExists(layoutPath);
+    const layoutLookup = await lstatExists(layoutPath);
     if (!layoutLookup.success) return layoutLookup;
     const layoutExists = layoutLookup.value;
     const nextSteps: string[] = [];
@@ -193,7 +183,7 @@ export async function runScan(
       );
     }
 
-    const manifestLookup = await pathExists(manifestPath);
+    const manifestLookup = await lstatExists(manifestPath);
     if (!manifestLookup.success) return manifestLookup;
     let wroteManifest = false;
     if (!manifestLookup.value && options.skipBootstrap !== true) {
@@ -220,7 +210,7 @@ export async function runScan(
     nextSteps.push(lintVerdict(lintExitCode));
 
     const reportPaths: string[] = [];
-    const manifestNow = await pathExists(manifestPath);
+    const manifestNow = await lstatExists(manifestPath);
     if (!manifestNow.success) return manifestNow;
     if (options.noReport !== true) {
       if (!manifestNow.value) {

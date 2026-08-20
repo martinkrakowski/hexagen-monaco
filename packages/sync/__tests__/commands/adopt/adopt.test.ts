@@ -1,4 +1,4 @@
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import os from "node:os";
@@ -102,6 +102,73 @@ describe("hexagen adopt", () => {
         fs.stat(path.join(root, ".architecture", "layout.yaml")),
       );
     } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to replace a dangling layout.yaml symlink without --force", async () => {
+    const root = await makeRepo();
+    try {
+      const archDir = path.join(root, ".architecture");
+      await fs.mkdir(archDir, { recursive: true });
+      const layoutPath = path.join(archDir, "layout.yaml");
+      await fs.symlink("missing-target", layoutPath);
+
+      const result = await runAdopt({ root, yes: true });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toMatch(/overwrite|--force/i);
+      }
+      const st = await fs.lstat(layoutPath);
+      expect(st.isSymbolicLink()).toBe(true);
+      expect(await fs.readlink(layoutPath)).toBe("missing-target");
+      await expect(
+        fs.stat(path.join(archDir, "missing-target")),
+      ).rejects.toThrow();
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not treat a non-ENOENT layout probe as absence", async () => {
+    const root = await makeRepo();
+    const layoutPath = path.join(root, ".architecture", "layout.yaml");
+    const originalStat = fs.stat;
+    const originalLstat = fs.lstat;
+    const denyLayout = async (
+      original: typeof fs.stat,
+      target: Parameters<typeof fs.stat>[0],
+      extra?: Parameters<typeof fs.stat>[1],
+    ) => {
+      if (path.resolve(String(target)) === path.resolve(layoutPath)) {
+        const e = new Error(
+          `EACCES: permission denied, stat '${String(target)}'`,
+        ) as NodeJS.ErrnoException;
+        e.code = "EACCES";
+        throw e;
+      }
+      return extra === undefined ? original(target) : original(target, extra);
+    };
+    fs.stat = ((
+      target: Parameters<typeof fs.stat>[0],
+      extra?: Parameters<typeof fs.stat>[1],
+    ) => denyLayout(originalStat, target, extra)) as typeof fs.stat;
+    fs.lstat = ((
+      target: Parameters<typeof fs.lstat>[0],
+      extra?: Parameters<typeof fs.lstat>[1],
+    ) => denyLayout(originalLstat, target, extra)) as typeof fs.lstat;
+    try {
+      const result = await runAdopt({ root, yes: true });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toMatch(/EACCES/);
+      }
+      await expect(originalLstat(layoutPath)).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    } finally {
+      fs.stat = originalStat;
+      fs.lstat = originalLstat;
       await fs.rm(root, { recursive: true, force: true });
     }
   });

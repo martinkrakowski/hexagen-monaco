@@ -17,3 +17,4 @@ export { confirm } from "./confirm.js";
 export * from "./validation.js";
 export * from "./error-formatter.js";
 export { resolveTemplatesDir } from "./template-engine-path.js";
+export { lstatExists } from "./lstat-exists.js";
