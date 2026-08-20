@@ -1,5 +1,8 @@
 # Remaining work — execution runbook (live)
 
+> **SUPERSEDED (2026-08-20).** Change log ends at #538; `main` moved 17+ merges past this file (#539–#558). The live runbook is
+> [`2026-08-20-remaining-work-execution-runbook.md`](./2026-08-20-remaining-work-execution-runbook.md), which carries §6.1/§6.2 forward. Do not schedule from this file.
+
 **Date:** 2026-08-19 · **Status:** Wave 0 on `main` (**#535**). Wave A0 T4/FU-2/RI-1.3/RI-2 on `main` (**#536**–**#538** @ `9ad83b6a`). DOS-2.1 in flight. Wave A1 unblocked by D-C0; **next owner action:** enable branch protection, then open A1 PRs.
 **Baseline:** `main` @ `9ad83b6a` (`v0.11.0` + #535–#538).
 

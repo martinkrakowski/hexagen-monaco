@@ -1,5 +1,8 @@
 # Remaining work — development plan
 
+> **SUPERSEDED (2026-08-20).** Waves 0 / A0 / A1 / C landed in full (#535–#555); Wave B landed 2 of 5. The live queue is
+> [`2026-08-20-remaining-work-plan.md`](./2026-08-20-remaining-work-plan.md). This file stays as provenance — do not schedule from it.
+
 **Date:** 2026-08-19 · **Status:** Wave 0 on `main` (**#535**). Wave A0 T4/FU-2/RI-1.3/RI-2 on `main` (**#536**–**#538** @ `9ad83b6a`). DOS-2.1 in flight. Remaining 6–8 is the active engineering calendar (ADR-0059 amendment).
 **Baseline:** `main` @ `9ad83b6a` (`v0.11.0` + #535–#538)
 **Companion (live status):** [`2026-08-18-remaining-work-execution-runbook.md`](./2026-08-18-remaining-work-execution-runbook.md)
