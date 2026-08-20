@@ -85,7 +85,7 @@ function generateRandomAST(nodeCount: number): DomainAST {
       targetIdx = Math.floor(Math.random() * nodes.length);
     }
     const kinds = [
-      EdgeKind.DirectAssociation,
+      EdgeKind.Dependency,
       EdgeKind.Composition,
       EdgeKind.Aggregation,
       EdgeKind.Inheritance,

@@ -14,6 +14,7 @@ const makeManifest = (): ProjectSpec => ({
       coreDomainEntities: [],
       valueObjects: [],
       domainEvents: [],
+      portConfiguration: { inboundPorts: [], outboundPorts: [] },
       uiFramework: "",
       persistenceAdapter: "",
       messagingAdapter: "",
@@ -33,6 +34,7 @@ const makeManifest = (): ProjectSpec => ({
     },
   },
   peerMappings: [],
+  addOnsAnswers: {},
 });
 
 const makeArchitectureGraph = (): ArchitectureGraph => ({

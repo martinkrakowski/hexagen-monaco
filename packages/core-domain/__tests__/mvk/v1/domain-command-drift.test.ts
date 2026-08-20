@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
+import { NodeKind, EdgeKind } from "../../../src/mvk/v1/index.js";
 import type {
   DomainCommand,
   CreateNodeCommand,
@@ -15,7 +16,7 @@ describe("MVK spec↔TS drift: DomainCommand shape", () => {
   it("DomainCommand variants carry only type + payload (no lineageId/timestamp)", () => {
     const validCreateNode: CreateNodeCommand = {
       type: "CreateNode",
-      payload: { kind: "BoundedContext", attributes: {} },
+      payload: { kind: NodeKind.BoundedContext, attributes: {} },
     };
     const validUpdateNode: UpdateNodeCommand = {
       type: "UpdateNode",
@@ -28,7 +29,7 @@ describe("MVK spec↔TS drift: DomainCommand shape", () => {
     const validCreateEdge: CreateEdgeCommand = {
       type: "CreateEdge",
       payload: {
-        kind: "PeerMapping",
+        kind: EdgeKind.Dependency,
         source: "a",
         target: "b",
         attributes: {},
@@ -73,7 +74,7 @@ describe("MVK spec↔TS drift: DomainCommand shape", () => {
   it("command.lineageId and command.timestamp are not accessible", () => {
     const cmd: DomainCommand = {
       type: "CreateNode",
-      payload: { kind: "BoundedContext", attributes: {} },
+      payload: { kind: NodeKind.BoundedContext, attributes: {} },
     };
     assert.doesNotThrow(
       () => (cmd as unknown as { lineageId: string }).lineageId,
