@@ -18,8 +18,8 @@ sub-agents, phased, gated, and landed — and _which choices must be made by a h
 > arc. You operate in **Orchestrator Mode** per `AGENTS.md` and `.agents/ORCHESTRATOR.md`.
 > **You write no implementation code.** You decompose plan items, emit Work Plans,
 > delegate to sub-agents in isolated worktrees, run the Quality Gate, adjudicate review
-> bots, keep the runbook's §1/§3/§7 current as items merge, and land PRs — respecting
-> every dependency and decision gate below.
+> bots, keep the runbook's §1/§2/§3/§7 current as items merge, and prepare PRs for human
+> merge — respecting every dependency and decision gate below.
 >
 > Authoritative inputs, in precedence order:
 >
@@ -65,8 +65,10 @@ Standing rules (do not relax):
   (grep + typecheck) captured for the PR body. If the scout contradicts the plan's
   premise, **stop and surface; do not proceed.**
 - **Primary-reserved stays reserved:** workers never edit `.architecture/**` or the
-  context-YAML family, never run the gate of record, never `git commit`. Port-touching
-  items here — **8.12(h), 8.12(a), 7.1, 7.6** — are worker-prepared, Primary-landed.
+  context-YAML family, never run the gate of record, never `git commit`. Workers produce
+  unapplied proposals only; the **Primary applies, stages, and lands** all `.architecture/**` and
+  context-YAML edits. Port-touching items — **8.12(h), 8.12(a), 7.1, 7.6** — are
+  worker-proposed, Primary-applied.
 - **Effort tiering:** mechanical batches (FU-1.3, R-1, R-3) → low-effort workers;
   seam/protocol work (8.12(h), Wave D, FU-1.2) → standard workers + refuters.
 
@@ -85,7 +87,7 @@ Run the 2026-08-14 prompt §2 loop verbatim for every item, with two amendments:
 The loop, condensed: decompose → scout (sub-agent) → Work Plan table → provision
 worktree → delegate with the §6 governance block prepended → Primary lands
 manifest-family edits → refuter panel where mandated → Quality Gate (Primary, from
-main checkout) → land, adjudicate bots, reviewer's-guide comment → human merges.
+main checkout) → prepare for human merge, adjudicate bots, reviewer's-guide comment → human merges.
 
 ## 3. Wave map, gating, and the opening fan-out
 
@@ -118,9 +120,9 @@ branch protection (overdue), D-P1/D-P2 (S-4 blocked), D-T11 write-up, D-R1a
 - **8.12(h)** — treat as a **feature extraction**, not a file move. Scout first:
   enumerate every consumer of `GenerateWithAiScreenState` and the screen-flow symbols
   across `manifest-generation`, `apps/web`, and `model-settings`. Domain Worker moves
-  code; Test/QA ports the suites; worker stages the `context.yaml` ownership diff as a
-  proposal; **Primary applies it**. Refuter panel (2–3 agents) before landing: refute
-  "no behavior change" against the generate-with-AI flow. Lands **alone** — nothing
+  code; Test/QA ports the suites; worker produces the `context.yaml` ownership diff as an
+  unapplied proposal; **Primary applies and lands it**. Refuter panel (2–3 agents) before
+  landing: refute "no behavior change" against the generate-with-AI flow. Lands **alone** — nothing
   else in the PR.
 - **8.12(a)** — small Domain Worker PR after (h) merges; port declaration moves with
   the code; Primary lands the manifest edit.
@@ -203,7 +205,7 @@ worker prompt (ESM NodeNext `.js` extensions in `packages/sync/`, hexagonal impo
 rules, `Result` returns, no empty barrels, dependency-declaration rule, worktree-has-
 no-node_modules, Primary-reserved boundaries, failing-first discipline), then append:
 
-```
+```text
 # --- 2026-08-20 additions ---
 - Your item row + acceptance criteria come from docs/planning/2026-08-20-remaining-work-plan.md; quote your item ID in the commit subject.
 - If you burn a ratchet-baseline entry, delete it in this same diff; never add one except R-5 at rule introduction.

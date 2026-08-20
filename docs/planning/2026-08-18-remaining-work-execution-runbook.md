@@ -1,4 +1,4 @@
-# Remaining work — execution runbook (live)
+# Remaining work — execution runbook (historical — superseded 2026-08-20)
 
 > **SUPERSEDED (2026-08-20).** Change log ends at #538; `main` moved 17+ merges past this file (#539–#558). The live runbook is
 > [`2026-08-20-remaining-work-execution-runbook.md`](./2026-08-20-remaining-work-execution-runbook.md), which carries §6.1/§6.2 forward. Do not schedule from this file.
@@ -6,13 +6,14 @@
 **Date:** 2026-08-19 · **Status:** Wave 0 on `main` (**#535**). Wave A0 T4/FU-2/RI-1.3/RI-2 on `main` (**#536**–**#538** @ `9ad83b6a`). DOS-2.1 in flight. Wave A1 unblocked by D-C0; **next owner action:** enable branch protection, then open A1 PRs.
 **Baseline:** `main` @ `9ad83b6a` (`v0.11.0` + #535–#538).
 
-This is the **live operating runbook** for the leftover work from the 2026-08-14 through
-2026-08-18 planning window. It is the companion to — not a replacement for — the plan:
+This is a **historical record** of the leftover work from the 2026-08-14 through
+2026-08-18 planning window. It was the companion to — not a replacement for — the plan:
 
 - **Plan** — [`2026-08-18-remaining-work-plan.md`](./2026-08-18-remaining-work-plan.md)
+- **Superseded by** — [`2026-08-20-remaining-work-execution-runbook.md`](./2026-08-20-remaining-work-execution-runbook.md)
 
-Where the plan is the queue, this file tracks **what has landed, what is in flight, and
-what to start next**. Update §1, §3, and §8 as items merge.
+**Do not schedule work from this file.** It went 17 merges stale (ended at #538; `main` is now past #558).
+The current runbook carries forward the release procedures (§6.1/§6.2) and all status tracking.
 
 Do **not** schedule from
 [`2026-08-15-architecture-remediation-execution-runbook.md`](./2026-08-15-architecture-remediation-execution-runbook.md)
