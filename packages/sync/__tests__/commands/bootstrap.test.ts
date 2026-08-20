@@ -432,16 +432,21 @@ describe("runBootstrap / bootstrapCommand", () => {
       }),
     });
     const logs: string[] = [];
-    console.log = (...args: unknown[]) => {
-      logs.push(args.map(String).join(" "));
-    };
-    await bootstrapCommand({ root, yes: true, dryRun: true });
-    const text = logs.join("\n");
-    assert.doesNotMatch(text, /^Wrote:/m);
-    assert.match(text, /Would write/i);
-    await assert.rejects(
-      fs.stat(path.join(root, ".architecture", "manifest.yaml")),
-    );
+    const originalLog = console.log;
+    try {
+      console.log = (...args: unknown[]) => {
+        logs.push(args.map(String).join(" "));
+      };
+      await bootstrapCommand({ root, yes: true, dryRun: true });
+      const text = logs.join("\n");
+      assert.doesNotMatch(text, /^Wrote:/m);
+      assert.match(text, /Would write/i);
+      await assert.rejects(
+        fs.stat(path.join(root, ".architecture", "manifest.yaml")),
+      );
+    } finally {
+      console.log = originalLog;
+    }
   });
 
   it("dry-run refuses a tree that would be blocked without --force (does not print Would write)", async () => {
@@ -462,19 +467,23 @@ describe("runBootstrap / bootstrapCommand", () => {
 
     const logs: string[] = [];
     const errors: string[] = [];
-    console.log = (...args: unknown[]) => {
-      logs.push(args.map(String).join(" "));
-    };
-    console.error = (...args: unknown[]) => {
-      errors.push(args.map(String).join(" "));
-    };
+    const originalLog = console.log;
+    const originalError = console.error;
     const previousExit = process.exitCode;
     try {
+      console.log = (...args: unknown[]) => {
+        logs.push(args.map(String).join(" "));
+      };
+      console.error = (...args: unknown[]) => {
+        errors.push(args.map(String).join(" "));
+      };
       await bootstrapCommand({ root, yes: true, dryRun: true });
       const text = [...logs, ...errors].join("\n");
       expect(text).not.toMatch(/Would write/i);
       expect(text).toMatch(/overwrite|--force/i);
     } finally {
+      console.log = originalLog;
+      console.error = originalError;
       process.exitCode = previousExit;
     }
 
