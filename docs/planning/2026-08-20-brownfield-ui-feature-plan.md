@@ -227,19 +227,32 @@ The ⚠ line is required: `hexagenConformanceActionFiles()` materializes **only 
 
 DESIGN.md §5.2 composition priority governs: primitive as-is → compose → custom Tailwind with a documented justification.
 
-| Need                                                                        | Decision                             | Home                                               | Why                                                                                                          |
-| --------------------------------------------------------------------------- | ------------------------------------ | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Cards, badges, buttons, inputs, dialog, tabs, accordion, tooltip, file drop | **Reuse** `@hexagen/ui`              | —                                                  | All exist. `FileDropZone` covers Tier A/C upload; `Dialog` family covers S7; `Accordion` covers S5 grouping. |
-| `ScanResultPanel`                                                           | **Promote**                          | `apps/web/components/conformance/`                 | In `features/landing` today → C-5 blocks reuse.                                                              |
-| NDJSON stream hook                                                          | **Promote**                          | `apps/web/app/lib/`                                | In `features/manifest-generation` → C-5. Collides with Wave D 8.1 (§6.3).                                    |
-| Stage progress view                                                         | **Promote (presentation half only)** | `apps/web/components/`                             | `ThinkingBlock` mixes an LLM-specific stage vocabulary with a generic progress list; extract the list.       |
-| `ChipInput`                                                                 | **Promote**                          | `apps/web/components/`                             | In `features/project-wizard` → C-5.                                                                          |
-| Data grid                                                                   | **Build**                            | `apps/web/components/data-grid/EntityDataGrid.tsx` | No table anywhere in `@hexagen/ui`. DESIGN.md §3.2 mandates this exact name over `Table`.                    |
-| Radio card group                                                            | **Build**                            | `apps/web/components/ChoiceCardGroup.tsx`          | No radio primitive. Pattern already proven inline in `PublishSettingsDialog`.                                |
-| Empty state · count pills                                                   | **Build**                            | `apps/web/components/`                             | Neither exists.                                                                                              |
-| Sparkline (S6 trend)                                                        | **Build, deferred**                  | `apps/web/components/`                             | Only S6 needs it; Phase 7.                                                                                   |
+| Need                                                                        | Decision                             | Home                                                 | Why                                                                                                          |
+| --------------------------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Cards, badges, buttons, inputs, dialog, tabs, accordion, tooltip, file drop | **Reuse** `@hexagen/ui`              | —                                                    | All exist. `FileDropZone` covers Tier A/C upload; `Dialog` family covers S7; `Accordion` covers S5 grouping. |
+| `ScanResultPanel`                                                           | **Promote**                          | `apps/web/components/conformance/`                   | In `features/landing` today → C-5 blocks reuse.                                                              |
+| NDJSON stream hook                                                          | **Promote**                          | `apps/web/app/lib/`                                  | In `features/manifest-generation` → C-5. Collides with Wave D 8.1 (§6.3).                                    |
+| Stage progress view                                                         | **Promote (presentation half only)** | `apps/web/components/`                               | `ThinkingBlock` mixes an LLM-specific stage vocabulary with a generic progress list; extract the list.       |
+| `ChipInput`                                                                 | **Promote**                          | `apps/web/components/`                               | In `features/project-wizard` → C-5.                                                                          |
+| Data grid                                                                   | **Build**                            | `apps/web/components/primitives/EntityDataGrid.tsx`  | No table anywhere in `@hexagen/ui`. DESIGN.md §3.2 mandates this exact name over `Table`.                    |
+| Radio card group                                                            | **Build**                            | `apps/web/components/primitives/ChoiceCardGroup.tsx` | No radio primitive. Pattern already proven inline in `PublishSettingsDialog`.                                |
+| Empty state · count pills                                                   | **Build**                            | `apps/web/components/primitives/`                    | Neither exists.                                                                                              |
+| Sparkline (S6 trend)                                                        | **Build, deferred**                  | `apps/web/components/primitives/`                    | Only S6 needs it; Phase 7.                                                                                   |
 
-**Why `apps/web/components/` and not `packages/ui`:** these are single-app compositions, and a `@hexagen/ui` addition drags in a DESIGN.md §9 version bump + changelog entry + `NoSemanticState` branding + the package's own ESLint firewall. Promote to `packages/ui` later if a second app needs them. **Every one of these must still avoid the 11 forbidden prop names** if it is ever promoted — build them prop-clean from the start (`variant`, not `status`; `rows`, not `data`).
+**Why `apps/web/components/primitives/` and not `packages/ui`:** these are single-app compositions, and a `@hexagen/ui` addition drags in a DESIGN.md §9 version bump + changelog entry + `NoSemanticState` branding + the package's own ESLint firewall. Promote to `packages/ui` later if a second app needs them.
+
+**But that siting has a cost rev 2 did not account for — verified, and it is the reason for the `primitives/` sub-directory.** `apps/web/components/` sits outside **both** enforcement layers:
+
+| Layer                                                              | Covers                                                                                                                  | Does **not** cover                                    |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| ESLint (`apps/web/eslint.config.js`)                               | `app/**`, `features/**` — where the `hexagen-ui` plugin rules incl. `no-arbitrary-tailwind-values` are wired at `error` | **`components/**` — no block exists at all\*\*        |
+| Firewall check 3 (`validate-ui-boundary.sh`, forbidden prop names) | `packages/ui/src` **only**                                                                                              | `apps/web/features/**` _and_ `apps/web/components/**` |
+
+Proof the gap is live, not theoretical: `apps/web/components/chat/ChatMessageList.tsx` carries two `w-[85%]` arbitrary values that DESIGN.md §4.8 forbids and no gate has ever flagged. Left alone here — it is out of scope — but it demonstrates that siting a _presentation-only_ primitive in an unenforced directory trades a DESIGN.md version bump for a silent loss of the two rules that matter most for these components.
+
+**BF-2.0 closes it** by scoping both layers to a new, greenfield `apps/web/components/primitives/` — zero legacy blast radius, because the directory does not exist yet.
+
+**Why a sub-directory rather than the whole of `components/`:** a blanket forbidden-prop check over `components/` would produce false positives on components that are _supposed_ to hold that state. `ErrorBoundary.tsx` declares `error: Error | null`, and DESIGN.md's own table says error handling **belongs** in boundary components. `primitives/` means presentation-only by construction; stateful boundary components stay outside it and keep their props legitimately.
 
 ---
 
@@ -300,13 +313,14 @@ Atomic, independently acceptable. **Size:** XS<½d · S≈1d · M≈2-3d · L≈
 
 ### Cross-cutting
 
-| ID   | Feature                                                                                                   | Size |
-| ---- | --------------------------------------------------------------------------------------------------------- | ---- |
-| F-32 | Versioned scan-envelope schema in `@hexagen/shared` + golden-fixture contract test both sides run.        | S    |
-| F-33 | `validate-ui-boundary.sh` in `.husky/pre-commit`, gated on staged `apps/web/{features,app}` paths.        | XS   |
-| F-34 | Draft persistence for the ratification reducer via `createPersistedStorage` / IDB.                        | S    |
-| F-35 | Shared error taxonomy across CLI → route → UI (one typed code set, one renderer).                         | M    |
-| F-36 | Stream observability: a `runId` on every NDJSON frame, scan duration / failure-rate / quota-hit counters. | S    |
+| ID   | Feature                                                                                                                                                                          | Size |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| F-32 | Versioned scan-envelope schema in `@hexagen/shared` + golden-fixture contract test both sides run.                                                                               | S    |
+| F-33 | `validate-ui-boundary.sh` in `.husky/pre-commit`, gated on staged `apps/web/{features,app}` paths.                                                                               | XS   |
+| F-34 | Draft persistence for the ratification reducer via `createPersistedStorage` / IDB.                                                                                               | S    |
+| F-35 | Shared error taxonomy across CLI → route → UI (one typed code set, one renderer).                                                                                                | M    |
+| F-36 | Stream observability: a `runId` on every NDJSON frame, scan duration / failure-rate / quota-hit counters.                                                                        | S    |
+| F-37 | Extend ESLint + firewall check 3 to `apps/web/components/primitives/**` so forbidden prop names and arbitrary Tailwind values are machine-blocked where the new primitives live. | S    |
 
 ---
 
@@ -348,13 +362,16 @@ Each rewires existing consumers. All touch different files → parallel, but eac
 
 ### Phase 2 — Primitives
 
-| Packet     | Features | Scope                                                          | Mode     | Depends |
-| ---------- | -------- | -------------------------------------------------------------- | -------- | ------- |
-| **BF-2.1** | F-28     | `apps/web/components/data-grid/EntityDataGrid.tsx` + test      | PARALLEL | —       |
-| **BF-2.2** | F-29     | `apps/web/components/ChoiceCardGroup.tsx` + test               | PARALLEL | —       |
-| **BF-2.3** | F-30     | `apps/web/components/EmptyState.tsx`, `CountPills.tsx` + tests | PARALLEL | —       |
+| Packet     | Features | Scope                                                                                                                                                                                        | Mode       | Depends |
+| ---------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------- |
+| **BF-2.0** | F-37     | `apps/web/eslint.config.js` (new `components/primitives/**` block); `scripts/validate-ui-boundary.sh` (check 3 walks a new `WEB_PRIMITIVES` path); `apps/web/components/primitives/.gitkeep` | SEQUENTIAL | —       |
+| **BF-2.1** | F-28     | `apps/web/components/primitives/EntityDataGrid.tsx` + test                                                                                                                                   | PARALLEL   | BF-2.0  |
+| **BF-2.2** | F-29     | `apps/web/components/primitives/ChoiceCardGroup.tsx` + test                                                                                                                                  | PARALLEL   | BF-2.0  |
+| **BF-2.3** | F-30     | `apps/web/components/primitives/EmptyState.tsx`, `CountPills.tsx` + tests                                                                                                                    | PARALLEL   | BF-2.0  |
 
-All three are greenfield files → maximal fan-out. No `@hexagen/ui` change ⇒ **no DESIGN.md bump needed**; that is the point of siting them here.
+**BF-2.0 lands first and is the whole point of the phase.** It wires `hexagen-ui/no-arbitrary-tailwind-values` (+ the sibling plugin rules) onto `components/primitives/**` and extends firewall check 3 to walk that path, so the forbidden prop names are machine-blocked in the one directory where the new presentation-only components live. Its RED test is a fixture file declaring `status: string` and using `w-[85%]`: the gate must fail on it before the packet is done, and the fixture is deleted in the same PR.
+
+BF-2.1–2.3 are then greenfield files under a covered path → maximal fan-out. No `@hexagen/ui` change ⇒ **no DESIGN.md §9 bump needed**, which was the reason for this siting; BF-2.0 is what makes that trade honest rather than a quiet loss of enforcement.
 
 ### Phase 3 — Tier A vertical slice (ships alone; procurement story)
 
@@ -431,9 +448,9 @@ WAVE 1  (4 concurrent — the cap)
                                     │              │
 WAVE 2                              │              │
   BF-1.4 ──┤                        │              │
-  BF-2.1 ──┼──────┐                 │              │
-  BF-2.2 ──┤      │                 │              │
-  BF-2.3 ──┘      │                 │              │
+  BF-2.0 ──▶ BF-2.1 ──┐             │              │
+          └─▶ BF-2.2 ─┤             │              │
+          └─▶ BF-2.3 ─┘             │              │
   BF-3.1 ─────────┼─────┐           │              │
                   │     │           │              │
 WAVE 3            │     │           │              │
@@ -601,3 +618,10 @@ Two review passes (constructive, then adversarial) against rev 1. Each claim was
 | R-14 | If D-P1 slips, GitHub path is blocked while Tier A is live                     | **Accepted**                             | That window is now the _designed_ MVP (Tier A + gate download), not an accident                                                                                                                                                                                                                                                           |
 | R-15 | Tier B lint cost is unbounded even for small repos                             | **Partially accepted**                   | The wall-clock kill already bounds it; the size preflight bounds bytes. Named explicitly in the S2 failure table rather than given a new control                                                                                                                                                                                          |
 | R-16 | S3/S5 cognitive load; baseline reasons are opaque to non-experts               | **Deferred, logged**                     | Real, but a copy/onboarding problem best solved against a working flow. Not scoped into a packet; revisit after the first FDE trial                                                                                                                                                                                                       |
+
+### Round 3 — PR #564 review
+
+| #    | Claim                                                                                                                                                                                      | Verdict                                                | Action                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R-17 | C-1/C-2/C-3 independently reproduced against the source tree                                                                                                                               | **Confirmed by a second party**                        | No change. The critical path (BF-0.1→0.3) stands on verified ground                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| R-18 | The new `apps/web/components/` primitives must honour the forbidden prop names from inception so they can be promoted to `@hexagen/ui` later; "requires strict enforcement during Phase 2" | **Accepted, and the finding is sharper than reported** | Verification showed `apps/web/components/` is covered by **neither** enforcement layer: ESLint's `hexagen-ui` rules bind `app/**` and `features/**` only, and firewall check 3 walks `packages/ui/src` alone. Two pre-existing `w-[85%]` values in `components/chat/ChatMessageList.tsx` have never been flagged. Rather than rely on Phase-2 discipline, **new BF-2.0** sites the primitives in a greenfield `components/primitives/` and scopes both layers to it — zero legacy blast radius. Scoped to a sub-directory deliberately: a blanket check would false-positive on `ErrorBoundary`'s `error` prop, which DESIGN.md explicitly sanctions for boundary components |
