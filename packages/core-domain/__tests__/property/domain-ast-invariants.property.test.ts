@@ -28,7 +28,7 @@ function generateRandomNode(id: string): DomainNode {
 function generateRandomEdge(id: string, nodeIds: string[]): DomainEdge | null {
   if (nodeIds.length < 2) return null;
   const kinds = [
-    EdgeKind.DirectAssociation,
+    EdgeKind.Dependency,
     EdgeKind.Composition,
     EdgeKind.Aggregation,
     EdgeKind.Inheritance,
@@ -164,21 +164,21 @@ describe("DomainAST Invariants Property Tests", () => {
       const edges: DomainEdge[] = [
         {
           id: "e1",
-          kind: EdgeKind.DirectAssociation,
+          kind: EdgeKind.Dependency,
           source: "n1",
           target: "n2",
           attributes: {},
         },
         {
           id: "e2",
-          kind: EdgeKind.DirectAssociation,
+          kind: EdgeKind.Dependency,
           source: "n2",
           target: "n3",
           attributes: {},
         },
         {
           id: "e3",
-          kind: EdgeKind.DirectAssociation,
+          kind: EdgeKind.Dependency,
           source: "n3",
           target: "n1",
           attributes: {},
@@ -212,7 +212,7 @@ describe("DomainAST Invariants Property Tests", () => {
         for (let j = 0; j < nodeCount - 1; j++) {
           edges.push({
             id: `e${j}`,
-            kind: EdgeKind.DirectAssociation,
+            kind: EdgeKind.Dependency,
             source: nodes[j].id,
             target: nodes[j + 1].id,
             attributes: {},
@@ -250,7 +250,7 @@ describe("DomainAST Invariants Property Tests", () => {
         for (let j = 0; j < edgeCount; j++) {
           edges.push({
             id: `e${j}`,
-            kind: EdgeKind.DirectAssociation,
+            kind: EdgeKind.Dependency,
             source: nodes[j % nodeCount].id,
             target: nodes[(j + 1) % nodeCount].id,
             attributes: {},
