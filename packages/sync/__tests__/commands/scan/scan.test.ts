@@ -1,4 +1,4 @@
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import assert from "node:assert/strict";
 import { promises as fs, readFileSync } from "node:fs";
 import os from "node:os";
@@ -495,4 +495,33 @@ process.exit(2);
       }
     },
   );
+
+  it("does not treat a dangling manifest.yaml symlink as absence", async () => {
+    const root = await makeRepo();
+    try {
+      const archDir = path.join(root, ".architecture");
+      await fs.mkdir(archDir, { recursive: true });
+      const manifestPath = path.join(archDir, "manifest.yaml");
+      await fs.symlink("missing-target", manifestPath);
+
+      const result = await runScan({
+        root,
+        yes: true,
+        noReport: true,
+        lint: silentLint,
+      });
+      expect(result.success).toBe(true);
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+      expect(result.value.nextSteps.join("\n")).not.toMatch(
+        /Wrote .* via bootstrap/i,
+      );
+      const st = await fs.lstat(manifestPath);
+      expect(st.isSymbolicLink()).toBe(true);
+      expect(await fs.readlink(manifestPath)).toBe("missing-target");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
 });

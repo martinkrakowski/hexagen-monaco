@@ -5,6 +5,7 @@ import path from "node:path";
 import yaml from "js-yaml";
 import { err, ok, type Result } from "../../domain/result.js";
 import { detectWorkspaces } from "../shared/detect-workspaces.js";
+import { lstatExists } from "../shared/lstat-exists.js";
 
 export interface AdoptOptions {
   root: string;
@@ -73,12 +74,9 @@ export async function runAdopt(
 
     await fs.mkdir(path.dirname(layoutPath), { recursive: true });
 
-    const exists = await fs
-      .stat(layoutPath)
-      .then(() => true)
-      .catch(() => false);
-
-    if (exists && options.force !== true) {
+    const existsLookup = await lstatExists(layoutPath);
+    if (!existsLookup.success) return existsLookup;
+    if (existsLookup.value && options.force !== true) {
       return err(
         new Error(
           `Refusing to overwrite existing ${layoutPath}. Pass --force to overwrite.`,
@@ -88,14 +86,14 @@ export async function runAdopt(
 
     await fs.writeFile(layoutPath, contents, "utf8");
 
-    const hasManifest = await fs
-      .stat(path.join(options.root, ".architecture", "manifest.yaml"))
-      .then(() => true)
-      .catch(() => false);
+    const manifestLookup = await lstatExists(
+      path.join(options.root, ".architecture", "manifest.yaml"),
+    );
+    if (!manifestLookup.success) return manifestLookup;
 
     const nextSteps = [
       `Wrote ${path.relative(options.root, layoutPath) || ".architecture/layout.yaml"}.`,
-      hasManifest
+      manifestLookup.value
         ? "Run `hexagen-lint --root .` to produce a first report (vacuous runs exit 2)."
         : "No manifest yet — run `hexagen bootstrap --yes` (or answer its questions) before linting.",
     ];

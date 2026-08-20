@@ -3,7 +3,7 @@
 // prompt-service.ts; this suite mutates them transiently and restores
 // originals. Not a turbo task input.
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, describe, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { promises as fs, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -442,5 +442,46 @@ describe("runBootstrap / bootstrapCommand", () => {
     await assert.rejects(
       fs.stat(path.join(root, ".architecture", "manifest.yaml")),
     );
+  });
+
+  it("dry-run refuses a tree that would be blocked without --force (does not print Would write)", async () => {
+    const root = await fixture({
+      "package.json": JSON.stringify({
+        name: "already-adopted",
+        workspaces: ["packages/*"],
+      }),
+      ".architecture/manifest.yaml": "system: keep-me\nbounded_contexts: []\n",
+      "packages/billing/package.json": JSON.stringify({ name: "billing" }),
+    });
+
+    const result = await runBootstrap({ root, yes: true, dryRun: true });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.message).toMatch(/overwrite|--force/i);
+    }
+
+    const logs: string[] = [];
+    const errors: string[] = [];
+    console.log = (...args: unknown[]) => {
+      logs.push(args.map(String).join(" "));
+    };
+    console.error = (...args: unknown[]) => {
+      errors.push(args.map(String).join(" "));
+    };
+    const previousExit = process.exitCode;
+    try {
+      await bootstrapCommand({ root, yes: true, dryRun: true });
+      const text = [...logs, ...errors].join("\n");
+      expect(text).not.toMatch(/Would write/i);
+      expect(text).toMatch(/overwrite|--force/i);
+    } finally {
+      process.exitCode = previousExit;
+    }
+
+    const kept = await fs.readFile(
+      path.join(root, ".architecture", "manifest.yaml"),
+      "utf8",
+    );
+    expect(kept).toMatch(/keep-me/);
   });
 });
