@@ -3,14 +3,6 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Result } from "@hexagen/shared";
-import { SecureChatDispatchUseCase } from "../../src/application/use-cases/secure-chat-dispatch.use-case";
-import type {
-  CloudLLMProviderPort,
-  CloudLLMCompletionRequest,
-  CloudLLMCompletionResponse,
-} from "../../src/domain/ports/cloud-llm-provider.port";
-import type { VaultError, VaultStatus } from "../../src/domain/index";
 import type { ApiKeyVaultLifecyclePort } from "../../src/application/ports/index";
 import {
   resolveApiKey,
@@ -39,13 +31,13 @@ import { EnvironmentSecretVaultAdapter } from "../../src/infrastructure/adapters
 //     `resolveApiKey` turns into "this provider is not configured" and
 //     `resolveFallbackChain` silently skips. Nothing throws, nothing surfaces.
 //   * the vault-lifecycle contract treats "absent" as a TYPED FAILURE — a
-//     `VaultError` whose `kind` the caller must handle, and which
-//     `SecureChatDispatchUseCase` propagates instead of dispatching.
+//     `VaultError` whose `kind` the caller must handle.
 //
 // Contract (2) has been renamed `ApiKeyVaultLifecyclePort`. These tests pin
-// both the split and each side's missing-secret behaviour so a future
+// the split and the env-lookup side's missing-secret behaviour so a future
 // "harmonisation" cannot quietly convert a silent skip into an error or an
-// error into a silent skip.
+// error into a silent skip. The lifecycle port stays declared; HEX-008 is
+// not closed by deleting an unused use case that once consumed it.
 // ---------------------------------------------------------------------------
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -196,6 +188,10 @@ describe("HEX-008: one name, one secret contract", () => {
     assert.deepEqual(declarationSites(files, "ApiKeyVaultLifecyclePort"), [
       "packages/agentic-interaction/src/application/ports/out/api-key-vault-lifecycle.port.ts",
     ]);
+    // Type-level pin: dropping the port from the application barrel fails
+    // typecheck:test. `retrieve` is the absent-secret seam (typed VaultError).
+    const retrieve: keyof ApiKeyVaultLifecyclePort = "retrieve";
+    assert.equal(retrieve, "retrieve");
   });
 
   it("keeps the two contracts structurally disjoint", () => {
@@ -300,138 +296,5 @@ describe("env-var lookup contract: a missing secret is an omission, not an error
     assert.equal(resolved.length, 1);
     assert.equal(resolved[0].apiKey, "sk-second");
     assert.equal(resolved[0].apiKeyEnvVar, "HEX008_SECOND");
-  });
-});
-
-describe("vault-lifecycle contract: a missing secret is a typed VaultError", () => {
-  interface ProviderSpy extends CloudLLMProviderPort {
-    calls: CloudLLMCompletionRequest[];
-  }
-
-  const createProviderSpy = (): ProviderSpy => {
-    const calls: CloudLLMCompletionRequest[] = [];
-    return {
-      calls,
-      async complete(request) {
-        calls.push(request);
-        return {
-          success: true,
-          value: { id: "resp-1", model: request.model },
-        } satisfies Result<CloudLLMCompletionResponse, Error>;
-      },
-      async *streamComplete(request) {
-        calls.push(request);
-        yield { success: true, value: "chunk" } satisfies Result<string, Error>;
-      },
-    };
-  };
-
-  const lockedVault = (error: VaultError): ApiKeyVaultLifecyclePort => ({
-    async getStatus() {
-      return { success: true, value: { state: "locked" } as VaultStatus };
-    },
-    async store() {
-      return { success: true, value: undefined };
-    },
-    async retrieve() {
-      return { success: false, error };
-    },
-    async unlock() {
-      return { success: true, value: undefined };
-    },
-    async lock() {
-      return { success: true, value: undefined };
-    },
-    async destroy() {
-      return { success: true, value: undefined };
-    },
-  });
-
-  const unlockedVault = (apiKey: string): ApiKeyVaultLifecyclePort => ({
-    ...lockedVault({ kind: "vault_empty", message: "unused" }),
-    async retrieve() {
-      return { success: true, value: apiKey };
-    },
-  });
-
-  const request = {
-    model: "gpt-4o",
-    messages: [{ role: "user" as const, content: "hi" }],
-  };
-
-  it("propagates the exact VaultError kind and never dispatches", async () => {
-    const provider = createProviderSpy();
-    const useCase = new SecureChatDispatchUseCase(
-      lockedVault({ kind: "vault_locked", message: "vault is locked" }),
-      provider,
-    );
-
-    const result = await useCase.execute(request);
-
-    assert.equal(result.success, false);
-    // `kind` is asserted, not just failure: an implementation that collapsed
-    // every vault miss into a generic "storage_unavailable" would still be a
-    // failure result and would still pass a bare `success === false` check.
-    assert.deepEqual(result.success === false ? result.error : null, {
-      kind: "vault_locked",
-      message: "vault is locked",
-    });
-    // The security-relevant half: no request may reach the provider when the
-    // key could not be retrieved.
-    assert.deepEqual(provider.calls, []);
-  });
-
-  it("injects the retrieved key exactly once on the happy path", async () => {
-    const provider = createProviderSpy();
-    const useCase = new SecureChatDispatchUseCase(
-      unlockedVault("sk-vaulted"),
-      provider,
-    );
-
-    const result = await useCase.execute(request);
-
-    assert.equal(result.success, true);
-    // Guards the inverse stub: a use case hard-wired to fail would pass the
-    // "never dispatches" test above and fail here.
-    assert.equal(provider.calls.length, 1);
-    assert.equal(provider.calls[0].apiKey, "sk-vaulted");
-    assert.equal(provider.calls[0].model, "gpt-4o");
-  });
-
-  it("stops the stream on a vault failure without dispatching", async () => {
-    const provider = createProviderSpy();
-    const useCase = new SecureChatDispatchUseCase(
-      lockedVault({ kind: "vault_empty", message: "no key stored" }),
-      provider,
-    );
-
-    const chunks: Result<string, VaultError>[] = [];
-    for await (const chunk of useCase.streamExecute(request)) {
-      chunks.push(chunk);
-    }
-
-    assert.equal(chunks.length, 1);
-    assert.deepEqual(chunks[0], {
-      success: false,
-      error: { kind: "vault_empty", message: "no key stored" },
-    });
-    assert.deepEqual(provider.calls, []);
-  });
-
-  it("streams provider chunks once the vault yields a key", async () => {
-    const provider = createProviderSpy();
-    const useCase = new SecureChatDispatchUseCase(
-      unlockedVault("sk-vaulted"),
-      provider,
-    );
-
-    const chunks: Result<string, VaultError>[] = [];
-    for await (const chunk of useCase.streamExecute(request)) {
-      chunks.push(chunk);
-    }
-
-    assert.deepEqual(chunks, [{ success: true, value: "chunk" }]);
-    assert.equal(provider.calls.length, 1);
-    assert.equal(provider.calls[0].apiKey, "sk-vaulted");
   });
 });

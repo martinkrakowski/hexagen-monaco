@@ -17,7 +17,6 @@ export type {
 
 // Export use cases
 export { GenerateSuggestionUseCase } from "./use-cases/generate-suggestion.use-case";
-export { SecureChatDispatchUseCase } from "./use-cases/secure-chat-dispatch.use-case";
 export { HandleServerChatUseCase } from "./use-cases/index";
 export { ModifyArchitectureUseCase } from "./use-cases/modify-architecture.use-case";
 export type { ModifyArchitectureDeps } from "./use-cases/modify-architecture.use-case";

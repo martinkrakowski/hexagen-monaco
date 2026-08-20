@@ -12,7 +12,6 @@ layers:
     use_cases:
     - ModifyArchitectureUseCase
     - GenerateSuggestionUseCase
-    - SecureChatDispatchUseCase
     - ExecuteLooseSpecConversionUseCase
     - ClassifyContextTypeUseCase
     - ExecuteFullStagedGenerationUseCase
