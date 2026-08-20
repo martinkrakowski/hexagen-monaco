@@ -15,9 +15,9 @@ made by a human first_.
 triad convention used elsewhere in `docs/planning/` calls for a live status ledger
 separate from the plan itself. Create
 `docs/planning/2026-08-20-brownfield-ui-execution-runbook.md` on the first landing
-(status table, decision ledger, do-not-start list, change log) rather than letting
-status live only in agent memory or PR comments — the 2026-08-18 remaining-work runbook
-going 17 merges stale is the cautionary precedent.
+(status table, open-packets ledger, decision ledger, do-not-start list, change log)
+rather than letting status live only in agent memory or PR comments — the 2026-08-18
+remaining-work runbook going 17 merges stale is the cautionary precedent.
 
 ---
 
@@ -123,8 +123,8 @@ shape):
    the Quality Gate fail, not warn, if either suite didn't run, and a worker who treats
    this as one test will silently under-deliver.
 3. **Step 10 (runbook update):** on merge, update the execution runbook — status row,
-   decision ledger, change-log entry with the merge SHA and the quoted `yarn test`
-   suite count. A merge that doesn't update the runbook is unfinished.
+   open-packets ledger, decision ledger, change-log entry with the merge SHA and the
+   quoted `yarn test` suite count. A merge that doesn't update the runbook is unfinished.
 
 The loop, condensed: decompose → scout (where §6.4 or step 0.5 names it) → Work Plan
 table → provision worktree → delegate with the §6 governance block prepended → Primary
