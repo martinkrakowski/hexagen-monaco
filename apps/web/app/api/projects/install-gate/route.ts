@@ -54,6 +54,14 @@ interface InstallGateRequest {
   readonly mode?: unknown;
 }
 
+/**
+ * Cheap pre-check on the declared length.
+ *
+ * NOT sufficient on its own: Content-Length is absent on a chunked request, so
+ * this returns null for exactly the shape an attacker would send. `readCappedBody`
+ * below is the enforcing read; this just avoids buffering anything at all when
+ * the client is honest about being too big.
+ */
 function rejectOversizedRequest(request: NextRequest): NextResponse | null {
   const raw = request.headers.get("content-length");
   if (raw === null) return null;
@@ -71,6 +79,38 @@ function rejectOversizedRequest(request: NextRequest): NextResponse | null {
     );
   }
   return null;
+}
+
+/**
+ * Read the body with a hard byte ceiling that holds even when Content-Length is
+ * absent.
+ *
+ * `request.json()` buffers whatever arrives, so a chunked request with no
+ * Content-Length defeats the header pre-check entirely — an anonymous endpoint
+ * would allocate unbounded memory before any validation ran. This streams and
+ * aborts the moment the cap is crossed, so the cost of a hostile body is
+ * bounded by the cap rather than by the sender.
+ */
+async function readCappedBody(
+  request: NextRequest,
+): Promise<{ kind: "ok"; text: string } | { kind: "too-large" }> {
+  const reader = request.body?.getReader();
+  if (!reader) return { kind: "ok", text: "" };
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > MAX_INSTALL_GATE_REQUEST_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      return { kind: "too-large" };
+    }
+    chunks.push(value);
+  }
+  return { kind: "ok", text: Buffer.concat(chunks).toString("utf8") };
 }
 
 function isInstallGateMode(value: unknown): value is InstallGateMode {
@@ -99,9 +139,17 @@ export async function POST(request: NextRequest) {
   const oversized = rejectOversizedRequest(request);
   if (oversized) return oversized;
 
+  const capped = await readCappedBody(request);
+  if (capped.kind === "too-large") {
+    return NextResponse.json(
+      { error: "Request body is too large" },
+      { status: 413 },
+    );
+  }
+
   let body: InstallGateRequest;
   try {
-    body = (await request.json()) as InstallGateRequest;
+    body = JSON.parse(capped.text) as InstallGateRequest;
   } catch {
     return NextResponse.json(
       { error: "Request body must be JSON" },

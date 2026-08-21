@@ -327,9 +327,56 @@ export interface ConformanceGateFile {
  * sites depend on); trailing slashes are collapsed so `"out/"` and `"out"`
  * behave identically.
  */
+/**
+ * Thrown when `pathPrefix` could produce an archive entry outside the
+ * extraction root.
+ */
+export class UnsafePathPrefixError extends Error {
+  constructor(pathPrefix: string) {
+    super(
+      `Unsafe pathPrefix ${JSON.stringify(pathPrefix)}: must be a relative path of ` +
+        `[A-Za-z0-9._-] segments, with no "..", no leading "/", and no backslashes.`,
+    );
+    this.name = "UnsafePathPrefixError";
+  }
+}
+
+const SAFE_PREFIX_SEGMENT = /^[A-Za-z0-9._-]+$/;
+
+/**
+ * Prefix an entry path, refusing anything that could escape on extraction.
+ *
+ * These strings become zip entry names, and `JsZipCreatorAdapter` writes them
+ * verbatim — so an unchecked "../" or "/abs" prefix is a zip-slip primitive
+ * handed to whoever unzips the bundle. No caller passes untrusted input today,
+ * but this is exported API and the cost of being wrong later is borne by the
+ * consumer's filesystem, not ours. Rejecting loudly beats silently emitting a
+ * traversing entry.
+ */
 function withPathPrefix(filePath: string, pathPrefix?: string): string {
-  const prefix = pathPrefix?.trim().replace(/\/+$/, "") ?? "";
-  return prefix.length === 0 ? filePath : `${prefix}/${filePath}`;
+  const raw = pathPrefix?.trim() ?? "";
+  const prefix = raw.replace(/\/+$/, "");
+  if (prefix.length === 0) return filePath;
+
+  if (
+    prefix.includes("\\") ||
+    prefix.includes("\0") ||
+    prefix.startsWith("/") ||
+    /^[A-Za-z]:/.test(prefix) ||
+    // "." and ".." are made entirely of characters SAFE_PREFIX_SEGMENT allows,
+    // so they must be rejected by name -- and ".." is the whole point.
+    !prefix
+      .split("/")
+      .every(
+        (segment) =>
+          segment !== "." &&
+          segment !== ".." &&
+          SAFE_PREFIX_SEGMENT.test(segment),
+      )
+  ) {
+    throw new UnsafePathPrefixError(raw);
+  }
+  return `${prefix}/${filePath}`;
 }
 
 /**

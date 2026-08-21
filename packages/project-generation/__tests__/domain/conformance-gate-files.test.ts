@@ -12,6 +12,7 @@ import {
   SYNC_INTEGRITY_WORKFLOW_PATH,
   hexagenConformanceActionFiles,
   hexagenGateBundleFiles,
+  UnsafePathPrefixError,
 } from "../../src/domain/conformance-gate-files.js";
 import * as syncIntegrityWorkflowModule from "../../src/domain/sync-integrity-workflow.js";
 
@@ -260,5 +261,45 @@ describe("sync-integrity-workflow.ts re-export shim", () => {
       typeof syncIntegrityWorkflowModule.shouldInjectSyncIntegrityWorkflow,
       "function",
     );
+  });
+});
+
+describe("pathPrefix safety (zip-slip)", () => {
+  // These strings become zip entry names and JsZipCreatorAdapter writes them
+  // verbatim, so an unchecked prefix is a traversal primitive handed to
+  // whoever unzips the bundle.
+  const unsafe = [
+    "../escape",
+    "..",
+    "a/../../b",
+    "/absolute",
+    "C:\\windows",
+    "back\\slash",
+    "with space",
+    "semi;colon",
+  ];
+
+  for (const prefix of unsafe) {
+    it(`rejects ${JSON.stringify(prefix)}`, () => {
+      assert.throws(
+        () => hexagenConformanceActionFiles({ pathPrefix: prefix }),
+        UnsafePathPrefixError,
+      );
+    });
+  }
+
+  it("accepts ordinary nested prefixes", () => {
+    const files = hexagenConformanceActionFiles({ pathPrefix: "bundle/gate" });
+    assert.ok(files.every((f) => f.path.startsWith("bundle/gate/")));
+  });
+
+  it("treats a blank prefix as no prefix", () => {
+    const bare = hexagenConformanceActionFiles();
+    for (const prefix of ["", "   "]) {
+      assert.deepEqual(
+        hexagenConformanceActionFiles({ pathPrefix: prefix }),
+        bare,
+      );
+    }
   });
 });
