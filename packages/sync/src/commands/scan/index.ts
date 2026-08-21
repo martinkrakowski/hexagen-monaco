@@ -4,6 +4,8 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { resolveArchLinterBin } from "../../arch-linter-bin.js";
 import { err, ok, type Result } from "../../domain/result.js";
+import { CURRENT_SCHEMA_VERSION } from "@hexagen/shared";
+import { readFileSync } from "node:fs";
 import { resolveLinterTimeoutMs } from "../../linter.js";
 import { runAdopt } from "../adopt/index.js";
 import { runBootstrap } from "../bootstrap/index.js";
@@ -43,6 +45,36 @@ export interface ScanResult {
   lintExitCode: number;
   reportPaths: string[];
   nextSteps: string[];
+  /**
+   * Machine-readable summary for non-human consumers (the web scan adapter).
+   *
+   * Emitted by `scanCommand` as the FINAL stdout line, after the human
+   * `nextSteps`. That placement is the repo's existing convention for mixing
+   * both on one stream -- `parseLintJson` reads `hexagen-lint --json` the same
+   * way, taking the last trimmed line that starts with `{`.
+   */
+  envelope: ScanEnvelopePayload;
+}
+
+/**
+ * The scan envelope. Field names are the contract the web adapter already
+ * parses; `schemaVersion` comes from @hexagen/shared so producer and consumer
+ * cannot drift on it independently.
+ */
+export interface ScanEnvelopePayload {
+  schemaVersion: string;
+  layout: string | null;
+  filesScanned: number | null;
+  reportMarkdown: string | null;
+  error: string | null;
+}
+
+function readIfPresent(filePath: string): string | null {
+  try {
+    return readFileSync(filePath, "utf8");
+  } catch {
+    return null;
+  }
 }
 
 function lintVerdict(exitCode: number): string {
@@ -134,6 +166,16 @@ async function previewScan(
     lintExitCode: 0,
     reportPaths: [],
     nextSteps,
+    // --dry-run writes nothing, so there is nothing to report on. The envelope
+    // is still emitted so a machine consumer gets the same shape on every
+    // path and never has to special-case "preview returned no JSON".
+    envelope: {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      layout: null,
+      filesScanned: null,
+      reportMarkdown: null,
+      error: null,
+    },
   });
 }
 
@@ -240,6 +282,12 @@ export async function runScan(
       "Review layout.yaml and manifest.yaml. hexagen bootstrap does not infer depends_on from the import graph.",
     );
 
+    // The report is read back off disk rather than re-rendered: reportCommand
+    // owns the filename, and duplicating it here is exactly the drift that made
+    // `reportMarkdown` always null before (the adapter probed three names the
+    // CLI never writes).
+    const markdownPath = reportPaths.find((f) => f.endsWith(".md")) ?? null;
+
     return ok({
       layoutPath,
       manifestPath,
@@ -247,6 +295,13 @@ export async function runScan(
       lintExitCode,
       reportPaths,
       nextSteps,
+      envelope: {
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        layout: readIfPresent(layoutPath),
+        filesScanned: null,
+        reportMarkdown: markdownPath ? readIfPresent(markdownPath) : null,
+        error: null,
+      },
     });
   } catch (e) {
     return err(e instanceof Error ? e : new Error(String(e)));
@@ -271,12 +326,29 @@ export async function scanCommand(options: {
   });
   if (!result.success) {
     console.error(`❌ ${result.error.message}`);
+    // Emit an envelope on the failure path too. `error` exists precisely so a
+    // machine consumer learns WHY the scan could not run, instead of having to
+    // infer it from an exit code and a human string on stderr.
+    console.log(
+      JSON.stringify({
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        layout: null,
+        filesScanned: null,
+        reportMarkdown: null,
+        error: result.error.message,
+      } satisfies ScanEnvelopePayload),
+    );
     process.exitCode = 1;
     return;
   }
   for (const line of result.value.nextSteps) {
     console.log(line);
   }
+  // LAST line, after the human output. Same convention as `hexagen-lint --json`,
+  // whose consumer (parseLintJson) takes the last trimmed line starting with
+  // `{`. Keeping the human lines first means `hexagen scan` still reads as a
+  // CLI for a person, with one machine line appended for the adapter.
+  console.log(JSON.stringify(result.value.envelope));
   process.exitCode = result.value.lintExitCode;
 }
 

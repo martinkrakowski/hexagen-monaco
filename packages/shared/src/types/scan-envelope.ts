@@ -46,7 +46,12 @@ export const ScanEnvelope = z
     // excerpt. A looser z.unknown() here let a structured fixture through that
     // the real consumer would silently ignore.
     layout: z.string().nullable().optional(),
-    filesScanned: z.number().int().min(0).optional(),
+    // Nullable like its siblings: the producer emits an explicit null when the
+    // count is unknown (the linter prints "Files scanned" on inherited stdio,
+    // so scan cannot see it until BF-0.3 captures that stream). Making this
+    // optional-but-not-nullable would force the producer to choose between
+    // omitting the key and failing its own schema.
+    filesScanned: z.number().int().min(0).nullable().optional(),
     reportMarkdown: z.string().nullable().optional(),
     error: z.string().nullable().optional(),
   })

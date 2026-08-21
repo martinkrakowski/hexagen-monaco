@@ -307,3 +307,54 @@ describe("CliHexagenScanAdapter", () => {
     assert.match(outcome.result.errorMessage ?? "", /not found/i);
   });
 });
+
+describe("scan envelope (BF-0.1) — consumer side", () => {
+  // The other half of the dual-suite contract: BF-0.0's schema is only useful
+  // if BOTH sides assert against the same shape. The producer test lives in
+  // packages/sync; this is the consumer's.
+  const envelope = {
+    schemaVersion: "1.0.0",
+    layout: "contexts:\n  billing:\n    root: packages/billing\n",
+    filesScanned: null,
+    reportMarkdown: "# Scan Report\n\nAll good.",
+    error: null,
+  };
+
+  it("reads the envelope from the LAST stdout line, after human output", async () => {
+    // Human next-steps precede it, exactly as the real CLI prints them. The
+    // previous implementation required stdout to *start* with `{`, so this
+    // branch never fired against the real CLI at all.
+    const zip = await zipBuffer({ "package.json": "{}" });
+    const inst = adapter(async () => ({
+      stdout: [
+        "Wrote .architecture/layout.yaml",
+        "Architecture is compliant.",
+        JSON.stringify(envelope),
+      ].join("\n"),
+      stderr: "",
+    }));
+
+    const outcome = await inst.scanZip({ zip, projectName: "Demo" });
+    assert.equal(outcome.kind, "scanned");
+    if (outcome.kind !== "scanned") return;
+    assert.match(outcome.result.layoutExcerpt ?? "", /contexts:/);
+    assert.match(outcome.result.reportMarkdown ?? "", /Scan Report/);
+  });
+
+  it("surfaces the envelope's error on the failure path", async () => {
+    const zip = await zipBuffer({ "package.json": "{}" });
+    const inst = adapter(async () => {
+      throw execFailure(
+        2,
+        "",
+        JSON.stringify({ ...envelope, error: "Refusing to write." }),
+      );
+    });
+
+    const outcome = await inst.scanZip({ zip, projectName: "Demo" });
+    assert.equal(outcome.kind, "scanned");
+    if (outcome.kind !== "scanned") return;
+    assert.equal(outcome.result.verdict, "could-not-run");
+    assert.match(outcome.result.errorMessage ?? "", /Refusing to write/);
+  });
+});
