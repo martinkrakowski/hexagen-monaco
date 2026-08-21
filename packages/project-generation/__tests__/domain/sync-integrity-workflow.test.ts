@@ -252,8 +252,33 @@ describe("PR-comment review deep link (F-22)", () => {
     );
     assert.match(
       script,
-      /catch \{[\s\S]*?ignoring unparseable HEXAGEN_APP_URL[\s\S]*?return "";/,
+      /catch \{[\s\S]*?not a valid URL[\s\S]*?return "";/,
       "a bad override must cost the link, never the comment or the job",
     );
+  });
+
+  it("never echoes HEXAGEN_APP_URL into the log", () => {
+    // The value may carry credentials and may contain newlines, so printing it
+    // would leak secrets into CI logs and allow log injection.
+    const failureArm = script.slice(
+      script.indexOf("function reviewFooter"),
+      script.indexOf("let body ="),
+    );
+    assert.ok(
+      !/HEXAGEN_APP_URL \(\$\{appUrl\}\)/.test(failureArm),
+      "the raw override value must not be interpolated into stderr",
+    );
+  });
+
+  it("emits the link only for http(s) schemes", () => {
+    // new URL() accepts javascript:, data: and file:, and this string goes
+    // straight into a Markdown link in a public PR comment.
+    assert.ok(script.includes('url.protocol !== "https:"'));
+    assert.ok(script.includes('url.protocol !== "http:"'));
+  });
+
+  it("strips credentials from the emitted link", () => {
+    assert.ok(script.includes('url.username = ""'));
+    assert.ok(script.includes('url.password = ""'));
   });
 });

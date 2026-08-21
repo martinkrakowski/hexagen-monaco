@@ -236,11 +236,27 @@ function reviewFooter() {
   try {
     url = new URL(REVIEW_PATH, appUrl);
   } catch {
+    // Deliberately does NOT echo the value. It is attacker-influencable only
+    // by whoever can set repo/org variables, but it may legitimately carry
+    // credentials, and it can contain newlines -- printing it would both leak
+    // secrets into CI logs and allow log injection.
     process.stderr.write(
-      \`hexagen-conformance: ignoring unparseable HEXAGEN_APP_URL (\${appUrl})\\n\`,
+      "hexagen-conformance: HEXAGEN_APP_URL is not a valid URL — omitting the review link\\n",
     );
     return "";
   }
+  // new URL() happily accepts javascript:, data:, file: and friends, and this
+  // string is emitted straight into a Markdown link in a public PR comment.
+  // Allow only real web schemes.
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    process.stderr.write(
+      \`hexagen-conformance: HEXAGEN_APP_URL scheme \${url.protocol} is not http(s) — omitting the review link\\n\`,
+    );
+    return "";
+  }
+  // Strip any credentials rather than publishing them.
+  url.username = "";
+  url.password = "";
   url.searchParams.set("repo", repo);
   url.searchParams.set("pr", pr);
   return \`\\n\\n---\\n\\n[Review in Hexagen-Monaco](\${url.toString()})\\n\`;
