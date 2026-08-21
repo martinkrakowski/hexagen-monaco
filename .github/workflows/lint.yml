@@ -67,8 +67,16 @@ jobs:
       # packages/agentic-interaction/__tests__/**/fixtures/*.md) that a test
       # suite reads as literal input, so a blanket *.md skip would be wrong
       # there. It is safe here only because this job never runs tests.
+      # shell: bash pinned explicitly, not left to the runner default --
+      # this step uses process substitution (`< <(...)`) and `read -d`,
+      # neither of which POSIX sh (e.g. dash) supports. GitHub Actions
+      # defaults Linux/macOS `run:` steps to bash already, but the local
+      # pre-commit hook (.husky/pre-commit) hit exactly this class of
+      # mistake -- husky invokes it via `sh -e` regardless of its shebang --
+      # so this is pinned rather than assumed a second time.
       - name: "Detect docs-only changeset"
         id: docs-only
+        shell: bash
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base="${{ github.event.pull_request.base.sha }}"
@@ -89,17 +97,39 @@ jobs:
             exit 0
           fi
 
-          changed="$(git diff --name-only $diff_range)"
-          if [ -z "$changed" ]; then
+          # --no-renames is load-bearing, not cosmetic: `--name-only` on a
+          # detected rename prints only the destination path, so a rename
+          # from foo.ts to notes.md would show as a single "notes.md" line
+          # and be misclassified as docs-only -- silently skipping the
+          # typecheck that would have caught every other file's now-broken
+          # import of foo.ts. --no-renames forces both sides of the rename
+          # to appear as a plain delete + add, and foo.ts disqualifies the
+          # fast path correctly. -z + a NUL-delimited read loop is the same
+          # pattern tools/arch-linter/src/git-ops.ts's stagedFiles() already
+          # uses, for the same reason: `--name-only` on its own is
+          # newline-delimited and mis-parses a path containing an embedded
+          # newline.
+          is_docs_only=true
+          file_count=0
+          while IFS= read -r -d '' f; do
+            if [ -n "$f" ]; then
+              file_count=$((file_count + 1))
+              case "$f" in
+                *.md) ;;
+                *) is_docs_only=false ;;
+              esac
+            fi
+          done < <(git diff --name-only -z --no-renames $diff_range || echo -ne "")
+
+          if [ "$file_count" -eq 0 ]; then
             echo "docs_only=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          if printf '%s\n' "$changed" | grep -qvE '\.md$'; then
+          if [ "$is_docs_only" = "false" ]; then
             echo "docs_only=false" >> "$GITHUB_OUTPUT"
           else
             echo "docs_only=true" >> "$GITHUB_OUTPUT"
-            file_count="$(printf '%s\n' "$changed" | wc -l | tr -d ' ')"
             echo "Docs-only changeset (${file_count} file(s), all *.md) -- skipping lint/build/ratchet."
           fi
 

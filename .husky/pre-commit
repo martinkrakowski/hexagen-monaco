@@ -6,8 +6,20 @@ npx lint-staged
 # past them; lint-staged above already ran prettier on the staged .md files,
 # so formatting isn't lost, only the code-oriented checks are. No
 # --diff-filter here on purpose: a staged *deletion* of a non-.md file must
-# still disqualify the fast path.
-staged_files="$(git diff --cached --name-only)"
+# still disqualify the fast path. --no-renames matters for the same reason:
+# without it, staging a rename from foo.ts to notes.md shows only
+# "notes.md" and would be misclassified as docs-only.
+#
+# POSIX sh only below -- no bashisms. husky's shim (.husky/_/h) hardcodes
+# `sh -e "$s"` to run this file regardless of any shebang, and on Linux
+# `sh` is commonly dash, which has neither process substitution (`<(...)`)
+# nor `read -d`. Both were tried here and both broke this hook outright
+# under dash -- verified by running it through dash directly, not assumed.
+# The equivalent NUL-safe read-loop pattern tools/arch-linter/src/git-ops.ts
+# uses for the same newline-in-filename problem is fine there because it is
+# plain Node string splitting, not a shell builtin, and portability doesn't
+# apply the same way.
+staged_files="$(git diff --cached --name-only --no-renames)"
 if [ -n "$staged_files" ] && ! printf '%s\n' "$staged_files" | grep -qvE '\.md$'; then
   echo "Docs-only commit (every staged file ends in .md) -- skipping turbo lint/typecheck and the arch-lint ratchet."
 else
@@ -21,4 +33,3 @@ else
     yarn lint:arch -- --staged --ratchet || exit 1
   fi
 fi
-
