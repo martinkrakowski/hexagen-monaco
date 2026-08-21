@@ -76,15 +76,16 @@ for this one because the two arcs may run concurrently):
 - **One item = one worktree = one PR.** Provision with `isolation: worktree` per
   packet; parallel packets get parallel worktrees. Worktrees have **no `node_modules`**
   — workers stage diffs and report; the Primary runs gates from the main checkout.
-  **Who produces RED/GREEN evidence, precisely:** the _repo-wide_ Quality Gate is the
-  Primary's, from the main checkout — a worker never runs it. But the worker still owns
-  its packet's failing-first proof, and needs a runnable environment to produce it. Give
-  the worker one of: a `yarn install`ed worktree, or a shared install, or run its two
-  commands yourself and hand back the output. If none of those is available, the worker
-  reports the **test definition and the exact commands** and says plainly that it could
-  not execute them — the Primary then produces the RED/GREEN evidence before landing.
-  What must never happen is a packet landing with the evidence simply absent: an unrun
-  test is a non-success result, not a silent pass.
+  **Who produces RED/GREEN evidence, precisely:** the worker **authors** the
+  failing-first test; the Primary **executes** it. That split follows from the worktree
+  model rather than working around it — feature-plan §6.2 rule 3 is "no gates in the
+  worktree; stage the diff and report," so a worker has no environment to run anything
+  in and must not be given one. The worker reports the test's name, the exact command
+  that runs it, and what it expects to fail before the fix and pass after. The Primary,
+  from the main checkout, applies the test alone to observe RED, then applies the fix to
+  observe GREEN, and records both in the landing record. What must never happen is a
+  packet landing with that evidence absent or asserted-but-unrun: an unrun test is a
+  non-success result, not a silent pass.
 - **BF-0.1 → BF-0.2 → BF-0.3 is a serialization chain, not a stack.** This repo does
   not do stacked PRs (verified: no `wt-`-style stacking convention exists;
   dependency-serialization is the house model). Each of the three lands, merges to
@@ -150,7 +151,7 @@ shape):
 The loop, condensed: decompose → scout (where §6.4 or step 0.5 names it) → Work Plan
 table → provision worktree → delegate with the §6 governance block prepended → Primary
 lands anything Primary-reserved → refuter panel where §1/§4 mandates it → Quality Gate
-(Primary, from main checkout, both suites for Phase 0) → prepare for human merge,
+(Primary, from main checkout, both suites for BF-0.1–0.3) → prepare for human merge,
 adjudicate bots per `.agents/REVIEW.md`, reviewer's-guide comment → human merges.
 
 ## 3. Wave map, gating, and the opening fan-out
@@ -161,7 +162,8 @@ it — which packets to actually launch, in what order, respecting the ≤4 cap.
 ```text
 Gates:  BF-0.0 ⟶ BF-0.1 ⟶ BF-0.2 ⟶ BF-0.3          BF-2.0 ⟶ {BF-2.1, BF-2.2, BF-2.3}
         BF-3.1 ⟶ {BF-3.2, BF-3.3, BF-3.4}           BF-6.1 ⟶ {BF-6.2, BF-6.3}
-        {BF-3.1, BF-2.1, BF-1.4, BF-0.3} ⟶ BF-4.*   BF-4.2 ⟶ BF-4.3
+        {BF-3.1, BF-2.1, BF-1.4} ⟶ BF-4.1           BF-4.2 ⟶ BF-4.3
+        {BF-3.1, BF-2.1} ⟶ BF-4.2                   {BF-2.1, BF-0.3} ⟶ BF-4.4
         D-U1 ⟶ BF-5.1 ⟶ D-P1 ⟶ BF-5.2 ⟶ BF-5.3
         MVP = Phase 0 + Phase 1 + Phase 2 + Phase 3 + BF-6.1 + BF-6.2
 ```
@@ -190,8 +192,9 @@ Gates:  BF-0.0 ⟶ BF-0.1 ⟶ BF-0.2 ⟶ BF-0.3          BF-2.0 ⟶ {BF-2.1, BF-
 
 From there the DAG fans out on its own: BF-0.1 → BF-0.2 → BF-0.3 continues its chain
 one merge at a time; BF-2.0 unlocks BF-2.1/2.2/2.3 (3-wide, pick 3 of the 4 open slots);
-BF-3.1 unlocks BF-3.2/3.3/3.4 and, once BF-2.1/BF-1.4/BF-0.3 are also in, Phase 4's
-BF-4.1/4.2/4.4.
+BF-3.1 unlocks BF-3.2/3.3/3.4, and — with BF-2.1 in — BF-4.2 immediately, BF-4.1 once
+BF-1.4 lands, and BF-4.4 once BF-0.3 lands. Gate each on its own row (Phase 4 card
+below), not on the union.
 
 **The MVP milestone — call it out explicitly when it's reached, don't let it pass
 quietly:** Phase 0 + Phase 1 + Phase 2 + Phase 3 + BF-6.1 + BF-6.2 merged is a shippable
@@ -256,13 +259,21 @@ path, and a signature change that isn't scouted first risks breaking it silently
 
 ### Phase 4 — Ratification
 
-Starts once **BF-3.1, BF-2.1, BF-1.4, and BF-0.3** are all merged — that is the union of
-the three packets' own dependency rows in the feature plan's §4 Phase-4 table (BF-4.1 →
-BF-3.1 + BF-2.1 + BF-1.4; BF-4.2 → BF-3.1 + BF-2.1; BF-4.4 → **BF-0.3** + BF-2.1).
-BF-0.3 is easy to miss and load-bearing: BF-4.4 is the findings-review screen, and
-BF-0.3 is the packet that first makes findings cross the CLI→web seam at all. Starting
-BF-4.4 before it lands means building a screen against a contract that does not yet
-exist.
+**Gate each Phase-4 packet on its own row in the feature plan's §4 table, not on the
+union** — the three have genuinely different prerequisites, and gating them all on the
+union needlessly serializes work that can run in parallel:
+
+| Packet | Starts once these are merged |
+| ------ | ---------------------------- |
+| BF-4.1 | BF-3.1, BF-2.1, BF-1.4       |
+| BF-4.2 | BF-3.1, BF-2.1               |
+| BF-4.4 | BF-2.1, **BF-0.3**           |
+
+BF-4.2 is therefore the first Phase-4 packet that can start — it needs neither BF-1.4
+nor BF-0.3. BF-0.3 is easy to miss and load-bearing for **BF-4.4 specifically**: that is
+the findings-review screen, and BF-0.3 is the packet that first makes findings cross the
+CLI→web seam at all. Starting BF-4.4 before it lands means building a screen against a
+contract that does not yet exist. It is not a prerequisite for BF-4.1 or BF-4.2.
 
 BF-4.1, BF-4.2, and BF-4.4 own disjoint sub-folders and fan out fully in parallel —
 three separate **UI Worker** agents. BF-4.2 is a UI packet despite touching
@@ -378,12 +389,13 @@ open-string rule-grouping requirement, test conventions), then append:
   your packet's ID — several packets already have a documented "the reviewer said X,
   verification found Y" history. Do not re-litigate a refuted claim; do not re-discover
   an already-accepted one as if it were new.
-- Report your diff, your test evidence (RED then GREEN output, both suites where two
-  apply), and any scout-contradicting discovery back to the Primary; do not push,
-  commit, or open PRs yourself. If your worktree cannot run tests, do NOT report the
-  packet as done and do NOT guess at the output: report the test definition, the exact
-  commands, and state that you could not execute them. The Primary produces the
-  evidence. An unrun test is never reported as a pass.
+- Your worktree has no node_modules and you do not run tests in it. Report your diff,
+  the failing-first test you wrote, the exact command that runs it (both commands where
+  two suites apply), and what you expect to fail before the fix and pass after. The
+  Primary executes it from the main checkout and records the RED/GREEN evidence. Never
+  guess at or fabricate test output, and never report a packet as done on the strength
+  of a test you did not see run. Also report any scout-contradicting discovery. Do not
+  push, commit, or open PRs yourself.
 ```
 
 ## 9. Completion checklist (Primary tracks continuously)
@@ -391,7 +403,9 @@ open-string rule-grouping requirement, test conventions), then append:
 - [ ] Every ungated packet merged; every gated packet (BF-5.1–5.3, BF-6.3) explicitly
       parked with a dated runbook note naming its gate.
 - [ ] Quality Gate green on `main` after each landing; suite counts quoted in every
-      landing record; Phase-0 landings additionally quote both suites' counts.
+      landing record; **BF-0.1, BF-0.2, and BF-0.3** landings (the scan-envelope
+      packets) additionally quote both suites' counts. BF-0.0 and BF-0.4 do not — they
+      do not touch the envelope, and requiring it of them is checklist busywork.
 - [ ] Refuter panels ran on BF-0.3, BF-0.4, BF-5.2, BF-6.3; verdicts recorded in PR bodies.
 - [ ] The four §6.4 scouts (BF-1.2, BF-4.2, BF-6.1, BF-7.1) ran and reported before
       their workers were provisioned, not after.
