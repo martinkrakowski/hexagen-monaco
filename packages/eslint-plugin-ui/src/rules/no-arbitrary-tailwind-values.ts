@@ -33,7 +33,17 @@ const EXCEPTION_PATTERNS = [
  * longer a whole-string pre-filter — matching is per token, and a token the
  * rule cannot classify is simply not a match.
  */
-const ARBITRARY_TOKEN = /^((?:[\w-]+:)*[\w-]+)-\[([^\]\s]+)\]$/;
+/*
+ * The `!?` groups carry Tailwind's IMPORTANT modifier, in both spellings:
+ * v3 puts it before the utility (`!w-[85%]`, `hover:!w-[85%]`), v4 puts it
+ * after the token (`w-[85%]!`). Without them `[\w-]+` rejects the `!` and the
+ * token is not a match at all -- so marking a magic number important was
+ * enough to walk past the rule entirely.
+ */
+const ARBITRARY_TOKEN = /^((?:[\w-]+:)*!?[\w-]+)-\[([^\]\s]+)\]!?$/;
+
+/** Strip the important modifier for comparisons that are about the VALUE. */
+const IMPORTANT = /!/g;
 
 /**
  * A reference to a CSS custom property, e.g. `var(--card-width-md)`.
@@ -98,14 +108,20 @@ const rule: TSESLint.RuleModule<MessageIds> = {
 
           const [fullValue, variantsAndUtility, value] = match;
 
-          // Skip documented exceptions
-          if (EXCEPTION_PATTERNS.includes(fullValue)) continue;
+          // Skip documented exceptions. Compared with the important
+          // modifier stripped: `active:!scale-[0.98]` is the same documented
+          // value as `active:scale-[0.98]`, and exempting one but not the
+          // other would be an accident of spelling.
+          if (EXCEPTION_PATTERNS.includes(fullValue.replace(IMPORTANT, "")))
+            continue;
 
           // Skip design-token references (DESIGN.md §4.8 category exception)
           if (TOKEN_REFERENCE.test(value)) continue;
 
           // Skip property-name lists (DESIGN.md §4.8 category exception)
-          const utility = variantsAndUtility.replace(VARIANT_PREFIX, "");
+          const utility = variantsAndUtility
+            .replace(VARIANT_PREFIX, "")
+            .replace(IMPORTANT, "");
           if (
             PROPERTY_LIST_UTILITIES.has(utility) &&
             PROPERTY_NAME_LIST.test(value)

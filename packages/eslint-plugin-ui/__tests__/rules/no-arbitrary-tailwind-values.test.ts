@@ -214,4 +214,35 @@ describe("no-arbitrary-tailwind-values", () => {
       assert.deepStrictEqual(report("flex\n  w-[347px]\t p-4"), ["w-[347px]"]);
     });
   });
+
+  describe("the important modifier cannot be used to walk past the rule", () => {
+    // Tailwind spells `!important` two ways: v3 prefixes the utility, v4
+    // suffixes the token. Neither was matched before, so `!w-[85%]` was
+    // simply not a violation -- a one-character bypass of the whole rule.
+    it("reports a v3 important prefix", () => {
+      assert.deepStrictEqual(report("!w-[85%]"), ["!w-[85%]"]);
+    });
+
+    it("reports a v3 important prefix behind a variant", () => {
+      assert.deepStrictEqual(report("hover:!w-[347px]"), ["hover:!w-[347px]"]);
+    });
+
+    it("reports a v4 important suffix", () => {
+      assert.deepStrictEqual(report("w-[85%]!"), ["w-[85%]!"]);
+    });
+
+    it("still exempts a documented exception when marked important", () => {
+      // The exception is about the VALUE, so exempting active:scale-[0.98]
+      // but reporting active:!scale-[0.98] would be an accident of spelling.
+      assert.deepStrictEqual(report("active:!scale-[0.98]"), []);
+    });
+
+    it("still exempts a token reference when marked important", () => {
+      assert.deepStrictEqual(report("!h-[var(--resizable-panel-height)]"), []);
+    });
+
+    it("still exempts a property list when marked important", () => {
+      assert.deepStrictEqual(report("!transition-[box-shadow,border-color]"), []);
+    });
+  });
 });
