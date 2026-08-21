@@ -1,9 +1,6 @@
 {
   "schemaVersion": "1.0.0",
-  "layout": {
-    "type": "hexagonal-grid",
-    "dimensions": { "width": 12, "height": 8 }
-  },
+  "layout": "contexts:\n  orders:\n    root: packages/orders\n    layers:\n      domain:\n        - src/domain\n      application:\n        - src/application\n  billing:\n    root: packages/billing\n    layers:\n      domain:\n        - src/core\n",
   "filesScanned": 128,
   "reportMarkdown": "# Baseline Scan Report\n\nScanned 128 files, 0 issues found.",
   "error": null
