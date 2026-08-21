@@ -58,12 +58,12 @@ export function ChatMessageList({
         msg.role === "user" ? (
           <div
             key={msg.id}
-            className="text-sm whitespace-pre-wrap text-foreground ml-auto mr-0 max-w-[85%]"
+            className="text-sm whitespace-pre-wrap text-foreground ml-auto mr-0 max-w-[var(--chat-bubble-max-width)]"
           >
             {msg.content}
           </div>
         ) : (
-          <div key={msg.id} className="text-sm mr-auto ml-0 max-w-[85%]">
+          <div key={msg.id} className="text-sm mr-auto ml-0 max-w-[var(--chat-bubble-max-width)]">
             <ChatMarkdown content={msg.content} />
           </div>
         ),
