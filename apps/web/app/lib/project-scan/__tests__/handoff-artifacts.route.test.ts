@@ -292,4 +292,47 @@ describe("GET /api/projects/scan/artifacts", () => {
     assert.equal(res.status, 405);
     assert.equal(res.headers.get("Allow"), "POST");
   });
+
+  it("413s a chunked oversized body that declares no Content-Length", async () => {
+    // The attack shape the Content-Length guard cannot see: chunked transfer
+    // encoding omits the header entirely, so the pre-parse check returns null.
+    // Before the capped read, formData() would then buffer the whole payload
+    // and every size check downstream ran only after it was already in memory.
+    //
+    // Uses a REAL body stream (not the stubbed formData of the helper above),
+    // because the whole point is what happens while the body is being read.
+    let pushed = 0;
+    const chunk = new Uint8Array(64 * 1024);
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        // Deliberately unbounded: a well-behaved route must stop pulling on
+        // its own rather than rely on the producer ever ending.
+        pushed += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+    });
+    const request = new NextRequest(
+      "http://localhost/api/projects/scan/artifacts",
+      {
+        method: "POST",
+        headers: new Headers({
+          "content-type": "multipart/form-data; boundary=----probe",
+        }),
+        body,
+        // @ts-expect-error -- duplex is required for a streaming body and is
+        // not in the lib.dom RequestInit typing.
+        duplex: "half",
+      },
+    );
+
+    const response = await POST(request);
+
+    assert.equal(response.status, 413);
+    // Bounded: it stopped pulling shortly after the cap instead of draining an
+    // endless producer. Asserting the 413 alone would pass even if it had.
+    assert.ok(
+      pushed < MAX_HANDOFF_REQUEST_BYTES * 2,
+      `read ${pushed} bytes, which is not a bounded read`,
+    );
+  });
 });

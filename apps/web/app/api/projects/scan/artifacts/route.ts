@@ -70,6 +70,79 @@ function rejectOversizedRequest(request: NextRequest): NextResponse | null {
   return null;
 }
 
+/**
+ * Read the request body, aborting once it exceeds MAX_HANDOFF_REQUEST_BYTES.
+ *
+ * Exists because Content-Length cannot be trusted as the size guard: it is
+ * client-supplied, and a chunked request omits it altogether, in which case
+ * `rejectOversizedRequest` above returns null and every downstream size check
+ * happens only after `formData()` has already materialized the payload. A
+ * Next.js route handler has no default body limit, so that was a
+ * straightforward memory/CPU exhaustion path.
+ *
+ * Counts as it reads and stops at the cap, so peak memory is bounded by the
+ * limit rather than by what the client claims or sends.
+ */
+async function readCappedBody(
+  request: NextRequest,
+): Promise<
+  | { ok: true; body: ArrayBuffer | null }
+  | { ok: false; response: NextResponse }
+> {
+  const tooLarge = () => ({
+    ok: false as const,
+    response: NextResponse.json(
+      {
+        error: `Request body is too large (exceeds ${MAX_HANDOFF_REQUEST_BYTES.toLocaleString()} bytes)`,
+      },
+      { status: 413 },
+    ),
+  });
+
+  const stream = request.body;
+  // No readable stream means there is nothing to meter -- the runtime has
+  // already materialized the body (or there is none). Signal that by returning
+  // null so the caller falls back to request.formData() rather than
+  // reconstructing an empty body and turning every such request into a 400.
+  if (stream === null) return { ok: true, body: null };
+
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value === undefined) continue;
+      total += value.byteLength;
+      if (total > MAX_HANDOFF_REQUEST_BYTES) {
+        await reader.cancel().catch(() => {});
+        return tooLarge();
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Could not read the request body" },
+        { status: 400 },
+      ),
+    };
+  }
+
+  // Allocated as an ArrayBuffer so it is a valid BodyInit for the Response
+  // reconstruction at the call site.
+  const buffer = new ArrayBuffer(total);
+  const body = new Uint8Array(buffer);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { ok: true, body: buffer };
+}
+
 function isZipFile(file: File): boolean {
   const name = file.name.toLowerCase();
   if (name.endsWith(".zip")) return true;
@@ -98,9 +171,24 @@ export async function POST(request: NextRequest) {
   const oversized = rejectOversizedRequest(request);
   if (oversized) return oversized;
 
+  // Content-Length is a fast path, not the guard. It is client-supplied and
+  // omitted entirely under chunked transfer-encoding, so relying on it alone
+  // left `formData()` free to buffer an unbounded body -- the per-part checks
+  // further down only run AFTER the whole payload is already in memory.
+  // Reading through a byte counter bounds memory before any parsing happens.
+  const capped = await readCappedBody(request);
+  if (!capped.ok) return capped.response;
+
   let form: FormData;
   try {
-    form = await request.formData();
+    form =
+      capped.body === null
+        ? await request.formData()
+        : await new Response(capped.body, {
+            headers: {
+              "content-type": request.headers.get("content-type") ?? "",
+            },
+          }).formData();
   } catch {
     return NextResponse.json(
       { error: "Request body must be multipart form data" },
