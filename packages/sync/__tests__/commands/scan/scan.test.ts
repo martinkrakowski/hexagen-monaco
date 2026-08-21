@@ -545,7 +545,11 @@ describe("scan envelope (BF-0.1) — producer side", () => {
     // scanCommand sets process.exitCode as part of its CLI behaviour. That is
     // worker-global state in vitest: leaving it non-zero makes the whole test
     // process exit as failed even when every assertion here passed.
-    const origExitCode = process.exitCode;
+    // `?? undefined` is load-bearing: @types/node types the process.exitCode
+    // GETTER as `string | number | null | undefined` but its SETTER as
+    // `string | number | undefined`, so round-tripping the raw value does not
+    // typecheck (TS2322 under typecheck:test).
+    const origExitCode = process.exitCode ?? undefined;
     console.log = (...a: unknown[]) => void out.push(a.join(" "));
     console.error = (...a: unknown[]) => void err.push(a.join(" "));
     try {
@@ -603,7 +607,11 @@ describe("scan envelope (BF-0.1) — producer side", () => {
     const out: string[] = [];
     const origLog = console.log;
     const origErr = console.error;
-    const origExitCode = process.exitCode;
+    // `?? undefined` is load-bearing: @types/node types the process.exitCode
+    // GETTER as `string | number | null | undefined` but its SETTER as
+    // `string | number | undefined`, so round-tripping the raw value does not
+    // typecheck (TS2322 under typecheck:test).
+    const origExitCode = process.exitCode ?? undefined;
     let observedExitCode: number | string | undefined;
     console.log = (...a: unknown[]) => void out.push(a.join(" "));
     console.error = () => {};
@@ -611,7 +619,7 @@ describe("scan envelope (BF-0.1) — producer side", () => {
       // Without --yes and without a TTY, scan refuses to write unratified
       // architecture files -- a real, deterministic failure path.
       await scanCommand({ root, noReport: true });
-      observedExitCode = process.exitCode;
+      observedExitCode = process.exitCode ?? undefined;
     } finally {
       console.log = origLog;
       console.error = origErr;
@@ -657,7 +665,11 @@ describe("scan envelope (BF-0.1) — producer side", () => {
     const out: string[] = [];
     const origLog = console.log;
     const origErr = console.error;
-    const origExitCode = process.exitCode;
+    // `?? undefined` is load-bearing: @types/node types the process.exitCode
+    // GETTER as `string | number | null | undefined` but its SETTER as
+    // `string | number | undefined`, so round-tripping the raw value does not
+    // typecheck (TS2322 under typecheck:test).
+    const origExitCode = process.exitCode ?? undefined;
     let observedExitCode: number | string | undefined;
     console.log = (...a: unknown[]) => void out.push(a.join(" "));
     console.error = () => {};
@@ -668,7 +680,7 @@ describe("scan envelope (BF-0.1) — producer side", () => {
       await fs.rm(layoutPath, { force: true });
       await fs.mkdir(layoutPath, { recursive: true });
       await scanCommand({ root, yes: true, noReport: true });
-      observedExitCode = process.exitCode;
+      observedExitCode = process.exitCode ?? undefined;
     } finally {
       console.log = origLog;
       console.error = origErr;
