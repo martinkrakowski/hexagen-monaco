@@ -69,11 +69,44 @@ export interface ScanEnvelopePayload {
   error: string | null;
 }
 
-function readIfPresent(filePath: string): string | null {
+/**
+ * Read an artifact this scan is required to have produced or kept.
+ *
+ * Deliberately does not catch. `layoutPath` was either just written by adopt
+ * or reported as "Kept existing", so on this path any read failure -- absence
+ * included -- is a real fault. --dry-run never reaches here; it builds its own
+ * envelope with `layout: null`, because a preview genuinely has nothing to
+ * read.
+ *
+ * An earlier revision caught every error and returned null, so the CLI exited
+ * 0 with `layout: null, error: null`: a scan reporting success while having
+ * produced nothing readable. The throw propagates to runScan's catch, which
+ * returns err() and emits the failure envelope with a real message.
+ */
+function readRequiredArtifact(filePath: string): string {
+  return readFileSync(filePath, "utf8");
+}
+
+/**
+ * Read an artifact whose ABSENCE is a legitimate outcome but whose
+ * unreadability is not.
+ *
+ * The report writer returns the path it intends to write, and a caller may
+ * inject a writer that reports a path without producing a file -- the test
+ * doubles in this suite do exactly that. So ENOENT here means "no report
+ * content", which `reportMarkdown: null` states honestly.
+ *
+ * Every OTHER errno is a genuine fault (EISDIR, EACCES, EIO) and is rethrown,
+ * because those cannot mean "there is no report" -- they mean something is
+ * wrong with reading one that should be there. This is the distinction the
+ * previous blanket catch collapsed.
+ */
+function readOptionalArtifact(filePath: string): string | null {
   try {
     return readFileSync(filePath, "utf8");
-  } catch {
-    return null;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return null;
+    throw e;
   }
 }
 
@@ -297,9 +330,11 @@ export async function runScan(
       nextSteps,
       envelope: {
         schemaVersion: CURRENT_SCHEMA_VERSION,
-        layout: readIfPresent(layoutPath),
+        layout: readRequiredArtifact(layoutPath),
         filesScanned: null,
-        reportMarkdown: markdownPath ? readIfPresent(markdownPath) : null,
+        reportMarkdown: markdownPath
+          ? readOptionalArtifact(markdownPath)
+          : null,
         error: null,
       },
     });
@@ -338,7 +373,14 @@ export async function scanCommand(options: {
         error: result.error.message,
       } satisfies ScanEnvelopePayload),
     );
-    process.exitCode = 1;
+    // 2, not 1. The web adapter's classifyScanExit treats 1 as "violations"
+    // (layout written, lint found problems) and 2 as "could not run". This
+    // branch is reached when the scan never ran at all -- refusing to write
+    // without --yes, no workspaces, an unreadable artifact -- so exiting 1
+    // told the UI the user's architecture has violations when nothing was
+    // ever checked. The envelope already says `error: <message>` here, so the
+    // exit code was also contradicting the payload beside it.
+    process.exitCode = 2;
     return;
   }
   for (const line of result.value.nextSteps) {

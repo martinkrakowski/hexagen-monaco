@@ -542,6 +542,10 @@ describe("scan envelope (BF-0.1) — producer side", () => {
     const err: string[] = [];
     const origLog = console.log;
     const origErr = console.error;
+    // scanCommand sets process.exitCode as part of its CLI behaviour. That is
+    // worker-global state in vitest: leaving it non-zero makes the whole test
+    // process exit as failed even when every assertion here passed.
+    const origExitCode = process.exitCode;
     console.log = (...a: unknown[]) => void out.push(a.join(" "));
     console.error = (...a: unknown[]) => void err.push(a.join(" "));
     try {
@@ -549,6 +553,7 @@ describe("scan envelope (BF-0.1) — producer side", () => {
     } finally {
       console.log = origLog;
       console.error = origErr;
+      process.exitCode = origExitCode;
       await fs.rm(root, { recursive: true, force: true });
     }
 
@@ -598,20 +603,87 @@ describe("scan envelope (BF-0.1) — producer side", () => {
     const out: string[] = [];
     const origLog = console.log;
     const origErr = console.error;
+    const origExitCode = process.exitCode;
+    let observedExitCode: number | string | undefined;
     console.log = (...a: unknown[]) => void out.push(a.join(" "));
     console.error = () => {};
     try {
       // Without --yes and without a TTY, scan refuses to write unratified
       // architecture files -- a real, deterministic failure path.
       await scanCommand({ root, noReport: true });
+      observedExitCode = process.exitCode;
     } finally {
       console.log = origLog;
       console.error = origErr;
+      process.exitCode = origExitCode;
       await fs.rm(root, { recursive: true, force: true });
     }
     const last = out.at(-1) ?? "";
     const parsed = JSON.parse(last) as Record<string, unknown>;
     assert.equal(parsed.schemaVersion, CURRENT_SCHEMA_VERSION);
     assert.equal(typeof parsed.error, "string");
+
+    // 2 = could-not-run, per the contract apps/web's classifyScanExit
+    // encodes. 1 would mean "layout written, lint found violations" -- so
+    // exiting 1 from a scan that never ran told the UI the user's
+    // architecture has violations, contradicting the `error` field emitted
+    // on the very same line.
+    assert.equal(
+      observedExitCode,
+      2,
+      "a scan that could not run must exit 2, not 1 (which means violations)",
+    );
+  });
+
+  it("restores process.exitCode so a failing scan does not leak into the worker", () => {
+    // Guards the harness itself. Both tests above mutate worker-global state;
+    // if either stops restoring it, a green suite can still exit non-zero.
+    assert.notEqual(
+      process.exitCode,
+      2,
+      "a previous test leaked its exit code into the worker",
+    );
+  });
+
+  it("fails loudly when a produced artifact cannot be read", async () => {
+    // The success path only reads files the scan is known to have written or
+    // kept. An earlier revision caught every read error and returned null,
+    // which produced exit 0 with `layout: null, error: null` -- a scan
+    // reporting success while having produced nothing readable.
+    //
+    // Simulated by replacing layout.yaml with a DIRECTORY: readFileSync then
+    // fails with EISDIR, which is a genuine fault rather than an absence.
+    const root = await makeRepo();
+    const out: string[] = [];
+    const origLog = console.log;
+    const origErr = console.error;
+    const origExitCode = process.exitCode;
+    let observedExitCode: number | string | undefined;
+    console.log = (...a: unknown[]) => void out.push(a.join(" "));
+    console.error = () => {};
+    try {
+      await scanCommand({ root, yes: true, noReport: true });
+      out.length = 0;
+      const layoutPath = path.join(root, ".architecture", "layout.yaml");
+      await fs.rm(layoutPath, { force: true });
+      await fs.mkdir(layoutPath, { recursive: true });
+      await scanCommand({ root, yes: true, noReport: true });
+      observedExitCode = process.exitCode;
+    } finally {
+      console.log = origLog;
+      console.error = origErr;
+      process.exitCode = origExitCode;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+
+    const last = out.at(-1) ?? "";
+    const parsed = JSON.parse(last) as Record<string, unknown>;
+    assert.equal(
+      typeof parsed.error,
+      "string",
+      "an unreadable artifact must surface as an error, not a null field",
+    );
+    assert.equal(parsed.layout, null);
+    assert.equal(observedExitCode, 2);
   });
 });
