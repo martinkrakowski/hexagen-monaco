@@ -18,7 +18,12 @@ export interface ScanLintRunner {
 }
 
 export interface ScanReportRunner {
-  (options: { cwd: string; format?: "html" | "md" | "both" }): Promise<{
+  (options: {
+    cwd: string;
+    format?: "html" | "md" | "both";
+    handoff?: boolean;
+    handoffOut?: string;
+  }): Promise<{
     markdownPath: string;
     htmlPath: string;
     handoffPath?: string;
@@ -32,6 +37,17 @@ export interface ScanOptions {
   force?: boolean;
   skipBootstrap?: boolean;
   noReport?: boolean;
+  /**
+   * Also write the Tier-A handoff zip (`hexagen-handoff.zip`).
+   *
+   * Not a second implementation: it forwards to `reportCommand`, which already
+   * owns `buildHandoffZip` and therefore owns the entry names the web ingest
+   * route matches on. Duplicating the packing here is exactly the drift that
+   * made `reportMarkdown` always null before.
+   */
+  handoff?: boolean;
+  /** Handoff zip path. Relative paths resolve against `root`. */
+  handoffOut?: string;
   /** Test / composition seam. Defaults to spawning hexagen-lint --root. */
   lint?: ScanLintRunner;
   /** Test / composition seam. Defaults to reportCommand. */
@@ -44,6 +60,13 @@ export interface ScanResult {
   wrote: boolean;
   lintExitCode: number;
   reportPaths: string[];
+  /**
+   * Absolute path of the handoff zip, present only when `--handoff` was asked
+   * for and the report actually ran. Kept OUT of `reportPaths`: that list is
+   * consumed as "the report documents" (`.md`/`.html`), and a zip in it would
+   * be read as one.
+   */
+  handoffPath?: string;
   nextSteps: string[];
   /**
    * Machine-readable summary for non-human consumers (the web scan adapter).
@@ -220,6 +243,29 @@ export async function runScan(
     const layoutPath = path.join(root, ".architecture", "layout.yaml");
     const manifestPath = path.join(root, ".architecture", "manifest.yaml");
 
+    // Contradictory-flag guards, deliberately BEFORE anything is written.
+    //
+    // The handoff zip is packed by the report writer from the report it just
+    // built, so "--handoff" without a report cannot produce one. Silently
+    // ignoring the flag would hand the user a scan that looks like it honoured
+    // it and no zip to upload; both refusals are usage errors, which is why
+    // they take the same shape as the missing-`--yes` refusal above and land
+    // on exit 2 ("could not run") rather than 1 ("violations").
+    if (options.handoff === true && options.noReport === true) {
+      return err(
+        new Error(
+          "--handoff needs the engagement report; drop --no-report (the handoff zip is packed from the report).",
+        ),
+      );
+    }
+    if (options.handoff === true && options.dryRun === true) {
+      return err(
+        new Error(
+          "--handoff writes a file, so it cannot be combined with --dry-run. Re-run with --yes to produce the handoff zip.",
+        ),
+      );
+    }
+
     if (options.dryRun === true) {
       return previewScan(root, options);
     }
@@ -285,10 +331,24 @@ export async function runScan(
     nextSteps.push(lintVerdict(lintExitCode));
 
     const reportPaths: string[] = [];
+    let handoffPath: string | undefined;
     const manifestNow = await lstatExists(manifestPath);
     if (!manifestNow.success) return manifestNow;
     if (options.noReport !== true) {
       if (!manifestNow.value) {
+        // --handoff cannot be honoured without a manifest: the zip is packed
+        // from the report, and the report needs one. Failing here rather than
+        // pushing the skip line keeps the flag honest -- otherwise a user who
+        // ran --handoff specifically to get an upload gets no zip, no error,
+        // and exit 0. Same class as the exit-code defect fixed in BF-0.1:
+        // claiming success while producing nothing.
+        if (options.handoff === true) {
+          return err(
+            new Error(
+              "Cannot write a handoff zip without .architecture/manifest.yaml — the zip is packed from the report, which needs a manifest. Omit --skip-bootstrap, or run hexagen bootstrap --yes first.",
+            ),
+          );
+        }
         nextSteps.push(
           "Skipped report — no .architecture/manifest.yaml (omit --skip-bootstrap, or run hexagen bootstrap --yes).",
         );
@@ -297,10 +357,27 @@ export async function runScan(
           const written = await (options.report ?? reportCommand)({
             cwd: root,
             format: "both",
+            handoff: options.handoff === true,
+            handoffOut: options.handoffOut,
           });
           reportPaths.push(written.markdownPath, written.htmlPath);
           nextSteps.push(`Wrote ${written.markdownPath}`);
           nextSteps.push(`Wrote ${written.htmlPath}`);
+          if (options.handoff === true) {
+            if (written.handoffPath === undefined) {
+              // Asked for, not produced. Reported as a failure rather than a
+              // missing line: a user who ran --handoff to get an upload has
+              // nothing to upload, and a scan that exits 0 here would be
+              // claiming it honoured the flag.
+              return err(
+                new Error(
+                  "Report ran but produced no handoff zip, so there is nothing to upload.",
+                ),
+              );
+            }
+            handoffPath = written.handoffPath;
+            nextSteps.push(`Wrote ${handoffPath}`);
+          }
         } catch (e) {
           return err(
             new Error(
@@ -327,6 +404,7 @@ export async function runScan(
       wrote: wroteLayout || wroteManifest,
       lintExitCode,
       reportPaths,
+      handoffPath,
       nextSteps,
       envelope: {
         schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -350,6 +428,8 @@ export async function scanCommand(options: {
   force?: boolean;
   skipBootstrap?: boolean;
   noReport?: boolean;
+  handoff?: boolean;
+  handoffOut?: string;
 }): Promise<void> {
   const result = await runScan({
     root: path.resolve(options.root ?? process.cwd()),
@@ -358,6 +438,8 @@ export async function scanCommand(options: {
     force: options.force,
     skipBootstrap: options.skipBootstrap,
     noReport: options.noReport,
+    handoff: options.handoff,
+    handoffOut: options.handoffOut,
   });
   if (!result.success) {
     console.error(`❌ ${result.error.message}`);
@@ -410,6 +492,14 @@ export const scanCommander = new Command("scan")
     "Do not run bootstrap even if .architecture/manifest.yaml is missing",
   )
   .option("--no-report", "Skip writing hexagen-report.md / hexagen-report.html")
+  .option(
+    "--handoff",
+    "Also write hexagen-handoff.zip (report + manifest + layout + baseline + ledger) for upload",
+  )
+  .option(
+    "--handoff-out <path>",
+    "Handoff zip path, relative to --root (default: <root>/hexagen-handoff.zip)",
+  )
   .action(
     async (opts: {
       root?: string;
@@ -418,6 +508,8 @@ export const scanCommander = new Command("scan")
       force?: boolean;
       skipBootstrap?: boolean;
       report?: boolean;
+      handoff?: boolean;
+      handoffOut?: string;
     }) => {
       await scanCommand({
         root: opts.root,
@@ -426,6 +518,8 @@ export const scanCommander = new Command("scan")
         force: opts.force,
         skipBootstrap: opts.skipBootstrap,
         noReport: opts.report === false,
+        handoff: opts.handoff,
+        handoffOut: opts.handoffOut,
       });
     },
   );

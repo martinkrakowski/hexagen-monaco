@@ -699,3 +699,364 @@ describe("scan envelope (BF-0.1) — producer side", () => {
     assert.equal(observedExitCode, 2);
   });
 });
+
+/**
+ * BF-0.2 — `hexagen scan --handoff`.
+ *
+ * The consumer is `apps/web/app/api/projects/scan/artifacts/route.ts`, which is
+ * already on main. It ingests the zip in-process and matches entries by
+ * BASENAME against `HANDOFF_ARTIFACT_NAMES` in
+ * `apps/web/app/lib/project-scan/artifact-parse.ts` — six names, three of them
+ * conditional on the file existing in the tree. These tests assert the produced
+ * archive against that list, so a rename on either side fails here rather than
+ * silently degrading a Tier-A upload to `verdict: "incomplete"`.
+ */
+const TIER_A_HANDOFF_ENTRIES = [
+  "hexagen-report.md",
+  "hexagen-report.html",
+  "suppression-ledger.json",
+  "manifest.yaml",
+  "layout.yaml",
+  "arch-lint-baseline.json",
+];
+
+/**
+ * Read entry names from the ZIP central directory.
+ *
+ * Deliberately not `zip.includes(Buffer.from(name))`: these are STORE-method
+ * archives, so a name can appear inside another entry's payload (the report
+ * markdown names its own files), and a substring probe would pass on an archive
+ * that contains no such entry at all. Walking the central directory also yields
+ * the entry COUNT, which is what "all 6 entries" actually means.
+ */
+function readZipEntryNames(zip: Buffer): string[] {
+  const eocd = zip.length - 22; // writeZipStore emits no archive comment.
+  assert.ok(eocd >= 0, "buffer is too short to be a zip");
+  assert.equal(
+    zip.readUInt32LE(eocd),
+    0x06054b50,
+    "zip must end with an end-of-central-directory record",
+  );
+  const total = zip.readUInt16LE(eocd + 10);
+  let offset = zip.readUInt32LE(eocd + 16);
+  const names: string[] = [];
+  for (let i = 0; i < total; i += 1) {
+    assert.equal(
+      zip.readUInt32LE(offset),
+      0x02014b50,
+      `central directory header ${i} is malformed`,
+    );
+    const nameLen = zip.readUInt16LE(offset + 28);
+    const extraLen = zip.readUInt16LE(offset + 30);
+    const commentLen = zip.readUInt16LE(offset + 32);
+    names.push(
+      zip.subarray(offset + 46, offset + 46 + nameLen).toString("utf8"),
+    );
+    offset += 46 + nameLen + extraLen + commentLen;
+  }
+  return names;
+}
+
+/**
+ * A tree where all three CONDITIONAL handoff entries exist, so the zip carries
+ * the full six. The manifest is the fixture `reportCommand`'s own suite loads,
+ * so this exercises the real report writer rather than a stub of it.
+ */
+async function makeHandoffRepo(): Promise<string> {
+  const root = await makeRepo();
+  const archDir = path.join(root, ".architecture");
+  await fs.mkdir(archDir, { recursive: true });
+  await fs.writeFile(
+    path.join(archDir, "manifest.yaml"),
+    `system: acme-billing
+scope: acme
+architecture: modular-monolith
+bounded_contexts:
+  - name: shared
+    type: shared-kernel
+    layers:
+      domain: {}
+`,
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(archDir, "layout.yaml"),
+    "contexts:\n  billing: { root: packages/billing }\n",
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(archDir, "arch-lint-baseline.json"),
+    `${JSON.stringify({ version: 1, entries: [] }, null, 2)}\n`,
+    "utf8",
+  );
+  return root;
+}
+
+describe("scan --handoff (BF-0.2)", () => {
+  it("writes a zip carrying exactly the six artifacts the ingest route matches on", async () => {
+    const root = await makeHandoffRepo();
+    try {
+      const result = await runScan({
+        root,
+        yes: true,
+        handoff: true,
+        lint: silentLint,
+      });
+      assert.equal(
+        result.success,
+        true,
+        result.success ? "" : result.error.message,
+      );
+      if (!result.success) return;
+
+      const handoffPath = result.value.handoffPath;
+      assert.ok(handoffPath, "--handoff must report the zip it wrote");
+      assert.equal(handoffPath, path.join(root, "hexagen-handoff.zip"));
+
+      const zip = await fs.readFile(handoffPath);
+      assert.equal(
+        zip.subarray(0, 2).toString("utf8"),
+        "PK",
+        "handoff must be a zip",
+      );
+      const names = readZipEntryNames(zip);
+      assert.deepEqual(
+        [...names].sort(),
+        [...TIER_A_HANDOFF_ENTRIES].sort(),
+        "entry names are the web route's contract (HANDOFF_ARTIFACT_NAMES)",
+      );
+      // Flat names: the route matches on basename, but a nested layout would
+      // mean the CLI stopped writing what `ingestHandoffFiles` (loose-file
+      // mode, which has no directories at all) can accept.
+      for (const name of names) {
+        assert.doesNotMatch(name, /[\\/]/, `${name} must be a flat entry`);
+      }
+
+      // The path is announced on stdout as a human line, so a person running
+      // the CLI knows what to upload.
+      assert.match(
+        result.value.nextSteps.join("\n"),
+        /hexagen-handoff\.zip/,
+        "next steps must name the handoff zip",
+      );
+      // ...and it stays out of reportPaths, which is read as "the report docs".
+      assert.equal(
+        result.value.reportPaths.some((p) => p.endsWith(".zip")),
+        false,
+      );
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails rather than silently skipping the zip when there is no manifest", async () => {
+    // The report is skipped without a manifest, and the zip is packed FROM
+    // the report -- so --handoff could not be honoured. Before this guard the
+    // scan pushed the ordinary "Skipped report" line and exited 0, leaving a
+    // user who ran --handoff specifically to get an upload with no zip and no
+    // error. Reproduced end-to-end against the built CLI before fixing.
+    const root = await makeRepo();
+    try {
+      const result = await runScan({
+        root,
+        yes: true,
+        handoff: true,
+        skipBootstrap: true,
+        lint: silentLint,
+      });
+      assert.equal(
+        result.success,
+        false,
+        "--handoff with no manifest must fail, not exit 0 with nothing written",
+      );
+      if (result.success) return;
+      assert.match(result.error.message, /manifest\.yaml/);
+      await assert.rejects(
+        fs.stat(path.join(root, "hexagen-handoff.zip")),
+        "no zip should exist",
+      );
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not write a handoff zip unless asked", async () => {
+    const root = await makeHandoffRepo();
+    try {
+      const result = await runScan({ root, yes: true, lint: silentLint });
+      assert.equal(
+        result.success,
+        true,
+        result.success ? "" : result.error.message,
+      );
+      if (result.success) {
+        assert.equal(result.value.handoffPath, undefined);
+      }
+      await assert.rejects(fs.stat(path.join(root, "hexagen-handoff.zip")));
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("forwards --handoff and --handoff-out to the report writer rather than packing its own zip", async () => {
+    // The zip is packed by `buildHandoffZip`, which reportCommand owns. Scan
+    // must delegate: a second packer here would own the entry names twice and
+    // drift from the route's expectations on the first change.
+    const root = await makeRepo();
+    try {
+      let seen: { handoff?: boolean; handoffOut?: string } | null = null;
+      const result = await runScan({
+        root,
+        yes: true,
+        handoff: true,
+        handoffOut: "artifacts/upload.zip",
+        lint: silentLint,
+        report: async ({ cwd, handoff, handoffOut }) => {
+          seen = { handoff, handoffOut };
+          return {
+            markdownPath: path.join(cwd, "hexagen-report.md"),
+            htmlPath: path.join(cwd, "hexagen-report.html"),
+            handoffPath: path.join(cwd, handoffOut ?? "hexagen-handoff.zip"),
+          };
+        },
+      });
+      assert.equal(
+        result.success,
+        true,
+        result.success ? "" : result.error.message,
+      );
+      assert.deepEqual(seen, {
+        handoff: true,
+        handoffOut: "artifacts/upload.zip",
+      });
+      if (result.success) {
+        assert.equal(
+          result.value.handoffPath,
+          path.join(root, "artifacts/upload.zip"),
+        );
+      }
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails when --handoff is honoured by no zip", async () => {
+    // A report writer that returns no handoffPath means the user has nothing to
+    // upload. Exiting 0 there would claim the flag was honoured.
+    const root = await makeRepo();
+    try {
+      const result = await runScan({
+        root,
+        yes: true,
+        handoff: true,
+        lint: silentLint,
+        report: async ({ cwd }) => ({
+          markdownPath: path.join(cwd, "hexagen-report.md"),
+          htmlPath: path.join(cwd, "hexagen-report.html"),
+        }),
+      });
+      assert.equal(result.success, false);
+      if (!result.success) {
+        assert.match(result.error.message, /handoff/i);
+      }
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses --handoff with --no-report, before writing anything", async () => {
+    const root = await makeRepo();
+    try {
+      const result = await runScan({
+        root,
+        yes: true,
+        handoff: true,
+        noReport: true,
+        lint: () => {
+          throw new Error("lint must not run on a rejected flag combination");
+        },
+      });
+      assert.equal(result.success, false);
+      if (!result.success) {
+        assert.match(result.error.message, /--handoff/);
+        assert.match(result.error.message, /--no-report/);
+      }
+      await assert.rejects(fs.stat(path.join(root, "hexagen-handoff.zip")));
+      await assert.rejects(
+        fs.stat(path.join(root, ".architecture", "layout.yaml")),
+      );
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses --handoff with --dry-run, before writing anything", async () => {
+    const root = await makeRepo();
+    try {
+      const result = await runScan({
+        root,
+        dryRun: true,
+        handoff: true,
+        lint: () => {
+          throw new Error("lint must not run on a rejected flag combination");
+        },
+      });
+      assert.equal(result.success, false);
+      if (!result.success) {
+        assert.match(result.error.message, /--dry-run/);
+      }
+      await assert.rejects(fs.stat(path.join(root, "hexagen-handoff.zip")));
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the envelope as the FINAL stdout line when --handoff prints an extra path", async () => {
+    // The adapter takes the LAST stdout line starting with `{`. The handoff
+    // line is human output and must therefore precede the envelope, like every
+    // other next-step.
+    const root = await makeHandoffRepo();
+    const out: string[] = [];
+    // `?? undefined` is load-bearing: @types/node types the process.exitCode
+    // GETTER as `string | number | null | undefined` but its SETTER as
+    // `string | number | undefined`, so round-tripping the raw value does not
+    // typecheck (TS2322 under typecheck:test).
+    const origExitCode = process.exitCode ?? undefined;
+    const origLog = console.log;
+    const origErr = console.error;
+    console.log = (...a: unknown[]) => void out.push(a.join(" "));
+    console.error = () => {};
+    try {
+      await scanCommand({ root, yes: true, handoff: true });
+    } finally {
+      console.log = origLog;
+      console.error = origErr;
+      process.exitCode = origExitCode;
+    }
+    try {
+      const last = out.at(-1) ?? "";
+      const parsed = JSON.parse(last) as Record<string, unknown>;
+      assert.equal(parsed.schemaVersion, CURRENT_SCHEMA_VERSION);
+      assert.equal(
+        out.some((line) => /hexagen-handoff\.zip/.test(line)),
+        true,
+        "the handoff path must be printed for the person running the CLI",
+      );
+      assert.equal(
+        last.includes("hexagen-handoff.zip"),
+        false,
+        "the handoff line must not be the last line -- the envelope is",
+      );
+      const zip = await fs.readFile(path.join(root, "hexagen-handoff.zip"));
+      assert.equal(readZipEntryNames(zip).length, 6);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("public CLI help lists --handoff and --handoff-out", () => {
+    const help = scanCommander.helpInformation();
+    assert.match(help, /--handoff\b/);
+    assert.match(help, /--handoff-out <path>/);
+  });
+});
