@@ -54,8 +54,8 @@ describe("creation-path domain", () => {
   });
 
   describe("IMPORT_SUB_OPTIONS", () => {
-    it("has exactly 3 sub-options", () => {
-      assert.strictEqual(IMPORT_SUB_OPTIONS.length, 3);
+    it("has exactly 4 sub-options", () => {
+      assert.strictEqual(IMPORT_SUB_OPTIONS.length, 4);
     });
 
     it("has unique ids", () => {
@@ -64,7 +64,12 @@ describe("creation-path domain", () => {
     });
 
     it("covers all ImportSubOptionId values", () => {
-      const expected: ImportSubOptionId[] = ["spec", "scan", "github"];
+      const expected: ImportSubOptionId[] = [
+        "spec",
+        "scan",
+        "artifacts",
+        "github",
+      ];
       const actual = IMPORT_SUB_OPTIONS.map((o) => o.id);
       assert.deepStrictEqual(actual.sort(), expected.sort());
     });
@@ -85,6 +90,13 @@ describe("creation-path domain", () => {
       }
     });
 
+    it("artifacts sub-option is coming-soon and routes through the name step", () => {
+      const artifacts = IMPORT_SUB_OPTIONS.find((o) => o.id === "artifacts");
+      assert.ok(artifacts);
+      assert.strictEqual(artifacts.status, "coming-soon");
+      assert.strictEqual(artifacts.href, "/projects/new/name?path=artifacts");
+    });
+
     it("github sub-option is marked as coming-soon", () => {
       const github = IMPORT_SUB_OPTIONS.find((o) => o.id === "github");
       assert.ok(github);
@@ -98,13 +110,35 @@ describe("creation-path domain", () => {
       assert.strictEqual(scan.href, "/projects/new/name?path=scan");
     });
 
-    it("manifest, spec, and scan sub-options are available", () => {
+    // `github` and `artifacts` are deliberately still "coming-soon": neither
+    // destination is mounted yet (`/projects/new/import/github` currently
+    // redirects, and `/projects/new/import/artifacts` does not exist until
+    // BF-3.3). Marking either available would publish a link to a redirect or
+    // a 404. Each flips to "available" in the packet that mounts its route.
+    const NOT_YET_ROUTED = new Set(["github", "artifacts"]);
+
+    it("every sub-option with a mounted route is available", () => {
       for (const option of IMPORT_SUB_OPTIONS) {
-        if (option.id === "github") continue;
+        if (NOT_YET_ROUTED.has(option.id)) continue;
         assert.strictEqual(
           option.status,
           "available",
           `${option.id} should be available`,
+        );
+      }
+    });
+
+    it("sub-options without a mounted route are marked coming-soon", () => {
+      // Guards the other direction: if a route lands and the status is not
+      // flipped, or a status is flipped before its route exists, one of these
+      // two tests fails rather than both silently agreeing.
+      for (const id of NOT_YET_ROUTED) {
+        const option = IMPORT_SUB_OPTIONS.find((o) => o.id === id);
+        assert.ok(option, `${id} should exist in IMPORT_SUB_OPTIONS`);
+        assert.strictEqual(
+          option.status,
+          "coming-soon",
+          `${id} has no mounted route yet, so it must be coming-soon`,
         );
       }
     });

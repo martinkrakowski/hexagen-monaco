@@ -13,7 +13,7 @@ export interface CreationPathOption {
 }
 
 /** Sub-option identifiers for the import creation path */
-export type ImportSubOptionId = "spec" | "scan" | "github";
+export type ImportSubOptionId = "spec" | "scan" | "artifacts" | "github";
 
 /** A selectable import sub-option under the import creation path */
 export interface ImportSubOption {
@@ -26,7 +26,10 @@ export interface ImportSubOption {
   readonly status: "available" | "coming-soon";
 }
 
-/** Pre-defined import sub-options: a unified file import (manifest or spec) and GitHub import */
+/**
+ * Pre-defined import sub-options: a unified file import (manifest or spec),
+ * zip scan, Tier-A scan-artifact upload, and GitHub import.
+ */
 export const IMPORT_SUB_OPTIONS: readonly ImportSubOption[] = [
   {
     id: "spec",
@@ -51,6 +54,21 @@ export const IMPORT_SUB_OPTIONS: readonly ImportSubOption[] = [
     href: "/projects/new/name?path=scan",
     iconName: "FolderSearch",
     status: "available",
+  },
+  {
+    id: "artifacts",
+    label: "Upload scan artifacts",
+    description:
+      "Run the scan locally with `hexagen scan --handoff` and upload only the handoff zip. Your source never leaves your machine.",
+    detail:
+      "Privacy tier A: we receive the manifest, layout, baseline, report and ledger — nothing else — and parse them in place. The path for client engagements where the repo cannot be uploaded.",
+    // Routes through the shared Project Name step, which forwards the entered
+    // name to the artifact importer via `?name=`.
+    href: "/projects/new/name?path=artifacts",
+    iconName: "Braces",
+    // Coming-soon until BF-3.3 mounts /projects/new/import/artifacts. Marking
+    // it available now would publish a link to a route that does not exist.
+    status: "coming-soon",
   },
   {
     id: "github",

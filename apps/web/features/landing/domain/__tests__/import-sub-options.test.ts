@@ -7,15 +7,16 @@ import {
 
 // The previously-separate "manifest" and "spec" options are consolidated into a
 // single "Import Manifest or Spec" option (the importer auto-detects which on
-// upload); zip scan is available; GitHub remains a coming-soon future feature.
+// upload); zip scan is available; the Tier-A scan-artifact upload and GitHub
+// are coming-soon (BF-3.3 and BF-5.3 respectively mount their routes).
 
-test("IMPORT_SUB_OPTIONS has 3 entries (unified import + scan + github)", () => {
-  assert.equal(IMPORT_SUB_OPTIONS.length, 3);
+test("IMPORT_SUB_OPTIONS has 4 entries (unified import + scan + artifacts + github)", () => {
+  assert.equal(IMPORT_SUB_OPTIONS.length, 4);
 });
 
-test("IDs are 'spec', 'scan', and 'github'", () => {
+test("IDs are 'spec', 'scan', 'artifacts', and 'github'", () => {
   const ids = IMPORT_SUB_OPTIONS.map((o) => o.id);
-  assert.deepEqual(ids, ["spec", "scan", "github"]);
+  assert.deepEqual(ids, ["spec", "scan", "artifacts", "github"]);
 });
 
 test("the unified import option ('spec') is available", () => {
@@ -28,6 +29,13 @@ test("scan is available", () => {
   const scan = IMPORT_SUB_OPTIONS.find((o) => o.id === "scan");
   assert.ok(scan);
   assert.equal(scan.status, "available");
+});
+
+test("the Tier-A artifacts option is coming soon until BF-3.3 mounts its route", () => {
+  const artifacts = IMPORT_SUB_OPTIONS.find((o) => o.id === "artifacts");
+  assert.ok(artifacts);
+  assert.equal(artifacts.status, "coming-soon");
+  assert.equal(artifacts.href, "/projects/new/name?path=artifacts");
 });
 
 test("github is not available (coming soon)", () => {
@@ -66,7 +74,7 @@ test("github href is '/projects/new/import/github'", () => {
   assert.equal(github.href, "/projects/new/import/github");
 });
 
-test("ImportSubOptionId type allows the three values (compile-time check)", () => {
-  const ids: ImportSubOptionId[] = ["spec", "scan", "github"];
-  assert.equal(ids.length, 3);
+test("ImportSubOptionId type allows the four values (compile-time check)", () => {
+  const ids: ImportSubOptionId[] = ["spec", "scan", "artifacts", "github"];
+  assert.equal(ids.length, 4);
 });
