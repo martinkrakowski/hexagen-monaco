@@ -5,7 +5,7 @@
 # Reads its blocklist from scripts/firewall-blocklist.yaml (single source
 # shared with Layer 2 ESLint rules).
 #
-# Scope: packages/ui/src + apps/web/{app,features}
+# Scope: packages/ui/src + apps/web/{app,features,components/primitives}
 #
 # Usage: Run in CI as part of the merge gate.
 # Exit code: 0 if compliant, 1 if any violations found.
@@ -18,6 +18,14 @@ BLOCKLIST="$SCRIPT_DIR/firewall-blocklist.yaml"
 UI_SRC="$ROOT_DIR/packages/ui/src"
 WEB_APP="$ROOT_DIR/apps/web/app"
 WEB_FEATURES="$ROOT_DIR/apps/web/features"
+# BF-2.0 — the presentation-only primitives home in apps/web. It is a SECOND
+# root for check 3 (semantic-state tokens in prop definitions), which walked
+# packages/ui/src alone. Scoped to `primitives/` and NOT to all of
+# `components/`: DESIGN.md's ownership table puts error handling IN boundary
+# components, so `components/ErrorBoundary.tsx` legitimately declares
+# `error: Error | null` and a blanket `components/` scan would report it as a
+# violation. `primitives/` is presentation-only by construction.
+WEB_PRIMITIVES="$ROOT_DIR/apps/web/components/primitives"
 
 if ! command -v yq &>/dev/null; then
   echo "⚠️  yq not found — using fallback awk-based parsing"
@@ -127,15 +135,74 @@ if grep -rqE "(from ['\"].*features/|import.*from.*features)" "$UI_SRC" 2>/dev/n
 fi
 
 # Check 3: No semantic state tokens in UI prop definitions (ERROR, not warning)
+#
+# Two roots, not one. `packages/ui/src` was the only one until BF-2.0, which
+# left `apps/web/components/` outside BOTH firewall layers — the `hexagen-ui`
+# ESLint plugin is wired for `app/**` and `features/**` only, and this check
+# walked packages/ui alone. `apps/web/components/primitives` is the
+# presentation-only home the brownfield arc puts new primitives in, so it is
+# held to the same prop contract as packages/ui.
+#
+# The roots are ANNOUNCED below rather than scanned silently: a check that
+# walks a directory which has since been renamed away would otherwise print a
+# green tick over zero files.
+PROP_TOKEN_ROOTS=("$UI_SRC")
+if [ -d "$WEB_PRIMITIVES" ]; then
+  PROP_TOKEN_ROOTS+=("$WEB_PRIMITIVES")
+fi
+
 echo ""
 echo "Checking for semantic state tokens in UI source..."
+for _root in "${PROP_TOKEN_ROOTS[@]}"; do
+  echo "  (root: ${_root#"$ROOT_DIR"/})"
+done
+if [ ! -d "$WEB_PRIMITIVES" ]; then
+  echo "  ⚠️  ${WEB_PRIMITIVES#"$ROOT_DIR"/} not found — that root was NOT scanned."
+fi
 while IFS= read -r token; do
-  if grep -rqE "(interface|type).*\\b${token}\\b" "$UI_SRC" 2>/dev/null; then
-    echo "  ❌ Found forbidden token '${token}' in type/interface definition"
-    grep -rnE "(interface|type).*\\b${token}\\b" "$UI_SRC" 2>/dev/null | while read -r line; do
-      echo "     → $line"
-    done
-    VIOLATIONS=$((VIOLATIONS + 1))
+  for _root in "${PROP_TOKEN_ROOTS[@]}"; do
+    if grep -rqE "(interface|type).*\\b${token}\\b" "$_root" 2>/dev/null; then
+      echo "  ❌ Found forbidden token '${token}' in type/interface definition"
+      grep -rnE "(interface|type).*\\b${token}\\b" "$_root" 2>/dev/null | while read -r line; do
+        echo "     → $line"
+      done
+      VIOLATIONS=$((VIOLATIONS + 1))
+    fi
+  done
+
+  # Second predicate, primitives root only. `grep` is LINE-scoped, so the
+  # predicate above only sees a forbidden name that shares a line with the
+  # `interface`/`type` keyword — i.e. the single-line form
+  # `type FooProps = { status: string }`. The dominant TypeScript spelling
+  #
+  #   interface FooProps {
+  #     status: string;
+  #   }
+  #
+  # puts the keyword and the name on different lines and sails straight
+  # through (measured against a fixture: 0 findings). This pass matches the
+  # PROPERTY DECLARATION itself, so both spellings are caught.
+  #
+  # It is deliberately NOT applied to packages/ui/src. That root has exactly
+  # one hit — `packages/ui/src/types/forbidden-brand.ts`, the module that
+  # DEFINES the brand and therefore has to name all eleven tokens (it already
+  # carries a by-name exemption in check 8). Turning this on there means
+  # adding a second exemption list for a root that is already covered by the
+  # NoSemanticState brand check, which is a separate change with its own
+  # review. `primitives/` is new and empty, so the stronger predicate costs
+  # nothing there and starts with no baseline to grandfather.
+  if [ -d "$WEB_PRIMITIVES" ]; then
+    if grep -rqE "^[[:space:]]*(readonly[[:space:]]+)?${token}\\??[[:space:]]*:" \
+      --include='*.ts' --include='*.tsx' "$WEB_PRIMITIVES" 2>/dev/null; then
+      echo "  ❌ Found forbidden prop '${token}' declared in a primitive"
+      grep -rnE "^[[:space:]]*(readonly[[:space:]]+)?${token}\\??[[:space:]]*:" \
+        --include='*.ts' --include='*.tsx' "$WEB_PRIMITIVES" 2>/dev/null | while read -r line; do
+        echo "     → $line"
+      done
+      echo "     components/primitives/ is presentation-only. Model interaction"
+      echo "     state (isExpanded, variant, onAction), not information state."
+      VIOLATIONS=$((VIOLATIONS + 1))
+    fi
   fi
 done < <(parse_yaml_list "forbidden_prop_names")
 

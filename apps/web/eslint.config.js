@@ -294,6 +294,72 @@ export default [
     },
   },
   {
+    // BF-2.0 — `components/primitives/` is the home for presentation-only
+    // primitives (EntityDataGrid, ChoiceCardGroup, EmptyState/CountPills).
+    //
+    // `apps/web/components/` sat outside BOTH enforcement layers: the
+    // `hexagen-ui` plugin was wired for `app/**` and `features/**` only, and
+    // check 3 of scripts/validate-ui-boundary.sh walked `packages/ui/src`
+    // alone. The gap was live, not theoretical —
+    // `components/chat/ChatMessageList.tsx` has carried two `w-[85%]`
+    // arbitrary values that DESIGN.md §4.8 forbids and no gate ever flagged.
+    //
+    // Fenced on the DIRECTORY rather than a file list, so a primitive added
+    // by a later packet inherits the rules instead of quietly escaping them.
+    // It lives in the shipped lint config rather than a test because a lint
+    // rule cannot be satisfied by deleting an assertion.
+    //
+    // SCOPED TO `primitives/`, NOT ALL OF `components/` — deliberately.
+    // `no-information-state` (and its Layer-3 twin, check 3 of
+    // validate-ui-boundary.sh) forbids `error`/`status`/`data`, while
+    // DESIGN.md's own ownership table puts error handling IN boundary
+    // components: `components/ErrorBoundary.tsx` legitimately declares
+    // `error: Error | null`. `primitives/` is presentation-only by
+    // construction; `components/` at large is not. Do not widen this.
+    files: ["components/primitives/**/*.{ts,tsx}"],
+    plugins: {
+      "hexagen-ui": hexagenUi,
+    },
+    rules: {
+      "hexagen-ui/no-arbitrary-tailwind-values": "error",
+      "hexagen-ui/rhf-stable-array-keys": "error",
+      "hexagen-ui/no-children-wrapper-type-swap": "error",
+      // Layer 2 of the information-state firewall, reading the same name list
+      // (scripts/firewall-blocklist.yaml `forbidden_prop_names`) that check 3
+      // of validate-ui-boundary.sh reads. The two are complements, not
+      // substitutes: this rule sees JSX ATTRIBUTES (`<Foo status={…} />`), the
+      // shell check sees TYPE DECLARATIONS (`interface FooProps { status }`).
+      // This packet turns both on for the same directory.
+      "hexagen-ui/no-information-state": "error",
+      // `hexagen-ui/no-feature-slice-imports` is DELIBERATELY absent, even
+      // though the `features/**` block above carries it: the rule
+      // early-returns for any file outside `features/` (`parseFeaturesPath`
+      // returns null), so wiring it here would be an inert rule that reads as
+      // coverage. Check 7 of scripts/validate-ui-boundary.sh is the live
+      // enforcement for this directory — `components` is one of its
+      // NEUTRAL_HOME_DIRS, so a primitive importing a slice already fails CI.
+      //
+      // Flat config REPLACES (does not merge) a rule's options, and no other
+      // block matches `components/**`, so the app-wide `@hexagen/local-llm`
+      // ACL has to be spelled out here or this directory is exempt from
+      // ADR-0021.
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@hexagen/local-llm",
+              importNames: ["LLMMessage", "LocalLLMProviderPort"],
+              allowTypeImports: true,
+              message:
+                'LLMMessage and LocalLLMProviderPort are @internal. Use SendStructuredRequestPort, ModelLifecyclePort, or LLMRequest["messages"] instead. See ADR 0021.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["app/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
