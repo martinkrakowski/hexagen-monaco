@@ -161,9 +161,14 @@ if [ ! -d "$WEB_PRIMITIVES" ]; then
 fi
 while IFS= read -r token; do
   for _root in "${PROP_TOKEN_ROOTS[@]}"; do
-    if grep -rqE "(interface|type).*\\b${token}\\b" "$_root" 2>/dev/null; then
+    # --include mirrors the second predicate below. Without it this walks every
+    # file type, so a future .css/.mdx/.snap under a scanned root could match a
+    # token and fail CI on a file that has no prop declarations at all.
+    if grep -rqE "(interface|type).*\\b${token}\\b" \
+      --include='*.ts' --include='*.tsx' "$_root" 2>/dev/null; then
       echo "  ❌ Found forbidden token '${token}' in type/interface definition"
-      grep -rnE "(interface|type).*\\b${token}\\b" "$_root" 2>/dev/null | while read -r line; do
+      grep -rnE "(interface|type).*\\b${token}\\b" \
+        --include='*.ts' --include='*.tsx' "$_root" 2>/dev/null | while read -r line; do
         echo "     → $line"
       done
       VIOLATIONS=$((VIOLATIONS + 1))
