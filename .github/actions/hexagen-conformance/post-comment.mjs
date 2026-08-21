@@ -14,7 +14,7 @@
  *
  * Provenance: vendored verbatim from Hexagen-Monaco's
  * `HEXAGEN_CONFORMANCE_COMMENT_SCRIPT`
- * (`packages/project-generation/src/domain/sync-integrity-workflow.ts`).
+ * (`packages/project-generation/src/domain/conformance-gate-files.ts`).
  * Upstream a test asserts the two copies stay byte-identical, so edit both or
  * neither; a local edit here is overwritten on the next sync.
  */
