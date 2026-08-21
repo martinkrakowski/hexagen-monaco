@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import JSZip from "jszip";
 import {
+  DuplicateZipEntryError,
   EmptyZipError,
   InvalidZipError,
   ZipResourceLimitError,
@@ -153,6 +154,74 @@ describe("unpackZipToDir", () => {
           err instanceof ZipResourceLimitError &&
           err.limit === "uncompressed-bytes",
       );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects duplicate normalized entry names without writing any files", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "hexagen-scan-dup-"));
+    try {
+      const zip = new JSZip();
+      zip.file("a.txt", "first");
+      zip.file("a.txt/", "second"); // directory entry with same normalized name
+      const buf = Buffer.from(await zip.generateAsync({ type: "uint8array" }));
+      const limits = { ...tight, maxEntries: 10 };
+      await assert.rejects(
+        () => unpackZipToDir(buf, dir, limits),
+        (err: unknown) => err instanceof DuplicateZipEntryError,
+      );
+      await assert.rejects(() => readFile(path.join(dir, "a.txt")));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("aborts an inflation bomb mid-stream instead of buffering it whole", async () => {
+    // This asserts the STREAMING guarantee, not merely that an oversized entry
+    // is rejected. Asserting only that the call throws would pass against the
+    // previous post-inflation implementation too -- it threw the identical
+    // error, just after materialising the entire entry in memory. The
+    // distinguishing evidence is how many bytes were read before the abort.
+    const dir = await mkdtemp(path.join(tmpdir(), "hexagen-scan-bomb-"));
+    try {
+      const maxEntryBytes = 1024; // 1 KiB cap
+      const inflatedSize = 5 * 1024 * 1024; // 5 MiB of highly compressible data
+      const limits = { ...tight, maxEntryBytes };
+      const zip = new JSZip();
+      zip.file("bomb.txt", "x".repeat(inflatedSize));
+      const buf = Buffer.from(await zip.generateAsync({ type: "uint8array" }));
+
+      let caught: ZipResourceLimitError | undefined;
+      await assert.rejects(
+        () => unpackZipToDir(buf, dir, limits),
+        (err: unknown) => {
+          assert.ok(err instanceof ZipResourceLimitError);
+          assert.equal(err.limit, "entry-bytes");
+          caught = err;
+          return true;
+        },
+      );
+
+      // The abort must happen after the cap is crossed but long before the full
+      // 5 MiB is read. A generous 1 MiB ceiling keeps this robust to whatever
+      // chunk size the zip stream happens to use, while still being ~5x below
+      // the payload -- so a regression to full buffering fails loudly.
+      assert.ok(
+        caught?.bytesRead !== undefined,
+        "bytesRead must be reported so the streaming guarantee is observable",
+      );
+      assert.ok(
+        caught.bytesRead > maxEntryBytes,
+        "abort should trigger only after the cap is crossed",
+      );
+      assert.ok(
+        caught.bytesRead < 1024 * 1024,
+        `expected an early abort, but ${caught.bytesRead} bytes were read of ${inflatedSize}`,
+      );
+
+      // Nothing may reach disk.
+      await assert.rejects(() => readFile(path.join(dir, "bomb.txt")));
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

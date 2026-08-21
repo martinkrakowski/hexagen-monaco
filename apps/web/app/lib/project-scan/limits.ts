@@ -24,3 +24,8 @@ export const MAX_SCAN_UNCOMPRESSED_BYTES = 256 * 1024 * 1024;
 export const MAX_SCAN_LAYOUT_EXCERPT_CHARS = 8_000;
 export const MAX_SCAN_REPORT_CHARS = 32_000;
 export const MAX_SCAN_ERROR_CHARS = 8_000;
+
+/** Tier-A unpack limits for small, trusted uploads (distinct from 256 MiB scan profile) */
+export const TIER_A_MAX_ZIP_ENTRIES = 8;
+export const TIER_A_MAX_ENTRY_UNCOMPRESSED_BYTES = 1024 * 1024; // 1 MiB
+export const TIER_A_MAX_UNCOMPRESSED_BYTES = 4 * 1024 * 1024; // 4 MiB
