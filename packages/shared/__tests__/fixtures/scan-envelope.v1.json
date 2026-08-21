@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0.0",
+  "layout": {
+    "type": "hexagonal-grid",
+    "dimensions": { "width": 12, "height": 8 }
+  },
+  "filesScanned": 128,
+  "reportMarkdown": "# Baseline Scan Report\n\nScanned 128 files, 0 issues found.",
+  "error": null
+}
