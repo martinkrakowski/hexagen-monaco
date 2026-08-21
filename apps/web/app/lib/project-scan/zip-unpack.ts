@@ -201,10 +201,11 @@ export async function unpackZipToDir(
     try {
       await pipeline(stream, async (source) => {
         for await (const chunk of source) {
-          const chunkSize = Buffer.isBuffer(chunk)
-            ? chunk.length
-            : Buffer.from(chunk).length;
-          entryBytes += chunkSize;
+          // Normalize once. Converting separately for the length check and
+          // again for storage doubles the copy on every non-Buffer chunk, on
+          // a path that by definition processes attacker-supplied input.
+          const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          entryBytes += buf.length;
           if (entryBytes > limits.maxEntryBytes) {
             throw new ZipResourceLimitError(
               "entry-bytes",
@@ -212,7 +213,7 @@ export async function unpackZipToDir(
               entryBytes,
             );
           }
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          chunks.push(buf);
         }
       });
     } catch (err) {

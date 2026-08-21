@@ -16,6 +16,7 @@ import type { ProjectScanResponse } from "./types";
 import {
   DEFAULT_ZIP_UNPACK_LIMITS,
   EmptyZipError,
+  DuplicateZipEntryError,
   InvalidZipError,
   ZipResourceLimitError,
   ZipSlipError,
@@ -23,7 +24,13 @@ import {
   type ZipUnpackLimits,
 } from "./zip-unpack";
 
-export { ZipSlipError, EmptyZipError, InvalidZipError, ZipResourceLimitError };
+export {
+  ZipSlipError,
+  EmptyZipError,
+  InvalidZipError,
+  ZipResourceLimitError,
+  DuplicateZipEntryError,
+};
 
 /**
  * Unpack a zip to a temp dir and spawn `hexagen scan --yes --root <tmp>` via
@@ -65,7 +72,11 @@ export type ScanZipOutcome =
   | { kind: "scanned"; result: ProjectScanResponse }
   | {
       kind: "rejected";
-      reason: "zip-slip" | "invalid-zip" | "zip-too-large";
+      reason:
+        | "zip-slip"
+        | "invalid-zip"
+        | "zip-too-large"
+        | "duplicate-zip-entry";
       message: string;
     };
 
@@ -226,6 +237,17 @@ export class CliHexagenScanAdapter {
           return {
             kind: "rejected",
             reason: "zip-slip",
+            message: error.message,
+          };
+        }
+        if (error instanceof DuplicateZipEntryError) {
+          // Explicitly rejected, not "could not run". A duplicate normalized
+          // entry name is a crafted archive attempting to overwrite an earlier
+          // entry -- surfacing it as a transient scan failure (HTTP 200
+          // could-not-run) would hide a deliberate attack behind a shrug.
+          return {
+            kind: "rejected",
+            reason: "duplicate-zip-entry",
             message: error.message,
           };
         }

@@ -146,6 +146,28 @@ describe("CliHexagenScanAdapter", () => {
     assert.equal(outcome.reason, "zip-slip");
   });
 
+  it("rejects a duplicate-entry zip explicitly, not as could-not-run", async () => {
+    // A duplicate normalized entry name is a crafted archive trying to
+    // overwrite an earlier entry. It must reach the route as kind:"rejected"
+    // (HTTP 400), not kind:"scanned"/could-not-run (HTTP 200) -- otherwise a
+    // deliberate attack is reported as a transient scan failure.
+    let spawned = false;
+    const zip = new JSZip();
+    zip.file("a.txt", "first");
+    zip.file("a.txt/", "second");
+    const buf = Buffer.from(await zip.generateAsync({ type: "uint8array" }));
+    const inst = adapter(async () => {
+      spawned = true;
+      return { stdout: "", stderr: "" };
+    });
+
+    const outcome = await inst.scanZip({ zip: buf, projectName: "Demo" });
+    assert.equal(spawned, false);
+    assert.equal(outcome.kind, "rejected");
+    if (outcome.kind !== "rejected") return;
+    assert.equal(outcome.reason, "duplicate-zip-entry");
+  });
+
   it("surfaces an empty zip as could-not-run without spawning", async () => {
     let spawned = false;
     const zip = await zipBuffer({});
