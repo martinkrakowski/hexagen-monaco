@@ -5,21 +5,55 @@
  * when the PR has gone clean so a stale list does not linger.
  *
  * Marker: `<!-- hexagen-conformance -->`
+ *
+ * The posted body is the linter's own report followed by a "Review in
+ * Hexagen-Monaco" deep link prefilled with `?repo=<owner/repo>&pr=<number>`.
+ * The link is appended (never substituted) and only on the code paths that
+ * already post, so a clean PR still leaves no comment. `HEXAGEN_APP_URL`
+ * overrides the host; an unparseable value costs the link, not the comment.
+ *
+ * Provenance: vendored verbatim from Hexagen-Monaco's
+ * `HEXAGEN_CONFORMANCE_COMMENT_SCRIPT`
+ * (`packages/project-generation/src/domain/sync-integrity-workflow.ts`).
+ * Upstream a test asserts the two copies stay byte-identical, so edit both or
+ * neither; a local edit here is overwritten on the next sync.
  */
 import { readFileSync } from "node:fs";
 
 const MARKER = "<!-- hexagen-conformance -->";
+const DEFAULT_APP_URL = "https://hexagen-monaco.cloud";
+const REVIEW_PATH = "/projects/new/import/github";
 
 const token = process.env.GITHUB_TOKEN ?? "";
 const repo = process.env.GH_REPO ?? "";
 const pr = process.env.PR_NUMBER ?? "";
 const file = process.env.COMMENT_FILE ?? "";
+const appUrl = process.env.HEXAGEN_APP_URL?.trim() || DEFAULT_APP_URL;
 
 if (!token || !repo || !pr) {
   process.stderr.write(
     "hexagen-conformance: missing GITHUB_TOKEN / GH_REPO / PR_NUMBER — skipping comment\n",
   );
   process.exit(0);
+}
+
+/**
+ * The trailing "Review in Hexagen-Monaco" link. `searchParams` percent-encodes
+ * the `owner/repo` slash, so the prefill survives the round trip.
+ */
+function reviewFooter() {
+  let url;
+  try {
+    url = new URL(REVIEW_PATH, appUrl);
+  } catch {
+    process.stderr.write(
+      `hexagen-conformance: ignoring unparseable HEXAGEN_APP_URL (${appUrl})\n`,
+    );
+    return "";
+  }
+  url.searchParams.set("repo", repo);
+  url.searchParams.set("pr", pr);
+  return `\n\n---\n\n[Review in Hexagen-Monaco](${url.toString()})\n`;
 }
 
 let body = "";
@@ -78,6 +112,10 @@ if (!body.trim()) {
   }
   process.exit(0);
 }
+
+// Past the silence gate: this PR has new violations, so the comment is going
+// out either way and the deep link rides along with it.
+body += reviewFooter();
 
 if (existing) {
   const res = await fetch(`${api}/issues/comments/${existing.id}`, {
