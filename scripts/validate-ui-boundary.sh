@@ -164,10 +164,17 @@ while IFS= read -r token; do
     # --include mirrors the second predicate below. Without it this walks every
     # file type, so a future .css/.mdx/.snap under a scanned root could match a
     # token and fail CI on a file that has no prop declarations at all.
-    if grep -rqE "(interface|type).*\\b${token}\\b" \
+    # ANCHORED to a real declaration, mirroring check 8's pattern at the
+    # bottom of this file. The unanchored form matched ANY line containing
+    # the word "type" plus a forbidden token, so ordinary JSX --
+    # `<input type="radio" data-testid="x" />` -- failed CI as a "forbidden
+    # token in type/interface definition". Harmless while this scanned only
+    # packages/ui/src; a live landmine once BF-2.0 pointed it at
+    # components/primitives, where exactly that markup lives.
+    if grep -rqE "^[[:space:]]*((export|default|declare)[[:space:]]+)*(interface|type)[[:space:]].*\\b${token}\\b" \
       --include='*.ts' --include='*.tsx' "$_root" 2>/dev/null; then
       echo "  ❌ Found forbidden token '${token}' in type/interface definition"
-      grep -rnE "(interface|type).*\\b${token}\\b" \
+      grep -rnE "^[[:space:]]*((export|default|declare)[[:space:]]+)*(interface|type)[[:space:]].*\\b${token}\\b" \
         --include='*.ts' --include='*.tsx' "$_root" 2>/dev/null | while read -r line; do
         echo "     → $line"
       done
