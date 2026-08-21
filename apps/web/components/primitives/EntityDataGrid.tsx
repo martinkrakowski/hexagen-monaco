@@ -272,13 +272,29 @@ export function EntityDataGrid<TRow>({
     [isControlled, onExpandedChange],
   );
 
+  const captionId = useId();
   const isExpandable = typeof renderExpandedRow === "function";
-  const columnCount = columns.length + (isExpandable ? 1 : 0);
+  // Clamped to >= 1. colSpan={0} is invalid HTML (the attribute's minimum is
+  // 1), and columns.length can legitimately be 0 for a caller that renders an
+  // empty grid before its columns are known -- which is exactly when the
+  // empty-state row below needs a valid colSpan.
+  const columnCount = Math.max(1, columns.length + (isExpandable ? 1 : 0));
 
   return (
     <div className={joinClasses("w-full", className)}>
-      <table role="table" className={gridVariants()}>
+      {/* aria-labelledby is belt-and-braces alongside the <caption>. A table's
+          accessible name normally comes from its caption, but this grid flips
+          the table's `display` below md, and changing display is what strips
+          table semantics in the first place -- so the implicit caption->name
+          association is exactly the thing not to depend on at that breakpoint.
+          Naming the table explicitly makes it hold at every width. */}
+      <table
+        role="table"
+        aria-labelledby={captionId}
+        className={gridVariants()}
+      >
         <caption
+          id={captionId}
           role="caption"
           className={captionVariants({ appearance: captionAppearance })}
         >

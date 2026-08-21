@@ -327,4 +327,30 @@ describe("EntityDataGrid", () => {
     expect(rows[0]?.getAttribute("class")?.includes("bg-card")).toBe(true);
     expect(rows[1]?.getAttribute("class")?.includes("bg-warning/10")).toBe(true);
   });
+
+  it("names the table explicitly, so the name survives the display flip", () => {
+    // The <caption> alone normally names a table, but this grid changes the
+    // table's `display` below md -- and changing display is precisely what
+    // strips table semantics. aria-labelledby makes the name independent of
+    // that association.
+    const { container } = renderGrid();
+    const table = container.querySelector("table");
+    const labelledBy = table?.getAttribute("aria-labelledby");
+    expect(labelledBy).toBeTruthy();
+    const caption = container.querySelector("caption");
+    expect(caption?.getAttribute("id")).toBe(labelledBy);
+    expect(caption?.textContent ?? "").not.toBe("");
+  });
+
+  it("never emits colSpan=0, even with no columns", () => {
+    // colSpan={0} is invalid HTML -- the attribute's minimum is 1 -- and
+    // columns.length can be 0 for a caller rendering an empty grid before its
+    // columns are known, which is exactly when the empty row needs a colSpan.
+    const { container } = renderGrid({ rows: [], columns: [] });
+    const spans = Array.from(container.querySelectorAll("[colspan]")).map((el) =>
+      Number(el.getAttribute("colspan")),
+    );
+    expect(spans.length).toBeGreaterThan(0);
+    for (const span of spans) expect(span).toBeGreaterThanOrEqual(1);
+  });
 });
