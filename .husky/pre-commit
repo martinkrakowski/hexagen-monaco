@@ -33,3 +33,21 @@ else
     yarn lint:arch -- --staged --ratchet || exit 1
   fi
 fi
+
+# UI boundary check (BF-1.0). Cross-slice imports between apps/web/features
+# slices are fatal in CI and both baselines in the script are shrink-only, but
+# until now nothing ran this locally -- a violation only surfaced after push.
+#
+# Gated on staged paths rather than run unconditionally: the script does a
+# full-tree scan and takes ~5.6s, which is too slow for every commit but fine
+# for the commits that can actually break it.
+#
+# The script itself is deliberately NOT modified to "know" about staging. It
+# reads the working tree, and that is what makes it correct in CI, where
+# nothing is ever staged. Teaching it to skip when the index is empty would
+# make it exit 0 on every CI run -- silently disabling the firewall it exists
+# to enforce. The decision about WHEN to run belongs here, in the caller.
+if [ -n "$staged_files" ] && printf '%s\n' "$staged_files" | grep -qE '^apps/web/(features|app)/'; then
+  echo "Staged files touch apps/web/{features,app} -- running UI boundary check..."
+  scripts/validate-ui-boundary.sh || exit 1
+fi
