@@ -28,10 +28,12 @@ Workers **stage but never commit**, so their branch ref still points at `main`.
 
 ```bash
 # WRONG — the branch has no commit, so this silently gives you main's copy
-git checkout <worker-branch> -- path/to/file
+git checkout worktree-agent-abc123 -- apps/web/components/primitives/Foo.tsx
 
 # RIGHT — copy from the worktree's working directory
-cp "$WORKTREE/path/to/file" path/to/file
+WORKTREE=.claude/worktrees/agent-abc123
+cp "$WORKTREE/apps/web/components/primitives/Foo.tsx" \
+   apps/web/components/primitives/Foo.tsx
 ```
 
 Also: **never** pass several paths to one `git checkout <ref> -- a b c`. A
@@ -42,14 +44,22 @@ are still testing the old file. Split it, or use `cp`.
 
 Run these from the **main checkout**, per packet:
 
+Real commands, not templates — `<pkg>` placeholders would be shell input
+redirection and fail on paste. Substitute the workspace and directory you
+actually touched:
+
 ```bash
 bash scripts/validate-ui-boundary.sh
 yarn --cwd apps/web typecheck
-cd apps/web && npx eslint <touched dirs> --ext .ts,.tsx
-cd apps/web && yarn vitest run <touched dirs>      # MUST be from the apps/web cwd
-yarn workspace @hexagen/<pkg> test
-yarn workspace @hexagen/<pkg> typecheck
-yarn workspace @hexagen/<pkg> typecheck:test       # <-- separate turbo task
+
+# apps/web packets (swap components/primitives for the dir you touched)
+cd apps/web && npx eslint components/primitives --ext .ts,.tsx
+cd apps/web && yarn vitest run components/primitives   # MUST be from apps/web
+
+# workspace packets (swap @hexagen/sync for yours)
+yarn workspace @hexagen/sync test
+yarn workspace @hexagen/sync typecheck
+yarn workspace @hexagen/sync typecheck:test            # separate turbo task
 ```
 
 ### `typecheck:test` is not `typecheck`
@@ -72,10 +82,12 @@ branch. Symptom: a test fails asserting behaviour whose source is plainly
 correct in front of you.
 
 ```bash
-# Confirm before debugging the code — compare source against built output
-grep -n "<symbol>" packages/shared/src/...
-grep -rn "<symbol>" packages/shared/dist/
-yarn turbo build --filter=@hexagen/<pkg> --force
+# Confirm before debugging the code — compare source against built output.
+# This exact case cost time twice: filesScanned gained .nullable() in source
+# while dist still carried main's version.
+grep -n "filesScanned" packages/shared/src/types/scan-envelope.ts
+grep -rn "filesScanned" packages/shared/dist/
+yarn turbo build --filter=@hexagen/shared --force
 ```
 
 This cost time twice. Check it _first_ whenever a schema/contract assertion
