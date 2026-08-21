@@ -320,3 +320,25 @@ describe("BrownfieldFlowStateMachine", () => {
     });
   });
 });
+
+describe("findings_review is skipped only on an explicit zero", () => {
+  // Malformed upstream data must not silently bypass a ratification step the
+  // user is meant to see. Showing an extra screen is benign; skipping one is not.
+  const skipCases: Array<[string, number, string]> = [
+    ["exactly zero skips", 0, "report"],
+    ["a positive count reviews", 7, "findings_review"],
+    ["a negative count still reviews", -1, "findings_review"],
+    ["NaN still reviews", Number.NaN, "findings_review"],
+  ];
+
+  for (const [name, count, expected] of skipCases) {
+    it(name, () => {
+      expect(
+        transitionState("manifest_ratify", {
+          type: "RATIFY_MANIFEST",
+          freshFindingCount: count,
+        }),
+      ).toBe(expected);
+    });
+  }
+});

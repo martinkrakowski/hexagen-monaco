@@ -161,7 +161,12 @@ function candidateFor(
     case "RATIFY_LAYOUT":
       return "manifest_ratify";
     case "RATIFY_MANIFEST":
-      return event.freshFindingCount > 0 ? "findings_review" : "report";
+      // Skip the review screen ONLY on an explicit zero. `> 0` would also skip
+      // it for a negative or NaN count -- i.e. malformed upstream data would
+      // silently bypass a ratification step the user is meant to see. The
+      // fail-safe direction is the opposite: show the screen unless we are
+      // certain there is nothing to show.
+      return event.freshFindingCount === 0 ? "report" : "findings_review";
     case "RATIFY_FINDINGS":
       return "report";
     case "INSTALL_GATE":
