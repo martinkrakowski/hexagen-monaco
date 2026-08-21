@@ -55,6 +55,22 @@ export type {
   ProjectWorkspacePort,
 } from "./application/ports/out/project-workspace.port.js";
 
+// Conformance gate files — the workflow + vendored composite action + D-B4
+// install doc. Exported because the brownfield "install the gate" route in
+// apps/web builds its leave-behind zip from exactly these bytes, and this
+// package's `exports` map has a single "." entry (no deep-import path).
+export {
+  HEXAGEN_GATE_INSTALL_DOC,
+  HEXAGEN_GATE_INSTALL_DOC_PATH,
+  HEXAGEN_TOOLCHAIN_RANGE,
+  hexagenConformanceActionFiles,
+  hexagenGateBundleFiles,
+} from "./domain/conformance-gate-files.js";
+export type {
+  ConformanceGateFile,
+  ConformanceGateFilesOptions,
+} from "./domain/conformance-gate-files.js";
+
 // Infrastructure exports (implementations)
 export { ExternalSyncEngineAdapter } from "./infrastructure/adapters/external-sync-engine.adapter.js";
 export { JsZipCreatorAdapter } from "./infrastructure/adapters/jszip-creator.adapter.js";
