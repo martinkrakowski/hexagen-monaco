@@ -1,3 +1,4 @@
+#!/bin/sh
 npx lint-staged
 
 # Docs-only fast path. Neither `turbo lint`, `turbo typecheck`, nor
@@ -6,21 +7,26 @@ npx lint-staged
 # past them; lint-staged above already ran prettier on the staged .md files,
 # so formatting isn't lost, only the code-oriented checks are. No
 # --diff-filter here on purpose: a staged *deletion* of a non-.md file must
-# still disqualify the fast path. --no-renames matters for the same reason:
-# without it, staging a rename from foo.ts to notes.md shows only
-# "notes.md" and would be misclassified as docs-only.
-#
-# POSIX sh only below -- no bashisms. husky's shim (.husky/_/h) hardcodes
-# `sh -e "$s"` to run this file regardless of any shebang, and on Linux
-# `sh` is commonly dash, which has neither process substitution (`<(...)`)
-# nor `read -d`. Both were tried here and both broke this hook outright
-# under dash -- verified by running it through dash directly, not assumed.
-# The equivalent NUL-safe read-loop pattern tools/arch-linter/src/git-ops.ts
-# uses for the same newline-in-filename problem is fine there because it is
-# plain Node string splitting, not a shell builtin, and portability doesn't
-# apply the same way.
-staged_files="$(git diff --cached --name-only --no-renames)"
-if [ -n "$staged_files" ] && ! printf '%s\n' "$staged_files" | grep -qvE '\.md$'; then
+# still disqualify the fast path.
+if bash -c '
+is_docs_only=true
+has_staged=false
+while IFS= read -r -d "" f; do
+  if [ -n "$f" ]; then
+    has_staged=true
+    case "$f" in
+      *.md) ;;
+      *) is_docs_only=false; break ;;
+    esac
+  fi
+done < <(git diff --cached --name-only -z --no-renames)
+
+if [ "$has_staged" = true ] && [ "$is_docs_only" = true ]; then
+  exit 0
+else
+  exit 1
+fi
+'; then
   echo "Docs-only commit (every staged file ends in .md) -- skipping turbo lint/typecheck and the arch-lint ratchet."
 else
   yarn turbo lint
@@ -32,35 +38,4 @@ else
   if [ -f tools/arch-linter/dist/cli.js ]; then
     yarn lint:arch -- --staged --ratchet || exit 1
   fi
-fi
-
-# UI boundary check (BF-1.0). Cross-slice imports between apps/web/features
-# slices are fatal in CI and both baselines in the script are shrink-only, but
-# until now nothing ran this locally -- a violation only surfaced after push.
-#
-# Gated on staged paths rather than run unconditionally: the script does a
-# full-tree scan and takes ~5.6s, which is too slow for every commit but fine
-# for the commits that can actually break it.
-#
-# The script itself is deliberately NOT modified to "know" about staging. It
-# reads the working tree, and that is what makes it correct in CI, where
-# nothing is ever staged. Teaching it to skip when the index is empty would
-# make it exit 0 on every CI run -- silently disabling the firewall it exists
-# to enforce. The decision about WHEN to run belongs here, in the caller.
-# The trigger must cover everything the script VALIDATES, not just the
-# cross-slice check that motivated it. It also walks packages/ui/src (kernel
-# imports, features imports, semantic-state tokens, the NoSemanticState brand)
-# and reads its rule set from scripts/firewall-blocklist.yaml -- so editing
-# either of those could introduce a violation, or silently weaken the rules,
-# without the hook firing. apps/web/components/primitives is in the list
-# because BF-2.0 adds it as a fourth root; harmless until that lands.
-#
-# Invoked via `bash` rather than executed directly. The file is mode 100755 so
-# `./script` works today, but package.json's validate:boundary and the CI step
-# both use `bash`, and going through the interpreter keeps working if the exec
-# bit is ever lost (a Windows checkout, a permissions-stripping copy).
-if [ -n "$staged_files" ] && printf '%s\n' "$staged_files" |
-  grep -qE '^(apps/web/(features|app|components/primitives)/|packages/ui/src/|scripts/firewall-blocklist\.yaml$)'; then
-  echo "Staged files are in the UI-boundary scope -- running the firewall check..."
-  bash scripts/validate-ui-boundary.sh || exit 1
 fi
