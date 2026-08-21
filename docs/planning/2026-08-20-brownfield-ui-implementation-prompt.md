@@ -67,7 +67,7 @@ load-bearing and this arc adds one wrinkle (dual-suite contract tests):
 | **Scout**                  | `subagent_type: "explore"`, read-only, **no worktree**     | The four named scouts in feature-plan §6.4 (BF-1.2, BF-4.2, BF-6.1, BF-7.1); any seam edit not already scouted in the plan's own exploration record |
 | **Domain/Contract Worker** | `subagent_type: "general"`, `isolation: worktree`          | Phase 0 (BF-0.0–0.4), BF-6.1's generalization                                                                                                       |
 | **UI Worker**              | `subagent_type: "general"`, `isolation: worktree`          | Phase 2 primitives, Phase 3/4 screens (incl. BF-4.2), Phase 5 UI views, Phase 6 dialog                                                              |
-| **Test/QA Worker**         | `subagent_type: "general"` (may share the item's worktree) | Failing-first tests, the **dual-suite** contract test for BF-0.0/BF-0.1, gate prep                                                                  |
+| **Test/QA Worker**         | `subagent_type: "general"` (may share the item's worktree) | Failing-first tests, the **dual-suite** contract test owned by BF-0.1 (see Step 0.5), gate prep                                                     |
 | **Refuter panel**          | 2–3 parallel `subagent_type: "general"`, majority verdict  | **Mandatory** on BF-0.3, BF-0.4, BF-5.2, BF-6.3 (feature-plan §8) — see §4 below for why each                                                       |
 
 Standing rules (do not relax; identical in spirit to the remaining-work arc's, restated
