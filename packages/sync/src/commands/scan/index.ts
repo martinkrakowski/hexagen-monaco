@@ -336,6 +336,19 @@ export async function runScan(
     if (!manifestNow.success) return manifestNow;
     if (options.noReport !== true) {
       if (!manifestNow.value) {
+        // --handoff cannot be honoured without a manifest: the zip is packed
+        // from the report, and the report needs one. Failing here rather than
+        // pushing the skip line keeps the flag honest -- otherwise a user who
+        // ran --handoff specifically to get an upload gets no zip, no error,
+        // and exit 0. Same class as the exit-code defect fixed in BF-0.1:
+        // claiming success while producing nothing.
+        if (options.handoff === true) {
+          return err(
+            new Error(
+              "Cannot write a handoff zip without .architecture/manifest.yaml — the zip is packed from the report, which needs a manifest. Omit --skip-bootstrap, or run hexagen bootstrap --yes first.",
+            ),
+          );
+        }
         nextSteps.push(
           "Skipped report — no .architecture/manifest.yaml (omit --skip-bootstrap, or run hexagen bootstrap --yes).",
         );

@@ -849,6 +849,37 @@ describe("scan --handoff (BF-0.2)", () => {
     }
   });
 
+  it("fails rather than silently skipping the zip when there is no manifest", async () => {
+    // The report is skipped without a manifest, and the zip is packed FROM
+    // the report -- so --handoff could not be honoured. Before this guard the
+    // scan pushed the ordinary "Skipped report" line and exited 0, leaving a
+    // user who ran --handoff specifically to get an upload with no zip and no
+    // error. Reproduced end-to-end against the built CLI before fixing.
+    const root = await makeRepo();
+    try {
+      const result = await runScan({
+        root,
+        yes: true,
+        handoff: true,
+        skipBootstrap: true,
+        lint: silentLint,
+      });
+      assert.equal(
+        result.success,
+        false,
+        "--handoff with no manifest must fail, not exit 0 with nothing written",
+      );
+      if (result.success) return;
+      assert.match(result.error.message, /manifest\.yaml/);
+      await assert.rejects(
+        fs.stat(path.join(root, "hexagen-handoff.zip")),
+        "no zip should exist",
+      );
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("does not write a handoff zip unless asked", async () => {
     const root = await makeHandoffRepo();
     try {
