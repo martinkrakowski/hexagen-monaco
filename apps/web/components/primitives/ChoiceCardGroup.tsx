@@ -123,6 +123,13 @@ export function ChoiceCardGroup<TValue extends string = string>({
     // always a real index into `options`.
     const targetIndex = pickable[nextPosition];
     inputRefs.current[targetIndex]?.focus();
+    // Focus still moves (harmless, and keeps the caret where the user expects
+    // it), but selection is only re-emitted when it actually changes. With a
+    // single pickable option the modulo lands back on the same index, so
+    // firing unconditionally meant every arrow press pushed an identical
+    // value at the parent -- redundant renders, and a spurious change event
+    // for any host that treats onSelect as "the user picked something".
+    if (targetIndex === fromIndex) return;
     onSelect(options[targetIndex].value);
   };
 
@@ -159,7 +166,17 @@ export function ChoiceCardGroup<TValue extends string = string>({
 
       {options.map((option, index) => {
         const unavailable = option.disabled === true;
-        const selected = option.value === value && !unavailable;
+        // Reflects the controlled `value` even when that option is now
+        // unavailable. Excluding it rendered NOTHING checked while `value` was
+        // non-null, so a card that became unavailable after selection looked
+        // like the user had chosen nothing. A disabled radio may legitimately
+        // be checked; showing it checked-and-disabled says "this is your
+        // choice, and it is no longer available", which is the truth.
+        //
+        // `selectedIndex` above deliberately still excludes disabled options:
+        // that one drives the roving tabindex, and a disabled input cannot be
+        // a tab stop. The two answer different questions.
+        const selected = option.value === value;
         return (
           <label
             key={option.value}

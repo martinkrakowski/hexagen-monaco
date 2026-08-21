@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
 import { ChoiceCardGroup } from "../ChoiceCardGroup";
+import type { ChoiceCardGroupProps } from "../ChoiceCardGroup";
 import type { ChoiceCardOption } from "../ChoiceCardGroup";
 
 // Assertions use toBeTruthy()/getAttribute() rather than jest-dom matchers:
@@ -35,21 +36,24 @@ const TIERS: ChoiceCardOption[] = [
   },
 ];
 
-function renderGroup(overrides: {
-  value?: string | null;
-  onSelect?: (next: string) => void;
-} = {}) {
+function renderGroup(
+  overrides: {
+    value?: string | null;
+    onSelect?: (next: string) => void;
+    options?: ChoiceCardGroupProps["options"];
+  } = {},
+) {
   const onSelect = overrides.onSelect ?? vi.fn();
-  render(
+  const { container } = render(
     <ChoiceCardGroup
       label="Privacy tier"
       description="Pick where the scan runs."
-      options={TIERS}
+      options={overrides.options ?? TIERS}
       value={overrides.value ?? null}
       onSelect={onSelect}
     />,
   );
-  return { onSelect };
+  return { onSelect, container };
 }
 
 describe("ChoiceCardGroup", () => {
@@ -150,6 +154,49 @@ describe("ChoiceCardGroup", () => {
   it("ignores keys it does not own", () => {
     const { onSelect } = renderGroup({ value: "local" });
     fireEvent.keyDown(screen.getAllByRole("radio")[0], { key: "a" });
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("still shows the controlled value checked when that option became unavailable", () => {
+    // A controlled parent passing a non-null value must never render an empty
+    // selection. If an option is disabled AFTER the user picked it, the honest
+    // rendering is checked-and-disabled, not "nothing selected".
+    const { container } = renderGroup({
+      value: "scan",
+      options: [
+        { value: "spec", label: "Spec", description: "d1" },
+        {
+          value: "scan",
+          label: "Scan",
+          description: "d2",
+          disabled: true,
+          unavailableReason: "Temporarily unavailable",
+        },
+      ],
+    });
+    const checked = container.querySelector('input[type="radio"]:checked');
+    expect(checked).toBeTruthy();
+    expect(checked?.getAttribute("value")).toBe("scan");
+    expect((checked as HTMLInputElement | null)?.disabled).toBe(true);
+  });
+
+  it("does not re-emit onSelect when an arrow key cannot move", () => {
+    // One pickable option: the modulo lands back on the same index. Firing
+    // onSelect there pushes an identical value at the parent on every press.
+    const onSelect = vi.fn();
+    const { container } = renderGroup({
+      value: "spec",
+      onSelect,
+      options: [
+        { value: "spec", label: "Spec", description: "d1" },
+        { value: "scan", label: "Scan", description: "d2", disabled: true },
+      ],
+    });
+    const input = container.querySelector(
+      'input[value="spec"]',
+    ) as HTMLInputElement;
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "ArrowUp" });
     expect(onSelect).not.toHaveBeenCalled();
   });
 });
