@@ -138,4 +138,45 @@ describe("useRovingTabIndex", () => {
     act(() => api.current?.focusFirst());
     assert.strictEqual(api.current?.activeIndex, 1);
   });
+
+  it("returns a stable ref callback per index across re-renders", () => {
+    // A fresh closure per call makes React tear down and re-attach every ref
+    // on every re-render -- and this hook re-renders on each arrow keypress,
+    // so an N-item group paid 2N detach/attach cycles per keystroke. Focus
+    // still worked, which is exactly why it was easy to miss.
+    const identities: boolean[] = [];
+    let api: ReturnType<typeof useRovingTabIndex> | null = null;
+    let previous: unknown = null;
+
+    function Group() {
+      const roving = useRovingTabIndex({ itemCount: 3 });
+      api = roving;
+      const callback = roving.setItemRef(0);
+      identities.push(previous === null || previous === callback);
+      previous = callback;
+      return React.createElement(
+        "div",
+        null,
+        Array.from({ length: 3 }, (_unused, index) =>
+          React.createElement("button", {
+            key: index,
+            type: "button",
+            ref: roving.setItemRef(index),
+          }),
+        ),
+      );
+    }
+
+    render(React.createElement(Group));
+    act(() => api?.focusNext());
+    act(() => api?.focusNext());
+
+    assert.ok(identities.length >= 3, "expected multiple renders");
+    assert.ok(
+      identities.every(Boolean),
+      "setItemRef(0) returned a new identity across renders",
+    );
+    // And focus still lands correctly with the cached callbacks.
+    assert.strictEqual(api?.activeIndex, 2);
+  });
 });

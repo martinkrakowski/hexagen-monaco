@@ -130,12 +130,26 @@ export function useRovingTabIndex(
     [effectiveIndex],
   );
 
-  const setItemRef = useCallback(
-    (index: number) => (element: HTMLElement | null) => {
-      elements.current[index] = element;
-    },
-    [],
+  // One STABLE callback per index, cached.
+  //
+  // Returning a fresh closure per call looks harmless but makes React tear
+  // down and re-attach every ref in the group on every re-render -- and this
+  // hook re-renders on each arrow keypress, so an N-item group paid 2N ref
+  // detach/attach cycles per keystroke. Focus still worked, which is why it
+  // was easy to miss; the cost lands on consumers whose ref callback does
+  // real work (measurement, IntersectionObserver), silently re-running it.
+  const refCallbacks = useRef(
+    new Map<number, (element: HTMLElement | null) => void>(),
   );
+  const setItemRef = useCallback((index: number) => {
+    const cached = refCallbacks.current.get(index);
+    if (cached !== undefined) return cached;
+    const callback = (element: HTMLElement | null) => {
+      elements.current[index] = element;
+    };
+    refCallbacks.current.set(index, callback);
+    return callback;
+  }, []);
 
   return {
     activeIndex: effectiveIndex,
