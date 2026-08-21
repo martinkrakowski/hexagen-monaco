@@ -135,7 +135,18 @@ function isStringArray(candidate: unknown): candidate is string[] {
 }
 
 function isRecord(candidate: unknown): candidate is Record<string, unknown> {
-  return typeof candidate === "object" && candidate !== null;
+  // Arrays are excluded deliberately. `typeof [] === "object"` and it is not
+  // null, so without this an ARRAY satisfies every Record<string, T> check:
+  // `layerDirectories: [["src/domain"], ["src/app"]]` passed validation and
+  // restored as layer names "0" and "1". That is precisely the
+  // structurally-valid-but-semantically-wrong draft this module's header
+  // refuses to salvage -- and it would have been ratified in one click and
+  // written into layout.yaml.
+  return (
+    typeof candidate === "object" &&
+    candidate !== null &&
+    !Array.isArray(candidate)
+  );
 }
 
 function isLayoutDraft(candidate: unknown): candidate is BrownfieldLayoutDraft {
@@ -169,25 +180,47 @@ function isManifestDraft(
   );
 }
 
-const FLOW_STATES: readonly BrownfieldFlowState[] = [
-  "tier_pick",
-  "uploading",
-  "repo_entry",
-  "scanning",
-  "blocked",
-  "layout_ratify",
-  "manifest_ratify",
-  "findings_review",
-  "report",
-  "gate_install",
-];
+/**
+ * Runtime mirrors of the BF-3.1 unions, pinned to them at COMPILE time.
+ *
+ * A plain `readonly T[]` annotation only proves every entry is a valid member
+ * -- it cannot prove every member is present. Adding a state to the union and
+ * forgetting it here would compile cleanly and then silently discard drafts
+ * that hold it, which is invisible: the user just finds their work gone.
+ *
+ * `exhaustive` inverts that. `Record<T, true>` requires a key for EVERY member,
+ * so a new union member becomes a type error here rather than a runtime data
+ * loss later.
+ */
+function exhaustive<T extends string>(members: Record<T, true>): readonly T[] {
+  return Object.keys(members) as T[];
+}
 
-const TIERS: readonly BrownfieldTier[] = ["artifacts", "clone", "zip"];
+const FLOW_STATES: readonly BrownfieldFlowState[] = exhaustive<BrownfieldFlowState>({
+  tier_pick: true,
+  uploading: true,
+  repo_entry: true,
+  scanning: true,
+  blocked: true,
+  layout_ratify: true,
+  manifest_ratify: true,
+  findings_review: true,
+  report: true,
+  gate_install: true,
+});
 
-const GATE_MODES: readonly BrownfieldGateInstallMode[] = [
-  "download-zip",
-  "open-pr",
-];
+
+const TIERS: readonly BrownfieldTier[] = exhaustive<BrownfieldTier>({
+  artifacts: true,
+  clone: true,
+  zip: true,
+});
+
+const GATE_MODES: readonly BrownfieldGateInstallMode[] =
+  exhaustive<BrownfieldGateInstallMode>({
+  "download-zip": true,
+  "open-pr": true,
+  });
 
 function isNullableString(candidate: unknown): candidate is string | null {
   return candidate === null || typeof candidate === "string";
@@ -438,7 +471,13 @@ function createStore(
     // Belt and braces: a draft found under a key it does not claim means the
     // key derivation drifted between builds. Treat it as unrecognised.
     if (stored.seedName !== normalizeSeedName(seedName)) return null;
-    if (Date.now() - stored.savedAt > BROWNFIELD_DRAFT_MAX_AGE_MS) return null;
+    // Absolute distance, not a forward difference. A future `savedAt` -- a
+    // skewed clock, a tampered blob, a machine that travelled across a DST
+    // boundary -- yields a NEGATIVE age, which no `> MAX_AGE` test can ever
+    // catch, so the draft would outlive its TTL indefinitely. A draft
+    // claiming to be from the future is not fresh, it is untrustworthy.
+    const age = Math.abs(Date.now() - stored.savedAt);
+    if (age > BROWNFIELD_DRAFT_MAX_AGE_MS) return null;
     return stored;
   }
 

@@ -465,3 +465,108 @@ describe("storage that throws (private browsing / blocked site data)", () => {
     expect(() => getBrownfieldDraftStore("acme").clear()).not.toThrow();
   });
 });
+describe("review fixes (#589)", () => {
+  const base = {
+    schemaVersion: BROWNFIELD_DRAFT_SCHEMA_VERSION,
+    seedName: "demo",
+    savedAt: Date.now(),
+    flowState: "layout_ratify" as const,
+    tier: "zip" as const,
+    repoUrl: null,
+    repoRef: null,
+    manifestDraft: null,
+    baselinedFindingKeys: [],
+    gateInstallMode: null,
+  };
+
+  it("rejects an array masquerading as layerDirectories", () => {
+    // typeof [] === "object" and it is not null, so without an Array.isArray
+    // guard this passed EVERY Record<string, T> check. Object.values of
+    // [["a"],["b"]] is [["a"],["b"]] -- each entry is a valid string[] -- so
+    // it validated and restored with layer names "0" and "1": structurally
+    // valid, semantically garbage, and one click from layout.yaml.
+    const sneaky = {
+      ...base,
+      layoutDraft: {
+        contexts: [
+          {
+            packageRoot: "packages/orders",
+            contextName: "orders",
+            layerDirectories: [["src/domain"], ["src/application"]],
+          },
+        ],
+      },
+    };
+    expect(isBrownfieldDraft(sneaky)).toBe(false);
+  });
+
+  it("still accepts a genuine layerDirectories record", () => {
+    const valid = {
+      ...base,
+      layoutDraft: {
+        contexts: [
+          {
+            packageRoot: "packages/orders",
+            contextName: "orders",
+            layerDirectories: { domain: ["src/domain"] },
+          },
+        ],
+      },
+    };
+    expect(isBrownfieldDraft(valid)).toBe(true);
+  });
+
+  it("treats a future-dated draft as expired, not as fresh forever", () => {
+    // `Date.now() - savedAt > MAX_AGE` yields a NEGATIVE age for a future
+    // timestamp -- clock skew, a tampered blob, a DST-crossing machine -- so
+    // no `>` test could ever expire it. A draft claiming to be from the
+    // future is not fresh, it is untrustworthy.
+    const store = getBrownfieldDraftStore("skew");
+    store.save({
+      ...base,
+      seedName: "skew",
+      savedAt: Date.now() + BROWNFIELD_DRAFT_MAX_AGE_MS * 2,
+      layoutDraft: null,
+    });
+    expect(store.read()).toBeNull();
+    store.clear();
+  });
+
+  it("accepts a draft in every flow state the machine can occupy", () => {
+    // Exercised through the public validator rather than by exporting the
+    // internal arrays: a member missing from the runtime list shows up here as
+    // a rejected draft, which is the symptom users would actually hit.
+    // `exhaustive` is the compile-time half -- omitting a member is a type
+    // error, verified by removing one and watching tsc fail.
+    const states: BrownfieldFlowState[] = [
+      "tier_pick",
+      "uploading",
+      "repo_entry",
+      "scanning",
+      "blocked",
+      "layout_ratify",
+      "manifest_ratify",
+      "findings_review",
+      "report",
+      "gate_install",
+    ];
+    for (const flowState of states) {
+      expect(
+        isBrownfieldDraft({ ...base, flowState, layoutDraft: null }),
+        `flowState ${flowState} must validate`,
+      ).toBe(true);
+    }
+  });
+
+  it("accepts every tier and gate mode", () => {
+    for (const tier of ["artifacts", "clone", "zip"] as const) {
+      expect(isBrownfieldDraft({ ...base, tier, layoutDraft: null })).toBe(true);
+    }
+    for (const gateInstallMode of ["download-zip", "open-pr"] as const) {
+      expect(
+        isBrownfieldDraft({ ...base, gateInstallMode, layoutDraft: null }),
+      ).toBe(true);
+    }
+  });
+});
+
