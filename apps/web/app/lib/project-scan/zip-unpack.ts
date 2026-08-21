@@ -1,10 +1,15 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import JSZip from "jszip";
+import { pipeline } from "node:stream/promises";
+import { Readable } from "node:stream";
 import {
   MAX_SCAN_ENTRY_UNCOMPRESSED_BYTES,
   MAX_SCAN_UNCOMPRESSED_BYTES,
   MAX_SCAN_ZIP_ENTRIES,
+  TIER_A_MAX_ENTRY_UNCOMPRESSED_BYTES,
+  TIER_A_MAX_UNCOMPRESSED_BYTES,
+  TIER_A_MAX_ZIP_ENTRIES,
 } from "./limits";
 
 /**
@@ -44,11 +49,33 @@ export type ZipUnpackLimitKind =
 /** Archive exceeded an extraction budget (entry count / per-file / aggregate). */
 export class ZipResourceLimitError extends Error {
   readonly limit: ZipUnpackLimitKind;
+  /**
+   * Bytes actually read before the abort, for the `entry-bytes` case.
+   *
+   * Exists so the streaming guarantee is *assertable* rather than assumed. The
+   * whole point of the fix this accompanies is that an oversized entry is
+   * rejected mid-inflation instead of after being fully buffered — but a test
+   * can only prove that if it can see how much was read. Asserting merely that
+   * the call throws does not distinguish streaming from buffering: the previous
+   * post-inflation implementation threw the identical error.
+   */
+  readonly bytesRead?: number;
 
-  constructor(limit: ZipUnpackLimitKind, message: string) {
+  constructor(limit: ZipUnpackLimitKind, message: string, bytesRead?: number) {
     super(message);
     this.name = "ZipResourceLimitError";
     this.limit = limit;
+    this.bytesRead = bytesRead;
+  }
+}
+
+export class DuplicateZipEntryError extends Error {
+  readonly entryName: string;
+
+  constructor(entryName: string) {
+    super("Zip contains duplicate entry names and was rejected");
+    this.name = "DuplicateZipEntryError";
+    this.entryName = entryName;
   }
 }
 
@@ -62,6 +89,12 @@ export const DEFAULT_ZIP_UNPACK_LIMITS: ZipUnpackLimits = {
   maxEntries: MAX_SCAN_ZIP_ENTRIES,
   maxEntryBytes: MAX_SCAN_ENTRY_UNCOMPRESSED_BYTES,
   maxUncompressedBytes: MAX_SCAN_UNCOMPRESSED_BYTES,
+};
+
+export const TIER_A_ZIP_UNPACK_LIMITS: ZipUnpackLimits = {
+  maxEntries: TIER_A_MAX_ZIP_ENTRIES,
+  maxEntryBytes: TIER_A_MAX_ENTRY_UNCOMPRESSED_BYTES,
+  maxUncompressedBytes: TIER_A_MAX_UNCOMPRESSED_BYTES,
 };
 
 const WINDOWS_ABS = /^[a-zA-Z]:[\\/]/;
@@ -143,6 +176,16 @@ export async function unpackZipToDir(
     assertSafeZipEntry(destRoot, entry.name);
   }
 
+  const seenNormalizedPaths = new Set<string>();
+  for (const entry of entries) {
+    const normalized = entry.name.replace(/\\/g, "/");
+    const resolved = path.resolve("/", normalized).slice(1);
+    if (seenNormalizedPaths.has(resolved)) {
+      throw new DuplicateZipEntryError(resolved);
+    }
+    seenNormalizedPaths.add(resolved);
+  }
+
   let filesWritten = 0;
   let uncompressedBytes = 0;
   for (const entry of entries) {
@@ -152,13 +195,31 @@ export async function unpackZipToDir(
       continue;
     }
     await mkdir(path.dirname(dest), { recursive: true });
-    const data = await entry.async("nodebuffer");
-    if (data.byteLength > limits.maxEntryBytes) {
-      throw new ZipResourceLimitError(
-        "entry-bytes",
-        `A zip entry exceeds ${limits.maxEntryBytes.toLocaleString()} uncompressed bytes and was rejected`,
-      );
+    const stream = entry.nodeStream() as Readable;
+    let entryBytes = 0;
+    const chunks: Buffer[] = [];
+    try {
+      await pipeline(stream, async (source) => {
+        for await (const chunk of source) {
+          const chunkSize = Buffer.isBuffer(chunk)
+            ? chunk.length
+            : Buffer.from(chunk).length;
+          entryBytes += chunkSize;
+          if (entryBytes > limits.maxEntryBytes) {
+            throw new ZipResourceLimitError(
+              "entry-bytes",
+              `A zip entry exceeds ${limits.maxEntryBytes.toLocaleString()} uncompressed bytes and was rejected`,
+              entryBytes,
+            );
+          }
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+      });
+    } catch (err) {
+      if (err instanceof ZipResourceLimitError) throw err;
+      throw new InvalidZipError(err);
     }
+    const data = Buffer.concat(chunks);
     uncompressedBytes += data.byteLength;
     if (uncompressedBytes > limits.maxUncompressedBytes) {
       throw new ZipResourceLimitError(
