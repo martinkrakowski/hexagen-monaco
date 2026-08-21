@@ -47,7 +47,20 @@ fi
 # nothing is ever staged. Teaching it to skip when the index is empty would
 # make it exit 0 on every CI run -- silently disabling the firewall it exists
 # to enforce. The decision about WHEN to run belongs here, in the caller.
-if [ -n "$staged_files" ] && printf '%s\n' "$staged_files" | grep -qE '^apps/web/(features|app)/'; then
-  echo "Staged files touch apps/web/{features,app} -- running UI boundary check..."
-  scripts/validate-ui-boundary.sh || exit 1
+# The trigger must cover everything the script VALIDATES, not just the
+# cross-slice check that motivated it. It also walks packages/ui/src (kernel
+# imports, features imports, semantic-state tokens, the NoSemanticState brand)
+# and reads its rule set from scripts/firewall-blocklist.yaml -- so editing
+# either of those could introduce a violation, or silently weaken the rules,
+# without the hook firing. apps/web/components/primitives is in the list
+# because BF-2.0 adds it as a fourth root; harmless until that lands.
+#
+# Invoked via `bash` rather than executed directly. The file is mode 100755 so
+# `./script` works today, but package.json's validate:boundary and the CI step
+# both use `bash`, and going through the interpreter keeps working if the exec
+# bit is ever lost (a Windows checkout, a permissions-stripping copy).
+if [ -n "$staged_files" ] && printf '%s\n' "$staged_files" |
+  grep -qE '^(apps/web/(features|app|components/primitives)/|packages/ui/src/|scripts/firewall-blocklist\.yaml$)'; then
+  echo "Staged files are in the UI-boundary scope -- running the firewall check..."
+  bash scripts/validate-ui-boundary.sh || exit 1
 fi
