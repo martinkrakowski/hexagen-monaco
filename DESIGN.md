@@ -1,10 +1,11 @@
 # DESIGN.md — Authoritative UI Contract
 
-> **Version:** 1.1.1
+> **Version:** 1.2.0
 > **Status:** Active
 > **Changelog:**
 > | Version | Date | Summary |
 > |---------|------|---------|
+> | 1.2.0 | 2026-08-21 | §4.8 arbitrary-value exceptions restated as two categories — `var(--token)` design-token references and property-name lists (`transition-[a,b]`) — alongside the existing exact-pattern table. §4.6 documents the three Form & Panel tokens that already shipped in `globals.css`. Enforcement corrected: the `no-arbitrary-tailwind-values` pre-filter silently exempted every className containing `%`, `(` or `)`, so `max-w-[85%]` and `h-[calc(100%-28px)]` were never flagged. |
 > | 1.1.1 | 2026-04-25 | Phase 3 completion: All 75 arbitrary Tailwind violations resolved; 4 component tokens finalized (--card-width-sm/md, --nav-indent, --canvas-height-sm); full design system compliance achieved. ESLint rule deployed to prevent regressions. |
 > | 1.1.0 | 2026-04-23 | P0: Next.js 16+, @hexagen/ui/types, arbitrary-value exceptions. P1: NoSemanticState enforcement, component inventory, Tailwind config. P2: CSS utilities, ProjectionToken system, color-scheme vars |
 > | 1.0.0 | 2026-04-23 | Initial authoritative contract |
@@ -451,6 +452,9 @@ Components use derived tokens for consistent sizing and spacing. These tokens ar
 | `--canvas-height-sm`     | 400px  | React Flow canvas fixed height — Phase 3      |
 | `--page-section-gap`     | 24px   | Vertical gap between page sections            |
 | `--form-field-gap`       | 8px    | Vertical gap between form fields              |
+| `--textarea-min-height`  | 150px  | Minimum height of a multi-line input          |
+| `--textarea-max-height`  | 60vh   | Maximum height of a multi-line input          |
+| `--resizable-panel-height` | `calc(100% - 3rem)` | Body height of a resizable panel, net of its header |
 
 These tokens derive from Primitive tokens (e.g., `--spacing-*`, `--radius-*`) defined in Sections 4.1–4.3 and ensure consistency across components.
 
@@ -513,11 +517,31 @@ active:scale-[0.98] active:opacity-90
 
 #### Arbitrary Value Exceptions
 
-The following arbitrary Tailwind values are the **only** permitted exceptions to the "No Arbitrary Values" rule in §1. Any other arbitrary value requires a DESIGN.md update before implementation.
+The rule in §1 exists to keep **magic numbers** out of the markup: a literal like `w-[347px]`, `max-w-[85%]` or `h-[calc(100%-28px)]` states a value that no token owns, so it cannot be changed in one place and cannot be audited. Exceptions are read against that intent, not against the bracket syntax alone.
+
+Two forms are permitted as **categories**, because enumerating their instances would be endless and would say nothing:
+
+| Category               | Form                                 | Example                          |
+| ---------------------- | ------------------------------------ | -------------------------------- |
+| Design-token reference | `-[var(--token)]`                    | `max-w-[var(--card-width-md)]`   |
+| CSS property-name list | `transition-[…]`, `will-change-[…]`  | `transition-[box-shadow,border-color]` |
+
+A **design-token reference** is the opposite of a magic number: the value lives in `globals.css` and is documented in §4.6, and the class only points at it. It is also the only way to consume a component token that has no Tailwind utility of its own.
+
+A **CSS property-name list** names CSS _properties_, not a value — no number can be expressed. Permitted on `transition-` and `will-change-` only, and the bracket must hold a comma-separated list of property names: `transition-[300ms]` is a violation.
+
+The token-reference category is deliberately narrow: **only** a bare `var(--token)` qualifies. `w-[calc(var(--x)-4px)]`, `w-[var(--x,280px)]` and `text-[hsl(var(--primary))]` all reintroduce a literal and remain violations. Adding a new token to `globals.css` **and** to the §4.6 table is the supported way to remove a magic number — not wrapping it in `calc()`.
+
+Beyond those categories, the following exact patterns are the **only** permitted exceptions. Any other arbitrary value requires a DESIGN.md update before implementation.
 
 | Pattern                    | Value                 | Justification                              |
 | -------------------------- | --------------------- | ------------------------------------------ |
 | Interactive press feedback | `active:scale-[0.98]` | Micro-animation for tactile press response |
+
+**Enforcement:** `hexagen-ui/no-arbitrary-tailwind-values`, wired for `apps/web/features/**` and `apps/web/components/primitives/**`. Two gaps are known and deliberate rather than accidental, and neither is a licence to write magic numbers there:
+
+- Class names built inside **template literals** are `TemplateElement` nodes, which the rule does not visit (e.g. `` `… sm:w-[400px] max-w-[90vw] …` `` in `features/manifest-generation/ContextGovernanceChatDrawer.tsx`).
+- `apps/web/components/` outside `primitives/` is not wired into the plugin at all (e.g. the two `max-w-[85%]` values in `components/chat/ChatMessageList.tsx`).
 
 #### Disabled
 
