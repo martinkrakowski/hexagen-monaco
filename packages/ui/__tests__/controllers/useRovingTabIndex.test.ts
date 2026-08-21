@@ -184,4 +184,88 @@ describe("useRovingTabIndex", () => {
     // And focus still lands correctly with the cached callbacks.
     assert.strictEqual(api.current?.activeIndex, 2);
   });
+
+  describe("when the active item becomes disabled", () => {
+    function disableHarness() {
+      const api: { current: ReturnType<typeof useRovingTabIndex> | null } = {
+        current: null,
+      };
+      const setDisabled: { current: ((next: number[]) => void) | null } = {
+        current: null,
+      };
+
+      function Group() {
+        const [disabled, setter] = React.useState<number[]>([]);
+        setDisabled.current = setter;
+        const roving = useRovingTabIndex({
+          itemCount: 3,
+          disabledIndices: disabled,
+        });
+        api.current = roving;
+        return React.createElement(
+          "div",
+          null,
+          Array.from({ length: 3 }, (_unused, index) =>
+            React.createElement("button", {
+              key: index,
+              type: "button",
+              disabled: disabled.includes(index),
+              tabIndex: roving.getTabIndex(index),
+              ref: roving.setItemRef(index),
+            }),
+          ),
+        );
+      }
+
+      const utils = render(React.createElement(Group));
+      const buttons = () =>
+        Array.from(utils.container.querySelectorAll("button"));
+      return { api, setDisabled, buttons };
+    }
+
+    it("does not leave focus sitting on the disabled item", () => {
+      const { api, setDisabled, buttons } = disableHarness();
+      act(() => api.current?.focusNext());
+      assert.strictEqual(document.activeElement, buttons()[1]);
+      act(() => setDisabled.current?.([1]));
+      assert.notStrictEqual(
+        document.activeElement,
+        buttons()[1],
+        "focus was left on a disabled control",
+      );
+      assert.strictEqual(document.activeElement, buttons()[0]);
+    });
+
+    it("does not resurrect the stale index when the item is re-enabled", () => {
+      // Deriving the fallback without committing it left activeIndex stale,
+      // so re-enabling moved the tab stop back with no user action.
+      const { api, setDisabled } = disableHarness();
+      act(() => api.current?.focusNext());
+      assert.strictEqual(api.current?.activeIndex, 1);
+      act(() => setDisabled.current?.([1]));
+      assert.strictEqual(api.current?.activeIndex, 0);
+      act(() => setDisabled.current?.([]));
+      assert.strictEqual(
+        api.current?.activeIndex,
+        0,
+        "the tab stop jumped back to the previously disabled item",
+      );
+    });
+
+    it("does not steal focus that lives outside the group", () => {
+      const { setDisabled, buttons } = disableHarness();
+      const outside = document.createElement("input");
+      document.body.appendChild(outside);
+      outside.focus();
+      assert.strictEqual(document.activeElement, outside);
+      act(() => setDisabled.current?.([0]));
+      assert.strictEqual(
+        document.activeElement,
+        outside,
+        "focus was stolen from outside the group",
+      );
+      assert.ok(buttons().length === 3);
+      outside.remove();
+    });
+  });
 });

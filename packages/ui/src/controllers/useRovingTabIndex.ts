@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /**
  * Roving tabindex for a composite widget (radiogroup, toolbar, menu, tablist).
@@ -81,6 +81,33 @@ export function useRovingTabIndex(
   const effectiveIndex = focusable.includes(activeIndex)
     ? activeIndex
     : (focusable[0] ?? -1);
+
+  // Commit the fallback rather than only deriving it for the render.
+  //
+  // Deriving alone leaves `activeIndex` STALE: when the item holding the tab
+  // stop becomes disabled the group renders correctly, but re-enabling that
+  // item silently resurrects the old index and the tab stop jumps back with
+  // no user action. Committing also means DOM focus can be dealt with, which
+  // derivation cannot do.
+  useEffect(() => {
+    if (focusable.includes(activeIndex)) return;
+    const fallback = focusable[0] ?? -1;
+    const vacated = elements.current[activeIndex] ?? null;
+    setActiveIndex(fallback);
+
+    // Relocate focus ONLY when it is sitting on the item that just became
+    // unfocusable. Focus left on a disabled element is an accessibility
+    // defect; moving focus that lives somewhere else entirely would be a
+    // worse one -- an unprompted focus steal.
+    if (vacated === null || document.activeElement !== vacated) return;
+    if (fallback >= 0) {
+      elements.current[fallback]?.focus();
+    } else {
+      // Nothing left to focus: drop it rather than strand the user on a
+      // disabled control.
+      vacated.blur();
+    }
+  }, [focusable, activeIndex]);
 
   const apply = useCallback((index: number) => {
     setActiveIndex(index);
