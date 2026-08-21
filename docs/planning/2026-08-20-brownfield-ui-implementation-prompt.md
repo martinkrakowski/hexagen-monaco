@@ -366,8 +366,11 @@ open-string rule-grouping requirement, test conventions), then append:
 - Your packet ID + scope fence + RED test come from
   docs/planning/2026-08-20-brownfield-ui-feature-plan.md §3/§4; quote your packet ID
   in the commit subject (e.g. "feat(web): BF-3.1 brownfield flow skeleton").
-- If you are BF-0.0 or BF-0.1: you own TWO test files, one in packages/sync and one in
-  apps/web. Report both explicitly. A report naming only one is incomplete.
+- If you are BF-0.1: you own TWO test files, one in packages/sync and one in apps/web.
+  Report both explicitly. A report naming only one is incomplete. (BF-0.0 owns the
+  schema and its golden fixture, not either test file.)
+- If you are BF-0.2 or BF-0.3: you do not create those two test files, but your landing
+  still has to show both suites ran -- you are changing the envelope they assert on.
 - If your packet is marked with a lock icon in the feature plan (BF-0.4, BF-6.3): a
   refuter panel runs before this lands, no exceptions, regardless of how small the diff
   looks.
