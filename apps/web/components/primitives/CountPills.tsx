@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Fragment } from "react";
 import type { NoSemanticState } from "@hexagen/ui";
+import { cn } from "@/lib/utils";
 
 /**
  * A compact row of labelled counts.
@@ -171,7 +172,10 @@ export function CountPills({
   return (
     <ul
       aria-label={label}
-      className={[ROW_CLASSES, className].filter(Boolean).join(" ")}
+      // cn(), not a string join -- see the note in the Badge rationale above:
+      // a join leaves a host override and the base class both present, and
+      // source order picks the winner instead of the caller.
+      className={cn(ROW_CLASSES, className)}
     >
       {pills.map((pill, index) => {
         const tone = pill.tone ?? "neutral";

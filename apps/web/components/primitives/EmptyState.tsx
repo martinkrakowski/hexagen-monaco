@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import type { NoSemanticState } from "@hexagen/ui";
+import { cn } from "@/lib/utils";
 
 /**
  * The "nothing here yet" surface.
@@ -64,6 +65,19 @@ const HEADING_TAGS = {
   4: "h4",
 } as const;
 
+/**
+ * Whether a ReactNode should be rendered at all.
+ *
+ * Not a truthiness check: `description` and `action` are ReactNodes, and `0`
+ * is a perfectly valid one that renders the character "0". A bare `cond ? …`
+ * silently swallowed it, so a caller passing a count of zero got no element.
+ * Only React's own render-nothing values -- plus the empty string, which
+ * would produce an empty wrapper -- count as absent.
+ */
+function isPresent(node: ReactNode): boolean {
+  return node !== null && node !== undefined && node !== false && node !== "";
+}
+
 export function EmptyState({
   title,
   description,
@@ -76,12 +90,15 @@ export function EmptyState({
 
   return (
     <div
-      className={[
+      // cn(), not a string join. A plain join leaves the host's override and
+      // the base class BOTH in the list (p-8 + p-0), so which one wins is
+      // decided by stylesheet source order rather than by the caller. This is
+      // the exact defect that disqualified @hexagen/ui's Badge from being
+      // composed here, so doing it ourselves would have been inconsistent.
+      className={cn(
         "flex flex-col items-center justify-center gap-3 p-8 text-center",
         className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      )}
     >
       {Icon ? (
         // aria-hidden: the icon is decorative -- `title` already names the
@@ -89,11 +106,17 @@ export function EmptyState({
         <Icon aria-hidden="true" className="h-8 w-8 text-muted-foreground" />
       ) : null}
       <Heading className="text-lg font-medium text-foreground">{title}</Heading>
-      {description ? (
+      {isPresent(description) ? (
         // text-muted-foreground per DESIGN.md 4.4: helper copy, not a heading.
-        <p className="text-sm text-muted-foreground">{description}</p>
+        //
+        // A <div>, not a <p>: `description` is a ReactNode, so a caller may
+        // legitimately pass a <ul> or a <div>, and flow content inside <p> is
+        // invalid HTML -- the browser silently closes the paragraph early,
+        // which reparents the node and breaks the layout in a way that is
+        // very hard to trace back to here.
+        <div className="text-sm text-muted-foreground">{description}</div>
       ) : null}
-      {action ? <div>{action}</div> : null}
+      {isPresent(action) ? <div>{action}</div> : null}
     </div>
   );
 }

@@ -80,4 +80,39 @@ describe("EmptyState", () => {
     // The component's own layout must survive the merge, not be replaced.
     expect(root?.getAttribute("class")).toContain("flex");
   });
+
+  it("renders a description of 0 rather than swallowing it", () => {
+    // `description` is a ReactNode and 0 is a valid one. A bare truthiness
+    // gate treated it as absent, so a caller passing a count of zero -- the
+    // single most likely number to show in an empty state -- got nothing.
+    const { container } = render(<EmptyState title="No findings" description={0} />);
+    expect(container.textContent).toContain("0");
+  });
+
+  it("does not wrap the description in a <p>", () => {
+    // ReactNode permits flow content. A <ul> inside <p> is invalid HTML and
+    // the browser closes the paragraph early, reparenting the node.
+    const { container } = render(
+      <EmptyState
+        title="No findings"
+        description={
+          <ul>
+            <li>first</li>
+          </ul>
+        }
+      />,
+    );
+    expect(container.querySelector("p ul")).toBeNull();
+    expect(container.querySelector("ul")).toBeTruthy();
+  });
+
+  it("lets a host override a base utility", () => {
+    // With a plain string join both p-8 and p-0 survive and source order
+    // decides. cn() resolves the conflict in the caller's favour.
+    const { container } = render(<EmptyState title="No findings" className="p-0" />);
+    const root = container.firstElementChild;
+    const cls = root?.getAttribute("class") ?? "";
+    expect(cls).toContain("p-0");
+    expect(cls).not.toContain("p-8");
+  });
 });
