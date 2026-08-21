@@ -65,8 +65,8 @@ load-bearing and this arc adds one wrinkle (dual-suite contract tests):
 | Role                       | Agent shape                                                | Used for                                                                                                                                            |
 | -------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Scout**                  | `subagent_type: "explore"`, read-only, **no worktree**     | The four named scouts in feature-plan §6.4 (BF-1.2, BF-4.2, BF-6.1, BF-7.1); any seam edit not already scouted in the plan's own exploration record |
-| **Domain/Contract Worker** | `subagent_type: "general"`, `isolation: worktree`          | Phase 0 (BF-0.0–0.4), BF-4.2's `sanitizeScope` export, BF-6.1's generalization                                                                      |
-| **UI Worker**              | `subagent_type: "general"`, `isolation: worktree`          | Phase 2 primitives, Phase 3/4 screens, Phase 5 UI views, Phase 6 dialog                                                                             |
+| **Domain/Contract Worker** | `subagent_type: "general"`, `isolation: worktree`          | Phase 0 (BF-0.0–0.4), BF-6.1's generalization                                                                                                       |
+| **UI Worker**              | `subagent_type: "general"`, `isolation: worktree`          | Phase 2 primitives, Phase 3/4 screens (incl. BF-4.2), Phase 5 UI views, Phase 6 dialog                                                              |
 | **Test/QA Worker**         | `subagent_type: "general"` (may share the item's worktree) | Failing-first tests, the **dual-suite** contract test for BF-0.0/BF-0.1, gate prep                                                                  |
 | **Refuter panel**          | 2–3 parallel `subagent_type: "general"`, majority verdict  | **Mandatory** on BF-0.3, BF-0.4, BF-5.2, BF-6.3 (feature-plan §8) — see §4 below for why each                                                       |
 
@@ -76,6 +76,15 @@ for this one because the two arcs may run concurrently):
 - **One item = one worktree = one PR.** Provision with `isolation: worktree` per
   packet; parallel packets get parallel worktrees. Worktrees have **no `node_modules`**
   — workers stage diffs and report; the Primary runs gates from the main checkout.
+  **Who produces RED/GREEN evidence, precisely:** the _repo-wide_ Quality Gate is the
+  Primary's, from the main checkout — a worker never runs it. But the worker still owns
+  its packet's failing-first proof, and needs a runnable environment to produce it. Give
+  the worker one of: a `yarn install`ed worktree, or a shared install, or run its two
+  commands yourself and hand back the output. If none of those is available, the worker
+  reports the **test definition and the exact commands** and says plainly that it could
+  not execute them — the Primary then produces the RED/GREEN evidence before landing.
+  What must never happen is a packet landing with the evidence simply absent: an unrun
+  test is a non-success result, not a silent pass.
 - **BF-0.1 → BF-0.2 → BF-0.3 is a serialization chain, not a stack.** This repo does
   not do stacked PRs (verified: no `wt-`-style stacking convention exists;
   dependency-serialization is the house model). Each of the three lands, merges to
@@ -117,11 +126,23 @@ shape):
 1. **Step 0 (gate check):** before provisioning, check the feature plan's §7 decision
    gates and this prompt's §5 below. If the packet is behind an unresolved gate, do not
    provision a worktree — surface the gate instead, with its recommendation.
-2. **Step 0.5 (dual-suite check, Phase 0 only):** for BF-0.0 and BF-0.1, confirm both
-   the `packages/sync` producer test and the `apps/web` consumer test are named in the
-   Work Plan as separate deliverables before delegating — the feature plan's §8 makes
-   the Quality Gate fail, not warn, if either suite didn't run, and a worker who treats
-   this as one test will silently under-deliver.
+   **Once the execution runbook exists, read it too** — its status table, decision
+   ledger, and do-not-start list. §0 makes the runbook authoritative for live state,
+   and a packet parked there after the last landing will not appear in either static
+   document. Before the first landing there is no runbook and this sub-step is a no-op;
+   after it exists, a runbook that is missing or unreadable **stops provisioning** —
+   it is not treated as an empty do-not-start list. An unread gate is never a
+   checked gate.
+2. **Step 0.5 (dual-suite check, Phase 0 only):** **BF-0.1** is the packet that owns
+   both test files — the `packages/sync` producer test and the `apps/web` consumer
+   test — per the feature plan's §4 scope fence. BF-0.0 owns the shared schema and its
+   golden fixture only, not either test; do not ask a BF-0.0 worker for two suites.
+   Before delegating BF-0.1, confirm both test files are named in the Work Plan as
+   separate deliverables — a worker who treats this as one test will silently
+   under-deliver. Separately, the feature plan's §8 requires **BF-0.1, BF-0.2, and
+   BF-0.3** each to prove both suites actually ran; the Quality Gate fails, not warns,
+   if either was skipped. That is a landing requirement on all three envelope packets,
+   not just on the one that creates the tests.
 3. **Step 10 (runbook update):** on merge, update the execution runbook — status row,
    open-packets ledger, decision ledger, change-log entry with the merge SHA and the
    quoted `yarn test` suite count. A merge that doesn't update the runbook is unfinished.
@@ -139,8 +160,9 @@ it — which packets to actually launch, in what order, respecting the ≤4 cap.
 
 ```text
 Gates:  BF-0.0 ⟶ BF-0.1 ⟶ BF-0.2 ⟶ BF-0.3          BF-2.0 ⟶ {BF-2.1, BF-2.2, BF-2.3}
-        BF-3.1 ⟶ {BF-3.2, BF-3.3, BF-3.4, BF-4.*}   BF-6.1 ⟶ {BF-6.2, BF-6.3}
-        D-U1 ⟶ BF-5.1 ⟶ D-P1 ⟶ BF-5.2 ⟶ BF-5.3      BF-4.2 ⟶ BF-4.3
+        BF-3.1 ⟶ {BF-3.2, BF-3.3, BF-3.4}           BF-6.1 ⟶ {BF-6.2, BF-6.3}
+        {BF-3.1, BF-2.1, BF-1.4, BF-0.3} ⟶ BF-4.*   BF-4.2 ⟶ BF-4.3
+        D-U1 ⟶ BF-5.1 ⟶ D-P1 ⟶ BF-5.2 ⟶ BF-5.3
         MVP = Phase 0 + Phase 1 + Phase 2 + Phase 3 + BF-6.1 + BF-6.2
 ```
 
@@ -168,7 +190,7 @@ Gates:  BF-0.0 ⟶ BF-0.1 ⟶ BF-0.2 ⟶ BF-0.3          BF-2.0 ⟶ {BF-2.1, BF-
 
 From there the DAG fans out on its own: BF-0.1 → BF-0.2 → BF-0.3 continues its chain
 one merge at a time; BF-2.0 unlocks BF-2.1/2.2/2.3 (3-wide, pick 3 of the 4 open slots);
-BF-3.1 unlocks BF-3.2/3.3/3.4 and, once BF-2.1/BF-1.1/BF-1.4 are also in, Phase 4's
+BF-3.1 unlocks BF-3.2/3.3/3.4 and, once BF-2.1/BF-1.4/BF-0.3 are also in, Phase 4's
 BF-4.1/4.2/4.4.
 
 **The MVP milestone — call it out explicitly when it's reached, don't let it pass
@@ -223,21 +245,30 @@ in parallel — greenfield files, no shared state, a **UI Worker** each.
 ### Phase 3 — Tier A vertical slice + Phase 6's BF-6.1/6.2 (the MVP set)
 
 BF-3.1 first (the skeleton and state machine everything else in Phase 3/4 targets).
-Once it merges: BF-3.2 (API route, needs BF-0.4 merged), BF-3.3 (screens, needs BF-3.1
-
-- BF-2.2 + BF-1.1), and BF-3.4 (draft persistence, needs only BF-3.1) fan out in
-  parallel. **BF-6.1 and BF-6.2 are scheduled here, not in Phase 6**, per the corrected
-  MVP definition — BF-6.1 has no dependency and can start as soon as a slot is free;
-  BF-6.2 follows once BF-6.1 and BF-2.2 are both in. **Scout BF-6.1 first** (feature-plan
-  §6.4): every consumer of `hexagenConformanceActionFiles` before generalizing its
-  signature — this function is shared with the ordinary (non-brownfield) project-export
-  path, and a signature change that isn't scouted first risks breaking it silently.
+Once it merges: BF-3.2 (API route, needs BF-0.4 merged), BF-3.3 (screens, needs all of
+BF-3.1, BF-2.2, and BF-1.1), and BF-3.4 (draft persistence, needs only BF-3.1) fan out in
+parallel. **BF-6.1 and BF-6.2 are scheduled here, not in Phase 6**, per the corrected
+MVP definition — BF-6.1 has no dependency and can start as soon as a slot is free;
+BF-6.2 follows once BF-6.1 and BF-2.2 are both in. **Scout BF-6.1 first** (feature-plan
+§6.4): every consumer of `hexagenConformanceActionFiles` before generalizing its
+signature — this function is shared with the ordinary (non-brownfield) project-export
+path, and a signature change that isn't scouted first risks breaking it silently.
 
 ### Phase 4 — Ratification
 
-Starts once BF-3.1, BF-2.1, and BF-1.4 are all merged. BF-4.1, BF-4.2, and BF-4.4 own
-disjoint sub-folders and fan out fully in parallel — three separate **UI Worker**
-agents. **Scout BF-4.2 first**: confirm exporting `sanitizeScope` from
+Starts once **BF-3.1, BF-2.1, BF-1.4, and BF-0.3** are all merged — that is the union of
+the three packets' own dependency rows in the feature plan's §4 Phase-4 table (BF-4.1 →
+BF-3.1 + BF-2.1 + BF-1.4; BF-4.2 → BF-3.1 + BF-2.1; BF-4.4 → **BF-0.3** + BF-2.1).
+BF-0.3 is easy to miss and load-bearing: BF-4.4 is the findings-review screen, and
+BF-0.3 is the packet that first makes findings cross the CLI→web seam at all. Starting
+BF-4.4 before it lands means building a screen against a contract that does not yet
+exist.
+
+BF-4.1, BF-4.2, and BF-4.4 own disjoint sub-folders and fan out fully in parallel —
+three separate **UI Worker** agents. BF-4.2 is a UI packet despite touching
+`packages/sync`: its one non-UI edit is exporting an existing private function, which is
+why it is scouted rather than reassigned to a Domain/Contract Worker. **Scout BF-4.2
+first**: confirm exporting `sanitizeScope` from
 `packages/sync/src/commands/bootstrap/index.ts` doesn't collide with an existing name in
 that package's public barrel. BF-4.3 (the bootstrap API route) only needs BF-4.2's
 _type_, not its merge — it can be provisioned once BF-4.2's worker has reported the
@@ -346,7 +377,10 @@ open-string rule-grouping requirement, test conventions), then append:
   an already-accepted one as if it were new.
 - Report your diff, your test evidence (RED then GREEN output, both suites where two
   apply), and any scout-contradicting discovery back to the Primary; do not push,
-  commit, or open PRs yourself.
+  commit, or open PRs yourself. If your worktree cannot run tests, do NOT report the
+  packet as done and do NOT guess at the output: report the test definition, the exact
+  commands, and state that you could not execute them. The Primary produces the
+  evidence. An unrun test is never reported as a pass.
 ```
 
 ## 9. Completion checklist (Primary tracks continuously)
@@ -366,7 +400,8 @@ open-string rule-grouping requirement, test conventions), then append:
       is reached, with D-B3 surfaced alongside it.
 - [ ] All decision gates surfaced in the first report and re-surfaced at every relevant
       packet boundary: D-P1 (pointed at the companion arc, not resolved here), D-U1,
-      D-U2, D-U3, D-B1, D-B3, D-B4.
+      D-U2, D-U3, D-B1, D-B2, D-B3, D-B4. D-B2 blocks no packet — it is listed so the
+      "not now" answer is a recorded decision rather than a default nobody ever stated.
 - [ ] Feature-flag defaults (`BROWNFIELD_GITHUB_SCAN`, `BROWNFIELD_GATE_PR`) confirmed
       off in every environment this arc's code reaches, until their gates resolve.
 - [ ] Packet→feature traceability intact — each of F-01…F-37 lands in exactly the
