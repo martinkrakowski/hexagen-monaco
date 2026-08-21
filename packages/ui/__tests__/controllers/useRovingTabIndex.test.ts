@@ -145,12 +145,17 @@ describe("useRovingTabIndex", () => {
     // so an N-item group paid 2N detach/attach cycles per keystroke. Focus
     // still worked, which is exactly why it was easy to miss.
     const identities: boolean[] = [];
-    let api: ReturnType<typeof useRovingTabIndex> | null = null;
+    // Boxed rather than a bare `let`: TS narrows a `let` assigned only inside
+    // a component closure to `never` at the assertion site, so reading
+    // `.activeIndex` off it fails typecheck:test (a separate turbo task).
+    const api: { current: ReturnType<typeof useRovingTabIndex> | null } = {
+      current: null,
+    };
     let previous: unknown = null;
 
     function Group() {
       const roving = useRovingTabIndex({ itemCount: 3 });
-      api = roving;
+      api.current = roving;
       const callback = roving.setItemRef(0);
       identities.push(previous === null || previous === callback);
       previous = callback;
@@ -168,8 +173,8 @@ describe("useRovingTabIndex", () => {
     }
 
     render(React.createElement(Group));
-    act(() => api?.focusNext());
-    act(() => api?.focusNext());
+    act(() => api.current?.focusNext());
+    act(() => api.current?.focusNext());
 
     assert.ok(identities.length >= 3, "expected multiple renders");
     assert.ok(
@@ -177,6 +182,6 @@ describe("useRovingTabIndex", () => {
       "setItemRef(0) returned a new identity across renders",
     );
     // And focus still lands correctly with the cached callbacks.
-    assert.strictEqual(api?.activeIndex, 2);
+    assert.strictEqual(api.current?.activeIndex, 2);
   });
 });
