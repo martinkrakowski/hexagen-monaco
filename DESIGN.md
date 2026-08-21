@@ -452,6 +452,7 @@ Components use derived tokens for consistent sizing and spacing. These tokens ar
 | `--canvas-height-sm`     | 400px  | React Flow canvas fixed height — Phase 3      |
 | `--page-section-gap`     | 24px   | Vertical gap between page sections            |
 | `--form-field-gap`       | 8px    | Vertical gap between form fields              |
+| `--chat-bubble-max-width` | 85%    | Chat message bubble max width                 |
 | `--textarea-min-height`  | 150px  | Minimum height of a multi-line input          |
 | `--textarea-max-height`  | 60vh   | Maximum height of a multi-line input          |
 | `--resizable-panel-height` | `calc(100% - 3rem)` | Body height of a resizable panel, net of its header |

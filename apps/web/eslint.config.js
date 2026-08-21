@@ -294,6 +294,42 @@ export default [
     },
   },
   {
+    // The three DIRECTORY-AGNOSTIC ui rules, across all of `components/`.
+    //
+    // `components/` sat outside the plugin entirely: it was wired for
+    // `app/**` and `features/**`, and BF-2.0 added `components/primitives/**`
+    // only. So every Phase-1 promotion into `components/` (BF-1.1
+    // ScanResultPanel, BF-1.3 StageProgressList, BF-1.4 ChipInput) silently
+    // LOST tailwind/react-hook-form linting the file had while it lived in a
+    // slice. Three promotions made the same trade before it was closed.
+    //
+    // The gap was live, not theoretical: this block's first run flagged the
+    // two `max-w-[85%]` in components/chat/ChatMessageList.tsx that the
+    // BF-2.0 comment below already NAMES as unenforced.
+    //
+    // `no-information-state` is deliberately NOT here, and that is the whole
+    // reason the block below says "do not widen". That rule forbids
+    // `error`/`status`/`data`, while DESIGN.md's ownership table puts error
+    // handling IN boundary components — `components/ErrorBoundary.tsx`
+    // legitimately declares `error: Error | null`. These three rules carry no
+    // such conflict: they are about arbitrary Tailwind values, RHF array
+    // keys, and children wrapper swaps, none of which depend on the
+    // presentation-only property that makes `primitives/` special.
+    //
+    // `primitives/**` is excluded only to keep ownership single: the block
+    // below already turns these on there, plus `no-information-state`.
+    files: ["components/**/*.{ts,tsx}"],
+    ignores: ["components/primitives/**/*.{ts,tsx}"],
+    plugins: {
+      "hexagen-ui": hexagenUi,
+    },
+    rules: {
+      "hexagen-ui/no-arbitrary-tailwind-values": "error",
+      "hexagen-ui/rhf-stable-array-keys": "error",
+      "hexagen-ui/no-children-wrapper-type-swap": "error",
+    },
+  },
+  {
     // BF-2.0 — `components/primitives/` is the home for presentation-only
     // primitives (EntityDataGrid, ChoiceCardGroup, EmptyState/CountPills).
     //

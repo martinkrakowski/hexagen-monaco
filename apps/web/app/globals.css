@@ -138,6 +138,10 @@
   --page-section-gap: 24px;
   --form-field-gap: 8px;
 
+  /* Chat Tokens */
+  --chat-bubble-max-width: 85%; /* leaves the opposite gutter visible so the
+                                   sender of a message is readable at a glance */
+
   /* Form & Panel Tokens */
   --textarea-min-height: 150px;
   --textarea-max-height: 60vh;
