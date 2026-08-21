@@ -4,7 +4,7 @@ import { useFormContext } from "react-hook-form";
 import type { FieldPath } from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 
-import { ChipInput } from "../ChipInput";
+import { ChipInput } from "@/ChipInput";
 
 interface ContextFormDomainProps {
   fieldPrefix: string;
