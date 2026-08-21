@@ -4,7 +4,12 @@ import { promises as fs, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import yaml from "js-yaml";
-import { runScan, scanCommander } from "../../../src/commands/scan/index.js";
+import {
+  runScan,
+  scanCommand,
+  scanCommander,
+} from "../../../src/commands/scan/index.js";
+import { CURRENT_SCHEMA_VERSION, ScanEnvelope } from "@hexagen/shared";
 
 async function makeRepo(): Promise<string> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-scan-"));
@@ -523,5 +528,174 @@ process.exit(2);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("scan envelope (BF-0.1) — producer side", () => {
+  it("emits the envelope as the FINAL stdout line, after the human next-steps", async () => {
+    // Asserts the exact final line, not merely "some line parses as JSON".
+    // The weaker assertion would pass against a build that emitted any
+    // JSON-shaped log line, and would have passed against the pre-BF-0.1 CLI
+    // for the wrong reason if one ever appeared.
+    const root = await makeRepo();
+    const out: string[] = [];
+    const err: string[] = [];
+    const origLog = console.log;
+    const origErr = console.error;
+    // scanCommand sets process.exitCode as part of its CLI behaviour. That is
+    // worker-global state in vitest: leaving it non-zero makes the whole test
+    // process exit as failed even when every assertion here passed.
+    // `?? undefined` is load-bearing: @types/node types the process.exitCode
+    // GETTER as `string | number | null | undefined` but its SETTER as
+    // `string | number | undefined`, so round-tripping the raw value does not
+    // typecheck (TS2322 under typecheck:test).
+    const origExitCode = process.exitCode ?? undefined;
+    console.log = (...a: unknown[]) => void out.push(a.join(" "));
+    console.error = (...a: unknown[]) => void err.push(a.join(" "));
+    try {
+      await scanCommand({ root, yes: true, noReport: true });
+    } finally {
+      console.log = origLog;
+      console.error = origErr;
+      process.exitCode = origExitCode;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+
+    assert.ok(out.length > 1, "human next-steps must still be printed");
+    const last = out.at(-1) ?? "";
+    const parsed = JSON.parse(last) as Record<string, unknown>;
+
+    // Stdout and stderr are captured separately: the envelope must be on
+    // stdout, where the adapter reads it, not mixed into the error stream.
+    assert.equal(
+      err.some((line) => line.trim().startsWith("{")),
+      false,
+      "the envelope must not be written to stderr",
+    );
+
+    assert.equal(parsed.schemaVersion, CURRENT_SCHEMA_VERSION);
+    assert.ok("layout" in parsed);
+    assert.ok("filesScanned" in parsed);
+    assert.ok("reportMarkdown" in parsed);
+    assert.ok("error" in parsed);
+    // The line before it must be human text, proving placement rather than
+    // "the envelope happens to be the only thing printed".
+    assert.equal((out.at(-2) ?? "").trim().startsWith("{"), false);
+  });
+
+  it("validates against the shared schema both sides own", async () => {
+    const root = await makeRepo();
+    try {
+      const result = await runScan({ root, yes: true, noReport: true });
+      assert.equal(result.success, true);
+      if (!result.success) return;
+      const check = ScanEnvelope.safeParse(result.value.envelope);
+      assert.equal(
+        check.success,
+        true,
+        check.success ? "" : JSON.stringify(check.error.issues),
+      );
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports why it could not run, on the failure path", async () => {
+    // `error` exists so a machine consumer learns the reason instead of
+    // inferring it from an exit code plus a human string on stderr.
+    const root = await makeRepo();
+    const out: string[] = [];
+    const origLog = console.log;
+    const origErr = console.error;
+    // `?? undefined` is load-bearing: @types/node types the process.exitCode
+    // GETTER as `string | number | null | undefined` but its SETTER as
+    // `string | number | undefined`, so round-tripping the raw value does not
+    // typecheck (TS2322 under typecheck:test).
+    const origExitCode = process.exitCode ?? undefined;
+    let observedExitCode: number | string | undefined;
+    console.log = (...a: unknown[]) => void out.push(a.join(" "));
+    console.error = () => {};
+    try {
+      // Without --yes and without a TTY, scan refuses to write unratified
+      // architecture files -- a real, deterministic failure path.
+      await scanCommand({ root, noReport: true });
+      observedExitCode = process.exitCode ?? undefined;
+    } finally {
+      console.log = origLog;
+      console.error = origErr;
+      process.exitCode = origExitCode;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+    const last = out.at(-1) ?? "";
+    const parsed = JSON.parse(last) as Record<string, unknown>;
+    assert.equal(parsed.schemaVersion, CURRENT_SCHEMA_VERSION);
+    assert.equal(typeof parsed.error, "string");
+
+    // 2 = could-not-run, per the contract apps/web's classifyScanExit
+    // encodes. 1 would mean "layout written, lint found violations" -- so
+    // exiting 1 from a scan that never ran told the UI the user's
+    // architecture has violations, contradicting the `error` field emitted
+    // on the very same line.
+    assert.equal(
+      observedExitCode,
+      2,
+      "a scan that could not run must exit 2, not 1 (which means violations)",
+    );
+  });
+
+  it("restores process.exitCode so a failing scan does not leak into the worker", () => {
+    // Guards the harness itself. Both tests above mutate worker-global state;
+    // if either stops restoring it, a green suite can still exit non-zero.
+    assert.notEqual(
+      process.exitCode,
+      2,
+      "a previous test leaked its exit code into the worker",
+    );
+  });
+
+  it("fails loudly when a produced artifact cannot be read", async () => {
+    // The success path only reads files the scan is known to have written or
+    // kept. An earlier revision caught every read error and returned null,
+    // which produced exit 0 with `layout: null, error: null` -- a scan
+    // reporting success while having produced nothing readable.
+    //
+    // Simulated by replacing layout.yaml with a DIRECTORY: readFileSync then
+    // fails with EISDIR, which is a genuine fault rather than an absence.
+    const root = await makeRepo();
+    const out: string[] = [];
+    const origLog = console.log;
+    const origErr = console.error;
+    // `?? undefined` is load-bearing: @types/node types the process.exitCode
+    // GETTER as `string | number | null | undefined` but its SETTER as
+    // `string | number | undefined`, so round-tripping the raw value does not
+    // typecheck (TS2322 under typecheck:test).
+    const origExitCode = process.exitCode ?? undefined;
+    let observedExitCode: number | string | undefined;
+    console.log = (...a: unknown[]) => void out.push(a.join(" "));
+    console.error = () => {};
+    try {
+      await scanCommand({ root, yes: true, noReport: true });
+      out.length = 0;
+      const layoutPath = path.join(root, ".architecture", "layout.yaml");
+      await fs.rm(layoutPath, { force: true });
+      await fs.mkdir(layoutPath, { recursive: true });
+      await scanCommand({ root, yes: true, noReport: true });
+      observedExitCode = process.exitCode ?? undefined;
+    } finally {
+      console.log = origLog;
+      console.error = origErr;
+      process.exitCode = origExitCode;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+
+    const last = out.at(-1) ?? "";
+    const parsed = JSON.parse(last) as Record<string, unknown>;
+    assert.equal(
+      typeof parsed.error,
+      "string",
+      "an unreadable artifact must surface as an error, not a null field",
+    );
+    assert.equal(parsed.layout, null);
+    assert.equal(observedExitCode, 2);
   });
 });

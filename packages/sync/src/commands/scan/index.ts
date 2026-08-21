@@ -4,6 +4,8 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { resolveArchLinterBin } from "../../arch-linter-bin.js";
 import { err, ok, type Result } from "../../domain/result.js";
+import { CURRENT_SCHEMA_VERSION } from "@hexagen/shared";
+import { readFileSync } from "node:fs";
 import { resolveLinterTimeoutMs } from "../../linter.js";
 import { runAdopt } from "../adopt/index.js";
 import { runBootstrap } from "../bootstrap/index.js";
@@ -43,6 +45,69 @@ export interface ScanResult {
   lintExitCode: number;
   reportPaths: string[];
   nextSteps: string[];
+  /**
+   * Machine-readable summary for non-human consumers (the web scan adapter).
+   *
+   * Emitted by `scanCommand` as the FINAL stdout line, after the human
+   * `nextSteps`. That placement is the repo's existing convention for mixing
+   * both on one stream -- `parseLintJson` reads `hexagen-lint --json` the same
+   * way, taking the last trimmed line that starts with `{`.
+   */
+  envelope: ScanEnvelopePayload;
+}
+
+/**
+ * The scan envelope. Field names are the contract the web adapter already
+ * parses; `schemaVersion` comes from @hexagen/shared so producer and consumer
+ * cannot drift on it independently.
+ */
+export interface ScanEnvelopePayload {
+  schemaVersion: string;
+  layout: string | null;
+  filesScanned: number | null;
+  reportMarkdown: string | null;
+  error: string | null;
+}
+
+/**
+ * Read an artifact this scan is required to have produced or kept.
+ *
+ * Deliberately does not catch. `layoutPath` was either just written by adopt
+ * or reported as "Kept existing", so on this path any read failure -- absence
+ * included -- is a real fault. --dry-run never reaches here; it builds its own
+ * envelope with `layout: null`, because a preview genuinely has nothing to
+ * read.
+ *
+ * An earlier revision caught every error and returned null, so the CLI exited
+ * 0 with `layout: null, error: null`: a scan reporting success while having
+ * produced nothing readable. The throw propagates to runScan's catch, which
+ * returns err() and emits the failure envelope with a real message.
+ */
+function readRequiredArtifact(filePath: string): string {
+  return readFileSync(filePath, "utf8");
+}
+
+/**
+ * Read an artifact whose ABSENCE is a legitimate outcome but whose
+ * unreadability is not.
+ *
+ * The report writer returns the path it intends to write, and a caller may
+ * inject a writer that reports a path without producing a file -- the test
+ * doubles in this suite do exactly that. So ENOENT here means "no report
+ * content", which `reportMarkdown: null` states honestly.
+ *
+ * Every OTHER errno is a genuine fault (EISDIR, EACCES, EIO) and is rethrown,
+ * because those cannot mean "there is no report" -- they mean something is
+ * wrong with reading one that should be there. This is the distinction the
+ * previous blanket catch collapsed.
+ */
+function readOptionalArtifact(filePath: string): string | null {
+  try {
+    return readFileSync(filePath, "utf8");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return null;
+    throw e;
+  }
 }
 
 function lintVerdict(exitCode: number): string {
@@ -134,6 +199,16 @@ async function previewScan(
     lintExitCode: 0,
     reportPaths: [],
     nextSteps,
+    // --dry-run writes nothing, so there is nothing to report on. The envelope
+    // is still emitted so a machine consumer gets the same shape on every
+    // path and never has to special-case "preview returned no JSON".
+    envelope: {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      layout: null,
+      filesScanned: null,
+      reportMarkdown: null,
+      error: null,
+    },
   });
 }
 
@@ -240,6 +315,12 @@ export async function runScan(
       "Review layout.yaml and manifest.yaml. hexagen bootstrap does not infer depends_on from the import graph.",
     );
 
+    // The report is read back off disk rather than re-rendered: reportCommand
+    // owns the filename, and duplicating it here is exactly the drift that made
+    // `reportMarkdown` always null before (the adapter probed three names the
+    // CLI never writes).
+    const markdownPath = reportPaths.find((f) => f.endsWith(".md")) ?? null;
+
     return ok({
       layoutPath,
       manifestPath,
@@ -247,6 +328,15 @@ export async function runScan(
       lintExitCode,
       reportPaths,
       nextSteps,
+      envelope: {
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        layout: readRequiredArtifact(layoutPath),
+        filesScanned: null,
+        reportMarkdown: markdownPath
+          ? readOptionalArtifact(markdownPath)
+          : null,
+        error: null,
+      },
     });
   } catch (e) {
     return err(e instanceof Error ? e : new Error(String(e)));
@@ -271,12 +361,36 @@ export async function scanCommand(options: {
   });
   if (!result.success) {
     console.error(`❌ ${result.error.message}`);
-    process.exitCode = 1;
+    // Emit an envelope on the failure path too. `error` exists precisely so a
+    // machine consumer learns WHY the scan could not run, instead of having to
+    // infer it from an exit code and a human string on stderr.
+    console.log(
+      JSON.stringify({
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        layout: null,
+        filesScanned: null,
+        reportMarkdown: null,
+        error: result.error.message,
+      } satisfies ScanEnvelopePayload),
+    );
+    // 2, not 1. The web adapter's classifyScanExit treats 1 as "violations"
+    // (layout written, lint found problems) and 2 as "could not run". This
+    // branch is reached when the scan never ran at all -- refusing to write
+    // without --yes, no workspaces, an unreadable artifact -- so exiting 1
+    // told the UI the user's architecture has violations when nothing was
+    // ever checked. The envelope already says `error: <message>` here, so the
+    // exit code was also contradicting the payload beside it.
+    process.exitCode = 2;
     return;
   }
   for (const line of result.value.nextSteps) {
     console.log(line);
   }
+  // LAST line, after the human output. Same convention as `hexagen-lint --json`,
+  // whose consumer (parseLintJson) takes the last trimmed line starting with
+  // `{`. Keeping the human lines first means `hexagen scan` still reads as a
+  // CLI for a person, with one machine line appended for the adapter.
+  console.log(JSON.stringify(result.value.envelope));
   process.exitCode = result.value.lintExitCode;
 }
 

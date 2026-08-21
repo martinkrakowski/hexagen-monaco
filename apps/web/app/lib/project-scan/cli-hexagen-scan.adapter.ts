@@ -49,7 +49,13 @@ const defaultExecFileAsync = promisify(execFile);
 const MAX_SCAN_STDIO_BYTES = 16 * 1024 * 1024;
 const MAXBUFFER_ERROR_CODE = "ERR_CHILD_PROCESS_STDIO_MAXBUFFER";
 
+// `hexagen-report.md` first: that is the name `reportCommand` actually writes
+// (packages/sync/src/commands/report/index.ts). Its absence here is why
+// `reportMarkdown` was always null -- the probe list named three files the CLI
+// has never produced. The legacy names are kept so an older CLI on a user's
+// PATH still resolves, but they are now the fallback rather than the whole list.
 const REPORT_CANDIDATES = [
+  "hexagen-report.md",
   path.join(".architecture", "HEXAGEN-SCAN-REPORT.md"),
   path.join(".architecture", "scan-report.md"),
   "HEXAGEN-SCAN-REPORT.md",
@@ -125,10 +131,18 @@ async function collectArtifacts(
   let reportMarkdown: string | null = null;
   let parsedError: string | null = null;
 
-  const trimmed = stdout.trim();
-  if (trimmed.startsWith("{")) {
+  // The LAST line that starts with `{`, not the whole of stdout. `hexagen scan`
+  // prints its human next-steps first and appends the envelope, so requiring
+  // stdout to *begin* with `{` meant this branch never fired against the real
+  // CLI. Same shape as parseLintJson, which reads `hexagen-lint --json` this way.
+  const envelopeLine = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("{"))
+    .at(-1);
+  if (envelopeLine) {
     try {
-      const parsed: unknown = JSON.parse(trimmed);
+      const parsed: unknown = JSON.parse(envelopeLine);
       if (typeof parsed === "object" && parsed !== null) {
         const rec = parsed as Record<string, unknown>;
         if (typeof rec.layout === "string") {
