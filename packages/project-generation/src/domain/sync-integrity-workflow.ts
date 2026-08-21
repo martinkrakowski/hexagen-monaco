@@ -180,21 +180,86 @@ runs:
         node "\${{ github.action_path }}/post-comment.mjs"
 `;
 
+/**
+ * The vendored `post-comment.mjs`. This literal must stay BYTE-IDENTICAL to
+ * this repo's own dogfooded copy at
+ * `.github/actions/hexagen-conformance/post-comment.mjs` — the two silently
+ * drifted once already. `sync-integrity-workflow.test.ts` reads that file off
+ * disk and asserts strict equality against this constant, so any edit here
+ * must be mirrored there (and vice versa).
+ */
 export const HEXAGEN_CONFORMANCE_COMMENT_SCRIPT = `#!/usr/bin/env node
+/**
+ * Post or update the per-PR conformance comment. Silent when the comment
+ * file is empty (clean PR). Deletes a previous comment from this action
+ * when the PR has gone clean so a stale list does not linger.
+ *
+ * Marker: \`<!-- hexagen-conformance -->\`
+ *
+ * The posted body is the linter's own report followed by a "Review in
+ * Hexagen-Monaco" deep link prefilled with \`?repo=<owner/repo>&pr=<number>\`.
+ * The link is appended (never substituted) and only on the code paths that
+ * already post, so a clean PR still leaves no comment. \`HEXAGEN_APP_URL\`
+ * overrides the host; an unparseable value costs the link, not the comment.
+ *
+ * Provenance: vendored verbatim from Hexagen-Monaco's
+ * \`HEXAGEN_CONFORMANCE_COMMENT_SCRIPT\`
+ * (\`packages/project-generation/src/domain/sync-integrity-workflow.ts\`).
+ * Upstream a test asserts the two copies stay byte-identical, so edit both or
+ * neither; a local edit here is overwritten on the next sync.
+ */
 import { readFileSync } from "node:fs";
 
 const MARKER = "<!-- hexagen-conformance -->";
+const DEFAULT_APP_URL = "https://hexagen-monaco.cloud";
+const REVIEW_PATH = "/projects/new/import/github";
 
 const token = process.env.GITHUB_TOKEN ?? "";
 const repo = process.env.GH_REPO ?? "";
 const pr = process.env.PR_NUMBER ?? "";
 const file = process.env.COMMENT_FILE ?? "";
+const appUrl = process.env.HEXAGEN_APP_URL?.trim() || DEFAULT_APP_URL;
 
 if (!token || !repo || !pr) {
   process.stderr.write(
     "hexagen-conformance: missing GITHUB_TOKEN / GH_REPO / PR_NUMBER — skipping comment\\n",
   );
   process.exit(0);
+}
+
+/**
+ * The trailing "Review in Hexagen-Monaco" link. \`searchParams\` percent-encodes
+ * the \`owner/repo\` slash, so the prefill survives the round trip.
+ */
+function reviewFooter() {
+  let url;
+  try {
+    url = new URL(REVIEW_PATH, appUrl);
+  } catch {
+    // Deliberately does NOT echo the value. It is attacker-influencable only
+    // by whoever can set repo/org variables, but it may legitimately carry
+    // credentials, and it can contain newlines -- printing it would both leak
+    // secrets into CI logs and allow log injection.
+    process.stderr.write(
+      "hexagen-conformance: HEXAGEN_APP_URL is not a valid URL — omitting the review link\\n",
+    );
+    return "";
+  }
+  // new URL() happily accepts javascript:, data:, file: and friends, and this
+  // string is emitted straight into a Markdown link in a public PR comment.
+  // Allow only real web schemes.
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    process.stderr.write(
+      \`hexagen-conformance: HEXAGEN_APP_URL scheme \${url.protocol} is not http(s) — omitting the review link\\n\`,
+    );
+    return "";
+  }
+  // Strip any credentials rather than publishing them.
+  url.username = "";
+  url.password = "";
+  url.searchParams.set("repo", repo);
+  url.searchParams.set("pr", pr);
+  return \`\\n\\n---\\n\\n[Review in Hexagen-Monaco](\${url.toString()})\\n\`;
 }
 
 let body = "";
@@ -253,6 +318,10 @@ if (!body.trim()) {
   }
   process.exit(0);
 }
+
+// Past the silence gate: this PR has new violations, so the comment is going
+// out either way and the deep link rides along with it.
+body += reviewFooter();
 
 if (existing) {
   const res = await fetch(\`\${api}/issues/comments/\${existing.id}\`, {
