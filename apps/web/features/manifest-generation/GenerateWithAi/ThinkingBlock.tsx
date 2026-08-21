@@ -4,6 +4,7 @@ import { Fragment, useRef, useEffect, useState } from "react";
 import { Loader2, Check, Terminal, AlertCircle, Clock } from "lucide-react";
 import { CopyButton } from "@hexagen/ui";
 import type { StagedPhase, StageProgress } from "../staged-generation-types";
+import { StageProgressList } from "@/StageProgressList";
 
 const STAGE_ORDER: StagedPhase[] = [
   "stage-0",
@@ -238,29 +239,9 @@ function VerboseLogPanel({
   );
 }
 
-function StepIndicator({
-  state,
-}: {
-  state: "completed" | "active" | "pending";
-}) {
-  if (state === "completed") {
-    return (
-      <div className="w-4 h-4 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-        <Check className="w-3 h-3 text-primary" />
-      </div>
-    );
-  }
-  if (state === "active") {
-    return (
-      <div className="w-4 h-4 rounded-full bg-primary flex items-center justify-center shrink-0 step-dot-active">
-        <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground" />
-      </div>
-    );
-  }
-  return (
-    <div className="w-4 h-4 rounded-full border border-muted-foreground/20 shrink-0" />
-  );
-}
+// StepIndicator moved to apps/web/components/StageProgressList.tsx (BF-1.3) as
+// StatusIndicator, verbatim -- including the `step-dot-active` pulse on the
+// active dot.
 
 function DetailLine({ text }: { text: string }) {
   const prevText = usePrevious(text);
@@ -291,21 +272,12 @@ function formatDuration(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
 }
 
-function DurationBadge({ ms }: { ms?: number }) {
-  if (ms === undefined) return null;
-  return (
-    <span className="text-xs text-muted-foreground/60 tabular-nums">
-      {formatDuration(ms)}
-    </span>
-  );
-}
-
 /**
  * Live, per-stage elapsed-time counter. Owns its own interval + state so only
  * this leaf re-renders on each tick (the surrounding log is left untouched).
  * Resets whenever `resetKey` (the active phase) changes, so it reads as the
  * time spent in the *current* stage; completed stages keep their final
- * `DurationBadge` in the step row.
+ * duration in the step row, now rendered by `StageProgressList`.
  */
 function LiveTimer({ resetKey }: { resetKey: string }) {
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -391,28 +363,28 @@ export function ThinkingBlock({
 
   return (
     <div className="flex flex-col gap-4 py-3 w-full h-full">
-      <div className="flex items-center gap-1.5 shrink-0 self-center">
-        {STAGE_ORDER.map((stage, index) => {
-          const stageNum = index;
-          const progress = stageProgress?.[stageNum];
-          let dotState: "completed" | "active" | "pending";
-          if (index < currentStageIndex) dotState = "completed";
-          else if (index === currentStageIndex) dotState = "active";
-          else dotState = "pending";
+      <StageProgressList
+        className="shrink-0 self-center"
+        stages={STAGE_ORDER.map((stage, index) => {
+          const progress = stageProgress?.[index];
+          let status: "complete" | "active" | "pending";
+          if (index < currentStageIndex) status = "complete";
+          else if (index === currentStageIndex) status = "active";
+          else status = "pending";
 
-          return (
-            <div key={stage} className="flex items-center gap-1.5">
-              <StepIndicator state={dotState} />
-              {dotState === "completed" && (
-                <DurationBadge ms={progress?.durationMs} />
-              )}
-              {index < STAGE_ORDER.length - 1 && (
-                <div className="w-4 h-px bg-border" />
-              )}
-            </div>
-          );
+          return {
+            id: stage,
+            label: (stageLabels?.[stage] ?? STAGE_LABELS[stage]) || stage,
+            status,
+            // Only completed stages showed a duration before, and
+            // DurationBadge rendered nothing for an undefined ms.
+            duration:
+              status === "complete" && progress?.durationMs !== undefined
+                ? formatDuration(progress.durationMs)
+                : undefined,
+          };
         })}
-      </div>
+      />
 
       <div className="flex flex-col items-center justify-center gap-2 shrink-0">
         <div className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/50 px-4 py-2 shadow-sm">
