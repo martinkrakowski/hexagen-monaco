@@ -6,7 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button, Spinner } from "@hexagen/ui";
 import { ProjectsShellWithFreeTier } from "@/ProjectsShellWithFreeTier";
 import { CreationStepIndicator } from "@/landing/components/CreationStepIndicator";
-import { ScanResultPanel } from "@/landing/components/ScanResultPanel";
+import { ScanResultPanel } from "@/conformance/ScanResultPanel";
 import { CREATION_STEPS } from "@/landing/domain/creation-path";
 import { MAX_PROJECT_NAME_CHARS } from "@/lib/project-scan/limits";
 import type { ProjectScanResponse } from "@/lib/project-scan/types";
