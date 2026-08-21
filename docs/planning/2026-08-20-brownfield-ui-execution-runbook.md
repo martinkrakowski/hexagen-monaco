@@ -52,9 +52,13 @@ actually touched:
 bash scripts/validate-ui-boundary.sh
 yarn --cwd apps/web typecheck
 
-# apps/web packets (swap components/primitives for the dir you touched)
-cd apps/web && npx eslint components/primitives --ext .ts,.tsx
-cd apps/web && yarn vitest run components/primitives   # MUST be from apps/web
+# apps/web packets (swap components/primitives for the dir you touched).
+# Each cd is wrapped in a SUBSHELL on purpose. Chained bare, the second
+# `cd apps/web` fails (there is no apps/web inside apps/web), so vitest never
+# runs, every later command executes from the wrong directory, and the block
+# STILL exits 0 -- silently skipped gates that look like passing ones.
+( cd apps/web && npx eslint components/primitives --ext .ts,.tsx )
+( cd apps/web && yarn vitest run components/primitives )   # MUST be from apps/web
 
 # workspace packets (swap @hexagen/sync for yours)
 yarn workspace @hexagen/sync test
@@ -112,7 +116,7 @@ Three layers: L1 branded types, L2 `@hexagen/eslint-plugin-ui`, L3
 
 **Eleven prop names are banned** in `components/primitives/`:
 
-```
+```text
 data, loading, error, result, isFetching, isPending,
 isSuccess, isError, governance, llm, status
 ```
