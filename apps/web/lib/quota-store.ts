@@ -15,21 +15,32 @@ import { dirname } from "node:path";
  */
 
 /**
- * WARNING: "scan" must NOT be passed to `enforceDailyQuota`.
- *
- * That helper's exhaustion copy is `kind === "chat" ? "chat messages" :
- * "generations"` and it tells the user to add a BYOK key or run a local model.
- * Scanning has no LLM and no BYOK path, so a scan 429 routed through it would
- * tell the user they had run out of GENERATIONS. Use `openScanQuota` in
- * app/lib/project-scan/scan-quota.ts, which is the same gate with scan's copy.
- *
- * Widening this union made that wrong call TYPE-CHECK, which is the hazard --
- * the compiler will not stop it. Narrowing `enforceDailyQuota`'s parameter to
- * `Exclude<QuotaKind, "scan">` would close it properly and changes no metering
- * behaviour, but `apps/web/lib/enforce-quota.ts` is frozen by ADR-0063 and
- * this packet deliberately does not edit it. Flagged for the owner.
+ * Every metered kind. "scan" is metered by `openScanQuota`
+ * (app/lib/project-scan/scan-quota.ts), the others by `enforceDailyQuota` --
+ * see {@link LlmQuotaKind}, which is what stops the two being confused.
  */
 export type QuotaKind = "generation" | "chat" | "scan";
+
+/**
+ * The kinds `enforceDailyQuota` may meter.
+ *
+ * Deliberately excludes "scan". That helper's exhaustion copy is
+ * `kind === "chat" ? "chat messages" : "generations"` and it tells the user to
+ * add a BYOK key or run a local model -- advice with no meaning for scanning,
+ * which has no LLM and no BYOK path. Before this type existed, widening
+ * QuotaKind silently made `enforceDailyQuota(request, "scan")` type-check, so
+ * the compiler would have waved through a 429 telling the user they had run
+ * out of GENERATIONS.
+ *
+ * Scan metering goes through `openScanQuota` in
+ * app/lib/project-scan/scan-quota.ts, which is the same gate with scan's copy.
+ *
+ * This is a TYPE narrowing only: every existing call site passes "generation"
+ * or "chat", so no metering behaviour changes. That distinction matters --
+ * ADR-0063 freezes enforce-quota.ts against METERING edits, and this alters
+ * none.
+ */
+export type LlmQuotaKind = Exclude<QuotaKind, "scan">;
 
 /**
  * Daily per-session limits — 10 generations, 100 chat messages (PR-6 spec), and

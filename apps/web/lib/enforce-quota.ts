@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { resolveAnonSession } from "./anon-session";
 import {
   getQuotaStore,
-  type QuotaKind,
+  type LlmQuotaKind,
   type QuotaResult,
   type QuotaStore,
 } from "./quota-store";
@@ -43,7 +43,10 @@ export type QuotaGate =
  */
 export function enforceDailyQuota(
   request: NextRequest,
-  kind: QuotaKind,
+  // Narrowed from QuotaKind: "scan" must not reach this helper's copy.
+  // See LlmQuotaKind in quota-store.ts. Type-only -- no metering behaviour
+  // changes, so ADR-0063's freeze on metering edits is not reversed.
+  kind: LlmQuotaKind,
   store?: QuotaStore,
 ): QuotaGate {
   const { sessionId, setCookie } = resolveAnonSession(request);
