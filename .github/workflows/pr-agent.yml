@@ -46,11 +46,34 @@ permissions:
 # Both #594 and #595 got no review at all.
 #
 # Splitting on sender type gives bot-triggered runs their own group, where
-# they can only cancel each other (and are skipped anyway). Two `/review`
-# comments from a human still land in one group, so the newer one supersedes
+# they can only cancel each other (and are skipped anyway).
+#
+# That fix was HALF the hole. It stopped *bots* cancelling the review; a
+# HUMAN comment still landed in the same group as the pull_request run and
+# killed it exactly the same way. Observed on #609 --
+#   17:58:07  pull_request   review starts        (sender: a human)
+#   17:58:11  bots comment                        -> own group, skipped (the
+#                                                    sender-type fix working)
+#   17:58:17  the PR author posts a summary       -> SAME group
+#   17:58:20  pull_request   CANCELLED, mid docker-pull
+#   17:58:19  issue_comment  skipped (not a slash command)
+# Review dead, nothing replaced it. Same failure, human sender.
+#
+# This is not an edge case: posting a reviewer's-guide comment right after
+# opening a PR is routine practice here, which means the review was being
+# killed on essentially every PR that followed it. A cancelled run still
+# reports as a red check, so it looked like a flaky bot rather than a
+# self-inflicted cancel.
+#
+# Root cause both times: cancel-in-progress treats every run in the group as
+# redundant, but a comment-triggered run and a pull_request-triggered run are
+# not alternatives to each other -- one reviews the diff, the other answers a
+# command, and most comment runs do neither because the job guard skips them.
+# Keying on the event as well means an issue_comment can no longer pre-empt a
+# review. Two `/review` comments still share a group, so the newer supersedes
 # the older -- which is what cancel-in-progress is actually for here.
 concurrency:
-  group: "pr-agent-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event.sender.type }}"
+  group: "pr-agent-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event_name }}-${{ github.event.sender.type }}"
   cancel-in-progress: true
 
 jobs:
