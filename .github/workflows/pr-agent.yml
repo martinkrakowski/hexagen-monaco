@@ -46,11 +46,56 @@ permissions:
 # Both #594 and #595 got no review at all.
 #
 # Splitting on sender type gives bot-triggered runs their own group, where
-# they can only cancel each other (and are skipped anyway). Two `/review`
-# comments from a human still land in one group, so the newer one supersedes
-# the older -- which is what cancel-in-progress is actually for here.
+# they can only cancel each other (and are skipped anyway).
+#
+# That fix was HALF the hole. It stopped *bots* cancelling the review; a
+# HUMAN comment still landed in the same group as the pull_request run and
+# killed it exactly the same way. Observed on #609 --
+#   17:58:07  pull_request   review starts        (sender: a human)
+#   17:58:11  bots comment                        -> own group, skipped (the
+#                                                    sender-type fix working)
+#   17:58:17  the PR author posts a summary       -> SAME group
+#   17:58:20  pull_request   CANCELLED, mid docker-pull
+#   17:58:19  issue_comment  skipped (not a slash command)
+# Review dead, nothing replaced it. Same failure, human sender.
+#
+# This is not an edge case: posting a reviewer's-guide comment right after
+# opening a PR is routine practice here, which means the review was being
+# killed on essentially every PR that followed it. A cancelled run still
+# reports as a red check, so it looked like a flaky bot rather than a
+# self-inflicted cancel.
+#
+# Root cause both times: cancel-in-progress treats every run in the group as
+# redundant, but a comment-triggered run and a pull_request-triggered run are
+# not alternatives to each other -- one reviews the diff, the other answers a
+# command, and most comment runs do neither because the job guard skips them.
+#
+# So the key is not the event, it is "does this run produce a review". Keying
+# on the event alone was the obvious fix and it was wrong in the other
+# direction: it put `/review` in a different group from the auto review, so an
+# explicit /review would no longer supersede the run it was asking to redo --
+# both would proceed and post duplicate reviews. Trading a cancelled review
+# for a doubled one is not a fix. (Caught in review on this PR.)
+#
+# Review-producing runs share a group and supersede each other, as intended:
+#   - every `pull_request` run
+#   - an `issue_comment` whose body is exactly the /review command
+# Everything else -- /describe, /improve, /ask, /help, and ordinary comments --
+# gets the isolated group. Those are not alternatives to a review: they do
+# different work, so running one concurrently with a review is correct.
+#
+# The /review test is the exact-match form the job guard uses, deliberately
+# not startsWith(body, '/review'). A loose test would let `/reviewXYZ` join
+# the review group and cancel a real review, and the guard would then skip it
+# -- which is precisely the bug this whole block exists to prevent, rebuilt one
+# level down.
 concurrency:
-  group: "pr-agent-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event.sender.type }}"
+  group: >-
+    pr-agent-${{ github.event.pull_request.number || github.event.issue.number
+    }}-${{ (github.event_name == 'pull_request'
+    || github.event.comment.body == '/review'
+    || startsWith(github.event.comment.body, '/review '))
+    && 'review' || 'other' }}-${{ github.event.sender.type }}
   cancel-in-progress: true
 
 jobs:
