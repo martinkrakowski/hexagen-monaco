@@ -110,6 +110,18 @@ export interface FindingsReviewViewProps {
  * gate whether or not the finding is gone, which is the one behaviour on this
  * screen nobody guesses correctly.
  */
+/**
+ * Accessible-name suffix that disambiguates two findings sharing rule+file.
+ *
+ * A finding's identity is rule + file + SPECIFIER (it mirrors the linter's
+ * violationKey). Naming a control by rule and file alone gives two distinct
+ * rows the same accessible name -- so a screen-reader user cannot tell which
+ * import they are accepting, and getByLabelText becomes ambiguous in tests.
+ */
+function rowSuffix(row: FindingsReviewRow): string {
+  return row.specifier ? ` (${row.specifier})` : "";
+}
+
 function bucketPills(counts: FindingsSourceCounts): CountPillItem[] {
   return [
     {
@@ -273,7 +285,7 @@ export function FindingsReviewView({
         <Checkbox
           checked={row.baselined}
           onCheckedChange={(checked) => onToggleBaselined(row.key, checked)}
-          aria-label={`Accept ${row.rule} in ${row.file} as pre-existing debt`}
+          aria-label={`Accept ${row.rule} in ${row.file}${rowSuffix(row)} as pre-existing debt`}
         />
       ),
     },
@@ -321,7 +333,7 @@ export function FindingsReviewView({
               onChange={(event) => onReasonChange(row.key, event.target.value)}
               disabled={!row.baselined}
               placeholder="Required — e.g. predates adoption, tracked in ADR-0054"
-              aria-label={`Why ${row.rule} in ${row.file} is accepted debt`}
+              aria-label={`Why ${row.rule} in ${row.file}${rowSuffix(row)} is accepted debt`}
               aria-describedby={message ? messageId : undefined}
               aria-invalid={message?.severity === "error" ? true : undefined}
             />

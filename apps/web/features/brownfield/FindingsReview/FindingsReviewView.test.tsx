@@ -174,11 +174,29 @@ describe("FindingsReviewView", () => {
   it("raises an accept intent from the row checkbox", async () => {
     const user = userEvent.setup();
     const { handlers, rows } = renderView();
+    // The accessible name carries the SPECIFIER too: rule + file alone is not
+    // a finding's identity, so two rows differing only by specifier would
+    // otherwise share a name and this query would be ambiguous.
     const box = screen.getByLabelText(
-      "Accept npm-package-in-domain in packages/orders/src/domain/order.ts as pre-existing debt",
+      `Accept ${rows[0].rule} in ${rows[0].file} (${rows[0].specifier}) as pre-existing debt`,
     );
     await user.click(box);
     expect(handlers.onToggleBaselined).toHaveBeenCalledWith(rows[0].key, true);
+  });
+
+  it("gives two findings differing only by specifier distinct accessible names", () => {
+    // Distinct findings sharing rule+file must not collide: a screen-reader
+    // user has to know WHICH import they are accepting.
+    const { rows } = renderView();
+    const names = rows
+      .filter((r) => r.specifier)
+      .map(
+        (r) =>
+          `Accept ${r.rule} in ${r.file} (${r.specifier}) as pre-existing debt`,
+      );
+    for (const name of names) {
+      expect(screen.getAllByLabelText(name).length).toBe(1);
+    }
   });
 
   it("bulk-accepts one rule under one typed reason, and clears without one", async () => {

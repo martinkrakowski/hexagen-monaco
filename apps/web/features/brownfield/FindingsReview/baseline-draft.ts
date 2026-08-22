@@ -720,11 +720,23 @@ export function summarizeFindingsSource(
   source: FindingsReviewSource,
 ): FindingsSourceCounts | null {
   if (source.kind !== "collected") return null;
+  // Counted the SAME way the rows are built -- deduped by findingKey.
+  //
+  // Raw bucket lengths disagreed with the grid: buildFindingsReviewRows drops
+  // repeats, so a source containing a duplicated finding produced a heading
+  // saying "5 findings" above a pill reading 6. The pills are the summary OF
+  // the table, so they have to count what the table shows, or the screen
+  // contradicts itself about how much debt is under review.
+  const distinct = (findings: readonly BrownfieldFinding[]): number => {
+    const seen = new Set<string>();
+    for (const finding of findings) seen.add(findingKey(finding));
+    return seen.size;
+  };
   return {
-    fresh: source.fresh.length,
-    baselined: source.baselined.length,
-    stale: source.stale.length,
-    expired: source.expired.length,
+    fresh: distinct(source.fresh),
+    baselined: distinct(source.baselined),
+    stale: distinct(source.stale),
+    expired: distinct(source.expired),
   };
 }
 
