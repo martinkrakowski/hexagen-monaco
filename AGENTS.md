@@ -149,7 +149,7 @@ Ends with: **Ready to move to Develop mode when you say `develop [feature]`.**
 
 **Triggers:** "review", "analyze", "critique", "check this code", "why was this added", "history of", "verify and validate [PR] comments".
 
-**Full spec:** [`.agents/REVIEW.md`](.agents/REVIEW.md) — dispositioning CodeRabbit / qodo review-bot comments.
+**Full spec:** [`.agents/REVIEW.md`](.agents/REVIEW.md) — dispositioning CodeRabbit / qodo / greptile-apps / PR-Agent review-bot comments.
 
 **Rule:** Read-only — no edits, no code generation.
 **Output:** Structured critique: **Critical Violations** and **Architectural Smells**.
