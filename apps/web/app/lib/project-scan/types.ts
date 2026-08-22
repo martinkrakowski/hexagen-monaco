@@ -46,14 +46,35 @@ export interface ScanFinding {
  * brownfield tree has none, so they would arrive permanently empty and read as
  * "nothing was introduced" rather than "the question does not apply here".
  */
-export interface ScanFindings {
+interface ScanFindingBuckets {
   readonly fresh: readonly ScanFinding[];
   readonly baselined: readonly ScanFinding[];
   readonly stale: readonly ScanFinding[];
   readonly expired: readonly ScanFinding[];
-  readonly collected: boolean;
-  readonly failureReason?: string;
 }
+
+/**
+ * A discriminated union, not a flat record with an optional reason.
+ *
+ * `collected: false` with four empty arrays and NO explanation renders as "0
+ * findings" -- a clean bill of health for a scan that never ran. That is the
+ * false green this seam exists to prevent, so the type makes it unsayable:
+ * an uncollected summary must carry a `failureReason`, and a collected one
+ * cannot carry one.
+ *
+ * The previous shape (`collected: boolean` + optional reason) could only be
+ * defended by a runtime test, and the test that tried compared two literals
+ * to each other and could not fail.
+ */
+export type ScanFindings =
+  | (ScanFindingBuckets & {
+      readonly collected: true;
+      readonly failureReason?: never;
+    })
+  | (ScanFindingBuckets & {
+      readonly collected: false;
+      readonly failureReason: string;
+    });
 
 export interface ProjectScanResponse {
   readonly verdict: ScanVerdict;

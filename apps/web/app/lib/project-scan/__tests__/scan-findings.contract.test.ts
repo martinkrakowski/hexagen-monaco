@@ -94,6 +94,40 @@ describe("scan envelope findings — consumer contract", () => {
     assert.notEqual(uncollected.collected, clean.collected);
     assert.equal(typeof uncollected.failureReason, "string");
     assert.equal(clean.failureReason, undefined);
+
+    // The assertions above compare two literals declared in this test and
+    // cannot fail while the types compile. The invariant is now enforced by
+    // the TYPE instead, so the checks below are the ones with teeth.
+    //
+    // Caveat, stated rather than glossed: apps/web/tsconfig.json excludes
+    // **/*.test.ts, so `yarn typecheck` does not read this file and these
+    // directives are not enforced in CI today. Verified by running tsc
+    // against this file directly -- neither reports TS2578 ("unused
+    // @ts-expect-error"), so both are suppressing real errors. They become
+    // CI-enforced the moment that exclude is fixed, which is its own packet.
+
+    // @ts-expect-error collected:false must carry a failureReason -- a bare
+    // uncollected summary renders as "0 findings", i.e. a clean bill of health
+    // for a scan that never ran.
+    const missingReason: ScanFindings = {
+      fresh: [],
+      baselined: [],
+      stale: [],
+      expired: [],
+      collected: false,
+    };
+    void missingReason;
+
+    // @ts-expect-error a collected summary cannot carry a failure reason.
+    const contradictory: ScanFindings = {
+      fresh: [],
+      baselined: [],
+      stale: [],
+      expired: [],
+      collected: true,
+      failureReason: "should not typecheck",
+    };
+    void contradictory;
   });
 
   it("is optional on ProjectScanResponse, so a pre-BF-0.3 CLI still typechecks", () => {

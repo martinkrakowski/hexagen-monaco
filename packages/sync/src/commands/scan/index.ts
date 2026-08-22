@@ -129,8 +129,9 @@ export interface ScanEnvelopePayload {
   schemaVersion: string;
   layout: string | null;
   /**
-   * Still always null, and NOT an oversight of BF-0.3.
+   * The count of files the linter walked, or null when it could not run.
    *
+   * The history matters, because the obvious reading of the CLI is wrong:
    * `hexagen-lint` prints `Files scanned: N` through `logger.info`, and its
    * logger is built as `createConsoleLogger(process.argv.includes("--json"))`
    * -- i.e. `--json` makes it QUIET. So the findings and the count are not
@@ -274,22 +275,60 @@ function toLintOutcome(value: number | ScanLintOutcome): ScanLintOutcome {
  * that type is shared with the report path, which has no use for the count,
  * and growing a shared type to serve one caller is how contracts rot.
  */
+/**
+ * Parse one JSON object line without a bare `catch`.
+ *
+ * Returns a discriminated value rather than null so a caller can tell
+ * "unparseable" from "parsed, but nothing useful in it" -- the distinction
+ * .agents/TESTING.md's Result convention exists to preserve.
+ */
+function parseJsonRecord(
+  line: string,
+): { ok: true; value: Record<string, unknown> } | { ok: false; error: Error } {
+  try {
+    const value = JSON.parse(line) as unknown;
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      return { ok: false, error: new Error("not a JSON object") };
+    }
+    return { ok: true, value: value as Record<string, unknown> };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e : new Error(String(e)) };
+  }
+}
+
 export function collectFilesScanned(stdout: string): number | null {
   const line = stdout
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => l.startsWith("{"))
     .at(-1);
-  if (!line) return null;
-  try {
-    const raw = JSON.parse(line) as { filesScanned?: unknown };
+  if (line === undefined) return null;
+  // No catch here, deliberately, and no swallowed error: .agents/TESTING.md
+  // makes `catch { return null }` a hard rejection, and it would have been
+  // one more null with a second meaning. `parseJsonRecord` returns a
+  // discriminated value instead, and the PARSE FAILURE ITSELF is already
+  // reported by collectLintFindings, which reads the same line and yields
+  // `uncollectedFindings(reason)`. So the diagnosis is carried by
+  // findings.failureReason and this function only answers "is there a count
+  // I can trust", where every no is the same no.
+  const parsed = parseJsonRecord(line);
+  if (!parsed.ok) return null;
+  {
+    const raw = parsed.value as { filesScanned?: unknown };
+    // INTEGER and > 0. Two reasons, both concrete:
+    //
+    // - The shared ScanEnvelope schema is z.number().int().min(0), so a float
+    //   would fail the consumer's parse rather than degrade.
+    // - 0 is rejected because this seam's own contract is "null, never 0": a
+    //   zero renders as "scanned nothing and passed". The linter cannot
+    //   legitimately report it either -- abortIfVacuous exits before printing
+    //   when nothing was scanned -- so a 0 arriving here means the payload is
+    //   not trustworthy, which is exactly what null says.
     return typeof raw.filesScanned === "number" &&
-      Number.isFinite(raw.filesScanned) &&
-      raw.filesScanned >= 0
+      Number.isInteger(raw.filesScanned) &&
+      raw.filesScanned > 0
       ? raw.filesScanned
       : null;
-  } catch {
-    return null;
   }
 }
 
@@ -334,7 +373,8 @@ const LINT_STDOUT_MAX_BYTES = 32 * 1024 * 1024;
  *    their terminal: every violation line is `logger.error`, i.e. stderr.
  *  - the linter's console logger is constructed quiet under `--json`, so its
  *    informational stdout (including `Files scanned: N`) is not emitted at all.
- *    That is why `ScanEnvelopePayload.filesScanned` stays null; see its doc.
+ *    That is why the count needed the linter change this packet makes; see
+ *    `ScanEnvelopePayload.filesScanned`.
  *
  * Capturing stdout also keeps the linter's JSON line OFF the scan's own
  * stdout, where a stray `{`-line would compete with the envelope the web
@@ -375,10 +415,19 @@ export function invokeHexagenLint(root: string): ScanLintOutcome {
   );
 
   if (result.error) {
+    // Distinguish the failure modes rather than calling everything a start
+    // failure. All three are still "could not run" (exit 2) -- the exit code
+    // is unchanged -- but the envelope now carries findings.failureReason, so
+    // a reader diagnosing a flaky CI run needs to know whether the binary
+    // never launched, the output blew the buffer, or it ran and timed out.
+    // "failed to start" for a timeout sends that reader after the wrong bug.
+    const errno = (result.error as NodeJS.ErrnoException).code;
     const message =
-      (result.error as NodeJS.ErrnoException).code === "ENOBUFS"
+      errno === "ENOBUFS"
         ? `hexagen-lint produced more than ${LINT_STDOUT_MAX_BYTES} bytes of output and was stopped — architecture was not checked (exit 2).`
-        : `hexagen-lint failed to start: ${result.error.message}`;
+        : errno === "ETIMEDOUT"
+          ? `hexagen-lint timed out and was stopped — architecture was not checked (exit 2).`
+          : `hexagen-lint failed to start: ${result.error.message}`;
     console.error(message);
     return {
       exitCode: 2,

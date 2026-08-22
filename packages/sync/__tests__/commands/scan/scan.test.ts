@@ -1079,7 +1079,7 @@ describe("scan findings (BF-0.3) — hexagen-lint --json capture", () => {
   //
   // String.raw keeps the `\n` sequences inside the JSON string literal escaped
   // for JSON.parse rather than being turned into real newlines by TypeScript.
-  const REAL_LINT_JSON = String.raw`{"fresh":[],"baselined":[{"rule":"npm-package-in-domain","file":"packages/template-engine/templates/llm-adapter/files/src/domain/ports/out/llm-client.port.ts","specifier":"zod","message":"Domain Violation in [template-engine]:\n  Domain file: packages/template-engine/templates/llm-adapter/files/src/domain/ports/out/llm-client.port.ts\n  npm package 'zod' imported in the domain layer (specifier 'zod').\n  Wrap it in an adapter, or declare the exception under 'domain_package_allowlist' in linter-config.yaml."}],"stale":[],"expired":[],"introduced":[],"baselineGrowth":[]}`;
+  const REAL_LINT_JSON = String.raw`{"fresh":[],"baselined":[{"rule":"npm-package-in-domain","file":"packages/template-engine/templates/llm-adapter/files/src/domain/ports/out/llm-client.port.ts","specifier":"zod","message":"Domain Violation in [template-engine]:\n  Domain file: packages/template-engine/templates/llm-adapter/files/src/domain/ports/out/llm-client.port.ts\n  npm package 'zod' imported in the domain layer (specifier 'zod').\n  Wrap it in an adapter, or declare the exception under 'domain_package_allowlist' in linter-config.yaml."}],"stale":[],"expired":[],"introduced":[],"baselineGrowth":[],"filesScanned":1946}`;
 
   // The same real entry, moved into `fresh` — what an unbaselined violation
   // looks like on a first brownfield import. Derived from the captured payload
@@ -1088,6 +1088,26 @@ describe("scan findings (BF-0.3) — hexagen-lint --json capture", () => {
     const raw = JSON.parse(REAL_LINT_JSON) as Record<string, unknown[]>;
     return JSON.stringify({ ...raw, fresh: raw.baselined, baselined: [] });
   })();
+
+  it("the fixture still matches what the linter actually emits", () => {
+    // The fixture is captured verbatim, so it is the contract. When the
+    // linter gained `filesScanned` this fixture kept six keys and nothing
+    // failed -- a captured payload that no longer matches the producer is
+    // worse than no fixture, because every test built on it reads as proof.
+    const keys = Object.keys(
+      JSON.parse(REAL_LINT_JSON) as Record<string, unknown>,
+    ).sort();
+    assert.deepEqual(keys, [
+      "baselineGrowth",
+      "baselined",
+      "expired",
+      "filesScanned",
+      "fresh",
+      "introduced",
+      "stale",
+    ]);
+    assert.equal(collectFilesScanned(REAL_LINT_JSON), 1946);
+  });
 
   it("parses the real --json payload and drops the two --pr-diff-only fields", () => {
     const findings = collectLintFindings(REAL_LINT_JSON);
@@ -1338,6 +1358,13 @@ describe("scan envelope — filesScanned (BF-0.3)", () => {
     );
     assert.equal(collectFilesScanned('{"filesScanned":"7"}'), null);
     assert.equal(collectFilesScanned('{"filesScanned":-1}'), null);
+    // A float would fail the shared schema's z.number().int() on the consumer
+    // side rather than degrade, so it is rejected here.
+    assert.equal(collectFilesScanned('{"filesScanned":1.5}'), null);
+    // 0 is rejected on purpose: the seam's contract is "null, never 0", and
+    // the linter's own abortIfVacuous exits before printing when nothing was
+    // scanned -- so a 0 arriving here means the payload is untrustworthy.
+    assert.equal(collectFilesScanned('{"filesScanned":0}'), null);
     assert.equal(collectFilesScanned("not json"), null);
     assert.equal(collectFilesScanned(""), null);
   });
