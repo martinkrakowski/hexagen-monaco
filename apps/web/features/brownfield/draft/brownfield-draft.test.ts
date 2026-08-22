@@ -560,7 +560,9 @@ describe("review fixes (#589)", () => {
 
   it("accepts every tier and gate mode", () => {
     for (const tier of ["artifacts", "clone", "zip"] as const) {
-      expect(isBrownfieldDraft({ ...base, tier, layoutDraft: null })).toBe(true);
+      expect(isBrownfieldDraft({ ...base, tier, layoutDraft: null })).toBe(
+        true,
+      );
     }
     for (const gateInstallMode of ["download-zip", "open-pr"] as const) {
       expect(
@@ -569,4 +571,3 @@ describe("review fixes (#589)", () => {
     }
   });
 });
-

@@ -15,7 +15,12 @@ export class AtomicFileSystemAdapter implements FileSystemPort {
       await fs.stat(filePath);
       return true;
     } catch (e: unknown) {
-      if (typeof e === "object" && e !== null && "code" in e && (e as { code: string }).code === "ENOENT") {
+      if (
+        typeof e === "object" &&
+        e !== null &&
+        "code" in e &&
+        (e as { code: string }).code === "ENOENT"
+      ) {
         return false;
       }
       throw e;

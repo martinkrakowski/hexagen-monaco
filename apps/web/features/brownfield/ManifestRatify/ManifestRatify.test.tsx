@@ -116,7 +116,9 @@ describe("ManifestRatify", () => {
     const user = userEvent.setup();
     const { onBack, onRatify, onDraftChange } = renderRatify();
 
-    await user.click(screen.getByRole("button", { name: /Back to the layout/ }));
+    await user.click(
+      screen.getByRole("button", { name: /Back to the layout/ }),
+    );
 
     expect(onBack).toHaveBeenCalledTimes(1);
     expect(onRatify).not.toHaveBeenCalled();

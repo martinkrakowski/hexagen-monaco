@@ -63,7 +63,10 @@ export function ChatMessageList({
             {msg.content}
           </div>
         ) : (
-          <div key={msg.id} className="text-sm mr-auto ml-0 max-w-[var(--chat-bubble-max-width)]">
+          <div
+            key={msg.id}
+            className="text-sm mr-auto ml-0 max-w-[var(--chat-bubble-max-width)]"
+          >
             <ChatMarkdown content={msg.content} />
           </div>
         ),

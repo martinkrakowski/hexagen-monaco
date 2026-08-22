@@ -314,7 +314,10 @@ export function parseArchLintBaseline(text: string): ParseResult<{
   }
   const version = parsed.value.version;
   if (typeof version !== "number" || !Number.isFinite(version)) {
-    return { ok: false, error: "arch-lint baseline: missing numeric 'version'" };
+    return {
+      ok: false,
+      error: "arch-lint baseline: missing numeric 'version'",
+    };
   }
   if (version !== 1) {
     return {

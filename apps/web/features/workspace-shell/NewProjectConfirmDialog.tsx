@@ -30,10 +30,7 @@ export function NewProjectConfirmDialog({
     lifecycle.loadedProject?.name;
 
   return (
-    <Dialog
-      open={isOpen}
-      onClose={handleCancel}
-    >
+    <Dialog open={isOpen} onClose={handleCancel}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Start a New Project?</DialogTitle>

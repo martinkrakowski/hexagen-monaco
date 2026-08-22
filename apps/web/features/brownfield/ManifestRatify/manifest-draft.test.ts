@@ -56,8 +56,16 @@ const problemIds = (draft: BrownfieldManifestDraft): string[] =>
 describe("createManifestDraft", () => {
   const layout = {
     contexts: [
-      { packageRoot: "packages/orders", contextName: "orders", layerDirectories: {} },
-      { packageRoot: "packages/billing", contextName: "billing", layerDirectories: {} },
+      {
+        packageRoot: "packages/orders",
+        contextName: "orders",
+        layerDirectories: {},
+      },
+      {
+        packageRoot: "packages/billing",
+        contextName: "billing",
+        layerDirectories: {},
+      },
     ],
   };
 
@@ -225,7 +233,10 @@ describe("validateManifestDraft", () => {
 describe("includedContexts / dependencyOptionsFor", () => {
   it("counts only ticked rows", () => {
     const draft = draftOf({
-      contexts: [contextOf({ name: "a" }), contextOf({ name: "b", include: false })],
+      contexts: [
+        contextOf({ name: "a" }),
+        contextOf({ name: "b", include: false }),
+      ],
     });
 
     expect(includedContexts(draft).map((c) => c.name)).toEqual(["a"]);
@@ -306,12 +317,14 @@ describe("updateContextAt / toggleDependency", () => {
 
   it("removes an edge without touching the others", () => {
     const draft = draftOf({
-      contexts: [contextOf({ name: "orders", dependsOn: ["billing", "shipping"] })],
+      contexts: [
+        contextOf({ name: "orders", dependsOn: ["billing", "shipping"] }),
+      ],
     });
 
-    expect(toggleDependency(draft, 0, "billing", false).contexts[0]?.dependsOn).toEqual([
-      "shipping",
-    ]);
+    expect(
+      toggleDependency(draft, 0, "billing", false).contexts[0]?.dependsOn,
+    ).toEqual(["shipping"]);
   });
 });
 
@@ -389,9 +402,9 @@ describe("context type is a closed set (#599 review)", () => {
 
   it("tells the user rather than silently changing their choice", () => {
     const problems = validateManifestDraft(withType("retired-kind"));
-    expect(
-      problems.some((p) => p.id.startsWith("context-type-unknown")),
-    ).toBe(true);
+    expect(problems.some((p) => p.id.startsWith("context-type-unknown"))).toBe(
+      true,
+    );
   });
 
   it("accepts every supported type unchanged", () => {
@@ -406,4 +419,3 @@ describe("context type is a closed set (#599 review)", () => {
     }
   });
 });
-

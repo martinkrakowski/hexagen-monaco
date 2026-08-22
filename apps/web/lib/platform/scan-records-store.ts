@@ -386,7 +386,8 @@ function parseFindingsBlob(raw: string): FindingsBlob | null {
 
 function isScanTier(value: unknown): value is ScanTier {
   return (
-    typeof value === "string" && (SCAN_TIERS as readonly string[]).includes(value)
+    typeof value === "string" &&
+    (SCAN_TIERS as readonly string[]).includes(value)
   );
 }
 
@@ -567,7 +568,10 @@ export function createScanRecordsStore(
         // evictedArtifactPaths back for the caller to unlink, retention would
         // then delete another tenant's file. Cross-tenant deletion is not a
         // hypothetical consequence of a wrong path; it is the mechanism.
-        const ownerDir = join(resolve(artifactsRoot), assertSafeSegmentOrNull(ownerId) ?? "\u0000");
+        const ownerDir = join(
+          resolve(artifactsRoot),
+          assertSafeSegmentOrNull(ownerId) ?? "\u0000",
+        );
         if (
           typeof artifact.path !== "string" ||
           !isPathInside(ownerDir, artifact.path)

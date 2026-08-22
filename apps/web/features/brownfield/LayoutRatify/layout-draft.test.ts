@@ -123,12 +123,9 @@ describe("buildLayoutRatifyRows", () => {
 
   it("keeps the detector's proposal isolated from later edits", () => {
     const rows = buildLayoutRatifyRows(detected());
-    const edited = setLayerDirectories(
-      rows,
-      "packages/orders",
-      "domain",
-      ["src/model"],
-    );
+    const edited = setLayerDirectories(rows, "packages/orders", "domain", [
+      "src/model",
+    ]);
     expect(edited[0].detectedLayerDirectories.domain).toEqual(["src/domain"]);
     expect(edited[0].layerDirectories.domain).toEqual(["src/model"]);
   });
@@ -284,18 +281,18 @@ describe("validateLayoutRows", () => {
       "packages/orders",
       "   ",
     );
-    expect(validateLayoutRows(rows).rowMessages["packages/orders"].severity).toBe(
-      "error",
-    );
+    expect(
+      validateLayoutRows(rows).rowMessages["packages/orders"].severity,
+    ).toBe("error");
 
     rows = renameContext(
       buildLayoutRatifyRows(detected()),
       "packages/orders",
       "order service",
     );
-    expect(validateLayoutRows(rows).rowMessages["packages/orders"].text).toMatch(
-      /spaces, slashes/,
-    );
+    expect(
+      validateLayoutRows(rows).rowMessages["packages/orders"].text,
+    ).toMatch(/spaces, slashes/);
 
     rows = renameContext(
       buildLayoutRatifyRows(detected()),
@@ -308,7 +305,11 @@ describe("validateLayoutRows", () => {
   it("accepts the ordinary names the detector itself emits", () => {
     const rows = buildLayoutRatifyRows([
       { root: "packages/a", name: "order-service", layers: { domain: ["s"] } },
-      { root: "packages/b", name: "Order_Service.v2", layers: { domain: ["s"] } },
+      {
+        root: "packages/b",
+        name: "Order_Service.v2",
+        layers: { domain: ["s"] },
+      },
     ]);
     expect(validateLayoutRows(rows).errorCount).toBe(0);
   });
@@ -393,7 +394,10 @@ describe("mergeRatifiedDraft", () => {
     ]);
     const draft = toLayoutDraft(rows);
 
-    const restored = mergeRatifiedDraft(buildLayoutRatifyRows(detected()), draft);
+    const restored = mergeRatifiedDraft(
+      buildLayoutRatifyRows(detected()),
+      draft,
+    );
     expect(toLayoutDraft(restored)).toEqual(draft);
   });
 
@@ -465,4 +469,3 @@ describe("normalizeDirectory — path containment", () => {
     expect(normalizeDirectory("src/v1.2/domain")).toBe("src/v1.2/domain");
   });
 });
-

@@ -85,9 +85,9 @@ describe("the scope preview", () => {
     // user typed — which is the whole reason this screen previews rather than
     // silently sanitizing on submit.
     expect(screen.getAllByText("acme-corp").length).toBeGreaterThan(0);
-    expect(
-      (screen.getByLabelText("npm scope") as HTMLInputElement).value,
-    ).toBe("@Acme Corp!");
+    expect((screen.getByLabelText("npm scope") as HTMLInputElement).value).toBe(
+      "@Acme Corp!",
+    );
   });
 
   it("names each rule that fired rather than leaving the user to diff strings", () => {
@@ -190,7 +190,11 @@ describe("the context grid", () => {
       screen.getByRole("checkbox", { name: "orders depends on billing" }),
     );
 
-    expect(handlers.onToggleDependency).toHaveBeenCalledWith(0, "billing", true);
+    expect(handlers.onToggleDependency).toHaveBeenCalledWith(
+      0,
+      "billing",
+      true,
+    );
   });
 
   it("explains an empty dependency panel instead of showing an empty box", async () => {
@@ -300,7 +304,9 @@ describe("the ratify gate", () => {
     const user = userEvent.setup();
     const handlers = renderView();
 
-    await user.click(screen.getByRole("button", { name: /Back to the layout/ }));
+    await user.click(
+      screen.getByRole("button", { name: /Back to the layout/ }),
+    );
 
     expect(handlers.onBack).toHaveBeenCalledTimes(1);
   });
@@ -310,7 +316,9 @@ describe("the architecture pick", () => {
   it("offers the three architectures hexagen writes, as one radiogroup", () => {
     renderView();
 
-    expect(screen.getByRole("radiogroup", { name: "Architecture" })).toBeTruthy();
+    expect(
+      screen.getByRole("radiogroup", { name: "Architecture" }),
+    ).toBeTruthy();
     expect(screen.getAllByRole("radio").length).toBe(3);
   });
 

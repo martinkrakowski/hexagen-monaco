@@ -45,7 +45,7 @@ HEX-034.
 
 ## ADR-C2 — Inbound vs outbound directory convention
 
-**Context.** Several packages park *driven* ports under `application/ports/in`
+**Context.** Several packages park _driven_ ports under `application/ports/in`
 and inject them into use cases. Comments on those files say “infrastructure
 adapters implement this.” Observed in security, governance,
 monaco-orchestration, wizard-orchestration, and project-configuration
@@ -58,7 +58,7 @@ a port the adapter implements).
 
 **Options.**
 
-1. **Enforce the documented convention.** Use cases *implement* inbound
+1. **Enforce the documented convention.** Use cases _implement_ inbound
    ports; driven contracts live in `ports/out`.
 2. **Accept “ports/in means the only port the use case has”** and update
    layer-rules + sync generators so the linter stops implying otherwise.
@@ -66,7 +66,7 @@ a port the adapter implements).
    `direction: in | out` in the context YAML.
 
 **Recommendation.** (1). It matches AGENTS.md Domain/Adapter worker specs
-and unblocks HEX-015 (use case implements inbound *and* delegates I/O).
+and unblocks HEX-015 (use case implements inbound _and_ delegates I/O).
 
 **Consequences.** Folder moves across ~5 packages. Sync generators that emit
 `ports/in` stubs with “adapter implements this” comments must change.
@@ -109,7 +109,7 @@ tsconfig reference. Option 2 is a move + delete.
 prevent TS2306.” `core-domain` exports MVK from `src/mvk/v1` while
 `domain/application/infrastructure` are `export {}` (HEX-025). Frozen
 contexts `architectural-enforcement` and `code-generation` have no runtime
-code. `transaction-system` is also `status: frozen` but *is* implemented —
+code. `transaction-system` is also `status: frozen` but _is_ implemented —
 do not delete it.
 
 AGENTS.md: “Never leave a barrel with only `export {}`.”
@@ -148,12 +148,12 @@ again (HEX-017).
    infrastructure, injected as a port. Domain keeps only provider/model ids.
 2. **Keep catalogs in domain** as “configuration as data” and document an
    exception in layer-rules.yaml.
-3. **Per-app chains** (web vs TUI vs MCP) but one *builder* in a single
+3. **Per-app chains** (web vs TUI vs MCP) but one _builder_ in a single
    package, not three literals.
 
 **Recommendation.** (1) + (3): domain ids, one config adapter, per-app
 composition of the chain. Delete the domain `createDefaultFallbackChain`
-once wire.* and TUI consume the adapter.
+once wire.\* and TUI consume the adapter.
 
 **Consequences.** Prompt/stage temperature changes stop requiring domain
 edits. Secret-name changes stay next to the vault adapter (HEX-008).
@@ -220,7 +220,7 @@ import type { FireflyError } from "../../../infrastructure/adobe/errors/firefly-
 from `src/domain/ports/out/*.port.ts`, with a comment calling this
 “deliberate decoupling” (HEX-001). Type-only does not invert the
 dependency. The same pattern is about to be copied for
-`AgentRuntimePort` living *in* infrastructure (HEX-036).
+`AgentRuntimePort` living _in_ infrastructure (HEX-036).
 
 **Options.**
 

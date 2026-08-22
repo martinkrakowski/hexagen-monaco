@@ -16,16 +16,16 @@ Legend: **ADR** = decision first · **PKG** = package code · **WEB** = `apps/we
 
 ## Wave 0 — Decisions (no production code)
 
-| # | Item | Findings | ADR | Acceptance |
-|---|------|----------|-----|------------|
-| 0.1 | Accept or rewrite ADR-C1 (port ownership) | HEX-005, HEX-006, HEX-007 | C1 | ADR merged; owning package named per port |
-| 0.2 | Accept or rewrite ADR-C2 (in/out folders) | HEX-018, HEX-019 | C2 | ADR merged; sync stub comments match |
-| 0.3 | Accept or rewrite ADR-C3 (security BC) | HEX-009 | C3 | ADR merged; keep / fold / delete chosen |
-| 0.4 | Accept or rewrite ADR-C4 (empty barrels) | HEX-025 | C4 | ADR merged; frozen-empty vs kernel-real distinguished |
-| 0.5 | Accept or rewrite ADR-C5 (LLM catalog) | HEX-012, HEX-020 | C5 | ADR merged; single catalog owner named |
-| 0.6 | Accept or rewrite ADR-C6 (TS pin) | MOD-001 | C6 | ADR merged; stay on 5.9.3 **or** scheduled raise |
-| 0.7 | Accept or rewrite ADR-C7 (engines.node) | MOD-004 | C7 | ADR merged; 22.7-only **or** CI-on-20 |
-| 0.8 | Accept or rewrite ADR-C8 (template errors) | HEX-001 | C8 | ADR merged; domain error union shape named |
+| #   | Item                                       | Findings                  | ADR | Acceptance                                            |
+| --- | ------------------------------------------ | ------------------------- | --- | ----------------------------------------------------- |
+| 0.1 | Accept or rewrite ADR-C1 (port ownership)  | HEX-005, HEX-006, HEX-007 | C1  | ADR merged; owning package named per port             |
+| 0.2 | Accept or rewrite ADR-C2 (in/out folders)  | HEX-018, HEX-019          | C2  | ADR merged; sync stub comments match                  |
+| 0.3 | Accept or rewrite ADR-C3 (security BC)     | HEX-009                   | C3  | ADR merged; keep / fold / delete chosen               |
+| 0.4 | Accept or rewrite ADR-C4 (empty barrels)   | HEX-025                   | C4  | ADR merged; frozen-empty vs kernel-real distinguished |
+| 0.5 | Accept or rewrite ADR-C5 (LLM catalog)     | HEX-012, HEX-020          | C5  | ADR merged; single catalog owner named                |
+| 0.6 | Accept or rewrite ADR-C6 (TS pin)          | MOD-001                   | C6  | ADR merged; stay on 5.9.3 **or** scheduled raise      |
+| 0.7 | Accept or rewrite ADR-C7 (engines.node)    | MOD-004                   | C7  | ADR merged; 22.7-only **or** CI-on-20                 |
+| 0.8 | Accept or rewrite ADR-C8 (template errors) | HEX-001                   | C8  | ADR merged; domain error union shape named            |
 
 ---
 
@@ -48,7 +48,7 @@ Legend: **ADR** = decision first · **PKG** = package code · **WEB** = `apps/we
 
 - **Findings:** MOD-003
 - **Depends on:** 1.1
-- **Scope:** `packages/agentic-interaction` jest.* files, `test:jest`
+- **Scope:** `packages/agentic-interaction` jest.\* files, `test:jest`
   script, jest/ts-jest deps; root `jest.setup.js`;
   `packages/ui-projection-compiler/jest.config.cjs`
 - **Acceptance:**
@@ -101,7 +101,7 @@ Legend: **ADR** = decision first · **PKG** = package code · **WEB** = `apps/we
   - `rg "export interface ProjectConfigurationReadPort"` has **one** hit
     in `src/`.
   - mcp-server and sync `import type { ProjectConfigurationReadPort } from
-    "@hexagen/project-configuration"`.
+"@hexagen/project-configuration"`.
   - Typecheck green.
 
 ### 2.2 PKG — Rename the two `FileSystemPort`s
@@ -209,7 +209,7 @@ Legend: **ADR** = decision first · **PKG** = package code · **WEB** = `apps/we
   - Those use-case files do not import `node:fs`, `process.env`,
     `html-to-image`, or call `document.querySelector`.
   - An outbound adapter implements the I/O.
-  - HEX-015 use case may still *implement* the inbound port.
+  - HEX-015 use case may still _implement_ the inbound port.
 
 ### 3.7 PKG — ts-morph stays behind a DTO port
 
@@ -245,10 +245,10 @@ Legend: **ADR** = decision first · **PKG** = package code · **WEB** = `apps/we
 - **Scope:** `packages/agentic-interaction`
 - **Acceptance:**
   - `src/domain/prompts/generate-manifest.prompt.ts` no longer owns
-    STAGE_* literals **or** the file has moved under `application/`.
+    STAGE\_\* literals **or** the file has moved under `application/`.
   - One R01–R18 catalog is imported by both the Stage-6 prompt and
     `structuralManifestErrors`.
-  - `ExecuteStructuredConfigGenerationUseCase` no longer *defines*
+  - `ExecuteStructuredConfigGenerationUseCase` no longer _defines_
     `parseStructuredConfig` / `structuralManifestErrors` (it may re-export
     for one release).
   - Existing staged-generation tests still pass.
@@ -407,27 +407,27 @@ Do **not** put extracted policy into `@hexagen/ui`.
 
 ## Wave 7 — Smaller / leftover items (parallel after Wave 2)
 
-| # | Findings | Notes |
-|---|----------|--------|
-| 7.1 | HEX-023, HEX-024 | Neutral persistence-backend type; model-prefs port |
-| 7.2 | HEX-026 | `ManifestCodecPort` for wizard + manifest-generation |
-| 7.3 | HEX-027 | domain path predicates without `node:path` |
-| 7.4 | HEX-028 | strip WebLLM/WebGPU wording from local-llm domain ports |
-| 7.5 | HEX-029 | move ChatMessage/GovernancePayload out of prompt-compiler infra |
-| 7.6 | HEX-032 | topology invariants in domain or `@hexagen/runtime` |
-| 7.7 | HEX-033 | wire or delete `apps/api-gateway` |
-| 7.8 | HEX-037 | delete empty `*PortAdapter` stubs **or** implement them |
-| 7.9 | HEX-038 | stub-template-resolver stops importing `config.js` |
-| 7.10 | GOD-008 | extract `deriveApps` / `deriveCrossContextEdges` (after 3.3) |
-| 7.11 | GOD-011 | IDB salvage mapper out of the adapter class |
-| 7.12 | MOD-007 | `Error.cause` on listed rethrow sites (in-floor) |
-| 7.13 | MOD-008 | llm-driver retry must not hang on inner throw |
+| #    | Findings         | Notes                                                           |
+| ---- | ---------------- | --------------------------------------------------------------- |
+| 7.1  | HEX-023, HEX-024 | Neutral persistence-backend type; model-prefs port              |
+| 7.2  | HEX-026          | `ManifestCodecPort` for wizard + manifest-generation            |
+| 7.3  | HEX-027          | domain path predicates without `node:path`                      |
+| 7.4  | HEX-028          | strip WebLLM/WebGPU wording from local-llm domain ports         |
+| 7.5  | HEX-029          | move ChatMessage/GovernancePayload out of prompt-compiler infra |
+| 7.6  | HEX-032          | topology invariants in domain or `@hexagen/runtime`             |
+| 7.7  | HEX-033          | wire or delete `apps/api-gateway`                               |
+| 7.8  | HEX-037          | delete empty `*PortAdapter` stubs **or** implement them         |
+| 7.9  | HEX-038          | stub-template-resolver stops importing `config.js`              |
+| 7.10 | GOD-008          | extract `deriveApps` / `deriveCrossContextEdges` (after 3.3)    |
+| 7.11 | GOD-011          | IDB salvage mapper out of the adapter class                     |
+| 7.12 | MOD-007          | `Error.cause` on listed rethrow sites (in-floor)                |
+| 7.13 | MOD-008          | llm-driver retry must not hang on inner throw                   |
 
 ---
 
 ## Explicit non-goals (do not open PRs for these)
 
-- Splitting a file *because* it is long (inventory 3059-loc use-case is
+- Splitting a file _because_ it is long (inventory 3059-loc use-case is
   GOD-001 for **four** responsibilities, not for LOC).
 - Moving extracted view-models into `@hexagen/ui`.
 - Introducing Vite as the web bundler (ADR-0000).

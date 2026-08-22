@@ -20,8 +20,5 @@ export interface FileSystemPort {
   /**
    * Write content to a file atomically.
    */
-  writeFile(
-    filePath: string,
-    content: string,
-  ): Promise<void>;
+  writeFile(filePath: string, content: string): Promise<void>;
 }

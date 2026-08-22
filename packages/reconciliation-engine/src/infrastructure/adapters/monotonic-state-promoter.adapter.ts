@@ -140,7 +140,9 @@ export class MonotonicStatePromoterAdapter implements PromoteStatePort {
    * @param state - Reconciliation state to analyze
    * @returns Inferred current phase
    */
-  private getCurrentPhaseFromState(state: ReconciliationState): ReconciliationPhase {
+  private getCurrentPhaseFromState(
+    state: ReconciliationState,
+  ): ReconciliationPhase {
     if (state.isStable && state.pendingVerdicts.length === 0) {
       return "approved"; // or could be initial pending if version is 0
     }

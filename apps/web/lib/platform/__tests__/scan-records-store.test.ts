@@ -219,7 +219,9 @@ describe("scan records store — artifact paths", () => {
     });
     expect(written.success).toBe(false);
     if (!written.success) {
-      expect(written.error.message).toMatch(/outside this owner's artifacts directory/);
+      expect(written.error.message).toMatch(
+        /outside this owner's artifacts directory/,
+      );
     }
     const listed = store.list();
     if (listed.success) expect(listed.value.length).toBe(0);
@@ -456,9 +458,14 @@ describe("scan records store — trend", () => {
 
   it("survives a corrupt findings blob because it never reads one", () => {
     const { db, store } = harness();
-    rawInsert(db, { id: "corrupt", findings_sample: "{not json", created_at: 1 });
+    rawInsert(db, {
+      id: "corrupt",
+      findings_sample: "{not json",
+      created_at: 1,
+    });
     const trend = store.trend();
     expect(trend.success).toBe(true);
-    if (trend.success) expect(trend.value.map((p) => p.id)).toEqual(["corrupt"]);
+    if (trend.success)
+      expect(trend.value.map((p) => p.id)).toEqual(["corrupt"]);
   });
 });

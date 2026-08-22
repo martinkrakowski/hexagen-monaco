@@ -79,9 +79,10 @@ describe("ingestHandoffZip", () => {
     assert.match(result.artifacts.manifestExcerpt ?? "", /system: Demo/);
     assert.equal(result.errorMessage, null);
     assert.deepEqual(result.warnings, []);
-    assert.deepEqual([...result.artifacts.present].sort(), [
-      ...HANDOFF_ARTIFACT_NAMES,
-    ].sort());
+    assert.deepEqual(
+      [...result.artifacts.present].sort(),
+      [...HANDOFF_ARTIFACT_NAMES].sort(),
+    );
     assert.deepEqual(result.artifacts.missing, []);
   });
 

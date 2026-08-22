@@ -77,7 +77,9 @@ describe("GATE_PACKAGE_JSON_PATCH (decision D-B4)", () => {
     };
 
     expect(parsed.packageManager).toBe(GATE_PACKAGE_MANAGER_PIN);
-    expect(parsed.scripts[GATE_LINT_SCRIPT_NAME]).toBe(GATE_LINT_SCRIPT_COMMAND);
+    expect(parsed.scripts[GATE_LINT_SCRIPT_NAME]).toBe(
+      GATE_LINT_SCRIPT_COMMAND,
+    );
     expect(parsed.scripts[GATE_CHECK_SCRIPT_NAME]).toBe(
       GATE_CHECK_SCRIPT_COMMAND,
     );

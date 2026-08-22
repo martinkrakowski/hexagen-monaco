@@ -10,19 +10,25 @@ interface ContextFormDomainProps {
   fieldPrefix: string;
 }
 
-export function ContextFormDomain({
-  fieldPrefix,
-}: ContextFormDomainProps) {
+export function ContextFormDomain({ fieldPrefix }: ContextFormDomainProps) {
   const { setValue, watch } = useFormContext<ProjectConfig>();
 
   const coreDomainEntities =
-    (watch(`${fieldPrefix}.coreDomainEntities` as FieldPath<ProjectConfig>) as string[]) || [];
+    (watch(
+      `${fieldPrefix}.coreDomainEntities` as FieldPath<ProjectConfig>,
+    ) as string[]) || [];
   const valueObjects =
-    (watch(`${fieldPrefix}.valueObjects` as FieldPath<ProjectConfig>) as string[]) || [];
+    (watch(
+      `${fieldPrefix}.valueObjects` as FieldPath<ProjectConfig>,
+    ) as string[]) || [];
   const useCases =
-    (watch(`${fieldPrefix}.useCases` as FieldPath<ProjectConfig>) as string[]) || [];
+    (watch(
+      `${fieldPrefix}.useCases` as FieldPath<ProjectConfig>,
+    ) as string[]) || [];
   const domainEvents =
-    (watch(`${fieldPrefix}.domainEvents` as FieldPath<ProjectConfig>) as string[]) || [];
+    (watch(
+      `${fieldPrefix}.domainEvents` as FieldPath<ProjectConfig>,
+    ) as string[]) || [];
 
   return (
     <div className="space-y-6 p-2">
@@ -42,9 +48,13 @@ export function ContextFormDomain({
             name={`${fieldPrefix}.coreDomainEntities`}
             values={coreDomainEntities}
             onChange={(values) =>
-              setValue(`${fieldPrefix}.coreDomainEntities` as FieldPath<ProjectConfig>, values, {
-                shouldDirty: true,
-              })
+              setValue(
+                `${fieldPrefix}.coreDomainEntities` as FieldPath<ProjectConfig>,
+                values,
+                {
+                  shouldDirty: true,
+                },
+              )
             }
           />
           <ChipInput
@@ -53,9 +63,13 @@ export function ContextFormDomain({
             name={`${fieldPrefix}.valueObjects`}
             values={valueObjects}
             onChange={(values) =>
-              setValue(`${fieldPrefix}.valueObjects` as FieldPath<ProjectConfig>, values, {
-                shouldDirty: true,
-              })
+              setValue(
+                `${fieldPrefix}.valueObjects` as FieldPath<ProjectConfig>,
+                values,
+                {
+                  shouldDirty: true,
+                },
+              )
             }
           />
         </div>
@@ -77,9 +91,13 @@ export function ContextFormDomain({
             name={`${fieldPrefix}.useCases`}
             values={useCases}
             onChange={(values) =>
-              setValue(`${fieldPrefix}.useCases` as FieldPath<ProjectConfig>, values, {
-                shouldDirty: true,
-              })
+              setValue(
+                `${fieldPrefix}.useCases` as FieldPath<ProjectConfig>,
+                values,
+                {
+                  shouldDirty: true,
+                },
+              )
             }
           />
           <ChipInput
@@ -88,9 +106,13 @@ export function ContextFormDomain({
             name={`${fieldPrefix}.domainEvents`}
             values={domainEvents}
             onChange={(values) =>
-              setValue(`${fieldPrefix}.domainEvents` as FieldPath<ProjectConfig>, values, {
-                shouldDirty: true,
-              })
+              setValue(
+                `${fieldPrefix}.domainEvents` as FieldPath<ProjectConfig>,
+                values,
+                {
+                  shouldDirty: true,
+                },
+              )
             }
           />
         </div>

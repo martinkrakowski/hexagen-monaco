@@ -50,7 +50,9 @@ describe("EmptyState", () => {
   it("renders the icon and hides it from assistive tech", () => {
     // The glyph repeats what the title already says; announcing it would read
     // the empty state twice.
-    const { container } = render(<EmptyState title="No scans yet" icon={Inbox} />);
+    const { container } = render(
+      <EmptyState title="No scans yet" icon={Inbox} />,
+    );
     const svg = container.querySelector("svg");
     expect(svg).toBeTruthy();
     expect(svg?.getAttribute("aria-hidden")).toBe("true");
@@ -85,7 +87,9 @@ describe("EmptyState", () => {
     // `description` is a ReactNode and 0 is a valid one. A bare truthiness
     // gate treated it as absent, so a caller passing a count of zero -- the
     // single most likely number to show in an empty state -- got nothing.
-    const { container } = render(<EmptyState title="No findings" description={0} />);
+    const { container } = render(
+      <EmptyState title="No findings" description={0} />,
+    );
     expect(container.textContent).toContain("0");
   });
 
@@ -109,7 +113,9 @@ describe("EmptyState", () => {
   it("lets a host override a base utility", () => {
     // With a plain string join both p-8 and p-0 survive and source order
     // decides. cn() resolves the conflict in the caller's favour.
-    const { container } = render(<EmptyState title="No findings" className="p-0" />);
+    const { container } = render(
+      <EmptyState title="No findings" className="p-0" />,
+    );
     const root = container.firstElementChild;
     const cls = root?.getAttribute("class") ?? "";
     expect(cls).toContain("p-0");

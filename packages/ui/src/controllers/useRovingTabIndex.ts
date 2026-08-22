@@ -124,7 +124,7 @@ export function useRovingTabIndex(
       }
       const next = position + delta;
       const wrapped = circular
-        ? (((next % focusable.length) + focusable.length) % focusable.length)
+        ? ((next % focusable.length) + focusable.length) % focusable.length
         : Math.min(focusable.length - 1, Math.max(0, next));
       apply(focusable[wrapped]);
     },

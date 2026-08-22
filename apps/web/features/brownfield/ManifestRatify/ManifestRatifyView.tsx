@@ -1,7 +1,14 @@
 "use client";
 
 import { useId } from "react";
-import { ArrowLeft, ArrowRight, Blocks, Box, Network, PackageX } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Blocks,
+  Box,
+  Network,
+  PackageX,
+} from "lucide-react";
 import { Button, Checkbox, Input, Label } from "@hexagen/ui";
 import { CountPills } from "@/primitives/CountPills";
 import { EmptyState } from "@/primitives/EmptyState";
@@ -55,29 +62,30 @@ import type { ScopePreview } from "./scope-preview";
  * and its own mobile affordance; it is styled to match `Input` and nothing more.
  */
 
-const ARCHITECTURE_OPTIONS: readonly ChoiceCardOption<ManifestArchitecture>[] = [
-  {
-    value: "modular-monolith",
-    label: "Modular monolith",
-    description:
-      "One deployable, bounded contexts as packages inside it. What hexagen bootstrap proposes, and what a workspace with packages/* usually already is.",
-    Icon: Blocks,
-  },
-  {
-    value: "microservices",
-    label: "Microservices",
-    description:
-      "Each bounded context deploys on its own. Pick this only if that is already true of the repository you scanned — it changes what the conformance gate considers a boundary violation.",
-    Icon: Network,
-  },
-  {
-    value: "monolith",
-    label: "Monolith",
-    description:
-      "One deployable with no package-level separation. Contexts are still ratified; they describe intent rather than an existing physical split.",
-    Icon: Box,
-  },
-];
+const ARCHITECTURE_OPTIONS: readonly ChoiceCardOption<ManifestArchitecture>[] =
+  [
+    {
+      value: "modular-monolith",
+      label: "Modular monolith",
+      description:
+        "One deployable, bounded contexts as packages inside it. What hexagen bootstrap proposes, and what a workspace with packages/* usually already is.",
+      Icon: Blocks,
+    },
+    {
+      value: "microservices",
+      label: "Microservices",
+      description:
+        "Each bounded context deploys on its own. Pick this only if that is already true of the repository you scanned — it changes what the conformance gate considers a boundary violation.",
+      Icon: Network,
+    },
+    {
+      value: "monolith",
+      label: "Monolith",
+      description:
+        "One deployable with no package-level separation. Contexts are still ratified; they describe intent rather than an existing physical split.",
+      Icon: Box,
+    },
+  ];
 
 /** Human labels for the `bounded_contexts[].type` enum. */
 const CONTEXT_TYPE_LABELS: Record<ManifestContextType, string> = {
@@ -255,9 +263,9 @@ export function ManifestRatifyView({
         </h1>
         <p className="text-muted-foreground max-w-xl mx-auto leading-relaxed">
           These are the values that get written to{" "}
-          <code className="font-mono text-sm">.architecture/manifest.yaml</code>.
-          Nothing here was inferred from your code — change anything you disagree
-          with before you continue.
+          <code className="font-mono text-sm">.architecture/manifest.yaml</code>
+          . Nothing here was inferred from your code — change anything you
+          disagree with before you continue.
         </p>
       </div>
 
@@ -397,8 +405,8 @@ export function ManifestRatifyView({
               return (
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">
-                    Tick a context this one is allowed to import from. Nothing is
-                    ticked for you: bootstrap infers no edges.
+                    Tick a context this one is allowed to import from. Nothing
+                    is ticked for you: bootstrap infers no edges.
                   </p>
                   <ul className="space-y-2">
                     {options.map((target) => {

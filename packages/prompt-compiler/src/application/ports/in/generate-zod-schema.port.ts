@@ -1,4 +1,3 @@
-
 import type { StructuredOutputSchema } from "../../../domain/index.js";
 
 /**

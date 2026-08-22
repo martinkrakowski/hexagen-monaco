@@ -69,7 +69,9 @@ describe("LayoutRatifyView", () => {
     expect(document.body.textContent).toMatch(
       /proposals from the scan of Acme Checkout, not assertions/,
     );
-    expect(document.body.textContent).toMatch(/nothing is written until you continue/);
+    expect(document.body.textContent).toMatch(
+      /nothing is written until you continue/,
+    );
   });
 
   it("renders one include control per package, pre-set from the evidence", () => {
@@ -135,7 +137,9 @@ describe("LayoutRatifyView", () => {
     );
     // The wording is deliberately absolute — the detector records only aliases
     // that exist on disk, so this is never a confidence score.
-    expect(document.body.textContent).not.toMatch(/confidence|likely|probably/i);
+    expect(document.body.textContent).not.toMatch(
+      /confidence|likely|probably/i,
+    );
   });
 
   it("marks a row a human changed, so a proposal is never mistaken for a decision", () => {
@@ -163,9 +167,9 @@ describe("LayoutRatifyView", () => {
     expect(field.getAttribute("aria-invalid")).toBe("true");
     const describedBy = field.getAttribute("aria-describedby");
     expect(describedBy).toBeTruthy();
-    expect(
-      document.getElementById(describedBy ?? "")?.textContent,
-    ).toMatch(/packages\/orders/);
+    expect(document.getElementById(describedBy ?? "")?.textContent).toMatch(
+      /packages\/orders/,
+    );
 
     expect(screen.getByRole("status").textContent).toMatch(
       /Fix the highlighted context names/,

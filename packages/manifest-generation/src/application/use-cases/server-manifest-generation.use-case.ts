@@ -40,7 +40,9 @@ export class ServerManifestGenerationUseCase implements ManifestGenerationPort {
   async execute(
     description: string,
     options?: { mode?: "local" | "server"; modelId?: string },
-  ): Promise<{ ok: true; result: GeneratedManifest } | { ok: false; error: string }> {
+  ): Promise<
+    { ok: true; result: GeneratedManifest } | { ok: false; error: string }
+  > {
     try {
       const endpoint =
         options?.mode === "local"

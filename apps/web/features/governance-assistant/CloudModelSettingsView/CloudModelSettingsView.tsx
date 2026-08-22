@@ -22,7 +22,11 @@ export function CloudModelSettingsView({
   onCancelConnection,
 }: CloudModelSettingsViewProps) {
   const settings = useCloudModelSettings({ vault });
-  const connectivity = useCloudConnectivity(isConnecting, connectionError, isConnected);
+  const connectivity = useCloudConnectivity(
+    isConnecting,
+    connectionError,
+    isConnected,
+  );
 
   const clientProviders = getClientProviders();
   const {

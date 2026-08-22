@@ -45,9 +45,8 @@ export function useWizardData(): WizardData {
   return ctx.wizardData;
 }
 
-const WizardFormMethodsContext = createContext<UseFormReturn<ProjectConfig> | null>(
-  null,
-);
+const WizardFormMethodsContext =
+  createContext<UseFormReturn<ProjectConfig> | null>(null);
 
 export function WizardStepFormProvider({
   children,

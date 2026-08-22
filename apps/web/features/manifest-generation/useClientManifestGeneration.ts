@@ -132,10 +132,7 @@ export function useClientManifestGeneration(
   );
 
   const finalizeGeneration = useCallback(
-    async (
-      topology: ManifestTopologyDraft,
-      signal?: AbortSignal,
-    ) => {
+    async (topology: ManifestTopologyDraft, signal?: AbortSignal) => {
       logger.info(
         `[manifest-gen] Finalizing generation for ${topology.boundedContexts.length} contexts`,
       );
@@ -174,7 +171,10 @@ export function useClientManifestGeneration(
         );
         setStepDetail("Manifest generation complete");
         setGeneratedManifest(rendered.yaml);
-        setDiagnostics([...rendered.diagnostics, ...adaptersResult.diagnostics]);
+        setDiagnostics([
+          ...rendered.diagnostics,
+          ...adaptersResult.diagnostics,
+        ]);
         setPhase("complete");
         setIsGenerating(false);
       } catch (error) {

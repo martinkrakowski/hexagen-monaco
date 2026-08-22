@@ -180,6 +180,21 @@ jobs:
         if: steps.docs-only.outputs.docs_only != 'true'
         run: node scripts/check-lint-coverage.mjs
 
+      # Layer 0. Formatting was enforced ONLY by lint-staged (pre-commit), so
+      # anything committed with --no-verify, produced in a worktree without
+      # node_modules, or merged from a branch that never ran the hook drifted
+      # silently. 42 files had accumulated by the time anyone looked.
+      #
+      # This is the structural fix: the hook cannot see what bypasses it, and
+      # in a delegated workflow bypassing it is the normal case, not the
+      # exception -- a worker with no node_modules cannot run prettier at all.
+      #
+      # --check, never --write: CI reports drift, it does not rewrite the
+      # author's commit behind their back. `yarn format` is the fix.
+      - name: "Verify Formatting"
+        if: steps.docs-only.outputs.docs_only != 'true'
+        run: npx prettier --check "**/*.{ts,tsx,md,json}"
+
       # Layer 2. Runs eslint in every workspace that has a lint script, via the
       # same `turbo lint` the root `lint` script uses. `dependsOn: ["^build"]`
       # in turbo.json means dependency builds run first; that is the graph's

@@ -17,4 +17,6 @@ export interface LocalLlmStructuredMessagingPort {
   ): Promise<T>;
 }
 
-export type LocalLlmPort = LocalLlmMessagingPort | LocalLlmStructuredMessagingPort;
+export type LocalLlmPort =
+  | LocalLlmMessagingPort
+  | LocalLlmStructuredMessagingPort;

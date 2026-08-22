@@ -52,7 +52,9 @@ const emptyData: GovernanceData = {
   portAdapterStatus: [],
 };
 
-export function useGovernanceData(options: UseGovernanceDataOptions = {}): UseGovernanceDataReturn {
+export function useGovernanceData(
+  options: UseGovernanceDataOptions = {},
+): UseGovernanceDataReturn {
   const { enabled = true } = options;
   const [data, setData] = useState<GovernanceData>(emptyData);
   const [isLoading, setIsLoading] = useState(false);
@@ -104,11 +106,9 @@ export function useGovernanceData(options: UseGovernanceDataOptions = {}): UseGo
           }
         }
 
-        const [violationsData, suggestionsData, statusData] = await Promise.all([
-          violationsRes.json(),
-          suggestionsRes.json(),
-          statusRes.json(),
-        ]);
+        const [violationsData, suggestionsData, statusData] = await Promise.all(
+          [violationsRes.json(), suggestionsRes.json(), statusRes.json()],
+        );
 
         if (violationsData.error || suggestionsData.error || statusData.error) {
           setError(
@@ -126,7 +126,9 @@ export function useGovernanceData(options: UseGovernanceDataOptions = {}): UseGo
         });
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Failed to fetch governance data",
+          err instanceof Error
+            ? err.message
+            : "Failed to fetch governance data",
         );
       } finally {
         setIsLoading(false);
