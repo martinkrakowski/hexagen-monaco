@@ -56,7 +56,13 @@ const TSCONFIG = path.join(PACKAGE_ROOT, "tsconfig.json");
  *      release. "Trimmed the barrel" is not a changelog entry; the names are.
  * ──────────────────────────────────────────────────────────────────────────
  *
- * Last change: 0.10.0 removed `InMemoryConfigDouble`, `YamlConfigAdapter`, and
+ * Last change: `sanitizeScope` ADDED — the canonical npm-scope normaliser from
+ * `src/types/manifest/helpers.ts`, surfaced so the brownfield S4 ratification
+ * screen and `POST /api/projects/bootstrap` can show and apply exactly what
+ * `hexagen bootstrap` writes instead of reimplementing it. An addition, so not
+ * breaking; it is on this list because it is now supported, not incidental.
+ *
+ * Before that: 0.10.0 removed `InMemoryConfigDouble`, `YamlConfigAdapter`, and
  * the six `fs-utils` names (`protectedFiles`, `isGeneratedFile`,
  * `isProtectedRoot`, `isInScope`, `safeWriteFileAtomic`, `safeWriteFile`).
  */
@@ -111,6 +117,7 @@ const EXPECTED_PUBLIC_SURFACE: readonly string[] = [
   "parseArgs",
   "portName",
   "recordWriteStatus",
+  "sanitizeScope",
   "saveManifest",
   "validateManifest",
 ];
