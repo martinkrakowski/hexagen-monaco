@@ -2,11 +2,11 @@ import { test, vi } from "vitest";
 import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
 
-vi.mock("../../../app/lib/persist-run-telemetry", () => ({
+vi.mock("../persist-run-telemetry", () => ({
   persistStageTelemetry: vi.fn(),
 }));
 
-import { persistStageTelemetry } from "../../../app/lib/persist-run-telemetry";
+import { persistStageTelemetry } from "../persist-run-telemetry";
 import { useStagedGenerationStream } from "../useStagedGenerationStream";
 
 const originalFetch = global.fetch;

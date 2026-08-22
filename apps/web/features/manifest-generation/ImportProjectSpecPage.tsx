@@ -10,7 +10,7 @@ import {
 import { logger } from "../../lib/structured-logger";
 import { useStagedSpecGeneration } from "./useStagedSpecGeneration";
 import { useStagedManifestGeneration } from "./useStagedManifestGeneration";
-import type { StageValidationReport } from "./useStagedGenerationStream";
+import type { StageValidationReport } from "../../app/lib/useStagedGenerationStream";
 import { useLooseSpecConversion } from "./useLooseSpecConversion";
 import { Button } from "@hexagen/ui";
 import { ArrowLeft, ArrowRight, RefreshCw } from "lucide-react";

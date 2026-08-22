@@ -1,7 +1,10 @@
 import { Suspense } from "react";
 import { Skeleton } from "@hexagen/ui";
-import type { StagedPhase, StageProgress } from "../staged-generation-types";
-import type { StageValidationReport } from "../useStagedGenerationStream";
+import type {
+  StagedPhase,
+  StageProgress,
+} from "../../../app/lib/staged-generation-types";
+import type { StageValidationReport } from "../../../app/lib/useStagedGenerationStream";
 import { ValidationFindingsPanel } from "../ValidationFindingsPanel";
 import { ThinkingBlock } from "./ThinkingBlock";
 

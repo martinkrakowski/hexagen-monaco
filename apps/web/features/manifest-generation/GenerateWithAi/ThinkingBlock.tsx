@@ -3,7 +3,10 @@
 import { Fragment, useRef, useEffect, useState } from "react";
 import { Loader2, Check, Terminal, AlertCircle, Clock } from "lucide-react";
 import { CopyButton } from "@hexagen/ui";
-import type { StagedPhase, StageProgress } from "../staged-generation-types";
+import type {
+  StagedPhase,
+  StageProgress,
+} from "../../../app/lib/staged-generation-types";
 import { StageProgressList } from "@/StageProgressList";
 
 const STAGE_ORDER: StagedPhase[] = [

@@ -1,12 +1,15 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import type { StagedPhase, StageProgress } from "./staged-generation-types";
+import type {
+  StagedPhase,
+  StageProgress,
+} from "../../app/lib/staged-generation-types";
 import {
   useStagedGenerationStream,
   type StageValidationReport,
   type StageRepairSummary,
-} from "./useStagedGenerationStream";
+} from "../../app/lib/useStagedGenerationStream";
 import { countManifestEntities } from "@hexagen/agentic-interaction";
 import { createLocalProgressCallbacks } from "./mapLocalLLMProgressCallbacks";
 import {

@@ -1,4 +1,4 @@
-import type { StagedPhase } from "../staged-generation-types";
+import type { StagedPhase } from "../../../app/lib/staged-generation-types";
 import { normalizeContextName } from "@hexagen/agentic-interaction";
 import { isManifestDialect } from "@hexagen/agentic-interaction/manifest-dialect";
 

@@ -23,7 +23,7 @@ import { Button } from "@hexagen/ui";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import type { LocalLLMContext } from "../../lib/llm-interfaces";
 import type { GeneratingFooterActions } from "./GenerateWithAi/types";
-import type { StageValidationReport } from "./useStagedGenerationStream";
+import type { StageValidationReport } from "../../app/lib/useStagedGenerationStream";
 
 interface AIGenerationPageProps {
   llmContext: LocalLLMContext;

@@ -2,7 +2,7 @@ import type {
   ManifestViewData,
   ValidationItem,
 } from "@hexagen/manifest-generation";
-import type { StageValidationReport } from "./useStagedGenerationStream";
+import type { StageValidationReport } from "../../app/lib/useStagedGenerationStream";
 
 /**
  * Parser items produced by the fuzzy port→adapter name-containment heuristics

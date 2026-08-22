@@ -1,5 +1,8 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { StagedPhase, StageProgress } from "./staged-generation-types";
+import type {
+  StagedPhase,
+  StageProgress,
+} from "../../app/lib/staged-generation-types";
 import type { StageTelemetry } from "@hexagen/agentic-interaction";
 import { formatModelChip } from "@hexagen/agentic-interaction";
 

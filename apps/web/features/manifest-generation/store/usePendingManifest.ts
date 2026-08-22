@@ -5,7 +5,7 @@ import { ProjectSpec } from "@hexagen/project-configuration";
 import type { ProjectLayerTurn } from "@hexagen/shared";
 // Type-only import (erased at compile time): no runtime coupling from the
 // store to the streaming hook.
-import type { StageValidationReport } from "../useStagedGenerationStream";
+import type { StageValidationReport } from "../../../app/lib/useStagedGenerationStream";
 
 /**
  * Provenance for a manifest whose spec text was DISTILLED from a live

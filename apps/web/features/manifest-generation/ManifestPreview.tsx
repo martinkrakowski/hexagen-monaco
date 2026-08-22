@@ -37,7 +37,7 @@ import {
   canAutoFix,
   applyDeterministicFix,
 } from "@hexagen/manifest-generation";
-import type { StageValidationReport } from "./useStagedGenerationStream";
+import type { StageValidationReport } from "../../app/lib/useStagedGenerationStream";
 import {
   toAdvisoryValidationItems,
   computeHasBlockingFailures,
