@@ -104,10 +104,37 @@ describe("creation-path domain", () => {
       assert.strictEqual(artifacts.href, "/projects/new/name?path=artifacts");
     });
 
-    it("github sub-option is marked as coming-soon", () => {
+    it("github sub-option is available and links straight to the Tier-B screen", () => {
+      // Flipped by BF-5.3, which mounted /projects/new/import/github (repo
+      // entry + streaming scan). Unlike `scan` and `artifacts` this href does
+      // NOT route through the shared name step, and that is deliberate rather
+      // than an oversight: the Tier-B screen carries its own project-name
+      // field, so the name step would be a screen the user did not ask for in
+      // front of a screen that does not need it. It still HONOURS `?name=` when
+      // something upstream supplies one.
       const github = IMPORT_SUB_OPTIONS.find((o) => o.id === "github");
       assert.ok(github);
-      assert.strictEqual(github!.status, "coming-soon");
+      assert.strictEqual(github.status, "available");
+      assert.strictEqual(github.href, "/projects/new/import/github");
+    });
+
+    it("github sub-option no longer advertises an OAuth connection", () => {
+      // The pre-BF-5.3 copy promised "OAuth connection and repository
+      // analysis". What shipped is an anonymous shallow clone of a PUBLIC
+      // repository. Nothing structural stops that copy drifting back, and a
+      // privacy claim that overstates what the product does is the one kind of
+      // stale string this flow cannot carry — so it is pinned.
+      const github = IMPORT_SUB_OPTIONS.find((o) => o.id === "github");
+      assert.ok(github);
+      const copy = `${github.label} ${github.description} ${github.detail}`;
+      assert.ok(
+        !/oauth/i.test(copy),
+        "the GitHub sub-option must not claim an OAuth connection",
+      );
+      assert.ok(
+        /public/i.test(copy),
+        "the GitHub sub-option must say the repository has to be public",
+      );
     });
 
     it("scan sub-option is available and routes through the name step", () => {
@@ -117,17 +144,19 @@ describe("creation-path domain", () => {
       assert.strictEqual(scan.href, "/projects/new/name?path=scan");
     });
 
-    // `github` is deliberately still "coming-soon": `/projects/new/import/github`
-    // is a placeholder that redirects straight back to `/projects/new/import`,
-    // so marking it available would publish a link to a redirect. It flips in
-    // BF-5.3, the packet that mounts the real repo-entry screen.
+    // `artifacts` LEFT this set in BF-3.3 and `github` in BF-5.3, each in the
+    // packet that mounted its real screen — so the set is EMPTY today. The two
+    // tests below are the ratchet: one fails if a routed option is left
+    // "coming-soon", the other fails if an unrouted one is flipped to
+    // "available", so neither half of the pair can move on its own.
     //
-    // `artifacts` LEFT this set in BF-3.3, which mounted
-    // `/projects/new/import/artifacts`. The two tests below are the ratchet:
-    // one fails if a routed option is left "coming-soon", the other fails if an
-    // unrouted one is flipped to "available", so neither half of the pair can
-    // move on its own.
-    const NOT_YET_ROUTED = new Set(["github"]);
+    // An empty set does not retire the ratchet; the next sub-option that is
+    // designed before it is built goes in here, and both halves start biting
+    // again. What an empty set DOES do is make the second test's loop vacuous,
+    // so that test asserts the complement while the set is empty (see there) —
+    // a silently no-op test that reads as a passing one is precisely the shape
+    // this pair exists to prevent.
+    const NOT_YET_ROUTED = new Set<ImportSubOptionId>([]);
 
     // Both tests above compare two IN-REPO CONSTANTS -- the option's `status`
     // and the NOT_YET_ROUTED literal -- and neither observes the filesystem.
@@ -169,6 +198,19 @@ describe("creation-path domain", () => {
       // Guards the other direction: if a route lands and the status is not
       // flipped, or a status is flipped before its route exists, one of these
       // two tests fails rather than both silently agreeing.
+      if (NOT_YET_ROUTED.size === 0) {
+        // Nothing is unrouted today, so the loop below would assert nothing at
+        // all. Assert the complement instead — every option available — which
+        // is the exact condition that emptied the set. This branch disappears
+        // on its own the moment a future unrouted option is added.
+        assert.deepStrictEqual(
+          IMPORT_SUB_OPTIONS.filter((o) => o.status !== "available").map(
+            (o) => o.id,
+          ),
+          [],
+          "NOT_YET_ROUTED is empty, so no sub-option may be coming-soon",
+        );
+      }
       for (const id of NOT_YET_ROUTED) {
         const option = IMPORT_SUB_OPTIONS.find((o) => o.id === id);
         assert.ok(option, `${id} should exist in IMPORT_SUB_OPTIONS`);
