@@ -1,0 +1,55 @@
+# PR-Agent — UI-contract specialist. Complements CodeRabbit and Qodo; does not
+# replace them. Read from the repo default branch (not the PR head).
+#
+# https://docs.pr-agent.ai/usage-guide/configuration_options/
+
+[config]
+restricted_mode = true
+model = "openrouter/tencent/hy3"
+fallback_models = ["openrouter/anthropic/claude-3.5-sonnet"]
+custom_model_max_tokens = 64000
+repo_context_files = [
+  ".agents/PR_REVIEW_RUBRIC.md",
+  "best_practices.md",
+  "DESIGN.md",
+]
+repo_context_from_default_branch = true
+# Raised from the default 500 so the rubric, best_practices.md, and DESIGN.md
+# all fit (DESIGN.md alone is ~810 lines).
+repo_context_max_lines = 3000
+
+[github_action_config]
+auto_review = true
+auto_describe = false
+auto_improve = false
+pr_actions = ["opened", "reopened", "ready_for_review"]
+
+[pr_reviewer]
+# Unique job: DESIGN.md UI contracts the linter cannot cheaply catch.
+# Verifier defects, assertion-style, and ADR inventory comments belong to
+# CodeRabbit / Qodo — do not duplicate them.
+extra_instructions = """
+You are the UI-contract reviewer for this repository. Enforce DESIGN.md.
+Do not re-raise findings that belong to CodeRabbit or Qodo (verifier
+defects, assertion-style, manifest inventory completeness).
+Cite DESIGN.md section numbers. Do not paraphrase a rule that already
+has a section; name it.
+When you propose a fix, say what it does to inputs the current code
+already handles — particularly whether it turns a loud failure into a
+quiet one.
+"""
+
+[pr_code_suggestions]
+extra_instructions = """
+Suggestions must stay inside DESIGN.md. Do not invent tokens, utilities,
+or exception patterns that are not in §4.8 / §4.9.
+Manual /improve only — auto_improve is off.
+"""
+
+[ignore]
+# Generated build artefacts only. Do not ignore .architecture/** (accuracy
+# defects are in-scope for other bots; this one simply must not propose
+# edits there) or packages/template-engine/templates/** (shipped customer
+# payload — see best_practices.md). @generated barrels are a content
+# marker, not a path glob — handled in the rubric.
+glob = ['**/dist/**', '**/*.tsbuildinfo', 'yarn.lock']
