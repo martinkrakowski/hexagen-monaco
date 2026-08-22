@@ -1,7 +1,7 @@
 # Review Disposition — handling automated review-bot comments
 
 **Status:** Accepted
-**Context:** PRs in this repo are reviewed by automated review bots — **CodeRabbit**, **qodo** and **greptile-apps** at the time of writing. This loop applies to **whichever bots are configured on the PR**; that list is current practice, not a closed set, so a newly added bot is in scope on arrival (the one-line pointer at `AGENTS.md:152` names only the two longest-standing ones and is not the roster). Their comments are high-signal but can be stale (reviewed an earlier commit), misattributed (historical vs. current code), or proportionately deferrable. Disposition each one — never reflexively apply or dismiss.
+**Context:** PRs in this repo are reviewed by automated review bots — **CodeRabbit**, **qodo**, **greptile-apps**, and **PR-Agent** (GitHub Action, UI-contract specialist) at the time of writing. This loop applies to **whichever bots are configured on the PR**; that list is current practice, not a closed set, so a newly added bot is in scope on arrival (the one-line pointer at `AGENTS.md` §Review & Archeology Mode names the configured set and is not a closed roster). Their comments are high-signal but can be stale (reviewed an earlier commit), misattributed (historical vs. current code), or proportionately deferrable. Disposition each one — never reflexively apply or dismiss. A passing PR-Agent (or CodeRabbit) check is not evidence that a review happened — see Honesty Rules below.
 
 ---
 
