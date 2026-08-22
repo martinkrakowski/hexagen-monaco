@@ -14,15 +14,49 @@ import { dirname } from "node:path";
  * keep it safe even if a second process ever opens the same file.
  */
 
-export type QuotaKind = "generation" | "chat";
+/**
+ * WARNING: "scan" must NOT be passed to `enforceDailyQuota`.
+ *
+ * That helper's exhaustion copy is `kind === "chat" ? "chat messages" :
+ * "generations"` and it tells the user to add a BYOK key or run a local model.
+ * Scanning has no LLM and no BYOK path, so a scan 429 routed through it would
+ * tell the user they had run out of GENERATIONS. Use `openScanQuota` in
+ * app/lib/project-scan/scan-quota.ts, which is the same gate with scan's copy.
+ *
+ * Widening this union made that wrong call TYPE-CHECK, which is the hazard --
+ * the compiler will not stop it. Narrowing `enforceDailyQuota`'s parameter to
+ * `Exclude<QuotaKind, "scan">` would close it properly and changes no metering
+ * behaviour, but `apps/web/lib/enforce-quota.ts` is frozen by ADR-0063 and
+ * this packet deliberately does not edit it. Flagged for the owner.
+ */
+export type QuotaKind = "generation" | "chat" | "scan";
 
-const KINDS: readonly QuotaKind[] = ["generation", "chat"];
-
-/** Daily per-session limits — 10 generations, 100 chat messages (PR-6 spec). */
+/**
+ * Daily per-session limits — 10 generations, 100 chat messages (PR-6 spec), and
+ * 10 scans (BF-5.1 / decision D-U1).
+ *
+ * The scan cap sits in the generation cost class, not the chat class: a scan
+ * unpacks an uploaded archive and, on the Tier-B path, spawns the `hexagen` CLI
+ * with a 60s budget. Without it, anonymous scanning is free unbounded compute —
+ * the per-IP limiter on those routes only bounds the *rate* (its window resets
+ * every 60s), never the daily total.
+ */
 export const QUOTA_LIMITS: Record<QuotaKind, number> = {
   generation: 10,
   chat: 100,
+  scan: 10,
 };
+
+/**
+ * Every kind, derived from {@link QUOTA_LIMITS} rather than re-listed.
+ *
+ * A hand-written `readonly QuotaKind[]` is NOT exhaustiveness-checked — adding a
+ * member to `QuotaKind` and forgetting this array compiles cleanly and silently
+ * drops the new kind from `snapshot()` / `fullQuotaSnapshot()`. `QUOTA_LIMITS`
+ * is a `Record<QuotaKind, number>`, so its keys are exactly the union and the
+ * cast (needed only because `Object.keys` is typed `string[]`) is sound.
+ */
+const KINDS: readonly QuotaKind[] = Object.keys(QUOTA_LIMITS) as QuotaKind[];
 
 export interface QuotaResult {
   /** For `consume`: whether this request was counted (within the cap). For

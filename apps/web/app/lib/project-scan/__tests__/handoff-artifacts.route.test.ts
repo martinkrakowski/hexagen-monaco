@@ -9,10 +9,12 @@
  * Lives beside the parser tests (rather than under the route's own directory)
  * because this packet's scope fence confines new tests to this folder.
  */
-import { describe, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, vi } from "vitest";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import JSZip from "jszip";
+import { ANON_SESSION_COOKIE } from "../../../../lib/anon-session";
+import { getQuotaStore, QUOTA_LIMITS } from "../../../../lib/quota-store";
 import {
   MAX_HANDOFF_REQUEST_BYTES,
   MAX_HANDOFF_UPLOAD_BYTES,
@@ -54,6 +56,8 @@ interface PostOptions {
   loose?: Array<[string, File]>;
   origin?: string;
   contentLength?: string;
+  /** Anonymous-session cookie value; omit to arrive as a fresh visitor. */
+  sid?: string;
   onFormData?: () => void;
 }
 
@@ -73,6 +77,9 @@ async function postForm(options: PostOptions): Promise<Response> {
 
   const headers = new Headers();
   if (options.origin) headers.set("origin", options.origin);
+  if (options.sid) {
+    headers.set("cookie", `${ANON_SESSION_COOKIE}=${options.sid}`);
+  }
   if (options.contentLength !== undefined) {
     headers.set("content-length", options.contentLength);
   }
@@ -220,10 +227,7 @@ describe("POST /api/projects/scan/artifacts", () => {
   it("400s when nothing at all was uploaded", async () => {
     const res = await postForm({ name: "Demo" });
     assert.equal(res.status, 400);
-    assert.match(
-      ((await res.json()) as { error: string }).error,
-      /--handoff/,
-    );
+    assert.match(((await res.json()) as { error: string }).error, /--handoff/);
   });
 
   it("400s a non-zip upload in the zip slot", async () => {
@@ -283,6 +287,95 @@ describe("POST /api/projects/scan/artifacts", () => {
     });
     assert.equal(res.status, 403);
     assert.equal(parsed, false);
+  });
+});
+
+/**
+ * Free-tier scan quota (BF-5.1 / F-10). Tier A shares the `"scan"` budget with
+ * the Tier-B zip route on purpose: the two are alternative ways to start ONE
+ * scan, never two steps of the same one, so a user pays once either way.
+ *
+ * The per-IP limiter is mocked open for this whole file, so what is asserted
+ * here is the daily per-session cap, not the rate limiter.
+ */
+describe("POST /api/projects/scan/artifacts — free-tier scan quota", () => {
+  // Frozen mid-day UTC: the store buckets by UTC day and a run straddling
+  // midnight would otherwise read a fresh bucket and flake.
+  beforeEach(() =>
+    vi.useFakeTimers({
+      now: Date.UTC(2026, 7, 20, 12, 0, 0),
+      toFake: ["Date"],
+    }),
+  );
+  afterEach(() => vi.useRealTimers());
+
+  async function handoffZip(): Promise<File> {
+    return asFile(
+      await zipBytes({ "hexagen-report.md": REPORT }),
+      "hexagen-handoff.zip",
+    );
+  }
+
+  it("mints the anon-session cookie the daily cap is keyed on", async () => {
+    const res = await postForm({ name: "Demo", zip: await handoffZip() });
+    assert.equal(res.status, 200);
+    assert.ok(res.headers.get("set-cookie")?.includes(ANON_SESSION_COOKIE));
+  });
+
+  it("charges exactly one scan for a zip handoff", async () => {
+    const sid = "55555555-5555-4555-8555-555555555555";
+    await postForm({ name: "Demo", zip: await handoffZip(), sid });
+    assert.equal(getQuotaStore().peek(sid, "scan").used, 1);
+  });
+
+  it("charges exactly one scan for a loose-file handoff", async () => {
+    const sid = "66666666-6666-4666-8666-666666666666";
+    await postForm({
+      name: "Demo",
+      sid,
+      loose: [
+        [
+          "hexagen-report.md",
+          asFile(
+            new TextEncoder().encode(REPORT),
+            "hexagen-report.md",
+            "text/markdown",
+          ),
+        ],
+      ],
+    });
+    assert.equal(getQuotaStore().peek(sid, "scan").used, 1);
+  });
+
+  it("does not charge an upload that carried no artifacts at all", async () => {
+    const sid = "77777777-7777-4777-8777-777777777777";
+    const res = await postForm({ name: "Demo", sid });
+    assert.equal(res.status, 400);
+    assert.equal(getQuotaStore().peek(sid, "scan").used, 0);
+  });
+
+  it("429s once the daily cap is spent, without parsing the upload", async () => {
+    const sid = "88888888-8888-4888-8888-888888888888";
+    const store = getQuotaStore();
+    for (let i = 0; i < QUOTA_LIMITS.scan; i++) store.consume(sid, "scan");
+
+    let parsed = false;
+    const res = await postForm({
+      name: "Demo",
+      zip: await handoffZip(),
+      sid,
+      onFormData: () => {
+        parsed = true;
+      },
+    });
+    assert.equal(res.status, 429);
+    assert.equal(parsed, false);
+    assert.ok(Number(res.headers.get("retry-after")) >= 1);
+
+    const body = (await res.json()) as { error: string; kind: string };
+    assert.equal(body.kind, "scan");
+    assert.match(body.error, /daily limit/i);
+    assert.equal(store.peek(sid, "scan").used, QUOTA_LIMITS.scan);
   });
 });
 

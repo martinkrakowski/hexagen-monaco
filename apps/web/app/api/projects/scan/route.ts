@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guardMutation } from "@/lib/request-guards";
+import {
+  openScanQuota,
+  type ScanQuotaGate,
+} from "@/lib/project-scan/scan-quota";
 import { CliHexagenScanAdapter } from "@/lib/project-scan/cli-hexagen-scan.adapter";
 import {
   MAX_PROJECT_NAME_CHARS,
@@ -69,8 +73,29 @@ function isZipFile(file: File): boolean {
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limit first. It is the cheapest rejection, and a cross-origin or
+  // flooding caller must not be handed an anonymous-session cookie.
   const gate = guardMutation(request, SCAN_MUTATION_GUARD);
   if (gate) return gate;
+
+  // Quota is the second, separate gate: `guardMutation` bounds how fast this IP
+  // may scan, `openScanQuota` bounds how much this session may scan today.
+  // Wrapping the handler means EVERY response below carries the gate's headers,
+  // so a first-time visitor actually receives the `hxg_sid` cookie the daily cap
+  // is keyed on — miss one path and that caller's quota never accumulates.
+  const quota = openScanQuota(request);
+  return quota.applyHeaders(await handleScanRequest(request, quota));
+}
+
+async function handleScanRequest(
+  request: NextRequest,
+  quota: ScanQuotaGate,
+): Promise<NextResponse> {
+  // Peek, not consume: turn an exhausted caller away before their zip is read
+  // into memory. This cannot double-charge with the `quota.charge()` below,
+  // because a peek never counts.
+  const exhausted = quota.precheck();
+  if (exhausted) return exhausted;
 
   const oversized = rejectOversizedRequest(request);
   if (oversized) return oversized;
@@ -134,6 +159,12 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+
+  // Charge here and only here. Everything above is cheap validation and stays
+  // free, so a malformed upload never burns a credit; below this line the CLI
+  // subprocess is the point of no return. One request, one charge.
+  const denied = quota.charge();
+  if (denied) return denied;
 
   try {
     const adapter = CliHexagenScanAdapter.fromMonorepoRoot();
