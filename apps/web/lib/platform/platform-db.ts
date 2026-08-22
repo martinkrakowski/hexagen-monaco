@@ -137,6 +137,81 @@ export function openPlatformDb(dbPath: string): Database.Database {
     -- Trend queries are always "this repo, this owner, newest first".
     CREATE INDEX IF NOT EXISTS idx_scan_records_repo
       ON scan_records (owner_id, repo_ref, created_at DESC);
+
+    -- Repair-outcome telemetry: one row per repair loop, owner-scoped.
+    -- See repair-telemetry-store.ts for the grain argument and, more
+    -- importantly, for the retention contract these two tables are shaped by.
+    --
+    -- ADDITIVE-ONLY MIGRATION. Both tables are new, so there is no prior shape
+    -- to convert: CREATE TABLE IF NOT EXISTS plus CREATE INDEX IF NOT
+    -- EXISTS is the whole of it. No ALTER, no DROP, no table rebuild, no data
+    -- movement -- nothing on the live /data volume is read or rewritten, and
+    -- re-running openPlatformDb on the same file is a no-op. Deliberately NOT
+    -- given a migrateX() helper like saved_projects/run_events: those exist
+    -- only because those tables predate owner_id, and inventing one here
+    -- would add a rewrite path with nothing to rewrite.
+    --
+    -- Forward-only, and safe to roll back THROUGH: a previous deploy simply
+    -- never queries these tables. sqlite does not mind the extra schema.
+    --
+    -- NOTE ON WHAT IS ABSENT: there is no project_id and no repo_ref column
+    -- here, unlike run_events and scan_records. That is the point -- either
+    -- would let a reader attach a repair history to a named project or
+    -- owner/repo, which the shipped "nothing was kept" copy forbids. The
+    -- only correlation key is an opaque run id the store validates on write.
+    CREATE TABLE IF NOT EXISTS repair_runs (
+      id TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      schema_version INTEGER NOT NULL,
+      run_id TEXT NOT NULL,
+      surface TEXT NOT NULL,
+      outcome TEXT NOT NULL,
+      rounds INTEGER NOT NULL,
+      violations_initial INTEGER NOT NULL,
+      violations_remaining INTEGER NOT NULL,
+      attempts_total INTEGER NOT NULL,
+      attempts_applied INTEGER NOT NULL,
+      duration_ms INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (owner_id, id)
+    );
+    -- run_id, not id, carries the uniqueness: a reconnect or a retried write
+    -- re-sends the same loop and must upsert rather than double-count it
+    -- (same reasoning as idx_run_events_run_stage).
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_repair_runs_run
+      ON repair_runs (owner_id, run_id);
+    CREATE INDEX IF NOT EXISTS idx_repair_runs_owner
+      ON repair_runs (owner_id, created_at DESC);
+
+    -- One row per (round, attempt-within-round). The per-run table above cannot
+    -- express per-violation-class success rates, and this table cannot express
+    -- "abandoned" -- abandonment is a property of the loop, not of an attempt.
+    CREATE TABLE IF NOT EXISTS repair_attempts (
+      id TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      schema_version INTEGER NOT NULL,
+      run_id TEXT NOT NULL,
+      round INTEGER NOT NULL,
+      seq INTEGER NOT NULL,
+      violation_class TEXT NOT NULL,
+      violation_status TEXT NOT NULL,
+      path TEXT NOT NULL,
+      eligible INTEGER NOT NULL,
+      applied INTEGER NOT NULL,
+      changed_yaml INTEGER NOT NULL,
+      duration_ms INTEGER NOT NULL,
+      ops_proposed INTEGER,
+      ops_applied INTEGER,
+      ops_skipped INTEGER,
+      gate_reason TEXT,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (owner_id, id)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_repair_attempts_slot
+      ON repair_attempts (owner_id, run_id, round, seq);
+    -- The eval read is "group every attempt by class", so the class leads.
+    CREATE INDEX IF NOT EXISTS idx_repair_attempts_class
+      ON repair_attempts (owner_id, violation_class, schema_version);
   `);
   seedModelPrices(db);
   return db;
