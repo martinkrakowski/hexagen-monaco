@@ -62,15 +62,49 @@ jobs:
     # the PR to skip drafts here — that would remove the override.
     # author_association gate: issue_comment runs on the base repo with
     # secrets; pull_request from a fork does not get OPENROUTER_KEY.
+    #
+    # The command list is an ALLOWLIST, not `startsWith(body, '/')`, because an
+    # unrecognised command is not an error to PR-Agent: it logs
+    # `WARNING Unknown command: <x>` and exits 0, so the check goes GREEN
+    # having done nothing. That is indistinguishable from a completed review
+    # unless somebody opens the log -- and it already cost a cycle, when
+    # `/agentic_review` (which the deprecation notice recommends) turned out
+    # not to exist in the pinned 0.42.0 image. 0.42.0 is the newest tag
+    # published, so upgrading is not an option: /review remains correct.
+    #
+    # Skipping is the honest outcome for a command this image cannot serve --
+    # no run, no green check claiming success. Prevention beats detection here:
+    # the alternative is grepping the action's own stdout from a later step,
+    # which is fragile and only reports the waste after paying for it.
+    #
+    # Each command is matched as the WHOLE body or the body up to a space, so
+    # `/reviewers please look` and `/reviewXYZ` no longer match `/review`.
+    # GHA expressions have no split(), but exact-equality plus a
+    # trailing-space prefix covers both real forms without the collision.
+    # `/ask` is space-only: it is meaningless without a question after it.
     if: >-
       github.event.sender.type != 'Bot'
       && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
       && (github.event_name != 'issue_comment' || (
         github.event.issue.pull_request
         && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
-        && startsWith(github.event.comment.body, '/')
+        && (
+          github.event.comment.body == '/review'
+          || startsWith(github.event.comment.body, '/review ')
+          || github.event.comment.body == '/describe'
+          || startsWith(github.event.comment.body, '/describe ')
+          || github.event.comment.body == '/improve'
+          || startsWith(github.event.comment.body, '/improve ')
+          || startsWith(github.event.comment.body, '/ask ')
+          || github.event.comment.body == '/help'
+          || startsWith(github.event.comment.body, '/help ')
+        )
       ))
     runs-on: ubuntu-latest
+    # The action has no internal deadline and an LLM call can hang. Without
+    # this the job inherits GitHub's 360-minute default and holds a runner for
+    # six hours to produce nothing. Observed healthy runs finish in ~1 minute.
+    timeout-minutes: 15
     steps:
       - name: "PR Agent"
         uses: docker://pragent/pr-agent@sha256:b81235c3bddc551939a1feca8926f4b6e8abcec2ae5bf4620424f8f56dd9cb93 # 0.42.0-github_action
