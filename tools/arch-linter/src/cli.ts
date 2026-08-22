@@ -1005,7 +1005,10 @@ function checkArchitecturalIntegrity(): {
  * decreasing by review, and failing here would block the very PR that fixed
  * something until it also re-ran the tool.
  */
-function reportAndExit(violations: ViolationRecord[]): void {
+function reportAndExit(
+  violations: ViolationRecord[],
+  filesScanned: number,
+): void {
   const { fresh, baselined, stale, expired } = partitionAgainstBaseline(
     violations,
     baselineEntries,
@@ -1088,6 +1091,13 @@ function reportAndExit(violations: ViolationRecord[]): void {
         expired,
         introduced,
         baselineGrowth,
+        // --json builds its logger as createConsoleLogger(quiet), so the
+        // human "Files scanned: N" line is never emitted in this mode. A
+        // consumer that captures --json therefore had no way to learn the
+        // count, and `hexagen scan`'s envelope reported filesScanned: null
+        // for every run that read findings. Carrying it in the payload is
+        // the only way a machine reader can see it.
+        filesScanned,
       })}\n`,
     );
   }
@@ -1218,5 +1228,5 @@ if (STAGED) {
 if (UPDATE_BASELINE) {
   writeBaseline(foundViolations);
 } else {
-  reportAndExit(foundViolations);
+  reportAndExit(foundViolations, filesScanned);
 }
