@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import yaml from "js-yaml";
 import {
+  collectFilesScanned,
+  collectLintFindings,
   runScan,
   scanCommand,
   scanCommander,
@@ -1060,3 +1062,284 @@ describe("scan --handoff (BF-0.2)", () => {
     assert.match(help, /--handoff-out <path>/);
   });
 });
+
+describe("scan findings (BF-0.3) — hexagen-lint --json capture", () => {
+  // Captured VERBATIM from a real run of the built linter:
+  //
+  //   node tools/arch-linter/dist/cli.js --root <repo> --json --ratchet
+  //
+  // That run printed this single line on stdout and nothing else; the only
+  // stderr line was an unrelated warning. Two facts this fixture pins that a
+  // hand-written one would not:
+  //   1. the payload has SIX keys, of which `introduced` / `baselineGrowth`
+  //      are populated only under `--pr-diff` and are deliberately dropped;
+  //   2. `--json` silences the linter's own logger, so `Files scanned: N`
+  //      (present on stdout WITHOUT `--json`) is absent here. That is why the
+  //      envelope's `filesScanned` is still null.
+  //
+  // String.raw keeps the `\n` sequences inside the JSON string literal escaped
+  // for JSON.parse rather than being turned into real newlines by TypeScript.
+  const REAL_LINT_JSON = String.raw`{"fresh":[],"baselined":[{"rule":"npm-package-in-domain","file":"packages/template-engine/templates/llm-adapter/files/src/domain/ports/out/llm-client.port.ts","specifier":"zod","message":"Domain Violation in [template-engine]:\n  Domain file: packages/template-engine/templates/llm-adapter/files/src/domain/ports/out/llm-client.port.ts\n  npm package 'zod' imported in the domain layer (specifier 'zod').\n  Wrap it in an adapter, or declare the exception under 'domain_package_allowlist' in linter-config.yaml."}],"stale":[],"expired":[],"introduced":[],"baselineGrowth":[]}`;
+
+  // The same real entry, moved into `fresh` — what an unbaselined violation
+  // looks like on a first brownfield import. Derived from the captured payload
+  // rather than retyped, so the two fixtures cannot drift apart.
+  const FRESH_LINT_JSON = (() => {
+    const raw = JSON.parse(REAL_LINT_JSON) as Record<string, unknown[]>;
+    return JSON.stringify({ ...raw, fresh: raw.baselined, baselined: [] });
+  })();
+
+  it("parses the real --json payload and drops the two --pr-diff-only fields", () => {
+    const findings = collectLintFindings(REAL_LINT_JSON);
+
+    assert.equal(findings.collected, true);
+    assert.equal(findings.failureReason, undefined);
+    assert.equal(findings.fresh.length, 0);
+    assert.equal(findings.stale.length, 0);
+    assert.equal(findings.expired.length, 0);
+    assert.equal(findings.baselined.length, 1);
+    assert.equal(findings.baselined[0].rule, "npm-package-in-domain");
+    assert.equal(findings.baselined[0].specifier, "zod");
+    assert.match(findings.baselined[0].file, /llm-client\.port\.ts$/);
+    assert.match(findings.baselined[0].message, /^Domain Violation in/);
+
+    // Excluded ON PURPOSE, not by accident: the linter fills these only under
+    // `--pr-diff`, which needs a base branch. An imported tree has none, so
+    // carrying them would ship two permanently empty arrays that read as
+    // "nothing was introduced" instead of "the question does not apply".
+    assert.equal("introduced" in findings, false);
+    assert.equal("baselineGrowth" in findings, false);
+  });
+
+  it("reports WHY, rather than a clean sheet, when there is no JSON line", () => {
+    // This is the exact stdout the linter produces WITHOUT `--json`: human
+    // lines only, including the count the envelope cannot otherwise see.
+    const findings = collectLintFindings(
+      "[arch-lint] Running Architectural Integrity Linter...\n" +
+        "[arch-lint] Files scanned: 1946\n",
+    );
+    assert.equal(findings.collected, false);
+    assert.match(String(findings.failureReason), /no JSON line/);
+    assert.deepEqual(
+      [
+        findings.fresh.length,
+        findings.baselined.length,
+        findings.stale.length,
+        findings.expired.length,
+      ],
+      [0, 0, 0, 0],
+    );
+  });
+
+  it("reports WHY when the JSON line is malformed", () => {
+    const findings = collectLintFindings('{"fresh":[},\n');
+    assert.equal(findings.collected, false);
+    assert.match(String(findings.failureReason), /not valid JSON/);
+  });
+
+  it("carries findings.fresh[] into the envelope with rule/file/specifier/message", async () => {
+    const root = await makeRepo();
+    try {
+      const result = await runScan({
+        root,
+        yes: true,
+        noReport: true,
+        lint: () => ({
+          exitCode: 1,
+          findings: collectLintFindings(FRESH_LINT_JSON),
+          filesScanned: collectFilesScanned(FRESH_LINT_JSON),
+        }),
+      });
+      assert.equal(result.success, true);
+      if (!result.success) return;
+
+      const { findings } = result.value.envelope;
+      assert.equal(findings.collected, true);
+      assert.equal(findings.fresh.length, 1);
+      const [entry] = findings.fresh;
+      assert.equal(entry.rule, "npm-package-in-domain");
+      assert.match(entry.file, /llm-client\.port\.ts$/);
+      assert.equal(entry.specifier, "zod");
+      assert.match(entry.message, /npm package 'zod'/);
+
+      // The exit-code contract is untouched by findings capture: 1 still
+      // means "ran, found violations".
+      assert.equal(result.value.lintExitCode, 1);
+
+      // Additive against the shared schema, which is `.passthrough()` — so a
+      // consumer that predates BF-0.3 preserves the field instead of failing.
+      const check = ScanEnvelope.safeParse(result.value.envelope);
+      assert.equal(
+        check.success,
+        true,
+        check.success ? "" : JSON.stringify(check.error.issues),
+      );
+      if (check.success) {
+        const preserved = (check.data as Record<string, unknown>).findings;
+        assert.notEqual(preserved, undefined);
+      }
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("a runner that reports only an exit code yields uncollected findings, not a clean tree", async () => {
+    // `lint: () => 1` is the pre-BF-0.3 seam shape. It says nothing about
+    // findings, and four empty arrays with `collected: true` would be read by
+    // the UI as "no violations" — a false pass invented by this layer.
+    const root = await makeRepo();
+    try {
+      const result = await runScan({
+        root,
+        yes: true,
+        noReport: true,
+        lint: () => 1,
+      });
+      assert.equal(result.success, true);
+      if (!result.success) return;
+
+      const { findings } = result.value.envelope;
+      assert.equal(findings.collected, false);
+      assert.equal(typeof findings.failureReason, "string");
+      assert.ok((findings.failureReason ?? "").length > 0);
+      assert.equal(findings.fresh.length, 0);
+      assert.equal(result.value.lintExitCode, 1);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("--dry-run says the linter did not run instead of implying a clean tree", async () => {
+    const root = await makeRepo();
+    try {
+      const result = await runScan({
+        root,
+        dryRun: true,
+        lint: () => {
+          throw new Error("lint must not run on --dry-run");
+        },
+      });
+      assert.equal(result.success, true);
+      if (!result.success) return;
+      const { findings } = result.value.envelope;
+      assert.equal(findings.collected, false);
+      assert.match(String(findings.failureReason), /--dry-run/);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("the failure envelope carries uncollected findings on the FINAL stdout line", async () => {
+    const root = await makeRepo();
+    const out: string[] = [];
+    const origLog = console.log;
+    const origErr = console.error;
+    // `?? undefined` is load-bearing: @types/node types the process.exitCode
+    // GETTER as `string | number | null | undefined` but its SETTER as
+    // `string | number | undefined`, so round-tripping the raw value does not
+    // typecheck (TS2322 under typecheck:test).
+    const origExitCode = process.exitCode ?? undefined;
+    let observedExitCode: number | string | undefined;
+    console.log = (...a: unknown[]) => void out.push(a.join(" "));
+    console.error = () => {};
+    try {
+      // No --yes: a real, deterministic "could not run" path.
+      await scanCommand({ root, noReport: true });
+      observedExitCode = process.exitCode ?? undefined;
+    } finally {
+      console.log = origLog;
+      console.error = origErr;
+      process.exitCode = origExitCode;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+
+    const parsed = JSON.parse(out.at(-1) ?? "") as Record<string, unknown>;
+    assert.ok("findings" in parsed, "the envelope must always carry findings");
+    const findings = parsed.findings as {
+      collected: boolean;
+      failureReason?: string;
+      fresh: unknown[];
+    };
+    assert.equal(findings.collected, false);
+    assert.equal(findings.fresh.length, 0);
+    assert.match(String(findings.failureReason), /did not complete/);
+    // Still 2 = could-not-run. Findings capture must not turn a scan that
+    // never ran into "violations".
+    assert.equal(observedExitCode, 2);
+  });
+});
+describe("scan envelope — filesScanned (BF-0.3)", () => {
+  it("carries the count the linter reported in its --json payload", async () => {
+    // The linter builds its logger as createConsoleLogger(--json), i.e. QUIET,
+    // so "Files scanned: N" is never printed in the mode that yields findings.
+    // Capturing --json therefore USED to blank the count. The fix put
+    // filesScanned into the payload; this asserts scan carries it through.
+    const root = await makeRepo();
+    try {
+      const result = await runScan({
+        root,
+        yes: true,
+        noReport: true,
+        lint: () => ({
+          exitCode: 0,
+          findings: {
+            collected: true,
+            fresh: [],
+            baselined: [],
+            stale: [],
+            expired: [],
+          },
+          filesScanned: 1946,
+        }),
+      });
+      assert.equal(result.success, true);
+      if (!result.success) return;
+      assert.equal(result.value.envelope.filesScanned, 1946);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports null, never 0, when the linter could not run", async () => {
+    // 0 would render as "scanned nothing and passed" -- the false green the
+    // linter's own abortIfVacuous exists to prevent. Absence must stay absent.
+    const root = await makeRepo();
+    try {
+      const result = await runScan({
+        root,
+        yes: true,
+        noReport: true,
+        lint: () => ({
+          exitCode: 2,
+          findings: {
+            collected: false,
+            failureReason: "binary not found",
+            fresh: [],
+            baselined: [],
+            stale: [],
+            expired: [],
+          },
+          filesScanned: null,
+        }),
+      });
+      assert.equal(result.success, true);
+      if (!result.success) return;
+      assert.equal(result.value.envelope.filesScanned, null);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("collectFilesScanned reads the last JSON line, and refuses junk", () => {
+    assert.equal(collectFilesScanned('{"filesScanned":42}'), 42);
+    assert.equal(
+      collectFilesScanned('noise\n{"fresh":[],"filesScanned":7}'),
+      7,
+    );
+    assert.equal(collectFilesScanned('{"filesScanned":"7"}'), null);
+    assert.equal(collectFilesScanned('{"filesScanned":-1}'), null);
+    assert.equal(collectFilesScanned("not json"), null);
+    assert.equal(collectFilesScanned(""), null);
+  });
+});
+
