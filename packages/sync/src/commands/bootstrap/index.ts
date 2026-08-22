@@ -13,6 +13,12 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
 import { err, ok, type Result } from "../../domain/result.js";
+// The canonical npm-scope normaliser. This module used to carry a private,
+// character-identical copy of it; the two were free to drift, and only one of
+// them was covered by `__tests__/generators/namespacing.test.ts`. There is now
+// one implementation, and it is the one the public barrel exports — so what the
+// brownfield S4 screen previews and what this command writes cannot disagree.
+import { sanitizeScope } from "../../types/manifest/helpers.js";
 import { detectWorkspaces } from "../shared/detect-workspaces.js";
 import { promptService } from "../shared/prompt-service.js";
 
@@ -57,18 +63,6 @@ const EMPTY_BASELINE = `{
   "entries": []
 }
 `;
-
-function sanitizeScope(raw: string): string {
-  const cleaned = raw
-    .trim()
-    .toLowerCase()
-    .replace(/^@+/, "")
-    .replace(/[^a-z0-9._-]/g, "-")
-    .replace(/[._-]{2,}/g, "-")
-    .slice(0, 214)
-    .replace(/^[._-]+|[._-]+$/g, "");
-  return cleaned.length > 0 ? cleaned : "generated-project";
-}
 
 /** ts-morph globs reject native Windows separators. Folded from the retired Phase-0 module. */
 export function toTsMorphGlob(absPath: string): string {
