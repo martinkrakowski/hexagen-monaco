@@ -13,7 +13,10 @@ describe("ImportSelectionPage", () => {
     // now a single "Import Manifest or Spec" row (auto-detected on upload).
     assert.ok(screen.getByText("Import Manifest or Spec"));
     assert.ok(screen.getByText("Scan existing project"));
-    assert.ok(screen.getByText("Import from GitHub"));
+    // Renamed in BF-5.3: the old label promised an OAuth "import", but what
+    // shipped is an anonymous shallow clone of a PUBLIC repo. The label has to
+    // say public, because the privacy difference is the whole point.
+    assert.ok(screen.getByText("Scan a public GitHub repository"));
   });
 
   it("shows Choose Import Type heading", () => {

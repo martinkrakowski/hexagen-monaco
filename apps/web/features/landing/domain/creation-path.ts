@@ -75,13 +75,25 @@ export const IMPORT_SUB_OPTIONS: readonly ImportSubOption[] = [
   },
   {
     id: "github",
-    label: "Import from GitHub",
+    label: "Scan a public GitHub repository",
     description:
-      "Connect a repository and extract its existing architecture as a starting point.",
-    detail: "OAuth connection and repository analysis.",
+      "Give us a public repository URL. We shallow-clone it, scan it, and delete the clone.",
+    detail:
+      "Privacy tier B: your source is fetched by our server, so the repository has to be public and this is not the path for client engagements. Nothing is retained but the scan artifacts.",
     href: "/projects/new/import/github",
     iconName: "Github",
-    status: "coming-soon",
+    // Available since BF-5.3 mounted /projects/new/import/github (the real
+    // Tier-B repo-entry and streaming-scan screen, replacing the placeholder
+    // that redirected back to the import list). `creation-path.test.ts` asserts
+    // this in both directions — see NOT_YET_ROUTED there.
+    //
+    // The label and description above changed with it, and not cosmetically:
+    // they previously promised an OAuth connection and architecture
+    // extraction, which is not what shipped. What shipped is an anonymous
+    // shallow clone of a PUBLIC repository — no OAuth, no private access — and
+    // an option that oversells its own privacy posture is the one kind of
+    // stale copy this product cannot carry.
+    status: "available",
   },
 ] as const;
 

@@ -6,7 +6,19 @@ import { ImportOptionRow } from "../ImportOptionRow";
 import { IMPORT_SUB_OPTIONS } from "../../domain/creation-path";
 
 const mockAvailableOption = IMPORT_SUB_OPTIONS.find((o) => o.id === "spec")!;
-const mockComingSoonOption = IMPORT_SUB_OPTIONS.find((o) => o.id === "github")!;
+// SYNTHETIC, not a real option. This used to be the `github` entry, which
+// broke the moment github shipped (BF-5.3): four tests for the component's
+// coming-soon rendering path failed, none of which were about github.
+//
+// A component test should not depend on which features happen to be
+// unreleased. The coming-soon path still needs coverage even when nothing
+// currently ships in that state -- and if this were rebound to whichever
+// option is unreleased today, it would break again on the day that one ships.
+const mockComingSoonOption = {
+  ...IMPORT_SUB_OPTIONS.find((o) => o.id === "github")!,
+  id: "github" as const,
+  status: "coming-soon" as const,
+};
 const mockScanOption = IMPORT_SUB_OPTIONS.find((o) => o.id === "scan")!;
 
 describe("ImportOptionRow", () => {

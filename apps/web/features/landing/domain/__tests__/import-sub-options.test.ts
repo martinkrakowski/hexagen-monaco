@@ -39,10 +39,20 @@ test("the Tier-A artifacts option is available now that BF-3.3 mounted its route
   assert.equal(artifacts.href, "/projects/new/name?path=artifacts");
 });
 
-test("github is not available (coming soon)", () => {
+// Flipped by BF-5.3, which mounted /projects/new/import/github over the
+// bounded clone route.
+//
+// Note this file duplicates assertions that also live in
+// ../creation-path.test.ts, which carries the real ratchet pair (routed =>
+// available AND unrouted => coming-soon, so neither half can move alone).
+// This copy asserts only one direction, so it cannot catch a status flipped
+// ahead of its route -- it just has to be kept in step. Consolidating the two
+// is worth doing, but not inside the packet that flips the value.
+test("github is available and routes to the scan screen", () => {
   const github = IMPORT_SUB_OPTIONS.find((o) => o.id === "github");
   assert.ok(github);
-  assert.equal(github.status, "coming-soon");
+  assert.equal(github.status, "available");
+  assert.equal(github.href, "/projects/new/import/github");
 });
 
 test("each option has non-empty label, description, iconName, and href", () => {
