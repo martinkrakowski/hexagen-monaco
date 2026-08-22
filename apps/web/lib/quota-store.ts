@@ -14,15 +14,34 @@ import { dirname } from "node:path";
  * keep it safe even if a second process ever opens the same file.
  */
 
-export type QuotaKind = "generation" | "chat";
+export type QuotaKind = "generation" | "chat" | "scan";
 
-const KINDS: readonly QuotaKind[] = ["generation", "chat"];
-
-/** Daily per-session limits — 10 generations, 100 chat messages (PR-6 spec). */
+/**
+ * Daily per-session limits — 10 generations, 100 chat messages (PR-6 spec), and
+ * 10 scans (BF-5.1 / decision D-U1).
+ *
+ * The scan cap sits in the generation cost class, not the chat class: a scan
+ * unpacks an uploaded archive and, on the Tier-B path, spawns the `hexagen` CLI
+ * with a 60s budget. Without it, anonymous scanning is free unbounded compute —
+ * the per-IP limiter on those routes only bounds the *rate* (its window resets
+ * every 60s), never the daily total.
+ */
 export const QUOTA_LIMITS: Record<QuotaKind, number> = {
   generation: 10,
   chat: 100,
+  scan: 10,
 };
+
+/**
+ * Every kind, derived from {@link QUOTA_LIMITS} rather than re-listed.
+ *
+ * A hand-written `readonly QuotaKind[]` is NOT exhaustiveness-checked — adding a
+ * member to `QuotaKind` and forgetting this array compiles cleanly and silently
+ * drops the new kind from `snapshot()` / `fullQuotaSnapshot()`. `QUOTA_LIMITS`
+ * is a `Record<QuotaKind, number>`, so its keys are exactly the union and the
+ * cast (needed only because `Object.keys` is typed `string[]`) is sound.
+ */
+const KINDS: readonly QuotaKind[] = Object.keys(QUOTA_LIMITS) as QuotaKind[];
 
 export interface QuotaResult {
   /** For `consume`: whether this request was counted (within the cap). For

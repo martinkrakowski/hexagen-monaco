@@ -1,6 +1,10 @@
 import { describe, it } from "vitest";
 import assert from "node:assert";
-import { createQuotaStore, QUOTA_LIMITS } from "../quota-store";
+import {
+  createQuotaStore,
+  fullQuotaSnapshot,
+  QUOTA_LIMITS,
+} from "../quota-store";
 
 describe("quota-store", () => {
   it("counts a request and reports remaining", () => {
@@ -84,5 +88,46 @@ describe("quota-store", () => {
     assert.strictEqual(snap.generation.remaining, QUOTA_LIMITS.generation - 1);
     assert.strictEqual(snap.chat.used, 0);
     store.close();
+  });
+
+  it("meters the scan kind independently of generation and chat", () => {
+    const store = createQuotaStore(":memory:");
+    for (let i = 0; i < QUOTA_LIMITS.scan; i++) {
+      assert.strictEqual(store.consume("s", "scan").allowed, true);
+    }
+    const over = store.consume("s", "scan");
+    assert.strictEqual(over.allowed, false);
+    assert.strictEqual(over.used, QUOTA_LIMITS.scan); // capped, not limit+1
+
+    // A spent scan budget must not touch the LLM budgets, or vice versa.
+    assert.strictEqual(store.consume("s", "generation").allowed, true);
+    assert.strictEqual(store.consume("s", "chat").allowed, true);
+    store.close();
+  });
+
+  // Guards the `KINDS = Object.keys(QUOTA_LIMITS)` derivation: a hand-listed
+  // array silently drops a newly added kind from both snapshot helpers.
+  it("snapshot includes every kind in QUOTA_LIMITS, including scan", () => {
+    const store = createQuotaStore(":memory:");
+    store.consume("s", "scan");
+    const snap = store.snapshot("s");
+    assert.deepStrictEqual(
+      Object.keys(snap).sort(),
+      Object.keys(QUOTA_LIMITS).sort(),
+    );
+    assert.strictEqual(snap.scan.used, 1);
+    assert.strictEqual(snap.scan.limit, QUOTA_LIMITS.scan);
+    assert.strictEqual(snap.scan.remaining, QUOTA_LIMITS.scan - 1);
+    store.close();
+  });
+
+  it("fullQuotaSnapshot (the fail-open fallback) covers every kind too", () => {
+    const snap = fullQuotaSnapshot(Date.UTC(2026, 7, 20, 12, 0));
+    assert.deepStrictEqual(
+      Object.keys(snap).sort(),
+      Object.keys(QUOTA_LIMITS).sort(),
+    );
+    assert.strictEqual(snap.scan.allowed, true);
+    assert.strictEqual(snap.scan.remaining, QUOTA_LIMITS.scan);
   });
 });

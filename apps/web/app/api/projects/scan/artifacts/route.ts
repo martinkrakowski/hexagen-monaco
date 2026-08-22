@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guardMutation } from "@/lib/request-guards";
 import {
+  openScanQuota,
+  type ScanQuotaGate,
+} from "@/lib/project-scan/scan-quota";
+import {
   MAX_HANDOFF_LOOSE_FILES,
   MAX_HANDOFF_LOOSE_FILE_BYTES,
   MAX_HANDOFF_REQUEST_BYTES,
@@ -86,8 +90,7 @@ function rejectOversizedRequest(request: NextRequest): NextResponse | null {
 async function readCappedBody(
   request: NextRequest,
 ): Promise<
-  | { ok: true; body: ArrayBuffer | null }
-  | { ok: false; response: NextResponse }
+  { ok: true; body: ArrayBuffer | null } | { ok: false; response: NextResponse }
 > {
   const tooLarge = () => ({
     ok: false as const,
@@ -165,8 +168,29 @@ function isZipFile(file: File): boolean {
  * Accepts either a `zip` part (the handoff zip) or loose artifact file parts.
  */
 export async function POST(request: NextRequest) {
+  // Rate limit first. It is the cheapest rejection, and a cross-origin or
+  // flooding caller must not be handed an anonymous-session cookie.
   const gate = guardMutation(request, HANDOFF_MUTATION_GUARD);
   if (gate) return gate;
+
+  // Quota is the second, separate gate: `guardMutation` bounds how fast this IP
+  // may post handoffs, `openScanQuota` bounds how much this session may scan
+  // today. Wrapping the handler means EVERY response below carries the gate's
+  // headers, so a first-time visitor actually receives the `hxg_sid` cookie the
+  // daily cap is keyed on — miss one path and that quota never accumulates.
+  const quota = openScanQuota(request);
+  return quota.applyHeaders(await handleHandoffRequest(request, quota));
+}
+
+async function handleHandoffRequest(
+  request: NextRequest,
+  quota: ScanQuotaGate,
+): Promise<NextResponse> {
+  // Peek, not consume: turn an exhausted caller away before the body is drained
+  // and parsed. A peek never counts, so it cannot double-charge with the
+  // `quota.charge()` calls below.
+  const exhausted = quota.precheck();
+  if (exhausted) return exhausted;
 
   const oversized = rejectOversizedRequest(request);
   if (oversized) return oversized;
@@ -244,6 +268,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Charge once, at the point of no return into the parser. Every rejection
+    // above is cheap and stays free. `charge()` memoizes its outcome, so the
+    // loose-file branch below can never charge the same request a second time.
+    const denied = quota.charge();
+    if (denied) return denied;
+
     return respond(await ingestHandoffZip({ zip: buffer, projectName }));
   }
 
@@ -293,6 +323,11 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+
+  // Mutually exclusive with the zip branch above: reaching here means no zip
+  // part was present, so this is still one charge for one scan.
+  const denied = quota.charge();
+  if (denied) return denied;
 
   return respond(ingestHandoffFiles({ files: loose, projectName }));
 }
