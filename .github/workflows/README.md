@@ -6,7 +6,7 @@ GitHub Actions workflows for the hexagen-monaco monorepo. Each reflects delibera
 
 ## `pr-agent.yml` — UI-contract LLM review
 
-Not a merge gate. Posts a DESIGN.md-focused review on PR `opened` / `reopened` / `ready_for_review`, and on `/review` (and other slash commands) via `issue_comment`. Complements CodeRabbit and Qodo; `auto_describe` and `auto_improve` are off.
+Not a merge gate. Posts a DESIGN.md-focused review on PR `opened` / `reopened` / `ready_for_review`, and on slash commands (`/review`, `/ask`, …) via `issue_comment` **created** by `OWNER` / `MEMBER` / `COLLABORATOR`. Complements CodeRabbit and Qodo; `auto_describe` and `auto_improve` are off. Draft PRs skip the auto-run; a trusted `/review` on a draft is the explicit override.
 
 **Secret:** `OPENROUTER_KEY` (repo Actions secret). The workflow maps it to `OPENROUTER__KEY` (`[openrouter].key`). `GITHUB_TOKEN` is the default Actions token.
 
