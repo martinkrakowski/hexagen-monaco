@@ -77,10 +77,11 @@ jobs:
     # the alternative is grepping the action's own stdout from a later step,
     # which is fragile and only reports the waste after paying for it.
     #
-    # Prefix matching, not exact-token: GHA expressions have no split(), so
-    # `/reviewers please look` still matches `/review` and runs. That is the
-    # accepted imprecision -- it errs toward running a real command, never
-    # toward the silent-green case this exists to close.
+    # Each command is matched as the WHOLE body or the body up to a space, so
+    # `/reviewers please look` and `/reviewXYZ` no longer match `/review`.
+    # GHA expressions have no split(), but exact-equality plus a
+    # trailing-space prefix covers both real forms without the collision.
+    # `/ask` is space-only: it is meaningless without a question after it.
     if: >-
       github.event.sender.type != 'Bot'
       && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
@@ -88,11 +89,15 @@ jobs:
         github.event.issue.pull_request
         && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         && (
-          startsWith(github.event.comment.body, '/review')
-          || startsWith(github.event.comment.body, '/describe')
-          || startsWith(github.event.comment.body, '/improve')
-          || startsWith(github.event.comment.body, '/ask')
-          || startsWith(github.event.comment.body, '/help')
+          github.event.comment.body == '/review'
+          || startsWith(github.event.comment.body, '/review ')
+          || github.event.comment.body == '/describe'
+          || startsWith(github.event.comment.body, '/describe ')
+          || github.event.comment.body == '/improve'
+          || startsWith(github.event.comment.body, '/improve ')
+          || startsWith(github.event.comment.body, '/ask ')
+          || github.event.comment.body == '/help'
+          || startsWith(github.event.comment.body, '/help ')
         )
       ))
     runs-on: ubuntu-latest
