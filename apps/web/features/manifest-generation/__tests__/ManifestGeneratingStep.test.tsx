@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { render, screen } from "@testing-library/react";
 import { ManifestGeneratingStep } from "../import-project-spec/ManifestGeneratingStep";
 import { isAutoAppliedNotice } from "../import-project-spec/utils";
-import type { StageValidationReport } from "../useStagedGenerationStream";
+import type { StageValidationReport } from "../../../app/lib/useStagedGenerationStream";
 
 /**
  * The completion summary must lead with SUCCESS: Stage-6 findings are advisory

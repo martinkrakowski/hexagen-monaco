@@ -1,11 +1,14 @@
 import { Suspense } from "react";
 import { Skeleton } from "@hexagen/ui";
 import { CheckCircle2 } from "lucide-react";
-import type { StagedPhase, StageProgress } from "../staged-generation-types";
+import type {
+  StagedPhase,
+  StageProgress,
+} from "../../../app/lib/staged-generation-types";
 import type {
   StageValidationReport,
   StageRepairSummary,
-} from "../useStagedGenerationStream";
+} from "../../../app/lib/useStagedGenerationStream";
 import { ThinkingBlock } from "../GenerateWithAi/ThinkingBlock";
 import {
   ValidationFindingsPanel,

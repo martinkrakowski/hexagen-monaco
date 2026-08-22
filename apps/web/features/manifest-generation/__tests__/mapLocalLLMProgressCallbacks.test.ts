@@ -1,7 +1,10 @@
 import { test, describe, vi } from "vitest";
 import assert from "node:assert";
 import type { Dispatch, SetStateAction } from "react";
-import type { StagedPhase, StageProgress } from "../staged-generation-types.ts";
+import type {
+  StagedPhase,
+  StageProgress,
+} from "../../../app/lib/staged-generation-types.ts";
 import type { StageTelemetry } from "@hexagen/agentic-interaction";
 
 // The factory's ONLY runtime dependency on @hexagen/agentic-interaction is

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { LocalLLMContext } from "../../../lib/llm-interfaces";
-import type { StageValidationReport } from "../useStagedGenerationStream";
+import type { StageValidationReport } from "../../../app/lib/useStagedGenerationStream";
 import type {
   ModelSelectionFlowState,
   ModelSelectionFlowActions,

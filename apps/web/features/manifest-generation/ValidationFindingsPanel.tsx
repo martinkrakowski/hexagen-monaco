@@ -1,7 +1,7 @@
 import type {
   StageValidationReport,
   StageRepairSummary,
-} from "./useStagedGenerationStream";
+} from "../../app/lib/useStagedGenerationStream";
 import {
   describeFindings,
   isAutoAppliedNotice,

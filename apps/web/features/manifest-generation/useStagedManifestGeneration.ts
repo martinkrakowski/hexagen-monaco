@@ -10,11 +10,14 @@ import type {
 import type { ManifestDraftContext } from "@hexagen/agentic-interaction";
 import { formatModelChip } from "@hexagen/agentic-interaction";
 import { getClientManifestGenerationUseCase } from "../../app/lib/wire.client";
-import type { StagedPhase, StageProgress } from "./staged-generation-types";
+import type {
+  StagedPhase,
+  StageProgress,
+} from "../../app/lib/staged-generation-types";
 import {
   useStagedGenerationStream,
   type StageValidationReport,
-} from "./useStagedGenerationStream";
+} from "../../app/lib/useStagedGenerationStream";
 
 /** Return type of the useStagedManifestGeneration hook */
 export interface UseStagedManifestGenerationReturn {
