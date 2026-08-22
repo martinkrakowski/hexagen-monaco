@@ -1,5 +1,7 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import {
   CREATION_PATH_OPTIONS,
   CREATION_STEPS,
@@ -90,10 +92,15 @@ describe("creation-path domain", () => {
       }
     });
 
-    it("artifacts sub-option is coming-soon and routes through the name step", () => {
+    it("artifacts sub-option is available and routes through the name step", () => {
+      // Flipped by BF-3.3, which mounted /projects/new/import/artifacts. The
+      // href still points at the shared name step: that step forwards the
+      // entered name to the Tier-A screen via `?name=`, and the screen redirects
+      // back to it when the name is missing, so the two legs are a loop rather
+      // than two destinations.
       const artifacts = IMPORT_SUB_OPTIONS.find((o) => o.id === "artifacts");
       assert.ok(artifacts);
-      assert.strictEqual(artifacts.status, "coming-soon");
+      assert.strictEqual(artifacts.status, "available");
       assert.strictEqual(artifacts.href, "/projects/new/name?path=artifacts");
     });
 
@@ -110,12 +117,42 @@ describe("creation-path domain", () => {
       assert.strictEqual(scan.href, "/projects/new/name?path=scan");
     });
 
-    // `github` and `artifacts` are deliberately still "coming-soon": neither
-    // destination is mounted yet (`/projects/new/import/github` currently
-    // redirects, and `/projects/new/import/artifacts` does not exist until
-    // BF-3.3). Marking either available would publish a link to a redirect or
-    // a 404. Each flips to "available" in the packet that mounts its route.
-    const NOT_YET_ROUTED = new Set(["github", "artifacts"]);
+    // `github` is deliberately still "coming-soon": `/projects/new/import/github`
+    // is a placeholder that redirects straight back to `/projects/new/import`,
+    // so marking it available would publish a link to a redirect. It flips in
+    // BF-5.3, the packet that mounts the real repo-entry screen.
+    //
+    // `artifacts` LEFT this set in BF-3.3, which mounted
+    // `/projects/new/import/artifacts`. The two tests below are the ratchet:
+    // one fails if a routed option is left "coming-soon", the other fails if an
+    // unrouted one is flipped to "available", so neither half of the pair can
+    // move on its own.
+    const NOT_YET_ROUTED = new Set(["github"]);
+
+    // Both tests above compare two IN-REPO CONSTANTS -- the option's `status`
+    // and the NOT_YET_ROUTED literal -- and neither observes the filesystem.
+    // So deleting or renaming the route file leaves them green while the
+    // option keeps advertising a screen that no longer exists. The pair is a
+    // consistency check between two declarations, not proof that a route is
+    // mounted; this test supplies the missing half.
+    it("every option claimed available has a page file actually mounted", () => {
+      const appDir = path.resolve(__dirname, "..", "..", "..", "app");
+      const ROUTE_FOR: Record<string, string> = {
+        spec: "projects/new/import/spec/page.tsx",
+        scan: "projects/new/import/scan/page.tsx",
+        artifacts: "projects/new/import/artifacts/page.tsx",
+        github: "projects/new/import/github/page.tsx",
+      };
+      for (const option of IMPORT_SUB_OPTIONS) {
+        if (option.status !== "available") continue;
+        const rel = ROUTE_FOR[option.id];
+        assert.ok(rel, `no route mapping recorded for ${option.id}`);
+        assert.ok(
+          existsSync(path.join(appDir, rel)),
+          `${option.id} is marked available but ${rel} does not exist`,
+        );
+      }
+    });
 
     it("every sub-option with a mounted route is available", () => {
       for (const option of IMPORT_SUB_OPTIONS) {
