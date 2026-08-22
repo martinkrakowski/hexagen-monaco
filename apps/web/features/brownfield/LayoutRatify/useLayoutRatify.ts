@@ -158,6 +158,29 @@ export function useLayoutRatify({
     setRows(initialRows(packages, ratifiedDraft));
   }
 
+  /**
+   * Replay a draft that ARRIVES LATE.
+   *
+   * `ratifiedDraft` was read once at mount. But BF-3.4's `useBrownfieldDraft`
+   * cannot return a restored draft on the first render: it feeds
+   * useSyncExternalStore a server snapshot of `null` so the server render and
+   * the hydration render agree, and only flips to the stored value after
+   * hydration commits. So the draft is reliably null when this hook mounts,
+   * and arrives one render later with `packages` unchanged -- which the
+   * detection signature above cannot see. The user's saved ratification was
+   * silently discarded every time.
+   *
+   * Keyed on the draft's own identity so it replays once per arrival, and
+   * never re-applies over later edits. A null draft is not an arrival.
+   */
+  const [replayedDraft, setReplayedDraft] = useState(ratifiedDraft);
+  if (ratifiedDraft !== replayedDraft) {
+    setReplayedDraft(ratifiedDraft);
+    if (ratifiedDraft !== null && ratifiedDraft !== undefined) {
+      setRows(initialRows(packages, ratifiedDraft));
+    }
+  }
+
   const validation = useMemo(() => validateLayoutRows(rows), [rows]);
 
   /**

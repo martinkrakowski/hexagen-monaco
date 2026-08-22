@@ -219,4 +219,39 @@ describe("useLayoutRatify", () => {
       result.current.rows.find((r) => r.packageRoot === target)?.contextName,
     ).toBe("renamed-context");
   });
+
+  it("replays a draft that arrives after hydration", () => {
+    // BF-3.4's useBrownfieldDraft CANNOT return a restored draft on the first
+    // render -- it hands useSyncExternalStore a null server snapshot so the
+    // server and hydration renders agree, then flips once. So the draft is
+    // reliably null at mount and arrives a render later with `packages`
+    // unchanged, which the detection signature cannot see. Without this the
+    // user's saved ratification was discarded every single time.
+    const onRatifyLayout = vi.fn();
+    const packages = detected();
+    let draft: ReturnType<typeof toLayoutDraft> | null = null;
+    const { result, rerender } = renderHook(() =>
+      useLayoutRatify({ packages, ratifiedDraft: draft, onRatifyLayout }),
+    );
+
+    const target = result.current.rows[0].packageRoot;
+    expect(
+      result.current.rows.find((r) => r.packageRoot === target)?.contextName,
+    ).not.toBe("restored-name");
+
+    draft = {
+      contexts: [
+        {
+          packageRoot: target,
+          contextName: "restored-name",
+          layerDirectories: { domain: ["src/domain"] },
+        },
+      ],
+    } as ReturnType<typeof toLayoutDraft>;
+    rerender();
+
+    expect(
+      result.current.rows.find((r) => r.packageRoot === target)?.contextName,
+    ).toBe("restored-name");
+  });
 });

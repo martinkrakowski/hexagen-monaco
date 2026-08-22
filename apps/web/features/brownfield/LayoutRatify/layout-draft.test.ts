@@ -442,3 +442,27 @@ describe("mergeRatifiedDraft", () => {
     expect(mergeRatifiedDraft(rows, undefined)).toBe(rows);
   });
 });
+describe("normalizeDirectory — path containment", () => {
+  it("rejects parent-directory escapes", () => {
+    // These land in layout.yaml and are path-joined against the package root
+    // by the sync engine, which accepts them as-is.
+    for (const hostile of ["../outside", "src/../../etc", "..", "a/../../b"]) {
+      expect(normalizeDirectory(hostile), hostile).toBe("");
+    }
+  });
+
+  it("rejects absolute paths", () => {
+    for (const abs of ["/etc/passwd", "/", "//srv"]) {
+      expect(normalizeDirectory(abs), abs).toBe("");
+    }
+  });
+
+  it("still accepts ordinary relative directories", () => {
+    // The guard must not be so blunt that real input is refused; note a dot
+    // INSIDE a segment is fine, only a `..` segment is traversal.
+    expect(normalizeDirectory("./src/domain/")).toBe("src/domain");
+    expect(normalizeDirectory("src//application")).toBe("src/application");
+    expect(normalizeDirectory("src/v1.2/domain")).toBe("src/v1.2/domain");
+  });
+});
+

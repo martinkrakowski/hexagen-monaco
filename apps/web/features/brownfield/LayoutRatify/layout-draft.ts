@@ -146,6 +146,19 @@ export function normalizeDirectory(raw: string): string {
   // Trailing slashes only. A bare "/" collapses to "" and is dropped, which is
   // correct: an absolute root is never a valid package-relative layer dir.
   value = value.replace(/\/+$/, "");
+  // Reject escapes rather than normalising them away. These strings are
+  // written into layout.yaml as layer roots and then path-joined against the
+  // package root by the sync engine, whose loader accepts them as-is -- so
+  // `../outside` or `/etc` would resolve outside the package the user is
+  // ratifying.
+  //
+  // Rejected BY SEGMENT, not by stripping characters: stripping would silently
+  // turn `../src` into `src`, which is a different directory the user did not
+  // choose. Empty is the honest answer, and callers already drop empties.
+  // (Same lesson as the artifact-path fix in BF-7.1: a dot segment is
+  // traversal regardless of what surrounds it.)
+  if (value.startsWith("/")) return "";
+  if (value.split("/").some((segment) => segment === "..")) return "";
   return value;
 }
 
