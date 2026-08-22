@@ -27,5 +27,29 @@ export {
   type DailyRunCount,
   type StageTelemetryInput,
 } from "./run-history-store";
+export {
+  MAX_ARTIFACT_BYTES,
+  MAX_INLINE_FINDING_ENTRIES,
+  MAX_SCAN_RECORDS_PER_OWNER,
+  SCAN_RECORD_SCHEMA_VERSION,
+  SCAN_TIERS,
+  isPathInside,
+  scanArtifactPath,
+  type RecordScanInput,
+  type RecordScanOutcome,
+  type ScanArtifactRef,
+  type ScanFindingCounts,
+  type ScanFindingEntry,
+  type ScanRecord,
+  type ScanRecordsStore,
+  type ScanTier,
+  type ScanTrendPoint,
+} from "./scan-records-store";
 export { requirePersistenceOwner } from "./require-owner";
-export { resolvePlatformDbPath, LOCAL_PLATFORM_DB_PATH } from "./platform-db";
+export {
+  resolvePlatformDbPath,
+  LOCAL_PLATFORM_DB_PATH,
+  resolveScanArtifactsDir,
+  ensureScanArtifactsDir,
+  LOCAL_SCAN_ARTIFACTS_DIR,
+} from "./platform-db";

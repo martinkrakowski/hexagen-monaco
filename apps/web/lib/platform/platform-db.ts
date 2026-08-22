@@ -96,6 +96,47 @@ export function openPlatformDb(dbPath: string): Database.Database {
       current_period_end INTEGER,
       updated_at INTEGER NOT NULL
     );
+
+    -- One row per completed scan, owner-scoped (F-13).
+    --
+    -- Deliberately NOT a variant of saved_projects: savedProjectBodySchema
+    -- requires formState + manifestYaml, neither of which a scan produces.
+    --
+    -- Bulk lives on the /data volume, not in the row: artifact_path +
+    -- artifact_bytes reference the handoff zip / full findings.json, while the
+    -- inline columns carry only already-clipped text and a capped findings
+    -- sample. A large monorepo therefore cannot inflate a row.
+    --
+    -- schema_version is per-row, not per-database, because reads gate on it
+    -- (see scan-records-store.ts) rather than migrating in place.
+    CREATE TABLE IF NOT EXISTS scan_records (
+      id TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      schema_version INTEGER NOT NULL,
+      project_name TEXT NOT NULL,
+      repo_ref TEXT,
+      tier TEXT NOT NULL,
+      verdict TEXT NOT NULL,
+      exit_code INTEGER,
+      files_scanned INTEGER,
+      findings_fresh INTEGER NOT NULL,
+      findings_baselined INTEGER NOT NULL,
+      findings_stale INTEGER NOT NULL,
+      findings_expired INTEGER NOT NULL,
+      layout_excerpt TEXT,
+      report_markdown TEXT,
+      error_message TEXT,
+      findings_sample TEXT NOT NULL,
+      artifact_path TEXT,
+      artifact_bytes INTEGER,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (owner_id, id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_scan_records_owner
+      ON scan_records (owner_id, created_at DESC);
+    -- Trend queries are always "this repo, this owner, newest first".
+    CREATE INDEX IF NOT EXISTS idx_scan_records_repo
+      ON scan_records (owner_id, repo_ref, created_at DESC);
   `);
   seedModelPrices(db);
   return db;
@@ -247,4 +288,36 @@ export function resolvePlatformDbPath(
   if (env.NODE_ENV === "production") return "/data/platform.db";
   if (env.NODE_ENV === "test") return ":memory:";
   return LOCAL_PLATFORM_DB_PATH;
+}
+
+export const LOCAL_SCAN_ARTIFACTS_DIR = join(
+  tmpdir(),
+  "hexagen-monaco-scan-artifacts",
+);
+
+/**
+ * Where scan artifact bytes (handoff zip, full findings.json) are written.
+ *
+ * Mirrors resolvePlatformDbPath so both land on the same persistent volume in
+ * production. Kept out of the sqlite file on purpose: `payload TEXT` rows are
+ * read whole, so a 30 MB zip in a row would be paid for on every list().
+ *
+ * NODE_ENV=test does NOT get an in-memory equivalent -- there is no such thing
+ * for a directory -- so suites that exercise artifacts must pass an explicit
+ * temp dir rather than relying on this default.
+ */
+export function resolveScanArtifactsDir(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  if (env.SCAN_ARTIFACTS_DIR) return env.SCAN_ARTIFACTS_DIR;
+  if (env.NODE_ENV === "production") return "/data/scan-artifacts";
+  return LOCAL_SCAN_ARTIFACTS_DIR;
+}
+
+/**
+ * Create the artifacts directory if absent. Separate from the row store, which
+ * performs no filesystem I/O at all (see scan-records-store.ts).
+ */
+export function ensureScanArtifactsDir(dir: string): void {
+  mkdirSync(dir, { recursive: true });
 }
