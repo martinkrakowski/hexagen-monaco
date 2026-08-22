@@ -82,20 +82,27 @@ jobs:
           OPENROUTER__KEY: ${{ secrets.OPENROUTER_KEY }}
           config.restricted_mode: "true"
           config.model: "openrouter/tencent/hy3"
-          config.fallback_models: '["openrouter/anthropic/claude-3.5-sonnet"]'
-          config.custom_model_max_tokens: "64000"
+          # claude-3.5-sonnet is NOT in the OpenRouter catalogue — the old
+          # fallback could not have resolved. Verified against /api/v1/models.
+          config.fallback_models: '["openrouter/anthropic/claude-haiku-4.5"]'
+          # hy3's real window per OpenRouter: 262144. This was 64000, which
+          # silently capped max_model_tokens below it.
+          config.custom_model_max_tokens: "262144"
           # Mirrors .pr_agent.toml, per this file's own "keep env and toml in
           # agreement" rule. custom_model_max_tokens declares the model's
           # capacity; max_model_tokens caps what PR-Agent actually spends and
           # defaults to 32000 regardless — which is what was pruning diffs and
           # dropping files from reviews. See the toml for the measurements.
-          config.max_model_tokens: "60000"
+          config.max_model_tokens: "200000"
           # DESIGN.md and best_practices.md exist on main today. The rubric
           # does not — missing entries are skipped. extra_instructions below
           # is what makes this PR a UI-contract review rather than AGENTS.md
           # defaults (repo_context_files default is ["AGENTS.md"], cap 500).
           config.repo_context_files: '[".agents/PR_REVIEW_RUBRIC.md", "best_practices.md", "DESIGN.md"]'
           config.repo_context_max_lines: "3000"
+          # See .pr_agent.toml for the 3/3 correlation showing this reads any
+          # `#NNN` in a PR body as a ticket the PR must implement.
+          pr_reviewer.require_ticket_analysis_review: "false"
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "false"
           github_action_config.auto_improve: "false"
