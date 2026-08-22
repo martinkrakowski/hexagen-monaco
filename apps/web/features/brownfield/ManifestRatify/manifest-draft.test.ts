@@ -372,3 +372,38 @@ describe("toRatificationPayload", () => {
     ).toBe("microservices");
   });
 });
+describe("context type is a closed set (#599 review)", () => {
+  const withType = (type: string): BrownfieldManifestDraft =>
+    draftOf({ contexts: [{ ...contextOf(), type, include: true }] });
+
+  it("never forwards an unrecognised type into the payload", () => {
+    // The payload goes to bootstrap and lands in manifest.yaml as
+    // bounded_contexts[].type. A stale value from a persisted draft would
+    // produce a manifest the linter later rejects, discovered far from the
+    // screen that wrote it.
+    const payload = toRatificationPayload(withType("retired-kind"));
+    for (const c of payload.contexts) {
+      expect(MANIFEST_CONTEXT_TYPES).toContain(c.type);
+    }
+  });
+
+  it("tells the user rather than silently changing their choice", () => {
+    const problems = validateManifestDraft(withType("retired-kind"));
+    expect(
+      problems.some((p) => p.id.startsWith("context-type-unknown")),
+    ).toBe(true);
+  });
+
+  it("accepts every supported type unchanged", () => {
+    for (const type of MANIFEST_CONTEXT_TYPES) {
+      const payload = toRatificationPayload(withType(type));
+      expect(payload.contexts[0].type).toBe(type);
+      expect(
+        validateManifestDraft(withType(type)).some((p) =>
+          p.id.startsWith("context-type-unknown"),
+        ),
+      ).toBe(false);
+    }
+  });
+});
+

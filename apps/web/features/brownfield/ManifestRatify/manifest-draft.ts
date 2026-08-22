@@ -210,6 +210,24 @@ export function validateManifestDraft(
     });
   }
 
+  // Surfaced, not silently coerced. toRatificationPayload falls back so a bad
+  // value can never reach manifest.yaml, but a user whose restored draft
+  // carries a retired type deserves to be told rather than to watch their
+  // choice change under them.
+  for (const context of includedContexts(draft)) {
+    const value = context.type.trim();
+    if (
+      value.length > 0 &&
+      !(MANIFEST_CONTEXT_TYPES as readonly string[]).includes(value)
+    ) {
+      problems.push({
+        id: `context-type-unknown:${context.name}`,
+        field: "contexts",
+        message: `"${context.name}" has an unrecognised context type "${value}". Pick one of: ${MANIFEST_CONTEXT_TYPES.join(", ")}.`,
+      });
+    }
+  }
+
   if (draft.scope.trim().length === 0) {
     problems.push({
       id: "scope-empty",
@@ -328,6 +346,19 @@ export interface ManifestRatificationPayload {
  * Call only on a draft `validateManifestDraft` returned empty for; it normalises
  * whitespace, it does not repair a draft.
  */
+/**
+ * Coerce a stored/entered context type to the closed set.
+ *
+ * Unknown values fall back to the default instead of propagating, so a draft
+ * written by an older build cannot smuggle a type into manifest.yaml.
+ */
+function asManifestContextType(raw: string): ManifestContextType {
+  const value = raw.trim();
+  return (MANIFEST_CONTEXT_TYPES as readonly string[]).includes(value)
+    ? (value as ManifestContextType)
+    : DEFAULT_CONTEXT_TYPE;
+}
+
 export function toRatificationPayload(
   draft: BrownfieldManifestDraft,
 ): ManifestRatificationPayload {
@@ -338,7 +369,17 @@ export function toRatificationPayload(
     contexts: includedContexts(draft).map((context) => ({
       name: context.name.trim(),
       include: true as const,
-      type: context.type.trim() || DEFAULT_CONTEXT_TYPE,
+      // Validated against the closed set, not merely trimmed. The payload
+      // goes to bootstrap and lands in manifest.yaml as
+      // `bounded_contexts[].type`, so an unrecognised value written there is
+      // a manifest the linter will later reject -- discovered long after the
+      // screen that produced it. A persisted draft from an older build, or a
+      // hand-edited one, is exactly how a stale value gets here.
+      //
+      // Falls back rather than throwing: the caller is a payload projection,
+      // and validateManifestDraft below is where a bad value is surfaced to
+      // the user.
+      type: asManifestContextType(context.type),
       description: context.description.trim(),
       dependsOn: context.dependsOn
         .map((target) => target.trim())
