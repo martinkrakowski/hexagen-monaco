@@ -8,6 +8,25 @@ restricted_mode = true
 model = "openrouter/tencent/hy3"
 fallback_models = ["openrouter/anthropic/claude-3.5-sonnet"]
 custom_model_max_tokens = 64000
+# THE setting that was pruning diffs. `custom_model_max_tokens` declares what
+# the model can hold; `max_model_tokens` caps what PR-Agent will actually use,
+# and it defaults to 32000 REGARDLESS of the model's capacity. So the 64000
+# above was never reached and reviews silently dropped files:
+#
+#   Tokens: 36247, total tokens over limit: 32000, pruning diff.
+#   After pruning, added_list_str: Additional added files (insufficient token
+#   budget to process): … useLayoutRatify.ts …
+#
+# On #598 the pruned set included useLayoutRatify.ts — the one file in that PR
+# that contained a crash (an infinite render loop). The review reported "no
+# major issues" without ever reading it, which is worse than no review: a
+# green check that looks like coverage.
+#
+# Sized from measurements, not guessed. Observed peaks: 36247 (6 files) and
+# 37977 (11 files); a 5-file PR fit under 32000 without pruning. 60000 leaves
+# ~58% headroom over the largest observed PR while staying below the declared
+# 64000 window so the response still has room.
+max_model_tokens = 60000
 repo_context_files = [
   ".agents/PR_REVIEW_RUBRIC.md",
   "best_practices.md",

@@ -84,6 +84,12 @@ jobs:
           config.model: "openrouter/tencent/hy3"
           config.fallback_models: '["openrouter/anthropic/claude-3.5-sonnet"]'
           config.custom_model_max_tokens: "64000"
+          # Mirrors .pr_agent.toml, per this file's own "keep env and toml in
+          # agreement" rule. custom_model_max_tokens declares the model's
+          # capacity; max_model_tokens caps what PR-Agent actually spends and
+          # defaults to 32000 regardless — which is what was pruning diffs and
+          # dropping files from reviews. See the toml for the measurements.
+          config.max_model_tokens: "60000"
           # DESIGN.md and best_practices.md exist on main today. The rubric
           # does not — missing entries are skipped. extra_instructions below
           # is what makes this PR a UI-contract review rather than AGENTS.md
