@@ -219,7 +219,7 @@ describe("scan records store — artifact paths", () => {
     });
     expect(written.success).toBe(false);
     if (!written.success) {
-      expect(written.error.message).toMatch(/outside the artifacts directory/);
+      expect(written.error.message).toMatch(/outside this owner's artifacts directory/);
     }
     const listed = store.list();
     if (listed.success) expect(listed.value.length).toBe(0);
@@ -237,14 +237,64 @@ describe("scan records store — artifact paths", () => {
     }
   });
 
-  it("scanArtifactPath cannot be escaped by hostile segments", () => {
-    const path = scanArtifactPath(
-      ARTIFACTS_ROOT,
-      "../../root",
-      "../../../etc/passwd",
-    );
-    expect(isPathInside(ARTIFACTS_ROOT, path)).toBe(true);
-    expect(path.includes("..")).toBe(false);
+  it("scanArtifactPath REJECTS hostile segments rather than sanitising them", () => {
+    // Sanitising was the original approach and it caused a collision: any two
+    // ids differing only in stripped characters mapped to one file. Rejecting
+    // keeps the mapping injective, so a stored path names exactly one scan.
+    expect(() =>
+      scanArtifactPath(ARTIFACTS_ROOT, "../../root", "id"),
+    ).toThrow();
+    expect(() =>
+      scanArtifactPath(ARTIFACTS_ROOT, "owner", "../../../etc/passwd"),
+    ).toThrow();
+    for (const hostile of [".", "..", "a..b", "../x", "x/y"]) {
+      expect(
+        () => scanArtifactPath(ARTIFACTS_ROOT, "owner", hostile),
+        `hostile segment ${hostile} must be rejected`,
+      ).toThrow();
+    }
+  });
+
+  it("refuses another owner's artifact path", () => {
+    // The containment check used to compare against the SHARED root, so owner
+    // A could record a path naming owner B's artifact. record() hands
+    // evictedArtifactPaths back for the caller to unlink, so retention would
+    // then delete another tenant's file: cross-tenant deletion is the
+    // mechanism, not a downstream consequence.
+    const { db, store } = harness("attacker");
+    const victimPath = scanArtifactPath(ARTIFACTS_ROOT, "victim", "s1");
+
+    const outcome = store.record({
+      ...base,
+      artifact: { path: victimPath, bytes: 10 },
+    });
+
+    expect(outcome.success).toBe(false);
+    if (!outcome.success) {
+      expect(outcome.error.message).toMatch(/outside this owner/i);
+    }
+    // Sanity: the same path IS inside the shared root, which is exactly why
+    // the old check passed it.
+    expect(isPathInside(ARTIFACTS_ROOT, victimPath)).toBe(true);
+    db.close();
+  });
+
+  it("distinct scan ids never collapse to one artifact path", () => {
+    // `scan.1` and `scan1` both became `scan1.zip` when '.' was stripped, so
+    // two scans silently shared one artifact file -- and retention unlinking
+    // one would take the other's bytes with it.
+    const a = scanArtifactPath(ARTIFACTS_ROOT, "owner", "scan.1");
+    const b = scanArtifactPath(ARTIFACTS_ROOT, "owner", "scan1");
+    expect(a).not.toBe(b);
+    expect(isPathInside(ARTIFACTS_ROOT, a)).toBe(true);
+    expect(isPathInside(ARTIFACTS_ROOT, b)).toBe(true);
+  });
+
+  it("accepts a dot inside an id, matching SCAN_ID_PATTERN", () => {
+    // The route's allow-list is /^[A-Za-z0-9._-]{1,64}$/, so a legitimate id
+    // carrying a dot must still resolve rather than be refused.
+    const p = scanArtifactPath(ARTIFACTS_ROOT, "owner", "scan.1");
+    expect(p.endsWith("scan.1.zip")).toBe(true);
   });
 
   it("isPathInside rejects the root itself and any parent", () => {

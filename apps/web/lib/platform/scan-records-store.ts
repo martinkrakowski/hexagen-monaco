@@ -286,8 +286,43 @@ export function isPathInside(root: string, candidate: string): boolean {
 }
 
 /** Strip everything a path segment has no business containing. */
-function safeSegment(value: string): string {
-  return value.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64);
+/**
+ * The characters a path segment may contain. Matches SCAN_ID_PATTERN in
+ * app/api/projects/install-gate/route.ts, which ALLOWS `.` -- an earlier
+ * revision stripped it, so `scan.1` and `scan1` both became `scan1.zip` and
+ * two distinct scans silently shared one artifact file.
+ */
+const SEGMENT_CHARS = /^[A-Za-z0-9._-]{1,64}$/;
+
+/**
+ * Reject a segment rather than sanitising it.
+ *
+ * Sanitising is what caused the collision: any two ids differing only in
+ * stripped characters map to one path. Rejecting keeps the mapping injective,
+ * so a stored path always identifies exactly one scan.
+ *
+ * Dot segments are refused BY NAME, not by character class. Allowing `.` back
+ * into the charset re-admits `..`, and a `..` segment is traversal regardless
+ * of how the rest of the string looks -- so `.`, `..`, and any segment
+ * containing `..` are rejected outright.
+ */
+/** Non-throwing variant for validation paths that must return a Result. */
+function assertSafeSegmentOrNull(value: string): string | null {
+  if (!SEGMENT_CHARS.test(value)) return null;
+  if (value === "." || value === ".." || value.includes("..")) return null;
+  return value;
+}
+
+function assertSafeSegment(value: string, label: string): string {
+  if (!SEGMENT_CHARS.test(value)) {
+    throw new Error(
+      `scanArtifactPath: ${label} must match ${String(SEGMENT_CHARS)}`,
+    );
+  }
+  if (value === "." || value === ".." || value.includes("..")) {
+    throw new Error(`scanArtifactPath: ${label} must not be a dot segment`);
+  }
+  return value;
 }
 
 /**
@@ -301,12 +336,9 @@ export function scanArtifactPath(
   scanId: string,
   extension = "zip",
 ): string {
-  const owner = safeSegment(ownerId);
-  const scan = safeSegment(scanId);
-  const ext = safeSegment(extension) || "bin";
-  if (owner.length === 0 || scan.length === 0) {
-    throw new Error("scanArtifactPath requires a non-empty owner and scan id");
-  }
+  const owner = assertSafeSegment(ownerId, "owner id");
+  const scan = assertSafeSegment(scanId, "scan id");
+  const ext = assertSafeSegment(extension, "extension");
   return join(resolve(root), owner, `${scan}.${ext}`);
 }
 
@@ -425,7 +457,7 @@ export function createScanRecordsStore(
   const selectEvictable = db.prepare(`
     SELECT id, artifact_path FROM scan_records
      WHERE owner_id = @owner_id
-     ORDER BY created_at DESC, id DESC
+     ORDER BY created_at DESC, rowid DESC
      LIMIT -1 OFFSET @keep
   `);
   const deleteById = db.prepare(
@@ -437,7 +469,7 @@ export function createScanRecordsStore(
      WHERE owner_id = @owner_id
        AND schema_version = @schema_version
        AND (@repo_ref IS NULL OR repo_ref = @repo_ref)
-     ORDER BY created_at DESC, id DESC
+     ORDER BY created_at DESC, rowid DESC
      LIMIT @limit
   `);
   const selectOne = db.prepare(`
@@ -446,20 +478,32 @@ export function createScanRecordsStore(
        AND id = @id
        AND schema_version = @schema_version
   `);
+  // rowid must be SELECTED here, aliased: the outer query reads from a
+  // subquery result, which is not a table and therefore has no rowid of its
+  // own. Ordering the outer query by a bare `rowid` fails with
+  // "no such column: rowid".
+  //
+  // rowid, not id, is the tie-break. `id` defaults to crypto.randomUUID(), so
+  // two rows written in the same millisecond ordered RANDOMLY -- retention
+  // could evict the newer scan and the trend window could shuffle between
+  // reads. sqlite's rowid is monotonic per insert, so ties resolve to true
+  // insertion order.
+  //
   // Newest `limit` rows, then flipped to oldest-first. A bare ORDER BY ASC
   // with a LIMIT would return the OLDEST n instead, i.e. a chart that stops
   // updating once an owner passes the limit.
   const selectTrend = db.prepare(`
     SELECT * FROM (
-      SELECT id, created_at, verdict, findings_fresh, findings_baselined
+      SELECT id, created_at, verdict, findings_fresh, findings_baselined,
+             rowid AS insertion_seq
         FROM scan_records
        WHERE owner_id = @owner_id
          AND schema_version = @schema_version
          AND (@repo_ref IS NULL OR repo_ref = @repo_ref)
-       ORDER BY created_at DESC, id DESC
+       ORDER BY created_at DESC, insertion_seq DESC
        LIMIT @limit
     )
-    ORDER BY created_at ASC, id ASC
+    ORDER BY created_at ASC, insertion_seq ASC
   `);
 
   const writeWithRetention = db.transaction(
@@ -517,11 +561,20 @@ export function createScanRecordsStore(
       if (artifact !== null) {
         // Never store a path the volume does not own: a later cleanup pass
         // unlinks exactly what this column names.
+        // Scoped to THIS owner's directory, not the shared root. Checking the
+        // shared root only proves the path is ours collectively -- owner A
+        // could name owner B's artifact, and since record() hands
+        // evictedArtifactPaths back for the caller to unlink, retention would
+        // then delete another tenant's file. Cross-tenant deletion is not a
+        // hypothetical consequence of a wrong path; it is the mechanism.
+        const ownerDir = join(resolve(artifactsRoot), assertSafeSegmentOrNull(ownerId) ?? "\u0000");
         if (
           typeof artifact.path !== "string" ||
-          !isPathInside(artifactsRoot, artifact.path)
+          !isPathInside(ownerDir, artifact.path)
         ) {
-          return rejected("Artifact path is outside the artifacts directory");
+          return rejected(
+            "Artifact path is outside this owner's artifacts directory",
+          );
         }
         if (
           typeof artifact.bytes !== "number" ||
