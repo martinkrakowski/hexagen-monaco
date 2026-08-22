@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { BrownfieldImportPage, looksLikeZip } from "../BrownfieldImportPage";
+import {
+  BrownfieldImportPage,
+  looksLikeZip,
+  isHandoffResponse as isHandoffResponseForTest,
+} from "../BrownfieldImportPage";
 
 // jest-dom is NOT registered by apps/web/vitest.setup.ts — toBeTruthy(),
 // toBeNull() and getAttribute() only. React is not imported: the Vitest config
@@ -556,6 +560,40 @@ describe("BrownfieldImportPage", () => {
         /Handoff zip, or the individual artifact files/i,
       ) as HTMLInputElement;
       expect(fresh.files?.length ?? 0).toBe(0);
+    });
+
+    it("rejects a 200 whose warnings are not strings", () => {
+      // Warnings render as React children (`<li>{warning}</li>`), and React
+      // THROWS on a non-primitive child. The element type is a crash surface.
+      expect(
+        isHandoffResponseForTest({ ...HANDOFF_OK, warnings: [{ msg: "x" }] }),
+      ).toBe(false);
+      expect(isHandoffResponseForTest(HANDOFF_OK)).toBe(true);
+    });
+
+    it("distinguishes an unparseable body from a well-formed wrong shape", async () => {
+      // `.catch(() => null)` made a malformed body and a literal null body
+      // indistinguishable. app/lib/fetch-json.ts exists to stop exactly that.
+      const user = userEvent.setup();
+      render(<BrownfieldImportPage />);
+      const input = await gotoUpload(user);
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => {
+            throw new SyntaxError("Unexpected token < in JSON");
+          },
+        } as unknown as Response),
+      );
+      await user.upload(input, ZIP());
+      await user.click(screen.getByRole("button", { name: /Upload/i }));
+
+      await waitFor(() => {
+        expect(screen.getAllByText(/not valid JSON/i).length).toBeGreaterThan(0);
+      });
     });
   });
 });

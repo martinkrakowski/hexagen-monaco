@@ -1,5 +1,7 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import {
   CREATION_PATH_OPTIONS,
   CREATION_STEPS,
@@ -126,6 +128,31 @@ describe("creation-path domain", () => {
     // unrouted one is flipped to "available", so neither half of the pair can
     // move on its own.
     const NOT_YET_ROUTED = new Set(["github"]);
+
+    // Both tests above compare two IN-REPO CONSTANTS -- the option's `status`
+    // and the NOT_YET_ROUTED literal -- and neither observes the filesystem.
+    // So deleting or renaming the route file leaves them green while the
+    // option keeps advertising a screen that no longer exists. The pair is a
+    // consistency check between two declarations, not proof that a route is
+    // mounted; this test supplies the missing half.
+    it("every option claimed available has a page file actually mounted", () => {
+      const appDir = path.resolve(__dirname, "..", "..", "..", "app");
+      const ROUTE_FOR: Record<string, string> = {
+        spec: "projects/new/import/spec/page.tsx",
+        scan: "projects/new/import/scan/page.tsx",
+        artifacts: "projects/new/import/artifacts/page.tsx",
+        github: "projects/new/import/github/page.tsx",
+      };
+      for (const option of IMPORT_SUB_OPTIONS) {
+        if (option.status !== "available") continue;
+        const rel = ROUTE_FOR[option.id];
+        assert.ok(rel, `no route mapping recorded for ${option.id}`);
+        assert.ok(
+          existsSync(path.join(appDir, rel)),
+          `${option.id} is marked available but ${rel} does not exist`,
+        );
+      }
+    });
 
     it("every sub-option with a mounted route is available", () => {
       for (const option of IMPORT_SUB_OPTIONS) {

@@ -102,13 +102,17 @@ export function looksLikeZip(file: File): boolean {
   return type === "application/zip" || type === "application/x-zip-compressed";
 }
 
-function isHandoffResponse(value: unknown): value is ProjectHandoffResponse {
+export function isHandoffResponse(value: unknown): value is ProjectHandoffResponse {
   if (typeof value !== "object" || value === null) return false;
   const record = value as Record<string, unknown>;
   if (
     record.source !== "handoff-artifacts" ||
     (record.verdict !== "ingested" && record.verdict !== "incomplete") ||
-    !Array.isArray(record.warnings)
+    !Array.isArray(record.warnings) ||
+    // Every warning is rendered as a React child (`<li>{warning}</li>`), and
+    // React THROWS on a non-primitive child ("Objects are not valid as a React
+    // child"). So the element type is a crash surface, not a cosmetic detail.
+    !record.warnings.every((warning) => typeof warning === "string")
   ) {
     return false;
   }
@@ -386,9 +390,11 @@ export function BrownfieldImportPage() {
     // Client-side checks the route cannot make cheaply, or that would cost a
     // whole round trip to learn. Both produce the same alert shape as a server
     // rejection so the screen has one error surface, not two.
-    const hasZip = files.some((file) =>
-      file.name.toLowerCase().endsWith(".zip"),
-    );
+    // Uses the SAME predicate as the routing decision below. When this
+    // checked only the .zip suffix, a zip identified by media type slipped
+    // past the guard and was then posted as a loose artifact -- precisely the
+    // outcome this alert exists to prevent. One predicate, both places.
+    const hasZip = files.some(looksLikeZip);
     if (files.length > 1 && hasZip) {
       setResult(null);
       setStatusMessage("");
@@ -435,7 +441,16 @@ export function BrownfieldImportPage() {
         body: form,
       });
       setStatusMessage("Parsing the handoff artifacts…");
-      const body: unknown = await response.json().catch(() => null);
+      // `.catch(() => null)` conflated two different failures: a malformed
+      // body and a literal `null` body both arrived as null, so neither the
+      // copy nor a future reader could tell them apart. app/lib/fetch-json.ts
+      // exists precisely to stop that idiom swallowing parse errors, and its
+      // docblock says so.
+      let bodyParsed = true;
+      const body: unknown = await response.json().catch(() => {
+        bodyParsed = false;
+        return null;
+      });
 
       if (!response.ok) {
         const failure = failureFor(
@@ -461,8 +476,9 @@ export function BrownfieldImportPage() {
       if (!isHandoffResponse(body)) {
         setAlert({
           title: "The server returned an unexpected response",
-          detail:
-            "The upload succeeded but the reply did not look like a parsed handoff.",
+          detail: bodyParsed
+            ? "The upload succeeded but the reply did not look like a parsed handoff."
+            : "The upload succeeded but the reply was not valid JSON, so it could not be read.",
           hint: "Try again. If it repeats, this build of the app and the API are out of step.",
         });
         setStatusMessage("The server returned an unexpected response.");

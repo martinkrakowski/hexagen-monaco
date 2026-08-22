@@ -52,6 +52,7 @@ function renderView(
       statusMessage={overrides.statusMessage ?? ""}
       alert={overrides.alert ?? null}
       result={overrides.result ?? null}
+      resetToken={overrides.resetToken ?? 0}
     />,
   );
   return { onFilesSelected };
