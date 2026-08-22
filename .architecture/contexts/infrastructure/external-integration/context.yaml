@@ -1,16 +1,18 @@
 name: external-integration
 type: supporting
-description: GitHub integration plumbing — scaffold export (publish) and editor push, over a shared Git Data client
+description: GitHub integration plumbing — scaffold export (publish), editor push, and conformance-gate pull requests, over a shared Git Data client
 layers:
   application:
     ports:
       out:
         - RepositoryWriterPort
+        - PullRequestOpenerPort
   infrastructure:
     adapters:
       - GitHubExporterAdapter
       - GitHubRepositoryWriterAdapter
       - GitHubGitDataClient
+      - GitHubPullRequestAdapter
   # Git Data client logic relocated here from project-generation (see github-exporter.adapter.ts)
   # for sharing with RepositoryWriterPort / commitFiles (editor push) without violating project-generation import rules.
 plane: infrastructure
