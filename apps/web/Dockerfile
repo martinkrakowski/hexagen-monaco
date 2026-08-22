@@ -72,6 +72,50 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/
 # initialises writable for the non-root runtime user.
 RUN mkdir -p /data && chown nextjs:nodejs /data
 
+# ---------- `hexagen scan` must be able to FIND `hexagen-lint` ----------
+#
+# `hexagen scan` does not check anything itself: it shells out to a second
+# binary. @hexagen/sync's resolveArchLinterBin locates that binary ONLY by
+# walking UP from the directory being scanned, checking
+# `node_modules/.bin/hexagen-lint` and then
+# `node_modules/@hexagen{,-monaco}/arch-linter` at each level. There is no PATH
+# fallback and no env override — the walk is the entire contract, and it is in a
+# published package, so it is not ours to change here.
+#
+# #615 put the FILES in the image; two further things have to be true for that
+# walk to reach them, and neither was:
+#
+#  1. The linter must be reachable through a `node_modules` path. Next's tracer
+#     copies files, not Yarn's workspace symlinks, so the standalone output
+#     contains `tools/arch-linter/dist/cli.js` and NO `node_modules/.bin` and NO
+#     `node_modules/@hexagen` directory at all (verified by listing a built
+#     standalone tree). Recreating the workspace link is what gives the resolver
+#     a shape it recognises. Deliberately the PACKAGE link and not a `.bin`
+#     shim: resolving through the package yields a `.js` path, which
+#     packages/sync launches through the current interpreter, so nothing depends
+#     on the traced copy having kept its executable bit.
+#  2. Scan workspaces must live where walking up reaches /app — see
+#     HEXAGEN_SCAN_WORKSPACE_DIR below.
+#
+# The `test -f` lines are the gate: if a future trace change drops the linter,
+# the BUILD fails here instead of every production scan silently returning
+# `findings.collected: false`.
+RUN mkdir -p /app/node_modules/@hexagen \
+    && ln -sfn ../../tools/arch-linter /app/node_modules/@hexagen/arch-linter \
+    && test -f /app/node_modules/@hexagen/arch-linter/package.json \
+    && test -f /app/node_modules/@hexagen/arch-linter/dist/cli.js \
+    && test -f /app/packages/sync/dist/cli.js
+
+# Scan workspaces (`hexagen-scan-*`, `hexagen-clone-*`, `hexagen-handoff-*`).
+# Under /app so the walk above terminates at /app/node_modules — os.tmpdir()
+# gives `/tmp/... -> /tmp -> /`, which never passes it. Pre-created and chowned
+# because /app is not writable by the non-root runtime user; same pattern as
+# /data. Nothing sweeps this directory the way the OS sweeps /tmp, so every
+# creator deletes its own workspace in a `finally`
+# (apps/web/app/lib/project-scan/*).
+ENV HEXAGEN_SCAN_WORKSPACE_DIR=/app/.scan-workspaces
+RUN mkdir -p /app/.scan-workspaces && chown nextjs:nodejs /app/.scan-workspaces
+
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000

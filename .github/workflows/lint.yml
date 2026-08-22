@@ -306,3 +306,56 @@ jobs:
         with:
           lint-command: yarn lint:arch -- --baseline .architecture/arch-lint-baseline.json --ratchet
           skip-sync-check: "true"
+
+  # ---------------------------------------------------------------------------
+  # Standalone packaging smoke test.
+  #
+  # Every gate above reads SOURCE. None of them can see what Next's file tracer
+  # actually copied into .next/standalone, and that gap has now shipped three
+  # production defects that were individually invisible to tests, typecheck and
+  # lint:
+  #
+  #   1. the hexagen CLIs were absent from the image entirely (fixed in #615)
+  #   2. hexagen-lint was traced to tools/arch-linter, a path the resolver never
+  #      consults, because the tracer copies FILES and not Yarn's workspace
+  #      symlinks
+  #   3. the scan routes anchored on .architecture/manifest.yaml, which the
+  #      standalone tree does not contain at all, so every scan threw before it
+  #      looked for a binary
+  #
+  # Unit tests could not catch any of them: they inject the root
+  # (`new CliHexagenScanAdapter(ROOT, ...)`) or mock the factory outright
+  # (`fromMonorepoRoot: () => ({ scanZip })`), so the one line that fails in
+  # production never executes. monorepo-root.test.ts writes its own fixture
+  # manifest, so it proves the WALK works and can never notice a missing tree.
+  # The only job that builds an image is deploy.yml, which is
+  # workflow_dispatch-only and ships rather than validates.
+  #
+  # So this job asserts the packaged artifact, not the source: build standalone,
+  # then run a real scan out of it and require collected findings. It fails on
+  # the artifact being wrong, which is the only place these defects are visible.
+  standalone-smoke:
+    name: "Standalone packaging smoke test"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: "Setup Node"
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - name: "Enable Corepack"
+        run: corepack enable
+
+      - name: "Install Dependencies"
+        run: yarn install --immutable
+
+      - name: "Build web (standalone output)"
+        run: yarn turbo build --filter=web --concurrency=1
+
+      - name: "Assert the packaged artifact can actually scan"
+        run: node scripts/verify-standalone-scan.mjs

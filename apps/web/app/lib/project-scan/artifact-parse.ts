@@ -17,8 +17,8 @@
  * uploads and are validated defensively, field by field, by this module.
  */
 import { mkdtemp, open, readdir, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
+import { scanWorkspaceBaseDir } from "./workspace-root";
 import {
   MAX_SCAN_ERROR_CHARS,
   MAX_SCAN_LAYOUT_EXCERPT_CHARS,
@@ -480,7 +480,12 @@ export async function ingestHandoffZip(input: {
 }): Promise<HandoffIngestOutcome> {
   let dir: string;
   try {
-    dir = await mkdtemp(path.join(tmpdir(), "hexagen-handoff-"));
+    // Handoff ingestion spawns nothing, so it does not itself depend on the
+    // walk-up that `workspace-root.ts` exists for. It uses the same base
+    // anyway: one answer to "where do scan workspaces live" is the point, and
+    // the day something here does shell out to the CLI, it must not be a
+    // separate decision made by whoever adds it.
+    dir = await mkdtemp(path.join(scanWorkspaceBaseDir(), "hexagen-handoff-"));
   } catch (error) {
     return {
       kind: "failed",

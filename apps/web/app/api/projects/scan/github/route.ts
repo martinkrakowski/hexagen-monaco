@@ -13,7 +13,7 @@ import {
   hexagenScanArgv,
   resolveHexagenBin,
 } from "@/lib/project-scan/hexagen-bin";
-import { findMonorepoRoot } from "@/lib/monorepo-root";
+import { resolveInstallationRoot } from "@/lib/project-scan/workspace-root";
 import {
   MAX_PROJECT_NAME_CHARS,
   MAX_SCAN_ERROR_CHARS,
@@ -498,7 +498,7 @@ async function runHexagenScan(
   repoDir: string,
   projectName: string,
 ): Promise<ScanOutcome> {
-  const bin = resolveHexagenBin(findMonorepoRoot());
+  const bin = resolveHexagenBin(resolveInstallationRoot());
   if (bin === null) {
     return {
       ok: false,

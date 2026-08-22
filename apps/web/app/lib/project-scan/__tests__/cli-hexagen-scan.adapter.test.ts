@@ -7,10 +7,14 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { mkdir, readdir, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import JSZip from "jszip";
 import { CliHexagenScanAdapter } from "../cli-hexagen-scan.adapter";
+// NOT os.tmpdir(): staging moved under the application root so that
+// `hexagen scan` can walk up from `--root` and find hexagen-lint. Asserting
+// against the helper rather than a literal keeps this test honest about WHERE
+// staging must be, instead of pinning it to whatever it happens to be.
+import { scanWorkspaceBaseDir } from "../workspace-root";
 import {
   MAX_SCAN_ERROR_CHARS,
   MAX_SCAN_REPORT_CHARS,
@@ -76,7 +80,9 @@ describe("CliHexagenScanAdapter", () => {
     assert.ok(call.args.includes("--yes"));
     assert.ok(call.args.includes("--root"));
     const rootFlag = call.args[call.args.indexOf("--root") + 1];
-    assert.ok(rootFlag.startsWith(path.join(tmpdir(), "hexagen-scan-")));
+    assert.ok(
+      rootFlag.startsWith(path.join(scanWorkspaceBaseDir(), "hexagen-scan-")),
+    );
     assert.equal(call.args[0], CLI);
   });
 
@@ -194,7 +200,9 @@ describe("CliHexagenScanAdapter", () => {
 
     await inst.scanZip({ zip, projectName: "Demo" });
 
-    assert.ok(staged.startsWith(path.join(tmpdir(), "hexagen-scan-")));
+    assert.ok(
+      staged.startsWith(path.join(scanWorkspaceBaseDir(), "hexagen-scan-")),
+    );
     await assert.rejects(() => readdir(staged), /ENOENT/);
   });
 

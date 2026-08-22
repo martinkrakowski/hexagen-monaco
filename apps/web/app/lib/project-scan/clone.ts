@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir, mkdtemp, readdir, lstat, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
+import { scanWorkspaceBaseDir } from "./workspace-root";
 
 /**
  * Bounded shallow clone of a PUBLIC GitHub repository (F-09, packet BF-5.2).
@@ -537,9 +537,20 @@ export interface CloneWorkspace {
  * Create the throwaway workspace. `repoDir` and `homeDir` are siblings under
  * one `mkdtemp` root so a single `rm -rf` removes both, and neither path is
  * derived from user input.
+ *
+ * `baseDir` defaults to {@link scanWorkspaceBaseDir}, NOT to `os.tmpdir()`:
+ * `hexagen scan` locates `hexagen-lint` by walking UP from the directory it is
+ * pointed at, and that walk only reaches the application's `node_modules` when
+ * the workspace lives under the application root. See `workspace-root.ts` for
+ * the walk, path by path.
+ *
+ * Because that base is outside the OS temp directory, nothing on the host
+ * sweeps a leaked workspace — `/tmp` gets cleaned, `<appRoot>/.scan-workspaces`
+ * does not. `cleanup()` is therefore not a courtesy; every caller must run it in
+ * a `finally`.
  */
 export async function createCloneWorkspace(
-  baseDir: string = tmpdir(),
+  baseDir: string = scanWorkspaceBaseDir(),
 ): Promise<CloneWorkspace> {
   const root = await mkdtemp(path.join(baseDir, "hexagen-clone-"));
   const homeDir = path.join(root, "home");
