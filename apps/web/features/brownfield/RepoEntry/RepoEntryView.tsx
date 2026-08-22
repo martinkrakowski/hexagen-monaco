@@ -102,7 +102,7 @@ export function RepoEntryView({
       */}
       <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm flex gap-2 items-start">
         <ShieldAlert
-          className="h-4 w-4 mt-0.5 shrink-0 text-warning"
+          className="h-4 w-4 mt-1 shrink-0 text-warning"
           aria-hidden="true"
         />
         <div className="space-y-1">
@@ -115,7 +115,7 @@ export function RepoEntryView({
             </code>{" "}
             locally and upload the handoff zip instead.
           </p>
-          <div className="flex flex-wrap gap-1.5 pt-1">
+          <div className="flex flex-wrap gap-2 pt-1">
             <Badge variant="outline">clone</Badge>
             <Badge variant="outline">scan</Badge>
             <Badge variant="outline">delete</Badge>
