@@ -6,8 +6,39 @@
 [config]
 restricted_mode = true
 model = "openrouter/tencent/hy3"
-fallback_models = ["openrouter/anthropic/claude-3.5-sonnet"]
-custom_model_max_tokens = 64000
+# WAS openrouter/anthropic/claude-3.5-sonnet, which does NOT exist in the
+# OpenRouter catalogue — so the fallback path could not have resolved. A
+# fallback that 404s is worse than none: it only fails when the primary is
+# already failing. Verified against /api/v1/models; claude-haiku-4.5 is
+# present with a 200000 window, which comfortably serves the budget below.
+fallback_models = ["openrouter/anthropic/claude-haiku-4.5"]
+# The model's REAL window, from OpenRouter's own catalogue:
+#   tencent/hy3  context_length = 262144
+# This was 64000, which silently became the ceiling: max_model_tokens below
+# can never exceed what the model is declared to hold, so raising that alone
+# would have changed nothing.
+custom_model_max_tokens = 262144
+# THE setting that was pruning diffs. `custom_model_max_tokens` declares what
+# the model can hold; `max_model_tokens` caps what PR-Agent will actually use,
+# and it defaults to 32000 REGARDLESS of the model's capacity. So the 64000
+# above was never reached and reviews silently dropped files:
+#
+#   Tokens: 36247, total tokens over limit: 32000, pruning diff.
+#   After pruning, added_list_str: Additional added files (insufficient token
+#   budget to process): … useLayoutRatify.ts …
+#
+# On #598 the pruned set included useLayoutRatify.ts — the one file in that PR
+# that contained a crash (an infinite render loop). The review reported "no
+# major issues" without ever reading it, which is worse than no review: a
+# green check that looks like coverage.
+#
+# Observed peaks were modest — 36247 tokens (6 files) and 37977 (11 files),
+# against the old 32000 cap. 200000 is far above that on purpose: the point is
+# that a large PR is never silently truncated, and pr-agent spends only what
+# the diff actually needs. It sits inside hy3's 262144 window with room for
+# the response, and inside the fallback's 200000 window (pr-agent takes the
+# min of the two, so the fallback self-limits rather than erroring).
+max_model_tokens = 200000
 repo_context_files = [
   ".agents/PR_REVIEW_RUBRIC.md",
   "best_practices.md",
@@ -25,6 +56,18 @@ auto_improve = false
 pr_actions = ["opened", "reopened", "ready_for_review"]
 
 [pr_reviewer]
+# OFF. It treats any `#NNN` in the PR body as a ticket this PR must IMPLEMENT,
+# with no notion of a cross-reference. Measured 3/3 correlation:
+#
+#   #594  no #NNN in body        -> no ticket block
+#   #595  cites #594             -> 8 false "non-compliant requirements"
+#   #596  cites #594, #595       -> 2 false blocks
+#
+# On #595 it declared the PR non-compliant for not implementing BF-6.2 — a
+# different packet, referenced only as the sibling that completes the MVP. The
+# output is long and authoritative, so it costs more review attention than it
+# saves, and it penalises exactly the PRs that document their reasoning.
+require_ticket_analysis_review = false
 # Unique job: DESIGN.md UI contracts the linter cannot cheaply catch.
 # Verifier defects, assertion-style, and ADR inventory comments belong to
 # CodeRabbit / Qodo — do not duplicate them.
