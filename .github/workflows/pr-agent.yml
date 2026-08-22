@@ -29,8 +29,28 @@ permissions:
 
 # Group by PR number: issue_comment runs with github.ref == the default
 # branch, so grouping by ref would cancel unrelated PRs.
+# Keyed by PR *and sender type*, not by PR alone.
+#
+# Workflow-level concurrency is evaluated when a run is QUEUED -- before the
+# job-level `if` below ever runs. So with a PR-only key, any bot comment
+# queued a run in this PR's group, cancel-in-progress killed the review that
+# was already running, and only then did the bot-sender guard skip the new
+# run. The review died and nothing replaced it.
+#
+# That was not a rare race: CodeRabbit and Qodo comment within seconds of a PR
+# opening, which is exactly while this job is still pulling its image.
+# Observed on #595 --
+#   02:22:37  pull_request  PR-Agent starts
+#   02:22:43  issue_comment CodeRabbit comments (same group)
+#   02:22:46  pull_request  CANCELLED, mid docker-pull
+# Both #594 and #595 got no review at all.
+#
+# Splitting on sender type gives bot-triggered runs their own group, where
+# they can only cancel each other (and are skipped anyway). Two `/review`
+# comments from a human still land in one group, so the newer one supersedes
+# the older -- which is what cancel-in-progress is actually for here.
 concurrency:
-  group: "pr-agent-${{ github.event.pull_request.number || github.event.issue.number }}"
+  group: "pr-agent-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event.sender.type }}"
   cancel-in-progress: true
 
 jobs:
