@@ -1,0 +1,51 @@
+name: "PR-Agent UI Review"
+
+# LLM reviewer specialised in DESIGN.md UI contracts. Complements CodeRabbit
+# (ADR / verifier-defect class) and Qodo (best_practices.md). Not a merge gate:
+# a green check is not a review — see .agents/REVIEW.md.
+#
+# Config in .pr_agent.toml is read from the default branch. Until that file is
+# on main, the env block below is the live contract (restricted_mode, model,
+# which tools auto-run). After merge, toml and env should stay in agreement.
+#
+# Pin is the multi-arch index digest of pragent/pr-agent:0.42.0-github_action,
+# not uses: the-pr-agent/pr-agent@<sha> — that repo's action.yaml FROM's the
+# rolling :github_action tag. Version tags are immutable; rolling tags are not.
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  issue_comment:
+
+# restricted_mode skips contents:write operations. contents:read is enough
+# for the GitHub API to fetch the PR and repo context files.
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+# Group by PR number: issue_comment runs with github.ref == the default
+# branch, so grouping by ref would cancel unrelated PRs.
+concurrency:
+  group: "pr-agent-${{ github.event.pull_request.number || github.event.issue.number }}"
+  cancel-in-progress: true
+
+jobs:
+  pr_agent:
+    name: "PR-Agent UI contract review"
+    if: ${{ github.event.sender.type != 'Bot' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && (github.event_name != 'issue_comment' || github.event.issue.pull_request) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: "PR Agent"
+        uses: docker://pragent/pr-agent@sha256:b81235c3bddc551939a1feca8926f4b6e8abcec2ae5bf4620424f8f56dd9cb93 # 0.42.0-github_action
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PR-Agent reads [openrouter].key as OPENROUTER.KEY / openrouter__key.
+          # The repo secret may be named OPENROUTER_KEY; the env key must not.
+          OPENROUTER.KEY: ${{ secrets.OPENROUTER_KEY }}
+          config.restricted_mode: "true"
+          config.model: "openrouter/tencent/hy3"
+          github_action_config.auto_review: "true"
+          github_action_config.auto_describe: "false"
+          github_action_config.auto_improve: "false"
+          github_action_config.pr_actions: '["opened", "reopened", "ready_for_review"]'

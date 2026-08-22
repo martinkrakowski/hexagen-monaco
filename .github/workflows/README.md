@@ -1,6 +1,20 @@
 # CI/CD Workflows
 
-This directory contains three GitHub Actions workflows for the hexagen-monaco monorepo. Each reflects deliberate tradeoffs for a solo-developer project running on a resource-constrained VPS.
+GitHub Actions workflows for the hexagen-monaco monorepo. Each reflects deliberate tradeoffs for a solo-developer project running on a resource-constrained VPS.
+
+---
+
+## `pr-agent.yml` — UI-contract LLM review
+
+Not a merge gate. Posts a DESIGN.md-focused review on PR `opened` / `reopened` / `ready_for_review`, and on `/review` (and other slash commands) via `issue_comment`. Complements CodeRabbit and Qodo; `auto_describe` and `auto_improve` are off.
+
+**Secret:** `OPENROUTER_KEY` (repo Actions secret). The workflow maps it to `OPENROUTER.KEY`, which is the name PR-Agent reads. `GITHUB_TOKEN` is the default Actions token.
+
+**Pin:** `docker://pragent/pr-agent@sha256:b81235c3bddc551939a1feca8926f4b6e8abcec2ae5bf4620424f8f56dd9cb93` (`0.42.0-github_action` index digest). Do not switch to `the-pr-agent/pr-agent@<sha>` — that action's Dockerfile `FROM`s the rolling `:github_action` tag.
+
+**Config:** `.pr_agent.toml` at the repo root, read from the **default branch**. The first PR that lands that file will not be reviewed under it until it is merged; the workflow `env` block is the live contract until then. Context files: `.agents/PR_REVIEW_RUBRIC.md`, `best_practices.md`, `DESIGN.md`.
+
+**Permissions:** `contents: read`, `pull-requests: write`, `issues: write`, with `config.restricted_mode = true`. No `pull_request_target`.
 
 ---
 
