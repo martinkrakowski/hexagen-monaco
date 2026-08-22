@@ -33,7 +33,7 @@
     "validate:purity": "bash scripts/validate-src-purity.sh",
     "validate:boundary": "bash scripts/validate-ui-boundary.sh",
     "validate": "yarn validate:purity && yarn validate:boundary",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "prepare": "husky"
   },
   "lint-staged": {

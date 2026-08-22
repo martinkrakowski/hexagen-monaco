@@ -191,8 +191,11 @@ jobs:
       #
       # --check, never --write: CI reports drift, it does not rewrite the
       # author's commit behind their back. `yarn format` is the fix.
+      # Deliberately NOT gated on docs-only. This check covers *.md, so a
+      # docs-only PR is exactly the case where markdown drift lands -- guarding
+      # it behind that condition would skip the gate precisely when it is the
+      # only gate that applies. Prettier over the repo takes a few seconds.
       - name: "Verify Formatting"
-        if: steps.docs-only.outputs.docs_only != 'true'
         run: npx prettier --check "**/*.{ts,tsx,md,json}"
 
       # Layer 2. Runs eslint in every workspace that has a lint script, via the
