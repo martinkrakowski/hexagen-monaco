@@ -11,7 +11,6 @@ import {
 import { wizardSteps } from "./config";
 import type { ViewMode } from "@/types/view-mode";
 
-// eslint-disable-next-line hexagen-ui/no-feature-slice-imports
 import { useWizardLifecycleContext } from "../workspace-shell/contexts/WizardLifecycleContext";
 
 /**

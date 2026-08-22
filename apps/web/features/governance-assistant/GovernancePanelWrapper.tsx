@@ -6,7 +6,6 @@ import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { useGovernanceData } from "./hooks/useGovernanceData";
 import { GovernanceAssistantPanel } from "./GovernanceAssistantPanel";
 import { ArchitectureModificationPanel } from "./architecture-modification";
-// eslint-disable-next-line hexagen-ui/no-feature-slice-imports
 import { useWizardData } from "../workspace-shell/contexts/WizardLifecycleContext";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 
