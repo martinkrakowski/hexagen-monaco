@@ -69,11 +69,33 @@ permissions:
 # redundant, but a comment-triggered run and a pull_request-triggered run are
 # not alternatives to each other -- one reviews the diff, the other answers a
 # command, and most comment runs do neither because the job guard skips them.
-# Keying on the event as well means an issue_comment can no longer pre-empt a
-# review. Two `/review` comments still share a group, so the newer supersedes
-# the older -- which is what cancel-in-progress is actually for here.
+#
+# So the key is not the event, it is "does this run produce a review". Keying
+# on the event alone was the obvious fix and it was wrong in the other
+# direction: it put `/review` in a different group from the auto review, so an
+# explicit /review would no longer supersede the run it was asking to redo --
+# both would proceed and post duplicate reviews. Trading a cancelled review
+# for a doubled one is not a fix. (Caught in review on this PR.)
+#
+# Review-producing runs share a group and supersede each other, as intended:
+#   - every `pull_request` run
+#   - an `issue_comment` whose body is exactly the /review command
+# Everything else -- /describe, /improve, /ask, /help, and ordinary comments --
+# gets the isolated group. Those are not alternatives to a review: they do
+# different work, so running one concurrently with a review is correct.
+#
+# The /review test is the exact-match form the job guard uses, deliberately
+# not startsWith(body, '/review'). A loose test would let `/reviewXYZ` join
+# the review group and cancel a real review, and the guard would then skip it
+# -- which is precisely the bug this whole block exists to prevent, rebuilt one
+# level down.
 concurrency:
-  group: "pr-agent-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event_name }}-${{ github.event.sender.type }}"
+  group: >-
+    pr-agent-${{ github.event.pull_request.number || github.event.issue.number
+    }}-${{ (github.event_name == 'pull_request'
+    || github.event.comment.body == '/review'
+    || startsWith(github.event.comment.body, '/review '))
+    && 'review' || 'other' }}-${{ github.event.sender.type }}
   cancel-in-progress: true
 
 jobs:
