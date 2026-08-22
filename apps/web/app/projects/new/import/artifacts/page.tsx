@@ -1,17 +1,28 @@
-import { redirect } from "next/navigation";
+"use client";
+
+import { Suspense } from "react";
+
+import { BrownfieldImportPage } from "@/brownfield/BrownfieldImportPage";
 
 /**
- * Placeholder for the Tier-A artifact-upload screen (BF-3.3).
+ * Tier-A entry point (BF-3.3, F-15) — `/projects/new/import/artifacts`.
  *
- * NameStepClient already routes `?path=artifacts` here, and the route has to
- * exist before that navigation does — otherwise submitting the name step from
- * a shared or bookmarked `/projects/new/name?path=artifacts` URL lands on a
- * 404. The funnel itself cannot reach this yet (the sub-option is
- * `coming-soon`), but a direct visit can.
+ * Replaces the BF-3.1 placeholder that redirected back to `/projects/new/import`
+ * because the screen did not exist yet. Mounting this route is what makes the
+ * `artifacts` import sub-option `status: "available"` in
+ * `features/landing/domain/creation-path.ts` truthful; the two changes ship in
+ * the same packet by design, and `creation-path.test.ts` fails in BOTH
+ * directions if only one of them lands.
  *
- * Mirrors the `import/github` placeholder. BF-3.3 replaces this file with the
- * real screen and flips the sub-option to `available` in the same packet.
+ * `Suspense` is required, not decorative: `BrownfieldImportPage` reads the
+ * carried project name with `useSearchParams`, which opts the subtree into
+ * client-side bailout during prerender. The sibling `import/scan` route is
+ * wrapped for the same reason.
  */
 export default function ImportArtifactsPage() {
-  redirect("/projects/new/import");
+  return (
+    <Suspense>
+      <BrownfieldImportPage />
+    </Suspense>
+  );
 }

@@ -66,9 +66,12 @@ export const IMPORT_SUB_OPTIONS: readonly ImportSubOption[] = [
     // name to the artifact importer via `?name=`.
     href: "/projects/new/name?path=artifacts",
     iconName: "Braces",
-    // Coming-soon until BF-3.3 mounts /projects/new/import/artifacts. Marking
-    // it available now would publish a link to a route that does not exist.
-    status: "coming-soon",
+    // Available since BF-3.3 mounted /projects/new/import/artifacts (the real
+    // Tier-A screen, replacing the placeholder that redirected here). The name
+    // step forwards `?name=` to it, so both legs of this href now terminate on
+    // a real screen. `creation-path.test.ts` asserts this in both directions —
+    // see NOT_YET_ROUTED there.
+    status: "available",
   },
   {
     id: "github",

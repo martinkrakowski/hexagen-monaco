@@ -7,8 +7,9 @@ import {
 
 // The previously-separate "manifest" and "spec" options are consolidated into a
 // single "Import Manifest or Spec" option (the importer auto-detects which on
-// upload); zip scan is available; the Tier-A scan-artifact upload and GitHub
-// are coming-soon (BF-3.3 and BF-5.3 respectively mount their routes).
+// upload); zip scan is available; the Tier-A scan-artifact upload became
+// available in BF-3.3, which mounted /projects/new/import/artifacts; GitHub is
+// still coming-soon until BF-5.3 mounts its repo-entry screen.
 
 test("IMPORT_SUB_OPTIONS has 4 entries (unified import + scan + artifacts + github)", () => {
   assert.equal(IMPORT_SUB_OPTIONS.length, 4);
@@ -31,10 +32,10 @@ test("scan is available", () => {
   assert.equal(scan.status, "available");
 });
 
-test("the Tier-A artifacts option is coming soon until BF-3.3 mounts its route", () => {
+test("the Tier-A artifacts option is available now that BF-3.3 mounted its route", () => {
   const artifacts = IMPORT_SUB_OPTIONS.find((o) => o.id === "artifacts");
   assert.ok(artifacts);
-  assert.equal(artifacts.status, "coming-soon");
+  assert.equal(artifacts.status, "available");
   assert.equal(artifacts.href, "/projects/new/name?path=artifacts");
 });
 

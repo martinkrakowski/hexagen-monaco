@@ -90,10 +90,15 @@ describe("creation-path domain", () => {
       }
     });
 
-    it("artifacts sub-option is coming-soon and routes through the name step", () => {
+    it("artifacts sub-option is available and routes through the name step", () => {
+      // Flipped by BF-3.3, which mounted /projects/new/import/artifacts. The
+      // href still points at the shared name step: that step forwards the
+      // entered name to the Tier-A screen via `?name=`, and the screen redirects
+      // back to it when the name is missing, so the two legs are a loop rather
+      // than two destinations.
       const artifacts = IMPORT_SUB_OPTIONS.find((o) => o.id === "artifacts");
       assert.ok(artifacts);
-      assert.strictEqual(artifacts.status, "coming-soon");
+      assert.strictEqual(artifacts.status, "available");
       assert.strictEqual(artifacts.href, "/projects/new/name?path=artifacts");
     });
 
@@ -110,12 +115,17 @@ describe("creation-path domain", () => {
       assert.strictEqual(scan.href, "/projects/new/name?path=scan");
     });
 
-    // `github` and `artifacts` are deliberately still "coming-soon": neither
-    // destination is mounted yet (`/projects/new/import/github` currently
-    // redirects, and `/projects/new/import/artifacts` does not exist until
-    // BF-3.3). Marking either available would publish a link to a redirect or
-    // a 404. Each flips to "available" in the packet that mounts its route.
-    const NOT_YET_ROUTED = new Set(["github", "artifacts"]);
+    // `github` is deliberately still "coming-soon": `/projects/new/import/github`
+    // is a placeholder that redirects straight back to `/projects/new/import`,
+    // so marking it available would publish a link to a redirect. It flips in
+    // BF-5.3, the packet that mounts the real repo-entry screen.
+    //
+    // `artifacts` LEFT this set in BF-3.3, which mounted
+    // `/projects/new/import/artifacts`. The two tests below are the ratchet:
+    // one fails if a routed option is left "coming-soon", the other fails if an
+    // unrouted one is flipped to "available", so neither half of the pair can
+    // move on its own.
+    const NOT_YET_ROUTED = new Set(["github"]);
 
     it("every sub-option with a mounted route is available", () => {
       for (const option of IMPORT_SUB_OPTIONS) {
