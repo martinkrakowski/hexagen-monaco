@@ -4,9 +4,11 @@ name: "PR-Agent UI Review"
 # (ADR / verifier-defect class) and Qodo (best_practices.md). Not a merge gate:
 # a green check is not a review — see .agents/REVIEW.md.
 #
-# Config in .pr_agent.toml is read from the default branch. Until that file is
-# on main, the env block below is the live contract (restricted_mode, model,
-# which tools auto-run). After merge, toml and env should stay in agreement.
+# Config in .pr_agent.toml is read from the default branch. A missing
+# repo_context_files entry is skipped, not a crash — but until this workflow
+# and toml are on main, only keys in the env block actually apply. Keep env
+# and toml in agreement. Do not set repo_context_from_default_branch=false to
+# "read the PR head": false reads the PR *target* (still main), never head.
 #
 # Pin is the multi-arch index digest of pragent/pr-agent:0.42.0-github_action,
 # not uses: the-pr-agent/pr-agent@<sha> — that repo's action.yaml FROM's the
@@ -40,12 +42,34 @@ jobs:
         uses: docker://pragent/pr-agent@sha256:b81235c3bddc551939a1feca8926f4b6e8abcec2ae5bf4620424f8f56dd9cb93 # 0.42.0-github_action
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # PR-Agent reads [openrouter].key as OPENROUTER.KEY / openrouter__key.
-          # The repo secret may be named OPENROUTER_KEY; the env key must not.
-          OPENROUTER.KEY: ${{ secrets.OPENROUTER_KEY }}
+          # Dynaconf/PR-Agent OpenRouter secret: openrouter__key. Dotted
+          # OPENROUTER.KEY is accepted in some GHA examples; __ is the
+          # documented form and a legal POSIX env name.
+          OPENROUTER__KEY: ${{ secrets.OPENROUTER_KEY }}
           config.restricted_mode: "true"
           config.model: "openrouter/tencent/hy3"
+          config.fallback_models: '["openrouter/anthropic/claude-3.5-sonnet"]'
+          config.custom_model_max_tokens: "64000"
+          # DESIGN.md and best_practices.md exist on main today. The rubric
+          # does not — missing entries are skipped. extra_instructions below
+          # is what makes this PR a UI-contract review rather than AGENTS.md
+          # defaults (repo_context_files default is ["AGENTS.md"], cap 500).
+          config.repo_context_files: '[".agents/PR_REVIEW_RUBRIC.md", "best_practices.md", "DESIGN.md"]'
+          config.repo_context_max_lines: "3000"
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "false"
           github_action_config.auto_improve: "false"
           github_action_config.pr_actions: '["opened", "reopened", "ready_for_review"]'
+          pr_reviewer.extra_instructions: |
+            You are the UI-contract reviewer for this repository. Enforce DESIGN.md.
+            Do not re-raise findings that belong to CodeRabbit or Qodo (verifier
+            defects, assertion-style, manifest inventory completeness).
+            Cite DESIGN.md section numbers. Do not paraphrase a rule that already
+            has a section; name it.
+            When you propose a fix, say what it does to inputs the current code
+            already handles — particularly whether it turns a loud failure into a
+            quiet one.
+            Flag: DESIGN.md §4.8 gaps the ESLint rule misses (template-literal
+            class names; apps/web/components/ outside primitives/); §4.7 4px
+            grid; §3.4 untyped/as-any escapes and template-engine payload;
+            §4.9 inline styles outside CanvasNodeStyleAdapter.tsx.
