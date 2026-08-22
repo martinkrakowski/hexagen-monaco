@@ -14,6 +14,21 @@ import { dirname } from "node:path";
  * keep it safe even if a second process ever opens the same file.
  */
 
+/**
+ * WARNING: "scan" must NOT be passed to `enforceDailyQuota`.
+ *
+ * That helper's exhaustion copy is `kind === "chat" ? "chat messages" :
+ * "generations"` and it tells the user to add a BYOK key or run a local model.
+ * Scanning has no LLM and no BYOK path, so a scan 429 routed through it would
+ * tell the user they had run out of GENERATIONS. Use `openScanQuota` in
+ * app/lib/project-scan/scan-quota.ts, which is the same gate with scan's copy.
+ *
+ * Widening this union made that wrong call TYPE-CHECK, which is the hazard --
+ * the compiler will not stop it. Narrowing `enforceDailyQuota`'s parameter to
+ * `Exclude<QuotaKind, "scan">` would close it properly and changes no metering
+ * behaviour, but `apps/web/lib/enforce-quota.ts` is frozen by ADR-0063 and
+ * this packet deliberately does not edit it. Flagged for the owner.
+ */
 export type QuotaKind = "generation" | "chat" | "scan";
 
 /**
