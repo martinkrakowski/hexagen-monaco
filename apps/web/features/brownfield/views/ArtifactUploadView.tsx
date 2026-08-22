@@ -71,6 +71,18 @@ export interface ArtifactUploadViewProps {
   statusMessage: string;
   alert: ArtifactUploadAlert | null;
   result: ProjectHandoffResponse | null;
+  /**
+   * Bumped by the boundary whenever the upload is reset.
+   *
+   * Used as the file input's `key`, which remounts it and drops its internal
+   * FileList. Clearing React state alone left the real control still holding
+   * the previous selection, so re-picking the SAME file fired no `change`
+   * event and "Upload different artifacts" could not retry that file at all.
+   *
+   * A key rather than a ref: this view stays presentational, and the boundary
+   * that owns the reset owns the token.
+   */
+  resetToken: number;
 }
 
 const VERDICT_COPY = {
@@ -143,6 +155,7 @@ function ArtifactExcerpt({ title, body }: { title: string; body: string }) {
 export function ArtifactUploadView({
   projectName,
   selectedFiles,
+  resetToken,
   onFilesSelected,
   busy,
   statusMessage,
@@ -188,6 +201,7 @@ export function ArtifactUploadView({
           Handoff zip, or the individual artifact files
         </label>
         <input
+          key={resetToken}
           id={inputId}
           type="file"
           multiple

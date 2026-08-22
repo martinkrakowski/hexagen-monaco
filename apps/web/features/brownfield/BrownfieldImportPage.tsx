@@ -77,16 +77,51 @@ function freshViewState(): BrownfieldFlowViewState {
   return { state: "tier_pick", tier: null };
 }
 
+/**
+ * Whether a single selected file should be sent as the `zip` part.
+ *
+ * Deliberately NOT a mirror of `isZipFile()` in
+ * app/api/projects/scan/artifacts/route.ts, and the difference matters.
+ *
+ * The server calls its predicate on a file ALREADY placed in the zip field —
+ * it asks "is this really a zip?", so being permissive only accepts an odd
+ * upload. This asks the opposite question: "should this go in the zip field?"
+ * A false positive here MISROUTES a legitimate loose artifact into the zip
+ * slot, where the server then fails to unzip it.
+ *
+ * So `application/octet-stream` is excluded even though the server allows it:
+ * browsers routinely report it for files they cannot type, including the
+ * .yaml and .md artifacts of a loose upload. Accepting it would mean selecting
+ * a single manifest.yaml sends it as a zip — a regression on the common path
+ * to fix a rare one. The unambiguous zip media types are honoured, so a
+ * handoff zip saved without a .zip extension still routes correctly.
+ */
+export function looksLikeZip(file: File): boolean {
+  if (file.name.toLowerCase().endsWith(".zip")) return true;
+  const type = file.type.toLowerCase();
+  return type === "application/zip" || type === "application/x-zip-compressed";
+}
+
 function isHandoffResponse(value: unknown): value is ProjectHandoffResponse {
   if (typeof value !== "object" || value === null) return false;
   const record = value as Record<string, unknown>;
-  return (
-    record.source === "handoff-artifacts" &&
-    (record.verdict === "ingested" || record.verdict === "incomplete") &&
-    typeof record.artifacts === "object" &&
-    record.artifacts !== null &&
-    Array.isArray(record.warnings)
-  );
+  if (
+    record.source !== "handoff-artifacts" ||
+    (record.verdict !== "ingested" && record.verdict !== "incomplete") ||
+    !Array.isArray(record.warnings)
+  ) {
+    return false;
+  }
+  // `artifacts` is not merely "an object". The render path reads
+  // `artifacts.present.length` and `artifacts.missing.length`, so a payload
+  // where those are absent passed this guard and then threw a TypeError --
+  // which is exactly the "200 with an unexpected shape" case the guard exists
+  // to turn into a message. A guard must check what its callers dereference,
+  // not what is convenient to check.
+  const artifacts = record.artifacts;
+  if (typeof artifacts !== "object" || artifacts === null) return false;
+  const shape = artifacts as Record<string, unknown>;
+  return Array.isArray(shape.present) && Array.isArray(shape.missing);
 }
 
 /** Pull the route's own message out of a JSON error body, if there is one. */
@@ -161,7 +196,13 @@ function failureFor(
       alert: {
         title: "That upload could not be used",
         detail: message ?? "The server rejected the upload.",
-        hint: "Re-run `npx hexagen scan --handoff` in your repository and upload the zip it writes, unchanged. Repacking or renaming its contents is the usual cause.",
+        // The route returns 400 for BOTH a malformed handoff and an oversized
+        // one ("Handoff zip is too large…"), so a single hint was wrong for
+        // one of them. 413 covers the whole request being too large; the
+        // per-part zip cap lands here instead.
+        hint: /too large|exceeds/i.test(message ?? "")
+          ? "A handoff zip is a handful of small text files. If yours is large you probably zipped the repository — that is the \"Upload a zip\" tier, not this one."
+          : "Re-run `npx hexagen scan --handoff` in your repository and upload the zip it writes, unchanged. Repacking or renaming its contents is the usual cause.",
       },
     };
   }
@@ -314,11 +355,18 @@ export function BrownfieldImportPage() {
     [view, applyView],
   );
 
+  const [resetToken, setResetToken] = useState(0);
+
   const resetUpload = useCallback(() => {
     setFiles([]);
     setResult(null);
     setAlert(null);
     setStatusMessage("");
+    // Remounts the file input, dropping its internal FileList. Without this,
+    // clearing React state left the real control still holding the previous
+    // selection, so re-picking the SAME file fired no change event and the
+    // user could not retry it.
+    setResetToken((token) => token + 1);
   }, []);
 
   const handleFilesSelected = useCallback((next: File[]) => {
@@ -372,17 +420,21 @@ export function BrownfieldImportPage() {
       const form = new FormData();
       form.append("name", carriedName);
       const single = files.length === 1 ? files[0] : null;
-      if (single !== null && single.name.toLowerCase().endsWith(".zip")) {
+      if (single !== null && looksLikeZip(single)) {
         form.append(ZIP_FIELD, single, single.name);
       } else {
         for (const file of files) form.append(LOOSE_FIELD, file, file.name);
       }
 
-      setStatusMessage("Parsing the handoff artifacts…");
+      // "Parsing" is announced AFTER the request settles, not before it is
+      // sent. Setting it here previously overwrote "Uploading artifacts…" in
+      // the same tick, so the live region claimed parsing was underway for the
+      // entire upload -- and on a slow connection that is the whole wait.
       const response = await fetch("/api/projects/scan/artifacts", {
         method: "POST",
         body: form,
       });
+      setStatusMessage("Parsing the handoff artifacts…");
       const body: unknown = await response.json().catch(() => null);
 
       if (!response.ok) {
@@ -586,6 +638,7 @@ export function BrownfieldImportPage() {
             {view.state === "uploading" ? (
               <>
                 <ArtifactUploadView
+          resetToken={resetToken}
                   projectName={carriedName}
                   selectedFiles={files}
                   onFilesSelected={handleFilesSelected}

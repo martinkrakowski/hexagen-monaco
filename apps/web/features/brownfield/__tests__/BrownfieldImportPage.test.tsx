@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { BrownfieldImportPage } from "../BrownfieldImportPage";
+import { BrownfieldImportPage, looksLikeZip } from "../BrownfieldImportPage";
 
 // jest-dom is NOT registered by apps/web/vitest.setup.ts — toBeTruthy(),
 // toBeNull() and getAttribute() only. React is not imported: the Vitest config
@@ -458,6 +458,104 @@ describe("BrownfieldImportPage", () => {
           }) as HTMLInputElement
         ).checked,
       ).toBe(true);
+    });
+  });
+
+  describe("review fixes (#595)", () => {
+    it("treats a 200 with a malformed artifacts object as an unexpected response", async () => {
+      // The guard checked `typeof artifacts === "object"` but not that
+      // `present`/`missing` are arrays -- and the render path reads
+      // `artifacts.present.length`. So the shape that actually crashed was the
+      // one the guard let through.
+      const user = userEvent.setup();
+      render(<BrownfieldImportPage />);
+      const input = await gotoUpload(user);
+      stubFetch(
+        reply(200, {
+          ...HANDOFF_OK,
+          artifacts: { reportHtmlPresent: false },
+        }),
+      );
+      await user.upload(input, ZIP());
+      await user.click(screen.getByRole("button", { name: /Upload/i }));
+
+      await waitFor(() => {
+        // Appears twice by design: once in the alert, once in the polite
+        // live region. Asserting "at least one" rather than "exactly one".
+        expect(
+          screen.getAllByText(/returned an unexpected response/i).length,
+        ).toBeGreaterThan(0);
+      });
+    });
+
+    it("routes an unambiguous zip media type without a .zip name as the zip part", () => {
+      // `.json` is in the input's accept list, so this file can actually be
+      // staged; its NAME does not end in .zip, so only the media-type branch
+      // can classify it.
+      expect(
+        looksLikeZip(new File(["PK"], "handoff.json", { type: "application/zip" })),
+      ).toBe(true);
+    });
+
+    it("does NOT route an octet-stream file as a zip", () => {
+      // The server's isZipFile accepts octet-stream, but it only ever runs on
+      // a file already in the zip field. Copying that permissiveness into the
+      // client's ROUTING decision would send a single manifest.yaml — which
+      // browsers often report as octet-stream — into the zip slot, where the
+      // server would fail to unzip it. A regression on the common path to fix
+      // a rare one.
+      expect(
+        looksLikeZip(
+          new File(["x"], "manifest.yaml", { type: "application/octet-stream" }),
+        ),
+      ).toBe(false);
+      expect(
+        looksLikeZip(new File(["PK"], "handoff.zip", { type: "application/octet-stream" })),
+      ).toBe(true);
+    });
+
+    it("gives size-specific guidance when a 400 says the zip is too large", async () => {
+      // The route returns 400 for BOTH a malformed handoff and an oversized
+      // one, so a single hint was wrong for one of them.
+      const user = userEvent.setup();
+      render(<BrownfieldImportPage />);
+      const input = await gotoUpload(user);
+      stubFetch(
+        reply(400, { error: "Handoff zip is too large (exceeds 2,097,152 bytes)" }),
+      );
+      await user.upload(input, ZIP());
+      await user.click(screen.getByRole("button", { name: /Upload/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getAllByText(/zipped the repository/i).length,
+        ).toBeGreaterThan(0);
+      });
+    });
+
+    it("clears the file input on reset so the same file can be retried", async () => {
+      const user = userEvent.setup();
+      render(<BrownfieldImportPage />);
+      const input = (await gotoUpload(user)) as HTMLInputElement;
+      stubFetch(reply(200, HANDOFF_OK));
+      await user.upload(input, ZIP());
+      expect(input.files?.length).toBe(1);
+      await user.click(screen.getByRole("button", { name: /Upload/i }));
+
+      await waitFor(() =>
+        expect(
+          screen.getAllByText(/Artifacts ingested/i).length,
+        ).toBeGreaterThan(0),
+      );
+      await user.click(
+        screen.getByRole("button", { name: /Upload different artifacts/i }),
+      );
+
+      // Remounted, so the control no longer holds the previous FileList.
+      const fresh = screen.getByLabelText(
+        /Handoff zip, or the individual artifact files/i,
+      ) as HTMLInputElement;
+      expect(fresh.files?.length ?? 0).toBe(0);
     });
   });
 });
