@@ -401,7 +401,28 @@ export function buildScanReport({
   return {
     projectName: scan.projectName,
     outcome,
-    counts: summarizeFindingsSource(source),
+    // Counts ONLY when the outcome is trustworthy.
+    //
+    // `summarizeFindingsSource` already returns null when the findings were
+    // never collected, which covers the `unreadable` arm. It does NOT cover
+    // the other two untrustworthy arms, and one of them is deterministic
+    // rather than hypothetical:
+    //
+    //   `inconsistent` -- verdict "violations" with 0 fresh findings. counts
+    //   is a real object of zeroes, so the screen printed four 0 pills
+    //   directly under a heading saying the verdict and the findings do not
+    //   agree. Zeroes read as a clean bill of health at a glance, which is
+    //   precisely the false green this arc exists to prevent, and here the
+    //   screen contradicted itself in two adjacent elements.
+    //
+    //   `could-not-run` -- classified before the findings are read, so an
+    //   inconsistent payload carrying a collected findings blob would show
+    //   pills for a scan that reported it never ran.
+    //
+    // Deriving from `outcome.trustworthy` ties the pills to the same
+    // predicate as `canInstallGate`, so the screen cannot offer counts it
+    // would refuse to install a gate from.
+    counts: outcome.trustworthy ? summarizeFindingsSource(source) : null,
     filesScannedLabel: describeFilesScanned(scan.filesScanned),
     reportMarkdown: scan.reportMarkdown,
     trend: buildRatchetTrend(trend),

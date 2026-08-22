@@ -289,6 +289,34 @@ describe("buildScanReport", () => {
     expect(model.counts).toBeNull();
   });
 
+  // Regression, raised in review on #611. The assertion above passes for the
+  // wrong reason: `findings: null` makes summarizeFindingsSource return null
+  // on its own, so it never exercised the trustworthy gate. These two do.
+  it("shows no counts on the inconsistent arm, where zeroes are real", () => {
+    // verdict "violations" with 0 fresh findings. counts here is a genuine
+    // object of zeroes, not null -- so before the gate the screen printed
+    // four 0 pills immediately under a heading saying the verdict and the
+    // findings disagree. Zeroes scan as a clean bill of health.
+    const model = buildScanReport({
+      scan: scan({ verdict: "violations", findings: collected(0) }),
+    });
+    expect(model.outcome.kind).toBe("inconsistent");
+    expect(model.outcome.trustworthy).toBe(false);
+    expect(model.counts).toBeNull();
+  });
+
+  it("shows no counts when a could-not-run scan still carries findings", () => {
+    // An inconsistent payload: the scan says it never ran, but a findings
+    // blob came back anyway. `could-not-run` is classified before the
+    // findings are read, so nothing downstream would have suppressed these.
+    const model = buildScanReport({
+      scan: scan({ verdict: "could-not-run", findings: collected(4) }),
+    });
+    expect(model.outcome.kind).toBe("could-not-run");
+    expect(model.counts).toBeNull();
+    expect(model.canInstallGate).toBe(false);
+  });
+
   it("allows the installer on a scan that produced a real answer", () => {
     const model = buildScanReport({ scan: scan() });
     expect(model.canInstallGate).toBe(true);

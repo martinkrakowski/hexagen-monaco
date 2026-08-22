@@ -286,13 +286,36 @@ export type RatchetSparklineProps = NoSemanticState<{
    * A default is supplied so the honest branch cannot be lost by a caller who
    * forgot the prop; hosts with a better sentence pass their own.
    */
-  readonly insufficientLabel?: ReactNode;
+  /**
+   * Narrowed to `string`, not `ReactNode`, on purpose. Both label props are
+   * rendered inside a `<p>`; a caller passing block content (a `<div>`, a
+   * list) would produce invalid DOM nesting, which browsers "fix" by
+   * restructuring the tree -- so the bug surfaces as mangled layout far from
+   * its cause. These are single explanatory sentences by contract, and every
+   * caller already passes a string, so the compiler may as well enforce it.
+   */
+  readonly insufficientLabel?: string;
   /** Shown when there are no points at all. */
-  readonly emptyLabel?: ReactNode;
+  readonly emptyLabel?: string;
   /** Cell text for an unmeasured point that carried no `note`. */
   readonly unmeasuredLabel?: string;
   readonly className?: string;
 }>;
+
+/**
+ * A note counts only if it actually says something.
+ *
+ * `note` reaches this component from a payload, and "" is a very ordinary
+ * thing for a serializer to produce where a caller meant "absent". Treating
+ * it as present renders an empty cell, which reads as a value rather than as
+ * a missing reading -- the exact confusion the unmeasured label exists to
+ * prevent.
+ */
+function normalizeNote(note: string | undefined): string | null {
+  if (typeof note !== "string") return null;
+  const trimmed = note.trim();
+  return trimmed === "" ? null : trimmed;
+}
 
 function TrendTable({
   points,
@@ -366,7 +389,15 @@ function TrendTable({
                 */}
                 {typeof point.value === "number" && Number.isFinite(point.value)
                   ? String(point.value)
-                  : (point.note ?? unmeasuredLabel)}
+                  : /*
+                      `??` would only catch null/undefined, so a note of ""
+                      (or whitespace) fell through as itself and rendered an
+                      EMPTY cell -- breaking the guarantee stated directly
+                      above, in the one place it matters most. A blank cell
+                      beside populated ones reads as "nothing was wrong here",
+                      which is the opposite of "no reading was taken".
+                    */
+                    (normalizeNote(point.note) ?? unmeasuredLabel)}
               </td>
             </tr>
           ))}

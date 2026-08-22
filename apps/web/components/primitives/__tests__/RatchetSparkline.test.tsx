@@ -283,6 +283,28 @@ describe("RatchetSparkline", () => {
     expect(screen.getByText("not measured")).toBeTruthy();
   });
 
+  // Regression, raised in review on #611. The test above only covers an
+  // ABSENT note; the fallback used `??`, which passes "" straight through.
+  it("treats an empty or whitespace note as absent, never as a blank cell", () => {
+    for (const blank of ["", "   "]) {
+      const { unmount } = render(
+        <RatchetSparkline
+          points={[
+            point("a", 40),
+            { ...point("b", null), note: blank },
+            point("c", 10),
+          ]}
+          label="Findings by scan"
+        />,
+      );
+      // A blank cell beside populated ones reads as "nothing was wrong here",
+      // which is the opposite of "no reading was taken" -- the same false
+      // green as a plotted zero, arriving through the text equivalent.
+      expect(screen.getByText("not measured")).toBeTruthy();
+      unmount();
+    }
+  });
+
   it("shows the host's summary sentence to everyone, not only to a screen reader", () => {
     render(
       <RatchetSparkline
