@@ -24,7 +24,7 @@ Three forcing events changed the picture:
    ~16.5s for a representative 7-context import.
 2. **The 5-minute-import incident.** The same import took ~5 minutes for the
    human architect because `auto` ran a loaded WebLLM model in-browser first
-   and then *silently* fell back to cloud. The strategy resolver was making an
+   and then _silently_ fell back to cloud. The strategy resolver was making an
    architecture-level routing decision invisibly, with a 20× latency penalty.
 3. **Tandem mode had no remaining role.** With cloud as the quality and
    latency baseline, interleaving local output into cloud flows added a
@@ -42,7 +42,7 @@ implementation detail, documented in their PRs.
 ## Decision
 
 1. **Cloud is the default execution path.** The `auto` strategy resolves
-   cloud-first. Falling back is *honest*: any switch away from the requested
+   cloud-first. Falling back is _honest_: any switch away from the requested
    path surfaces in the UI rather than happening silently.
 2. **Local execution is explicit opt-in.** A persisted three-state engine
    selection (`auto` / `cloud` / `local`) distinguishes "user chose local"
@@ -61,7 +61,7 @@ implementation detail, documented in their PRs.
 
 ## Consequences
 
-- **Decision-trail note:** the gate-3b ADR lived *inside* the
+- **Decision-trail note:** the gate-3b ADR lived _inside_ the
   `tandem-execution` context directory and was deleted with it (it documented
   an implementation decision internal to the deleted context). It remains in
   git history; the general ACL principles it leaned on live in ADR-0021. This

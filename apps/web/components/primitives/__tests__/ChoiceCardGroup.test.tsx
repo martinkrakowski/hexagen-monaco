@@ -65,7 +65,9 @@ describe("ChoiceCardGroup", () => {
   it("exposes a named radiogroup", () => {
     renderGroup();
     // Without the accessible name the group is an anonymous pile of radios.
-    expect(screen.getByRole("radiogroup", { name: "Privacy tier" })).toBeTruthy();
+    expect(
+      screen.getByRole("radiogroup", { name: "Privacy tier" }),
+    ).toBeTruthy();
   });
 
   it("marks the picked option as checked", () => {
@@ -107,14 +109,18 @@ describe("ChoiceCardGroup", () => {
   it("puts exactly one option in the tab order, and it is the picked one", () => {
     renderGroup({ value: "hybrid" });
     expect(
-      screen.getAllByRole("radio").map((radio) => radio.getAttribute("tabindex")),
+      screen
+        .getAllByRole("radio")
+        .map((radio) => radio.getAttribute("tabindex")),
     ).toEqual(["-1", "-1", "0"]);
   });
 
   it("falls back to the first option in the tab order when nothing is picked", () => {
     renderGroup();
     expect(
-      screen.getAllByRole("radio").map((radio) => radio.getAttribute("tabindex")),
+      screen
+        .getAllByRole("radio")
+        .map((radio) => radio.getAttribute("tabindex")),
     ).toEqual(["0", "-1", "-1"]);
   });
 

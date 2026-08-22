@@ -15,11 +15,7 @@
  */
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
-import type {
-  ProjectScanResponse,
-  ScanFinding,
-  ScanFindings,
-} from "../types";
+import type { ProjectScanResponse, ScanFinding, ScanFindings } from "../types";
 
 // String.raw keeps the `\n` sequences inside the JSON string escaped for
 // JSON.parse rather than being turned into real newlines by TypeScript.

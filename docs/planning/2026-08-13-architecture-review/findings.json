@@ -45,15 +45,11 @@
   "findings": [
     {
       "id": "HEX-001",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "critical",
       "title": "Generated customer domain ports import infrastructure error types",
       "package": "@hexagen/template-engine",
-      "source_ids": [
-        "A1I-001"
-      ],
+      "source_ids": ["A1I-001"],
       "evidence": [
         {
           "path": "packages/template-engine/templates/adobe-creative-production/files/src/domain/ports/out/creative-production.port.ts",
@@ -75,15 +71,11 @@
     },
     {
       "id": "HEX-002",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "critical",
       "title": "GenerateProjectUseCase performs Node filesystem I/O instead of a driven port",
       "package": "@hexagen/project-generation",
-      "source_ids": [
-        "A1C-001"
-      ],
+      "source_ids": ["A1C-001"],
       "evidence": [
         {
           "path": "packages/project-generation/src/application/generate-project-use-case.ts",
@@ -98,23 +90,17 @@
       "coupling": "Application layer imports node:fs/promises and node:path while also injecting generator/exporter/materializer ports.",
       "benefit": "testability \u2014 generation can be exercised without a real filesystem or /tmp side effects",
       "recommendation": "Move mkdir/write/realpath/lstat/rm/readFile behind an owned outbound FileSystemPort. See ADR on whether this shares a kernel FS port with HEX-007.",
-      "depends_on": [
-        "HEX-007"
-      ],
+      "depends_on": ["HEX-007"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "HEX-003",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "critical",
       "title": "Manifest generate HTTP routes compose adapters, domain factories, and transaction infra",
       "package": "web",
-      "source_ids": [
-        "A1W-001"
-      ],
+      "source_ids": ["A1W-001"],
       "evidence": [
         {
           "path": "apps/web/app/api/manifest/generate/route.ts",
@@ -131,24 +117,17 @@
       "coupling": "Same new EnvironmentSecretVaultAdapter / LLMProviderSelectorAdapter / InMemoryTransactionManager pattern in generate/route.ts, local/route.ts, spec/route.ts, stage/route.ts \u2014 bypassing wire.server.ts.",
       "benefit": "testability \u2014 routes become request mapping; LLM/tx providers swap at one composition root",
       "recommendation": "Move adapter construction into wire.server.ts; route only parses HTTP and invokes a pre-wired inbound port.",
-      "depends_on": [
-        "HEX-010"
-      ],
+      "depends_on": ["HEX-010"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "HEX-004",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "high",
       "title": "Application ports and mappers are typed on @hexagen/sync Manifest",
       "package": "@hexagen/project-generation",
-      "source_ids": [
-        "A1C-003",
-        "A1C-004"
-      ],
+      "source_ids": ["A1C-003", "A1C-004"],
       "evidence": [
         {
           "path": "packages/project-generation/src/application/ports/out/external-project-generator.port.ts",
@@ -161,10 +140,7 @@
           "excerpt": "import type {\n  WizardData,\n  BoundedContext,\n} from \"@hexagen/project-configuration\";\nimport {\n  getWorkspaceTemplate,\n  FALLBACK_RULES,\n  CURRENT_MANIFEST_SCHEMA_VERSION,\n} from \"@hexagen/project-configuration\";\nimport type { Manifest } from \"@hexagen/sync\";"
         }
       ],
-      "responsibilities": [
-        "generation ports",
-        "wizard\u2192manifest mapping"
-      ],
+      "responsibilities": ["generation ports", "wizard\u2192manifest mapping"],
       "coupling": "Application contracts cannot compile without the sync CLI package. Manifest schema is owned by project-configuration.",
       "benefit": "boundary integrity \u2014 generation/wizard stay independent of the sync engine",
       "recommendation": "Import Manifest from @hexagen/project-configuration (or a BC-owned DTO). Restrict @hexagen/sync to ExternalSyncEngineAdapter.",
@@ -174,15 +150,11 @@
     },
     {
       "id": "HEX-005",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "high",
       "title": "ManifestGenerationPort is owned by two contexts with incompatible contracts",
       "package": "@hexagen/mcp-server",
-      "source_ids": [
-        "A5-001"
-      ],
+      "source_ids": ["A5-001"],
       "evidence": [
         {
           "path": "packages/manifest-generation/src/application/ports/in/manifest-generation.port.ts",
@@ -209,15 +181,11 @@
     },
     {
       "id": "HEX-006",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "high",
       "title": "ProjectConfigurationReadPort is independently declared in three packages",
       "package": "@hexagen/project-configuration",
-      "source_ids": [
-        "A5-002"
-      ],
+      "source_ids": ["A5-002"],
       "evidence": [
         {
           "path": "packages/project-configuration/src/application/ports/out/project-configuration-read.port.ts",
@@ -235,9 +203,7 @@
           "excerpt": "export interface ProjectConfigurationReadPort {\n  /**\n   * Reads and validates the current manifest\n   */\n  getManifest(): Promise<Result<Manifest>>;"
         }
       ],
-      "responsibilities": [
-        "canonical manifest read port"
-      ],
+      "responsibilities": ["canonical manifest read port"],
       "coupling": "Three type identities for one capability. Consumers can implement the wrong copy.",
       "benefit": "boundary integrity \u2014 single type identity; signature changes compile everywhere",
       "recommendation": "Publish from project-configuration only; mcp-server and sync import that type.",
@@ -247,15 +213,11 @@
     },
     {
       "id": "HEX-007",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "high",
       "title": "FileSystemPort is declared twice with disjoint APIs",
       "package": "@hexagen/sync",
-      "source_ids": [
-        "A5-003"
-      ],
+      "source_ids": ["A5-003"],
       "evidence": [
         {
           "path": "packages/project-configuration/src/application/ports/out/file-system.port.ts",
@@ -268,10 +230,7 @@
           "excerpt": "export interface FileSystemPort {\n  /**\n   * Check if a path exists.\n   */\n  exists(filePath: string): Promise<boolean>;\n\n  /**\n   * Create a directory (and parent directories if needed).\n   */"
         }
       ],
-      "responsibilities": [
-        "manifest merge FS",
-        "generator FS"
-      ],
+      "responsibilities": ["manifest merge FS", "generator FS"],
       "coupling": "Homonymous ports are not substitutable. HEX-002 will need a write/mkdir port \u2014 must not silently reuse the wrong FileSystemPort.",
       "benefit": "correctness \u2014 adapters cannot be wired to the wrong FS contract",
       "recommendation": "Rename to ManifestMergeFsPort vs GeneratorFsPort (or extract a shared-kernel FsPort if operations truly belong together). ADR required.",
@@ -281,15 +240,11 @@
     },
     {
       "id": "HEX-008",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "high",
       "title": "Two incompatible SecretVaultPort contracts in one package",
       "package": "@hexagen/agentic-interaction",
-      "source_ids": [
-        "A1A-004"
-      ],
+      "source_ids": ["A1A-004"],
       "evidence": [
         {
           "path": "packages/agentic-interaction/src/domain/provider-config.ts",
@@ -302,31 +257,21 @@
           "excerpt": "export interface SecretVaultPort {\n  /**\n   * Get the current vault state without modifying it.\n   */\n  getStatus(): Promise<Result<VaultStatus, VaultError>>;"
         }
       ],
-      "responsibilities": [
-        "env-var lookup",
-        "browser vault lifecycle"
-      ],
+      "responsibilities": ["env-var lookup", "browser vault lifecycle"],
       "coupling": "EnvironmentSecretVaultAdapter implements getSecret; SecureChatDispatchUseCase depends on retrieve(); package barrel can export the domain type.",
       "benefit": "correctness \u2014 no silent type collision at the package export",
       "recommendation": "Keep two named ports if both capabilities are needed (EnvSecretLookupPort vs EncryptedVaultPort). Do not share the name SecretVaultPort.",
-      "depends_on": [
-        "HEX-012"
-      ],
+      "depends_on": ["HEX-012"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "HEX-009",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "high",
       "title": "@hexagen/security is a hexagonal package outside manifest bounded_contexts",
       "package": "@hexagen/security",
-      "source_ids": [
-        "A1K-003",
-        "A5-004"
-      ],
+      "source_ids": ["A1K-003", "A5-004"],
       "evidence": [
         {
           "path": "packages/security/src/application/ports/in/secret-scanner.port.ts",
@@ -339,9 +284,7 @@
           "excerpt": "  - name: llm-driver\n    type: driver\n    plane: core\n    status: active\n    file: contexts/core/llm-driver/context.yaml\n  - name: template-engine\n    type: supporting\n    plane: infrastructure\n    status: active"
         }
       ],
-      "responsibilities": [
-        "secret-scan driven port"
-      ],
+      "responsibilities": ["secret-scan driven port"],
       "coupling": "Port exists only in packages/security; manifest.yaml has no security context. Also missing from tsconfig.base references. Node16 tsconfig (MOD-005).",
       "benefit": "boundary integrity \u2014 arch lint and port-ownership map can see the scanner",
       "recommendation": "ADR: register a security bounded context listing ISecretScanner as outbound, or fold the port into governance/shared and retire the package.",
@@ -351,15 +294,11 @@
     },
     {
       "id": "HEX-010",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "high",
       "title": "Application use-case constructs InMemoryTransactionManager instead of requiring its port",
       "package": "@hexagen/agentic-interaction",
-      "source_ids": [
-        "A1A-002"
-      ],
+      "source_ids": ["A1A-002"],
       "evidence": [
         {
           "path": "packages/agentic-interaction/src/application/use-cases/generate-manifest-from-description.use-case.ts",
@@ -367,10 +306,7 @@
           "excerpt": "import { InMemoryTransactionManager } from \"@hexagen/transaction-system\";\nimport type { TransactionManagerPort } from \"@hexagen/transaction-system\";\n    this.stagedUseCase = new ExecuteFullStagedGenerationUseCase(\n      llmPipeline,\n      transactionManager ?? new InMemoryTransactionManager(),"
         }
       ],
-      "responsibilities": [
-        "application orchestration",
-        "adapter selection"
-      ],
+      "responsibilities": ["application orchestration", "adapter selection"],
       "coupling": "Application compiles against a concrete infrastructure adapter. Routes then construct another InMemoryTransactionManager (HEX-003).",
       "benefit": "testability \u2014 composition root swaps persistence; tests inject a fake without importing infrastructure",
       "recommendation": "Require TransactionManagerPort. Instantiate InMemoryTransactionManager only at composition roots (wire.*, mcp-server/src/index.ts, tests).",
@@ -380,17 +316,11 @@
     },
     {
       "id": "HEX-011",
-      "axes": [
-        "hexagonal",
-        "god-structure"
-      ],
+      "axes": ["hexagonal", "god-structure"],
       "severity": "high",
       "title": "LLM prompt strings, retry policy, and R-rule text live in domain",
       "package": "@hexagen/agentic-interaction",
-      "source_ids": [
-        "A1A-001",
-        "A2P-003"
-      ],
+      "source_ids": ["A1A-001", "A2P-003"],
       "evidence": [
         {
           "path": "packages/agentic-interaction/src/domain/prompts/generate-manifest.prompt.ts",
@@ -413,15 +343,11 @@
     },
     {
       "id": "HEX-012",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "high",
       "title": "Domain catalogs hard-code vendor HTTP endpoints and API-key env names",
       "package": "@hexagen/local-llm",
-      "source_ids": [
-        "A1A-003"
-      ],
+      "source_ids": ["A1A-003"],
       "evidence": [
         {
           "path": "packages/local-llm/src/domain/cloud-provider-catalog.ts",
@@ -447,16 +373,11 @@
     },
     {
       "id": "HEX-013",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "high",
       "title": "Refactoring impact port and use-case are bound to ts-morph",
       "package": "@hexagen/sync",
-      "source_ids": [
-        "A1I-002",
-        "A1I-003"
-      ],
+      "source_ids": ["A1I-002", "A1I-003"],
       "evidence": [
         {
           "path": "packages/sync/src/application/ports/out/symbol-reference-provider.port.ts",
@@ -482,15 +403,11 @@
     },
     {
       "id": "HEX-014",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "high",
       "title": "ValidateTemplatesUseCase talks to node:fs and process.env",
       "package": "@hexagen/template-engine",
-      "source_ids": [
-        "A1I-004"
-      ],
+      "source_ids": ["A1I-004"],
       "evidence": [
         {
           "path": "packages/template-engine/src/application/use-cases/validate-templates.use-case.ts",
@@ -505,23 +422,17 @@
       "coupling": "Use-case ignores FileEmitterPort and probes disk/env directly.",
       "benefit": "testability \u2014 validation can run against in-memory emitters without Node fs",
       "recommendation": "Add exists()/env lookup to an outbound port; drop node:fs and process.env from the use-case.",
-      "depends_on": [
-        "HEX-007"
-      ],
+      "depends_on": ["HEX-007"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "HEX-015",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "high",
       "title": "ExportGraphImageUseCase performs DOM, fetch, and html-to-image I/O",
       "package": "@hexagen/visualization",
-      "source_ids": [
-        "A1P-001"
-      ],
+      "source_ids": ["A1P-001"],
       "evidence": [
         {
           "path": "packages/visualization/src/application/use-cases/export-graph-image.ts",
@@ -529,10 +440,7 @@
           "excerpt": "export class ExportGraphImageUseCase implements ExportGraphImagePort {\n  async exportImage(\n    input: ExportGraphImageInput,\n  ): Promise<Result<ExportGraphImageOutput, Error>> {\n    try {\n      const { toPng, toJpeg, toSvg } = await import(\"html-to-image\");\n\n      const viewport = document.querySelector(\n        input.viewportSelector,\n      ) as HTMLElement | null;"
         }
       ],
-      "responsibilities": [
-        "inbound export port",
-        "browser rendering I/O"
-      ],
+      "responsibilities": ["inbound export port", "browser rendering I/O"],
       "coupling": "Application layer bound to document, fetch, and html-to-image.",
       "benefit": "testability \u2014 export becomes swappable (canvas/server) without changing application policy",
       "recommendation": "Keep the use case as inbound-port orchestration; move querySelector/html-to-image/fetch into an infrastructure adapter.",
@@ -543,15 +451,11 @@
     },
     {
       "id": "HEX-016",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "high",
       "title": "Governance refresh route owns shell lint, filesystem, YAML parsing, and LLM adapter construction",
       "package": "web",
-      "source_ids": [
-        "A1W-002"
-      ],
+      "source_ids": ["A1W-002"],
       "evidence": [
         {
           "path": "apps/web/app/api/governance/refresh/route.ts",
@@ -568,23 +472,17 @@
       "coupling": "Boundary handler shells out to yarn lint:arch and news ServerLLMAdapter.",
       "benefit": "boundary integrity \u2014 lint and suggestion paths become replaceable ports",
       "recommendation": "Extract LintReportPort and SuggestionGenerationPort; wire adapters in wire.server.ts.",
-      "depends_on": [
-        "HEX-003"
-      ],
+      "depends_on": ["HEX-003"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "HEX-017",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "high",
       "title": "TUI inlines LLM HTTP, MCP SDK, and filesystem watch instead of driving ports",
       "package": "@hexagen/tui",
-      "source_ids": [
-        "A1W-005"
-      ],
+      "source_ids": ["A1W-005"],
       "evidence": [
         {
           "path": "apps/tui/src/services/action-service.ts",
@@ -601,27 +499,17 @@
       "coupling": "package.json lists @hexagen/agentic-interaction but action-service reimplements the LLM port locally.",
       "benefit": "TUI can reuse agentic-interaction and messaging ports already wired for web",
       "recommendation": "Inject LLMProviderPort / ManifestReaderPort / EventBusPort; keep MCP SDK behind a wire module.",
-      "depends_on": [
-        "HEX-012"
-      ],
+      "depends_on": ["HEX-012"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "HEX-018",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "high",
       "title": "Driven ports are parked under application/ports/in across multiple packages",
       "package": "multiple",
-      "source_ids": [
-        "A1K-004",
-        "A1K-005",
-        "A1C-005",
-        "A1C-006",
-        "A1C-007"
-      ],
+      "source_ids": ["A1K-004", "A1K-005", "A1C-005", "A1C-006", "A1C-007"],
       "evidence": [
         {
           "path": "packages/security/src/application/use-cases/secret-sanitization.use-case.ts",
@@ -646,23 +534,17 @@
       "coupling": "Same inversion in security, governance, monaco-orchestration, wizard-orchestration, project-configuration. Empty infrastructure barrels in monaco/wizard.",
       "benefit": "boundary integrity \u2014 driving adapters call use cases; driven adapters implement out-ports",
       "recommendation": "ADR on inbound vs outbound directory convention, then move driven contracts to ports/out. Use cases implement inbound ports.",
-      "depends_on": [
-        "HEX-009"
-      ],
+      "depends_on": ["HEX-009"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "HEX-019",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "high",
       "title": "MCP inbound adapters depend on concrete use-case classes, not inbound ports",
       "package": "@hexagen/mcp-server",
-      "source_ids": [
-        "A1I-006"
-      ],
+      "source_ids": ["A1I-006"],
       "evidence": [
         {
           "path": "packages/mcp-server/src/infrastructure/adapters/mcp-server.types.ts",
@@ -677,24 +559,17 @@
       "coupling": "MCPServerAdapterDependencies types 25 concrete *UseCase classes. domain/index.ts is an empty barrel.",
       "benefit": "testability \u2014 tools test against port fakes; use-case impls can change without adapter recompiles",
       "recommendation": "Declare inbound ports under application/ports/in. Wire adapters to those ports.",
-      "depends_on": [
-        "HEX-018"
-      ],
+      "depends_on": ["HEX-018"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "HEX-020",
-      "axes": [
-        "hexagonal",
-        "god-structure"
-      ],
+      "axes": ["hexagonal", "god-structure"],
       "severity": "high",
       "title": "Web composition roots encode discard policy and LLM fallback rules",
       "package": "web",
-      "source_ids": [
-        "A5-005"
-      ],
+      "source_ids": ["A5-005"],
       "evidence": [
         {
           "path": "apps/web/app/lib/wire.server.ts",
@@ -710,23 +585,17 @@
       "coupling": "Duplicates HEX-012 domain fallback chain. Discard orchestration lives in wire.client subscribe handlers.",
       "benefit": "testability \u2014 fallback/stage policy and discard use-cases can be tested without the composition root",
       "recommendation": "Move discard orchestration into a named use case and LLM fallback/stage policy into agentic-interaction or llm-driver; leave wire.* as factories.",
-      "depends_on": [
-        "HEX-012"
-      ],
+      "depends_on": ["HEX-012"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "HEX-021",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "high",
       "title": "Visualization application inbound API is typed on project-configuration WizardData",
       "package": "@hexagen/visualization",
-      "source_ids": [
-        "A1P-002"
-      ],
+      "source_ids": ["A1P-002"],
       "evidence": [
         {
           "path": "packages/visualization/src/application/ports/in/generate-hexagonal-map.port.ts",
@@ -734,9 +603,7 @@
           "excerpt": "import type { WizardData } from \"@hexagen/project-configuration\";\nimport type {\n  HexagonNodeWithLayout,\n} from \"../../../domain/index.js\";\n\nexport interface GenerateHexagonalMapInput {\n  wizardData: WizardData;\n}"
         }
       ],
-      "responsibilities": [
-        "GenerateHexagonalMapPort"
-      ],
+      "responsibilities": ["GenerateHexagonalMapPort"],
       "coupling": "layer-rules application allowed_imports exclude @hexagen/project-configuration; the only granted exception is architecture-graph.ts.",
       "benefit": "boundary integrity \u2014 visualization owns its graph DTO",
       "recommendation": "Introduce a visualization-owned map input VO. Map WizardData only in infrastructure or at the composition root.",
@@ -746,18 +613,11 @@
     },
     {
       "id": "HEX-022",
-      "axes": [
-        "hexagonal",
-        "react-decomposition"
-      ],
+      "axes": ["hexagonal", "react-decomposition"],
       "severity": "high",
       "title": "ModelSettingsView owns cache probes, hardware recommend, and semantic loading state",
       "package": "@hexagen/model-settings",
-      "source_ids": [
-        "A1P-004",
-        "A1P-005",
-        "A3-007"
-      ],
+      "source_ids": ["A1P-004", "A1P-005", "A3-007"],
       "evidence": [
         {
           "path": "packages/model-settings/src/ui/ModelSettingsView.tsx",
@@ -784,15 +644,11 @@
     },
     {
       "id": "HEX-023",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "medium",
       "title": "PersistenceDomainRegistryPort exposes concrete storage backends",
       "package": "@hexagen/shared",
-      "source_ids": [
-        "A1K-001"
-      ],
+      "source_ids": ["A1K-001"],
       "evidence": [
         {
           "path": "packages/shared/src/application/ports/persistence-domain-registry.port.ts",
@@ -800,9 +656,7 @@
           "excerpt": "export interface PersistenceDomainRegistryPort {\n  getActiveBackend(domain: PersistenceDomain): \"localStorage\" | \"indexedDB\";\n  markMigrated(\n    domain: PersistenceDomain,\n  ): Promise<Result<void, PersistenceError>>;"
         }
       ],
-      "responsibilities": [
-        "shared-kernel persistence-domain registry"
-      ],
+      "responsibilities": ["shared-kernel persistence-domain registry"],
       "coupling": "Callers must reason about infrastructure products.",
       "benefit": "boundary integrity",
       "recommendation": "Replace getActiveBackend's storage-product union with a technology-neutral capability; keep backend names inside the adapter.",
@@ -812,15 +666,11 @@
     },
     {
       "id": "HEX-024",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "medium",
       "title": "Model preferences talk to localStorage without an application port",
       "package": "@hexagen/shared",
-      "source_ids": [
-        "A1K-002"
-      ],
+      "source_ids": ["A1K-002"],
       "evidence": [
         {
           "path": "packages/shared/src/infrastructure/adapters/model-preference-storage.ts",
@@ -835,17 +685,13 @@
       "coupling": "Public helpers return null/false instead of Result; model-preferences is already a PersistenceDomain.",
       "benefit": "testability",
       "recommendation": "Add a ModelPreferencesPersistencePort that returns Result; stop exporting window.localStorage helpers as the public API.",
-      "depends_on": [
-        "HEX-023"
-      ],
+      "depends_on": ["HEX-023"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "HEX-025",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "medium",
       "title": "Sync-generated empty export {} barrels advertise unused hexagonal layers",
       "package": "multiple",
@@ -874,9 +720,7 @@
           "excerpt": "export * from \"./mvk/v1/index.js\";"
         }
       ],
-      "responsibilities": [
-        "sync-generated hexagonal layer entrypoints"
-      ],
+      "responsibilities": ["sync-generated hexagonal layer entrypoints"],
       "coupling": "Command: rg '^export \\{\\s*\\}' packages --glob '**/src/**/*.ts' \u2014 31 empty barrels. core-domain real contracts live in mvk/v1. Frozen packages (architectural-enforcement, code-generation) plus persistence/deployment/runtime/ui/model-settings advertise empty layers. AGENTS.md forbids empty barrels.",
       "benefit": "boundary integrity \u2014 inventory and generators stop treating stub folders as real contexts",
       "recommendation": "ADR: stop emitting unused layer folders; re-export MVK from domain/ or drop the folders. Remove empty frozen packages from packages/ and bounded_contexts (transaction-system is frozen but implemented \u2014 do not delete).",
@@ -886,16 +730,11 @@
     },
     {
       "id": "HEX-026",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "medium",
       "title": "YAML parse/dump lives in application and domain instead of a codec port",
       "package": "multiple",
-      "source_ids": [
-        "A1C-002",
-        "A1P-007"
-      ],
+      "source_ids": ["A1C-002", "A1P-007"],
       "evidence": [
         {
           "path": "packages/wizard-orchestration/src/application/manifest-parser.ts",
@@ -908,10 +747,7 @@
           "excerpt": "import yaml from \"js-yaml\";\nimport type {\n  ManifestViewData,\n  BoundedContextView,"
         }
       ],
-      "responsibilities": [
-        "schema mapping",
-        "serialization ACL"
-      ],
+      "responsibilities": ["schema mapping", "serialization ACL"],
       "coupling": "js-yaml is an infrastructure parser bound into application/domain.",
       "benefit": "testability \u2014 YAML parse failures can be injected without a parser library",
       "recommendation": "Declare ManifestCodecPort; implement yaml.load/dump in infrastructure. Keep mapping/fixer policy against already-parsed types.",
@@ -921,15 +757,11 @@
     },
     {
       "id": "HEX-027",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "medium",
       "title": "Template-engine domain imports node:path",
       "package": "@hexagen/template-engine",
-      "source_ids": [
-        "A1I-008"
-      ],
+      "source_ids": ["A1I-008"],
       "evidence": [
         {
           "path": "packages/template-engine/src/domain/conflict-path.ts",
@@ -937,10 +769,7 @@
           "excerpt": "import path from \"node:path\";\n"
         }
       ],
-      "responsibilities": [
-        "conflict-path derivation",
-        "output-path safety"
-      ],
+      "responsibilities": ["conflict-path derivation", "output-path safety"],
       "coupling": "conflictFilePath and isContainedRelativePath bind domain safety rules to Node path APIs.",
       "benefit": "Same predicates work in browser/in-memory emitters without node:path",
       "recommendation": "Implement ext/absolute/`..` checks with string operations in domain, or inject a PathPort.",
@@ -950,17 +779,11 @@
     },
     {
       "id": "HEX-028",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "medium",
       "title": "local-llm domain ports and VOs encode WebLLM/WebGPU/IndexedDB mechanics",
       "package": "@hexagen/local-llm",
-      "source_ids": [
-        "A1A-005",
-        "A1A-007",
-        "A1A-008"
-      ],
+      "source_ids": ["A1A-005", "A1A-007", "A1A-008"],
       "evidence": [
         {
           "path": "packages/local-llm/src/domain/ports/local-llm-provider.port.ts",
@@ -986,15 +809,11 @@
     },
     {
       "id": "HEX-029",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "medium",
       "title": "prompt-compiler infrastructure adapter owns ChatMessage and GovernancePayload types",
       "package": "@hexagen/prompt-compiler",
-      "source_ids": [
-        "A1A-006"
-      ],
+      "source_ids": ["A1A-006"],
       "evidence": [
         {
           "path": "packages/prompt-compiler/src/infrastructure/adapters/app-compatibility.adapter.ts",
@@ -1015,15 +834,11 @@
     },
     {
       "id": "HEX-030",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "medium",
       "title": "Domain hexagon node carries React Flow and CSS presentation fields",
       "package": "@hexagen/visualization",
-      "source_ids": [
-        "A1P-003"
-      ],
+      "source_ids": ["A1P-003"],
       "evidence": [
         {
           "path": "packages/visualization/src/domain/model/hexagon-node/hexagon-node.ts",
@@ -1031,10 +846,7 @@
           "excerpt": "export interface NodeVisualProps {\n  readonly headerBg: string;\n  readonly bodyBg: string;\n  readonly border: string;\n  readonly handleColor: string;\n  readonly headerText: string;\n  readonly hexColor: string;\n}\n\nexport interface HexagonNodeWithLayout extends HexagonNode {\n  extent?: \"parent\";\n  variant?: NodeVisualProps;"
         }
       ],
-      "responsibilities": [
-        "graph identity",
-        "renderer tokens"
-      ],
+      "responsibilities": ["graph identity", "renderer tokens"],
       "coupling": "Domain fused with React Flow primitives (extent: parent) and CSS colors.",
       "benefit": "Domain stays layout-agnostic; swapping ELK/React Flow does not rewrite entities",
       "recommendation": "Keep HexagonNode as id/type/position. Move NodeVisualProps/style/extent into a projection DTO.",
@@ -1044,15 +856,11 @@
     },
     {
       "id": "HEX-031",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "medium",
       "title": "Several @hexagen/ui public props skip NoSemanticState",
       "package": "@hexagen/ui",
-      "source_ids": [
-        "A1P-006"
-      ],
+      "source_ids": ["A1P-006"],
       "evidence": [
         {
           "path": "packages/ui/src/sections/Dialog.tsx",
@@ -1076,15 +884,11 @@
     },
     {
       "id": "HEX-032",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "medium",
       "title": "intent-compiler topology invariants live in an infrastructure adapter",
       "package": "@hexagen/intent-compiler",
-      "source_ids": [
-        "A1W-007"
-      ],
+      "source_ids": ["A1W-007"],
       "evidence": [
         {
           "path": "packages/intent-compiler/src/application/use-cases/validate-topology.use-case.ts",
@@ -1105,15 +909,11 @@
     },
     {
       "id": "HEX-033",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "medium",
       "title": "api-gateway is a stub Fastify app that never drives declared package ports",
       "package": "@hexagen/api-gateway",
-      "source_ids": [
-        "A1W-006"
-      ],
+      "source_ids": ["A1W-006"],
       "evidence": [
         {
           "path": "apps/api-gateway/routes/root.js",
@@ -1126,10 +926,7 @@
           "excerpt": "  \"dependencies\": {\n    \"@hexagen/messaging\": \"workspace:*\",\n    \"@hexagen/project-configuration\": \"workspace:*\",\n    \"@hexagen/shared\": \"workspace:*\""
         }
       ],
-      "responsibilities": [
-        "HTTP shell",
-        "unused workspace dependencies"
-      ],
+      "responsibilities": ["HTTP shell", "unused workspace dependencies"],
       "coupling": "Declared hexagonal packages are never imported.",
       "benefit": "Either a real gateway composition root or removal of a fake boundary",
       "recommendation": "Wire messaging/project-configuration through ports or delete the unused gateway app.",
@@ -1139,15 +936,11 @@
     },
     {
       "id": "HEX-034",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "medium",
       "title": "LLM context route merges the workspace manifest and encodes port-ownership rules inline",
       "package": "web",
-      "source_ids": [
-        "A1W-008"
-      ],
+      "source_ids": ["A1W-008"],
       "evidence": [
         {
           "path": "apps/web/app/api/llm/context/route.ts",
@@ -1163,24 +956,17 @@
       "coupling": "Route imports project-configuration/server and @hexagen/sync portName, then hardcodes governance invariants.",
       "benefit": "Context payload becomes a use-case output from a ManifestQueryPort",
       "recommendation": "Move merge + port-ownership projection into a package use case; route only calls the port.",
-      "depends_on": [
-        "HEX-003",
-        "HEX-006"
-      ],
+      "depends_on": ["HEX-003", "HEX-006"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "HEX-035",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "medium",
       "title": "tsconfig.base references omit six workspace packages that exist on disk",
       "package": "root",
-      "source_ids": [
-        "A5-008"
-      ],
+      "source_ids": ["A5-008"],
       "evidence": [
         {
           "path": "tsconfig.base.json",
@@ -1188,29 +974,21 @@
           "excerpt": "  \"references\": [\n    { \"path\": \"./packages/agentic-interaction\" },\n    { \"path\": \"./packages/architectural-enforcement\" },\n    { \"path\": \"./packages/code-generation\" },\n    { \"path\": \"./packages/core-domain\" },\n    { \"path\": \"./packages/deployment\" },\n    { \"path\": \"./packages/eslint-plugin-ui\" },\n    { \"path\": \"./packages/external-integration\" },\n    { \"path\": \"./packages/governance\" },\n    { \"path\": \"./packages/intent-compiler\" },"
         }
       ],
-      "responsibilities": [
-        "solution-style TypeScript graph"
-      ],
+      "responsibilities": ["solution-style TypeScript graph"],
       "coupling": "Missing: ai-pipeline, byok, llm-driver, manifest-generation, model-settings, security. Command: compare tsconfig.base.json references to find packages/*/package.json.",
       "benefit": "boundary integrity \u2014 active hexagonal packages are not orphan TypeScript projects",
       "recommendation": "Regenerate tsconfig.base references from bounded_contexts after HEX-009 decides security.",
-      "depends_on": [
-        "HEX-009"
-      ],
+      "depends_on": ["HEX-009"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "HEX-036",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "medium",
       "title": "Generated AgentRuntimePort is declared inside infrastructure",
       "package": "@hexagen/template-engine",
-      "source_ids": [
-        "A1I-007"
-      ],
+      "source_ids": ["A1I-007"],
       "evidence": [
         {
           "path": "packages/template-engine/templates/bedrock-agentcore-runtime/files/src/infrastructure/agentcore/runtime/payload.ts",
@@ -1218,29 +996,21 @@
           "excerpt": "/**\n * Application use-case the runtime drives. Implemented by your agent (e.g. a\n * LangGraph graph, a tool-calling loop, a single LLM call) and injected into the\n * server \u2014 the inbound HTTP adapter depends only on this port, never on a\n * concrete agent. `runStream` is optional; when absent, `stream: true` requests\n * fall back to a single `run()` result.\n */"
         }
       ],
-      "responsibilities": [
-        "ports live in domain or application, not adapters"
-      ],
+      "responsibilities": ["ports live in domain or application, not adapters"],
       "coupling": "Customer AgentRuntimePort lives next to Zod HTTP envelopes.",
       "benefit": "Agent implementations depend on a stable application port, not Bedrock payload parsing",
       "recommendation": "Emit AgentRuntimePort under src/application/ports/in. Keep Zod schemas only in the runtime adapter.",
-      "depends_on": [
-        "HEX-001"
-      ],
+      "depends_on": ["HEX-001"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "HEX-037",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "low",
       "title": "project-configuration infrastructure stubs are named as ports without implementing owned interfaces",
       "package": "@hexagen/project-configuration",
-      "source_ids": [
-        "A1C-008"
-      ],
+      "source_ids": ["A1C-008"],
       "evidence": [
         {
           "path": "packages/project-configuration/src/infrastructure/external-apis/git-provider-port.adapter.ts",
@@ -1248,9 +1018,7 @@
           "excerpt": "// Adapter for GitProviderPort external API\nexport class GitProviderPortAdapter {}"
         }
       ],
-      "responsibilities": [
-        "empty adapter classes"
-      ],
+      "responsibilities": ["empty adapter classes"],
       "coupling": "GitProviderPort/AIProviderPort/PreviewProviderPort are not declared in this package's application/ports.",
       "benefit": "boundary integrity \u2014 each adapter implements exactly one owned port",
       "recommendation": "Declare the outbound ports and implement them, or delete the empty *PortAdapter classes.",
@@ -1260,15 +1028,11 @@
     },
     {
       "id": "HEX-038",
-      "axes": [
-        "hexagonal"
-      ],
+      "axes": ["hexagonal"],
       "severity": "medium",
       "title": "sync domain stub resolver imports composition-root config and template-engine",
       "package": "@hexagen/sync",
-      "source_ids": [
-        "A1I-005"
-      ],
+      "source_ids": ["A1I-005"],
       "evidence": [
         {
           "path": "packages/sync/src/domain/services/stub-template-resolver.ts",
@@ -1276,9 +1040,7 @@
           "excerpt": "import type { StubTemplates, StubNaming } from \"../../types/manifest.js\";\nimport { resolveScope } from \"../../types/manifest.js\";\nimport type { SyncConfig } from \"../../config.js\";\nimport { interpolate } from \"../../template-engine.js\";\nimport { DEFAULT_TEMPLATES, DEFAULT_NAMING } from \"../stub-templates.js\";"
         }
       ],
-      "responsibilities": [
-        "domain stub interpolation"
-      ],
+      "responsibilities": ["domain stub interpolation"],
       "coupling": "domain/services depend on SyncConfig (logger + journal) and template-engine re-export.",
       "benefit": "Stub interpolation stays testable without CLI config or filesystem audit log",
       "recommendation": "Pass interpolate + logger as function args or an application port.",
@@ -1288,15 +1050,11 @@
     },
     {
       "id": "GOD-001",
-      "axes": [
-        "god-structure"
-      ],
+      "axes": ["god-structure"],
       "severity": "high",
       "title": "Structured-config use-case owns parse, dialect, mapping, R01\u2013R09 gate, and stage orchestration",
       "package": "@hexagen/agentic-interaction",
-      "source_ids": [
-        "A2P-001"
-      ],
+      "source_ids": ["A2P-001"],
       "evidence": [
         {
           "path": "packages/agentic-interaction/src/application/use-cases/staged-generation/execute-structured-config-generation.use-case.ts",
@@ -1313,23 +1071,17 @@
       "coupling": "3059 loc / cc 238 (inventory). 20+ tests import mapping/gate helpers from the use-case file.",
       "benefit": "testability \u2014 parse, dialect, port inference, and the repair gate can be exercised without constructing six LLM stages",
       "recommendation": "Move parseStructuredConfig/normalizeDialect and structuralManifestErrors/evaluateRepairGate into domain/manifest modules; leave the class as the stage composer only. Not a rewrite of the 3000-line file in one PR.",
-      "depends_on": [
-        "HEX-011"
-      ],
+      "depends_on": ["HEX-011"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "GOD-002",
-      "axes": [
-        "god-structure"
-      ],
+      "axes": ["god-structure"],
       "severity": "high",
       "title": "arch-linter index is CLI entry, library barrel, and inline layer-policy engine",
       "package": "@hexagen/arch-linter",
-      "source_ids": [
-        "A2P-002"
-      ],
+      "source_ids": ["A2P-002"],
       "evidence": [
         {
           "path": "tools/arch-linter/src/index.ts",
@@ -1351,15 +1103,11 @@
     },
     {
       "id": "GOD-003",
-      "axes": [
-        "god-structure"
-      ],
+      "axes": ["god-structure"],
       "severity": "high",
       "title": "ImportProjectSpecPage owns classification, session persistence, generation orchestration, accept rewrite, and step UI",
       "package": "web",
-      "source_ids": [
-        "A2W-001"
-      ],
+      "source_ids": ["A2W-001"],
       "evidence": [
         {
           "path": "apps/web/features/manifest-generation/ImportProjectSpecPage.tsx",
@@ -1377,25 +1125,17 @@
       "coupling": "Binds Next router, sessionStorage, three generation hooks, pendingManifest store, wizard-orchestration parse, and five step components.",
       "benefit": "testability \u2014 classification and accept rewrite become independently testable; page shrinks to a step router",
       "recommendation": "Keep the page as a step router. Extract classification/session, acceptManifest, and generation-controller. Do not move classification into @hexagen/ui.",
-      "depends_on": [
-        "GOD-006"
-      ],
+      "depends_on": ["GOD-006"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "GOD-004",
-      "axes": [
-        "god-structure",
-        "react-decomposition"
-      ],
+      "axes": ["god-structure", "react-decomposition"],
       "severity": "high",
       "title": "ExportProvider mixes ZIP/GitHub/editor-push I/O, IDB persistence, import-manifest policy, and dialog state",
       "package": "web",
-      "source_ids": [
-        "A2W-002",
-        "A3-004"
-      ],
+      "source_ids": ["A2W-002", "A3-004"],
       "evidence": [
         {
           "path": "apps/web/app/contexts/ExportContext.tsx",
@@ -1420,15 +1160,11 @@
     },
     {
       "id": "GOD-005",
-      "axes": [
-        "god-structure"
-      ],
+      "axes": ["god-structure"],
       "severity": "high",
       "title": "useStagedGenerationStream owns HTTP transport, NDJSON protocol, reconnect/timeout, and React view-model",
       "package": "web",
-      "source_ids": [
-        "A2W-004"
-      ],
+      "source_ids": ["A2W-004"],
       "evidence": [
         {
           "path": "apps/web/features/manifest-generation/useStagedGenerationStream.ts",
@@ -1450,15 +1186,11 @@
     },
     {
       "id": "GOD-006",
-      "axes": [
-        "god-structure"
-      ],
+      "axes": ["god-structure"],
       "severity": "high",
       "title": "useStagedSpecGeneration owns engine policy, local pipeline, cloud stream, view-model, and GitOps PR",
       "package": "web",
-      "source_ids": [
-        "A2W-003"
-      ],
+      "source_ids": ["A2W-003"],
       "evidence": [
         {
           "path": "apps/web/features/manifest-generation/useStagedSpecGeneration.ts",
@@ -1475,23 +1207,17 @@
       "coupling": "One hook is the only surface for ImportProjectSpecPage generation and /api/gitops/propose-pr.",
       "benefit": "Engine/fallback and local progress mapping can be tested without React; proposePR can change auth without regenerating the spec pipeline",
       "recommendation": "Move proposePR to its own hook. Extract local progress mapping after GOD-005.",
-      "depends_on": [
-        "GOD-005"
-      ],
+      "depends_on": ["GOD-005"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "GOD-007",
-      "axes": [
-        "god-structure"
-      ],
+      "axes": ["god-structure"],
       "severity": "high",
       "title": "usePlanningSession owns the chat loop, persist/reconcile control, and finalize-distill UI",
       "package": "web",
-      "source_ids": [
-        "A2W-005"
-      ],
+      "source_ids": ["A2W-005"],
       "evidence": [
         {
           "path": "apps/web/features/workspace-shell/plan-phase/session/usePlanningSession.ts",
@@ -1514,15 +1240,11 @@
     },
     {
       "id": "GOD-008",
-      "axes": [
-        "god-structure"
-      ],
+      "axes": ["god-structure"],
       "severity": "medium",
       "title": "wizardToManifest composes context mapping, apps topology, transport edges, and scaffold defaults",
       "package": "@hexagen/wizard-orchestration",
-      "source_ids": [
-        "A2P-004"
-      ],
+      "source_ids": ["A2P-004"],
       "evidence": [
         {
           "path": "packages/wizard-orchestration/src/application/wizard-to-manifest.ts",
@@ -1539,23 +1261,17 @@
       "coupling": "Package-manager pins and turbo pipeline change for scaffold policy while deriveApps changes for template rules.",
       "benefit": "testability \u2014 apps isolation and transport edges can be specified without rebuilding the full monorepo blob",
       "recommendation": "Extract deriveApps and deriveCrossContextEdges; keep wizardToManifest as composer plus a named scaffold-defaults object.",
-      "depends_on": [
-        "HEX-004"
-      ],
+      "depends_on": ["HEX-004"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "GOD-009",
-      "axes": [
-        "god-structure"
-      ],
+      "axes": ["god-structure"],
       "severity": "medium",
       "title": "Port-mapping use-case owns LLM I/O, NDJSON salvage parse, and port/mapping policy",
       "package": "@hexagen/agentic-interaction",
-      "source_ids": [
-        "A2P-005"
-      ],
+      "source_ids": ["A2P-005"],
       "evidence": [
         {
           "path": "packages/agentic-interaction/src/application/use-cases/staged-generation/execute-port-mapping.use-case.ts",
@@ -1578,15 +1294,11 @@
     },
     {
       "id": "GOD-010",
-      "axes": [
-        "god-structure"
-      ],
+      "axes": ["god-structure"],
       "severity": "medium",
       "title": "OpenAI manifest adapter is HTTP client, draft pipeline, and write/event side effects",
       "package": "@hexagen/mcp-server",
-      "source_ids": [
-        "A2P-006"
-      ],
+      "source_ids": ["A2P-006"],
       "evidence": [
         {
           "path": "packages/mcp-server/src/infrastructure/adapters/manifest-generation.adapter.ts",
@@ -1602,23 +1314,17 @@
       "coupling": "Application sequencing, I/O, and writes sit behind ManifestGenerationPort (HEX-005).",
       "benefit": "boundary integrity \u2014 adapters should not register bounded contexts or publish events",
       "recommendation": "Keep callLLM on the adapter; move generateManifestPipeline compose/validate/write/publish into the pipeline use-case.",
-      "depends_on": [
-        "HEX-005"
-      ],
+      "depends_on": ["HEX-005"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "GOD-011",
-      "axes": [
-        "god-structure"
-      ],
+      "axes": ["god-structure"],
       "severity": "medium",
       "title": "IDB saved-projects adapter mixes CRUD, layer salvage, and legacy provenance inference",
       "package": "web",
-      "source_ids": [
-        "A2W-006"
-      ],
+      "source_ids": ["A2W-006"],
       "evidence": [
         {
           "path": "apps/web/app/lib/adapters/idb-saved-projects.adapter.ts",
@@ -1640,15 +1346,11 @@
     },
     {
       "id": "GOD-012",
-      "axes": [
-        "god-structure"
-      ],
+      "axes": ["god-structure"],
       "severity": "medium",
       "title": "useStagedManifestGeneration duplicates local-pipeline + cloud-stream + view-model ownership",
       "package": "web",
-      "source_ids": [
-        "A2W-007"
-      ],
+      "source_ids": ["A2W-007"],
       "evidence": [
         {
           "path": "apps/web/features/manifest-generation/useStagedManifestGeneration.ts",
@@ -1664,23 +1366,17 @@
       "coupling": "Parallel god to GOD-006: same stream hook, same progress cells, different client use-case.",
       "benefit": "Shared progress binding can be tested once",
       "recommendation": "After GOD-005, share one progress-binding helper with the spec hook. Extract the local topology/adapters/render sequence.",
-      "depends_on": [
-        "GOD-005"
-      ],
+      "depends_on": ["GOD-005"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "REA-001",
-      "axes": [
-        "react-decomposition"
-      ],
+      "axes": ["react-decomposition"],
       "severity": "high",
       "title": "GovernanceAssistantPanel fetches, owns two LLM transports, and renders Q&A",
       "package": "web",
-      "source_ids": [
-        "A3-001"
-      ],
+      "source_ids": ["A3-001"],
       "evidence": [
         {
           "path": "apps/web/features/governance-assistant/GovernanceAssistantPanel/GovernanceAssistantPanel.tsx",
@@ -1703,15 +1399,11 @@
     },
     {
       "id": "REA-002",
-      "axes": [
-        "react-decomposition"
-      ],
+      "axes": ["react-decomposition"],
       "severity": "high",
       "title": "Local-mode lifecycle is six overlapping boolean props",
       "package": "web",
-      "source_ids": [
-        "A3-002"
-      ],
+      "source_ids": ["A3-002"],
       "evidence": [
         {
           "path": "apps/web/features/governance-assistant/GovernanceAssistantPanel/types.ts",
@@ -1726,23 +1418,17 @@
       "coupling": "Callers can set multiple show* flags; children re-decode mutually exclusive states.",
       "benefit": "correctness \u2014 impossible states disappear; each card is independently testable",
       "recommendation": "Replace show* booleans with composition selected from engine status.",
-      "depends_on": [
-        "REA-001"
-      ],
+      "depends_on": ["REA-001"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "REA-003",
-      "axes": [
-        "react-decomposition"
-      ],
+      "axes": ["react-decomposition"],
       "severity": "high",
       "title": "CodeView both generates files and renders the explorer",
       "package": "web",
-      "source_ids": [
-        "A3-003"
-      ],
+      "source_ids": ["A3-003"],
       "evidence": [
         {
           "path": "apps/web/features/code-view/CodeView.tsx",
@@ -1764,15 +1450,11 @@
     },
     {
       "id": "REA-004",
-      "axes": [
-        "react-decomposition"
-      ],
+      "axes": ["react-decomposition"],
       "severity": "medium",
       "title": "useCanvasState mixes store subscription, graph derivation, and mutations",
       "package": "web",
-      "source_ids": [
-        "A3-005"
-      ],
+      "source_ids": ["A3-005"],
       "evidence": [
         {
           "path": "apps/web/features/hexagon-canvas/hooks/useCanvasState.ts",
@@ -1789,23 +1471,17 @@
       "coupling": "Any layout I/O tick re-renders mutation callers.",
       "benefit": "Pure compile/overlay becomes deterministic",
       "recommendation": "Extract compileWizardGraph (pure) and useCanvasGraphMutations; GraphCanvasInner composes them.",
-      "depends_on": [
-        "HEX-021"
-      ],
+      "depends_on": ["HEX-021"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "REA-005",
-      "axes": [
-        "react-decomposition"
-      ],
+      "axes": ["react-decomposition"],
       "severity": "medium",
       "title": "Imported-manifest payload mapping is copied in three features",
       "package": "web",
-      "source_ids": [
-        "A3-006"
-      ],
+      "source_ids": ["A3-006"],
       "evidence": [
         {
           "path": "apps/web/app/contexts/ExportContext.tsx",
@@ -1825,24 +1501,17 @@
       "coupling": "Export, generate, and architecture-ZIP can diverge on the same invariant.",
       "benefit": "correctness \u2014 one tested mapper; fail-closed behavior cannot drift",
       "recommendation": "Named shared mapper resolveImportedManifestPayload(formState, savedYaml) used by all three call sites.",
-      "depends_on": [
-        "GOD-004",
-        "REA-003"
-      ],
+      "depends_on": ["GOD-004", "REA-003"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "REA-006",
-      "axes": [
-        "react-decomposition"
-      ],
+      "axes": ["react-decomposition"],
       "severity": "medium",
       "title": "Server model names are fetched and mapped in two sibling views",
       "package": "web",
-      "source_ids": [
-        "A3-008"
-      ],
+      "source_ids": ["A3-008"],
       "evidence": [
         {
           "path": "apps/web/features/governance-assistant/GovernanceAssistantPanel/LocalModeSettingsView.tsx",
@@ -1857,23 +1526,17 @@
       "coupling": "Panel footer and settings card can show different names; duplicate client fetch.",
       "benefit": "Single mapping, one request, consistent labels",
       "recommendation": "Fetch capabilities once in the transport boundary (REA-001) and pass names down.",
-      "depends_on": [
-        "REA-001"
-      ],
+      "depends_on": ["REA-001"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "MOD-001",
-      "axes": [
-        "modernization"
-      ],
+      "axes": ["modernization"],
       "severity": "high",
       "title": "agentic-interaction ships TypeScript ^6.0.3 against the repo floor (^5.4.5 / installed 5.9.3)",
       "package": "@hexagen/agentic-interaction",
-      "source_ids": [
-        "A4-001"
-      ],
+      "source_ids": ["A4-001"],
       "evidence": [
         {
           "path": "packages/agentic-interaction/package.json",
@@ -1886,10 +1549,7 @@
           "excerpt": "    \"typescript\": \"^5.4.5\",\n    \"typescript-eslint\": \"^8.0.0\",\n    \"vitest\": \"^4.1.9\"\n  },\n  \"engines\": {\n    \"node\": \">=22.7.0\"\n  },"
         }
       ],
-      "responsibilities": [
-        "typecheck",
-        "workspace toolchain pin"
-      ],
+      "responsibilities": ["typecheck", "workspace toolchain pin"],
       "coupling": "Command: rg --glob '**/package.json' '\"typescript\":' \u2014 only this workspace declares a second compiler. @types/node ^20 vs root ^22.19.0.",
       "benefit": "correctness \u2014 yarn workspace typecheck can pass on TS 6 while CI's 5.9.3 fails, or the reverse",
       "recommendation": "Delete the local typescript pin and depend on workspace typescript@^5.4.5. Do not keep 6.0.3 unless the root declared version is raised (requires_toolchain_raise).",
@@ -1899,15 +1559,11 @@
     },
     {
       "id": "MOD-002",
-      "axes": [
-        "modernization"
-      ],
+      "axes": ["modernization"],
       "severity": "high",
       "title": "arch-linter still runs node:test; ADR-0044 made Vitest the monorepo runner",
       "package": "@hexagen/arch-linter",
-      "source_ids": [
-        "A4-002"
-      ],
+      "source_ids": ["A4-002"],
       "evidence": [
         {
           "path": "tools/arch-linter/package.json",
@@ -1915,30 +1571,21 @@
           "excerpt": "  \"scripts\": {\n    \"build\": \"tsup\",\n    \"clean\": \"rm -rf dist\",\n    \"typecheck\": \"tsc --noEmit\",\n    \"test\": \"node --test --import tsx __tests__/**/*.test.ts\",\n    \"typecheck:test\": \"tsc -p tsconfig.test.json --noEmit\","
         }
       ],
-      "responsibilities": [
-        "architecture lint tests",
-        "turbo test pipeline"
-      ],
+      "responsibilities": ["architecture lint tests", "turbo test pipeline"],
       "coupling": "Command: rg --glob '*.{ts,tsx}' \"from ['\\\"]node:test['\\\"]\" \u2014 5 files, all under tools/arch-linter/__tests__.",
       "benefit": "testability \u2014 Vitest config, shared setup, and coverage do not apply to the linter that gates the rest of the repo",
       "recommendation": "Switch to `vitest run`, replace from \"node:test\" with from \"vitest\", keep node:assert/strict (ADR-0044 allows it).",
-      "depends_on": [
-        "GOD-002"
-      ],
+      "depends_on": ["GOD-002"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "MOD-003",
-      "axes": [
-        "modernization"
-      ],
+      "axes": ["modernization"],
       "severity": "high",
       "title": "Jest leftover after ADR-0044: live jest configs/deps plus a root jest.setup.js",
       "package": "@hexagen/agentic-interaction",
-      "source_ids": [
-        "A4-003"
-      ],
+      "source_ids": ["A4-003"],
       "evidence": [
         {
           "path": "packages/agentic-interaction/package.json",
@@ -1951,30 +1598,21 @@
           "excerpt": "// Stateful localStorage mock with jest.fn() wrappers for spyability\nconst storageMap = new Map();\nglobal.localStorage = {\n  getItem: jest.fn((key) => storageMap.get(key) ?? null),\n  setItem: jest.fn((key, value) => { storageMap.set(String(key), String(value)); }),"
         }
       ],
-      "responsibilities": [
-        "test runner",
-        "install graph"
-      ],
+      "responsibilities": ["test runner", "install graph"],
       "coupling": "test:jest can still execute a second, stale suite. Root jest.setup.js will throw if loaded under Vitest.",
       "benefit": "testability \u2014 two runners on the same files can disagree",
       "recommendation": "Remove test:jest, jest/ts-jest/jest-environment-jsdom, jest.config.cjs, jest.resolver.cjs, both jest.setup.js files, and the unused ui-projection-compiler Jest config.",
-      "depends_on": [
-        "MOD-001"
-      ],
+      "depends_on": ["MOD-001"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "MOD-004",
-      "axes": [
-        "modernization"
-      ],
+      "axes": ["modernization"],
       "severity": "medium",
       "title": "Published packages advertise Node >=20 while the repo/CI floor is >=22.7.0",
       "package": "@hexagen/sync",
-      "source_ids": [
-        "A4-004"
-      ],
+      "source_ids": ["A4-004"],
       "evidence": [
         {
           "path": "packages/sync/package.json",
@@ -1987,10 +1625,7 @@
           "excerpt": "  \"engines\": {\n    \"node\": \">=20\"\n  },"
         }
       ],
-      "responsibilities": [
-        "published CLI contract",
-        "CI Node pin"
-      ],
+      "responsibilities": ["published CLI contract", "CI Node pin"],
       "coupling": "CI is Node 22.7 / 22.12 (ADR-0036 assumes Node 22). npm will not refuse Node 20 installs of hexagen/hexagen-lint.",
       "benefit": "runtime \u2014 consumers on Node 20 are outside what this monorepo builds and tests",
       "recommendation": "Align engines.node with root >=22.7.0, or document a tested 20.x matrix and run CI on 20. ADR required.",
@@ -2000,15 +1635,11 @@
     },
     {
       "id": "MOD-005",
-      "axes": [
-        "modernization"
-      ],
+      "axes": ["modernization"],
       "severity": "medium",
       "title": "@hexagen/security is Node16/ESM-with-.js while the monorepo floor is bundler",
       "package": "@hexagen/security",
-      "source_ids": [
-        "A4-005"
-      ],
+      "source_ids": ["A4-005"],
       "evidence": [
         {
           "path": "packages/security/tsconfig.json",
@@ -2016,31 +1647,21 @@
           "excerpt": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"Node16\",\n    \"moduleResolution\": \"Node16\",\n    \"esModuleInterop\": true,\n    \"declaration\": true,"
         }
       ],
-      "responsibilities": [
-        "secret scanning",
-        "module resolution"
-      ],
+      "responsibilities": ["secret scanning", "module resolution"],
       "coupling": "Does not extend tsconfig.base.json. main points at src/index.ts. No in-repo consumers yet.",
       "benefit": "correctness \u2014 Node16 requires .js specifiers at emit time; bundler consumers resolve .ts source",
       "recommendation": "Extend tsconfig.base.json (bundler), drop .js specifiers, point main/types at dist, add engines.node matching root.",
-      "depends_on": [
-        "HEX-009",
-        "MOD-004"
-      ],
+      "depends_on": ["HEX-009", "MOD-004"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "MOD-006",
-      "axes": [
-        "modernization"
-      ],
+      "axes": ["modernization"],
       "severity": "medium",
       "title": "ai-pipeline tsconfig.test.json is CommonJS + @types/jest while the package is ESM Vitest",
       "package": "@hexagen/ai-pipeline",
-      "source_ids": [
-        "A4-006"
-      ],
+      "source_ids": ["A4-006"],
       "evidence": [
         {
           "path": "packages/ai-pipeline/tsconfig.test.json",
@@ -2048,29 +1669,21 @@
           "excerpt": "{\n  \"extends\": \"./tsconfig.json\",\n  \"compilerOptions\": {\n    \"noEmit\": false,\n    \"module\": \"commonjs\",\n    \"moduleResolution\": \"node\",\n    \"types\": [\"jest\", \"node\"]\n  },\n  \"include\": [\"src/**/*\"],\n  \"exclude\": [\"dist\"]"
         }
       ],
-      "responsibilities": [
-        "test typecheck"
-      ],
+      "responsibilities": ["test typecheck"],
       "coupling": "Only commonjs/node test config in the repo. Tests import from vitest.",
       "benefit": "correctness \u2014 CJS + jest types will mis-type import.meta and Vitest globals",
       "recommendation": "Delete tsconfig.test.json or rewrite it to inherit ESM/bundler with types: [\"node\"] (or vitest/globals).",
-      "depends_on": [
-        "MOD-003"
-      ],
+      "depends_on": ["MOD-003"],
       "requires_toolchain_raise": null,
       "killed": false
     },
     {
       "id": "MOD-007",
-      "axes": [
-        "modernization"
-      ],
+      "axes": ["modernization"],
       "severity": "medium",
       "title": "catch-and-rethrow stringifies the original error and drops Error.cause",
       "package": "web",
-      "source_ids": [
-        "A4-007"
-      ],
+      "source_ids": ["A4-007"],
       "evidence": [
         {
           "path": "apps/web/app/lib/manifest-generation/capability-cache.ts",
@@ -2078,9 +1691,7 @@
           "excerpt": "  } catch (error) {\n    const message =\n      error instanceof Error\n        ? error.message\n        : \"Unknown error fetching capabilities\";\n    throw new Error(`Capability probe failed: ${message}`);"
         }
       ],
-      "responsibilities": [
-        "diagnostics"
-      ],
+      "responsibilities": ["diagnostics"],
       "coupling": "Same repo already uses { cause } in idb-saved-projects.adapter.ts. Error.cause is in the ES2022 floor.",
       "benefit": "correctness \u2014 stack, errno, and nested fetch failures are lost",
       "recommendation": "throw new Error(msg, { cause: error }) at these rethrow sites. No lib raise.",
@@ -2090,15 +1701,11 @@
     },
     {
       "id": "MOD-008",
-      "axes": [
-        "modernization"
-      ],
+      "axes": ["modernization"],
       "severity": "medium",
       "title": "Retry helper wraps an already-thenable in new Promise and can hang if the inner call throws",
       "package": "@hexagen/llm-driver",
-      "source_ids": [
-        "A4-008"
-      ],
+      "source_ids": ["A4-008"],
       "evidence": [
         {
           "path": "packages/llm-driver/src/application/use-cases/cloud-connection.use-case.ts",
@@ -2106,9 +1713,7 @@
           "excerpt": "    if (!result.success && result.error && shouldRetry(result.error)) {\n      const nextRetryCount = getNextRetryCount(result.error);\n      const delay = calculateRetryDelay(retryCount);\n\n      return new Promise((resolve) => {\n        setTimeout(() => {\n          resolve(\n            createCloudConnectionUseCaseWithRetry(deps, onResult)(\n              config,\n              nextRetryCount,\n            ),\n          );\n        }, delay);\n      });"
         }
       ],
-      "responsibilities": [
-        "cloud LLM connect retry"
-      ],
+      "responsibilities": ["cloud LLM connect retry"],
       "coupling": "No reject path. A sync throw inside setTimeout is unhandled and the outer Promise stays pending.",
       "benefit": "correctness \u2014 failures must propagate",
       "recommendation": "await new Promise(r => setTimeout(r, delay)); return createCloudConnectionUseCaseWithRetry(...)(...). Do not use Promise.withResolvers unless lib is raised to ES2024.",

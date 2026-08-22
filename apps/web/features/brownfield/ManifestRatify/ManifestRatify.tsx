@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
-import type { BrownfieldManifestContextDraft, BrownfieldManifestDraft } from "../BrownfieldFlow/types";
+import type {
+  BrownfieldManifestContextDraft,
+  BrownfieldManifestDraft,
+} from "../BrownfieldFlow/types";
 import { ManifestRatifyView } from "./ManifestRatifyView";
 import {
   toRatificationPayload,

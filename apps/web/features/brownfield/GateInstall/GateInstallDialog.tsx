@@ -128,9 +128,9 @@ function PackageJsonPatch() {
             download patches anything is wrong.
           */}
           <p className="mt-1 text-xs text-muted-foreground">
-            The bundle does not touch your <code>package.json</code>. Merge these
-            three keys into it by hand — the same instructions ship inside the
-            zip as <code>HEXAGEN-GATE-INSTALL.md</code>.
+            The bundle does not touch your <code>package.json</code>. Merge
+            these three keys into it by hand — the same instructions ship inside
+            the zip as <code>HEXAGEN-GATE-INSTALL.md</code>.
           </p>
         </div>
         <CopyButton

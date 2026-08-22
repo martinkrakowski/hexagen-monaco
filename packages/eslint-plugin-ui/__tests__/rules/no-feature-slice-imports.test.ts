@@ -127,7 +127,9 @@ describe("no-feature-slice-imports", () => {
       mkdirSync(path.join(root, "features", "source-slice"), {
         recursive: true,
       });
-      mkdirSync(path.join(root, "features", "other-slice"), { recursive: true });
+      mkdirSync(path.join(root, "features", "other-slice"), {
+        recursive: true,
+      });
       const filename = path.join(root, "features", "source-slice", "file.ts");
       writeFileSync(filename, "");
       const reported = lint(filename, "@/other-slice/foo");

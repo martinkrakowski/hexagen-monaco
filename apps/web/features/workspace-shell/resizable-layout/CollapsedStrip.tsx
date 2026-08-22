@@ -9,7 +9,11 @@ interface CollapsedStripProps {
   onExpand: () => void;
 }
 
-export const CollapsedStrip = React.memo(function CollapsedStrip({ side, title, onExpand }: CollapsedStripProps) {
+export const CollapsedStrip = React.memo(function CollapsedStrip({
+  side,
+  title,
+  onExpand,
+}: CollapsedStripProps) {
   const Icon = side === "left" ? ChevronRight : ChevronLeft;
   return (
     <div className="flex items-start justify-center w-8 shrink-0 border border-border rounded-md bg-card pt-2">

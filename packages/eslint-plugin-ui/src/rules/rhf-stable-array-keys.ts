@@ -2,7 +2,14 @@ import type { TSESLint, TSESTree } from "@typescript-eslint/utils";
 
 type MessageIds = "missingKey" | "indexKey" | "staticKey";
 
-const INDEX_IDENTIFIERS = new Set(["index", "i", "idx", "activeIndex", "rowIndex", "colIndex"]);
+const INDEX_IDENTIFIERS = new Set([
+  "index",
+  "i",
+  "idx",
+  "activeIndex",
+  "rowIndex",
+  "colIndex",
+]);
 
 function isIndexLike(expr: TSESTree.Expression): boolean {
   if (expr.type === "Identifier") return INDEX_IDENTIFIERS.has(expr.name);

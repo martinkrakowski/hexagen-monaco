@@ -30,7 +30,9 @@ interface ResizableLayoutProps {
  * DesktopLayout and the tab-based MobileLayout based on viewport.
  * All panel-specific rendering lives in `./resizable-layout/`.
  */
-export const ResizableLayout = React.memo(function ResizableLayout(props: ResizableLayoutProps) {
+export const ResizableLayout = React.memo(function ResizableLayout(
+  props: ResizableLayoutProps,
+) {
   const { onRightPanelClose, onLeftPanelClose, ...rest } = props;
   const breakpoint = useBreakpoint();
   const isDesktop = breakpoint === "lg";

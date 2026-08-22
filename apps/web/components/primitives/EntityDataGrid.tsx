@@ -358,10 +358,7 @@ export function EntityDataGrid<TRow>({
                     })}
                   >
                     {isExpandable && (
-                      <td
-                        role="cell"
-                        className={cellVariants({ density })}
-                      >
+                      <td role="cell" className={cellVariants({ density })}>
                         <button
                           type="button"
                           aria-expanded={expanded}
@@ -446,9 +443,7 @@ export function EntityDataGrid<TRow>({
                       role="row"
                       id={detailId}
                       hidden={!expanded}
-                      className={
-                        expanded ? "block md:table-row" : "hidden"
-                      }
+                      className={expanded ? "block md:table-row" : "hidden"}
                     >
                       <td
                         role="cell"

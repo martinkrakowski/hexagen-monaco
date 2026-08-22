@@ -429,32 +429,32 @@ fontFamily: {
 
 Components use derived tokens for consistent sizing and spacing. These tokens are defined in `globals.css` and inherit CSS variable delegation in dark mode:
 
-| Token                    | Value  | Usage                                         |
-| ------------------------ | ------ | --------------------------------------------- |
-| `--button-height`        | 40px   | Button height (h-10)                          |
-| `--button-padding-x`     | 12px   | Horizontal button padding                     |
-| `--button-padding-y`     | 8px    | Vertical button padding                       |
-| `--button-border-radius` | 4px    | Button corner radius (rounded-md)             |
-| `--input-height`         | 40px   | Input field height                            |
-| `--input-padding-x`      | 12px   | Input horizontal padding                      |
-| `--input-padding-y`      | 8px    | Input vertical padding                        |
-| `--input-border-radius`  | 4px    | Input corner radius                           |
-| `--card-padding`         | 16px   | Default card padding (p-4)                    |
-| `--card-padding-lg`      | 24px   | Large card padding (p-6)                      |
-| `--card-gap`             | 16px   | Internal card spacing (gap-4)                 |
-| `--card-border-radius`   | 6px    | Card corner radius (rounded-lg)               |
-| `--card-width-sm`        | 256px  | Small card width (w-64) — Phase 3             |
-| `--card-width-md`        | 280px  | Medium card width — Phase 3                   |
-| `--badge-height`         | 20px   | Badge element height                          |
-| `--badge-padding-x`      | 8px    | Badge horizontal padding                      |
-| `--badge-border-radius`  | 9999px | Pill-shaped badge (rounded-full)              |
-| `--nav-indent`           | 40px   | Navigation item left indent (pl-10) — Phase 3 |
-| `--canvas-height-sm`     | 400px  | React Flow canvas fixed height — Phase 3      |
-| `--page-section-gap`     | 24px   | Vertical gap between page sections            |
-| `--form-field-gap`       | 8px    | Vertical gap between form fields              |
-| `--chat-bubble-max-width` | 85%    | Chat message bubble max width                 |
-| `--textarea-min-height`  | 150px  | Minimum height of a multi-line input          |
-| `--textarea-max-height`  | 60vh   | Maximum height of a multi-line input          |
+| Token                      | Value               | Usage                                               |
+| -------------------------- | ------------------- | --------------------------------------------------- |
+| `--button-height`          | 40px                | Button height (h-10)                                |
+| `--button-padding-x`       | 12px                | Horizontal button padding                           |
+| `--button-padding-y`       | 8px                 | Vertical button padding                             |
+| `--button-border-radius`   | 4px                 | Button corner radius (rounded-md)                   |
+| `--input-height`           | 40px                | Input field height                                  |
+| `--input-padding-x`        | 12px                | Input horizontal padding                            |
+| `--input-padding-y`        | 8px                 | Input vertical padding                              |
+| `--input-border-radius`    | 4px                 | Input corner radius                                 |
+| `--card-padding`           | 16px                | Default card padding (p-4)                          |
+| `--card-padding-lg`        | 24px                | Large card padding (p-6)                            |
+| `--card-gap`               | 16px                | Internal card spacing (gap-4)                       |
+| `--card-border-radius`     | 6px                 | Card corner radius (rounded-lg)                     |
+| `--card-width-sm`          | 256px               | Small card width (w-64) — Phase 3                   |
+| `--card-width-md`          | 280px               | Medium card width — Phase 3                         |
+| `--badge-height`           | 20px                | Badge element height                                |
+| `--badge-padding-x`        | 8px                 | Badge horizontal padding                            |
+| `--badge-border-radius`    | 9999px              | Pill-shaped badge (rounded-full)                    |
+| `--nav-indent`             | 40px                | Navigation item left indent (pl-10) — Phase 3       |
+| `--canvas-height-sm`       | 400px               | React Flow canvas fixed height — Phase 3            |
+| `--page-section-gap`       | 24px                | Vertical gap between page sections                  |
+| `--form-field-gap`         | 8px                 | Vertical gap between form fields                    |
+| `--chat-bubble-max-width`  | 85%                 | Chat message bubble max width                       |
+| `--textarea-min-height`    | 150px               | Minimum height of a multi-line input                |
+| `--textarea-max-height`    | 60vh                | Maximum height of a multi-line input                |
 | `--resizable-panel-height` | `calc(100% - 3rem)` | Body height of a resizable panel, net of its header |
 
 These tokens derive from Primitive tokens (e.g., `--spacing-*`, `--radius-*`) defined in Sections 4.1–4.3 and ensure consistency across components.
@@ -522,10 +522,10 @@ The rule in §1 exists to keep **magic numbers** out of the markup: a literal li
 
 Two forms are permitted as **categories**, because enumerating their instances would be endless and would say nothing:
 
-| Category               | Form                                 | Example                          |
-| ---------------------- | ------------------------------------ | -------------------------------- |
-| Design-token reference | `-[var(--token)]`                    | `max-w-[var(--card-width-md)]`   |
-| CSS property-name list | `transition-[…]`, `will-change-[…]`  | `transition-[box-shadow,border-color]` |
+| Category               | Form                                | Example                                |
+| ---------------------- | ----------------------------------- | -------------------------------------- |
+| Design-token reference | `-[var(--token)]`                   | `max-w-[var(--card-width-md)]`         |
+| CSS property-name list | `transition-[…]`, `will-change-[…]` | `transition-[box-shadow,border-color]` |
 
 A **design-token reference** is the opposite of a magic number: the value lives in `globals.css` and is documented in §4.6, and the class only points at it. It is also the only way to consume a component token that has no Tailwind utility of its own.
 

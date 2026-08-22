@@ -196,19 +196,19 @@ function exhaustive<T extends string>(members: Record<T, true>): readonly T[] {
   return Object.keys(members) as T[];
 }
 
-const FLOW_STATES: readonly BrownfieldFlowState[] = exhaustive<BrownfieldFlowState>({
-  tier_pick: true,
-  uploading: true,
-  repo_entry: true,
-  scanning: true,
-  blocked: true,
-  layout_ratify: true,
-  manifest_ratify: true,
-  findings_review: true,
-  report: true,
-  gate_install: true,
-});
-
+const FLOW_STATES: readonly BrownfieldFlowState[] =
+  exhaustive<BrownfieldFlowState>({
+    tier_pick: true,
+    uploading: true,
+    repo_entry: true,
+    scanning: true,
+    blocked: true,
+    layout_ratify: true,
+    manifest_ratify: true,
+    findings_review: true,
+    report: true,
+    gate_install: true,
+  });
 
 const TIERS: readonly BrownfieldTier[] = exhaustive<BrownfieldTier>({
   artifacts: true,
@@ -218,8 +218,8 @@ const TIERS: readonly BrownfieldTier[] = exhaustive<BrownfieldTier>({
 
 const GATE_MODES: readonly BrownfieldGateInstallMode[] =
   exhaustive<BrownfieldGateInstallMode>({
-  "download-zip": true,
-  "open-pr": true,
+    "download-zip": true,
+    "open-pr": true,
   });
 
 function isNullableString(candidate: unknown): candidate is string | null {

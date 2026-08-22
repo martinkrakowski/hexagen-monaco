@@ -129,16 +129,18 @@ describe("EntityDataGrid", () => {
 
   it("carries explicit table roles so the responsive display swap cannot strip them", () => {
     const { container } = renderGrid();
-    expect(container.querySelector("table")?.getAttribute("role")).toBe("table");
+    expect(container.querySelector("table")?.getAttribute("role")).toBe(
+      "table",
+    );
     expect(container.querySelector("tbody")?.getAttribute("role")).toBe(
       "rowgroup",
     );
     expect(container.querySelector("tbody > tr")?.getAttribute("role")).toBe(
       "row",
     );
-    expect(container.querySelector("tbody > tr > td")?.getAttribute("role")).toBe(
-      "cell",
-    );
+    expect(
+      container.querySelector("tbody > tr > td")?.getAttribute("role"),
+    ).toBe("cell");
   });
 
   it("renders the nominated column as th scope=row", () => {
@@ -290,7 +292,9 @@ describe("EntityDataGrid", () => {
 
     const inCellLabel = firstCell?.querySelector("span");
     expect(inCellLabel?.textContent).toBe("Package root");
-    expect(inCellLabel?.getAttribute("class")?.includes("md:hidden")).toBe(true);
+    expect(inCellLabel?.getAttribute("class")?.includes("md:hidden")).toBe(
+      true,
+    );
 
     const head = container.querySelector("thead");
     expect(head?.getAttribute("class")?.includes("hidden")).toBe(true);
@@ -325,7 +329,9 @@ describe("EntityDataGrid", () => {
     });
     const rows = Array.from(container.querySelectorAll("tbody > tr"));
     expect(rows[0]?.getAttribute("class")?.includes("bg-card")).toBe(true);
-    expect(rows[1]?.getAttribute("class")?.includes("bg-warning/10")).toBe(true);
+    expect(rows[1]?.getAttribute("class")?.includes("bg-warning/10")).toBe(
+      true,
+    );
   });
 
   it("names the table explicitly, so the name survives the display flip", () => {
@@ -347,8 +353,8 @@ describe("EntityDataGrid", () => {
     // columns.length can be 0 for a caller rendering an empty grid before its
     // columns are known, which is exactly when the empty row needs a colSpan.
     const { container } = renderGrid({ rows: [], columns: [] });
-    const spans = Array.from(container.querySelectorAll("[colspan]")).map((el) =>
-      Number(el.getAttribute("colspan")),
+    const spans = Array.from(container.querySelectorAll("[colspan]")).map(
+      (el) => Number(el.getAttribute("colspan")),
     );
     expect(spans.length).toBeGreaterThan(0);
     for (const span of spans) expect(span).toBeGreaterThanOrEqual(1);

@@ -55,6 +55,8 @@ export class LocalLlmGenerationAdapter implements LocalLlmMessagingPort {
       }
     }
 
-    throw lastError ?? new Error("Failed to send structured prompt after retries");
+    throw (
+      lastError ?? new Error("Failed to send structured prompt after retries")
+    );
   }
 }

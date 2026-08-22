@@ -37,10 +37,7 @@ function parseFeaturesPath(
  * Resolve `@/…` the way apps/web does: first-segment alias roots, then
  * features/. Specifiers that land outside features/ are not cross-slice.
  */
-function aliasSliceTarget(
-  specifier: string,
-  webRoot: string,
-): string | null {
+function aliasSliceTarget(specifier: string, webRoot: string): string | null {
   if (!specifier.startsWith("@/")) return null;
   const rest = specifier.slice(2);
   const seg = rest.split("/")[0] ?? "";

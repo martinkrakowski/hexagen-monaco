@@ -110,7 +110,9 @@ describe("CountPills", () => {
   it("renders no dividers in the pill appearance", () => {
     const { container } = render(<CountPills pills={FINDING_COUNTS} />);
     expect(container.querySelectorAll("li")).toHaveLength(4);
-    expect(container.querySelectorAll('li[aria-hidden="true"]')).toHaveLength(0);
+    expect(container.querySelectorAll('li[aria-hidden="true"]')).toHaveLength(
+      0,
+    );
   });
 
   it("emits exactly one background class per pill", () => {

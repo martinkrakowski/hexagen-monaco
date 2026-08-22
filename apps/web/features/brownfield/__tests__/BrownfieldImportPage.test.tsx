@@ -497,7 +497,9 @@ describe("BrownfieldImportPage", () => {
       // staged; its NAME does not end in .zip, so only the media-type branch
       // can classify it.
       expect(
-        looksLikeZip(new File(["PK"], "handoff.json", { type: "application/zip" })),
+        looksLikeZip(
+          new File(["PK"], "handoff.json", { type: "application/zip" }),
+        ),
       ).toBe(true);
     });
 
@@ -510,11 +512,15 @@ describe("BrownfieldImportPage", () => {
       // a rare one.
       expect(
         looksLikeZip(
-          new File(["x"], "manifest.yaml", { type: "application/octet-stream" }),
+          new File(["x"], "manifest.yaml", {
+            type: "application/octet-stream",
+          }),
         ),
       ).toBe(false);
       expect(
-        looksLikeZip(new File(["PK"], "handoff.zip", { type: "application/octet-stream" })),
+        looksLikeZip(
+          new File(["PK"], "handoff.zip", { type: "application/octet-stream" }),
+        ),
       ).toBe(true);
     });
 
@@ -525,7 +531,9 @@ describe("BrownfieldImportPage", () => {
       render(<BrownfieldImportPage />);
       const input = await gotoUpload(user);
       stubFetch(
-        reply(400, { error: "Handoff zip is too large (exceeds 2,097,152 bytes)" }),
+        reply(400, {
+          error: "Handoff zip is too large (exceeds 2,097,152 bytes)",
+        }),
       );
       await user.upload(input, ZIP());
       await user.click(screen.getByRole("button", { name: /Upload/i }));
@@ -592,7 +600,9 @@ describe("BrownfieldImportPage", () => {
       await user.click(screen.getByRole("button", { name: /Upload/i }));
 
       await waitFor(() => {
-        expect(screen.getAllByText(/not valid JSON/i).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/not valid JSON/i).length).toBeGreaterThan(
+          0,
+        );
       });
     });
   });

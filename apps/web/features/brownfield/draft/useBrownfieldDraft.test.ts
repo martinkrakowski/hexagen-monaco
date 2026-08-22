@@ -45,9 +45,7 @@ function viewState(
         },
       ],
     },
-    freshFindings: [
-      { rule: "r", file: "f", specifier: "s", message: "m" },
-    ],
+    freshFindings: [{ rule: "r", file: "f", specifier: "s", message: "m" }],
     baselinedFindingKeys: ["r:f:s"],
     gateInstallMode: null,
     ...overrides,
@@ -84,7 +82,9 @@ describe("useBrownfieldDraft", () => {
     const { result } = renderHook(() => useBrownfieldDraft("acme"));
 
     expect(result.current.restoredView?.state).toBe("manifest_ratify");
-    expect(result.current.restoredView?.baselinedFindingKeys).toEqual(["r:f:s"]);
+    expect(result.current.restoredView?.baselinedFindingKeys).toEqual([
+      "r:f:s",
+    ]);
   });
 
   it("does not restore fetched server state alongside the user's input", () => {

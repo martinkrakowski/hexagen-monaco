@@ -10,7 +10,10 @@ export function validateRenameRequest(
   newName: string | undefined,
 ): ValidationResult {
   if (!newName || newName.trim() === "") {
-    return { valid: false, error: "New name is required for rename operations" };
+    return {
+      valid: false,
+      error: "New name is required for rename operations",
+    };
   }
 
   if (type === "rename-port") {
@@ -18,7 +21,10 @@ export function validateRenameRequest(
       return { valid: false, error: "Port names must end with 'Port'" };
     }
     if (!/^[A-Z][a-zA-Z0-9]*Port$/.test(newName)) {
-      return { valid: false, error: "Port names must be in PascalCase and end with 'Port'" };
+      return {
+        valid: false,
+        error: "Port names must be in PascalCase and end with 'Port'",
+      };
     }
   }
 
@@ -27,7 +33,10 @@ export function validateRenameRequest(
       return { valid: false, error: "Use case names must end with 'UseCase'" };
     }
     if (!/^[A-Z][a-zA-Z0-9]*UseCase$/.test(newName)) {
-      return { valid: false, error: "Use case names must be in PascalCase and end with 'UseCase'" };
+      return {
+        valid: false,
+        error: "Use case names must be in PascalCase and end with 'UseCase'",
+      };
     }
   }
 
@@ -49,15 +58,21 @@ export function validateMoveRequest(
   }
 
   if (!newLocation || newLocation.trim() === "") {
-    return { valid: false, error: "New location is required for move operations" };
+    return {
+      valid: false,
+      error: "New location is required for move operations",
+    };
   }
 
   return { valid: true };
 }
 
-export function validateRequest(
-  request: { type: RefactoringType; target: string; newName?: string; newLocation?: string },
-): ValidationResult {
+export function validateRequest(request: {
+  type: RefactoringType;
+  target: string;
+  newName?: string;
+  newLocation?: string;
+}): ValidationResult {
   if (!request.target || request.target.trim() === "") {
     return { valid: false, error: "Target symbol is required" };
   }

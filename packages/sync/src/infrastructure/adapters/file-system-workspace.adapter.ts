@@ -1,6 +1,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { WorkspaceFileProviderPort, WorkspaceFileInfo } from "../../application/ports/out/workspace-file-provider.port.js";
+import type {
+  WorkspaceFileProviderPort,
+  WorkspaceFileInfo,
+} from "../../application/ports/out/workspace-file-provider.port.js";
 
 export class FileSystemWorkspaceAdapter implements WorkspaceFileProviderPort {
   constructor(private readonly workspaceRoot: string) {}

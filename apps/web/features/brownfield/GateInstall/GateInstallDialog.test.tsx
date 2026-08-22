@@ -118,7 +118,9 @@ describe("GateInstallDialog — what is in the bundle", () => {
 
   it("renders an injected listing instead of the default when one is given", () => {
     setup({
-      entries: [{ path: "custom/only.yml", purpose: "Injected for this test." }],
+      entries: [
+        { path: "custom/only.yml", purpose: "Injected for this test." },
+      ],
     });
     expect(bodyText()).toContain("custom/only.yml");
     expect(bodyText()).not.toContain(GATE_BUNDLE_ENTRIES[0].path);

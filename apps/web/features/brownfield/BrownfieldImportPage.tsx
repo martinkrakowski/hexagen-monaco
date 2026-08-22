@@ -102,7 +102,9 @@ export function looksLikeZip(file: File): boolean {
   return type === "application/zip" || type === "application/x-zip-compressed";
 }
 
-export function isHandoffResponse(value: unknown): value is ProjectHandoffResponse {
+export function isHandoffResponse(
+  value: unknown,
+): value is ProjectHandoffResponse {
   if (typeof value !== "object" || value === null) return false;
   const record = value as Record<string, unknown>;
   if (
@@ -205,7 +207,7 @@ function failureFor(
         // one of them. 413 covers the whole request being too large; the
         // per-part zip cap lands here instead.
         hint: /too large|exceeds/i.test(message ?? "")
-          ? "A handoff zip is a handful of small text files. If yours is large you probably zipped the repository — that is the \"Upload a zip\" tier, not this one."
+          ? 'A handoff zip is a handful of small text files. If yours is large you probably zipped the repository — that is the "Upload a zip" tier, not this one.'
           : "Re-run `npx hexagen scan --handoff` in your repository and upload the zip it writes, unchanged. Repacking or renaming its contents is the usual cause.",
       },
     };
@@ -654,7 +656,7 @@ export function BrownfieldImportPage() {
             {view.state === "uploading" ? (
               <>
                 <ArtifactUploadView
-          resetToken={resetToken}
+                  resetToken={resetToken}
                   projectName={carriedName}
                   selectedFiles={files}
                   onFilesSelected={handleFilesSelected}

@@ -3,13 +3,13 @@
 **Mode:** Review & Archeology (read-only). No source was modified except these
 review artifacts.
 
-| Artifact | Role |
-| --- | --- |
-| `inventory.json` | Phase 0 ground truth (workspace graph, classifications, metrics) |
-| `findings.json` | Reconciled findings (64), full schema |
-| `BACKLOG.md` | Topologically ordered, PR-sized work items |
-| `ADR-CANDIDATES.md` | Decisions required before code moves |
-| `COVERAGE.md` | What was reviewed, sampled, and skipped |
+| Artifact            | Role                                                             |
+| ------------------- | ---------------------------------------------------------------- |
+| `inventory.json`    | Phase 0 ground truth (workspace graph, classifications, metrics) |
+| `findings.json`     | Reconciled findings (64), full schema                            |
+| `BACKLOG.md`        | Topologically ordered, PR-sized work items                       |
+| `ADR-CANDIDATES.md` | Decisions required before code moves                             |
+| `COVERAGE.md`       | What was reviewed, sampled, and skipped                          |
 
 **Orchestrator verification.** Every defect sentence in the executive summary
 cites a finding ID present in `findings.json`. The coupled-finding graph is
@@ -49,25 +49,25 @@ MOD-003).
 Passed verbatim to every Phase 1 agent. Do not propose features above this
 without `requires_toolchain_raise`.
 
-| Item | Value |
-| --- | --- |
-| TypeScript (declared / installed) | `^5.4.5` / `5.9.3` |
-| Base `compilerOptions` (`tsconfig.base.json`) | `target: ES2022`, `module: ESNext`, `moduleResolution: bundler`, `strict: true`; `lib` / `jsx` unset (lib follows target → ES2022) |
-| Web `compilerOptions` (`apps/web/tsconfig.json`) | `lib: ["dom", "dom.iterable", "esnext"]`, `jsx: "preserve"`, `moduleResolution` inherited `bundler` |
-| Outlier: `packages/sync` | `module` / `moduleResolution: NodeNext`, `target: es2022`, bundler `tsup` (ADR-0009) |
-| Outlier: `packages/security` | `module` / `moduleResolution: Node16`, `target: ES2022`, `lib: [ES2022]` |
-| Outlier: `apps/tui` | `module` / `moduleResolution: NodeNext`, `jsx: react-jsx` |
-| Outlier: `packages/ai-pipeline/tsconfig.test.json` | `module: commonjs`, `moduleResolution: node` |
-| Node engines | root `>=22.7.0`; `@hexagen/sync` `>=20`; `@hexagen/arch-linter` `>=20` |
-| CI Node | `capstone.yml` / `sync-integrity.yml` `22.7`; `publish.yml` `22.12.0`; `deploy.yml` docker (no setup-node); `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` |
-| React / React DOM | `^19.2.4` / installed `19.2.4` |
-| Next.js | `^16.1.6` / installed `16.1.6`; webpack (`next dev --webpack` / `next build --webpack`; ADR-0000) |
-| Package manager | `yarn@4.12.0` |
-| Turbo | `^1.13.3` (`build`, `lint`, `test`, `@hexagen/sync#test`, `typecheck:test`, `dev`, `typecheck`) |
-| Test runner | Vitest `^4.1.9` / `4.1.9` (ADR-0044) |
-| Lint | ESLint `^8.57.0`, `typescript-eslint` `^8.57.0`, `yarn lint:arch` → `@hexagen/arch-linter`, `@hexagen/eslint-plugin-ui` |
-| Allowed without raise | ES2022 syntax; TS 5.4/5.5 `satisfies` / const type params; Node 22 `fetch` / `glob` / `require(esm)` (repo uses Vitest — do not switch); React 19 / Next 16 App Router |
-| Requires raise | ES2024 `Object.groupBy` / `Promise.withResolvers` types → `lib` ES2024; ES2025 iterator / Set types → `lib` ES2025; TS 5.7+ compiler flags → declared `typescript` `^5.7`; `using` emit → raise `lib` and confirm bundler |
+| Item                                               | Value                                                                                                                                                                                                                     |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TypeScript (declared / installed)                  | `^5.4.5` / `5.9.3`                                                                                                                                                                                                        |
+| Base `compilerOptions` (`tsconfig.base.json`)      | `target: ES2022`, `module: ESNext`, `moduleResolution: bundler`, `strict: true`; `lib` / `jsx` unset (lib follows target → ES2022)                                                                                        |
+| Web `compilerOptions` (`apps/web/tsconfig.json`)   | `lib: ["dom", "dom.iterable", "esnext"]`, `jsx: "preserve"`, `moduleResolution` inherited `bundler`                                                                                                                       |
+| Outlier: `packages/sync`                           | `module` / `moduleResolution: NodeNext`, `target: es2022`, bundler `tsup` (ADR-0009)                                                                                                                                      |
+| Outlier: `packages/security`                       | `module` / `moduleResolution: Node16`, `target: ES2022`, `lib: [ES2022]`                                                                                                                                                  |
+| Outlier: `apps/tui`                                | `module` / `moduleResolution: NodeNext`, `jsx: react-jsx`                                                                                                                                                                 |
+| Outlier: `packages/ai-pipeline/tsconfig.test.json` | `module: commonjs`, `moduleResolution: node`                                                                                                                                                                              |
+| Node engines                                       | root `>=22.7.0`; `@hexagen/sync` `>=20`; `@hexagen/arch-linter` `>=20`                                                                                                                                                    |
+| CI Node                                            | `capstone.yml` / `sync-integrity.yml` `22.7`; `publish.yml` `22.12.0`; `deploy.yml` docker (no setup-node); `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`                                                                    |
+| React / React DOM                                  | `^19.2.4` / installed `19.2.4`                                                                                                                                                                                            |
+| Next.js                                            | `^16.1.6` / installed `16.1.6`; webpack (`next dev --webpack` / `next build --webpack`; ADR-0000)                                                                                                                         |
+| Package manager                                    | `yarn@4.12.0`                                                                                                                                                                                                             |
+| Turbo                                              | `^1.13.3` (`build`, `lint`, `test`, `@hexagen/sync#test`, `typecheck:test`, `dev`, `typecheck`)                                                                                                                           |
+| Test runner                                        | Vitest `^4.1.9` / `4.1.9` (ADR-0044)                                                                                                                                                                                      |
+| Lint                                               | ESLint `^8.57.0`, `typescript-eslint` `^8.57.0`, `yarn lint:arch` → `@hexagen/arch-linter`, `@hexagen/eslint-plugin-ui`                                                                                                   |
+| Allowed without raise                              | ES2022 syntax; TS 5.4/5.5 `satisfies` / const type params; Node 22 `fetch` / `glob` / `require(esm)` (repo uses Vitest — do not switch); React 19 / Next 16 App Router                                                    |
+| Requires raise                                     | ES2024 `Object.groupBy` / `Promise.withResolvers` types → `lib` ES2024; ES2025 iterator / Set types → `lib` ES2025; TS 5.7+ compiler flags → declared `typescript` `^5.7`; `using` emit → raise `lib` and confirm bundler |
 
 ---
 
@@ -81,15 +81,15 @@ driver-slice exceptions for `architecture-graph.ts`,
 measure live conformance against those rules and the findings, not the
 existence of the rules file.
 
-| Axis | Rating | Score /10 | Finding IDs |
-| --- | --- | --- | --- |
-| Port single-ownership | Fail | 3 | HEX-005, HEX-006, HEX-007, HEX-008 |
-| Domain purity (no infra/framework) | Fail | 4 | HEX-001, HEX-011, HEX-012, HEX-026, HEX-027, HEX-028, HEX-030, HEX-032, HEX-038 |
-| Application ports-only | Fail | 3 | HEX-002, HEX-004, HEX-010, HEX-013, HEX-014, HEX-015, HEX-021, HEX-023, HEX-026 |
-| Composition-root integrity | Fail | 3 | HEX-003, HEX-010, HEX-016, HEX-017, HEX-019, HEX-020, HEX-033, HEX-034 |
-| Empty-barrel / layer honesty | Fail | 4 | HEX-009, HEX-018, HEX-025, HEX-033, HEX-035, HEX-036, HEX-037 |
-| UI presentation-only (DESIGN.md) | Partial | 5 | HEX-022, HEX-030, HEX-031, REA-001, REA-002, REA-003 |
-| Toolchain coherence (ADR-0044 / TS pin / engines) | Partial | 4 | MOD-001, MOD-002, MOD-003, MOD-004, MOD-005, MOD-006 |
+| Axis                                              | Rating  | Score /10 | Finding IDs                                                                     |
+| ------------------------------------------------- | ------- | --------- | ------------------------------------------------------------------------------- |
+| Port single-ownership                             | Fail    | 3         | HEX-005, HEX-006, HEX-007, HEX-008                                              |
+| Domain purity (no infra/framework)                | Fail    | 4         | HEX-001, HEX-011, HEX-012, HEX-026, HEX-027, HEX-028, HEX-030, HEX-032, HEX-038 |
+| Application ports-only                            | Fail    | 3         | HEX-002, HEX-004, HEX-010, HEX-013, HEX-014, HEX-015, HEX-021, HEX-023, HEX-026 |
+| Composition-root integrity                        | Fail    | 3         | HEX-003, HEX-010, HEX-016, HEX-017, HEX-019, HEX-020, HEX-033, HEX-034          |
+| Empty-barrel / layer honesty                      | Fail    | 4         | HEX-009, HEX-018, HEX-025, HEX-033, HEX-035, HEX-036, HEX-037                   |
+| UI presentation-only (DESIGN.md)                  | Partial | 5         | HEX-022, HEX-030, HEX-031, REA-001, REA-002, REA-003                            |
+| Toolchain coherence (ADR-0044 / TS pin / engines) | Partial | 4         | MOD-001, MOD-002, MOD-003, MOD-004, MOD-005, MOD-006                            |
 
 **Overall hexagonal score: 4 / 10.** The first five rows are the hexagon;
 they average about 3.4. Domain is discernible (`@hexagen/core-domain` MVK,
@@ -151,7 +151,7 @@ Evidence: `packages/security/src/application/ports/in/secret-scanner.port.ts:10-
 `GenerateManifestFromDescriptionUseCase` compiles against a concrete infrastructure adapter and defaults `transactionManager ?? new InMemoryTransactionManager()`; routes then construct another instance (HEX-003).
 Evidence: `packages/agentic-interaction/src/application/use-cases/generate-manifest-from-description.use-case.ts:18-44`
 
-**HEX-011** — high — LLM prompt strings, retry policy, and R-rule text live in domain *(also god-structure)*.
+**HEX-011** — high — LLM prompt strings, retry policy, and R-rule text live in domain _(also god-structure)_.
 Domain owns Stage-0 system prompts and R01–R18 wording that must stay aligned with `structuralManifestErrors` in the 3059-line use-case; `@hexagen/prompt-compiler` already owns application prompt ports.
 Evidence: `packages/agentic-interaction/src/domain/prompts/generate-manifest.prompt.ts:76-84`
 
@@ -187,7 +187,7 @@ Evidence: `packages/security/src/application/use-cases/secret-sanitization.use-c
 `MCPServerAdapterDependencies` types 25 concrete `*UseCase` classes; `domain/index.ts` is an empty barrel.
 Evidence: `packages/mcp-server/src/infrastructure/adapters/mcp-server.types.ts:1-6`
 
-**HEX-020** — high — Web composition roots encode discard policy and LLM fallback rules *(also god-structure)*.
+**HEX-020** — high — Web composition roots encode discard policy and LLM fallback rules _(also god-structure)_.
 `buildStagedGenerationFallbackChain` in `wire.server.ts` hard-codes provider order, model, temperature, and `OPENAI_API_KEY`; discard orchestration lives in `wire.client` subscribe handlers.
 Evidence: `apps/web/app/lib/wire.server.ts:223-232`
 
@@ -195,7 +195,7 @@ Evidence: `apps/web/app/lib/wire.server.ts:223-232`
 `GenerateHexagonalMapInput.wizardData` imports a package excluded from application `allowed_imports`; the only granted exception is `architecture-graph.ts`.
 Evidence: `packages/visualization/src/application/ports/in/generate-hexagonal-map.port.ts:1-8`
 
-**HEX-022** — high — `ModelSettingsView` owns cache probes, hardware recommend, and semantic loading state *(also react-decomposition)*.
+**HEX-022** — high — `ModelSettingsView` owns cache probes, hardware recommend, and semantic loading state _(also react-decomposition)_.
 Props include `hasModelInCache` and `isLoading`; the view imports the `@hexagen/local-llm` root barrel (re-exports infrastructure); `application/` is `export {}`. DESIGN.md forbids `isLoading` on presentation components.
 Evidence: `packages/model-settings/src/ui/ModelSettingsView.tsx:21-27`; `packages/model-settings/src/application/index.ts:1-3`
 
@@ -277,7 +277,7 @@ Evidence: `tools/arch-linter/src/index.ts:522-528`
 The page binds Next router, `sessionStorage`, three generation hooks, pending-manifest store, wizard-orchestration parse, and five step components.
 Evidence: `apps/web/features/manifest-generation/ImportProjectSpecPage.tsx:64-67`
 
-**GOD-004** — high — `ExportProvider` mixes ZIP / GitHub / editor-push I/O, IDB persistence, import-manifest policy, and dialog state *(also react-decomposition)*.
+**GOD-004** — high — `ExportProvider` mixes ZIP / GitHub / editor-push I/O, IDB persistence, import-manifest policy, and dialog state _(also react-decomposition)_.
 ZIP consumers subscribe to GitHub dialog/auth; `githubLink` load is duplicated in `useEditorPush`.
 Evidence: `apps/web/app/contexts/ExportContext.tsx:92-101`
 

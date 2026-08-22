@@ -91,17 +91,20 @@ const SCOPE_RULES: readonly ScopeRule[] = [
   },
   {
     id: "strip-leading-at",
-    explanation: "the leading @ is added back by npm, not stored in the manifest",
+    explanation:
+      "the leading @ is added back by npm, not stored in the manifest",
     apply: (value) => value.replace(/^@+/, ""),
   },
   {
     id: "replace-illegal",
-    explanation: "anything outside a-z, 0-9, dot, underscore and hyphen becomes a hyphen",
+    explanation:
+      "anything outside a-z, 0-9, dot, underscore and hyphen becomes a hyphen",
     apply: (value) => value.replace(/[^a-z0-9._-]/g, "-"),
   },
   {
     id: "collapse-separators",
-    explanation: "runs of dots, underscores or hyphens collapse to a single hyphen",
+    explanation:
+      "runs of dots, underscores or hyphens collapse to a single hyphen",
     apply: (value) => value.replace(/[._-]{2,}/g, "-"),
   },
   {

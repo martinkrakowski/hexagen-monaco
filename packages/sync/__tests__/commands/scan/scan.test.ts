@@ -1369,4 +1369,3 @@ describe("scan envelope — filesScanned (BF-0.3)", () => {
     assert.equal(collectFilesScanned(""), null);
   });
 });
-

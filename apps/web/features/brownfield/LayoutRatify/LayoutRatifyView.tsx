@@ -179,7 +179,9 @@ export function LayoutRatifyView({
       cell: (row) => (
         <Checkbox
           checked={row.include}
-          onCheckedChange={(checked) => onToggleInclude(row.packageRoot, checked)}
+          onCheckedChange={(checked) =>
+            onToggleInclude(row.packageRoot, checked)
+          }
           aria-label={`Include ${row.packageRoot} as a bounded context`}
         />
       ),
@@ -213,12 +215,11 @@ export function LayoutRatifyView({
                 aria-describedby={message ? messageId : undefined}
                 className={cn(
                   "h-9 font-mono",
-                  isError && "border-destructive focus-visible:ring-destructive",
+                  isError &&
+                    "border-destructive focus-visible:ring-destructive",
                 )}
               />
-              {changes.renamed ? (
-                <Badge variant="outline">edited</Badge>
-              ) : null}
+              {changes.renamed ? <Badge variant="outline">edited</Badge> : null}
             </div>
             {message ? (
               <p

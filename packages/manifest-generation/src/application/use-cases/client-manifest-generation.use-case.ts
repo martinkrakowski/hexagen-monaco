@@ -198,9 +198,7 @@ export class ClientManifestGenerationUseCase implements ClientManifestGeneration
                 }
                 if (
                   extracted.length === 0 &&
-                  ("name" in obj ||
-                    "adapterName" in obj ||
-                    "implements" in obj)
+                  ("name" in obj || "adapterName" in obj || "implements" in obj)
                 ) {
                   extracted = [data];
                 }

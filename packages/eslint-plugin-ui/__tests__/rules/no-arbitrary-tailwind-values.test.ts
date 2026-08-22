@@ -242,7 +242,10 @@ describe("no-arbitrary-tailwind-values", () => {
     });
 
     it("still exempts a property list when marked important", () => {
-      assert.deepStrictEqual(report("!transition-[box-shadow,border-color]"), []);
+      assert.deepStrictEqual(
+        report("!transition-[box-shadow,border-color]"),
+        [],
+      );
     });
   });
 });
