@@ -164,6 +164,10 @@ jobs:
     # not multiply this number.
     timeout-minutes: 25
     steps:
+      - name: "Stamp run start"
+        id: started
+        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: "PR Agent"
         uses: docker://pragent/pr-agent@sha256:b81235c3bddc551939a1feca8926f4b6e8abcec2ae5bf4620424f8f56dd9cb93 # 0.42.0-github_action
         env:
@@ -326,11 +330,28 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
+          # ISO-8601, lexicographically comparable to GitHub's created_at.
+          STARTED_AT: ${{ steps.started.outputs.at }}
         run: |
           set -euo pipefail
-          failed=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
-            --jq '[.[] | select(.user.login == "github-actions[bot]")
-                       | select(.body | test("Failed to generate"))] | length')
+          # Only comments from THIS run. Matching every failure notice the PR
+          # has ever carried deadlocks it: once PR-Agent fails once, the stale
+          # comment fails every later run, including the one that fixes the
+          # cause. That is not hypothetical -- it happened to the PR that
+          # introduced this step.
+          #
+          # Kept on ONE line on purpose. packages/sync's tool-declaration guard
+          # joins backslash continuations but not a quoted jq filter spanning
+          # physical lines, so a wrapped `gh api` leaves a fragment whose first
+          # token reads as an undeclared binary. It caught exactly that here.
+          # `gh` leads its own line, and the result goes through a FILE rather
+          # than `failed=$(gh ...)`. In that form the token `failed=$(gh`
+          # matches the guard's assignment pattern, so it skips it and reads
+          # the NEXT token -- `api` -- as the binary being invoked. It caught
+          # exactly that here, which is the guard working.
+          FILTER='[.[] | select(.user.login == "github-actions[bot]") | select(.created_at >= $since) | select(.body | test("Failed to generate"))] | length'
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" --jq "$FILTER" --raw-field since="$STARTED_AT" > "$RUNNER_TEMP/pr_agent_failures" 2>/dev/null || echo 0 > "$RUNNER_TEMP/pr_agent_failures"
+          failed=$(cat "$RUNNER_TEMP/pr_agent_failures")
           if [ "$failed" -gt 0 ]; then
             echo "PR-Agent reported it could not generate a review."
             echo "A green check here would claim a review that never happened."
