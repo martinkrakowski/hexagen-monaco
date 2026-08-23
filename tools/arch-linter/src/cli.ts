@@ -39,6 +39,11 @@ import {
   checkRequiredCommunication,
   type CrossContextEdgeInput,
 } from "./required-communication-violation.js";
+import {
+  checkContextDeclarations,
+  collectDeclaredElements,
+  collectExportedNames,
+} from "./context-declaration-violation.js";
 import type { LayerRules } from "./layer-import-violation.js";
 import {
   getLayerAllowedImports,
@@ -439,6 +444,48 @@ function loadBaseline(filePath: string): BaselineEntry[] {
 
 const baselineEntries = UPDATE_BASELINE ? [] : loadBaseline(BASELINE_PATH);
 
+// ─── Context-file attribution (context-declaration-drift) ───────────────────
+//
+// `mergeSplitManifest` merges each `contexts/**/context.yaml` into the manifest
+// but does NOT carry the index entry's `file:` pointer onto the merged record,
+// so the merged object cannot say which file a declaration came from. The
+// registry-accuracy rule needs that: its finding is about a line in a YAML file,
+// and both the human message and the ratchet-baseline key must name it.
+//
+// Rather than change a published cross-package contract to thread one field
+// through, the index manifest is re-read here — one small YAML parse, no
+// TypeScript work — purely to rebuild `name -> .architecture/<file>`.
+//
+// A monolithic manifest has no pointers, so the map is empty and every finding
+// is attributed to the manifest itself. Same for a manifest this loader cannot
+// re-read: attribution degrades, the check still runs. It is deliberately NOT
+// fatal — unlike the config loaders above, nothing here can silently disable a
+// rule, it can only make a reported finding point at a coarser file.
+async function loadContextFileMap(): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const load = await loadOptionalYamlConfig<{ bounded_contexts?: unknown }>(
+    MANIFEST_PATH,
+    readUtf8,
+  );
+  if (load.kind !== "loaded") return map;
+  const contexts: unknown = load.value?.bounded_contexts;
+  if (!Array.isArray(contexts)) return map;
+  const entries: unknown[] = contexts;
+  for (const entry of entries) {
+    const record = entry as { name?: unknown; file?: unknown };
+    if (typeof record.name !== "string" || typeof record.file !== "string") {
+      continue;
+    }
+    map.set(
+      record.name,
+      `.architecture/${record.file.split("\\").join("/").replace(/^\/+/, "")}`,
+    );
+  }
+  return map;
+}
+
+const CONTEXT_FILE_BY_NAME = await loadContextFileMap();
+
 // ─── TypeScript Project ─────────────────────────────────────────────────────
 
 function resolveTsconfigPath(): string {
@@ -472,6 +519,21 @@ try {
 }
 
 // ─── Helper Functions ───────────────────────────────────────────────────────
+
+/**
+ * Does this file's export surface count as the context's own?
+ *
+ * `__tests__/` and `*.test.ts` are excluded so a test fake named after a port
+ * cannot make a stale registry entry look accurate; `templates/` is excluded
+ * because template files are payload emitted into customer projects (the same
+ * exclusion ADR-0057's own measurements used), not surface this context owns.
+ */
+function countsAsContextExportSource(filePath: string): boolean {
+  const posix = filePath.split(path.sep).join("/");
+  if (posix.includes("/__tests__/")) return false;
+  if (posix.includes("/templates/")) return false;
+  return !/\.test\.tsx?$/.test(posix);
+}
 
 function isTestDoubleOrTest(filePath: string): boolean {
   const testDoubleRules = linterConfig.test_double_rules;
@@ -538,6 +600,8 @@ function checkArchitecturalIntegrity(): {
     name: string;
     type?: string;
     depends_on?: string[];
+    /** `layers.*` registry lists — see context-declaration-violation.ts. */
+    layers?: unknown;
   }[] = manifest.bounded_contexts ?? [];
   const contextNames = new Set<string>(modules.map((m) => m.name));
   const extraScopes = [
@@ -622,9 +686,22 @@ function checkArchitecturalIntegrity(): {
       process.exit(EXIT_COULD_NOT_RUN);
     }
 
+    // Union of every symbol this context exports, for the registry-accuracy
+    // rule below. Filled from the SAME already-parsed source files this loop
+    // walks for imports: no second parse, no type resolution.
+    const exportedNames = new Set<string>();
+
     checkedModuleSourceFiles.forEach((file) => {
       const filePath = file.getFilePath();
       filesScanned += 1;
+
+      // A registry entry must be satisfied by the context's own production
+      // surface. Tests may export a fake that happens to share a port's name,
+      // and `templates/` is customer payload the host does not own — neither
+      // makes a declaration true.
+      if (countsAsContextExportSource(filePath)) {
+        for (const name of collectExportedNames(file)) exportedNames.add(name);
+      }
 
       const isTestDbl = isTestDoubleOrTest(filePath);
 
@@ -911,6 +988,42 @@ function checkArchitecturalIntegrity(): {
         }
       }
     });
+
+    // ─── Registry accuracy (ADR-0057) ──────────────────────────────────────
+    //
+    // Every `layers.*` entry this context declares must name a symbol the
+    // context actually exports. ONE direction only: an exported symbol the
+    // registry does not name is explicitly a non-defect (ADR-0057 §1 — "the
+    // filesystem is the authoritative inventory"), so nothing is reported for
+    // it. See context-declaration-violation.ts.
+    //
+    // This runs only for a context whose directory exists and whose files were
+    // actually scanned — the early `return` above skips a context declared
+    // before its package is scaffolded, which is the normal state of a freshly
+    // generated repo, and `checkedModuleSourceFiles.length === 0` has already
+    // aborted the run for a directory that exists but resolved nothing. A
+    // declaration is therefore never failed on the strength of a scan that did
+    // not happen.
+    const declarationViolations = checkContextDeclarations({
+      contextName: moduleName,
+      declared: collectDeclaredElements(moduleInfo),
+      exportedNames,
+    });
+    for (const violation of declarationViolations) {
+      const contextFile =
+        CONTEXT_FILE_BY_NAME.get(moduleName) ?? toRelativePosix(MANIFEST_PATH);
+      const message = `${violation.message}\n  File: ${contextFile}`;
+      if (violation.enforcement === "error") {
+        errors.push({
+          rule: "context-declaration-drift",
+          file: contextFile,
+          specifier: violation.specifier,
+          message,
+        });
+      } else {
+        warnings.push(message);
+      }
+    }
   });
 
   // ─── Server Marker Backward Check (per-package) ───────────────────────────
@@ -986,7 +1099,10 @@ function checkArchitecturalIntegrity(): {
   }
 
   if (warnings.length > 0) {
-    logger.warn("Subpath convention warnings (enforcement: warn):");
+    // Header widened from "Subpath convention warnings": this channel already
+    // carried server-marker warnings too, and now also carries advisory
+    // context-declaration drift. Naming only one producer mislabels the rest.
+    logger.warn("Warnings (enforcement: warn):");
     warnings.forEach((w) => logger.warn(` - ${w}`));
   }
 
@@ -1158,7 +1274,7 @@ function reportAndExit(
   // Name what was actually checked (RCA #8: the old blanket "compliant
   // with manifest.yaml" claimed manifest governance the linter didn't do).
   logger.info(
-    "Architecture is compliant. Checked: cross-context imports (manifest depends_on + shared-kernel types + linter-config), layer rules (incl. cross-layer relative imports, node builtins in domain/application, npm packages in domain), subpath conventions, server markers, required communication.",
+    "Architecture is compliant. Checked: cross-context imports (manifest depends_on + shared-kernel types + linter-config), layer rules (incl. cross-layer relative imports, node builtins in domain/application, npm packages in domain), subpath conventions, server markers, required communication, context-declaration accuracy (declared ports/adapters name an exported symbol).",
   );
 }
 

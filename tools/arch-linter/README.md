@@ -97,16 +97,51 @@ invoking `hexagen-lint` directly is for standalone or CI checks.
 
 Reading your manifest and the optional invariant files, the linter enforces:
 
-| Check                          | Source                                                                                                                                                                                                                                                                                                                                                                                                |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Manifest validity**          | `.architecture/manifest.yaml` (schema-validated; split manifests merged)                                                                                                                                                                                                                                                                                                                              |
-| **Layer access rules**         | `layer-rules.yaml` → `layers[*].allowed_imports` — which layers may import which                                                                                                                                                                                                                                                                                                                      |
-| **Cross-package import rules** | `linter-config.yaml` → `package_rules` (`allowed_imports` / `cannot_import` / `restricted_to`)                                                                                                                                                                                                                                                                                                        |
-| **Global whitelist**           | `linter-config.yaml` → `global_whitelist` — packages/subpaths importable from anywhere. Patterns are exact-match unless they end in `/**`. The **scaffold** writes `@{scope}/shared` + `@{scope}/shared/**` (kernel root **and** its subpaths). With **no `linter-config.yaml`**, the linter's built-in fallback is only `@{scope}/shared` (the kernel root — subpaths need an explicit `/**` entry). |
-| **Server/client boundaries**   | `linter-config.yaml` → `subpath_conventions` — `server`/`client` subpath markers + allowed consumers                                                                                                                                                                                                                                                                                                  |
+| Check                            | Source                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Manifest validity**            | `.architecture/manifest.yaml` (schema-validated; split manifests merged)                                                                                                                                                                                                                                                                                                                              |
+| **Layer access rules**           | `layer-rules.yaml` → `layers[*].allowed_imports` — which layers may import which                                                                                                                                                                                                                                                                                                                      |
+| **Cross-package import rules**   | `linter-config.yaml` → `package_rules` (`allowed_imports` / `cannot_import` / `restricted_to`)                                                                                                                                                                                                                                                                                                        |
+| **Global whitelist**             | `linter-config.yaml` → `global_whitelist` — packages/subpaths importable from anywhere. Patterns are exact-match unless they end in `/**`. The **scaffold** writes `@{scope}/shared` + `@{scope}/shared/**` (kernel root **and** its subpaths). With **no `linter-config.yaml`**, the linter's built-in fallback is only `@{scope}/shared` (the kernel root — subpaths need an explicit `/**` entry). |
+| **Server/client boundaries**     | `linter-config.yaml` → `subpath_conventions` — `server`/`client` subpath markers + allowed consumers                                                                                                                                                                                                                                                                                                  |
+| **Context-declaration accuracy** | `bounded_contexts[*].layers` (inline, or merged from `.architecture/contexts/**/context.yaml`) — every declared port/adapter must name a symbol its own context exports                                                                                                                                                                                                                               |
 
 TypeScript analysis resolves sources via `tsconfig.base.json` at the project
 root.
+
+### Context-declaration accuracy
+
+| Rule                        | What fails                                                                                                               |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `context-declaration-drift` | `layers.application.ports.in` / `.out` / `layers.infrastructure.adapters` names a symbol no file in that context exports |
+
+A declaration is satisfied when **some file in the declaring context exports a
+symbol of exactly that name** — union across the context, so barrels and
+`export { X as Y }` renames count (the alias is what a consumer imports).
+Filenames are not consulted; a symbol rename is exactly the drift this catches.
+Test files (`__tests__/`, `*.test.ts`) and `templates/` payload do not count as
+the context's export surface, and `export *` is not followed (a star re-export of
+another package's symbol is not ownership).
+
+**Only one direction is checked.** A symbol the code exports and the manifest
+does not name produces nothing: these lists are a curated ownership registry, not
+a file inventory, so an absent entry is not a defect. Do **not** add a stub to
+satisfy a failing entry — fix the spelling, move the entry to the context that
+defines the symbol, or delete it.
+
+Sibling lists (`use_cases`, `entities`, `value_objects`, `ui.components`) are
+checked the same way but reported as **warnings**, not failures.
+
+The code side is **TypeScript exports as your `tsconfig` resolves them**. A
+context implemented in plain JavaScript, or whose sources the TypeScript project
+does not include, exports nothing the linter can see — declare `layers` only for
+contexts the TypeScript project actually covers.
+
+**No declarations, no findings.** `layers` is optional at every level, and a
+context whose directory does not exist yet is skipped entirely — so a repo with
+no `.architecture/contexts/`, a hand-written adopt-style manifest, or a freshly
+scaffolded project that declares ports before the code exists cannot fail this
+rule. It can only fail a repo that made a claim.
 
 ### Layer purity
 
