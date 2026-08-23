@@ -46,17 +46,20 @@ vi.mock("@/ProjectsShellWithFreeTier", () => ({
 // everything else: the genesis settings store's save() seeds its diff
 // baseline through the REAL deriveWorkspaceName.
 const mockViewData = vi.hoisted(() => {
-  const defaults = () => ({
-    validationItems: [] as Array<{
-      status: "pass" | "warn" | "fail";
-      title: string;
-      description: string;
-    }>,
-    overallScore: 90,
-    system: "Vellum",
-    architecture: "hexagonal",
-    contexts: [],
-  });
+  // Typed against the REAL ManifestViewData (type-only — erased at runtime,
+  // so vi.hoisted's early execution is unaffected): the mock must not drift
+  // from the production shape parseYamlToViewData actually returns, or this
+  // suite stops exercising the page's real contract (P0 made `code` required
+  // on every ValidationItem).
+  const defaults =
+    (): import("@hexagen/manifest-generation").ManifestViewData => ({
+      validationItems: [],
+      overallScore: 90,
+      system: "Vellum",
+      scope: "internal",
+      architecture: "hexagonal",
+      contexts: [],
+    });
   return { current: defaults(), defaults };
 });
 vi.mock("@hexagen/manifest-generation", async (importOriginal) => ({
@@ -251,11 +254,14 @@ describe("ManifestAcceptPage — genesis settings snapshot lifecycle", () => {
 // dead-end on the parser's connectivity heuristics when the store carries the
 // server's own validation report for this manifest.
 describe("ManifestAcceptPage — server-report approve gate", () => {
-  const connectivityFail = {
-    status: "fail" as const,
-    title: "files: 1 Unconnected Ports",
-    description: "Missing adapters for: 'StorageProxyPort'.",
-  };
+  const connectivityFail: import("@hexagen/manifest-generation").ValidationItem =
+    {
+      status: "fail",
+      code: "unconnected-ports",
+      title: "files: 1 Unconnected Ports",
+      description: "Missing adapters for: 'StorageProxyPort'.",
+      contextName: "files",
+    };
 
   const approveBtn = () =>
     Array.from(document.querySelectorAll("button")).find((b) =>
@@ -312,6 +318,7 @@ describe("ManifestAcceptPage — server-report approve gate", () => {
     mockViewData.current.validationItems = [
       {
         status: "fail",
+        code: "invalid-yaml",
         title: "Invalid YAML",
         description: "Failed to parse YAML document.",
       },
@@ -373,8 +380,10 @@ describe("ManifestAcceptPage — validationPending banner (Part B-lite)", () => 
     mockViewData.current.validationItems = [
       {
         status: "fail",
+        code: "unconnected-ports",
         title: "files: 1 Unconnected Ports",
         description: "Missing adapters for: 'StorageProxyPort'.",
+        contextName: "files",
       },
     ];
     usePendingManifest

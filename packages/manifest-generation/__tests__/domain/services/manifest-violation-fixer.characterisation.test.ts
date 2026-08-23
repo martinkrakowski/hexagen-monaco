@@ -256,4 +256,35 @@ bounded_contexts:
     );
     assert.strictEqual(applyDeterministicFix(BASE, v), null);
   });
+
+  it("canAutoFix is false-by-default for codes outside the union at runtime (missing / unknown / prototype key)", () => {
+    // TypeScript guarantees `code: ViolationCode` for in-repo callers, but the
+    // function is an exported package boundary: loosely-typed or deserialized
+    // data (persisted telemetry, JS consumers) can supply anything. The
+    // boolean contract must hold there too — including for object-literal
+    // prototype keys ("toString" et al.), where a plain lookup would return a
+    // truthy inherited FUNCTION.
+    const asItem = (code: unknown): ValidationItem =>
+      ({
+        status: "fail",
+        code,
+        title: "t",
+        description: "d",
+      }) as unknown as ValidationItem;
+    assert.strictEqual(canAutoFix(asItem(undefined)), false);
+    assert.strictEqual(canAutoFix(asItem("from-the-future")), false);
+    assert.strictEqual(canAutoFix(asItem("toString")), false);
+    assert.strictEqual(canAutoFix(asItem("__proto__")), false);
+    assert.strictEqual(canAutoFix(asItem("constructor")), false);
+  });
+
+  it("applyDeterministicFix no-ops (returns null) on a code outside the union", () => {
+    const future = {
+      status: "fail",
+      code: "from-the-future",
+      title: "t",
+      description: "d",
+    } as unknown as ValidationItem;
+    assert.strictEqual(applyDeterministicFix(BASE, future), null);
+  });
 });

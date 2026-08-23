@@ -115,7 +115,13 @@ const DETERMINISTIC_FIXABILITY = {
 } as const satisfies Record<ViolationCode, boolean>;
 
 export function canAutoFix(violation: ValidationItem): boolean {
-  return DETERMINISTIC_FIXABILITY[violation.code];
+  // `=== true` rather than a bare lookup (or `?? false`): every allow-list
+  // value is a boolean literal, so this is exact for valid codes — and it is
+  // safe-by-default for values OUTSIDE the union at runtime (missing code,
+  // future/unknown code from persisted data, or an object-literal prototype
+  // key like "toString", which `?? false` would let through as a truthy
+  // inherited function, violating the boolean contract worse than undefined).
+  return DETERMINISTIC_FIXABILITY[violation.code] === true;
 }
 
 /** Exhaustiveness backstop for the fix dispatch below. */
