@@ -326,35 +326,37 @@ jobs:
       # image is pinned by digest, so that cannot change without a deliberate
       # bump -- and the bump is the moment to re-check this.
       - name: "Fail if the review did not actually run"
-        if: always() && github.event_name == 'pull_request'
+        # Runs for BOTH triggers. A /review command fails the same way a
+        # pull_request run does, and gating this on pull_request left exactly
+        # that hole -- the command path could exit 0 having produced nothing.
+        if: always() && (github.event_name == 'pull_request' || github.event_name == 'issue_comment')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR: ${{ github.event.pull_request.number }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number }}
           # ISO-8601, lexicographically comparable to GitHub's created_at.
           STARTED_AT: ${{ steps.started.outputs.at }}
         run: |
           set -euo pipefail
-          # Only comments from THIS run. Matching every failure notice the PR
-          # has ever carried deadlocks it: once PR-Agent fails once, the stale
-          # comment fails every later run, including the one that fixes the
-          # cause. That is not hypothetical -- it happened to the PR that
-          # introduced this step.
+          # --paginate, and NO request parameters.
           #
-          # Kept on ONE line on purpose. packages/sync's tool-declaration guard
-          # joins backslash continuations but not a quoted jq filter spanning
-          # physical lines, so a wrapped `gh api` leaves a fragment whose first
-          # token reads as an undeclared binary. It caught exactly that here.
-          # `gh` leads its own line, and the result goes through a FILE rather
-          # than `failed=$(gh ...)`. In that form the token `failed=$(gh`
-          # matches the guard's assignment pattern, so it skips it and reads
-          # the NEXT token -- `api` -- as the binary being invoked. It caught
-          # exactly that here, which is the guard working.
+          # The first version passed a request parameter, and every part of
+          # that was wrong in a way that made the guard useless. A request
+          # parameter switches `gh api` to POST, so it tried to CREATE a
+          # comment and got 422. It also does not define a jq variable, so the
+          # since filter was undefined. And the error fallback turned both
+          # failures into a count of zero. The guard therefore always passed,
+          # which is the exact defect it exists to catch, inside itself.
+          #
+          # Errors are NOT converted to zero. If the API call fails, this step
+          # fails, because "I could not check" must never read as "nothing was
+          # wrong".
+          gh api --paginate --method GET "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" > "$RUNNER_TEMP/comments.json"
           FILTER='[.[] | select(.user.login == "github-actions[bot]") | select(.created_at >= $since) | select(.body | test("Failed to generate"))] | length'
-          gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" --jq "$FILTER" --raw-field since="$STARTED_AT" > "$RUNNER_TEMP/pr_agent_failures" 2>/dev/null || echo 0 > "$RUNNER_TEMP/pr_agent_failures"
-          failed=$(cat "$RUNNER_TEMP/pr_agent_failures")
+          jq --arg since "$STARTED_AT" "$FILTER" "$RUNNER_TEMP/comments.json" > "$RUNNER_TEMP/failures"
+          failed=$(cat "$RUNNER_TEMP/failures")
           if [ "$failed" -gt 0 ]; then
             echo "PR-Agent reported it could not generate a review."
             echo "A green check here would claim a review that never happened."
             exit 1
           fi
-          echo "No PR-Agent failure notice on this PR."
+          echo "No PR-Agent failure notice from this run."

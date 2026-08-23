@@ -66,8 +66,8 @@ custom_model_max_tokens = 128000
 # (~12k of repo context files plus a ~20k diff on the biggest PR), so it does
 # not reintroduce pruning.
 #
-# In practice completions are far under the cap — reasoning is capped at 4000
-# by the [openrouter] block, and suggestion bodies are a few thousand tokens —
+# In practice completions are far under the cap — reasoning_effort is "low"
+# and suggestion bodies are a few thousand tokens —
 # but a budget that only holds while the model is well behaved is not a budget.
 max_model_tokens = 70000
 repo_context_files = [
