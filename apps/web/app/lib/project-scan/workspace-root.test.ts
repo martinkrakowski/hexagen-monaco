@@ -275,9 +275,10 @@ describe("sweepStaleWorkspaces", () => {
     await aged(base, "hexagen-clone-bbb", STALE_WORKSPACE_MS * 2);
     await aged(base, "hexagen-handoff-ccc", STALE_WORKSPACE_MS * 2);
 
-    const removed = await sweepStaleWorkspaces(base);
+    const outcome = await sweepStaleWorkspaces(base);
 
-    assert.deepEqual(removed.sort(), [
+    assert.equal(outcome.ok, true);
+    assert.deepEqual([...(outcome.ok ? outcome.removed : [])].sort(), [
       "hexagen-clone-bbb",
       "hexagen-handoff-ccc",
       "hexagen-scan-aaa",
@@ -291,7 +292,10 @@ describe("sweepStaleWorkspaces", () => {
     // still survive, because the sweep's whole job is to be conservative.
     await aged(base, "hexagen-scan-live", 5 * 60 * 1000);
 
-    assert.deepEqual(await sweepStaleWorkspaces(base), []);
+    assert.deepEqual(await sweepStaleWorkspaces(base), {
+      ok: true,
+      removed: [],
+    });
     assert.deepEqual(await readdir(base), ["hexagen-scan-live"]);
   });
 
@@ -300,16 +304,31 @@ describe("sweepStaleWorkspaces", () => {
     await aged(base, "someone-elses-data", STALE_WORKSPACE_MS * 10);
     await writeFile(path.join(base, "README"), "keep me", "utf8");
 
-    assert.deepEqual(await sweepStaleWorkspaces(base), []);
+    assert.deepEqual(await sweepStaleWorkspaces(base), {
+      ok: true,
+      removed: [],
+    });
     assert.deepEqual((await readdir(base)).sort(), [
       "README",
       "someone-elses-data",
     ]);
   });
 
-  it("returns empty rather than throwing when the base does not exist", async () => {
+  // Raised in review on #616: returning `[]` here made an unreadable base
+  // indistinguishable from a clean one, and the caller marks the base swept
+  // either way -- so the failure was never logged and never retried in that
+  // process. An unreadable workspace root means residue accumulates
+  // unattended, which is exactly what the sweep exists to prevent.
+  it("reports a failure distinctly from finding nothing to sweep", async () => {
     const base = await fixture("hexagen-sweep-gone-");
     await rm(base, { recursive: true, force: true });
-    assert.deepEqual(await sweepStaleWorkspaces(base), []);
+
+    const outcome = await sweepStaleWorkspaces(base);
+
+    assert.equal(outcome.ok, false, "an unreadable base is not a clean sweep");
+    assert.ok(
+      !outcome.ok && outcome.reason.length > 0,
+      "the failure carries a reason for the log line",
+    );
   });
 });

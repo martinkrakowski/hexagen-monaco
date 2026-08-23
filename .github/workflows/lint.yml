@@ -346,10 +346,24 @@ jobs:
       - name: "Setup Node"
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "22"
+          # Matches apps/web/Dockerfile's node:20-alpine (lines 2 and 54).
+          #
+          # This job exists to run the packaged artifact rather than read the
+          # source, so it has to run it on the version the image runs it on. A
+          # traced dependency that loads on 22 and fails on 20 would pass here
+          # and fail in production -- the same blind spot the job comment above
+          # describes, reintroduced by the job meant to close it.
+          node-version: "20"
 
       - name: "Enable Corepack"
         run: corepack enable
+
+      # No version literal, matching the lint job above: `corepack prepare
+      # --activate` with no spec reads `packageManager` from the root
+      # package.json, so CI cannot drift from the declared Yarn pin. Without
+      # this the job installs with whatever Yarn corepack defaults to.
+      - name: "Prepare Yarn"
+        run: corepack prepare --activate
 
       - name: "Install Dependencies"
         run: yarn install --immutable

@@ -355,7 +355,38 @@ function streamScan(input: StreamInput): NextResponse {
         }
       };
 
-      const workspace: CloneWorkspace = await createCloneWorkspace();
+      // Creating the workspace can now REJECT. The base moved out of
+      // os.tmpdir() to <appRoot>/.scan-workspaces, which is writable only
+      // because the image pre-creates and chowns it -- so a provisioning
+      // regression makes mkdtemp fail where it previously could not.
+      //
+      // This call sits above the try/finally that sends frames and closes the
+      // controller, so an escaping rejection would leave the client holding a
+      // 200 with a truncated NDJSON body: no error frame, no `done`, no
+      // close. That silently breaks the contract stated in this file's header
+      // -- every failure is one of the F-35 codes -- in the one case where the
+      // server is misconfigured and most needs to say so.
+      let workspace: CloneWorkspace;
+      try {
+        workspace = await createCloneWorkspace();
+      } catch (error) {
+        logger.error("[scan/github] could not create the clone workspace", {
+          runId: input.runId,
+          // Log-only: the reason can name a server path, so it never reaches
+          // the response body.
+          detail: error instanceof Error ? error.message : String(error),
+        });
+        send(errorFrame("scan_could_not_run", input.runId, "workspace"));
+        input.request.signal.removeEventListener("abort", onRequestAbort);
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          // Already closed by a cancelled consumer.
+        }
+        return;
+      }
+
       try {
         send({
           type: "stage-start",

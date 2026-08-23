@@ -104,7 +104,18 @@ RUN mkdir -p /app/node_modules/@hexagen \
     && ln -sfn ../../tools/arch-linter /app/node_modules/@hexagen/arch-linter \
     && test -f /app/node_modules/@hexagen/arch-linter/package.json \
     && test -f /app/node_modules/@hexagen/arch-linter/dist/cli.js \
-    && test -f /app/packages/sync/dist/cli.js
+    && test -f /app/packages/sync/dist/cli.js \
+    && test -f /app/package.json \
+    && node -e "process.exit(require('/app/package.json').workspaces===undefined?1:0)"
+
+# The last two lines gate the INSTALLATION ANCHOR, not just the binaries.
+# resolveInstallationRoot walks up for a package.json declaring `workspaces`;
+# if a future COPY or trace change drops it, findAppRoot returns null, the
+# resolver falls back to cwd, resolveHexagenBin returns null, and every scan
+# reports scan_could_not_run while the build stays green. Existence alone is
+# not enough -- a package.json without `workspaces` fails the walk just as
+# completely, so the node check asserts the property the walk actually tests
+# rather than the file being present.
 
 # Scan workspaces (`hexagen-scan-*`, `hexagen-clone-*`, `hexagen-handoff-*`).
 # Under /app so the walk above terminates at /app/node_modules — os.tmpdir()

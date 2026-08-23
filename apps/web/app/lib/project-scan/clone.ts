@@ -554,10 +554,23 @@ export async function createCloneWorkspace(
 ): Promise<CloneWorkspace> {
   const root = await mkdtemp(path.join(baseDir, "hexagen-clone-"));
   const homeDir = path.join(root, "home");
-  // Materialize HOME so git has a real (and empty) one. `repo` is deliberately
-  // NOT created — `git clone` makes it, and a pre-existing directory is one
-  // more thing that could be non-empty.
-  await mkdir(homeDir, { recursive: true });
+  try {
+    // Materialize HOME so git has a real (and empty) one. `repo` is deliberately
+    // NOT created — `git clone` makes it, and a pre-existing directory is one
+    // more thing that could be non-empty.
+    await mkdir(homeDir, { recursive: true });
+  } catch (error) {
+    // mkdtemp succeeded, so `root` EXISTS, but no CloneWorkspace was ever
+    // returned -- the caller has no handle and cannot run cleanup(). Under
+    // os.tmpdir() that leak was swept eventually; under the app root nothing
+    // sweeps it, so a repeating failure (ENOSPC, a permissions regression on
+    // the chowned base) accumulates directories until the disk fills.
+    //
+    // Remove it here, then rethrow: the caller still learns the workspace
+    // could not be created, it just does not also inherit an orphan.
+    await rm(root, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  }
   let removed = false;
   return {
     repoDir: path.join(root, "repo"),

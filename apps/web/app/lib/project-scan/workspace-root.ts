@@ -246,19 +246,37 @@ export const STALE_WORKSPACE_MS = 60 * 60 * 1000;
  * container that residue is permanent, so it needs an owner.
  *
  * Matching is by the creators' own prefixes and by age; anything else in the
- * directory is left alone. Returns the names removed, for tests.
+ * directory is left alone.
+ *
+ * Returns a discriminated outcome rather than a bare array. A `readdir` failure
+ * used to return `[]`, which the caller could not tell apart from "nothing was
+ * stale" -- and it marks the base swept either way, so the failure was never
+ * logged and never retried in that process. A sweep that could not read its own
+ * directory reporting the same value as a sweep that found nothing is a gate
+ * claiming success without running, which is the one shape this codebase keeps
+ * getting bitten by.
+ *
+ * The per-ENTRY catch stays swallowed on purpose: one directory racing with its
+ * owner is a normal outcome and must not fail the sweep.
  */
+export type SweepOutcome =
+  | { readonly ok: true; readonly removed: readonly string[] }
+  | { readonly ok: false; readonly reason: string };
+
 export async function sweepStaleWorkspaces(
   dir: string,
   options: { readonly now?: number; readonly olderThanMs?: number } = {},
-): Promise<string[]> {
+): Promise<SweepOutcome> {
   const now = options.now ?? Date.now();
   const olderThanMs = options.olderThanMs ?? STALE_WORKSPACE_MS;
   let entries: string[];
   try {
     entries = await readdir(dir);
-  } catch {
-    return [];
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : String(error),
+    };
   }
   const removed: string[] = [];
   for (const name of entries) {
@@ -280,7 +298,7 @@ export async function sweepStaleWorkspaces(
       // next sweep gets it; a failed sweep must never fail a scan.
     }
   }
-  return removed;
+  return { ok: true, removed };
 }
 
 /** Base already swept in this process, so the sweep runs once, not per scan. */
@@ -329,7 +347,18 @@ export function scanWorkspaceBaseDir(): string {
   if (base.source !== "os-tmp" && sweptBase !== base.dir) {
     sweptBase = base.dir;
     void sweepStaleWorkspaces(base.dir)
-      .then((removed) => {
+      .then((outcome) => {
+        if (!outcome.ok) {
+          // Distinguished from "nothing was stale" deliberately: the base is
+          // already marked swept, so this process will not try again, and an
+          // unreadable workspace root means residue accumulates unattended.
+          logger.warn(
+            "Could not sweep abandoned scan workspaces — the workspace base could not be read, so stale directories will accumulate until this is fixed or the container restarts.",
+            { baseDir: base.dir, reason: outcome.reason },
+          );
+          return;
+        }
+        const removed = outcome.removed;
         if (removed.length > 0) {
           logger.warn(
             "Swept abandoned scan workspaces. Each one is a run whose cleanup never got to execute — expected after a kill or a redeploy mid-scan, worth investigating if it recurs.",
