@@ -97,23 +97,23 @@ invoking `hexagen-lint` directly is for standalone or CI checks.
 
 Reading your manifest and the optional invariant files, the linter enforces:
 
-| Check                          | Source                                                                                                                                                                                                                                                                                                                                                                                                |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Manifest validity**          | `.architecture/manifest.yaml` (schema-validated; split manifests merged)                                                                                                                                                                                                                                                                                                                              |
-| **Layer access rules**         | `layer-rules.yaml` → `layers[*].allowed_imports` — which layers may import which                                                                                                                                                                                                                                                                                                                      |
-| **Cross-package import rules** | `linter-config.yaml` → `package_rules` (`allowed_imports` / `cannot_import` / `restricted_to`)                                                                                                                                                                                                                                                                                                        |
-| **Global whitelist**           | `linter-config.yaml` → `global_whitelist` — packages/subpaths importable from anywhere. Patterns are exact-match unless they end in `/**`. The **scaffold** writes `@{scope}/shared` + `@{scope}/shared/**` (kernel root **and** its subpaths). With **no `linter-config.yaml`**, the linter's built-in fallback is only `@{scope}/shared` (the kernel root — subpaths need an explicit `/**` entry). |
-| **Server/client boundaries**   | `linter-config.yaml` → `subpath_conventions` — `server`/`client` subpath markers + allowed consumers                                                                                                                                                                                                                                                                                                  |
-| **Context-declaration accuracy** | **Opt-in** — off unless `linter-config.yaml` sets `context_declarations.enforce: true`. Then: every declared port/adapter in `bounded_contexts[*].layers` (inline, or merged from `.architecture/contexts/**/context.yaml`) must name a symbol its own context exports |
+| Check                            | Source                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Manifest validity**            | `.architecture/manifest.yaml` (schema-validated; split manifests merged)                                                                                                                                                                                                                                                                                                                              |
+| **Layer access rules**           | `layer-rules.yaml` → `layers[*].allowed_imports` — which layers may import which                                                                                                                                                                                                                                                                                                                      |
+| **Cross-package import rules**   | `linter-config.yaml` → `package_rules` (`allowed_imports` / `cannot_import` / `restricted_to`)                                                                                                                                                                                                                                                                                                        |
+| **Global whitelist**             | `linter-config.yaml` → `global_whitelist` — packages/subpaths importable from anywhere. Patterns are exact-match unless they end in `/**`. The **scaffold** writes `@{scope}/shared` + `@{scope}/shared/**` (kernel root **and** its subpaths). With **no `linter-config.yaml`**, the linter's built-in fallback is only `@{scope}/shared` (the kernel root — subpaths need an explicit `/**` entry). |
+| **Server/client boundaries**     | `linter-config.yaml` → `subpath_conventions` — `server`/`client` subpath markers + allowed consumers                                                                                                                                                                                                                                                                                                  |
+| **Context-declaration accuracy** | **Opt-in** — off unless `linter-config.yaml` sets `context_declarations.enforce: true`. Then: every declared port/adapter in `bounded_contexts[*].layers` (inline, or merged from `.architecture/contexts/**/context.yaml`) must name a symbol its own context exports                                                                                                                                |
 
 TypeScript analysis resolves sources via `tsconfig.base.json` at the project
 root.
 
 ### Context-declaration accuracy
 
-| Rule                         | What fails                                                                        |
-| ---------------------------- | --------------------------------------------------------------------------------- |
-| `context-declaration-drift`  | `layers.application.ports.in` / `.out` / `layers.infrastructure.adapters` names a symbol no file in that context exports |
+| Rule                        | What fails                                                                                                               |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `context-declaration-drift` | `layers.application.ports.in` / `.out` / `layers.infrastructure.adapters` names a symbol no file in that context exports |
 
 A declaration is satisfied when **some file in the declaring context exports a
 symbol of exactly that name** — union across the context, so barrels and
@@ -166,7 +166,7 @@ default is off and why the scaffold does not emit this key.
 and a context whose directory does not exist yet is skipped entirely — so even
 with the rule armed, a repo with no `.architecture/contexts/`, a hand-written
 adopt-style manifest, or a context declared before its package is scaffolded
-cannot fail. It can only fail a repo that opted in *and* made a claim.
+cannot fail. It can only fail a repo that opted in _and_ made a claim.
 
 ### Layer purity
 
