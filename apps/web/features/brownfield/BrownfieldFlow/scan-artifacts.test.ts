@@ -135,6 +135,7 @@ describe("packagesFromLayoutDraft", () => {
   });
 
   it("is empty for an absent draft rather than throwing", () => {
+    // population-guard: emptiness IS the contract — a null draft has no packages.
     expect(packagesFromLayoutDraft(null)).toEqual([]);
     expect(packagesFromLayoutDraft(undefined)).toEqual([]);
   });
