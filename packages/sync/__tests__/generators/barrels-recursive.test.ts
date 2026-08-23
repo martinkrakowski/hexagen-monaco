@@ -287,6 +287,27 @@ describe("generateRecursiveBarrels", () => {
     );
   });
 
+  it("5d. a hand-written `declare global` barrel ending in `export {};` is left alone", async () => {
+    // Substring matching on "export {}" would classify this as an empty stub
+    // and delete it (review flag on #637). It has a real statement.
+    const globalAug =
+      "declare global {\n  interface Window {\n    __hexagen?: string;\n  }\n}\n\nexport {};\n";
+    await createFixture(moduleDir, {
+      src: {
+        domain: { "index.ts": globalAug },
+      },
+    });
+
+    const config = makeConfig(tmpDir);
+    await generateRecursiveBarrels(moduleDir, config);
+
+    assert.strictEqual(
+      await readFile(moduleDir, "src/domain/index.ts"),
+      globalAug,
+      "a declare-global barrel must be byte-identical after sync",
+    );
+  });
+
   it("5c. a hand-written barrel in an empty layer dir is left alone", async () => {
     // The old branch rewrote ANY non-stub barrel in a layer dir to the stub
     // when the dir had no exportable files — destroying hand-written

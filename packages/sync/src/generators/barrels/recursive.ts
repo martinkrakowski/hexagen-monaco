@@ -302,7 +302,17 @@ async function walkDirectory(
 
     if (existingBarrel) {
       const isGenerated = isGeneratedFile(existingBarrel);
-      const isEmptyStub = existingBarrel.includes("export {}");
+      // Exact-stub match, not substring: a hand-written barrel that merely
+      // CONTAINS `export {}` (e.g. `declare global { … } export {};`) is not
+      // the generator's to delete (review flag on #637). Comment lines are
+      // ignored so a commented generated stub still qualifies.
+      const statements = existingBarrel
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0 && !line.startsWith("//"));
+      const isEmptyStub =
+        statements.length === 1 &&
+        /^export\s*\{\s*\}\s*;?$/.test(statements[0]);
       if (isGenerated || isEmptyStub) {
         pendingWrites.push({
           filePath: barrelPath,

@@ -77,10 +77,16 @@ const rel = (absolute: string): string =>
  * empty, whatever else it contains.
  */
 export function isEmptyBarrel(source: string): boolean {
+  // Strip /* */ blocks and // comments (full-line AND trailing) before
+  // classifying, so `/* hdr */\nexport {};` or `export {}; // note` cannot
+  // slip past the guard (review flag on #637). A naive regex would eat
+  // string literals — irrelevant here: any file with a string literal has
+  // a statement besides `export {}` and classifies non-empty either way.
   const statements = source
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
     .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !line.startsWith("//"));
+    .map((line) => line.replace(/\/\/.*$/, "").trim())
+    .filter((line) => line.length > 0);
   return (
     statements.length === 1 && /^export\s*\{\s*\}\s*;?$/.test(statements[0])
   );
