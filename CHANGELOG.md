@@ -3,6 +3,12 @@
 Release notes for the co-published `@hexagen-monaco/sync` and
 `@hexagen-monaco/arch-linter` packages (they share one version, tagged `vX.Y.Z`).
 
+**Release order:** merge the bump PR → tag the squash commit `vX.Y.Z` →
+`publish.yml` runs on the tag → then deploy. `deploy.yml` refuses to ship
+`main` while the version in `packages/sync/package.json` is absent from npm
+(F1 preflight, #432): a merged bump blocks deploys until it is published. That
+is the guard working, not a fault to bypass.
+
 ## 0.12.0
 
 Everything `hexagen scan` and the brownfield import flow need from the
@@ -37,7 +43,7 @@ reports none. The six `@generated` empty `export {};` barrels in
 
 ### `hexagen scan` — brownfield import in one command (new)
 
-```
+```text
 hexagen scan [--root <path>] [--yes] [--dry-run] [--force]
              [--skip-bootstrap] [--no-report] [--handoff] [--handoff-out <path>]
 ```
