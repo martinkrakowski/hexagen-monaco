@@ -168,3 +168,39 @@ costs a human more time than it saves.
 # payload — see best_practices.md). @generated barrels are a content
 # marker, not a path glob — handled in the rubric.
 glob = ['**/dist/**', '**/*.tsbuildinfo', 'yarn.lock']
+
+[openrouter]
+# WHY THIS SECTION EXISTS: it did not, and four knobs that govern wall-clock
+# time were therefore at their defaults.
+#
+# `tencent/hy3` is a REASONING model — its OpenRouter `supported_parameters`
+# carry `reasoning` and `reasoning_effort`. With no `[openrouter]` block,
+# PR-Agent leaves `reasoning_effort` empty (= the model's own default) and
+# `reasoning_max_tokens` at 0 (= no budget at all), so the length of the
+# thinking phase was chosen by the model and bounded by nothing.
+#
+# That matches the measurements far better than "the provider is slow" does.
+# Single-chunk /improve runs on 2026-08-23, same config, same repo:
+#
+#   #620   165 patch lines, YAML config .................... 110s
+#   #621  1400 patch lines, new module + prose comments .... 121s
+#   #619         React hooks, race conditions .............. 365s
+#   #617  1343 patch lines, Tailwind token-parsing regex ... 812s
+#   #618         killed at the 15-minute cap ............... 912s
+#
+# #621 and #617 are the control pair: near-identical input SIZE, 6.7x apart in
+# duration. Input size does not predict the time; problem DIFFICULTY does, and
+# that is the signature of reasoning length rather than of network latency.
+#
+# Deliberately changing ONE mechanism here. Provider routing is the other
+# uncontrolled knob — hy3 serves from Baidu, GMICloud and Tencent, and nothing
+# pins which — but changing both at once would make the result unattributable.
+# If capping reasoning does not fix it, add:
+#     provider_order = ["tencent"]
+#     allow_fallbacks = true
+# and measure again. `provider_only` is deliberately NOT the first reach: it is
+# a hard allowlist with no escape, so a provider outage becomes a failed request
+# that falls through to `fallback_models` — which carries its own open defect
+# (see the note on custom_model_max_tokens vs claude-haiku-4.5's 200k window).
+reasoning_effort = "low"
+reasoning_max_tokens = 4000
