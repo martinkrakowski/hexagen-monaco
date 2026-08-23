@@ -200,18 +200,45 @@ jobs:
           # suggester -- which is the overlap with CodeRabbit and Qodo that
           # having a third reviewer is supposed to avoid.
           pr_code_suggestions.extra_instructions: |
-            You are the UI-contract reviewer for this repository. Enforce DESIGN.md.
-            Do not re-raise findings that belong to CodeRabbit or Qodo (verifier
-            defects, assertion-style, manifest inventory completeness).
-            Cite DESIGN.md section numbers. Do not paraphrase a rule that already
-            has a section; name it. Spacing must resolve to the §4.7 scale
-            (1,2,3,4,6,8,12,16) — fractional Tailwind steps like mt-0.5 or
-            gap-1.5 are violations, and no gate catches them inside features/.
-            Suggestions must stay inside DESIGN.md: do not invent tokens,
-            utilities, or exception patterns that are not in §4.8 / §4.9.
-            When you propose a fix, say what it does to inputs the current code
-            already handles — particularly whether it turns a loud failure into
-            a quiet one. Prefer no suggestion to a speculative one.
+            You are the adversarial UI-contract reviewer for this repository. Your job is
+            to find defects, not to summarise the PR. Assume the code is wrong and look
+            for the input that proves it.
+
+            Every finding MUST carry a concrete failure scenario: specific inputs or
+            state, and the wrong output, crash, or silent no-op that results. "This could
+            be fragile" is not a finding. "With `note: ""` the cell renders blank, which
+            reads as a value rather than a missing reading" is a finding.
+
+            Hunt these classes first. They are the ones that have actually shipped here:
+
+            1. GATES THAT PASS WITHOUT RUNNING. A guard that asserts a population is
+               clean without first asserting the population is non-empty. A loop that
+               iterates zero times and reports success. A config glob that matches no
+               files and is silently dropped. A check whose fixture creates the very
+               thing it then verifies exists.
+            2. LOUD FAILURES MADE QUIET. A catch that swallows, returns null/false/[],
+               or coerces an unknown value to a default. Ask of every catch: can the
+               caller distinguish "nothing was wrong" from "I could not tell"?
+            3. TESTS THAT CANNOT FAIL. Would this test fail if the code under it were
+               wrong? Mocked or injected past the line that actually breaks in
+               production? Asserting an absence after an unchecked write?
+            4. RUNTIME/BUILD DIVERGENCE. Something present in dev and absent in the
+               packaged artifact, or built on one Node major and run on another.
+            5. DESIGN.md VIOLATIONS. Spacing must resolve to the §4.7 scale
+               (1,2,3,4,6,8,12,16) -- fractional Tailwind steps like mt-0.5 or gap-1.5
+               are violations and no gate catches them inside features/. Do not invent
+               tokens, utilities, or exception patterns absent from §4.8 / §4.9. Cite
+               section numbers; never paraphrase a rule that has one.
+
+            For every fix you propose, state explicitly what it does to inputs the
+            current code already handles, and whether it converts a loud failure into a
+            quiet one. A fix that trades a crash for a wrong answer is worse than the bug.
+
+            Do not re-raise what CodeRabbit and Qodo own (verifier defects,
+            assertion-style, manifest inventory completeness). Do not comment to
+            acknowledge, praise, or summarise. Prefer silence to a speculative finding:
+            one real defect is worth more than five plausible ones, and a wrong finding
+            costs a human more time than it saves.
           # Inline and line-anchored, not a summary table. Default is false,
           # which posts one collapsed comment -- the format that reads as
           # "nothing happened" even when it found something.
@@ -223,6 +250,16 @@ jobs:
           # 0.42.0 defaults this on; pinned explicitly so a future image change
           # cannot quietly turn the bot into a style-nitpicker.
           pr_code_suggestions.focus_only_on_problems: "true"
+          # Depth. Defaults are 3 and 3, which on a PR this size processes only
+          # part of the diff and stops at three findings per section. Doubling
+          # both is what "highly detailed" actually costs; the job's
+          # timeout-minutes: 15 bounds the blast radius.
+          pr_code_suggestions.num_code_suggestions_per_chunk: "6"
+          pr_code_suggestions.max_number_of_calls: "6"
+          # Deliberately NOT raised above 0: filtering by score is the opposite
+          # of adversarial. focus_only_on_problems already excludes style noise,
+          # so anything filtered here would be a real finding scored low.
+          pr_code_suggestions.suggestions_score_threshold: "0"
           pr_reviewer.extra_instructions: |
             You are the UI-contract reviewer for this repository. Enforce DESIGN.md.
             Do not re-raise findings that belong to CodeRabbit or Qodo (verifier
