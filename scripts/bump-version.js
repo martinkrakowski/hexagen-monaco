@@ -105,6 +105,7 @@ export function assertTagIsFree(target, remoteRefs = lsRemoteTags) {
 function lsRemoteTags() {
   const r = spawnSync("git", ["ls-remote", "--tags", "origin"], {
     encoding: "utf8",
+    cwd: ROOT, // the script may be invoked from anywhere; the repo's origin is what matters
   });
   if (r.status !== 0) return null;
   return r.stdout
