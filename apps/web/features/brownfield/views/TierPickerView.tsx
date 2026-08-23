@@ -5,7 +5,7 @@ import { ChoiceCardGroup } from "@/primitives/ChoiceCardGroup";
 import type { ChoiceCardOption } from "@/primitives/ChoiceCardGroup";
 import { MAX_SCAN_ZIP_BYTES } from "@/lib/project-scan/limits";
 import type { BrownfieldTier } from "../BrownfieldFlow/types";
-import { describeUnavailable } from "../ScanProgress/scan-stream";
+import { describeUnavailable } from "../ScanProgress/unavailable-copy";
 import type { GithubScanAvailability } from "../ScanProgress/useGithubScanAvailability";
 
 /**
