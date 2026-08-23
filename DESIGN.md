@@ -484,7 +484,10 @@ The table is the scale, not an illustration of it: a step that lands on the
 4px grid but is absent here — `p-5` (20px), `mb-7` (28px), `pl-10` (40px) — is
 still off-scale. §7.3 uses `p-5` as its worked example of exactly that.
 
-**Enforcement:** `hexagen-ui/no-off-scale-spacing` reads this table. It covers
+**Enforcement:** `hexagen-ui/no-off-scale-spacing` encodes this table as a
+constant — it does **not** parse this file, so editing the table alone will not
+change what the rule accepts. The two are kept in step by review; change both or
+neither. It covers
 the utilities that put space **between or around** boxes — `m-*`, `p-*`
 (all sides and axes, logical `ms`/`me`/`ps`/`pe` included), `gap-*`, `space-x`
 / `space-y`, `scroll-m*` / `scroll-p*` — across every variant and `!` spelling.

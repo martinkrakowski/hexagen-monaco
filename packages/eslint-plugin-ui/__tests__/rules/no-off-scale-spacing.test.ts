@@ -265,6 +265,23 @@ describe("no-off-scale-spacing", () => {
       ]);
     });
 
+    // Regression, raised in review on #617. The previous regex parser consumed
+    // NEITHER of these -- `[^\]]*` stopped at the first `]`, and `[\w-]+` has
+    // no `/` -- so the variant stayed attached, the remainder no longer looked
+    // like a spacing utility, and the token was SILENTLY SKIPPED. A rule that
+    // reports nothing is harder to notice than one that reports wrongly.
+    it("reports behind a NAMED group variant (slash)", () => {
+      assert.deepStrictEqual(report("group-hover/item:mt-0.5"), [
+        "offGrid:group-hover/item:mt-0.5",
+      ]);
+    });
+
+    it("reports behind a NESTED arbitrary variant", () => {
+      assert.deepStrictEqual(report("[&>[data-active]+span]:gap-1.5"), [
+        "offGrid:[&>[data-active]+span]:gap-1.5",
+      ]);
+    });
+
     it("reports a stack of variants", () => {
       assert.deepStrictEqual(report("group-hover:md:mt-0.5"), [
         "offGrid:group-hover:md:mt-0.5",

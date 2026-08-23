@@ -70,7 +70,34 @@ const SPACING_UTILITIES = new Set<string>([
  * `data-[state=open]:`, so `data-[state=open]:px-1.5` would fall out of the
  * grammar and go unreported — a variant would be enough to walk past the rule.
  */
-const VARIANT_PREFIX = /^(?:\[[^\]]*\]|[\w-]+(?:-\[[^\]]*\])?):/;
+/**
+ * Consume ONE leading variant, returning the remainder, or null when the token
+ * has no variant left.
+ *
+ * A regex was tried and is not sufficient. `[^\]]*` stops at the first `]`, so
+ * a nested arbitrary variant like `[&>[data-active]+span]:gap-1.5` never
+ * matched; and `[\w-]+` has no `/`, so a named group variant like
+ * `group-hover/item:mt-0.5` never matched either. In both cases the variant
+ * stayed attached, the remainder failed to look like a spacing utility, and the
+ * token was SILENTLY SKIPPED — a rule that reports nothing rather than a rule
+ * that reports wrongly, which is the harder failure to notice.
+ *
+ * Scanning with bracket depth handles arbitrary nesting, and `/` is simply an
+ * ordinary character outside brackets. Both forms are valid Tailwind 3.4.
+ */
+function stripOneVariant(token: string): string | null {
+  let depth = 0;
+  for (let i = 0; i < token.length; i += 1) {
+    const ch = token[i];
+    if (ch === "[") depth += 1;
+    else if (ch === "]") depth -= 1;
+    else if (ch === ":" && depth === 0) {
+      // A trailing `:` with nothing after it is not a variant.
+      return i + 1 < token.length ? token.slice(i + 1) : null;
+    }
+  }
+  return null;
+}
 
 /**
  * A bare numeric scale value. Deliberately narrow, so the other spellings a
@@ -108,7 +135,7 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
     type: "problem",
     docs: {
       description:
-        "Enforce the DESIGN.md §4.7 spacing scale on Tailwind margin, padding, gap and space utilities",
+        "Enforce the DESIGN.md §4.7 spacing scale on margin, padding, gap, space and scroll-margin/scroll-padding utilities",
     },
     messages: {
       offGrid:
@@ -154,9 +181,9 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
           // on `mt-0.5` and reported as the whole token the author wrote.
           let rest = token;
           for (;;) {
-            const variant = VARIANT_PREFIX.exec(rest);
-            if (variant === null) break;
-            rest = rest.slice(variant[0].length);
+            const stripped = stripOneVariant(rest);
+            if (stripped === null) break;
+            rest = stripped;
           }
 
           // Strip the important modifier in BOTH Tailwind spellings (v3
