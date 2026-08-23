@@ -1,4 +1,5 @@
 import type { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { safeTemplateTokens } from "./class-string-tokens.js";
 
 type MessageIds = "offGrid" | "offScale";
 type Options = [{ allowGridMultiples?: boolean }?];
@@ -124,10 +125,12 @@ const NUMERIC_VALUE = /^\d+(?:\.\d+)?$/;
  * unrecognised character silently exempted every class in the string. There is
  * no whole-string pre-filter here either.
  *
- * Scope note, shared with `no-arbitrary-tailwind-values`: only string `Literal`
- * nodes are inspected. Classes assembled inside template literals
- * (`` `… ${x} mt-0.5` ``) are `TemplateElement` nodes and are NOT seen — a
- * known gap in both rules, to be closed for both at once.
+ * Scope note, shared with `no-arbitrary-tailwind-values`: string `Literal`
+ * nodes AND template literals are inspected. Classes assembled inside
+ * backticks (`` `… ${x} mt-0.5` ``) arrive as `TemplateElement` chunks, whose
+ * edges may hold half a token — `safeTemplateTokens` decides which of them can
+ * be classified. TAGGED templates are skipped entirely: the tag decides what
+ * the value becomes, so its chunks are not class strings.
  */
 const rule: TSESLint.RuleModule<MessageIds, Options> = {
   defaultOptions: [{}],
@@ -169,69 +172,84 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
     const allowGridMultiples = context.options[0]?.allowGridMultiples === true;
 
     return {
+      TemplateElement(node: TSESTree.TemplateElement) {
+        const parent = node.parent as TSESTree.TemplateLiteral | undefined;
+        if (parent === undefined || parent.type !== "TemplateLiteral") return;
+        // A TAGGED template is not a class string: the tag decides what the
+        // value becomes. String.raw is the sharp case -- it returns the RAW
+        // text while a TemplateElement exposes COOKED text, so `gap-1.5\nmt-0.5`
+        // reads here as two class tokens and at runtime as one nonsense string.
+        // Classifying either would be a guess about a function we cannot see.
+        if (parent.parent?.type === "TaggedTemplateExpression") return;
+        classify(safeTemplateTokens(node, parent), node);
+      },
+
       Literal(node: TSESTree.Literal) {
         if (typeof node.value !== "string") return;
-
-        // A className is a token stream: classify each token on its own, so
-        // one unrecognised token can never suppress the rest of the string.
-        for (const token of node.value.split(/\s+/)) {
-          if (token === "") continue;
-
-          // Consume every variant prefix, so `md:hover:mt-0.5` is classified
-          // on `mt-0.5` and reported as the whole token the author wrote.
-          let rest = token;
-          for (;;) {
-            const stripped = stripOneVariant(rest);
-            if (stripped === null) break;
-            rest = stripped;
-          }
-
-          // Strip the important modifier in BOTH Tailwind spellings (v3
-          // prefixes the utility, v4 suffixes the token) and the negative
-          // sign, in either order — `!-mt-3.5` and `-!mt-3.5` both occur.
-          // A negative step consumes the same scale as its positive twin, so
-          // only the magnitude is classified; `-mt-4` stays legal.
-          for (;;) {
-            if (rest.startsWith("!") || rest.startsWith("-")) {
-              rest = rest.slice(1);
-              continue;
-            }
-            break;
-          }
-          if (rest.endsWith("!")) rest = rest.slice(0, -1);
-
-          // Arbitrary values are `no-arbitrary-tailwind-values`' job. Bailing
-          // on any residual bracket keeps `mt-[3px]` from being reported
-          // twice, and keeps a bracket the variant loop could not consume from
-          // being mis-split below.
-          if (rest.includes("[") || rest.includes("]")) continue;
-
-          // Values never contain a dash, so the LAST dash separates the
-          // utility from its value: `space-y-2` → `space-y` + `2`,
-          // `gap-x-10` → `gap-x` + `10`, `mt-0.5` → `mt` + `0.5`.
-          const separator = rest.lastIndexOf("-");
-          if (separator <= 0) continue;
-
-          const utility = rest.slice(0, separator);
-          const value = rest.slice(separator + 1);
-
-          if (!SPACING_UTILITIES.has(utility)) continue;
-          if (!NUMERIC_VALUE.test(value)) continue;
-
-          const step = Number(value);
-          if (SCALE_STEPS.has(step)) continue;
-
-          const onGrid = Number.isInteger(step);
-          if (onGrid && allowGridMultiples) continue;
-
-          context.report({
-            node,
-            messageId: onGrid ? "offScale" : "offGrid",
-            data: { token, px: String(step * PX_PER_STEP) },
-          });
-        }
+        classify(node.value.split(/\s+/), node);
       },
     };
+
+    function classify(tokens: readonly string[], node: TSESTree.Node): void {
+      // A className is a token stream: classify each token on its own, so one
+      // unrecognised token can never suppress the rest of the string.
+      for (const token of tokens) {
+        if (token === "") continue;
+
+        // Consume every variant prefix, so `md:hover:mt-0.5` is classified
+        // on `mt-0.5` and reported as the whole token the author wrote.
+        let rest = token;
+        for (;;) {
+          const stripped = stripOneVariant(rest);
+          if (stripped === null) break;
+          rest = stripped;
+        }
+
+        // Strip the important modifier in BOTH Tailwind spellings (v3
+        // prefixes the utility, v4 suffixes the token) and the negative
+        // sign, in either order — `!-mt-3.5` and `-!mt-3.5` both occur.
+        // A negative step consumes the same scale as its positive twin, so
+        // only the magnitude is classified; `-mt-4` stays legal.
+        for (;;) {
+          if (rest.startsWith("!") || rest.startsWith("-")) {
+            rest = rest.slice(1);
+            continue;
+          }
+          break;
+        }
+        if (rest.endsWith("!")) rest = rest.slice(0, -1);
+
+        // Arbitrary values are `no-arbitrary-tailwind-values`' job. Bailing
+        // on any residual bracket keeps `mt-[3px]` from being reported
+        // twice, and keeps a bracket the variant loop could not consume from
+        // being mis-split below.
+        if (rest.includes("[") || rest.includes("]")) continue;
+
+        // Values never contain a dash, so the LAST dash separates the
+        // utility from its value: `space-y-2` → `space-y` + `2`,
+        // `gap-x-10` → `gap-x` + `10`, `mt-0.5` → `mt` + `0.5`.
+        const separator = rest.lastIndexOf("-");
+        if (separator <= 0) continue;
+
+        const utility = rest.slice(0, separator);
+        const value = rest.slice(separator + 1);
+
+        if (!SPACING_UTILITIES.has(utility)) continue;
+        if (!NUMERIC_VALUE.test(value)) continue;
+
+        const step = Number(value);
+        if (SCALE_STEPS.has(step)) continue;
+
+        const onGrid = Number.isInteger(step);
+        if (onGrid && allowGridMultiples) continue;
+
+        context.report({
+          node,
+          messageId: onGrid ? "offScale" : "offGrid",
+          data: { token, px: String(step * PX_PER_STEP) },
+        });
+      }
+    }
   },
 };
 

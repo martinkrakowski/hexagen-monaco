@@ -152,6 +152,14 @@
   --card-width-md: 280px; /* Governance card width */
   --nav-indent: 40px; /* pl-10 equivalent for navigation indentation */
   --canvas-height-sm: 400px; /* React Flow canvas fixed height */
+
+  /* Side-drawer sizing. Added when template-literal classNames became visible
+     to no-arbitrary-tailwind-values and surfaced sm:w-[400px] max-w-[90vw] in
+     ContextGovernanceChatDrawer -- a §4.8 violation that had simply never been
+     read. 90vw is a viewport unit with no scale equivalent, so a token is the
+     sanctioned expression of it rather than a bracket. */
+  --drawer-width: 400px;
+  --drawer-max-width: 90vw;
 }
 
 /* ── Dark Mode — Warm Neutral ─────────────────────────────────────────────── */

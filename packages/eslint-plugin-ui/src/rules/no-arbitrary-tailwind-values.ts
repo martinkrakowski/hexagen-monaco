@@ -1,4 +1,5 @@
 import type { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { safeTemplateTokens } from "./class-string-tokens.js";
 
 type MessageIds = "arbitraryValue";
 
@@ -76,9 +77,11 @@ const VARIANT_PREFIX = /^(?:[\w-]+:)*/;
  * Arbitrary values match patterns like: w-[347px], text-[13px], px-[18px]
  * Exceptions are enumerated in DESIGN.md §4.8.
  *
- * Scope note: only string `Literal` nodes are inspected. Class names built
- * inside template literals (`` `… sm:w-[400px] …` ``) are TemplateElement
- * nodes and are NOT seen by this rule — a known, separate gap.
+ * Scope note: string `Literal` nodes AND template literals are inspected.
+ * Class names built inside backticks (`` `… sm:w-[400px] …` ``) arrive as
+ * `TemplateElement` chunks; `safeTemplateTokens` drops the edges that abut an
+ * interpolation rather than guessing at half a token. TAGGED templates are
+ * skipped entirely — the tag decides what the value becomes.
  */
 const rule: TSESLint.RuleModule<MessageIds> = {
   defaultOptions: [],
@@ -96,13 +99,33 @@ const rule: TSESLint.RuleModule<MessageIds> = {
   },
   create(context) {
     return {
+      // Classes built with backticks were invisible to this rule until now.
+      // Boundary fragments adjacent to an interpolation are dropped by
+      // safeTemplateTokens rather than guessed at -- see that module.
+      TemplateElement(node: TSESTree.TemplateElement) {
+        const parent = node.parent as TSESTree.TemplateLiteral | undefined;
+        if (parent === undefined || parent.type !== "TemplateLiteral") return;
+        // A TAGGED template is not a class string: the tag decides what the
+        // value becomes. String.raw is the sharp case -- it returns the RAW
+        // text while a TemplateElement exposes COOKED text, so `gap-1.5\nmt-0.5`
+        // reads here as two class tokens and at runtime as one nonsense string.
+        // Classifying either would be a guess about a function we cannot see.
+        if (parent.parent?.type === "TaggedTemplateExpression") return;
+        classify(safeTemplateTokens(node, parent), node);
+      },
+
       Literal(node: TSESTree.Literal) {
         // Only check string literals
         if (typeof node.value !== "string") return;
+        classify(node.value.split(/\s+/), node);
+      },
+    };
 
-        // A className is a token stream: classify each token on its own, so
-        // one unrecognised token can never suppress the rest of the string.
-        for (const token of node.value.split(/\s+/)) {
+    function classify(tokens: readonly string[], node: TSESTree.Node): void {
+      // A className is a token stream: classify each token on its own, so
+      // one unrecognised token can never suppress the rest of the string.
+      {
+        for (const token of tokens) {
           const match = ARBITRARY_TOKEN.exec(token);
           if (match === null) continue;
 
@@ -135,8 +158,8 @@ const rule: TSESLint.RuleModule<MessageIds> = {
             data: { value: fullValue },
           });
         }
-      },
-    };
+      }
+    }
   },
 };
 
