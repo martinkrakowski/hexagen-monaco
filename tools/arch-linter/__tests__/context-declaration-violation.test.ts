@@ -200,7 +200,9 @@ describe("collectExportedNames — what the code actually exports", () => {
   it("DOES count a default re-exported under a name", () => {
     // `export { default as X }` is a real named binding, so it counts — and it
     // arrives through the ExportDeclaration path, not the declaration loops.
-    const file = sourceFile('export { default as RepositoryWriterPort } from "./m.js";');
+    const file = sourceFile(
+      'export { default as RepositoryWriterPort } from "./m.js";',
+    );
     assert.ok(collectExportedNames(file).includes("RepositoryWriterPort"));
   });
 
