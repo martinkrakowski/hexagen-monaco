@@ -19,6 +19,7 @@ import {
   type BrownfieldTier,
 } from "./BrownfieldFlow/types";
 import { useBrownfieldDraft } from "./draft/useBrownfieldDraft";
+import { useGithubScanAvailability } from "./ScanProgress/useGithubScanAvailability";
 import { ArtifactUploadView } from "./views/ArtifactUploadView";
 import type { ArtifactUploadAlert } from "./views/ArtifactUploadView";
 import { TierPickerView } from "./views/TierPickerView";
@@ -296,6 +297,17 @@ export function BrownfieldImportPage() {
     useBrownfieldDraft(carriedName);
   const draftApplied = useRef(false);
 
+  /**
+   * Whether THIS deployment runs the Tier-B endpoint. One cheap GET, the same
+   * probe the scan screen uses (`useGithubScanAvailability`), because the tier
+   * picker has to be as truthful about server-side cloning as the screen it
+   * leads to. `unknown` means the probe failed and is treated as "let the user
+   * try": the POST is the only authority on whether the endpoint is there.
+   */
+  const { availability: cloneAvailability } = useGithubScanAvailability();
+  const cloneIsWorthTrying =
+    cloneAvailability === "available" || cloneAvailability === "unknown";
+
   useEffect(() => {
     if (!carriedName) {
       router.replace("/projects/new/name?path=artifacts");
@@ -525,9 +537,28 @@ export function BrownfieldImportPage() {
       router.push(
         `/projects/new/import/scan?name=${encodeURIComponent(carriedName)}`,
       );
+      return;
     }
-    // "clone" is rendered disabled and cannot be the selected tier.
-  }, [view.tier, dispatch, resetUpload, router, carriedName]);
+    if (tier === "clone") {
+      // Tier B ships too (BF-5.3). The button below is already disabled while
+      // the endpoint is known-absent or still being probed; re-checking here
+      // means a restored draft carrying `clone` cannot navigate to a 404 by
+      // some path that bypasses the footer.
+      if (!cloneIsWorthTrying) return;
+      // The scan screen owns its own name field, but accepts a carried one and
+      // prefills from it — same `?name=` contract as the zip tier.
+      router.push(
+        `/projects/new/import/github?name=${encodeURIComponent(carriedName)}`,
+      );
+    }
+  }, [
+    view.tier,
+    dispatch,
+    resetUpload,
+    router,
+    carriedName,
+    cloneIsWorthTrying,
+  ]);
 
   const startOver = useCallback(() => {
     resetUpload();
@@ -612,10 +643,14 @@ export function BrownfieldImportPage() {
         <Button
           onClick={handleContinueFromTierPick}
           disabled={
-            // "clone" is checked as well as null: a draft written by a future
-            // Tier-B run could restore a tier this build cannot act on, and an
-            // enabled button that does nothing is worse than a disabled one.
-            (view.tier ?? null) === null || view.tier === "clone" || nameTooLong
+            // "clone" is no longer disabled outright — BF-5.3 shipped the
+            // screen it leads to. It is disabled only while the deployment has
+            // said it does not run the endpoint, or has not answered yet: an
+            // enabled button that lands on a 404 is worse than a disabled one,
+            // and a draft can restore `clone` on a deployment that has it off.
+            (view.tier ?? null) === null ||
+            nameTooLong ||
+            (view.tier === "clone" && !cloneIsWorthTrying)
           }
         >
           Continue
@@ -647,6 +682,7 @@ export function BrownfieldImportPage() {
               <TierPickerView
                 tier={view.tier ?? null}
                 projectName={carriedName}
+                cloneAvailability={cloneAvailability}
                 onSelectTier={(tier: BrownfieldTier) =>
                   applyView({ ...view, tier })
                 }

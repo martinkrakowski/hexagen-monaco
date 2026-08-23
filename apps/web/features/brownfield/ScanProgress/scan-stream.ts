@@ -1,3 +1,4 @@
+import { describeUnavailable } from "./unavailable-copy";
 import { SCAN_TIMEOUT_MS } from "@/lib/project-scan/limits";
 import type {
   ProjectScanResponse,
@@ -663,22 +664,11 @@ export function describeScanFailure(
 /* ------------------------------------------------------------------ */
 
 /**
- * The kill switch is OFF by default (`BROWNFIELD_GITHUB_SCAN`), and when it is
- * off the route answers 404 — the endpoint does not exist. "Not available" is
- * the truth; "something went wrong" is not, and neither is a retry button.
- *
- * Exported so the availability probe and the POST handler produce the SAME
- * copy: those are two ways of learning one fact, and they must not disagree.
+ * Moved to `./unavailable-copy` so the tier picker can state Tier B's
+ * availability without importing this whole streaming module (#619 review).
+ * Re-exported here so every existing importer of `scan-stream` is unaffected.
  */
-export function describeUnavailable(): ScanFailureCopy {
-  return {
-    title: "Scanning a GitHub repository is not available here",
-    detail:
-      "This deployment does not run the GitHub scan endpoint, so there is nothing to connect to. It is switched off, not broken.",
-    hint: "The other two import tiers work everywhere: upload the handoff zip from `npx hexagen scan --handoff`, or upload a zip of the repository.",
-    code: "not-enabled",
-  };
-}
+export { describeUnavailable } from "./unavailable-copy";
 
 /**
  * Copy for a non-200 response, i.e. a failure that happened before any stream

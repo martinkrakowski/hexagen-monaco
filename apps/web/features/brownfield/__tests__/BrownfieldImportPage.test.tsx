@@ -88,10 +88,32 @@ function stubFetch(response: Response | Error) {
   return mock;
 }
 
+/**
+ * The upload POSTs, and nothing else.
+ *
+ * The tier picker now probes `/api/projects/scan/github` with a GET on mount so
+ * the repo-URL card can state whether this deployment runs the endpoint. That
+ * probe is a fetch call, so a bare `mock.calls.length` no longer counts what
+ * these tests mean by "did we touch the network". Filtering by method is the
+ * same fix `useGithubScan.test.ts` already uses.
+ */
+function postCalls(mock: ReturnType<typeof vi.fn>) {
+  return mock.mock.calls.filter(
+    ([, init]) => (init as RequestInit | undefined)?.method === "POST",
+  );
+}
+
 const ZIP = () =>
   new File(["PK"], "hexagen-handoff.zip", {
     type: "application/zip",
   });
+
+/** Re-queried each time: the card's `disabled` flips when the probe answers. */
+function cloneRadio(): HTMLInputElement {
+  return screen.getByRole("radio", {
+    name: /Public repo URL/,
+  }) as HTMLInputElement;
+}
 
 /** Walk S1 -> the upload screen the way a user does. */
 async function gotoUpload(user: ReturnType<typeof userEvent.setup>) {
@@ -135,6 +157,37 @@ describe("BrownfieldImportPage", () => {
       );
     });
 
+    it("sends the repo-URL tier to the Tier-B screen once the endpoint answers", async () => {
+      // The default stub answers the availability probe 200, which the probe
+      // reads as "the endpoint is there" — the same way a real 405 is read.
+      const user = userEvent.setup();
+      render(<BrownfieldImportPage />);
+      await waitFor(() => {
+        expect(cloneRadio().disabled).toBe(false);
+      });
+      await user.click(cloneRadio());
+      await user.click(screen.getByRole("button", { name: "Continue" }));
+      expect(routerPush).toHaveBeenCalledWith(
+        `/projects/new/import/github?name=${encodeURIComponent(currentName())}`,
+      );
+    });
+
+    it("blocks the repo-URL tier on a deployment that 404s the endpoint", async () => {
+      // `BROWNFIELD_GITHUB_SCAN` is off by default, so this is the state most
+      // deployments are in. The card says so instead of claiming the tier was
+      // never built — and it does not offer a Continue that lands on a 404.
+      stubFetch(reply(404, { error: "Not found" }));
+      render(<BrownfieldImportPage />);
+      await waitFor(() => {
+        expect(cloneRadio().disabled).toBe(true);
+      });
+      expect(document.body.textContent).toMatch(
+        /This deployment does not run the GitHub scan endpoint/,
+      );
+      expect(document.body.textContent).not.toMatch(/not available yet/i);
+      expect(routerPush).not.toHaveBeenCalled();
+    });
+
     it("opens the upload screen for the artifacts tier without touching the network", async () => {
       const user = userEvent.setup();
       render(<BrownfieldImportPage />);
@@ -142,7 +195,7 @@ describe("BrownfieldImportPage", () => {
       expect(
         screen.getByRole("heading", { name: "Upload your scan artifacts" }),
       ).toBeTruthy();
-      expect(vi.mocked(fetch).mock.calls.length).toBe(0);
+      expect(postCalls(vi.mocked(fetch)).length).toBe(0);
     });
 
     it("redirects to the shared name step when no name was carried in", async () => {
@@ -169,10 +222,10 @@ describe("BrownfieldImportPage", () => {
       );
 
       await waitFor(() => {
-        expect(fetchMock.mock.calls.length).toBe(1);
+        expect(postCalls(fetchMock).length).toBe(1);
       });
-      expect(fetchMock.mock.calls[0][0]).toBe("/api/projects/scan/artifacts");
-      const init = fetchMock.mock.calls[0][1] as RequestInit;
+      expect(postCalls(fetchMock)[0][0]).toBe("/api/projects/scan/artifacts");
+      const init = postCalls(fetchMock)[0][1] as RequestInit;
       expect(init.method).toBe("POST");
       const form = init.body as FormData;
       expect(form.get("name")).toBe(currentName());
@@ -194,9 +247,10 @@ describe("BrownfieldImportPage", () => {
       );
 
       await waitFor(() => {
-        expect(fetchMock.mock.calls.length).toBe(1);
+        expect(postCalls(fetchMock).length).toBe(1);
       });
-      const form = (fetchMock.mock.calls[0][1] as RequestInit).body as FormData;
+      const [, init] = postCalls(fetchMock)[0];
+      const form = (init as RequestInit).body as FormData;
       expect(form.getAll("files").length).toBe(2);
       expect(form.get("zip")).toBeNull();
     });
@@ -217,7 +271,7 @@ describe("BrownfieldImportPage", () => {
       expect(screen.getByRole("alert").textContent).toMatch(
         /Select the handoff zip on its own/,
       );
-      expect(fetchMock.mock.calls.length).toBe(0);
+      expect(postCalls(fetchMock).length).toBe(0);
     });
 
     it("renders the report and does NOT navigate away from it", async () => {

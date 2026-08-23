@@ -19,7 +19,7 @@ import type { PersistenceError, Result } from "@hexagen/shared";
  *   features/landing/domain/creation-path.ts:80,82
  *     "We shallow-clone it, scan it, and delete the clone."
  *     "Nothing is retained but the scan artifacts."
- *   features/brownfield/views/TierPickerView.tsx:56
+ *   features/brownfield/views/TierPickerView.tsx  `CLONE_DESCRIPTION`
  *   features/brownfield/RepoEntry/RepoEntryView.tsx:93
  *   features/brownfield/ScanProgress/GithubScanPage.tsx:208  "nothing was kept"
  *

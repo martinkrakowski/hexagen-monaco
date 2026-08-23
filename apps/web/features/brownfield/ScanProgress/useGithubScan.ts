@@ -4,6 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { logger } from "../../../lib/structured-logger";
 import {
+  GITHUB_SCAN_ENDPOINT,
+  useGithubScanAvailability,
+  type GithubScanAvailability,
+} from "./useGithubScanAvailability";
+import {
   applyScanFrame,
   describePreStreamFailure,
   describeUnavailable,
@@ -61,20 +66,12 @@ export const STREAM_INACTIVITY_MS = 180_000;
 const WATCHDOG_TICK_MS = 5_000;
 
 /**
- * What the deployment says about this endpoint.
- *
- * `not-enabled` is the DEFAULT state of the world, not an edge case:
- * `BROWNFIELD_GITHUB_SCAN` is off unless a deployment sets it, and the route
- * then answers 404 to both GET and POST. Learning that before the user types
- * anything is the difference between an honest screen and a form that throws
- * an error on submit.
+ * The availability vocabulary and the probe that produces it now live in
+ * `useGithubScanAvailability.ts`, because the TIER PICKER has to state the same
+ * fact and must not carry a streaming transport to learn it. Re-exported here
+ * so this module stays the single import for the scan screen.
  */
-export type GithubScanAvailability =
-  | "checking"
-  | "available"
-  | "not-enabled"
-  /** The probe itself failed. Not evidence of anything — let the POST speak. */
-  | "unknown";
+export type { GithubScanAvailability };
 
 export interface GithubScanRequest {
   readonly projectName: string;
@@ -92,7 +89,7 @@ export interface UseGithubScanReturn {
   readonly reset: () => void;
 }
 
-const ENDPOINT = "/api/projects/scan/github";
+const ENDPOINT = GITHUB_SCAN_ENDPOINT;
 
 /** `Retry-After`, defensively: a thrown header read must not replace precise copy. */
 function retryAfterOf(response: Response): string | null {
@@ -115,49 +112,13 @@ function readFailureFrame(
 }
 
 export function useGithubScan(): UseGithubScanReturn {
-  const [availability, setAvailability] =
-    useState<GithubScanAvailability>("checking");
+  // The probe itself lives in `useGithubScanAvailability` — same GET, same
+  // three-state vocabulary, now shared with the tier picker.
+  const { availability, markNotEnabled } = useGithubScanAvailability();
   const [run, setRun] = useState<ScanRun>(initialScanRun);
 
   const abortRef = useRef<AbortController | null>(null);
   const inFlightRef = useRef(false);
-
-  /**
-   * Availability probe. `GET` mirrors `POST`'s kill switch on purpose (see the
-   * route's own comment): 404 when the feature is off, 405 with `Allow: POST`
-   * when it is on. It is not rate-limited — `guardMutation` runs on POST only —
-   * so this costs nothing but one cheap round trip.
-   *
-   * Anything other than those two answers leaves availability `unknown` rather
-   * than guessing. A proxy that rewrites errors must not be able to hide a
-   * working feature behind a "not available" screen.
-   */
-  useEffect(() => {
-    const controller = new AbortController();
-    let cancelled = false;
-    void (async () => {
-      try {
-        const response = await fetch(ENDPOINT, {
-          method: "GET",
-          signal: controller.signal,
-        });
-        if (cancelled) return;
-        if (response.status === 404) {
-          setAvailability("not-enabled");
-        } else if (response.status === 405 || response.ok) {
-          setAvailability("available");
-        } else {
-          setAvailability("unknown");
-        }
-      } catch {
-        if (!cancelled) setAvailability("unknown");
-      }
-    })();
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, []);
 
   // Abort an in-flight stream on unmount. The route listens to the request
   // signal and kills the clone's whole process group when it drops, so this is
@@ -222,7 +183,7 @@ export function useGithubScan(): UseGithubScanReturn {
           // The switch was off all along, or was turned off between the probe
           // and now. Same fact, same copy, and the screen re-renders as the
           // "not available here" state rather than as a failed scan.
-          setAvailability("not-enabled");
+          markNotEnabled();
           push({
             ...current,
             phase: "blocked",
@@ -330,7 +291,9 @@ export function useGithubScan(): UseGithubScanReturn {
         abortRef.current = null;
       }
     },
-    [run],
+    // `markNotEnabled` is a stable useCallback, so this identity is as steady
+    // as `[run]` alone was.
+    [run, markNotEnabled],
   );
 
   return { availability, run, start, cancel, reset };

@@ -18,7 +18,8 @@ import { GithubScanPage } from "@/brownfield/ScanProgress/GithubScanPage";
  * ENDPOINT behind it is behind `BROWNFIELD_GITHUB_SCAN`, which defaults off, so
  * in most deployments `/api/projects/scan/github` answers 404. The screen probes
  * for that on mount and says so plainly rather than offering a form that can
- * only fail — see `useGithubScan`'s availability probe.
+ * only fail — see `useGithubScanAvailability`, the probe this screen and
+ * the brownfield tier picker both read.
  *
  * `Suspense` is required, not decorative: `GithubScanPage` reads the carried
  * project name with `useSearchParams`, which opts the subtree into client-side

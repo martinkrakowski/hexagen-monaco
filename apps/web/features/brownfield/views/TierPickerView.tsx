@@ -5,6 +5,8 @@ import { ChoiceCardGroup } from "@/primitives/ChoiceCardGroup";
 import type { ChoiceCardOption } from "@/primitives/ChoiceCardGroup";
 import { MAX_SCAN_ZIP_BYTES } from "@/lib/project-scan/limits";
 import type { BrownfieldTier } from "../BrownfieldFlow/types";
+import { describeUnavailable } from "../ScanProgress/unavailable-copy";
+import type { GithubScanAvailability } from "../ScanProgress/useGithubScanAvailability";
 
 /**
  * S1 — "How should we read your codebase?" (F-15).
@@ -39,8 +41,75 @@ const TIER_C_MAX_MIB = Math.floor(MAX_SCAN_ZIP_BYTES / (1024 * 1024));
  */
 const HANDOFF_STRIP = "manifest · layout · baseline · report · ledger";
 
-export const BROWNFIELD_TIER_OPTIONS: readonly ChoiceCardOption<BrownfieldTier>[] =
-  [
+/** The retention sentence for Tier B. True whenever the tier can run at all. */
+const CLONE_DESCRIPTION =
+  "We shallow-clone the repository, scan it in a temporary directory, and delete it. Nothing is retained but the scan artifacts.";
+
+/**
+ * Tier B's card, told the truth in each of the four states the probe can be in.
+ *
+ * BF-5.3 SHIPPED this tier — `/projects/new/import/github` is mounted and the
+ * landing page lists it as available — so "not available yet" is simply false.
+ * But `BROWNFIELD_GITHUB_SCAN` is off by default and the route then 404s, so
+ * "available" is equally false on a default deployment. The card therefore says
+ * what the deployment actually answered, and nothing more:
+ *
+ * - `checking` — the probe is in flight. Unpickable, because a card that
+ *   accepts a pick and then reveals there was nothing behind it is worse than a
+ *   card that asks for a moment. This is the same call the scan screen makes
+ *   with its submit button.
+ * - `available` — the endpoint answered. Pickable, ordinary copy.
+ * - `not-enabled` — the endpoint answered 404. Unpickable, and it borrows
+ *   `describeUnavailable()` so this card and the scan screen cannot drift into
+ *   two different explanations of one fact.
+ * - `unknown` — the probe itself failed, which is evidence of NOTHING. Left
+ *   pickable and said so: a proxy that rewrites errors must not be able to hide
+ *   a working feature, and the POST is the only authority. Picking it costs a
+ *   navigation, not a clone.
+ */
+function cloneTierOption(
+  availability: GithubScanAvailability,
+): ChoiceCardOption<BrownfieldTier> {
+  const base = {
+    value: "clone" as const,
+    label: "Public repo URL",
+    description: CLONE_DESCRIPTION,
+    warning: "Not for client engagements.",
+    Icon: Github,
+  };
+
+  if (availability === "checking") {
+    return {
+      ...base,
+      disabled: true,
+      unavailableReason:
+        "Checking whether this deployment runs server-side scanning. This card unlocks as soon as the check answers.",
+    };
+  }
+
+  if (availability === "not-enabled") {
+    const off = describeUnavailable();
+    return {
+      ...base,
+      disabled: true,
+      unavailableReason: `${off.detail} ${off.hint}`,
+    };
+  }
+
+  if (availability === "unknown") {
+    return {
+      ...base,
+      description: `${CLONE_DESCRIPTION} We could not confirm that this deployment runs the scan endpoint — the check itself failed, which is not evidence either way. Picking this opens the scan screen, which says so plainly if the endpoint is not there; nothing is cloned until you start a scan.`,
+    };
+  }
+
+  return base;
+}
+
+export function brownfieldTierOptions(
+  cloneAvailability: GithubScanAvailability,
+): readonly ChoiceCardOption<BrownfieldTier>[] {
+  return [
     {
       value: "artifacts",
       label: "Artifacts only — recommended",
@@ -49,29 +118,15 @@ export const BROWNFIELD_TIER_OPTIONS: readonly ChoiceCardOption<BrownfieldTier>[
       badge: HANDOFF_STRIP,
       Icon: Braces,
     },
-    {
-      value: "clone",
-      label: "Public repo URL",
-      description:
-        "We shallow-clone the repository, scan it in a temporary directory, and delete it. Nothing is retained but the scan artifacts.",
-      warning: "Not for client engagements.",
-      // Tier B is BF-5.2/BF-5.3 and is gated on a decision (a hexagen CLI in
-      // the production image). Rendering it disabled with the reason is the
-      // honest state: the option exists in the product's design, it is simply
-      // not reachable yet. Hiding it would make the tier list read as if only
-      // two tiers were ever planned.
-      disabled: true,
-      unavailableReason:
-        "Server-side cloning is not available yet. Run the scan locally and upload the artifacts, or upload a zip of the repository.",
-      Icon: Github,
-    },
+    cloneTierOption(cloneAvailability),
     {
       value: "zip",
       label: "Upload a zip",
       description: `Upload a zip of the repository. Same retention as above — scanned in a temporary directory, then deleted. Max ${TIER_C_MAX_MIB} MB.`,
       Icon: FolderSearch,
     },
-  ] as const;
+  ];
+}
 
 export interface TierPickerViewProps {
   /** The tier the user has picked, or null before the first pick. */
@@ -79,13 +134,22 @@ export interface TierPickerViewProps {
   onSelectTier: (tier: BrownfieldTier) => void;
   /** Name carried in from the shared project-name step, shown for orientation. */
   projectName: string;
+  /**
+   * What the deployment answered about the Tier-B endpoint. Supplied by the
+   * boundary component, which owns the probe — this view stays presentational
+   * and does no I/O of its own. Required rather than defaulted: a default would
+   * let a caller that forgot to probe render a confident-looking card.
+   */
+  cloneAvailability: GithubScanAvailability;
 }
 
 export function TierPickerView({
   tier,
   onSelectTier,
   projectName,
+  cloneAvailability,
 }: TierPickerViewProps) {
+  const options = brownfieldTierOptions(cloneAvailability);
   return (
     <div className="space-y-8">
       <div className="text-center animate-fade-in-up delay-100">
@@ -104,7 +168,7 @@ export function TierPickerView({
       <div className="animate-fade-in-up delay-200">
         <ChoiceCardGroup<BrownfieldTier>
           label="How your codebase is read"
-          options={BROWNFIELD_TIER_OPTIONS}
+          options={options}
           value={tier}
           onSelect={onSelectTier}
         />
