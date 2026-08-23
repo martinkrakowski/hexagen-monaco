@@ -21,6 +21,7 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as yaml from "js-yaml";
@@ -36,9 +37,19 @@ const LAYER_RULES = path.join(
 
 /**
  * Keys the linter reads — the `LayerRules` type in
- * `src/layer-import-violation.ts`. Keep this list in step with that type.
+ * `src/layer-import-violation.ts` (`layers`, `cross_package_rules`,
+ * `shared_kernel` via `isSharedKernelAllowed()`). `layers` and
+ * `cross_package_rules` are also read by the MCP governance adapter, and
+ * `shared_kernel` (singular, object) is what the sync generator's
+ * layer-rules template writes. Keep this list in step with those readers.
+ *
+ * The YAML does NOT carry `shared_kernel` today — only the dead plural
+ * `shared_kernels` listed below. Listing the singular key here anyway is the
+ * point: when the schema is reconciled to what the reader consumes, a valid
+ * `shared_kernel` object must pass this guard, not be flagged as dead config
+ * (review flag on #636).
  */
-const READ_KEYS = ["layers", "cross_package_rules"] as const;
+const READ_KEYS = ["layers", "cross_package_rules", "shared_kernel"] as const;
 
 /**
  * Keys present in the file that NO code reads. Each entry is debt with a
@@ -94,6 +105,50 @@ function loadLayerRules(): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
+type PathEntry = { trail: string; value: string };
+
+/**
+ * Classify path entries into `escapes` (not repo-relative, or resolving —
+ * lexically OR through a symlink — outside `root`) and `missing` (inside the
+ * root but absent on disk).
+ *
+ * The root is canonicalized first: on macOS a checkout under `/var/folders/`
+ * has a realpath under `/private/var/folders/`, and comparing `realpathSync`
+ * output for entries against the lexical root would flag every entry as an
+ * escape. Existing entries are then canonicalized too, because `path.resolve`
+ * only checks lexical containment — a repo-local symlink whose target lives
+ * outside the root would otherwise satisfy the guard (review flag on #636).
+ */
+function findPathViolations(
+  entries: PathEntry[],
+  root: string,
+): { escapes: PathEntry[]; missing: PathEntry[] } {
+  const canonicalRoot = fs.realpathSync(root);
+  const escapes: PathEntry[] = [];
+  const missing: PathEntry[] = [];
+
+  for (const entry of entries) {
+    const resolved = path.resolve(canonicalRoot, entry.value);
+    if (
+      path.isAbsolute(entry.value) ||
+      !(resolved + path.sep).startsWith(canonicalRoot + path.sep)
+    ) {
+      escapes.push(entry);
+      continue;
+    }
+    if (!fs.existsSync(resolved)) {
+      missing.push(entry);
+      continue;
+    }
+    const canonical = fs.realpathSync(resolved);
+    if (!(canonical + path.sep).startsWith(canonicalRoot + path.sep)) {
+      escapes.push(entry);
+    }
+  }
+
+  return { escapes, missing };
+}
+
 describe("layer-rules.yaml liveness", () => {
   it("every path-valued entry resolves to something on disk", () => {
     const entries: { trail: string; value: string }[] = [];
@@ -108,14 +163,9 @@ describe("layer-rules.yaml liveness", () => {
     );
 
     // An absolute value or `..` traversal must not be able to satisfy the
-    // guard by resolving OUTSIDE the repo (review flag on #636).
-    const escapes = entries.filter((e) => {
-      const resolved = path.resolve(REPO_ROOT, e.value);
-      return (
-        path.isAbsolute(e.value) ||
-        !(resolved + path.sep).startsWith(REPO_ROOT + path.sep)
-      );
-    });
+    // guard by resolving OUTSIDE the repo — lexically or via a repo-local
+    // symlink (review flag on #636).
+    const { escapes, missing } = findPathViolations(entries, REPO_ROOT);
     assert.deepEqual(
       escapes,
       [],
@@ -124,9 +174,6 @@ describe("layer-rules.yaml liveness", () => {
         .join("\n")}`,
     );
 
-    const missing = entries.filter(
-      (e) => !fs.existsSync(path.join(REPO_ROOT, e.value)),
-    );
     assert.deepEqual(
       missing,
       [],
@@ -164,5 +211,73 @@ describe("layer-rules.yaml liveness", () => {
       [],
       `PROSE_ONLY_KEYS_PENDING_RETIREMENT lists keys no longer in the file: ${stale.join(", ")}`,
     );
+  });
+
+  it("READ_KEYS covers a reconciled layer-rules.yaml (review flag on #636)", () => {
+    // The `LayerRules` reader (layer-import-violation.ts:18-33) consumes
+    // `shared_kernel` (singular, object). If the YAML's dead plural
+    // `shared_kernels` block is ever reconciled to the reader's schema, the
+    // key-set guard above must pass — not report live config as dead. This
+    // fails if READ_KEYS ever drops a key the reader consumes.
+    const reconciledYamlKeys = [
+      "shared_kernel",
+      "layers",
+      "cross_package_rules",
+    ];
+    const allowed = [
+      ...READ_KEYS,
+      ...Object.keys(PROSE_ONLY_KEYS_PENDING_RETIREMENT),
+    ];
+    const unknown = reconciledYamlKeys.filter((k) => !allowed.includes(k));
+    assert.deepEqual(
+      unknown,
+      [],
+      `READ_KEYS is missing keys the linter reads: ${unknown.join(", ")}`,
+    );
+  });
+
+  it("path classification traps repo-local symlinks pointing outside the root", () => {
+    // Hermetic fixture for findPathViolations: a symlink inside the root
+    // whose target lives outside passes the lexical containment check that
+    // the repo-wide assertion used before (review flag on #636). Both temp
+    // roots are deliberately passed lexically — on macOS os.tmpdir() is
+    // /var/folders/... whose realpath is /private/var/folders/..., which is
+    // exactly the root-canonicalization the helper must do itself.
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "liveness-root-"));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "liveness-out-"));
+    try {
+      const outsideTarget = path.join(fs.realpathSync(outside), "target");
+      fs.writeFileSync(outsideTarget, "x");
+
+      fs.writeFileSync(path.join(root, "real.txt"), "x");
+      fs.symlinkSync(outsideTarget, path.join(root, "link-out"));
+      fs.symlinkSync("real.txt", path.join(root, "link-in"));
+
+      const { escapes, missing } = findPathViolations(
+        [
+          { trail: "ok.file", value: "real.txt" },
+          { trail: "ok.inRepoSymlink", value: "link-in" },
+          { trail: "bad.absolute", value: outsideTarget },
+          { trail: "bad.dotdot", value: "../escape" },
+          { trail: "bad.outsideSymlink", value: "link-out" },
+          { trail: "bad.missing", value: "nope.txt" },
+        ],
+        root,
+      );
+
+      assert.deepEqual(
+        escapes.map((e) => e.trail).sort(),
+        ["bad.absolute", "bad.dotdot", "bad.outsideSymlink"],
+        "absolute, traversing, and outside-pointing-symlink values must all be escapes",
+      );
+      assert.deepEqual(
+        missing.map((e) => e.trail),
+        ["bad.missing"],
+        "an in-root value that does not exist is missing, not an escape",
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
   });
 });
