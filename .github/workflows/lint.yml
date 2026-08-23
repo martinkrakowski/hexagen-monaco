@@ -202,33 +202,16 @@ jobs:
       # pinned 3.8.1 and flagged 85 files no PR had touched. Both paths below
       # therefore run the lockfile's version: `--no-install` makes the installed
       # path fail loudly if prettier is missing instead of fetching, and the
-      # docs-only path reads the resolved version out of yarn.lock.
+      # docs-only path asks scripts/locked-dependency-version.mjs (unit-tested
+      # against decoy and multi-selector lockfile shapes) which version that is.
+      # `set -e` is the shell default for `run:`, so a non-zero exit from the
+      # script stops the step before npx runs.
       - name: "Verify Formatting"
         env:
           DOCS_ONLY: ${{ steps.docs-only.outputs.docs_only }}
         run: |
           if [ "$DOCS_ONLY" = "true" ]; then
-            # Resolve the ROOT selector to its lockfile block, not "the first
-            # prettier block": a second prettier@npm:<range> entry from any
-            # workspace or plugin would otherwise win silently. Yarn 4 lockfile
-            # keys can carry several selectors ("a@npm:^1, a@npm:^1.2":), so
-            # the key is split and each selector compared whole.
-            selector="prettier@npm:$(node -p "require('./package.json').devDependencies.prettier")"
-            locked=$(awk -v key="$selector" '
-              /^"/ {
-                block = 0
-                line = $0
-                sub(/^"/, "", line)
-                sub(/":$/, "", line)
-                n = split(line, selectors, ", ")
-                for (i = 1; i <= n; i++) if (selectors[i] == key) block = 1
-              }
-              block && /version:/ { print $2; exit }
-            ' yarn.lock)
-            if [ -z "$locked" ]; then
-              echo "::error::no yarn.lock block matches the root selector ${selector}"
-              exit 1
-            fi
+            locked=$(node scripts/locked-dependency-version.mjs prettier)
             echo "docs-only fast path: running locked prettier@${locked}"
             npx --yes "prettier@${locked}" --check "**/*.{ts,tsx,md,json}"
           else
