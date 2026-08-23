@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * The Tier-B availability probe (BF-5.3), extracted so that BOTH screens that
@@ -59,6 +59,23 @@ export function useGithubScanAvailability(): UseGithubScanAvailabilityReturn {
     useState<GithubScanAvailability>("checking");
 
   /**
+   * Latches once the POST has proved the endpoint is off, so the in-flight GET
+   * cannot promote it back.
+   *
+   * Raised in review on #619. `markNotEnabled` was one-way in its PUBLIC API --
+   * there is no `markAvailable` -- but not in effect: the mount-time probe's
+   * `cancelled` flag guards UNMOUNT, not a state transition, so a GET resolving
+   * 405 AFTER a POST returned 404 would overwrite `not-enabled` with
+   * `available`. The screen would then offer a tier the server had just
+   * refused, which is the exact false promise this hook exists to prevent.
+   *
+   * Ordering makes it unlikely -- the GET starts on mount and the POST needs a
+   * user -- but a slow proxy and a fast click is all it takes, and "unlikely"
+   * is not the contract the docstring states.
+   */
+  const provenOff = useRef(false);
+
+  /**
    * `GET` mirrors `POST`'s kill switch on purpose (see the route's own
    * comment): 404 when the feature is off, 405 with `Allow: POST` when it is
    * on. It is not rate-limited — `guardMutation` runs on POST only — so this
@@ -77,7 +94,7 @@ export function useGithubScanAvailability(): UseGithubScanAvailabilityReturn {
           method: "GET",
           signal: controller.signal,
         });
-        if (cancelled) return;
+        if (cancelled || provenOff.current) return;
         if (response.status === 404) {
           setAvailability("not-enabled");
         } else if (response.status === 405 || response.ok) {
@@ -86,7 +103,7 @@ export function useGithubScanAvailability(): UseGithubScanAvailabilityReturn {
           setAvailability("unknown");
         }
       } catch {
-        if (!cancelled) setAvailability("unknown");
+        if (!cancelled && !provenOff.current) setAvailability("unknown");
       }
     })();
     return () => {
@@ -96,6 +113,7 @@ export function useGithubScanAvailability(): UseGithubScanAvailabilityReturn {
   }, []);
 
   const markNotEnabled = useCallback(() => {
+    provenOff.current = true;
     setAvailability("not-enabled");
   }, []);
 

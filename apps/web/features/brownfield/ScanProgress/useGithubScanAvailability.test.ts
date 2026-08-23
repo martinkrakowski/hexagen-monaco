@@ -94,4 +94,36 @@ describe("useGithubScanAvailability", () => {
     rerender();
     expect(fetchMock.mock.calls.length).toBe(1);
   });
+
+  // Raised in review on #619: the probe's `cancelled` flag guards UNMOUNT, not
+  // a state transition, so a GET resolving AFTER the POST proved the endpoint
+  // off would overwrite `not-enabled` with `available` -- offering a tier the
+  // server had just refused. The public API was one-way; the effect was not.
+  it("never promotes back to available after the POST proved it off", async () => {
+    let resolveGet: ((r: Response) => void) | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveGet = resolve;
+          }),
+      ),
+    );
+
+    const { result } = renderHook(() => useGithubScanAvailability());
+    expect(result.current.availability).toBe("checking");
+
+    // The POST comes back first and latches the state down.
+    act(() => result.current.markNotEnabled());
+    expect(result.current.availability).toBe("not-enabled");
+
+    // The still-in-flight GET now answers 405 ("endpoint is on").
+    await act(async () => {
+      resolveGet?.({ status: 405, ok: false } as Response);
+      await Promise.resolve();
+    });
+
+    expect(result.current.availability).toBe("not-enabled");
+  });
 });
