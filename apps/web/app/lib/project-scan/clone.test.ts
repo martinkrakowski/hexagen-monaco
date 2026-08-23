@@ -1,4 +1,6 @@
 import { EventEmitter } from "node:events";
+import { mkdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { PassThrough } from "node:stream";
 import assert from "node:assert/strict";
 import { describe, it, vi } from "vitest";
@@ -16,6 +18,7 @@ import {
   type CloneProgress,
   type CloneWorkspace,
   type RepoReference,
+  createCloneWorkspace,
 } from "./clone";
 
 /* ------------------------------------------------------------------ */
@@ -921,5 +924,62 @@ describe("measureTree", () => {
 
   it("has a default disk cap that matches the exported bound", () => {
     assert.equal(MAX_CLONE_DISK_BYTES, 384 * 1024 * 1024);
+  });
+});
+
+describe("createCloneWorkspace failure paths", () => {
+  // Raised in review on #616 and held open until covered, correctly: the
+  // rollback branch is where a workspace becomes an ORPHAN, and an orphan
+  // outside /tmp is permanent until the next process sweeps it. Both fs calls
+  // are injected because no fixture can make `rm` fail on a real filesystem
+  // without running as another user; `cloneRepository` already injects
+  // `spawnImpl`/`killImpl` for the same reason.
+  const base = tmpdir();
+
+  it("reports the failure and no orphan when rollback succeeds", async () => {
+    let removed: string | null = null;
+    const result = await createCloneWorkspace(base, {
+      mkdirImpl: (async () => {
+        throw new Error("EACCES: home unwritable");
+      }) as unknown as typeof mkdir,
+      rmImpl: (async (target: string) => {
+        removed = target;
+      }) as unknown as typeof rm,
+    });
+
+    assert.equal(result.ok, false);
+    assert.ok(!result.ok);
+    assert.match(result.failure.reason, /home unwritable/);
+    // The directory was cleaned up, so there is nothing for anyone to chase.
+    assert.equal(result.failure.orphanedAt, null);
+    assert.equal(result.failure.rollbackReason, null);
+    assert.ok(removed !== null, "rollback must remove the mkdtemp root");
+  });
+
+  it("reports WHERE the orphan was left when rollback also fails", async () => {
+    const result = await createCloneWorkspace(base, {
+      mkdirImpl: (async () => {
+        throw new Error("ENOSPC: no space left");
+      }) as unknown as typeof mkdir,
+      rmImpl: (async () => {
+        throw new Error("EPERM: cannot remove");
+      }) as unknown as typeof rm,
+    });
+
+    assert.ok(!result.ok);
+    // Both failures survive. A rethrow could only ever carry the first, and
+    // the second is the one that says a directory was left behind.
+    assert.match(result.failure.reason, /no space left/);
+    assert.match(result.failure.rollbackReason ?? "", /cannot remove/);
+    assert.ok(
+      result.failure.orphanedAt?.includes("hexagen-clone-"),
+      "the orphan path is reported so it can be found and removed",
+    );
+
+    // Clean up the directory this test genuinely created, since the injected
+    // rm deliberately did not.
+    if (result.failure.orphanedAt !== null) {
+      await rm(result.failure.orphanedAt, { recursive: true, force: true });
+    }
   });
 });

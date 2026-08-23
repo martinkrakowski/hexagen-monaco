@@ -575,9 +575,27 @@ export type CreateCloneWorkspaceResult =
   | { readonly ok: true; readonly workspace: CloneWorkspace }
   | { readonly ok: false; readonly failure: CloneWorkspaceFailure };
 
+/**
+ * Injectable filesystem calls, so the rollback-failure branch is reachable.
+ *
+ * That branch needs `mkdir` to fail AND the `rm` cleaning up after it to fail
+ * too, which no fixture can arrange on a real filesystem without running as a
+ * different user. Injection is this file's existing answer to exactly that
+ * problem -- `cloneRepository` takes `spawnImpl`, `killImpl` and `measure` for
+ * the same reason -- so it is the idiom here rather than a testing special
+ * case. Production passes nothing and gets the real calls.
+ */
+export interface CloneWorkspaceDeps {
+  readonly mkdirImpl?: typeof mkdir;
+  readonly rmImpl?: typeof rm;
+}
+
 export async function createCloneWorkspace(
   baseDir: string = scanWorkspaceBaseDir(),
+  deps: CloneWorkspaceDeps = {},
 ): Promise<CreateCloneWorkspaceResult> {
+  const mkdirImpl = deps.mkdirImpl ?? mkdir;
+  const rmImpl = deps.rmImpl ?? rm;
   let root: string;
   try {
     root = await mkdtemp(path.join(baseDir, "hexagen-clone-"));
@@ -597,7 +615,7 @@ export async function createCloneWorkspace(
     // Materialize HOME so git has a real (and empty) one. `repo` is deliberately
     // NOT created — `git clone` makes it, and a pre-existing directory is one
     // more thing that could be non-empty.
-    await mkdir(homeDir, { recursive: true });
+    await mkdirImpl(homeDir, { recursive: true });
   } catch (error) {
     // mkdtemp succeeded, so `root` EXISTS, but no CloneWorkspace was ever
     // returned -- the caller has no handle and cannot run cleanup(). Under
@@ -610,7 +628,7 @@ export async function createCloneWorkspace(
     // up or left behind, and "left behind" is the case somebody has to act on.
     let rollbackReason: string | null = null;
     try {
-      await rm(root, { recursive: true, force: true });
+      await rmImpl(root, { recursive: true, force: true });
     } catch (rollbackError) {
       rollbackReason = messageOf(rollbackError);
     }
