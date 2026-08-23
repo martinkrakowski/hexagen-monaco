@@ -153,7 +153,8 @@ jobs:
     # this the job inherits GitHub's 360-minute default and holds a runner for
     # six hours to produce nothing. Observed healthy runs finish in ~1 minute.
     # Raised from 15 after observing a single-chunk /improve run take 812s
-    # against a 70s median -- ~11.6x degraded on openrouter/tencent/hy3, with
+    # against a 70s median -- ~11.6x degraded on the then-active
+    # openrouter/tencent/hy3 (superseded by mercury-2), with
     # 88 seconds of margin left. The call did not error, so fallback_models
     # never engaged: fallback covers failures, and a slow call is not one.
     #
@@ -176,15 +177,17 @@ jobs:
           # claude-3.5-sonnet is NOT in the OpenRouter catalogue — the old
           # fallback could not have resolved. Verified against /api/v1/models.
           config.fallback_models: '["openrouter/anthropic/claude-haiku-4.5"]'
-          # hy3's real window per OpenRouter: 262144. This was 64000, which
-          # silently capped max_model_tokens below it.
+          # mercury-2's real window per OpenRouter: 128000 (completion cap
+          # 50000). Historical, so nobody applies the wrong model's numbers:
+          # this was 64000 (which silently capped max_model_tokens below it),
+          # then 262144 for tencent/hy3. Neither applies now.
           config.custom_model_max_tokens: "128000"
           # Mirrors .pr_agent.toml, per this file's own "keep env and toml in
           # agreement" rule. custom_model_max_tokens declares the model's
           # capacity; max_model_tokens caps what PR-Agent actually spends and
           # defaults to 32000 regardless — which is what was pruning diffs and
           # dropping files from reviews. See the toml for the measurements.
-          config.max_model_tokens: "96000"
+          config.max_model_tokens: "70000"
           # DESIGN.md and best_practices.md exist on main today. The rubric
           # does not — missing entries are skipped. extra_instructions below
           # is what makes this PR a UI-contract review rather than AGENTS.md

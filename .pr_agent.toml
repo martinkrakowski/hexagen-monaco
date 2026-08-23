@@ -18,11 +18,12 @@ model = "openrouter/inception/mercury-2"
 # it build a prompt the model could not accept, and the fallback has never
 # fired, so nobody would have found out until it mattered.
 fallback_models = ["openrouter/anthropic/claude-haiku-4.5"]
-# The model's REAL window, from OpenRouter's own catalogue:
-#   tencent/hy3  context_length = 262144
-# This was 64000, which silently became the ceiling: max_model_tokens below
-# can never exceed what the model is declared to hold, so raising that alone
-# would have changed nothing.
+# The ACTIVE model's real window, from OpenRouter's own catalogue:
+#   inception/mercury-2  context_length = 128000, max_completion_tokens = 50000
+#
+# Historical, so the numbers below are not read against the wrong model: this
+# was 64000 (a silent ceiling, since max_model_tokens can never exceed what the
+# model is declared to hold), then 262144 for tencent/hy3. Neither applies now.
 # mercury-2's REAL window from OpenRouter's catalogue: 128000, with a 50000
 # completion cap. This MUST NOT exceed it. Over-declaring is the failure mode
 # nobody notices until it bites: PR-Agent builds a prompt to fit a window the
@@ -45,20 +46,30 @@ custom_model_max_tokens = 128000
 # green check that looks like coverage.
 #
 # Observed peaks were modest — 36247 tokens (6 files) and 37977 (11 files),
-# against the old 32000 cap. 200000 is far above that on purpose: the point is
-# that a large PR is never silently truncated, and pr-agent spends only what
-# the diff actually needs. It sits inside hy3's 262144 window with room for
-# the response, and inside the fallback's 200000 window (pr-agent takes the
-# min of the two, so the fallback self-limits rather than erroring).
+# against the old 32000 cap. The point is that a large PR is never silently
+# truncated and pr-agent spends only what the diff actually needs -- but the
+# ceiling is now mercury-2's 128000 window, not hy3's 262144, so the budget is
+# set by the arithmetic below rather than by how much headroom we would like.
+# The fallback (haiku-4.5, 200000) self-limits, since pr-agent takes the min.
 # Was 200000, chosen deliberately to stop diffs being pruned. mercury-2 cannot
-# hold that, so this is a forced reduction rather than a preference: 128000
-# total minus room for a completion that may reach 50000.
+# hold that, so this is a forced reduction rather than a preference.
 #
-# 96000 is still roughly 3x the largest prompt observed on this repo -- ~12k of
-# repo context files plus a ~20k diff on the biggest PR so far -- so it should
-# not reintroduce pruning. If a PR ever does get clipped, this is the number to
-# revisit, not custom_model_max_tokens above.
-max_model_tokens = 96000
+# The number is bounded by ARITHMETIC, not by taste. The window is 128000 TOTAL
+# — prompt plus completion — and mercury-2's completion cap is 50000. So the
+# prompt budget must leave room for a completion that large:
+#
+#     70000 prompt  +  50000 completion  =  120000  <  128000  ✔
+#     96000 prompt  +  50000 completion  =  146000  >  128000  ✘
+#
+# 96000 was the first value here and could overflow in the worst case. 70000
+# cannot, and is still more than twice the largest prompt observed on this repo
+# (~12k of repo context files plus a ~20k diff on the biggest PR), so it does
+# not reintroduce pruning.
+#
+# In practice completions are far under the cap — reasoning is capped at 4000
+# by the [openrouter] block, and suggestion bodies are a few thousand tokens —
+# but a budget that only holds while the model is well behaved is not a budget.
+max_model_tokens = 70000
 repo_context_files = [
   ".agents/PR_REVIEW_RUBRIC.md",
   "best_practices.md",
