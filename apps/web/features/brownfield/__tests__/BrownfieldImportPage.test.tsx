@@ -313,6 +313,40 @@ describe("BrownfieldImportPage", () => {
       });
     });
 
+    // Raised in review on #626: Continue was offered for ANY non-null result,
+    // including `verdict: "incomplete"` -- no report, so nothing for S3 to
+    // ratify. Worse than a dead end: Back from S3 goes to the tier picker, not
+    // here, so a retryable upload became a restart.
+    it("offers no Continue when the handoff produced no report", async () => {
+      const user = userEvent.setup();
+      stubFetch(
+        reply(200, {
+          ...HANDOFF_OK,
+          verdict: "incomplete",
+          reportMarkdown: null,
+          errorMessage: "The upload contained no hexagen-report.md.",
+          artifacts: {
+            ...HANDOFF_OK.artifacts,
+            missing: ["hexagen-report.md"],
+          },
+        }),
+      );
+      render(<BrownfieldImportPage />);
+      const input = await gotoUpload(user);
+      await user.upload(input, ZIP());
+      await user.click(
+        screen.getByRole("button", { name: "Upload and parse" }),
+      );
+
+      // The retry action stays; the way forward does not.
+      expect(
+        await screen.findByRole("button", {
+          name: /upload different artifacts/i,
+        }),
+      ).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /^continue$/i })).toBeNull();
+    });
+
     it("surfaces an incomplete handoff rather than pretending it passed", async () => {
       const user = userEvent.setup();
       stubFetch(

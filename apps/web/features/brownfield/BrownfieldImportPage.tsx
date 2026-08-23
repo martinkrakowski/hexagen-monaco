@@ -919,6 +919,15 @@ export function BrownfieldImportPage() {
       // The success arm never navigates. Once a report is on screen the footer
       // offers explicit choices and nothing else moves.
       if (result !== null) {
+        // Continue is offered ONLY for an ingested handoff. `verdict` is
+        // `incomplete` exactly when no report came back, and S3 ratifies a
+        // layout derived from that report — so advancing would put the user on
+        // a screen with nothing to ratify, and Back from S3 goes to the tier
+        // picker rather than here, turning a retryable upload into a restart.
+        //
+        // Keeping the incomplete case on this screen keeps the retry loop
+        // where the user already is, next to the reason it failed.
+        const canRatify = result.verdict === "ingested";
         return (
           <>
             <Button variant="outline" onClick={resetUpload} disabled={busy}>
@@ -929,10 +938,12 @@ export function BrownfieldImportPage() {
               an effect. `continueToRatification` folds UPLOAD_COMPLETE then
               SCAN_COMPLETE — see its docblock for why two events.
             */}
-            <Button onClick={continueToRatification} disabled={busy}>
-              Continue
-              <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
+            {canRatify ? (
+              <Button onClick={continueToRatification} disabled={busy}>
+                Continue
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            ) : null}
           </>
         );
       }
