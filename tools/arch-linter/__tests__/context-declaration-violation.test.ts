@@ -184,6 +184,35 @@ describe("collectExportedNames — what the code actually exports", () => {
     const file = sourceFile("export default class {}");
     assert.deepEqual(collectExportedNames(file), []);
   });
+
+  it("does NOT count a NAMED default export — it is not importable by name", () => {
+    // `export default class Foo {}` binds nothing called `Foo` for a consumer:
+    // `import Anything from "./m"` is legal and idiomatic. Counting it would let
+    // a registry entry naming an unimportable symbol pass the accuracy check.
+    // Raised by Qodo on #621.
+    const cls = sourceFile("export default class GitHubExporterAdapter {}");
+    assert.deepEqual(collectExportedNames(cls), []);
+
+    const fn = sourceFile("export default function describeUnavailable() {}");
+    assert.deepEqual(collectExportedNames(fn), []);
+  });
+
+  it("DOES count a default re-exported under a name", () => {
+    // `export { default as X }` is a real named binding, so it counts — and it
+    // arrives through the ExportDeclaration path, not the declaration loops.
+    const file = sourceFile('export { default as RepositoryWriterPort } from "./m.js";');
+    assert.ok(collectExportedNames(file).includes("RepositoryWriterPort"));
+  });
+
+  it("still counts ordinary named exports alongside a default in the same file", () => {
+    const file = sourceFile(`
+      export default class Internal {}
+      export interface RepositoryWriterPort { write(): void }
+    `);
+    const found = collectExportedNames(file);
+    assert.ok(found.includes("RepositoryWriterPort"));
+    assert.deepEqual(found.includes("Internal"), false);
+  });
 });
 
 describe("checkContextDeclarations — accuracy, one direction only", () => {

@@ -534,16 +534,23 @@ try {
 /**
  * Does this file's export surface count as the context's own?
  *
- * `__tests__/` and `*.test.ts` are excluded so a test fake named after a port
- * cannot make a stale registry entry look accurate; `templates/` is excluded
- * because template files are payload emitted into customer projects (the same
- * exclusion ADR-0057's own measurements used), not surface this context owns.
+ * `__tests__/`, `*.test.ts` and `*.spec.ts` are excluded so a test fake named
+ * after a port cannot make a stale registry entry look accurate; `templates/`
+ * is excluded because template files are payload emitted into customer projects
+ * (the same exclusion ADR-0057's own measurements used), not surface this
+ * context owns.
+ *
+ * `.spec.` matters as much as `.test.`: both are conventional vitest filenames,
+ * and a `Foo.spec.ts` sitting OUTSIDE `__tests__/` would otherwise have its
+ * fakes counted as the context's production surface. A discovery pattern that
+ * misses a legal test-file form is a check that passes because it looked in the
+ * wrong place. Raised by CodeRabbit on #621.
  */
 function countsAsContextExportSource(filePath: string): boolean {
   const posix = filePath.split(path.sep).join("/");
   if (posix.includes("/__tests__/")) return false;
   if (posix.includes("/templates/")) return false;
-  return !/\.test\.tsx?$/.test(posix);
+  return !/\.(test|spec)\.tsx?$/.test(posix);
 }
 
 function isTestDoubleOrTest(filePath: string): boolean {

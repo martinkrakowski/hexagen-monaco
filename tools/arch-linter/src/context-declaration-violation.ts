@@ -224,21 +224,41 @@ export function collectExportedNames(file: SourceFile): string[] {
     if (name !== undefined && name.length > 0) names.push(name);
   };
 
+  /**
+   * NAMED exports only.
+   *
+   * `export default class Foo {}` binds nothing importable called `Foo` — a
+   * consumer writes `import Anything from "./m"` and may call it whatever it
+   * likes. Counting `Foo` would let a registry entry naming a symbol no
+   * consumer can import by that name pass the accuracy check, which is the
+   * exact drift this rule exists to catch, and it contradicts the alias rule
+   * below (`export { Foo as Bar }` counts as `Bar` precisely BECAUSE `Bar` is
+   * the importable name). Raised by Qodo on #621.
+   *
+   * A default export re-exported under a name — `export { default as Foo }` —
+   * still counts, because that IS a named binding; it arrives via the
+   * ExportDeclaration loop at the end, not here.
+   */
+  const isNamed = (d: {
+    isExported(): boolean;
+    isDefaultExport(): boolean;
+  }): boolean => d.isExported() && !d.isDefaultExport();
+
   for (const declaration of file.getInterfaces()) {
-    if (declaration.isExported()) push(declaration.getName());
+    if (isNamed(declaration)) push(declaration.getName());
   }
   for (const declaration of file.getTypeAliases()) {
-    if (declaration.isExported()) push(declaration.getName());
+    if (isNamed(declaration)) push(declaration.getName());
   }
   for (const declaration of file.getClasses()) {
-    // `export default class {}` is anonymous — nothing to name, nothing to match.
-    if (declaration.isExported()) push(declaration.getName());
+    // `export default class {}` is anonymous AND default — excluded twice over.
+    if (isNamed(declaration)) push(declaration.getName());
   }
   for (const declaration of file.getEnums()) {
-    if (declaration.isExported()) push(declaration.getName());
+    if (isNamed(declaration)) push(declaration.getName());
   }
   for (const declaration of file.getFunctions()) {
-    if (declaration.isExported()) push(declaration.getName());
+    if (isNamed(declaration)) push(declaration.getName());
   }
   // Read off the STATEMENT, not the declaration: `export` is a modifier on
   // `export const a = 1, b = 2;` as a whole, and the statement node is the one
