@@ -49,6 +49,12 @@ repo_context_from_default_branch = true
 # all fit (DESIGN.md alone is ~810 lines).
 repo_context_max_lines = 3000
 
+# Bound the LLM call inside the container so fallback_models can engage on a
+# slow model. Without it the only deadline is the workflow's timeout-minutes,
+# which kills the job and attempts no fallback. See the workflow env block for
+# the caveat: an 812s call completed despite the documented 120s default.
+ai_timeout = 600
+
 [github_action_config]
 # SWAPPED — see the workflow env block, which overrides this file until both
 # are on the default branch. /review emits only the "PR Reviewer Guide": an
@@ -103,6 +109,12 @@ focus_only_on_problems = true
 # timeout-minutes: 15 bounds it.
 num_code_suggestions_per_chunk = 6
 max_number_of_calls = 6
+# PINNED, not inherited. The workflow's 25-minute timeout is justified by
+# wall-clock being the slowest single call rather than the sum of six, which
+# holds only while chunks run in parallel. That is the 0.42.0 default, but an
+# image bump that flipped it would turn six chunks at the observed 812s into
+# ~81 minutes against a 25-minute cap.
+parallel_calls = true
 # Deliberately 0. Filtering by score is the opposite of adversarial:
 # focus_only_on_problems already excludes style noise, so anything this removed
 # would be a real finding that happened to score low.
