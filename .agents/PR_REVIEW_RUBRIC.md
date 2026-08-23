@@ -24,8 +24,21 @@ a restated rule drifts.
     lists) plus the exact-pattern table. `w-[calc(var(--x)-4px)]` and
     `w-[var(--x,280px)]` remain violations.
 
-- **4px baseline grid** (`DESIGN.md` §4.7). Spacing must resolve to a multiple
-  of 4px. `p-5` (20px) is a violation; `p-4` / `p-6` are the replacements.
+- **Off-scale spacing the linter misses** (`DESIGN.md` §4.7). Spacing must land
+  on the §4.7 table — 1, 2, 3, 4, 6, 8, 12, 16 (0 cancels). Both `mt-0.5` (2px,
+  off the 4px grid) and `p-5` (20px, on the grid but off the table) are
+  violations; the nearest table step is the replacement.
+  `hexagen-ui/no-off-scale-spacing` now covers `m-*`, `p-*`, `gap-*`,
+  `space-x`/`space-y` and `scroll-m*`/`scroll-p*` — at `error` in
+  `apps/web/components/primitives/**` and at `warn` in `apps/web/features/**`
+  and `apps/web/components/**` pending their migration. Four gaps are in-scope
+  for review and are **not** a licence to go off-scale:
+  - class names built inside **template literals** (`TemplateElement` nodes)
+  - `apps/web/app/**`, wired for neither Tailwind rule
+  - **sizing** (`w`/`h`/`size`/`min-*`/`max-*`) and **positioning**
+    (`inset`, `top`/`right`/`bottom`/`left`, `translate-*`), deliberately out
+    of the rule's scope — flag an off-grid value there on its merits
+  - anything the `warn` scopes surface but do not block
 
 - **Presentation-only props** (`DESIGN.md` §3.4). `@hexagen/ui` props must
   extend `NoSemanticState<T>`. Forbidden information-state props (`data`,

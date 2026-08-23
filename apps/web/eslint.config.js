@@ -24,7 +24,10 @@ export default [
     rules: {
       "@next/next/no-html-link-for-pages": "off",
       "no-console": "warn",
-      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: '^_' }],
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_" },
+      ],
       "hexagen-ui/no-children-wrapper-type-swap": "error",
     },
     settings: {
@@ -41,6 +44,26 @@ export default [
     rules: {
       "hexagen-ui/no-feature-slice-imports": "error",
       "hexagen-ui/no-arbitrary-tailwind-values": "error",
+      // DESIGN.md §4.7 spacing scale. The companion to the rule above, not a
+      // duplicate: that one matches BRACKETED values (`mt-[3px]`), so an
+      // off-scale NAMED step (`mt-0.5` = 2px, `gap-1.5` = 6px) never entered
+      // its grammar, and check 3 of scripts/validate-ui-boundary.sh walks
+      // packages/ui/src + components/primitives only. `features/` had no gate
+      // at all — the two that shipped in RepoEntry/RepoEntryView.tsx were
+      // caught by a review bot, which is not a gate.
+      //
+      // "warn", NOT "error", and deliberately so. `features/` carries 225
+      // pre-existing violations across 75 files (185 off-grid `.5` steps, 40
+      // on-grid steps off the §4.7 table such as `px-5`). Turning this to
+      // "error" today fails CI on untouched code, and lowering the rule to
+      // make it pass would be worse than not having it. `turbo lint` exits 0
+      // on warnings (see the note in .github/workflows/lint.yml), so this is
+      // visible in the lint output and in editors without blocking.
+      //
+      // RATCHET OBLIGATION: this stays "warn" only until the migration packet
+      // clears the 225. Flip it to "error" in the same PR that lands the last
+      // fix — a warning nobody is required to clear stops being a gate.
+      "hexagen-ui/no-off-scale-spacing": "warn",
       "hexagen-ui/rhf-stable-array-keys": "error",
       "hexagen-ui/no-children-wrapper-type-swap": "error",
       "no-restricted-imports": [
@@ -103,7 +126,12 @@ export default [
               // `wire.client` because `app/lib/wire.ts` is a barrel that does
               // `export * from "./wire.client"`; fencing only the latter left
               // the container reachable one re-export away.
-              group: ["**/wire", "**/wire.*", "**/adapters/*", "**/adapters/*/*"],
+              group: [
+                "**/wire",
+                "**/wire.*",
+                "**/adapters/*",
+                "**/adapters/*/*",
+              ],
               message:
                 "REA-003: the code-view explorer must not reach the client DI container or an adapter. Do the I/O in the CodeView boundary and pass the result down.",
             },
@@ -325,6 +353,11 @@ export default [
     },
     rules: {
       "hexagen-ui/no-arbitrary-tailwind-values": "error",
+      // See the long note in the `features/**` block above. `components/`
+      // (excluding `primitives/`) carries 17 pre-existing violations across
+      // 7 files, so this is staged the same way and flips to "error" with the
+      // same migration packet.
+      "hexagen-ui/no-off-scale-spacing": "warn",
       "hexagen-ui/rhf-stable-array-keys": "error",
       "hexagen-ui/no-children-wrapper-type-swap": "error",
     },
@@ -358,6 +391,13 @@ export default [
     },
     rules: {
       "hexagen-ui/no-arbitrary-tailwind-values": "error",
+      // DESIGN.md §4.7 spacing scale, at "error" — the ONLY scope where that
+      // is possible today. `primitives/` measures 0 violations, so the
+      // stronger setting costs nothing here and starts with no baseline to
+      // grandfather, exactly as the BF-2.0 note above says of check 3.
+      // `features/**` and `components/**` carry the same rule at "warn"
+      // pending their migration; do not copy the "warn" here.
+      "hexagen-ui/no-off-scale-spacing": "error",
       "hexagen-ui/rhf-stable-array-keys": "error",
       "hexagen-ui/no-children-wrapper-type-swap": "error",
       // Layer 2 of the information-state firewall, reading the same name list
