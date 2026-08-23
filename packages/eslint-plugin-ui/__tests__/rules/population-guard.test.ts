@@ -17,9 +17,7 @@ function lint(code: string): string[] {
       {
         files: ["**/*.test.ts"],
         plugins: {
-          // Linter's plugin typing predates typescript-eslint's RuleModule;
-          // structurally compatible at runtime.
-          "hexagen-ui": { rules: { "population-guard": rule } } as never,
+          "hexagen-ui": { rules: { "population-guard": rule } },
         },
         rules: { "hexagen-ui/population-guard": "error" },
       },
@@ -133,6 +131,48 @@ describe("population-guard", () => {
     assert.equal(FLAG(msgs), 0, msgs.join("\n"));
   });
 
+  it("expect(x.length).toBe(NAMED_COUNT) guards it (non-literal count)", () => {
+    const msgs = lint(`
+      it("guarded by a named constant", () => {
+        expect(items.length).toBe(EXPECTED_COUNT);
+        expect(items).not.toContain("bad");
+      });
+    `);
+    assert.equal(FLAG(msgs), 0, msgs.join("\n"));
+  });
+
+  it("expect(x.length).toEqual(NAMED_COUNT) guards it (non-literal count)", () => {
+    const msgs = lint(`
+      it("guarded by a named constant", () => {
+        expect(items.length).toEqual(EXPECTED_COUNT);
+        expect(items).not.toContain("bad");
+      });
+    `);
+    assert.equal(FLAG(msgs), 0, msgs.join("\n"));
+  });
+
+  it("expect(x.length).toBe(0) / toEqual(0) never guard", () => {
+    const msgs = lint(`
+      it("zero proves emptiness, not population", () => {
+        expect(items.length).toBe(0);
+        expect(items).not.toContain("bad");
+        expect(other.length).toEqual(0);
+        expect(other).not.toContain("bad");
+      });
+    `);
+    assert.equal(FLAG(msgs), 2, msgs.join("\n"));
+  });
+
+  it("expect(x.length).toBeGreaterThan(non-literal) does not guard (bound not syntactically known)", () => {
+    const msgs = lint(`
+      it("bound could be negative", () => {
+        expect(items.length).toBeGreaterThan(MIN);
+        expect(items).not.toContain("bad");
+      });
+    `);
+    assert.equal(FLAG(msgs), 1, msgs.join("\n"));
+  });
+
   it("expect(x.length).toBeGreaterThan(0) guards it", () => {
     const msgs = lint(`
       it("guarded", () => {
@@ -158,6 +198,16 @@ describe("population-guard", () => {
       it("guarded assert-style", () => {
         assert.strictEqual(rows.length, 4);
         expect(rows).not.toMatch(/error/);
+      });
+    `);
+    assert.equal(FLAG(msgs), 0, msgs.join("\n"));
+  });
+
+  it("assert.strictEqual(x.length, NAMED_COUNT) guards it (non-literal count)", () => {
+    const msgs = lint(`
+      it("guarded assert-style", () => {
+        assert.strictEqual(rows.length, EXPECTED_ROWS);
+        expect(rows).not.toContain("bad");
       });
     `);
     assert.equal(FLAG(msgs), 0, msgs.join("\n"));

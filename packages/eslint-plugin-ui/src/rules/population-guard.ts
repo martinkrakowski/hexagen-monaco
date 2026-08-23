@@ -21,11 +21,20 @@ type MessageIds = "unguardedNegative";
  * Counted as positive population guards, when they precede the negative and
  * name the same subject:
  *
- *   expect(x).toHaveLength(n)            // n > 0 or non-literal
- *   expect(x.length).toBe(n) / toEqual(n) / toBeGreaterThan(0)
- *                            / toBeGreaterThanOrEqual(n >= 1)
+ *   expect(x).toHaveLength(n)            // n ≠ 0 (literal) or non-literal
+ *   expect(x.length).toBe(n) / toEqual(n) / toStrictEqual(n)
+ *                                        // n ≠ 0 (literal) or non-literal,
+ *                                        // mirroring toHaveLength: a named
+ *                                        // count is a deliberate population
+ *                                        // statement even when the value is
+ *                                        // not syntactically visible
+ *   expect(x.length).toBeGreaterThan(0) / toBeGreaterThanOrEqual(n >= 1)
+ *                                        // literal bounds only — a non-literal
+ *                                        // lower bound does not syntactically
+ *                                        // prove ≥ 1
  *   assert.ok(x.length > 0) / assert.ok(x.length >= 1)
- *   assert.equal(x.length, n) / assert.strictEqual(x.length, n)   // n > 0
+ *   assert.equal(x.length, n) / assert.strictEqual(x.length, n)
+ *                                        // n ≠ 0 (literal) or non-literal
  *
  * `expect(x).not.toHaveLength(0)` is itself a negative shape and never
  * counts as a guard.
@@ -169,6 +178,21 @@ const rule: TSESLint.RuleModule<MessageIds> = {
   },
   create(context) {
     const sourceCode = context.sourceCode ?? context.getSourceCode();
+    // Lines an allow-list comment suppresses: a comment ending on line L
+    // covers reports starting on L or L+1. Comments are constant per file,
+    // so this is indexed once in create() instead of rescanning every
+    // comment on each reported node.
+    const allowLines = new Set<number>();
+    for (const comment of sourceCode.getAllComments()) {
+      const text = comment.value.trim();
+      if (
+        text.startsWith("population-guard:") &&
+        text.length > "population-guard:".length
+      ) {
+        allowLines.add(comment.loc.end.line);
+        allowLines.add(comment.loc.end.line + 1);
+      }
+    }
     // test body node -> normalized subject texts guarded so far. Traversal is
     // source order, so a guard is recorded before any negative that follows
     // it; a guard placed after the negative never suppresses the report.
@@ -185,16 +209,7 @@ const rule: TSESLint.RuleModule<MessageIds> = {
     }
 
     function hasAllowComment(node: TSESTree.Node): boolean {
-      const line = node.loc.start.line;
-      return sourceCode
-        .getAllComments()
-        .some(
-          (comment) =>
-            comment.value.trim().startsWith("population-guard:") &&
-            comment.value.trim().length > "population-guard:".length &&
-            (comment.loc.end.line === line ||
-              comment.loc.end.line === line - 1),
-        );
+      return allowLines.has(node.loc.start.line);
     }
 
     function report(node: TSESTree.Node, subject: TSESTree.Expression): void {
@@ -239,7 +254,8 @@ const rule: TSESLint.RuleModule<MessageIds> = {
           }
           if (
             (method === "equal" || method === "strictEqual") &&
-            isPositiveNumberLiteral(second)
+            second !== undefined &&
+            !isZeroLiteral(second)
           ) {
             const subj = lengthSubject(first);
             if (subj) {
@@ -279,11 +295,23 @@ const rule: TSESLint.RuleModule<MessageIds> = {
           const subject = expectSubject(callee, false);
           const lenSubj = subject ? lengthSubject(subject) : null;
           const arg = node.arguments[0];
-          const positive =
-            matcher === "toBeGreaterThan"
-              ? isZeroLiteral(arg) || isPositiveNumberLiteral(arg)
-              : isPositiveNumberLiteral(arg);
-          if (lenSubj && positive) {
+          // Exact-count matchers mirror toHaveLength: any argument except a
+          // literal 0 guards (a named count is a deliberate population
+          // statement even when its value is not visible to the rule).
+          // Comparison matchers stay literal-only: a non-literal lower bound
+          // does not syntactically prove length >= 1.
+          const exactCount =
+            matcher === "toBe" ||
+            matcher === "toEqual" ||
+            matcher === "toStrictEqual";
+          const guards =
+            arg !== undefined &&
+            (exactCount
+              ? !isZeroLiteral(arg)
+              : matcher === "toBeGreaterThan"
+                ? isZeroLiteral(arg) || isPositiveNumberLiteral(arg)
+                : isPositiveNumberLiteral(arg));
+          if (lenSubj && guards) {
             recordGuard(
               enclosingTestBody(node),
               normalize(sourceCode.getText(lenSubj)),

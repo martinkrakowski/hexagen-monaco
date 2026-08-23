@@ -10,9 +10,14 @@ declare module "eslint" {
     message: string;
   }
 
+  /** The plugin shape the fixtures rely on: a named map of rules. */
+  interface PluginShape {
+    rules: Record<string, unknown>;
+  }
+
   interface FlatConfigItem {
     files?: string[];
-    plugins?: Record<string, unknown>;
+    plugins?: Record<string, PluginShape>;
     rules?: Record<string, unknown>;
   }
 
