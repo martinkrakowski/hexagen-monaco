@@ -38,7 +38,7 @@ const LAYER_RULES = path.join(
  * Keys the linter reads — the `LayerRules` type in
  * `src/layer-import-violation.ts`. Keep this list in step with that type.
  */
-const READ_KEYS = ["shared_kernels", "layers", "cross_package_rules"] as const;
+const READ_KEYS = ["layers", "cross_package_rules"] as const;
 
 /**
  * Keys present in the file that NO code reads. Each entry is debt with a
@@ -47,6 +47,14 @@ const READ_KEYS = ["shared_kernels", "layers", "cross_package_rules"] as const;
  * exists to stop.
  */
 const PROSE_ONLY_KEYS_PENDING_RETIREMENT: Record<string, string> = {
+  shared_kernels:
+    "DEAD BY KEY MISMATCH (review flag on #636): the reader is " +
+    "isSharedKernelAllowed() (layer-import-violation.ts:19,83), which reads " +
+    "singular `shared_kernel` as an OBJECT; this plural key is a per-package " +
+    "LIST no code reads. Behaviour today equals the reader's default " +
+    "(allowed_in_all_layers: true), which is also what every list entry says " +
+    "-- so nothing is currently mis-enforced. Reconcile the schema and make " +
+    "it live, or delete the block.",
   composition_root_exceptions:
     "no reader in tools/arch-linter/src, packages/sync/src or scripts/ (verified 2026-08-23); " +
     "the live per-context list lives in linter-config.yaml. Retire or wire.",
@@ -97,6 +105,23 @@ describe("layer-rules.yaml liveness", () => {
     assert.ok(
       entries.length > 0,
       "expected at least one path-valued entry in layer-rules.yaml; found none — guard is not checking anything",
+    );
+
+    // An absolute value or `..` traversal must not be able to satisfy the
+    // guard by resolving OUTSIDE the repo (review flag on #636).
+    const escapes = entries.filter((e) => {
+      const resolved = path.resolve(REPO_ROOT, e.value);
+      return (
+        path.isAbsolute(e.value) ||
+        !(resolved + path.sep).startsWith(REPO_ROOT + path.sep)
+      );
+    });
+    assert.deepEqual(
+      escapes,
+      [],
+      `layer-rules.yaml path entries must be repo-relative and stay inside the repo:\n${escapes
+        .map((m) => `  ${m.trail} = ${m.value}`)
+        .join("\n")}`,
     );
 
     const missing = entries.filter(
