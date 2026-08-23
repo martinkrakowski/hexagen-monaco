@@ -480,6 +480,37 @@ The 4px baseline grid is absolute. All spacing must resolve to a multiple of 4px
 | 12         | `p-12`, `m-12`, `gap-12` | 48px     |
 | 16         | `p-16`, `m-16`, `gap-16` | 64px     |
 
+The table is the scale, not an illustration of it: a step that lands on the
+4px grid but is absent here — `p-5` (20px), `mb-7` (28px), `pl-10` (40px) — is
+still off-scale. §7.3 uses `p-5` as its worked example of exactly that.
+
+**Enforcement:** `hexagen-ui/no-off-scale-spacing` encodes this table as a
+constant — it does **not** parse this file, so editing the table alone will not
+change what the rule accepts. The two are kept in step by review; change both or
+neither. It covers
+the utilities that put space **between or around** boxes — `m-*`, `p-*`
+(all sides and axes, logical `ms`/`me`/`ps`/`pe` included), `gap-*`, `space-x`
+/ `space-y`, `scroll-m*` / `scroll-p*` — across every variant and `!` spelling.
+`0`, `auto`, `px` and `-reverse` are legal; sizing (`w`/`h`/`size`/`min-*`/
+`max-*`) and positioning (`inset`, `top`/`right`/`bottom`/`left`, `translate-*`)
+are deliberately out of scope, because those consume the same numbers for
+control heights, glyph boxes and optical offsets rather than for rhythm.
+Bracketed values (`mt-[3px]`) belong to `no-arbitrary-tailwind-values` (§4.8).
+
+It is wired at **`error`** for `apps/web/components/primitives/**`, which
+measures zero violations, and at **`warn`** for `apps/web/features/**` and
+`apps/web/components/**` — those carry 242 pre-existing violations, and the
+setting is staged to flip to `error` in the PR that clears the last one, not
+left as a permanent warning. Three gaps are known and deliberate, and none is
+a licence to go off-scale there:
+
+- Classes built inside **template literals** are `TemplateElement` nodes, which
+  neither this rule nor `no-arbitrary-tailwind-values` visits (24 off-scale
+  steps live there today).
+- `apps/web/app/**` is not wired for either Tailwind rule.
+- Sizing and positioning utilities are out of scope by the reasoning above; an
+  off-grid `h-*` or `-top-*` is still a review matter.
+
 **Border Radii:**
 | Context | Class |
 |---------|-------|

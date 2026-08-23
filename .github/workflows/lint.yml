@@ -300,6 +300,16 @@ jobs:
       # resolver that has its own "not installed" failure mode, and never
       # naming the baseline it enforces. This step invokes the linter directly,
       # names the file, and fails in parallel with that job.
+      # MUST run after "Build Packages" above. The script shells out to
+      # `npx eslint` directly rather than through turbo, so turbo's
+      # `lint: dependsOn ["^build"]` does not apply and the plugin's dist/ is
+      # not built for it. Placed earlier, it failed with ERR_MODULE_NOT_FOUND
+      # on @hexagen/eslint-plugin-ui/dist/index.js -- a real CI failure on
+      # #617, not a hypothetical.
+      - name: "Spacing debt (shrink-only)"
+        if: steps.docs-only.outputs.docs_only != 'true'
+        run: node scripts/check-spacing-debt.mjs
+
       - name: "Verify Architecture Lint Ratchet"
         if: steps.docs-only.outputs.docs_only != 'true'
         uses: ./.github/actions/hexagen-conformance
