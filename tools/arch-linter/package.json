@@ -1,6 +1,6 @@
 {
   "name": "@hexagen/arch-linter",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "HexaGen architecture linter and manifest validation",
   "license": "FSL-1.1-ALv2",
   "type": "module",

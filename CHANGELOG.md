@@ -3,6 +3,99 @@
 Release notes for the co-published `@hexagen-monaco/sync` and
 `@hexagen-monaco/arch-linter` packages (they share one version, tagged `vX.Y.Z`).
 
+## 0.12.0
+
+Everything `hexagen scan` and the brownfield import flow need from the
+published CLI. **0.11.0 on npm has no `scan` command**; the production web
+app has been running it from the monorepo checkout (D-P1, #616) rather than
+from the registry. This release closes that gap.
+
+**Minor, not patch**, for the same reason 0.11.0 was: a caret range on `0.11.x`
+would otherwise pull the two behaviour changes below into every generated
+project on its next install. Generated projects pin `^<engine version>`; a
+project scaffolded by 0.11.x stays on 0.11.x until the pin is changed.
+
+### ⚠️ A project that passed the linter on 0.11.0 can fail on 0.12.0
+
+`hexagen-lint` now enforces **context-declaration accuracy** (#621, ADR-0057):
+every port and adapter a `context.yaml` declares must name a symbol the code
+actually exports. Declarations were prose before — nothing read them. The
+direction is one-way by decision: a _declared_ element that resolves to
+nothing is a violation; an exported symbol the registry does not name reports
+nothing. Run `hexagen-lint` before bumping the pin; the fix is either to
+correct the declaration or to delete it.
+
+### ⚠️ `hexagen sync` no longer emits unused layer folders
+
+A configured layer directory is created only when the bounded-context YAML
+lists real content for it — entities, ports, adapters, use-cases, factories
+(#554, HEX-025). Missing `layers:`, empty objects and empty lists emit
+nothing. Existing projects are unaffected on disk (sync does not delete), but
+a `sync --check` that previously reported dozens of `created` layer ops now
+reports none. The six `@generated` empty `export {};` barrels in
+`core-domain` and `runtime` are gone from the reference tree (#548).
+
+### `hexagen scan` — brownfield import in one command (new)
+
+```
+hexagen scan [--root <path>] [--yes] [--dry-run] [--force]
+             [--skip-bootstrap] [--no-report] [--handoff] [--handoff-out <path>]
+```
+
+Composes adopt → bootstrap → lint → report (#557). Refuses to write without
+`--yes`; `--dry-run` prints the proposed layout and writes nothing. Exit codes
+keep the 0 / 1 / 2 contract (clean / findings / could-not-run).
+
+- **Machine-readable envelope** on the final stdout line, after the human
+  output, on success _and_ failure — a consumer learns _why_ a scan could not
+  run instead of inferring it from an exit code (#577; schema in
+  `@hexagen/shared`, versioned, with a golden fixture, #569).
+- The envelope carries the **`hexagen-lint --json` findings and the scanned
+  file count** (#597). `introduced` / `baselineGrowth` are deliberately
+  absent: the linter fills them only under `--pr-diff`, which a first import
+  cannot have.
+- `--handoff` writes the **Tier-A upload zip** the hosted import route
+  ingests; `--handoff-out` names the path (#588). `--handoff` with
+  `--no-report` or `--dry-run` is refused before any write.
+- `hexagen-report.md` is what `report` actually writes; the envelope names it
+  and carries its markdown directly (#577 — the old probe list named three
+  files that were never produced).
+
+### `hexagen-lint`
+
+- Every human-readable run prints
+  `Ratchet: N suppressed / M stale / K fresh (<baseline>)`, including zeros
+  (#537). `--json` is unchanged.
+- Context-declaration check, as above (#621).
+
+### `hexagen arch refactor`
+
+Reports a named warning — `Could not parse <path> (syntactic); impact for
+this file is incomplete` — instead of a silent, confident result when a file
+that mentions the target symbol cannot be parsed (#538). Semantic errors are
+excluded so consumer trees do not flood the channel.
+
+### Fixes
+
+- **Probe parity** across adopt, bootstrap `--dry-run` and scan (#561): a
+  dangling `layout.yaml` / manifest symlink is an _existing_ path (it blocks
+  overwrite without `--force`), `EACCES` propagates instead of reading as
+  "absent", and bootstrap `--dry-run` runs the overwrite guard _before_
+  reporting `Would write:`.
+- `MigrateManifestUseCase` no longer imports `node:util` from the domain
+  layer (#550); `template-engine` domain no longer imports `node:path` (#545).
+
+### License text
+
+The `LICENSE` file inside the `@hexagen-monaco/sync` tarball was a copy of
+the root platform licence whose preamble described sync as a _wedge_ package
+"licensed separately" — while being that file. The preamble now states what
+ADR-0066 decided: sync is platform (Source-Available Evaluation License);
+`@hexagen-monaco/arch-linter` is the only wedge (FSL-1.1-Apache-2.0, SPDX
+`FSL-1.1-ALv2`). **No licence terms change**; only the description of which
+package is under which terms. ADR-0061 is marked superseded by ADR-0066
+(#627, #629).
+
 ## 0.11.0
 
 Prepared as 0.10.0 in #485; **never tagged or published**. Shipped as **0.11.0**
