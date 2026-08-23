@@ -193,11 +193,26 @@ costs a human more time than it saves.
 """
 
 [ignore]
-# Generated build artefacts only. Do not ignore .architecture/** (accuracy
-# defects are in-scope for other bots; this one simply must not propose
-# edits there) or packages/template-engine/templates/** (shipped customer
-# payload — see best_practices.md). @generated barrels are a content
-# marker, not a path glob — handled in the rubric.
+# Scope: this reviewer sees apps/web/** and nothing else.
+#
+# Its brief is the DESIGN.md UI contract. On the two PRs it reviewed outside
+# that remit (#631, a CI workflow; #632, a changelog) it produced one
+# suggestion each, both refuted with evidence -- an adversarial prompt with
+# no real target invents a plausible one. On the one apps/web diff it has
+# seen (#624) it was right. So the diff it is given is cut to the files the
+# brief can actually judge; on a PR touching nothing under apps/web the
+# filtered diff is empty, the tool logs "no code suggestions", and with
+# publish_output_no_suggestions = false nothing is posted. CodeRabbit and
+# Qodo keep the rest of the tree.
+#
+# Mechanics (pr_agent/algo/file_filter.py @0.42.0): every pattern is
+# re.match-ed against the repo-relative filename and a file is dropped when
+# ANY pattern matches. "Only apps/web" is therefore a negative lookahead.
+# Keep the build-artefact globs as well so apps/web/**/dist is still out.
+#
+# Do not ignore .architecture/** or packages/template-engine/templates/**
+# for any other reason than this scope -- see best_practices.md.
+regex = ['^(?!apps/web/).*']
 glob = ['**/dist/**', '**/*.tsbuildinfo', 'yarn.lock']
 
 [openrouter]
