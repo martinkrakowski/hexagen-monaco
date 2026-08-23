@@ -128,18 +128,37 @@ describe("runDeterministicAutoFix — the fall-through set", () => {
   // baseline needs to distinguish. Deleting it now would make the telemetry
   // unable to express the distinction the moment it appears.
 
-  it("reports the residue of the SETTLED document, not of the first pass", () => {
-    // Pass 1 fixes `Scope Missing`; pass 2 walks every item against the
-    // repaired document. The residue reported is the terminal pass's, so a
-    // violation that WAS repaired never appears as residue.
+  // CodeRabbit was right on #619 that `not.toContain` is vacuous on an empty
+  // list. The first remedy asserted `fellThrough.length > 0` on this fixture,
+  // and that assertion is UNSATISFIABLE: probing every construction shows every
+  // reachable violation except `Invalid YAML` is repaired, and `Invalid YAML`
+  // stops the document parsing so nothing else is ever evaluated beside it.
+  // There is no document that both applies a fix and leaves residue.
+  //
+  // So the invariant is split in two, each non-vacuous against a population it
+  // can actually have.
+  it("never reports a violation it repaired — with fixes proven to exist", () => {
     const outcome = runDeterministicAutoFix(NEEDS_ONE_FIX_THEN_RESIDUE);
 
+    // The non-vacuity guard is on the APPLIED list, which this fixture really
+    // does populate. Without it, "no repaired title appears as residue" would
+    // pass on a runner that repaired nothing at all.
+    expect(outcome.appliedTitles.length).toBeGreaterThan(0);
     expect(outcome.appliedTitles).toContain("Scope Missing");
-    // `not.toContain` is vacuously true on an EMPTY list, so this would still
-    // pass if the runner stopped reporting terminal residue at all. Pin that
-    // the fixture really does leave some. Raised by CodeRabbit on #619.
-    expect(outcome.fellThrough.length).toBeGreaterThan(0);
-    expect(fallThroughTitles(outcome)).not.toContain("Scope Missing");
+    for (const title of outcome.appliedTitles) {
+      expect(fallThroughTitles(outcome)).not.toContain(title);
+    }
+  });
+
+  it("reports terminal residue when the document actually leaves some", () => {
+    // `Invalid YAML` is the one title `canAutoFix` refuses, so it is the only
+    // residue reachable today. Asserting the exact contents rather than a
+    // non-empty length: a count alone would not notice the wrong item.
+    const outcome = runDeterministicAutoFix("system: acme\n  bad: [unclosed\n");
+
+    expect(outcome.appliedTitles).toEqual([]);
+    expect(fallThroughTitles(outcome)).toEqual(["Invalid YAML"]);
+    expect(outcome.fellThrough[0].reason).toBe("not-allow-listed");
   });
 
   it("never reports an item the parser passed", () => {
