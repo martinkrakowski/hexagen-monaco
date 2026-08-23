@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, ArrowLeft } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight } from "lucide-react";
 import { Button, Spinner } from "@hexagen/ui";
 import { ProjectsShellWithFreeTier } from "@/ProjectsShellWithFreeTier";
 import { EmptyState } from "@/primitives/EmptyState";
@@ -15,13 +15,34 @@ import {
   deriveStateFromEvent,
   type BrownfieldBlockReason,
   type BrownfieldFlowEvent,
+  type BrownfieldFlowState,
   type BrownfieldFlowViewState,
+  type BrownfieldGateInstallMode,
+  type BrownfieldLayoutDraft,
+  type BrownfieldManifestDraft,
   type BrownfieldTier,
 } from "./BrownfieldFlow/types";
+import {
+  deriveScanId,
+  freshFindingCountOf,
+  packagesFromLayoutDraft,
+  readDetectedPackages,
+  scanFromHandoff,
+} from "./BrownfieldFlow/scan-artifacts";
 import { useBrownfieldDraft } from "./draft/useBrownfieldDraft";
 import { useGithubScanAvailability } from "./ScanProgress/useGithubScanAvailability";
+import { FindingsReview } from "./FindingsReview/FindingsReview";
+import { LayoutRatify } from "./LayoutRatify/LayoutRatify";
+import { ManifestRatify } from "./ManifestRatify/ManifestRatify";
+import { createManifestDraft } from "./ManifestRatify/manifest-draft";
+import { Report } from "./Report/Report";
 import { ArtifactUploadView } from "./views/ArtifactUploadView";
 import type { ArtifactUploadAlert } from "./views/ArtifactUploadView";
+import {
+  BrownfieldNotice,
+  BrownfieldScreenFrame,
+} from "./views/BrownfieldScreenFrame";
+import { BrownfieldStepIndicator } from "./views/BrownfieldStepIndicator";
 import { TierPickerView } from "./views/TierPickerView";
 
 /**
@@ -41,23 +62,46 @@ import { TierPickerView } from "./views/TierPickerView";
  * product surface for this tier, which is why every reachable HTTP status below
  * gets its own copy rather than a shared "something went wrong".
  *
- * ## Where the flow stops, and why it stops there
+ * ## This is now the whole flow, not the first three states
  *
- * The state machine (BF-3.1) runs `uploading -> scanning -> layout_ratify` and
- * on to a report. `scanning` is a Tier-B concept (there is no stream to watch
- * when the parse finished inside the POST), and the ratification screens are
- * BF-4.1/4.2/4.4. So this packet drives `tier_pick`, `uploading` and `blocked`
- * only, and the ingest result is rendered in place on the upload screen.
+ * It drives every state the machine defines: `tier_pick`, `uploading` and
+ * `blocked` as before, and now `layout_ratify`, `manifest_ratify`,
+ * `findings_review`, `report` and `gate_install` as well. Before that wiring the
+ * five ratification slices were complete, tested and imported by nothing, which
+ * meant `SCAN_COMPLETE` could never be dispatched: its target state had nothing
+ * to render, so dispatching it would have blanked the page.
  *
- * The success arm deliberately performs NO navigation (see the house rule on
- * flows that end on a result screen, and the machine's own comment that
- * `report` is terminal-with-actions). The user reads the report they came for
- * and leaves by pressing something.
+ * ## How `SCAN_COMPLETE` is dispatched, and why not automatically
+ *
+ * A successful ingest still lands on the upload screen with the parse result in
+ * place. The footer then offers an explicit **Continue** button, and pressing it
+ * folds TWO events through the machine — `UPLOAD_COMPLETE` (uploading ->
+ * scanning) then `SCAN_COMPLETE` (scanning -> layout_ratify). Two, because the
+ * transition table has no `uploading -> layout_ratify` edge and reaching around
+ * it would give away the property BF-3.1 encoded. `scanning` is instantaneous
+ * for Tier A — the parse already happened inside the POST — so it is a state the
+ * flow passes THROUGH rather than one it renders.
+ *
+ * The success arm still performs no navigation of its own. The user reads the
+ * ingest result and moves on by pressing something, which is the standing house
+ * rule for a flow that ends on a result screen and is doubly true of `report`,
+ * which the machine makes terminal-with-actions.
+ *
+ * ## What is NOT wired here, and is flagged rather than faked
+ *
+ * The ratified manifest is held in the flow state; it is NOT yet POSTed to
+ * `/api/projects/bootstrap` (BF-4.3). That route exists and works, but wiring it
+ * needs its own error surface, and inventing a silent one would be worse than an
+ * honest gap. The gate bundle the user takes away does not depend on it — the
+ * install-gate route builds from `scanId` alone.
  */
 
-/** The seam BF-6.2 (`GateInstall/`) plugs into: the footer of the result state. */
+/**
+ * The seam note under a finished Tier-A ingest. Now says what Continue does
+ * rather than announcing a future release.
+ */
 const NEXT_STEP_NOTE =
-  "Ratifying the layout and installing the conformance gate arrive in the next release. Nothing you uploaded was stored.";
+  "Nothing you uploaded was stored. Continue to confirm the layout these artifacts describe, then take away a conformance gate.";
 
 /** Field name for the single-zip form part the route looks for first. */
 const ZIP_FIELD = "zip";
@@ -373,6 +417,77 @@ export function BrownfieldImportPage() {
     [view, applyView],
   );
 
+  /** Fold a sequence of events through the machine, left to right. */
+  const foldEvents = useCallback(
+    (from: BrownfieldFlowState, events: BrownfieldFlowEvent[]) =>
+      events.reduce(deriveStateFromEvent, from),
+    [],
+  );
+
+  /**
+   * One correlation id per mounted run, captured once.
+   *
+   * It names the gate bundle the user downloads, so it must not change while
+   * they are looking at the screen that offers it — a `Date.now()` read per
+   * render would rename the file on every keystroke. The install-gate route
+   * treats `scanId` as a name rather than a lookup key (it says so: there is no
+   * `ScanRecord` store to look one up in), so deriving it locally is the whole
+   * contract, and `deriveScanId` guarantees the route's allow-list by
+   * construction.
+   */
+  const [runSuffix] = useState(() => Date.now().toString(36));
+  const scanId = useMemo(
+    () => deriveScanId(carriedName, runSuffix),
+    [carriedName, runSuffix],
+  );
+
+  /**
+   * The ingest, in the shape S6 reads. Null until the upload succeeds, and null
+   * again on a resumed run — a scan is server state and BF-3.4 deliberately does
+   * not persist it.
+   */
+  const scan = useMemo(
+    () => (result === null ? null : scanFromHandoff(result)),
+    [result],
+  );
+
+  /**
+   * The detected packages S3 edits — the join this flow was missing.
+   *
+   * LIVE SCAN FIRST, draft projection second. When the run produced artifacts,
+   * the packages come from the returned `layout.yaml` text. On a resumed run
+   * there is no scan, and `resolveResumeState` still permits `layout_ratify`
+   * because the ratified draft is persisted; `packagesFromLayoutDraft` rebuilds
+   * the rows from it so the screen shows what the user confirmed rather than an
+   * empty grid. See that function's docblock for what the rebuild loses.
+   */
+  const detected = useMemo(
+    () => readDetectedPackages(scan?.layoutExcerpt ?? null),
+    [scan],
+  );
+  const resumedPackages = useMemo(
+    () => packagesFromLayoutDraft(view.layoutDraft),
+    [view.layoutDraft],
+  );
+  const layoutPackages = scan === null ? resumedPackages : detected.packages;
+  const layoutProblem =
+    scan !== null
+      ? detected.problem
+      : resumedPackages.length === 0
+        ? "This run was resumed and its scan is gone, so there is nothing to confirm. Start again from the import options."
+        : null;
+
+  /**
+   * S4's draft. Seeded from what S3 ratified the first time the screen is
+   * reached, then held in the flow state so S5 -> S4 shows what the user typed.
+   */
+  const manifestDraft = useMemo(
+    () =>
+      view.manifestDraft ??
+      createManifestDraft(view.layoutDraft ?? { contexts: [] }, carriedName),
+    [view.manifestDraft, view.layoutDraft, carriedName],
+  );
+
   const [resetToken, setResetToken] = useState(0);
 
   const resetUpload = useCallback(() => {
@@ -565,7 +680,221 @@ export function BrownfieldImportPage() {
     dispatch({ type: "TRY_ANOTHER_TIER" });
   }, [resetUpload, dispatch]);
 
+  const toImportOptions = useCallback(() => {
+    router.push("/projects/new/import");
+  }, [router]);
+
+  const goBack = useCallback(() => {
+    dispatch({ type: "GO_BACK" });
+  }, [dispatch]);
+
+  /**
+   * The one place `SCAN_COMPLETE` is raised.
+   *
+   * TWO events, not one. `uploading -> layout_ratify` is not an edge the table
+   * permits, so `SCAN_COMPLETE` alone would be inert — `transitionState` would
+   * hand back `uploading` and the button would appear broken. `UPLOAD_COMPLETE`
+   * moves to `scanning` first, which for Tier A is a state with no duration
+   * (the parse finished inside the POST) and therefore nothing to render.
+   */
+  const continueToRatification = useCallback(() => {
+    applyView({
+      ...view,
+      state: foldEvents(view.state, [
+        { type: "UPLOAD_COMPLETE" },
+        { type: "SCAN_COMPLETE" },
+      ]),
+    });
+  }, [view, applyView, foldEvents]);
+
+  const handleLayoutDraftChange = useCallback(
+    (layoutDraft: BrownfieldLayoutDraft) => {
+      applyView({ ...view, layoutDraft });
+    },
+    [view, applyView],
+  );
+
+  /**
+   * Ratifying the layout also DROPS a manifest draft seeded from an older one.
+   *
+   * S4's contexts are seeded from S3's output, so walking back, changing which
+   * packages are included and returning would otherwise show a context list
+   * that no longer matches the layout the user just confirmed. The draft is
+   * only discarded when the ratified layout actually differs.
+   */
+  const handleRatifyLayout = useCallback(
+    (layoutDraft: BrownfieldLayoutDraft) => {
+      const layoutChanged =
+        JSON.stringify(view.layoutDraft ?? null) !==
+        JSON.stringify(layoutDraft);
+      dispatch(
+        { type: "RATIFY_LAYOUT" },
+        {
+          layoutDraft,
+          manifestDraft: layoutChanged ? null : (view.manifestDraft ?? null),
+        },
+      );
+    },
+    [dispatch, view.layoutDraft, view.manifestDraft],
+  );
+
+  const handleManifestDraftChange = useCallback(
+    (next: BrownfieldManifestDraft) => {
+      applyView({ ...view, manifestDraft: next });
+    },
+    [view, applyView],
+  );
+
+  /**
+   * `freshFindingCount` is the REAL count, never a convenient zero.
+   *
+   * The machine skips `findings_review` only on an explicit `0`, and its comment
+   * explains why a `> 0` test would be wrong. `freshFindingCountOf` returns a
+   * negative sentinel when the scan reported no findings list at all — which is
+   * the case for every Tier-A handoff today — so the user is routed TO the review
+   * screen, where the copy says an unread list is not an empty one. Defaulting to
+   * `0` here would skip the screen and present an unmeasured tree as clean.
+   */
+  const handleRatifyManifest = useCallback(
+    (_payload: unknown, draft: BrownfieldManifestDraft) => {
+      dispatch(
+        {
+          type: "RATIFY_MANIFEST",
+          freshFindingCount: freshFindingCountOf({
+            findings: scan?.findings ?? null,
+          }),
+        },
+        { manifestDraft: draft },
+      );
+    },
+    [dispatch, scan],
+  );
+
+  const handleDecisionsChange = useCallback(
+    (baselinedFindingKeys: string[]) => {
+      applyView({ ...view, baselinedFindingKeys });
+    },
+    [view, applyView],
+  );
+
+  const handleRatifyFindings = useCallback(
+    (baselinedFindingKeys: string[]) => {
+      dispatch({ type: "RATIFY_FINDINGS" }, { baselinedFindingKeys });
+    },
+    [dispatch],
+  );
+
+  const handleInstallGate = useCallback(() => {
+    dispatch({ type: "INSTALL_GATE" });
+  }, [dispatch]);
+
+  /**
+   * Records WHICH way the gate was taken, and does nothing else. Not a
+   * navigation trigger: this is a success arm, and success arms do not route.
+   */
+  const handleGateDelivered = useCallback(
+    (gateInstallMode: BrownfieldGateInstallMode) => {
+      applyView({ ...view, gateInstallMode });
+    },
+    [view, applyView],
+  );
+
   if (!carriedName) return null;
+
+  // ── S3–S7 ──────────────────────────────────────────────────────────────────
+  //
+  // Each ratification screen renders its OWN shell, because each owns its own
+  // footer actions and its own content width (the plan gives S1 `max-w-3xl` and
+  // the dense S3 `max-w-4xl`). A single shared shell can express neither, and
+  // mounting the screens conditionally is also what keeps their hooks
+  // conditional — `useScanReport` needs a scan, and there is none to give it on
+  // the tier picker.
+
+  if (view.state === "layout_ratify") {
+    return (
+      <LayoutRatify
+        packages={layoutPackages}
+        ratifiedDraft={view.layoutDraft ?? null}
+        projectName={carriedName}
+        detectionProblem={layoutProblem}
+        onDraftChange={handleLayoutDraftChange}
+        onRatify={handleRatifyLayout}
+        onBack={goBack}
+      />
+    );
+  }
+
+  if (view.state === "manifest_ratify") {
+    // S4 is the one screen whose view renders its own Back/Continue inside the
+    // content column, so its shell footer carries only the way out of the flow.
+    // That is `ManifestRatifyView`'s existing choice, not a new convention.
+    return (
+      <BrownfieldScreenFrame
+        measure="wide"
+        footer={
+          <Button variant="outline" onClick={toImportOptions}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to import options
+          </Button>
+        }
+      >
+        <ManifestRatify
+          draft={manifestDraft}
+          onDraftChange={handleManifestDraftChange}
+          onBack={goBack}
+          onRatify={handleRatifyManifest}
+        />
+      </BrownfieldScreenFrame>
+    );
+  }
+
+  if (view.state === "findings_review") {
+    return (
+      <FindingsReview
+        findings={scan?.findings ?? null}
+        ratifiedKeys={view.baselinedFindingKeys ?? null}
+        projectName={carriedName}
+        onDecisionsChange={handleDecisionsChange}
+        onRatify={handleRatifyFindings}
+        onBack={goBack}
+      />
+    );
+  }
+
+  // `gate_install` renders the SAME screen: S7 is a dialog over the report, not
+  // a page, and `gate_install` has no outgoing edge — so a host that switched on
+  // `report` alone would blank the page the moment the installer opened.
+  if (view.state === "report" || view.state === "gate_install") {
+    if (scan === null) {
+      // Reachable only by a restored draft, which cannot carry a scan. Saying so
+      // is the honest arm; rendering a report assembled from nothing is not.
+      return (
+        <BrownfieldScreenFrame
+          footer={
+            <Button onClick={toImportOptions}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to import options
+            </Button>
+          }
+        >
+          <BrownfieldNotice assertive>
+            This run was resumed, and a scan report is not something that can be
+            restored — it describes a repository as it was when it was read.
+            Start the import again to produce one.
+          </BrownfieldNotice>
+        </BrownfieldScreenFrame>
+      );
+    }
+    return (
+      <Report
+        scan={scan}
+        scanId={scanId}
+        onInstallGate={handleInstallGate}
+        onGateDelivered={handleGateDelivered}
+        onExit={toImportOptions}
+      />
+    );
+  }
 
   const footer = (() => {
     if (view.state === "blocked") {
@@ -595,8 +924,14 @@ export function BrownfieldImportPage() {
             <Button variant="outline" onClick={resetUpload} disabled={busy}>
               Upload different artifacts
             </Button>
-            <Button onClick={() => router.push("/projects/new/import")}>
-              Back to import options
+            {/*
+              The ONLY place `SCAN_COMPLETE` is raised, and a button rather than
+              an effect. `continueToRatification` folds UPLOAD_COMPLETE then
+              SCAN_COMPLETE — see its docblock for why two events.
+            */}
+            <Button onClick={continueToRatification} disabled={busy}>
+              Continue
+              <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
           </>
         );
@@ -732,61 +1067,5 @@ export function BrownfieldImportPage() {
         </div>
       </div>
     </ProjectsShellWithFreeTier>
-  );
-}
-
-/**
- * The three-dot creation-flow indicator.
- *
- * DUPLICATED ON PURPOSE, and it is the smallest legal option. The shared
- * component is `features/landing/components/CreationStepIndicator`, and check 6
- * of `scripts/validate-ui-boundary.sh` makes `features/brownfield` importing
- * anything from `features/landing` a build failure — the alias form
- * (`@/landing/...`) included, with an empty, shrink-only baseline. Promoting it
- * to `components/` is a Phase-1-shaped packet touching the landing slice's
- * consumers, which is outside this packet's fence. Flagged for that promotion.
- */
-function BrownfieldStepIndicator() {
-  const steps = [
-    { label: "Method", step: 1 },
-    { label: "Configure", step: 2 },
-    { label: "Generate", step: 3 },
-  ];
-  const currentStep = 2;
-
-  return (
-    <div className="flex items-center justify-center gap-0 mb-12 animate-fade-in-up">
-      {steps.map((step, index) => {
-        const isActive = step.step === currentStep;
-        const isInactive = step.step > currentStep;
-        return (
-          <div key={step.step} className="flex items-center">
-            {index > 0 ? (
-              <div className="w-8 sm:w-16 h-px bg-border mx-1 sm:mx-3" />
-            ) : null}
-            <div className="flex items-center gap-2">
-              <div
-                className={
-                  isActive
-                    ? "w-2 h-2 rounded-full bg-primary step-dot-active"
-                    : isInactive
-                      ? "w-2 h-2 rounded-full bg-muted"
-                      : "w-2 h-2 rounded-full bg-primary"
-                }
-              />
-              <span
-                className={
-                  isActive
-                    ? "text-xs font-medium text-primary"
-                    : "text-xs font-medium text-muted-foreground"
-                }
-              >
-                {step.label}
-              </span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
   );
 }

@@ -289,11 +289,12 @@ describe("BrownfieldImportPage", () => {
       });
       expect(document.body.textContent).toMatch(/2 violations/);
       // The house rule: a flow that ends on a result screen never pushes from
-      // the success arm. The user leaves by pressing something.
+      // the success arm. The user leaves by pressing something — and now that
+      // S3 exists, the something is "Continue", which is still a press.
       expect(routerPush).not.toHaveBeenCalled();
-      expect(
-        screen.getByRole("button", { name: "Back to import options" }),
-      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: /Continue/ })).toBeTruthy();
+      // Still on the ingest result, not teleported onwards.
+      expect(screen.getByText("Artifacts ingested")).toBeTruthy();
     });
 
     it("announces the outcome in a live region, not only visually", async () => {
@@ -658,6 +659,119 @@ describe("BrownfieldImportPage", () => {
           0,
         );
       });
+    });
+  });
+
+  /**
+   * The routing this packet existed to add.
+   *
+   * Before it, `LayoutRatify/`, `FindingsReview/` and `Report/` were complete,
+   * tested and imported by NOTHING — a grep found zero non-test importers — so
+   * `SCAN_COMPLETE` could never be dispatched: its target state had nothing to
+   * render. These tests walk the states the machine defines and assert the two
+   * properties that must survive the wiring: the ingest result is never
+   * teleported past, and an unmeasured tree is never presented as clean.
+   */
+  describe("S3–S7 — the ratification flow is reachable", () => {
+    /** A handoff whose layout carries the `root:` the linter requires. */
+    const HANDOFF_WITH_LAYOUT = {
+      ...HANDOFF_OK,
+      layoutExcerpt:
+        "contexts:\n  orders:\n    root: packages/orders\n    layers:\n      domain: [src/domain]\n",
+    };
+
+    const S3_HEADING =
+      "1 package found. Confirm whether it is a bounded context.";
+
+    async function ingest(user: ReturnType<typeof userEvent.setup>) {
+      stubFetch(reply(200, HANDOFF_WITH_LAYOUT));
+      render(<BrownfieldImportPage />);
+      const input = await gotoUpload(user);
+      await user.upload(input, ZIP());
+      await user.click(
+        screen.getByRole("button", { name: "Upload and parse" }),
+      );
+      await waitFor(() => {
+        expect(screen.getByText("Artifacts ingested")).toBeTruthy();
+      });
+    }
+
+    it("dispatches SCAN_COMPLETE only from an explicit press", async () => {
+      const user = userEvent.setup();
+      await ingest(user);
+
+      // Still on the ingest result. Nothing auto-advanced.
+      expect(
+        screen.queryByRole("heading", { name: /packages? found/ }),
+      ).toBeNull();
+
+      await user.click(screen.getByRole("button", { name: /Continue/ }));
+
+      // uploading -> scanning -> layout_ratify, folded through the machine.
+      expect(screen.getByRole("heading", { name: S3_HEADING })).toBeTruthy();
+      expect(routerPush).not.toHaveBeenCalled();
+    });
+
+    it("reaches the manifest screen from a ratified layout", async () => {
+      const user = userEvent.setup();
+      await ingest(user);
+      await user.click(screen.getByRole("button", { name: /Continue/ }));
+      await user.click(screen.getByRole("button", { name: "Continue" }));
+
+      expect(screen.queryByRole("heading", { name: S3_HEADING })).toBeNull();
+      expect(screen.getByDisplayValue(currentName())).toBeTruthy();
+    });
+
+    it("does NOT skip the findings screen when no findings were reported", async () => {
+      // A Tier-A handoff carries no findings list. `freshFindingCountOf`
+      // therefore returns a negative sentinel, never 0, so the machine routes
+      // to `findings_review` rather than taking the zero-fresh shortcut to a
+      // report that would read as a clean bill of health.
+      const user = userEvent.setup();
+      await ingest(user);
+      await user.click(screen.getByRole("button", { name: /Continue/ }));
+      await user.click(screen.getByRole("button", { name: "Continue" }));
+      await user.click(screen.getByRole("button", { name: "Continue" }));
+
+      expect(document.body.textContent).toMatch(/not the same as a clean tree/);
+      const button = screen.getByRole("button", {
+        name: "Continue",
+      }) as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+    });
+
+    it("says why a layout cannot be confirmed instead of showing an empty grid", async () => {
+      // HANDOFF_OK's layout names a context with no `root:`, which the linter
+      // rejects. The screen must say so rather than claim the repository has no
+      // packages in it.
+      const user = userEvent.setup();
+      stubFetch(reply(200, HANDOFF_OK));
+      render(<BrownfieldImportPage />);
+      const input = await gotoUpload(user);
+      await user.upload(input, ZIP());
+      await user.click(
+        screen.getByRole("button", { name: "Upload and parse" }),
+      );
+      await waitFor(() => {
+        expect(screen.getByText("Artifacts ingested")).toBeTruthy();
+      });
+      await user.click(screen.getByRole("button", { name: /Continue/ }));
+
+      expect(screen.getByRole("alert").textContent).toMatch(/root/);
+      const button = screen.getByRole("button", {
+        name: "Continue",
+      }) as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+    });
+
+    it("walks back from the manifest screen to the layout screen", async () => {
+      const user = userEvent.setup();
+      await ingest(user);
+      await user.click(screen.getByRole("button", { name: /Continue/ }));
+      await user.click(screen.getByRole("button", { name: "Continue" }));
+      await user.click(screen.getAllByRole("button", { name: /^Back/ })[0]);
+
+      expect(screen.getByRole("heading", { name: S3_HEADING })).toBeTruthy();
     });
   });
 });
