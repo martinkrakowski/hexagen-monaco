@@ -366,15 +366,18 @@ function streamScan(input: StreamInput): NextResponse {
       // close. That silently breaks the contract stated in this file's header
       // -- every failure is one of the F-35 codes -- in the one case where the
       // server is misconfigured and most needs to say so.
-      let workspace: CloneWorkspace;
-      try {
-        workspace = await createCloneWorkspace();
-      } catch (error) {
+      const created = await createCloneWorkspace();
+      if (!created.ok) {
         logger.error("[scan/github] could not create the clone workspace", {
           runId: input.runId,
-          // Log-only: the reason can name a server path, so it never reaches
-          // the response body.
-          detail: error instanceof Error ? error.message : String(error),
+          // Log-only: every field here can name a server path, so none of it
+          // reaches the response body.
+          detail: created.failure.reason,
+          // Present only when rollback ALSO failed, i.e. a directory was left
+          // behind. Nothing sweeps it until the next process starts, so it is
+          // logged distinctly rather than folded into the reason above.
+          orphanedAt: created.failure.orphanedAt,
+          rollbackReason: created.failure.rollbackReason,
         });
         send(errorFrame("scan_could_not_run", input.runId, "workspace"));
         input.request.signal.removeEventListener("abort", onRequestAbort);
@@ -386,6 +389,7 @@ function streamScan(input: StreamInput): NextResponse {
         }
         return;
       }
+      const workspace: CloneWorkspace = created.workspace;
 
       try {
         send({

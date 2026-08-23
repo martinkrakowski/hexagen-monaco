@@ -549,10 +549,49 @@ export interface CloneWorkspace {
  * does not. `cleanup()` is therefore not a courtesy; every caller must run it in
  * a `finally`.
  */
+/**
+ * Why this returns a Result rather than throwing.
+ *
+ * Two distinct things can fail here, and the second one is the interesting
+ * one: creating the workspace, and — when that fails — rolling back the
+ * directory `mkdtemp` already made. Throwing can only carry one of them, so a
+ * rethrow silently discards the rollback failure, which is precisely the
+ * detail that says a workspace was orphaned rather than cleaned up. The
+ * orphan is fresh, so the once-per-process stale sweep has already run and
+ * will not collect it.
+ *
+ * Matches the repo convention (.agents/TESTING.md, ORCHESTRATOR.md): a catch
+ * returns Result, never null/false/default. `parseRepoReference` in this same
+ * file already uses the `{ ok: false, reason }` shape.
+ */
+export type CloneWorkspaceFailure = {
+  readonly reason: string;
+  /** Set only when rollback ALSO failed — i.e. a directory was left behind. */
+  readonly orphanedAt: string | null;
+  readonly rollbackReason: string | null;
+};
+
+export type CreateCloneWorkspaceResult =
+  | { readonly ok: true; readonly workspace: CloneWorkspace }
+  | { readonly ok: false; readonly failure: CloneWorkspaceFailure };
+
 export async function createCloneWorkspace(
   baseDir: string = scanWorkspaceBaseDir(),
-): Promise<CloneWorkspace> {
-  const root = await mkdtemp(path.join(baseDir, "hexagen-clone-"));
+): Promise<CreateCloneWorkspaceResult> {
+  let root: string;
+  try {
+    root = await mkdtemp(path.join(baseDir, "hexagen-clone-"));
+  } catch (error) {
+    // Nothing was created, so there is nothing to roll back.
+    return {
+      ok: false,
+      failure: {
+        reason: messageOf(error),
+        orphanedAt: null,
+        rollbackReason: null,
+      },
+    };
+  }
   const homeDir = path.join(root, "home");
   try {
     // Materialize HOME so git has a real (and empty) one. `repo` is deliberately
@@ -566,19 +605,35 @@ export async function createCloneWorkspace(
     // sweeps it, so a repeating failure (ENOSPC, a permissions regression on
     // the chowned base) accumulates directories until the disk fills.
     //
-    // Remove it here, then rethrow: the caller still learns the workspace
-    // could not be created, it just does not also inherit an orphan.
-    await rm(root, { recursive: true, force: true }).catch(() => {});
-    throw error;
+    // Roll back, and report whether the rollback itself worked. Swallowing the
+    // rm failure would report the same thing whether the directory was cleaned
+    // up or left behind, and "left behind" is the case somebody has to act on.
+    let rollbackReason: string | null = null;
+    try {
+      await rm(root, { recursive: true, force: true });
+    } catch (rollbackError) {
+      rollbackReason = messageOf(rollbackError);
+    }
+    return {
+      ok: false,
+      failure: {
+        reason: messageOf(error),
+        orphanedAt: rollbackReason === null ? null : root,
+        rollbackReason,
+      },
+    };
   }
   let removed = false;
   return {
-    repoDir: path.join(root, "repo"),
-    homeDir,
-    async cleanup() {
-      if (removed) return;
-      removed = true;
-      await rm(root, { recursive: true, force: true }).catch(() => {});
+    ok: true,
+    workspace: {
+      repoDir: path.join(root, "repo"),
+      homeDir,
+      async cleanup() {
+        if (removed) return;
+        removed = true;
+        await rm(root, { recursive: true, force: true }).catch(() => {});
+      },
     },
   };
 }

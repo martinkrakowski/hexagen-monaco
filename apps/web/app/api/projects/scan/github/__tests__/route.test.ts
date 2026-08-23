@@ -41,10 +41,16 @@ vi.mock("@/lib/project-scan/clone", async (importOriginal) => {
     // touching the network or spawning git.
     cloneRepository,
     preflightRepository,
+    // Returns a Result now: workspace creation can fail (the base is writable
+    // only because the image pre-creates and chowns it), and rollback can fail
+    // on top of that, which throwing could not express.
     createCloneWorkspace: async () => ({
-      repoDir: "/tmp/hexagen-clone-test/repo",
-      homeDir: "/tmp/hexagen-clone-test/home",
-      cleanup,
+      ok: true,
+      workspace: {
+        repoDir: "/tmp/hexagen-clone-test/repo",
+        homeDir: "/tmp/hexagen-clone-test/home",
+        cleanup,
+      },
     }),
   };
 });

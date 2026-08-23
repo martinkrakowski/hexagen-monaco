@@ -215,7 +215,10 @@ describe("repair telemetry store", () => {
     const db = openPlatformDb(":memory:");
     const a = createRepairTelemetryStore(db, "owner-a");
     const b = createRepairTelemetryStore(db, "owner-b");
-    a.record(run());
+    // Asserted, not discarded: `record` returns a Result rather than throwing,
+    // so a fixture that stopped validating would make "b sees 0 rows" pass for
+    // the wrong reason -- b sees nothing because nothing exists.
+    assert.equal(a.record(run()).success, true);
     const seen = b.listRuns();
     assert.ok(seen.success);
     assert.equal(seen.success && seen.value.length, 0);
@@ -463,7 +466,7 @@ describe("repair telemetry store", () => {
 
   it("hides rows written under a foreign schema_version instead of decoding them", () => {
     const { db, store } = openStore();
-    store.record(run());
+    assert.equal(store.record(run()).success, true);
     db.prepare("UPDATE repair_runs SET schema_version = 99").run();
     const runs = store.listRuns();
     assert.ok(runs.success);
@@ -473,7 +476,7 @@ describe("repair telemetry store", () => {
 
   it("drops a row whose stored enum no longer parses", () => {
     const { db, store } = openStore();
-    store.record(run());
+    assert.equal(store.record(run()).success, true);
     db.prepare("UPDATE repair_runs SET outcome = 'from-the-future'").run();
     const runs = store.listRuns();
     assert.ok(runs.success);
@@ -487,7 +490,7 @@ describe("repair telemetry store", () => {
     // holds a string that isn't an enum member or the opaque run id. This is
     // the test that would fail if someone later added a `title` column.
     const { db, store } = openStore();
-    store.record(run());
+    assert.equal(store.record(run()).success, true);
     const allowed = new Set<string>([
       ...REPAIR_VIOLATION_CLASSES,
       "client-deterministic",
@@ -508,14 +511,21 @@ describe("repair telemetry store", () => {
     ]);
     const uuid =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    // Counted so the guard cannot pass by inspecting nothing. This is the
+    // assertion that no user architecture reaches a column, and a vacuous
+    // version of it is worse than none -- it reports the guarantee holds while
+    // having looked at zero cells.
+    let inspected = 0;
     for (const table of ["repair_runs", "repair_attempts"]) {
       const rows = db.prepare(`SELECT * FROM ${table}`).all() as Array<
         Record<string, unknown>
       >;
+      assert.ok(rows.length > 0, `${table} produced no rows to inspect`);
       for (const row of rows) {
         for (const [column, value] of Object.entries(row)) {
           if (typeof value !== "string") continue;
           if (column === "owner_id") continue;
+          inspected += 1;
           assert.ok(
             allowed.has(value) || uuid.test(value),
             `${table}.${column} holds unbounded text: ${value}`,
@@ -523,6 +533,7 @@ describe("repair telemetry store", () => {
         }
       }
     }
+    assert.ok(inspected > 0, "no string cells were inspected at all");
     db.close();
   });
 });
