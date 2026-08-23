@@ -57,17 +57,96 @@ async function makeFixtureRepo(tmpDir: string): Promise<void> {
 }
 
 function gitCheckoutMainQuietly(tmpDir: string): void {
-  // No shell string: "2>/dev/null || true" is POSIX-only under cmd.exe. The
-  // checkout is best-effort (already on main / unborn HEAD is fine).
+  // No shell string: "2>/dev/null || true" is POSIX-only under cmd.exe. But a
+  // blanket catch would also swallow REAL failures (a main ref that already
+  // exists, a corrupt HEAD, git missing from PATH), leaving the fixture on
+  // whatever branch `git init` picked while the tests still pass. Tolerate
+  // only the verified benign outcome — HEAD already resolves to main
+  // (unborn via init.defaultBranch=main, or checked out) — and fail the
+  // setup loudly on anything else.
   try {
     execFileSync("git", ["checkout", "-b", "main", "--quiet"], {
       cwd: tmpDir,
       stdio: "ignore",
     });
   } catch {
-    // already on the desired branch — nothing to do
+    let currentBranch: string | null = null;
+    try {
+      currentBranch = execFileSync("git", ["symbolic-ref", "--short", "HEAD"], {
+        cwd: tmpDir,
+        encoding: "utf8",
+      }).trim();
+    } catch {
+      // Unreadable or detached HEAD — never benign for a fresh fixture.
+    }
+    if (currentBranch !== "main") {
+      throw new Error(
+        `gitCheckoutMainQuietly: 'git checkout -b main' failed and HEAD is ${
+          currentBranch ?? "unreadable"
+        } — refusing to continue the fixture on an unexpected branch`,
+      );
+    }
   }
 }
+
+describe("gitCheckoutMainQuietly (fixture helper)", () => {
+  let fixtureRoot: string | null = null;
+  let hostStatusBefore = "";
+
+  afterEach(async () => {
+    const hostStatusAfter = hostRepoGitStatus();
+    await removeFixture(fixtureRoot);
+    fixtureRoot = null;
+    assert.equal(
+      hostStatusAfter,
+      hostStatusBefore,
+      "host repo git status must be byte-identical after test",
+    );
+  });
+
+  it("#g1 tolerates an unborn HEAD already on main (init.defaultBranch=main)", async () => {
+    fixtureRoot = await fs.mkdtemp(
+      path.join(os.tmpdir(), "hexagen-sync-checkout-benign-"),
+    );
+    execSync("git init --quiet -b main", { cwd: fixtureRoot });
+    hostStatusBefore = hostRepoGitStatus();
+
+    // `git checkout -b main` on an unborn main succeeds on modern git, but
+    // some environments fail it benignly — either way HEAD must end on main
+    // and the helper must not throw.
+    gitCheckoutMainQuietly(fixtureRoot);
+    assert.equal(
+      execSync("git symbolic-ref --short HEAD", {
+        cwd: fixtureRoot,
+        encoding: "utf8",
+      }).trim(),
+      "main",
+    );
+  });
+
+  it("#g2 throws loudly when checkout fails for a non-benign reason (existing main, HEAD elsewhere)", async () => {
+    fixtureRoot = await fs.mkdtemp(
+      path.join(os.tmpdir(), "hexagen-sync-checkout-loud-"),
+    );
+    execSync("git init --quiet -b master", { cwd: fixtureRoot });
+    execSync('git config user.name "test"', { cwd: fixtureRoot });
+    execSync('git config user.email "test@test"', { cwd: fixtureRoot });
+    await fs.writeFile(path.join(fixtureRoot, ".gitkeep"), "");
+    execSync("git add .", { cwd: fixtureRoot });
+    execSync('git commit -m "init" --quiet', { cwd: fixtureRoot });
+    // refs/heads/main now exists while HEAD is on master, so
+    // `git checkout -b main` fails with "a branch named 'main' already
+    // exists" — an unexpected failure the helper must surface, not swallow.
+    execSync("git branch main", { cwd: fixtureRoot });
+    hostStatusBefore = hostRepoGitStatus();
+    const root = fixtureRoot;
+
+    assert.throws(
+      () => gitCheckoutMainQuietly(root),
+      /gitCheckoutMainQuietly.*failed.*unexpected branch/s,
+    );
+  });
+});
 
 function withProcessExitSpy<T>(
   fn: (exitCalls: Array<number | undefined>) => Promise<T>,
