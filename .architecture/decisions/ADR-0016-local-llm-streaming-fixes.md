@@ -1,7 +1,7 @@
 # ADR-0016: Local LLM Streaming Fixes — Model Selection, Sampling Pipeline, and React StrictMode Token Doubling
 
 **Date:** 2026-04-17
-**Status:** Accepted
+**Status:** Accepted — partially superseded by ADR-0017 (2026-08-23): model-ID strategy and metadata approach
 **Authors:** Human Architect
 **Supersedes:** None
 

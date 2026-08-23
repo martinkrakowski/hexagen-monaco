@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted. Supersedes ADR-0035 (the `/shared` subpath became `/client`).
 
 ## Context
 

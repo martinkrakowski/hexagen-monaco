@@ -23,7 +23,7 @@
  *
  * A copy, not a symlink: the ESM loader realpaths import.meta.url, so a
  * symlinked dist would walk up from the repo again. The tsup bundle keeps
- * commander / js-yaml / ts-morph external (ADR-0009) — those ARE symlinked
+ * commander / js-yaml / ts-morph external (ADR-0068) — those ARE symlinked
  * into the fixture's node_modules, because Node resolves their own deps from
  * their realpath inside the host repo, which is exactly what we want.
  *
@@ -54,7 +54,7 @@ export const LINTER_DIST = path.join(
   "dist",
   "cli.js",
 );
-// Externalized by tsup (ADR-0009) — must be resolvable next to the copied dist.
+// Externalized by tsup (ADR-0068) — must be resolvable next to the copied dist.
 export const EXTERNALS = ["commander", "js-yaml", "ts-morph", "zod"];
 
 export const SKIP_NON_POSIX = process.platform === "win32";

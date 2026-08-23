@@ -18,7 +18,7 @@
  * doesn't know — would die on "unrecognized key" first, misdiagnosing
  * "too new" as "malformed". `mergeSplitManifest` is the single seam where
  * this runs: the `hexagen` CLI consumes it via `@hexagen/sync`'s loader
- * re-export, and the arch-linter bundles the same module (ADR-0009).
+ * re-export, and the arch-linter bundles the same module (ADR-0068).
  */
 
 /** The manifest schema version this toolchain reads and writes. */

@@ -1,7 +1,7 @@
 # ADR-0018: MVK Semantic Kernel Contracts
 
 **Date:** 2026-04-20
-**Status:** Accepted
+**Status:** Accepted — partially superseded by ADR-0058 (2026-08-23): Q1/Q7 name `intent-compiler`, which no longer exists; the hybrid-controller model is unchanged
 **Authors:** Human Architect
 **Supersedes:** None (extends ADR-0005 shared kernel framing)
 

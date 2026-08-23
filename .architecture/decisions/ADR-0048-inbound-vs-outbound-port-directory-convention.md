@@ -1,7 +1,7 @@
 # ADR-0048: Inbound vs Outbound Port Directory Convention
 
 **Date:** 2026-08-14
-**Status:** Proposed
+**Status:** Proposed — amends ADR-0010 (Decision §3)
 **Type:** Architecture
 **Amends:** ADR-0010-mcp-server-architecture.md (retains stdio transport, dynamic SDK loading, dry-run-by-default, and the read-only-resources/write-tools split; supersedes its Decision §3 "MCP request handlers delegate to application use cases, which depend on ports" wording for the tool/resource path — handlers must depend on inbound port interfaces, not concrete `*UseCase` classes)
 **Relates to:** ADR-0043 (linter derives cross-context import legality from manifest `depends_on`); remediation-plan items 6.4 (HEX-018) and 6.5 (HEX-019); security-package fate governed separately by remediation-plan item 6.6 / ADR item 0.3 (candidate C3)

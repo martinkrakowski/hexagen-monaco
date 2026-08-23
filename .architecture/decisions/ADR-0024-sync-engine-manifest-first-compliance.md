@@ -1,6 +1,6 @@
 # ADR-0024: Sync Engine Manifest-First Compliance
 
-**Status:** Proposed
+**Status:** Proposed — partially superseded by ADR-0026 (2026-08-23): the Phase 2 mass-regen is no longer automatic
 **Date:** 2026-04-22
 **Authors:** Architecture Co-pilot, Human Architect
 **Supersedes (in part):** Sections of ADR-0002 (auto-generated tsconfig refs), ADR-0003 (manual reference fixes for project-generation)

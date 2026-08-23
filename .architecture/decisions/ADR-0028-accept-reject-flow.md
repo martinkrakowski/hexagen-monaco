@@ -216,7 +216,7 @@ Add an explicit "preview" phase where patches are displayed but not stored.
 
 ## Related ADRs
 
-- ADR-0009: Published CLI Bundling
+- ADR-0068: Published CLI Bundling
 - ADR-0033: Timing Test Policy
 - ADR-0027: State Machine Evolution
 

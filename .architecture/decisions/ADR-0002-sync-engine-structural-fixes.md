@@ -1,6 +1,6 @@
 # ADR-0002: Sync Engine Structural Fixes
 
-**Status:** Accepted  
+**Status:** Accepted — partially superseded by ADR-0024 (2026-08-23): the "Fix tsconfig.json References Path" section  
 **Date:** 2026-03-11  
 **Authors:** Architecture Co-pilot, Human Architect  
 **Supersedes:** None

@@ -4,7 +4,7 @@
 **Status:** Accepted
 **Type:** Architecture
 **Resolves:** sync-toolchain plan decision D2 / RCA #8
-**Extends:** ADR-0009 (linter bundles the manifest loader)
+**Extends:** ADR-0068 (linter bundles the manifest loader)
 
 ## Context
 

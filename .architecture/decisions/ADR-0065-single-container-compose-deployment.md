@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted. **Supersedes ADR-0064** — that ADR decided to keep and fix the k8s manifests; this one removes them, and the tree follows this one (both landed in #528).
 
 ## Context
 

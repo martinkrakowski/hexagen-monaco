@@ -1,7 +1,7 @@
 # ADR-0058: Deleting an Active Implemented Context With Zero Live Consumers
 
 **Date:** 2026-08-17
-**Status:** Accepted
+**Status:** Accepted — partially supersedes ADR-0018 (Q1/Q7 `intent-compiler` naming)
 **Type:** Architecture
 **Relates to:** ADR-0049 (unregistered + scaffold-grade deletion), ADR-0050 (frozen AND no-runtime-code deletion), ADR-0018 (MVK kernel membership — Q1 / Q7 naming of `intent-compiler` is superseded here), HEX-032 / plan row 8.12(e)
 

@@ -1,7 +1,7 @@
 # ADR-0057: Manifest `layers.*` Lists Are a Curated Ownership Registry, Not a File Inventory
 
 **Date:** 2026-08-16
-**Status:** Proposed
+**Status:** Proposed — partially supersedes ADR-0009 (`MonacoPersistencePort` attribution)
 **Type:** Architecture
 **Relates to:** HEX-018 (remediation-plan item 6.4) — this ADR is the **document-only disposition** of that item, decided in `docs/planning/2026-08-16-decision-dossier-and-remediation-followups.md` §1.5; ADR-0047 (port ownership and homonym doctrine); ADR-0048 (inbound vs outbound port directory convention); ADR-0043 (linter derives cross-context import legality from manifest `depends_on`); ADR-0054 (arch-lint enforcement posture — the ratchet this ADR declines to extend)
 

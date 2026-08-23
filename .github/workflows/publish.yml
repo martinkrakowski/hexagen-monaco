@@ -2,7 +2,7 @@ name: "Publish to NPM"
 
 # Co-releases the two published tooling packages under @hexagen-monaco at the
 # tag's version (sync and arch-linter share a version). Each is a self-contained
-# tsup bundle (ADR-0009 + amendment): private @hexagen/* deps are inlined, so the
+# tsup bundle (ADR-0068 + amendment): private @hexagen/* deps are inlined, so the
 # published manifests reference only third-party deps. Staged via
 # prepare-publish-package.js, which strips workspace/private/dev fields and
 # rewrites @hexagen/* → @hexagen-monaco/*. No @hexagen/shared publish and no
@@ -115,7 +115,7 @@ jobs:
       #
       # Scope is the *bundled* closure, not just the two root packages. The
       # staging script strips `workspace:` deps because tsup inlines
-      # them into dist/ (ADR-0009, noExternal: [/^@hexagen\//]), so a tarball
+      # them into dist/ (ADR-0068, noExternal: [/^@hexagen\//]), so a tarball
       # physically contains @hexagen/{shared,governance,project-configuration,
       # template-engine,visualization} compiled in. Testing packages/sync alone
       # would leave most of the shipped bytes unexercised.

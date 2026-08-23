@@ -110,7 +110,7 @@ export async function mergeSplitManifest(
   // ROOT manifest carries the version; context/app files inherit it. This is
   // the single seam every reader shares — the `hexagen` commands consume it
   // via @hexagen/sync's loader re-export, and the arch-linter bundles this
-  // module (ADR-0009) and surfaces this message verbatim from its top-level
+  // module (ADR-0068) and surfaces this message verbatim from its top-level
   // catch.
   assertSupportedSchemaVersion(parsed);
 

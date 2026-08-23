@@ -1,6 +1,6 @@
 # ADR-0035: `@hexagen/local-llm/shared` subpath export for server-safe domain types
 
-**Status:** Accepted
+**Status:** Superseded by ADR-0037 (2026-08-23) — the `/shared` subpath became the `/client` convention (PR #68); no consumer imports `/shared`
 **Date:** 2026-05-08
 **Deciders:** Engineering
 

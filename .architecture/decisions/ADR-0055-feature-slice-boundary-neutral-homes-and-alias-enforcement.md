@@ -1,7 +1,7 @@
 # ADR-0055: Feature-Slice Boundary — Cross-Slice Imports Are Debt, Neutral Homes Are the Remedy, and the Rule Must See Aliases
 
 **Date:** 2026-08-16
-**Status:** Proposed
+**Status:** Proposed — amends ADR-0034 (Feature-Isolation accommodations)
 **Type:** Architecture
 **Relates to:** ADR-0034 (creation-flow de-modalization — its "Feature Isolation" section records accommodations this ADR retires; see the amendment note filed there), ADR-0021 (`@internal` ACL types, enforced by the same firewall), ADR-0054 (arch-lint enforcement posture — this ADR applies the same "a check's scope must be visible in its output" principle to the web boundary).
 

@@ -169,7 +169,7 @@ function prepare(packageDir) {
 
   // Rewrite the npm scope to the published org. The monorepo packages keep their
   // internal `@hexagen/*` names; only the PUBLISHED name uses `@hexagen-monaco`
-  // (the `@hexagen` org was unavailable on npm — see the ADR-0009 amendment).
+  // (the `@hexagen` org was unavailable on npm — see the ADR-0068 amendment).
   // Self-contained bundles, so no dependency reference needs the same rewrite.
   if (
     typeof staged.name === "string" &&

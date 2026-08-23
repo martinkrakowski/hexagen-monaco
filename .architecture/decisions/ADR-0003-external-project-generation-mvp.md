@@ -1,6 +1,6 @@
 # ADR-0003: External Project Generation MVP
 
-**Status:** Accepted  
+**Status:** Accepted — partially superseded by ADR-0024 (2026-08-23): §8 "Fix tsconfig References"  
 **Date:** 2026-03-12  
 **Authors:** Architecture Co-pilot, Human Architect  
 **Supersedes:** None

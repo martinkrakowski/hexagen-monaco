@@ -637,7 +637,7 @@ describe("mergeSplitManifest", () => {
 // guided message, never with zod's "unrecognized key" misdiagnosis. The
 // legacy case (no schemaVersion at all) is pinned by the passthrough test
 // above. This seam is shared by every reader: the `hexagen` commands via
-// @hexagen/sync's loader re-export, the arch-linter via its ADR-0009 bundle.
+// @hexagen/sync's loader re-export, the arch-linter via its ADR-0068 bundle.
 describe("mergeSplitManifest schemaVersion gate (PR-C1)", () => {
   let tmpDir: string;
 

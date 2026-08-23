@@ -1,8 +1,10 @@
-# ADR-0010: Increase DESCRIPTION_MAX_LENGTH from 2000 to 50000
+# ADR-0069: Increase DESCRIPTION_MAX_LENGTH from 2000 to 50000
 
 ## Status
 
 Proposed
+
+Renumbered from ADR-0010 on 2026-08-23 — the number was shared with ADR-0010 (MCP Server Architecture, 2026-04-07), which is older and keeps it.
 
 ## Context
 

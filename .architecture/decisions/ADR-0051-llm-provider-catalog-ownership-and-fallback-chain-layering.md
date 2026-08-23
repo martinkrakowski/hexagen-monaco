@@ -1,7 +1,7 @@
 # ADR-0051: LLM Provider-Catalog Ownership and Fallback-Chain Layering
 
 **Date:** 2026-08-14
-**Status:** Proposed
+**Status:** Proposed — amends ADR-0029 (§1.3/§1.4)
 **Type:** Architecture
 **Relates to:** ADR-0042 (cloud-first LLM execution — that ADR made cloud provider chains the product's primary generation path; this ADR governs _where_ the provider catalog and the chains ADR-0042 made primary may live)
 

@@ -196,7 +196,7 @@ When editing `.architecture/manifest.yaml` or `.architecture/invariants/linter-c
 
 **Policy:** Dual-resolution architecture based on deployment target.
 
-**Codified in:** `.architecture/decisions/ADR-0009-published-cli-bundling.md`
+**Codified in:** `.architecture/decisions/ADR-0068-published-cli-bundling.md`
 
 | Package                         | Resolution         | Extension Handling              | Rationale                                                                                             |
 | ------------------------------- | ------------------ | ------------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -205,7 +205,7 @@ When editing `.architecture/manifest.yaml` or `.architecture/invariants/linter-c
 
 **Key Implementation Notes:**
 
-- `@hexagen/sync` uses `tsup` for build (not `tsc`). See `.architecture/decisions/ADR-0009-published-cli-bundling.md` for rationale.
+- `@hexagen/sync` uses `tsup` for build (not `tsc`). See `.architecture/decisions/ADR-0068-published-cli-bundling.md` for rationale.
 - Source code in `@hexagen/sync` and dependencies remains `bundler`-resolved during development.
 - `tsup` handles ESM transpilation and extension normalization at publish-time.
 - All _source_ files in the monorepo use `bundler` resolution (AGENTS.md §Operating Modes).
@@ -221,4 +221,4 @@ Originally proposed (Phases 1–5 work). Rejected in favor of targeted bundling 
 4. Industry precedent: published CLIs use bundling, not module-resolution config flips
 5. Preserves AGENTS.md dual-resolution policy (correct for this deployment profile)
 
-See ADR-0009 for full decision record.
+See ADR-0068 for full decision record.
