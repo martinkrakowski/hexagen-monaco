@@ -2,8 +2,10 @@ import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -67,59 +69,79 @@ describe("turbo.json cache-input guard (P3.2)", () => {
   }
 
   /**
-   * Discovery of tsconfigs extending the repo-root base: `git grep` narrows
-   * the candidates (tracked files only), then each candidate's `extends` is
-   * resolved against its own directory so that non-root bases — the live
-   * example is `config/tsconfig.json`, which extends a non-root
-   * `./tsconfig.base.json` — do not inflate the count.
-   *
-   * `tsconfig.json` is JSONC in general; a file containing comments fails
-   * JSON.parse and is excluded here — the guard then fails closed, which is
-   * the safe direction, and the excluded file is named in the failure
+   * Discovery of tsconfigs extending the repo-root base: every TRACKED
+   * tsconfig.json is enumerated (`git ls-files`, content-agnostic — no line
+   * pattern can miss a legal syntax form such as a multiline TS 5+ `extends`
+   * array), then each file's `extends` is resolved against its own directory
+   * so that non-root bases — the live example is `config/tsconfig.json`,
+   * which extends a non-root `./tsconfig.base.json` — do not inflate the
+   * count. Files whose `extends` resolves elsewhere, or that have no
+   * `extends` at all, are legitimately excluded and named in the failure
    * message.
+   *
+   * tsconfig.json is JSONC in general: parsing uses TypeScript's own
+   * `parseConfigFileTextToJson`, so legal comments and trailing commas still
+   * count. A tracked file that not even the JSONC parser accepts FAILS the
+   * guard loudly (fail-closed) — a skipped candidate is an invisible one,
+   * and the floor must not pass over an unreadable file.
    */
-  async function discoverRootBaseExtenders(): Promise<{
-    matched: string[];
-    extenders: string[];
-  }> {
-    let matched: string[] = [];
+  function listTrackedTsconfigs(): string[] {
     try {
-      matched = execFileSync(
-        "git",
-        ["grep", "-l", '"extends".*tsconfig.base', "--", "*/tsconfig.json"],
-        { cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
-      )
+      return execFileSync("git", ["ls-files", "--", "*/tsconfig.json"], {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+        maxBuffer: 4 * 1024 * 1024,
+      })
         .split("\n")
         .filter(Boolean);
     } catch (err) {
-      const e = err as { status?: number; message: string };
-      if (e.status !== 1) {
-        // git grep exits 1 for "no matches" (an empty list is a legitimate
-        // finding below); anything else — git missing, not a repo — means
-        // discovery is unavailable. Fail with intent, not a raw stack.
-        throw new Error(
-          "extender discovery via `git grep` is unavailable " +
-            `(${e.message}); cannot verify the tsconfig.base.json population floor`,
-        );
-      }
+      const e = err as { message: string };
+      // `git ls-files` exits 0 even with no matches, so any throw — git
+      // missing, not a repo — means discovery is unavailable. Fail with
+      // intent, not a raw stack.
+      throw new Error(
+        "extender discovery via `git ls-files` is unavailable " +
+          `(${e.message}); cannot verify the tsconfig.base.json population floor`,
+      );
     }
+  }
 
+  function parseTsconfigText(fileName: string, text: string): unknown {
+    const { config, error } = ts.parseConfigFileTextToJson(fileName, text);
+    if (error !== undefined || config === undefined) {
+      const detail =
+        typeof error?.messageText === "string"
+          ? error.messageText
+          : "no config object parsed";
+      throw new Error(
+        `tracked tsconfig ${fileName} is unparseable even as JSONC ` +
+          `(${detail}); the population floor cannot be verified over an ` +
+          `unreadable candidate — fix or remove the file`,
+      );
+    }
+    return config;
+  }
+
+  async function isRootBaseExtender(tsconfigAbsPath: string): Promise<boolean> {
+    const text = await fs.readFile(tsconfigAbsPath, "utf8");
+    const config = parseTsconfigText(tsconfigAbsPath, text) as {
+      extends?: unknown;
+    };
+    return extendsRepoRootBase(tsconfigAbsPath, config.extends);
+  }
+
+  async function discoverRootBaseExtenders(): Promise<{
+    tracked: string[];
+    extenders: string[];
+  }> {
+    const tracked = listTrackedTsconfigs();
     const extenders: string[] = [];
-    for (const relPath of matched) {
-      const absPath = path.join(REPO_ROOT, relPath);
-      let config: unknown;
-      try {
-        config = JSON.parse(await fs.readFile(absPath, "utf8"));
-      } catch {
-        continue;
-      }
-      if (
-        extendsRepoRootBase(absPath, (config as { extends?: unknown }).extends)
-      ) {
+    for (const relPath of tracked) {
+      if (await isRootBaseExtender(path.join(REPO_ROOT, relPath))) {
         extenders.push(relPath);
       }
     }
-    return { matched, extenders };
+    return { tracked, extenders };
   }
 
   it("pipeline discovery is non-empty (the guard is checking something)", async () => {
@@ -148,14 +170,14 @@ describe("turbo.json cache-input guard (P3.2)", () => {
     // stops extending the base config, this guard should be revisited, not
     // silently satisfied. Only tsconfigs whose `extends` resolves to the
     // REPO-ROOT tsconfig.base.json count toward the floor.
-    const { matched, extenders } = await discoverRootBaseExtenders();
-    const excluded = matched.filter((f) => !extenders.includes(f));
+    const { tracked, extenders } = await discoverRootBaseExtenders();
+    const excluded = tracked.filter((f) => !extenders.includes(f));
     assert.ok(
       extenders.length >= 20,
       `expected >=20 tsconfigs extending the repo-root tsconfig.base.json, ` +
         `found ${extenders.length}` +
         (excluded.length > 0
-          ? ` (grep-matched but resolving elsewhere or unparsable: ` +
+          ? ` (tracked tsconfig.json files not extending the root base: ` +
             `${excluded.slice(0, 5).join(", ")})`
           : ""),
     );
@@ -201,6 +223,68 @@ describe("turbo.json cache-input guard (P3.2)", () => {
         undefined,
       ),
       false,
+    );
+  });
+
+  /**
+   * Fixtures for the two discovery blind spots found in PR #639 review
+   * (CodeRabbit): a legal multiline TS 5+ `extends` array, and legal JSONC
+   * (comments / trailing commas). Both were invisible to the previous
+   * grep+JSON.parse pipeline — reproduced by staging the fixtures and
+   * observing the floor still pass at 33 — so both must now count. Each
+   * fixture's `extends` is computed to resolve to the repo-root base from
+   * wherever the temp directory lands.
+   */
+  async function writeFixture(
+    renderExtends: (dir: string) => string,
+  ): Promise<string> {
+    const dir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "hexagen-turbo-guard-"),
+    );
+    const absPath = path.join(dir, "tsconfig.json");
+    await fs.writeFile(absPath, renderExtends(dir), "utf8");
+    return absPath;
+  }
+
+  it("discovery counts a legal multiline TS 5+ extends array", async () => {
+    const absPath = await writeFixture(
+      (dir) =>
+        `{\n  "extends": [\n    "@tsconfig/strictest/tsconfig.json",\n    "${path.relative(dir, ROOT_BASE)}"\n  ],\n  "compilerOptions": {}\n}\n`,
+    );
+    assert.equal(await isRootBaseExtender(absPath), true);
+  });
+
+  it("discovery counts a legal JSONC extender (comment, trailing comma)", async () => {
+    const absPath = await writeFixture(
+      (dir) =>
+        `{\n  // legal tsconfig comment\n  "extends": "${path.relative(dir, ROOT_BASE)}",\n}\n`,
+    );
+    assert.equal(await isRootBaseExtender(absPath), true);
+  });
+
+  it("an unparseable tracked tsconfig fails the guard loudly instead of being skipped", async () => {
+    const absPath = await writeFixture(() => "not json at all {[");
+    await assert.rejects(isRootBaseExtender(absPath), (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.match(err.message, /unparseable even as JSONC/);
+      assert.ok(err.message.includes(absPath));
+      return true;
+    });
+  });
+
+  it("tsconfig enumeration is content-agnostic (no-extends files are still listed)", () => {
+    // The old `git grep '"extends".*tsconfig.base'` pre-filter could only
+    // ever see files whose extends sat on one line; enumeration by filename
+    // cannot miss a legal syntax form. These tracked files have no `extends`
+    // at all and must still be listed.
+    const tracked = listTrackedTsconfigs();
+    assert.ok(
+      tracked.includes("tools/arch-linter/tsconfig.json") &&
+        tracked.includes(
+          "tools/arch-linter/__tests__/external-repo/tsconfig.json",
+        ) &&
+        tracked.includes("packages/eslint-plugin-ui/tsconfig.json"),
+      `expected content-agnostic enumeration to list no-extends tsconfigs, got: ${tracked.length} files`,
     );
   });
 
