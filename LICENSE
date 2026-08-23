@@ -1,8 +1,9 @@
 This is the proprietary platform license for Hexagen-Monaco (the web
-application, hosted services, and any package that does not carry its own
-LICENSE file). The published wedge packages `@hexagen-monaco/sync` and
-`@hexagen-monaco/arch-linter` are licensed separately; see the LICENSE file
-in each package.
+application, hosted services, `@hexagen-monaco/sync`, and any package that
+does not carry its own LICENSE file). The fair-source wedge is
+`@hexagen-monaco/arch-linter` only; it is licensed separately under
+FSL-1.1-Apache-2.0 (SPDX identifier FSL-1.1-ALv2) -- see
+`tools/arch-linter/LICENSE` (ADR-0066).
 
 KRAKOWSKI CLOUD SOLUTIONS LLC - SOURCE-AVAILABLE EVALUATION LICENSE
 

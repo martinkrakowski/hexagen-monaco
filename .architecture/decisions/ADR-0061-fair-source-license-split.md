@@ -1,7 +1,7 @@
 # ADR-0061: Three-Layer Fair-Source License Split
 
 **Date:** 2026-08-17
-**Status:** Accepted
+**Status:** Superseded by ADR-0066 (2026-08-23) — see the amendment at the end of this document
 **Type:** Licensing
 **Runbook ID:** D-1
 **Relates to:** ADR-0060 (D-3 — business, the prerequisite), ADR-0062 (D-2 public copy), [`2026-08-17-fde-gtm-development-runbook.md`](../../docs/planning/2026-08-17-fde-gtm-development-runbook.md) Phase −1 D-1, [`2026-08-17-positioning-plan-independent-review.md`](../../docs/planning/2026-08-17-positioning-plan-independent-review.md) §7 and §8
@@ -81,3 +81,28 @@ Bespoke certainty for a named enterprise belongs in that customer's commercial a
 - If external contributions are ever accepted on FSL packages, a DCO or lightweight CLA lands _first_. Sole ownership is what keeps future license moves free.
 - FSL is not OSI-approved. Budget legal-review cycles into the Phase 0 trial.
 - Relicense is release-gated. Shipping these files on `main` does not change the terms of tarballs already on npm.
+
+---
+
+## Amendment — 2026-08-23: superseded by ADR-0066
+
+This ADR decided to FSL the whole of `packages/sync`. **ADR-0066 decided the
+opposite and is the decision of record**: the wedge is `tools/arch-linter`
+only, and `packages/sync` remains proprietary under the Source-Available
+Evaluation License.
+
+The tree had already followed ADR-0066 — `packages/sync/package.json` carries
+`"license": "UNLICENSED"` and its LICENSE is the platform text — while this
+document continued to read "Accepted" and the two ADRs did not cite each
+other. A reader opening this one was told it was current.
+
+The body above is left unedited as the record of 2026-08-17 and of the
+three-layer reasoning, most of which ADR-0066 retains (partner interpretation,
+0.x version boundary, new-packages-default-proprietary, legal review budgeted
+into the trial). Only the membership of the wedge changed.
+
+One defect this supersession left behind is also fixed in the same PR:
+`packages/sync/LICENSE` was a byte-identical copy of the root platform
+license, whose preamble says "see the LICENSE file in each package" — correct
+at the root, self-referential inside the package. That file ships in every
+published tarball.
