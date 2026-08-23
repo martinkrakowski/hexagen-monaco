@@ -191,14 +191,6 @@ jobs:
       #
       # --check, never --write: CI reports drift, it does not rewrite the
       # author's commit behind their back. `yarn format` is the fix.
-      # The warn scopes of no-off-scale-spacing are not gated by eslint itself
-      # -- turbo lint exits 0 on warnings, so a new off-scale utility in
-      # features/ would land green. This is the gate: a counted, shrink-only
-      # pin that fails when debt grows OR when a scope inspects zero files.
-      - name: "Spacing debt (shrink-only)"
-        if: steps.docs-only.outputs.docs_only != 'true'
-        run: node scripts/check-spacing-debt.mjs
-
       # Deliberately NOT gated on docs-only. This check covers *.md, so a
       # docs-only PR is exactly the case where markdown drift lands -- guarding
       # it behind that condition would skip the gate precisely when it is the
@@ -308,6 +300,16 @@ jobs:
       # resolver that has its own "not installed" failure mode, and never
       # naming the baseline it enforces. This step invokes the linter directly,
       # names the file, and fails in parallel with that job.
+      # MUST run after "Build Packages" above. The script shells out to
+      # `npx eslint` directly rather than through turbo, so turbo's
+      # `lint: dependsOn ["^build"]` does not apply and the plugin's dist/ is
+      # not built for it. Placed earlier, it failed with ERR_MODULE_NOT_FOUND
+      # on @hexagen/eslint-plugin-ui/dist/index.js -- a real CI failure on
+      # #617, not a hypothetical.
+      - name: "Spacing debt (shrink-only)"
+        if: steps.docs-only.outputs.docs_only != 'true'
+        run: node scripts/check-spacing-debt.mjs
+
       - name: "Verify Architecture Lint Ratchet"
         if: steps.docs-only.outputs.docs_only != 'true'
         uses: ./.github/actions/hexagen-conformance

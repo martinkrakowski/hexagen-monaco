@@ -48,8 +48,13 @@ const PINS = [
 
 function reportFor(dir) {
   let raw;
+  let failure = null;
   try {
-    raw = execFileSync("npx", ["eslint", dir, "--format", "json"], {
+    // `yarn eslint`, not `npx eslint`: npx will attempt a NETWORK INSTALL when
+    // the binary is not resolvable, so a broken install becomes a slow,
+    // confusing failure instead of an immediate one. yarn resolves from the
+    // workspace or fails.
+    raw = execFileSync("yarn", ["eslint", dir, "--format", "json"], {
       cwd: webRoot,
       encoding: "utf8",
       maxBuffer: 64 * 1024 * 1024,
@@ -58,10 +63,24 @@ function reportFor(dir) {
     // ESLint exits non-zero when it reports errors. That is not a failure of
     // THIS gate — stdout still holds the JSON, and an unrelated error in
     // another rule must not make the spacing count unknowable.
+    //
+    // But the same catch also sees a CRASH (a missing plugin dist, a config
+    // error), where stdout is empty and the only evidence is on stderr. The
+    // previous version coerced that to "" and threw a message naming neither
+    // the exit code nor stderr — failing closed, correctly, while discarding
+    // the one thing that explains why. This file's own header calls that the
+    // defect the repo keeps rediscovering, so it should not have shipped in it.
     raw = error.stdout ?? "";
+    failure = {
+      status: error.status ?? "unknown",
+      stderr: (error.stderr ?? "").toString().trim(),
+    };
   }
   if (raw.trim() === "") {
-    throw new Error(`eslint produced no output for ${dir}`);
+    throw new Error(
+      `eslint produced no output for ${dir} (exit ${failure?.status ?? "unknown"}).\n` +
+        `stderr:\n${failure?.stderr || "<none captured>"}`,
+    );
   }
   const files = JSON.parse(raw);
   const count = files.reduce(
