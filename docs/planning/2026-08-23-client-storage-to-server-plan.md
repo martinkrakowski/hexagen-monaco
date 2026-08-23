@@ -1,0 +1,203 @@
+# Client storage → server database — implementation plan
+
+**Date:** 2026-08-23
+**Extends:** the 2026-08-20 hosting plan (`docs/planning/2026-08-20-hosting-migration-plan.md`, **currently uncommitted** — commit it before this one lands or the cross-references dangle). That plan made saved projects server-authoritative for signed-in users (Wave H1.7) and parked wizard drafts / workspace as device-local under **D-H5**. This document is the D-H5 answer and everything D-H5 did not name.
+**Companions:** Plan 2 (orgs/teams — tenant = `owner_id`) and Plan 3 (VPS → GCP, owns the Postgres decision D-H4). This plan depends on both and says where.
+**Baseline:** `main` @ `d582213a`; prod = one container, three better-sqlite3 files on `/data` (`quota.db`, `byok.db`, `platform.db`).
+
+## The ask, and the correction
+
+The ask is "migrate **all** local storage, including IndexedDB projects, to a database."
+
+The inventory below shows that "all" covers two different kinds of thing, and one of them does not belong in a database:
+
+- **Data** — the user's architecture work: project manifests, wizard form state, editor buffers, brainstorm transcripts, generated file trees, brownfield drafts. Losing it is losing work. It must follow the account, not the device. **This plan migrates all of it.**
+- **Preferences and caches** — theme, panel widths, last-used model, "remember my choice", the local-LLM model cache metadata, the model-verification cache. Losing it costs one click. Putting it behind a network round-trip makes first paint slower and offline worse for nothing. **This plan keeps it local, under a named allow-list that a test enforces.**
+
+Stated as a scope change, not applied silently: **"migrate all storage" becomes "migrate all data; keep preferences local; test the boundary."** D-S1 is the gate to overrule it.
+
+One more thing the inventory makes unavoidable: **anonymous users have no `owner_id`.** Every server store is keyed `(owner_id, id)` and `requirePersistenceOwner` returns 401 without a JWT `sub` (`lib/platform/require-owner.ts:19-37`). There is no server-side home for an anonymous user's project today. D-S2 decides what that means.
+
+## 0. Inventory — every client-side store, verified 2026-08-23
+
+Columns: **live** = constructed in `app/lib/wire.client.ts` or reached from a rendered component today; **arch** = carries user architecture content (manifest YAML, context names, file contents, prose); **anon** = written by a signed-out user.
+
+### IndexedDB (all via `idb-keyval`, one database `keyval-store`, one object store `keyval`)
+
+| key                                   | writer                                                                               | live | holds                                                                                                                                                                          | arch | anon | lifecycle                                                                                                                                                            |
+| ------------------------------------- | ------------------------------------------------------------------------------------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hexagen:saved-projects`              | `app/lib/adapters/idb-saved-projects.adapter.ts:19`                                  | yes  | `SavedProject[]` — `id, name, formState, manifestYaml, layers[] (brainstorm turns, prose), githubLink, githubPublishPrefs` (`packages/shared/src/domain/saved-project.ts:111`) | yes  | yes  | One array, rewritten whole on every save. For signed-in users it is the **cache** behind `CachedSavedProjectsAdapter`; for anonymous users it is the **only copy**.  |
+| `hexagen:saved-projects-owner`        | same file `:20`                                                                      | yes  | owner stamp (JWT `sub`) used for the owner-mismatch cache wipe                                                                                                                 | no   | no   | Written on first authenticated load; compared on every load.                                                                                                         |
+| `hexagen:wizard-draft:<projectId>`    | `app/lib/adapters/idb-wizard-draft.adapter.ts:8`                                     | yes  | `WizardDraft` — `savedAtStep, formState (the whole wizard form), sessionId` (`packages/shared/src/application/ports/wizard-persistence.port.ts:11`)                            | yes  | yes  | Wired as `IDBWizardDraftAdapter("default")` (`wire.client.ts:116`) — **one draft slot**, keyed `default`, not per project in practice. Cleared on wizard completion. |
+| `hexagen:workspace:<sessionId>`       | `app/lib/adapters/idb-editor-workspace.adapter.ts:9`                                 | yes  | `PersistedEditorWorkspace` — `files: Record<path, {content, dirty, isNew}>, selectedFileId, unpushed` (`packages/shared/src/domain/persisted-editor-workspace.ts:16`)          | yes  | yes  | Every editor keystroke batch. The `dirty`/`unpushed` flags mean **unsaved edits live only here**.                                                                    |
+| `hexagen:generation:<projectId>-<ts>` | `packages/web-driver/src/infrastructure/adapters/idb-generation-result.adapter.ts:9` | yes  | `GenerationResult` — `files: Record<path, string>, manifestYaml, source` (`packages/shared/src/domain/types/generation-result.ts:1`) — a **whole generated tree**              | yes  | yes  | One key per generation run; never pruned by the adapter.                                                                                                             |
+| `hexagen:chat-history`                | `packages/local-llm/src/infrastructure/adapters/idb-chat-persistence.adapter.ts:7`   | yes  | `ChatMessage[]` — full local-LLM chat transcript                                                                                                                               | yes  | yes  | Rewritten whole per message.                                                                                                                                         |
+| `hexagen:governance:<contextKey>`     | same file `:8`                                                                       | yes  | governance-assistant thread per context                                                                                                                                        | yes  | yes  | Per bounded context.                                                                                                                                                 |
+
+### localStorage
+
+| key                                                                                               | writer                                                                                                                                                | live                                                                                      | holds                                                                                      | arch                               | anon         | class                                                 |
+| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------- | ------------ | ----------------------------------------------------- |
+| `monaco-session-<projectId>`                                                                      | `packages/web-driver/src/infrastructure/adapters/local-storage-monaco.adapter.ts:14,36`                                                               | yes                                                                                       | `MonacoSessionState` — `content` (the full editor buffer) + timestamp                      | **yes**                            | yes          | **data**                                              |
+| `hexagen-brownfield-draft:*`                                                                      | `apps/web/features/brownfield/draft/brownfield-draft.ts:89` via `persisted-state.ts`                                                                  | yes                                                                                       | `BrownfieldDraft` — `repoUrl, layoutDraft, manifestDraft, baselinedFindingKeys, flowState` | **yes**                            | yes          | **data** (7-day TTL, `BROWNFIELD_DRAFT_MAX_AGE_MS`)   |
+| `hexagen-canvas-layout-<id>`                                                                      | `packages/web-driver/.../local-storage-canvas-layout.adapter.ts:9`                                                                                    | yes                                                                                       | node positions / viewport for the architecture canvas                                      | partial (node ids = context names) | yes          | **data** (layout is work)                             |
+| `hexagen-active-workspace`                                                                        | `app/contexts/ActiveWorkspaceContext.tsx:32`                                                                                                          | yes                                                                                       | `{ projectId }` — which project is open                                                    | no                                 | yes          | preference                                            |
+| `hexagen-theme`                                                                                   | `app/hooks/useTheme.tsx:22`, inline in `app/layout.tsx:37`                                                                                            | yes                                                                                       | `"light" \| "dark"`                                                                        | no                                 | yes          | preference                                            |
+| `hexagen-workspace-layout-v1`                                                                     | `features/workspace-shell/resizable-layout/constants.ts:9` (react-resizable-panels autosave)                                                          | yes                                                                                       | panel sizes                                                                                | no                                 | yes          | preference                                            |
+| `preferred-llm-storage`                                                                           | `app/lib/free-tier/store/usePreferredLLM.ts:20` (zustand `persist`)                                                                                   | yes                                                                                       | preferred LLM id                                                                           | no                                 | yes          | preference                                            |
+| `execution-engine-storage`                                                                        | `features/manifest-generation/store/useExecutionEngine.ts:29` (zustand `persist`)                                                                     | yes                                                                                       | `engine: "auto"\|…`, `readinessPreferLocal`                                                | no                                 | yes          | preference                                            |
+| `hexagen:local-llm:last-model`, `:auto-load`, `:has-enabled`, `:cache-metadata:<model>`           | `packages/shared/src/infrastructure/adapters/model-preference-keys.ts:2-9`                                                                            | yes                                                                                       | local-LLM choices + per-model cache metadata (sizes, timestamps)                           | no                                 | yes          | preference / cache                                    |
+| `hexagen:manifest-flow:cloud-provider`, `:remember-api-key`, `:skip-ai-setup`, `:remember-choice` | same file `:5-8`                                                                                                                                      | yes                                                                                       | flow choices                                                                               | no                                 | yes          | preference                                            |
+| `hexagen:model-verification-cache`                                                                | `packages/web-driver/.../model-verification-cache.adapter.ts:16`                                                                                      | yes                                                                                       | cached model verification result                                                           | no                                 | yes          | cache                                                 |
+| `hexagen:persistence-migrated:<domain>`                                                           | `packages/web-driver/.../persistence-domain-registry.ts:28`                                                                                           | yes                                                                                       | localStorage→IDB migration flags                                                           | no                                 | yes          | migration flag                                        |
+| `hexagen-saved-projects`, `hexagen-wizard-draft`, `hexagen-editor-workspace-<id>`                 | `local-storage-saved-projects.adapter.ts:8` (marked FROZEN), `local-storage-wizard-draft.adapter.ts:7`, `local-storage-editor-workspace.adapter.ts:8` | **read-only by migration steps** (`wire.client.ts:252-256`)                               | legacy pre-IDB copies                                                                      | yes                                | yes          | legacy — drained by the migration steps, then removed |
+| `byok:keys`                                                                                       | `packages/web-driver/.../local-storage-byok-store.adapter.ts:8`                                                                                       | **no** — not wired; `wire.client.ts:267` uses `EphemeralSecretVaultAdapter` (memory only) | —                                                                                          | —                                  | —            | dead adapter                                          |
+| `hexagen:vault:encrypted-payload`                                                                 | `packages/web-driver/.../encrypted-session-vault.adapter.ts:6`                                                                                        | **no** — not wired                                                                        | —                                                                                          | —                                  | dead adapter |
+
+### sessionStorage
+
+| key                                                   | writer                                                                                                                                 | holds                                       | arch | class                                                                                                                   |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------- |
+| `import_spec_content`, `import_spec_original_content` | `features/manifest-generation/ImportProjectSpecPage.tsx:157,204,214`; `features/workspace-shell/plan-phase/LiveSessionSection.tsx:124` | the pasted/converted project spec in flight | yes  | **in-flight handoff between two pages** — tab-scoped on purpose (`ManifestAcceptPage.tsx:108`); not persistence. Stays. |
+
+### What is already server-side (do not rebuild)
+
+`platform.db`: `saved_projects (owner_id, id, name, payload, created_at, updated_at, ord)` PK `(owner_id, id)` (`lib/platform/platform-db.ts:249-257`); `run_events`; `scan_records`; `repair_runs` / `repair_attempts`; `project_owner_state`; `entitlements`; NextAuth tables. Routes `app/api/projects` + `[projectId]` with `If-Match: <updatedAt>` → 409 on mismatch (`[projectId]/route.ts:28-40,133-140`; store `updateIfMatch` at `saved-projects-store.ts:90-93`). The client's `CachedSavedProjectsAdapter(IDB, HTTP)` lifts IDB→server once per owner (`http-saved-projects.adapter.ts:285-299`, keyed on `project_owner_state.initialized`) and retries 409 three times (`:222`).
+
+Two things the inventory found that the 2026-08-20 plan did not say:
+
+- **`scan_records` has a store and no producer.** `PlatformStore.scansFor` (`lib/platform/store.ts:30`) has zero callers outside `store.ts`; the brownfield Report reads scan artifacts from the route, not the table. Not this plan's defect, but Plan 2 should not build sharing on a table nothing writes.
+- **Unsaved editor edits exist only in IDB.** `PersistedEditorWorkspace.files[*].dirty` and `unpushed` (`persisted-editor-workspace.ts:9-22`) are the _only_ record of edits not yet written to a saved project. A device loss today loses them. This is the highest-value row to move.
+
+## 1. Scope
+
+**Migrates (data):** saved projects for every user class D-S2 admits; wizard drafts; editor workspaces; generation results; chat + governance threads; Monaco session buffers; brownfield drafts; canvas layouts.
+
+**Keeps local (preferences/caches), under a tested allow-list:** theme, active workspace pointer, panel layout, preferred LLM, execution engine, every `hexagen:local-llm:*` and `hexagen:manifest-flow:*` key, model-verification cache, migration flags, and `import_spec_*` (sessionStorage handoff).
+
+**Removes:** the three FROZEN legacy localStorage adapters and their migration steps once P1.7's telemetry shows zero drains for 30 days; the two dead vault adapters (`byok:keys`, `hexagen:vault:*`) now — nothing constructs them.
+
+**Never migrates:** BYOK key material. ADR-0030 §1: raw keys never persist server-side. The live vault is `EphemeralSecretVaultAdapter` (memory); the server `byok.db` holds metadata and revocation only (`app/lib/byok-wire.ts:36-40`). Unchanged.
+
+## 2. The anonymous question (D-S2)
+
+Three options; the plan recommends **(a)** and says why the others lose.
+
+**(a) Persistence requires sign-in. Anonymous users keep IDB, exactly as today.** The free tier keeps working offline and signed-out; sign-in triggers the existing one-time lift, extended to every data row in §0 rather than only saved projects. Cost: an anonymous user who clears site data loses work — which is already true and already the stated contract (`StorageQuotaToast.tsx:102` tells them to free space, not that we hold a copy). Retention copy is untouched: the four sites (`creation-path.ts:80,82`, `TierPickerView.tsx:46`, `RepoEntryView.tsx:93`, `GithubScanPage.tsx:208`) promise we do not keep _their repository_; they say nothing about projects a signed-in user chose to save.
+
+**(b) Promote `hxg_sid` to a server-side anonymous owner** (`lib/anon-session.ts:10,34` mints a UUID cookie for the quota cap) with a TTL and a claim-on-sign-in merge. It works mechanically — the `(owner_id, id)` trick does not care what the UUID means — but it turns an abuse-control cookie into an identity, stores user architecture for people who never agreed to an account, and makes every one of the four retention sentences **false** for anonymous brownfield users: "nothing is retained" would now be "retained for N days under a cookie". It also needs a GC job, a merge policy for cookie-vs-account conflicts, and a privacy-policy change. Rejected for v1; revisit only if D-S2's owner wants anonymous cross-device, which nobody has asked for.
+
+**(c) Migrate nothing for anonymous users, ever, and nothing for signed-in users beyond saved projects.** This is the status quo plus D-H5 "stay local". Rejected: it leaves dirty editor buffers, wizard drafts and brownfield drafts on the device for paying users, which is the gap the ask names.
+
+## 3. Packets
+
+Sizes: S ≤ half a day, M ≤ two days, L more. Every exit criterion names the failing-first test or the mutation that must turn it red. All DDL is SQLite-compatible and goes through `platform-db.ts` in the `migrateSavedProjects` style (create-if-absent, idempotent); nothing Postgres-only, so Plan 3's D-H4 move is an ETL, not a rewrite.
+
+**P1.0 — the preference allow-list test** · **S** · no dependencies
+
+- _What:_ `apps/web/__tests__/client-storage-allowlist.test.ts`: greps the app + `packages/web-driver`, `packages/shared`, `packages/local-llm` sources for every storage key literal (`localStorage.setItem`, `idb-keyval` `set(`, zustand `persist({ name })`, `createPersistedStorage(`) and asserts each key is in one of two explicit lists — `DATA_KEYS` (must have a server store by the end of this plan) or `PREFERENCE_KEYS` (stays local). Unknown key → red.
+- _Why:_ the §0 table was built by hand today; without this the next feature adds a fourth copy of something and nobody notices. This is the "assert non-empty before clean" doctrine applied to storage.
+- _Exit:_ the test passes on today's tree with the §0 keys; **mutation:** add `localStorage.setItem("hexagen:new-thing", …)` anywhere → red.
+
+**P1.1 — generic owner-scoped document store** · **M** · no dependencies
+
+- _What:_ one table, not seven: `owner_documents (owner_id TEXT, kind TEXT, id TEXT, rev INTEGER NOT NULL, payload TEXT NOT NULL, updated_at INTEGER NOT NULL, updated_by TEXT, PRIMARY KEY (owner_id, kind, id))`, `kind ∈ {wizard-draft, workspace, generation, chat, governance, monaco, brownfield-draft, canvas-layout}`. Store `lib/platform/owner-documents-store.ts` with `list(owner, kind)`, `get`, `put(expectedRev)`, `delete`, mirroring `saved-projects-store.ts` including the `updateIfMatch` shape. Exposed as `PlatformStore.documentsFor(ownerId)`.
+- _Why one table:_ every §0 row is "an opaque JSON blob owned by one owner, addressed by one id, with optimistic concurrency". Seven tables is seven migrations, seven stores and seven routes for one shape. `saved_projects` stays separate because it already exists and has `ord`.
+- _Why `rev` not `updated_at`:_ H1.4's argument — a clock is not monotonic across two devices; an integer is. `saved_projects` gets the same `rev` column in P1.4 so both stores speak one concurrency dialect.
+- _Exit:_ store tests in `apps/web/lib/platform/__tests__/` — put/get/list/delete per kind; cross-owner read returns nothing; `put` with stale `expectedRev` → `Conflict`; **mutation:** remove `AND rev = @expected_rev` from the update statement → the conflict test goes red.
+
+**P1.2 — routes** · **S** · after P1.1
+
+- _What:_ `app/api/documents/[kind]/route.ts` (GET list, POST create) and `[kind]/[id]/route.ts` (GET, PUT with `If-Match: <rev>` → 409, DELETE), all behind `requirePersistenceOwner`, same-origin guard, and the existing rate limiter. `kind` validated against the P1.1 enum — unknown kind → 404, not 500.
+- _Exit:_ route tests mirroring `app/api/projects/__tests__/route.test.ts`: 401 without JWT, 409 on stale `If-Match`, 404 on bad kind; **mutation:** delete the `requirePersistenceOwner` call → the 401 test goes red.
+
+**P1.3 — `Cached<Port>` adapters per §0 data row** · **L** · after P1.2
+
+- _What:_ for each live IDB/localStorage **data** adapter, an HTTP adapter against P1.2 and a `Cached*Adapter(local, http)` wired in `wire.client.ts` in place of the bare local one — the exact shape of `CachedSavedProjectsAdapter` (`http-saved-projects.adapter.ts:267`): server authoritative when reachable, local is the cache, anonymous (401) falls through to local silently, one-time lift per `(owner, kind)` keyed on a `project_owner_state`-style flag (generalised to `owner_state(owner_id, kind, initialized)`).
+- _Order inside the packet, by value:_ (1) editor workspace — dirty buffers; (2) wizard draft — and fix the single `"default"` slot to be per-project while here, since the key already allows it; (3) brownfield draft (keep the 7-day TTL server-side as `expires_at`); (4) Monaco session; (5) generation results — with a cap: keep the last 10 per project server-side, the adapter never pruned and a whole file tree per run is the one row that can get big; (6) chat + governance threads; (7) canvas layout.
+- _Owner stamp:_ every cached adapter records the owner it was filled for (the `hexagen:saved-projects-owner` pattern, `idb-saved-projects.adapter.ts:379-388`) and wipes on mismatch. This is the same hook Plan 2's tenant switcher uses — implement it once, in a shared `owner-stamped-cache.ts`, not seven times.
+- _Exit per adapter:_ the adapter test suite from `idb-saved-projects.adapter.test.ts` re-targeted: anonymous → local only; signed-in empty server + non-empty local → lifted exactly once; owner mismatch → cache wiped, nothing lifted; **mutation:** remove the owner-mismatch wipe → the "never lift another owner's cache" test goes red.
+
+**P1.4 — `rev` on `saved_projects`; retire the clock precondition** · **M** · after P1.1, coordinates with Plan 2 H1.4
+
+- _What:_ add `rev INTEGER NOT NULL DEFAULT 0` + `updated_by TEXT` to `saved_projects` (migrate-by-copy, the `migrateSavedProjects` pattern); `If-Match` accepts a rev; `updated_at` precondition kept for one release for old clients, then removed. Client stops the silent 3× retry on 409 for org tenants (H1.4) — for personal tenants keep it, two devices of one person is exactly the case it was written for.
+- _Exit:_ existing route tests pass with `If-Match: rev`; **mutation:** make the client send a stale rev → 409 surfaced, not retried, in the org-tenant path.
+
+**P1.5 — offline: read-through cache + write queue** · **M** · after P1.3
+
+- _What breaks, honestly:_ once the server is authoritative, a user with no network gets their **last-synced** copy from the cache, and a write while offline reaches the cache only. `CachedSavedProjectsAdapter` today returns the cache on remote failure (`:275`) and writes through to both (`:312-316`) — so reads degrade gracefully already; what it does **not** do is re-send a write made offline. Two devices editing the same project offline will conflict on reconnect, and the P1.4 `rev` is what turns that into a 409 instead of a silent overwrite.
+- _Minimal answer:_ a per-kind **outbox** in IDB (`hexagen:outbox:<kind>`), drained on `online`/visibility and on the next successful remote call; a drained write that 409s surfaces the existing conflict UI. No service worker, no background sync, no CRDT.
+- _Exit:_ adapter test: write while `fetch` rejects → cache updated + outbox entry; `fetch` restored → outbox drained, server has the write, outbox empty; **mutation:** skip the drain on reconnect → the "server has the write" assertion goes red.
+
+**P1.6 — account export grows to cover documents** · **S** · after P1.1; this is H0.2, which the tree shows is **not built** (`app/api/account/` does not exist)
+
+- _What:_ `GET /api/account/export` returns projects + documents (all kinds) + runs. Build it once, here, rather than twice.
+- _Exit:_ a signed-in test owner with one row of every kind gets a bundle containing every row; **mutation:** drop one kind from the exporter → the test's kind-coverage assertion goes red (assert on the _set_ of kinds, not the count).
+
+**P1.7 — legacy drain + dead-adapter removal** · **S** · after P1.3
+
+- _What:_ delete `local-storage-byok-store.adapter.ts` and `encrypted-session-vault.adapter.ts` now (zero constructors). Add a counter to the three migration steps (`wire.client.ts:252-256`) reporting drains to `POST /api/runs`-style telemetry (count only, no content); after 30 days of zero, delete the FROZEN adapters and the steps.
+- _Exit:_ P1.0 allow-list shrinks by the removed keys and stays green; `turbo build` green.
+
+## 4. Decisions
+
+| id       | question                                                                                      | default if unanswered                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **D-S1** | Migrate preferences too ("all" literally)?                                                    | **No.** Preferences stay local under the P1.0 allow-list. A server round-trip for the theme is cost without benefit. Overrule = add the keys to `DATA_KEYS` and a `preferences` kind.                                                                                                                                                                                                                                                                      |
+| **D-S2** | Anonymous users: (a) sign-in required for persistence, (b) `hxg_sid` as owner, (c) status quo | **(a).** Keeps the retention copy true and the free tier offline-capable. (b) is a privacy-policy change, not a packet.                                                                                                                                                                                                                                                                                                                                    |
+| **D-S3** | One generic `owner_documents` table vs a table per kind                                       | **Generic.** Same shape, one store, one route family. Split a kind out only when it needs a column the others do not (today none does).                                                                                                                                                                                                                                                                                                                    |
+| **D-S4** | Generation-result retention server-side                                                       | **Last 10 per project.** A run is a whole file tree; unbounded is the one row that can blow the volume. Revisit with Plan 3's storage numbers.                                                                                                                                                                                                                                                                                                             |
+| **D-S5** | Offline writes: outbox (P1.5) vs "read-only when offline"                                     | **Outbox.** Read-only offline is honest but regresses today's behaviour, where IDB accepts every write.                                                                                                                                                                                                                                                                                                                                                    |
+| **D-S6** | Land before or after Plan 2's tenant switcher?                                                | **Before**, personal tenant only; the owner-stamp hook is built to take a tenant id, so Plan 2 flips one parameter. Waiting inverts the value order (dirty buffers are the prize).                                                                                                                                                                                                                                                                         |
+| **D-S7** | New store contract: sync (like today's stores) or async?                                      | **Async from day one.** Plan 3 (G2.2) found the real cost of the Postgres move is not SQL dialect but the sync→async contract change across every existing store and its 12 caller files (`saved-projects-store.ts` and `run-history-store.ts` have zero `Promise<` today). `owner_documents` (P1.1) must not add to that bill: its interface returns Promises even while the first backend is better-sqlite3, so G2.2 swaps the adapter, not the callers. |
+
+## 5. Sequencing
+
+```
+P1.0 allow-list test ──────────────────────────────────────────────────────┐
+                                                                           │
+P1.1 owner_documents store ──▶ P1.2 routes ──▶ P1.3 cached adapters ──▶ P1.5 outbox
+          │                                         │
+          ├──▶ P1.4 rev on saved_projects ◀─────────┤  (coordinates with Plan 2 H1.4)
+          │                                         │
+          └──▶ P1.6 account export                  └──▶ P1.7 legacy drain / dead adapters
+
+Plan 2 (orgs): consumes the owner-stamp hook from P1.3 and the rev dialect from P1.4
+Plan 3 (GCP):  D-H4 Postgres = ETL of saved_projects + owner_documents; no SQL here is Postgres-only
+```
+
+**Parallel-safe:** P1.0 and P1.1 from day one; P1.6 alongside P1.2. P1.3's seven adapters are independent of each other once P1.2 lands — three workers, disjoint files. Workers edit and report; the primary runs every test (a worktree worker has no `node_modules`).
+
+## 6. What this plan does not do
+
+| excluded                                | why                                                                                                                           |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Anonymous server-side persistence       | D-S2 (b) rejected; it falsifies shipped retention copy.                                                                       |
+| Moving preferences server-side          | D-S1; no benefit, real cost.                                                                                                  |
+| BYOK key material                       | ADR-0030 §1 forbids it; the live vault is memory-only.                                                                        |
+| `import_spec_*` sessionStorage          | A two-page handoff, tab-scoped by design (`ManifestAcceptPage.tsx:108`), not persistence.                                     |
+| Realtime / CRDT / live cursors          | `rev` + 409 + snapshot (H1.4) is the conflict model. Two devices of one person is the case; it does not need merge semantics. |
+| Postgres, replicas, the DB engine       | Plan 3 / D-H4. Everything here is SQLite-compatible and behind the store interfaces so that move is an ETL.                   |
+| Org/team tenancy of documents           | Plan 2. `owner_id` is opaque; an org UUID drops in without schema change.                                                     |
+| A service worker / background sync      | P1.5's outbox drains on reconnect from the page. Background sync is a later packet if the outbox telemetry says it matters.   |
+| Fixing `scan_records`' missing producer | Found, flagged to Plan 2, not this plan's defect.                                                                             |
+
+## 7. Risks
+
+| risk                                                       | mitigation                                                                                                                                                              |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A lift duplicates rows on a second device                  | Lift is keyed on `owner_state(owner, kind).initialized`, set server-side in the same transaction as the lift write — the `project_owner_state` pattern, which has held. |
+| Generation results fill the volume                         | D-S4 cap; P1.1 store enforces it on write, not a cron.                                                                                                                  |
+| The wizard-draft `"default"` slot hides per-project drafts | P1.3(2) fixes the key while moving the store; the test asserts two projects yield two drafts.                                                                           |
+| Outbox replays a write the user since abandoned            | Outbox entries carry the `rev` they were made against; a replay against a newer rev is a 409, surfaced, never force-written.                                            |
+| A new feature adds a storage key nobody migrates           | P1.0 fails the build.                                                                                                                                                   |
+| `If-Match` dialect change breaks deployed clients          | P1.4 accepts both `updated_at` and `rev` for one release; the `Accept` header version is not needed — the shape of the value (epoch ms vs small int) is unambiguous.    |
+| Two personal devices offline edit the same workspace       | Reconnect → one wins by rev, the other gets 409 + the H1.4 snapshot to recover from. Stated plainly in the conflict UI; no silent merge.                                |
+| A worker reports green on a suite it cannot run            | Primary re-runs every command; PR bodies carry the primary's output.                                                                                                    |
+
+## 8. Ready when
+
+- P1.0 is green and lists every key in §0 under exactly one of `DATA_KEYS` / `PREFERENCE_KEYS`.
+- A signed-in user who edits a file, closes the browser, and opens a second browser sees the dirty buffer (P1.3(1)) — the one acceptance test that matters.
+- A signed-out user's flow is byte-for-byte what it is today.
+- Every new gate's PR body carries the command that made it fail and the exit code.
