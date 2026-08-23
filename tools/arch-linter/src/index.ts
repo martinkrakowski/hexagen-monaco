@@ -140,6 +140,7 @@ export {
   checkContextDeclarations,
   collectDeclaredElements,
   collectExportedNames,
+  contextDeclarationsEnforced,
 } from "./context-declaration-violation.js";
 
 export type { LoggerPort } from "./logger.js";

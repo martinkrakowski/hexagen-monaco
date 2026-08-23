@@ -39,6 +39,26 @@ export interface LinterConfig {
     allowed_cross_package_imports?: boolean;
   };
   subpath_conventions?: SubpathConventionConfig;
+  /**
+   * Opt-in for the `context-declaration-drift` rule (ADR-0057 registry
+   * accuracy). ABSENT MEANS OFF, deliberately.
+   *
+   * The rule asserts that every declared `layers.*` entry names a symbol the
+   * context exports. That is true of a CURATED registry, which is what
+   * `.architecture/contexts/**` is in this repository. It is false of a
+   * GENERATED project's manifest, which is a specification of intent: entries
+   * are spelled as file names (`Prisma.adapter.ts`, `rest-controller.in-port.ts`)
+   * rather than exported symbols, and with `generator.sync.stubs.enabled: false`
+   * the elements they name are deliberately never materialised.
+   *
+   * Defaulting to on therefore red-walled every scaffolded project and every
+   * published consumer whose manifest is a spec — observed on the capstone
+   * `Generate -> gate (minimal-addons)` job. A project states that its manifest
+   * is a registry by setting this; nothing else turns the rule on.
+   */
+  context_declarations?: {
+    enforce?: boolean;
+  };
 }
 
 const escapeRegExp = (str: string): string =>

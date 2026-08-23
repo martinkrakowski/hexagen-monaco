@@ -260,6 +260,27 @@ export function collectExportedNames(file: SourceFile): string[] {
   return names;
 }
 
+/**
+ * Is the registry-accuracy rule turned on for this project?
+ *
+ * ABSENT MEANS OFF, and that default is the whole point. The rule reads a
+ * `layers.*` entry as a claim about an exported symbol. That holds for a
+ * curated registry; it is false for a generated project, whose manifest is a
+ * SPECIFICATION — entries spelled as file names (`Prisma.adapter.ts`,
+ * `rest-controller.in-port.ts`) naming elements that `stubs.enabled: false`
+ * deliberately never creates.
+ *
+ * Shipping this on by default failed every scaffold for being a scaffold
+ * (capstone `Generate -> gate (minimal-addons)`), so a project must SAY that
+ * its manifest is a registry. Only the literal `true` counts: a truthy string
+ * from a hand-edited YAML must not silently arm a gate.
+ */
+export function contextDeclarationsEnforced(
+  config: { context_declarations?: { enforce?: boolean } } | undefined,
+): boolean {
+  return config?.context_declarations?.enforce === true;
+}
+
 export interface CheckContextDeclarationsInput {
   contextName: string;
   declared: readonly DeclaredElement[];

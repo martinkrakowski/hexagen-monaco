@@ -43,6 +43,7 @@ import {
   checkContextDeclarations,
   collectDeclaredElements,
   collectExportedNames,
+  contextDeclarationsEnforced,
 } from "./context-declaration-violation.js";
 import type { LayerRules } from "./layer-import-violation.js";
 import {
@@ -389,6 +390,16 @@ const linterConfig = useOptionalConfig(
   LINTER_CONFIG_PATH,
   "linter-config.yaml",
 );
+
+/**
+ * `context-declaration-drift` is OPT-IN (see LinterConfig.context_declarations).
+ *
+ * Absent config means OFF. A generated project's manifest declares elements by
+ * FILE NAME and, with stubs disabled, deliberately does not materialise them —
+ * so enforcing there fails a scaffold for being a scaffold. Only a repo that
+ * declares its manifest to be a curated registry gets the rule.
+ */
+const ENFORCE_CONTEXT_DECLARATIONS = contextDeclarationsEnforced(linterConfig);
 
 const layoutLoad = await loadLayoutConfig(LAYOUT_PATH, readUtf8);
 let layout: LayoutConfig | undefined;
@@ -1004,11 +1015,13 @@ function checkArchitecturalIntegrity(): {
     // aborted the run for a directory that exists but resolved nothing. A
     // declaration is therefore never failed on the strength of a scan that did
     // not happen.
-    const declarationViolations = checkContextDeclarations({
-      contextName: moduleName,
-      declared: collectDeclaredElements(moduleInfo),
-      exportedNames,
-    });
+    const declarationViolations = ENFORCE_CONTEXT_DECLARATIONS
+      ? checkContextDeclarations({
+          contextName: moduleName,
+          declared: collectDeclaredElements(moduleInfo),
+          exportedNames,
+        })
+      : [];
     for (const violation of declarationViolations) {
       const contextFile =
         CONTEXT_FILE_BY_NAME.get(moduleName) ?? toRelativePosix(MANIFEST_PATH);
@@ -1273,8 +1286,13 @@ function reportAndExit(
 
   // Name what was actually checked (RCA #8: the old blanket "compliant
   // with manifest.yaml" claimed manifest governance the linter didn't do).
+  // Never claim a check that did not run (RCA #8). The declaration rule is
+  // opt-in, so it is named only when linter-config.yaml turned it on.
   logger.info(
-    "Architecture is compliant. Checked: cross-context imports (manifest depends_on + shared-kernel types + linter-config), layer rules (incl. cross-layer relative imports, node builtins in domain/application, npm packages in domain), subpath conventions, server markers, required communication, context-declaration accuracy (declared ports/adapters name an exported symbol).",
+    "Architecture is compliant. Checked: cross-context imports (manifest depends_on + shared-kernel types + linter-config), layer rules (incl. cross-layer relative imports, node builtins in domain/application, npm packages in domain), subpath conventions, server markers, required communication" +
+      (ENFORCE_CONTEXT_DECLARATIONS
+        ? ", context-declaration accuracy (declared ports/adapters name an exported symbol)."
+        : "."),
   );
 }
 

@@ -7,6 +7,7 @@ import {
   checkContextDeclarations,
   collectDeclaredElements,
   collectExportedNames,
+  contextDeclarationsEnforced,
   type DeclarationSection,
   type DeclaredElement,
 } from "../src/context-declaration-violation.js";
@@ -316,5 +317,86 @@ describe("absent config — a repo that declares nothing cannot fail", () => {
       exportedNames: new Set<string>(),
     });
     assert.deepEqual(violations, []);
+  });
+});
+
+describe("contextDeclarationsEnforced — opt-in, absent means OFF", () => {
+  it("is off when the project declares no linter config at all", () => {
+    assert.equal(contextDeclarationsEnforced(undefined), false);
+    assert.equal(contextDeclarationsEnforced({}), false);
+  });
+
+  it("is off when the key is present but says nothing", () => {
+    assert.equal(
+      contextDeclarationsEnforced({ context_declarations: {} }),
+      false,
+    );
+  });
+
+  it("is off when explicitly disabled", () => {
+    assert.equal(
+      contextDeclarationsEnforced({ context_declarations: { enforce: false } }),
+      false,
+    );
+  });
+
+  it("is on only for a literal true", () => {
+    assert.equal(
+      contextDeclarationsEnforced({ context_declarations: { enforce: true } }),
+      true,
+    );
+  });
+
+  it("a truthy non-boolean does NOT arm the gate", () => {
+    // A hand-edited YAML can yield the STRING "true". Arming a gate on a value
+    // the schema never promised is how a rule starts firing where nobody
+    // opted in.
+    const handEdited = {
+      context_declarations: { enforce: "true" },
+    } as unknown as { context_declarations?: { enforce?: boolean } };
+    assert.equal(contextDeclarationsEnforced(handEdited), false);
+  });
+});
+
+describe("regression: a GENERATED project must not fail this rule", () => {
+  // The capstone `Generate -> gate (minimal-addons)` job caught this. A
+  // scaffold's manifest is a SPECIFICATION, not a registry: entries are spelled
+  // as FILE NAMES, and `generator.sync.stubs.enabled: false` means the elements
+  // they name are deliberately never created. Both break the symbol-matching
+  // premise, which is why the rule must be opt-in.
+  const generatedContext = {
+    name: "ledger",
+    layers: {
+      application: {
+        use_cases: ["RecordEntry"],
+        ports: {
+          in: ["rest-controller.in-port.ts"],
+          out: ["relational-db.out-port.ts"],
+        },
+      },
+      infrastructure: { adapters: ["Prisma.adapter.ts", "BullMQ.adapter.ts"] },
+    },
+  };
+
+  it("declares elements by filename that no exported symbol will ever match", () => {
+    const declared = collectDeclaredElements(generatedContext);
+    const names = declared.map((d) => d.name);
+    assert.ok(names.includes("Prisma.adapter.ts"));
+    assert.ok(names.includes("rest-controller.in-port.ts"));
+
+    // Every one of them WOULD be reported if the rule ran against a scaffold
+    // whose stubs were never emitted — which is precisely why it must not run
+    // unless a project opted in.
+    const wouldFire = checkContextDeclarations({
+      contextName: "ledger",
+      declared,
+      exportedNames: new Set<string>(),
+    });
+    assert.equal(wouldFire.length, declared.length);
+  });
+
+  it("stays silent for such a project, because it opted into nothing", () => {
+    assert.equal(contextDeclarationsEnforced(undefined), false);
+    assert.equal(contextDeclarationsEnforced({}), false);
   });
 });
