@@ -7,7 +7,34 @@ import { createDefaultProjectConfig } from "@/project-config-presets";
 import { useSavedProjects } from "@/hooks/useSavedProjects";
 import { logger } from "../../../../lib/structured-logger";
 
-/** Streams that route through the shared Project Name step. */
+/**
+ * Streams that route through the shared Project Name step.
+ *
+ * ## Why `github` is absent, and why that is not an oversight
+ *
+ * `IMPORT_SUB_OPTIONS` has four import ids — `spec`, `scan`, `artifacts` and
+ * `github` — and only the first three appear here. The omission is deliberate:
+ *
+ * - `github`'s href is `/projects/new/import/github` directly, not
+ *   `/projects/new/name?path=github`. It is the ONE import stream that does not
+ *   route through this step.
+ * - `GithubScanPage` (BF-5.3) carries its own project-name field, precisely so
+ *   a direct link to that route is a complete entry point rather than a bounce
+ *   back to a step the user did not ask for. Adding a `github` branch here
+ *   would give one tier two naming surfaces, and the name step would be the one
+ *   nobody linked to.
+ * - It still ACCEPTS a carried name (`?name=`) and prefills from it, which is
+ *   how the brownfield tier picker hands off. That is a carry, not a step.
+ *
+ * The unknown-path behaviour below is therefore load-bearing rather than
+ * incidental: `isNamedPath("github")` is false, `PATH_COPY` is never indexed
+ * with it, and the effect redirects to `/projects/new`. Anyone who hand-types
+ * `?path=github` is sent to choose again rather than shown a nameless form —
+ * the same treatment as any other unrecognised value. If `github` ever needs a
+ * name step, the change is: add it to the union, `PATH_COPY`, `isNamedPath`,
+ * the submit dispatch and the `handleBack` import-sub-path list, and repoint
+ * the `IMPORT_SUB_OPTIONS` href. Five places, all in this file bar the last.
+ */
 type NamedPath = "blank" | "ai" | "spec" | "scan" | "artifacts";
 
 const PATH_COPY: Record<NamedPath, { title: string; description: string }> = {

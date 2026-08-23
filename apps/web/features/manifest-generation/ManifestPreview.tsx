@@ -32,11 +32,8 @@ import { ValidationReportView } from "./ValidationReportView";
 import { ValidationFindingsPanel } from "./ValidationFindingsPanel";
 import { ManifestAutoFixDrawer } from "./ManifestAutoFixDrawer";
 import type { ValidationItem } from "@hexagen/manifest-generation";
-import {
-  parseYamlToViewData,
-  canAutoFix,
-  applyDeterministicFix,
-} from "@hexagen/manifest-generation";
+import { parseYamlToViewData } from "@hexagen/manifest-generation";
+import { runDeterministicAutoFix } from "./deterministic-auto-fix";
 import type { StageValidationReport } from "../../app/lib/useStagedGenerationStream";
 import {
   toAdvisoryValidationItems,
@@ -154,30 +151,18 @@ export function ManifestPreview({
     if (validationReport) return;
     if (autoFixAppliedRef.current) return;
     autoFixAppliedRef.current = true;
-    let yaml = localManifestYaml;
-    const applied: string[] = [];
-    let changed = true;
-    while (changed) {
-      changed = false;
-      const data = parseYamlToViewData(yaml);
-      for (const v of data.validationItems) {
-        if (v.status !== "pass" && canAutoFix(v)) {
-          const patched = applyDeterministicFix(yaml, v);
-          if (patched && patched !== yaml) {
-            yaml = patched;
-            applied.push(v.title);
-            changed = true;
-            break;
-          }
-        }
-      }
-    }
-    if (yaml !== localManifestYaml) {
-      setLocalManifestYaml(yaml);
+    // The loop itself moved to `deterministic-auto-fix.ts` UNCHANGED — same
+    // predicate order, same calls, same fixpoint. It moved so that the set it
+    // could NOT repair (`outcome.fellThrough`) can be characterised in tests;
+    // ADR-0067 needs that set, and it was previously computed nowhere. Nothing
+    // about which violations get fixed changed here.
+    const outcome = runDeterministicAutoFix(localManifestYaml);
+    if (outcome.yaml !== localManifestYaml) {
+      setLocalManifestYaml(outcome.yaml);
       // Disclose, don't silently mutate — the fixpoint loop can apply the
       // same fix class more than once, so dedupe for display.
-      setAppliedAutoFixes(Array.from(new Set(applied)));
-      onYamlChange?.(yaml);
+      setAppliedAutoFixes(Array.from(new Set(outcome.appliedTitles)));
+      onYamlChange?.(outcome.yaml);
     }
   }, [localManifestYaml, onYamlChange, validationReport]);
 
