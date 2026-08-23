@@ -95,7 +95,21 @@ function assertEnvelope(file) {
   if (line === undefined) {
     fail(`no JSON envelope in captured scan output:\n${stdout.slice(-2000)}`);
   }
-  const envelope = JSON.parse(line);
+  // A line that merely STARTS with "{" is not guaranteed to parse: a truncated
+  // or partial write, or stray progress prose beginning with a brace, would
+  // otherwise escape as a raw stack trace instead of a controlled failure with
+  // the tail of the output — the same contract verify-standalone-scan.mjs's
+  // try/catch gives the setup-node smoke.
+  let envelope;
+  try {
+    envelope = JSON.parse(line);
+  } catch (error) {
+    fail(
+      `the last JSON-looking line does not parse (${error.message}).\n` +
+        `offending line:\n${line.slice(-500)}\n` +
+        `tail of captured scan output:\n${stdout.slice(-2000)}`,
+    );
+  }
   const findings = envelope.findings ?? {};
   console.log(`  filesScanned  : ${envelope.filesScanned}`);
   console.log(`  collected     : ${findings.collected}`);

@@ -437,10 +437,17 @@ jobs:
   # scripts/verify-container-scan.mjs. HOSTNAME=0.0.0.0 because Next
   # standalone binds to $HOSTNAME (see deploy/docker-compose.prod.yml) and
   # the probe here comes through the published port instead of exec.
+  # Only what this job needs: the image build (GHA layer cache uses the
+  # runner's runtime token, not GITHUB_TOKEN scopes) and docker. It never
+  # comments on PRs, and it executes repo scripts on the runner, so it does
+  # not get the workflow-level pull-requests: write the conformance action
+  # in the lint job requires.
   container-smoke:
     name: "Standalone smoke in the production image"
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
       - name: "Checkout Repository"
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -490,10 +497,25 @@ jobs:
       - name: "Assert findings were collected"
         run: node scripts/verify-container-scan.mjs --assert scan-stdout.txt
 
+      # Best-effort, both steps: a failure BEFORE `docker run` (e.g. the image
+      # build) means no container exists, and an unguarded `docker logs` /
+      # `docker rm -f` would then fail too — burying the original error under
+      # a second red X ("No such container") and making the job's failure look
+      # like a teardown bug. Guard on actual existence instead.
       - name: "Container logs on failure"
         if: failure()
-        run: docker logs hexagen-smoke
+        run: |
+          if docker ps -a --format '{{.Names}}' | grep -q '^hexagen-smoke$'; then
+            docker logs hexagen-smoke
+          else
+            echo "hexagen-smoke was never created — no logs to dump"
+          fi
 
       - name: "Teardown"
         if: always()
-        run: docker rm -f hexagen-smoke
+        run: |
+          if docker ps -a --format '{{.Names}}' | grep -q '^hexagen-smoke$'; then
+            docker rm -f hexagen-smoke
+          else
+            echo "hexagen-smoke absent — nothing to remove"
+          fi
