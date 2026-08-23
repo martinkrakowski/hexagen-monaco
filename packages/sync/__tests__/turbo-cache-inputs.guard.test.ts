@@ -9,6 +9,7 @@ const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../..",
 );
+const ROOT_BASE = path.join(REPO_ROOT, "tsconfig.base.json");
 
 /**
  * Turbo cache-key correctness (enforcement plan P3.2, decision D-2).
@@ -32,6 +33,27 @@ const REPO_ROOT = path.resolve(
  * tasks, so their inputs affect nothing; they are left in place as
  * documentation only.
  */
+
+/**
+ * True when one of a tsconfig's `extends` entries is a relative path that
+ * resolves to the repo-root tsconfig.base.json. `extends` may be a string or
+ * (TS 5.0+) an array; bare package specifiers (e.g.
+ * "@tsconfig/node20/tsconfig.json") never resolve to the repo-root base via a
+ * file path, so only "./"- or "../"-prefixed entries are considered. The
+ * repo's stable workspace shape is `"../../tsconfig.base.json"` from every
+ * directory under `packages` and `apps`.
+ */
+function extendsRepoRootBase(
+  tsconfigAbsPath: string,
+  extendsValue: unknown,
+): boolean {
+  const entries = Array.isArray(extendsValue) ? extendsValue : [extendsValue];
+  return entries.some((entry) => {
+    if (typeof entry !== "string" || !entry.startsWith(".")) return false;
+    return path.resolve(path.dirname(tsconfigAbsPath), entry) === ROOT_BASE;
+  });
+}
+
 describe("turbo.json cache-input guard (P3.2)", () => {
   async function loadTurbo(): Promise<{
     globalDependencies: string[];
@@ -42,6 +64,62 @@ describe("turbo.json cache-input guard (P3.2)", () => {
   }> {
     const raw = await fs.readFile(path.join(REPO_ROOT, "turbo.json"), "utf8");
     return JSON.parse(raw);
+  }
+
+  /**
+   * Discovery of tsconfigs extending the repo-root base: `git grep` narrows
+   * the candidates (tracked files only), then each candidate's `extends` is
+   * resolved against its own directory so that non-root bases — the live
+   * example is `config/tsconfig.json`, which extends a non-root
+   * `./tsconfig.base.json` — do not inflate the count.
+   *
+   * `tsconfig.json` is JSONC in general; a file containing comments fails
+   * JSON.parse and is excluded here — the guard then fails closed, which is
+   * the safe direction, and the excluded file is named in the failure
+   * message.
+   */
+  async function discoverRootBaseExtenders(): Promise<{
+    matched: string[];
+    extenders: string[];
+  }> {
+    let matched: string[] = [];
+    try {
+      matched = execFileSync(
+        "git",
+        ["grep", "-l", '"extends".*tsconfig.base', "--", "*/tsconfig.json"],
+        { cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
+      )
+        .split("\n")
+        .filter(Boolean);
+    } catch (err) {
+      const e = err as { status?: number; message: string };
+      if (e.status !== 1) {
+        // git grep exits 1 for "no matches" (an empty list is a legitimate
+        // finding below); anything else — git missing, not a repo — means
+        // discovery is unavailable. Fail with intent, not a raw stack.
+        throw new Error(
+          "extender discovery via `git grep` is unavailable " +
+            `(${e.message}); cannot verify the tsconfig.base.json population floor`,
+        );
+      }
+    }
+
+    const extenders: string[] = [];
+    for (const relPath of matched) {
+      const absPath = path.join(REPO_ROOT, relPath);
+      let config: unknown;
+      try {
+        config = JSON.parse(await fs.readFile(absPath, "utf8"));
+      } catch {
+        continue;
+      }
+      if (
+        extendsRepoRootBase(absPath, (config as { extends?: unknown }).extends)
+      ) {
+        extenders.push(relPath);
+      }
+    }
+    return { matched, extenders };
   }
 
   it("pipeline discovery is non-empty (the guard is checking something)", async () => {
@@ -68,17 +146,61 @@ describe("turbo.json cache-input guard (P3.2)", () => {
 
     // Population floor: the pin must not outlive its reason. If the repo
     // stops extending the base config, this guard should be revisited, not
-    // silently satisfied.
-    const extenders = execFileSync(
-      "git",
-      ["grep", "-l", '"extends".*tsconfig.base', "--", "*/tsconfig.json"],
-      { cwd: REPO_ROOT, encoding: "utf8" },
-    )
-      .split("\n")
-      .filter(Boolean);
+    // silently satisfied. Only tsconfigs whose `extends` resolves to the
+    // REPO-ROOT tsconfig.base.json count toward the floor.
+    const { matched, extenders } = await discoverRootBaseExtenders();
+    const excluded = matched.filter((f) => !extenders.includes(f));
     assert.ok(
       extenders.length >= 20,
-      `expected >=20 tsconfigs extending tsconfig.base.json, found ${extenders.length}`,
+      `expected >=20 tsconfigs extending the repo-root tsconfig.base.json, ` +
+        `found ${extenders.length}` +
+        (excluded.length > 0
+          ? ` (grep-matched but resolving elsewhere or unparsable: ` +
+            `${excluded.slice(0, 5).join(", ")})`
+          : ""),
+    );
+  });
+
+  it("extender resolution counts only extends that resolve to the repo-root base", () => {
+    // The config/ trap: a same-named base beside the tsconfig must not count.
+    assert.equal(
+      extendsRepoRootBase(
+        path.join(REPO_ROOT, "config/tsconfig.json"),
+        "./tsconfig.base.json",
+      ),
+      false,
+    );
+    // The stable workspace shape.
+    assert.equal(
+      extendsRepoRootBase(
+        path.join(REPO_ROOT, "packages/sync/tsconfig.json"),
+        "../../tsconfig.base.json",
+      ),
+      true,
+    );
+    // TS 5.0+ array form counts when any entry resolves to the root base.
+    assert.equal(
+      extendsRepoRootBase(path.join(REPO_ROOT, "packages/sync/tsconfig.json"), [
+        "@tsconfig/strictest/tsconfig.json",
+        "../../tsconfig.base.json",
+      ]),
+      true,
+    );
+    // Bare package specifiers never resolve to the repo-root base.
+    assert.equal(
+      extendsRepoRootBase(
+        path.join(REPO_ROOT, "packages/sync/tsconfig.json"),
+        "@tsconfig/node20/tsconfig.json",
+      ),
+      false,
+    );
+    // No extends at all.
+    assert.equal(
+      extendsRepoRootBase(
+        path.join(REPO_ROOT, "packages/sync/tsconfig.json"),
+        undefined,
+      ),
+      false,
     );
   });
 
