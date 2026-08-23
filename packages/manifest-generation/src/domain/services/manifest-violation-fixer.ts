@@ -1,5 +1,8 @@
 import yaml from "js-yaml";
-import type { ValidationItem } from "../model/manifest-view-data.js";
+import type {
+  ValidationItem,
+  ViolationCode,
+} from "../model/manifest-view-data.js";
 
 interface ManifestOutput {
   system?: string;
@@ -83,21 +86,42 @@ function findContextIndex(
   return contexts.findIndex((c) => c.name === cleaned);
 }
 
+/**
+ * Deterministic-fixer allow-list, keyed on the bounded code (P0). The
+ * `satisfies Record<ViolationCode, boolean>` makes the map EXHAUSTIVE: adding
+ * a code to VIOLATION_CODES without deciding its fixability here fails to
+ * compile (the quota-store QUOTA_LIMITS/KINDS idiom — a hand-maintained
+ * parallel list silently drifts; a derived one cannot).
+ *
+ * Until 2026-08-23 this dispatched on title/description SUBSTRINGS of
+ * strings that interpolate user content — a context literally named to
+ * contain "Unconnected" made a PASS item "fixable" (characterisation suite
+ * pins the removal). Pass-class codes are false by construction: a passing
+ * item is never repaired.
+ */
+const DETERMINISTIC_FIXABILITY = {
+  "invalid-yaml": false,
+  "scope-missing": true,
+  "scope-defined": false,
+  "architecture-missing": true,
+  "architecture-declared": false,
+  "context-name-hyphen": true,
+  "yaml-tag-indicator": true,
+  "zero-adapters": true,
+  "unconnected-ports": true,
+  "ports-connected": false,
+  "interface-contract-met": false,
+  "interface-contract-missing-ports": true,
+} as const satisfies Record<ViolationCode, boolean>;
+
 export function canAutoFix(violation: ValidationItem): boolean {
-  const title = violation.title;
-  const desc = violation.description;
-  if (title === "Invalid YAML") return false;
-  if (title === "Scope Missing") return true;
-  if (title === "Architecture Missing") return true;
-  if (title === "Minimum Interface Contract" && desc.includes("missing ports"))
-    return true;
-  if (title.includes("Context Name") && desc.includes("Starts with hyphen"))
-    return true;
-  if (desc.includes("YAML tag indicator") || desc.includes('contains "!"'))
-    return true;
-  if (title.includes("Zero Adapters") || title.includes("Unconnected"))
-    return true;
-  return false;
+  return DETERMINISTIC_FIXABILITY[violation.code];
+}
+
+/** Exhaustiveness backstop for the fix dispatch below. */
+function assertNever(code: never): null {
+  void code;
+  return null;
 }
 
 export function applyDeterministicFix(
@@ -111,24 +135,20 @@ export function applyDeterministicFix(
     return null;
   }
 
-  const title = violation.title;
-  const desc = violation.description;
   let changed = false;
 
-  if (title === "Scope Missing") {
+  const code = violation.code;
+  if (code === "scope-missing") {
     if (!parsed.scope) {
       parsed.scope = "internal";
       changed = true;
     }
-  } else if (title === "Architecture Missing") {
+  } else if (code === "architecture-missing") {
     if (!parsed.architecture) {
       parsed.architecture = "modular-monolith";
       changed = true;
     }
-  } else if (
-    title === "Minimum Interface Contract" &&
-    desc.includes("missing ports")
-  ) {
+  } else if (code === "interface-contract-missing-ports") {
     // Synthesize default ports for contexts that are missing in/out ports.
     // Each context needs ≥1 inbound and ≥1 outbound port to pass the check.
     const contexts = parsed.bounded_contexts || [];
@@ -180,10 +200,7 @@ export function applyDeterministicFix(
         },
       };
     });
-  } else if (
-    title.includes("Context Name") &&
-    desc.includes("Starts with hyphen")
-  ) {
+  } else if (code === "context-name-hyphen") {
     const contexts = parsed.bounded_contexts || [];
     parsed.bounded_contexts = contexts.map((c) => {
       if (c.name && c.name.startsWith("-")) {
@@ -192,10 +209,7 @@ export function applyDeterministicFix(
       }
       return c;
     });
-  } else if (
-    desc.includes("YAML tag indicator") ||
-    desc.includes('contains "!"')
-  ) {
+  } else if (code === "yaml-tag-indicator") {
     const ctxIdx = findContextIndex(
       parsed.bounded_contexts || [],
       violation.contextName,
@@ -230,7 +244,7 @@ export function applyDeterministicFix(
         },
       };
     });
-  } else if (title.includes("Zero Adapters") || title.includes("Unconnected")) {
+  } else if (code === "zero-adapters" || code === "unconnected-ports") {
     const ctxIdx = findContextIndex(
       parsed.bounded_contexts || [],
       violation.contextName,
@@ -266,6 +280,19 @@ export function applyDeterministicFix(
       },
     };
     parsed.bounded_contexts = contexts;
+  } else if (
+    code === "invalid-yaml" ||
+    code === "scope-defined" ||
+    code === "architecture-declared" ||
+    code === "ports-connected" ||
+    code === "interface-contract-met"
+  ) {
+    // Never-fixable classes (allow-list is false for all of them). Listed
+    // explicitly so the final else is `never`: a NEW code added to
+    // VIOLATION_CODES without a branch here fails to compile.
+    return null;
+  } else {
+    return assertNever(code);
   }
 
   if (!changed) return null;

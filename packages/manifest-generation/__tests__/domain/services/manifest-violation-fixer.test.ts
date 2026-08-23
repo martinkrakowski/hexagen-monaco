@@ -9,6 +9,9 @@ import type { ValidationItem } from "../../../src/domain/model/manifest-view-dat
 
 const MISSING_PORTS: ValidationItem = {
   status: "warn",
+  // Mechanical edit forced by the P0 signature change (code is required);
+  // the assertions below are untouched.
+  code: "interface-contract-missing-ports",
   title: "Minimum Interface Contract",
   description: "Some bounded contexts are missing ports in/out.",
 };

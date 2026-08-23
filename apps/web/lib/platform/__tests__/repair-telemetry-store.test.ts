@@ -4,7 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
-import { canAutoFix } from "@hexagen/manifest-generation";
+import { canAutoFix, type ViolationCode } from "@hexagen/manifest-generation";
 import { openPlatformDb } from "../platform-db";
 import {
   MAX_REPAIR_RUNS_PER_OWNER,
@@ -70,33 +70,67 @@ function run(over: Partial<RecordRepairRunInput> = {}): RecordRepairRunInput {
  * lumps an eligible violation with an ineligible one.
  */
 describe("classifyViolation mirrors canAutoFix", () => {
-  const cases: Array<{ title: string; description: string }> = [
-    { title: "Invalid YAML", description: "bad indent at line 4" },
-    { title: "Scope Missing", description: "No scope declared" },
-    { title: "Architecture Missing", description: "No architecture declared" },
+  // P0 (2026-08-23) made `code` the fixer's contract; title/description are
+  // display-only. Cases the parser really emits carry their code and still
+  // cross-check canAutoFix; shapes the parser never emits (the classifier's
+  // `-other` / `unclassified` probes) have no canAutoFix ground truth any
+  // more and are asserted ineligible directly.
+  const cases: Array<{
+    title: string;
+    description: string;
+    code?: ViolationCode;
+  }> = [
+    {
+      title: "Invalid YAML",
+      description: "bad indent at line 4",
+      code: "invalid-yaml",
+    },
+    {
+      title: "Scope Missing",
+      description: "No scope declared",
+      code: "scope-missing",
+    },
+    {
+      title: "Architecture Missing",
+      description: "No architecture declared",
+      code: "architecture-missing",
+    },
     {
       title: "Minimum Interface Contract",
       description: "2 contexts are missing ports",
+      code: "interface-contract-missing-ports",
     },
     {
       title: "Minimum Interface Contract",
       description: "all contexts satisfy the contract",
+      code: "interface-contract-met",
     },
     // Real parser output interpolates the user's context name into the title.
-    { title: 'Context Name "-billing"', description: "Starts with hyphen" },
+    {
+      title: 'Context Name "-billing"',
+      description: "Starts with hyphen",
+      code: "context-name-hyphen",
+    },
     { title: 'Context Name "Billing"', description: "Looks fine" },
     {
       title: 'YAML Tag Indicator "!" in Names',
       description: 'Port name contains "!"',
+      code: "yaml-tag-indicator",
     },
     {
       title: "Some Other Title",
       description: "Adapter has a YAML tag indicator",
+      code: "yaml-tag-indicator",
     },
-    { title: "Billing: Zero Adapters", description: "0 adapters declared" },
+    {
+      title: "Billing: Zero Adapters",
+      description: "0 adapters declared",
+      code: "zero-adapters",
+    },
     {
       title: "Billing: 3 Unconnected Ports",
       description: "3 outbound ports have no adapter",
+      code: "unconnected-ports",
     },
     { title: "Description Quality", description: "too short" },
   ];
@@ -113,13 +147,28 @@ describe("classifyViolation mirrors canAutoFix", () => {
 
   it("agrees with canAutoFix on eligibility for every case", () => {
     for (const item of cases) {
-      const expected = canAutoFix({ status: "fail", ...item });
       const actual = isDeterministicallyEligible(classifyViolation(item));
-      assert.equal(
-        actual,
-        expected,
-        `eligibility drift for ${JSON.stringify(item.title)}`,
-      );
+      if (item.code !== undefined) {
+        const expected = canAutoFix({
+          status: "fail",
+          code: item.code,
+          title: item.title,
+          description: item.description,
+        });
+        assert.equal(
+          actual,
+          expected,
+          `eligibility drift for ${JSON.stringify(item.title)}`,
+        );
+      } else {
+        // Never emitted by the parser: no code exists, so the fixer can never
+        // see it; the classifier must not claim eligibility for it either.
+        assert.equal(
+          actual,
+          false,
+          `uncoded shape claims eligibility: ${JSON.stringify(item.title)}`,
+        );
+      }
     }
   });
 
