@@ -57,21 +57,42 @@ describe("SyncEngine idempotency — expected artifacts", () => {
     });
     await engine.run();
 
+    // alpha's layers carry only .gitkeep placeholders (no source file), so no
+    // alpha layer has exportable content and no alpha layer barrel is
+    // emitted (ADR-0050; emitter fixed 2026-08-23 — it used to write
+    // `export {};` stubs there, which this list pinned). The package-root
+    // src/index.ts stub is what keeps tsc from TS18003. shared's domain has
+    // a real source file (result.ts), so its domain barrel is real and stays.
     const expectedFiles = [
       "packages/alpha/package.json",
       "packages/alpha/tsconfig.json",
+      "packages/alpha/src/index.ts",
+      "packages/alpha/src/domain/.gitkeep",
+      "packages/shared/package.json",
+      "packages/shared/tsconfig.json",
+      "packages/shared/src/index.ts",
+      "packages/shared/src/domain/result.ts",
+      "packages/shared/src/domain/index.ts",
+    ];
+    const mustNotExist = [
       "packages/alpha/src/domain/index.ts",
       "packages/alpha/src/application/index.ts",
       "packages/alpha/src/infrastructure/index.ts",
-      "packages/shared/package.json",
-      "packages/shared/tsconfig.json",
-      "packages/shared/src/domain/index.ts",
     ];
 
     for (const rel of expectedFiles) {
       const abs = path.join(fixtureRoot, rel);
       const stat = await fs.stat(abs).catch(() => null);
       assert.ok(stat?.isFile(), `expected generated file to exist: ${rel}`);
+    }
+    for (const rel of mustNotExist) {
+      const abs = path.join(fixtureRoot, rel);
+      const stat = await fs.stat(abs).catch(() => null);
+      assert.strictEqual(
+        stat,
+        null,
+        `empty layer barrel must not be emitted: ${rel}`,
+      );
     }
 
     // shared has no `layers:` content. The Result kernel still owns
