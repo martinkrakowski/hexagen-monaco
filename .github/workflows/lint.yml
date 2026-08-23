@@ -195,8 +195,28 @@ jobs:
       # docs-only PR is exactly the case where markdown drift lands -- guarding
       # it behind that condition would skip the gate precisely when it is the
       # only gate that applies. Prettier over the repo takes a few seconds.
+      #
+      # But on the docs-only path node_modules is ABSENT, and a bare
+      # `npx prettier` then downloads the newest release rather than the locked
+      # one. On 2026-08-23 that judged the tree with 3.9.6 while the lockfile
+      # pinned 3.8.1 and flagged 85 files no PR had touched. Both paths below
+      # therefore run the lockfile's version: `--no-install` makes the installed
+      # path fail loudly if prettier is missing instead of fetching, and the
+      # docs-only path asks scripts/locked-dependency-version.mjs (unit-tested
+      # against decoy and multi-selector lockfile shapes) which version that is.
+      # `set -e` is the shell default for `run:`, so a non-zero exit from the
+      # script stops the step before npx runs.
       - name: "Verify Formatting"
-        run: npx prettier --check "**/*.{ts,tsx,md,json}"
+        env:
+          DOCS_ONLY: ${{ steps.docs-only.outputs.docs_only }}
+        run: |
+          if [ "$DOCS_ONLY" = "true" ]; then
+            locked=$(node scripts/locked-dependency-version.mjs prettier)
+            echo "docs-only fast path: running locked prettier@${locked}"
+            npx --yes "prettier@${locked}" --check "**/*.{ts,tsx,md,json}"
+          else
+            npx --no-install prettier --check "**/*.{ts,tsx,md,json}"
+          fi
 
       # Layer 2. Runs eslint in every workspace that has a lint script, via the
       # same `turbo lint` the root `lint` script uses. `dependsOn: ["^build"]`
