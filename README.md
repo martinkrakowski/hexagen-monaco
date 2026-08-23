@@ -5,7 +5,7 @@
 # Hexagen-Monaco <br> Governance Engine for Human and Agentic Systems
 
 [![Architectural Integrity Check](https://github.com/martinkrakowski/hexagen-monaco/actions/workflows/sync-integrity.yml/badge.svg)](https://github.com/martinkrakowski/hexagen-monaco/actions/workflows/sync-integrity.yml)
-[![License: FSL-1.1-Apache-2.0 (wedge)](<https://img.shields.io/badge/License-FSL--1.1--Apache--2.0%20(wedge)-blue.svg>)](./packages/sync/LICENSE)
+[![License: FSL-1.1-Apache-2.0 (wedge)](<https://img.shields.io/badge/License-FSL--1.1--Apache--2.0%20(wedge)-blue.svg>)](./tools/arch-linter/LICENSE)
 [![License: Source-Available (platform)](<https://img.shields.io/badge/License-Source--Available%20(platform)-orange.svg>)](./LICENSE)
 
 **Architecture should compile**
@@ -379,7 +379,7 @@ Generation stays. If you installed the CLI to scaffold Hexagonal monorepos, that
 
 Hexagen-Monaco is a three-layer product (ADR-0061, ADR-0066).
 
-**Wedge.** `@hexagen-monaco/arch-linter` and the future adopt / bootstrap / report commands and CI action are licensed under the [Functional Source License, Version 1.1, Apache 2.0 Future License](./tools/arch-linter/LICENSE) (FSL-1.1-Apache-2.0). Internal use — including commercial internal use — is permitted. Offering a competing product or service on the wedge is not. Each published version converts to Apache-2.0 two years after it is made available.
+**Wedge.** `@hexagen-monaco/arch-linter` and the future adopt / bootstrap / report commands and CI action are licensed under the [Functional Source License, Version 1.1, Apache 2.0 Future License](./tools/arch-linter/LICENSE) (FSL-1.1-Apache-2.0; SPDX identifier `FSL-1.1-ALv2`). Internal use — including commercial internal use — is permitted. Offering a competing product or service on the wedge is not. Each published version converts to Apache-2.0 two years after it is made available.
 
 **Platform.** `@hexagen-monaco/sync` (the generator), the web app, staged generation, hosted history, and the agent-constraint pack remain proprietary under the [Source-Available Evaluation License](./LICENSE). New packages default to this license unless they are deliberately placed in the wedge.
 

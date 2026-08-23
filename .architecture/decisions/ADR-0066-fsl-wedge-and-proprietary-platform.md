@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted
+Accepted. **Supersedes ADR-0061** on wedge membership: that ADR placed
+`packages/sync` in the wedge under FSL; this one keeps it proprietary. The
+supersession was not recorded in either document until 2026-08-23, during
+which time the tree followed this ADR and ADR-0061 still read "Accepted".
 
 ## Context
 
