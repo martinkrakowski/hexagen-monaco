@@ -334,6 +334,7 @@ describe("extractSpecSummary ⇄ pipeline count parity", () => {
       const analysis = buildDomainAnalysisFromConfig(
         parseStructuredConfig(raw),
       );
+      assert.ok(analysis.useCases, "pipeline import yields use cases");
       assert.equal(
         preview.useCaseCount,
         analysis.useCases.length,

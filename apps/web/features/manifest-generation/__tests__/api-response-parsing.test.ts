@@ -1,6 +1,12 @@
 import { describe, it } from "vitest";
 import assert from "assert";
 
+/** An API payload as it arrives: nothing about its shape is guaranteed yet. */
+type LooseApiResponse = {
+  ok: boolean;
+  data: { boundedContexts?: unknown[]; ports?: unknown[] };
+};
+
 describe("API Response Parsing and Port Normalization", () => {
   describe("Port Normalization", () => {
     it("should normalize string port to object", () => {
@@ -161,7 +167,7 @@ describe("API Response Parsing and Port Normalization", () => {
     });
 
     it("should detect missing boundedContexts", () => {
-      const response = {
+      const response: LooseApiResponse = {
         ok: true,
         data: {
           ports: [{ name: "TestPort", type: "use-case" }],
@@ -176,7 +182,7 @@ describe("API Response Parsing and Port Normalization", () => {
     });
 
     it("should detect missing ports field", () => {
-      const response = {
+      const response: LooseApiResponse = {
         ok: true,
         data: {
           boundedContexts: [{ name: "TestContext", type: "core" }],

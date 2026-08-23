@@ -5,6 +5,8 @@ import type { ProjectConfig } from "@hexagen/project-configuration";
 import { IMPORTED_MANIFEST_CORRUPT_MESSAGE } from "@/lib/imported-manifest";
 import { useProjectGenerationFlow } from "../useProjectGenerationFlow";
 
+type FlowOptions = Parameters<typeof useProjectGenerationFlow>[0];
+
 // Minimal blank project config (mirrors createDefaultProjectConfig),
 // which wizardToManifest accepts.
 const config: ProjectConfig = {
@@ -68,12 +70,12 @@ describe("useProjectGenerationFlow", () => {
     const order: string[] = [];
     // Resolve on a later microtask so a missing `await` would let
     // setActiveWorkspace run first.
-    const saveProject = vi.fn(async () => {
+    const saveProject = vi.fn<FlowOptions["saveProject"]>(async () => {
       await Promise.resolve();
       order.push("save");
       return "proj-1";
     });
-    const setActiveWorkspace = vi.fn(() => {
+    const setActiveWorkspace = vi.fn<FlowOptions["setActiveWorkspace"]>(() => {
       order.push("setWs");
     });
 
@@ -97,7 +99,7 @@ describe("useProjectGenerationFlow", () => {
 
   it("returns an error and skips the workspace when persistence fails", async () => {
     mockGenerateOk();
-    const saveProject = vi.fn(async () => null);
+    const saveProject = vi.fn<FlowOptions["saveProject"]>(async () => null);
     const setActiveWorkspace = vi.fn();
 
     const { result } = renderHook(() =>
@@ -178,7 +180,7 @@ describe("useProjectGenerationFlow", () => {
       "        ports:",
       "          in: [ProcessPaymentPort]",
     ].join("\n");
-    const saveProject = vi.fn(async () => "proj-1");
+    const saveProject = vi.fn<FlowOptions["saveProject"]>(async () => "proj-1");
     const setActiveWorkspace = vi.fn();
 
     const { result } = renderHook(() =>
@@ -212,7 +214,7 @@ describe("useProjectGenerationFlow", () => {
       ...config,
       manifestSource: "imported",
     } as ProjectConfig;
-    const saveProject = vi.fn(async () => "proj-1");
+    const saveProject = vi.fn<FlowOptions["saveProject"]>(async () => "proj-1");
 
     const { result } = renderHook(() =>
       useProjectGenerationFlow({
@@ -269,7 +271,7 @@ describe("useProjectGenerationFlow", () => {
 
   it("returns an error when persistence throws", async () => {
     mockGenerateOk();
-    const saveProject = vi.fn(async () => {
+    const saveProject = vi.fn<FlowOptions["saveProject"]>(async () => {
       throw new Error("IDB corrupted");
     });
     const setActiveWorkspace = vi.fn();

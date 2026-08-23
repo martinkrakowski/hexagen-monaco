@@ -2,7 +2,15 @@ import { describe, it, vi } from "vitest";
 import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
 
-import { useLooseSpecConversion } from "../useLooseSpecConversion.ts";
+import {
+  useLooseSpecConversion,
+  type UseLooseSpecConversionReturn,
+} from "../useLooseSpecConversion.ts";
+import type { getClientLooseSpecConversionUseCase } from "../../../app/lib/wire.client";
+
+type ConvertResult = Awaited<
+  ReturnType<UseLooseSpecConversionReturn["convert"]>
+>;
 
 describe("useLooseSpecConversion", () => {
   it("Local path success", async () => {
@@ -24,7 +32,7 @@ describe("useLooseSpecConversion", () => {
 
     const { result } = renderHook(() => useLooseSpecConversion(deps));
 
-    let convertResult;
+    let convertResult: ConvertResult | undefined;
     await act(async () => {
       convertResult = await result.current.convert("local spec");
     });
@@ -74,7 +82,7 @@ describe("useLooseSpecConversion", () => {
 
     const { result } = renderHook(() => useLooseSpecConversion(deps));
 
-    let convertResult;
+    let convertResult: ConvertResult | undefined;
     await act(async () => {
       convertResult = await result.current.convert("cloud spec");
     });
@@ -118,7 +126,7 @@ describe("useLooseSpecConversion", () => {
 
     const { result } = renderHook(() => useLooseSpecConversion(deps));
 
-    let convertResult;
+    let convertResult: ConvertResult | undefined;
     await act(async () => {
       convertResult = await result.current.convert("cloud spec");
     });
@@ -173,7 +181,7 @@ describe("useLooseSpecConversion", () => {
 
     const { result } = renderHook(() => useLooseSpecConversion(deps));
 
-    let convertResult;
+    let convertResult: ConvertResult | undefined;
     await act(async () => {
       // Explicit local strategy: under cloud-first "auto" this scenario would
       // route straight to cloud and never exercise the local→cloud fallback.
@@ -236,7 +244,7 @@ describe("useLooseSpecConversion", () => {
 
     const { result } = renderHook(() => useLooseSpecConversion(deps));
 
-    let convertResult;
+    let convertResult: ConvertResult | undefined;
     await act(async () => {
       convertResult = await result.current.convert("auto spec");
     });
@@ -270,7 +278,9 @@ describe("useLooseSpecConversion", () => {
 
     const { result } = renderHook(() => useLooseSpecConversion(deps));
 
-    let convertPromise;
+    let convertPromise:
+      | ReturnType<UseLooseSpecConversionReturn["convert"]>
+      | undefined;
     act(() => {
       convertPromise = result.current.convert("abort spec", {
         signal: controller.signal,
@@ -280,7 +290,7 @@ describe("useLooseSpecConversion", () => {
     // abort immediately
     controller.abort();
 
-    let convertResult;
+    let convertResult: ConvertResult | undefined;
     await act(async () => {
       convertResult = await convertPromise;
     });

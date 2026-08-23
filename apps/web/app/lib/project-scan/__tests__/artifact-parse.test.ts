@@ -454,7 +454,8 @@ describe("untrusted JSON validation", () => {
     );
     assert.equal(result.ok, true);
     if (!result.ok) return;
-    const entry = result.value.entries[0] as Record<string, unknown>;
+    const entry = result.value.entries[0];
+    assert.ok(entry, "ledger has an entry");
     assert.deepEqual(Object.keys(entry).sort(), [
       "expires",
       "file",

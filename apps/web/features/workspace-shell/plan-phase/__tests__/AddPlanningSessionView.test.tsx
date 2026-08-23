@@ -65,7 +65,9 @@ describe("AddPlanningSessionView", () => {
     render(
       <ControlledAddSessionView
         onCancel={vi.fn()}
-        onSubmit={vi.fn(async () => true)}
+        onSubmit={vi.fn<AddPlanningSessionViewProps["onSubmit"]>(
+          async () => true,
+        )}
         submitError={null}
       />,
     );
@@ -84,7 +86,9 @@ describe("AddPlanningSessionView", () => {
     render(
       <ControlledAddSessionView
         onCancel={vi.fn()}
-        onSubmit={vi.fn(async () => true)}
+        onSubmit={vi.fn<AddPlanningSessionViewProps["onSubmit"]>(
+          async () => true,
+        )}
         submitError={null}
       />,
     );
@@ -95,7 +99,9 @@ describe("AddPlanningSessionView", () => {
 
   it("fires onCancel from the Cancel action without submitting", () => {
     const onCancel = vi.fn();
-    const onSubmit = vi.fn(async () => true);
+    const onSubmit = vi.fn<AddPlanningSessionViewProps["onSubmit"]>(
+      async () => true,
+    );
     render(
       <ControlledAddSessionView
         onCancel={onCancel}
@@ -110,7 +116,9 @@ describe("AddPlanningSessionView", () => {
   });
 
   it("submits one Imported turn (default title) and resets the fields on success", async () => {
-    const onSubmit = vi.fn(async () => true);
+    const onSubmit = vi.fn<AddPlanningSessionViewProps["onSubmit"]>(
+      async () => true,
+    );
     render(
       <ControlledAddSessionView
         onCancel={vi.fn()}
@@ -136,7 +144,9 @@ describe("AddPlanningSessionView", () => {
   });
 
   it("uses the typed title when provided", async () => {
-    const onSubmit = vi.fn(async () => true);
+    const onSubmit = vi.fn<AddPlanningSessionViewProps["onSubmit"]>(
+      async () => true,
+    );
     render(
       <ControlledAddSessionView
         onCancel={vi.fn()}
@@ -159,7 +169,9 @@ describe("AddPlanningSessionView", () => {
   });
 
   it("keeps the content intact when the write fails and surfaces the error inline", async () => {
-    const onSubmit = vi.fn(async () => false);
+    const onSubmit = vi.fn<AddPlanningSessionViewProps["onSubmit"]>(
+      async () => false,
+    );
     const { rerender } = render(
       <ControlledAddSessionView
         onCancel={vi.fn()}
@@ -202,7 +214,9 @@ describe("AddPlanningSessionView", () => {
     render(
       <ControlledAddSessionView
         onCancel={vi.fn()}
-        onSubmit={vi.fn(async () => true)}
+        onSubmit={vi.fn<AddPlanningSessionViewProps["onSubmit"]>(
+          async () => true,
+        )}
         submitError={null}
       />,
     );
@@ -218,7 +232,9 @@ describe("AddPlanningSessionView", () => {
     render(
       <ControlledAddSessionView
         onCancel={vi.fn()}
-        onSubmit={vi.fn(async () => true)}
+        onSubmit={vi.fn<AddPlanningSessionViewProps["onSubmit"]>(
+          async () => true,
+        )}
         submitError={null}
       />,
     );
@@ -241,7 +257,9 @@ describe("AddPlanningSessionView", () => {
   });
 
   it("splits into authored turns on submit when the checkbox is checked", async () => {
-    const onSubmit = vi.fn(async () => true);
+    const onSubmit = vi.fn<AddPlanningSessionViewProps["onSubmit"]>(
+      async () => true,
+    );
     render(
       <ControlledAddSessionView
         onCancel={vi.fn()}
@@ -270,7 +288,9 @@ describe("AddPlanningSessionView", () => {
     // splitTurnsByAuthorHeadings returns [] here; the view must normalize
     // that to "no split" (a bare truthiness check would submit turns: [] and
     // persist a turn-less layer).
-    const onSubmit = vi.fn(async () => true);
+    const onSubmit = vi.fn<AddPlanningSessionViewProps["onSubmit"]>(
+      async () => true,
+    );
     render(
       <ControlledAddSessionView
         onCancel={vi.fn()}
@@ -291,7 +311,9 @@ describe("AddPlanningSessionView", () => {
   });
 
   it("keeps the lossless single-Imported-turn behavior when unchecked", async () => {
-    const onSubmit = vi.fn(async () => true);
+    const onSubmit = vi.fn<AddPlanningSessionViewProps["onSubmit"]>(
+      async () => true,
+    );
     render(
       <ControlledAddSessionView
         onCancel={vi.fn()}
@@ -369,7 +391,9 @@ describe("AddPlanningSessionView", () => {
       render(
         <ControlledAddSessionView
           onCancel={vi.fn()}
-          onSubmit={vi.fn(async () => true)}
+          onSubmit={vi.fn<AddPlanningSessionViewProps["onSubmit"]>(
+            async () => true,
+          )}
           submitError={null}
         />,
       );
@@ -404,7 +428,9 @@ describe("AddPlanningSessionView", () => {
       render(
         <ControlledAddSessionView
           onCancel={vi.fn()}
-          onSubmit={vi.fn(async () => true)}
+          onSubmit={vi.fn<AddPlanningSessionViewProps["onSubmit"]>(
+            async () => true,
+          )}
           submitError={null}
         />,
       );

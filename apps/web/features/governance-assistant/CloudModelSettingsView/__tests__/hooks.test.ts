@@ -24,9 +24,8 @@ describe("useSettingsValidation hook", () => {
 
   it("should export ValidationState type", async () => {
     const module = await import("../hooks");
-    assert.strictEqual(
-      typeof module.ValidationState,
-      "undefined",
+    assert.ok(
+      !("ValidationState" in module),
       "ValidationState is a type, not a runtime value",
     );
   });

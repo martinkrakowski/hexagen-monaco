@@ -322,10 +322,9 @@ describe("Welcome Screen Manifest Generation Integration", () => {
 
       // Verify state properties exist and have correct types
       assert.strictEqual(typeof result.current.isGenerating, "boolean");
-      assert.strictEqual(
-        typeof result.current.generationError,
-        "object" || "string" || "null",
-      );
+      // `"object" || "string" || "null"` is just "object", and passed only
+      // because `typeof null === "object"`. Assert the real initial state.
+      assert.strictEqual(result.current.generationError, null);
     });
   });
 

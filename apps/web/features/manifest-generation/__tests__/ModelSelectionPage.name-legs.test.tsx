@@ -82,7 +82,9 @@ beforeEach(() => {
 
 describe("ModelSelectionPage — genesis ?name= return legs", () => {
   it("Back echoes the carried name", () => {
-    render(<ModelSelectionPage llmContext={makeLlmContext("unloaded")} />);
+    render(
+      <ModelSelectionPage llmContext={makeLlmContext("requires_model")} />,
+    );
     fireEvent.click(screen.getByRole("button", { name: /back/i }));
     assert.deepEqual(nav.push.mock.calls, [
       ["/projects/new/ai?name=Vellum%20Notes"],
@@ -90,7 +92,9 @@ describe("ModelSelectionPage — genesis ?name= return legs", () => {
   });
 
   it("Generate Manifest echoes the carried name on the auto-start URL", () => {
-    render(<ModelSelectionPage llmContext={makeLlmContext("unloaded")} />);
+    render(
+      <ModelSelectionPage llmContext={makeLlmContext("requires_model")} />,
+    );
     fireEvent.click(screen.getByRole("button", { name: /generate manifest/i }));
     assert.deepEqual(nav.push.mock.calls, [
       ["/projects/new/ai?generate=1&name=Vellum%20Notes"],

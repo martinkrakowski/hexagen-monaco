@@ -479,7 +479,7 @@ test("aborts stream on cancel", async () => {
     },
   });
 
-  global.fetch = async (input: RequestInfo, init?: RequestInit) => {
+  global.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const signal = init?.signal as AbortSignal | undefined;
     if (signal) {
       signal.addEventListener(
