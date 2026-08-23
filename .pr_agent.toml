@@ -210,9 +210,14 @@ costs a human more time than it saves.
 # ANY pattern matches. "Only apps/web" is therefore a negative lookahead.
 # Keep the build-artefact globs as well so apps/web/**/dist is still out.
 #
+# The three repo_context_files above are loaded from the DEFAULT branch, so
+# a PR that changes the contract itself would otherwise be reviewed against
+# the old contract with the change invisible. They stay in the diff for that
+# reason only; the reviewer is still briefed to propose edits under apps/web.
+#
 # Do not ignore .architecture/** or packages/template-engine/templates/**
 # for any other reason than this scope -- see best_practices.md.
-regex = ['^(?!apps/web/).*']
+regex = ['^(?!(apps/web/|DESIGN\.md$|best_practices\.md$|\.agents/PR_REVIEW_RUBRIC\.md$)).*']
 glob = ['**/dist/**', '**/*.tsbuildinfo', 'yarn.lock']
 
 [openrouter]
