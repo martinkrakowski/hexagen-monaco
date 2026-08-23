@@ -27,10 +27,15 @@ import {
 import { STAGE1_NDJSON_LINE_SCHEMA } from "../../../domain/prompts/ndjson-line-schemas";
 import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
-import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
+import type {
+  StageSummary,
+  StageTelemetry,
+} from "../../../domain/value-objects/stage-telemetry";
 import {
+  EMPTY_STAGE_SUMMARY,
   estimateTokenCount,
   modelNameFromResponseMetadata,
+  stageSummary,
 } from "../../../domain/value-objects/stage-telemetry";
 
 const STAGE_NUMBER = 1;
@@ -270,7 +275,7 @@ export class ExecuteDomainExtractionUseCase {
           outputTokensActual:
             (collapsedFallbackTelemetry.outputTokensActual ?? 0) +
             refined.outputTokens,
-          summary: `${collapsedFallbackTelemetry.summary}${refined.note}`,
+          summary: stageSummary`${collapsedFallbackTelemetry.summary}${refined.note}`,
           ...(modelName !== undefined ? { modelName } : {}),
           ...(refined.refinerModelName !== undefined
             ? { refinerModelName: refined.refinerModelName }
@@ -403,7 +408,7 @@ export class ExecuteDomainExtractionUseCase {
             inputTokensEstimate: estimateTokenCount(prompt),
             outputTokensActual: estimateTokenCount(fullResponse),
             servedFromCache: false,
-            summary: `Extracted ${verbs.length} verbs, ${nouns.length} nouns, ${subdomains.length} subdomains, ${aggregateRoots.length} aggregates (accepted single-subdomain output after decomposition retry)`,
+            summary: stageSummary`Extracted ${verbs.length} verbs, ${nouns.length} nouns, ${subdomains.length} subdomains, ${aggregateRoots.length} aggregates (accepted single-subdomain output after decomposition retry)`,
           };
           lastError = `Output declared ${subdomains.length} subdomain(s) for a domain with ${aggregateRoots.length} aggregateRoot(s) and ${useCases.length} useCase(s)`;
           prompt = buildStageRetryPrompt({
@@ -433,7 +438,7 @@ export class ExecuteDomainExtractionUseCase {
           outputTokensActual:
             estimateTokenCount(fullResponse) + refined.outputTokens,
           servedFromCache: false,
-          summary: `Extracted ${verbs.length} verbs, ${nouns.length} nouns, ${subdomains.length} subdomains, ${aggregateRoots.length} aggregates${refined.note}`,
+          summary: stageSummary`Extracted ${verbs.length} verbs, ${nouns.length} nouns, ${subdomains.length} subdomains, ${aggregateRoots.length} aggregates${refined.note}`,
           ...(modelName !== undefined ? { modelName } : {}),
           ...(refined.refinerModelName !== undefined
             ? { refinerModelName: refined.refinerModelName }
@@ -476,7 +481,10 @@ export class ExecuteDomainExtractionUseCase {
     onChunk?: (chunk: string) => void,
   ): Promise<{
     value: DomainAnalysis;
-    note: string;
+    /** Telemetry suffix, composed into the stage summary. Typed as a
+     * `StageSummary` (not `string`) so a future note cannot smuggle model or
+     * user prose into the persisted `run_events.summary` column. */
+    note: StageSummary;
     inputTokens: number;
     outputTokens: number;
     /** Model that served the refine request, when a response arrived —
@@ -484,7 +492,12 @@ export class ExecuteDomainExtractionUseCase {
     refinerModelName?: string;
   }> {
     // Refinement skipped — no request sent, nothing to bill.
-    const skipped = { value: draft, note: "", inputTokens: 0, outputTokens: 0 };
+    const skipped = {
+      value: draft,
+      note: EMPTY_STAGE_SUMMARY,
+      inputTokens: 0,
+      outputTokens: 0,
+    };
     if (!this.refinement) return skipped;
     if (this.refinement.mode === "escalation" && draft.subdomains.length >= 2) {
       return skipped;
@@ -500,7 +513,12 @@ export class ExecuteDomainExtractionUseCase {
       draftResponse,
     );
     const inputTokens = estimateTokenCount(refinementPrompt);
-    const keepDraft = { value: draft, note: "", inputTokens, outputTokens: 0 };
+    const keepDraft = {
+      value: draft,
+      note: EMPTY_STAGE_SUMMARY,
+      inputTokens,
+      outputTokens: 0,
+    };
     const abortController = new AbortController();
     // Tight best-effort ceiling, NOT the stage timeout: an aborted refine
     // keeps the draft, so the only cost of firing early is a lost upgrade.
@@ -533,7 +551,7 @@ export class ExecuteDomainExtractionUseCase {
       if (!responseResult.success) {
         return {
           ...keepDraft,
-          note: " (cascade refine failed: provider error)",
+          note: stageSummary` (cascade refine failed: provider error)`,
         };
       }
 
@@ -553,7 +571,7 @@ export class ExecuteDomainExtractionUseCase {
       if (!refinedParsed.hasValidLine) {
         return {
           ...discardRefinement,
-          note: " (cascade refine discarded: no valid NDJSON)",
+          note: stageSummary` (cascade refine discarded: no valid NDJSON)`,
         };
       }
       const refinedResult = buildDomainAnalysis(refinedParsed);
@@ -562,13 +580,13 @@ export class ExecuteDomainExtractionUseCase {
       if (refinedResult.subdomains.length < draft.subdomains.length) {
         return {
           ...discardRefinement,
-          note: ` (cascade refine discarded: would lose subdomains ${draft.subdomains.length}→${refinedResult.subdomains.length})`,
+          note: stageSummary` (cascade refine discarded: would lose subdomains ${draft.subdomains.length}→${refinedResult.subdomains.length})`,
         };
       }
 
       return {
         value: refinedResult,
-        note: ` (cascade refined ${draft.subdomains.length}→${refinedResult.subdomains.length} subdomains)`,
+        note: stageSummary` (cascade refined ${draft.subdomains.length}→${refinedResult.subdomains.length} subdomains)`,
         inputTokens,
         outputTokens,
         ...(refinerModelName !== undefined ? { refinerModelName } : {}),
@@ -578,8 +596,8 @@ export class ExecuteDomainExtractionUseCase {
       return {
         ...keepDraft,
         note: abortController.signal.aborted
-          ? ` (cascade refine failed: timeout ${STAGE1_REFINEMENT_TIMEOUT_MS}ms)`
-          : " (cascade refine failed: error)",
+          ? stageSummary` (cascade refine failed: timeout ${STAGE1_REFINEMENT_TIMEOUT_MS}ms)`
+          : stageSummary` (cascade refine failed: error)`,
       };
     } finally {
       clearTimeout(timeoutHandle);

@@ -55,6 +55,7 @@ export type {
   ValidationResult,
   GeneratedManifest,
   GenerationMetadata,
+  StageSummary,
   StageTelemetry,
 } from "./domain/value-objects/index";
 export {
@@ -65,6 +66,8 @@ export {
   GeneratedManifestValidator,
   createGeneratedManifest,
   formatModelChip,
+  stageSummary,
+  EMPTY_STAGE_SUMMARY,
 } from "./domain/value-objects/index";
 export type {
   NormalizedPrompt,

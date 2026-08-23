@@ -11,7 +11,10 @@ import type { ValidationReport } from "../../../domain/value-objects/pipeline-st
 import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
-import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
+import {
+  estimateTokenCount,
+  stageSummary,
+} from "../../../domain/value-objects/stage-telemetry";
 
 const STAGE_NUMBER = 7;
 
@@ -166,7 +169,11 @@ export class ExecuteManifestRepairUseCase {
         inputTokensEstimate: estimateTokenCount(prompt),
         outputTokensActual: estimateTokenCount(fullResponse),
         servedFromCache: false,
-        summary: `Repair edits emitted (${errorCount} finding${errorCount !== 1 ? "s" : ""} targeted)`,
+        summary: stageSummary`Repair edits emitted (${
+          errorCount === 1
+            ? stageSummary`1 finding`
+            : stageSummary`${errorCount} findings`
+        } targeted)`,
         ...(modelName !== undefined ? { modelName } : {}),
       });
       return ok(cleaned);

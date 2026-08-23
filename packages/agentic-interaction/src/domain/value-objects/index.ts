@@ -51,9 +51,11 @@ export type {
 } from "./pipeline-state";
 
 // Phase P17: Stage telemetry
-export type { StageTelemetry } from "./stage-telemetry";
+export type { StageSummary, StageTelemetry } from "./stage-telemetry";
 export {
+  EMPTY_STAGE_SUMMARY,
   estimateTokenCount,
   formatModelChip,
   modelNameFromResponseMetadata,
+  stageSummary,
 } from "./stage-telemetry";
