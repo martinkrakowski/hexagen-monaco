@@ -58,7 +58,13 @@ describe("stagedFiles", () => {
         cwd: tmp,
         stdio: "ignore",
       });
-      const names = [" leading.txt", "trailing.txt ", "has\nnewline.txt"];
+      // A "\n" in a filename is illegal on NTFS, so the newline fixture only
+      // runs where such a file can exist.
+      const names = [
+        " leading.txt",
+        "trailing.txt ",
+        ...(process.platform === "win32" ? [] : ["has\nnewline.txt"]),
+      ];
       for (const name of names) {
         writeFileSync(path.join(tmp, name), "x\n");
       }
