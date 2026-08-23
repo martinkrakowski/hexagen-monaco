@@ -57,50 +57,64 @@ describe("scripts/bump-version.js — assertTagIsFree", () => {
     );
   });
 
+  /**
+   * Stand up a local bare repo holding `v0.12.0` and redirect `origin` to it
+   * via git's environment-level url.<base>.insteadOf rewrite, so the CLI test
+   * needs no network and cannot flake on connectivity (review flag on #635).
+   * `outside` is a plain directory — not a repo, and with no `origin.git`
+   * sibling, so git cannot DWIM-resolve `origin` from there: if ls-remote
+   * ever loses its cwd pin, the query fails and the test fails.
+   */
+  function setupLocalOrigin(tmp: string): {
+    env: NodeJS.ProcessEnv;
+    outside: string;
+  } {
+    const seed = path.join(tmp, "seed");
+    const bare = path.join(tmp, "origin.git");
+    const git = (cwd: string, ...args: string[]) => {
+      const r = spawnSync("git", args, { cwd, encoding: "utf8" });
+      assert.equal(r.status, 0, `git ${args.join(" ")}: ${r.stderr}`);
+      return r.stdout;
+    };
+    fs.mkdirSync(seed);
+    git(seed, "init", "-q");
+    git(
+      seed,
+      "-c",
+      "user.email=t@t",
+      "-c",
+      "user.name=t",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "seed",
+    );
+    git(seed, "tag", "v0.12.0");
+    git(seed, "clone", "-q", "--bare", ".", bare);
+
+    const realOrigin = git(REPO_ROOT, "remote", "get-url", "origin").trim();
+    const env = {
+      ...process.env,
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: `url.${bare}.insteadOf`,
+      GIT_CONFIG_VALUE_0: realOrigin,
+    };
+    const outside = path.join(tmp, "outside");
+    fs.mkdirSync(outside);
+    return { env, outside };
+  }
+
   it("CLI: hermetic — refuses a version whose tag exists, passes a free one (local bare origin, no network)", () => {
-    // A local bare repo stands in for origin via git's environment-level
-    // url.<base>.insteadOf rewrite, so this test needs no network and cannot
-    // flake on connectivity (review flag on #635). It still exercises the
-    // real CLI path, including the cwd pin on ls-remote.
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "bump-tag-"));
     try {
-      const seed = path.join(tmp, "seed");
-      const bare = path.join(tmp, "origin.git");
-      const git = (cwd: string, ...args: string[]) => {
-        const r = spawnSync("git", args, { cwd, encoding: "utf8" });
-        assert.equal(r.status, 0, `git ${args.join(" ")}: ${r.stderr}`);
-        return r.stdout;
-      };
-      fs.mkdirSync(seed);
-      git(seed, "init", "-q");
-      git(
-        seed,
-        "-c",
-        "user.email=t@t",
-        "-c",
-        "user.name=t",
-        "commit",
-        "-q",
-        "--allow-empty",
-        "-m",
-        "seed",
-      );
-      git(seed, "tag", "v0.12.0");
-      git(seed, "clone", "-q", "--bare", ".", bare);
-
-      const realOrigin = git(REPO_ROOT, "remote", "get-url", "origin").trim();
-      const env = {
-        ...process.env,
-        GIT_CONFIG_COUNT: "1",
-        GIT_CONFIG_KEY_0: `url.${bare}.insteadOf`,
-        GIT_CONFIG_VALUE_0: realOrigin,
-      };
+      const { env, outside } = setupLocalOrigin(tmp);
 
       const taken = spawnSync(
         "node",
         [SCRIPT, "--set", "0.12.0", "--dry-run"],
         {
-          cwd: REPO_ROOT,
+          cwd: outside,
           encoding: "utf8",
           env,
         },
@@ -110,7 +124,7 @@ describe("scripts/bump-version.js — assertTagIsFree", () => {
       assert.doesNotMatch(taken.stdout, /Dry run complete/);
 
       const free = spawnSync("node", [SCRIPT, "--set", "9.9.9", "--dry-run"], {
-        cwd: REPO_ROOT,
+        cwd: outside,
         encoding: "utf8",
         env,
       });
@@ -120,4 +134,26 @@ describe("scripts/bump-version.js — assertTagIsFree", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
+
+  it.skipIf(process.platform === "win32")(
+    "CLI: runs (does not silently no-op) when invoked through a symlinked path",
+    () => {
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "bump-link-"));
+      try {
+        const { env, outside } = setupLocalOrigin(tmp);
+        const link = path.join(tmp, "bump-version.js");
+        fs.symlinkSync(SCRIPT, link);
+
+        const r = spawnSync("node", [link, "--set", "9.9.9", "--dry-run"], {
+          cwd: outside,
+          encoding: "utf8",
+          env,
+        });
+        assert.equal(r.status, 0, r.stderr);
+        assert.match(r.stdout, /Dry run complete/);
+      } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    },
+  );
 });

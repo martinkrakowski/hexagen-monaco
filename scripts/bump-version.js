@@ -425,11 +425,21 @@ async function main() {
   console.log(`  git tag v${target} && git push origin v${target}`);
 }
 
-const isEntryModule =
-  process.argv[1] &&
-  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+// Node loads the ESM entry module by its realpath, so a symlinked invocation
+// (macOS /var, symlinked checkouts) makes argv[1] differ textually from
+// import.meta.url — compare realpaths too, or the CLI silently no-ops.
+function isEntryModule() {
+  if (!process.argv[1]) return false;
+  const self = fileURLToPath(import.meta.url);
+  if (path.resolve(process.argv[1]) === self) return true;
+  try {
+    return fs.realpathSync(process.argv[1]) === self;
+  } catch {
+    return false;
+  }
+}
 
-if (isEntryModule)
+if (isEntryModule())
   main().catch((err) => {
     console.error(err);
     process.exit(1);
