@@ -978,7 +978,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@hexagen/arch-linter@workspace:tools/arch-linter":
+"@hexagen/arch-linter@workspace:*, @hexagen/arch-linter@workspace:tools/arch-linter":
   version: 0.0.0-use.local
   resolution: "@hexagen/arch-linter@workspace:tools/arch-linter"
   dependencies:
@@ -12522,6 +12522,7 @@ __metadata:
     "@fontsource-variable/inter": "npm:^5.1.0"
     "@hexagen/agentic-interaction": "workspace:*"
     "@hexagen/ai-pipeline": "workspace:*"
+    "@hexagen/arch-linter": "workspace:*"
     "@hexagen/byok": "workspace:*"
     "@hexagen/core-domain": "workspace:*"
     "@hexagen/eslint-plugin-ui": "workspace:*"

@@ -13,7 +13,7 @@ import {
   hexagenScanArgv,
   resolveHexagenBin,
 } from "@/lib/project-scan/hexagen-bin";
-import { findMonorepoRoot } from "@/lib/monorepo-root";
+import { resolveInstallationRoot } from "@/lib/project-scan/workspace-root";
 import {
   MAX_PROJECT_NAME_CHARS,
   MAX_SCAN_ERROR_CHARS,
@@ -355,7 +355,42 @@ function streamScan(input: StreamInput): NextResponse {
         }
       };
 
-      const workspace: CloneWorkspace = await createCloneWorkspace();
+      // Creating the workspace can now REJECT. The base moved out of
+      // os.tmpdir() to <appRoot>/.scan-workspaces, which is writable only
+      // because the image pre-creates and chowns it -- so a provisioning
+      // regression makes mkdtemp fail where it previously could not.
+      //
+      // This call sits above the try/finally that sends frames and closes the
+      // controller, so an escaping rejection would leave the client holding a
+      // 200 with a truncated NDJSON body: no error frame, no `done`, no
+      // close. That silently breaks the contract stated in this file's header
+      // -- every failure is one of the F-35 codes -- in the one case where the
+      // server is misconfigured and most needs to say so.
+      const created = await createCloneWorkspace();
+      if (!created.ok) {
+        logger.error("[scan/github] could not create the clone workspace", {
+          runId: input.runId,
+          // Log-only: every field here can name a server path, so none of it
+          // reaches the response body.
+          detail: created.failure.reason,
+          // Present only when rollback ALSO failed, i.e. a directory was left
+          // behind. Nothing sweeps it until the next process starts, so it is
+          // logged distinctly rather than folded into the reason above.
+          orphanedAt: created.failure.orphanedAt,
+          rollbackReason: created.failure.rollbackReason,
+        });
+        send(errorFrame("scan_could_not_run", input.runId, "workspace"));
+        input.request.signal.removeEventListener("abort", onRequestAbort);
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          // Already closed by a cancelled consumer.
+        }
+        return;
+      }
+      const workspace: CloneWorkspace = created.workspace;
+
       try {
         send({
           type: "stage-start",
@@ -498,7 +533,7 @@ async function runHexagenScan(
   repoDir: string,
   projectName: string,
 ): Promise<ScanOutcome> {
-  const bin = resolveHexagenBin(findMonorepoRoot());
+  const bin = resolveHexagenBin(resolveInstallationRoot());
   if (bin === null) {
     return {
       ok: false,

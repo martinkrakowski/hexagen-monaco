@@ -95,6 +95,11 @@ skills/
 *.zip
 generated-*.zip
 temp-*
+# Scan workspaces. Created at the application root (NOT os.tmpdir()) so that
+# `hexagen scan` can walk up from one and find node_modules/.bin/hexagen-lint —
+# see apps/web/app/lib/project-scan/workspace-root.ts. Each workspace is deleted
+# in a `finally`; the directory itself is left behind.
+.scan-workspaces/
 .webcontainer/
 downloads/
 .cache/

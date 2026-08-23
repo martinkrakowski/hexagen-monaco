@@ -78,7 +78,7 @@ import {
   type Manifest,
 } from "@hexagen/sync";
 import { guardMutation } from "@/lib/request-guards";
-import { findMonorepoRoot } from "@/lib/monorepo-root";
+import { resolveInstallationRoot } from "@/lib/project-scan/workspace-root";
 import { resolveHexagenBin } from "@/lib/project-scan/hexagen-bin";
 import { logger } from "../../../../lib/structured-logger";
 
@@ -687,13 +687,14 @@ const RETURNED_FILES = [
 async function runBootstrapCli(
   request: ValidatedRequest,
 ): Promise<BootstrapOutcome> {
-  let workspaceRoot: string;
-  try {
-    workspaceRoot = findMonorepoRoot();
-  } catch (error) {
-    // A missing manifest anchor is a server packaging fault, not a bad body.
-    return { kind: "failed", message: messageOf(error) };
-  }
+  // Where the app is INSTALLED, not where this repo's architecture manifest
+  // lives. This used to be findMonorepoRoot(), which walks up for
+  // .architecture/manifest.yaml and throws when it is absent -- and the Next
+  // standalone image contains no yaml at all, so bootstrap failed in
+  // production with a manifest error before it ever looked for a binary. The
+  // manifest was never read here: workspaceRoot reached exactly one call, the
+  // resolveHexagenBin below. It was a required file that nothing required.
+  const workspaceRoot = resolveInstallationRoot();
 
   const bin = resolveHexagenBin(workspaceRoot);
   if (bin === null) {

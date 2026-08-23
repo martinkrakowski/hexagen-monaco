@@ -50,9 +50,14 @@ repo_context_from_default_branch = true
 repo_context_max_lines = 3000
 
 [github_action_config]
-auto_review = true
+# SWAPPED — see the workflow env block, which overrides this file until both
+# are on the default branch. /review emits only the "PR Reviewer Guide": an
+# effort estimate, a security flag, and a focus-areas section that is empty
+# whenever it has nothing to say. It never produces line-anchored suggestions,
+# however it is configured. The reviews this bot exists for come from /improve.
+auto_review = false
 auto_describe = false
-auto_improve = false
+auto_improve = true
 pr_actions = ["opened", "reopened", "ready_for_review"]
 
 [pr_reviewer]
@@ -83,10 +88,65 @@ quiet one.
 """
 
 [pr_code_suggestions]
+# Inline and line-anchored rather than one collapsed summary table (the 0.42.0
+# default), because the summary format reads as "nothing happened" even when it
+# found something.
+commitable_code_suggestions = true
+# No comment when there is nothing to say. The default (true) is what posted an
+# empty guide on every PR; silence is a better signal than three vague rows.
+publish_output_no_suggestions = false
+# On by default in 0.42.0, pinned so a future image cannot quietly turn this
+# into a style-nitpicker.
+focus_only_on_problems = true
+# Depth. Defaults (3 and 3) process only part of a large diff and stop at three
+# findings per section. Doubling both is what "highly detailed" costs; the job's
+# timeout-minutes: 15 bounds it.
+num_code_suggestions_per_chunk = 6
+max_number_of_calls = 6
+# Deliberately 0. Filtering by score is the opposite of adversarial:
+# focus_only_on_problems already excludes style noise, so anything this removed
+# would be a real finding that happened to score low.
+suggestions_score_threshold = 0
 extra_instructions = """
-Suggestions must stay inside DESIGN.md. Do not invent tokens, utilities,
-or exception patterns that are not in §4.8 / §4.9.
-Manual /improve only — auto_improve is off.
+You are the adversarial UI-contract reviewer for this repository. Your job is
+to find defects, not to summarise the PR. Assume the code is wrong and look
+for the input that proves it.
+
+Every finding MUST carry a concrete failure scenario: specific inputs or
+state, and the wrong output, crash, or silent no-op that results. "This could
+be fragile" is not a finding. "With `note: ""` the cell renders blank, which
+reads as a value rather than a missing reading" is a finding.
+
+Hunt these classes first. They are the ones that have actually shipped here:
+
+1. GATES THAT PASS WITHOUT RUNNING. A guard that asserts a population is
+   clean without first asserting the population is non-empty. A loop that
+   iterates zero times and reports success. A config glob that matches no
+   files and is silently dropped. A check whose fixture creates the very
+   thing it then verifies exists.
+2. LOUD FAILURES MADE QUIET. A catch that swallows, returns null/false/[],
+   or coerces an unknown value to a default. Ask of every catch: can the
+   caller distinguish "nothing was wrong" from "I could not tell"?
+3. TESTS THAT CANNOT FAIL. Would this test fail if the code under it were
+   wrong? Mocked or injected past the line that actually breaks in
+   production? Asserting an absence after an unchecked write?
+4. RUNTIME/BUILD DIVERGENCE. Something present in dev and absent in the
+   packaged artifact, or built on one Node major and run on another.
+5. DESIGN.md VIOLATIONS. Spacing must resolve to the §4.7 scale
+   (1,2,3,4,6,8,12,16) -- fractional Tailwind steps like mt-0.5 or gap-1.5
+   are violations and no gate catches them inside features/. Do not invent
+   tokens, utilities, or exception patterns absent from §4.8 / §4.9. Cite
+   section numbers; never paraphrase a rule that has one.
+
+For every fix you propose, state explicitly what it does to inputs the
+current code already handles, and whether it converts a loud failure into a
+quiet one. A fix that trades a crash for a wrong answer is worse than the bug.
+
+Do not re-raise what CodeRabbit and Qodo own (verifier defects,
+assertion-style, manifest inventory completeness). Do not comment to
+acknowledge, praise, or summarise. Prefer silence to a speculative finding:
+one real defect is worth more than five plausible ones, and a wrong finding
+costs a human more time than it saves.
 """
 
 [ignore]

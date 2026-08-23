@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, open, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
-import { findMonorepoRoot } from "../monorepo-root";
+import { resolveInstallationRoot } from "./workspace-root";
+import { scanWorkspaceBaseDir } from "./workspace-root";
 import { classifyScanExit } from "./classify-scan-exit";
 import { hexagenScanArgv, resolveHexagenBin } from "./hexagen-bin";
 import {
@@ -219,7 +219,10 @@ export class CliHexagenScanAdapter {
   static fromMonorepoRoot(
     execFileAsyncFn?: ExecFileAsyncFn,
   ): CliHexagenScanAdapter {
-    return new CliHexagenScanAdapter(findMonorepoRoot(), execFileAsyncFn);
+    return new CliHexagenScanAdapter(
+      resolveInstallationRoot(),
+      execFileAsyncFn,
+    );
   }
 
   async scanZip(input: {
@@ -229,7 +232,10 @@ export class CliHexagenScanAdapter {
   }): Promise<ScanZipOutcome> {
     let dir: string;
     try {
-      dir = await mkdtemp(path.join(tmpdir(), "hexagen-scan-"));
+      // Under the application root, never `os.tmpdir()`: `hexagen scan` finds
+      // `hexagen-lint` by walking UP from `--root`, and from /tmp that walk
+      // never reaches the app's node_modules. See `workspace-root.ts`.
+      dir = await mkdtemp(path.join(scanWorkspaceBaseDir(), "hexagen-scan-"));
     } catch (error) {
       return {
         kind: "scanned",

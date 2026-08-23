@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir, mkdtemp, readdir, lstat, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
+import { scanWorkspaceBaseDir } from "./workspace-root";
 
 /**
  * Bounded shallow clone of a PUBLIC GitHub repository (F-09, packet BF-5.2).
@@ -537,24 +537,121 @@ export interface CloneWorkspace {
  * Create the throwaway workspace. `repoDir` and `homeDir` are siblings under
  * one `mkdtemp` root so a single `rm -rf` removes both, and neither path is
  * derived from user input.
+ *
+ * `baseDir` defaults to {@link scanWorkspaceBaseDir}, NOT to `os.tmpdir()`:
+ * `hexagen scan` locates `hexagen-lint` by walking UP from the directory it is
+ * pointed at, and that walk only reaches the application's `node_modules` when
+ * the workspace lives under the application root. See `workspace-root.ts` for
+ * the walk, path by path.
+ *
+ * Because that base is outside the OS temp directory, nothing on the host
+ * sweeps a leaked workspace — `/tmp` gets cleaned, `<appRoot>/.scan-workspaces`
+ * does not. `cleanup()` is therefore not a courtesy; every caller must run it in
+ * a `finally`.
  */
+/**
+ * Why this returns a Result rather than throwing.
+ *
+ * Two distinct things can fail here, and the second one is the interesting
+ * one: creating the workspace, and — when that fails — rolling back the
+ * directory `mkdtemp` already made. Throwing can only carry one of them, so a
+ * rethrow silently discards the rollback failure, which is precisely the
+ * detail that says a workspace was orphaned rather than cleaned up. The
+ * orphan is fresh, so the once-per-process stale sweep has already run and
+ * will not collect it.
+ *
+ * Matches the repo convention (.agents/TESTING.md, ORCHESTRATOR.md): a catch
+ * returns Result, never null/false/default. `parseRepoReference` in this same
+ * file already uses the `{ ok: false, reason }` shape.
+ */
+export type CloneWorkspaceFailure = {
+  readonly reason: string;
+  /** Set only when rollback ALSO failed — i.e. a directory was left behind. */
+  readonly orphanedAt: string | null;
+  readonly rollbackReason: string | null;
+};
+
+export type CreateCloneWorkspaceResult =
+  | { readonly ok: true; readonly workspace: CloneWorkspace }
+  | { readonly ok: false; readonly failure: CloneWorkspaceFailure };
+
+/**
+ * Injectable filesystem calls, so the rollback-failure branch is reachable.
+ *
+ * That branch needs `mkdir` to fail AND the `rm` cleaning up after it to fail
+ * too, which no fixture can arrange on a real filesystem without running as a
+ * different user. Injection is this file's existing answer to exactly that
+ * problem -- `cloneRepository` takes `spawnImpl`, `killImpl` and `measure` for
+ * the same reason -- so it is the idiom here rather than a testing special
+ * case. Production passes nothing and gets the real calls.
+ */
+export interface CloneWorkspaceDeps {
+  readonly mkdirImpl?: typeof mkdir;
+  readonly rmImpl?: typeof rm;
+}
+
 export async function createCloneWorkspace(
-  baseDir: string = tmpdir(),
-): Promise<CloneWorkspace> {
-  const root = await mkdtemp(path.join(baseDir, "hexagen-clone-"));
+  baseDir: string = scanWorkspaceBaseDir(),
+  deps: CloneWorkspaceDeps = {},
+): Promise<CreateCloneWorkspaceResult> {
+  const mkdirImpl = deps.mkdirImpl ?? mkdir;
+  const rmImpl = deps.rmImpl ?? rm;
+  let root: string;
+  try {
+    root = await mkdtemp(path.join(baseDir, "hexagen-clone-"));
+  } catch (error) {
+    // Nothing was created, so there is nothing to roll back.
+    return {
+      ok: false,
+      failure: {
+        reason: messageOf(error),
+        orphanedAt: null,
+        rollbackReason: null,
+      },
+    };
+  }
   const homeDir = path.join(root, "home");
-  // Materialize HOME so git has a real (and empty) one. `repo` is deliberately
-  // NOT created — `git clone` makes it, and a pre-existing directory is one
-  // more thing that could be non-empty.
-  await mkdir(homeDir, { recursive: true });
+  try {
+    // Materialize HOME so git has a real (and empty) one. `repo` is deliberately
+    // NOT created — `git clone` makes it, and a pre-existing directory is one
+    // more thing that could be non-empty.
+    await mkdirImpl(homeDir, { recursive: true });
+  } catch (error) {
+    // mkdtemp succeeded, so `root` EXISTS, but no CloneWorkspace was ever
+    // returned -- the caller has no handle and cannot run cleanup(). Under
+    // os.tmpdir() that leak was swept eventually; under the app root nothing
+    // sweeps it, so a repeating failure (ENOSPC, a permissions regression on
+    // the chowned base) accumulates directories until the disk fills.
+    //
+    // Roll back, and report whether the rollback itself worked. Swallowing the
+    // rm failure would report the same thing whether the directory was cleaned
+    // up or left behind, and "left behind" is the case somebody has to act on.
+    let rollbackReason: string | null = null;
+    try {
+      await rmImpl(root, { recursive: true, force: true });
+    } catch (rollbackError) {
+      rollbackReason = messageOf(rollbackError);
+    }
+    return {
+      ok: false,
+      failure: {
+        reason: messageOf(error),
+        orphanedAt: rollbackReason === null ? null : root,
+        rollbackReason,
+      },
+    };
+  }
   let removed = false;
   return {
-    repoDir: path.join(root, "repo"),
-    homeDir,
-    async cleanup() {
-      if (removed) return;
-      removed = true;
-      await rm(root, { recursive: true, force: true }).catch(() => {});
+    ok: true,
+    workspace: {
+      repoDir: path.join(root, "repo"),
+      homeDir,
+      async cleanup() {
+        if (removed) return;
+        removed = true;
+        await rm(root, { recursive: true, force: true }).catch(() => {});
+      },
     },
   };
 }
