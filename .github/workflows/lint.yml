@@ -403,3 +403,97 @@ jobs:
 
       - name: "Assert the packaged artifact can actually scan"
         run: node scripts/verify-standalone-scan.mjs
+
+  # ---------------------------------------------------------------------------
+  # Standalone smoke INSIDE the production image (enforcement plan P3.3, D-3:
+  # SUPPLEMENT standalone-smoke, do not replace it).
+  #
+  # The job above runs the packaged artifact on setup-node Ubuntu. It matches
+  # the image's Node major, but it cannot see anything only the IMAGE decides:
+  # the runner stage's node_modules/@hexagen symlink shim (apps/web/Dockerfile
+  # builds it and gates it with `test -f` lines), musl vs glibc, the non-root
+  # nextjs user, HEXAGEN_SCAN_WORKSPACE_DIR, or a future drift between
+  # setup-node's "20" and the Dockerfile's node:20-alpine. #616 shipped an
+  # artifact that ran on the runner's Node and failed on the image's; the
+  # D-P1 arc found tracer behaviour visible only by exec-ing into the
+  # container. This job closes that class: build the real image, boot it the
+  # way compose does, run the packaged scan INSIDE it, and require the same
+  # non-vacuous envelope the deploy verification used (collected: true,
+  # filesScanned >= 1).
+  #
+  # NOT a required check (D-6 defers that until the timing is known). D-3's
+  # revisit condition: record this job's wall-clock once the GHA layer cache
+  # is warm; if it holds under ~6 minutes, revisit making it required and
+  # whether it can absorb the setup-node job. Note the Dockerfile's
+  # `COPY . .` means any source change rebuilds from that layer — the cache
+  # mostly saves the apk/corepack/install layers, so expect minutes, not
+  # seconds.
+  #
+  # The boot env is placeholder-only: NEXTAUTH_SECRET/AUTH_SECRET are dummy
+  # strings for a throwaway container that listens on loopback of an
+  # ephemeral CI runner; no real secret is present or needed. The liveness
+  # probe is the deploy healthcheck's contract (any HTTP status < 500 =
+  # up-and-routing) against the same route, driven by
+  # scripts/verify-container-scan.mjs. HOSTNAME=0.0.0.0 because Next
+  # standalone binds to $HOSTNAME (see deploy/docker-compose.prod.yml) and
+  # the probe here comes through the published port instead of exec.
+  container-smoke:
+    name: "Standalone smoke in the production image"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: "Set up Docker Buildx"
+        uses: docker/setup-buildx-action@988b5a0280414f521da01fcc63a27aeeb4b104db # v3.6.1
+
+      # load: true puts the image in the local daemon for the docker run
+      # below. Build args are deliberately unset: NEXT_PUBLIC_* default to
+      # empty, which is the keyless boot this smoke exercises.
+      - name: "Build the production image (GHA layer cache)"
+        uses: docker/build-push-action@5cd11c3a4ced054e52742c5fd54dca954e0edd85 # v6.7.0
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          load: true
+          tags: hexagen-monaco-web:smoke
+          cache-from: type=gha,scope=container-smoke
+          cache-to: type=gha,scope=container-smoke,mode=max
+
+      - name: "Boot the container the way compose does"
+        run: docker run -d --name hexagen-smoke -p 127.0.0.1:3123:3000 -e HOSTNAME=0.0.0.0 -e NEXTAUTH_URL=http://127.0.0.1:3123 -e NEXTAUTH_SECRET=ci-smoke-placeholder -e AUTH_SECRET=ci-smoke-placeholder -e QUOTA_DB_PATH=/data/quota.db -e BYOK_DB_PATH=/data/byok.db -e PLATFORM_DB_PATH=/data/platform.db hexagen-monaco-web:smoke
+
+      - name: "Wait until the app answers like the deploy healthcheck"
+        run: node scripts/verify-container-scan.mjs --wait http://127.0.0.1:3123/api/auth/providers
+
+      - name: "Create the throwaway project"
+        run: node scripts/verify-container-scan.mjs --make-fixture smoke-project
+
+      # Into HEXAGEN_SCAN_WORKSPACE_DIR so resolveArchLinterBin's upward walk
+      # from the scanned tree reaches /app/node_modules/@hexagen — the same
+      # placement production scans use. docker cp preserves root ownership,
+      # so the chown hands it to the runtime user (uid/gid 1001, Dockerfile).
+      - name: "Copy it into the scan workspace"
+        run: docker cp smoke-project hexagen-smoke:/app/.scan-workspaces/project
+
+      - name: "Own it as the runtime user"
+        run: docker exec --user root hexagen-smoke chown -R 1001:1001 /app/.scan-workspaces/project
+
+      # Default exec user is the image's USER nextjs — the scan runs exactly
+      # as production runs it, permissions included.
+      - name: "Run the packaged scan inside the image"
+        run: docker exec hexagen-smoke node /app/packages/sync/dist/cli.js scan --yes --root /app/.scan-workspaces/project > scan-stdout.txt
+
+      - name: "Assert findings were collected"
+        run: node scripts/verify-container-scan.mjs --assert scan-stdout.txt
+
+      - name: "Container logs on failure"
+        if: failure()
+        run: docker logs hexagen-smoke
+
+      - name: "Teardown"
+        if: always()
+        run: docker rm -f hexagen-smoke
