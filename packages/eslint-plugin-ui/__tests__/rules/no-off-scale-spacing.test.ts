@@ -270,6 +270,22 @@ describe("no-off-scale-spacing", () => {
     // no `/` -- so the variant stayed attached, the remainder no longer looked
     // like a spacing utility, and the token was SILENTLY SKIPPED. A rule that
     // reports nothing is harder to notice than one that reports wrongly.
+    // Raised by PR-Agent on #617, against the regex this file replaced: a
+    // LEADING `!` (canonical Tailwind v3 important) sat before the variant, so
+    // `[\w-]+:` never matched, the variant was never stripped, and the token
+    // was silently skipped -- a false negative that would have defeated the
+    // `error` gate in components/primitives/**. The bracket-depth scanner fixes
+    // it incidentally (`!` is an ordinary character before the `:`), which is
+    // exactly why it is pinned here rather than left to coincidence.
+    it("reports a LEADING important modifier before a variant", () => {
+      assert.deepStrictEqual(report("!hover:mt-0.5"), [
+        "offGrid:!hover:mt-0.5",
+      ]);
+      assert.deepStrictEqual(report("!hover:gap-1.5"), [
+        "offGrid:!hover:gap-1.5",
+      ]);
+    });
+
     it("reports behind a NAMED group variant (slash)", () => {
       assert.deepStrictEqual(report("group-hover/item:mt-0.5"), [
         "offGrid:group-hover/item:mt-0.5",
