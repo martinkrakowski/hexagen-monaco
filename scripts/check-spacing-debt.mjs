@@ -42,9 +42,25 @@ const RULE = "hexagen-ui/no-off-scale-spacing";
  * one is the same as deleting the gate for that scope.
  */
 const PINS = [
-  { scope: "features", dir: "features", max: 225 },
-  { scope: "components", dir: "components", max: 17 },
+  { scope: "features", dir: "features", max: 245 },
+  { scope: "components", dir: "components", max: 21 },
 ];
+
+/**
+ * These were 225 and 17, and were raised ONCE, deliberately.
+ *
+ * This is the one legitimate reason to raise a shrink-only pin, and it is
+ * recorded here rather than done quietly, because "the number went up" and
+ * "the number was raised to make CI pass" look identical in a diff.
+ *
+ * The debt did not grow. The LENS widened: both Tailwind rules previously
+ * inspected string `Literal` nodes only, so classes built with backticks were
+ * invisible to them. Teaching them `TemplateElement` surfaced 24 violations
+ * that were always there -- e.g. `prose-p:my-1.5` in ChatMarkdown, inside a
+ * template literal, off-scale the whole time.
+ *
+ * Every future movement is downward. If a count rises again, it is new debt.
+ */
 
 function reportFor(dir) {
   let raw;

@@ -1,4 +1,5 @@
 import type { TSESLint, TSESTree } from "@typescript-eslint/utils";
+import { safeTemplateTokens } from "./class-string-tokens.js";
 
 type MessageIds = "arbitraryValue";
 
@@ -96,13 +97,27 @@ const rule: TSESLint.RuleModule<MessageIds> = {
   },
   create(context) {
     return {
+      // Classes built with backticks were invisible to this rule until now.
+      // Boundary fragments adjacent to an interpolation are dropped by
+      // safeTemplateTokens rather than guessed at -- see that module.
+      TemplateElement(node: TSESTree.TemplateElement) {
+        const parent = node.parent as TSESTree.TemplateLiteral | undefined;
+        if (parent === undefined || parent.type !== "TemplateLiteral") return;
+        classify(safeTemplateTokens(node, parent), node);
+      },
+
       Literal(node: TSESTree.Literal) {
         // Only check string literals
         if (typeof node.value !== "string") return;
+        classify(node.value.split(/\s+/), node);
+      },
+    };
 
-        // A className is a token stream: classify each token on its own, so
-        // one unrecognised token can never suppress the rest of the string.
-        for (const token of node.value.split(/\s+/)) {
+    function classify(tokens: readonly string[], node: TSESTree.Node): void {
+      // A className is a token stream: classify each token on its own, so
+      // one unrecognised token can never suppress the rest of the string.
+      {
+        for (const token of tokens) {
           const match = ARBITRARY_TOKEN.exec(token);
           if (match === null) continue;
 
@@ -135,8 +150,8 @@ const rule: TSESLint.RuleModule<MessageIds> = {
             data: { value: fullValue },
           });
         }
-      },
-    };
+      }
+    }
   },
 };
 
