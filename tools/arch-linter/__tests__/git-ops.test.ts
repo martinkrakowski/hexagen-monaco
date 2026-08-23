@@ -58,12 +58,14 @@ describe("stagedFiles", () => {
         cwd: tmp,
         stdio: "ignore",
       });
-      // A "\n" in a filename is illegal on NTFS, so the newline fixture only
-      // runs where such a file can exist.
+      // NTFS cannot round-trip a trailing space (silently stripped on create,
+      // so `git add` then fails) nor a "\n" in a filename — those fixtures
+      // only run where such files can exist.
       const names = [
         " leading.txt",
-        "trailing.txt ",
-        ...(process.platform === "win32" ? [] : ["has\nnewline.txt"]),
+        ...(process.platform === "win32"
+          ? []
+          : ["trailing.txt ", "has\nnewline.txt"]),
       ];
       for (const name of names) {
         writeFileSync(path.join(tmp, name), "x\n");
