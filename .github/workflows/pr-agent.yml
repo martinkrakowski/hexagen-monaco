@@ -306,3 +306,34 @@ jobs:
             class names; apps/web/components/ outside primitives/); §4.7 4px
             grid; §3.4 untyped/as-any escapes and template-engine payload;
             §4.9 inline styles outside CanvasNodeStyleAdapter.tsx.
+
+      # PR-Agent exits 0 even when it could not produce a review. On #624 it
+      # posted "Failed to generate code suggestions for PR" and the check went
+      # GREEN -- a passing gate for work that did not happen, which is the one
+      # failure this repository keeps rediscovering.
+      #
+      # Deliberately matched on PR-Agent's own failure string rather than on
+      # the absence of suggestions: silence is legitimate (a clean PR posts
+      # nothing, by publish_output_no_suggestions=false), so "no comment" must
+      # NOT fail. Only an explicit failure does.
+      #
+      # Fragile in one known way, stated rather than hidden: the string is
+      # PR-Agent's, and an upstream reword would silently stop matching. The
+      # image is pinned by digest, so that cannot change without a deliberate
+      # bump -- and the bump is the moment to re-check this.
+      - name: "Fail if the review did not actually run"
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          failed=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
+            --jq '[.[] | select(.user.login == "github-actions[bot]")
+                       | select(.body | test("Failed to generate"))] | length')
+          if [ "$failed" -gt 0 ]; then
+            echo "PR-Agent reported it could not generate a review."
+            echo "A green check here would claim a review that never happened."
+            exit 1
+          fi
+          echo "No PR-Agent failure notice on this PR."

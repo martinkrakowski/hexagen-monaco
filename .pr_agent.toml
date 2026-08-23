@@ -233,5 +233,21 @@ glob = ['**/dist/**', '**/*.tsbuildinfo', 'yarn.lock']
 # a hard allowlist with no escape, so a provider outage becomes a failed request
 # that falls through to `fallback_models` — which carries its own open defect
 # (see the note on custom_model_max_tokens vs claude-haiku-4.5's 200k window).
+# EXACTLY ONE of these, never both. OpenRouter's reasoning API documents them
+# as mutually exclusive -- "one of the following (not both)" -- and sending
+# both makes the request invalid, so the provider rejects it outright.
+#
+# #622 set both. The result was not an error anyone saw: PR-Agent posted
+# "Failed to generate code suggestions for PR" and the job exited 0, so the
+# check went GREEN for a review that never happened. Evidence, two mercury-2
+# runs either side of that merge:
+#
+#   04:51 (no [openrouter] block)  13 log records, "AI response:" with valid
+#                                  YAML, 2 suggestions posted
+#   05:32 (both keys set)          11 records, stops at "PR diff:", no
+#                                  response at all, failed in ~2 seconds
+#
+# effort is kept rather than max_tokens: it is the knob the model interprets
+# for itself, and OpenRouter converts it to a budget for models that want one.
+# A hard token budget would need re-tuning per model; "low" survives a swap.
 reasoning_effort = "low"
-reasoning_max_tokens = 4000
