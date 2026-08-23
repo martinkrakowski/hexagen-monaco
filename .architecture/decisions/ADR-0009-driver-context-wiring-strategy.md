@@ -1,7 +1,7 @@
 # ADR-0009: Driver-Context Wiring Strategy
 
 **Date:** 2026-04-05
-**Status:** Accepted
+**Status:** Accepted — partially superseded by ADR-0057 (2026-08-23): the attribution of `MonacoPersistencePort` to `monaco-orchestration`
 **Type:** Architecture
 
 ## Context

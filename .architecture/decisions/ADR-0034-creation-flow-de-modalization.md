@@ -1,6 +1,6 @@
 # ADR-0034: Creation Flow De-Modalization — Route-Driven Project Creation
 
-**Status**: ACCEPTED (2026-05-07)
+**Status**: ACCEPTED (2026-05-07) — amended by ADR-0055 (2026-08-23): the Feature-Isolation accommodations are retired; the de-modalization decision stands
 
 **Context**:
 

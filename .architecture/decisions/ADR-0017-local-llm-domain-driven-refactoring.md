@@ -1,7 +1,7 @@
 # ADR-0017: Local LLM Domain-Driven Refactoring — DomainModelId, Result<T>, and Event Leak Guards
 
 **Date:** 2026-04-17
-**Status:** Accepted
+**Status:** Accepted — partially supersedes ADR-0016
 **Authors:** Human Architect
 **Supersedes:** Partially supersedes ADR-0016 (model ID strategy; metadata approach)
 

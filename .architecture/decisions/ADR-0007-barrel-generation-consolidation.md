@@ -1,6 +1,6 @@
 # ADR-0007: Barrel Generation Consolidation — Deletion of Stub Generator
 
-**Status:** Accepted  
+**Status:** Accepted — partially superseded by ADR-0050 (2026-08-23): the Implementation-section `export {};` empty-layer-barrel convention  
 **Date:** 2026-03-13  
 **Authors:** Architecture Co-pilot, Human Architect  
 **Related PR:** #56

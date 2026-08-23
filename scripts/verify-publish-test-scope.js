@@ -32,7 +32,7 @@
  * WHAT "SHIPS" MEANS HERE
  * -----------------------
  * `scripts/prepare-publish-package.js` strips `workspace:` dependencies from
- * the staged manifest because tsup inlines them into `dist/` (ADR-0009,
+ * the staged manifest because tsup inlines them into `dist/` (ADR-0068,
  * `noExternal: [/^@hexagen\//]`). A published tarball therefore contains the
  * *transitive* workspace closure of its root, compiled in. Testing only
  * `packages/sync` would leave most of the shipped bytes unexercised. The

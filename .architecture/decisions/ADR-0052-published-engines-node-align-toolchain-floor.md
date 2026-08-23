@@ -3,7 +3,7 @@
 **Date:** 2026-08-14
 **Status:** Proposed
 **Type:** Architecture
-**Relates to:** ADR-0009 (published-CLI bundling); ADR-0036 (SSR guards for browser storage APIs in Node.js 22+); MOD-004
+**Relates to:** ADR-0068 (published-CLI bundling); ADR-0036 (SSR guards for browser storage APIs in Node.js 22+); MOD-004
 
 ## Context
 

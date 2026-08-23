@@ -3,7 +3,7 @@
 **Date:** 2026-08-16
 **Status:** Proposed
 **Type:** Release / Public API
-**Relates to:** ADR-0009 (published-CLI bundling — establishes that the shipped artifact is a self-contained `dist` per entry point), ADR-0052 (published `engines.node` tracks the toolchain floor — the change this ADR's minor-version rule had to fence), ADR-0054 (arch-lint enforcement posture — the source of the three new rule classes in the same release)
+**Relates to:** ADR-0068 (published-CLI bundling — establishes that the shipped artifact is a self-contained `dist` per entry point), ADR-0052 (published `engines.node` tracks the toolchain floor — the change this ADR's minor-version rule had to fence), ADR-0054 (arch-lint enforcement posture — the source of the three new rule classes in the same release)
 
 > This decision is referred to as **D6** in
 > `docs/planning/2026-08-16-decision-dossier-and-remediation-followups.md` (§1.3),

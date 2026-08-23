@@ -1,7 +1,7 @@
 # ADR-0050: Empty Hexagonal Barrels and Frozen No-Code Scaffolds
 
 **Date:** 2026-08-14
-**Status:** Proposed
+**Status:** Proposed — partially supersedes ADR-0007 (empty-layer barrels)
 **Type:** Architecture
 **Supersedes:** ADR-0007-barrel-generation-consolidation.md (Implementation section — specifically the `export {};` empty-layer-barrel convention decided at its line 110 and the "Barrel Generation After Fix" diagram at lines 126-146)
 **Relates to:** ADR-0026-sync-generator-safety-hand-written-preservation.md (hand-written preservation guarantees), ADR-0007-barrel-generation-consolidation.md (single-walker barrel doctrine, which stays intact)
@@ -75,13 +75,13 @@ That premise is false on the tree. The workspaces Node executes directly are:
 
 | Workspace                  | Config                             | Resolution                                                                                                       |
 | -------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `@hexagen/sync` **source** | `packages/sync/tsconfig.json`      | `bundler` + `module: Preserve` — **ADR-0009 / AGENTS.md**. tsup emits the published ESM; source is not NodeNext. |
+| `@hexagen/sync` **source** | `packages/sync/tsconfig.json`      | `bundler` + `module: Preserve` — **ADR-0068 / AGENTS.md**. tsup emits the published ESM; source is not NodeNext. |
 | `@hexagen/sync` **tests**  | `packages/sync/tsconfig.test.json` | `NodeNext`                                                                                                       |
 | `@hexagen/tui`             | `apps/tui/tsconfig.json`           | `NodeNext`                                                                                                       |
 | `@hexagen/arch-linter`     | `tools/arch-linter/tsconfig.json`  | `NodeNext`                                                                                                       |
 
-6.7(d) (#517) reconciled `tsconfig.base.json` `references` and added the HEX-035 guard. It did **not** flip arch-linter (or tui, or sync tests) to bundler, and that flip is not required: no arch-linter rule demands NodeNext on sync, and accepted ADR-0009 already decided sync _source_ stays bundler.
+6.7(d) (#517) reconciled `tsconfig.base.json` `references` and added the HEX-035 guard. It did **not** flip arch-linter (or tui, or sync tests) to bundler, and that flip is not required: no arch-linter rule demands NodeNext on sync, and accepted ADR-0068 already decided sync _source_ stays bundler.
 
 **Decision 4 is therefore narrowed.** After a package deletion, drop that package's `tsconfig.base.json` reference (the HEX-035 half). Do **not** "align" Node-executed workspaces to bundler. The NodeNext hold-outs above are the documented exceptions, not drift. A later change to tui or arch-linter resolution is its own decision; it is not implied here.
 
-ADR-0009's older problem-statement table that listed `sync (CLI) \| NodeNext` is a leftover of Approach 1 and is footnoted there; Approach 2 and AGENTS.md are the governing text.
+ADR-0068's older problem-statement table that listed `sync (CLI) \| NodeNext` is a leftover of Approach 1 and is footnoted there; Approach 2 and AGENTS.md are the governing text.

@@ -2,7 +2,7 @@ import { defineConfig } from "tsup";
 
 /**
  * Bundles @hexagen-monaco/arch-linter into a self-contained ESM artifact for npm
- * publishing (ADR-0009 amendment — co-released second package).
+ * publishing (ADR-0068 amendment — co-released second package).
  *
  * Two entry points (GOD-002 split):
  * - `cli`   → `dist/cli.js`, the `hexagen-lint` bin. Has the CLI bootstrap +

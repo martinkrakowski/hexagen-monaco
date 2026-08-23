@@ -1,6 +1,6 @@
 # ADR-0000: Next.js with Webpack over Vite
 
-**Status:** Accepted  
+**Status:** Accepted — amended by ADR-0044 (2026-08-23): scope clarified as web-app bundler only, not a test-runner decision  
 **Date:** 2026-01-15 (retroactive)  
 **Deciders:** Architecture team  
 **Supersedes:** None

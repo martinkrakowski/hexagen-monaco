@@ -1,6 +1,6 @@
 # ADR-0026: Sync Generator Safety — Hand-Written File Preservation Under `--force`
 
-**Status:** Accepted
+**Status:** Accepted — partially supersedes ADR-0024 (automatic mass-regen)
 **Date:** 2026-04-22
 **Authors:** Architecture Co-pilot, Human Architect
 **Builds on:** ADR-0024 (sync-engine-manifest-first-compliance), ADR-0025 (unified-sync-engine)

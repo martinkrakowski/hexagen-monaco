@@ -32,7 +32,7 @@ export default defineConfig({
    * remain external and are resolved from the consumer's node_modules via
    * standard npm peer resolution.
    *
-   * See: .architecture/decisions/ADR-0009-published-cli-bundling.md
+   * See: .architecture/decisions/ADR-0068-published-cli-bundling.md
    */
 
   entry: {

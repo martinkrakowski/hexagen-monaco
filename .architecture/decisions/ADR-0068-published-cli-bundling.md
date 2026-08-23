@@ -1,7 +1,8 @@
-# ADR-0009: Published CLI Bundling Strategy
+# ADR-0068: Published CLI Bundling Strategy
 
 **Date:** 2026-04-25  
 **Status:** ✅ Accepted  
+**Renumbered:** from ADR-0009 on 2026-08-23 — the number was shared with ADR-0009 (Driver-Context Wiring Strategy, 2026-04-05), which is older and keeps it.  
 **Supersedes:** None  
 **Superseded By:** None  
 **Drivers:** `@hexagen/sync` npm publishing requirement  

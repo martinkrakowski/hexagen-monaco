@@ -2,7 +2,7 @@
 
 **Implementation branch:** `feature/installable-scaffold-publishing` (proposed) — split into a stack (see Sequencing).
 **Status:** Proposed (v5 — final review round folded in: stale route-(a) references corrected, exact bin-invocation form, both tooling packages packed in the capstone, env-check resolved by signature)
-**Relates to:** [14-ci-github-actions.md](./14-ci-github-actions.md), [11-env-setup.md](./11-env-setup.md), [engine-cleanup-and-wizard-followups.md](./engine-cleanup-and-wizard-followups.md), `.architecture/decisions/ADR-0009-published-cli-bundling.md`
+**Relates to:** [14-ci-github-actions.md](./14-ci-github-actions.md), [11-env-setup.md](./11-env-setup.md), [engine-cleanup-and-wizard-followups.md](./engine-cleanup-and-wizard-followups.md), `.architecture/decisions/ADR-0068-published-cli-bundling.md`
 
 ---
 
@@ -10,7 +10,7 @@
 
 Three reviews caught a **critical architectural error** in v1, verified against the code:
 
-- **ADR-0009 mandates publishing only `@hexagen/sync`**, bundled via `tsup` (`packages/sync/tsup.config.ts:90` → `noExternal: [/^@hexagen\//]`; codified in `AGENTS.md:197`). v1's "publish six packages with aligned versions + Changesets dependency-ordering" **reversed an accepted ADR** and is dropped. Real Item 1 is ~0.5 day, not 1–2.
+- **ADR-0068 mandates publishing only `@hexagen/sync`**, bundled via `tsup` (`packages/sync/tsup.config.ts:90` → `noExternal: [/^@hexagen\//]`; codified in `AGENTS.md:197`). v1's "publish six packages with aligned versions + Changesets dependency-ordering" **reversed an accepted ADR** and is dropped. Real Item 1 is ~0.5 day, not 1–2.
 - **`@hexagen/arch-linter` exists** at `tools/arch-linter/` (v1 claimed it doesn't — I checked `packages/` and npm, not `tools/`). It has a `bin` (`hexagen-lint`) and `publishConfig`, but **no `private` field** → npm would publish it by default. And `hexagen arch validate` **shells out to it** (`packages/sync/src/manifest-service.ts:45` → `execAsync("yarn workspace @hexagen/arch-linter lint:arch")`), which **cannot work in a generated project** (no such workspace there). This is a pre-existing first-run blocker and gets a dedicated **Item 0**.
 - **An existing `.github/workflows/publish.yml`** already publishes `shared` + `sync` + `arch-linter` with `sleep 10` / `yarn remove`+`add` hacks — itself inconsistent with the tsup-bundle decision. It must be reconciled, not duplicated.
 - Several **namespace hardcode sites** were under-enumerated; they're now listed with `file:line`. (Note: `architecture-file-templates.ts` already uses `@{scope}/` — the infra is partly in place.)
@@ -52,7 +52,7 @@ Chosen over inlining (route a). Rationale:
 
 - **Avoids the circular-import refactor.** `arch-linter/index.ts:13` does `import type { Manifest } from "@hexagen/sync"`; inlining would make that a self-import, forcing `Manifest` to relocate (a cross-package move touching _every_ importer of `Manifest` from sync). Route (b) sidesteps it entirely.
 - **No `ts-morph` reconciliation.** Inlining would force sync's `^22.0.0` and arch-linter's `^27.0.2` onto one version — re-testing all of sync's AST features against a bumped `ts-morph`, or downgrading arch-linter's 27-API code. Route (b) keeps each on its own version.
-- **ADR-0009's rationale doesn't forbid this.** That ADR targeted avoiding _six separately-versioned packages with inter-dep coordination_ — a distribution/versioning concern. arch-linter is a **devDependency** of generated projects, off the runtime path of everyday `hexagen sync`; a second package with a narrow purpose and its own `bin` (`hexagen-lint`) is a bounded, reasonable exception.
+- **ADR-0068's rationale doesn't forbid this.** That ADR targeted avoiding _six separately-versioned packages with inter-dep coordination_ — a distribution/versioning concern. arch-linter is a **devDependency** of generated projects, off the runtime path of everyday `hexagen sync`; a second package with a narrow purpose and its own `bin` (`hexagen-lint`) is a bounded, reasonable exception.
 - **~1–1.5 day of straightforward work** vs ~2–3 days of risky refactoring — and this blocks the other five items.
 
 **Cost (accepted):** version coordination between the two packages. **Mitigation:** co-release in `publish.yml` with a shared version bump; document them as co-released.
@@ -72,7 +72,7 @@ Chosen over inlining (route a). Rationale:
 
 ### ADR amendment
 
-Short amendment to ADR-0009: `@hexagen/arch-linter` is published as a **co-released second package** (shared version with `@hexagen/sync`), a bounded exception justified by its devDep-only, off-runtime-path role. Reference the pre-work file list.
+Short amendment to ADR-0068: `@hexagen/arch-linter` is published as a **co-released second package** (shared version with `@hexagen/sync`), a bounded exception justified by its devDep-only, off-runtime-path role. Reference the pre-work file list.
 
 ### Acceptance
 
@@ -82,7 +82,7 @@ Short amendment to ADR-0009: `@hexagen/arch-linter` is published as a **co-relea
 
 ---
 
-## Item 1 — Publish `@hexagen/sync` (ADR-0009 compliant)
+## Item 1 — Publish `@hexagen/sync` (ADR-0068 compliant)
 
 ### What actually publishes
 
@@ -93,7 +93,7 @@ Short amendment to ADR-0009: `@hexagen/arch-linter` is published as a **co-relea
 - **Flip `private: true → false` on `@hexagen/sync` only.** Audit its existing `publishConfig` block (registry, access) — ensure `access: public`, no stale registry override.
 - **Reuse / repair the existing publish pipeline**, don't add a parallel one:
   - `scripts/prepare-publish-package.js` already stages the publish manifest (strips `workspace:*`). **Verify it produces a manifest whose `dependencies` are only the external npm deps** — any surviving `@hexagen/* workspace:*` (or rewritten-to-version private packages) means a 404 on consumer install. Add a `--dry-run` pack assertion to CI that greps the packed `package.json` for `@hexagen/` and fails if present.
-  - **Reconcile `.github/workflows/publish.yml`:** today it publishes `shared` + `sync` + `arch-linter` with `sleep 10` and `yarn remove/add` rewrites. Under ADR-0009 it should publish **only the bundled `@hexagen/sync`** (plus arch-linter _iff_ Item 0 chooses route (b)). Remove the `shared` publish + propagation hacks; replace `sleep` with a registry-poll/retry if any cross-package wait remains.
+  - **Reconcile `.github/workflows/publish.yml`:** today it publishes `shared` + `sync` + `arch-linter` with `sleep 10` and `yarn remove/add` rewrites. Under ADR-0068 it should publish **only the bundled `@hexagen/sync`** (plus arch-linter _iff_ Item 0 chooses route (b)). Remove the `shared` publish + propagation hacks; replace `sleep` with a registry-poll/retry if any cross-package wait remains.
 - **`prepare-publish-package.js` — target staged-manifest spec (not just "audit").** After staging, sync's published `package.json` must be exactly: `bin: { "hexagen": "./dist/cli.js" }`, `main: "./dist/index.js"`, `types: "./dist/index.d.ts"`, `exports` matching the source map (with a `types` condition), `dependencies` = `{ commander, js-yaml }` only (the two `external`s — **no `workspace:*`, no `@hexagen/*`, `ts-morph` removed** per the bundled-only decision), plus `engines`/`repository`/`homepage`/`bugs`. **Coordinate with Item 0:** Item 0 already parameterizes this script (or adds a second invocation) to stage `@hexagen/arch-linter`; the Item 1 PR description states "assumes `prepare-publish-package.js` was parameterized in Item 0; this PR updates the _sync_ invocation/spec" so the two PRs don't collide. The PR states the diff from today, not the whole script. **The `ts-morph` bundled-vs-deps check is observable, not reasoned:** `npm pack` the tarball, then `grep -l ts-morph dist/cli.js` (present = bundled) **and** confirm `ts-morph` absent from the packed manifest `dependencies` — run in the PR.
 - **Build correctness (shebang — verify, don't double):** `cli.ts` source **already starts with `#!/usr/bin/env node`**, and tsup preserves shebangs + marks the output executable by default. So the task is to **verify the packed `dist/cli.js` retains the shebang and +x** (`npm pack` → inspect the tarball) — **do not add a `banner`**, which would emit a duplicate shebang. The current `tsup.config.ts` has no explicit banner/chmod, which is _fine if tsup's built-in handling fires_; the verify step confirms it does. Also confirm `bin`/`main`/`types`/`exports` resolve to `dist`. Add `"engines": { "node": ">=20" }` and `repository`/`homepage`/`bugs`.
 - **`noExternal` covers ts-morph implicitly?** `noExternal: [/^@hexagen\//]` matches only `@hexagen/*`; `ts-morph` is neither in `external` (`["commander","js-yaml"]`) nor matched by `noExternal`. tsup's default is to bundle anything not `external`, so `ts-morph` **is** inlined today — which is exactly why moving it to `devDependencies` (and out of published `dependencies`) is safe. **Verify** with a `npm pack` whose bundle contains ts-morph and whose manifest `dependencies` are only `commander`+`js-yaml` — one check, stated in the PR (a `ts-morph` missing from _both_ bundle and deps would be a runtime crash).

@@ -157,7 +157,7 @@ plus four inlined workspace packages:
 | `@hexagen/visualization`         | Architecture graph schemas                 |
 
 Bundling is handled at build time by [`tsup`](https://tsup.egoist.dev/) and
-is codified in [`.architecture/decisions/ADR-0009-published-cli-bundling.md`](../../.architecture/decisions/ADR-0009-published-cli-bundling.md).
+is codified in [`.architecture/decisions/ADR-0068-published-cli-bundling.md`](../../.architecture/decisions/ADR-0068-published-cli-bundling.md).
 
 ### Runtime Dependencies (not bundled)
 
@@ -216,7 +216,7 @@ The source `packages/sync/package.json` is never mutated by this process.
 ## Links
 
 - **HexaGen Monaco repository:** https://github.com/martinkrakowski/hexagen-monaco
-- **Architecture Decision Record:** [`ADR-0009`](../../.architecture/decisions/ADR-0009-published-cli-bundling.md) — CLI Bundling Strategy
+- **Architecture Decision Record:** [`ADR-0068`](../../.architecture/decisions/ADR-0068-published-cli-bundling.md) — CLI Bundling Strategy
 - **Manifest schema:** `@hexagen/project-configuration`
 - **Issue tracker:** https://github.com/martinkrakowski/hexagen-monaco/issues
 

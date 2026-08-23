@@ -1,7 +1,7 @@
 # ADR-0064: Deploy Topology Is Single-Container
 
 **Date:** 2026-08-17
-**Status:** Accepted
+**Status:** Superseded by ADR-0065 (2026-08-23) — see the amendment at the end of this document
 **Type:** Operations
 **Runbook ID:** D-4
 **Relates to:** ADR-0063 (quota-D2 — metering policy, not topology); `apps/web/lib/quota-store.ts`, `apps/web/lib/byok-store.ts`; `deploy/docker-compose.prod.yml`
@@ -41,3 +41,7 @@ A second replica, a shared SQLite, or a Postgres cutover is out of scope. Those 
 - Phase 2 persistence / tenancy work honors this topology: schema lands on the single-container SQLite (or an explicit successor decided later), not on an assumed multi-replica cluster.
 - The compose deploy remains the production path. k8s is now a non-lying description of the same topology, not an accidental HA sketch.
 - `rate-limiter.ts` stays an in-process `Map`. Moving it to the DB is required only if replicas ever exceed 1, which this ADR forbids until amended.
+
+## Amendment — 2026-08-23: superseded by ADR-0065
+
+This ADR decided to keep the `k8s/` manifests and fix them (replicas 1, PVC, `Recreate`, `fsGroup`). ADR-0065, filed in the same PR (#528), decided to remove them in favour of a single-container Compose deployment, and that PR deleted `k8s/deployment.yaml` and `k8s/ingress.yaml`. The tree has matched ADR-0065 since; the single-container topology and SQLite-on-a-volume conclusions here remain the operating model, only the "fix the manifests" instruction is void. See ADR-0065.

@@ -1,6 +1,6 @@
 # ADR-0029: Governance Panel Storage Lifecycle & State Management
 
-**Status**: ACCEPTED (2026-04-28)
+**Status**: ACCEPTED (2026-04-28) — amended by ADR-0051 (2026-08-23): §1.3/§1.4 subscriber-driven purge no longer describes the code; see the 2026-08-15 note in §1.3
 
 **Context**:
 

@@ -1,7 +1,7 @@
 # ADR-0010: MCP Server Architecture
 
 **Date:** 2026-04-07
-**Status:** Accepted
+**Status:** Accepted — amended by ADR-0048 (2026-08-23): Decision §3 handler wiring now targets inbound ports; everything else stands
 **Type:** Architecture
 
 ## Context

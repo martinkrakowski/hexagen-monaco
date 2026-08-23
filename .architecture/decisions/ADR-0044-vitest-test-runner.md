@@ -1,11 +1,11 @@
 # ADR-0044: Vitest as the Monorepo Test Runner
 
-**Status:** Accepted
+**Status:** Accepted — amends ADR-0000; partially supersedes ADR-0038 (test runner)
 **Date:** 2026-06-19
 **Deciders:** Martin Krakowski
 **Supersedes:** None
 **Amends:** ADR-0000 (clarifies it is bundler-scoped, not a test-runner ban)
-**Related:** ADR-0009 (cites Vitest approvingly as published-CLI bundling precedent)
+**Related:** ADR-0068 (cites Vitest approvingly as published-CLI bundling precedent)
 
 ---
 
@@ -22,7 +22,7 @@ Crucially, **no ADR actually bans Vitest**:
 - **ADR-0000** ("Next.js with Webpack over Vite") is about the web app's _bundler_ — RSC,
   API routes, SSR. It says nothing about the _test runner_. The recurring "we chose against
   Vite" memory has been over-applied to Vitest.
-- **ADR-0009** cites **Vitest approvingly** as precedent for bundling published CLIs.
+- **ADR-0068** cites **Vitest approvingly** as precedent for bundling published CLIs.
 
 We want Vitest as the monorepo runner (and available in generated projects) for: one modern
 runner, native ESM/TS transform (no `tsx` loader), `expect()` ergonomics, and — for
@@ -76,7 +76,7 @@ No ESLint rule enforces the assert/expect policy (docs-only), so nothing blocks 
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `resolve.extensionAlias { ".js": [".ts",".tsx",".js"], ".mjs": [".mts",".mjs"] }` | Resolve explicit `.js` barrel specifiers to `.ts` sources; mirrors `next.config.mjs` (ADR-0000). |
 | Keep `assert.*`; do **not** rewrite ~8,900 calls                                  | Runner-agnostic; rewriting is churn + risk with no behavioural gain.                             |
-| `@hexagen/sync` build stays `tsup`                                                | Vitest is a **devDependency**; the published bundle is unaffected (ADR-0009).                    |
+| `@hexagen/sync` build stays `tsup`                                                | Vitest is a **devDependency**; the published bundle is unaffected (ADR-0068).                    |
 | Per-package `test` scripts drive Turbo                                            | Enables coexistence; no flag day.                                                                |
 
 ## Rollout (staged, multi-PR)

@@ -239,7 +239,7 @@ done
 
 ## Related ADRs
 
-- ADR-0009: Published CLI Bundling (testing strategy context)
+- ADR-0068: Published CLI Bundling (testing strategy context)
 
 ## References
 
