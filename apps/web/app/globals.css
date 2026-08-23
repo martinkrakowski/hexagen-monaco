@@ -322,8 +322,7 @@ dialog::backdrop {
 }
 
 @keyframes dotPulse {
-  0%,
-  100% {
+  0%, 100% {
     box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
   }
   50% {
@@ -369,10 +368,7 @@ dialog::backdrop {
 
 /* ── Dot-grid background pattern ──────────────────────────────────────────── */
 .dot-grid {
-  background-image: radial-gradient(
-    hsl(var(--muted-foreground) / 0.15) 1px,
-    transparent 1px
-  );
+  background-image: radial-gradient(hsl(var(--muted-foreground) / 0.15) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 
@@ -547,48 +543,20 @@ dialog::backdrop {
 }
 
 /* ── Validation Report Staggered Delays ──────────────────────────────────────── */
-.validation-delay-0 {
-  animation-delay: 0ms;
-}
-.validation-delay-40 {
-  animation-delay: 40ms;
-}
-.validation-delay-80 {
-  animation-delay: 80ms;
-}
-.validation-delay-120 {
-  animation-delay: 120ms;
-}
-.validation-delay-160 {
-  animation-delay: 160ms;
-}
-.validation-delay-200 {
-  animation-delay: 200ms;
-}
-.validation-delay-240 {
-  animation-delay: 240ms;
-}
-.validation-delay-280 {
-  animation-delay: 280ms;
-}
-.validation-delay-320 {
-  animation-delay: 320ms;
-}
-.validation-delay-360 {
-  animation-delay: 360ms;
-}
-.validation-delay-400 {
-  animation-delay: 400ms;
-}
-.validation-delay-440 {
-  animation-delay: 440ms;
-}
-.validation-delay-480 {
-  animation-delay: 480ms;
-}
-.validation-delay-final {
-  animation-delay: 500ms;
-}
+.validation-delay-0 { animation-delay: 0ms; }
+.validation-delay-40 { animation-delay: 40ms; }
+.validation-delay-80 { animation-delay: 80ms; }
+.validation-delay-120 { animation-delay: 120ms; }
+.validation-delay-160 { animation-delay: 160ms; }
+.validation-delay-200 { animation-delay: 200ms; }
+.validation-delay-240 { animation-delay: 240ms; }
+.validation-delay-280 { animation-delay: 280ms; }
+.validation-delay-320 { animation-delay: 320ms; }
+.validation-delay-360 { animation-delay: 360ms; }
+.validation-delay-400 { animation-delay: 400ms; }
+.validation-delay-440 { animation-delay: 440ms; }
+.validation-delay-480 { animation-delay: 480ms; }
+.validation-delay-final { animation-delay: 500ms; }
 
 @media (prefers-reduced-motion: reduce) {
   .validation-delay-0,
@@ -610,38 +578,10 @@ dialog::backdrop {
 }
 
 /* ── Manifest Preview YAML Viewer ───────────────────────────────────────────── */
-.manifest-yaml-line {
-  display: flex;
-  min-height: 20px;
-}
-.manifest-yaml-ln {
-  width: 28px;
-  text-align: right;
-  padding-right: 8px;
-  color: hsl(var(--muted-foreground) / 0.4);
-  font-size: 10px;
-  user-select: none;
-  flex-shrink: 0;
-}
-.manifest-yaml-gut {
-  width: 14px;
-  flex-shrink: 0;
-}
-.manifest-yaml-gut-error {
-  color: hsl(var(--destructive));
-}
-.manifest-yaml-gut-warn {
-  color: hsl(var(--warning));
-}
-.manifest-yaml-hl {
-  background: hsl(var(--accent) / 0.15);
-  border-left: 2px solid hsl(var(--accent));
-  margin: 0 -10px;
-  padding: 0 10px;
-}
-.manifest-yaml-hl-error {
-  background: hsl(var(--destructive) / 0.06);
-  border-left: 2px solid hsl(var(--destructive));
-  margin: 0 -10px;
-  padding: 0 10px;
-}
+.manifest-yaml-line { display: flex; min-height: 20px; }
+.manifest-yaml-ln { width: 28px; text-align: right; padding-right: 8px; color: hsl(var(--muted-foreground) / 0.4); font-size: 10px; user-select: none; flex-shrink: 0; }
+.manifest-yaml-gut { width: 14px; flex-shrink: 0; }
+.manifest-yaml-gut-error { color: hsl(var(--destructive)); }
+.manifest-yaml-gut-warn { color: hsl(var(--warning)); }
+.manifest-yaml-hl { background: hsl(var(--accent) / 0.15); border-left: 2px solid hsl(var(--accent)); margin: 0 -10px; padding: 0 10px; }
+.manifest-yaml-hl-error { background: hsl(var(--destructive) / 0.06); border-left: 2px solid hsl(var(--destructive)); margin: 0 -10px; padding: 0 10px; }

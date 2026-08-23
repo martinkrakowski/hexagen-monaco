@@ -100,6 +100,22 @@ describe("boundary fragments are not guessed at", () => {
   });
 });
 
+describe("guards raised in review on #624", () => {
+  it("classifies nothing when the chunk is not in its parent's quasis", () => {
+    // `-1 < length - 1` is TRUE, so an unguarded indexOf would treat a foreign
+    // node as preceding an expression and silently drop a real token.
+    const orphan = {
+      type: "TemplateElement",
+      value: { cooked: "gap-1.5", raw: "gap-1.5" },
+    } as unknown as TSESTree.TemplateElement;
+    const parent = {
+      type: "TemplateLiteral",
+      quasis: [],
+    } as unknown as TSESTree.TemplateLiteral;
+    assert.deepStrictEqual(safeTemplateTokens(orphan, parent), []);
+  });
+});
+
 describe("safeTemplateTokens, directly", () => {
   const parentOf = (chunks: string[]) => {
     const quasis = chunks.map((raw) => ({

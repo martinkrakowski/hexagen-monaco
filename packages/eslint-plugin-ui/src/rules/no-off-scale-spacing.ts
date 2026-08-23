@@ -125,10 +125,12 @@ const NUMERIC_VALUE = /^\d+(?:\.\d+)?$/;
  * unrecognised character silently exempted every class in the string. There is
  * no whole-string pre-filter here either.
  *
- * Scope note, shared with `no-arbitrary-tailwind-values`: only string `Literal`
- * nodes are inspected. Classes assembled inside template literals
- * (`` `… ${x} mt-0.5` ``) are `TemplateElement` nodes and are NOT seen — a
- * known gap in both rules, to be closed for both at once.
+ * Scope note, shared with `no-arbitrary-tailwind-values`: string `Literal`
+ * nodes AND template literals are inspected. Classes assembled inside
+ * backticks (`` `… ${x} mt-0.5` ``) arrive as `TemplateElement` chunks, whose
+ * edges may hold half a token — `safeTemplateTokens` decides which of them can
+ * be classified. TAGGED templates are skipped entirely: the tag decides what
+ * the value becomes, so its chunks are not class strings.
  */
 const rule: TSESLint.RuleModule<MessageIds, Options> = {
   defaultOptions: [{}],
@@ -173,6 +175,12 @@ const rule: TSESLint.RuleModule<MessageIds, Options> = {
       TemplateElement(node: TSESTree.TemplateElement) {
         const parent = node.parent as TSESTree.TemplateLiteral | undefined;
         if (parent === undefined || parent.type !== "TemplateLiteral") return;
+        // A TAGGED template is not a class string: the tag decides what the
+        // value becomes. String.raw is the sharp case -- it returns the RAW
+        // text while a TemplateElement exposes COOKED text, so `gap-1.5\nmt-0.5`
+        // reads here as two class tokens and at runtime as one nonsense string.
+        // Classifying either would be a guess about a function we cannot see.
+        if (parent.parent?.type === "TaggedTemplateExpression") return;
         classify(safeTemplateTokens(node, parent), node);
       },
 

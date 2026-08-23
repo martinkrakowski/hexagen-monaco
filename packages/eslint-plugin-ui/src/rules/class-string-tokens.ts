@@ -26,8 +26,11 @@ import type { TSESTree } from "@typescript-eslint/utils";
  *   - a chunk that precedes an expression drops its last token, unless the
  *     chunk ends with whitespace.
  *
- * The first and last chunks of the template are bounded by the backticks
- * rather than by an expression, so those outer edges are always complete.
+ * The template's OUTER edges -- the start of the first chunk and the end of the
+ * last -- are bounded by the backticks rather than by an expression, so those
+ * two edges are always complete. That is a claim about the two edges, not
+ * about those chunks: the first chunk's END may still abut an expression, and
+ * the last chunk's START may still resume from one. Both are handled above.
  *
  * The cost is deliberate and stated: `` `mt-${a}` `` is never classified,
  * because nothing here can know what `a` holds. Under-reporting an
@@ -41,6 +44,13 @@ export function safeTemplateTokens(
   if (raw === "") return [];
 
   const index = parent.quasis.indexOf(node);
+  // A chunk that is not in its own parent's quasis means the AST is not the
+  // shape this function reasons about (a transform, a non-standard parser).
+  // Returning nothing is the only safe answer: `-1 < length - 1` is TRUE, so
+  // falling through would silently treat the node as preceding an expression
+  // and drop a real token -- inventing the boundary error this module exists
+  // to prevent, in the one case where nothing can be trusted.
+  if (index === -1) return [];
   const followsExpression = index > 0;
   const precedesExpression = index < parent.quasis.length - 1;
 

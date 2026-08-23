@@ -77,9 +77,11 @@ const VARIANT_PREFIX = /^(?:[\w-]+:)*/;
  * Arbitrary values match patterns like: w-[347px], text-[13px], px-[18px]
  * Exceptions are enumerated in DESIGN.md §4.8.
  *
- * Scope note: only string `Literal` nodes are inspected. Class names built
- * inside template literals (`` `… sm:w-[400px] …` ``) are TemplateElement
- * nodes and are NOT seen by this rule — a known, separate gap.
+ * Scope note: string `Literal` nodes AND template literals are inspected.
+ * Class names built inside backticks (`` `… sm:w-[400px] …` ``) arrive as
+ * `TemplateElement` chunks; `safeTemplateTokens` drops the edges that abut an
+ * interpolation rather than guessing at half a token. TAGGED templates are
+ * skipped entirely — the tag decides what the value becomes.
  */
 const rule: TSESLint.RuleModule<MessageIds> = {
   defaultOptions: [],
@@ -103,6 +105,12 @@ const rule: TSESLint.RuleModule<MessageIds> = {
       TemplateElement(node: TSESTree.TemplateElement) {
         const parent = node.parent as TSESTree.TemplateLiteral | undefined;
         if (parent === undefined || parent.type !== "TemplateLiteral") return;
+        // A TAGGED template is not a class string: the tag decides what the
+        // value becomes. String.raw is the sharp case -- it returns the RAW
+        // text while a TemplateElement exposes COOKED text, so `gap-1.5\nmt-0.5`
+        // reads here as two class tokens and at runtime as one nonsense string.
+        // Classifying either would be a guess about a function we cannot see.
+        if (parent.parent?.type === "TaggedTemplateExpression") return;
         classify(safeTemplateTokens(node, parent), node);
       },
 
