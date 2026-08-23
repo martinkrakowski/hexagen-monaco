@@ -50,9 +50,14 @@ repo_context_from_default_branch = true
 repo_context_max_lines = 3000
 
 [github_action_config]
-auto_review = true
+# SWAPPED — see the workflow env block, which overrides this file until both
+# are on the default branch. /review emits only the "PR Reviewer Guide": an
+# effort estimate, a security flag, and a focus-areas section that is empty
+# whenever it has nothing to say. It never produces line-anchored suggestions,
+# however it is configured. The reviews this bot exists for come from /improve.
+auto_review = false
 auto_describe = false
-auto_improve = false
+auto_improve = true
 pr_actions = ["opened", "reopened", "ready_for_review"]
 
 [pr_reviewer]
@@ -83,10 +88,29 @@ quiet one.
 """
 
 [pr_code_suggestions]
+# Inline and line-anchored rather than one collapsed summary table (the 0.42.0
+# default), because the summary format reads as "nothing happened" even when it
+# found something.
+commitable_code_suggestions = true
+# No comment when there is nothing to say. The default (true) is what posted an
+# empty guide on every PR; silence is a better signal than three vague rows.
+publish_output_no_suggestions = false
+# On by default in 0.42.0, pinned so a future image cannot quietly turn this
+# into a style-nitpicker.
+focus_only_on_problems = true
 extra_instructions = """
+You are the UI-contract reviewer for this repository. Enforce DESIGN.md.
+Do not re-raise findings that belong to CodeRabbit or Qodo (verifier
+defects, assertion-style, manifest inventory completeness).
+Cite DESIGN.md section numbers. Do not paraphrase a rule that already has a
+section; name it. Spacing must resolve to the §4.7 scale (1,2,3,4,6,8,12,16)
+— fractional Tailwind steps like mt-0.5 or gap-1.5 are violations, and no
+gate catches them inside features/.
 Suggestions must stay inside DESIGN.md. Do not invent tokens, utilities,
 or exception patterns that are not in §4.8 / §4.9.
-Manual /improve only — auto_improve is off.
+When you propose a fix, say what it does to inputs the current code already
+handles — particularly whether it turns a loud failure into a quiet one.
+Prefer no suggestion to a speculative one.
 """
 
 [ignore]
