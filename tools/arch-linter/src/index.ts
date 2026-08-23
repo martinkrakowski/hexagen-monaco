@@ -127,5 +127,21 @@ export {
   parseLayoutConfig,
 } from "./layout-config.js";
 
+export type {
+  ContextDeclarationInput,
+  ContextDeclarationViolation,
+  CheckContextDeclarationsInput,
+  DeclarationSection,
+  DeclaredElement,
+} from "./context-declaration-violation.js";
+export {
+  ADVISORY_DECLARATION_SECTIONS,
+  ENFORCED_DECLARATION_SECTIONS,
+  checkContextDeclarations,
+  collectDeclaredElements,
+  collectExportedNames,
+  contextDeclarationsEnforced,
+} from "./context-declaration-violation.js";
+
 export type { LoggerPort } from "./logger.js";
 export { createConsoleLogger } from "./logger.js";

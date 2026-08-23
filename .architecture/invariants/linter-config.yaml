@@ -237,3 +237,18 @@ package_rules:
       - '@hexagen/local-llm'
       - '@hexagen/byok'
       - '@hexagen/agentic-interaction'
+
+# Turns on `context-declaration-drift`. This repository's
+# `.architecture/contexts/**/context.yaml` files are a CURATED OWNERSHIP
+# REGISTRY (ADR-0057): every `layers.*` entry names a symbol, spelled exactly as
+# exported, owned by the context whose package defines it. Accuracy is the
+# registry's one hard invariant and had no automated check until this key
+# existed — PR #608 added a port and #609 fixed by hand the context file that
+# had already gone stale.
+#
+# Deliberately NOT emitted into generated projects. A scaffold's manifest is a
+# SPECIFICATION, not a registry: it names elements by file (`Prisma.adapter.ts`)
+# and, with `generator.sync.stubs.enabled: false`, never materialises them.
+# Setting this there would fail a scaffold for being a scaffold.
+context_declarations:
+  enforce: true
