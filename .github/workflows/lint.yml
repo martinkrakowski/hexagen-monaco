@@ -208,9 +208,25 @@ jobs:
           DOCS_ONLY: ${{ steps.docs-only.outputs.docs_only }}
         run: |
           if [ "$DOCS_ONLY" = "true" ]; then
-            locked=$(awk '/^"prettier@/ { block = 1 } block && /version:/ { print $2; exit }' yarn.lock)
+            # Resolve the ROOT selector to its lockfile block, not "the first
+            # prettier block": a second prettier@npm:<range> entry from any
+            # workspace or plugin would otherwise win silently. Yarn 4 lockfile
+            # keys can carry several selectors ("a@npm:^1, a@npm:^1.2":), so
+            # the key is split and each selector compared whole.
+            selector="prettier@npm:$(node -p "require('./package.json').devDependencies.prettier")"
+            locked=$(awk -v key="$selector" '
+              /^"/ {
+                block = 0
+                line = $0
+                sub(/^"/, "", line)
+                sub(/":$/, "", line)
+                n = split(line, selectors, ", ")
+                for (i = 1; i <= n; i++) if (selectors[i] == key) block = 1
+              }
+              block && /version:/ { print $2; exit }
+            ' yarn.lock)
             if [ -z "$locked" ]; then
-              echo "::error::could not read the locked prettier version from yarn.lock"
+              echo "::error::no yarn.lock block matches the root selector ${selector}"
               exit 1
             fi
             echo "docs-only fast path: running locked prettier@${locked}"
