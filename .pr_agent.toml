@@ -5,19 +5,31 @@
 
 [config]
 restricted_mode = true
-model = "openrouter/tencent/hy3"
+model = "openrouter/inception/mercury-2"
 # WAS openrouter/anthropic/claude-3.5-sonnet, which does NOT exist in the
 # OpenRouter catalogue — so the fallback path could not have resolved. A
 # fallback that 404s is worse than none: it only fails when the primary is
 # already failing. Verified against /api/v1/models; claude-haiku-4.5 is
 # present with a 200000 window, which comfortably serves the budget below.
+# Kept. With custom_model_max_tokens now 128000 the fallback is UNDER-declared
+# (haiku-4.5 holds 200000), which is the safe direction -- PR-Agent will simply
+# use less of it than it could. The reverse, which the previous config had, is
+# the dangerous one: 262144 declared against haiku's real 200000 would have had
+# it build a prompt the model could not accept, and the fallback has never
+# fired, so nobody would have found out until it mattered.
 fallback_models = ["openrouter/anthropic/claude-haiku-4.5"]
 # The model's REAL window, from OpenRouter's own catalogue:
 #   tencent/hy3  context_length = 262144
 # This was 64000, which silently became the ceiling: max_model_tokens below
 # can never exceed what the model is declared to hold, so raising that alone
 # would have changed nothing.
-custom_model_max_tokens = 262144
+# mercury-2's REAL window from OpenRouter's catalogue: 128000, with a 50000
+# completion cap. This MUST NOT exceed it. Over-declaring is the failure mode
+# nobody notices until it bites: PR-Agent builds a prompt to fit a window the
+# model does not have, and the provider truncates or rejects. The previous
+# 262144 was hy3's window and would have been a live over-claim the moment the
+# model changed.
+custom_model_max_tokens = 128000
 # THE setting that was pruning diffs. `custom_model_max_tokens` declares what
 # the model can hold; `max_model_tokens` caps what PR-Agent will actually use,
 # and it defaults to 32000 REGARDLESS of the model's capacity. So the 64000
@@ -38,7 +50,15 @@ custom_model_max_tokens = 262144
 # the diff actually needs. It sits inside hy3's 262144 window with room for
 # the response, and inside the fallback's 200000 window (pr-agent takes the
 # min of the two, so the fallback self-limits rather than erroring).
-max_model_tokens = 200000
+# Was 200000, chosen deliberately to stop diffs being pruned. mercury-2 cannot
+# hold that, so this is a forced reduction rather than a preference: 128000
+# total minus room for a completion that may reach 50000.
+#
+# 96000 is still roughly 3x the largest prompt observed on this repo -- ~12k of
+# repo context files plus a ~20k diff on the biggest PR so far -- so it should
+# not reintroduce pruning. If a PR ever does get clipped, this is the number to
+# revisit, not custom_model_max_tokens above.
+max_model_tokens = 96000
 repo_context_files = [
   ".agents/PR_REVIEW_RUBRIC.md",
   "best_practices.md",
