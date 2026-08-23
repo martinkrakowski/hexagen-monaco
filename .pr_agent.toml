@@ -109,6 +109,12 @@ focus_only_on_problems = true
 # timeout-minutes: 15 bounds it.
 num_code_suggestions_per_chunk = 6
 max_number_of_calls = 6
+# PINNED, not inherited. The workflow's 25-minute timeout is justified by
+# wall-clock being the slowest single call rather than the sum of six, which
+# holds only while chunks run in parallel. That is the 0.42.0 default, but an
+# image bump that flipped it would turn six chunks at the observed 812s into
+# ~81 minutes against a 25-minute cap.
+parallel_calls = true
 # Deliberately 0. Filtering by score is the opposite of adversarial:
 # focus_only_on_problems already excludes style noise, so anything this removed
 # would be a real finding that happened to score low.

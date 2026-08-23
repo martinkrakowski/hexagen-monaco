@@ -276,6 +276,16 @@ jobs:
           # timeout-minutes: 15 bounds the blast radius.
           pr_code_suggestions.num_code_suggestions_per_chunk: "6"
           pr_code_suggestions.max_number_of_calls: "6"
+          # PINNED, not inherited. The 25-minute timeout above is justified by
+          # wall-clock being roughly the slowest single call rather than the sum
+          # of six -- which is true only while chunks run in parallel. That is
+          # the 0.42.0 default, verified against the pinned image's own
+          # configuration.toml, but a default is not a guarantee: an image bump
+          # that flipped it would turn 6 chunks at the observed 812s into ~81
+          # minutes against a 25-minute cap, and the first symptom would be a
+          # killed job with no review. Stating it explicitly costs one line and
+          # removes the assumption.
+          pr_code_suggestions.parallel_calls: "true"
           # Deliberately NOT raised above 0: filtering by score is the opposite
           # of adversarial. focus_only_on_problems already excludes style noise,
           # so anything filtered here would be a real finding scored low.
