@@ -6,6 +6,13 @@ on:
     branches: [main, develop]
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+# Both jobs only read the repo (checkout with persist-credentials: false) and
+# publish nothing — pin the GITHUB_TOKEN to read-only instead of inheriting
+# the repository default (same pattern as lint.yml / capstone.yml).
+permissions:
+  contents: read
+
 jobs:
   verify-sync:
     name: "Verify Sync Engine & Hexagonal Structure"
@@ -147,8 +154,22 @@ jobs:
       # Same Corepack-before-setup-node ordering as the ubuntu job, and for
       # the same reason: setup-node's probe runs `yarn`, which must already
       # resolve to the pinned yarn@4 shim.
+      #
+      # But plain `corepack enable` is NOT enough on Windows: it writes the
+      # shims next to the *current* node binary (the runner's default node
+      # dir), which the runner's preinstalled Yarn 1 shim (C:\npm\prefix\
+      # yarn.cmd) precedes on PATH — setup-node@v5's probe then resolved
+      # yarn 1.22.22 and failed on the packageManager pin (run 32667225915).
+      # Install the yarn shim into a dedicated dir prepended via GITHUB_PATH
+      # so it wins PATH resolution for setup-node and every later step
+      # (setup-node prepends its own node dir too, but that dir has no yarn,
+      # so the shim still wins for `yarn`).
       - name: "Enable Corepack"
-        run: corepack enable
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/corepack-shims"
+          corepack enable --install-directory "$RUNNER_TEMP/corepack-shims" yarn
+          echo "$RUNNER_TEMP/corepack-shims" >> "$GITHUB_PATH"
 
       - name: "Prepare Yarn"
         run: corepack prepare --activate
