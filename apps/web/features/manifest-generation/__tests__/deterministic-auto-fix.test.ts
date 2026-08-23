@@ -135,6 +135,10 @@ describe("runDeterministicAutoFix — the fall-through set", () => {
     const outcome = runDeterministicAutoFix(NEEDS_ONE_FIX_THEN_RESIDUE);
 
     expect(outcome.appliedTitles).toContain("Scope Missing");
+    // `not.toContain` is vacuously true on an EMPTY list, so this would still
+    // pass if the runner stopped reporting terminal residue at all. Pin that
+    // the fixture really does leave some. Raised by CodeRabbit on #619.
+    expect(outcome.fellThrough.length).toBeGreaterThan(0);
     expect(fallThroughTitles(outcome)).not.toContain("Scope Missing");
   });
 

@@ -101,18 +101,27 @@ describe("useGithubScanAvailability", () => {
   // server had just refused. The public API was one-way; the effect was not.
   it("never promotes back to available after the POST proved it off", async () => {
     let resolveGet: ((r: Response) => void) | undefined;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        () =>
-          new Promise<Response>((resolve) => {
-            resolveGet = resolve;
-          }),
-      ),
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveGet = resolve;
+        }),
     );
+    vi.stubGlobal("fetch", fetchMock);
 
     const { result } = renderHook(() => useGithubScanAvailability());
     expect(result.current.availability).toBe("checking");
+
+    // Prove the race this test is named for can actually happen. Without an
+    // IN-FLIGHT GET there is nothing to promote the state back up, and the
+    // assertion at the end would pass on `markNotEnabled` alone -- green for a
+    // reason other than the one the name claims. Raised by CodeRabbit on #619.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    if (!resolveGet) {
+      throw new Error(
+        "the availability probe never issued its GET, so there is no in-flight response to race",
+      );
+    }
 
     // The POST comes back first and latches the state down.
     act(() => result.current.markNotEnabled());
@@ -120,7 +129,7 @@ describe("useGithubScanAvailability", () => {
 
     // The still-in-flight GET now answers 405 ("endpoint is on").
     await act(async () => {
-      resolveGet?.({ status: 405, ok: false } as Response);
+      resolveGet({ status: 405, ok: false } as Response);
       await Promise.resolve();
     });
 
