@@ -164,6 +164,10 @@ jobs:
     # not multiply this number.
     timeout-minutes: 25
     steps:
+      - name: "Stamp run start"
+        id: started
+        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: "PR Agent"
         uses: docker://pragent/pr-agent@sha256:b81235c3bddc551939a1feca8926f4b6e8abcec2ae5bf4620424f8f56dd9cb93 # 0.42.0-github_action
         env:
@@ -306,3 +310,53 @@ jobs:
             class names; apps/web/components/ outside primitives/); §4.7 4px
             grid; §3.4 untyped/as-any escapes and template-engine payload;
             §4.9 inline styles outside CanvasNodeStyleAdapter.tsx.
+
+      # PR-Agent exits 0 even when it could not produce a review. On #624 it
+      # posted "Failed to generate code suggestions for PR" and the check went
+      # GREEN -- a passing gate for work that did not happen, which is the one
+      # failure this repository keeps rediscovering.
+      #
+      # Deliberately matched on PR-Agent's own failure string rather than on
+      # the absence of suggestions: silence is legitimate (a clean PR posts
+      # nothing, by publish_output_no_suggestions=false), so "no comment" must
+      # NOT fail. Only an explicit failure does.
+      #
+      # Fragile in one known way, stated rather than hidden: the string is
+      # PR-Agent's, and an upstream reword would silently stop matching. The
+      # image is pinned by digest, so that cannot change without a deliberate
+      # bump -- and the bump is the moment to re-check this.
+      - name: "Fail if the review did not actually run"
+        # Runs for BOTH triggers. A /review command fails the same way a
+        # pull_request run does, and gating this on pull_request left exactly
+        # that hole -- the command path could exit 0 having produced nothing.
+        if: always() && (github.event_name == 'pull_request' || github.event_name == 'issue_comment')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number || github.event.issue.number }}
+          # ISO-8601, lexicographically comparable to GitHub's created_at.
+          STARTED_AT: ${{ steps.started.outputs.at }}
+        run: |
+          set -euo pipefail
+          # --paginate, and NO request parameters.
+          #
+          # The first version passed a request parameter, and every part of
+          # that was wrong in a way that made the guard useless. A request
+          # parameter switches `gh api` to POST, so it tried to CREATE a
+          # comment and got 422. It also does not define a jq variable, so the
+          # since filter was undefined. And the error fallback turned both
+          # failures into a count of zero. The guard therefore always passed,
+          # which is the exact defect it exists to catch, inside itself.
+          #
+          # Errors are NOT converted to zero. If the API call fails, this step
+          # fails, because "I could not check" must never read as "nothing was
+          # wrong".
+          gh api --paginate --method GET "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" > "$RUNNER_TEMP/comments.json"
+          FILTER='[.[] | select(.user.login == "github-actions[bot]") | select(.created_at >= $since) | select(.body | test("Failed to generate"))] | length'
+          jq --arg since "$STARTED_AT" "$FILTER" "$RUNNER_TEMP/comments.json" > "$RUNNER_TEMP/failures"
+          failed=$(cat "$RUNNER_TEMP/failures")
+          if [ "$failed" -gt 0 ]; then
+            echo "PR-Agent reported it could not generate a review."
+            echo "A green check here would claim a review that never happened."
+            exit 1
+          fi
+          echo "No PR-Agent failure notice from this run."
