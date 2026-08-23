@@ -1,7 +1,7 @@
 # VPS → GCP migration — implementation plan
 
 **Date:** 2026-08-23
-**Predecessor:** the 2026-08-20 hosting plan (`docs/planning/2026-08-20-hosting-migration-plan.md` — currently **uncommitted**; its Wave H3 "Postgres + replicas" is gated D-H4 and "triggered only when someone pays")
+**Predecessor:** the 2026-08-20 hosting plan (`docs/planning/2026-08-20-hosting-migration-plan.md`, committed alongside this document in #634; its Wave H3 "Postgres + replicas" is gated D-H4 and "triggered only when someone pays")
 **This plan overrides that trigger.** The move to GCP is being planned now, on its own merits, not on revenue evidence. Everything H3 said still holds as _engineering_ fact — ADR-0065/0064 must be amended before Postgres or a second replica — so that amendment is packet **G0.1**, first, not last.
 **Companions:** the client-storage plan and the orgs/teams/sharing plan (same date). They land on whatever database this plan chooses; see §6.
 
@@ -91,10 +91,10 @@ Sizes: S ≤ half a day, M ≤ two days, L ≤ a week, XL more. Every exit crite
 - _What:_ ADR-0065's "single-container compose is canonical" stays true for step 1 and gains a dated amendment: the host is a GCE VM; the database tier moves to Cloud SQL at step 2 (the "Phase 2 … appropriate distributed database" its Consequences section reserves, `ADR-0065:18`); replica count stays 1 until H3.2. ADR-0064 is already superseded (#629); its amendment gets one line pointing here.
 - _Exit:_ both ADRs carry the amendment and `docs/index.md` agrees; the hosting plan's D-H4 row is marked "decided by G0.1".
 
-**G0.2 — Commit the 2026-08-20 hosting plan** · **S**
+**G0.2 — Commit the 2026-08-20 hosting plan** · **S** · _done in #634_
 
-- _What:_ this plan and its two companions cite it; it is untracked. Land it as-is with a one-line status note ("H3 trigger overridden by the GCP plan").
-- _Exit:_ the three cross-references resolve on `main`.
+- _What:_ this plan and its two companions cite it; it was untracked when this plan was drafted. Landed as written in #634 (`05f47fb4`); the override of its H3 trigger is recorded here and in its successors rather than by editing it.
+- _Exit:_ the three cross-references resolve on `main` — met by #634.
 
 **G0.3 — GCP project scaffold** · **M** · needs D-G1, D-G3
 
@@ -254,4 +254,4 @@ A single VPS is almost certainly cheaper in cash. What the GCP shape buys is an 
 | Image is environment-specific (`NEXT_PUBLIC_*` build args)                    | Unchanged from today; recorded in G2.3 so Artifact Registry tags are not mistaken for environment-agnostic.                               |
 | Cost overrun from scan disk growth                                            | 80 % disk alert (G1.5); GCS lifecycle (G2.5); scan workspaces are deleted in `finally` by every creator (Dockerfile 124–128).             |
 | Tier-C clone silently assumed to work on GCP                                  | D-G6; the runner has no `git`, verified.                                                                                                  |
-| The 2026-08-20 plan stays uncommitted and the cross-references dangle         | G0.2.                                                                                                                                     |
+| The 2026-08-20 plan's H3 trigger is read as still governing                   | G0.2 — its successors record the override; the plan itself is unedited.                                                                   |

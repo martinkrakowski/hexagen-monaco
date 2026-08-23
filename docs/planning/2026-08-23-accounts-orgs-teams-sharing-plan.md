@@ -1,7 +1,7 @@
 # Accounts, organizations, teams, and project sharing — implementation plan
 
 **Date:** 2026-08-23
-**Predecessor:** the 2026-08-20 hosting plan (`docs/planning/2026-08-20-hosting-migration-plan.md` — **currently uncommitted**; its Wave H1 items are referenced below by ID and are not re-planned here)
+**Predecessor:** the 2026-08-20 hosting plan (`docs/planning/2026-08-20-hosting-migration-plan.md`, committed alongside this document in #634; its Wave H1 items are referenced below by ID and are not re-planned here)
 **Siblings:** `2026-08-23-client-storage-to-server-plan.md` (Plan 1), `2026-08-23-gcp-migration-plan.md` (Plan 3 — owns the Postgres decision, D-H4)
 **Baseline:** `main` @ `d582213a`; prod = single container, `platform.db` on the `hexagen-monaco-quota-data` volume (ADR-0065)
 

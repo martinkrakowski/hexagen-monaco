@@ -1,7 +1,7 @@
 # Client storage → server database — implementation plan
 
 **Date:** 2026-08-23
-**Extends:** the 2026-08-20 hosting plan (`docs/planning/2026-08-20-hosting-migration-plan.md`, **currently uncommitted** — commit it before this one lands or the cross-references dangle). That plan made saved projects server-authoritative for signed-in users (Wave H1.7) and parked wizard drafts / workspace as device-local under **D-H5**. This document is the D-H5 answer and everything D-H5 did not name.
+**Extends:** the 2026-08-20 hosting plan (`docs/planning/2026-08-20-hosting-migration-plan.md`, committed alongside this document in #634). That plan made saved projects server-authoritative for signed-in users (Wave H1.7) and parked wizard drafts / workspace as device-local under **D-H5**. This document is the D-H5 answer and everything D-H5 did not name.
 **Companions:** Plan 2 (orgs/teams — tenant = `owner_id`) and Plan 3 (VPS → GCP, owns the Postgres decision D-H4). This plan depends on both and says where.
 **Baseline:** `main` @ `d582213a`; prod = one container, three better-sqlite3 files on `/data` (`quota.db`, `byok.db`, `platform.db`).
 
