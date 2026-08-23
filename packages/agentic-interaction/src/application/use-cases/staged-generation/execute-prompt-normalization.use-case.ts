@@ -16,8 +16,10 @@ import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
 import {
+  EMPTY_STAGE_SUMMARY,
   estimateTokenCount,
   modelNameFromResponseMetadata,
+  stageSummary,
 } from "../../../domain/value-objects/stage-telemetry";
 
 const STAGE_NUMBER = 0;
@@ -215,7 +217,22 @@ export class ExecutePromptNormalizationUseCase {
           inputTokensEstimate: estimateTokenCount(prompt),
           outputTokensActual: estimateTokenCount(fullResponse),
           servedFromCache: false,
-          summary: `Normalized intent: ${intent}, ${explicitTechnologies.length} technologies, ${ambiguities.length} ambiguities`,
+          // `intent` is the model's restatement of the USER'S PROMPT. It used
+          // to be interpolated here, which put user prose into
+          // `run_events.summary` on the platform DB — directly against the
+          // retention promise in the shipped UI copy and ADR-0067. The counts
+          // and flags below answer the questions run history actually asks of
+          // stage 0 (did normalization extract anything; which downstream
+          // branch did it pick) without carrying a word the user wrote.
+          summary: stageSummary`Normalized: ${explicitTechnologies.length} technologies, ${explicitPatterns.length} patterns, ${ambiguities.length} ambiguities${
+            projectName !== undefined
+              ? stageSummary`, project name detected`
+              : EMPTY_STAGE_SUMMARY
+          }${
+            isStructuredConfig
+              ? stageSummary`, structured-config input`
+              : EMPTY_STAGE_SUMMARY
+          }`,
           ...(modelName !== undefined ? { modelName } : {}),
         });
         return ok(result);

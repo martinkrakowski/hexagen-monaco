@@ -23,6 +23,7 @@ import type { StageTelemetry } from "../../../domain/value-objects/stage-telemet
 import {
   estimateTokenCount,
   modelNameFromResponseMetadata,
+  stageSummary,
 } from "../../../domain/value-objects/stage-telemetry";
 
 const STAGE_NUMBER = 2;
@@ -262,7 +263,7 @@ export class ExecuteContextClassificationUseCase {
           inputTokensEstimate: estimateTokenCount(prompt),
           outputTokensActual: estimateTokenCount(fullResponse),
           servedFromCache: false,
-          summary: `Classified ${accepted.length} accepted, ${rejected.length} rejected, ${uncertain.length} uncertain contexts`,
+          summary: stageSummary`Classified ${accepted.length} accepted, ${rejected.length} rejected, ${uncertain.length} uncertain contexts`,
           ...(modelName !== undefined ? { modelName } : {}),
         });
         return ok(result);

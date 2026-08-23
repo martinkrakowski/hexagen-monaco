@@ -22,7 +22,10 @@ import { buildStage6RetryPrompt } from "../../../domain/prompts/generate-manifes
 import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
-import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
+import {
+  estimateTokenCount,
+  stageSummary,
+} from "../../../domain/value-objects/stage-telemetry";
 
 const STAGE_NUMBER = 6;
 
@@ -432,7 +435,12 @@ export class ExecuteValidationReviewUseCase {
           inputTokensEstimate: estimateTokenCount(prompt),
           outputTokensActual: estimateTokenCount(fullResponse),
           servedFromCache: false,
-          summary: `Validation ${passed ? "passed" : "failed"}: ${finalErrors.length} errors, ${finalWarnings.length} warnings`,
+          // Branch on the whole phrase rather than interpolating the word:
+          // the builder deliberately refuses `string` slots, and spelling
+          // both literals out is clearer than a ternary inside the template.
+          summary: passed
+            ? stageSummary`Validation passed: ${finalErrors.length} errors, ${finalWarnings.length} warnings`
+            : stageSummary`Validation failed: ${finalErrors.length} errors, ${finalWarnings.length} warnings`,
           ...(modelName !== undefined ? { modelName } : {}),
         });
         return ok(result);

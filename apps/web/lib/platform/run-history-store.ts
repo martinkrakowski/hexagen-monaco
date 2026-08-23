@@ -9,6 +9,18 @@ export interface StageTelemetryInput {
   inputTokensEstimate: number;
   outputTokensActual: number;
   servedFromCache: boolean;
+  /**
+   * Counts / flags / closed-set phrases only — NEVER user content. This is the
+   * READ side of the boundary and stays `string` on purpose: the value arrives
+   * as JSON over `/api/runs` (`z.string()`), so nothing here can re-derive a
+   * brand. Enforcement lives on the WRITE side, where the value is built:
+   * `StageTelemetry.summary` in @hexagen/agentic-interaction is a branded
+   * `StageSummary` obtainable only from the `stageSummary` tagged template,
+   * whose interpolation slots refuse `string`. See that type's doc, and
+   * `repair-telemetry-store.ts` for the same retention contract stated in
+   * full. A `run_events.summary` that quotes a prompt breaks the shipped
+   * "nothing was kept" promise as surely as storing the prompt would.
+   */
   summary: string;
   modelName?: string;
   refinerModelName?: string;

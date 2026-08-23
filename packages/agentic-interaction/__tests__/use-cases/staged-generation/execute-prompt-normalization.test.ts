@@ -2,6 +2,7 @@ import { test, describe } from "vitest";
 import assert from "node:assert";
 import { ExecutePromptNormalizationUseCase } from "../../../src/application/use-cases/staged-generation/execute-prompt-normalization.use-case";
 import type { SendStructuredRequestPort } from "@hexagen/local-llm/client";
+import type { StageTelemetry } from "../../../src/domain/value-objects/stage-telemetry";
 
 describe("ExecutePromptNormalizationUseCase", () => {
   const validNDJSONResponse = [
@@ -11,6 +12,40 @@ describe("ExecutePromptNormalizationUseCase", () => {
     '{"type": "pattern", "value": "CRUD"}',
     '{"type": "ambiguity", "value": "Authentication method not specified"}',
   ];
+
+  /** Runs the use case against a canned NDJSON body and returns the single
+   * telemetry emission. Shared by the privacy regression tests below. */
+  async function runNormalizationTelemetry(
+    ndjsonLines: readonly string[],
+  ): Promise<StageTelemetry> {
+    const content = ndjsonLines.join("\n");
+    const mockLLMAdapter = {
+      sendRequest: async () => ({
+        success: true as const,
+        value: {
+          id: "test",
+          modelId: "gpt-4o-mini" as any,
+          content,
+          finishReason: "stop" as const,
+          timestamp: Date.now(),
+        },
+      }),
+      streamStructuredRequest: async function* () {
+        yield { success: true, value: content };
+      },
+    } as unknown as SendStructuredRequestPort;
+
+    const emissions: StageTelemetry[] = [];
+    const useCase = new ExecutePromptNormalizationUseCase(mockLLMAdapter);
+    await useCase.execute(
+      "Build a task management system",
+      undefined,
+      undefined,
+      (telemetry) => emissions.push(telemetry),
+    );
+    assert.strictEqual(emissions.length, 1);
+    return emissions[0];
+  }
 
   test("Happy path: executes successfully with valid user description", async () => {
     const mockLLMAdapter = {
@@ -146,6 +181,62 @@ describe("ExecutePromptNormalizationUseCase", () => {
     assert.ok(telemetryData[0].durationMs >= 0);
     assert.strictEqual(telemetryData[0].usedLLM, true);
     assert.strictEqual(telemetryData[0].retryCount, 0);
+  });
+
+  test("telemetry summary carries counts only — never the user's prompt", async () => {
+    // REGRESSION (privacy). The summary used to read
+    //   "Normalized intent: <intent>, N technologies, M ambiguities"
+    // and `intent` is the model's restatement of the USER'S PROMPT. That
+    // string is POSTed to /api/runs and stored verbatim in
+    // `run_events.summary` on the platform DB, against the retention promise
+    // in the shipped UI copy (creation-path.ts:80,82; TierPickerView.tsx:56;
+    // RepoEntryView.tsx:93; GithubScanPage.tsx:208) and ADR-0067.
+    //
+    // Asserted as a pure function of the emitted telemetry so the test fails
+    // on ANY reintroduction, not just on the exact old wording.
+    const telemetry = await runNormalizationTelemetry(validNDJSONResponse);
+    const summary: string = telemetry.summary;
+
+    // The intent value from validNDJSONResponse must not appear, in whole or
+    // in any distinctive word.
+    assert.ok(!summary.includes("build a task management system"));
+    for (const word of ["task", "management", "build"]) {
+      assert.ok(
+        !summary.toLowerCase().includes(word),
+        `summary leaked the word "${word}": ${summary}`,
+      );
+    }
+    // Technology, pattern and ambiguity VALUES are user-derived too (the model
+    // lifts them out of the prompt) — only their counts may be persisted.
+    assert.ok(!summary.includes("React"));
+    assert.ok(!summary.includes("Node"));
+    assert.ok(!summary.includes("CRUD"));
+    assert.ok(!summary.includes("Authentication"));
+
+    // Still USEFUL: the counts that make a run history row worth reading.
+    assert.strictEqual(
+      summary,
+      "Normalized: 2 technologies, 1 patterns, 1 ambiguities",
+    );
+  });
+
+  test("telemetry summary flags the structured-config branch without content", async () => {
+    // `projectName` is a user-authored name and `isStructuredConfig` decides
+    // which downstream branch the pipeline takes. The BRANCH is worth
+    // recording; the NAME is not — so the summary states that a name was
+    // detected without ever quoting it.
+    const telemetry = await runNormalizationTelemetry([
+      '{"type": "intent", "value": "build a task management system"}',
+      '{"type": "technology", "value": "React"}',
+      '{"type": "projectName", "value": "AcmePlatform"}',
+      '{"type": "isStructuredConfig", "value": true}',
+    ]);
+    const summary: string = telemetry.summary;
+    assert.ok(!summary.includes("AcmePlatform"));
+    assert.strictEqual(
+      summary,
+      "Normalized: 1 technologies, 0 patterns, 0 ambiguities, project name detected, structured-config input",
+    );
   });
 
   test("onChunk callback is called for each chunk", async () => {

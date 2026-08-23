@@ -23,7 +23,10 @@ import type {
 import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest.prompt";
 import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
-import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
+import {
+  estimateTokenCount,
+  stageSummary,
+} from "../../../domain/value-objects/stage-telemetry";
 import {
   retryWithEscalation,
   STAGE3_ESCALATION_CONFIG,
@@ -367,7 +370,7 @@ export class ExecutePortMappingUseCase {
       inputTokensEstimate: totalInputTokens,
       outputTokensActual: totalOutputTokens,
       servedFromCache: false,
-      summary: `Mapped ports for ${contextsArray.length} contexts, ${allContextMappings.length} context mappings`,
+      summary: stageSummary`Mapped ports for ${contextsArray.length} contexts, ${allContextMappings.length} context mappings`,
       ...(modelName !== undefined ? { modelName } : {}),
     });
 

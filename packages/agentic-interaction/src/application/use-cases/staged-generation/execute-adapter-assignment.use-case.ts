@@ -21,7 +21,10 @@ import { buildStageRetryPrompt } from "../../../domain/prompts/generate-manifest
 import { MAX_RETRY_ATTEMPTS } from "../../../domain/errors/stage-errors";
 import { StageMaxRetriesError } from "../../../domain/errors/stage-errors";
 import type { StageTelemetry } from "../../../domain/value-objects/stage-telemetry";
-import { estimateTokenCount } from "../../../domain/value-objects/stage-telemetry";
+import {
+  estimateTokenCount,
+  stageSummary,
+} from "../../../domain/value-objects/stage-telemetry";
 // Model-emitted context names arrive in casing/kebab variants of the names the
 // model was given (documented prod incident — same canonicalization exists in
 // Stage 3 and the Stage-6 prompt); resolve them to the requested spelling so
@@ -309,7 +312,7 @@ export class ExecuteAdapterAssignmentUseCase {
           inputTokensEstimate: estimateTokenCount(prompt),
           outputTokensActual: estimateTokenCount(fullResponse),
           servedFromCache: false,
-          summary: `Assigned adapters for ${contexts.length} contexts`,
+          summary: stageSummary`Assigned adapters for ${contexts.length} contexts`,
           ...(modelName !== undefined ? { modelName } : {}),
         });
         return ok(result);
