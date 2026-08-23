@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it, afterEach } from "vitest";
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { SyncEngine } from "../../src/sync-engine.js";
 import { LockFile } from "../../src/lock.js";
 import { createSpyLogger, messagesAt } from "../helpers/spy-logger.js";
@@ -16,7 +17,9 @@ import { makeSelfRegenFlags } from "../helpers/test-config.js";
 import { SKIP_NON_POSIX } from "../helpers/published-layout.js";
 
 function locateHostRepoRoot(): string {
-  let dir = path.dirname(new URL(import.meta.url).pathname);
+  // fileURLToPath, not URL.pathname: on win32 the pathname is an undecoded
+  // "/D:/..." drive-relative string that no cwd accepts.
+  let dir = path.dirname(fileURLToPath(import.meta.url));
   while (dir !== path.parse(dir).root) {
     try {
       execSync("git rev-parse --show-toplevel", {
@@ -47,12 +50,23 @@ async function makeFixtureRepo(tmpDir: string): Promise<void> {
   execSync("git init --quiet", { cwd: tmpDir });
   execSync('git config user.name "test"', { cwd: tmpDir });
   execSync('git config user.email "test@test"', { cwd: tmpDir });
-  execSync("git checkout -b main --quiet 2>/dev/null || true", {
-    cwd: tmpDir,
-  });
+  gitCheckoutMainQuietly(tmpDir);
   await fs.writeFile(path.join(tmpDir, ".gitkeep"), "");
   execSync("git add .", { cwd: tmpDir });
   execSync('git commit -m "init" --quiet', { cwd: tmpDir });
+}
+
+function gitCheckoutMainQuietly(tmpDir: string): void {
+  // No shell string: "2>/dev/null || true" is POSIX-only under cmd.exe. The
+  // checkout is best-effort (already on main / unborn HEAD is fine).
+  try {
+    execFileSync("git", ["checkout", "-b", "main", "--quiet"], {
+      cwd: tmpDir,
+      stdio: "ignore",
+    });
+  } catch {
+    // already on the desired branch — nothing to do
+  }
 }
 
 function withProcessExitSpy<T>(
@@ -493,9 +507,7 @@ async function makeMidRunFailureFixture(tmpDir: string): Promise<void> {
   execSync("git init --quiet", { cwd: tmpDir });
   execSync('git config user.name "test"', { cwd: tmpDir });
   execSync('git config user.email "test@test"', { cwd: tmpDir });
-  execSync("git checkout -b main --quiet 2>/dev/null || true", {
-    cwd: tmpDir,
-  });
+  gitCheckoutMainQuietly(tmpDir);
   await fs.writeFile(path.join(tmpDir, ".gitkeep"), "");
   await fs.writeFile(path.join(tmpDir, ".gitignore"), "node_modules/\n");
   await fs.mkdir(path.join(tmpDir, "packages", "beta", "package.json"), {
