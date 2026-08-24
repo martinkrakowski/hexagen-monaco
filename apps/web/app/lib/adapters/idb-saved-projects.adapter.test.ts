@@ -988,6 +988,7 @@ describe("normalizeLayers (Phase-2 provenance salvage)", () => {
         ],
       },
     ]);
+    assert.ok(project.layers, "layers survive normalizeLoadedProjects");
     assert.deepStrictEqual(project.layers[0].link, {
       type: "produced-manifest",
       at: 2,

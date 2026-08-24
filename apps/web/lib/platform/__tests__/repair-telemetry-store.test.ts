@@ -364,7 +364,9 @@ describe("repair telemetry store", () => {
     assert.equal(bad.success, false);
     // The rejection message must not echo the value it refused.
     assert.ok(!bad.success && !bad.error.message.includes("acme"));
-    assert.equal(store.listRuns().success && store.listRuns().value?.length, 0);
+    const runs = store.listRuns();
+    assert.ok(runs.success, "listRuns succeeds after a rejected record");
+    assert.equal(runs.value.length, 0);
     db.close();
   });
 

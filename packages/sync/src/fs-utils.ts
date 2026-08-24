@@ -53,7 +53,9 @@ export function isGeneratedFile(content: string): boolean {
  * Check if a path points to a protected root file.
  */
 export function isProtectedRoot(filePath: string, config: SyncConfig): boolean {
-  const relative = path.relative(config.workspaceRoot, filePath);
+  const relative = path
+    .relative(config.workspaceRoot, filePath)
+    .replace(/\\/g, "/");
   const isRootLevel =
     !relative.startsWith("packages/") &&
     !relative.startsWith("tools/") &&

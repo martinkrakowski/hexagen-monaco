@@ -3,7 +3,12 @@ import { describe, it, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import React from "react";
 import { renderHook, act, cleanup } from "@testing-library/react";
-import { useForm, FormProvider, type DefaultValues } from "react-hook-form";
+import {
+  useForm,
+  FormProvider,
+  type DefaultValues,
+  type UseFormReturn,
+} from "react-hook-form";
 import type { ProjectConfig } from "@hexagen/project-configuration";
 import {
   SelectedAddOnsProvider,
@@ -20,10 +25,16 @@ function makeWrapper(defaultAddOns: Record<string, unknown> = {}) {
         addOnsAnswers: defaultAddOns,
       } as unknown as DefaultValues<ProjectConfig>,
     });
+    // FormProvider is generic; createElement cannot infer TFieldValues from a
+    // spread, so instantiate it explicitly or it falls back to FieldValues.
     return React.createElement(
-      FormProvider,
-      { ...form },
-      React.createElement(SelectedAddOnsProvider, null, children),
+      FormProvider as React.FC<
+        UseFormReturn<ProjectConfig> & { children: React.ReactNode }
+      >,
+      {
+        ...form,
+        children: React.createElement(SelectedAddOnsProvider, null, children),
+      },
     );
   };
 }

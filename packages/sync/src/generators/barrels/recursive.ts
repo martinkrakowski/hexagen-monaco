@@ -12,7 +12,6 @@ import {
 import { safeWriteFileAtomic } from "../../fs-utils.js";
 import { isExcludedDirectory } from "../../config/barrel-exclusions.js";
 import {
-  GENERATED_MARKER,
   isGeneratedFile,
   isSourceFile,
   generateBarrelContent,
@@ -286,54 +285,41 @@ async function walkDirectory(
 
   // Determine if we should create/update a barrel for this directory
   if (exportEntries.length === 0) {
-    // No exportable content - check if there's an existing barrel to clean up
+    // No exportable content. A generated or empty-stub barrel is removed;
+    // a hand-written one is left alone; nothing is created.
+    //
+    // Until 2026-08-23 this branch special-cased domain/application/
+    // infrastructure: it created `export {};` stubs there and rewrote any
+    // non-stub barrel to the stub. That emitter outlived ADR-0050 (empty
+    // layer barrels retired) and #554 (no unused layer folders) — it
+    // recreated the barrels P4.1 deleted, and the #548 core-domain/runtime
+    // ones, every time CI ran `sync`. The TS18003 case it existed for (a
+    // module whose tsconfig includes src/ with zero inputs) is handled by
+    // the package-root stub in package-src-index.ts, which is write-if-
+    // absent and never a layer barrel.
     const barrelPath = path.join(dirPath, "index.ts");
     const existingBarrel = await readFileIfExists(barrelPath);
-    const dirName = path.basename(dirPath);
-    const isLayerDir = ["domain", "application", "infrastructure"].includes(
-      dirName,
-    );
 
     if (existingBarrel) {
-      // For layer directories: keep barrel with export {} (needed for TypeScript modules)
-      // For other directories: can delete empty barrels
       const isGenerated = isGeneratedFile(existingBarrel);
-      const isEmptyStub = existingBarrel.includes("export {}");
-
-      if ((isGenerated || isEmptyStub) && !isLayerDir) {
-        // Delete the empty barrel (not a layer directory)
+      // Exact-stub match, not substring: a hand-written barrel that merely
+      // CONTAINS `export {}` (e.g. `declare global { … } export {};`) is not
+      // the generator's to delete (review flag on #637). Comment lines are
+      // ignored so a commented generated stub still qualifies.
+      const statements = existingBarrel
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0 && !line.startsWith("//"));
+      const isEmptyStub =
+        statements.length === 1 &&
+        /^export\s*\{\s*\}\s*;?$/.test(statements[0]);
+      if (isGenerated || isEmptyStub) {
         pendingWrites.push({
           filePath: barrelPath,
           content: "", // Empty content signals deletion
           isNew: false,
         });
-      } else if (isEmptyStub && isLayerDir) {
-        // Clean up comment-only barrels - replace with just export {}
-        const newContent = `${GENERATED_MARKER}\n\nexport {};\n`;
-        if (contentHash(existingBarrel) !== contentHash(newContent)) {
-          pendingWrites.push({
-            filePath: barrelPath,
-            content: newContent,
-            isNew: false,
-          });
-        }
-      } else if (!existingBarrel.includes("export {}") && isLayerDir) {
-        // Layer directory needs export {} to be a valid TypeScript module
-        const newContent = `${GENERATED_MARKER}\n\nexport {};\n`;
-        pendingWrites.push({
-          filePath: barrelPath,
-          content: newContent,
-          isNew: false,
-        });
       }
-    } else if (isLayerDir) {
-      // Create barrel with export {} for layer directories (valid TypeScript module)
-      const newContent = `${GENERATED_MARKER}\n\nexport {};\n`;
-      pendingWrites.push({
-        filePath: barrelPath,
-        content: newContent,
-        isNew: true,
-      });
     }
     return [];
   }

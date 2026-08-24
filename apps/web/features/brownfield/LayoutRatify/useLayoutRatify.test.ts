@@ -11,7 +11,7 @@ import { renderHook, act } from "@testing-library/react";
 
 import type { BrownfieldLayoutDraft } from "../BrownfieldFlow/types";
 import { useLayoutRatify } from "./useLayoutRatify";
-import type { DetectedPackageSummary } from "./layout-draft";
+import type { DetectedPackageSummary, toLayoutDraft } from "./layout-draft";
 
 function detected(): DetectedPackageSummary[] {
   return [

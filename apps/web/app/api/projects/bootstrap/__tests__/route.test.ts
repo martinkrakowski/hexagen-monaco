@@ -181,8 +181,7 @@ async function postJson(
     method: "POST",
     headers,
     body: streamOf(text),
-    // @ts-expect-error -- duplex is required for a streaming body and is not in
-    // the lib.dom RequestInit typing.
+    // `duplex` is required for a streaming body; @types/node types it.
     duplex: "half",
   });
   return POST(request);
@@ -268,7 +267,7 @@ describe("POST /api/projects/bootstrap — request guards", () => {
       method: "POST",
       headers: new Headers({ "content-type": "application/json" }),
       body,
-      // @ts-expect-error -- duplex is required for a streaming body.
+      // `duplex` is required for a streaming body; @types/node types it.
       duplex: "half",
     });
 
@@ -296,7 +295,7 @@ describe("POST /api/projects/bootstrap — request guards", () => {
       method: "POST",
       headers: new Headers({ "content-type": "application/json" }),
       body,
-      // @ts-expect-error -- duplex is required for a streaming body.
+      // `duplex` is required for a streaming body; @types/node types it.
       duplex: "half",
     });
 

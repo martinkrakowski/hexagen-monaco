@@ -1,5 +1,6 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
+import path from "node:path";
 import type { LinterConfig } from "../src/index.js";
 import {
   hasServerOnlyMarker,
@@ -211,13 +212,16 @@ describe("checkMissingMarker", () => {
 });
 
 describe("resolveServerBarrelPath", () => {
+  // path.join produces platform-native separators, so the suffix expectation
+  // must be spelled the same way.
+  const srcServerTs = ["src", "server.ts"].join(path.sep);
   it("resolves string export path", () => {
     const result = resolveServerBarrelPath(
       "/packages/foo",
       "./dist/server.js",
       () => true,
     );
-    assert.ok(result?.endsWith("src/server.ts"));
+    assert.ok(result?.endsWith(srcServerTs));
   });
 
   it("resolves conditions export (types path)", () => {
@@ -226,7 +230,7 @@ describe("resolveServerBarrelPath", () => {
       { types: "./dist/server.d.ts", import: "./dist/server.js" },
       () => true,
     );
-    assert.ok(result?.endsWith("src/server.ts"));
+    assert.ok(result?.endsWith(srcServerTs));
   });
 
   it("resolves import-only conditional export", () => {
@@ -235,7 +239,7 @@ describe("resolveServerBarrelPath", () => {
       { import: "./dist/server.js" },
       () => true,
     );
-    assert.ok(result?.endsWith("src/server.ts"));
+    assert.ok(result?.endsWith(srcServerTs));
   });
 
   it("returns null if source file missing", () => {

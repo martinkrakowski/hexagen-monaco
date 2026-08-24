@@ -118,7 +118,7 @@ describe("HttpSavedProjectsAdapter", () => {
       name: "gone",
     };
     const methods: string[] = [];
-    const fetchImpl = vi.fn(async (url: string | URL, init?: RequestInit) => {
+    const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
       methods.push(`${init?.method ?? "GET"} ${String(url)}`);
       if (String(url) === "/api/projects" && init?.method === "PUT") {
         return new Response(JSON.stringify({ projects: [kept] }), {
@@ -126,7 +126,7 @@ describe("HttpSavedProjectsAdapter", () => {
         });
       }
       return new Response("nope", { status: 500 });
-    }) as unknown as typeof fetch;
+    });
     const port = new HttpSavedProjectsAdapter(fetchImpl);
     const written = await port.saveProjects([kept]);
     assert.equal(written.success, true);

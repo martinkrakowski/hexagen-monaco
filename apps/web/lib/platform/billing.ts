@@ -66,7 +66,7 @@ const FREE_ENTITLEMENT: Entitlement = {
 };
 
 export function readStripeConfig(
-  env: NodeJS.ProcessEnv = process.env,
+  env: Readonly<Partial<NodeJS.ProcessEnv>> = process.env,
 ): StripeConfig {
   return {
     secretKey: env.STRIPE_SECRET_KEY || null,

@@ -46,31 +46,53 @@ describe("stagedDiffArgs", () => {
 });
 
 describe("stagedFiles", () => {
-  it("keeps leading spaces, trailing spaces, and newlines in staged paths", () => {
+  function makeStagedFixture(names: string[]): string {
     const tmp = mkdtempSync(path.join(os.tmpdir(), "hexagen-git-staged-"));
+    execFileSync("git", ["init"], { cwd: tmp, stdio: "ignore" });
+    execFileSync("git", ["config", "user.email", "t@example.com"], {
+      cwd: tmp,
+      stdio: "ignore",
+    });
+    execFileSync("git", ["config", "user.name", "t"], {
+      cwd: tmp,
+      stdio: "ignore",
+    });
+    for (const name of names) {
+      writeFileSync(path.join(tmp, name), "x\n");
+    }
+    execFileSync("git", ["add", "--", ...names], {
+      cwd: tmp,
+      stdio: "ignore",
+    });
+    return tmp;
+  }
+
+  it("keeps leading spaces in staged paths", () => {
+    const names = [" leading.txt"];
+    const tmp = makeStagedFixture(names);
     try {
-      execFileSync("git", ["init"], { cwd: tmp, stdio: "ignore" });
-      execFileSync("git", ["config", "user.email", "t@example.com"], {
-        cwd: tmp,
-        stdio: "ignore",
-      });
-      execFileSync("git", ["config", "user.name", "t"], {
-        cwd: tmp,
-        stdio: "ignore",
-      });
-      const names = [" leading.txt", "trailing.txt ", "has\nnewline.txt"];
-      for (const name of names) {
-        writeFileSync(path.join(tmp, name), "x\n");
-      }
-      execFileSync("git", ["add", "--", ...names], {
-        cwd: tmp,
-        stdio: "ignore",
-      });
       assert.deepEqual(stagedFiles(tmp).sort(), [...names].sort());
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
   });
+
+  // NTFS cannot round-trip a trailing space (silently stripped on create,
+  // so `git add` then fails) nor a "\n" in a filename — those fixtures only
+  // run where such files can exist. The leading-space case above stays
+  // cross-platform, so win32 still exercises the quoting logic.
+  it.skipIf(process.platform === "win32")(
+    "keeps trailing spaces and newlines in staged paths",
+    () => {
+      const names = ["trailing.txt ", "has\nnewline.txt"];
+      const tmp = makeStagedFixture(names);
+      try {
+        assert.deepEqual(stagedFiles(tmp).sort(), [...names].sort());
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 describe("renameDiffArgs", () => {

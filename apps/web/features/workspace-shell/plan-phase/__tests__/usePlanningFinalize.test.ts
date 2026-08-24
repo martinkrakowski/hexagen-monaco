@@ -596,7 +596,13 @@ const CONVERGED_LAYER: ProjectLayer = {
 };
 
 function renderComposed() {
-  const updateLayer = vi.fn(async () => true);
+  const updateLayer = vi.fn<
+    (
+      projectId: string,
+      layerId: string,
+      patch: { status?: string },
+    ) => Promise<boolean>
+  >(async () => true);
   const addLayer = vi.fn(async () => "L1");
   const appendLayerTurn = vi.fn(async () => null);
   const rendered = renderHook(() => {

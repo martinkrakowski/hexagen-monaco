@@ -1,7 +1,8 @@
 import { describe, it, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import { usePendingManifest } from "../store/usePendingManifest";
-import { ProjectSpec } from "@hexagen/project-configuration";
+import type { ProjectSpec } from "@hexagen/project-configuration";
+import { emptyFormValues } from "@/project-config-presets";
 
 // Relocated from features/landing/store/. The store has always lived in
 // manifest-generation; landing only held a one-line re-export shim with no
@@ -31,9 +32,13 @@ describe("usePendingManifest — set/clear lifecycle", () => {
   it("should set state with yaml, formValues, projectName, and originPath", () => {
     const yaml = "test: manifest";
     const formValues: ProjectSpec = {
+      ...emptyFormValues,
       boundedContexts: [],
       externalContexts: [],
-      governance: { workspaceName: "test-workspace" },
+      governance: {
+        ...emptyFormValues.governance,
+        workspaceName: "test-workspace",
+      },
       peerMappings: [],
     };
     const projectName = "Test Project";
@@ -52,9 +57,13 @@ describe("usePendingManifest — set/clear lifecycle", () => {
   it("should clear state back to null values", () => {
     const yaml = "test: manifest";
     const formValues: ProjectSpec = {
+      ...emptyFormValues,
       boundedContexts: [],
       externalContexts: [],
-      governance: { workspaceName: "test-workspace" },
+      governance: {
+        ...emptyFormValues.governance,
+        workspaceName: "test-workspace",
+      },
       peerMappings: [],
     };
     const projectName = "Test Project";
@@ -73,9 +82,13 @@ describe("usePendingManifest — set/clear lifecycle", () => {
 
   it("should handle set/clear lifecycle correctly", () => {
     const formValues1: ProjectSpec = {
+      ...emptyFormValues,
       boundedContexts: [],
       externalContexts: [],
-      governance: { workspaceName: "workspace1" },
+      governance: {
+        ...emptyFormValues.governance,
+        workspaceName: "workspace1",
+      },
       peerMappings: [],
     };
 
@@ -88,9 +101,13 @@ describe("usePendingManifest — set/clear lifecycle", () => {
     assert.strictEqual(usePendingManifest.getState().projectName, null);
 
     const formValues2: ProjectSpec = {
+      ...emptyFormValues,
       boundedContexts: [],
       externalContexts: [],
-      governance: { workspaceName: "workspace2" },
+      governance: {
+        ...emptyFormValues.governance,
+        workspaceName: "workspace2",
+      },
       peerMappings: [],
     };
 
@@ -106,8 +123,10 @@ describe("usePendingManifest — set/clear lifecycle", () => {
 
   it("should store complex ProjectSpec objects", () => {
     const complexFormValues: ProjectSpec = {
+      ...emptyFormValues,
       boundedContexts: [
         {
+          ...emptyFormValues.boundedContexts[0],
           id: "auth-context",
           name: "Authentication",
           description: "Authentication context",
@@ -131,6 +150,7 @@ describe("usePendingManifest — set/clear lifecycle", () => {
         },
       ],
       governance: {
+        ...emptyFormValues.governance,
         workspaceName: "My Workspace",
         workspaceTemplate: "modular-monolith",
         workspaceDescription: "Test workspace",

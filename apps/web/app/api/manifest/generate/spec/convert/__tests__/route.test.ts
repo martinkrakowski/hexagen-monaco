@@ -55,7 +55,7 @@ test("POST /api/manifest/generate/spec/convert happy path with mock", async () =
     callbacks?.onChunk?.("mock chunk");
     return ok({
       configJson: "{}",
-      config: { mock: true },
+      config: { bounded_contexts: [] },
     });
   });
 

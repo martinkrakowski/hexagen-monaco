@@ -185,7 +185,14 @@ export function resolveRelativeImportPath(
   moduleSpecifier: string,
 ): string {
   if (moduleSpecifier.startsWith("/")) return path.normalize(moduleSpecifier);
-  return path.resolve(path.dirname(fromFilePath), moduleSpecifier);
+  const resolved = path.resolve(path.dirname(fromFilePath), moduleSpecifier);
+  // On win32, path.resolve reinterprets a POSIX-absolute ("/repo/…") importing
+  // file as drive-relative and fabricates a drive prefix ("D:\repo\…"), which
+  // breaks the layout prefix matching downstream — keep the input's style.
+  if (path.sep !== "/" && fromFilePath.startsWith("/")) {
+    return resolved.replace(/^[A-Za-z]:/, "").replace(/\\/g, "/");
+  }
+  return resolved;
 }
 
 export interface CrossLayerRelativeInput {

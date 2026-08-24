@@ -95,12 +95,11 @@ describe("scan envelope findings — consumer contract", () => {
     // cannot fail while the types compile. The invariant is now enforced by
     // the TYPE instead, so the checks below are the ones with teeth.
     //
-    // Caveat, stated rather than glossed: apps/web/tsconfig.json excludes
-    // **/*.test.ts, so `yarn typecheck` does not read this file and these
-    // directives are not enforced in CI today. Verified by running tsc
-    // against this file directly -- neither reports TS2578 ("unused
-    // @ts-expect-error"), so both are suppressing real errors. They become
-    // CI-enforced the moment that exclude is fixed, which is its own packet.
+    // These directives are CI-enforced: `typecheck:test` (tsconfig.test.json,
+    // enforcement plan P2.1) type-checks every test file, and an unused
+    // directive is itself an error (TS2578). Both below suppress real errors.
+    // Note for editors: a comment line must not *begin* with the directive
+    // text, or tsc reads the prose as a directive.
 
     // @ts-expect-error collected:false must carry a failureReason -- a bare
     // uncollected summary renders as "0 findings", i.e. a clean bill of health

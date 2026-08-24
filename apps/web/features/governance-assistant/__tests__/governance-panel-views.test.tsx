@@ -69,7 +69,7 @@ function qaProps(
     onSelectViolation: () => {},
     onSelectSuggestion: () => {},
     displayQuestions: [
-      { id: "q-1", type: "step", label: "What does this step decide?" },
+      { id: "q-1", type: "explain", label: "What does this step decide?" },
     ],
     isStreaming: false,
     isExpanded: () => false,

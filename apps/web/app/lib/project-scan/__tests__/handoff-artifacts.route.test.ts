@@ -412,8 +412,7 @@ describe("GET /api/projects/scan/artifacts", () => {
           "content-type": "multipart/form-data; boundary=----probe",
         }),
         body,
-        // @ts-expect-error -- duplex is required for a streaming body and is
-        // not in the lib.dom RequestInit typing.
+        // `duplex` is required for a streaming body; @types/node types it.
         duplex: "half",
       },
     );

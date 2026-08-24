@@ -2,13 +2,11 @@ import { describe, it, beforeEach, afterEach, vi, type Mock } from "vitest";
 import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
 import { useModelSelectionFlowState } from "../ModelSelectionFlow/useModelSelectionFlowState";
-import type {
-  LocalLLMContext,
-  LocalLLMState,
-} from "../../../lib/llm-interfaces";
+import type { LocalLLMContext } from "../../../lib/llm-interfaces";
+import { createLLMEngineState, type LLMEngineState } from "@hexagen/local-llm";
 
 describe("useModelSelectionFlowState", () => {
-  let mockEngineState: LocalLLMState;
+  let mockEngineState: LLMEngineState;
   let mockInitializeModel: Mock<(modelId: string) => Promise<void>>;
   let mockCancelDownload: Mock<() => void>;
   let mockHasAnyCachedModel: Mock<() => Promise<boolean>>;
@@ -16,7 +14,8 @@ describe("useModelSelectionFlowState", () => {
   let llmContext: LocalLLMContext;
 
   beforeEach(() => {
-    mockEngineState = { status: "idle", progress: 0 };
+    // "unavailable" is the engine's real initial status (LLM_ENGINE_INITIAL_STATE).
+    mockEngineState = createLLMEngineState("unavailable", 0);
     mockInitializeModel = vi.fn();
     mockCancelDownload = vi.fn();
     mockHasAnyCachedModel = vi.fn(async () => false);
@@ -28,6 +27,12 @@ describe("useModelSelectionFlowState", () => {
       cancelDownload: mockCancelDownload,
       hasAnyCachedModel: mockHasAnyCachedModel,
       hasModelInCache: mockHasModelInCache,
+      switchModel: async () => {},
+      deleteCachedModel: async () => {},
+      loadedModel: null,
+      sendGovernanceMessage: async () => {},
+      sendStructuredPrompt: async () => "",
+      messages: [],
     };
   });
 
