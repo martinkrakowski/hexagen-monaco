@@ -149,7 +149,65 @@ jobs:
       - name: "Checkout Repository"
         uses: actions/checkout@v5
         with:
+          fetch-depth: 0 # the scope probe below diffs base...head
           persist-credentials: false
+
+      # Only changes that can affect the published packages pay for this leg.
+      # The job ALWAYS runs and always reports, so it stays eligible to be a
+      # required check -- a `paths:` trigger filter would emit no check at all
+      # on a non-matching PR, which blocks the merge rather than passing it.
+      # Same shape as lint.yml's docs-only fast path.
+      #
+      # Fails OPEN: an unusable base SHA, or an empty diff, runs the tests.
+      # Skipping on a broken probe would be a green check over an unexamined
+      # change -- the exact pattern the arch-linter vacuity guard exists to
+      # stop.
+      - name: "Scope: does this change touch the published packages?"
+        id: scope
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+            diff_range="${base}...${head}"
+          else
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+            diff_range="${base} ${head}"
+          fi
+
+          if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            echo "run_tests=true" >> "$GITHUB_OUTPUT"
+            echo "Base SHA unusable ('$base') -- running the leg."
+            exit 0
+          fi
+
+          relevant=false
+          file_count=0
+          while IFS= read -r -d '' f; do
+            if [ -n "$f" ]; then
+              file_count=$((file_count + 1))
+              case "$f" in
+                packages/sync/* | tools/arch-linter/* | scripts/* | yarn.lock | package.json | turbo.json | tsconfig.base.json | .github/workflows/sync-integrity.yml)
+                  relevant=true
+                  ;;
+              esac
+            fi
+          done < <(git diff --name-only -z --no-renames $diff_range || echo -ne "")
+
+          if [ "$file_count" -eq 0 ]; then
+            echo "run_tests=true" >> "$GITHUB_OUTPUT"
+            echo "Empty diff -- running rather than passing over an unexamined change."
+            exit 0
+          fi
+
+          if [ "$relevant" = "true" ]; then
+            echo "run_tests=true" >> "$GITHUB_OUTPUT"
+            echo "Touches the published packages (${file_count} file(s) changed) -- running the leg."
+          else
+            echo "run_tests=false" >> "$GITHUB_OUTPUT"
+            echo "No published-package files among ${file_count} changed file(s) -- skipping the Windows suites."
+          fi
 
       # Same Corepack-before-setup-node ordering as the ubuntu job, and for
       # the same reason: setup-node's probe runs `yarn`, which must already
@@ -165,6 +223,7 @@ jobs:
       # (setup-node prepends its own node dir too, but that dir has no yarn,
       # so the shim still wins for `yarn`).
       - name: "Enable Corepack"
+        if: steps.scope.outputs.run_tests == 'true'
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/corepack-shims"
@@ -172,9 +231,11 @@ jobs:
           echo "$RUNNER_TEMP/corepack-shims" >> "$GITHUB_PATH"
 
       - name: "Prepare Yarn"
+        if: steps.scope.outputs.run_tests == 'true'
         run: corepack prepare --activate
 
       - name: "Setup Node.js"
+        if: steps.scope.outputs.run_tests == 'true'
         uses: actions/setup-node@v5
         with:
           node-version: "22.7"
@@ -183,6 +244,7 @@ jobs:
       # install-time lifecycle script in the graph is the root `prepare`
       # (husky), whose bin is Node — no shell script runs at install.
       - name: "Install Dependencies"
+        if: steps.scope.outputs.run_tests == 'true'
         shell: bash
         env:
           YARN_HTTP_TIMEOUT: "120000"
@@ -197,5 +259,6 @@ jobs:
           done
 
       - name: "Run Scoped Test Suites"
+        if: steps.scope.outputs.run_tests == 'true'
         shell: bash
         run: yarn turbo run test --filter=@hexagen/sync --filter=@hexagen/arch-linter --output-logs=full --log-order=stream
