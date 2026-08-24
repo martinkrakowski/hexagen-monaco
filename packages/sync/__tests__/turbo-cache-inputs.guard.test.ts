@@ -98,9 +98,10 @@ describe("turbo.json cache-input guard (P3.2)", () => {
    * tsconfig.json is enumerated (`git ls-files`, content-agnostic — no line
    * pattern can miss a legal syntax form such as a multiline TS 5+ `extends`
    * array), then each file's `extends` is resolved against its own directory
-   * so that non-root bases — the live example is `config/tsconfig.json`,
-   * which extends a non-root `./tsconfig.base.json` — do not inflate the
-   * count. Files whose `extends` resolves elsewhere, or that have no
+   * so that a tsconfig extending a non-root base of the same name does not
+   * inflate the count. (The live example used to be `config/tsconfig.json`;
+   * that directory was dead and broken and was deleted — the case is now
+   * covered by the synthetic assertion below.) Files whose `extends` resolves elsewhere, or that have no
    * `extends` at all, are legitimately excluded and named in the failure
    * message.
    *
@@ -221,11 +222,11 @@ describe("turbo.json cache-input guard (P3.2)", () => {
     // A same-named base beside the tsconfig must not count. The live example
     // used to be config/tsconfig.json; that directory was dead and broken
     // (it extended a ./tsconfig.base.json that did not exist) and was
-    // deleted, so this is now a synthetic path — the assertion is pure path
+    // deleted. The path below is synthetic — this assertion is pure path
     // resolution and never touches the filesystem.
     assert.equal(
       extendsRepoRootBase(
-        path.join(REPO_ROOT, "config/tsconfig.json"),
+        path.join(REPO_ROOT, "some-dir/tsconfig.json"), // synthetic; nothing on disk
         "./tsconfig.base.json",
       ),
       false,
