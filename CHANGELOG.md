@@ -9,6 +9,42 @@ Release notes for the co-published `@hexagen-monaco/sync` and
 (F1 preflight, #432): a merged bump blocks deploys until it is published. That
 is the guard working, not a fault to bypass.
 
+## 0.12.1
+
+**Patch. `@hexagen-monaco/arch-linter` could not analyse a single file on
+Windows.** If you run `hexagen-lint` on Windows, 0.12.0 and earlier exit 2 with
+`NOTHING WAS CHECKED for module '<name>' … 0 source files remain` on every run.
+Upgrade.
+
+### The defect
+
+The linter compared two path conventions that never match on Windows:
+`ts-morph` returns TypeScript's form — forward slashes on **every** platform —
+while the module root came from `path.join` / `path.resolve` and is
+backslashed on Windows. The prefix test therefore matched nothing, every module
+scanned zero files, and the run aborted.
+
+Nothing was mis-reported as clean: the fail-closed vacuity guard refused to
+call an empty scan a pass, which is why the failure is loud. But the tool was
+unusable on Windows, and CI could not see it because the suites that exercise
+the CLI were skipped on that platform.
+
+macOS and Linux are unaffected — the two conventions coincide there, which is
+why this survived since the affected call site was introduced.
+
+### Also in this release
+
+- The Windows CI leg now runs the linter's CLI suites (they were skipped with
+  no recorded reason). Eleven suites were re-enabled; the twelfth keeps a skip
+  that now states what is genuinely POSIX-bound.
+- Two arch-linter tests asserted only that a diagnostic was _absent_, which a
+  zero-file run satisfies. They now assert a non-zero files-scanned count
+  first, so they fail on exactly the defect above.
+
+No API, CLI-flag, or output-format changes. `@hexagen-monaco/sync` is
+re-published at the same version for the co-release; it has no functional
+change in this patch.
+
 ## 0.12.0
 
 Everything `hexagen scan` and the brownfield import flow need from the
