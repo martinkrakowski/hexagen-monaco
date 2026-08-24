@@ -4,7 +4,9 @@ import { persistStageTelemetry } from "./persist-run-telemetry";
 
 describe("persistStageTelemetry", () => {
   it("posts telemetry to the run-history API", () => {
-    const fetchImpl = vi.fn(async () => new Response(null, { status: 201 }));
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () => new Response(null, { status: 201 }),
+    );
     vi.stubGlobal("fetch", fetchImpl);
     persistStageTelemetry({
       stage: 0,

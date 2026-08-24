@@ -101,7 +101,8 @@ describe("POST /api/plan/extract-decisions", () => {
   });
 
   it("returns 401 when unauthenticated and no server LLM key is configured", async () => {
-    vi.mocked(resolveWebLlmApiKey).mockReturnValue(undefined);
+    // The real resolver returns "" when neither key is set, never undefined.
+    vi.mocked(resolveWebLlmApiKey).mockReturnValue("");
     const res = await POST(post({ transcript: "## A\n\nhello" }, "10.0.0.2"));
     assert.strictEqual(res.status, 401);
   });
@@ -131,7 +132,7 @@ describe("POST /api/plan/extract-decisions", () => {
   });
 
   it("returns the extracted decisions markdown on success", async () => {
-    const complete = vi.fn(async () =>
+    const complete = vi.fn<LLMProviderPort["complete"]>(async () =>
       completion("## Decisions\n\n- adopt hexagonal core"),
     );
     vi.mocked(createLLMProvider).mockReturnValue(providerWith(complete));
@@ -168,7 +169,9 @@ describe("POST /api/plan/extract-decisions", () => {
     // stubEnv rather than recomputing the route's own `LLM_MODEL || fallback`
     // expression — an unset test env cannot distinguish a hardcoded model id.
     vi.stubEnv("LLM_MODEL", "env-model");
-    const complete = vi.fn(async () => completion("## Decisions\n\n- ok"));
+    const complete = vi.fn<LLMProviderPort["complete"]>(async () =>
+      completion("## Decisions\n\n- ok"),
+    );
     vi.mocked(createLLMProvider).mockReturnValue(providerWith(complete));
 
     const res = await POST(post({ transcript: "## A\n\nhi" }, "10.0.0.15"));

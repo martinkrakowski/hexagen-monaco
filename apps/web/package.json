@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "typecheck": "tsc --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
     "gen:template-questions": "tsx scripts/generate-template-questions.ts",
     "check:template-questions": "tsx scripts/generate-template-questions.ts --check"

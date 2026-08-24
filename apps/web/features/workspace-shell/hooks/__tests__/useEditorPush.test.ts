@@ -125,11 +125,10 @@ function mockPushOk(commitSha: string) {
  * the collaborator whose behavior these persistence assertions are about.
  */
 function wrapper({ children }: { children: React.ReactNode }) {
-  return React.createElement(
-    ProjectExportRecordProvider,
-    { projectId: "p1" },
+  return React.createElement(ProjectExportRecordProvider, {
+    projectId: "p1",
     children,
-  );
+  });
 }
 
 async function renderConnectedHook() {

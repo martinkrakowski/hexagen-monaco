@@ -446,26 +446,27 @@ describe("useSavedProjects — layer mutations", () => {
     ];
     const { result } = await mountLoaded();
 
-    let committed: { id: string; at?: number } | null = null;
-    await act(async () => {
-      committed = await result.current.appendLayerTurn(
+    // Assigning inside the act() closure leaves `committed` narrowed to its
+    // initializer for TS, so capture the awaited value from act() instead.
+    const committed = await act(() =>
+      result.current.appendLayerTurn(
         "p1",
         "L1",
         { author: "Critic", content: "critique", role: "critic", round: 1 },
         { status: "revising" },
-      );
-    });
+      ),
+    );
 
     assert.ok(committed, "returns the committed turn");
     const layer = result.current.projects[0].layers[0];
     assert.strictEqual(layer.turns.length, 2);
-    assert.strictEqual(layer.turns[1].id, committed!.id);
+    assert.strictEqual(layer.turns[1].id, committed.id);
     assert.strictEqual(layer.turns[1].role, "critic");
     assert.strictEqual(layer.turns[1].round, 1);
     assert.strictEqual(typeof layer.turns[1].at, "number");
     // The returned turn IS what was persisted — callers mirror this object
     // instead of re-stamping their own `at` (which would diverge).
-    assert.strictEqual(layer.turns[1].at, committed!.at);
+    assert.strictEqual(layer.turns[1].at, committed.at);
     assert.strictEqual(
       layer.status,
       "revising",

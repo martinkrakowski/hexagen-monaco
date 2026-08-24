@@ -137,10 +137,10 @@ describe("useProjectLifecycle - Manifest Integration", () => {
     });
 
     await waitFor(() => {
-      assert.strictEqual(mockForm.reset.mock.calls.length, 1);
+      assert.strictEqual(vi.mocked(mockForm.reset).mock.calls.length, 1);
     });
 
-    assert.strictEqual(mockUi.closeDialog.mock.calls.length, 1);
+    assert.strictEqual(vi.mocked(mockUi.closeDialog).mock.calls.length, 1);
     assert.strictEqual(mockOnGoToStep.mock.calls.length, 1);
     assert.deepStrictEqual(mockOnGoToStep.mock.calls[0], [0]);
   });
@@ -201,12 +201,17 @@ describe("useProjectLifecycle - Manifest Integration", () => {
     });
 
     await waitFor(() => {
-      assert.strictEqual(mockForm.reset.mock.calls.length, 1);
+      assert.strictEqual(vi.mocked(mockForm.reset).mock.calls.length, 1);
     });
 
-    const resetArgs = mockForm.reset.mock.calls[0][0];
+    const resetArgs = vi.mocked(mockForm.reset).mock.calls[0]?.[0];
+    // reset() also accepts a ResetAction callback; the hook passes values.
+    assert.ok(
+      resetArgs && typeof resetArgs === "object",
+      "reset was called with form values",
+    );
     assert.deepStrictEqual(resetArgs.boundedContexts, []);
-    assert.strictEqual(mockUi.closeDialog.mock.calls.length, 1);
+    assert.strictEqual(vi.mocked(mockUi.closeDialog).mock.calls.length, 1);
     assert.strictEqual(mockOnGoToStep.mock.calls.length, 1);
     // First incomplete step for an empty-boundedContexts manifest = step 1
     // (step 0, the describe/genesis step, is satisfied once a manifest loads).
@@ -290,7 +295,10 @@ describe("useProjectLifecycle - Manifest Integration", () => {
 
     const newUrl = window.location.href;
     assert.strictEqual(newUrl, "http://localhost/?project=project-123");
-    assert.strictEqual(mockEditor.setActiveWorkspace.mock.calls.length, 1);
+    assert.strictEqual(
+      vi.mocked(mockEditor.setActiveWorkspace).mock.calls.length,
+      1,
+    );
   });
 });
 
@@ -485,7 +493,7 @@ describe("useProjectLifecycle - imported-manifest autosave guard", () => {
     });
 
     await waitFor(() => {
-      assert.strictEqual(mockForm.reset.mock.calls.length, 1);
+      assert.strictEqual(vi.mocked(mockForm.reset).mock.calls.length, 1);
     });
     assert.strictEqual(
       persistencePort.state.projects[0].manifestYaml,
@@ -506,7 +514,7 @@ describe("useProjectLifecycle - imported-manifest autosave guard", () => {
     // Fail the generation server-side so the flow stops after the request —
     // the assertion target is the request BODY, not the success plumbing
     // (covered in useProjectGenerationFlow.test.ts).
-    const fetchMock = vi.fn(
+    const fetchMock = vi.fn<typeof fetch>(
       async () =>
         new Response(JSON.stringify({ success: false, error: "stop here" }), {
           status: 200,

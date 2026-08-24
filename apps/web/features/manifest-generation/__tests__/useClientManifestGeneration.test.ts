@@ -1,3 +1,4 @@
+import { createLLMEngineState } from "@hexagen/local-llm";
 import { describe, it, beforeEach, afterEach } from "vitest";
 import assert from "node:assert";
 import { renderHook, act } from "@testing-library/react";
@@ -41,7 +42,7 @@ function buildContext(
   sendFn?: ReturnType<typeof makeSendGovernanceMock>,
 ): LocalLLMContext {
   return {
-    engineState: { status: "ready", progress: 100 },
+    engineState: createLLMEngineState("ready", 100),
     initializeModel: async () => {},
     cancelDownload: () => {},
     hasAnyCachedModel: async () => false,
@@ -50,6 +51,7 @@ function buildContext(
     deleteCachedModel: async () => {},
     loadedModel: null,
     sendGovernanceMessage: sendFn ?? makeSendGovernanceMock(),
+    sendStructuredPrompt: async () => "",
     messages,
   };
 }
@@ -124,10 +126,9 @@ describe("useClientManifestGeneration", () => {
       const { result } = renderHook(() => useClientManifestGeneration(ctx));
 
       // Verify hook initializes with error handling capability
-      assert.strictEqual(
-        typeof result.current.generationError,
-        "object" || "string" || "null",
-      );
+      // `"object" || "string" || "null"` is just "object", and passed only
+      // because `typeof null === "object"`. Assert the real initial state.
+      assert.strictEqual(result.current.generationError, null);
     });
 
     it("should call sendGovernanceMessage with correct arguments", async () => {

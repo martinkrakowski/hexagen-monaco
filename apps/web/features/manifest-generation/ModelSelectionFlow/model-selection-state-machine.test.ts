@@ -12,16 +12,7 @@ import type {
   ModelSelectionEvent,
 } from "./model-selection-state-machine";
 
-type DomainModelId =
-  | "qwen-coder-3b"
-  | "llama-3.2-3b"
-  | "qwen3-8b"
-  | "qwen3-4b"
-  | "qwen3-1.7b"
-  | "qwen3-0.6b"
-  | "qwen-coder-1.5b"
-  | "llama-3.2-1b"
-  | "qwen-coder-0.5b";
+import { DomainModelId } from "@hexagen/local-llm";
 
 describe("ModelSelectionStateMachine", () => {
   describe("getInitialState", () => {
@@ -42,7 +33,7 @@ describe("ModelSelectionStateMachine", () => {
         from: "model_selection",
         event: {
           type: "SELECT_LOCAL_MODEL",
-          modelId: "qwen-coder-3b" as DomainModelId,
+          modelId: DomainModelId.QWEN_CODER_3B,
           remember: false,
         },
         to: "model_downloading",

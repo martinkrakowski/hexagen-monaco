@@ -357,7 +357,7 @@ export const LOCAL_PLATFORM_DB_PATH = join(
 );
 
 export function resolvePlatformDbPath(
-  env: NodeJS.ProcessEnv = process.env,
+  env: Readonly<Partial<NodeJS.ProcessEnv>> = process.env,
 ): string {
   if (env.PLATFORM_DB_PATH) return env.PLATFORM_DB_PATH;
   if (env.NODE_ENV === "production") return "/data/platform.db";
@@ -382,7 +382,7 @@ export const LOCAL_SCAN_ARTIFACTS_DIR = join(
  * temp dir rather than relying on this default.
  */
 export function resolveScanArtifactsDir(
-  env: NodeJS.ProcessEnv = process.env,
+  env: Readonly<Partial<NodeJS.ProcessEnv>> = process.env,
 ): string {
   if (env.SCAN_ARTIFACTS_DIR) return env.SCAN_ARTIFACTS_DIR;
   if (env.NODE_ENV === "production") return "/data/scan-artifacts";
