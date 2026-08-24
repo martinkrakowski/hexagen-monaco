@@ -224,7 +224,7 @@ describe("rollback contract — built dist in published layout (PR-B1, RCA #4)",
       );
       assert.match(
         r.stderr,
-        /packages\/alpha\/tsconfig\.json/,
+        /packages[\\/]alpha[\\/]tsconfig\.json/,
         `journal print must name alpha's created tsconfig — Case B's unlink assert relies on this being a real create→unlink arc\n${describeResult(r)}`,
       );
       assert.ok(!r.stdout.includes("Rollback completed"), describeResult(r));

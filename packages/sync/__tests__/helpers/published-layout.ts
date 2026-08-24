@@ -100,7 +100,15 @@ export function runProcess(
     execFile(
       file,
       args,
-      { cwd, timeout: 120_000, maxBuffer: 10 * 1024 * 1024 },
+      {
+        cwd,
+        timeout: 120_000,
+        maxBuffer: 10 * 1024 * 1024,
+        // Node >= 18.20 refuses to spawn .cmd/.bat directly (EINVAL, the
+        // CVE-2024-27980 mitigation) — a shell is required for the Windows
+        // shim. POSIX keeps the direct exec.
+        shell: process.platform === "win32" && file.endsWith(".cmd"),
+      },
       (error, stdout, stderr) => {
         // A numeric code means the binary ran to completion and chose its own
         // exit. Anything else (ENOENT/EACCES spawn failure, timeout, signal

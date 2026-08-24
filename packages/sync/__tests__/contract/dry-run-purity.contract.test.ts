@@ -157,7 +157,9 @@ async function snapshotTreeWithDirs(root: string): Promise<string[]> {
 }
 
 /** Seed the campaign-foundry shape: legacy empty barrel in a non-layer dir. */
-async function seedLegacyEmptyBarrel(fix: ContractFixture): Promise<string> {
+async function seedLegacyEmptyBarrel(
+  fix: ContractFixture,
+): Promise<{ abs: string; rel: string }> {
   const legacyRel = path.join(
     "packages",
     "billing",
@@ -175,8 +177,15 @@ async function seedLegacyEmptyBarrel(fix: ContractFixture): Promise<string> {
   // The engine logs the barrel under the REALPATH of the fixture root: the
   // ESM loader realpaths import.meta.url, so findWorkspaceRoot resolves
   // /private/var/… while mkdtemp reports /var/… on macOS (same trap as the
-  // capstone's issue-#179 guard).
-  return path.join(await fs.realpath(fix.root), legacyRel);
+  // capstone's issue-#179 guard). On Windows the two forms differ again —
+  // os.tmpdir() hands back the 8.3 SHORT name (C:\Users\RUNNER~1\…) while
+  // realpath returns the long one — so the ABSOLUTE prefix is environmental
+  // noise on both platforms. Callers assert on `rel`, which is the actual
+  // claim: this barrel was named.
+  return {
+    abs: path.join(await fs.realpath(fix.root), legacyRel),
+    rel: legacyRel,
+  };
 }
 
 describe("dry-run purity contract — built dist in published layout", () => {
@@ -225,11 +234,14 @@ describe("dry-run purity contract — built dist in published layout", () => {
       // prints path.relative output, so on win32 both are backslashed while
       // this file's other literals are not. The claim is WHICH barrel was
       // named, not its spelling.
+      // Separator- and prefix-independent: the absolute root differs by
+      // platform (8.3 short vs long on Windows, /var vs /private/var on
+      // macOS). What must be true is that the deletion intent names THIS
+      // barrel.
       const posix = (v: string) => v.replace(/\\/g, "/");
       assert.ok(
-        posix(r.stdout).includes(
-          `[DRY-RUN] would delete empty barrel ${posix(legacyBarrel)}`,
-        ),
+        posix(r.stdout).includes(`[DRY-RUN] would delete empty barrel `) &&
+          posix(r.stdout).includes(posix(legacyBarrel.rel)),
         `expected the legacy-barrel deletion intent in output\n${describeResult(r)}`,
       );
       assert.ok(
