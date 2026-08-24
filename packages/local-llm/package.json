@@ -12,11 +12,6 @@
       "default": "./dist/index.js",
       "source": "./src/index.ts"
     },
-    "./shared": {
-      "types": "./dist/shared/index.d.ts",
-      "default": "./dist/shared/index.js",
-      "source": "./src/shared/index.ts"
-    },
     "./client": {
       "types": "./dist/client/index.d.ts",
       "default": "./dist/client/index.js",
