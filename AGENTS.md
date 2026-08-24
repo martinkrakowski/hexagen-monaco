@@ -1,6 +1,7 @@
 # AGENTS.md — HexaGen Monaco
 
-> Update this file only when a mode trigger changes or a new never-edit file is added.
+> Update this file when a mode trigger changes, a never-edit file is added, or a
+> project-wide working rule changes. Keep it short.
 > Detailed specs live in `.agents/` — see links in each mode entry.
 
 ---
@@ -24,6 +25,23 @@ yarn build && yarn typecheck && yarn lint
 ```
 
 If any command fails — **STOP**. Fix existing errors before writing anything new.
+
+---
+
+## Step Zero: Liveness
+
+Before hardening, refactoring, or guarding **any** code path, prove it is live — one of:
+
+- a route that renders it,
+- a test that **executes** it (importing a symbol is not executing it),
+- a CLI command that reaches it,
+- a consumer search that **matches** — at least one hit; `grep` exits **0** on a
+  match and 1 on none, so "no output" is the opposite of liveness.
+
+Put the proof in the PR body — the command and its result, not the claim.
+**"No consumers" is a deletion finding, not a hardening target.**
+
+Evidence class (learnings catalogue §3.1): the brownfield arc hardened a scan route before verifying it dispatched; the AR-9 exception guarded a directory that did not exist.
 
 ---
 
@@ -61,13 +79,14 @@ yarn vitest run <path-to-file>.test.ts
 
 ## Commands After Edits
 
-| Trigger                 | Command                                     | On Failure                  |
-| ----------------------- | ------------------------------------------- | --------------------------- |
-| Before starting work    | `yarn build && yarn typecheck && yarn lint` | STOP — fix first            |
-| Any .ts / .tsx edit     | `yarn lint && yarn typecheck`               | Fix before continuing       |
-| Any .architecture/ edit | `yarn lint:arch`                            | STOP — do not proceed       |
-| After `yarn sync`       | `yarn build && yarn typecheck`              | Fix before committing       |
-| Before committing       | `yarn test`                                 | Diagnose — never skip tests |
+| Trigger                                                    | Command                                     | On Failure                                     |
+| ---------------------------------------------------------- | ------------------------------------------- | ---------------------------------------------- |
+| Before starting work                                       | `yarn build && yarn typecheck && yarn lint` | STOP — fix first                               |
+| Any .ts / .tsx edit                                        | `yarn lint && yarn typecheck`               | Fix before continuing                          |
+| Any .architecture/ edit                                    | `yarn lint:arch`                            | STOP — do not proceed                          |
+| After `yarn sync`                                          | `yarn build && yarn typecheck`              | Fix before committing                          |
+| Before committing                                          | `yarn test`                                 | Diagnose — never skip tests                    |
+| Before consuming another package's `dist` (local worktree) | `yarn turbo build --filter=<pkg> --force`   | Stale `dist` lies — rebuild before trusting it |
 
 **Clean CI simulation:**
 

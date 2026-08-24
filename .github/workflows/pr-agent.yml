@@ -266,6 +266,17 @@ jobs:
             acknowledge, praise, or summarise. Prefer silence to a speculative finding:
             one real defect is worth more than five plausible ones, and a wrong finding
             costs a human more time than it saves.
+
+            A PR that ADDS or CHANGES a gate -- a CI step, a guard test, an assertion
+            that something never happens, a check script -- must name in its body the
+            fault that was shown to make the new gate fail: the injected mutation, the
+            command, and the non-zero exit or failing assertion. If the body names no
+            fault, request it -- unless the section says "None" and the PR genuinely
+            adds or changes no gate, which is a valid answer. If the named fault would
+            not exercise the gate, say why.
+            A gate that has never been seen red has not been shown to exist. AGENTS.md
+            "Step Zero: Liveness" carries the sibling rule: hardening a path requires
+            proof the path is live.
           # Inline and line-anchored, not a summary table. Default is false,
           # which posts one collapsed comment -- the format that reads as
           # "nothing happened" even when it found something.
@@ -310,6 +321,17 @@ jobs:
             class names; apps/web/components/ outside primitives/); §4.7 4px
             grid; §3.4 untyped/as-any escapes and template-engine payload;
             §4.9 inline styles outside CanvasNodeStyleAdapter.tsx.
+
+            A PR that ADDS or CHANGES a gate -- a CI step, a guard test, an assertion
+            that something never happens, a check script -- must name in its body the
+            fault that was shown to make the new gate fail: the injected mutation, the
+            command, and the non-zero exit or failing assertion. If the body names no
+            fault, request it -- unless the section says "None" and the PR genuinely
+            adds or changes no gate, which is a valid answer. If the named fault would
+            not exercise the gate, say why.
+            A gate that has never been seen red has not been shown to exist. AGENTS.md
+            "Step Zero: Liveness" carries the sibling rule: hardening a path requires
+            proof the path is live.
 
       # PR-Agent exits 0 even when it could not produce a review. On #624 it
       # posted "Failed to generate code suggestions for PR" and the check went

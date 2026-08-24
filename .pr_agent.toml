@@ -122,6 +122,17 @@ has a section; name it.
 When you propose a fix, say what it does to inputs the current code
 already handles — particularly whether it turns a loud failure into a
 quiet one.
+
+A PR that ADDS or CHANGES a gate -- a CI step, a guard test, an assertion
+that something never happens, a check script -- must name in its body the
+fault that was shown to make the new gate fail: the injected mutation, the
+command, and the non-zero exit or failing assertion. If the body names no
+fault, request it -- unless the section says "None" and the PR genuinely adds or
+changes no gate, which is a valid answer. If the named fault would not exercise
+the gate, say why.
+A gate that has never been seen red has not been shown to exist. AGENTS.md
+"Step Zero: Liveness" carries the sibling rule: hardening a path requires
+proof the path is live.
 """
 
 [pr_code_suggestions]
@@ -190,6 +201,17 @@ assertion-style, manifest inventory completeness). Do not comment to
 acknowledge, praise, or summarise. Prefer silence to a speculative finding:
 one real defect is worth more than five plausible ones, and a wrong finding
 costs a human more time than it saves.
+
+A PR that ADDS or CHANGES a gate -- a CI step, a guard test, an assertion
+that something never happens, a check script -- must name in its body the
+fault that was shown to make the new gate fail: the injected mutation, the
+command, and the non-zero exit or failing assertion. If the body names no
+fault, request it -- unless the section says "None" and the PR genuinely adds or
+changes no gate, which is a valid answer. If the named fault would not exercise
+the gate, say why.
+A gate that has never been seen red has not been shown to exist. AGENTS.md
+"Step Zero: Liveness" carries the sibling rule: hardening a path requires
+proof the path is live.
 """
 
 [ignore]
