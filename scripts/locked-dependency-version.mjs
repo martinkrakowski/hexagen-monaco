@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Print the version yarn.lock resolved for a ROOT dependency.
  *

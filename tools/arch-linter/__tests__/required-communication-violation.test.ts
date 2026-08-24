@@ -6,7 +6,10 @@ import {
   type CrossContextEdgeInput,
 } from "../src/required-communication-violation.js";
 
-const PKG = path.join("/ws", "packages");
+// A genuine absolute path per platform: on win32, "/ws/packages" is
+// drive-relative and path.resolve inside the check would answer with a
+// drive-prefixed path the fixture set below never matches.
+const PKG = path.resolve(path.join("/ws", "packages"));
 
 /** A fileExists predicate that returns true only for the given package-relative paths. */
 const exists =
