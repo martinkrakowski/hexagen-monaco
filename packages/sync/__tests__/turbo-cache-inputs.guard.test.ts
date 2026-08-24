@@ -1,4 +1,4 @@
-import { describe, it } from "vitest";
+import { describe, it, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
@@ -6,6 +6,23 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+
+/**
+ * A path in TypeScript's own convention: forward slashes on every platform.
+ *
+ * Two win32 defects in this file shared one cause — native separators leaking
+ * into places that require TS/JSON conventions. `ts.parseConfigFileTextToJson`
+ * asserts its file name is already normalised (a backslashed name trips
+ * `Debug Failure. Expected C:/... === C:\...`), and a `path.relative()` result
+ * embedded in a JSON string makes `"..\..\tsconfig.base.json"` — invalid JSON
+ * escapes, so `extends` silently failed to resolve. tsconfig `extends` uses
+ * forward slashes on every platform, so this is also the correct output.
+ *
+ * Exported for the unit test below, which feeds it a win32 path on any host.
+ */
+export function toTsPath(p: string): string {
+  return p.replace(/\\/g, "/");
+}
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -51,7 +68,15 @@ function extendsRepoRootBase(
 ): boolean {
   const entries = Array.isArray(extendsValue) ? extendsValue : [extendsValue];
   return entries.some((entry) => {
-    if (typeof entry !== "string" || !entry.startsWith(".")) return false;
+    if (typeof entry !== "string") return false;
+    // Relative ("./", "../") or absolute entries are file paths and are
+    // resolved; a bare package specifier ("@tsconfig/strictest/tsconfig.json")
+    // never denotes the repo-root base and is excluded. Absolute must be
+    // accepted: on the Windows runners TEMP is on C: and the workspace on D:,
+    // and `path.relative` across drives returns an ABSOLUTE path, so a fixture
+    // that legitimately points at the base was silently read as "not an
+    // extender" — the two counting tests reported false rather than failing.
+    if (!entry.startsWith(".") && !path.isAbsolute(entry)) return false;
     return path.resolve(path.dirname(tsconfigAbsPath), entry) === ROOT_BASE;
   });
 }
@@ -107,7 +132,16 @@ describe("turbo.json cache-input guard (P3.2)", () => {
   }
 
   function parseTsconfigText(fileName: string, text: string): unknown {
-    const { config, error } = ts.parseConfigFileTextToJson(fileName, text);
+    // TypeScript's API speaks its own path convention — forward slashes on
+    // every platform — and asserts the name it is handed is already
+    // normalised. `path.join` yields backslashes on win32, which tripped
+    // an internal `Debug Failure. Expected C:/... === C:\...` and made the
+    // guard fail for a reason that had nothing to do with tsconfigs. Caught
+    // by the Windows leg (#640) on its first run against another PR's diff;
+    // the catalogue's §2.3 separator class, in a test that shipped green on
+    // ubuntu.
+    const tsFileName = toTsPath(fileName);
+    const { config, error } = ts.parseConfigFileTextToJson(tsFileName, text);
     if (error !== undefined || config === undefined) {
       const detail =
         typeof error?.messageText === "string"
@@ -235,21 +269,34 @@ describe("turbo.json cache-input guard (P3.2)", () => {
    * fixture's `extends` is computed to resolve to the repo-root base from
    * wherever the temp directory lands.
    */
+  const fixtureDirs: string[] = [];
+
   async function writeFixture(
     renderExtends: (dir: string) => string,
   ): Promise<string> {
+    // os.tmpdir(), never inside the repo: an in-repo fixture races the other
+    // guards that scan tracked tsconfigs while vitest runs files in parallel.
     const dir = await fs.mkdtemp(
       path.join(os.tmpdir(), "hexagen-turbo-guard-"),
     );
+    fixtureDirs.push(dir);
     const absPath = path.join(dir, "tsconfig.json");
     await fs.writeFile(absPath, renderExtends(dir), "utf8");
     return absPath;
   }
 
+  // In-repo fixtures must not survive the run (os.tmpdir() used to clean up
+  // for us). Removed even when a test fails.
+  afterAll(async () => {
+    await Promise.all(
+      fixtureDirs.map((d) => fs.rm(d, { recursive: true, force: true })),
+    );
+  });
+
   it("discovery counts a legal multiline TS 5+ extends array", async () => {
     const absPath = await writeFixture(
       (dir) =>
-        `{\n  "extends": [\n    "@tsconfig/strictest/tsconfig.json",\n    "${path.relative(dir, ROOT_BASE)}"\n  ],\n  "compilerOptions": {}\n}\n`,
+        `{\n  "extends": [\n    "@tsconfig/strictest/tsconfig.json",\n    "${toTsPath(path.relative(dir, ROOT_BASE))}"\n  ],\n  "compilerOptions": {}\n}\n`,
     );
     assert.equal(await isRootBaseExtender(absPath), true);
   });
@@ -257,9 +304,51 @@ describe("turbo.json cache-input guard (P3.2)", () => {
   it("discovery counts a legal JSONC extender (comment, trailing comma)", async () => {
     const absPath = await writeFixture(
       (dir) =>
-        `{\n  // legal tsconfig comment\n  "extends": "${path.relative(dir, ROOT_BASE)}",\n}\n`,
+        `{\n  // legal tsconfig comment\n  "extends": "${toTsPath(path.relative(dir, ROOT_BASE))}",\n}\n`,
     );
     assert.equal(await isRootBaseExtender(absPath), true);
+  });
+
+  it("discovery counts an ABSOLUTE extends that resolves to the base (the cross-drive case)", async () => {
+    // On the Windows runners TEMP and the workspace are on different drives,
+    // so `path.relative` returns an absolute path. Reproduced here on any
+    // platform by writing the absolute path directly.
+    const absPath = await writeFixture(
+      () => `{\n  "extends": "${toTsPath(ROOT_BASE)}"\n}\n`,
+    );
+    assert.equal(await isRootBaseExtender(absPath), true);
+  });
+
+  it("discovery still rejects a bare package specifier", async () => {
+    const absPath = await writeFixture(
+      () => `{\n  "extends": "@tsconfig/strictest/tsconfig.json"\n}\n`,
+    );
+    assert.equal(await isRootBaseExtender(absPath), false);
+  });
+
+  it("toTsPath converts win32 separators — the fault the Windows leg caught", () => {
+    // Platform-independent: the input is a literal win32 path, so this runs
+    // the same on ubuntu. Both prior failures came from native separators
+    // reaching a consumer that requires forward slashes — the TS config
+    // parser (Debug Failure) and a JSON string literal (invalid escapes).
+    assert.equal(
+      toTsPath("C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\x\\tsconfig.json"),
+      "C:/Users/RUNNER~1/AppData/Local/Temp/x/tsconfig.json",
+    );
+    assert.equal(
+      toTsPath("..\\..\\tsconfig.base.json"),
+      "../../tsconfig.base.json",
+    );
+    // A JSON string built from the result must not carry stray escapes.
+    assert.deepEqual(
+      JSON.parse(`{"extends": "${toTsPath("..\\..\\tsconfig.base.json")}"}`),
+      { extends: "../../tsconfig.base.json" },
+    );
+    // Already-posix input is untouched.
+    assert.equal(
+      toTsPath("../../tsconfig.base.json"),
+      "../../tsconfig.base.json",
+    );
   });
 
   it("an unparseable tracked tsconfig fails the guard loudly instead of being skipped", async () => {
