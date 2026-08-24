@@ -1,4 +1,4 @@
-import { describe, it } from "vitest";
+import { describe, it, afterAll } from "vitest";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
@@ -68,7 +68,15 @@ function extendsRepoRootBase(
 ): boolean {
   const entries = Array.isArray(extendsValue) ? extendsValue : [extendsValue];
   return entries.some((entry) => {
-    if (typeof entry !== "string" || !entry.startsWith(".")) return false;
+    if (typeof entry !== "string") return false;
+    // Relative ("./", "../") or absolute entries are file paths and are
+    // resolved; a bare package specifier ("@tsconfig/strictest/tsconfig.json")
+    // never denotes the repo-root base and is excluded. Absolute must be
+    // accepted: on the Windows runners TEMP is on C: and the workspace on D:,
+    // and `path.relative` across drives returns an ABSOLUTE path, so a fixture
+    // that legitimately points at the base was silently read as "not an
+    // extender" — the two counting tests reported false rather than failing.
+    if (!entry.startsWith(".") && !path.isAbsolute(entry)) return false;
     return path.resolve(path.dirname(tsconfigAbsPath), entry) === ROOT_BASE;
   });
 }
@@ -261,16 +269,29 @@ describe("turbo.json cache-input guard (P3.2)", () => {
    * fixture's `extends` is computed to resolve to the repo-root base from
    * wherever the temp directory lands.
    */
+  const fixtureDirs: string[] = [];
+
   async function writeFixture(
     renderExtends: (dir: string) => string,
   ): Promise<string> {
+    // os.tmpdir(), never inside the repo: an in-repo fixture races the other
+    // guards that scan tracked tsconfigs while vitest runs files in parallel.
     const dir = await fs.mkdtemp(
       path.join(os.tmpdir(), "hexagen-turbo-guard-"),
     );
+    fixtureDirs.push(dir);
     const absPath = path.join(dir, "tsconfig.json");
     await fs.writeFile(absPath, renderExtends(dir), "utf8");
     return absPath;
   }
+
+  // In-repo fixtures must not survive the run (os.tmpdir() used to clean up
+  // for us). Removed even when a test fails.
+  afterAll(async () => {
+    await Promise.all(
+      fixtureDirs.map((d) => fs.rm(d, { recursive: true, force: true })),
+    );
+  });
 
   it("discovery counts a legal multiline TS 5+ extends array", async () => {
     const absPath = await writeFixture(
@@ -286,6 +307,23 @@ describe("turbo.json cache-input guard (P3.2)", () => {
         `{\n  // legal tsconfig comment\n  "extends": "${toTsPath(path.relative(dir, ROOT_BASE))}",\n}\n`,
     );
     assert.equal(await isRootBaseExtender(absPath), true);
+  });
+
+  it("discovery counts an ABSOLUTE extends that resolves to the base (the cross-drive case)", async () => {
+    // On the Windows runners TEMP and the workspace are on different drives,
+    // so `path.relative` returns an absolute path. Reproduced here on any
+    // platform by writing the absolute path directly.
+    const absPath = await writeFixture(
+      () => `{\n  "extends": "${toTsPath(ROOT_BASE)}"\n}\n`,
+    );
+    assert.equal(await isRootBaseExtender(absPath), true);
+  });
+
+  it("discovery still rejects a bare package specifier", async () => {
+    const absPath = await writeFixture(
+      () => `{\n  "extends": "@tsconfig/strictest/tsconfig.json"\n}\n`,
+    );
+    assert.equal(await isRootBaseExtender(absPath), false);
   });
 
   it("toTsPath converts win32 separators — the fault the Windows leg caught", () => {

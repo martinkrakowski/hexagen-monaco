@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 // @ts-expect-error -- root script, plain ESM without a declaration file
-import { assertTagIsFree } from "../../../scripts/bump-version.js";
+import { assertTagIsFree } from "../../../scripts/lib/tag-collision.mjs";
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
