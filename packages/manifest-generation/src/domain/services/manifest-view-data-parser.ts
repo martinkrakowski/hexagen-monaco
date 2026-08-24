@@ -70,6 +70,7 @@ export function parseYamlToViewData(yamlString: string): ManifestViewData {
   } catch (e: unknown) {
     validationItems.push({
       status: "fail",
+      code: "invalid-yaml",
       title: "Invalid YAML",
       description:
         e instanceof Error ? e.message : "Failed to parse YAML document.",
@@ -87,12 +88,14 @@ export function parseYamlToViewData(yamlString: string): ManifestViewData {
   if (parsed.scope) {
     validationItems.push({
       status: "pass",
+      code: "scope-defined",
       title: "Scope Defined",
       description: `Scope field present with value \`${parsed.scope}\`.`,
     });
   } else {
     validationItems.push({
       status: "fail",
+      code: "scope-missing",
       title: "Scope Missing",
       description: `Scope field is missing from the manifest.`,
     });
@@ -101,12 +104,14 @@ export function parseYamlToViewData(yamlString: string): ManifestViewData {
   if (parsed.architecture) {
     validationItems.push({
       status: "pass",
+      code: "architecture-declared",
       title: "Architecture Declared",
       description: `Architecture field specifies \`${parsed.architecture}\`.`,
     });
   } else {
     validationItems.push({
       status: "fail",
+      code: "architecture-missing",
       title: "Architecture Missing",
       description: `Architecture field is missing from the manifest.`,
     });
@@ -174,6 +179,7 @@ export function parseYamlToViewData(yamlString: string): ManifestViewData {
       );
       validationItems.push({
         status: "fail",
+        code: "context-name-hyphen",
         title: `Context Name "${name}"`,
         description: `Starts with hyphen — produces invalid identifiers in code generation.`,
         contextName: name,
@@ -186,6 +192,7 @@ export function parseYamlToViewData(yamlString: string): ManifestViewData {
         hasWarn = true;
         validationItems.push({
           status: "warn",
+          code: "yaml-tag-indicator",
           title: 'YAML Tag Indicator "!" in Names',
           description: `Port name \`${p}\` contains "!" — YAML tag indicator.`,
           contextName: name,
@@ -204,6 +211,7 @@ export function parseYamlToViewData(yamlString: string): ManifestViewData {
         hasWarn = true;
         validationItems.push({
           status: "warn",
+          code: "yaml-tag-indicator",
           title: 'YAML Tag Indicator "!" in Names',
           description: `Adapter \`${a}\` contains "!" — YAML tag indicator.`,
           contextName: name,
@@ -268,6 +276,7 @@ export function parseYamlToViewData(yamlString: string): ManifestViewData {
       hasError = true;
       validationItems.push({
         status: "fail",
+        code: "zero-adapters",
         title: `${name}: Zero Adapters`,
         description: `${rawPortsOut.length} outbound ports but \`infrastructure: {}\` is empty.`,
         contextName: name,
@@ -279,6 +288,7 @@ export function parseYamlToViewData(yamlString: string): ManifestViewData {
       if (unconnected.length > 0) {
         validationItems.push({
           status: "fail",
+          code: "unconnected-ports",
           title: `${name}: ${unconnected.length} Unconnected Ports`,
           description: `Missing adapters for: ${unconnected.map((p) => "'" + p.name + "'").join(", ")}.`,
           contextName: name,
@@ -286,6 +296,7 @@ export function parseYamlToViewData(yamlString: string): ManifestViewData {
       } else if (portsOut.length > 0) {
         validationItems.push({
           status: "pass",
+          code: "ports-connected",
           title: `${name}: Connected`,
           description: `All outbound ports have matching adapters.`,
           contextName: name,
@@ -314,12 +325,14 @@ export function parseYamlToViewData(yamlString: string): ManifestViewData {
     if (validContractCount === rawContexts.length) {
       validationItems.push({
         status: "pass",
+        code: "interface-contract-met",
         title: "Minimum Interface Contract",
         description: `All bounded contexts define at least one port-in and one port-out, or are type-only shared-kernels (exempt).`,
       });
     } else {
       validationItems.push({
         status: "warn",
+        code: "interface-contract-missing-ports",
         title: "Minimum Interface Contract",
         description: `Some bounded contexts are missing ports in/out.`,
       });

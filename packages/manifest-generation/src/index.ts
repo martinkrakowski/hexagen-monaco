@@ -35,7 +35,9 @@ export type {
   PortEntry,
   AdapterEntry,
   ValidationItem,
+  ViolationCode,
 } from "./domain/model/manifest-view-data.js";
+export { VIOLATION_CODES } from "./domain/model/manifest-view-data.js";
 export {
   validateApiKeyFormat,
   isValidProvider,
