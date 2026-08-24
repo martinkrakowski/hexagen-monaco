@@ -54,6 +54,8 @@ import {
   describeResult,
   cleanupFixture,
   assertBuiltArtifactsPresent,
+  writeBinStub,
+  EXIT_ZERO_STUB,
 } from "../helpers/published-layout.js";
 
 // Same layers-armed shape as the dry-run purity suite: generator.sync.layers
@@ -140,10 +142,10 @@ async function createConvergedFixture(
   // Preflight stub (the converging real run execs `npx turbo run build`).
   // node_modules/.bin is guaranteed by createPublishedLayoutFixture (it
   // installs the hexagen-lint shim there).
-  await fs.writeFile(
-    path.join(fix.root, "node_modules", ".bin", "turbo"),
-    "#!/bin/sh\nexit 0\n",
-    { mode: 0o755 },
+  await writeBinStub(
+    path.join(fix.root, "node_modules", ".bin"),
+    "turbo",
+    EXIT_ZERO_STUB,
   );
 
   // node_modules (copied dist, symlinked externals, shims) stays

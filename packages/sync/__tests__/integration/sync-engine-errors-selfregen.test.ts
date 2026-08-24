@@ -14,7 +14,11 @@ import {
 } from "../helpers/fixture-factory.js";
 import { pathExists } from "../helpers/fs-helpers.js";
 import { makeSelfRegenFlags } from "../helpers/test-config.js";
-import { SKIP_NON_POSIX } from "../helpers/published-layout.js";
+import {
+  SKIP_NON_POSIX,
+  writeBinStub,
+  EXIT_ZERO_STUB,
+} from "../helpers/published-layout.js";
 
 function locateHostRepoRoot(): string {
   // fileURLToPath, not URL.pathname: on win32 the pathname is an undecoded
@@ -606,18 +610,22 @@ async function makeMidRunFailureFixture(tmpDir: string): Promise<void> {
 
   const binDir = path.join(tmpDir, "node_modules", ".bin");
   await fs.mkdir(binDir, { recursive: true });
-  await fs.writeFile(path.join(binDir, "turbo"), "#!/bin/sh\nexit 0\n", {
-    mode: 0o755,
-  });
+  await writeBinStub(binDir, "turbo", EXIT_ZERO_STUB);
   await fs.mkdir(path.join(tmpDir, ".architecture"), { recursive: true });
 }
 
-// POSIX-only, like the contract suites and for the same reason: the fixture's
-// preflight stub is a sh-shebang script that cannot exec on win32 — there the
-// run would die at preflight, before any journal entry, so nothing this
-// describe asserts (EISDIR arc, journal prints, POSIX-separator paths from
-// path.relative) is reachable. Declaring that beats separator-tolerant
-// regexes that would pretend at a Windows support the stub forecloses.
+// POSIX-only, and the reason is now narrower than it was. The original note
+// said the fixture's sh-shebang preflight stub cannot exec on win32; that is
+// no longer true — writeBinStub emits a .cmd alongside, so the run reaches
+// the journal. What remains genuinely POSIX-bound is what this describe
+// ASSERTS:
+//   - the EISDIR arc: it provokes failure by writing to a directory, and
+//     Windows reports that with a different errno and wording;
+//   - the journal prints, which are `path.relative` output and therefore
+//     backslashed on win32 while these assertions are written forward-slash.
+// Both are about the ASSERTIONS, not the fixture, so widening them would
+// change what the tests mean rather than port them. The other four describes
+// in this file were never skipped and pass on Windows.
 describe(
   "SyncEngine — journaled rollback after mid-run writes (PR-B1, RCA #4, fixture-only)",
   { skip: SKIP_NON_POSIX },

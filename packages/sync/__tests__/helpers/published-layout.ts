@@ -191,16 +191,45 @@ export async function createPublishedLayoutFixture(
   }
 
   const binDir = path.join(root, "node_modules", ".bin");
-  await fs.mkdir(binDir, { recursive: true });
   const lintBin = path.join(binDir, "hexagen-lint");
-  await fs.writeFile(
-    lintBin,
-    `#!/bin/sh\nexec "${process.execPath}" "${LINTER_DIST}" "$@"\n`,
-    { mode: 0o755 },
-  );
+  await writeBinStub(binDir, "hexagen-lint", {
+    sh: `#!/bin/sh\nexec "${process.execPath}" "${LINTER_DIST}" "$@"\n`,
+    cmd: `@echo off\r\n"${process.execPath}" "${LINTER_DIST}" %*\r\n`,
+  });
 
   return { root, cli: path.join(pkgDir, "dist", "cli.js"), lintBin };
 }
+
+/**
+ * Write an executable stub into a fixture's `node_modules/.bin`, in BOTH
+ * forms the platforms need.
+ *
+ * npm/npx resolve a bin differently per platform: on POSIX they exec the
+ * extensionless file and honour its shebang; on Windows they look for
+ * `<name>.cmd` and cannot exec a `#!/bin/sh` file at all. Writing only the
+ * POSIX form meant npx fell through to the REAL binary on Windows — which is
+ * why the contract fixtures failed there with turbo's "could not resolve
+ * workspaces" instead of using the stub, and why these suites were skipped
+ * as "POSIX-only". They are not: the stub was.
+ */
+export async function writeBinStub(
+  binDir: string,
+  name: string,
+  spec: { sh: string; cmd: string },
+): Promise<void> {
+  await fs.mkdir(binDir, { recursive: true });
+  await fs.writeFile(path.join(binDir, name), spec.sh, { mode: 0o755 });
+  // CRLF: cmd.exe is unreliable with LF-only batch files.
+  await fs.writeFile(path.join(binDir, `${name}.cmd`), spec.cmd, {
+    mode: 0o755,
+  });
+}
+
+/** A stub that succeeds and does nothing (the preflight `turbo` case). */
+export const EXIT_ZERO_STUB = {
+  sh: "#!/bin/sh\nexit 0\n",
+  cmd: "@echo off\r\nexit /b 0\r\n",
+};
 
 export function runHexagen(
   fix: ContractFixture,

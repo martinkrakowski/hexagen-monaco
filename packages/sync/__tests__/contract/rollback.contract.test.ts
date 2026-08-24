@@ -50,6 +50,8 @@ import {
   cleanupFixture,
   assertBuiltArtifactsPresent,
   type ContractFixture,
+  writeBinStub,
+  EXIT_ZERO_STUB,
 } from "../helpers/published-layout.js";
 import { pathExists } from "../helpers/fs-helpers.js";
 
@@ -114,10 +116,10 @@ async function prepareRollbackFixture(): Promise<ContractFixture> {
   // installs the hexagen-lint shim there (published-layout.ts) — so no
   // defensive mkdir here: a missing dir would mean the fixture contract
   // broke, and THAT should fail loudly.
-  await fs.writeFile(
-    path.join(fix.root, "node_modules", ".bin", "turbo"),
-    "#!/bin/sh\nexit 0\n",
-    { mode: 0o755 },
+  await writeBinStub(
+    path.join(fix.root, "node_modules", ".bin"),
+    "turbo",
+    EXIT_ZERO_STUB,
   );
 
   // A tracked file for the dirty-tree case to modify.
