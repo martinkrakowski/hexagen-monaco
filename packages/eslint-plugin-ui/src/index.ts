@@ -5,6 +5,7 @@ import noArbitraryTailwindValues from "./rules/no-arbitrary-tailwind-values.js";
 import noOffScaleSpacing from "./rules/no-off-scale-spacing.js";
 import rhfStableArrayKeys from "./rules/rhf-stable-array-keys.js";
 import noChildrenWrapperTypeSwap from "./rules/no-children-wrapper-type-swap.js";
+import populationGuard from "./rules/population-guard.js";
 
 export const rules = {
   "no-information-state": noInformationState,
@@ -14,6 +15,7 @@ export const rules = {
   "no-off-scale-spacing": noOffScaleSpacing,
   "rhf-stable-array-keys": rhfStableArrayKeys,
   "no-children-wrapper-type-swap": noChildrenWrapperTypeSwap,
+  "population-guard": populationGuard,
 };
 
 export default { rules };
