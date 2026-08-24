@@ -191,7 +191,12 @@ export async function createPublishedLayoutFixture(
   }
 
   const binDir = path.join(root, "node_modules", ".bin");
-  const lintBin = path.join(binDir, "hexagen-lint");
+  // Direct spawn (execFile), not PATH resolution: on Windows the extensionless
+  // file is not executable, so point at the .cmd sibling writeBinStub emits.
+  const lintBin = path.join(
+    binDir,
+    process.platform === "win32" ? "hexagen-lint.cmd" : "hexagen-lint",
+  );
   await writeBinStub(binDir, "hexagen-lint", {
     sh: `#!/bin/sh\nexec "${process.execPath}" "${LINTER_DIST}" "$@"\n`,
     cmd: `@echo off\r\n"${process.execPath}" "${LINTER_DIST}" %*\r\n`,

@@ -214,9 +214,12 @@ describe("rollback contract — built dist in published layout (PR-B1, RCA #4)",
         /Sync failed after touching [1-9]\d* path\(s\) — NO rollback under --allow-dirty/,
         describeResult(r),
       );
+      // Separator-insensitive: the journal prints `path.relative` output, which
+      // is backslashed on win32. The claim is that the journal NAMES this path,
+      // not how the host spells it.
       assert.match(
         r.stderr,
-        /packages\/alpha\/package\.json/,
+        /packages[\\/]alpha[\\/]package\.json/,
         `journal print must name the touched paths\n${describeResult(r)}`,
       );
       assert.match(

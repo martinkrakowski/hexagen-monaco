@@ -221,9 +221,14 @@ describe("dry-run purity contract — built dist in published layout", () => {
 
       // Prove the run ARMED the gated paths (see header) — a run that
       // planned nothing would pass the purity asserts without testing them.
+      // Both sides normalised: legacyBarrel comes from path.join and the CLI
+      // prints path.relative output, so on win32 both are backslashed while
+      // this file's other literals are not. The claim is WHICH barrel was
+      // named, not its spelling.
+      const posix = (v: string) => v.replace(/\\/g, "/");
       assert.ok(
-        r.stdout.includes(
-          `[DRY-RUN] would delete empty barrel ${legacyBarrel}`,
+        posix(r.stdout).includes(
+          `[DRY-RUN] would delete empty barrel ${posix(legacyBarrel)}`,
         ),
         `expected the legacy-barrel deletion intent in output\n${describeResult(r)}`,
       );
