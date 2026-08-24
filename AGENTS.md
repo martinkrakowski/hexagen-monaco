@@ -33,11 +33,13 @@ If any command fails — **STOP**. Fix existing errors before writing anything n
 Before hardening, refactoring, or guarding **any** code path, prove it is live — one of:
 
 - a route that renders it,
-- a test that imports it,
+- a test that **executes** it (importing a symbol is not executing it),
 - a CLI command that reaches it,
-- a consumer grep that returns non-zero.
+- a consumer search that **matches** — at least one hit; `grep` exits **0** on a
+  match and 1 on none, so "no output" is the opposite of liveness.
 
-Put the proof in the PR body. **"No consumers" is a deletion finding, not a hardening target.**
+Put the proof in the PR body — the command and its result, not the claim.
+**"No consumers" is a deletion finding, not a hardening target.**
 
 Evidence class (learnings catalogue §3.1): the brownfield arc hardened a scan route before verifying it dispatched; the AR-9 exception guarded a directory that did not exist.
 

@@ -127,7 +127,9 @@ A PR that ADDS or CHANGES a gate -- a CI step, a guard test, an assertion
 that something never happens, a check script -- must name in its body the
 fault that was shown to make the new gate fail: the injected mutation, the
 command, and the non-zero exit or failing assertion. If the body names no
-fault, request it. If the named fault would not exercise the gate, say why.
+fault, request it -- unless the section says "None" and the PR genuinely adds or
+changes no gate, which is a valid answer. If the named fault would not exercise
+the gate, say why.
 A gate that has never been seen red has not been shown to exist. AGENTS.md
 "Step Zero: Liveness" carries the sibling rule: hardening a path requires
 proof the path is live.
@@ -204,7 +206,9 @@ A PR that ADDS or CHANGES a gate -- a CI step, a guard test, an assertion
 that something never happens, a check script -- must name in its body the
 fault that was shown to make the new gate fail: the injected mutation, the
 command, and the non-zero exit or failing assertion. If the body names no
-fault, request it. If the named fault would not exercise the gate, say why.
+fault, request it -- unless the section says "None" and the PR genuinely adds or
+changes no gate, which is a valid answer. If the named fault would not exercise
+the gate, say why.
 A gate that has never been seen red has not been shown to exist. AGENTS.md
 "Step Zero: Liveness" carries the sibling rule: hardening a path requires
 proof the path is live.
