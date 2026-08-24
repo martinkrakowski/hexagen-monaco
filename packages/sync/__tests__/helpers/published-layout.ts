@@ -57,7 +57,7 @@ export const LINTER_DIST = path.join(
 // Externalized by tsup (ADR-0068) — must be resolvable next to the copied dist.
 export const EXTERNALS = ["commander", "js-yaml", "ts-morph", "zod"];
 
-export const SKIP_NON_POSIX = process.platform === "win32";
+export const SKIP_NON_POSIX = false; // PROBE(explore/win32-unskip): run everything on Windows to see what breaks
 
 export const VALID_MANIFEST = `system: acme-app
 scope: acme

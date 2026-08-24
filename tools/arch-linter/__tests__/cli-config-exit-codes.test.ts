@@ -28,7 +28,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.join(__dirname, "..", "dist", "cli.js");
 
-const SKIP_NON_POSIX = process.platform === "win32";
+const SKIP_NON_POSIX = false; // PROBE(explore/win32-unskip): run everything on Windows to see what breaks
 
 const MANIFEST = `system: acme-app
 scope: acme

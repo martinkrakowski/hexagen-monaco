@@ -34,7 +34,7 @@ const PACKAGE_DIR = path.join(__dirname, "..");
 const LAUNCHER = path.join(PACKAGE_DIR, "bin", "lint-arch.mjs");
 const BUILT_CLI = path.join(PACKAGE_DIR, "dist", "cli.js");
 
-const SKIP_NON_POSIX = process.platform === "win32";
+const SKIP_NON_POSIX = false; // PROBE(explore/win32-unskip): run everything on Windows to see what breaks
 
 const MANIFEST = `system: acme-app
 scope: acme
