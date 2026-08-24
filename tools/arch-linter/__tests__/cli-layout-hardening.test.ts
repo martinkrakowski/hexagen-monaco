@@ -18,8 +18,6 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.join(__dirname, "..", "dist", "cli.js");
 
-const SKIP_NON_POSIX = process.platform === "win32";
-
 const MANIFEST = `system: acme-app
 scope: acme
 architecture: modular-monolith
@@ -107,144 +105,141 @@ async function cleanup(root: string): Promise<void> {
   }
 }
 
-describe(
-  "hexagen-lint — layout.yaml + foreign-repo hardening",
-  { skip: SKIP_NON_POSIX },
-  () => {
-    beforeAll(async () => {
-      assert.ok(
-        await fs
-          .stat(CLI)
-          .then(() => true)
-          .catch(() => false),
-        `missing ${CLI} — build @hexagen/arch-linter before running this suite`,
+describe("hexagen-lint — layout.yaml + foreign-repo hardening", () => {
+  beforeAll(async () => {
+    assert.ok(
+      await fs
+        .stat(CLI)
+        .then(() => true)
+        .catch(() => false),
+      `missing ${CLI} — build @hexagen/arch-linter before running this suite`,
+    );
+  });
+
+  it("(a) exits 2 with a clear message when zero resolvable files were scanned", async () => {
+    const root = await createFixture({
+      "tsconfig.json": TSCONFIG,
+      // Context declared, directory missing — generated repos do this.
+      // Vacuity is zero files scanned, not "missing dir is fatal".
+    });
+    try {
+      const r = await runLinter(root);
+      assert.equal(r.code, 2, describeResult(r));
+      assert.match(
+        r.stdout + r.stderr,
+        /zero resolvable (source )?files/i,
+        describeResult(r),
       );
-    });
+      assert.doesNotMatch(
+        r.stdout + r.stderr,
+        /Architecture is compliant/,
+        "a vacuous run must never report compliance",
+      );
+    } finally {
+      await cleanup(root);
+    }
+  });
 
-    it("(a) exits 2 with a clear message when zero resolvable files were scanned", async () => {
-      const root = await createFixture({
-        "tsconfig.json": TSCONFIG,
-        // Context declared, directory missing — generated repos do this.
-        // Vacuity is zero files scanned, not "missing dir is fatal".
-      });
-      try {
-        const r = await runLinter(root);
-        assert.equal(r.code, 2, describeResult(r));
-        assert.match(
-          r.stdout + r.stderr,
-          /zero resolvable (source )?files/i,
-          describeResult(r),
-        );
-        assert.doesNotMatch(
-          r.stdout + r.stderr,
-          /Architecture is compliant/,
-          "a vacuous run must never report compliance",
-        );
-      } finally {
-        await cleanup(root);
-      }
+  it("(b) reports the files-scanned count on a non-vacuous run", async () => {
+    const root = await createFixture({
+      "tsconfig.json": TSCONFIG,
+      "packages/billing/src/domain/model.ts": `export const x = 1;\n`,
     });
+    try {
+      const r = await runLinter(root);
+      assert.equal(r.code, 0, describeResult(r));
+      assert.match(
+        r.stdout + r.stderr,
+        /files scanned:\s*[1-9]\d*/i,
+        describeResult(r),
+      );
+    } finally {
+      await cleanup(root);
+    }
+  });
 
-    it("(b) reports the files-scanned count on a non-vacuous run", async () => {
-      const root = await createFixture({
-        "tsconfig.json": TSCONFIG,
-        "packages/billing/src/domain/model.ts": `export const x = 1;\n`,
-      });
-      try {
-        const r = await runLinter(root);
-        assert.equal(r.code, 0, describeResult(r));
-        assert.match(
-          r.stdout + r.stderr,
-          /files scanned:\s*[1-9]\d*/i,
-          describeResult(r),
-        );
-      } finally {
-        await cleanup(root);
-      }
+  it("(c) purity-check layer dispatch works via layout.yaml on a core/services repo", async () => {
+    const root = await createFixture({
+      "tsconfig.json": TSCONFIG,
+      ".architecture/layout.yaml": CORE_SERVICES_LAYOUT,
+      // node:fs in src/core must fire as a domain purity violation even
+      // though the path has no /domain/ segment.
+      "packages/billing/src/core/invoice.ts": `import fs from "node:fs";\nexport const invoice = fs;\n`,
+      "packages/billing/src/services/charge.ts": `export const charge = 1;\n`,
     });
+    try {
+      const r = await runLinter(root);
+      assert.equal(r.code, 1, describeResult(r));
+      assert.match(
+        r.stdout + r.stderr,
+        /node-builtin-in-layer|Node builtin/,
+        describeResult(r),
+      );
+      assert.match(r.stdout + r.stderr, /domain/i, describeResult(r));
+    } finally {
+      await cleanup(root);
+    }
+  });
 
-    it("(c) purity-check layer dispatch works via layout.yaml on a core/services repo", async () => {
-      const root = await createFixture({
-        "tsconfig.json": TSCONFIG,
-        ".architecture/layout.yaml": CORE_SERVICES_LAYOUT,
-        // node:fs in src/core must fire as a domain purity violation even
-        // though the path has no /domain/ segment.
-        "packages/billing/src/core/invoice.ts": `import fs from "node:fs";\nexport const invoice = fs;\n`,
-        "packages/billing/src/services/charge.ts": `export const charge = 1;\n`,
-      });
-      try {
-        const r = await runLinter(root);
-        assert.equal(r.code, 1, describeResult(r));
-        assert.match(
-          r.stdout + r.stderr,
-          /node-builtin-in-layer|Node builtin/,
-          describeResult(r),
-        );
-        assert.match(r.stdout + r.stderr, /domain/i, describeResult(r));
-      } finally {
-        await cleanup(root);
-      }
+  it("(d) does not crash on a plain tsconfig.json (no tsconfig.base.json)", async () => {
+    const root = await createFixture({
+      "tsconfig.json": TSCONFIG,
+      "packages/billing/src/domain/model.ts": `export const x = 1;\n`,
     });
+    try {
+      const r = await runLinter(root);
+      assert.notEqual(r.code, 2, describeResult(r));
+      assert.doesNotMatch(
+        r.stdout + r.stderr,
+        /tsconfig\.base\.json/,
+        "must not demand tsconfig.base.json when tsconfig.json exists",
+      );
+      assert.doesNotMatch(
+        r.stderr,
+        /ENOENT|Cannot find|tsconfig.*not found/i,
+        describeResult(r),
+      );
+    } finally {
+      await cleanup(root);
+    }
+  });
 
-    it("(d) does not crash on a plain tsconfig.json (no tsconfig.base.json)", async () => {
-      const root = await createFixture({
-        "tsconfig.json": TSCONFIG,
-        "packages/billing/src/domain/model.ts": `export const x = 1;\n`,
-      });
-      try {
-        const r = await runLinter(root);
-        assert.notEqual(r.code, 2, describeResult(r));
-        assert.doesNotMatch(
-          r.stdout + r.stderr,
-          /tsconfig\.base\.json/,
-          "must not demand tsconfig.base.json when tsconfig.json exists",
-        );
-        assert.doesNotMatch(
-          r.stderr,
-          /ENOENT|Cannot find|tsconfig.*not found/i,
-          describeResult(r),
-        );
-      } finally {
-        await cleanup(root);
-      }
-    });
-
-    it("(e) a misspelled layout.yaml mapping fails loudly (exit 2)", async () => {
-      const root = await createFixture({
-        "tsconfig.json": TSCONFIG,
-        ".architecture/layout.yaml": `contexts:
+  it("(e) a misspelled layout.yaml mapping fails loudly (exit 2)", async () => {
+    const root = await createFixture({
+      "tsconfig.json": TSCONFIG,
+      ".architecture/layout.yaml": `contexts:
   billing:
     rooot: packages/billing
     layers:
       domaine: [src/core]
 `,
-        "packages/billing/src/core/invoice.ts": `export const invoice = 1;\n`,
-      });
-      try {
-        const r = await runLinter(root);
-        assert.equal(r.code, 2, describeResult(r));
-        assert.match(
-          r.stdout + r.stderr,
-          /layout\.yaml|FATAL ERROR/i,
-          describeResult(r),
-        );
-        assert.doesNotMatch(
-          r.stdout + r.stderr,
-          /Architecture is compliant/,
-          "an invalid layout must never report compliance",
-        );
-      } finally {
-        await cleanup(root);
-      }
+      "packages/billing/src/core/invoice.ts": `export const invoice = 1;\n`,
     });
+    try {
+      const r = await runLinter(root);
+      assert.equal(r.code, 2, describeResult(r));
+      assert.match(
+        r.stdout + r.stderr,
+        /layout\.yaml|FATAL ERROR/i,
+        describeResult(r),
+      );
+      assert.doesNotMatch(
+        r.stdout + r.stderr,
+        /Architecture is compliant/,
+        "an invalid layout must never report compliance",
+      );
+    } finally {
+      await cleanup(root);
+    }
+  });
 
-    it("does not report npm-package-in-domain for an extra-scope workspace import", async () => {
-      // Manifest scope is @acme-app; workspace packages live under @acme.
-      // After adopt/bootstrap this is the common shape. depends_on grants the
-      // edge; the npm-package check must not fire on the extra scope.
-      const root = await createFixture({
-        "tsconfig.json": TSCONFIG,
-        ".architecture/manifest.yaml": `system: acme-app
+  it("does not report npm-package-in-domain for an extra-scope workspace import", async () => {
+    // Manifest scope is @acme-app; workspace packages live under @acme.
+    // After adopt/bootstrap this is the common shape. depends_on grants the
+    // edge; the npm-package check must not fire on the extra scope.
+    const root = await createFixture({
+      "tsconfig.json": TSCONFIG,
+      ".architecture/manifest.yaml": `system: acme-app
 scope: acme-app
 architecture: modular-monolith
 bounded_contexts:
@@ -260,7 +255,7 @@ bounded_contexts:
     layers:
       domain: {}
 `,
-        ".architecture/layout.yaml": `contexts:
+      ".architecture/layout.yaml": `contexts:
   billing:
     root: packages/billing
     layers:
@@ -270,27 +265,37 @@ bounded_contexts:
     layers:
       domain: [src/core]
 `,
-        "packages/billing/package.json": `{ "name": "@acme/billing" }\n`,
-        "packages/orders/package.json": `{ "name": "@acme/orders" }\n`,
-        "packages/billing/src/core/invoice.ts": `import { x } from "@acme/orders";\nexport const invoice = x;\n`,
-        "packages/orders/src/core/index.ts": `export const x = 1;\n`,
-      });
-      try {
-        const r = await runLinter(root);
-        assert.doesNotMatch(
-          r.stdout + r.stderr,
-          /npm-package-in-domain|npm package '@acme\/orders'/,
-          describeResult(r),
-        );
-      } finally {
-        await cleanup(root);
-      }
+      "packages/billing/package.json": `{ "name": "@acme/billing" }\n`,
+      "packages/orders/package.json": `{ "name": "@acme/orders" }\n`,
+      "packages/billing/src/core/invoice.ts": `import { x } from "@acme/orders";\nexport const invoice = x;\n`,
+      "packages/orders/src/core/index.ts": `export const x = 1;\n`,
     });
+    try {
+      const r = await runLinter(root);
+      // Non-vacuity first: an exit-2 run that scanned ZERO files satisfies the
+      // absence assertion below without the rule ever being evaluated — which
+      // is precisely how a linter that could not resolve paths on Windows
+      // would have slipped past this test. Same idiom as the checks above.
+      assert.notEqual(r.code, 2, describeResult(r));
+      assert.match(
+        r.stdout + r.stderr,
+        /files scanned:\s*[1-9]\d*/i,
+        describeResult(r),
+      );
+      assert.doesNotMatch(
+        r.stdout + r.stderr,
+        /npm-package-in-domain|npm package '@acme\/orders'/,
+        describeResult(r),
+      );
+    } finally {
+      await cleanup(root);
+    }
+  });
 
-    it('does not treat import "zod" as a cross-package import when a context is named zod', async () => {
-      const root = await createFixture({
-        "tsconfig.json": TSCONFIG,
-        ".architecture/manifest.yaml": `system: acme-app
+  it('does not treat import "zod" as a cross-package import when a context is named zod', async () => {
+    const root = await createFixture({
+      "tsconfig.json": TSCONFIG,
+      ".architecture/manifest.yaml": `system: acme-app
 scope: acme
 architecture: modular-monolith
 bounded_contexts:
@@ -305,19 +310,26 @@ bounded_contexts:
     layers:
       domain: {}
 `,
-        "packages/billing/src/domain/model.ts": `import { z } from "zod";\nexport const schema = z;\n`,
-        "packages/zod/src/domain/index.ts": `export const local = 1;\n`,
-      });
-      try {
-        const r = await runLinter(root);
-        assert.doesNotMatch(
-          r.stdout + r.stderr,
-          /Boundary Violation|cross-package-import/,
-          describeResult(r),
-        );
-      } finally {
-        await cleanup(root);
-      }
+      "packages/billing/src/domain/model.ts": `import { z } from "zod";\nexport const schema = z;\n`,
+      "packages/zod/src/domain/index.ts": `export const local = 1;\n`,
     });
-  },
-);
+    try {
+      const r = await runLinter(root);
+      // Non-vacuity first, as above: absence of a violation must be observed
+      // over a scan that actually happened.
+      assert.notEqual(r.code, 2, describeResult(r));
+      assert.match(
+        r.stdout + r.stderr,
+        /files scanned:\s*[1-9]\d*/i,
+        describeResult(r),
+      );
+      assert.doesNotMatch(
+        r.stdout + r.stderr,
+        /Boundary Violation|cross-package-import/,
+        describeResult(r),
+      );
+    } finally {
+      await cleanup(root);
+    }
+  });
+});

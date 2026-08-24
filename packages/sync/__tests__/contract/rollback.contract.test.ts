@@ -44,13 +44,14 @@ import { execSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
-  SKIP_NON_POSIX,
   createPublishedLayoutFixture,
   runHexagen,
   describeResult,
   cleanupFixture,
   assertBuiltArtifactsPresent,
   type ContractFixture,
+  writeBinStub,
+  EXIT_ZERO_STUB,
 } from "../helpers/published-layout.js";
 import { pathExists } from "../helpers/fs-helpers.js";
 
@@ -115,10 +116,10 @@ async function prepareRollbackFixture(): Promise<ContractFixture> {
   // installs the hexagen-lint shim there (published-layout.ts) — so no
   // defensive mkdir here: a missing dir would mean the fixture contract
   // broke, and THAT should fail loudly.
-  await fs.writeFile(
-    path.join(fix.root, "node_modules", ".bin", "turbo"),
-    "#!/bin/sh\nexit 0\n",
-    { mode: 0o755 },
+  await writeBinStub(
+    path.join(fix.root, "node_modules", ".bin"),
+    "turbo",
+    EXIT_ZERO_STUB,
   );
 
   // A tracked file for the dirty-tree case to modify.
@@ -157,141 +158,140 @@ async function assertCanaryResolvedFixture(fix: ContractFixture) {
   );
 }
 
-describe(
-  "rollback contract — built dist in published layout (PR-B1, RCA #4)",
-  { skip: SKIP_NON_POSIX },
-  () => {
-    beforeAll(assertBuiltArtifactsPresent);
+describe("rollback contract — built dist in published layout (PR-B1, RCA #4)", () => {
+  beforeAll(assertBuiltArtifactsPresent);
 
-    it("Case A: failed `sync --allow-dirty` NEVER rolls back — untracked + dirty files survive, journal printed", async () => {
-      const fix = await prepareRollbackFixture();
-      try {
-        // The user's in-flight work. Pre-B1: `git clean -fd` deletes
-        // scratch.txt, `git reset --hard` empties .gitkeep.
-        await fs.writeFile(
-          path.join(fix.root, "scratch.txt"),
-          "user scratch - must survive\n",
-        );
-        await fs.writeFile(
-          path.join(fix.root, ".gitkeep"),
-          "UNCOMMITTED_CHANGE_PATTERN",
-        );
+  it("Case A: failed `sync --allow-dirty` NEVER rolls back — untracked + dirty files survive, journal printed", async () => {
+    const fix = await prepareRollbackFixture();
+    try {
+      // The user's in-flight work. Pre-B1: `git clean -fd` deletes
+      // scratch.txt, `git reset --hard` empties .gitkeep.
+      await fs.writeFile(
+        path.join(fix.root, "scratch.txt"),
+        "user scratch - must survive\n",
+      );
+      await fs.writeFile(
+        path.join(fix.root, ".gitkeep"),
+        "UNCOMMITTED_CHANGE_PATTERN",
+      );
 
-        await assertCanaryResolvedFixture(fix);
+      await assertCanaryResolvedFixture(fix);
 
-        const r = await runHexagen(fix, ["sync", "--allow-dirty"]);
-        assert.notEqual(r.code, 0, describeResult(r));
-        assert.ok(r.stderr.includes("Fatal sync error"), describeResult(r));
-        assert.match(
-          r.stderr,
-          /EISDIR|illegal operation on a directory/,
-          describeResult(r),
-        );
+      const r = await runHexagen(fix, ["sync", "--allow-dirty"]);
+      assert.notEqual(r.code, 0, describeResult(r));
+      assert.ok(r.stderr.includes("Fatal sync error"), describeResult(r));
+      assert.match(
+        r.stderr,
+        /EISDIR|illegal operation on a directory/,
+        describeResult(r),
+      );
 
-        assert.equal(
-          await fs.readFile(path.join(fix.root, "scratch.txt"), "utf8"),
-          "user scratch - must survive\n",
-          `untracked scratch file must survive a failed sync (pre-B1 'git clean -fd' deleted it)\n${describeResult(r)}`,
-        );
-        assert.equal(
-          await fs.readFile(path.join(fix.root, ".gitkeep"), "utf8"),
-          "UNCOMMITTED_CHANGE_PATTERN",
-          `dirty tracked file must keep the user's uncommitted content\n${describeResult(r)}`,
-        );
-        assert.notEqual(
-          await fs.readFile(
-            path.join(fix.root, "packages", "alpha", "package.json"),
-            "utf8",
-          ),
-          STALE_ALPHA_PKG,
-          `under --allow-dirty NOTHING is reverted — sync's own overwrite stays too, not even restored to the seed\n${describeResult(r)}`,
-        );
+      assert.equal(
+        await fs.readFile(path.join(fix.root, "scratch.txt"), "utf8"),
+        "user scratch - must survive\n",
+        `untracked scratch file must survive a failed sync (pre-B1 'git clean -fd' deleted it)\n${describeResult(r)}`,
+      );
+      assert.equal(
+        await fs.readFile(path.join(fix.root, ".gitkeep"), "utf8"),
+        "UNCOMMITTED_CHANGE_PATTERN",
+        `dirty tracked file must keep the user's uncommitted content\n${describeResult(r)}`,
+      );
+      assert.notEqual(
+        await fs.readFile(
+          path.join(fix.root, "packages", "alpha", "package.json"),
+          "utf8",
+        ),
+        STALE_ALPHA_PKG,
+        `under --allow-dirty NOTHING is reverted — sync's own overwrite stays too, not even restored to the seed\n${describeResult(r)}`,
+      );
 
-        // logger.warn → stderr: the deliberate no-rollback notice plus the
-        // journal of touched paths. The non-zero count pins the
-        // non-empty-journal branch (the empty branch says "nothing to roll
-        // back" instead).
-        assert.match(
-          r.stderr,
-          /Sync failed after touching [1-9]\d* path\(s\) — NO rollback under --allow-dirty/,
-          describeResult(r),
-        );
-        assert.match(
-          r.stderr,
-          /packages\/alpha\/package\.json/,
-          `journal print must name the touched paths\n${describeResult(r)}`,
-        );
-        assert.match(
-          r.stderr,
-          /packages\/alpha\/tsconfig\.json/,
-          `journal print must name alpha's created tsconfig — Case B's unlink assert relies on this being a real create→unlink arc\n${describeResult(r)}`,
-        );
-        assert.ok(!r.stdout.includes("Rollback completed"), describeResult(r));
-      } finally {
-        await cleanupFixture(fix.root);
-      }
-    });
+      // logger.warn → stderr: the deliberate no-rollback notice plus the
+      // journal of touched paths. The non-zero count pins the
+      // non-empty-journal branch (the empty branch says "nothing to roll
+      // back" instead).
+      assert.match(
+        r.stderr,
+        /Sync failed after touching [1-9]\d* path\(s\) — NO rollback under --allow-dirty/,
+        describeResult(r),
+      );
+      // Separator-insensitive: the journal prints `path.relative` output, which
+      // is backslashed on win32. The claim is that the journal NAMES this path,
+      // not how the host spells it.
+      assert.match(
+        r.stderr,
+        /packages[\\/]alpha[\\/]package\.json/,
+        `journal print must name the touched paths\n${describeResult(r)}`,
+      );
+      assert.match(
+        r.stderr,
+        /packages[\\/]alpha[\\/]tsconfig\.json/,
+        `journal print must name alpha's created tsconfig — Case B's unlink assert relies on this being a real create→unlink arc\n${describeResult(r)}`,
+      );
+      assert.ok(!r.stdout.includes("Rollback completed"), describeResult(r));
+    } finally {
+      await cleanupFixture(fix.root);
+    }
+  });
 
-    it("Case B: failed `sync` on a clean tree rolls back ONLY journaled paths — porcelain-clean after, exit non-zero", async () => {
-      const fix = await prepareRollbackFixture();
-      try {
-        assert.equal(
-          porcelain(fix.root),
-          "",
-          "fixture must be porcelain-clean before the run (precondition: the git check must pass)",
-        );
+  it("Case B: failed `sync` on a clean tree rolls back ONLY journaled paths — porcelain-clean after, exit non-zero", async () => {
+    const fix = await prepareRollbackFixture();
+    try {
+      assert.equal(
+        porcelain(fix.root),
+        "",
+        "fixture must be porcelain-clean before the run (precondition: the git check must pass)",
+      );
 
-        await assertCanaryResolvedFixture(fix);
+      await assertCanaryResolvedFixture(fix);
 
-        const r = await runHexagen(fix, ["sync"]);
-        assert.notEqual(r.code, 0, describeResult(r));
-        assert.ok(r.stderr.includes("Fatal sync error"), describeResult(r));
-        assert.match(
-          r.stderr,
-          /EISDIR|illegal operation on a directory/,
-          describeResult(r),
-        );
+      const r = await runHexagen(fix, ["sync"]);
+      assert.notEqual(r.code, 0, describeResult(r));
+      assert.ok(r.stderr.includes("Fatal sync error"), describeResult(r));
+      assert.match(
+        r.stderr,
+        /EISDIR|illegal operation on a directory/,
+        describeResult(r),
+      );
 
-        // Every journaled write inverted; only empty directories remain,
-        // which porcelain cannot see.
-        assert.equal(
-          porcelain(fix.root),
-          "",
-          `after rollback the tree must be porcelain-clean\n${describeResult(r)}`,
-        );
-        // The seeded OVERWRITE restored byte-identically — the assertion that
-        // dies if recordWrite ever journals null pre-images for updates
-        // (rollback would unlink the user's file instead). See header.
-        assert.equal(
-          await fs.readFile(
-            path.join(fix.root, "packages", "alpha", "package.json"),
-            "utf8",
-          ),
-          STALE_ALPHA_PKG,
-          `alpha's seeded package.json must be restored to its exact pre-sync bytes\n${describeResult(r)}`,
-        );
-        assert.equal(
-          await pathExists(
-            path.join(fix.root, "packages", "alpha", "tsconfig.json"),
-          ),
-          false,
-          `alpha's freshly created tsconfig.json must be unlinked by the rollback\n${describeResult(r)}`,
-        );
+      // Every journaled write inverted; only empty directories remain,
+      // which porcelain cannot see.
+      assert.equal(
+        porcelain(fix.root),
+        "",
+        `after rollback the tree must be porcelain-clean\n${describeResult(r)}`,
+      );
+      // The seeded OVERWRITE restored byte-identically — the assertion that
+      // dies if recordWrite ever journals null pre-images for updates
+      // (rollback would unlink the user's file instead). See header.
+      assert.equal(
+        await fs.readFile(
+          path.join(fix.root, "packages", "alpha", "package.json"),
+          "utf8",
+        ),
+        STALE_ALPHA_PKG,
+        `alpha's seeded package.json must be restored to its exact pre-sync bytes\n${describeResult(r)}`,
+      );
+      assert.equal(
+        await pathExists(
+          path.join(fix.root, "packages", "alpha", "tsconfig.json"),
+        ),
+        false,
+        `alpha's freshly created tsconfig.json must be unlinked by the rollback\n${describeResult(r)}`,
+      );
 
-        // logger.info → stdout. Back-reference pins restored === attempted.
-        assert.match(
-          r.stdout,
-          /Rolling back [1-9]\d* journaled path/,
-          describeResult(r),
-        );
-        assert.match(
-          r.stdout,
-          /Rollback completed: (\d+)\/\1 path\(s\) restored/,
-          describeResult(r),
-        );
-      } finally {
-        await cleanupFixture(fix.root);
-      }
-    });
-  },
-);
+      // logger.info → stdout. Back-reference pins restored === attempted.
+      assert.match(
+        r.stdout,
+        /Rolling back [1-9]\d* journaled path/,
+        describeResult(r),
+      );
+      assert.match(
+        r.stdout,
+        /Rollback completed: (\d+)\/\1 path\(s\) restored/,
+        describeResult(r),
+      );
+    } finally {
+      await cleanupFixture(fix.root);
+    }
+  });
+});

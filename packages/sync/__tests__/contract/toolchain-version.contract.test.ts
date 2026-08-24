@@ -23,7 +23,6 @@ import { describe, it, beforeAll } from "vitest";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
-  SKIP_NON_POSIX,
   REPO_ROOT,
   VALID_MANIFEST,
   createPublishedLayoutFixture,
@@ -33,60 +32,56 @@ import {
   assertBuiltArtifactsPresent,
 } from "../helpers/published-layout.js";
 
-describe(
-  "toolchain-version contract — built dist in published layout",
-  { skip: SKIP_NON_POSIX },
-  () => {
-    beforeAll(assertBuiltArtifactsPresent);
+describe("toolchain-version contract — built dist in published layout", () => {
+  beforeAll(assertBuiltArtifactsPresent);
 
-    it("hexagen --version reports the build-injected engine version, not the adjacent package.json", async () => {
-      const fix = await createPublishedLayoutFixture(
-        VALID_MANIFEST,
-        "hexagen-version-",
+  it("hexagen --version reports the build-injected engine version, not the adjacent package.json", async () => {
+    const fix = await createPublishedLayoutFixture(
+      VALID_MANIFEST,
+      "hexagen-version-",
+    );
+    try {
+      const engineVersion = (
+        JSON.parse(
+          await fs.readFile(
+            path.join(REPO_ROOT, "packages", "sync", "package.json"),
+            "utf8",
+          ),
+        ) as { version: string }
+      ).version;
+
+      // Precondition: the fixture must still stage the sentinel version.
+      // If published-layout.ts ever starts mirroring the real version, this
+      // test would silently stop distinguishing define-wins from file-read.
+      const staged = (
+        JSON.parse(
+          await fs.readFile(
+            path.join(
+              fix.root,
+              "node_modules",
+              "@hexagen-monaco",
+              "sync",
+              "package.json",
+            ),
+            "utf8",
+          ),
+        ) as { version: string }
+      ).version;
+      assert.equal(
+        staged,
+        "0.0.0-contract",
+        "fixture precondition: staged package.json must carry the sentinel version",
       );
-      try {
-        const engineVersion = (
-          JSON.parse(
-            await fs.readFile(
-              path.join(REPO_ROOT, "packages", "sync", "package.json"),
-              "utf8",
-            ),
-          ) as { version: string }
-        ).version;
 
-        // Precondition: the fixture must still stage the sentinel version.
-        // If published-layout.ts ever starts mirroring the real version, this
-        // test would silently stop distinguishing define-wins from file-read.
-        const staged = (
-          JSON.parse(
-            await fs.readFile(
-              path.join(
-                fix.root,
-                "node_modules",
-                "@hexagen-monaco",
-                "sync",
-                "package.json",
-              ),
-              "utf8",
-            ),
-          ) as { version: string }
-        ).version;
-        assert.equal(
-          staged,
-          "0.0.0-contract",
-          "fixture precondition: staged package.json must carry the sentinel version",
-        );
-
-        const r = await runHexagen(fix, ["--version"]);
-        assert.equal(r.code, 0, describeResult(r));
-        assert.equal(
-          r.stdout.trim(),
-          engineVersion,
-          `--version must print the build-injected engine version\n${describeResult(r)}`,
-        );
-      } finally {
-        await cleanupFixture(fix.root);
-      }
-    });
-  },
-);
+      const r = await runHexagen(fix, ["--version"]);
+      assert.equal(r.code, 0, describeResult(r));
+      assert.equal(
+        r.stdout.trim(),
+        engineVersion,
+        `--version must print the build-injected engine version\n${describeResult(r)}`,
+      );
+    } finally {
+      await cleanupFixture(fix.root);
+    }
+  });
+});

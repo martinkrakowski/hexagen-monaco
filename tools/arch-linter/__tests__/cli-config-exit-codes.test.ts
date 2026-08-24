@@ -28,8 +28,6 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.join(__dirname, "..", "dist", "cli.js");
 
-const SKIP_NON_POSIX = process.platform === "win32";
-
 const MANIFEST = `system: acme-app
 scope: acme
 architecture: modular-monolith
@@ -152,123 +150,118 @@ async function cleanup(root: string): Promise<void> {
 const LAYER_RULES = ".architecture/invariants/layer-rules.yaml";
 const LINTER_CONFIG = ".architecture/invariants/linter-config.yaml";
 
-describe(
-  "hexagen-lint — optional config loading exit codes",
-  { skip: SKIP_NON_POSIX },
-  () => {
-    beforeAll(async () => {
-      assert.ok(
-        await fs
-          .stat(CLI)
-          .then(() => true)
-          .catch(() => false),
-        `missing ${CLI} — build @hexagen/arch-linter before running this suite`,
+describe("hexagen-lint — optional config loading exit codes", () => {
+  beforeAll(async () => {
+    assert.ok(
+      await fs
+        .stat(CLI)
+        .then(() => true)
+        .catch(() => false),
+      `missing ${CLI} — build @hexagen/arch-linter before running this suite`,
+    );
+  });
+
+  it("a malformed linter-config.yaml is FATAL — it must not silently mask a real violation", async () => {
+    // Baseline: with the config intact the denial fires and the run fails
+    // with a Boundary Violation.
+    const ok = await createFixture({ [LINTER_CONFIG]: DENYING_CONFIG });
+    try {
+      const r = await runLinter(ok);
+      assert.equal(r.code, 1, describeResult(r));
+      assert.match(r.stderr, /Boundary Violation/, describeResult(r));
+    } finally {
+      await cleanup(ok);
+    }
+
+    // Same project, same import, one corrupt line appended. This used to
+    // print "Architecture is compliant" and exit 0.
+    const broken = await createFixture({ [LINTER_CONFIG]: MALFORMED });
+    try {
+      const r = await runLinter(broken);
+      assert.notEqual(r.code, 0, describeResult(r));
+      assert.match(
+        r.stderr,
+        /FATAL ERROR: linter-config\.yaml exists but could not be loaded/,
+        describeResult(r),
       );
-    });
+      assert.doesNotMatch(
+        r.stdout + r.stderr,
+        /Architecture is compliant/,
+        "a config that could not be parsed must never report compliance",
+      );
+    } finally {
+      await cleanup(broken);
+    }
+  });
 
-    it("a malformed linter-config.yaml is FATAL — it must not silently mask a real violation", async () => {
-      // Baseline: with the config intact the denial fires and the run fails
-      // with a Boundary Violation.
-      const ok = await createFixture({ [LINTER_CONFIG]: DENYING_CONFIG });
-      try {
-        const r = await runLinter(ok);
-        assert.equal(r.code, 1, describeResult(r));
-        assert.match(r.stderr, /Boundary Violation/, describeResult(r));
-      } finally {
-        await cleanup(ok);
-      }
-
-      // Same project, same import, one corrupt line appended. This used to
-      // print "Architecture is compliant" and exit 0.
-      const broken = await createFixture({ [LINTER_CONFIG]: MALFORMED });
-      try {
-        const r = await runLinter(broken);
-        assert.notEqual(r.code, 0, describeResult(r));
-        assert.match(
-          r.stderr,
-          /FATAL ERROR: linter-config\.yaml exists but could not be loaded/,
-          describeResult(r),
-        );
-        assert.doesNotMatch(
-          r.stdout + r.stderr,
-          /Architecture is compliant/,
-          "a config that could not be parsed must never report compliance",
-        );
-      } finally {
-        await cleanup(broken);
-      }
+  it("a malformed layer-rules.yaml is FATAL", async () => {
+    const root = await createFixture({
+      [LAYER_RULES]: "layers:\n  domain:\n    access_rule: strict\n bad: [x\n",
     });
+    try {
+      const r = await runLinter(root);
+      assert.notEqual(r.code, 0, describeResult(r));
+      assert.match(
+        r.stderr,
+        /FATAL ERROR: layer-rules\.yaml exists but could not be loaded/,
+        describeResult(r),
+      );
+      assert.doesNotMatch(
+        r.stdout + r.stderr,
+        /Architecture is compliant/,
+        describeResult(r),
+      );
+    } finally {
+      await cleanup(root);
+    }
+  });
 
-    it("a malformed layer-rules.yaml is FATAL", async () => {
-      const root = await createFixture({
-        [LAYER_RULES]:
-          "layers:\n  domain:\n    access_rule: strict\n bad: [x\n",
-      });
-      try {
-        const r = await runLinter(root);
-        assert.notEqual(r.code, 0, describeResult(r));
-        assert.match(
-          r.stderr,
-          /FATAL ERROR: layer-rules\.yaml exists but could not be loaded/,
-          describeResult(r),
-        );
-        assert.doesNotMatch(
-          r.stdout + r.stderr,
-          /Architecture is compliant/,
-          describeResult(r),
-        );
-      } finally {
-        await cleanup(root);
-      }
-    });
+  it("MISSING config files still warn and fall back to defaults (exit 0)", async () => {
+    const root = await createFixture({});
+    try {
+      const r = await runLinter(root);
+      assert.equal(r.code, 0, describeResult(r));
+      // The original warning text is preserved — absent is not an error.
+      assert.match(
+        r.stdout + r.stderr,
+        /Could not load layer-rules\.yaml from .*, using defaults/,
+        describeResult(r),
+      );
+      assert.match(
+        r.stdout + r.stderr,
+        /Could not load linter-config\.yaml from .*, using defaults/,
+        describeResult(r),
+      );
+      assert.match(
+        r.stdout + r.stderr,
+        /Architecture is compliant/,
+        describeResult(r),
+      );
+    } finally {
+      await cleanup(root);
+    }
+  });
 
-    it("MISSING config files still warn and fall back to defaults (exit 0)", async () => {
-      const root = await createFixture({});
-      try {
-        const r = await runLinter(root);
-        assert.equal(r.code, 0, describeResult(r));
-        // The original warning text is preserved — absent is not an error.
-        assert.match(
-          r.stdout + r.stderr,
-          /Could not load layer-rules\.yaml from .*, using defaults/,
-          describeResult(r),
-        );
-        assert.match(
-          r.stdout + r.stderr,
-          /Could not load linter-config\.yaml from .*, using defaults/,
-          describeResult(r),
-        );
-        assert.match(
-          r.stdout + r.stderr,
-          /Architecture is compliant/,
-          describeResult(r),
-        );
-      } finally {
-        await cleanup(root);
-      }
+  it("EMPTY-but-valid config files are a legitimate empty config, not a fatal", async () => {
+    const root = await createFixture({
+      [LAYER_RULES]: "",
+      [LINTER_CONFIG]: "# no rules declared\n",
     });
-
-    it("EMPTY-but-valid config files are a legitimate empty config, not a fatal", async () => {
-      const root = await createFixture({
-        [LAYER_RULES]: "",
-        [LINTER_CONFIG]: "# no rules declared\n",
-      });
-      try {
-        const r = await runLinter(root);
-        assert.equal(r.code, 0, describeResult(r));
-        assert.doesNotMatch(
-          r.stdout + r.stderr,
-          /FATAL ERROR/,
-          "an empty config parses cleanly and must not be fatal",
-        );
-        assert.match(
-          r.stdout + r.stderr,
-          /Architecture is compliant/,
-          describeResult(r),
-        );
-      } finally {
-        await cleanup(root);
-      }
-    });
-  },
-);
+    try {
+      const r = await runLinter(root);
+      assert.equal(r.code, 0, describeResult(r));
+      assert.doesNotMatch(
+        r.stdout + r.stderr,
+        /FATAL ERROR/,
+        "an empty config parses cleanly and must not be fatal",
+      );
+      assert.match(
+        r.stdout + r.stderr,
+        /Architecture is compliant/,
+        describeResult(r),
+      );
+    } finally {
+      await cleanup(root);
+    }
+  });
+});
