@@ -218,7 +218,11 @@ describe("turbo.json cache-input guard (P3.2)", () => {
   });
 
   it("extender resolution counts only extends that resolve to the repo-root base", () => {
-    // The config/ trap: a same-named base beside the tsconfig must not count.
+    // A same-named base beside the tsconfig must not count. The live example
+    // used to be config/tsconfig.json; that directory was dead and broken
+    // (it extended a ./tsconfig.base.json that did not exist) and was
+    // deleted, so this is now a synthetic path — the assertion is pure path
+    // resolution and never touches the filesystem.
     assert.equal(
       extendsRepoRootBase(
         path.join(REPO_ROOT, "config/tsconfig.json"),
