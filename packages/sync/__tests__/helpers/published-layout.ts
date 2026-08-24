@@ -57,7 +57,22 @@ export const LINTER_DIST = path.join(
 // Externalized by tsup (ADR-0068) — must be resolvable next to the copied dist.
 export const EXTERNALS = ["commander", "js-yaml", "ts-morph", "zod"];
 
-export const SKIP_NON_POSIX = false; // PROBE(explore/win32-unskip): run everything on Windows to see what breaks
+/**
+ * True on Windows. Use it ONLY where a fixture genuinely cannot run there,
+ * and say why at the use site.
+ *
+ * It used to guard twelve suites with no recorded reason. Running them on
+ * Windows (2026-08-24) showed eleven were fine once a real product defect was
+ * fixed — `hexagen-lint` compared a ts-morph path against a native one and so
+ * scanned zero files on Windows, which the blanket skip had hidden. The one
+ * surviving use is the journaled-rollback describe in
+ * sync-engine-errors-selfregen.test.ts, whose fixture shells out to a
+ * sh-shebang preflight stub that cannot exec on win32; that use site carries
+ * the explanation.
+ *
+ * A skip without a stated reason is indistinguishable from a gap nobody chose.
+ */
+export const SKIP_NON_POSIX = process.platform === "win32";
 
 export const VALID_MANIFEST = `system: acme-app
 scope: acme

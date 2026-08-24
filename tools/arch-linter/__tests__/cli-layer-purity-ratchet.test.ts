@@ -25,8 +25,6 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.join(__dirname, "..", "dist", "cli.js");
 
-const SKIP_NON_POSIX = false; // PROBE(explore/win32-unskip): run everything on Windows to see what breaks
-
 const MANIFEST = `system: acme-app
 scope: acme
 architecture: modular-monolith
@@ -175,39 +173,282 @@ async function withFixture(
   }
 }
 
-describe(
-  "hexagen-lint — layer purity (AUD-011)",
-  { skip: SKIP_NON_POSIX },
-  () => {
-    beforeAll(async () => {
-      assert.ok(
-        await fs
-          .stat(CLI)
-          .then(() => true)
-          .catch(() => false),
-        `missing ${CLI} — build @hexagen/arch-linter before running this suite`,
+describe("hexagen-lint — layer purity (AUD-011)", () => {
+  beforeAll(async () => {
+    assert.ok(
+      await fs
+        .stat(CLI)
+        .then(() => true)
+        .catch(() => false),
+      `missing ${CLI} — build @hexagen/arch-linter before running this suite`,
+    );
+  });
+
+  it("the always-present legal fixture is compliant (no rule over-fires)", async () => {
+    await withFixture({}, async (root) => {
+      const r = await runLinter(root);
+      assert.equal(r.code, 0, describeResult(r));
+      assert.match(r.stdout + r.stderr, /Architecture is compliant/);
+    });
+  });
+
+  it("hole 1 — a relative import that crosses OUT of the domain layer fails", async () => {
+    await withFixture(
+      {
+        "packages/billing/src/domain/model/ledger.ts": `import { db } from "../../infrastructure/db.adapter.js";\nexport const ledger = db;\n`,
+      },
+      async (root) => {
+        const r = await runLinter(root);
+        assert.equal(r.code, 1, describeResult(r));
+        assert.match(
+          r.stderr,
+          /Relative import '\.\.\/\.\.\/infrastructure\/db\.adapter\.js' crosses out of the 'domain' layer into 'infrastructure'/,
+          describeResult(r),
+        );
+        assert.doesNotMatch(
+          r.stdout + r.stderr,
+          /Architecture is compliant/,
+          describeResult(r),
+        );
+      },
+    );
+  });
+
+  it("hole 1 — the application layer's relative escape hatch is closed too", async () => {
+    await withFixture(
+      {
+        "packages/billing/src/application/report.use-case.ts": `import { db } from "../infrastructure/db.adapter.js";\nexport const report = db;\n`,
+      },
+      async (root) => {
+        const r = await runLinter(root);
+        assert.equal(r.code, 1, describeResult(r));
+        assert.match(
+          r.stderr,
+          /Application Violation[\s\S]*crosses out of the 'application' layer into 'infrastructure'/,
+          describeResult(r),
+        );
+      },
+    );
+  });
+
+  it("hole 2 — node builtins in domain and in application both fail", async () => {
+    await withFixture(
+      {
+        "packages/billing/src/domain/model/statement.ts": `import fs from "node:fs/promises";\nexport const statement = fs;\n`,
+        "packages/billing/src/application/export.use-case.ts": `import path from "path";\nexport const exporter = path;\n`,
+      },
+      async (root) => {
+        const r = await runLinter(root);
+        assert.equal(r.code, 1, describeResult(r));
+        assert.match(
+          r.stderr,
+          /Node builtin 'node:fs\/promises' imported in the 'domain' layer/,
+          describeResult(r),
+        );
+        // Bare builtin names (no `node:` prefix) count as builtins too.
+        assert.match(
+          r.stderr,
+          /Node builtin 'path' imported in the 'application' layer/,
+          describeResult(r),
+        );
+        // …and the infrastructure adapter's own `node:fs` import stays legal.
+        assert.doesNotMatch(
+          r.stderr,
+          /db\.adapter\.ts/,
+          "the builtin ban is domain/application only",
+        );
+      },
+    );
+  });
+
+  it("hole 3 — an npm package in domain fails, and the allowlist releases it", async () => {
+    const domainFile = {
+      "packages/billing/src/domain/model/config.ts": `import yaml from "js-yaml";\nexport const config = yaml;\n`,
+    };
+
+    await withFixture(domainFile, async (root) => {
+      const r = await runLinter(root);
+      assert.equal(r.code, 1, describeResult(r));
+      assert.match(
+        r.stderr,
+        /npm package 'js-yaml' imported in the domain layer/,
+        describeResult(r),
       );
     });
 
-    it("the always-present legal fixture is compliant (no rule over-fires)", async () => {
-      await withFixture({}, async (root) => {
+    // Same file, same import, one declarative exception — the HEX-026 shape.
+    await withFixture(
+      {
+        ...domainFile,
+        [LINTER_CONFIG_PATH]: `domain_package_allowlist:\n  - package: billing\n    allowed_packages: [js-yaml]\n`,
+      },
+      async (root) => {
         const r = await runLinter(root);
         assert.equal(r.code, 0, describeResult(r));
         assert.match(r.stdout + r.stderr, /Architecture is compliant/);
+      },
+    );
+  });
+
+  it("hole 3 — the allowlist is per-context, not global", async () => {
+    await withFixture(
+      {
+        "packages/billing/src/domain/model/config.ts": `import yaml from "js-yaml";\nexport const config = yaml;\n`,
+        // The exception is granted to a DIFFERENT context.
+        [LINTER_CONFIG_PATH]: `domain_package_allowlist:\n  - package: shipping\n    allowed_packages: [js-yaml]\n`,
+      },
+      async (root) => {
+        const r = await runLinter(root);
+        assert.equal(r.code, 1, describeResult(r));
+        assert.match(r.stderr, /npm package 'js-yaml'/, describeResult(r));
+      },
+    );
+  });
+
+  it("hole 3 — a TYPE-ONLY npm import in domain still fails (ADR-0054 amendment 2026-08-16)", async () => {
+    // `import type` emits no runtime import, and it was proposed that the rule
+    // should therefore exempt it. The amendment declined, so this is a pinned
+    // decision rather than incidental behaviour — a future contributor who
+    // "fixes" the rule has to delete this test and read the ADR to do it.
+    //
+    // The reasoning, in short: erasure removes the runtime edge but not the
+    // dependency. A domain contract written in terms of a third-party type
+    // still requires that package in package.json to typecheck, and it
+    // propagates the library to every implementer and caller of the contract.
+    // Exempting it would also make the rule silent on the one baseline entry
+    // that corresponds to a genuinely broken shipped artifact (the emitted
+    // `llm-adapter` template port, dossier §2.11). The allowlist already
+    // expresses "accepted", and it leaves an auditable record; a blind rule
+    // leaves none.
+    await withFixture(
+      {
+        "packages/billing/src/domain/model/schema.ts": `import type { ZodSchema } from "zod";\nexport type Validated = { schema: ZodSchema };\n`,
+      },
+      async (root) => {
+        const r = await runLinter(root);
+        assert.equal(r.code, 1, describeResult(r));
+        assert.match(
+          r.stderr,
+          /npm package 'zod' imported in the domain layer/,
+          describeResult(r),
+        );
+      },
+    );
+
+    // The paired legality case: the exception is declarative, not a rule
+    // carve-out. A type-only import is released by the allowlist exactly as a
+    // value import is — which is how `local-llm` is dispositioned.
+    await withFixture(
+      {
+        "packages/billing/src/domain/model/schema.ts": `import type { ZodSchema } from "zod";\nexport type Validated = { schema: ZodSchema };\n`,
+        [LINTER_CONFIG_PATH]: `domain_package_allowlist:\n  - package: billing\n    allowed_packages: [zod]\n`,
+      },
+      async (root) => {
+        const r = await runLinter(root);
+        assert.equal(r.code, 0, describeResult(r));
+        assert.match(r.stdout + r.stderr, /Architecture is compliant/);
+      },
+    );
+  });
+
+  it("hole 3 — application-layer npm packages stay legal (ADR-0054 §2c)", async () => {
+    await withFixture(
+      {
+        "packages/billing/src/application/render.use-case.ts": `import yaml from "js-yaml";\nexport const render = yaml;\n`,
+      },
+      async (root) => {
+        const r = await runLinter(root);
+        assert.equal(r.code, 0, describeResult(r));
+      },
+    );
+  });
+
+  describe("the ratchet", () => {
+    const VIOLATORS = {
+      "packages/billing/src/domain/model/ledger.ts": `import { db } from "../../infrastructure/db.adapter.js";\nexport const ledger = db;\n`,
+      "packages/billing/src/domain/model/statement.ts": `import fs from "node:fs/promises";\nexport const statement = fs;\n`,
+      "packages/billing/src/domain/model/config.ts": `import yaml from "js-yaml";\nexport const config = yaml;\n`,
+    };
+
+    it("baselined violations pass; a NEW one fails and is named alone", async () => {
+      await withFixture(VIOLATORS, async (root) => {
+        // Seed the baseline from the current state…
+        const seed = await runLinter(root, "--update-baseline");
+        assert.equal(seed.code, 0, describeResult(seed));
+        const baseline = JSON.parse(
+          await fs.readFile(path.join(root, BASELINE_PATH), "utf8"),
+        );
+        assert.equal(baseline.entries.length, 3, JSON.stringify(baseline));
+
+        // …and the same tree is now green.
+        const green = await runLinter(root);
+        assert.equal(green.code, 0, describeResult(green));
+        assert.match(
+          green.stdout + green.stderr,
+          /Ratchet: 3 suppressed \/ 0 stale \/ 0 fresh/,
+          describeResult(green),
+        );
+
+        // One NEW violation, nothing else changed.
+        await fs.writeFile(
+          path.join(root, "packages/billing/src/domain/model/clock.ts"),
+          `import os from "node:os";\nexport const clock = os;\n`,
+          "utf8",
+        );
+        const red = await runLinter(root);
+        assert.equal(red.code, 1, describeResult(red));
+        assert.match(red.stderr, /clock\.ts/, describeResult(red));
+        assert.match(
+          red.stdout + red.stderr,
+          /Ratchet: 3 suppressed \/ 0 stale \/ 1 fresh/,
+          describeResult(red),
+        );
+        assert.match(
+          red.stderr,
+          /These are NEW violations, measured against the committed baseline/,
+          describeResult(red),
+        );
+        // The three baselined findings must NOT be re-reported as failures.
+        assert.doesNotMatch(red.stderr, /ledger\.ts/, describeResult(red));
+        assert.doesNotMatch(red.stderr, /js-yaml/, describeResult(red));
       });
     });
 
-    it("hole 1 — a relative import that crosses OUT of the domain layer fails", async () => {
+    it("a baseline entry that no longer reproduces warns, and does not fail", async () => {
       await withFixture(
         {
-          "packages/billing/src/domain/model/ledger.ts": `import { db } from "../../infrastructure/db.adapter.js";\nexport const ledger = db;\n`,
+          [BASELINE_PATH]: `{"version":1,"entries":[{"rule":"npm-package-in-domain","file":"packages/billing/src/domain/model/gone.ts","specifier":"js-yaml"}]}`,
         },
         async (root) => {
           const r = await runLinter(root);
-          assert.equal(r.code, 1, describeResult(r));
+          assert.equal(r.code, 0, describeResult(r));
+          assert.match(
+            r.stdout + r.stderr,
+            /Ratchet: 0 suppressed \/ 1 stale \/ 0 fresh/,
+            describeResult(r),
+          );
+          assert.match(
+            r.stdout + r.stderr,
+            /1 baseline entry no longer reproduces/,
+            describeResult(r),
+          );
+          assert.match(r.stdout + r.stderr, /gone\.ts/, describeResult(r));
+        },
+      );
+    });
+
+    it("a malformed baseline is FATAL — it must not silently change what is enforced", async () => {
+      await withFixture(
+        {
+          ...VIOLATORS,
+          [BASELINE_PATH]: `{"version":1,"entries":[{"rule":`,
+        },
+        async (root) => {
+          const r = await runLinter(root);
+          assert.notEqual(r.code, 0, describeResult(r));
           assert.match(
             r.stderr,
-            /Relative import '\.\.\/\.\.\/infrastructure\/db\.adapter\.js' crosses out of the 'domain' layer into 'infrastructure'/,
+            /FATAL ERROR: arch-lint baseline exists but could not be loaded/,
             describeResult(r),
           );
           assert.doesNotMatch(
@@ -219,366 +460,116 @@ describe(
       );
     });
 
-    it("hole 1 — the application layer's relative escape hatch is closed too", async () => {
-      await withFixture(
-        {
-          "packages/billing/src/application/report.use-case.ts": `import { db } from "../infrastructure/db.adapter.js";\nexport const report = db;\n`,
-        },
-        async (root) => {
-          const r = await runLinter(root);
-          assert.equal(r.code, 1, describeResult(r));
-          assert.match(
-            r.stderr,
-            /Application Violation[\s\S]*crosses out of the 'application' layer into 'infrastructure'/,
-            describeResult(r),
-          );
-        },
-      );
+    it("--update-baseline is deterministic and one entry per line", async () => {
+      await withFixture(VIOLATORS, async (root) => {
+        await runLinter(root, "--update-baseline");
+        const first = await fs.readFile(path.join(root, BASELINE_PATH), "utf8");
+        await runLinter(root, "--update-baseline");
+        const second = await fs.readFile(
+          path.join(root, BASELINE_PATH),
+          "utf8",
+        );
+        assert.equal(second, first, "baseline writing must be byte-stable");
+
+        const entryLines = first
+          .split("\n")
+          .filter((line) => line.trim().startsWith('{"rule"'));
+        assert.equal(entryLines.length, 3, first);
+        for (const line of entryLines) {
+          // Each line parses on its own → a fixed violation is a one-line diff.
+          JSON.parse(line.trim().replace(/,$/, ""));
+        }
+      });
     });
 
-    it("hole 2 — node builtins in domain and in application both fail", async () => {
-      await withFixture(
-        {
-          "packages/billing/src/domain/model/statement.ts": `import fs from "node:fs/promises";\nexport const statement = fs;\n`,
-          "packages/billing/src/application/export.use-case.ts": `import path from "path";\nexport const exporter = path;\n`,
-        },
-        async (root) => {
-          const r = await runLinter(root);
-          assert.equal(r.code, 1, describeResult(r));
-          assert.match(
-            r.stderr,
-            /Node builtin 'node:fs\/promises' imported in the 'domain' layer/,
-            describeResult(r),
-          );
-          // Bare builtin names (no `node:` prefix) count as builtins too.
-          assert.match(
-            r.stderr,
-            /Node builtin 'path' imported in the 'application' layer/,
-            describeResult(r),
-          );
-          // …and the infrastructure adapter's own `node:fs` import stays legal.
-          assert.doesNotMatch(
-            r.stderr,
-            /db\.adapter\.ts/,
-            "the builtin ban is domain/application only",
-          );
-        },
-      );
+    // `--root` exists precisely so the linter can be pointed at a project the
+    // caller is NOT standing in. A `--baseline` resolved against cwd would
+    // then read/write a file beside the caller instead of inside that
+    // project — enforcing against an absent baseline (everything fails) or
+    // scattering baselines into unrelated directories.
+    it("a relative --baseline resolves from the project root, not cwd", async () => {
+      await withFixture(VIOLATORS, async (root) => {
+        // A fresh empty dir, so "nothing landed here" is a real assertion.
+        const elsewhere = await fs.mkdtemp(
+          path.join(await fs.realpath(os.tmpdir()), "hexagen-lint-cwd-"),
+        );
+        const seed = await runLinterFrom(
+          elsewhere,
+          root,
+          "--baseline",
+          "ci/arch-lint-baseline.json",
+          "--update-baseline",
+        );
+        assert.equal(seed.code, 0, describeResult(seed));
+
+        const written = path.join(root, "ci", "arch-lint-baseline.json");
+        const baseline = JSON.parse(await fs.readFile(written, "utf8"));
+        assert.equal(baseline.entries.length, 3, JSON.stringify(baseline));
+        // Nothing was written next to the caller.
+        await assert.rejects(
+          () => fs.access(path.join(elsewhere, "ci")),
+          "the baseline must not land beside cwd",
+        );
+
+        // …and enforcement reads back the same file from the same cwd.
+        const green = await runLinterFrom(
+          elsewhere,
+          root,
+          "--baseline",
+          "ci/arch-lint-baseline.json",
+        );
+        assert.equal(green.code, 0, describeResult(green));
+        assert.match(
+          green.stdout + green.stderr,
+          /Ratchet: 3 suppressed \/ 0 stale \/ 0 fresh/,
+          describeResult(green),
+        );
+        await cleanup(elsewhere);
+      });
     });
 
-    it("hole 3 — an npm package in domain fails, and the allowlist releases it", async () => {
-      const domainFile = {
-        "packages/billing/src/domain/model/config.ts": `import yaml from "js-yaml";\nexport const config = yaml;\n`,
-      };
+    it("an absolute --baseline is honoured as given", async () => {
+      await withFixture(VIOLATORS, async (root) => {
+        const abs = path.join(root, "ci", "abs-baseline.json");
+        const seed = await runLinterFrom(
+          await fs.realpath(os.tmpdir()),
+          root,
+          "--baseline",
+          abs,
+          "--update-baseline",
+        );
+        assert.equal(seed.code, 0, describeResult(seed));
+        const baseline = JSON.parse(await fs.readFile(abs, "utf8"));
+        assert.equal(baseline.entries.length, 3, JSON.stringify(baseline));
+      });
+    });
 
-      await withFixture(domainFile, async (root) => {
-        const r = await runLinter(root);
-        assert.equal(r.code, 1, describeResult(r));
+    it("--baseline with no value is FATAL, not a silent fall back to the default", async () => {
+      await withFixture(VIOLATORS, async (root) => {
+        const r = await runLinter(root, "--baseline");
+        assert.notEqual(r.code, 0, describeResult(r));
         assert.match(
           r.stderr,
-          /npm package 'js-yaml' imported in the domain layer/,
+          /FATAL ERROR: --baseline requires a path argument/,
           describeResult(r),
         );
-      });
-
-      // Same file, same import, one declarative exception — the HEX-026 shape.
-      await withFixture(
-        {
-          ...domainFile,
-          [LINTER_CONFIG_PATH]: `domain_package_allowlist:\n  - package: billing\n    allowed_packages: [js-yaml]\n`,
-        },
-        async (root) => {
-          const r = await runLinter(root);
-          assert.equal(r.code, 0, describeResult(r));
-          assert.match(r.stdout + r.stderr, /Architecture is compliant/);
-        },
-      );
-    });
-
-    it("hole 3 — the allowlist is per-context, not global", async () => {
-      await withFixture(
-        {
-          "packages/billing/src/domain/model/config.ts": `import yaml from "js-yaml";\nexport const config = yaml;\n`,
-          // The exception is granted to a DIFFERENT context.
-          [LINTER_CONFIG_PATH]: `domain_package_allowlist:\n  - package: shipping\n    allowed_packages: [js-yaml]\n`,
-        },
-        async (root) => {
-          const r = await runLinter(root);
-          assert.equal(r.code, 1, describeResult(r));
-          assert.match(r.stderr, /npm package 'js-yaml'/, describeResult(r));
-        },
-      );
-    });
-
-    it("hole 3 — a TYPE-ONLY npm import in domain still fails (ADR-0054 amendment 2026-08-16)", async () => {
-      // `import type` emits no runtime import, and it was proposed that the rule
-      // should therefore exempt it. The amendment declined, so this is a pinned
-      // decision rather than incidental behaviour — a future contributor who
-      // "fixes" the rule has to delete this test and read the ADR to do it.
-      //
-      // The reasoning, in short: erasure removes the runtime edge but not the
-      // dependency. A domain contract written in terms of a third-party type
-      // still requires that package in package.json to typecheck, and it
-      // propagates the library to every implementer and caller of the contract.
-      // Exempting it would also make the rule silent on the one baseline entry
-      // that corresponds to a genuinely broken shipped artifact (the emitted
-      // `llm-adapter` template port, dossier §2.11). The allowlist already
-      // expresses "accepted", and it leaves an auditable record; a blind rule
-      // leaves none.
-      await withFixture(
-        {
-          "packages/billing/src/domain/model/schema.ts": `import type { ZodSchema } from "zod";\nexport type Validated = { schema: ZodSchema };\n`,
-        },
-        async (root) => {
-          const r = await runLinter(root);
-          assert.equal(r.code, 1, describeResult(r));
-          assert.match(
-            r.stderr,
-            /npm package 'zod' imported in the domain layer/,
-            describeResult(r),
-          );
-        },
-      );
-
-      // The paired legality case: the exception is declarative, not a rule
-      // carve-out. A type-only import is released by the allowlist exactly as a
-      // value import is — which is how `local-llm` is dispositioned.
-      await withFixture(
-        {
-          "packages/billing/src/domain/model/schema.ts": `import type { ZodSchema } from "zod";\nexport type Validated = { schema: ZodSchema };\n`,
-          [LINTER_CONFIG_PATH]: `domain_package_allowlist:\n  - package: billing\n    allowed_packages: [zod]\n`,
-        },
-        async (root) => {
-          const r = await runLinter(root);
-          assert.equal(r.code, 0, describeResult(r));
-          assert.match(r.stdout + r.stderr, /Architecture is compliant/);
-        },
-      );
-    });
-
-    it("hole 3 — application-layer npm packages stay legal (ADR-0054 §2c)", async () => {
-      await withFixture(
-        {
-          "packages/billing/src/application/render.use-case.ts": `import yaml from "js-yaml";\nexport const render = yaml;\n`,
-        },
-        async (root) => {
-          const r = await runLinter(root);
-          assert.equal(r.code, 0, describeResult(r));
-        },
-      );
-    });
-
-    describe("the ratchet", () => {
-      const VIOLATORS = {
-        "packages/billing/src/domain/model/ledger.ts": `import { db } from "../../infrastructure/db.adapter.js";\nexport const ledger = db;\n`,
-        "packages/billing/src/domain/model/statement.ts": `import fs from "node:fs/promises";\nexport const statement = fs;\n`,
-        "packages/billing/src/domain/model/config.ts": `import yaml from "js-yaml";\nexport const config = yaml;\n`,
-      };
-
-      it("baselined violations pass; a NEW one fails and is named alone", async () => {
-        await withFixture(VIOLATORS, async (root) => {
-          // Seed the baseline from the current state…
-          const seed = await runLinter(root, "--update-baseline");
-          assert.equal(seed.code, 0, describeResult(seed));
-          const baseline = JSON.parse(
-            await fs.readFile(path.join(root, BASELINE_PATH), "utf8"),
-          );
-          assert.equal(baseline.entries.length, 3, JSON.stringify(baseline));
-
-          // …and the same tree is now green.
-          const green = await runLinter(root);
-          assert.equal(green.code, 0, describeResult(green));
-          assert.match(
-            green.stdout + green.stderr,
-            /Ratchet: 3 suppressed \/ 0 stale \/ 0 fresh/,
-            describeResult(green),
-          );
-
-          // One NEW violation, nothing else changed.
-          await fs.writeFile(
-            path.join(root, "packages/billing/src/domain/model/clock.ts"),
-            `import os from "node:os";\nexport const clock = os;\n`,
-            "utf8",
-          );
-          const red = await runLinter(root);
-          assert.equal(red.code, 1, describeResult(red));
-          assert.match(red.stderr, /clock\.ts/, describeResult(red));
-          assert.match(
-            red.stdout + red.stderr,
-            /Ratchet: 3 suppressed \/ 0 stale \/ 1 fresh/,
-            describeResult(red),
-          );
-          assert.match(
-            red.stderr,
-            /These are NEW violations, measured against the committed baseline/,
-            describeResult(red),
-          );
-          // The three baselined findings must NOT be re-reported as failures.
-          assert.doesNotMatch(red.stderr, /ledger\.ts/, describeResult(red));
-          assert.doesNotMatch(red.stderr, /js-yaml/, describeResult(red));
-        });
-      });
-
-      it("a baseline entry that no longer reproduces warns, and does not fail", async () => {
-        await withFixture(
-          {
-            [BASELINE_PATH]: `{"version":1,"entries":[{"rule":"npm-package-in-domain","file":"packages/billing/src/domain/model/gone.ts","specifier":"js-yaml"}]}`,
-          },
-          async (root) => {
-            const r = await runLinter(root);
-            assert.equal(r.code, 0, describeResult(r));
-            assert.match(
-              r.stdout + r.stderr,
-              /Ratchet: 0 suppressed \/ 1 stale \/ 0 fresh/,
-              describeResult(r),
-            );
-            assert.match(
-              r.stdout + r.stderr,
-              /1 baseline entry no longer reproduces/,
-              describeResult(r),
-            );
-            assert.match(r.stdout + r.stderr, /gone\.ts/, describeResult(r));
-          },
+        // A following flag is a missing value too, not a filename.
+        const flagAsValue = await runLinter(
+          root,
+          "--baseline",
+          "--update-baseline",
+        );
+        assert.notEqual(flagAsValue.code, 0, describeResult(flagAsValue));
+        assert.match(
+          flagAsValue.stderr,
+          /FATAL ERROR: --baseline requires a path argument/,
+          describeResult(flagAsValue),
+        );
+        await assert.rejects(
+          () => fs.access(path.join(root, "--update-baseline")),
+          "a flag must never be taken as a baseline filename",
         );
       });
-
-      it("a malformed baseline is FATAL — it must not silently change what is enforced", async () => {
-        await withFixture(
-          {
-            ...VIOLATORS,
-            [BASELINE_PATH]: `{"version":1,"entries":[{"rule":`,
-          },
-          async (root) => {
-            const r = await runLinter(root);
-            assert.notEqual(r.code, 0, describeResult(r));
-            assert.match(
-              r.stderr,
-              /FATAL ERROR: arch-lint baseline exists but could not be loaded/,
-              describeResult(r),
-            );
-            assert.doesNotMatch(
-              r.stdout + r.stderr,
-              /Architecture is compliant/,
-              describeResult(r),
-            );
-          },
-        );
-      });
-
-      it("--update-baseline is deterministic and one entry per line", async () => {
-        await withFixture(VIOLATORS, async (root) => {
-          await runLinter(root, "--update-baseline");
-          const first = await fs.readFile(
-            path.join(root, BASELINE_PATH),
-            "utf8",
-          );
-          await runLinter(root, "--update-baseline");
-          const second = await fs.readFile(
-            path.join(root, BASELINE_PATH),
-            "utf8",
-          );
-          assert.equal(second, first, "baseline writing must be byte-stable");
-
-          const entryLines = first
-            .split("\n")
-            .filter((line) => line.trim().startsWith('{"rule"'));
-          assert.equal(entryLines.length, 3, first);
-          for (const line of entryLines) {
-            // Each line parses on its own → a fixed violation is a one-line diff.
-            JSON.parse(line.trim().replace(/,$/, ""));
-          }
-        });
-      });
-
-      // `--root` exists precisely so the linter can be pointed at a project the
-      // caller is NOT standing in. A `--baseline` resolved against cwd would
-      // then read/write a file beside the caller instead of inside that
-      // project — enforcing against an absent baseline (everything fails) or
-      // scattering baselines into unrelated directories.
-      it("a relative --baseline resolves from the project root, not cwd", async () => {
-        await withFixture(VIOLATORS, async (root) => {
-          // A fresh empty dir, so "nothing landed here" is a real assertion.
-          const elsewhere = await fs.mkdtemp(
-            path.join(await fs.realpath(os.tmpdir()), "hexagen-lint-cwd-"),
-          );
-          const seed = await runLinterFrom(
-            elsewhere,
-            root,
-            "--baseline",
-            "ci/arch-lint-baseline.json",
-            "--update-baseline",
-          );
-          assert.equal(seed.code, 0, describeResult(seed));
-
-          const written = path.join(root, "ci", "arch-lint-baseline.json");
-          const baseline = JSON.parse(await fs.readFile(written, "utf8"));
-          assert.equal(baseline.entries.length, 3, JSON.stringify(baseline));
-          // Nothing was written next to the caller.
-          await assert.rejects(
-            () => fs.access(path.join(elsewhere, "ci")),
-            "the baseline must not land beside cwd",
-          );
-
-          // …and enforcement reads back the same file from the same cwd.
-          const green = await runLinterFrom(
-            elsewhere,
-            root,
-            "--baseline",
-            "ci/arch-lint-baseline.json",
-          );
-          assert.equal(green.code, 0, describeResult(green));
-          assert.match(
-            green.stdout + green.stderr,
-            /Ratchet: 3 suppressed \/ 0 stale \/ 0 fresh/,
-            describeResult(green),
-          );
-          await cleanup(elsewhere);
-        });
-      });
-
-      it("an absolute --baseline is honoured as given", async () => {
-        await withFixture(VIOLATORS, async (root) => {
-          const abs = path.join(root, "ci", "abs-baseline.json");
-          const seed = await runLinterFrom(
-            await fs.realpath(os.tmpdir()),
-            root,
-            "--baseline",
-            abs,
-            "--update-baseline",
-          );
-          assert.equal(seed.code, 0, describeResult(seed));
-          const baseline = JSON.parse(await fs.readFile(abs, "utf8"));
-          assert.equal(baseline.entries.length, 3, JSON.stringify(baseline));
-        });
-      });
-
-      it("--baseline with no value is FATAL, not a silent fall back to the default", async () => {
-        await withFixture(VIOLATORS, async (root) => {
-          const r = await runLinter(root, "--baseline");
-          assert.notEqual(r.code, 0, describeResult(r));
-          assert.match(
-            r.stderr,
-            /FATAL ERROR: --baseline requires a path argument/,
-            describeResult(r),
-          );
-          // A following flag is a missing value too, not a filename.
-          const flagAsValue = await runLinter(
-            root,
-            "--baseline",
-            "--update-baseline",
-          );
-          assert.notEqual(flagAsValue.code, 0, describeResult(flagAsValue));
-          assert.match(
-            flagAsValue.stderr,
-            /FATAL ERROR: --baseline requires a path argument/,
-            describeResult(flagAsValue),
-          );
-          await assert.rejects(
-            () => fs.access(path.join(root, "--update-baseline")),
-            "a flag must never be taken as a baseline filename",
-          );
-        });
-      });
     });
-  },
-);
+  });
+});

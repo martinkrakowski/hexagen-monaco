@@ -15,7 +15,6 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.join(__dirname, "..", "dist", "cli.js");
-const SKIP_NON_POSIX = false; // PROBE(explore/win32-unskip): run everything on Windows to see what breaks
 
 const MANIFEST = `system: acme-app
 scope: acme
@@ -103,79 +102,76 @@ async function cleanup(root: string): Promise<void> {
   }
 }
 
-describe(
-  "hexagen-lint — layout.yaml contract and per-module coverage",
-  { skip: SKIP_NON_POSIX },
-  () => {
-    beforeAll(async () => {
-      assert.ok(
-        await fs
-          .stat(CLI)
-          .then(() => true)
-          .catch(() => false),
-        `missing ${CLI} — build @hexagen/arch-linter before running this suite`,
+describe("hexagen-lint — layout.yaml contract and per-module coverage", () => {
+  beforeAll(async () => {
+    assert.ok(
+      await fs
+        .stat(CLI)
+        .then(() => true)
+        .catch(() => false),
+      `missing ${CLI} — build @hexagen/arch-linter before running this suite`,
+    );
+  });
+
+  it("rejects a scalar layers value with exit 2", async () => {
+    const root = await createFixture({
+      "packages/billing/src/domain/index.ts": `export const billing = 1;\n`,
+      ".architecture/layout.yaml": "layers: domain\n",
+    });
+    try {
+      const r = await runLinter(root);
+      assert.equal(r.code, 2, describeResult(r));
+      assert.match(r.stderr, /layers/, describeResult(r));
+      assert.doesNotMatch(
+        r.stdout + r.stderr,
+        /Architecture is compliant/,
+        "invalid layers must never report compliance",
       );
-    });
+    } finally {
+      await cleanup(root);
+    }
+  });
 
-    it("rejects a scalar layers value with exit 2", async () => {
-      const root = await createFixture({
-        "packages/billing/src/domain/index.ts": `export const billing = 1;\n`,
-        ".architecture/layout.yaml": "layers: domain\n",
-      });
-      try {
-        const r = await runLinter(root);
-        assert.equal(r.code, 2, describeResult(r));
-        assert.match(r.stderr, /layers/, describeResult(r));
-        assert.doesNotMatch(
-          r.stdout + r.stderr,
-          /Architecture is compliant/,
-          "invalid layers must never report compliance",
-        );
-      } finally {
-        await cleanup(root);
-      }
+  it("applies configured layer names to purity dispatch", async () => {
+    const root = await createFixture({
+      ".architecture/layout.yaml": "layers:\n  - core\n  - services\n",
+      "packages/billing/src/core/entity.ts": `import fs from "node:fs";\nexport const entity = fs;\n`,
     });
+    try {
+      const r = await runLinter(root);
+      assert.equal(r.code, 1, describeResult(r));
+      assert.match(
+        r.stderr,
+        /node-builtin-in-layer|node:fs/,
+        describeResult(r),
+      );
+    } finally {
+      await cleanup(root);
+    }
+  });
 
-    it("applies configured layer names to purity dispatch", async () => {
-      const root = await createFixture({
-        ".architecture/layout.yaml": "layers:\n  - core\n  - services\n",
-        "packages/billing/src/core/entity.ts": `import fs from "node:fs";\nexport const entity = fs;\n`,
-      });
-      try {
-        const r = await runLinter(root);
-        assert.equal(r.code, 1, describeResult(r));
-        assert.match(
-          r.stderr,
-          /node-builtin-in-layer|node:fs/,
-          describeResult(r),
-        );
-      } finally {
-        await cleanup(root);
-      }
+  it("keeps named domain/application roles when the list is reordered", async () => {
+    const root = await createFixture({
+      ".architecture/layout.yaml": "layers:\n  - services\n  - domain\n",
+      "packages/billing/src/domain/entity.ts": `import fs from "node:fs";\nexport const entity = fs;\n`,
     });
+    try {
+      const r = await runLinter(root);
+      assert.equal(r.code, 1, describeResult(r));
+      assert.match(
+        r.stderr,
+        /node-builtin-in-layer|node:fs/,
+        describeResult(r),
+      );
+    } finally {
+      await cleanup(root);
+    }
+  });
 
-    it("keeps named domain/application roles when the list is reordered", async () => {
-      const root = await createFixture({
-        ".architecture/layout.yaml": "layers:\n  - services\n  - domain\n",
-        "packages/billing/src/domain/entity.ts": `import fs from "node:fs";\nexport const entity = fs;\n`,
-      });
-      try {
-        const r = await runLinter(root);
-        assert.equal(r.code, 1, describeResult(r));
-        assert.match(
-          r.stderr,
-          /node-builtin-in-layer|node:fs/,
-          describeResult(r),
-        );
-      } finally {
-        await cleanup(root);
-      }
-    });
-
-    it("skips a missing context directory when another module was checked", async () => {
-      const root = await createFixture({
-        "packages/billing/src/index.ts": `export const billing = 1;\n`,
-        ".architecture/manifest.yaml": `system: acme-app
+  it("skips a missing context directory when another module was checked", async () => {
+    const root = await createFixture({
+      "packages/billing/src/index.ts": `export const billing = 1;\n`,
+      ".architecture/manifest.yaml": `system: acme-app
 scope: acme
 architecture: modular-monolith
 bounded_contexts:
@@ -190,87 +186,82 @@ bounded_contexts:
     layers:
       domain: {}
 `,
-      });
-      try {
-        const r = await runLinter(root);
-        assert.notEqual(r.code, 2, describeResult(r));
-        assert.match(
-          r.stdout + r.stderr,
-          /files scanned:\s*[1-9]/i,
-          describeResult(r),
-        );
-      } finally {
-        await cleanup(root);
-      }
     });
+    try {
+      const r = await runLinter(root);
+      assert.notEqual(r.code, 2, describeResult(r));
+      assert.match(
+        r.stdout + r.stderr,
+        /files scanned:\s*[1-9]/i,
+        describeResult(r),
+      );
+    } finally {
+      await cleanup(root);
+    }
+  });
 
-    it("fails closed when one module is checkable and another is ignore-only", async () => {
-      const root = await createFixture({
-        "packages/billing/src/index.ts": `export const billing = 1;\n`,
-        ".architecture/layout.yaml": "ignore:\n  - packages/orders\n",
-      });
-      try {
-        const r = await runLinter(root);
-        assert.equal(r.code, 2, describeResult(r));
-        assert.match(
-          r.stderr,
-          /NOTHING WAS CHECKED for module 'orders'/,
-          describeResult(r),
-        );
-      } finally {
-        await cleanup(root);
-      }
+  it("fails closed when one module is checkable and another is ignore-only", async () => {
+    const root = await createFixture({
+      "packages/billing/src/index.ts": `export const billing = 1;\n`,
+      ".architecture/layout.yaml": "ignore:\n  - packages/orders\n",
     });
+    try {
+      const r = await runLinter(root);
+      assert.equal(r.code, 2, describeResult(r));
+      assert.match(
+        r.stderr,
+        /NOTHING WAS CHECKED for module 'orders'/,
+        describeResult(r),
+      );
+    } finally {
+      await cleanup(root);
+    }
+  });
 
-    it("loads a custom context layer name such as services", async () => {
-      const root = await createFixture({
-        "packages/billing/src/services/charge.ts": `export const charge = 1;\n`,
-        ".architecture/layout.yaml":
-          "contexts:\n  billing:\n    root: packages/billing\n    layers:\n      services: [src/services]\n",
-      });
-      try {
-        const r = await runLinter(root);
-        assert.notEqual(r.code, 2, describeResult(r));
-        assert.doesNotMatch(
-          r.stderr,
-          /invalid|unrecognized/i,
-          describeResult(r),
-        );
-      } finally {
-        await cleanup(root);
-      }
+  it("loads a custom context layer name such as services", async () => {
+    const root = await createFixture({
+      "packages/billing/src/services/charge.ts": `export const charge = 1;\n`,
+      ".architecture/layout.yaml":
+        "contexts:\n  billing:\n    root: packages/billing\n    layers:\n      services: [src/services]\n",
     });
+    try {
+      const r = await runLinter(root);
+      assert.notEqual(r.code, 2, describeResult(r));
+      assert.doesNotMatch(r.stderr, /invalid|unrecognized/i, describeResult(r));
+    } finally {
+      await cleanup(root);
+    }
+  });
 
-    it("fails closed when a checked module directory matches no source files", async () => {
-      const root = await createFixture({
-        "packages/billing/README.md": "no typescript here\n",
-      });
-      try {
-        const r = await runLinter(root);
-        assert.equal(r.code, 2, describeResult(r));
-        assert.match(
-          r.stderr,
-          /NOTHING WAS CHECKED for module 'billing'/,
-          describeResult(r),
-        );
-      } finally {
-        await cleanup(root);
-      }
+  it("fails closed when a checked module directory matches no source files", async () => {
+    const root = await createFixture({
+      "packages/billing/README.md": "no typescript here\n",
     });
+    try {
+      const r = await runLinter(root);
+      assert.equal(r.code, 2, describeResult(r));
+      assert.match(
+        r.stderr,
+        /NOTHING WAS CHECKED for module 'billing'/,
+        describeResult(r),
+      );
+    } finally {
+      await cleanup(root);
+    }
+  });
 
-    it("flags an undeclared unscoped workspace import", async () => {
-      const root = await createFixture({
-        "tsconfig.base.json": `{ "compilerOptions": { "target": "ES2022", "module": "NodeNext", "moduleResolution": "NodeNext", "strict": true, "baseUrl": ".", "paths": { "orders": ["./packages/orders/src/index.ts"] } } }\n`,
-        "packages/billing/src/index.ts": `import { x } from "orders";\nexport const y = x;\n`,
-      });
-      try {
-        const r = await runLinter(root);
-        assert.equal(r.code, 1, describeResult(r));
-        assert.match(r.stderr, /Boundary Violation/, describeResult(r));
-        assert.match(r.stderr, /'orders'/, describeResult(r));
-      } finally {
-        await cleanup(root);
-      }
+  it("flags an undeclared unscoped workspace import", async () => {
+    const root = await createFixture({
+      "tsconfig.base.json": `{ "compilerOptions": { "target": "ES2022", "module": "NodeNext", "moduleResolution": "NodeNext", "strict": true, "baseUrl": ".", "paths": { "orders": ["./packages/orders/src/index.ts"] } } }\n`,
+      "packages/billing/src/index.ts": `import { x } from "orders";\nexport const y = x;\n`,
     });
-  },
-);
+    try {
+      const r = await runLinter(root);
+      assert.equal(r.code, 1, describeResult(r));
+      assert.match(r.stderr, /Boundary Violation/, describeResult(r));
+      assert.match(r.stderr, /'orders'/, describeResult(r));
+    } finally {
+      await cleanup(root);
+    }
+  });
+});

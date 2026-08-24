@@ -41,7 +41,6 @@ import { describe, it, beforeAll } from "vitest";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
-  SKIP_NON_POSIX,
   type ContractFixture,
   createPublishedLayoutFixture,
   runProcess,
@@ -180,157 +179,148 @@ async function seedLegacyEmptyBarrel(fix: ContractFixture): Promise<string> {
   return path.join(await fs.realpath(fix.root), legacyRel);
 }
 
-describe(
-  "dry-run purity contract — built dist in published layout",
-  { skip: SKIP_NON_POSIX },
-  () => {
-    beforeAll(assertBuiltArtifactsPresent);
+describe("dry-run purity contract — built dist in published layout", () => {
+  beforeAll(assertBuiltArtifactsPresent);
 
-    it("sync --dry-run leaves the tree byte-identical (incl. empty dirs) and writes no report", async () => {
-      const fix = await createPublishedLayoutFixture(
-        PURITY_MANIFEST,
-        "hexagen-dryrun-purity-",
+  it("sync --dry-run leaves the tree byte-identical (incl. empty dirs) and writes no report", async () => {
+    const fix = await createPublishedLayoutFixture(
+      PURITY_MANIFEST,
+      "hexagen-dryrun-purity-",
+    );
+    try {
+      const legacyBarrel = await seedLegacyEmptyBarrel(fix);
+      await gitBaseline(fix.root);
+      const before = await snapshotTreeWithDirs(fix.root);
+
+      const r = await runHexagen(fix, ["sync", "--dry-run", "--allow-dirty"]);
+      assert.equal(r.code, 0, describeResult(r));
+
+      // Purity check 1: porcelain (content changes, deletions, new files).
+      // Checked before the arming asserts below so a purity REGRESSION
+      // surfaces as the actual tree diff, not a missing log line.
+      const status = await runGitOrThrow(["status", "--porcelain"], fix.root);
+      assert.equal(
+        status.trim(),
+        "",
+        `dry-run dirtied the tree:\n${status}\n${describeResult(r)}`,
       );
-      try {
-        const legacyBarrel = await seedLegacyEmptyBarrel(fix);
-        await gitBaseline(fix.root);
-        const before = await snapshotTreeWithDirs(fix.root);
 
-        const r = await runHexagen(fix, ["sync", "--dry-run", "--allow-dirty"]);
-        assert.equal(r.code, 0, describeResult(r));
-
-        // Purity check 1: porcelain (content changes, deletions, new files).
-        // Checked before the arming asserts below so a purity REGRESSION
-        // surfaces as the actual tree diff, not a missing log line.
-        const status = await runGitOrThrow(["status", "--porcelain"], fix.root);
-        assert.equal(
-          status.trim(),
-          "",
-          `dry-run dirtied the tree:\n${status}\n${describeResult(r)}`,
-        );
-
-        // Purity check 2: tree snapshot (empty dirs are porcelain-invisible).
-        const after = await snapshotTreeWithDirs(fix.root);
-        assert.deepEqual(
-          after,
-          before,
-          "dry-run changed the directory tree (created/removed entries)",
-        );
-
-        assert.equal(
-          await pathExists(path.join(fix.root, "SYNC-MIGRATION-REPORT.md")),
-          false,
-          "dry-run must not write SYNC-MIGRATION-REPORT.md",
-        );
-
-        // Prove the run ARMED the gated paths (see header) — a run that
-        // planned nothing would pass the purity asserts without testing them.
-        assert.ok(
-          r.stdout.includes(
-            `[DRY-RUN] would delete empty barrel ${legacyBarrel}`,
-          ),
-          `expected the legacy-barrel deletion intent in output\n${describeResult(r)}`,
-        );
-        assert.ok(
-          r.stdout.includes("[DRY-RUN] would create"),
-          `expected planned creations in output\n${describeResult(r)}`,
-        );
-        assert.ok(
-          r.stdout.includes("skipping migration report file"),
-          `expected the report-suppression notice in output\n${describeResult(r)}`,
-        );
-      } finally {
-        await cleanupFixture(fix.root);
-      }
-    });
-
-    it("sync --dry-run --report <path> writes ONLY the opted-in report", async () => {
-      const fix = await createPublishedLayoutFixture(
-        PURITY_MANIFEST,
-        "hexagen-dryrun-report-",
+      // Purity check 2: tree snapshot (empty dirs are porcelain-invisible).
+      const after = await snapshotTreeWithDirs(fix.root);
+      assert.deepEqual(
+        after,
+        before,
+        "dry-run changed the directory tree (created/removed entries)",
       );
-      try {
-        await gitBaseline(fix.root);
 
-        const r = await runHexagen(fix, [
-          "sync",
-          "--dry-run",
-          "--allow-dirty",
-          "--report",
-          "preview-report.md",
-        ]);
-        assert.equal(r.code, 0, describeResult(r));
-
-        const reportPath = path.join(fix.root, "preview-report.md");
-        assert.ok(
-          await pathExists(reportPath),
-          `--report must opt into writing under dry-run\n${describeResult(r)}`,
-        );
-        const content = await fs.readFile(reportPath, "utf8");
-        assert.ok(
-          content.includes("# Sync Migration Report"),
-          `unexpected report content:\n${content.slice(0, 300)}`,
-        );
-
-        // The default-named report must still be absent…
-        assert.equal(
-          await pathExists(path.join(fix.root, "SYNC-MIGRATION-REPORT.md")),
-          false,
-          "--report must redirect, not duplicate, the report",
-        );
-        // …and the opted-in report must be the ONLY change to the tree.
-        const status = await runGitOrThrow(["status", "--porcelain"], fix.root);
-        assert.equal(
-          status.trim(),
-          "?? preview-report.md",
-          `expected the opt-in report to be the only tree change:\n${status}`,
-        );
-      } finally {
-        await cleanupFixture(fix.root);
-      }
-    });
-
-    it("sync --dry-run --report <nested/path> creates the parent dirs and writes the report", async () => {
-      const fix = await createPublishedLayoutFixture(
-        PURITY_MANIFEST,
-        "hexagen-dryrun-nested-report-",
+      assert.equal(
+        await pathExists(path.join(fix.root, "SYNC-MIGRATION-REPORT.md")),
+        false,
+        "dry-run must not write SYNC-MIGRATION-REPORT.md",
       );
-      try {
-        await gitBaseline(fix.root);
 
-        // Nested destination: writeReport must mkdir the parent (review #315
-        // finding — createWriteStream does not create directories; pre-fix
-        // this aborted the run with a stream ENOENT under A1's honest exits).
-        const r = await runHexagen(fix, [
-          "sync",
-          "--dry-run",
-          "--allow-dirty",
-          "--report",
-          "reports/nested/preview.md",
-        ]);
-        assert.equal(r.code, 0, describeResult(r));
+      // Prove the run ARMED the gated paths (see header) — a run that
+      // planned nothing would pass the purity asserts without testing them.
+      assert.ok(
+        r.stdout.includes(
+          `[DRY-RUN] would delete empty barrel ${legacyBarrel}`,
+        ),
+        `expected the legacy-barrel deletion intent in output\n${describeResult(r)}`,
+      );
+      assert.ok(
+        r.stdout.includes("[DRY-RUN] would create"),
+        `expected planned creations in output\n${describeResult(r)}`,
+      );
+      assert.ok(
+        r.stdout.includes("skipping migration report file"),
+        `expected the report-suppression notice in output\n${describeResult(r)}`,
+      );
+    } finally {
+      await cleanupFixture(fix.root);
+    }
+  });
 
-        const reportPath = path.join(
-          fix.root,
-          "reports",
-          "nested",
-          "preview.md",
-        );
-        assert.ok(
-          await pathExists(reportPath),
-          `nested --report destination must be created\n${describeResult(r)}`,
-        );
-        // The opted-in report (with its parent dirs — git collapses untracked
-        // dirs to the topmost entry) must be the ONLY change to the tree.
-        const status = await runGitOrThrow(["status", "--porcelain"], fix.root);
-        assert.equal(
-          status.trim(),
-          "?? reports/",
-          `expected only the nested report dir as a tree change:\n${status}`,
-        );
-      } finally {
-        await cleanupFixture(fix.root);
-      }
-    });
-  },
-);
+  it("sync --dry-run --report <path> writes ONLY the opted-in report", async () => {
+    const fix = await createPublishedLayoutFixture(
+      PURITY_MANIFEST,
+      "hexagen-dryrun-report-",
+    );
+    try {
+      await gitBaseline(fix.root);
+
+      const r = await runHexagen(fix, [
+        "sync",
+        "--dry-run",
+        "--allow-dirty",
+        "--report",
+        "preview-report.md",
+      ]);
+      assert.equal(r.code, 0, describeResult(r));
+
+      const reportPath = path.join(fix.root, "preview-report.md");
+      assert.ok(
+        await pathExists(reportPath),
+        `--report must opt into writing under dry-run\n${describeResult(r)}`,
+      );
+      const content = await fs.readFile(reportPath, "utf8");
+      assert.ok(
+        content.includes("# Sync Migration Report"),
+        `unexpected report content:\n${content.slice(0, 300)}`,
+      );
+
+      // The default-named report must still be absent…
+      assert.equal(
+        await pathExists(path.join(fix.root, "SYNC-MIGRATION-REPORT.md")),
+        false,
+        "--report must redirect, not duplicate, the report",
+      );
+      // …and the opted-in report must be the ONLY change to the tree.
+      const status = await runGitOrThrow(["status", "--porcelain"], fix.root);
+      assert.equal(
+        status.trim(),
+        "?? preview-report.md",
+        `expected the opt-in report to be the only tree change:\n${status}`,
+      );
+    } finally {
+      await cleanupFixture(fix.root);
+    }
+  });
+
+  it("sync --dry-run --report <nested/path> creates the parent dirs and writes the report", async () => {
+    const fix = await createPublishedLayoutFixture(
+      PURITY_MANIFEST,
+      "hexagen-dryrun-nested-report-",
+    );
+    try {
+      await gitBaseline(fix.root);
+
+      // Nested destination: writeReport must mkdir the parent (review #315
+      // finding — createWriteStream does not create directories; pre-fix
+      // this aborted the run with a stream ENOENT under A1's honest exits).
+      const r = await runHexagen(fix, [
+        "sync",
+        "--dry-run",
+        "--allow-dirty",
+        "--report",
+        "reports/nested/preview.md",
+      ]);
+      assert.equal(r.code, 0, describeResult(r));
+
+      const reportPath = path.join(fix.root, "reports", "nested", "preview.md");
+      assert.ok(
+        await pathExists(reportPath),
+        `nested --report destination must be created\n${describeResult(r)}`,
+      );
+      // The opted-in report (with its parent dirs — git collapses untracked
+      // dirs to the topmost entry) must be the ONLY change to the tree.
+      const status = await runGitOrThrow(["status", "--porcelain"], fix.root);
+      assert.equal(
+        status.trim(),
+        "?? reports/",
+        `expected only the nested report dir as a tree change:\n${status}`,
+      );
+    } finally {
+      await cleanupFixture(fix.root);
+    }
+  });
+});
