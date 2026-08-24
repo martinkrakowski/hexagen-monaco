@@ -358,6 +358,40 @@ describe(
           "domain",
           "index.ts",
         );
+        // The converged fixture's billing domain is empty, and since
+        // 2026-08-23 an empty layer gets NO barrel (ADR-0050 — the
+        // `export {};` stub emitter was removed). Deleting a stub that no
+        // longer exists is not drift. Give the layer a real source file and
+        // re-converge so the barrel is a real one; deleting THAT is the
+        // drift this test exists to measure (exactly one pending create).
+        await fs.writeFile(
+          path.join(
+            fix.root,
+            "packages",
+            "billing",
+            "src",
+            "domain",
+            "price.ts",
+          ),
+          "export const price = 1;\n",
+        );
+        await gitCommitAll(fix.root, "add a real domain source file");
+        const reconverge = await runHexagen(fix, ["sync"]);
+        assert.equal(
+          reconverge.code,
+          0,
+          `re-converging sync must succeed:\n${describeResult(reconverge)}`,
+        );
+        await gitCommitAll(fix.root, "converged with a real domain barrel");
+        const realBarrel = await fs.readFile(
+          path.join(fix.root, barrelRel),
+          "utf8",
+        );
+        assert.match(
+          realBarrel,
+          /export \* from "\.\/price\.js";/,
+          `fixture barrel must be real, not a stub:\n${realBarrel}`,
+        );
         await fs.rm(path.join(fix.root, barrelRel));
         await gitCommitAll(fix.root, "drift: remove layer barrel");
 
