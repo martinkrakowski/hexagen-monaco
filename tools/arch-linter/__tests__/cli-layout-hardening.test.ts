@@ -272,6 +272,16 @@ bounded_contexts:
     });
     try {
       const r = await runLinter(root);
+      // Non-vacuity first: an exit-2 run that scanned ZERO files satisfies the
+      // absence assertion below without the rule ever being evaluated — which
+      // is precisely how a linter that could not resolve paths on Windows
+      // would have slipped past this test. Same idiom as the checks above.
+      assert.notEqual(r.code, 2, describeResult(r));
+      assert.match(
+        r.stdout + r.stderr,
+        /files scanned:\s*[1-9]\d*/i,
+        describeResult(r),
+      );
       assert.doesNotMatch(
         r.stdout + r.stderr,
         /npm-package-in-domain|npm package '@acme\/orders'/,
@@ -305,6 +315,14 @@ bounded_contexts:
     });
     try {
       const r = await runLinter(root);
+      // Non-vacuity first, as above: absence of a violation must be observed
+      // over a scan that actually happened.
+      assert.notEqual(r.code, 2, describeResult(r));
+      assert.match(
+        r.stdout + r.stderr,
+        /files scanned:\s*[1-9]\d*/i,
+        describeResult(r),
+      );
       assert.doesNotMatch(
         r.stdout + r.stderr,
         /Boundary Violation|cross-package-import/,
