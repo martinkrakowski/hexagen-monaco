@@ -7,6 +7,23 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
+/**
+ * A path in TypeScript's own convention: forward slashes on every platform.
+ *
+ * Two win32 defects in this file shared one cause — native separators leaking
+ * into places that require TS/JSON conventions. `ts.parseConfigFileTextToJson`
+ * asserts its file name is already normalised (a backslashed name trips
+ * `Debug Failure. Expected C:/... === C:\...`), and a `path.relative()` result
+ * embedded in a JSON string makes `"..\..\tsconfig.base.json"` — invalid JSON
+ * escapes, so `extends` silently failed to resolve. tsconfig `extends` uses
+ * forward slashes on every platform, so this is also the correct output.
+ *
+ * Exported for the unit test below, which feeds it a win32 path on any host.
+ */
+export function toTsPath(p: string): string {
+  return p.replace(/\\/g, "/");
+}
+
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../..",
@@ -107,7 +124,16 @@ describe("turbo.json cache-input guard (P3.2)", () => {
   }
 
   function parseTsconfigText(fileName: string, text: string): unknown {
-    const { config, error } = ts.parseConfigFileTextToJson(fileName, text);
+    // TypeScript's API speaks its own path convention — forward slashes on
+    // every platform — and asserts the name it is handed is already
+    // normalised. `path.join` yields backslashes on win32, which tripped
+    // an internal `Debug Failure. Expected C:/... === C:\...` and made the
+    // guard fail for a reason that had nothing to do with tsconfigs. Caught
+    // by the Windows leg (#640) on its first run against another PR's diff;
+    // the catalogue's §2.3 separator class, in a test that shipped green on
+    // ubuntu.
+    const tsFileName = toTsPath(fileName);
+    const { config, error } = ts.parseConfigFileTextToJson(tsFileName, text);
     if (error !== undefined || config === undefined) {
       const detail =
         typeof error?.messageText === "string"
@@ -249,7 +275,7 @@ describe("turbo.json cache-input guard (P3.2)", () => {
   it("discovery counts a legal multiline TS 5+ extends array", async () => {
     const absPath = await writeFixture(
       (dir) =>
-        `{\n  "extends": [\n    "@tsconfig/strictest/tsconfig.json",\n    "${path.relative(dir, ROOT_BASE)}"\n  ],\n  "compilerOptions": {}\n}\n`,
+        `{\n  "extends": [\n    "@tsconfig/strictest/tsconfig.json",\n    "${toTsPath(path.relative(dir, ROOT_BASE))}"\n  ],\n  "compilerOptions": {}\n}\n`,
     );
     assert.equal(await isRootBaseExtender(absPath), true);
   });
@@ -257,9 +283,34 @@ describe("turbo.json cache-input guard (P3.2)", () => {
   it("discovery counts a legal JSONC extender (comment, trailing comma)", async () => {
     const absPath = await writeFixture(
       (dir) =>
-        `{\n  // legal tsconfig comment\n  "extends": "${path.relative(dir, ROOT_BASE)}",\n}\n`,
+        `{\n  // legal tsconfig comment\n  "extends": "${toTsPath(path.relative(dir, ROOT_BASE))}",\n}\n`,
     );
     assert.equal(await isRootBaseExtender(absPath), true);
+  });
+
+  it("toTsPath converts win32 separators — the fault the Windows leg caught", () => {
+    // Platform-independent: the input is a literal win32 path, so this runs
+    // the same on ubuntu. Both prior failures came from native separators
+    // reaching a consumer that requires forward slashes — the TS config
+    // parser (Debug Failure) and a JSON string literal (invalid escapes).
+    assert.equal(
+      toTsPath("C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\x\\tsconfig.json"),
+      "C:/Users/RUNNER~1/AppData/Local/Temp/x/tsconfig.json",
+    );
+    assert.equal(
+      toTsPath("..\\..\\tsconfig.base.json"),
+      "../../tsconfig.base.json",
+    );
+    // A JSON string built from the result must not carry stray escapes.
+    assert.deepEqual(
+      JSON.parse(`{"extends": "${toTsPath("..\\..\\tsconfig.base.json")}"}`),
+      { extends: "../../tsconfig.base.json" },
+    );
+    // Already-posix input is untouched.
+    assert.equal(
+      toTsPath("../../tsconfig.base.json"),
+      "../../tsconfig.base.json",
+    );
   });
 
   it("an unparseable tracked tsconfig fails the guard loudly instead of being skipped", async () => {
