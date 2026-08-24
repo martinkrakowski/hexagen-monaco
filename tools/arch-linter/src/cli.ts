@@ -5,6 +5,7 @@ import * as fs from "fs";
 import { Project } from "ts-morph";
 import path from "node:path";
 import { createConsoleLogger } from "./logger.js";
+import { isFileUnderModule } from "./module-file-scope.js";
 // Manifest validation uses the schema from @hexagen/project-configuration
 // (packages/project-configuration/src/domain/model/manifest-schema/manifest-schema.ts)
 // via mergeSplitManifest(). Do not add a local schema to this package —
@@ -682,12 +683,13 @@ function checkArchitecturalIntegrity(): {
       return;
     }
 
-    const moduleSourceFiles = project.getSourceFiles().filter((f) => {
-      const fp = f.getFilePath();
-      // Use path separator boundary to avoid matching sibling packages
-      // whose names share a prefix (e.g. 'ui' matching 'ui-projection-compiler').
-      return fp === modulePath || fp.startsWith(modulePath + path.sep);
-    });
+    const moduleSourceFiles = project
+      .getSourceFiles()
+      // ts-morph paths are forward-slash on every platform; modulePath is
+      // native. See module-file-scope.ts — comparing them raw scanned zero
+      // files on Windows. The separator boundary still prevents 'ui' from
+      // matching 'ui-projection-compiler'.
+      .filter((f) => isFileUnderModule(f.getFilePath(), modulePath));
 
     const checkedModuleSourceFiles = moduleSourceFiles.filter((file) => {
       const filePath = file.getFilePath();
