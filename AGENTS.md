@@ -1,6 +1,7 @@
 # AGENTS.md — HexaGen Monaco
 
-> Update this file only when a mode trigger changes or a new never-edit file is added.
+> Update this file when a mode trigger changes, a never-edit file is added, or a
+> project-wide working rule changes. Keep it short.
 > Detailed specs live in `.agents/` — see links in each mode entry.
 
 ---
