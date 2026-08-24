@@ -74,7 +74,7 @@ test("analyzeManifestCompleteness - fully populated", () => {
         ...emptyFormValues.boundedContexts[0],
         name: "Users",
         portConfiguration: {
-          inboundPorts: ["REST_API"],
+          inboundPorts: ["rest-controller"],
           outboundPorts: [],
         },
       },
@@ -84,7 +84,7 @@ test("analyzeManifestCompleteness - fully populated", () => {
         name: "Billing",
         portConfiguration: {
           inboundPorts: [],
-          outboundPorts: ["DATABASE"],
+          outboundPorts: ["relational-db"],
         },
       },
     ],
@@ -92,8 +92,8 @@ test("analyzeManifestCompleteness - fully populated", () => {
       {
         consumerContext: "2",
         providerContext: emptyFormValues.boundedContexts[0].id,
-        relationshipType: "D",
-        integrationPattern: "ACL",
+        integrationPattern: "acl",
+        communicationBoundary: "in-process",
       },
     ],
   });

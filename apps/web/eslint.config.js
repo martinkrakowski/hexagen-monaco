@@ -605,4 +605,17 @@ export default [
       ],
     },
   },
+  {
+    // Enforcement plan P2.2 (D-4 accepted 2026-08-23): assert non-empty
+    // before asserting clean. `warn` — this is a tripwire, and the first
+    // sweep's fix:allow ratio is the recorded input to D-4's downgrade
+    // condition; escalate to "error" only once the tree is clean.
+    files: ["**/*.test.ts", "**/*.test.tsx"],
+    plugins: {
+      "hexagen-ui": hexagenUi,
+    },
+    rules: {
+      "hexagen-ui/population-guard": "warn",
+    },
+  },
 ];

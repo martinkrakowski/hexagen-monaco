@@ -79,7 +79,13 @@ export interface ScanWorkspaceBase {
 }
 
 export interface ResolveScanWorkspaceOptions {
-  readonly env?: NodeJS.ProcessEnv;
+  /**
+   * Injected environment. `Partial` because the resolver reads exactly one
+   * key (`HEXAGEN_SCAN_WORKSPACE_DIR`); Next's `global.d.ts` makes
+   * `NODE_ENV` a required member of `NodeJS.ProcessEnv`, which would force
+   * every caller that injects a minimal env to fake it.
+   */
+  readonly env?: Readonly<Partial<NodeJS.ProcessEnv>>;
   readonly cwd?: string;
   /**
    * Create `dir` and confirm the process can write into it. Returns `null` on

@@ -1,3 +1,4 @@
+import { createLLMEngineState } from "@hexagen/local-llm";
 import { describe, it, beforeEach, afterEach } from "vitest";
 import assert from "node:assert";
 import { renderHook } from "@testing-library/react";
@@ -36,7 +37,7 @@ function buildContext(
   sendFn?: ReturnType<typeof makeSendGovernanceMock>,
 ): LocalLLMContext {
   return {
-    engineState: { status: "ready", progress: 100 },
+    engineState: createLLMEngineState("ready", 100),
     initializeModel: async () => {},
     cancelDownload: () => {},
     hasAnyCachedModel: async () => false,
@@ -45,6 +46,7 @@ function buildContext(
     deleteCachedModel: async () => {},
     loadedModel: null,
     sendGovernanceMessage: sendFn ?? makeSendGovernanceMock(),
+    sendStructuredPrompt: async () => "",
     messages,
   };
 }

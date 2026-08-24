@@ -78,8 +78,11 @@ describe("scripts/locked-dependency-version.mjs", () => {
     const fromLock = lockedVersion("prettier", pkg, lock);
     assert.ok(fromLock, "real lockfile must resolve prettier");
     const installed = execFileSync(
-      "npx",
-      ["--no-install", "prettier", "--version"],
+      process.execPath,
+      [
+        path.join(REPO_ROOT, "node_modules", "prettier", "bin", "prettier.cjs"),
+        "--version",
+      ],
       {
         cwd: REPO_ROOT,
         encoding: "utf8",

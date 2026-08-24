@@ -50,6 +50,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
+import { assertTagIsFree } from "./lib/tag-collision.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -80,8 +81,8 @@ function printHelp() {
       "  yarn bump --set <X.Y.Z> [--all] [--dry-run] [--yes]",
       "",
       "Default bump type is 'patch'. Bumps only the lock-step cohort (packages",
-      'already at the root version); off-version packages are skipped unless',
-      "--all is given. Touches only the \"version\" field. Does not commit or tag.",
+      "already at the root version); off-version packages are skipped unless",
+      '--all is given. Touches only the "version" field. Does not commit or tag.',
     ].join("\n"),
   );
 }
@@ -92,11 +93,13 @@ function parseArgs() {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "patch" || a === "minor" || a === "major") {
-      if (opts.bump) fail(`Multiple bump types given: "${opts.bump}" and "${a}".`);
+      if (opts.bump)
+        fail(`Multiple bump types given: "${opts.bump}" and "${a}".`);
       opts.bump = a;
     } else if (a === "--set") {
       opts.set = args[++i];
-      if (!opts.set) fail("--set requires a version argument (e.g. --set 1.2.3).");
+      if (!opts.set)
+        fail("--set requires a version argument (e.g. --set 1.2.3).");
     } else if (a === "--all") {
       opts.all = true;
     } else if (a === "--dry-run") {
@@ -112,7 +115,8 @@ function parseArgs() {
       process.exit(1);
     }
   }
-  if (opts.set && opts.bump) fail("Pass either a bump type OR --set, not both.");
+  if (opts.set && opts.bump)
+    fail("Pass either a bump type OR --set, not both.");
   if (!opts.set && !opts.bump) opts.bump = "patch"; // friendly default
   return opts;
 }
@@ -123,12 +127,15 @@ function parseArgs() {
 
 function computeTarget(current, opts) {
   if (opts.set) {
-    if (!SEMVER_LOOSE.test(opts.set)) fail(`--set value is not a valid version: ${opts.set}`);
+    if (!SEMVER_LOOSE.test(opts.set))
+      fail(`--set value is not a valid version: ${opts.set}`);
     return opts.set;
   }
   const m = SEMVER_STRICT.exec(current);
   if (!m) {
-    fail(`Root version "${current}" is not plain X.Y.Z — use --set for a prerelease/explicit bump.`);
+    fail(
+      `Root version "${current}" is not plain X.Y.Z — use --set for a prerelease/explicit bump.`,
+    );
   }
   let major = Number(m[1]);
   let minor = Number(m[2]);
@@ -213,7 +220,9 @@ function setTopLevelVersion(content, newVersion) {
         const m = /^"version"(\s*:\s*)"(?:[^"\\]|\\.)*"/.exec(content.slice(i));
         if (m) {
           return (
-            content.slice(0, i) + `"version"${m[1]}"${newVersion}"` + content.slice(i + m[0].length)
+            content.slice(0, i) +
+            `"version"${m[1]}"${newVersion}"` +
+            content.slice(i + m[0].length)
           );
         }
       }
@@ -249,13 +258,21 @@ async function main() {
     fail('Root package.json has no valid "version" field.');
   }
   const target = computeTarget(current, opts);
+  try {
+    assertTagIsFree(target);
+  } catch (err) {
+    fail(err instanceof Error ? err.message : String(err));
+  }
 
   console.log("");
   console.log("Workspace version bump");
   console.log("======================");
   console.log(`  Current (root): ${current}`);
-  console.log(`  Target:         ${target}  ${opts.set ? "(--set)" : `(${opts.bump})`}`);
-  if (opts.all) console.log("  Mode:           --all (include off-lock-step packages)");
+  console.log(
+    `  Target:         ${target}  ${opts.set ? "(--set)" : `(${opts.bump})`}`,
+  );
+  if (opts.all)
+    console.log("  Mode:           --all (include off-lock-step packages)");
   if (opts.dryRun) console.log("  *** DRY RUN — no files will be written ***");
   console.log("");
 
@@ -268,7 +285,11 @@ async function main() {
     if (typeof pkg.version !== "string" || pkg.version.length === 0) {
       fail(`Invalid or missing "version" in ${rel}; cannot bump.`);
     }
-    (pkg.version === current ? cohort : offVersion).push({ file, rel, from: pkg.version });
+    (pkg.version === current ? cohort : offVersion).push({
+      file,
+      rel,
+      from: pkg.version,
+    });
   }
 
   const candidates = opts.all ? [...cohort, ...offVersion] : cohort;
@@ -281,7 +302,9 @@ async function main() {
 
   if (offVersion.length > 0) {
     if (opts.all) {
-      console.log(`Including ${offVersion.length} off-lock-step package(s) via --all.`);
+      console.log(
+        `Including ${offVersion.length} off-lock-step package(s) via --all.`,
+      );
     } else {
       console.log(
         `Skipping ${offVersion.length} off-lock-step package(s) (not at ${current}); pass --all to include:`,
@@ -291,7 +314,9 @@ async function main() {
     console.log("");
   }
 
-  console.log(`Total: ${planned.length} of ${files.length} workspace package.json file(s) to update.`);
+  console.log(
+    `Total: ${planned.length} of ${files.length} workspace package.json file(s) to update.`,
+  );
 
   if (planned.length === 0) {
     console.log("\nNothing to update — already at the target version.");
@@ -316,16 +341,21 @@ async function main() {
   for (const p of planned) {
     const content = fs.readFileSync(p.file, "utf8");
     const updated = setTopLevelVersion(content, target);
-    if (updated === null) fail(`Could not locate a top-level "version" field in ${p.rel}.`);
+    if (updated === null)
+      fail(`Could not locate a top-level "version" field in ${p.rel}.`);
     let parsed;
     try {
       parsed = JSON.parse(updated);
     } catch {
-      fail(`Rewrite produced invalid JSON for ${p.rel}; aborted with no files changed.`);
+      fail(
+        `Rewrite produced invalid JSON for ${p.rel}; aborted with no files changed.`,
+      );
     }
     // Structural guarantee: the parsed top-level version must now be the target.
     if (parsed.version !== target) {
-      fail(`Post-write check failed for ${p.rel}: top-level version is not ${target}.`);
+      fail(
+        `Post-write check failed for ${p.rel}: top-level version is not ${target}.`,
+      );
     }
     writes.push({ file: p.file, content: updated });
   }
@@ -344,7 +374,22 @@ async function main() {
   console.log(`  git tag v${target} && git push origin v${target}`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Node loads the ESM entry module by its realpath, so a symlinked invocation
+// (macOS /var, symlinked checkouts) makes argv[1] differ textually from
+// import.meta.url — compare realpaths too, or the CLI silently no-ops.
+function isEntryModule() {
+  if (!process.argv[1]) return false;
+  const self = fileURLToPath(import.meta.url);
+  if (path.resolve(process.argv[1]) === self) return true;
+  try {
+    return fs.realpathSync(process.argv[1]) === self;
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryModule())
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });

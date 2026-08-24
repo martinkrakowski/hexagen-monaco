@@ -1,6 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalDependencies": ["**/.env.*", "NODE_ENV"],
+  "globalDependencies": ["**/.env.*", "tsconfig.base.json"],
   "globalEnv": [
     "APP_VERSION",
     "CI",

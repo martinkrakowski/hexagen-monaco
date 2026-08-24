@@ -4,6 +4,7 @@ import type {
   AssembledManifest,
   PipelineState,
 } from "@hexagen/agentic-interaction";
+import { stageSummary } from "@hexagen/agentic-interaction";
 import {
   buildDoneEvent,
   buildManifestEvent,
@@ -100,7 +101,7 @@ describe("createFullPipelineEventAdapter", () => {
       inputTokensEstimate: 10,
       outputTokensActual: 20,
       servedFromCache: false,
-      summary: "ok",
+      summary: stageSummary`ok`,
     };
     adapter.onStageTelemetry?.(telemetry);
     assert.deepStrictEqual(events[0], {

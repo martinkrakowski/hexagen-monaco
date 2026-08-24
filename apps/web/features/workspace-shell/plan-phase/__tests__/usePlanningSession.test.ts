@@ -2,6 +2,10 @@ import { describe, it, vi, beforeEach, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import type { ProjectLayer } from "@hexagen/shared";
+import type {
+  NewProjectLayer,
+  NewProjectLayerTurn,
+} from "@/hooks/useSavedProjects";
 
 import { usePlanningSession } from "../session/usePlanningSession";
 
@@ -82,10 +86,12 @@ function makeMutations() {
   const layers = new Map<string, ProjectLayer>();
   let nextId = 0;
   const addLayer = vi.fn(
-    async (_projectId: string, layer: unknown): Promise<string | null> => {
+    async (
+      _projectId: string,
+      layer: NewProjectLayer,
+    ): Promise<string | null> => {
       const id = `layer-${++nextId}`;
-      const l = layer as Omit<ProjectLayer, "id" | "createdAt" | "updatedAt">;
-      layers.set(id, { ...l, id, createdAt: 1, updatedAt: 1 } as ProjectLayer);
+      layers.set(id, { ...layer, id, createdAt: 1, updatedAt: 1 });
       return id;
     },
   );
@@ -93,7 +99,7 @@ function makeMutations() {
     async (
       _projectId: string,
       layerId: string,
-      turn: { author: string; content: string },
+      turn: NewProjectLayerTurn,
       patch?: Partial<ProjectLayer>,
     ) => {
       const layer = layers.get(layerId);
@@ -186,7 +192,7 @@ describe("usePlanningSession", () => {
     const appended = mutations.appendLayerTurn.mock.calls;
     assert.strictEqual(appended.length, 2);
     assert.deepStrictEqual(
-      appended.map((c) => [c[2].role, c[2].round, c[3].status]),
+      appended.map((c) => [c[2].role, c[2].round, c[3]?.status]),
       [
         ["proposer", 1, "critiquing"],
         ["critic", 1, "converged"],

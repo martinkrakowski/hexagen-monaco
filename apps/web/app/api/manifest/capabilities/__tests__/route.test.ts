@@ -149,6 +149,11 @@ test("metadata-store error messages are not returned to the client", async () =>
   expect(res.status).toBe(500);
 
   const body = JSON.stringify(await res.json());
+  // Population guard: the redaction claims below are vacuous on an empty
+  // body — {} contains none of the secrets either. Prove the route said
+  // something before proving it did not say the wrong thing.
+  expect(body.length).toBeGreaterThan(2);
+  expect(body).toContain("error");
   expect(body).not.toContain(internal);
   expect(body).not.toContain("SQLITE_ERROR");
   expect(body).not.toContain("/var/db/byok.sqlite");

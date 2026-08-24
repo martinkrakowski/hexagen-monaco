@@ -6,6 +6,7 @@ import {
   saveModelPreferences,
   clearModelPreferences,
 } from "../ModelSelectionFlow/modelPreferencesStorage";
+import { DomainModelId } from "@hexagen/local-llm";
 
 describe("modelPreferencesStorage", () => {
   const store = new Map<string, string>();
@@ -77,7 +78,7 @@ describe("modelPreferencesStorage", () => {
 
     it("should read stored values", () => {
       store.set(STORAGE_KEYS.HAS_ENABLED_LOCAL_MODELS, "true");
-      store.set(STORAGE_KEYS.LAST_MODEL_ID, "my-model");
+      store.set(STORAGE_KEYS.LAST_MODEL_ID, DomainModelId.QWEN3_8B);
       store.set(STORAGE_KEYS.AUTO_LOAD_ENABLED, "true");
       store.set(STORAGE_KEYS.CLOUD_PROVIDER, "openai");
       store.set(STORAGE_KEYS.REMEMBER_API_KEY, "true");
@@ -86,7 +87,7 @@ describe("modelPreferencesStorage", () => {
 
       const prefs = getModelPreferences();
       assert.strictEqual(prefs.hasEnabledLocalModels, true);
-      assert.strictEqual(prefs.lastModelId, "my-model");
+      assert.strictEqual(prefs.lastModelId, DomainModelId.QWEN3_8B);
       assert.strictEqual(prefs.autoLoadEnabled, true);
       assert.strictEqual(prefs.cloudProvider, "openai");
       assert.strictEqual(prefs.rememberApiKey, true);
@@ -107,7 +108,7 @@ describe("modelPreferencesStorage", () => {
     it("should save preferences to localStorage", () => {
       saveModelPreferences({
         hasEnabledLocalModels: true,
-        lastModelId: "test-model",
+        lastModelId: DomainModelId.QWEN3_4B,
         autoLoadEnabled: true,
         cloudProvider: "anthropic",
         rememberApiKey: false,
@@ -119,7 +120,10 @@ describe("modelPreferencesStorage", () => {
         store.get(STORAGE_KEYS.HAS_ENABLED_LOCAL_MODELS),
         "true",
       );
-      assert.strictEqual(store.get(STORAGE_KEYS.LAST_MODEL_ID), "test-model");
+      assert.strictEqual(
+        store.get(STORAGE_KEYS.LAST_MODEL_ID),
+        DomainModelId.QWEN3_4B,
+      );
       assert.strictEqual(store.get(STORAGE_KEYS.AUTO_LOAD_ENABLED), "true");
       assert.strictEqual(store.get(STORAGE_KEYS.CLOUD_PROVIDER), "anthropic");
       assert.strictEqual(store.get(STORAGE_KEYS.REMEMBER_API_KEY), "false");
@@ -132,7 +136,7 @@ describe("modelPreferencesStorage", () => {
       store.set(STORAGE_KEYS.LAST_MODEL_ID, "existing-model");
       store.set(STORAGE_KEYS.AUTO_LOAD_ENABLED, "false");
 
-      saveModelPreferences({ lastModelId: "updated-model" });
+      saveModelPreferences({ lastModelId: DomainModelId.QWEN3_1_7B });
 
       assert.strictEqual(
         store.get(STORAGE_KEYS.HAS_ENABLED_LOCAL_MODELS),
@@ -140,7 +144,7 @@ describe("modelPreferencesStorage", () => {
       );
       assert.strictEqual(
         store.get(STORAGE_KEYS.LAST_MODEL_ID),
-        "updated-model",
+        DomainModelId.QWEN3_1_7B,
       );
       assert.strictEqual(store.get(STORAGE_KEYS.AUTO_LOAD_ENABLED), "false");
     });
@@ -185,12 +189,12 @@ describe("modelPreferencesStorage", () => {
     it("should persist rememberChoice across get/save cycles", () => {
       saveModelPreferences({
         rememberChoice: true,
-        lastModelId: "persisted-model",
+        lastModelId: DomainModelId.LLAMA_3_2_3B,
       });
 
       const prefs = getModelPreferences();
       assert.strictEqual(prefs.rememberChoice, true);
-      assert.strictEqual(prefs.lastModelId, "persisted-model");
+      assert.strictEqual(prefs.lastModelId, DomainModelId.LLAMA_3_2_3B);
     });
 
     it("should persist rememberChoice = false across get/save cycles", () => {
@@ -216,7 +220,7 @@ describe("modelPreferencesStorage", () => {
     it("should remove all preference keys", () => {
       saveModelPreferences({
         hasEnabledLocalModels: true,
-        lastModelId: "sample",
+        lastModelId: DomainModelId.QWEN_CODER_1_5B,
         autoLoadEnabled: true,
         cloudProvider: "openai",
         rememberApiKey: true,

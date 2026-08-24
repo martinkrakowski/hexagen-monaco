@@ -216,7 +216,7 @@ describe("useStagedSpecGeneration surface", () => {
       "proposeError",
     ]) {
       assert.strictEqual(
-        key in (result.current as Record<string, unknown>),
+        key in (result.current as unknown as Record<string, unknown>),
         false,
         `expected removed key \`${key}\` to be absent from the hook surface`,
       );

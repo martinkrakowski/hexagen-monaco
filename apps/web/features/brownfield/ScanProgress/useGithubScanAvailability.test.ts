@@ -129,6 +129,7 @@ describe("useGithubScanAvailability", () => {
 
     // The still-in-flight GET now answers 405 ("endpoint is on").
     await act(async () => {
+      if (!resolveGet) throw new Error("GET was never issued");
       resolveGet({ status: 405, ok: false } as Response);
       await Promise.resolve();
     });

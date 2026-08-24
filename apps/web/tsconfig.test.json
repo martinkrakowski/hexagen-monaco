@@ -1,6 +1,27 @@
 {
+  // Type-checks the test sources. `tsconfig.json` deliberately excludes
+  // `**/*.test.ts(x)` so the Next build never compiles them; `extends`
+  // inherits that exclude, which is why this file must restate `exclude`
+  // without the test globs -- otherwise `tsc -p tsconfig.test.json` sees zero
+  // test files and reports success while checking nothing (enforcement plan
+  // P2.1; the count is pinned by the typecheck-test-scope guard test).
   "extends": "./tsconfig.json",
+  // compilerOptions mirror the sibling packages' tsconfig.test.json: noEmit
+  // (so allowImportingTsExtensions is legal -- vitest resolves `.ts` imports),
+  // rootDir at the repo root and composite off (tests import sibling package
+  // sources directly, e.g. packages/sync/src/arch-linter-bin.ts).
   "compilerOptions": {
-    "jsx": "react-jsx"
-  }
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "composite": false,
+    "rootDir": "../..",
+    "allowImportingTsExtensions": true
+  },
+  "exclude": [
+    "node_modules",
+    ".next",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "vitest.config.ts"
+  ]
 }
