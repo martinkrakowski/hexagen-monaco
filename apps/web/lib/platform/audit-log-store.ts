@@ -21,8 +21,9 @@ import type Database from "better-sqlite3";
  * transactions.
  */
 
-/** v1 vocabulary (D-A6): team management, plus share grant/revoke from P-A4. */
+/** v1 vocabulary (D-A6): org and team management, plus share grant/revoke from P-A4. */
 export type AuditAction =
+  | "org.create"
   | "org.delete"
   | "team.member.add"
   | "team.member.remove"

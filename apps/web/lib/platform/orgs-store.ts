@@ -65,6 +65,22 @@ export interface OrgInvite {
   acceptedAt: string | null;
 }
 
+/**
+ * Unique index `idx_orgs_slug` rejected the slug.
+ *
+ * Raised from the index, not from a pre-check: a SELECT-then-INSERT loses the
+ * race between two concurrent creates, and the second caller would see a raw
+ * SqliteError instead of a 409. Unrelated constraint failures (a colliding
+ * `orgs.id`) must not be mapped here.
+ */
+export class DuplicateOrgSlugError extends Error {
+  readonly code = "duplicate_org_slug";
+  constructor(readonly slug: string) {
+    super(`org slug '${slug}' already exists`);
+    this.name = "DuplicateOrgSlugError";
+  }
+}
+
 export interface Org {
   id: string;
   slug: string;
@@ -117,6 +133,19 @@ export interface OrgsRepository {
     name: string;
     createdBy: string;
   }): Promise<Org>;
+  /**
+   * Create an org AND make `createdBy` its owner, atomically.
+   *
+   * An org with no owner is unreachable: nobody can administer it, invite to
+   * it, or delete it, and `requireTenant` refuses every caller. Splitting the
+   * two inserts would let a failure leave exactly that.
+   *
+   * @throws DuplicateOrgSlugError on the `idx_orgs_slug` unique-index conflict.
+   */
+  createOrgWithOwner(
+    input: { id?: string; slug: string; name: string; createdBy: string },
+    actor: OrgAuditContext,
+  ): Promise<Org>;
   getOrg(orgId: string): Promise<Org | null>;
   getOrgBySlug(slug: string): Promise<Org | null>;
   /**
@@ -232,6 +261,24 @@ function assertRole(role: OrgRole): void {
   }
 }
 
+function sqliteConstraintCode(err: unknown): string {
+  if (typeof err !== "object" || err === null || !("code" in err)) return "";
+  return typeof err.code === "string" ? err.code : "";
+}
+
+/** The unique index on `orgs.slug` — not PK `orgs.id`. */
+function isDuplicateOrgSlugConstraint(err: unknown): boolean {
+  const code = sqliteConstraintCode(err);
+  if (code !== "SQLITE_CONSTRAINT_UNIQUE" && code !== "SQLITE_CONSTRAINT") {
+    return false;
+  }
+  const message = err instanceof Error ? err.message : "";
+  return (
+    /UNIQUE constraint failed: orgs\.slug/i.test(message) ||
+    /idx_orgs_slug/i.test(message)
+  );
+}
+
 export function createOrgsRepository(db: Database.Database): OrgsRepository {
   const insertOrg = db.prepare(`
     INSERT INTO orgs (id, slug, name, created_by, created_at)
@@ -275,6 +322,35 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
     WHERE user_id = ?
       AND team_id IN (SELECT id FROM teams WHERE org_id = ?)
   `);
+  // Org, owner membership and audit row in ONE transaction. An org whose
+  // owner insert failed is administerable by nobody and refused by
+  // requireTenant for everybody — a row that exists and cannot be used.
+  const createOrgWithOwnerTx = db.transaction(
+    (row: OrgRow, actorId: string): Org => {
+      try {
+        insertOrg.run(row);
+      } catch (err) {
+        if (isDuplicateOrgSlugConstraint(err)) {
+          throw new DuplicateOrgSlugError(row.slug);
+        }
+        throw err;
+      }
+      upsertMember.run({
+        org_id: row.id,
+        user_id: row.created_by,
+        role: "owner",
+        created_at: row.created_at,
+      });
+      appendAudit({
+        actorId,
+        action: "org.create",
+        subjectOwnerId: row.id,
+        subjectId: row.id,
+      });
+      return toOrg(row);
+    },
+  );
+
   // JOIN orgs so a membership row whose org_id is not an org (the FK
   // constraint, or a connection that forgot PRAGMA foreign_keys) cannot
   // authorize requireTenant against a personal owner id.
@@ -584,6 +660,22 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
       };
       insertOrg.run(org);
       return toOrg(org);
+    },
+    async createOrgWithOwner(input, actor) {
+      const id = input.id ?? crypto.randomUUID();
+      if (userIdTaken.get(id)) {
+        throw new Error("org id collides with an existing user");
+      }
+      return createOrgWithOwnerTx(
+        {
+          id,
+          slug: input.slug,
+          name: input.name,
+          created_by: input.createdBy,
+          created_at: new Date().toISOString(),
+        },
+        actor.actorId,
+      );
     },
     async getOrg(orgId) {
       const row = selectOrg.get(orgId) as OrgRow | undefined;

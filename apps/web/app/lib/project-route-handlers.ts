@@ -5,6 +5,8 @@ import { getPlatformStore } from "../../lib/platform";
 import { parseSavedProjectBody } from "../../lib/platform/saved-project-body";
 import {
   PROJECT_MUTATION_GUARD,
+  requirePersistenceOwner,
+  requireTenant,
   resolveProjectAccess,
   type ProjectRole,
 } from "../../lib/platform/require-owner";
@@ -136,6 +138,75 @@ function insufficientRole(): NextResponse {
     },
     { status: 403 },
   );
+}
+
+/**
+ * Authenticate, then rate-limit. Reversing that lets unsigned traffic exhaust
+ * the IP-keyed write budget (429) before `resolveProjectAccess` can 401.
+ * JWT is checked here and again inside `resolveProjectAccess`; that is
+ * cheap. Resolving *project* access twice is what this avoids.
+ */
+async function gateProjectMutation(
+  request: NextRequest,
+): Promise<NextResponse | null> {
+  const owner = await requirePersistenceOwner(request);
+  if (!owner.ok) return owner.response;
+  return guardMutation(request, PROJECT_MUTATION_GUARD);
+}
+
+/**
+ * Create a project owned by `ownerId` — the personal tenant, or an org.
+ *
+ * Authorization is `requireTenant`, not `requirePersistenceOwner`: there is no
+ * project yet to resolve access against, so the question is "may this caller
+ * act as this owner". It answers `self` for a personal tenant and the org role
+ * for a member, which is exactly the distinction the two URL shapes need — so
+ * both routes reach the same single check rather than each carrying its own.
+ *
+ * Any org member may create in the org (H1.3: `member` is full project
+ * read-write; `owner` gates org administration, not project data).
+ */
+export async function handleProjectCreate(
+  request: NextRequest,
+  ownerId: string,
+): Promise<NextResponse> {
+  const tenant = await requireTenant(request, ownerId);
+  if (!tenant.ok) return tenant.response;
+
+  const gate = guardMutation(request, PROJECT_MUTATION_GUARD);
+  if (gate) return gate;
+
+  const parsedBody = await readJsonBody(request);
+  if (!parsedBody.ok) return parsedBody.response;
+  const parsedProject = parseSavedProjectBody(parsedBody.body);
+  if (!parsedProject.ok) {
+    return NextResponse.json(
+      {
+        error: "validation",
+        message: parsedProject.message,
+        statusCode: 400,
+      },
+      { status: 400 },
+    );
+  }
+
+  const store = getPlatformStore();
+  const created = await store
+    .projectsFor(tenant.tenantId)
+    .createProjectRecord(parsedProject.project);
+  if (!created.success) {
+    const status = created.error.kind === "Conflict" ? 409 : 500;
+    return NextResponse.json(
+      {
+        error: created.error.kind,
+        message: created.error.message,
+        statusCode: status,
+      },
+      { status },
+    );
+  }
+  store.markProjectsInitialized(tenant.tenantId);
+  return NextResponse.json(created.value, { status: 201 });
 }
 
 export async function handleProjectGet(
