@@ -40,6 +40,18 @@ export interface AuthRepository {
     providerAccountId: string,
   ): AdapterUser | null;
   updateUser(user: Partial<AdapterUser> & Pick<AdapterUser, "id">): AdapterUser;
+  /**
+   * P-A1: persist the GitHub username seen in the OAuth profile.
+   *
+   * Async (D-A9) unlike its siblings here, which are sync because NextAuth's
+   * adapter contract calls them. This one is not part of that contract — it is
+   * called from the jwt callback — so it is written in the form every new
+   * store uses, and it costs nothing at its only call site.
+   *
+   * Idempotent: re-running a sign-in with the same profile is a no-op.
+   */
+  setGithubLogin(userId: string, login: string): Promise<void>;
+  getUserByGithubLogin(login: string): AdapterUser | null;
   linkAccount(account: AdapterAccount): void;
   unlinkAccount(provider: string, providerAccountId: string): void;
   createSession(session: {
@@ -88,6 +100,12 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
            image = COALESCE(@image, image)
      WHERE id = @id
   `);
+  const setGithubLogin = db.prepare(
+    "UPDATE users SET github_login = @github_login WHERE id = @id",
+  );
+  const selectUserByGithubLogin = db.prepare(
+    "SELECT * FROM users WHERE github_login = ?",
+  );
   const insertAccount = db.prepare(`
     INSERT INTO accounts (provider, provider_account_id, user_id, type)
     VALUES (@provider, @provider_account_id, @user_id, @type)
@@ -170,6 +188,15 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
         throw new Error(`User ${user.id} not found`);
       }
       return toAdapterUser(row);
+    },
+    async setGithubLogin(userId, login) {
+      const trimmed = login.trim();
+      if (!trimmed) return;
+      setGithubLogin.run({ id: userId, github_login: trimmed });
+    },
+    getUserByGithubLogin(login) {
+      const row = selectUserByGithubLogin.get(login) as UserRow | undefined;
+      return row ? toAdapterUser(row) : null;
     },
     linkAccount(account) {
       insertAccount.run({

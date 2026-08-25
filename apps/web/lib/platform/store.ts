@@ -17,6 +17,7 @@ import {
   type EntitlementRepository,
 } from "./billing";
 import { createOwnerStateStore } from "./owner-state";
+import { createOrgsRepository, type OrgsRepository } from "./orgs-store";
 import {
   createScanRecordsStore,
   type ScanRecordsStore,
@@ -25,6 +26,8 @@ import {
 export interface PlatformStore {
   readonly auth: AuthRepository;
   readonly billing: EntitlementRepository;
+  /** H1.1/H1.2: org rows and membership. Membership resolves per request. */
+  readonly orgs: OrgsRepository;
   projectsFor(ownerId: string): SavedProjectsStore;
   runsFor(ownerId: string): RunHistoryRepository;
   scansFor(ownerId: string): ScanRecordsStore;
@@ -52,6 +55,7 @@ export function createPlatformStore(
     scanArtifactsDir: artifactsDir,
     auth: createAuthRepository(db),
     billing: createEntitlementRepository(db),
+    orgs: createOrgsRepository(db),
     projectsFor(ownerId) {
       return createSavedProjectsStore(db, ownerId);
     },

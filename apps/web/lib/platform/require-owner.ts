@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
+import type { OrgRole } from "./orgs-store";
+import { getPlatformStore } from "./store";
 
 /** Persistence writes are chatty (live-session patches). Isolated namespace. */
 export const PROJECT_MUTATION_GUARD = {
@@ -35,4 +37,65 @@ export async function requirePersistenceOwner(
     };
   }
   return { ok: true, ownerId: sub };
+}
+
+/**
+ * How the caller relates to the tenant whose data they asked for. `self` is a
+ * personal tenant (`tenantId === sub`); otherwise it is the caller's org role.
+ */
+export type TenantAccess = "self" | OrgRole;
+
+export type TenantResolution =
+  | { ok: true; tenantId: string; userId: string; access: TenantAccess }
+  | { ok: false; response: NextResponse };
+
+/** Membership lookup, injectable so the guard is testable without a database. */
+export interface TenantMembershipReader {
+  memberRole(orgId: string, userId: string): Promise<OrgRole | null>;
+}
+
+/**
+ * H1.2 — may this caller act as `tenantId`?
+ *
+ * 401 without a JWT `sub`; 403 unless the tenant IS the caller, or the caller
+ * holds an `org_members` row for it.
+ *
+ * Membership is read from the database on EVERY request, and no org claim is
+ * ever written into the JWT. That is deliberate: a claim would keep a removed
+ * member authorised until their token expired. The cost is one primary-key
+ * lookup; the benefit is that removal takes effect on the very next request.
+ *
+ * A 403 here means "you are not a member of this tenant". It deliberately does
+ * not reveal whether the tenant exists, and callers must not downgrade it to a
+ * 404 — that would turn the guard into an existence oracle (D-A4).
+ */
+export async function requireTenant(
+  request: NextRequest,
+  tenantId: string,
+  orgs: TenantMembershipReader = getPlatformStore().orgs,
+): Promise<TenantResolution> {
+  const owner = await requirePersistenceOwner(request);
+  if (!owner.ok) return owner;
+
+  const userId = owner.ownerId;
+  const tenant = tenantId.trim();
+  if (!tenant) return { ok: false, response: tenantForbidden() };
+  if (tenant === userId) {
+    return { ok: true, tenantId: tenant, userId, access: "self" };
+  }
+
+  const role = await orgs.memberRole(tenant, userId);
+  if (!role) return { ok: false, response: tenantForbidden() };
+  return { ok: true, tenantId: tenant, userId, access: role };
+}
+
+function tenantForbidden(): NextResponse {
+  return NextResponse.json(
+    {
+      error: "forbidden",
+      message: "You do not have access to this tenant",
+      statusCode: 403,
+    },
+    { status: 403 },
+  );
 }

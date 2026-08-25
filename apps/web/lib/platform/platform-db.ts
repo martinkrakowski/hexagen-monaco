@@ -22,6 +22,7 @@ export function openPlatformDb(dbPath: string): Database.Database {
       email TEXT,
       email_verified TEXT,
       image TEXT,
+      github_login TEXT,
       created_at TEXT NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email
@@ -55,8 +56,58 @@ export function openPlatformDb(dbPath: string): Database.Database {
   // Owner columns / composite PKs must exist before any index that names
   // them. CREATE TABLE IF NOT EXISTS is a no-op on a pre-owner legacy
   // table, so migrate those tables first (PR review: index-before-column).
+  //
+  // `users.github_login` obeys the same rule: the CREATE above is a no-op on
+  // an existing database, so the column arrives by ALTER before the partial
+  // index below can name it.
+  migrateUsersGithubLogin(db);
   migrateSavedProjects(db);
   migrateRunEvents(db);
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_github_login
+      ON users (github_login) WHERE github_login IS NOT NULL;
+
+    -- H1.1 (2026-08-20 hosting plan). An org is just another owner: its UUID
+    -- goes in the same \`owner_id\` column every project statement already
+    -- scopes by, so no store schema changes. Authorization lives entirely in
+    -- membership resolution (H1.2 \`requireTenant\`).
+    CREATE TABLE IF NOT EXISTS orgs (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL,
+      name TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_orgs_slug ON orgs (slug);
+
+    -- role: 'owner' (billing, membership, org delete) | 'member' (full
+    -- project/run read-write). Two roles only -- H1.3/D-A2: viewer roles and
+    -- per-project ACLs have no v1 buyer.
+    CREATE TABLE IF NOT EXISTS org_members (
+      org_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_org_members_user
+      ON org_members (user_id);
+
+    -- Keyed by GitHub login, not user id: an invitee may have no account yet.
+    -- It stays pending until their first sign-in populates users.github_login
+    -- (P-A1), which is consistent with GitHub-only auth (D-H1).
+    CREATE TABLE IF NOT EXISTS org_invites (
+      org_id TEXT NOT NULL,
+      github_login TEXT NOT NULL,
+      role TEXT NOT NULL,
+      invited_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      accepted_at TEXT,
+      PRIMARY KEY (org_id, github_login)
+    );
+    CREATE INDEX IF NOT EXISTS idx_org_invites_login
+      ON org_invites (github_login) WHERE accepted_at IS NULL;
+  `);
   db.exec(`
     DROP INDEX IF EXISTS idx_saved_projects_ord;
     CREATE INDEX IF NOT EXISTS idx_saved_projects_ord
@@ -256,6 +307,19 @@ const SAVED_PROJECTS_DDL = `
   ord INTEGER NOT NULL,
   PRIMARY KEY (owner_id, id)
 `;
+
+/**
+ * P-A1: `users.github_login`, added by ALTER on databases that predate it.
+ *
+ * Nullable and backfilled only at the next sign-in -- a migration must never
+ * call GitHub. An existing user therefore has NULL here and must keep signing
+ * in normally; the partial unique index permits any number of NULLs.
+ */
+function migrateUsersGithubLogin(db: Database.Database): void {
+  if (!tableExists(db, "users")) return;
+  if (tableHasColumn(db, "users", "github_login")) return;
+  db.exec("ALTER TABLE users ADD COLUMN github_login TEXT");
+}
 
 function migrateSavedProjects(db: Database.Database): void {
   if (!tableExists(db, "saved_projects")) {
