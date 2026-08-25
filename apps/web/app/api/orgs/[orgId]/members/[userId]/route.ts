@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { guardMutation } from "../../../../../lib/request-guards";
+import { guardMutation, readJsonBody } from "../../../../../lib/request-guards";
 import { getPlatformStore } from "../../../../../../lib/platform";
 import { LastOwnerError } from "../../../../../../lib/platform/orgs-store";
 import {
@@ -44,6 +44,78 @@ function authorizeRemoval(
     },
     { status: 403 },
   );
+}
+
+/**
+ * PATCH — change an existing member's role. By USER ID, deliberately: the
+ * POST route addresses people by GitHub handle, which is mutable and
+ * recyclable and therefore only provably owned at OAuth sign-in (see the
+ * always-invite rationale there). A member's userId is immutable, so a role
+ * change addressed to it cannot land on the wrong person. Owner role only;
+ * demoting the last owner is the same typed 409 as removing them.
+ */
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ orgId: string; userId: string }> },
+): Promise<NextResponse> {
+  const { orgId, userId } = await context.params;
+  const gate = guardMutation(request, ORG_MUTATION_GUARD);
+  if (gate) return gate;
+
+  const tenant = await requireTenant(request, orgId);
+  if (!tenant.ok) return tenant.response;
+  if (tenant.access !== "owner") {
+    return NextResponse.json(
+      {
+        error: "forbidden",
+        message: "Changing a member's role requires the org owner role.",
+        statusCode: 403,
+      },
+      { status: 403 },
+    );
+  }
+
+  const parsed = await readJsonBody(request);
+  if (!parsed.ok) return parsed.response;
+  const body = (parsed.body ?? {}) as { role?: unknown };
+  if (body.role !== "owner" && body.role !== "member") {
+    return NextResponse.json(
+      {
+        error: "validation",
+        message: 'role must be "owner" or "member"',
+        statusCode: 400,
+      },
+      { status: 400 },
+    );
+  }
+
+  const store = getPlatformStore();
+  if (!(await store.orgs.memberRole(orgId, userId))) {
+    return NextResponse.json(
+      { error: "not_found", message: "No such member", statusCode: 404 },
+      { status: 404 },
+    );
+  }
+
+  try {
+    await store.orgs.addMember(orgId, userId, body.role, {
+      actorId: tenant.userId,
+    });
+    return NextResponse.json({ member: { userId, role: body.role } });
+  } catch (err) {
+    if (err instanceof LastOwnerError) {
+      return NextResponse.json(
+        {
+          error: "conflict",
+          message:
+            "This org would be left with no owner. Promote another owner first.",
+          statusCode: 409,
+        },
+        { status: 409 },
+      );
+    }
+    throw err;
+  }
 }
 
 export async function DELETE(

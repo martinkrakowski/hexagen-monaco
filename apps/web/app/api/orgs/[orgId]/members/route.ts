@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guardMutation, readJsonBody } from "../../../../lib/request-guards";
 import { getPlatformStore } from "../../../../../lib/platform";
-import {
-  LastOwnerError,
-  type OrgRole,
-} from "../../../../../lib/platform/orgs-store";
+import { type OrgRole } from "../../../../../lib/platform/orgs-store";
 import {
   ORG_MUTATION_GUARD,
   requireTenant,
@@ -63,7 +60,10 @@ export async function POST(
 
   const parsed = await readJsonBody(request);
   if (!parsed.ok) return parsed.response;
-  const body = parsed.body as { githubLogin?: unknown; role?: unknown };
+  // JSON `null` is syntactically valid, so parsed.body can be null and a
+  // property access would throw 500 instead of the intended 400 (review flag
+  // on #657).
+  const body = (parsed.body ?? {}) as { githubLogin?: unknown; role?: unknown };
 
   const githubLogin =
     typeof body.githubLogin === "string" ? body.githubLogin.trim() : "";
@@ -95,61 +95,32 @@ export async function POST(
   }
 
   const store = getPlatformStore();
-  const existing = store.auth.getUserByGithubLogin(githubLogin);
 
-  try {
-    if (existing) {
-      // Audit row written inside the same transaction as the membership write.
-      await store.orgs.addMember(orgId, existing.id, role as OrgRole, {
-        actorId: tenant.userId,
-      });
-      return NextResponse.json(
-        { member: { userId: existing.id, role } },
-        { status: 201 },
-      );
-    }
-
-    const invite = await store.orgs.invite(
-      orgId,
-      githubLogin,
-      role as OrgRole,
-      {
-        actorId: tenant.userId,
+  // ALWAYS an invite, redeemed at the invitee's next sign-in — never a
+  // direct add from the local handle cache (review flag on #657, replacing
+  // the earlier 201 path). users.github_login refreshes only at sign-in,
+  // and GitHub handles are mutable and recyclable: a renamed-then-recycled
+  // handle would make a direct add grant membership to whichever LOCAL user
+  // last held the name — the same hijack invite expiry closes, minus the
+  // expiry. Handle ownership is only provably current at OAuth sign-in, so
+  // sign-in is the only moment a handle may become a membership. This also
+  // makes the response uniform: 202 for every target, disclosing nothing
+  // about whether a handle has been seen here (resolving the D-A4 judgment
+  // the earlier 201/202 split left open). An already-signed-in invitee can
+  // force redemption by re-authenticating.
+  const invite = await store.orgs.invite(orgId, githubLogin, role as OrgRole, {
+    actorId: tenant.userId,
+  });
+  // 202: nothing addressable exists yet — the membership arrives when the
+  // invitee next signs in.
+  return NextResponse.json(
+    {
+      invite: {
+        githubLogin: invite.githubLogin,
+        role: invite.role,
+        expiresAt: invite.expiresAt,
       },
-    );
-    // 202, not 201: nothing was created that the client can now address. The
-    // membership does not exist and will not until that person signs in, so a
-    // UI that renders a 201 as "added" would be lying. The distinct status is
-    // what lets it say "invited" instead.
-    //
-    // This DOES tell an org owner whether a handle has signed in here before,
-    // and that is a deliberate reading of D-A4: the rule forbids DISCOVERY —
-    // search, prefixes, enumerating who exists — by anyone who cares to ask.
-    // This is an exact-handle action by an authenticated owner who learns the
-    // same fact from the very next read of their own member list, and the
-    // shape of a REFUSAL is unchanged either way.
-    return NextResponse.json(
-      {
-        invite: {
-          githubLogin: invite.githubLogin,
-          role: invite.role,
-          expiresAt: invite.expiresAt,
-        },
-      },
-      { status: 202 },
-    );
-  } catch (err) {
-    if (err instanceof LastOwnerError) {
-      return NextResponse.json(
-        {
-          error: "conflict",
-          message:
-            "This org would be left with no owner. Promote another owner first.",
-          statusCode: 409,
-        },
-        { status: 409 },
-      );
-    }
-    throw err;
-  }
+    },
+    { status: 202 },
+  );
 }

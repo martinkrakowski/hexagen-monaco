@@ -197,15 +197,15 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
     VALUES (@org_id, @user_id, @role, @created_at)
     ON CONFLICT(org_id, user_id) DO UPDATE SET role = excluded.role
   `);
-  // Acceptance must never DEMOTE: an invite issued as 'member' to someone who
-  // has since become an owner would otherwise strip their ownership the moment
-  // they sign in — a privilege change nobody requested. DO NOTHING makes the
-  // existing membership win, so the last-owner invariant cannot be reached
-  // from this path at all.
+  // Promote-never-demote at acceptance: an owner-level invite to someone who
+  // joined as a member in the meantime lands the promotion; a member-level
+  // invite to someone who became an owner changes nothing. Both directions
+  // are asserted in org-members.guard.test.
   const insertMemberIfAbsent = db.prepare(`
     INSERT INTO org_members (org_id, user_id, role, created_at)
     VALUES (@org_id, @user_id, @role, @created_at)
-    ON CONFLICT(org_id, user_id) DO NOTHING
+    ON CONFLICT(org_id, user_id) DO UPDATE SET role = 'owner'
+      WHERE excluded.role = 'owner' AND org_members.role = 'member' 
   `);
   const deleteMember = db.prepare(
     "DELETE FROM org_members WHERE org_id = ? AND user_id = ?",

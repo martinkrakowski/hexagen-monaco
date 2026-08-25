@@ -312,6 +312,24 @@ describe("H1.2 — invitations", () => {
       fx.db.close();
     }
   });
+
+  it("acceptance PROMOTES an existing member when the invite is owner-level", async () => {
+    // The mirror of never-demote: an owner-level invite to someone who joined
+    // as a member in the meantime must not be silently swallowed by the
+    // conflict clause — the inviter granted ownership and acceptance is where
+    // that grant lands. Promote on owner-invite, never demote on member-invite.
+    const fx = fixture();
+    try {
+      await seedOrg(fx);
+      await fx.orgs.invite("org-acme", "ada", "owner", { actorId: "founder" });
+      await fx.orgs.addMember("org-acme", "ada-user", "member");
+
+      await fx.orgs.acceptInvitesForLogin("ada-user", "ada");
+      assert.equal(await fx.orgs.memberRole("org-acme", "ada-user"), "owner");
+    } finally {
+      fx.db.close();
+    }
+  });
 });
 
 describe("H1.2 — invite expiry", () => {
@@ -475,6 +493,40 @@ describe("H1.2 — invite expiry", () => {
     } finally {
       // fx.db is already closed above; closing twice is a no-op error, so
       // guard rather than double-close.
+      if (fx.db.open) fx.db.close();
+    }
+  });
+
+  it("a crash BETWEEN the ALTER and the backfill still repairs on the next open", async () => {
+    // The migration is two statements. If the process dies after the ALTER
+    // lands but before the UPDATE, the column exists with '' rows — so a
+    // backfill gated on "column missing" would never run again and every
+    // legacy invite would stay permanently expired. The backfill is keyed on
+    // the DATA state ('' rows) and runs on every open for exactly this case.
+    const fx = fixture();
+    try {
+      await seedOrg(fx);
+      await fx.orgs.invite("org-acme", "ada", "member", { actorId: "founder" });
+      // Simulate the interrupted state: column present, backfill never ran.
+      fx.db
+        .prepare("UPDATE org_invites SET expires_at = '' WHERE org_id = ?")
+        .run("org-acme");
+      const path = fx.db.name;
+      fx.db.close();
+
+      const db = openPlatformDb(path);
+      try {
+        const orgs = createOrgsRepository(db);
+        const [pending] = await orgs.listPendingInvites("org-acme");
+        assert.ok(pending, "the repaired invite must still be redeemable");
+        assert.match(
+          pending.expiresAt,
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+        );
+      } finally {
+        db.close();
+      }
+    } finally {
       if (fx.db.open) fx.db.close();
     }
   });

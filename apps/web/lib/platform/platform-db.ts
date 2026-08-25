@@ -395,10 +395,17 @@ export const ORG_INVITE_TTL_MS = ORG_INVITE_TTL_DAYS * 24 * 60 * 60 * 1000;
  */
 function migrateOrgInvitesExpiry(db: Database.Database): void {
   if (!tableExists(db, "org_invites")) return;
-  if (tableHasColumn(db, "org_invites", "expires_at")) return;
-  db.exec(
-    "ALTER TABLE org_invites ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''",
-  );
+  if (!tableHasColumn(db, "org_invites", "expires_at")) {
+    db.exec(
+      "ALTER TABLE org_invites ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''",
+    );
+  }
+  // The backfill is keyed on DATA state, not column presence, and runs on
+  // EVERY open: sqlite commits the ALTER immediately, so a crash between the
+  // ALTER and this UPDATE would otherwise leave every legacy invite at '' --
+  // which sorts before any timestamp and reads as permanently expired -- and
+  // a column-presence guard would then skip the repair forever (review flag
+  // on #657). Idempotent: the WHERE clause matches nothing once backfilled.
   db.prepare(
     `UPDATE org_invites
         SET expires_at = COALESCE(
