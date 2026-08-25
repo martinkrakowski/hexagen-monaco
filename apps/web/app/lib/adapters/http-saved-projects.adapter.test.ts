@@ -141,32 +141,65 @@ describe("HttpSavedProjectsAdapter", () => {
     assert.ok(!body.projects.some((p) => p.id === dropped.id));
   });
 
-  it("sends If-Match from the GET and retries a 409 against a fresh row", async () => {
+  it("sends If-Match from the GET and surfaces a 409 without retrying (H1.4)", async () => {
+    // Was: "retries a 409 against a fresh row". H1.4 removed that retry.
+    // Re-reading and re-applying the updater is how a co-editor's change
+    // disappears -- the second write wins and nobody is told. The conflict is
+    // now the caller's to handle; P-A5 builds the reload-and-merge UI.
     const first = sample;
-    const second: SavedProject = { ...sample, name: "from-b", updatedAt: 2 };
     let puts = 0;
     const fetchImpl = vi.fn(async (url: string | URL, init?: RequestInit) => {
       const href = String(url);
       if (href === `/api/projects/${sample.id}` && !init?.method) {
-        return new Response(JSON.stringify(puts === 0 ? first : second), {
-          status: 200,
-        });
+        return new Response(JSON.stringify(first), { status: 200 });
       }
       if (href === `/api/projects/${sample.id}` && init?.method === "GET") {
-        return new Response(JSON.stringify(puts === 0 ? first : second), {
-          status: 200,
-        });
+        return new Response(JSON.stringify(first), { status: 200 });
       }
       if (href === `/api/projects/${sample.id}` && init?.method === "PUT") {
         puts += 1;
         const headers = new Headers(init.headers);
-        if (puts === 1) {
-          assert.equal(headers.get("If-Match"), "1");
-          return new Response("conflict", { status: 409 });
-        }
-        assert.equal(headers.get("If-Match"), "2");
-        const body = JSON.parse(String(init.body)) as SavedProject;
-        return new Response(JSON.stringify(body), { status: 200 });
+        assert.equal(headers.get("If-Match"), "1");
+        return new Response("conflict", { status: 409 });
+      }
+      return new Response("nope", { status: 500 });
+    }) as unknown as typeof fetch;
+    const port = new HttpSavedProjectsAdapter(fetchImpl);
+    const written = await port.updateProjectRecord(sample.id, (current) => ({
+      ...current,
+      name: `${current.name}-patched`,
+    }));
+    assert.equal(written.success, false);
+    if (!written.success) assert.equal(written.error.kind, "Conflict");
+    // Non-vacuous: a write WAS attempted, exactly once.
+    assert.equal(puts, 1);
+  });
+
+  it("adopts the GET ETag as If-Match so a GET→PUT round-trip sends rev:<n>", async () => {
+    const fetchImpl = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const href = String(url);
+      if (href === `/api/projects/${sample.id}` && !init?.method) {
+        return new Response(JSON.stringify(sample), {
+          status: 200,
+          headers: { ETag: '"rev:4"' },
+        });
+      }
+      if (href === `/api/projects/${sample.id}` && init?.method === "GET") {
+        return new Response(JSON.stringify(sample), {
+          status: 200,
+          headers: { ETag: '"rev:4"' },
+        });
+      }
+      if (href === `/api/projects/${sample.id}` && init?.method === "PUT") {
+        const headers = new Headers(init.headers);
+        assert.equal(headers.get("If-Match"), "rev:4");
+        return new Response(
+          JSON.stringify({ ...sample, name: "shop-patched" }),
+          {
+            status: 200,
+            headers: { ETag: '"rev:5"' },
+          },
+        );
       }
       return new Response("nope", { status: 500 });
     }) as unknown as typeof fetch;
@@ -176,10 +209,48 @@ describe("HttpSavedProjectsAdapter", () => {
       name: `${current.name}-patched`,
     }));
     assert.equal(written.success, true);
-    if (written.success) {
-      assert.equal(written.value.name, "from-b-patched");
-      assert.equal(written.value.updatedAt, 2);
-    }
+    if (written.success) assert.equal(written.value.name, "shop-patched");
+  });
+
+  it("retains a PUT ETag for the next write when GET still has no ETag", async () => {
+    let puts = 0;
+    const fetchImpl = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const href = String(url);
+      const isGet =
+        href === `/api/projects/${sample.id}` &&
+        (!init?.method || init.method === "GET");
+      if (isGet) {
+        return new Response(JSON.stringify(sample), { status: 200 });
+      }
+      if (href === `/api/projects/${sample.id}` && init?.method === "PUT") {
+        puts += 1;
+        const headers = new Headers(init.headers);
+        if (puts === 1) {
+          assert.equal(headers.get("If-Match"), "1");
+          return new Response(JSON.stringify({ ...sample, name: "once" }), {
+            status: 200,
+            headers: { ETag: '"rev:2"' },
+          });
+        }
+        assert.equal(headers.get("If-Match"), "rev:2");
+        return new Response(JSON.stringify({ ...sample, name: "twice" }), {
+          status: 200,
+          headers: { ETag: '"rev:3"' },
+        });
+      }
+      return new Response("nope", { status: 500 });
+    }) as unknown as typeof fetch;
+    const port = new HttpSavedProjectsAdapter(fetchImpl);
+    const first = await port.updateProjectRecord(sample.id, (current) => ({
+      ...current,
+      name: "once",
+    }));
+    assert.equal(first.success, true);
+    const second = await port.updateProjectRecord(sample.id, (current) => ({
+      ...current,
+      name: "twice",
+    }));
+    assert.equal(second.success, true);
     assert.equal(puts, 2);
   });
 });

@@ -148,4 +148,121 @@ describe("GET/PUT /api/projects/[projectId]", () => {
     });
     assert.equal(((await read.json()) as SavedProject).name, "winner");
   });
+
+  it("PUT with a canonical rev If-Match succeeds, then a stale rev 409s", async () => {
+    const created = await PUT(put(ID, sample()), {
+      params: Promise.resolve({ projectId: ID }),
+    });
+    assert.ok(created.status === 200 || created.status === 201);
+
+    const winner = { ...sample(), name: "rev-winner", updatedAt: 2 };
+    const first = await PUT(
+      new NextRequest(`http://localhost/api/projects/${ID}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "If-Match": "rev:1",
+        },
+        body: JSON.stringify(winner),
+      }),
+      { params: Promise.resolve({ projectId: ID }) },
+    );
+    assert.equal(first.status, 200);
+    assert.equal(first.headers.get("ETag"), '"rev:2"');
+
+    const stale = await PUT(
+      new NextRequest(`http://localhost/api/projects/${ID}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "If-Match": "rev:1",
+        },
+        body: JSON.stringify({ ...sample(), name: "rev-stale", updatedAt: 3 }),
+      }),
+      { params: Promise.resolve({ projectId: ID }) },
+    );
+    assert.equal(stale.status, 409);
+
+    const read = await GET(get(ID), {
+      params: Promise.resolve({ projectId: ID }),
+    });
+    assert.equal(((await read.json()) as SavedProject).name, "rev-winner");
+  });
+
+  it("GET returns the canonical rev ETag so a client can echo it on PUT", async () => {
+    const created = await PUT(put(ID, sample()), {
+      params: Promise.resolve({ projectId: ID }),
+    });
+    assert.ok(created.status === 200 || created.status === 201);
+
+    const read = await GET(get(ID), {
+      params: Promise.resolve({ projectId: ID }),
+    });
+    assert.equal(read.status, 200);
+    assert.equal(read.headers.get("ETag"), '"rev:1"');
+
+    const echoed = await PUT(
+      new NextRequest(`http://localhost/api/projects/${ID}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "If-Match": read.headers.get("ETag") ?? "",
+        },
+        body: JSON.stringify({ ...sample(), name: "echoed", updatedAt: 2 }),
+      }),
+      { params: Promise.resolve({ projectId: ID }) },
+    );
+    assert.equal(echoed.status, 200);
+    assert.equal(echoed.headers.get("ETag"), '"rev:2"');
+    assert.equal(((await echoed.json()) as SavedProject).name, "echoed");
+  });
+
+  it("oversized rev:<n> If-Match is 400, not a persistence 500", async () => {
+    await PUT(put(ID, sample()), {
+      params: Promise.resolve({ projectId: ID }),
+    });
+
+    const huge = await PUT(
+      new NextRequest(`http://localhost/api/projects/${ID}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "If-Match": `rev:${"9".repeat(400)}`,
+        },
+        body: JSON.stringify({ ...sample(), name: "huge", updatedAt: 2 }),
+      }),
+      { params: Promise.resolve({ projectId: ID }) },
+    );
+    assert.equal(huge.status, 400);
+    const hugeBody = (await huge.json()) as {
+      error: string;
+      statusCode: number;
+    };
+    assert.equal(hugeBody.error, "validation");
+    assert.notEqual(huge.status, 500);
+
+    const rounded = await PUT(
+      new NextRequest(`http://localhost/api/projects/${ID}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          // MAX_SAFE_INTEGER is 9007199254740991; this value is finite after
+          // Number() but not a safe integer (it rounds).
+          "If-Match": "rev:9007199254740993",
+        },
+        body: JSON.stringify({ ...sample(), name: "rounded", updatedAt: 2 }),
+      }),
+      { params: Promise.resolve({ projectId: ID }) },
+    );
+    assert.equal(rounded.status, 400);
+    assert.equal(
+      ((await rounded.json()) as { error: string }).error,
+      "validation",
+    );
+
+    const stored = await GET(get(ID), {
+      params: Promise.resolve({ projectId: ID }),
+    });
+    assert.equal(((await stored.json()) as SavedProject).name, "shop");
+  });
 });

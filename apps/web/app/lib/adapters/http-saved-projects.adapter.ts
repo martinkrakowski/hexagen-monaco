@@ -112,11 +112,25 @@ function asOwnerId(value: unknown): string | null {
   return null;
 }
 
+/** Strip RFC 7232 quoting / weakness so a GET/PUT ETag becomes `rev:<n>`. */
+function revTokenFromEtag(etag: string | null | undefined): string | null {
+  if (!etag) return null;
+  const trimmed = etag.trim().replace(/^W\//, "").replaceAll('"', "");
+  return /^rev:\d+$/.test(trimmed) ? trimmed : null;
+}
+
+interface HttpBody {
+  body: unknown;
+  etag: string | null;
+}
+
 export class HttpSavedProjectsAdapter
   implements SavedProjectsPersistencePort, OwnerInitializedPort, RemoteOwnerPort
 {
   private ownerInitialized = false;
   private ownerId: string | null = null;
+  /** Last canonical `rev:<n>` seen per project (GET or PUT ETag). */
+  private readonly revTokens = new Map<string, string>();
 
   constructor(private readonly fetchImpl: typeof fetch = fetch) {}
 
@@ -131,7 +145,7 @@ export class HttpSavedProjectsAdapter
   private async request(
     url: string,
     init?: RequestInit,
-  ): Promise<Result<unknown, PersistenceError>> {
+  ): Promise<Result<HttpBody, PersistenceError>> {
     try {
       const response = await this.fetchImpl(url, {
         ...init,
@@ -170,10 +184,14 @@ export class HttpSavedProjectsAdapter
           ),
         };
       }
+      const etag = response.headers.get("ETag");
       if (response.status === 204) {
-        return { success: true, value: undefined };
+        return { success: true, value: { body: undefined, etag } };
       }
-      return { success: true, value: await response.json() };
+      return {
+        success: true,
+        value: { body: await response.json(), etag },
+      };
     } catch (cause) {
       return {
         success: false,
@@ -185,9 +203,9 @@ export class HttpSavedProjectsAdapter
   async loadProjects(): Promise<Result<SavedProject[], PersistenceError>> {
     const result = await this.request("/api/projects");
     if (!result.success) return result;
-    const projects = asProjects(result.value);
-    this.ownerInitialized = asInitialized(result.value, projects);
-    this.ownerId = asOwnerId(result.value);
+    const projects = asProjects(result.value.body);
+    this.ownerInitialized = asInitialized(result.value.body, projects);
+    this.ownerId = asOwnerId(result.value.body);
     return { success: true, value: projects };
   }
 
@@ -212,39 +230,46 @@ export class HttpSavedProjectsAdapter
     });
     if (!result.success) return result;
     this.ownerInitialized = true;
-    return { success: true, value: (result.value as SavedProject) ?? project };
+    return {
+      success: true,
+      value: (result.value.body as SavedProject) ?? project,
+    };
   }
 
   async updateProjectRecord(
     id: string,
     updater: (project: SavedProject) => SavedProject,
   ): Promise<Result<SavedProject, PersistenceError>> {
-    const maxAttempts = 3;
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const loaded = await this.request(`/api/projects/${id}`);
-      if (!loaded.success) return loaded;
-      const current = loaded.value as SavedProject;
-      const updated = updater(current);
-      if (updated === current) return { success: true, value: current };
-      const written = await this.request(`/api/projects/${id}`, {
-        method: "PUT",
-        headers: { "If-Match": String(current.updatedAt) },
-        body: JSON.stringify(updated),
-      });
-      if (written.success) {
-        return {
-          success: true,
-          value: (written.value as SavedProject) ?? updated,
-        };
-      }
-      if (written.error.kind !== "Conflict" || attempt === maxAttempts - 1) {
-        return written;
-      }
+    // H1.4: ONE write attempt. This loop used to re-read and re-write up to
+    // three times on a 409, which is how a co-editor's change disappears: the
+    // updater is re-applied to freshly-read state and the second write wins
+    // silently. A 409 is a decision by the server, not a transient blip, so it
+    // is surfaced to the caller instead of being retried away. The
+    // reload-and-merge UI that consumes it is P-A5.
+    const loaded = await this.request(`/api/projects/${id}`);
+    if (!loaded.success) return loaded;
+    const current = loaded.value.body as SavedProject;
+    const updated = updater(current);
+    if (updated === current) return { success: true, value: current };
+    const fromGet = revTokenFromEtag(loaded.value.etag);
+    if (fromGet) this.revTokens.set(id, fromGet);
+    // Canonical token from GET (or a prior PUT) first; legacy `updatedAt`
+    // only when the server has not yet advertised a rev ETag.
+    const ifMatch = this.revTokens.get(id) ?? String(current.updatedAt);
+    const written = await this.request(`/api/projects/${id}`, {
+      method: "PUT",
+      headers: { "If-Match": ifMatch },
+      body: JSON.stringify(updated),
+    });
+    if (written.success) {
+      const fromPut = revTokenFromEtag(written.value.etag);
+      if (fromPut) this.revTokens.set(id, fromPut);
+      return {
+        success: true,
+        value: (written.value.body as SavedProject) ?? updated,
+      };
     }
-    return {
-      success: false,
-      error: persistError("Conflict", "Project was updated elsewhere"),
-    };
+    return written;
   }
 
   async deleteProjectRecord(

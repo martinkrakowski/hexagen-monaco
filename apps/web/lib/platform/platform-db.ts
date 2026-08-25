@@ -66,6 +66,7 @@ export function openPlatformDb(dbPath: string): Database.Database {
   // index below can name it.
   migrateUsersGithubLogin(db);
   migrateSavedProjects(db);
+  migrateSavedProjectsRev(db);
   migrateRunEvents(db);
   db.exec(`
     DROP INDEX IF EXISTS idx_users_github_login;
@@ -482,6 +483,8 @@ const SAVED_PROJECTS_DDL = `
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   ord INTEGER NOT NULL,
+  rev INTEGER NOT NULL DEFAULT 1,
+  updated_by TEXT,
   PRIMARY KEY (owner_id, id)
 `;
 
@@ -496,6 +499,34 @@ function migrateUsersGithubLogin(db: Database.Database): void {
   if (!tableExists(db, "users")) return;
   if (tableHasColumn(db, "users", "github_login")) return;
   db.exec("ALTER TABLE users ADD COLUMN github_login TEXT");
+}
+
+/**
+ * H1.4: `saved_projects.rev` + `updated_by`, added by ALTER on databases that
+ * predate them.
+ *
+ * `rev` is a monotonic counter, NOT a clock. `updated_at` was the previous
+ * If-Match value and is unsafe under multi-seat: two writers within the same
+ * millisecond, or a clock that steps backwards, both make a stale write look
+ * current. `rev` cannot collide that way.
+ *
+ * Existing rows take `rev = 1` (the column default) and NULL `updated_by` --
+ * a row written before this migration has no recorded author, and inventing
+ * one would be a lie. NULL means "before H1.4", not "by nobody".
+ *
+ * Runs AFTER migrateSavedProjects, which may have rebuilt the table: on that
+ * path the columns arrive with the new DDL and this is a no-op.
+ */
+function migrateSavedProjectsRev(db: Database.Database): void {
+  if (!tableExists(db, "saved_projects")) return;
+  if (!tableHasColumn(db, "saved_projects", "rev")) {
+    db.exec(
+      "ALTER TABLE saved_projects ADD COLUMN rev INTEGER NOT NULL DEFAULT 1",
+    );
+  }
+  if (!tableHasColumn(db, "saved_projects", "updated_by")) {
+    db.exec("ALTER TABLE saved_projects ADD COLUMN updated_by TEXT");
+  }
 }
 
 function migrateSavedProjects(db: Database.Database): void {
