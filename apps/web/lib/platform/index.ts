@@ -7,6 +7,17 @@ export {
 export { createNextAuthAdapter } from "./auth-store";
 export { type Org, type OrgRole, type OrgsRepository } from "./orgs-store";
 export {
+  type Team,
+  type TeamsRepository,
+  NotAnOrgMemberError,
+  UnknownTeamError,
+} from "./teams-store";
+export {
+  type AuditAction,
+  type AuditEntry,
+  type AuditLogRepository,
+} from "./audit-log-store";
+export {
   BILLING_PLANS,
   ENTITLEMENT_STATUSES,
   FREE_PLAN,

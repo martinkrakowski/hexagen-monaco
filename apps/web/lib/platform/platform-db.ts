@@ -137,6 +137,57 @@ export function openPlatformDb(dbPath: string): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_org_invites_login
       ON org_invites (github_login) WHERE accepted_at IS NULL;
+
+    -- P-A2. A team is a GRANTEE GROUPING, never an owner (D-A1): teams appear
+    -- only in \`project_shares.grantee_type\`, so no project ever carries a team
+    -- id in \`owner_id\` and ownership statements stay untouched. The slug is
+    -- the share handle: \`@org-slug/team-slug\`.
+    CREATE TABLE IF NOT EXISTS teams (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      name TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_org_slug
+      ON teams (org_id, slug);
+
+    -- NOT enforced here: there is no foreign key and no trigger, so SQLite
+    -- accepts any (team_id, user_id) pair written directly. The rule lives in
+    -- teams-store.addMember, which checks org_members and inserts in one
+    -- transaction, and in orgs-store.removeMember, which deletes these rows in
+    -- the same transaction as the org row. A team membership that outlives its
+    -- org membership would be a grant nobody can see or revoke -- application
+    -- code is what prevents it.
+    CREATE TABLE IF NOT EXISTS team_members (
+      team_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (team_id, user_id)
+    );
+    -- P-A3 asks "which teams is this user in" on every shared-project read.
+    CREATE INDEX IF NOT EXISTS idx_team_members_user
+      ON team_members (user_id);
+
+    -- D-A6: narrow, and APPEND-ONLY BY CONSTRUCTION, not by schema -- SQLite
+    -- would accept UPDATE or DELETE against this table. What makes the property
+    -- hold is that no such statement is prepared anywhere in the codebase, and
+    -- AuditLogRepository exposes only an append and a count; a guard test
+    -- asserts that surface. v1 actions are team add/remove; share/revoke join
+    -- in P-A4.
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id TEXT PRIMARY KEY,
+      actor_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      subject_owner_id TEXT,
+      subject_id TEXT,
+      grantee_type TEXT,
+      grantee_id TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_log_subject
+      ON audit_log (subject_owner_id, subject_id);
   `);
   db.exec(`
     DROP INDEX IF EXISTS idx_saved_projects_ord;
