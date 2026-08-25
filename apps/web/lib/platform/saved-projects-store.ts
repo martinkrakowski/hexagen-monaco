@@ -1,3 +1,4 @@
+import { prepareShareRevokeAllForProject } from "./project-shares-store";
 import type Database from "better-sqlite3";
 import type {
   PersistenceError,
@@ -63,6 +64,17 @@ export interface SavedProjectsStore extends SavedProjectsPersistencePort {
     project: SavedProject,
     expectedUpdatedAt?: number,
   ): Result<SavedProject, PersistenceError>;
+
+  /**
+   * One row by id, or `null` when this owner has no such project.
+   *
+   * H0.4 / P-A3: the `[projectId]` route used to call `loadProjects()` and
+   * `.find()`, deserialising every project in the tenant to return one. The
+   * keyed statement already existed here; only a public method was missing.
+   * `null` is a normal answer, not an error — the route decides what a miss
+   * means, and for a cross-tenant request that answer is 403, never 404.
+   */
+  getProject(id: string): Result<SavedProject | null, PersistenceError>;
 }
 
 export function createSavedProjectsStore(
@@ -97,7 +109,26 @@ export function createSavedProjectsStore(
   );
   const clear = db.prepare("DELETE FROM saved_projects WHERE owner_id = ?");
 
+  const revokeSharesFor = prepareShareRevokeAllForProject(db);
+  const selectIds = db.prepare(
+    "SELECT id FROM saved_projects WHERE owner_id = ?",
+  );
+
+  const removeWithShares = db.transaction((id: string) => {
+    revokeSharesFor(ownerId, id);
+    remove.run(ownerId, id);
+  });
+
   const replaceAll = db.transaction((projects: SavedProject[]) => {
+    // Grants on projects that do NOT survive the replacement are revoked in
+    // the same transaction; surviving ids keep their grants. Without this a
+    // dropped project's live grants re-apply to any future project reusing
+    // its id (ghost grants — review flag on #652).
+    const surviving = new Set(projects.map((p) => p.id));
+    const existing = selectIds.all(ownerId) as { id: string }[];
+    for (const row of existing) {
+      if (!surviving.has(row.id)) revokeSharesFor(ownerId, row.id);
+    }
     clear.run(ownerId);
     for (let i = 0; i < projects.length; i += 1) {
       const project = projects[i];
@@ -114,6 +145,25 @@ export function createSavedProjectsStore(
   });
 
   return {
+    getProject(id: string) {
+      try {
+        const row = selectOne.get(ownerId, id) as ProjectRow | undefined;
+        if (!row) return { success: true, value: null };
+        const parsed = parsePayload(row);
+        if (!parsed.success) return parsed;
+        return { success: true, value: parsed.value };
+      } catch (cause) {
+        return {
+          success: false,
+          error: persistError(
+            "DeserializationFailed",
+            `Failed to load saved project ${id}`,
+            cause,
+          ),
+        };
+      }
+    },
+
     async loadProjects() {
       try {
         const rows = selectAll.all(ownerId) as ProjectRow[];
@@ -233,7 +283,9 @@ export function createSavedProjectsStore(
 
     async deleteProjectRecord(id) {
       try {
-        remove.run(ownerId, id);
+        // One transaction: the row and its live grants go together, or
+        // neither does. See prepareShareRevokeAllForProject for why.
+        removeWithShares(id);
         return { success: true, value: undefined };
       } catch (cause) {
         return {

@@ -188,6 +188,35 @@ export function openPlatformDb(dbPath: string): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_audit_log_subject
       ON audit_log (subject_owner_id, subject_id);
+
+    -- P-A3. A grant is NOT ownership: a project has exactly one owner
+    -- (saved_projects PK (owner_id, id)) and any number of grants beside it.
+    -- grantee_type is user | org | team (D-A1 -- a team is a grantee, never an
+    -- owner); role is read | write (D-A2).
+    --
+    -- Revocation is SOFT: revoked_at NULL means live, and every read filters
+    -- on it. A hard delete would take the audit trail with it, and "who could
+    -- see this project last March" is exactly the question a share table has
+    -- to answer.
+    CREATE TABLE IF NOT EXISTS project_shares (
+      owner_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      grantee_type TEXT NOT NULL,
+      grantee_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      granted_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      revoked_at TEXT,
+      PRIMARY KEY (owner_id, project_id, grantee_type, grantee_id)
+    );
+    -- "what is shared with me" -- the grantee side, hit on every shared-list
+    -- read and on every access resolution for a non-owner.
+    CREATE INDEX IF NOT EXISTS idx_project_shares_grantee
+      ON project_shares (grantee_type, grantee_id) WHERE revoked_at IS NULL;
+    -- "who can see this project" -- the owner side, for the manage-shares view
+    -- and for cascading revocation when an org or project goes away.
+    CREATE INDEX IF NOT EXISTS idx_project_shares_subject
+      ON project_shares (owner_id, project_id);
   `);
   db.exec(`
     DROP INDEX IF EXISTS idx_saved_projects_ord;

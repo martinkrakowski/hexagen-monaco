@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import type { OrgRole } from "./orgs-store";
+import type { GranteeIdentity, ShareRole } from "./project-shares-store";
 import { getPlatformStore } from "./store";
 
 /** Persistence writes are chatty (live-session patches). Isolated namespace. */
@@ -100,6 +101,119 @@ export async function requireTenant(
   const role = await membershipReader.memberRole(tenant, userId);
   if (!role) return { ok: false, response: tenantForbidden() };
   return { ok: true, tenantId: tenant, userId, access: role };
+}
+
+/** What the caller may do with one project. `owner` is not a grant (D-A2). */
+export type ProjectRole = "owner" | "write" | "read";
+
+export type ProjectAccessResolution =
+  | { ok: true; role: ProjectRole; ownerId: string; actorUserId: string }
+  | { ok: false; response: NextResponse };
+
+/** The two lookups access resolution needs, injectable for tests. */
+export interface ProjectAccessReaders {
+  memberRole(orgId: string, userId: string): Promise<OrgRole | null>;
+  listOrgIdsForUser(userId: string): Promise<string[]>;
+  listTeamIdsForUser(userId: string): Promise<string[]>;
+  accessFor(
+    ownerId: string,
+    projectId: string,
+    identity: GranteeIdentity,
+  ): Promise<ShareRole | null>;
+}
+
+/**
+ * P-A3 — may this caller reach `(ownerId, projectId)`, and as what?
+ *
+ * Resolved ONCE per request into a role; the caller then builds the ordinary
+ * owner-scoped store for `ownerId`. This is the design rule that keeps the
+ * seam intact: `saved-projects-store`'s statements stay `WHERE owner_id = ?`
+ * and never learn about grants. What changed is who may ask.
+ *
+ * Decision order, first match wins:
+ *   1. the caller IS the owner tenant — their own `sub`, or an `org_members`
+ *      row when `ownerId` is an org  → `owner`
+ *   2. a LIVE grant reaching them directly, through one of their orgs, or
+ *      through one of their teams   → that grant's role (strongest wins)
+ *   3. otherwise                     → 403
+ *
+ * The 403 is deliberately indistinguishable from the one for a project that
+ * does not exist. Returning 404 for "no such project" and 403 for "exists but
+ * forbidden" would turn this into an existence oracle across tenants (D-A4).
+ * The cost is that a genuine typo also reads as 403; that is the right trade
+ * for a cross-tenant surface.
+ *
+ * Grants are read per request and never cached in the JWT, so a revocation
+ * takes effect on the very next call — same rule as `requireTenant`.
+ */
+export async function resolveProjectAccess(
+  request: NextRequest,
+  ownerId: string,
+  projectId: string,
+  readers?: ProjectAccessReaders,
+): Promise<ProjectAccessResolution> {
+  const owner = await requirePersistenceOwner(request);
+  if (!owner.ok) return owner;
+
+  const actorUserId = owner.ownerId;
+  const tenant = ownerId.trim();
+  const project = projectId.trim();
+  if (!tenant || !project) {
+    return { ok: false, response: projectForbidden() };
+  }
+
+  if (tenant === actorUserId) {
+    return { ok: true, role: "owner", ownerId: tenant, actorUserId };
+  }
+
+  // An org tenant: membership makes the caller an owner of its projects. Org
+  // ROLE (owner vs member) gates org administration, not project data — H1.3
+  // gives members full project read/write inside their org.
+  // Resolved AFTER the 401 and the personal-tenant short-circuit: a default
+  // parameter evaluates at call time, which opened the platform store for
+  // every request, including unauthenticated ones (review flag on #652).
+  const r = readers ?? defaultProjectAccessReaders();
+  const orgRole = await r.memberRole(tenant, actorUserId);
+  if (orgRole) {
+    return { ok: true, role: "owner", ownerId: tenant, actorUserId };
+  }
+
+  const [orgIds, teamIds] = await Promise.all([
+    r.listOrgIdsForUser(actorUserId),
+    r.listTeamIdsForUser(actorUserId),
+  ]);
+  const granted = await r.accessFor(tenant, project, {
+    userId: actorUserId,
+    orgIds,
+    teamIds,
+  });
+  if (granted) {
+    return { ok: true, role: granted, ownerId: tenant, actorUserId };
+  }
+
+  return { ok: false, response: projectForbidden() };
+}
+
+function defaultProjectAccessReaders(): ProjectAccessReaders {
+  const store = getPlatformStore();
+  return {
+    memberRole: (orgId, userId) => store.orgs.memberRole(orgId, userId),
+    listOrgIdsForUser: (userId) => store.orgs.listOrgIdsForUser(userId),
+    listTeamIdsForUser: (userId) => store.teams.listTeamIdsForUser(userId),
+    accessFor: (ownerId, projectId, identity) =>
+      store.shares.accessFor(ownerId, projectId, identity),
+  };
+}
+
+function projectForbidden(): NextResponse {
+  return NextResponse.json(
+    {
+      error: "forbidden",
+      message: "You do not have access to this project",
+      statusCode: 403,
+    },
+    { status: 403 },
+  );
 }
 
 function tenantForbidden(): NextResponse {
