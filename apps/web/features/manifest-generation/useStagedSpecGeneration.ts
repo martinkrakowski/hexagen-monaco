@@ -23,6 +23,8 @@ export interface SpecGenerationOptions {
   deployment?: string;
   additionalContext?: string;
   executionStrategy?: "auto" | "local" | "cloud";
+  /** Org whose history this cloud run belongs to; omit for personal. */
+  tenantId?: string;
   signal?: AbortSignal;
 }
 
@@ -266,6 +268,7 @@ export function useStagedSpecGeneration(): UseStagedSpecGenerationReturn {
           platform: options?.platform,
           deployment: options?.deployment,
           additionalContext: options?.additionalContext,
+          tenantId: options?.tenantId,
         },
         controller.signal,
       );

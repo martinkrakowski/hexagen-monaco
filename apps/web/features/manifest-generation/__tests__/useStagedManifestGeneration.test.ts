@@ -106,6 +106,31 @@ describe("useStagedManifestGeneration (cloud path)", () => {
     assert.strictEqual(result.current.generationError, null);
   });
 
+  it("puts tenantId on the cloud generate body so telemetry can follow the org", async () => {
+    mockFetchWith([
+      {
+        type: "done",
+        yaml: "workspace: {}\n",
+        contextCount: 1,
+        portCount: 0,
+        adapterCount: 0,
+        transactionId: "t",
+      },
+    ]);
+    const { result } = renderHook(() => useStagedManifestGeneration());
+
+    await act(async () => {
+      await result.current.generateManifest("desc", {
+        preferLocal: false,
+        tenantId: "org-acme",
+      });
+    });
+
+    const init = vi.mocked(globalThis.fetch).mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(String(init.body)) as { tenantId?: string };
+    assert.equal(body.tenantId, "org-acme");
+  });
+
   it("accumulates streamed chunks into the verbose log", async () => {
     mockFetchWith([
       { type: "stage-start", stage: 1, label: "Domain Extraction" },
