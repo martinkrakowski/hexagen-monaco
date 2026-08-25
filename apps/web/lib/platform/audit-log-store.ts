@@ -10,16 +10,18 @@ import type Database from "better-sqlite3";
  * test asserts that surface, because "we simply never wrote one" decays the
  * moment someone does.
  *
- * No reader is exported yet. P-A4 adds share/revoke rows; a reader arrives
- * when a surface actually displays them, so this does not become a store with
- * no consumer in the meantime (the `scansFor` shape).
+ * No reader is exported yet. P-A4 (share/revoke) writes rows here; a reader
+ * arrives when a surface actually displays them, so this does not become a
+ * store with no consumer in the meantime (the `scansFor` shape). Tests read
+ * the table directly, which is deliberate — a reader added only to satisfy a
+ * test is a reader with no product behind it.
  *
  * ASYNC BY DECISION (D-A9), as with `orgs-store` and `teams-store` — but see
  * `prepareAuditAppend` for the synchronous form the stores enlist in their own
  * transactions.
  */
 
-/** v1 vocabulary. `share.*` rows arrive in P-A4. */
+/** v1 vocabulary (D-A6): team management, plus share grant/revoke from P-A4. */
 export type AuditAction =
   | "team.member.add"
   | "team.member.remove"
@@ -32,7 +34,9 @@ export type AuditAction =
   // person become an owner", which is the question an audit log is for.
   | "org.member.role_change"
   | "org.invite"
-  | "org.invite.accept";
+  | "org.invite.accept"
+  | "share.grant"
+  | "share.revoke";
 
 export interface AuditEntry {
   actorId: string;
