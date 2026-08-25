@@ -16,18 +16,51 @@ interface GitHubProfile extends Profile {
  * callback logs a failure and still returns `token`.
  */
 type PersistResult =
-  | { success: true; value: void }
+  | { success: true; value: string[] }
   | { success: false; error: Error };
 
+/**
+ * Injection points for the two writes this seam performs, so the callback can
+ * be tested without a database.
+ */
+export interface GithubSignInDeps {
+  setLogin?: (id: string, value: string) => Promise<void>;
+  acceptInvites?: (id: string, value: string) => Promise<string[]>;
+}
+
+/**
+ * Persists the handle and redeems any invitation addressed to it.
+ *
+ * These belong in ONE seam, in this order. An org invite is keyed by GitHub
+ * LOGIN because the invitee had no account when it was written (H1.2); this
+ * callback is the moment the login and a user id first exist together, so it
+ * is the only place the two can be joined. A second sign-in hook doing the
+ * acceptance would be a second place that has to agree about when a handle
+ * becomes known -- and the one that runs first on a fresh account would see no
+ * handle at all.
+ *
+ * Order matters: the handle is stored BEFORE invites are redeemed, so a crash
+ * between them leaves the invites pending and the next sign-in redeems them.
+ * Reversed, a membership could exist for a login the `users` row never
+ * recorded. Acceptance itself is one transaction inside the store.
+ *
+ * Returns the orgs joined, so the callback can log a real outcome rather than
+ * a bare success.
+ */
 export async function persistGithubLogin(
   userId: string,
   login: string,
-  setLogin: (id: string, value: string) => Promise<void> = (id, value) =>
-    getPlatformStore().auth.setGithubLogin(id, value),
+  deps: GithubSignInDeps = {},
 ): Promise<PersistResult> {
+  const setLogin =
+    deps.setLogin ??
+    ((id, value) => getPlatformStore().auth.setGithubLogin(id, value));
+  const acceptInvites =
+    deps.acceptInvites ??
+    ((id, value) => getPlatformStore().orgs.acceptInvitesForLogin(id, value));
   try {
     await setLogin(userId, login);
-    return { success: true, value: undefined };
+    return { success: true, value: await acceptInvites(userId, login) };
   } catch (error) {
     return {
       success: false,
@@ -64,7 +97,8 @@ export const authOptions: NextAuthOptions = {
         token.accessToken = account.access_token;
         token.login = githubProfile.login;
 
-        // P-A1: persist the handle. `users` stores GitHub's numeric id on
+        // P-A1: persist the handle, then redeem invitations addressed to it
+        // (H1.2). `users` stores GitHub's numeric id on
         // `accounts.provider_account_id`, which nobody can type into an invite
         // box, so share-by-handle and org invites need the login itself. This
         // callback is the only place the OAuth profile is in scope, and it
@@ -84,6 +118,10 @@ export const authOptions: NextAuthOptions = {
             console.error(
               "[auth] failed to persist github_login",
               persisted.error,
+            );
+          } else if (persisted.value.length > 0) {
+            console.info(
+              `[auth] accepted ${persisted.value.length} org invite(s) for ${userId}`,
             );
           }
         }

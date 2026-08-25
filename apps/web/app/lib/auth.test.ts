@@ -46,24 +46,73 @@ describe("authOptions GitHub provider", () => {
 describe("persistGithubLogin", () => {
   it("returns success when the repository write lands", async () => {
     const calls: Array<[string, string]> = [];
-    const result = await persistGithubLogin(
-      "user-1",
-      "Ada",
-      async (id, login) => {
+    const result = await persistGithubLogin("user-1", "Ada", {
+      setLogin: async (id, login) => {
         calls.push([id, login]);
       },
-    );
+      acceptInvites: async () => [],
+    });
     assert.equal(result.success, true);
     assert.deepEqual(calls, [["user-1", "Ada"]]);
   });
 
   it("returns a failed Result when setGithubLogin rejects, so sign-in can continue", async () => {
-    const result = await persistGithubLogin("user-1", "ada", async () => {
-      throw new Error("UNIQUE constraint failed: users.github_login");
+    const result = await persistGithubLogin("user-1", "ada", {
+      setLogin: async () => {
+        throw new Error("UNIQUE constraint failed: users.github_login");
+      },
+      acceptInvites: async () => [],
     });
     assert.equal(result.success, false);
     if (!result.success) {
       assert.match(result.error.message, /UNIQUE/);
     }
+  });
+
+  it("redeems invites AFTER the handle is stored, and reports the orgs joined", async () => {
+    // Ordering is the assertion, not an incidental detail: acceptance keys off
+    // the login, so a reversal would let a membership exist for a handle the
+    // `users` row never recorded.
+    const order: string[] = [];
+    const result = await persistGithubLogin("user-1", "Ada", {
+      setLogin: async () => {
+        order.push("setLogin");
+      },
+      acceptInvites: async (id, login) => {
+        order.push(`accept:${id}:${login}`);
+        return ["org-acme"];
+      },
+    });
+    assert.deepEqual(order, ["setLogin", "accept:user-1:Ada"]);
+    assert.equal(result.success, true);
+    if (result.success) assert.deepEqual(result.value, ["org-acme"]);
+  });
+
+  it("does not attempt acceptance when the handle write failed", async () => {
+    // Otherwise a user whose login never persisted could still be joined to an
+    // org by a stale invite, and nothing would record which handle did it.
+    let accepted = false;
+    const result = await persistGithubLogin("user-1", "ada", {
+      setLogin: async () => {
+        throw new Error("disk full");
+      },
+      acceptInvites: async () => {
+        accepted = true;
+        return ["org-acme"];
+      },
+    });
+    assert.equal(result.success, false);
+    assert.equal(accepted, false);
+  });
+
+  it("surfaces an acceptance failure as a failed Result, so sign-in still completes", async () => {
+    const result = await persistGithubLogin("user-1", "ada", {
+      setLogin: async () => {},
+      acceptInvites: async () => {
+        throw new Error("database is locked");
+      },
+    });
+    assert.equal(result.success, false);
+    if (!result.success) assert.match(result.error.message, /locked/);
   });
 });
