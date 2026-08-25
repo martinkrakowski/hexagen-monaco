@@ -5,6 +5,7 @@ export {
   type PlatformStore,
 } from "./store";
 export { createNextAuthAdapter } from "./auth-store";
+export { type Org, type OrgRole, type OrgsRepository } from "./orgs-store";
 export {
   BILLING_PLANS,
   ENTITLEMENT_STATUSES,

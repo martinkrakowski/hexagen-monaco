@@ -8,6 +8,34 @@ interface GitHubProfile extends Profile {
   login?: string;
 }
 
+/**
+ * Best-effort GitHub-login persistence for the jwt callback.
+ *
+ * NextAuth requires this callback to return a token, so the catch cannot
+ * become the callback's return value. The helper returns Result; the
+ * callback logs a failure and still returns `token`.
+ */
+type PersistResult =
+  | { success: true; value: void }
+  | { success: false; error: Error };
+
+export async function persistGithubLogin(
+  userId: string,
+  login: string,
+  setLogin: (id: string, value: string) => Promise<void> = (id, value) =>
+    getPlatformStore().auth.setGithubLogin(id, value),
+): Promise<PersistResult> {
+  try {
+    await setLogin(userId, login);
+    return { success: true, value: undefined };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error : new Error(String(error)),
+    };
+  }
+}
+
 export const authOptions: NextAuthOptions = {
   adapter: createNextAuthAdapter(() => getPlatformStore().auth),
   session: { strategy: "jwt" },
@@ -28,13 +56,37 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, account, profile }) {
+    async jwt({ token, account, profile, user }) {
       // `account` and `profile` are only present on the initial sign-in —
       // subsequent JWT refreshes skip this block, preserving stored values.
       if (account?.provider === "github" && profile) {
         const githubProfile = profile as GitHubProfile;
         token.accessToken = account.access_token;
         token.login = githubProfile.login;
+
+        // P-A1: persist the handle. `users` stores GitHub's numeric id on
+        // `accounts.provider_account_id`, which nobody can type into an invite
+        // box, so share-by-handle and org invites need the login itself. This
+        // callback is the only place the OAuth profile is in scope, and it
+        // fires on initial sign-in only — which is exactly the backfill rule:
+        // existing users acquire a login the next time they sign in, and no
+        // migration ever calls GitHub.
+        //
+        // Best-effort: a persistence failure must not block the sign-in that
+        // is otherwise complete.
+        const userId = user?.id ?? token.sub;
+        if (userId && githubProfile.login) {
+          const persisted = await persistGithubLogin(
+            userId,
+            githubProfile.login,
+          );
+          if (!persisted.success) {
+            console.error(
+              "[auth] failed to persist github_login",
+              persisted.error,
+            );
+          }
+        }
       }
       return token;
     },
