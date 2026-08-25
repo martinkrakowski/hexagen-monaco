@@ -150,7 +150,7 @@ export async function resolveProjectAccess(
   request: NextRequest,
   ownerId: string,
   projectId: string,
-  readers: ProjectAccessReaders = defaultProjectAccessReaders(),
+  readers?: ProjectAccessReaders,
 ): Promise<ProjectAccessResolution> {
   const owner = await requirePersistenceOwner(request);
   if (!owner.ok) return owner;
@@ -169,16 +169,20 @@ export async function resolveProjectAccess(
   // An org tenant: membership makes the caller an owner of its projects. Org
   // ROLE (owner vs member) gates org administration, not project data — H1.3
   // gives members full project read/write inside their org.
-  const orgRole = await readers.memberRole(tenant, actorUserId);
+  // Resolved AFTER the 401 and the personal-tenant short-circuit: a default
+  // parameter evaluates at call time, which opened the platform store for
+  // every request, including unauthenticated ones (review flag on #652).
+  const r = readers ?? defaultProjectAccessReaders();
+  const orgRole = await r.memberRole(tenant, actorUserId);
   if (orgRole) {
     return { ok: true, role: "owner", ownerId: tenant, actorUserId };
   }
 
   const [orgIds, teamIds] = await Promise.all([
-    readers.listOrgIdsForUser(actorUserId),
-    readers.listTeamIdsForUser(actorUserId),
+    r.listOrgIdsForUser(actorUserId),
+    r.listTeamIdsForUser(actorUserId),
   ]);
-  const granted = await readers.accessFor(tenant, project, {
+  const granted = await r.accessFor(tenant, project, {
     userId: actorUserId,
     orgIds,
     teamIds,

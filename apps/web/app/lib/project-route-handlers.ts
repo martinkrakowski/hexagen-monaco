@@ -164,6 +164,16 @@ export async function handleProjectPut(
     );
   }
   if (updated.error.kind === "NotFound") {
+    // Create-on-missing is OWNER-only. A write grant authorises editing THE
+    // shared project; letting it mint new rows in the owner's tenant would
+    // turn "can edit one project" into "can insert projects as the owner"
+    // (review flag on #652). A grantee whose target vanished gets 404.
+    if (access.role !== "owner") {
+      return NextResponse.json(
+        { error: "not_found", message: "No such project", statusCode: 404 },
+        { status: 404 },
+      );
+    }
     const created = await port.createProjectRecord(parsedProject.project);
     if (!created.success) {
       return persistenceError(created.error.kind, created.error.message);

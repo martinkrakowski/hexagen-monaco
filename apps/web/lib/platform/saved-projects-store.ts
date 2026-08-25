@@ -1,3 +1,4 @@
+import { prepareShareRevokeAllForProject } from "./project-shares-store";
 import type Database from "better-sqlite3";
 import type {
   PersistenceError,
@@ -108,7 +109,26 @@ export function createSavedProjectsStore(
   );
   const clear = db.prepare("DELETE FROM saved_projects WHERE owner_id = ?");
 
+  const revokeSharesFor = prepareShareRevokeAllForProject(db);
+  const selectIds = db.prepare(
+    "SELECT id FROM saved_projects WHERE owner_id = ?",
+  );
+
+  const removeWithShares = db.transaction((id: string) => {
+    revokeSharesFor(ownerId, id);
+    remove.run(ownerId, id);
+  });
+
   const replaceAll = db.transaction((projects: SavedProject[]) => {
+    // Grants on projects that do NOT survive the replacement are revoked in
+    // the same transaction; surviving ids keep their grants. Without this a
+    // dropped project's live grants re-apply to any future project reusing
+    // its id (ghost grants — review flag on #652).
+    const surviving = new Set(projects.map((p) => p.id));
+    const existing = selectIds.all(ownerId) as { id: string }[];
+    for (const row of existing) {
+      if (!surviving.has(row.id)) revokeSharesFor(ownerId, row.id);
+    }
     clear.run(ownerId);
     for (let i = 0; i < projects.length; i += 1) {
       const project = projects[i];
@@ -263,7 +283,9 @@ export function createSavedProjectsStore(
 
     async deleteProjectRecord(id) {
       try {
-        remove.run(ownerId, id);
+        // One transaction: the row and its live grants go together, or
+        // neither does. See prepareShareRevokeAllForProject for why.
+        removeWithShares(id);
         return { success: true, value: undefined };
       } catch (cause) {
         return {

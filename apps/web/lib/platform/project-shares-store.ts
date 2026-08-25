@@ -19,6 +19,32 @@ export type GranteeType = "user" | "org" | "team";
 /** What a grant confers. Two roles only (D-A2); `owner` is not a grant. */
 export type ShareRole = "read" | "write";
 
+/**
+ * Synchronous revoke-all for ONE project, for enlisting in another store's
+ * transaction (the prepareAuditAppend pattern). Deleting a project must
+ * revoke its grants IN THE SAME TRANSACTION: project_shares has no FK
+ * cascade and accessFor does not join saved_projects, so a surviving live
+ * grant re-applies to any future project recreated under the same
+ * (owner_id, id) — a ghost grant the new project's owner never made
+ * (review flag on #652). Soft revoke, so the audit trail survives.
+ */
+export function prepareShareRevokeAllForProject(
+  db: Database.Database,
+): (ownerId: string, projectId: string) => number {
+  const stmt = db.prepare(`
+    UPDATE project_shares
+       SET revoked_at = @revoked_at
+     WHERE owner_id = @owner_id AND project_id = @project_id
+       AND revoked_at IS NULL
+  `);
+  return (ownerId, projectId) =>
+    stmt.run({
+      owner_id: ownerId,
+      project_id: projectId,
+      revoked_at: new Date().toISOString(),
+    }).changes;
+}
+
 export interface ProjectShare {
   ownerId: string;
   projectId: string;
