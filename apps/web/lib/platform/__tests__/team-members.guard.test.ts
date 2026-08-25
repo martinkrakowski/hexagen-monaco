@@ -6,7 +6,11 @@ import { join } from "node:path";
 
 import { openPlatformDb } from "../platform-db";
 import { createOrgsRepository } from "../orgs-store";
-import { createTeamsRepository, NotAnOrgMemberError } from "../teams-store";
+import {
+  createTeamsRepository,
+  DuplicateTeamSlugError,
+  NotAnOrgMemberError,
+} from "../teams-store";
 import { createAuditLogRepository } from "../audit-log-store";
 
 function fixture() {
@@ -275,6 +279,129 @@ describe("P-A2 — team membership invariants", () => {
       assert.equal(row.actor_id, "owner-1");
       assert.equal(row.action, "team.member.add");
       assert.equal(row.grantee_id, "dev-1");
+
+      // The name of this test claims append-only, so assert it rather than
+      // imply it. Append-only here is a property of the SURFACE, not of the
+      // schema — SQLite would accept an UPDATE or a DELETE against this table.
+      // What holds the line is that the repository offers no way to ask for
+      // one, so that is what gets checked.
+      const surface = Object.keys(audit).sort();
+      assert.deepEqual(
+        surface,
+        ["append", "countFor"],
+        `AuditLogRepository must expose only append and countFor; found: ${surface.join(", ")}`,
+      );
+      for (const forbidden of ["update", "delete", "remove", "clear"]) {
+        assert.equal(
+          forbidden in audit,
+          false,
+          `AuditLogRepository must not expose '${forbidden}'`,
+        );
+      }
+    } finally {
+      db.close();
+    }
+  });
+
+  it("a duplicate team slug raises the store's typed error, not a raw SqliteError", async () => {
+    const { db, orgs, teams } = fixture();
+    try {
+      const org = await orgs.createOrg({
+        slug: "acme",
+        name: "Acme",
+        createdBy: "owner-1",
+      });
+      // Non-vacuity: the first create must succeed, so the second failing is
+      // the UNIQUE index and not a broken fixture.
+      const first = await teams.createTeam({
+        orgId: org.id,
+        slug: "platform",
+        name: "Platform",
+        createdBy: "owner-1",
+      });
+      assert.ok(first.id);
+
+      // The route used to pre-check with a SELECT; two concurrent creates both
+      // pass that and the loser escapes as a 500. The index is the arbiter.
+      await assert.rejects(
+        () =>
+          teams.createTeam({
+            orgId: org.id,
+            slug: "platform",
+            name: "Platform Again",
+            createdBy: "owner-1",
+          }),
+        (err: unknown) => {
+          assert.ok(
+            err instanceof DuplicateTeamSlugError,
+            `expected DuplicateTeamSlugError, got ${(err as Error).name}`,
+          );
+          assert.equal(
+            (err as DuplicateTeamSlugError).code,
+            "duplicate_team_slug",
+          );
+          return true;
+        },
+      );
+
+      // The same slug in a DIFFERENT org is legal.
+      const other = await orgs.createOrg({
+        slug: "other",
+        name: "Other",
+        createdBy: "owner-2",
+      });
+      const ok = await teams.createTeam({
+        orgId: other.id,
+        slug: "platform",
+        name: "Platform",
+        createdBy: "owner-2",
+      });
+      assert.ok(ok.id);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("a failing audit append rolls the membership back: no unaudited mutation", async () => {
+    const { db, orgs, teams } = fixture();
+    try {
+      const org = await orgs.createOrg({
+        slug: "acme",
+        name: "Acme",
+        createdBy: "owner-1",
+      });
+      await orgs.addMember(org.id, "dev-1", "member");
+      const team = await teams.createTeam({
+        orgId: org.id,
+        slug: "platform",
+        name: "Platform",
+        createdBy: "owner-1",
+      });
+
+      // Non-vacuity first: the SAME call succeeds and writes the row, so the
+      // absence below is a rollback and not a membership that never worked.
+      await teams.addMember(team.id, "dev-1", { actorId: "owner-1" });
+      assert.equal(await teams.isMember(team.id, "dev-1"), true);
+      await teams.removeMember(team.id, "dev-1", { actorId: "owner-1" });
+      assert.equal(await teams.isMember(team.id, "dev-1"), false);
+
+      // Force the audit insert to fail INSIDE the transaction. A trigger is
+      // the honest way to do it: it fails where a real disk/constraint error
+      // would, rather than by stubbing the appender the store closed over.
+      db.exec(`
+        CREATE TRIGGER audit_boom BEFORE INSERT ON audit_log
+        BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;
+      `);
+
+      await assert.rejects(
+        () => teams.addMember(team.id, "dev-1", { actorId: "owner-1" }),
+        /audit unavailable/,
+      );
+      assert.equal(
+        await teams.isMember(team.id, "dev-1"),
+        false,
+        "the membership must roll back when its audit row cannot be written",
+      );
     } finally {
       db.close();
     }

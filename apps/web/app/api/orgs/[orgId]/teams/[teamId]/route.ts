@@ -42,12 +42,7 @@ export async function DELETE(
     );
   }
 
-  await store.teams.deleteTeam(teamId);
-  await store.audit.append({
-    actorId: tenant.userId,
-    action: "team.delete",
-    subjectOwnerId: orgId,
-    subjectId: teamId,
-  });
+  // Audit row written inside the deletion transaction (see teams-store).
+  await store.teams.deleteTeam(teamId, { actorId: tenant.userId });
   return new NextResponse(null, { status: 204 });
 }

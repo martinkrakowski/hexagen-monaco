@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guardMutation, readJsonBody } from "../../../../lib/request-guards";
 import { getPlatformStore } from "../../../../../lib/platform";
+import { DuplicateTeamSlugError } from "../../../../../lib/platform/teams-store";
 import {
   ORG_MUTATION_GUARD,
   requireTenant,
@@ -76,28 +77,28 @@ export async function POST(
   }
 
   const store = getPlatformStore();
-  if (await store.teams.getTeamBySlug(orgId, slug)) {
-    return NextResponse.json(
-      {
-        error: "conflict",
-        message: `Team slug '${slug}' already exists in this org.`,
-        statusCode: 409,
-      },
-      { status: 409 },
+  // No read-then-write pre-check: two concurrent creates both pass it and the
+  // loser escapes as a 500. The UNIQUE index decides, and the store turns its
+  // verdict into DuplicateTeamSlugError.
+  let team;
+  try {
+    team = await store.teams.createTeam(
+      { orgId, slug, name, createdBy: tenant.userId },
+      // The audit row is written in the SAME transaction as the insert.
+      { actorId: tenant.userId },
     );
+  } catch (err) {
+    if (err instanceof DuplicateTeamSlugError) {
+      return NextResponse.json(
+        {
+          error: "conflict",
+          message: `Team slug '${slug}' already exists in this org.`,
+          statusCode: 409,
+        },
+        { status: 409 },
+      );
+    }
+    throw err;
   }
-
-  const team = await store.teams.createTeam({
-    orgId,
-    slug,
-    name,
-    createdBy: tenant.userId,
-  });
-  await store.audit.append({
-    actorId: tenant.userId,
-    action: "team.create",
-    subjectOwnerId: orgId,
-    subjectId: team.id,
-  });
   return NextResponse.json({ team }, { status: 201 });
 }

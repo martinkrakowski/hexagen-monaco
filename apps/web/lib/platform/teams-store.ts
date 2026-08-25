@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { prepareAuditAppend, type AuditEntry } from "./audit-log-store";
 
 /**
  * Teams and their membership (P-A2).
@@ -42,6 +43,25 @@ export class UnknownTeamError extends Error {
   }
 }
 
+/**
+ * A team slug already exists in the org.
+ *
+ * Raised by the STORE from the UNIQUE index, not by a read-then-write check in
+ * the route: two concurrent creates both pass a pre-check and the second would
+ * otherwise surface a raw SqliteError as a 500. The index is the arbiter; this
+ * turns its verdict into something the route can map to 409.
+ */
+export class DuplicateTeamSlugError extends Error {
+  readonly code = "duplicate_team_slug";
+  constructor(
+    readonly orgId: string,
+    readonly slug: string,
+  ) {
+    super(`team slug '${slug}' already exists in org ${orgId}`);
+    this.name = "DuplicateTeamSlugError";
+  }
+}
+
 export interface Team {
   id: string;
   orgId: string;
@@ -51,23 +71,46 @@ export interface Team {
   createdAt: string;
 }
 
+/**
+ * Who performed a mutation, so the store can write its audit row inside the
+ * SAME transaction (D-A6).
+ *
+ * The store owns the action vocabulary and the subject ids — the caller only
+ * says who. Passing the whole `AuditEntry` from a route would let two callers
+ * disagree about what a team deletion is called.
+ */
+export interface TeamAuditContext {
+  actorId: string;
+}
+
 export interface TeamsRepository {
-  createTeam(input: {
-    id?: string;
-    orgId: string;
-    slug: string;
-    name: string;
-    createdBy: string;
-  }): Promise<Team>;
+  createTeam(
+    input: {
+      id?: string;
+      orgId: string;
+      slug: string;
+      name: string;
+      createdBy: string;
+    },
+    audit?: TeamAuditContext,
+  ): Promise<Team>;
   getTeam(teamId: string): Promise<Team | null>;
   /** Resolves the `@org-slug/team-slug` share handle (P-A4). */
   getTeamBySlug(orgId: string, slug: string): Promise<Team | null>;
   listTeamsForOrg(orgId: string): Promise<Team[]>;
   /** Deletes the team and its memberships atomically. */
-  deleteTeam(teamId: string): Promise<void>;
+  deleteTeam(teamId: string, audit?: TeamAuditContext): Promise<void>;
   /** @throws NotAnOrgMemberError | UnknownTeamError */
-  addMember(teamId: string, userId: string): Promise<void>;
-  removeMember(teamId: string, userId: string): Promise<void>;
+  addMember(
+    teamId: string,
+    userId: string,
+    audit?: TeamAuditContext,
+  ): Promise<void>;
+  removeMember(
+    teamId: string,
+    userId: string,
+    audit?: TeamAuditContext,
+  ): Promise<void>;
   isMember(teamId: string, userId: string): Promise<boolean>;
   /** P-A3 reads this on every shared-project request. */
   listTeamIdsForUser(userId: string): Promise<string[]>;
@@ -127,32 +170,99 @@ export function createTeamsRepository(db: Database.Database): TeamsRepository {
   const deleteAllMembers = db.prepare(
     "DELETE FROM team_members WHERE team_id = ?",
   );
+
+  // The audit row is written INSIDE each mutation's transaction, not after it
+  // by a separate awaited repository call. Two independent commits mean the
+  // mutation can land while the audit write throws, and an unaudited change is
+  // exactly the event the log exists to make impossible to miss.
+  const appendAudit = prepareAuditAppend(db);
+  const audited = (
+    audit: TeamAuditContext | undefined,
+    entry: Omit<AuditEntry, "actorId">,
+  ) => {
+    if (audit) appendAudit({ ...entry, actorId: audit.actorId });
+  };
+
+  const createTeamTx = db.transaction(
+    (row: TeamRow, audit?: TeamAuditContext) => {
+      insertTeam.run(row);
+      audited(audit, {
+        action: "team.create",
+        subjectOwnerId: row.org_id,
+        subjectId: row.id,
+      });
+    },
+  );
+
   // Memberships go with the team, atomically: rows pointing at a team that no
   // longer exists would be invisible grants.
-  const deleteTeamTx = db.transaction((teamId: string) => {
-    deleteAllMembers.run(teamId);
-    deleteTeamRow.run(teamId);
-  });
+  const deleteTeamTx = db.transaction(
+    (teamId: string, audit?: TeamAuditContext) => {
+      const team = selectTeam.get(teamId) as TeamRow | undefined;
+      deleteAllMembers.run(teamId);
+      deleteTeamRow.run(teamId);
+      audited(audit, {
+        action: "team.delete",
+        subjectOwnerId: team?.org_id ?? null,
+        subjectId: teamId,
+      });
+    },
+  );
 
   // Check-and-insert in ONE transaction: without it, an org removal
   // interleaving between the membership check and the insert would leave a
   // team row belonging to a user who is no longer in the org — precisely the
   // orphan the cascade exists to prevent.
-  const addMemberTx = db.transaction((teamId: string, userId: string) => {
-    const team = selectTeam.get(teamId) as TeamRow | undefined;
-    if (!team) throw new UnknownTeamError(teamId);
-    if (!selectOrgMember.get(team.org_id, userId)) {
-      throw new NotAnOrgMemberError(teamId, userId);
-    }
-    upsertMember.run({
-      team_id: teamId,
-      user_id: userId,
-      created_at: new Date().toISOString(),
-    });
-  });
+  const addMemberTx = db.transaction(
+    (teamId: string, userId: string, audit?: TeamAuditContext) => {
+      const team = selectTeam.get(teamId) as TeamRow | undefined;
+      if (!team) throw new UnknownTeamError(teamId);
+      if (!selectOrgMember.get(team.org_id, userId)) {
+        throw new NotAnOrgMemberError(teamId, userId);
+      }
+      upsertMember.run({
+        team_id: teamId,
+        user_id: userId,
+        created_at: new Date().toISOString(),
+      });
+      audited(audit, {
+        action: "team.member.add",
+        subjectOwnerId: team.org_id,
+        subjectId: teamId,
+        granteeType: "user",
+        granteeId: userId,
+      });
+    },
+  );
+
+  const removeMemberTx = db.transaction(
+    (teamId: string, userId: string, audit?: TeamAuditContext) => {
+      const team = selectTeam.get(teamId) as TeamRow | undefined;
+      deleteMember.run(teamId, userId);
+      audited(audit, {
+        action: "team.member.remove",
+        subjectOwnerId: team?.org_id ?? null,
+        subjectId: teamId,
+        granteeType: "user",
+        granteeId: userId,
+      });
+    },
+  );
+
+  /**
+   * The UNIQUE index on (org_id, slug) is the arbiter, not a prior SELECT.
+   * better-sqlite3 surfaces the violation as SQLITE_CONSTRAINT_UNIQUE; a
+   * read-then-write check in the route loses the race between two concurrent
+   * creates and the loser would escape as a 500.
+   */
+  const isDuplicateSlug = (err: unknown): boolean =>
+    typeof err === "object" &&
+    err !== null &&
+    (err as { code?: string }).code === "SQLITE_CONSTRAINT_UNIQUE" &&
+    String((err as { message?: string }).message ?? "").includes("teams.slug");
 
   return {
-    async createTeam(input) {
+    async createTeam(input, audit) {
       const row: TeamRow = {
         id: input.id ?? crypto.randomUUID(),
         org_id: input.orgId,
@@ -161,7 +271,14 @@ export function createTeamsRepository(db: Database.Database): TeamsRepository {
         created_by: input.createdBy,
         created_at: new Date().toISOString(),
       };
-      insertTeam.run(row);
+      try {
+        createTeamTx(row, audit);
+      } catch (err) {
+        if (isDuplicateSlug(err)) {
+          throw new DuplicateTeamSlugError(input.orgId, input.slug);
+        }
+        throw err;
+      }
       return toTeam(row);
     },
     async getTeam(teamId) {
@@ -175,14 +292,14 @@ export function createTeamsRepository(db: Database.Database): TeamsRepository {
     async listTeamsForOrg(orgId) {
       return (selectTeamsForOrg.all(orgId) as TeamRow[]).map(toTeam);
     },
-    async deleteTeam(teamId) {
-      deleteTeamTx(teamId);
+    async deleteTeam(teamId, audit) {
+      deleteTeamTx(teamId, audit);
     },
-    async addMember(teamId, userId) {
-      addMemberTx(teamId, userId);
+    async addMember(teamId, userId, audit) {
+      addMemberTx(teamId, userId, audit);
     },
-    async removeMember(teamId, userId) {
-      deleteMember.run(teamId, userId);
+    async removeMember(teamId, userId, audit) {
+      removeMemberTx(teamId, userId, audit);
     },
     async isMember(teamId, userId) {
       return selectMember.get(teamId, userId) !== undefined;

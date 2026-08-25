@@ -78,7 +78,8 @@ export async function POST(
 
   const store = getPlatformStore();
   try {
-    await store.teams.addMember(teamId, userId);
+    // Audit row written inside the same transaction as the membership insert.
+    await store.teams.addMember(teamId, userId, { actorId: tenant.userId });
   } catch (err) {
     if (err instanceof NotAnOrgMemberError) {
       return NextResponse.json(
@@ -95,14 +96,6 @@ export async function POST(
     throw err;
   }
 
-  await store.audit.append({
-    actorId: tenant.userId,
-    action: "team.member.add",
-    subjectOwnerId: orgId,
-    subjectId: teamId,
-    granteeType: "user",
-    granteeId: userId,
-  });
   return NextResponse.json({ teamId, userId }, { status: 201 });
 }
 
@@ -130,14 +123,7 @@ export async function DELETE(
   if (!(await resolveTeam(orgId, teamId))) return unknownTeam();
 
   const store = getPlatformStore();
-  await store.teams.removeMember(teamId, userId);
-  await store.audit.append({
-    actorId: tenant.userId,
-    action: "team.member.remove",
-    subjectOwnerId: orgId,
-    subjectId: teamId,
-    granteeType: "user",
-    granteeId: userId,
-  });
+  // Audit row written inside the same transaction as the deletion.
+  await store.teams.removeMember(teamId, userId, { actorId: tenant.userId });
   return new NextResponse(null, { status: 204 });
 }

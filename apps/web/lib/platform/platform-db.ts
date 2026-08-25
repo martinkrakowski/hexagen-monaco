@@ -153,10 +153,13 @@ export function openPlatformDb(dbPath: string): Database.Database {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_org_slug
       ON teams (org_id, slug);
 
-    -- An insert is refused unless (org_id, user_id) exists in org_members, and
-    -- removal from the org deletes these rows in the SAME transaction
-    -- (orgs-store.removeMember). A team membership that outlives its org
-    -- membership would be a grant nobody can see or revoke.
+    -- NOT enforced here: there is no foreign key and no trigger, so SQLite
+    -- accepts any (team_id, user_id) pair written directly. The rule lives in
+    -- teams-store.addMember, which checks org_members and inserts in one
+    -- transaction, and in orgs-store.removeMember, which deletes these rows in
+    -- the same transaction as the org row. A team membership that outlives its
+    -- org membership would be a grant nobody can see or revoke -- application
+    -- code is what prevents it.
     CREATE TABLE IF NOT EXISTS team_members (
       team_id TEXT NOT NULL,
       user_id TEXT NOT NULL,
@@ -167,9 +170,11 @@ export function openPlatformDb(dbPath: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_team_members_user
       ON team_members (user_id);
 
-    -- D-A6: narrow, and APPEND-ONLY. No UPDATE or DELETE statement is prepared
-    -- against this table anywhere in the codebase -- an audit trail that can be
-    -- rewritten is not one. v1 actions are team add/remove; share/revoke join
+    -- D-A6: narrow, and APPEND-ONLY BY CONSTRUCTION, not by schema -- SQLite
+    -- would accept UPDATE or DELETE against this table. What makes the property
+    -- hold is that no such statement is prepared anywhere in the codebase, and
+    -- AuditLogRepository exposes only an append and a count; a guard test
+    -- asserts that surface. v1 actions are team add/remove; share/revoke join
     -- in P-A4.
     CREATE TABLE IF NOT EXISTS audit_log (
       id TEXT PRIMARY KEY,

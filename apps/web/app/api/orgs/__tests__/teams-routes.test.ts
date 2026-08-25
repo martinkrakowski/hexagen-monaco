@@ -2,7 +2,14 @@ import { afterEach, beforeEach, describe, it, vi } from "vitest";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 
-vi.mock("next-auth/jwt", () => ({ getToken: vi.fn() }));
+// Spread the real module and override only `getToken`: next-auth/jwt also
+// exports `encode` and `decode`, and a double that drops them would make any
+// future import of those resolve to undefined at runtime while typechecking
+// clean.
+vi.mock("next-auth/jwt", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next-auth/jwt")>()),
+  getToken: vi.fn(),
+}));
 
 import { getToken } from "next-auth/jwt";
 import { POST as createTeam } from "../[orgId]/teams/route";
@@ -58,6 +65,17 @@ describe("P-A2 — /api/orgs/[orgId]/teams", () => {
     vi.mocked(getToken).mockReset();
   });
   afterEach(() => closePlatformStore());
+
+  it("the next-auth/jwt double keeps the module's other exports", async () => {
+    // Without this the fix above has nothing proving it. A factory returning
+    // only `getToken` typechecks and passes every existing test, and the loss
+    // surfaces later as `encode is not a function` in whichever test first
+    // needs it.
+    const jwt = await import("next-auth/jwt");
+    assert.equal(typeof jwt.encode, "function");
+    assert.equal(typeof jwt.decode, "function");
+    assert.equal(vi.isMockFunction(jwt.getToken), true);
+  });
 
   it("401 without a session", async () => {
     signedInAs(null);
@@ -154,12 +172,23 @@ describe("P-A2 — /api/orgs/[orgId]/teams", () => {
     );
     const { team } = (await created.json()) as { team: { id: string } };
 
+    // The audit assertion is the point of this test's second half: asserting
+    // membership alone still passes when the audit write is removed entirely.
+    // Count BEFORE, so "exactly one new row" is a delta rather than a total a
+    // pre-existing row could satisfy.
+    const before = await store.audit.countFor("team.member.add", team.id);
+
     const res = await addMember(
       postMember(team.id, { userId: "dev-1" }),
       teamParams(team.id),
     );
     assert.equal(res.status, 201);
     assert.equal(await store.teams.isMember(team.id, "dev-1"), true);
+    assert.equal(
+      (await store.audit.countFor("team.member.add", team.id)) - before,
+      1,
+      "the membership add must write exactly one team.member.add audit row",
+    );
   });
 
   it("404 for a team id belonging to another org", async () => {
