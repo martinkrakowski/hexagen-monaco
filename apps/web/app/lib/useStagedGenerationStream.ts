@@ -408,6 +408,11 @@ export function useStagedGenerationStream(
                           typeof body.projectId === "string"
                             ? body.projectId
                             : undefined,
+                        tenantId:
+                          typeof body.tenantId === "string" &&
+                          body.tenantId.trim() !== ""
+                            ? body.tenantId.trim()
+                            : undefined,
                       });
                       // Key by the guard-validated `telemetry.stage` rather than
                       // an unchecked `event.stage as number` cast: the server

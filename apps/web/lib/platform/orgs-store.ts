@@ -79,6 +79,14 @@ export interface OrgMember {
   createdAt: string;
 }
 
+/** One membership row for the org switcher — org identity plus the caller's role. */
+export interface OrgMembershipSummary {
+  id: string;
+  slug: string;
+  name: string;
+  role: OrgRole;
+}
+
 export interface OrgsRepository {
   createOrg(input: {
     id?: string;
@@ -125,6 +133,11 @@ export interface OrgsRepository {
    * handle first becomes known. Returns the orgs joined.
    */
   acceptInvitesForLogin(userId: string, login: string): Promise<string[]>;
+  /**
+   * The caller's orgs with their role, in one JOIN. `GET /api/orgs` lists
+   * this rather than `listOrgIdsForUser` + per-id `getOrg`/`memberRole`.
+   */
+  listOrgsForUser(userId: string): Promise<OrgMembershipSummary[]>;
 }
 
 interface OrgRow {
@@ -238,6 +251,16 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
   const selectOrgIds = db.prepare(`
     SELECT m.org_id FROM org_members m
      INNER JOIN orgs o ON o.id = m.org_id
+     WHERE m.user_id = ?
+     ORDER BY m.org_id
+  `);
+  // Same JOIN as listOrgIdsForUser: a membership whose org_id is not an org
+  // cannot appear in the switcher. Role comes from the membership row so
+  // GET /api/orgs is one statement, not 2N+1.
+  const selectOrgsForUser = db.prepare(`
+    SELECT o.id, o.slug, o.name, m.role
+      FROM org_members m
+      INNER JOIN orgs o ON o.id = m.org_id
      WHERE m.user_id = ?
      ORDER BY m.org_id
   `);
@@ -525,6 +548,20 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
       const canonical = canonicalizeGithubLogin(login);
       if (!canonical) return [];
       return acceptInvitesTx(userId, canonical);
+    },
+    async listOrgsForUser(userId) {
+      const rows = selectOrgsForUser.all(userId) as Array<{
+        id: string;
+        slug: string;
+        name: string;
+        role: OrgRole;
+      }>;
+      return rows.map((r) => ({
+        id: r.id,
+        slug: r.slug,
+        name: r.name,
+        role: r.role,
+      }));
     },
   };
 }

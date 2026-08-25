@@ -203,6 +203,49 @@ describe("useStagedSpecGeneration retry", () => {
   });
 });
 
+describe("useStagedSpecGeneration tenant forwarding", () => {
+  test("puts tenantId on the cloud generate body so telemetry can follow the org", async () => {
+    const originalFetch = global.fetch;
+    const bodies: string[] = [];
+    global.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(String(init?.body));
+      const encoder = new TextEncoder();
+      const line =
+        '{"type":"done","yaml":"m","contextCount":1,"portCount":1,"adapterCount":1}\n';
+      let i = 0;
+      return {
+        ok: true,
+        status: 200,
+        body: new ReadableStream<Uint8Array>({
+          pull(controller) {
+            if (i === 0) {
+              controller.enqueue(encoder.encode(line));
+              i++;
+            } else {
+              controller.close();
+            }
+          },
+        }),
+      } as unknown as Response;
+    }) as typeof fetch;
+
+    try {
+      const { result } = renderHook(() => useStagedSpecGeneration());
+      await act(async () => {
+        await result.current.generateFromSpec("spec: content", {
+          executionStrategy: "cloud",
+          tenantId: "org-acme",
+        });
+      });
+      assert.equal(bodies.length, 1);
+      const body = JSON.parse(bodies[0] ?? "{}") as { tenantId?: string };
+      assert.equal(body.tenantId, "org-acme");
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+});
+
 describe("useStagedSpecGeneration surface", () => {
   test("does not expose the removed GitOps propose-PR surface", () => {
     // proposePR/isProposing/prMetadata/proposeError fetched a `/api/gitops/

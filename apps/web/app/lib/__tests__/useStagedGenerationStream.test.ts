@@ -353,6 +353,58 @@ test("a stage-telemetry event without a prior stage-start yields a well-formed e
   }
 });
 
+test("forwards generate-body tenantId to persistStageTelemetry, and omits it when absent", async () => {
+  const persist = vi.mocked(persistStageTelemetry);
+  persist.mockClear();
+  const telemetry = {
+    durationMs: 5,
+    usedLLM: true,
+    retryCount: 0,
+    inputTokensEstimate: 1,
+    outputTokensActual: 1,
+    servedFromCache: false,
+    summary: "x",
+  };
+  const lines = [
+    `{"type":"stage-telemetry","telemetry":${JSON.stringify({ ...telemetry, stage: 0, label: "A" })}}`,
+    '{"type":"done","yaml":"m","contextCount":1,"portCount":1,"adapterCount":1}',
+  ];
+  global.fetch = mockFetchWithSSE(lines);
+
+  try {
+    const { result } = renderHook(() =>
+      useStagedGenerationStream({ endpoint: "/api/test", stageLabels: {} }),
+    );
+    await act(async () => {
+      await result.current.generate({
+        description: "org run",
+        tenantId: "org-acme",
+        projectId: "proj-1",
+      });
+    });
+    assert.equal(persist.mock.calls.length, 1);
+    assert.equal(
+      persist.mock.calls[0]?.[1]?.tenantId,
+      "org-acme",
+      "org generation must name its tenant or the server writes personal history",
+    );
+    assert.equal(persist.mock.calls[0]?.[1]?.projectId, "proj-1");
+
+    persist.mockClear();
+    await act(async () => {
+      await result.current.generate({ description: "personal" });
+    });
+    assert.equal(persist.mock.calls.length, 1);
+    assert.equal(
+      persist.mock.calls[0]?.[1]?.tenantId,
+      undefined,
+      "the personal path must stay tenant-less",
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("one generate() pass shares a single runId across stage-telemetry persists", async () => {
   const persist = vi.mocked(persistStageTelemetry);
   persist.mockClear();

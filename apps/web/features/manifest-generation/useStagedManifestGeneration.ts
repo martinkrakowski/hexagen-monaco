@@ -28,6 +28,8 @@ export interface UseStagedManifestGenerationReturn {
       deployment?: string;
       additionalContext?: string;
       preferLocal?: boolean;
+      /** Org whose history this cloud run belongs to; omit for personal. */
+      tenantId?: string;
       signal?: AbortSignal;
     },
   ) => Promise<{
@@ -204,6 +206,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
         deployment?: string;
         additionalContext?: string;
         preferLocal?: boolean;
+        tenantId?: string;
         signal?: AbortSignal;
       },
     ) => {
@@ -330,6 +333,7 @@ export function useStagedManifestGeneration(): UseStagedManifestGenerationReturn
               deployment: options?.deployment,
               additionalContext: options?.additionalContext,
               preferLocal: options?.preferLocal,
+              tenantId: options?.tenantId,
             },
             controller.signal,
           );

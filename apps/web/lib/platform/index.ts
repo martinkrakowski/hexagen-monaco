@@ -5,7 +5,12 @@ export {
   type PlatformStore,
 } from "./store";
 export { createNextAuthAdapter } from "./auth-store";
-export { type Org, type OrgRole, type OrgsRepository } from "./orgs-store";
+export {
+  type Org,
+  type OrgMembershipSummary,
+  type OrgRole,
+  type OrgsRepository,
+} from "./orgs-store";
 export {
   type Team,
   type TeamsRepository,

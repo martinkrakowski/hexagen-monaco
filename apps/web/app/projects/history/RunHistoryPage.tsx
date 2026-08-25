@@ -11,13 +11,52 @@ interface RunsResponse {
   trend: DailyRunCount[];
 }
 
+interface OrgSummary {
+  id: string;
+  slug: string;
+  name: string;
+  role: string;
+}
+
+/** The personal tenant has no id: `/api/runs` without `tenantId` is "me". */
+const PERSONAL = "";
+
 export function RunHistoryPage() {
+  const [tenantId, setTenantId] = useState<string>(PERSONAL);
+  const [orgs, setOrgs] = useState<OrgSummary[]>([]);
   const [payload, setPayload] = useState<RunsResponse | null>(null);
   const [failed, setFailed] = useState(false);
 
+  // The tenants this caller may switch to. A failure here leaves the selector
+  // showing Personal only: not being able to list orgs must not stop someone
+  // reading their own history.
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/runs")
+    void fetch("/api/orgs")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("failed");
+        return (await response.json()) as { orgs: OrgSummary[] };
+      })
+      .then((data) => {
+        if (!cancelled) setOrgs(data.orgs);
+      })
+      .catch(() => {
+        // Personal history still works without the org list.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Refetches whenever the tenant changes — the selector is the only input.
+  useEffect(() => {
+    let cancelled = false;
+    setPayload(null);
+    setFailed(false);
+    const url = tenantId
+      ? `/api/runs?tenantId=${encodeURIComponent(tenantId)}`
+      : "/api/runs";
+    void fetch(url)
       .then(async (response) => {
         if (!response.ok) throw new Error("failed");
         return (await response.json()) as RunsResponse;
@@ -31,7 +70,7 @@ export function RunHistoryPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [tenantId]);
 
   return (
     <ProjectsShell
@@ -45,6 +84,29 @@ export function RunHistoryPage() {
       }
     >
       <div className="p-4 space-y-6">
+        {orgs.length > 0 ? (
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="run-history-tenant"
+              className="text-sm text-muted-foreground"
+            >
+              History for
+            </label>
+            <select
+              id="run-history-tenant"
+              value={tenantId}
+              onChange={(event) => setTenantId(event.target.value)}
+              className="rounded-lg border border-border bg-card p-2 text-sm text-foreground"
+            >
+              <option value={PERSONAL}>Personal</option>
+              {orgs.map((org) => (
+                <option key={org.id} value={org.id}>
+                  {org.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
         {failed ? (
           <p className="text-sm text-destructive">
             Could not load run history.
