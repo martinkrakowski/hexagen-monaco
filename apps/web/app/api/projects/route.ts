@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { guardMutation, readJsonBody } from "../../lib/request-guards";
 import { getPlatformStore } from "../../../lib/platform";
+import { handleProjectCreate } from "../../lib/project-route-handlers";
 import { parseSavedProjectBody } from "../../../lib/platform/saved-project-body";
 import {
   PROJECT_MUTATION_GUARD,
@@ -34,42 +35,18 @@ export async function GET(request: NextRequest) {
   });
 }
 
+/**
+ * The personal-tenant alias for creation (D-A8). Behaviour is unchanged; the
+ * implementation now lives in the shared handler that
+ * `/api/tenants/[ownerId]/projects` also calls, so the two addresses cannot
+ * drift apart in what they permit. Resolving the caller first is what supplies
+ * the owner id — the handler re-checks it via `requireTenant`, which answers
+ * `self` without a membership lookup.
+ */
 export async function POST(request: NextRequest) {
   const owner = await requirePersistenceOwner(request);
   if (!owner.ok) return owner.response;
-  const gate = guardMutation(request, PROJECT_MUTATION_GUARD);
-  if (gate) return gate;
-
-  const parsedBody = await readJsonBody(request);
-  if (!parsedBody.ok) return parsedBody.response;
-  const parsedProject = parseSavedProjectBody(parsedBody.body);
-  if (!parsedProject.ok) {
-    return NextResponse.json(
-      {
-        error: "validation",
-        message: parsedProject.message,
-        statusCode: 400,
-      },
-      { status: 400 },
-    );
-  }
-
-  const created = await getPlatformStore()
-    .projectsFor(owner.ownerId)
-    .createProjectRecord(parsedProject.project);
-  if (!created.success) {
-    const status = created.error.kind === "Conflict" ? 409 : 500;
-    return NextResponse.json(
-      {
-        error: created.error.kind,
-        message: created.error.message,
-        statusCode: status,
-      },
-      { status },
-    );
-  }
-  getPlatformStore().markProjectsInitialized(owner.ownerId);
-  return NextResponse.json(created.value, { status: 201 });
+  return handleProjectCreate(request, owner.ownerId);
 }
 
 const replaceBodySchema = z.object({
