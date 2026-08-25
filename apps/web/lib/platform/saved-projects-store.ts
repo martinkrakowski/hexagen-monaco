@@ -14,6 +14,41 @@ interface ProjectRow {
   created_at: number;
   updated_at: number;
   ord: number;
+  /** H1.4: monotonic revision. Rows written before H1.4 read as 1. */
+  rev: number;
+  /** H1.4: the user who last wrote. NULL means "before H1.4", not "nobody". */
+  updated_by: string | null;
+}
+
+/**
+ * H1.4 write precondition. A bare number is the LEGACY `updated_at` form and
+ * is still accepted during the transition; `{ rev }` is canonical.
+ */
+export type ProjectPrecondition =
+  | number
+  | { rev: number }
+  | { updatedAt: number };
+
+/** What a write returns: the stored project and its NEW revision. */
+export interface ProjectWriteResult {
+  project: SavedProject;
+  rev: number;
+}
+
+function preconditionParams(precondition: ProjectPrecondition | undefined): {
+  expected_rev: number | null;
+  expected_updated_at: number | null;
+} {
+  if (precondition === undefined) {
+    return { expected_rev: null, expected_updated_at: null };
+  }
+  if (typeof precondition === "number") {
+    return { expected_rev: null, expected_updated_at: precondition };
+  }
+  if ("rev" in precondition) {
+    return { expected_rev: precondition.rev, expected_updated_at: null };
+  }
+  return { expected_rev: null, expected_updated_at: precondition.updatedAt };
 }
 
 function persistError(
@@ -62,8 +97,9 @@ export interface SavedProjectsStore extends SavedProjectsPersistencePort {
    */
   putProject(
     project: SavedProject,
-    expectedUpdatedAt?: number,
-  ): Result<SavedProject, PersistenceError>;
+    precondition?: ProjectPrecondition,
+    actorUserId?: string,
+  ): Result<ProjectWriteResult, PersistenceError>;
 
   /**
    * One row by id, or `null` when this owner has no such project.
@@ -75,6 +111,14 @@ export interface SavedProjectsStore extends SavedProjectsPersistencePort {
    * means, and for a cross-tenant request that answer is 403, never 404.
    */
   getProject(id: string): Result<SavedProject | null, PersistenceError>;
+
+  /**
+   * Same row as `getProject`, plus the monotonic `rev` used as the GET ETag.
+   * The payload itself does not carry rev; the column is the source of truth.
+   */
+  getProjectWithRev(
+    id: string,
+  ): Result<ProjectWriteResult | null, PersistenceError>;
 }
 
 export function createSavedProjectsStore(
@@ -82,10 +126,10 @@ export function createSavedProjectsStore(
   ownerId: string,
 ): SavedProjectsStore {
   const selectAll = db.prepare(
-    "SELECT id, name, payload, created_at, updated_at, ord FROM saved_projects WHERE owner_id = ? ORDER BY ord ASC",
+    "SELECT id, name, payload, created_at, updated_at, ord, rev, updated_by FROM saved_projects WHERE owner_id = ? ORDER BY ord ASC",
   );
   const selectOne = db.prepare(
-    "SELECT id, name, payload, created_at, updated_at, ord FROM saved_projects WHERE owner_id = ? AND id = ?",
+    "SELECT id, name, payload, created_at, updated_at, ord, rev, updated_by FROM saved_projects WHERE owner_id = ? AND id = ?",
   );
   const minOrd = db.prepare(
     "SELECT COALESCE(MIN(ord), 0) AS min_ord FROM saved_projects WHERE owner_id = ?",
@@ -94,15 +138,47 @@ export function createSavedProjectsStore(
     INSERT INTO saved_projects (id, owner_id, name, payload, created_at, updated_at, ord)
     VALUES (@id, @owner_id, @name, @payload, @created_at, @updated_at, @ord)
   `);
-  const update = db.prepare(`
-    UPDATE saved_projects
-       SET name = @name, payload = @payload, updated_at = @updated_at
-     WHERE owner_id = @owner_id AND id = @id
+  /**
+   * Bulk replace used to DELETE + INSERT, which reset `rev` to the column
+   * default of 1 (ABA: a stale `rev:1` If-Match became valid again). UPSERT
+   * increments existing rows and inserts new ids at 1. `updated_by` is left
+   * alone: this path has no actor.
+   */
+  const upsert = db.prepare(`
+    INSERT INTO saved_projects (id, owner_id, name, payload, created_at, updated_at, ord)
+    VALUES (@id, @owner_id, @name, @payload, @created_at, @updated_at, @ord)
+    ON CONFLICT (owner_id, id) DO UPDATE SET
+      name = excluded.name,
+      payload = excluded.payload,
+      created_at = excluded.created_at,
+      updated_at = excluded.updated_at,
+      ord = excluded.ord,
+      rev = saved_projects.rev + 1
   `);
-  const updateIfMatch = db.prepare(`
+  /**
+   * H1.4: the ONE update path. It always increments `rev` and stamps
+   * `updated_by`, and both preconditions are optional columns of the same
+   * WHERE clause rather than separate statements:
+   *
+   *   both NULL          -> unconditional write (no If-Match)
+   *   @expected_rev      -> H1.4 canonical, monotonic
+   *   @expected_updated_at -> legacy If-Match, the clock (see parseIfMatch)
+   *
+   * A second statement is how one of them ends up missing the rev bump; a
+   * row whose rev did not move is a lost update that no precondition can
+   * afterwards detect.
+   */
+  const updateProject = db.prepare(`
     UPDATE saved_projects
-       SET name = @name, payload = @payload, updated_at = @updated_at
-     WHERE owner_id = @owner_id AND id = @id AND updated_at = @expected_updated_at
+       SET name = @name,
+           payload = @payload,
+           updated_at = @updated_at,
+           rev = rev + 1,
+           updated_by = @updated_by
+     WHERE owner_id = @owner_id
+       AND id = @id
+       AND (@expected_rev IS NULL OR rev = @expected_rev)
+       AND (@expected_updated_at IS NULL OR updated_at = @expected_updated_at)
   `);
   const remove = db.prepare(
     "DELETE FROM saved_projects WHERE owner_id = ? AND id = ?",
@@ -129,10 +205,22 @@ export function createSavedProjectsStore(
     for (const row of existing) {
       if (!surviving.has(row.id)) revokeSharesFor(ownerId, row.id);
     }
-    clear.run(ownerId);
+    // Delete ONLY the non-surviving rows. A clear + reinsert would reset
+    // `rev` to the column default on every surviving project, making a stale
+    // If-Match token valid again (the ABA the H1.4 contract exists to stop);
+    // survivors go through the UPSERT below, which increments their rev.
+    const incomingIds = projects.map((p) => p.id);
+    if (projects.length === 0) {
+      clear.run(ownerId);
+      return;
+    }
+    db.prepare(
+      `DELETE FROM saved_projects
+        WHERE owner_id = ? AND id NOT IN (${incomingIds.map(() => "?").join(",")})`,
+    ).run(ownerId, ...incomingIds);
     for (let i = 0; i < projects.length; i += 1) {
       const project = projects[i];
-      insert.run({
+      upsert.run({
         id: project.id,
         owner_id: ownerId,
         name: project.name,
@@ -144,24 +232,36 @@ export function createSavedProjectsStore(
     }
   });
 
+  function readProjectWithRev(
+    id: string,
+  ): Result<ProjectWriteResult | null, PersistenceError> {
+    try {
+      const row = selectOne.get(ownerId, id) as ProjectRow | undefined;
+      if (!row) return { success: true, value: null };
+      const parsed = parsePayload(row);
+      if (!parsed.success) return parsed;
+      return { success: true, value: { project: parsed.value, rev: row.rev } };
+    } catch (cause) {
+      return {
+        success: false,
+        error: persistError(
+          "DeserializationFailed",
+          `Failed to load saved project ${id}`,
+          cause,
+        ),
+      };
+    }
+  }
+
   return {
     getProject(id: string) {
-      try {
-        const row = selectOne.get(ownerId, id) as ProjectRow | undefined;
-        if (!row) return { success: true, value: null };
-        const parsed = parsePayload(row);
-        if (!parsed.success) return parsed;
-        return { success: true, value: parsed.value };
-      } catch (cause) {
-        return {
-          success: false,
-          error: persistError(
-            "DeserializationFailed",
-            `Failed to load saved project ${id}`,
-            cause,
-          ),
-        };
-      }
+      const found = readProjectWithRev(id);
+      if (!found.success) return found;
+      return { success: true, value: found.value?.project ?? null };
+    },
+
+    getProjectWithRev(id: string) {
+      return readProjectWithRev(id);
     },
 
     async loadProjects() {
@@ -254,13 +354,19 @@ export function createSavedProjectsStore(
         if (updated === parsed.value) {
           return { success: true, value: parsed.value };
         }
-        const written = updateIfMatch.run({
+        const written = updateProject.run({
           id,
           owner_id: ownerId,
           name: updated.name,
           payload: JSON.stringify(updated),
           updated_at: updated.updatedAt,
-          expected_updated_at: parsed.value.updatedAt,
+          // No actor on this path: updateProjectRecord is the in-process port
+          // used by client contexts, not the HTTP write. The route stamps
+          // updated_by; leaving it NULL here beats attributing the write to
+          // whoever happens to own the store.
+          updated_by: null,
+          expected_rev: row.rev,
+          expected_updated_at: null,
         });
         if (written.changes === 0) {
           return {
@@ -299,7 +405,7 @@ export function createSavedProjectsStore(
       }
     },
 
-    putProject(project, expectedUpdatedAt) {
+    putProject(project, precondition, actorUserId) {
       try {
         const existing = selectOne.get(ownerId, project.id) as
           | ProjectRow
@@ -313,30 +419,32 @@ export function createSavedProjectsStore(
             ),
           };
         }
-        const params = {
+        const written = updateProject.run({
           id: project.id,
           owner_id: ownerId,
           name: project.name,
           payload: JSON.stringify(project),
           updated_at: project.updatedAt,
-          expected_updated_at: expectedUpdatedAt,
-        };
-        const written =
-          expectedUpdatedAt === undefined
-            ? update.run(params)
-            : updateIfMatch.run(params);
+          updated_by: actorUserId ?? null,
+          ...preconditionParams(precondition),
+        });
         if (written.changes === 0) {
+          // The row exists (checked above), so a zero-row write can only mean
+          // the precondition did not match: a Conflict, never a NotFound.
           return {
             success: false,
             error: persistError(
-              expectedUpdatedAt === undefined ? "NotFound" : "Conflict",
-              expectedUpdatedAt === undefined
+              precondition === undefined ? "NotFound" : "Conflict",
+              precondition === undefined
                 ? `No saved project with id ${project.id}`
                 : "Project was updated elsewhere",
             ),
           };
         }
-        return { success: true, value: project };
+        return {
+          success: true,
+          value: { project, rev: existing.rev + 1 },
+        };
       } catch (cause) {
         return {
           success: false,

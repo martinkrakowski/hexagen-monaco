@@ -8,6 +8,7 @@ import {
   resolveProjectAccess,
   type ProjectRole,
 } from "../../lib/platform/require-owner";
+import type { ProjectPrecondition } from "../../lib/platform/saved-projects-store";
 
 /**
  * One project's handlers, shared by both addressable routes (D-A8):
@@ -54,27 +55,73 @@ function persistenceError(kind: string, message: string) {
   );
 }
 
+/**
+ * H1.4. `If-Match` carries the monotonic `rev` in its canonical form,
+ * `rev:<n>`, and a bare number is still read as the LEGACY `updated_at`
+ * clock.
+ *
+ * The two forms are TAGGED, not told apart by magnitude. A heuristic ("big
+ * numbers are timestamps") would silently mis-read a precondition the day a
+ * project reaches a large rev, and a mis-read precondition is a lost update
+ * that nothing downstream can detect. A client that sends neither form gets
+ * 400 rather than an unconditional write.
+ *
+ * Compatibility decision: the bare form is ACCEPTED, not rejected. Rejecting
+ * it would 409 every already-loaded personal-tenant tab until its next
+ * reload, and H1.4's own acceptance criterion is that the single-user flow is
+ * unchanged. `updated_at` remains unsafe under multi-seat, which is why the
+ * server answers with a rev ETag: a client that echoes what it is given
+ * upgrades itself on its next write.
+ */
+function malformedIfMatch(): {
+  ok: false;
+  response: NextResponse;
+} {
+  return {
+    ok: false,
+    response: NextResponse.json(
+      {
+        error: "validation",
+        message: "Invalid If-Match precondition",
+        statusCode: 400,
+      },
+      { status: 400 },
+    ),
+  };
+}
+
+/**
+ * Canonical `rev:<n>` must be a non-negative safe integer. `Number("9"×400)`
+ * is `Infinity` and `Number("9007199254740993")` rounds; either would reach
+ * SQLite as a value that is not the client's token (409/500 instead of 400).
+ * Length > 16 cannot be a safe integer (`MAX_SAFE_INTEGER` is 16 digits).
+ */
+function parseNonNegativeSafeInteger(digits: string): number | null {
+  if (digits.length === 0 || digits.length > 16) return null;
+  const n = Number(digits);
+  if (!Number.isSafeInteger(n) || n < 0) return null;
+  return n;
+}
+
 function parseIfMatch(
   request: NextRequest,
-): { ok: true; expected?: number } | { ok: false; response: NextResponse } {
+):
+  | { ok: true; expected?: ProjectPrecondition }
+  | { ok: false; response: NextResponse } {
   const raw = request.headers.get("If-Match");
   if (raw == null || raw === "" || raw === "*") return { ok: true };
   const trimmed = raw.trim().replace(/^W\//, "").replaceAll('"', "");
-  const expected = Number(trimmed);
-  if (!Number.isFinite(expected)) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        {
-          error: "validation",
-          message: "Invalid If-Match precondition",
-          statusCode: 400,
-        },
-        { status: 400 },
-      ),
-    };
+
+  const revMatch = /^rev:(\d+)$/.exec(trimmed);
+  if (revMatch) {
+    const rev = parseNonNegativeSafeInteger(revMatch[1] ?? "");
+    if (rev === null) return malformedIfMatch();
+    return { ok: true, expected: { rev } };
   }
-  return { ok: true, expected };
+
+  const legacy = Number(trimmed);
+  if (!Number.isFinite(legacy)) return malformedIfMatch();
+  return { ok: true, expected: { updatedAt: legacy } };
 }
 
 /** Roles that may write one project. A write grant is per-project (D-A2). */
@@ -104,12 +151,16 @@ export async function handleProjectGet(
 
   const found = getPlatformStore()
     .projectsFor(access.ownerId)
-    .getProject(parsed.data);
+    .getProjectWithRev(parsed.data);
   if (!found.success) {
     return persistenceError("persistence", found.error.message);
   }
   if (!found.value) return notFound();
-  return NextResponse.json(found.value);
+  // Echo-able precondition: a client that copies this ETag onto the next
+  // PUT upgrades from the legacy `updatedAt` If-Match to `rev:<n>`.
+  return NextResponse.json(found.value.project, {
+    headers: { ETag: `"rev:${found.value.rev}"` },
+  });
 }
 
 export async function handleProjectPut(
@@ -152,10 +203,18 @@ export async function handleProjectPut(
 
   const store = getPlatformStore();
   const port = store.projectsFor(access.ownerId);
-  const updated = port.putProject(parsedProject.project, precondition.expected);
+  const updated = port.putProject(
+    parsedProject.project,
+    precondition.expected,
+    access.actorUserId,
+  );
   if (updated.success) {
     store.markProjectsInitialized(access.ownerId);
-    return NextResponse.json(updated.value);
+    // The new rev goes back as the ETag, so the next write can send a rev
+    // precondition without the client having to know how revs are produced.
+    return NextResponse.json(updated.value.project, {
+      headers: { ETag: `"rev:${updated.value.rev}"` },
+    });
   }
   if (updated.error.kind === "Conflict") {
     return NextResponse.json(
