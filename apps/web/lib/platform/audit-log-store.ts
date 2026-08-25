@@ -23,6 +23,7 @@ import type Database from "better-sqlite3";
 
 /** v1 vocabulary (D-A6): team management, plus share grant/revoke from P-A4. */
 export type AuditAction =
+  | "org.delete"
   | "team.member.add"
   | "team.member.remove"
   | "team.create"

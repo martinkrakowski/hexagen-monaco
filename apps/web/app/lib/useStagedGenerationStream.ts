@@ -5,6 +5,7 @@ import { logger } from "../../lib/structured-logger";
 import { persistStageTelemetry } from "../../app/lib/persist-run-telemetry";
 import type { StagedPhase, StageProgress } from "./staged-generation-types";
 
+import { fetchWithCsrf } from "./csrf-fetch";
 /** Stage-6 review findings on the produced manifest — advisory, not a failure. */
 export interface StageValidationReport {
   errors: string[];
@@ -320,7 +321,7 @@ export function useStagedGenerationStream(
           await new Promise((resolve) => setTimeout(resolve, delay));
 
           try {
-            const newResponse = await fetch(endpoint, {
+            const newResponse = await fetchWithCsrf(endpoint, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(body),
@@ -333,7 +334,7 @@ export function useStagedGenerationStream(
           }
         };
 
-        const response = await fetch(endpoint, {
+        const response = await fetchWithCsrf(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),

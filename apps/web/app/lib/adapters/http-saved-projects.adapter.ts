@@ -4,6 +4,7 @@ import type {
   SavedProject,
   SavedProjectsPersistencePort,
 } from "@hexagen/shared";
+import { fetchWithCsrf } from "../csrf-fetch";
 
 function persistError(
   kind: PersistenceError["kind"],
@@ -132,7 +133,11 @@ export class HttpSavedProjectsAdapter
   /** Last canonical `rev:<n>` seen per project (GET or PUT ETag). */
   private readonly revTokens = new Map<string, string>();
 
-  constructor(private readonly fetchImpl: typeof fetch = fetch) {}
+  // Default transport is the D-H7 CSRF-aware fetch: every mutation this
+  // adapter issues is cookie-authenticated, so it must echo the double-submit
+  // header (app/lib/csrf-fetch.ts). Tests that inject their own fetchImpl are
+  // unaffected — the helper only wraps the DEFAULT transport.
+  constructor(private readonly fetchImpl: typeof fetch = fetchWithCsrf) {}
 
   isOwnerInitialized(): boolean {
     return this.ownerInitialized;

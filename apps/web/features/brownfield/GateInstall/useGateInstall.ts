@@ -10,6 +10,7 @@ import {
   isInstallableScanId,
 } from "./gate-bundle-manifest";
 
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 /**
  * The S7 phase machine, mirroring `ExportDialogPhase` in
  * `features/export/ExportDialog.tsx`: the view is a pure function of one string
@@ -134,7 +135,7 @@ export function useGateInstall({
     setPhase("preparing");
 
     try {
-      const response = await fetch(INSTALL_GATE_ENDPOINT, {
+      const response = await fetchWithCsrf(INSTALL_GATE_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

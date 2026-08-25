@@ -6,6 +6,7 @@ import {
 } from "../../app/lib/wire.client";
 import { resolveExecutionStrategy } from "./useStagedSpecGeneration";
 
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 export interface LooseSpecConversionOptions {
   executionStrategy?: "auto" | "local" | "cloud";
   signal?: AbortSignal;
@@ -44,9 +45,7 @@ export function useLooseSpecConversion(
     deps?.getClientUseCase ?? getClientLooseSpecConversionUseCase;
   const checkLocalLLM = deps?.isLocalLLMReady ?? isLocalLLMReady;
   const checkCloudKeys = deps?.hasServerLLMAccessKey ?? hasServerLLMAccessKey;
-  const executeFetch =
-    deps?.fetchClient ??
-    (typeof window !== "undefined" ? window.fetch.bind(window) : fetch);
+  const executeFetch = deps?.fetchClient ?? fetchWithCsrf;
 
   const [convertedConfig, setConvertedConfig] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);

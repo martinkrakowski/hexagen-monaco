@@ -6,6 +6,7 @@ import {
   parseImportedManifest,
 } from "@/lib/imported-manifest";
 
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 export type GenerationOutcome =
   | { kind: "success"; projectId: string; manifestYaml: string }
   | { kind: "validation-error"; errors: string[] }
@@ -80,7 +81,7 @@ export function useProjectGenerationFlow(
           ) as unknown as Record<string, unknown>;
         }
 
-        const response = await fetch("/api/generate", {
+        const response = await fetchWithCsrf("/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ manifest }),

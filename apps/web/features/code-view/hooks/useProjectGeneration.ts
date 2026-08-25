@@ -6,6 +6,7 @@ import { withFormStateDefaults } from "../../../app/lib/form-state-defaults";
 import { resolveImportedManifestPayload } from "../../../app/lib/imported-manifest";
 import type { GenerationNotices } from "../types";
 
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 const MAX_RETRIES = 3;
 
 /**
@@ -65,7 +66,7 @@ export function useProjectGeneration(
       setError(null);
 
       try {
-        const response = await fetch("/api/generate", {
+        const response = await fetchWithCsrf("/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -146,7 +147,7 @@ export function useProjectGeneration(
         await generate(true);
       }
 
-      const response = await fetch("/api/generate", {
+      const response = await fetchWithCsrf("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

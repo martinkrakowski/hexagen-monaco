@@ -7,6 +7,7 @@
  * produces a `parse-error` variant rather than the fallback defaults
  * produced by the previous `.catch(() => ({}))` idiom.
  */
+import { fetchWithCsrf } from "./csrf-fetch";
 
 /** Add-on materialization notice COUNTS, surfaced from sideband response
  * headers on a binary download (the full detail lives in the project's
@@ -77,7 +78,7 @@ export async function postJson<T>(
 ): Promise<FetchJsonResult<T>> {
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await fetchWithCsrf(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -128,7 +129,7 @@ export async function postForBlob(
 ): Promise<FetchJsonResult<Blob>> {
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await fetchWithCsrf(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

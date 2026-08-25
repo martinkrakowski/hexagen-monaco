@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system";
@@ -135,7 +136,7 @@ export function useGovernanceChat() {
       abortControllerRef.current = abortController;
 
       try {
-        const response = await fetch(CHAT_ENDPOINT, {
+        const response = await fetchWithCsrf(CHAT_ENDPOINT, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

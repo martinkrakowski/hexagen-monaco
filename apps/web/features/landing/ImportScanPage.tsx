@@ -11,6 +11,7 @@ import { CREATION_STEPS } from "@/landing/domain/creation-path";
 import { MAX_PROJECT_NAME_CHARS } from "@/lib/project-scan/limits";
 import type { ProjectScanResponse } from "@/lib/project-scan/types";
 
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 function isScanResponse(value: unknown): value is ProjectScanResponse {
   if (typeof value !== "object" || value === null) return false;
   const rec = value as Record<string, unknown>;
@@ -54,7 +55,7 @@ export function ImportScanPage() {
       const form = new FormData();
       form.append("name", carriedName);
       form.append("zip", file, file.name);
-      const response = await fetch("/api/projects/scan", {
+      const response = await fetchWithCsrf("/api/projects/scan", {
         method: "POST",
         body: form,
       });

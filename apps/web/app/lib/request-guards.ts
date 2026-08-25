@@ -29,6 +29,22 @@ import { checkRateLimit } from "../../lib/rate-limiter";
  * proxy DOES forward the original `Host`, that path matches too. When no
  * canonical env is set (e.g. local dev with no proxy), the request's own
  * effective origin is the sole allowed origin.
+ *
+ * AMENDMENT — 2026-08-25 (D-H7). D1's "best-effort, not a per-request CSRF
+ * token" stance is now SUPPLEMENTED, not replaced: H1 has shipped (orgs,
+ * teams, project shares), which is exactly the blast-radius trigger the
+ * 2026-08-20 hosting plan's D-H7 gate named for adopting double-submit.
+ * Every mutation under /api (NextAuth's /api/auth surface and the /api/csrf
+ * issuance route excepted) now ALSO requires an `x-hexagen-csrf` header
+ * matching the `hexagen-csrf` cookie WHENEVER the request carries a NextAuth
+ * session cookie — enforced in ONE place, `apps/web/middleware.ts`
+ * (`guardApiCsrf`), with token issuance at GET /api/csrf and the
+ * constant-time comparison in `apps/web/lib/csrf.ts`. Cookie-less callers
+ * (the wedge, CI, curl, the anonymous quota flows) never meet that check.
+ * THIS origin check stays as written and keeps covering every anonymous
+ * mutation, where there is no session cookie for double-submit to bind to.
+ * The original D1 text above is preserved deliberately — a decision record
+ * that silently changes is the anti-pattern this repo documents.
  */
 export function isSameOrigin(request: NextRequest): boolean {
   const origin = request.headers.get("origin");

@@ -87,6 +87,29 @@ export interface OrgMembershipSummary {
   role: OrgRole;
 }
 
+/**
+ * Deleting an org that still owns projects is refused (409 at the route).
+ * Deleting customer data must be an explicit act — empty the org first —
+ * never a cascade surprise. The count is carried so the refusal can say how
+ * much is in the way.
+ */
+export class OrgOwnsProjectsError extends Error {
+  readonly code = "org_owns_projects";
+  constructor(
+    readonly orgId: string,
+    readonly projectCount: number,
+  ) {
+    super(
+      `org ${orgId} still owns ${projectCount} project(s); move or delete them first`,
+    );
+    this.name = "OrgOwnsProjectsError";
+  }
+}
+
+export interface OrgAuditActor {
+  actorId: string;
+}
+
 export interface OrgsRepository {
   createOrg(input: {
     id?: string;
@@ -138,6 +161,18 @@ export interface OrgsRepository {
    * this rather than `listOrgIdsForUser` + per-id `getOrg`/`memberRole`.
    */
   listOrgsForUser(userId: string): Promise<OrgMembershipSummary[]>;
+  /**
+   * Tenancy-hygiene deletion. Refuses with {@link OrgOwnsProjectsError} while
+   * the org owns projects — checked INSIDE the transaction, so a project
+   * created concurrently cannot slip past a route-level pre-check. With zero
+   * projects it removes, in ONE transaction: team memberships, teams, org
+   * members, pending invites, soft-revokes every live grant whose GRANTEE is
+   * this org or one of its teams (their access dies with them; the rows stay
+   * for the audit trail), and finally the org row. The `org.delete` audit row
+   * is written inside the same transaction and gated on the org row actually
+   * being deleted.
+   */
+  deleteOrg(orgId: string, actor: OrgAuditActor): Promise<void>;
 }
 
 interface OrgRow {
@@ -464,6 +499,76 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
     },
   );
 
+  const countOwnedProjects = db.prepare(
+    "SELECT COUNT(*) AS n FROM saved_projects WHERE owner_id = ?",
+  );
+  const deleteOrgTeamMembers = db.prepare(`
+    DELETE FROM team_members
+    WHERE team_id IN (SELECT id FROM teams WHERE org_id = ?)
+  `);
+  const deleteOrgTeams = db.prepare("DELETE FROM teams WHERE org_id = ?");
+  const deleteOrgMembers = db.prepare(
+    "DELETE FROM org_members WHERE org_id = ?",
+  );
+  const deleteOrgInvites = db.prepare(
+    "DELETE FROM org_invites WHERE org_id = ?",
+  );
+  // Soft-revoke, not row deletion: the grant rows are the audit trail of who
+  // had access; what must die with the org is the ACCESS, i.e. liveness.
+  const revokeGrantsToOrgAndTeams = db.prepare(`
+    UPDATE project_shares SET revoked_at = @revoked_at
+    WHERE revoked_at IS NULL
+      AND (
+        (grantee_type = 'org' AND grantee_id = @org_id)
+        OR (
+          grantee_type = 'team'
+          AND grantee_id IN (SELECT id FROM teams WHERE org_id = @org_id)
+        )
+      )
+  `);
+  // Owner-side liveness dies with the org too: the schema does not force a
+  // share row's project to exist in saved_projects, so "zero owned projects"
+  // does not imply "zero live owner-side grants". Revoking by owner_id closes
+  // that gap (review flag on #658).
+  const revokeGrantsOwnedByOrg = db.prepare(`
+    UPDATE project_shares SET revoked_at = @revoked_at
+    WHERE owner_id = @org_id AND revoked_at IS NULL
+  `);
+  // Run telemetry is owner-scoped operational data, not an audit trail; with
+  // the tenant gone it is unreachable through every access path, so leaving
+  // it would be orphaned customer data, not history (review flag on #658).
+  const deleteRunEvents = db.prepare(
+    "DELETE FROM run_events WHERE owner_id = ?",
+  );
+  const deleteOrgRow = db.prepare("DELETE FROM orgs WHERE id = ?");
+  const deleteOrgTx = db.transaction((orgId: string, actorId: string) => {
+    // Inside the transaction, so the count and the deletes are one atomic
+    // view — a concurrent project create either lands before (refusal) or
+    // after (harmless: the owner row no longer exists to authorize writes).
+    const owned = countOwnedProjects.get(orgId) as { n: number };
+    if (owned.n > 0) throw new OrgOwnsProjectsError(orgId, owned.n);
+    // Grants revoked BEFORE the teams rows go — the team subquery needs them.
+    const revokedAt = new Date().toISOString();
+    revokeGrantsToOrgAndTeams.run({ org_id: orgId, revoked_at: revokedAt });
+    revokeGrantsOwnedByOrg.run({ org_id: orgId, revoked_at: revokedAt });
+    deleteRunEvents.run(orgId);
+    deleteOrgTeamMembers.run(orgId);
+    deleteOrgTeams.run(orgId);
+    deleteOrgInvites.run(orgId);
+    deleteOrgMembers.run(orgId);
+    const removed = deleteOrgRow.run(orgId);
+    // Gate on affected rows (P-A2's rule): an org.delete row for an org that
+    // did not exist would be a record of an event that never happened.
+    if (removed.changes > 0) {
+      appendAudit({
+        actorId,
+        action: "org.delete",
+        subjectOwnerId: orgId,
+        subjectId: orgId,
+      });
+    }
+  });
+
   return {
     async createOrg(input) {
       const id = input.id ?? crypto.randomUUID();
@@ -500,6 +605,9 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
         | { role: OrgRole }
         | undefined;
       return row ? row.role : null;
+    },
+    async deleteOrg(orgId, actor) {
+      deleteOrgTx(orgId, actor.actorId);
     },
     async listOrgIdsForUser(userId) {
       const rows = selectOrgIds.all(userId) as Array<{ org_id: string }>;
