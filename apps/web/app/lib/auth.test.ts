@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 // Importing the real authOptions (not a mock) is safe here: GITHUB_ID and
 // GITHUB_SECRET default to "" in auth.ts, so no env is required at module
 // load. No other test pins the requested scope — this closes that gap.
-import { authOptions } from "./auth";
+import { authOptions, persistGithubLogin } from "./auth";
 
 describe("authOptions GitHub provider", () => {
   it("requests both repo and workflow scopes", () => {
@@ -40,5 +40,30 @@ describe("authOptions GitHub provider", () => {
     assert.equal(authOptions.session?.strategy, "jwt");
     assert.equal(authOptions.pages?.signIn, "/auth/signin");
     assert.ok(authOptions.adapter);
+  });
+});
+
+describe("persistGithubLogin", () => {
+  it("returns success when the repository write lands", async () => {
+    const calls: Array<[string, string]> = [];
+    const result = await persistGithubLogin(
+      "user-1",
+      "Ada",
+      async (id, login) => {
+        calls.push([id, login]);
+      },
+    );
+    assert.equal(result.success, true);
+    assert.deepEqual(calls, [["user-1", "Ada"]]);
+  });
+
+  it("returns a failed Result when setGithubLogin rejects, so sign-in can continue", async () => {
+    const result = await persistGithubLogin("user-1", "ada", async () => {
+      throw new Error("UNIQUE constraint failed: users.github_login");
+    });
+    assert.equal(result.success, false);
+    if (!result.success) {
+      assert.match(result.error.message, /UNIQUE/);
+    }
   });
 });

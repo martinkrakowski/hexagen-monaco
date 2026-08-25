@@ -8,6 +8,34 @@ interface GitHubProfile extends Profile {
   login?: string;
 }
 
+/**
+ * Best-effort GitHub-login persistence for the jwt callback.
+ *
+ * NextAuth requires this callback to return a token, so the catch cannot
+ * become the callback's return value. The helper returns Result; the
+ * callback logs a failure and still returns `token`.
+ */
+type PersistResult =
+  | { success: true; value: void }
+  | { success: false; error: Error };
+
+export async function persistGithubLogin(
+  userId: string,
+  login: string,
+  setLogin: (id: string, value: string) => Promise<void> = (id, value) =>
+    getPlatformStore().auth.setGithubLogin(id, value),
+): Promise<PersistResult> {
+  try {
+    await setLogin(userId, login);
+    return { success: true, value: undefined };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error : new Error(String(error)),
+    };
+  }
+}
+
 export const authOptions: NextAuthOptions = {
   adapter: createNextAuthAdapter(() => getPlatformStore().auth),
   session: { strategy: "jwt" },
@@ -48,13 +76,15 @@ export const authOptions: NextAuthOptions = {
         // is otherwise complete.
         const userId = user?.id ?? token.sub;
         if (userId && githubProfile.login) {
-          try {
-            await getPlatformStore().auth.setGithubLogin(
-              userId,
-              githubProfile.login,
+          const persisted = await persistGithubLogin(
+            userId,
+            githubProfile.login,
+          );
+          if (!persisted.success) {
+            console.error(
+              "[auth] failed to persist github_login",
+              persisted.error,
             );
-          } catch (error) {
-            console.error("[auth] failed to persist github_login", error);
           }
         }
       }

@@ -31,6 +31,11 @@ function toAdapterUser(row: UserRow): AdapterUser {
   };
 }
 
+/** GitHub logins are case-insensitive; store and look up one canonical form. */
+function canonicalizeGithubLogin(login: string): string {
+  return login.trim().toLowerCase();
+}
+
 export interface AuthRepository {
   createUser(user: Omit<AdapterUser, "id">): AdapterUser;
   getUser(id: string): AdapterUser | null;
@@ -190,12 +195,14 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
       return toAdapterUser(row);
     },
     async setGithubLogin(userId, login) {
-      const trimmed = login.trim();
-      if (!trimmed) return;
-      setGithubLogin.run({ id: userId, github_login: trimmed });
+      const canonical = canonicalizeGithubLogin(login);
+      if (!canonical) return;
+      setGithubLogin.run({ id: userId, github_login: canonical });
     },
     getUserByGithubLogin(login) {
-      const row = selectUserByGithubLogin.get(login) as UserRow | undefined;
+      const canonical = canonicalizeGithubLogin(login);
+      if (!canonical) return null;
+      const row = selectUserByGithubLogin.get(canonical) as UserRow | undefined;
       return row ? toAdapterUser(row) : null;
     },
     linkAccount(account) {

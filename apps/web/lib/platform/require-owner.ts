@@ -72,7 +72,7 @@ export interface TenantMembershipReader {
 export async function requireTenant(
   request: NextRequest,
   tenantId: string,
-  orgs: TenantMembershipReader = getPlatformStore().orgs,
+  orgs?: TenantMembershipReader,
 ): Promise<TenantResolution> {
   const owner = await requirePersistenceOwner(request);
   if (!owner.ok) return owner;
@@ -84,7 +84,10 @@ export async function requireTenant(
     return { ok: true, tenantId: tenant, userId, access: "self" };
   }
 
-  const role = await orgs.memberRole(tenant, userId);
+  // Default arg evaluation would open the store before the 401 / self
+  // branches; resolve membership only when this request needs it.
+  const membershipReader = orgs ?? getPlatformStore().orgs;
+  const role = await membershipReader.memberRole(tenant, userId);
   if (!role) return { ok: false, response: tenantForbidden() };
   return { ok: true, tenantId: tenant, userId, access: role };
 }

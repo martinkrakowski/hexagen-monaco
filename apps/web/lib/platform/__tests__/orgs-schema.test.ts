@@ -122,6 +122,57 @@ describe("H1.1 — orgs schema", () => {
     }
   });
 
+  it("org_members.org_id is a foreign key to orgs", () => {
+    const db = openPlatformDb(tmpDbPath("hexagen-orgs-fk-"));
+    try {
+      const fks = db.pragma("foreign_key_list(org_members)") as Array<{
+        table: string;
+        from: string;
+        to: string;
+      }>;
+      assert.ok(
+        fks.some(
+          (fk) => fk.table === "orgs" && fk.from === "org_id" && fk.to === "id",
+        ),
+        `expected org_members.org_id → orgs.id; got ${JSON.stringify(fks)}`,
+      );
+      const now = new Date().toISOString();
+      assert.throws(
+        () =>
+          db
+            .prepare(
+              "INSERT INTO org_members (org_id, user_id, role, created_at) VALUES (?,?,?,?)",
+            )
+            .run("not-an-org", "user-1", "member", now),
+        /FOREIGN KEY/,
+        "membership for a missing org must not insert",
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  it("refuses an org id that already belongs to a user", () => {
+    const db = openPlatformDb(tmpDbPath("hexagen-orgs-collide-"));
+    try {
+      const now = new Date().toISOString();
+      db.prepare(
+        "INSERT INTO users (id, name, email, email_verified, image, created_at) VALUES (?,?,?,?,?,?)",
+      ).run("victim", "Victim", "victim@example.com", null, null, now);
+      assert.throws(
+        () =>
+          db
+            .prepare(
+              "INSERT INTO orgs (id, slug, name, created_by, created_at) VALUES (?,?,?,?,?)",
+            )
+            .run("victim", "takeover", "Takeover", "attacker", now),
+        /collides with an existing user/,
+      );
+    } finally {
+      db.close();
+    }
+  });
+
   it("org slugs are unique", () => {
     const db = openPlatformDb(tmpDbPath("hexagen-orgs-slug-"));
     try {

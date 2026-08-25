@@ -6,11 +6,16 @@ import { join } from "node:path";
 import { NextRequest } from "next/server";
 
 vi.mock("next-auth/jwt", () => ({ getToken: vi.fn() }));
+vi.mock("../store", () => ({
+  getPlatformStore: vi.fn(),
+}));
 
 import { getToken } from "next-auth/jwt";
 import { openPlatformDb } from "../platform-db";
 import { createOrgsRepository } from "../orgs-store";
+import { createAuthRepository } from "../auth-store";
 import { requireTenant } from "../require-owner";
+import { getPlatformStore } from "../store";
 
 function orgsOnTempDb() {
   const path = join(
@@ -30,6 +35,7 @@ function signedInAs(sub: string | null): void {
 describe("H1.2 — requireTenant", () => {
   beforeEach(() => {
     vi.mocked(getToken).mockReset();
+    vi.mocked(getPlatformStore).mockReset();
   });
 
   it("401 without a JWT sub", async () => {
@@ -129,6 +135,85 @@ describe("H1.2 — requireTenant", () => {
       const denied = await requireTenant(req(), org.id, orgs);
       assert.equal(denied.ok, false, "the very next request is denied");
       if (!denied.ok) assert.equal(denied.response.status, 403);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("does not open the platform store for unauthenticated or personal-tenant requests", async () => {
+    signedInAs(null);
+    const unauth = await requireTenant(req(), "org-1");
+    assert.equal(unauth.ok, false);
+    if (!unauth.ok) assert.equal(unauth.response.status, 401);
+    assert.equal(vi.mocked(getPlatformStore).mock.calls.length, 0);
+
+    signedInAs("user-1");
+    const personal = await requireTenant(req(), "user-1");
+    assert.equal(personal.ok, true);
+    if (personal.ok) assert.equal(personal.access, "self");
+    assert.equal(vi.mocked(getPlatformStore).mock.calls.length, 0);
+
+    const memberRole = vi.fn().mockResolvedValue("member");
+    vi.mocked(getPlatformStore).mockReturnValue({
+      orgs: { memberRole },
+    } as never);
+    const orgAccess = await requireTenant(req(), "org-1");
+    assert.equal(orgAccess.ok, true);
+    assert.equal(vi.mocked(getPlatformStore).mock.calls.length, 1);
+    assert.equal(memberRole.mock.calls.length, 1);
+  });
+
+  it("does not authorize a membership whose org_id is a personal user id", async () => {
+    const { db, orgs } = orgsOnTempDb();
+    try {
+      const auth = createAuthRepository(db);
+      const victim = auth.createUser({
+        name: "Victim",
+        email: "victim@example.com",
+        emailVerified: null,
+      });
+
+      await assert.rejects(
+        () =>
+          orgs.createOrg({
+            id: victim.id,
+            slug: "takeover",
+            name: "Takeover",
+            createdBy: "attacker",
+          }),
+        /collides with an existing user/,
+      );
+      await assert.rejects(
+        () => orgs.addMember(victim.id, "attacker", "member"),
+        /FOREIGN KEY/,
+      );
+      const org = await orgs.createOrg({
+        slug: "acme",
+        name: "Acme",
+        createdBy: victim.id,
+      });
+      await assert.rejects(
+        () => orgs.addMember(org.id, "attacker", "admin" as never),
+        /invalid org role/,
+      );
+
+      db.pragma("foreign_keys = OFF");
+      const now = new Date().toISOString();
+      db.prepare(
+        "INSERT INTO org_members (org_id, user_id, role, created_at) VALUES (?,?,?,?)",
+      ).run(victim.id, "attacker", "member", now);
+      db.pragma("foreign_keys = ON");
+
+      assert.equal(
+        await orgs.memberRole(victim.id, "attacker"),
+        null,
+        "orphan membership must not resolve a role",
+      );
+
+      signedInAs("attacker");
+      const result = await requireTenant(req(), victim.id, orgs);
+      assert.equal(result.ok, false);
+      if (!result.ok) assert.equal(result.response.status, 403);
     } finally {
       db.close();
     }

@@ -65,6 +65,7 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
     INSERT INTO orgs (id, slug, name, created_by, created_at)
     VALUES (@id, @slug, @name, @created_by, @created_at)
   `);
+  const userIdTaken = db.prepare("SELECT 1 AS ok FROM users WHERE id = ?");
   const selectOrg = db.prepare("SELECT * FROM orgs WHERE id = ?");
   const selectOrgBySlug = db.prepare("SELECT * FROM orgs WHERE slug = ?");
   const upsertMember = db.prepare(`
@@ -75,17 +76,29 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
   const deleteMember = db.prepare(
     "DELETE FROM org_members WHERE org_id = ? AND user_id = ?",
   );
-  const selectRole = db.prepare(
-    "SELECT role FROM org_members WHERE org_id = ? AND user_id = ?",
-  );
-  const selectOrgIds = db.prepare(
-    "SELECT org_id FROM org_members WHERE user_id = ? ORDER BY org_id",
-  );
+  // JOIN orgs so a membership row whose org_id is not an org (the FK
+  // constraint, or a connection that forgot PRAGMA foreign_keys) cannot
+  // authorize requireTenant against a personal owner id.
+  const selectRole = db.prepare(`
+    SELECT m.role FROM org_members m
+     INNER JOIN orgs o ON o.id = m.org_id
+     WHERE m.org_id = ? AND m.user_id = ?
+  `);
+  const selectOrgIds = db.prepare(`
+    SELECT m.org_id FROM org_members m
+     INNER JOIN orgs o ON o.id = m.org_id
+     WHERE m.user_id = ?
+     ORDER BY m.org_id
+  `);
 
   return {
     async createOrg(input) {
+      const id = input.id ?? crypto.randomUUID();
+      if (userIdTaken.get(id)) {
+        throw new Error("org id collides with an existing user");
+      }
       const org: OrgRow = {
-        id: input.id ?? crypto.randomUUID(),
+        id,
         slug: input.slug,
         name: input.name,
         created_by: input.createdBy,
@@ -103,6 +116,9 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
       return row ? toOrg(row) : null;
     },
     async addMember(orgId, userId, role) {
+      if (role !== "owner" && role !== "member") {
+        throw new Error(`invalid org role: ${role}`);
+      }
       upsertMember.run({
         org_id: orgId,
         user_id: userId,

@@ -15,6 +15,10 @@ export function openPlatformDb(dbPath: string): Database.Database {
   const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
   db.pragma("busy_timeout = 5000");
+  // SQLite keeps FK enforcement off unless the connection opts in. The
+  // CREATE TABLE statements below (and accounts/sessions) declare FKs;
+  // without this they are comments.
+  db.pragma("foreign_keys = ON");
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -64,8 +68,9 @@ export function openPlatformDb(dbPath: string): Database.Database {
   migrateSavedProjects(db);
   migrateRunEvents(db);
   db.exec(`
+    DROP INDEX IF EXISTS idx_users_github_login;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_users_github_login
-      ON users (github_login) WHERE github_login IS NOT NULL;
+      ON users (github_login COLLATE NOCASE) WHERE github_login IS NOT NULL;
 
     -- H1.1 (2026-08-20 hosting plan). An org is just another owner: its UUID
     -- goes in the same \`owner_id\` column every project statement already
@@ -80,15 +85,37 @@ export function openPlatformDb(dbPath: string): Database.Database {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_orgs_slug ON orgs (slug);
 
+    -- Personal users and orgs share the owner_id namespace. An org row whose
+    -- id equals a user id would make requireTenant treat org membership as
+    -- access to that user's personal projects. Block both insert directions.
+    CREATE TRIGGER IF NOT EXISTS org_id_not_user_id
+    BEFORE INSERT ON orgs
+    FOR EACH ROW
+    WHEN EXISTS (SELECT 1 FROM users WHERE id = NEW.id)
+    BEGIN
+      SELECT RAISE(ABORT, 'org id collides with an existing user');
+    END;
+    CREATE TRIGGER IF NOT EXISTS user_id_not_org_id
+    BEFORE INSERT ON users
+    FOR EACH ROW
+    WHEN EXISTS (SELECT 1 FROM orgs WHERE id = NEW.id)
+    BEGIN
+      SELECT RAISE(ABORT, 'user id collides with an existing org');
+    END;
+
     -- role: 'owner' (billing, membership, org delete) | 'member' (full
     -- project/run read-write). Two roles only -- H1.3/D-A2: viewer roles and
     -- per-project ACLs have no v1 buyer.
+    --
+    -- org_id is constrained to orgs: a membership whose org_id is a personal
+    -- user id (no orgs row) would otherwise authorize against that user.
     CREATE TABLE IF NOT EXISTS org_members (
       org_id TEXT NOT NULL,
       user_id TEXT NOT NULL,
       role TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      PRIMARY KEY (org_id, user_id)
+      PRIMARY KEY (org_id, user_id),
+      FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_org_members_user
       ON org_members (user_id);
@@ -96,14 +123,17 @@ export function openPlatformDb(dbPath: string): Database.Database {
     -- Keyed by GitHub login, not user id: an invitee may have no account yet.
     -- It stays pending until their first sign-in populates users.github_login
     -- (P-A1), which is consistent with GitHub-only auth (D-H1).
+    -- COLLATE NOCASE: GitHub logins are case-insensitive; Ada and ada are
+    -- the same invitee.
     CREATE TABLE IF NOT EXISTS org_invites (
       org_id TEXT NOT NULL,
-      github_login TEXT NOT NULL,
+      github_login TEXT NOT NULL COLLATE NOCASE,
       role TEXT NOT NULL,
       invited_by TEXT NOT NULL,
       created_at TEXT NOT NULL,
       accepted_at TEXT,
-      PRIMARY KEY (org_id, github_login)
+      PRIMARY KEY (org_id, github_login),
+      FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_org_invites_login
       ON org_invites (github_login) WHERE accepted_at IS NULL;
