@@ -10,6 +10,16 @@ export const PROJECT_MUTATION_GUARD = {
   keyPrefix: "projects",
 } as const;
 
+/**
+ * Org administration is low-volume and human-paced (P-A2): its own namespace
+ * so a burst of team edits cannot exhaust the chatty project-write budget.
+ */
+export const ORG_MUTATION_GUARD = {
+  maxRequests: 30,
+  windowMs: 60_000,
+  keyPrefix: "orgs",
+} as const;
+
 export type OwnerResolution =
   | { ok: true; ownerId: string }
   | { ok: false; response: NextResponse };

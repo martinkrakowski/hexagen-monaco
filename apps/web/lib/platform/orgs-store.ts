@@ -36,6 +36,7 @@ export interface OrgsRepository {
   getOrg(orgId: string): Promise<Org | null>;
   getOrgBySlug(slug: string): Promise<Org | null>;
   addMember(orgId: string, userId: string, role: OrgRole): Promise<void>;
+  /** Also clears the user's team memberships in this org, atomically (P-A2). */
   removeMember(orgId: string, userId: string): Promise<void>;
   /** The membership decision `requireTenant` asks on every request. */
   memberRole(orgId: string, userId: string): Promise<OrgRole | null>;
@@ -76,6 +77,21 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
   const deleteMember = db.prepare(
     "DELETE FROM org_members WHERE org_id = ? AND user_id = ?",
   );
+  // P-A2: leaving an org leaves every team in it. A team membership that
+  // outlived its org membership would be a live grant nobody can see from the
+  // org page or revoke from it.
+  const deleteTeamMemberships = db.prepare(`
+    DELETE FROM team_members
+    WHERE user_id = ?
+      AND team_id IN (SELECT id FROM teams WHERE org_id = ?)
+  `);
+  // ONE transaction, so a failure in either statement rolls back both: a user
+  // dropped from the org but left in its teams is the orphan this prevents,
+  // and the reverse (teams cleared, org row surviving) is just as wrong.
+  const removeMemberTx = db.transaction((orgId: string, userId: string) => {
+    deleteTeamMemberships.run(userId, orgId);
+    deleteMember.run(orgId, userId);
+  });
   // JOIN orgs so a membership row whose org_id is not an org (the FK
   // constraint, or a connection that forgot PRAGMA foreign_keys) cannot
   // authorize requireTenant against a personal owner id.
@@ -127,7 +143,7 @@ export function createOrgsRepository(db: Database.Database): OrgsRepository {
       });
     },
     async removeMember(orgId, userId) {
-      deleteMember.run(orgId, userId);
+      removeMemberTx(orgId, userId);
     },
     async memberRole(orgId, userId) {
       const row = selectRole.get(orgId, userId) as

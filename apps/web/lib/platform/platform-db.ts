@@ -137,6 +137,52 @@ export function openPlatformDb(dbPath: string): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_org_invites_login
       ON org_invites (github_login) WHERE accepted_at IS NULL;
+
+    -- P-A2. A team is a GRANTEE GROUPING, never an owner (D-A1): teams appear
+    -- only in \`project_shares.grantee_type\`, so no project ever carries a team
+    -- id in \`owner_id\` and ownership statements stay untouched. The slug is
+    -- the share handle: \`@org-slug/team-slug\`.
+    CREATE TABLE IF NOT EXISTS teams (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      name TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_org_slug
+      ON teams (org_id, slug);
+
+    -- An insert is refused unless (org_id, user_id) exists in org_members, and
+    -- removal from the org deletes these rows in the SAME transaction
+    -- (orgs-store.removeMember). A team membership that outlives its org
+    -- membership would be a grant nobody can see or revoke.
+    CREATE TABLE IF NOT EXISTS team_members (
+      team_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (team_id, user_id)
+    );
+    -- P-A3 asks "which teams is this user in" on every shared-project read.
+    CREATE INDEX IF NOT EXISTS idx_team_members_user
+      ON team_members (user_id);
+
+    -- D-A6: narrow, and APPEND-ONLY. No UPDATE or DELETE statement is prepared
+    -- against this table anywhere in the codebase -- an audit trail that can be
+    -- rewritten is not one. v1 actions are team add/remove; share/revoke join
+    -- in P-A4.
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id TEXT PRIMARY KEY,
+      actor_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      subject_owner_id TEXT,
+      subject_id TEXT,
+      grantee_type TEXT,
+      grantee_id TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_log_subject
+      ON audit_log (subject_owner_id, subject_id);
   `);
   db.exec(`
     DROP INDEX IF EXISTS idx_saved_projects_ord;

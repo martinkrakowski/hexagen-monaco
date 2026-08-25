@@ -18,6 +18,11 @@ import {
 } from "./billing";
 import { createOwnerStateStore } from "./owner-state";
 import { createOrgsRepository, type OrgsRepository } from "./orgs-store";
+import { createTeamsRepository, type TeamsRepository } from "./teams-store";
+import {
+  createAuditLogRepository,
+  type AuditLogRepository,
+} from "./audit-log-store";
 import {
   createScanRecordsStore,
   type ScanRecordsStore,
@@ -28,6 +33,10 @@ export interface PlatformStore {
   readonly billing: EntitlementRepository;
   /** H1.1/H1.2: org rows and membership. Membership resolves per request. */
   readonly orgs: OrgsRepository;
+  /** P-A2: teams are grantee groupings inside an org, never owners (D-A1). */
+  readonly teams: TeamsRepository;
+  /** P-A2/D-A6: append-only trail for membership and (from P-A4) grants. */
+  readonly audit: AuditLogRepository;
   projectsFor(ownerId: string): SavedProjectsStore;
   runsFor(ownerId: string): RunHistoryRepository;
   scansFor(ownerId: string): ScanRecordsStore;
@@ -56,6 +65,8 @@ export function createPlatformStore(
     auth: createAuthRepository(db),
     billing: createEntitlementRepository(db),
     orgs: createOrgsRepository(db),
+    teams: createTeamsRepository(db),
+    audit: createAuditLogRepository(db),
     projectsFor(ownerId) {
       return createSavedProjectsStore(db, ownerId);
     },
