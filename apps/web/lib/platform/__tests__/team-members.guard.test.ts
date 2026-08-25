@@ -35,6 +35,70 @@ const countTeamRows = (db: ReturnType<typeof fixture>["db"], userId: string) =>
   ).n;
 
 describe("P-A2 — team membership invariants", () => {
+  it("a no-op mutation writes NO audit row (duplicate add, absent removals)", async () => {
+    // An audit row for a mutation that changed nothing is a record of an event
+    // that did not happen — and a reader cannot tell it from a real one. That
+    // is worse than a missing row, so each transaction gates its append on
+    // better-sqlite3's `changes`.
+    const { db, orgs, teams, audit } = fixture();
+    try {
+      const org = await orgs.createOrg({
+        slug: "acme",
+        name: "Acme",
+        createdBy: "owner-1",
+      });
+      await orgs.addMember(org.id, "member-1", "member");
+      const team = await teams.createTeam({
+        orgId: org.id,
+        slug: "platform",
+        name: "Platform",
+        createdBy: "owner-1",
+      });
+
+      // A REAL add first: the counter must move, or the assertions below pass
+      // over a store that never audits anything.
+      await teams.addMember(team.id, "member-1", { actorId: "owner-1" });
+      const afterReal = await audit.countFor("team.member.add", team.id);
+      assert.equal(afterReal, 1, "a real add must be audited");
+
+      // Duplicate add — ON CONFLICT DO NOTHING, so nothing changed.
+      await teams.addMember(team.id, "member-1", { actorId: "owner-1" });
+      assert.equal(
+        await audit.countFor("team.member.add", team.id),
+        afterReal,
+        "a duplicate add changed nothing and must not be audited",
+      );
+
+      // Removing someone who is not a member.
+      const removesBefore = await audit.countFor("team.member.remove", team.id);
+      await teams.removeMember(team.id, "never-joined", { actorId: "owner-1" });
+      assert.equal(
+        await audit.countFor("team.member.remove", team.id),
+        removesBefore,
+        "removing an absent member changed nothing and must not be audited",
+      );
+
+      // Deleting a team that does not exist.
+      const deletesBefore = await audit.countFor("team.delete", "no-such-team");
+      await teams.deleteTeam("no-such-team", { actorId: "owner-1" });
+      assert.equal(
+        await audit.countFor("team.delete", "no-such-team"),
+        deletesBefore,
+        "deleting an absent team changed nothing and must not be audited",
+      );
+
+      // And the real deletion still IS audited.
+      await teams.deleteTeam(team.id, { actorId: "owner-1" });
+      assert.equal(
+        await audit.countFor("team.delete", team.id),
+        1,
+        "a real deletion must still be audited",
+      );
+    } finally {
+      db.close();
+    }
+  });
+
   it("refuses a user who is not a member of the team's org", async () => {
     const { db, orgs, teams } = fixture();
     try {

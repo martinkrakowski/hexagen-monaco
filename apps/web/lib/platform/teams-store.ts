@@ -200,12 +200,16 @@ export function createTeamsRepository(db: Database.Database): TeamsRepository {
     (teamId: string, audit?: TeamAuditContext) => {
       const team = selectTeam.get(teamId) as TeamRow | undefined;
       deleteAllMembers.run(teamId);
-      deleteTeamRow.run(teamId);
-      audited(audit, {
-        action: "team.delete",
-        subjectOwnerId: team?.org_id ?? null,
-        subjectId: teamId,
-      });
+      const removed = deleteTeamRow.run(teamId);
+      // Gate on affected rows: an audit row for a delete that hit nothing is a
+      // record of an event that did not happen, which is worse than a missing
+      // one — a reader cannot tell it from a real deletion.
+      if (removed.changes > 0)
+        audited(audit, {
+          action: "team.delete",
+          subjectOwnerId: team?.org_id ?? null,
+          subjectId: teamId,
+        });
     },
   );
 
@@ -220,32 +224,36 @@ export function createTeamsRepository(db: Database.Database): TeamsRepository {
       if (!selectOrgMember.get(team.org_id, userId)) {
         throw new NotAnOrgMemberError(teamId, userId);
       }
-      upsertMember.run({
+      const inserted = upsertMember.run({
         team_id: teamId,
         user_id: userId,
         created_at: new Date().toISOString(),
       });
-      audited(audit, {
-        action: "team.member.add",
-        subjectOwnerId: team.org_id,
-        subjectId: teamId,
-        granteeType: "user",
-        granteeId: userId,
-      });
+      // ON CONFLICT DO NOTHING: a duplicate add changes nothing, so recording
+      // "member added" would be a false entry.
+      if (inserted.changes > 0)
+        audited(audit, {
+          action: "team.member.add",
+          subjectOwnerId: team.org_id,
+          subjectId: teamId,
+          granteeType: "user",
+          granteeId: userId,
+        });
     },
   );
 
   const removeMemberTx = db.transaction(
     (teamId: string, userId: string, audit?: TeamAuditContext) => {
       const team = selectTeam.get(teamId) as TeamRow | undefined;
-      deleteMember.run(teamId, userId);
-      audited(audit, {
-        action: "team.member.remove",
-        subjectOwnerId: team?.org_id ?? null,
-        subjectId: teamId,
-        granteeType: "user",
-        granteeId: userId,
-      });
+      const removedMember = deleteMember.run(teamId, userId);
+      if (removedMember.changes > 0)
+        audited(audit, {
+          action: "team.member.remove",
+          subjectOwnerId: team?.org_id ?? null,
+          subjectId: teamId,
+          granteeType: "user",
+          granteeId: userId,
+        });
     },
   );
 
