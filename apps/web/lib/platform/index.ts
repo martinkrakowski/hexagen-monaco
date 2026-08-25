@@ -18,6 +18,14 @@ export {
   type AuditLogRepository,
 } from "./audit-log-store";
 export {
+  type GranteeIdentity,
+  type GranteeType,
+  type ProjectShare,
+  type ProjectSharesRepository,
+  type SharedProjectGrant,
+  type ShareRole,
+} from "./project-shares-store";
+export {
   BILLING_PLANS,
   ENTITLEMENT_STATUSES,
   FREE_PLAN,

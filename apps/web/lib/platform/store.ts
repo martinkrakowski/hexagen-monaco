@@ -20,6 +20,10 @@ import { createOwnerStateStore } from "./owner-state";
 import { createOrgsRepository, type OrgsRepository } from "./orgs-store";
 import { createTeamsRepository, type TeamsRepository } from "./teams-store";
 import {
+  createProjectSharesRepository,
+  type ProjectSharesRepository,
+} from "./project-shares-store";
+import {
   createAuditLogRepository,
   type AuditLogRepository,
 } from "./audit-log-store";
@@ -37,6 +41,8 @@ export interface PlatformStore {
   readonly teams: TeamsRepository;
   /** P-A2/D-A6: append-only trail for membership and (from P-A4) grants. */
   readonly audit: AuditLogRepository;
+  /** P-A3: grants beside ownership, never instead of it. */
+  readonly shares: ProjectSharesRepository;
   projectsFor(ownerId: string): SavedProjectsStore;
   runsFor(ownerId: string): RunHistoryRepository;
   scansFor(ownerId: string): ScanRecordsStore;
@@ -67,6 +73,7 @@ export function createPlatformStore(
     orgs: createOrgsRepository(db),
     teams: createTeamsRepository(db),
     audit: createAuditLogRepository(db),
+    shares: createProjectSharesRepository(db),
     projectsFor(ownerId) {
       return createSavedProjectsStore(db, ownerId);
     },

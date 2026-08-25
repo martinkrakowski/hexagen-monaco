@@ -63,6 +63,17 @@ export interface SavedProjectsStore extends SavedProjectsPersistencePort {
     project: SavedProject,
     expectedUpdatedAt?: number,
   ): Result<SavedProject, PersistenceError>;
+
+  /**
+   * One row by id, or `null` when this owner has no such project.
+   *
+   * H0.4 / P-A3: the `[projectId]` route used to call `loadProjects()` and
+   * `.find()`, deserialising every project in the tenant to return one. The
+   * keyed statement already existed here; only a public method was missing.
+   * `null` is a normal answer, not an error — the route decides what a miss
+   * means, and for a cross-tenant request that answer is 403, never 404.
+   */
+  getProject(id: string): Result<SavedProject | null, PersistenceError>;
 }
 
 export function createSavedProjectsStore(
@@ -114,6 +125,25 @@ export function createSavedProjectsStore(
   });
 
   return {
+    getProject(id: string) {
+      try {
+        const row = selectOne.get(ownerId, id) as ProjectRow | undefined;
+        if (!row) return { success: true, value: null };
+        const parsed = parsePayload(row);
+        if (!parsed.success) return parsed;
+        return { success: true, value: parsed.value };
+      } catch (cause) {
+        return {
+          success: false,
+          error: persistError(
+            "DeserializationFailed",
+            `Failed to load saved project ${id}`,
+            cause,
+          ),
+        };
+      }
+    },
+
     async loadProjects() {
       try {
         const rows = selectAll.all(ownerId) as ProjectRow[];
