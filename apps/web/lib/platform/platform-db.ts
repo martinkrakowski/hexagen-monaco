@@ -125,12 +125,19 @@ export function openPlatformDb(dbPath: string): Database.Database {
     -- (P-A1), which is consistent with GitHub-only auth (D-H1).
     -- COLLATE NOCASE: GitHub logins are case-insensitive; Ada and ada are
     -- the same invitee.
+    --
+    -- expires_at: an invite is a bearer grant addressed to a MUTABLE name.
+    -- GitHub logins can be renamed and the freed handle re-registered by
+    -- anyone, so an invite that never expires is a standing offer of write
+    -- access to whoever holds \`@login\` at sign-in time -- see
+    -- ORG_INVITE_TTL_DAYS.
     CREATE TABLE IF NOT EXISTS org_invites (
       org_id TEXT NOT NULL,
       github_login TEXT NOT NULL COLLATE NOCASE,
       role TEXT NOT NULL,
       invited_by TEXT NOT NULL,
       created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
       accepted_at TEXT,
       PRIMARY KEY (org_id, github_login),
       FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
@@ -345,8 +352,61 @@ export function openPlatformDb(dbPath: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_repair_attempts_class
       ON repair_attempts (owner_id, violation_class, schema_version);
   `);
+  migrateOrgInvitesExpiry(db);
   seedModelPrices(db);
   return db;
+}
+
+/**
+ * How long a pending org invite stays acceptable.
+ *
+ * An invite is keyed by GitHub LOGIN, not by user id, because the invitee may
+ * have no account yet -- and a login is a mutable, recyclable name. Alice is
+ * invited as `@alice`, renames herself, the handle is freed, and a stranger
+ * registers it; at their first sign-in the acceptance hook would hand them
+ * Alice's membership, which under H1.3 is full read-write on every project the
+ * org owns. A bounded window is what keeps that from being a standing offer.
+ *
+ * Lives here, beside the column and the backfill that share it, so the schema
+ * and the policy cannot drift apart.
+ */
+export const ORG_INVITE_TTL_DAYS = 14;
+
+/** ORG_INVITE_TTL_DAYS in milliseconds, for `Date` arithmetic. */
+export const ORG_INVITE_TTL_MS = ORG_INVITE_TTL_DAYS * 24 * 60 * 60 * 1000;
+
+/**
+ * Adds `org_invites.expires_at` to databases created before invites expired.
+ *
+ * ALTER ... NOT NULL requires a DEFAULT in sqlite, and '' would read as
+ * "already expired" against any ISO timestamp -- silently voiding every live
+ * invitation. So the column lands with that placeholder and is immediately
+ * backfilled to created_at + TTL, which is the deadline those invites would
+ * have carried had the column always existed.
+ *
+ * The backfill is written in the SAME format `new Date().toISOString()`
+ * produces (`%Y-%m-%dT%H:%M:%fZ`), because every expiry comparison in
+ * orgs-store is a lexicographic string compare against exactly that. sqlite's
+ * own `datetime()` output ('YYYY-MM-DD HH:MM:SS') would sort BEFORE any
+ * 'T'-separated timestamp -- ' ' < 'T' -- and read as permanently expired.
+ * COALESCE covers a created_at sqlite cannot parse: such a row falls back to
+ * expired rather than to NULL, which the NOT NULL column would reject and
+ * which would abort startup.
+ */
+function migrateOrgInvitesExpiry(db: Database.Database): void {
+  if (!tableExists(db, "org_invites")) return;
+  if (tableHasColumn(db, "org_invites", "expires_at")) return;
+  db.exec(
+    "ALTER TABLE org_invites ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''",
+  );
+  db.prepare(
+    `UPDATE org_invites
+        SET expires_at = COALESCE(
+              strftime('%Y-%m-%dT%H:%M:%fZ', created_at, '+' || ? || ' days'),
+              ''
+            )
+      WHERE expires_at = ''`,
+  ).run(ORG_INVITE_TTL_DAYS);
 }
 
 function tableExists(db: Database.Database, table: string): boolean {

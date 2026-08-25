@@ -56,6 +56,9 @@ describe("H1.1 — orgs schema", () => {
       assert.deepEqual(columns(db, "org_invites"), [
         "accepted_at",
         "created_at",
+        // A GitHub login is mutable and recyclable, so an invite addressed to
+        // one is a standing offer of write access unless it expires.
+        "expires_at",
         "github_login",
         "invited_by",
         "org_id",

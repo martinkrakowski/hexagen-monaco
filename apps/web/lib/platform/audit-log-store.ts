@@ -24,7 +24,15 @@ export type AuditAction =
   | "team.member.add"
   | "team.member.remove"
   | "team.create"
-  | "team.delete";
+  | "team.delete"
+  | "org.member.add"
+  | "org.member.remove"
+  // A role change is a distinct event, not an "add" with different arguments:
+  // conflating them would make the trail unable to answer "when did this
+  // person become an owner", which is the question an audit log is for.
+  | "org.member.role_change"
+  | "org.invite"
+  | "org.invite.accept";
 
 export interface AuditEntry {
   actorId: string;
