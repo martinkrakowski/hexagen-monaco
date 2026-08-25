@@ -1,4 +1,5 @@
 import type { StageTelemetryInput } from "../../lib/platform";
+import { fetchWithCsrf } from "./csrf-fetch";
 
 /**
  * Post one stage's telemetry to the active tenant's history.
@@ -12,7 +13,8 @@ export function persistStageTelemetry(
   telemetry: StageTelemetryInput,
   extras: { runId?: string; projectId?: string; tenantId?: string } = {},
 ): void {
-  void fetch("/api/runs", {
+  // D-H7: /api/runs is a cookie-authenticated mutation — send the header.
+  void fetchWithCsrf("/api/runs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

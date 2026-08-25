@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 interface Violation {
   id: string;
   type: "error" | "warning" | "info";
@@ -73,17 +74,17 @@ export function useGovernanceData(
 
       try {
         const [violationsRes, suggestionsRes, statusRes] = await Promise.all([
-          fetch("/api/governance/violations", {
+          fetchWithCsrf("/api/governance/violations", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ manifestYaml }),
           }),
-          fetch("/api/governance/suggestions", {
+          fetchWithCsrf("/api/governance/suggestions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ manifestYaml, openFileContent }),
           }),
-          fetch("/api/governance/status", {
+          fetchWithCsrf("/api/governance/status", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ manifestYaml }),

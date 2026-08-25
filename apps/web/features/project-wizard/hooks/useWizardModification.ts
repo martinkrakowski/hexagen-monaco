@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import type { Patch } from "@hexagen/reconciliation-engine";
 
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 export type WizardModificationStatus =
   | "idle"
   | "streaming"
@@ -41,7 +42,7 @@ export function useWizardModification() {
     });
 
     try {
-      const response = await fetch(STREAM_ENDPOINT, {
+      const response = await fetchWithCsrf(STREAM_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ intent }),
@@ -141,7 +142,7 @@ export function useWizardModification() {
     setState((prev) => ({ ...prev, status: "accepting" }));
 
     try {
-      const response = await fetch("/api/architecture/modify/accept", {
+      const response = await fetchWithCsrf("/api/architecture/modify/accept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -186,14 +187,17 @@ export function useWizardModification() {
       setState((prev) => ({ ...prev, status: "rejecting" }));
 
       try {
-        const response = await fetch("/api/architecture/modify/reject", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            transactionId: state.transactionId,
-            reason: reason ?? "User rejected the changes",
-          }),
-        });
+        const response = await fetchWithCsrf(
+          "/api/architecture/modify/reject",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              transactionId: state.transactionId,
+              reason: reason ?? "User rejected the changes",
+            }),
+          },
+        );
 
         const data = (await response.json()) as {
           success: boolean;

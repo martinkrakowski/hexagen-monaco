@@ -8,6 +8,7 @@ import { retrieveApiKey } from "./cloud-llm/retrieve-api-key";
 import { buildCloudMessageHistory } from "./cloud-llm/build-cloud-history";
 import { streamCloudChatResponse } from "./cloud-llm/stream-cloud-chat-response";
 
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 export interface CloudChatMessage {
   id: string;
   role: "user" | "assistant" | "system";
@@ -129,7 +130,7 @@ export function useCloudLLM() {
           requestBody.apiKey = keyResult.success ? keyResult.apiKey : "";
         }
 
-        const response = await fetch(CHAT_ENDPOINT, {
+        const response = await fetchWithCsrf(CHAT_ENDPOINT, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(requestBody),

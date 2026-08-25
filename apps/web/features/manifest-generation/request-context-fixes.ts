@@ -4,6 +4,7 @@ import {
 } from "@hexagen/agentic-interaction";
 import type { ContextView } from "./store/useContextChatPanel";
 
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 /**
  * A grouped, applyable fix derived from the AI's review of one bounded context:
  * a short label, a one-line rationale, and the deterministic manifest edit-ops
@@ -196,7 +197,7 @@ export async function requestContextFixes(
   ctx: ContextView,
   signal?: AbortSignal,
 ): Promise<ContextFix[]> {
-  const response = await fetch(CHAT_ENDPOINT, {
+  const response = await fetchWithCsrf(CHAT_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

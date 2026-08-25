@@ -34,6 +34,7 @@ import { usePlanningFinalize } from "./session/usePlanningFinalize";
 import { canConsumeSteering } from "./session/planning-session";
 import type { NewProjectLayer } from "@/hooks/useSavedProjects";
 
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 export interface PlanPhaseViewProps {
   /** Prop-injected navigation to the spec-import flow (finalize hand-off) —
    * repo convention: no router coupling, no auto-navigate outside an explicit
@@ -329,7 +330,7 @@ export function PlanPhaseView({
       .join("\n\n");
     let decisions: string;
     try {
-      const res = await fetch("/api/plan/extract-decisions", {
+      const res = await fetchWithCsrf("/api/plan/extract-decisions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ transcript, title: layer.title }),

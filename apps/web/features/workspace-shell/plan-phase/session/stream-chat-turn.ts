@@ -9,6 +9,7 @@
  * and the session loop needs a promise-of-full-content shape rather than a
  * message-list hook.
  */
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 
 export type StreamChatResult =
   | { readonly ok: true; readonly content: string }
@@ -33,7 +34,7 @@ export async function streamChatTurn(
   let streamError: string | null = null;
 
   try {
-    const response = await fetch(CHAT_ENDPOINT, {
+    const response = await fetchWithCsrf(CHAT_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

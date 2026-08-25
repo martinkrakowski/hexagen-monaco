@@ -21,6 +21,7 @@ import {
   type ScanRun,
 } from "./scan-stream";
 
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 /**
  * S2 transport (F-16, BF-5.3). The ONLY module in this packet that performs
  * I/O; every decision it makes about what the user sees is delegated to the
@@ -166,7 +167,7 @@ export function useGithubScan(): UseGithubScanReturn {
 
       try {
         const trimmedRef = request.ref.trim();
-        const response = await fetch(ENDPOINT, {
+        const response = await fetchWithCsrf(ENDPOINT, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

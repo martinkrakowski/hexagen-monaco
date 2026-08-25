@@ -26,6 +26,7 @@ import {
 
 import { streamAssistantResponse } from "./stream-assistant-response";
 
+import { fetchWithCsrf } from "../csrf-fetch";
 type LocalLLMAdapter = ModelLifecyclePort & SendStructuredRequestPort;
 
 interface UseChatMessagesOptions {
@@ -246,7 +247,7 @@ export function useChatMessages({
         // When no local model is loaded but the server ENV LLM is available,
         // route through the server proxy to avoid "Engine not initialized" errors.
         if (!adapter.getLoadedModel() && hasServerLLMAccessKey()) {
-          const response = await fetch("/api/llm/chat", {
+          const response = await fetchWithCsrf("/api/llm/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

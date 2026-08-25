@@ -45,6 +45,7 @@ import {
 import { BrownfieldStepIndicator } from "./views/BrownfieldStepIndicator";
 import { TierPickerView } from "./views/TierPickerView";
 
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 /**
  * S1 boundary component for the brownfield adoption flow (F-15, BF-3.3).
  *
@@ -565,7 +566,7 @@ export function BrownfieldImportPage() {
       // sent. Setting it here previously overwrote "Uploading artifacts…" in
       // the same tick, so the live region claimed parsing was underway for the
       // entire upload -- and on a slow connection that is the whole wait.
-      const response = await fetch("/api/projects/scan/artifacts", {
+      const response = await fetchWithCsrf("/api/projects/scan/artifacts", {
         method: "POST",
         body: form,
       });

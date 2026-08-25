@@ -6,6 +6,7 @@ import type { Patch } from "@hexagen/reconciliation-engine";
 import { usePipelineStreaming } from "./usePipelineStreaming";
 import type { StepProgress } from "./usePipelineStreaming";
 
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 export type { StepProgress };
 
 export type ArchitectureModificationStatus =
@@ -132,7 +133,7 @@ export function useArchitectureModification() {
     setState((prev) => ({ ...prev, result: optimisticResult }));
 
     try {
-      const response = await fetch("/api/architecture/modify/accept", {
+      const response = await fetchWithCsrf("/api/architecture/modify/accept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -195,14 +196,17 @@ export function useArchitectureModification() {
       setState((prev) => ({ ...prev, result: optimisticResult }));
 
       try {
-        const response = await fetch("/api/architecture/modify/reject", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            transactionId: state.result.transactionId,
-            reason: reason ?? "User rejected the changes",
-          }),
-        });
+        const response = await fetchWithCsrf(
+          "/api/architecture/modify/reject",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              transactionId: state.result.transactionId,
+              reason: reason ?? "User rejected the changes",
+            }),
+          },
+        );
         const data = (await response.json()) as {
           success: boolean;
           error?: string;

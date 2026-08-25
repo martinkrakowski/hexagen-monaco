@@ -5,6 +5,7 @@ import type { HexagonNode } from "@hexagen/visualization";
 import type { Patch } from "@hexagen/reconciliation-engine";
 import { useModificationStreaming } from "./useModificationStreaming";
 
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 export type NodeModificationStatus =
   | "idle"
   | "detecting"
@@ -164,7 +165,7 @@ export function useNodeModification() {
     setState((prev) => ({ ...prev, status: "accepting" }));
 
     try {
-      const response = await fetch("/api/architecture/modify/accept", {
+      const response = await fetchWithCsrf("/api/architecture/modify/accept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -209,7 +210,7 @@ export function useNodeModification() {
     setState((prev) => ({ ...prev, status: "rejecting" }));
 
     try {
-      const response = await fetch("/api/architecture/modify/reject", {
+      const response = await fetchWithCsrf("/api/architecture/modify/reject", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

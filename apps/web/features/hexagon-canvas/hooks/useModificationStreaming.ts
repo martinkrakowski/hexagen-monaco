@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 export interface ModificationStreamingState {
   isStreaming: boolean;
   error: string | null;
@@ -54,7 +55,7 @@ export function useModificationStreaming(
       setStreamingState({ isStreaming: true, error: null });
 
       try {
-        const response = await fetch(STREAM_ENDPOINT, {
+        const response = await fetchWithCsrf(STREAM_ENDPOINT, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ intent }),

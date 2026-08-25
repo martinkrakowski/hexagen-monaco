@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import type { PipelineStepStatus } from "@hexagen/ai-pipeline";
 
+import { fetchWithCsrf } from "@/lib/csrf-fetch";
 export interface StepProgress {
   name: string;
   status: PipelineStepStatus;
@@ -75,7 +76,7 @@ export function usePipelineStreaming(options: UsePipelineStreamingOptions) {
       setStreamingState({ steps: initialSteps, error: null });
 
       try {
-        const response = await fetch(endpoint, {
+        const response = await fetchWithCsrf(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
