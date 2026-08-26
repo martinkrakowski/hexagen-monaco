@@ -21,7 +21,7 @@ require a signup/account."**
 ## Decision
 
 1. **Deny-by-default middleware gate.** Every page and API requires a session
-   JWT, with an exact allowlist: `/projects/new/login` (the gate's redirect
+   JWT, with an exact allowlist: `/login` (the gate's redirect
    target), `/auth` (legacy sign-in redirect — a published contract),
    `/api/auth` (NextAuth's own surface, which must be reachable to create a
    session; also the deploy healthcheck target), and `/api/csrf` (token

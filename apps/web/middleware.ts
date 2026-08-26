@@ -21,7 +21,8 @@ import {
  * always runs behind authentication.
  *
  * The allowlist, each entry deliberate:
- * - `/projects/new/login` — the gate's own redirect target.
+ * - `/login` — the gate's own redirect target (rendered inside the shared
+ *   workspace chrome).
  * - `/auth` — the legacy /auth/signin redirect (published contract).
  * - `/api/auth` — NextAuth's surface: the OAuth round trip that CREATES the
  *   session must be reachable without one. Also the deploy healthcheck
@@ -30,7 +31,7 @@ import {
  *   (the login page itself may fetch it).
  */
 export const AUTH_EXEMPT_PREFIXES = [
-  "/projects/new/login",
+  "/login",
   "/auth",
   "/api/auth",
   "/api/csrf",
@@ -150,7 +151,7 @@ export async function middleware(request: NextRequest) {
     const token = await getToken({ req: request });
     if (!token) {
       if (isApiPath(pathname)) return apiAuthDenial();
-      const login = new URL("/projects/new/login", request.url);
+      const login = new URL("/login", request.url);
       login.searchParams.set("callbackUrl", `${pathname}${search}`);
       return NextResponse.redirect(login);
     }

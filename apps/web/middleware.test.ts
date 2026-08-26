@@ -45,7 +45,7 @@ describe("auth middleware — deny-by-default gate (D-U1)", () => {
 
   it("allowlist is exact: login, legacy auth redirect, NextAuth, csrf", () => {
     for (const pathname of [
-      "/projects/new/login",
+      "/login",
       "/auth/signin",
       "/api/auth/providers", // also the deploy healthcheck target
       "/api/auth/callback/github",
@@ -56,10 +56,9 @@ describe("auth middleware — deny-by-default gate (D-U1)", () => {
   });
 
   it("allowlist prefixes do not swallow siblings", () => {
-    // "/projects/new/login" must not exempt "/projects/new" or a
-    // hypothetical "/projects/new/login-history"-style sibling.
+    // "/login" must not exempt sibling-prefixed paths.
+    assert.equal(requiresAuth("/loginx"), true);
     assert.equal(requiresAuth("/projects/new"), true);
-    assert.equal(requiresAuth("/projects/new/loginx"), true);
     assert.equal(requiresAuth("/api/csrfx"), true);
   });
 
@@ -90,7 +89,7 @@ describe("middleware routing of unauthenticated traffic", () => {
     );
     assert.equal(response.status, 307);
     const location = new URL(response.headers.get("location") ?? "");
-    assert.equal(location.pathname, "/projects/new/login");
+    assert.equal(location.pathname, "/login");
     assert.equal(
       location.searchParams.get("callbackUrl"),
       "/projects/history?range=30d",
