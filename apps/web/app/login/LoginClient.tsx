@@ -40,9 +40,33 @@ export function LoginClient({ router: injectedRouter }: LoginClientProps) {
   const callbackUrl = safeCallbackUrl(searchParams.get("callbackUrl"));
 
   // A signed-in visitor has no business on the login screen: bounce to where
-  // they were headed. `replace`, not `push` — Back must not return here.
+  // they were headed — via the onboarding wizard first when the account has
+  // never completed it (P-U4). `replace`, not `push` — Back must not return
+  // here.
   useEffect(() => {
-    if (status === "authenticated") router.replace(callbackUrl);
+    if (status !== "authenticated") return;
+    let cancelled = false;
+    void (async () => {
+      let target = callbackUrl;
+      try {
+        // Plain fetch: a GET needs no CSRF header. Any failure — network,
+        // non-2xx, malformed body — falls through to callbackUrl; the
+        // onboarding check must never strand a signed-in user on /login.
+        const response = await fetch("/api/account/onboarding");
+        if (response.ok) {
+          const body = (await response.json()) as {
+            onboardedAt?: string | null;
+          };
+          if (body.onboardedAt === null) target = "/onboarding/welcome";
+        }
+      } catch {
+        // fall back to callbackUrl
+      }
+      if (!cancelled) router.replace(target);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [status, callbackUrl, router]);
 
   if (status === "authenticated") return null;
