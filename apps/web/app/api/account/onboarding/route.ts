@@ -48,7 +48,14 @@ export async function POST(request: NextRequest) {
   const owner = await requirePersistenceOwner(request);
   if (!owner.ok) return owner.response;
 
-  const gate = guardMutation(request, ACCOUNT_MUTATION_GUARD);
+  // Keyed PER OWNER, not per IP: behind a shared NAT one retrying client
+  // could otherwise exhaust the whole budget and 429 another account's
+  // onboarding completion (review flag on #663). The owner is already
+  // resolved above, so the key is free.
+  const gate = guardMutation(request, {
+    ...ACCOUNT_MUTATION_GUARD,
+    keyPrefix: `${ACCOUNT_MUTATION_GUARD.keyPrefix}:${owner.ownerId}`,
+  });
   if (gate) return gate;
 
   const auth = getPlatformStore().auth;

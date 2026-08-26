@@ -106,3 +106,30 @@ describe("P-U0b — /api/account/onboarding", () => {
     );
   });
 });
+
+describe("rate-limit keying (review flag on #663)", () => {
+  beforeEach(() => {
+    closePlatformStore();
+    vi.mocked(getToken).mockReset();
+  });
+  afterEach(() => closePlatformStore());
+
+  it("one owner exhausting the budget does not 429 another owner on the same IP", async () => {
+    // Both "clients" share the request fingerprint (same IP in test), so a
+    // shared key would let owner A's burst starve owner B.
+    signedInAs("owner-a");
+    let lastA: Response | undefined;
+    for (let i = 0; i < 40; i += 1) {
+      lastA = await POST(postReq());
+    }
+    assert.equal(lastA?.status, 429, "owner A must actually hit the limit");
+
+    signedInAs("owner-b");
+    const b = await POST(postReq());
+    assert.equal(
+      b.status,
+      200,
+      "owner B's first request must not inherit owner A's exhaustion",
+    );
+  });
+});
