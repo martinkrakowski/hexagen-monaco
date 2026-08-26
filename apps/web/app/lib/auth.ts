@@ -72,7 +72,9 @@ export async function persistGithubLogin(
 export const authOptions: NextAuthOptions = {
   adapter: createNextAuthAdapter(() => getPlatformStore().auth),
   session: { strategy: "jwt" },
-  pages: { signIn: "/auth/signin" },
+  // Moved in-shell (at /login, sharing the /projects chrome) 2026-08-25 (P-U2, docs/planning/2026-08-25-login-onboarding-ui-plan.md);
+  // /auth/signin remains as a redirect for the old contract.
+  pages: { signIn: "/login" },
   providers: [
     GitHubProvider({
       clientId: process.env.GITHUB_ID ?? "",
