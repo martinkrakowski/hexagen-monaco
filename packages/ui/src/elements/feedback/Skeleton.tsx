@@ -6,7 +6,7 @@ export type SkeletonProps = NoSemanticState<{
 }>;
 
 export function Skeleton({
-  className = "h-8 w-full rounded-md bg-gray-200 animate-pulse",
+  className = "h-8 w-full rounded-md bg-muted animate-pulse",
 }: SkeletonProps) {
   return <div className={className} aria-hidden="true" role="presentation" />;
 }

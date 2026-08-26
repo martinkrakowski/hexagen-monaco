@@ -59,4 +59,27 @@ describe("Label component", () => {
     const label = container.querySelector("label");
     assert.strictEqual(label?.getAttribute("for"), "input-id");
   });
+
+  it("renders an aria-hidden asterisk when required is set", () => {
+    const { container } = render(
+      React.createElement(Label, { required: true }, "Email"),
+    );
+    const label = container.querySelector("label");
+    // Positive assertion first: the label and its asterisk rendered.
+    assert.ok(label instanceof HTMLLabelElement);
+    const asterisk = label.querySelector("span");
+    assert.ok(asterisk);
+    assert.strictEqual(asterisk.textContent, "*");
+    assert.strictEqual(asterisk.getAttribute("aria-hidden"), "true");
+    // The prop must NOT leak onto the DOM element as an attribute.
+    assert.strictEqual(label.hasAttribute("required"), false);
+  });
+
+  it("renders no asterisk when required is not set", () => {
+    const { container } = render(React.createElement(Label, null, "Email"));
+    const label = container.querySelector("label");
+    assert.ok(label instanceof HTMLLabelElement);
+    assert.strictEqual(label.querySelector("span"), null);
+    assert.strictEqual(label.textContent, "Email");
+  });
 });
