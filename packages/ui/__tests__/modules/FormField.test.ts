@@ -14,20 +14,17 @@ function renderField(extra?: {
   childDescribedBy?: string;
 }) {
   return render(
-    React.createElement(
-      FormField,
-      {
-        label: "Email",
-        htmlFor: "email",
-        validationMessage: extra?.validationMessage,
-        hint: extra?.hint,
-      },
-      React.createElement("input", {
+    React.createElement(FormField, {
+      label: "Email",
+      htmlFor: "email",
+      validationMessage: extra?.validationMessage,
+      hint: extra?.hint,
+      children: React.createElement("input", {
         id: "email",
         type: "email",
         "aria-describedby": extra?.childDescribedBy,
       }),
-    ),
+    }),
   );
 }
 

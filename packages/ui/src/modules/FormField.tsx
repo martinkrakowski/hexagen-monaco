@@ -20,7 +20,7 @@ import type { NoSemanticState } from "../types/forbidden-brand.js";
 export type FormFieldProps = NoSemanticState<{
   label: string;
   htmlFor: string;
-  children: ReactElement<Record<string, unknown>>;
+  children: ReactElement<{ "aria-describedby"?: string }>;
   validationMessage?: string;
   hint?: string;
   className?: string;

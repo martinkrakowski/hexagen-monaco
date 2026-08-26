@@ -18,7 +18,10 @@ describe("Alert component", () => {
 
   it("uses role='alert' only for the danger tone", () => {
     const { getByRole } = render(
-      React.createElement(Alert, { tone: "danger" }, "Something is wrong"),
+      React.createElement(Alert, {
+        tone: "danger",
+        children: "Something is wrong",
+      }),
     );
     const alert = getByRole("alert");
     assert.match(alert.textContent ?? "", /Something is wrong/);
@@ -28,7 +31,7 @@ describe("Alert component", () => {
   it("uses role='status' for non-danger tones", () => {
     for (const tone of ["info", "success", "warning"] as const) {
       const { getByRole, unmount } = render(
-        React.createElement(Alert, { tone }, "Note"),
+        React.createElement(Alert, { tone, children: "Note" }),
       );
       const alert = getByRole("status");
       assert.equal(alert.getAttribute("role"), "status");
@@ -38,7 +41,7 @@ describe("Alert component", () => {
 
   it("applies tone-specific token classes", () => {
     const { getByRole } = render(
-      React.createElement(Alert, { tone: "success" }, "Saved"),
+      React.createElement(Alert, { tone: "success", children: "Saved" }),
     );
     const alert = getByRole("status");
     assert.match(alert.className, /bg-success\/10/);
@@ -47,7 +50,10 @@ describe("Alert component", () => {
 
   it("renders an optional title", () => {
     const { getByText } = render(
-      React.createElement(Alert, { title: "Import finished" }, "3 contexts"),
+      React.createElement(Alert, {
+        title: "Import finished",
+        children: "3 contexts",
+      }),
     );
     const title = getByText("Import finished");
     assert.match(title.className, /font-medium/);
