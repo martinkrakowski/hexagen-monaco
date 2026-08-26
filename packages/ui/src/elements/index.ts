@@ -30,3 +30,9 @@ export type { SkeletonProps } from "./feedback/Skeleton.js";
 
 export { CopyButton } from "./CopyButton.js";
 export type { CopyButtonProps } from "./CopyButton.js";
+
+export { Alert, alertVariants } from "./Alert.js";
+export type { AlertProps, AlertTone } from "./Alert.js";
+
+export { Avatar, avatarVariants } from "./Avatar.js";
+export type { AvatarProps, AvatarSize } from "./Avatar.js";
