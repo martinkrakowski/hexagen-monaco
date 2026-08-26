@@ -24,6 +24,6 @@ export function useAppSession() {
 }
 
 /** Starts app sign-in and returns to `callbackUrl` after the OAuth round trip. */
-export function signInToApp(callbackUrl: string): void {
-  void nextAuthSignIn("github", { callbackUrl });
+export function signInToApp(callbackUrl: string): Promise<unknown> {
+  return nextAuthSignIn("github", { callbackUrl });
 }

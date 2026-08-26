@@ -12,7 +12,17 @@ import { signInToApp, useAppSession } from "@/account-onboarding/useAppSession";
  * URL, garbage) is an open-redirect attempt and falls back to the front door.
  */
 export function safeCallbackUrl(raw: string | null): string {
-  if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  // Backslashes are refused outright: browsers normalize "\" to "/" during
+  // URL parsing, so "/\evil.example" would become protocol-relative
+  // "//evil.example" after the check that only looks at the first two chars.
+  if (
+    raw &&
+    raw.startsWith("/") &&
+    !raw.startsWith("//") &&
+    !raw.includes("\\")
+  ) {
+    return raw;
+  }
   return "/projects/new";
 }
 
@@ -42,7 +52,10 @@ export function LoginClient({ router: injectedRouter }: LoginClientProps) {
       busy={busy}
       onSignIn={() => {
         setBusy(true);
-        signInToApp(callbackUrl);
+        // Success navigates away, so the reset is unreachable then; it exists
+        // for the FAILURE path (network error before the OAuth redirect),
+        // where a forever-busy button would dead-end the login screen.
+        void signInToApp(callbackUrl).finally(() => setBusy(false));
       }}
     />
   );

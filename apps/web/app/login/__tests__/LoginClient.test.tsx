@@ -22,6 +22,7 @@ describe("safeCallbackUrl — the open-redirect gate", () => {
       null,
       "",
       "//evil.example",
+      "/\\evil.example", // backslash normalizes to "//" in browser URL parsing
       "https://evil.example/x",
       "javascript:alert(1)",
     ]) {
