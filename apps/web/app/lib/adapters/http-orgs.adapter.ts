@@ -101,12 +101,17 @@ async function readRefusalBody(
   }
 }
 
-function asArray<T>(body: unknown, key: string): T[] {
+/**
+ * Missing or mis-shaped keys are an ERROR, not an empty list: defaulting to
+ * [] would render "you have no orgs" for a response whose shape drifted —
+ * indistinguishable from the real empty state (review flag on #662).
+ */
+function asArray<T>(body: unknown, key: string): T[] | undefined {
   if (body && typeof body === "object" && key in body) {
     const inner = (body as Record<string, unknown>)[key];
     if (Array.isArray(inner)) return inner as T[];
   }
-  return [];
+  return undefined;
 }
 
 function asObject<T>(body: unknown, key: string): T | undefined {
@@ -160,7 +165,22 @@ export class HttpOrgsAdapter {
       if (response.status === 204) {
         return { success: true, value: undefined };
       }
-      return { success: true, value: await response.json() };
+      // Parse OUTSIDE the transport catch: invalid JSON from a 200 is a
+      // server/contract fault, not a connectivity one — labeling it
+      // "network" would send callers down the wrong recovery path
+      // (review flag on #662).
+      try {
+        return { success: true, value: await response.json() };
+      } catch (cause) {
+        return {
+          success: false,
+          error: {
+            kind: "unknown",
+            message: "Orgs response was not valid JSON",
+            cause,
+          },
+        };
+      }
     } catch (cause) {
       return {
         success: false,
@@ -173,10 +193,11 @@ export class HttpOrgsAdapter {
   async listOrgs(): Promise<Result<OrgMembershipSummary[], OrgsGatewayError>> {
     const result = await this.request("/api/orgs");
     if (!result.success) return result;
-    return {
-      success: true,
-      value: asArray<OrgMembershipSummary>(result.value, "orgs"),
-    };
+    const items = asArray<OrgMembershipSummary>(result.value, "orgs");
+    if (items === undefined) {
+      return { success: false, error: missingPayload("orgs") };
+    }
+    return { success: true, value: items };
   }
 
   async createOrg(input: {
@@ -261,7 +282,11 @@ export class HttpOrgsAdapter {
       `/api/orgs/${encodeURIComponent(orgId)}/teams`,
     );
     if (!result.success) return result;
-    return { success: true, value: asArray<Team>(result.value, "teams") };
+    const items = asArray<Team>(result.value, "teams");
+    if (items === undefined) {
+      return { success: false, error: missingPayload("teams") };
+    }
+    return { success: true, value: items };
   }
 
   async createTeam(
@@ -322,9 +347,10 @@ export class HttpOrgsAdapter {
   async listShared(): Promise<Result<SharedProjectGrant[], OrgsGatewayError>> {
     const result = await this.request("/api/projects/shared");
     if (!result.success) return result;
-    return {
-      success: true,
-      value: asArray<SharedProjectGrant>(result.value, "shared"),
-    };
+    const items = asArray<SharedProjectGrant>(result.value, "shared");
+    if (items === undefined) {
+      return { success: false, error: missingPayload("shared") };
+    }
+    return { success: true, value: items };
   }
 }

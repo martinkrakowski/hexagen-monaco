@@ -290,3 +290,39 @@ describe("HttpOrgsAdapter", () => {
     assert.ok(!ORG_SLUG_PATTERN.test("has@at"));
   });
 });
+
+describe("response-shape refusals (review flags on #662)", () => {
+  it("a 200 with the expected key MISSING is an error, not an empty list", async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ unexpected: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    ) as unknown as typeof fetch;
+    const adapter = new HttpOrgsAdapter(fetchImpl);
+    const result = await adapter.listOrgs();
+    assert.equal(result.success, false);
+    if (!result.success) {
+      assert.equal(result.error.kind, "unknown");
+      assert.match(result.error.message, /orgs/);
+    }
+  });
+
+  it("invalid JSON from a 200 is 'unknown', not 'network'", async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response("<!doctype html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        }),
+    ) as unknown as typeof fetch;
+    const adapter = new HttpOrgsAdapter(fetchImpl);
+    const result = await adapter.listOrgs();
+    assert.equal(result.success, false);
+    if (!result.success) {
+      assert.equal(result.error.kind, "unknown");
+      assert.match(result.error.message, /not valid JSON/);
+    }
+  });
+});
