@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 /**
- * The login screen moved into the application shell at /projects/new/login
+ * The login screen moved into the application shell at /login
  * (P-U2 of docs/planning/2026-08-25-login-onboarding-ui-plan.md). This route
  * survives as a redirect because it is a published contract: middleware
  * redirects built before the move, NextAuth error flows, and old links all
@@ -16,5 +16,5 @@ export default async function SignInRoute({
   const suffix = params.callbackUrl
     ? `?callbackUrl=${encodeURIComponent(params.callbackUrl)}`
     : "";
-  redirect(`/projects/new/login${suffix}`);
+  redirect(`/login${suffix}`);
 }

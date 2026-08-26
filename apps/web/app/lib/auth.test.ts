@@ -41,7 +41,7 @@ describe("authOptions GitHub provider", () => {
     // Changed 2026-08-25 with the in-shell login screen (P-U2,
     // docs/planning/2026-08-25-login-onboarding-ui-plan.md). /auth/signin
     // still exists as a redirect; this pin is the canonical target.
-    assert.equal(authOptions.pages?.signIn, "/projects/new/login");
+    assert.equal(authOptions.pages?.signIn, "/login");
     assert.ok(authOptions.adapter);
   });
 });
