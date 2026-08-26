@@ -8,11 +8,54 @@ import {
   csrfTokensMatch,
 } from "./lib/csrf";
 
-export const PROTECTED_PATH_PREFIXES = ["/account", "/billing"] as const;
+/**
+ * D-U1 (owner decision 2026-08-25, docs/planning/2026-08-25-login-onboarding-ui-plan.md):
+ * "All plans including the free tier should require a signup/account."
+ * The gate is DENY-BY-DEFAULT: every page and API requires a session JWT
+ * unless allowlisted below. This supersedes the anonymous free tier
+ * (quota-D2's browser half, H1.7's anonymous half); the free TIER survives
+ * as the default entitlement of a signed-in account.
+ *
+ * ADR-0063's eight frozen metering files are gated in FRONT by this
+ * middleware and are not edited — quota logic is unchanged, it now simply
+ * always runs behind authentication.
+ *
+ * The allowlist, each entry deliberate:
+ * - `/projects/new/login` — the gate's own redirect target.
+ * - `/auth` — the legacy /auth/signin redirect (published contract).
+ * - `/api/auth` — NextAuth's surface: the OAuth round trip that CREATES the
+ *   session must be reachable without one. Also the deploy healthcheck
+ *   target (docker-compose probes /api/auth/providers).
+ * - `/api/csrf` — token issuance; the bootstrap must not require a session
+ *   (the login page itself may fetch it).
+ */
+export const AUTH_EXEMPT_PREFIXES = [
+  "/projects/new/login",
+  "/auth",
+  "/api/auth",
+  "/api/csrf",
+] as const;
 
-export function isProtectedPath(pathname: string): boolean {
-  return PROTECTED_PATH_PREFIXES.some(
+export function requiresAuth(pathname: string): boolean {
+  return !AUTH_EXEMPT_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
+function isApiPath(pathname: string): boolean {
+  return pathname === "/api" || pathname.startsWith("/api/");
+}
+
+/**
+ * The API denial mirrors `requirePersistenceOwner`'s body EXACTLY — the
+ * client's `isUnauthenticatedPersistenceError` string-matches the
+ * "Sign in required" message (http-saved-projects.adapter.ts), so the two
+ * literals must not drift apart.
+ */
+export function apiAuthDenial(): NextResponse {
+  return NextResponse.json(
+    { error: "unauthorized", message: "Sign in required", statusCode: 401 },
+    { status: 401, headers: { "Cache-Control": "no-store" } },
   );
 }
 
@@ -99,25 +142,29 @@ export function guardApiCsrf(request: NextRequest): NextResponse | null {
 }
 
 export async function middleware(request: NextRequest) {
+  const { pathname, search } = request.nextUrl;
+
+  // Auth first, CSRF second: an unauthenticated caller gets the 401 (or the
+  // login redirect), never a confusing CSRF 403 for a session it lacks.
+  if (requiresAuth(pathname)) {
+    const token = await getToken({ req: request });
+    if (!token) {
+      if (isApiPath(pathname)) return apiAuthDenial();
+      const login = new URL("/projects/new/login", request.url);
+      login.searchParams.set("callbackUrl", `${pathname}${search}`);
+      return NextResponse.redirect(login);
+    }
+  }
+
   const denied = guardApiCsrf(request);
   if (denied) return denied;
 
-  if (!isProtectedPath(request.nextUrl.pathname)) {
-    return NextResponse.next();
-  }
-  const token = await getToken({ req: request });
-  if (token) return NextResponse.next();
-  const signIn = new URL("/auth/signin", request.url);
-  signIn.searchParams.set("callbackUrl", request.nextUrl.pathname);
-  return NextResponse.redirect(signIn);
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: [
-    "/account/:path*",
-    "/billing/:path*",
-    "/account",
-    "/billing",
-    "/api/:path*",
-  ],
+  // Deny-by-default needs a catch-all matcher; only Next's own assets and
+  // public static files are excluded (they carry no data and the pages that
+  // use them are themselves gated).
+  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|brand/).*)"],
 };

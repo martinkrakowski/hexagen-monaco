@@ -40,6 +40,9 @@ export async function requirePersistenceOwner(
       response: NextResponse.json(
         {
           error: "unauthorized",
+          // This literal is COUPLED: middleware.ts apiAuthDenial() mirrors it
+          // and the client's isUnauthenticatedPersistenceError string-matches
+          // it (http-saved-projects.adapter.ts). Change all three or none.
           message: "Sign in required",
           statusCode: 401,
         },
