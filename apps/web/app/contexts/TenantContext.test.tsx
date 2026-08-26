@@ -117,6 +117,55 @@ describe("TenantProvider", () => {
     assert.equal(getActiveTenantId(), "org-a");
   });
 
+  it("an OLDER listOrgs response landing last is discarded — no stale overwrite, no spurious reset (PR #666)", async () => {
+    setActiveTenantId("org-a");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // Manually released deferreds, one per listOrgs call.
+    const pending: Array<(result: ListResult) => void> = [];
+    const port = {
+      calls: () => pending.length,
+      listOrgs: () =>
+        new Promise<ListResult>((resolve) => {
+          pending.push(resolve);
+        }),
+    };
+    render(
+      <TenantProvider orgsPort={port}>
+        <Probe />
+      </TenantProvider>,
+    );
+    await waitFor(() => assert.equal(pending.length, 1));
+
+    // A focus refresh overlaps the still-unresolved mount fetch.
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    await waitFor(() => assert.equal(pending.length, 2));
+
+    // The NEWER request resolves first, with a list that validates org-a.
+    await act(async () => {
+      pending[1]({ success: true, value: [orgA] });
+    });
+    await waitFor(() =>
+      assert.equal(screen.getByTestId("org-count").textContent, "1"),
+    );
+    assert.equal(getActiveTenantId(), "org-a");
+
+    // The OLDER request resolves last with an empty list. Without the
+    // ticket it would commit, blank the org list, and reset the valid
+    // selection to personal.
+    await act(async () => {
+      pending[0]({ success: true, value: [] });
+    });
+    assert.equal(screen.getByTestId("org-count").textContent, "1");
+    assert.equal(getActiveTenantId(), "org-a");
+    assert.equal(
+      warn.mock.calls.length,
+      0,
+      "the stale response must not trigger the stale-selection warning",
+    );
+  });
+
   it("refreshes the org list on window focus (membership can change elsewhere)", async () => {
     const port = listPort([
       { success: true, value: [] },

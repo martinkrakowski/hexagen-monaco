@@ -31,7 +31,14 @@ function readPersisted(): string | null {
     if (typeof window === "undefined") return null;
     const raw = window.localStorage.getItem(STORAGE_KEY);
     return raw !== null && raw.length > 0 ? raw : null;
-  } catch {
+  } catch (cause) {
+    // Observability only — the fallback IS the behavior (PR #666 review):
+    // a per-viewer convenience whose authority is the server does not earn a
+    // typed error channel, but a silent swallow hides real storage trouble.
+    console.warn(
+      "[tenant] reading the persisted tenant selection failed; using personal",
+      cause,
+    );
     return null;
   }
 }
@@ -51,9 +58,14 @@ export function setActiveTenantId(id: string | null): void {
       if (id === null) window.localStorage.removeItem(STORAGE_KEY);
       else window.localStorage.setItem(STORAGE_KEY, id);
     }
-  } catch {
+  } catch (cause) {
     // Best-effort persistence: the in-memory switch already happened, so the
-    // session behaves correctly; only the reload-restore is lost.
+    // session behaves correctly; only the reload-restore is lost. Warn so
+    // the loss is at least visible (PR #666 review).
+    console.warn(
+      "[tenant] persisting the tenant selection failed; it will not survive a reload",
+      cause,
+    );
   }
   // Copy before iterating so a listener unsubscribing mid-notify is safe.
   for (const listener of [...listeners]) listener();

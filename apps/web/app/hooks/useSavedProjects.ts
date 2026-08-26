@@ -93,6 +93,8 @@ interface RecordOpTracker {
   settle(id: string): void;
   /** True while any op on `id` is in flight. */
   has(id: string): boolean;
+  /** True while any op on ANY record is in flight. */
+  anyPending(): boolean;
   /** True if an op on `id` settled after the given clock stamp. */
   settledAfter(id: string, stamp: number): boolean;
   /** Current clock value (for stamping a refresh's read start). */
@@ -127,6 +129,9 @@ function createRecordOpTracker(): RecordOpTracker {
     },
     has(id) {
       return pending.has(id);
+    },
+    anyPending() {
+      return pending.size > 0;
     },
     settledAfter(id, stamp) {
       return (settled.get(id) ?? 0) > stamp;
@@ -182,7 +187,31 @@ export function useSavedProjects() {
   // instance — intentional: it is mutable bookkeeping read/written inside
   // async closures; no render output depends on it, so React state/effects are
   // the wrong home for it.
-  const [recordOps] = useState(createRecordOpTracker);
+  // PR #666 review (P-U5): a tenant switch while ops are in flight leaves the
+  // old tenant's rows in local state — the switch-triggered refresh keeps
+  // pending records ON PURPOSE (per-record merge), and each op's settle only
+  // reconciles its own record. When the switch found ops pending, one more
+  // refresh must run after the LAST of them settles, or the stale rows stay
+  // visible under the new tenant until some unrelated refresh. The flag +
+  // settle wrapper below is that mechanism; it reuses the tracker's own
+  // pending bookkeeping rather than growing a parallel per-op tenant ledger.
+  const pendingTenantRefreshRef = useRef(false);
+  // Latest refreshProjects, assigned by effect below — the wrapper is created
+  // once, before refreshProjects exists.
+  const drainRefreshRef = useRef<(() => Promise<void>) | null>(null);
+  const [recordOps] = useState<RecordOpTracker>(() => {
+    const inner = createRecordOpTracker();
+    return {
+      ...inner,
+      settle(id: string) {
+        inner.settle(id);
+        if (pendingTenantRefreshRef.current && !inner.anyPending()) {
+          pendingTenantRefreshRef.current = false;
+          void drainRefreshRef.current?.();
+        }
+      },
+    };
+  });
   // Monotonic ticket so only the LATEST load/refresh may apply its result —
   // an older read applying after a newer one would reintroduce stale rows.
   const refreshTicket = useRef(0);
@@ -243,6 +272,10 @@ export function useSavedProjects() {
     load();
   }, [refreshProjects]);
 
+  useEffect(() => {
+    drainRefreshRef.current = refreshProjects;
+  }, [refreshProjects]);
+
   // Tenant switch (P-U5): the persistence adapters derive their URLs from the
   // module-level active-tenant store, so the moment the selection changes,
   // every row in local state belongs to the OLD tenant. A store subscription
@@ -251,14 +284,16 @@ export function useSavedProjects() {
   // data is tenant-scoped), already race-safe (the monotonic ticket drops a
   // slow pre-switch read that would resurrect the old tenant's rows), and
   // needs no coupling to any router. Rows with an in-flight mutation are kept
-  // by the per-record merge until the op settles — acceptable for the moments
-  // around a switch, and the next refresh clears them.
+  // by the per-record merge until the op settles; when any were pending at
+  // switch time, the settle wrapper above runs one more refresh after the
+  // last of them drains, so those rows cannot outlive their operations.
   useEffect(
     () =>
       subscribeActiveTenant(() => {
+        if (recordOps.anyPending()) pendingTenantRefreshRef.current = true;
         void refreshProjects();
       }),
-    [refreshProjects],
+    [recordOps, refreshProjects],
   );
 
   const clearError = useCallback(() => setPersistError(null), []);

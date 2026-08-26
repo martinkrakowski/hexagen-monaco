@@ -127,6 +127,37 @@ describe("HttpSavedProjectsAdapter URL derivation (P-U5)", () => {
     assert.deepEqual(headers, ["rev:8", "rev:8"]);
   });
 
+  it("update captures the tenant ONCE: a switch between the GET and the PUT does not split the operation (PR #666)", async () => {
+    // The tenant source reads a mutable box; the fetcher flips it after the
+    // first request — exactly a user switching tenants mid-operation.
+    const tenantBox = { current: "org-a" as string | null };
+    const requests: { url: string; method: string }[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      requests.push({ url: String(url), method: init?.method ?? "GET" });
+      tenantBox.current = "org-b"; // switch lands mid-flight
+      return new Response(JSON.stringify(sample), {
+        status: 200,
+        headers: { ETag: '"rev:3"' },
+      });
+    }) as unknown as typeof fetch;
+    const adapter = new HttpSavedProjectsAdapter(
+      fetchImpl,
+      () => tenantBox.current,
+    );
+
+    await adapter.updateProjectRecord(sample.id, (p) => ({
+      ...p,
+      name: "renamed",
+    }));
+
+    const base = "/api/tenants/org-a/projects";
+    assert.deepEqual(
+      requests.map((r) => `${r.method} ${r.url}`),
+      [`GET ${base}/${sample.id}`, `PUT ${base}/${sample.id}`],
+      "both halves of the read-modify-write must target the ORIGINAL tenant",
+    );
+  });
+
   it("org tenant: saveProjects (whole-list replace) is refused, not sent", async () => {
     const requests: { url: string; method: string }[] = [];
     const adapter = new HttpSavedProjectsAdapter(

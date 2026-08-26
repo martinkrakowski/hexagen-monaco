@@ -70,8 +70,17 @@ export function TenantProvider({
   if (portRef.current === null) portRef.current = new HttpOrgsAdapter();
   const port = portRef.current;
 
+  // Monotonic ticket so only the LATEST listOrgs response may commit (the
+  // useSavedProjects refresh-ticket precedent, via PR #666 review): mount and
+  // focus can overlap, and an OLDER response landing last would overwrite the
+  // newer list — and could wrongly reset a perfectly valid selection to
+  // personal on the strength of stale membership data.
+  const listTicket = useRef(0);
+
   const refresh = useCallback(async (): Promise<void> => {
+    const ticket = ++listTicket.current;
     const result = await port.listOrgs();
+    if (ticket !== listTicket.current) return;
     // A FAILED fetch (network, signed-out 401) keeps both the current list
     // and the current selection: without a trustworthy membership list there
     // is no basis for resetting anything, and the server re-checks

@@ -153,9 +153,14 @@ export class HttpSavedProjectsAdapter
    * keeps the historical `/api/projects...` alias; an org id addresses the
    * tenant-scoped routes, which run the same shared handlers server-side
    * (app/lib/project-route-handlers.ts, D-A8).
+   *
+   * Takes the tenant as an ARGUMENT instead of reading the source itself
+   * (PR #666 review): every public method captures the active tenant exactly
+   * once at entry, so a multi-request operation (update = GET then PUT) can
+   * never split across tenants when the user switches mid-flight — the whole
+   * operation belongs to the tenant that was active when it began.
    */
-  private projectsUrl(suffix = ""): string {
-    const tenantId = this.tenantIdSource();
+  private projectsUrlFor(tenantId: string | null, suffix = ""): string {
     if (tenantId === null) return `/api/projects${suffix}`;
     return `/api/tenants/${encodeURIComponent(tenantId)}/projects${suffix}`;
   }
@@ -227,7 +232,8 @@ export class HttpSavedProjectsAdapter
   }
 
   async loadProjects(): Promise<Result<SavedProject[], PersistenceError>> {
-    const result = await this.request(this.projectsUrl());
+    const tenantId = this.tenantIdSource();
+    const result = await this.request(this.projectsUrlFor(tenantId));
     if (!result.success) return result;
     const projects = asProjects(result.value.body);
     this.ownerInitialized = asInitialized(result.value.body, projects);
@@ -244,7 +250,8 @@ export class HttpSavedProjectsAdapter
     // everyone). Refusing here, instead of PUTting a nonexistent route, keeps
     // the failure typed and keeps stray boot-time writers (migrations) from
     // ever bulk-writing into an org.
-    if (this.tenantIdSource() !== null) {
+    const tenantId = this.tenantIdSource();
+    if (tenantId !== null) {
       return {
         success: false,
         error: persistError(
@@ -265,10 +272,13 @@ export class HttpSavedProjectsAdapter
   async createProjectRecord(
     project: SavedProject,
   ): Promise<Result<SavedProject, PersistenceError>> {
-    const result = await this.request(this.projectsUrl(), {
-      method: "POST",
-      body: JSON.stringify(project),
-    });
+    const result = await this.request(
+      this.projectsUrlFor(this.tenantIdSource()),
+      {
+        method: "POST",
+        body: JSON.stringify(project),
+      },
+    );
     if (!result.success) return result;
     this.ownerInitialized = true;
     return {
@@ -287,7 +297,12 @@ export class HttpSavedProjectsAdapter
     // silently. A 409 is a decision by the server, not a transient blip, so it
     // is surfaced to the caller instead of being retried away. The
     // reload-and-merge UI that consumes it is P-A5.
-    const loaded = await this.request(this.projectsUrl(`/${id}`));
+    // Tenant captured ONCE for the whole read-modify-write (PR #666 review):
+    // re-reading between the GET and the PUT let a mid-operation switch read
+    // one tenant and write another — with the first tenant's rev token as
+    // the precondition.
+    const itemUrl = this.projectsUrlFor(this.tenantIdSource(), `/${id}`);
+    const loaded = await this.request(itemUrl);
     if (!loaded.success) return loaded;
     const current = loaded.value.body as SavedProject;
     const updated = updater(current);
@@ -297,7 +312,7 @@ export class HttpSavedProjectsAdapter
     // Canonical token from GET (or a prior PUT) first; legacy `updatedAt`
     // only when the server has not yet advertised a rev ETag.
     const ifMatch = this.revTokens.get(id) ?? String(current.updatedAt);
-    const written = await this.request(this.projectsUrl(`/${id}`), {
+    const written = await this.request(itemUrl, {
       method: "PUT",
       headers: { "If-Match": ifMatch },
       body: JSON.stringify(updated),
@@ -316,9 +331,12 @@ export class HttpSavedProjectsAdapter
   async deleteProjectRecord(
     id: string,
   ): Promise<Result<void, PersistenceError>> {
-    const result = await this.request(this.projectsUrl(`/${id}`), {
-      method: "DELETE",
-    });
+    const result = await this.request(
+      this.projectsUrlFor(this.tenantIdSource(), `/${id}`),
+      {
+        method: "DELETE",
+      },
+    );
     if (!result.success && result.error.kind === "NotFound") {
       return { success: true, value: undefined };
     }
