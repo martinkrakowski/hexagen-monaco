@@ -14,6 +14,13 @@ interface TeamStepProps {
   readonly onBack: () => void;
   /** Continue WITHOUT a team — prominent, because a first team is optional. */
   readonly onSkip: () => void;
+  /**
+   * The WIZARD-WIDE "Skip setup" every intermediate step carries (D-U4:
+   * complete onboarding and leave). Distinct from `onSkip`, which only skips
+   * THIS step — losing this action made the team step the one screen with no
+   * way out of the wizard (review flag on #667).
+   */
+  readonly onSkipSetup: () => void;
 }
 
 /**
@@ -27,6 +34,7 @@ export function TeamStep({
   onCreate,
   onBack,
   onSkip,
+  onSkipSetup,
 }: TeamStepProps) {
   const { name, slug, handleNameChange, handleSlugChange } = useNameSlug();
 
@@ -53,6 +61,9 @@ export function TeamStep({
           <Button variant="secondary" onClick={onBack} disabled={busy}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
+          </Button>
+          <Button variant="secondary" onClick={onSkipSetup} disabled={busy}>
+            Skip setup
           </Button>
           <Button
             variant="secondary"

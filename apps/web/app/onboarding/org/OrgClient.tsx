@@ -9,6 +9,10 @@ import { completeOnboardingAndGo } from "../complete-onboarding";
 
 type OrgsGateway = Pick<HttpOrgsAdapter, "createOrg" | "listOrgs">;
 
+// Module-level default (see DoneClient): a per-render `new HttpOrgsAdapter()`
+// prop default is a fresh identity every render.
+const defaultGateway: OrgsGateway = new HttpOrgsAdapter();
+
 interface OrgClientProps {
   readonly router?: {
     push: (url: string) => void;
@@ -19,7 +23,7 @@ interface OrgClientProps {
 
 export function OrgClient({
   router: injectedRouter,
-  gateway = new HttpOrgsAdapter(),
+  gateway = defaultGateway,
 }: OrgClientProps) {
   const defaultRouter = useRouter();
   const router = injectedRouter ?? defaultRouter;
@@ -56,14 +60,25 @@ export function OrgClient({
         // page already carries the created org (`?org=`), or the caller
         // already OWNS an org with this exact slug, the 409 means "you
         // already did this" — continue forward instead of erroring.
-        if (carriedOrgId) {
-          goToTeam(carriedOrgId);
+        //
+        // The carried id is NEVER trusted bare (review flag on #667): a
+        // stale or tampered `?org=` would silently configure the wrong org
+        // the caller happens to be in. It only counts when listOrgs confirms
+        // the id is among the caller's orgs AND its slug is the one just
+        // submitted; otherwise fall through to the slug-match path, and if
+        // neither matches, the conflict really is someone else's slug.
+        const mine = await gateway.listOrgs();
+        const myOrgs = mine.success ? mine.value : [];
+        const carried = carriedOrgId
+          ? myOrgs.find((o) => o.id === carriedOrgId && o.slug === slug)
+          : undefined;
+        if (carried) {
+          goToTeam(carried.id);
           return;
         }
-        const mine = await gateway.listOrgs();
-        const existing = mine.success
-          ? mine.value.find((o) => o.slug === slug && o.role === "owner")
-          : undefined;
+        const existing = myOrgs.find(
+          (o) => o.slug === slug && o.role === "owner",
+        );
         if (existing) {
           goToTeam(existing.id);
           return;

@@ -5,8 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { TeamStep } from "@/account-onboarding/components/TeamStep";
 import { stepHref } from "@/account-onboarding/domain/onboarding-steps";
 import { HttpOrgsAdapter } from "@/lib/adapters/http-orgs.adapter";
+import { completeOnboardingAndGo } from "../complete-onboarding";
 
 type TeamsGateway = Pick<HttpOrgsAdapter, "createTeam">;
+
+// Module-level default (see DoneClient): a per-render `new HttpOrgsAdapter()`
+// prop default is a fresh identity every render.
+const defaultGateway: TeamsGateway = new HttpOrgsAdapter();
 
 interface TeamClientProps {
   readonly router?: {
@@ -18,7 +23,7 @@ interface TeamClientProps {
 
 export function TeamClient({
   router: injectedRouter,
-  gateway = new HttpOrgsAdapter(),
+  gateway = defaultGateway,
 }: TeamClientProps) {
   const defaultRouter = useRouter();
   const router = injectedRouter ?? defaultRouter;
@@ -63,6 +68,11 @@ export function TeamClient({
     [gateway, orgId, goToInvites],
   );
 
+  const handleSkipSetup = useCallback(() => {
+    setBusy(true);
+    void completeOnboardingAndGo(router);
+  }, [router]);
+
   if (!orgId) return null;
 
   return (
@@ -71,9 +81,10 @@ export function TeamClient({
       validationMessage={validationMessage}
       onCreate={(name, slug) => void handleCreate(name, slug)}
       onBack={() => router.push(stepHref("org"))}
-      // TeamStep's Skip means "no first team" — continue to invites, it does
-      // NOT complete onboarding (unlike the wizard-wide "Skip setup").
+      // TeamStep's Skip means "no first team" — continue to invites; the
+      // wizard-wide "Skip setup" below is the one that completes onboarding.
       onSkip={goToInvites}
+      onSkipSetup={handleSkipSetup}
     />
   );
 }

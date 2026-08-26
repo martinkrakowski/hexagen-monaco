@@ -12,6 +12,12 @@ import { completeOnboardingAndGo } from "../complete-onboarding";
 
 type OrgsGateway = Pick<HttpOrgsAdapter, "listOrgs">;
 
+// MODULE-LEVEL default, not a `= new HttpOrgsAdapter()` prop default: a
+// per-render default would be a fresh object each render, and the summary
+// effect below depends on `gateway` — setSummary would re-render, re-create
+// the adapter, re-run the effect, and refetch forever (review flag on #667).
+const defaultGateway: OrgsGateway = new HttpOrgsAdapter();
+
 interface DoneClientProps {
   readonly router?: {
     push: (url: string) => void;
@@ -48,7 +54,7 @@ async function fetchRosterCounts(
 
 export function DoneClient({
   router: injectedRouter,
-  gateway = new HttpOrgsAdapter(),
+  gateway = defaultGateway,
   fetchImpl = fetchWithCsrf,
 }: DoneClientProps) {
   const defaultRouter = useRouter();

@@ -12,6 +12,10 @@ import { completeOnboardingAndGo } from "../complete-onboarding";
 
 type InvitesGateway = Pick<HttpOrgsAdapter, "inviteMember">;
 
+// Module-level default (see DoneClient): a per-render `new HttpOrgsAdapter()`
+// prop default is a fresh identity every render.
+const defaultGateway: InvitesGateway = new HttpOrgsAdapter();
+
 interface InvitesClientProps {
   readonly router?: {
     push: (url: string) => void;
@@ -22,7 +26,7 @@ interface InvitesClientProps {
 
 export function InvitesClient({
   router: injectedRouter,
-  gateway = new HttpOrgsAdapter(),
+  gateway = defaultGateway,
 }: InvitesClientProps) {
   const defaultRouter = useRouter();
   const router = injectedRouter ?? defaultRouter;

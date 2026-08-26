@@ -63,12 +63,27 @@ describe("OrgClient", () => {
     );
   });
 
-  it("409 with ?org= already carried: continues forward, no double-create", async () => {
+  it("409 with a VERIFIED carried ?org=: continues forward, no double-create", async () => {
     // Replay (refresh / Back onto a submitted form): the unique index already
     // prevents the duplicate; the container must treat "conflict + already
-    // carried" as done and move on rather than erroring.
+    // carried" as done and move on rather than erroring. The carried id only
+    // counts once listOrgs confirms it is the caller's org with this slug —
+    // so a conflict now costs exactly one listOrgs round-trip.
     navState.reset("org=org-1");
-    const gateway = makeGateway({ createOrg: vi.fn(async () => conflict) });
+    const gateway = makeGateway({
+      createOrg: vi.fn(async () => conflict),
+      listOrgs: vi.fn(async () => ({
+        success: true as const,
+        value: [
+          {
+            id: "org-1",
+            slug: "acme-robotics",
+            name: "Acme Robotics",
+            role: "owner" as const,
+          },
+        ],
+      })),
+    });
     render(<OrgClient gateway={gateway} />);
     submitOrgForm();
     await waitFor(() =>
@@ -76,9 +91,49 @@ describe("OrgClient", () => {
     );
     assert.equal(
       (gateway.listOrgs as ReturnType<typeof vi.fn>).mock.calls.length,
-      0,
-      "the carried id already answers the question — no listOrgs round-trip",
+      1,
+      "the carried id must be verified against listOrgs — exactly one round-trip",
     );
+  });
+
+  it("409 with a stale/tampered ?org=: ignores it, uses the VERIFIED org", async () => {
+    // The caller does own the slug — but under a different org id than the
+    // URL claims. Trusting the carried value bare would silently configure
+    // the wrong org; the container must advance with the verified id.
+    navState.reset("org=org-TAMPERED");
+    const gateway = makeGateway({
+      createOrg: vi.fn(async () => conflict),
+      listOrgs: vi.fn(async () => ({
+        success: true as const,
+        value: [
+          {
+            id: "org-7",
+            slug: "acme-robotics",
+            name: "Acme Robotics",
+            role: "owner" as const,
+          },
+        ],
+      })),
+    });
+    render(<OrgClient gateway={gateway} />);
+    submitOrgForm();
+    await waitFor(() =>
+      assert.deepEqual(navState.pushCalls, ["/onboarding/team?org=org-7"]),
+    );
+  });
+
+  it("409 with a tampered ?org= and no matching org: errors, never advances", async () => {
+    navState.reset("org=org-TAMPERED");
+    const gateway = makeGateway({ createOrg: vi.fn(async () => conflict) });
+    render(<OrgClient gateway={gateway} />);
+    submitOrgForm();
+    await waitFor(() =>
+      assert.match(
+        screen.getByRole("alert").textContent ?? "",
+        /taken — pick another/i,
+      ),
+    );
+    assert.deepEqual(navState.pushCalls, []);
   });
 
   it("409 where listOrgs shows the caller owns that slug: continues forward", async () => {

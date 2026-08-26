@@ -9,6 +9,7 @@ function renderStep(overrides: Partial<Parameters<typeof TeamStep>[0]> = {}) {
     onCreate: vi.fn(),
     onBack: vi.fn(),
     onSkip: vi.fn(),
+    onSkipSetup: vi.fn(),
   };
   render(<TeamStep {...handlers} {...overrides} />);
   return handlers;
@@ -19,6 +20,21 @@ describe("TeamStep", () => {
     const handlers = renderStep();
     fireEvent.click(screen.getByRole("button", { name: /skip for now/i }));
     assert.equal(handlers.onSkip.mock.calls.length, 1);
+  });
+
+  it("carries BOTH skips: step-skip to invites AND the wizard-wide Skip setup", () => {
+    // Losing "Skip setup" made this the one intermediate screen with no way
+    // out of the wizard (review flag on #667). The two actions are distinct:
+    // "Skip for now" only skips the team, "Skip setup" completes onboarding.
+    const handlers = renderStep();
+    assert.ok(screen.getByRole("button", { name: /skip for now/i }));
+    fireEvent.click(screen.getByRole("button", { name: /skip setup/i }));
+    assert.equal(handlers.onSkipSetup.mock.calls.length, 1);
+    assert.equal(
+      handlers.onSkip.mock.calls.length,
+      0,
+      "the wizard-wide skip must not fire the step-skip",
+    );
   });
 
   it("Create is disabled until name and slug are valid", () => {
