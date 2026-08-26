@@ -52,6 +52,11 @@ vi.mock("../HeaderMenu", () => ({
 vi.mock("../ProjectMenu", () => ({
   ProjectMenu: () => null,
 }));
+// P-U5: TenantMenu calls useSession (throws without a SessionProvider) — it
+// is sibling chrome here, covered by its own suite.
+vi.mock("../TenantMenu", () => ({
+  TenantMenu: () => null,
+}));
 vi.mock("../ExportStatusStrip", () => ({
   ExportStatusStrip: () => null,
 }));

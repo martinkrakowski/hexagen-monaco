@@ -5,6 +5,7 @@ import type {
   SavedProjectsPersistencePort,
 } from "@hexagen/shared";
 import { fetchWithCsrf } from "../csrf-fetch";
+import { getActiveTenantId } from "../active-tenant";
 
 function persistError(
   kind: PersistenceError["kind"],
@@ -137,7 +138,32 @@ export class HttpSavedProjectsAdapter
   // adapter issues is cookie-authenticated, so it must echo the double-submit
   // header (app/lib/csrf-fetch.ts). Tests that inject their own fetchImpl are
   // unaffected — the helper only wraps the DEFAULT transport.
-  constructor(private readonly fetchImpl: typeof fetch = fetchWithCsrf) {}
+  //
+  // `tenantIdSource` defaults to the module-level active-tenant store (P-U5):
+  // this adapter is a wire.client singleton constructed once at module scope,
+  // so tenant selection must be read per REQUEST through a getter, never
+  // captured at construction time.
+  constructor(
+    private readonly fetchImpl: typeof fetch = fetchWithCsrf,
+    private readonly tenantIdSource: () => string | null = getActiveTenantId,
+  ) {}
+
+  /**
+   * The ONE place request URLs are derived (P-U5). Personal tenant (null)
+   * keeps the historical `/api/projects...` alias; an org id addresses the
+   * tenant-scoped routes, which run the same shared handlers server-side
+   * (app/lib/project-route-handlers.ts, D-A8).
+   *
+   * Takes the tenant as an ARGUMENT instead of reading the source itself
+   * (PR #666 review): every public method captures the active tenant exactly
+   * once at entry, so a multi-request operation (update = GET then PUT) can
+   * never split across tenants when the user switches mid-flight — the whole
+   * operation belongs to the tenant that was active when it began.
+   */
+  private projectsUrlFor(tenantId: string | null, suffix = ""): string {
+    if (tenantId === null) return `/api/projects${suffix}`;
+    return `/api/tenants/${encodeURIComponent(tenantId)}/projects${suffix}`;
+  }
 
   isOwnerInitialized(): boolean {
     return this.ownerInitialized;
@@ -206,7 +232,8 @@ export class HttpSavedProjectsAdapter
   }
 
   async loadProjects(): Promise<Result<SavedProject[], PersistenceError>> {
-    const result = await this.request("/api/projects");
+    const tenantId = this.tenantIdSource();
+    const result = await this.request(this.projectsUrlFor(tenantId));
     if (!result.success) return result;
     const projects = asProjects(result.value.body);
     this.ownerInitialized = asInitialized(result.value.body, projects);
@@ -217,6 +244,22 @@ export class HttpSavedProjectsAdapter
   async saveProjects(
     projects: SavedProject[],
   ): Promise<Result<void, PersistenceError>> {
+    // Whole-list replacement exists ONLY on the personal alias — the tenant
+    // routes deliberately expose no collection PUT (an org's list is shared
+    // state; replacing it wholesale from one member's browser would clobber
+    // everyone). Refusing here, instead of PUTting a nonexistent route, keeps
+    // the failure typed and keeps stray boot-time writers (migrations) from
+    // ever bulk-writing into an org.
+    const tenantId = this.tenantIdSource();
+    if (tenantId !== null) {
+      return {
+        success: false,
+        error: persistError(
+          "Unknown",
+          "Replacing the whole project list is personal-tenant-only",
+        ),
+      };
+    }
     const result = await this.request("/api/projects", {
       method: "PUT",
       body: JSON.stringify({ projects }),
@@ -229,10 +272,13 @@ export class HttpSavedProjectsAdapter
   async createProjectRecord(
     project: SavedProject,
   ): Promise<Result<SavedProject, PersistenceError>> {
-    const result = await this.request("/api/projects", {
-      method: "POST",
-      body: JSON.stringify(project),
-    });
+    const result = await this.request(
+      this.projectsUrlFor(this.tenantIdSource()),
+      {
+        method: "POST",
+        body: JSON.stringify(project),
+      },
+    );
     if (!result.success) return result;
     this.ownerInitialized = true;
     return {
@@ -251,7 +297,12 @@ export class HttpSavedProjectsAdapter
     // silently. A 409 is a decision by the server, not a transient blip, so it
     // is surfaced to the caller instead of being retried away. The
     // reload-and-merge UI that consumes it is P-A5.
-    const loaded = await this.request(`/api/projects/${id}`);
+    // Tenant captured ONCE for the whole read-modify-write (PR #666 review):
+    // re-reading between the GET and the PUT let a mid-operation switch read
+    // one tenant and write another — with the first tenant's rev token as
+    // the precondition.
+    const itemUrl = this.projectsUrlFor(this.tenantIdSource(), `/${id}`);
+    const loaded = await this.request(itemUrl);
     if (!loaded.success) return loaded;
     const current = loaded.value.body as SavedProject;
     const updated = updater(current);
@@ -261,7 +312,7 @@ export class HttpSavedProjectsAdapter
     // Canonical token from GET (or a prior PUT) first; legacy `updatedAt`
     // only when the server has not yet advertised a rev ETag.
     const ifMatch = this.revTokens.get(id) ?? String(current.updatedAt);
-    const written = await this.request(`/api/projects/${id}`, {
+    const written = await this.request(itemUrl, {
       method: "PUT",
       headers: { "If-Match": ifMatch },
       body: JSON.stringify(updated),
@@ -280,9 +331,12 @@ export class HttpSavedProjectsAdapter
   async deleteProjectRecord(
     id: string,
   ): Promise<Result<void, PersistenceError>> {
-    const result = await this.request(`/api/projects/${id}`, {
-      method: "DELETE",
-    });
+    const result = await this.request(
+      this.projectsUrlFor(this.tenantIdSource(), `/${id}`),
+      {
+        method: "DELETE",
+      },
+    );
     if (!result.success && result.error.kind === "NotFound") {
       return { success: true, value: undefined };
     }
@@ -298,9 +352,25 @@ export class CachedSavedProjectsAdapter implements SavedProjectsPersistencePort 
   constructor(
     private readonly cache: SavedProjectsPersistencePort,
     private readonly remote: SavedProjectsPersistencePort,
+    // Same getter the HTTP adapter derives its URLs from, so the two can
+    // never disagree about which tenant a request belongs to.
+    private readonly tenantIdSource: () => string | null = getActiveTenantId,
   ) {}
 
+  /**
+   * H1.7: the IDB cache is PERSONAL-TENANT-ONLY. When an org tenant is
+   * active every operation goes remote-only — a remote failure surfaces as
+   * an error instead of falling back to the cache, because the cache holds
+   * the personal tenant's projects and serving them here would silently
+   * render the WRONG tenant's data. The cache is neither read nor written
+   * while an org is active, so it stays a faithful personal-tenant mirror.
+   */
+  private orgTenantActive(): boolean {
+    return this.tenantIdSource() !== null;
+  }
+
   async loadProjects(): Promise<Result<SavedProject[], PersistenceError>> {
+    if (this.orgTenantActive()) return this.remote.loadProjects();
     const remote = await this.remote.loadProjects();
     if (!remote.success) return this.cache.loadProjects();
     const initialized = isOwnerInitializedPort(this.remote)
@@ -337,6 +407,7 @@ export class CachedSavedProjectsAdapter implements SavedProjectsPersistencePort 
   async saveProjects(
     projects: SavedProject[],
   ): Promise<Result<void, PersistenceError>> {
+    if (this.orgTenantActive()) return this.remote.saveProjects(projects);
     const remote = await this.remote.saveProjects(projects);
     if (remote.success) {
       await this.cache.saveProjects(projects);
@@ -351,6 +422,7 @@ export class CachedSavedProjectsAdapter implements SavedProjectsPersistencePort 
   async createProjectRecord(
     project: SavedProject,
   ): Promise<Result<SavedProject, PersistenceError>> {
+    if (this.orgTenantActive()) return this.remote.createProjectRecord(project);
     const remote = await this.remote.createProjectRecord(project);
     if (remote.success) {
       const updated = await this.cache.updateProjectRecord(
@@ -372,6 +444,9 @@ export class CachedSavedProjectsAdapter implements SavedProjectsPersistencePort 
     id: string,
     updater: (project: SavedProject) => SavedProject,
   ): Promise<Result<SavedProject, PersistenceError>> {
+    if (this.orgTenantActive()) {
+      return this.remote.updateProjectRecord(id, updater);
+    }
     const remote = await this.remote.updateProjectRecord(id, updater);
     if (remote.success) {
       await this.cache.updateProjectRecord(id, () => remote.value);
@@ -386,6 +461,7 @@ export class CachedSavedProjectsAdapter implements SavedProjectsPersistencePort 
   async deleteProjectRecord(
     id: string,
   ): Promise<Result<void, PersistenceError>> {
+    if (this.orgTenantActive()) return this.remote.deleteProjectRecord(id);
     const remote = await this.remote.deleteProjectRecord(id);
     if (remote.success) {
       await this.cache.deleteProjectRecord(id);

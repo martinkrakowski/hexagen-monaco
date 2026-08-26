@@ -1,5 +1,8 @@
 import { NextRequest } from "next/server";
-import { handleProjectCreate } from "../../../../lib/project-route-handlers";
+import {
+  handleProjectCreate,
+  handleProjectList,
+} from "../../../../lib/project-route-handlers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +20,21 @@ export const dynamic = "force-dynamic";
  * the same module, so the two addresses cannot drift apart in what they
  * permit.
  */
+/**
+ * Tenant-addressed project listing (P-U5). Without this the collection route
+ * was create-only: an org member could put a project into the org and then
+ * never see it again. Same shared handler pattern as POST — the personal
+ * alias (`GET /api/projects`) calls the same module, so the two addresses
+ * cannot drift apart in what they permit.
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ ownerId: string }> },
+) {
+  const { ownerId } = await params;
+  return handleProjectList(request, ownerId);
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ ownerId: string }> },
