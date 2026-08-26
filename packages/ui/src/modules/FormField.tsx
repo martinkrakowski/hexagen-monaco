@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import type { AriaAttributes, ReactElement } from "react";
 import { Children, cloneElement } from "react";
 import { Label } from "../elements/Label.js";
 import { cn } from "../lib/utils.js";
@@ -20,7 +20,10 @@ import type { NoSemanticState } from "../types/forbidden-brand.js";
 export type FormFieldProps = NoSemanticState<{
   label: string;
   htmlFor: string;
-  children: ReactElement<{ "aria-describedby"?: string }>;
+  children: ReactElement<{
+    "aria-describedby"?: string;
+    "aria-invalid"?: AriaAttributes["aria-invalid"];
+  }>;
   validationMessage?: string;
   hint?: string;
   className?: string;
@@ -48,7 +51,12 @@ export function FormField({
   return (
     <div className={cn("flex flex-col gap-2", className)}>
       <Label htmlFor={htmlFor}>{label}</Label>
-      {cloneElement(child, { "aria-describedby": describedBy })}
+      {cloneElement(child, {
+        "aria-describedby": describedBy,
+        // The description alone does not tell assistive tech the field is
+        // INVALID; the state and the message travel together.
+        ...(validationMessage ? { "aria-invalid": true } : {}),
+      })}
       {hint ? (
         <p id={hintId} className="text-sm text-muted-foreground">
           {hint}

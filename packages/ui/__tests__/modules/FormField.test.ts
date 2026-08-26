@@ -85,4 +85,24 @@ describe("FormField component", () => {
       "external-note email-hint email-validation",
     );
   });
+
+  it("marks the control aria-invalid exactly when a validation message shows", () => {
+    const { container, rerender } = renderField({
+      validationMessage: "Required",
+    });
+    const input = container.querySelector("input");
+    assert.equal(input?.getAttribute("aria-invalid"), "true");
+    rerender(
+      React.createElement(FormField, {
+        label: "Email",
+        htmlFor: "email",
+        children: React.createElement("input", { id: "email", type: "email" }),
+      }),
+    );
+    assert.equal(
+      container.querySelector("input")?.hasAttribute("aria-invalid"),
+      false,
+      "a valid field must not carry a stale invalid flag",
+    );
+  });
 });

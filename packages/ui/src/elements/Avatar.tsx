@@ -48,8 +48,11 @@ function initialsFromName(name: string): string {
 }
 
 export function Avatar({ name, src, size, className }: AvatarProps) {
-  const [imageFailed, setImageFailed] = useState(false);
-  const showImage = Boolean(src) && !imageFailed;
+  // Failure is remembered PER SOURCE: a new src gets a fresh attempt, so an
+  // avatar reused across user changes (or a refreshed image URL) is not
+  // permanently stuck on initials after one bad load.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const showImage = Boolean(src) && failedSrc !== src;
 
   if (showImage) {
     return (
@@ -58,7 +61,7 @@ export function Avatar({ name, src, size, className }: AvatarProps) {
           src={src}
           alt={name}
           className="h-full w-full object-cover"
-          onError={() => setImageFailed(true)}
+          onError={() => setFailedSrc(src ?? null)}
         />
       </span>
     );

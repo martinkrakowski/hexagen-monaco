@@ -80,4 +80,22 @@ describe("Avatar component", () => {
     );
     assert.match(second.getByRole("img").className, /h-10/);
   });
+
+  it("a NEW src after a failure gets a fresh attempt — failure is per source", () => {
+    const { container, rerender } = render(
+      React.createElement(Avatar, { name: "Ada Lovelace", src: "/broken.png" }),
+    );
+    const img = container.querySelector("img");
+    assert.ok(img, "image mode must render first");
+    fireEvent.error(img as HTMLImageElement);
+    assert.equal(container.querySelector("img"), null, "fallback after error");
+
+    rerender(
+      React.createElement(Avatar, { name: "Ada Lovelace", src: "/fixed.png" }),
+    );
+    assert.ok(
+      container.querySelector("img"),
+      "a different src must not inherit the previous failure",
+    );
+  });
 });
