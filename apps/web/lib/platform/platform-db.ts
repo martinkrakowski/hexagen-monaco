@@ -27,6 +27,7 @@ export function openPlatformDb(dbPath: string): Database.Database {
       email_verified TEXT,
       image TEXT,
       github_login TEXT,
+      onboarded_at TEXT,
       created_at TEXT NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email
@@ -65,6 +66,7 @@ export function openPlatformDb(dbPath: string): Database.Database {
   // an existing database, so the column arrives by ALTER before the partial
   // index below can name it.
   migrateUsersGithubLogin(db);
+  migrateUsersOnboardedAt(db);
   migrateSavedProjects(db);
   migrateSavedProjectsRev(db);
   migrateRunEvents(db);
@@ -499,6 +501,21 @@ function migrateUsersGithubLogin(db: Database.Database): void {
   if (!tableExists(db, "users")) return;
   if (tableHasColumn(db, "users", "github_login")) return;
   db.exec("ALTER TABLE users ADD COLUMN github_login TEXT");
+}
+
+/**
+ * P-U0b: `users.onboarded_at`, added by ALTER on databases that predate it.
+ *
+ * Nullable, and deliberately NOT backfilled: NULL is the correct state for
+ * every existing user — "has not completed onboarding" — and the value is
+ * only ever written by `markOnboarded` when the user finishes (or skips,
+ * which counts as finishing — D-U4) the wizard. Stamping existing users here
+ * would silently exempt them from onboarding they never saw.
+ */
+function migrateUsersOnboardedAt(db: Database.Database): void {
+  if (!tableExists(db, "users")) return;
+  if (tableHasColumn(db, "users", "onboarded_at")) return;
+  db.exec("ALTER TABLE users ADD COLUMN onboarded_at TEXT");
 }
 
 /**
