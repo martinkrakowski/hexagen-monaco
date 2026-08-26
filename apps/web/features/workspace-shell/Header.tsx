@@ -3,6 +3,7 @@
 import { useTheme } from "@/hooks/useTheme";
 import { Sun, Moon } from "lucide-react";
 import { HeaderMenu } from "./HeaderMenu";
+import { TenantMenu } from "./TenantMenu";
 import { ProjectMenu } from "./ProjectMenu";
 import { ExportStatusStrip } from "./ExportStatusStrip";
 import { ExportDialog } from "../export/ExportDialog";
@@ -117,6 +118,9 @@ export function Header({
             theme={theme}
           />
           <div className="hidden lg:flex items-center gap-2">
+            {/* Desktop-only tenant switcher; renders nothing when signed out
+                or when no TenantProvider is mounted (wizard chrome). */}
+            <TenantMenu />
             <ProjectMenu
               onNewProject={onNewProject}
               onNavigateToProjects={onNavigateToProjects}

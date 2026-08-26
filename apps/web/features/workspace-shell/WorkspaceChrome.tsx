@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Header } from "@/workspace-shell/Header";
 import { ExportProvider } from "@/contexts/ExportContext";
+import { TenantProvider } from "@/contexts/TenantContext";
 
 /**
  * The application chrome — topbar plus the padded main region — extracted
@@ -16,15 +17,19 @@ export function WorkspaceChrome({ children }: { children: React.ReactNode }) {
 
   return (
     <ExportProvider>
-      <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
-        <Header
-          onLoadManifest={() => router.push("/projects/new/import")}
-          onNewProject={() => router.push("/projects/new")}
-          onOpenWelcomeManifest={() => router.push("/projects/new/ai")}
-          onNavigateToProjects={() => router.push("/projects")}
-        />
-        <main className="flex-1 overflow-hidden p-4">{children}</main>
-      </div>
+      {/* Tenant selection is chrome-level state (P-U5): both /projects and
+          /login render inside this shell, so they share one provider. */}
+      <TenantProvider>
+        <div className="flex flex-col h-screen w-full overflow-hidden bg-background text-foreground">
+          <Header
+            onLoadManifest={() => router.push("/projects/new/import")}
+            onNewProject={() => router.push("/projects/new")}
+            onOpenWelcomeManifest={() => router.push("/projects/new/ai")}
+            onNavigateToProjects={() => router.push("/projects")}
+          />
+          <main className="flex-1 overflow-hidden p-4">{children}</main>
+        </div>
+      </TenantProvider>
     </ExportProvider>
   );
 }

@@ -209,6 +209,38 @@ export async function handleProjectCreate(
   return NextResponse.json(created.value, { status: 201 });
 }
 
+/**
+ * List every project owned by `ownerId` — the personal tenant, or an org.
+ *
+ * Added for the tenant switcher (P-U5): the tenant collection route carried
+ * only POST, so an org member could create a project in the org but never see
+ * it again. Same shape as the personal `GET /api/projects` (which now calls
+ * this too, so the two addresses cannot drift): `projects`, `initialized`,
+ * and the tenant's `ownerId` so the client can stamp what it fetched.
+ *
+ * Authorization is `requireTenant`, matching creation: any org member may
+ * read the org's list (H1.3 — org role gates administration, not project
+ * data).
+ */
+export async function handleProjectList(
+  request: NextRequest,
+  ownerId: string,
+): Promise<NextResponse> {
+  const tenant = await requireTenant(request, ownerId);
+  if (!tenant.ok) return tenant.response;
+
+  const store = getPlatformStore();
+  const loaded = await store.projectsFor(tenant.tenantId).loadProjects();
+  if (!loaded.success) {
+    return persistenceError("persistence", loaded.error.message);
+  }
+  return NextResponse.json({
+    projects: loaded.value,
+    initialized: store.isProjectsInitialized(tenant.tenantId),
+    ownerId: tenant.tenantId,
+  });
+}
+
 export async function handleProjectGet(
   request: NextRequest,
   ownerId: string,

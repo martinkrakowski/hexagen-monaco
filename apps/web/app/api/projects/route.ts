@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { guardMutation, readJsonBody } from "../../lib/request-guards";
 import { getPlatformStore } from "../../../lib/platform";
-import { handleProjectCreate } from "../../lib/project-route-handlers";
+import {
+  handleProjectCreate,
+  handleProjectList,
+} from "../../lib/project-route-handlers";
 import { parseSavedProjectBody } from "../../../lib/platform/saved-project-body";
 import {
   PROJECT_MUTATION_GUARD,
@@ -12,27 +15,17 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * The personal-tenant alias for listing (P-U5, same move D-A8 made for
+ * creation): the implementation lives in the shared handler that
+ * `GET /api/tenants/[ownerId]/projects` also calls, so the two addresses
+ * cannot drift apart. `requireTenant` inside answers `self` without a
+ * membership lookup.
+ */
 export async function GET(request: NextRequest) {
   const owner = await requirePersistenceOwner(request);
   if (!owner.ok) return owner.response;
-
-  const store = getPlatformStore();
-  const loaded = await store.projectsFor(owner.ownerId).loadProjects();
-  if (!loaded.success) {
-    return NextResponse.json(
-      {
-        error: "persistence",
-        message: loaded.error.message,
-        statusCode: 500,
-      },
-      { status: 500 },
-    );
-  }
-  return NextResponse.json({
-    projects: loaded.value,
-    initialized: store.isProjectsInitialized(owner.ownerId),
-    ownerId: owner.ownerId,
-  });
+  return handleProjectList(request, owner.ownerId);
 }
 
 /**

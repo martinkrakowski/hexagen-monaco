@@ -14,6 +14,7 @@ import {
   getSavedProjectsPersistence,
   getMigrationReady,
 } from "../lib/wire.client";
+import { subscribeActiveTenant } from "../lib/active-tenant";
 
 /**
  * App-level narrowing of the domain `SavedProject`: `formState` is the concrete
@@ -241,6 +242,24 @@ export function useSavedProjects() {
     };
     load();
   }, [refreshProjects]);
+
+  // Tenant switch (P-U5): the persistence adapters derive their URLs from the
+  // module-level active-tenant store, so the moment the selection changes,
+  // every row in local state belongs to the OLD tenant. A store subscription
+  // that re-runs the EXISTING refresh path is the reload mechanism, chosen
+  // over router.refresh()/remount because it is targeted (only this hook's
+  // data is tenant-scoped), already race-safe (the monotonic ticket drops a
+  // slow pre-switch read that would resurrect the old tenant's rows), and
+  // needs no coupling to any router. Rows with an in-flight mutation are kept
+  // by the per-record merge until the op settles — acceptable for the moments
+  // around a switch, and the next refresh clears them.
+  useEffect(
+    () =>
+      subscribeActiveTenant(() => {
+        void refreshProjects();
+      }),
+    [refreshProjects],
+  );
 
   const clearError = useCallback(() => setPersistError(null), []);
 
