@@ -45,6 +45,51 @@ function requireOwnerRole(access: string): NextResponse | null {
  */
 const GITHUB_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
 
+/**
+ * Org roster (P-U0b): live members plus pending invites.
+ *
+ * ANY org member may read — seeing who shares your org is not an
+ * administrative act, so unlike the mutations below there is no
+ * `requireOwnerRole` gate. Outsiders still get `requireTenant`'s uniform 403,
+ * which discloses nothing about whether the org exists (D-A4).
+ *
+ * `listPendingInvites` already excludes expired invites, so the response
+ * never advertises a grant that can no longer be redeemed. Members and
+ * invites are kept as separate arrays on purpose: an invite is NOT a
+ * membership (nothing exists until the invitee's next sign-in), and a client
+ * that merged them would be lying — see the 202 reasoning on POST below.
+ */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ orgId: string }> },
+) {
+  const { orgId } = await params;
+  const tenant = await requireTenant(request, orgId);
+  if (!tenant.ok) return tenant.response;
+
+  const store = getPlatformStore();
+  const [members, pending] = await Promise.all([
+    store.orgs.listMembers(orgId),
+    store.orgs.listPendingInvites(orgId),
+  ]);
+  // Explicit field mapping, not a pass-through: `OrgInvite` also carries
+  // `acceptedAt`/`orgId`/`createdAt`, and future store fields must not leak
+  // onto the wire by default.
+  return NextResponse.json({
+    members: members.map((m) => ({
+      userId: m.userId,
+      role: m.role,
+      createdAt: m.createdAt,
+    })),
+    pendingInvites: pending.map((invite) => ({
+      githubLogin: invite.githubLogin,
+      role: invite.role,
+      expiresAt: invite.expiresAt,
+      invitedBy: invite.invitedBy,
+    })),
+  });
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ orgId: string }> },

@@ -57,6 +57,25 @@ export interface AuthRepository {
    */
   setGithubLogin(userId: string, login: string): Promise<void>;
   getUserByGithubLogin(login: string): AdapterUser | null;
+  /**
+   * P-U0b: when this user completed (or skipped — D-U4) onboarding.
+   *
+   * NULL means "never" — the state every user starts in, including everyone
+   * who predates the column. Unknown user ids also read as NULL: the caller
+   * holds a JWT `sub`, and "no row" and "not onboarded" demand the same
+   * response.
+   */
+  getOnboardedAt(userId: string): Promise<string | null>;
+  /**
+   * Stamp onboarding complete — once.
+   *
+   * Idempotent BY THE STATEMENT, not by a read-first: the UPDATE's
+   * `AND onboarded_at IS NULL` clause makes a second call a no-op, so the
+   * original timestamp survives replays (a wizard "Done" double-click, a
+   * refreshed final step). A SELECT-then-UPDATE would race two concurrent
+   * completions into two different timestamps, the later one winning.
+   */
+  markOnboarded(userId: string): Promise<void>;
   linkAccount(account: AdapterAccount): void;
   unlinkAccount(provider: string, providerAccountId: string): void;
   createSession(session: {
@@ -110,6 +129,14 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
   );
   const selectUserByGithubLogin = db.prepare(
     "SELECT * FROM users WHERE github_login = ?",
+  );
+  const selectOnboardedAt = db.prepare(
+    "SELECT onboarded_at FROM users WHERE id = ?",
+  );
+  const markOnboarded = db.prepare(
+    `UPDATE users
+        SET onboarded_at = @onboarded_at
+      WHERE id = @id AND onboarded_at IS NULL`,
   );
   const insertAccount = db.prepare(`
     INSERT INTO accounts (provider, provider_account_id, user_id, type)
@@ -204,6 +231,18 @@ export function createAuthRepository(db: Database.Database): AuthRepository {
       if (!canonical) return null;
       const row = selectUserByGithubLogin.get(canonical) as UserRow | undefined;
       return row ? toAdapterUser(row) : null;
+    },
+    async getOnboardedAt(userId) {
+      const row = selectOnboardedAt.get(userId) as
+        | { onboarded_at: string | null }
+        | undefined;
+      return row?.onboarded_at ?? null;
+    },
+    async markOnboarded(userId) {
+      markOnboarded.run({
+        id: userId,
+        onboarded_at: new Date().toISOString(),
+      });
     },
     linkAccount(account) {
       insertAccount.run({

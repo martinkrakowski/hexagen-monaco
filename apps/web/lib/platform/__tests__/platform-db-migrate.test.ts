@@ -81,4 +81,38 @@ describe("openPlatformDb legacy migration", () => {
     assert.deepEqual(pk, ["owner_id", "id"]);
     db.close();
   });
+
+  it("adds users.onboarded_at on reopen, NULL for every existing user (P-U0b)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "hexagen-platform-db-"));
+    const path = join(dir, "platform.db");
+    // A users table from before the column existed. CREATE TABLE IF NOT
+    // EXISTS is a no-op against it, so only the ALTER migration can deliver
+    // the column.
+    const legacy = new Database(path);
+    legacy.exec(`
+      CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        email TEXT,
+        email_verified TEXT,
+        image TEXT,
+        github_login TEXT,
+        created_at TEXT NOT NULL
+      );
+    `);
+    legacy
+      .prepare("INSERT INTO users (id, created_at) VALUES (?, ?)")
+      .run("user-1", new Date().toISOString());
+    legacy.close();
+
+    const db = openPlatformDb(path);
+    const row = db
+      .prepare("SELECT onboarded_at FROM users WHERE id = ?")
+      .get("user-1") as { onboarded_at: string | null };
+    // NULL, not a backfilled stamp: an existing user has NOT completed
+    // onboarding, and stamping them here would exempt them from a wizard
+    // they never saw.
+    assert.equal(row.onboarded_at, null);
+    db.close();
+  });
 });

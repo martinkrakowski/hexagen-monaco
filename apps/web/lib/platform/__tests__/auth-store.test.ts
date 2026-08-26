@@ -44,4 +44,33 @@ describe("auth store + NextAuth adapter", () => {
     assert.equal(byEmail.id, user.id);
     store.close();
   });
+
+  it("markOnboarded stamps once; a replay never moves the timestamp (P-U0b)", async () => {
+    const store = createPlatformStore(":memory:");
+    const user = store.auth.createUser({
+      name: "Octo Cat",
+      email: "octo@example.com",
+      emailVerified: null,
+    });
+
+    assert.equal(await store.auth.getOnboardedAt(user.id), null);
+
+    await store.auth.markOnboarded(user.id);
+    const first = await store.auth.getOnboardedAt(user.id);
+    assert.ok(first, "completion must persist a timestamp");
+
+    // Millisecond precision: without this pause a non-idempotent second
+    // UPDATE could write an identical string and pass by luck.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await store.auth.markOnboarded(user.id);
+    assert.equal(
+      await store.auth.getOnboardedAt(user.id),
+      first,
+      "idempotency lives in the statement's `AND onboarded_at IS NULL`",
+    );
+
+    // Unknown ids read as NULL — same answer as "not onboarded".
+    assert.equal(await store.auth.getOnboardedAt("no-such-user"), null);
+    store.close();
+  });
 });

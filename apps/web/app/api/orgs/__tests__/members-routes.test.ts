@@ -8,8 +8,13 @@ vi.mock("next-auth/jwt", async (importOriginal) => ({
   getToken: vi.fn(),
 }));
 
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { getToken } from "next-auth/jwt";
-import { POST as addMember } from "../[orgId]/members/route";
+import { GET as listRoster, POST as addMember } from "../[orgId]/members/route";
+import { openPlatformDb } from "../../../../lib/platform/platform-db";
 import {
   DELETE as removeMember,
   PATCH as changeRole,
@@ -428,5 +433,116 @@ describe("H1.2 — PATCH /api/orgs/[orgId]/members/[userId]", () => {
     );
     assert.equal(res.status, 200);
     assert.equal(await store.orgs.memberRole(ORG, "founder"), "member");
+  });
+});
+
+describe("P-U0b — GET /api/orgs/[orgId]/members", () => {
+  let previousDbPath: string | undefined;
+
+  beforeEach(() => {
+    closePlatformStore();
+    vi.mocked(getToken).mockReset();
+    previousDbPath = process.env.PLATFORM_DB_PATH;
+  });
+  afterEach(() => {
+    closePlatformStore();
+    if (previousDbPath === undefined) delete process.env.PLATFORM_DB_PATH;
+    else process.env.PLATFORM_DB_PATH = previousDbPath;
+  });
+
+  function getRoster(): NextRequest {
+    return new NextRequest(`http://localhost/api/orgs/${ORG}/members`);
+  }
+
+  /**
+   * Backdates an invite's expiry by writing the column directly (the
+   * org-members.guard.test idiom): the store has no "expire this now" method
+   * and should not — the only way an invite expires in production is the
+   * clock passing `expires_at`, so the test moves the deadline, not the
+   * clock. Needs a file-backed db (a second connection cannot reach the
+   * default `:memory:` store), hence PLATFORM_DB_PATH in the test that uses
+   * it.
+   */
+  function backdateInvite(dbPath: string, login: string): void {
+    const db = openPlatformDb(dbPath);
+    try {
+      db.prepare(
+        "UPDATE org_invites SET expires_at = ? WHERE org_id = ? AND github_login = ?",
+      ).run(new Date(Date.now() - 1000).toISOString(), ORG, login);
+    } finally {
+      db.close();
+    }
+  }
+
+  it("401 without a session", async () => {
+    signedInAs(null);
+    const res = await listRoster(getRoster(), orgParams);
+    assert.equal(res.status, 401);
+  });
+
+  it("403 for a signed-in non-member — and the org exists", async () => {
+    const store = await seedOrg("owner", "founder");
+    assert.ok(await store.orgs.getOrg(ORG));
+
+    signedInAs("outsider");
+    const res = await listRoster(getRoster(), orgParams);
+    assert.equal(res.status, 403);
+  });
+
+  it("200 for a plain MEMBER: members and pending invites, expired invites excluded", async () => {
+    const dbPath = join(
+      mkdtempSync(join(tmpdir(), "hexagen-members-roster-")),
+      "p.db",
+    );
+    process.env.PLATFORM_DB_PATH = dbPath;
+
+    const store = await seedOrg("owner", "founder");
+    await store.orgs.addMember(ORG, "dev-1", "member");
+    await store.orgs.invite(ORG, "ada", "member", { actorId: "founder" });
+    await store.orgs.invite(ORG, "stale", "owner", { actorId: "founder" });
+    backdateInvite(dbPath, "stale");
+
+    // Reading the roster is NOT owner-only: any member may see who they
+    // share the org with.
+    signedInAs("dev-1");
+    const res = await listRoster(getRoster(), orgParams);
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+      members: Array<{ userId: string; role: string; createdAt: string }>;
+      pendingInvites: Array<{
+        githubLogin: string;
+        role: string;
+        expiresAt: string;
+        invitedBy: string;
+      }>;
+    };
+
+    assert.deepEqual(
+      body.members
+        .map(({ userId, role }) => ({ userId, role }))
+        .sort((a, b) => a.userId.localeCompare(b.userId)),
+      [
+        { userId: "dev-1", role: "member" },
+        { userId: "founder", role: "owner" },
+      ],
+    );
+    for (const member of body.members) {
+      assert.ok(member.createdAt, "each membership carries its createdAt");
+    }
+
+    // The expired invite must NOT appear: advertising a grant that can no
+    // longer be redeemed would have the UI promising a membership that will
+    // never arrive.
+    assert.deepEqual(
+      body.pendingInvites.map((i) => i.githubLogin),
+      ["ada"],
+    );
+    const [invite] = body.pendingInvites;
+    assert.equal(invite.role, "member");
+    assert.equal(invite.invitedBy, "founder");
+    assert.ok(
+      invite.expiresAt > new Date().toISOString(),
+      "a listed invite is still redeemable",
+    );
   });
 });
