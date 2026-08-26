@@ -9,6 +9,7 @@ import {
 import { HttpOrgsAdapter } from "@/lib/adapters/http-orgs.adapter";
 import { fetchWithCsrf } from "@/lib/csrf-fetch";
 import { completeOnboardingAndGo } from "../complete-onboarding";
+import { setActiveTenantId } from "@/lib/active-tenant";
 
 type OrgsGateway = Pick<HttpOrgsAdapter, "listOrgs">;
 
@@ -102,9 +103,14 @@ export function DoneClient({
 
   const handleGo = useCallback(() => {
     setBusy(true);
-    // Tenant preselection of the new org is wired in a later packet.
+    // Land INSIDE what the wizard just built: with an org created, the
+    // workspace opens on that org's tenant — otherwise the user's first
+    // sight after "create an organization" would be their personal
+    // projects, with the org hidden behind the tenant menu (A5).
+    if (orgId) setActiveTenantId(orgId);
+
     void completeOnboardingAndGo(router);
-  }, [router]);
+  }, [router, orgId]);
 
   return (
     <DoneStep

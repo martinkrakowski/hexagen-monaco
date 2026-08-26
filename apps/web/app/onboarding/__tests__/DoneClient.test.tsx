@@ -11,6 +11,7 @@ vi.mock("next/navigation", async () =>
 
 import { navState } from "../../../features/workspace-shell/plan-phase/__tests__/nav-stub";
 import { DoneClient } from "../done/DoneClient";
+import { getActiveTenantId, setActiveTenantId } from "../../lib/active-tenant";
 
 function jsonResponse(body: unknown) {
   return new Response(JSON.stringify(body), {
@@ -97,5 +98,54 @@ describe("DoneClient", () => {
     await waitFor(() => assert.ok(screen.getByText(/personal workspace/i)));
     assert.equal(fetchMock.mock.calls.length, 0);
     assert.equal(listOrgs.mock.calls.length, 0);
+  });
+});
+
+describe("Done → workspace tenant handoff (P-U6)", () => {
+  beforeEach(() => setActiveTenantId(null));
+  afterEach(() => setActiveTenantId(null));
+
+  it("with a created org, Go selects that org's tenant before leaving", async () => {
+    // fireEvent on the button after summary settles; ?org= carried.
+    const { fireEvent } = await import("@testing-library/react");
+    const gateway = {
+      listOrgs: async () => ({
+        success: true as const,
+        value: [{ id: "org-1", slug: "acme", name: "Acme", role: "owner" }],
+      }),
+    };
+    const fetchImpl = vi.fn(async () =>
+      Response.json({ members: [], pendingInvites: [] }),
+    ) as unknown as typeof fetch;
+    navState.reset("org=org-1");
+    render(<DoneClient gateway={gateway as never} fetchImpl={fetchImpl} />);
+    const go = await screen.findByRole("button", {
+      name: /go to your workspace/i,
+    });
+    fireEvent.click(go);
+    assert.equal(
+      getActiveTenantId(),
+      "org-1",
+      "the workspace must open on the org the wizard just created",
+    );
+  });
+
+  it("personal path leaves the tenant untouched", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    navState.reset();
+    render(
+      <DoneClient
+        gateway={
+          {
+            listOrgs: async () => ({ success: true as const, value: [] }),
+          } as never
+        }
+      />,
+    );
+    const go = await screen.findByRole("button", {
+      name: /go to your workspace/i,
+    });
+    fireEvent.click(go);
+    assert.equal(getActiveTenantId(), null);
   });
 });
