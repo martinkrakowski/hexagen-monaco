@@ -1,5 +1,5 @@
 import type { TemplateConfigStorePort } from "../application/ports/template-config-store.port.js";
-import type { TemplateConfig } from "../domain/index.js";
+import type { TemplateConfig, TemplateConfigState } from "../domain/index.js";
 import { emptyConfig } from "../domain/index.js";
 
 /**
@@ -12,6 +12,15 @@ import { emptyConfig } from "../domain/index.js";
 export class InMemoryTemplateConfigStore implements TemplateConfigStorePort {
   async load(): Promise<TemplateConfig> {
     return emptyConfig();
+  }
+
+  /**
+   * There is no durable record in the in-memory flow — `save` persists
+   * nothing, so nothing was ever installed through a record. That is
+   * `absent` (add-on history unknown), never `empty` (known to have none).
+   */
+  async loadState(): Promise<TemplateConfigState> {
+    return { state: "absent" };
   }
 
   async save(): Promise<void> {

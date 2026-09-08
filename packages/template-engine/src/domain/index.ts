@@ -26,11 +26,13 @@ export type {
   TemplateInstallRecord,
   GeneratedFileRecord,
   TemplateConfig,
+  TemplateConfigState,
 } from "./template-config.js";
 export {
   TEMPLATE_CONFIG_FILE,
   emptyConfig,
   isInstalled,
+  configState,
 } from "./template-config.js";
 
 export { conflictFilePath } from "./conflict-path.js";
