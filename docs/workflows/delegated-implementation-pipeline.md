@@ -6,6 +6,11 @@
 > `yarn build && yarn typecheck && yarn lint && yarn test` — no coverage counter, no separate
 > `lint:arch` (it is chained by `lint`), no `sync:check` (`sync` runs the generator). Where a
 > command here disagrees with `.claude/skills/orchestrate-wave/SKILL.md`, **the skill wins.**
+>
+> **Template A and cast.md rule 8 disagree, and rule 8 wins.** Template A asks each lane to
+> append a session-log entry; rule 8 says a lane agent never opens that file — the lane reports
+> itself in its PR body and the orchestrator writes the log at merge time. That also dissolves
+> the shared seam two lanes would otherwise have. Ignore Template A's session-log step.
 
 A reusable workflow for turning a committed plan into merged code with one **orchestrator**
 agent and one or more **implementer** agents, without a human in the loop between waves.
