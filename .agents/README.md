@@ -8,13 +8,14 @@ Agent mode specs (`ORCHESTRATOR.md`, `TESTING.md`, `REVIEW.md`, `yaml-editing-di
 
 ## Files
 
-| File                          | Purpose                                     | Referenced By                         |
-| ----------------------------- | ------------------------------------------- | ------------------------------------- |
-| `ORCHESTRATOR.md`             | Full Orchestrator Mode protocol             | `AGENTS.md` §Orchestrator Mode        |
-| `TESTING.md`                  | Testing protocol for Develop Mode           | `AGENTS.md` §Develop Mode             |
-| `REVIEW.md`                   | Review-bot comment disposition protocol     | `AGENTS.md` §Review & Archeology Mode |
-| `yaml-editing-disciplines.md` | YAML editing rules for .architecture/ files | `AGENTS.md` §YAML editing             |
-| `PR_REVIEW_RUBRIC.md`         | Bot-facing UI-contract rubric for PR-Agent  | `.pr_agent.toml` `repo_context_files` |
+| File                          | Purpose                                     | Referenced By                          |
+| ----------------------------- | ------------------------------------------- | -------------------------------------- |
+| `ORCHESTRATOR.md`             | Full Orchestrator Mode protocol             | `AGENTS.md` §Orchestrator Mode         |
+| `TESTING.md`                  | Testing protocol for Develop Mode           | `AGENTS.md` §Develop Mode              |
+| `REVIEW.md`                   | Review-bot comment disposition protocol     | `AGENTS.md` §Review & Archeology Mode  |
+| `yaml-editing-disciplines.md` | YAML editing rules for .architecture/ files | `AGENTS.md` §YAML editing              |
+| `PR_REVIEW_RUBRIC.md`         | Bot-facing UI-contract rubric for PR-Agent  | `.pr_agent.toml` `repo_context_files`  |
+| `session-log.md`              | Append-only wave records (one per wave)     | `docs/workflows/` (wave orchestration) |
 
 ---
 
