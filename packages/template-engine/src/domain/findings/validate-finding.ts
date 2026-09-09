@@ -192,6 +192,15 @@ export function validateFinding(
         `a fix version has to be recorded or the finding stays open`,
     );
   }
+  // A fixedIn is a version, so it must be one: a bare token like `banana` (or a
+  // `---` fence echo) would otherwise become a fixedIn that no join key ever
+  // matches, the same F-D6 corruption the subjectVersion gate refuses above.
+  if (fixedIn !== null && !isSemver(fixedIn)) {
+    return reject(
+      "fixedIn",
+      `fixedIn '${fixedIn}' is not a well-formed semver version`,
+    );
+  }
 
   // 7. Body — F-D4 §5 risk 3: upstream finds must carry no absolute path from
   //    a downstream repository. Any absolute path that resolves outside the

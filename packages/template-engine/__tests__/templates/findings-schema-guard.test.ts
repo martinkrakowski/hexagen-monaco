@@ -473,6 +473,19 @@ describe("validate-finding — the closed-schema validator", () => {
     expectFailure(findingText({ fixedIn: null }), "fixedIn", baseContext());
   });
 
+  it.each(["banana", "---", "1.2", "v3.0.0"] as const)(
+    "refuses a fixedIn that is not a well-formed semver version (%s)",
+    (fixedIn) => {
+      const err = expectFailure(
+        findingText({ fixedIn }),
+        "fixedIn",
+        baseContext(),
+        "semver",
+      );
+      assert.ok(err.message.includes("fixedIn"), err.message);
+    },
+  );
+
   it("refuses a subjectKind that does not match where the file sits", () => {
     const err = expectFailure(
       findingText({ subjectKind: "component" }),
