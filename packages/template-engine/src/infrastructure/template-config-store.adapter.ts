@@ -25,13 +25,17 @@ export class FileSystemTemplateConfigStore implements TemplateConfigStorePort {
 
   /**
    * Reads the record without collapsing absence: ENOENT maps to `absent`
-   * (unknown), a present file to `empty` or `populated` by its content.
+   * (unknown), a present file to `empty` or `populated` by its content. A
+   * present record that is not readable as a config (a null body, or a
+   * missing `templates` map) is a schema fault, raised as its own named
+   * error — never as an I/O failure, never as a silent classification.
    */
   async loadState(projectRoot: string): Promise<TemplateConfigState> {
     const configPath = path.join(projectRoot, TEMPLATE_CONFIG_FILE);
+    let parsed: unknown;
     try {
       const raw = await fs.readFile(configPath, "utf-8");
-      return configState(JSON.parse(raw) as TemplateConfig);
+      parsed = JSON.parse(raw);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT")
         return { state: "absent" };
@@ -39,6 +43,16 @@ export class FileSystemTemplateConfigStore implements TemplateConfigStorePort {
         `Failed to read template config at ${configPath}: ${(err as Error).message}`,
       );
     }
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      !Object.hasOwn(parsed, "templates")
+    ) {
+      throw new Error(
+        `Template config record at ${configPath} is present but not readable as a config: expected an object with a "templates" map`,
+      );
+    }
+    return configState(parsed as TemplateConfig);
   }
 
   async save(projectRoot: string, config: TemplateConfig): Promise<void> {

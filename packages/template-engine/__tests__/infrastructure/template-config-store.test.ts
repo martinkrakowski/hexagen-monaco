@@ -108,6 +108,29 @@ describe("FileSystemTemplateConfigStore.loadState", () => {
     });
   });
 
+  it("raises a schema fault, not a read error, when the record body is null", async () => {
+    const nullBody = await projectWith("null-body", "null");
+
+    await assert.rejects(store.loadState(nullBody), (err: Error) => {
+      assert.match(err.message, /not readable as a config/);
+      assert.ok(!err.message.includes("Failed to read template config"));
+      return true;
+    });
+  });
+
+  it("raises a schema fault, not a read error, when the record has no templates map", async () => {
+    const noTemplates = await projectWith(
+      "no-templates",
+      JSON.stringify({ schemaVersion: "1" }),
+    );
+
+    await assert.rejects(store.loadState(noTemplates), (err: Error) => {
+      assert.match(err.message, /not readable as a config/);
+      assert.ok(!err.message.includes("Failed to read template config"));
+      return true;
+    });
+  });
+
   it("raises the wrapped read error, not a raw SyntaxError, for malformed JSON", async () => {
     const malformed = await projectWith("malformed", "{ not json");
 
