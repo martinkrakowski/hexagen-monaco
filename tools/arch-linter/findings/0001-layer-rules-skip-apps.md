@@ -12,21 +12,29 @@ status: open
 
 ## What happens
 
-The arch-linter's layer rules evaluate a context's declared files by matching
-paths under `packages/*/src`. A context that declares files under `apps/` — a
-Next.js adapter, a wizard component — gets no layer evaluation at all: the
-glob matches nothing, so whatever the manifest claims about those files
-(ownership, ports, adapters) is backed by nothing the linter actually runs.
+The arch-linter resolves each context's root with `contextRootAbs`
+(`tools/arch-linter/src/cli.ts:585`): it returns `layout.contexts[name].root`
+when the layout maps the context, and otherwise falls back to
+`packages/<module>`. This repo has no `.architecture/layout.yaml` at all, so
+today every context falls back — and a context whose files live under `apps/`
+(a Next.js adapter, a wizard component) resolves to a `packages/` path that
+does not exist. The linter skips a module whose root does not exist, so those
+contexts get no layer evaluation at all: whatever the manifest claims about
+their files (ownership, ports, adapters) is backed by nothing the linter
+actually runs.
 
 ## Minimal repro
 
 An `.architecture/contexts/**/context.yaml` declares a layer entry whose
 symbol lives in `apps/*/src`. Introduce an import from that symbol that
 violates the context's layer rules: the arch-linter reports nothing, because
-its layer rules never opened the file.
+the context's root fell back to a nonexistent `packages/<module>` directory
+and its layer rules never opened the file.
 
 ## Fix
 
-Extend the layer rules' file matching to `apps/*/src` alongside
-`packages/*/src`, and add a guard test with a violating import from an
-`apps/`-side symbol so this coverage hole cannot reopen silently.
+Map every `apps/`-rooted context's real directory in
+`.architecture/layout.yaml` (`contexts:` → `<name>: root: apps/<name>` — the
+mapping `contextRootAbs` already honours), and add a guard test with a
+violating import from an `apps/`-side symbol so this coverage hole cannot
+reopen silently.
