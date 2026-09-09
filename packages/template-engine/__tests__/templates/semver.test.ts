@@ -69,6 +69,16 @@ describe("semver — compareSemver ordering", () => {
     assert.ok(compareSemver("1.0.0-beta.11", "1.0.0-beta.2") > 0);
   });
 
+  it("orders numeric identifiers above Number.MAX_SAFE_INTEGER correctly", () => {
+    // Number() rounds both of these to the same float, so a Number-based
+    // compare would report them equal when they are not.
+    assert.ok(
+      compareSemver("999999999999999999.0.0", "999999999999999998.0.0") > 0,
+    );
+    assert.ok(compareSemver("1.0.0", "99999999999999999999.0.0") < 0);
+    assert.ok(compareSemver("99999999999999999999.0.0", "1.0.0") > 0);
+  });
+
   it("ignores build metadata in precedence", () => {
     assert.equal(compareSemver("1.2.3+01", "1.2.3+999"), 0);
     assert.equal(compareSemver("1.2.3+build.5", "1.2.3+build.6"), 0);
