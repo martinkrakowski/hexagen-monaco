@@ -701,7 +701,9 @@ describe("validate-finding — the closed-schema validator", () => {
  * cannot ship; these tests assert on the copy INPUT (the templates/ directory
  * itself), because a real tarball/packaging run is disproportionate for a
  * unit guard and the verbatim copy makes the input fully determine the
- * tarball contents.
+ * tarball contents. That verbatim-copy premise is itself pinned from the test
+ * side against packages/sync/tsup.config.ts: exactly one cpSync into
+ * dist/templates, sourced from ../template-engine/templates.
  */
 describe("template guard — the findings layout ships for free (lane G3)", () => {
   it("discoverTemplateIds() reports no strays with findings/ directories present", async () => {
@@ -726,22 +728,72 @@ describe("template guard — the findings layout ships for free (lane G3)", () =
     assert.ok(ids.includes("agents-md"));
   });
 
+  it("the seeded component finding validates against the arch-linter component context", async () => {
+    // The one component record lane G3 seeded is validated like the template
+    // findings: schema gates, the subject kind/id/version gates against the
+    // component's own package.json version, the body rules (F-D4's second
+    // line of defence), and the F-D1 filename shape. This is not a general
+    // component-finding scan — F-D0 keeps component findings author-facing
+    // and out of the tarball; this guards the one file this lane committed.
+    const findingPath = path.join(
+      REPO_ROOT,
+      "tools",
+      "arch-linter",
+      "findings",
+      "0001-layer-rules-skip-apps.md",
+    );
+    const stat = await fs.stat(findingPath).catch(() => undefined);
+    assert.ok(
+      stat?.isFile(),
+      "fixture error: the component finding is missing at " +
+        "tools/arch-linter/findings/0001-layer-rules-skip-apps.md — the " +
+        "record this test validates was removed or relocated",
+    );
+    const pkg = JSON.parse(
+      await fs.readFile(
+        path.join(REPO_ROOT, "tools", "arch-linter", "package.json"),
+        "utf-8",
+      ),
+    ) as { version?: unknown };
+    assert.equal(
+      typeof pkg.version,
+      "string",
+      "fixture error: tools/arch-linter/package.json must carry a version string — the component context has nothing to validate the finding against",
+    );
+    const componentContext: FindingContext = {
+      subjectId: "arch-linter",
+      subjectKind: "component",
+      locationLabel: "tools/arch-linter/findings/",
+      currentVersion: (kind, id) =>
+        kind === "component" && id === "arch-linter"
+          ? (pkg.version as string)
+          : undefined,
+      generatorRoot: REPO_ROOT,
+    };
+    const result = validateFinding(
+      await fs.readFile(findingPath, "utf-8"),
+      componentContext,
+    );
+    if (!result.success) {
+      assert.fail(
+        `the component finding must pass the finding schema validator: ` +
+          `${result.error.field}: ${result.error.message}`,
+      );
+    }
+    // The F-D1 filename shape and id agreement, same as the template findings.
+    const filename = path.basename(findingPath);
+    const shaped = FINDING_FILENAME_RE.exec(filename);
+    assert.ok(
+      shaped,
+      `filename '${filename}' does not match the NNNN-<slug>.md shape (F-D1)`,
+    );
+    assert.equal(result.value.id, shaped[1]);
+  });
+
   it("the component finding lives outside templates/, so the verbatim copy input holds no component finding", async () => {
     // The copy input is exactly packages/template-engine/templates: the set of
     // finding files under it must be exactly the two template findings, and no
     // template directory named arch-linter may exist.
-    await assert.doesNotReject(
-      fs.access(
-        path.join(
-          REPO_ROOT,
-          "tools",
-          "arch-linter",
-          "findings",
-          "0001-layer-rules-skip-apps.md",
-        ),
-      ),
-      "the component finding should exist at tools/arch-linter/findings/ as an author-facing record",
-    );
     const found = await collectTemplateFindings(TEMPLATES_DIR);
     assert.deepStrictEqual(
       found.map((f) => f.subjectId).sort(),
@@ -753,6 +805,37 @@ describe("template guard — the findings layout ships for free (lane G3)", () =
         (f) => f.subjectId === "arch-linter" || f.file.includes("arch-linter"),
       ),
       "no component finding may sit under templates/ — it would ship",
+    );
+  });
+
+  it("the verbatim-copy premise holds: tsup.config.ts copies templates/ into dist/templates with exactly one cpSync", async () => {
+    // The isolation suite (file-emitter-finding-isolation.test.ts) and the
+    // copy-input assertion above reason about the copy INPUT (templates/);
+    // that is only sound while packages/sync/tsup.config.ts keeps a single,
+    // unfiltered cpSync of ../template-engine/templates into dist/templates.
+    // This pin reads the config and enforces that property from the test side
+    // (the config itself must not be edited for this layout — F-D1), so a
+    // second cpSync or a widened source fails here, by name, instead of
+    // shipping findings with the suite green.
+    const config = await fs.readFile(
+      path.join(REPO_ROOT, "packages", "sync", "tsup.config.ts"),
+      "utf-8",
+    );
+    const copyCalls = config.match(/cpSync\(/g) ?? [];
+    assert.equal(
+      copyCalls.length,
+      1,
+      "packages/sync/tsup.config.ts must contain exactly one cpSync call — " +
+        "the findings isolation guarantees reason about the verbatim copy " +
+        "input; a second copy source is a packaging change that must revisit " +
+        "that premise in the template-engine guard suite",
+    );
+    assert.match(
+      config,
+      /cpSync\(\s*["']\.\.\/template-engine\/templates["']\s*,\s*["']dist\/templates["']/,
+      "the single cpSync must copy ../template-engine/templates into " +
+        "dist/templates — the verbatim, unfiltered copy the input-level " +
+        "assertions depend on",
     );
   });
 });
