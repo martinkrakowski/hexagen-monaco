@@ -125,7 +125,7 @@ async function collectFindingFiles(findingsDir: string): Promise<string[]> {
       files.push(...(await collectFindingFiles(full)));
       continue;
     }
-    if (!entry.name.endsWith(".md")) continue;
+    if (!FINDING_SUFFIX_RE.test(entry.name)) continue;
     files.push(full);
   }
   return files;
@@ -172,3 +172,14 @@ function sortByName(entries: Dirent[]): Dirent[] {
 function rel(root: string, file: string): string {
   return path.relative(root, file).split(path.sep).join("/");
 }
+
+/**
+ * A `.md` suffix in any letter case. On case-insensitive filesystems
+ * (macOS, Windows) an upper-case `.MD` is the same file a finder (Spotlight,
+ * Explorer, `ls`) shows, so dropping it would leave a silent hole in "what
+ * is known about my templates" — precisely what this reader may never do
+ * quietly. A suffix that matches may still be refused by the shape check at
+ * read time, but it SURFACES, naming the file; it is never dropped as if
+ * absent.
+ */
+const FINDING_SUFFIX_RE = /\.md$/i;

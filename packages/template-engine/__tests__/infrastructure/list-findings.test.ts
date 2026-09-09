@@ -215,6 +215,26 @@ describe("listFindings — the read path", () => {
     });
   });
 
+  it("a .MD travel-artifact is seen, never dropped as if absent", async () => {
+    // On case-insensitive filesystems (macOS, Windows) an upper-case `.MD` is
+    // the same file the finder shows; dropping it would leave a silent hole
+    // in "what is known" — the docstring's cardinal sin. The suffix test
+    // matches case-insensitively, so the file is read (and held to the same
+    // schema as every other finding), never quietly absent.
+    await withTree(
+      async (root) => {
+        await seedTemplate(root, "alpha", "1.0.0", [
+          { name: "0001-alpha-open.md", status: "open" },
+          { name: "0002-alpha-open2.MD", status: "open" },
+        ]);
+      },
+      async (root) => {
+        const found = await listFindings(root);
+        assert.deepStrictEqual(found.map((f) => f.id).sort(), ["0001", "0002"]);
+      },
+    );
+  });
+
   it("a finding file that fails validation fails the call, naming the file", async () => {
     await withTree(
       async (root) => {
