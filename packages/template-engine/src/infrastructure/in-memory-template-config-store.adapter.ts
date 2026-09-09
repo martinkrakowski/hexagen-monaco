@@ -11,6 +11,11 @@ import { emptyConfig } from "../domain/index.js";
  */
 export class InMemoryTemplateConfigStore implements TemplateConfigStorePort {
   async load(): Promise<TemplateConfig> {
+    // Deliberately differs from loadState(): load answers "give me a config
+    // to run with", so a run with no project on disk gets a fresh empty
+    // config; loadState answers "what does the durable record say" and
+    // reports absent. Do not port a call site between them expecting the
+    // same absence semantics.
     return emptyConfig();
   }
 
