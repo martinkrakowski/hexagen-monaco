@@ -563,6 +563,41 @@ describe("validate-finding — the closed-schema validator", () => {
     assert.ok(err.message.includes("1.3.0"));
   });
 
+  it("refuses a subject whose current manifest version is not well-formed semver, naming the manifest", () => {
+    // A manifest at '1.0' (not semver) would make every compareSemver NaN and
+    // the not-ahead gate silently pass; the fault is the manifest's, and the
+    // error is named 'manifest', not 'subjectVersion'.
+    const badManifestContext: FindingContext = {
+      ...baseContext(),
+      currentVersion: (kind, id) =>
+        kind === "template" && id === "ci-github-actions" ? "1.0" : undefined,
+    };
+    const err = expectFailure(
+      findingText({ subjectVersion: "9.9.9" }),
+      "manifest",
+      badManifestContext,
+      "manifest.json",
+    );
+    assert.ok(err.message.includes("not a well-formed semver"), err.message);
+    assert.ok(
+      !err.message.includes("ahead of"),
+      "a bad current version must not be reported as ahead-of: " + err.message,
+    );
+  });
+
+  it("refuses the manifest fault even when the finding is not ahead", () => {
+    const badManifestContext: FindingContext = {
+      ...baseContext(),
+      currentVersion: (kind, id) =>
+        kind === "template" && id === "ci-github-actions" ? "1.0" : undefined,
+    };
+    expectFailure(
+      findingText({ subjectVersion: "0.1.0" }),
+      "manifest",
+      badManifestContext,
+    );
+  });
+
   it("refuses a body carrying an absolute path outside the generator", () => {
     const body =
       "The bug reproduced at /Users/client/projects/campaign-foundry/src/main.ts on macOS.";

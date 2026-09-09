@@ -19,7 +19,11 @@ import { compareSemver, isSemver } from "./semver.js";
  */
 
 export class FindingValidationError extends Error {
-  /** The front-matter field the fault is in — or "body" / "front-matter". */
+  /**
+   * The front-matter field the fault is in — or "body" / "front-matter"
+   * (the finding document) / "manifest" (the subject's manifest is at
+   * fault, not the finding).
+   */
   readonly field: string;
 
   constructor(field: string, message: string) {
@@ -187,8 +191,23 @@ export function validateFinding(
       `subjectVersion '${subjectVersion}' is not a well-formed semver version`,
     );
   }
+  // The "not ahead" gate compares against the subject's current manifest
+  // version. A current version that is not well-formed semver makes every
+  // compareSemver NaN, and every comparison against NaN is false — so "not
+  // ahead" would pass and the gate would silently turn itself off, claiming a
+  // guarantee it is not providing. Refuse it explicitly, named 'manifest' so
+  // it is distinguishable from the finding's own bad subjectVersion: the
+  // fault is in the subject's manifest, not in the finding.
+  if (!isSemver(current)) {
+    return reject(
+      "manifest",
+      `subject '${subject}' cannot be validated against its current version ` +
+        `'${current}' — that is not a well-formed semver version; fix the ` +
+        `subject's manifest.json, then the finding can be compared to it`,
+    );
+  }
   const ahead = compareSemver(subjectVersion, current);
-  if (!Number.isNaN(ahead) && ahead > 0) {
+  if (ahead > 0) {
     return reject(
       "subjectVersion",
       `subjectVersion '${subjectVersion}' is ahead of ${subjectKind.value} ` +
