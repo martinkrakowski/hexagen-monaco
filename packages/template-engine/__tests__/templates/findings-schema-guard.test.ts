@@ -388,6 +388,18 @@ describe("parse-finding — the hand-rolled front-matter parser", () => {
     assert.ok(!result.success);
     assert.ok(result.error.message.includes("quote"));
   });
+
+  it("refuses a duplicated front-matter key, naming it", () => {
+    // id: 0002 after id: 0001 — last-wins would make the record disagree with
+    // the file that carries it, so the parser refuses the duplicate.
+    const lines = findingText().split("\n");
+    lines.splice(lines.indexOf("---", 1), 0, "id: 0002");
+    const result = parseFinding(lines.join("\n"));
+    assert.ok(!result.success);
+    assert.ok(result.error.message.includes("duplicate"));
+    assert.ok(result.error.message.includes("'id'"));
+    assert.equal(result.error.line, lines.indexOf("id: 0002") + 1);
+  });
 });
 
 describe("validate-finding — the closed-schema validator", () => {

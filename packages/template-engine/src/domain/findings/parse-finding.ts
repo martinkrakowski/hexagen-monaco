@@ -49,8 +49,20 @@ export function parseFinding(
     if (lines[i] === "---") break;
     const parsed = parseLine(lines[i], i + 1);
     if (!parsed.success) return parsed;
-    // A repeated key takes the last occurrence: duplicate detection is not
-    // part of this lane's contract, and the closed key set tolerates it.
+    // A repeated key is refused, not folded: last-wins makes the file a human
+    // reads and the record this parser produces disagree — a finding named
+    // `0001-*.md` claiming `id: 0002` — so the schema's nine keys are also
+    // unique. Strict YAML (which this parser exists to out-spec) rejects the
+    // same input.
+    if (frontMatter.has(parsed.value.key)) {
+      return {
+        success: false,
+        error: {
+          line: i + 1,
+          message: `duplicate front-matter key '${parsed.value.key}' — each key may appear only once`,
+        },
+      };
+    }
     frontMatter.set(parsed.value.key, parsed.value.value);
   }
   if (i === lines.length) {
