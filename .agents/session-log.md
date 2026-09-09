@@ -164,3 +164,102 @@ prefer one well-specified brief to an exchange.
 - **§8 gap 2**: `tools/wave-status/` unported, so `wave-event.sh`'s "byte-identical to `emit.ts`"
   claim stays untestable here.
 - Next wave is **G3** (seed the store), which depends on G2's validator.
+
+## Wave 2 — the findings store, lane G3 (2026-09-08)
+
+Plan: `docs/planning/findings-store.md` (now tracked — wave 1 ran against it untracked).
+Single lane, because the plan's order is `G1 → G2 → G3` and G3 depends on G2's validator.
+
+### What merged
+
+| PR   | Lane                                        | Squash     | Net                                         |
+| ---- | ------------------------------------------- | ---------- | ------------------------------------------- |
+| #673 | plan tracked + F5's gate corrected          | `123cb820` | the wave-1 blocker, cleared before dispatch |
+| #674 | G3 — seed the store, prove the layout ships | `8d215446` | +307/−21, 5 files, 556 tests                |
+
+`template-engine` is now 59 test files / 556 tests, from 54 / 479 at the start of wave 1.
+
+### The finding class this wave surfaced: tests that pass without their premises
+
+Nothing in G3 was broken. CI was green 9/9 and the gate passed 61/61 before review ran. What two
+independent reviewers found instead was a category a green build is **structurally blind to**:
+
+1. **The F-D3 isolation suite passed with every finding file deleted.** It built its "before" tree
+   by filtering `findings/` out and asserted the before-tree lacked them — but never asserted the
+   _with_-tree had any. Reproduced by moving both `findings/` directories out of `templates/`:
+   `Test Files 1 passed`. The guarantee that no generated project ever receives a finding rested
+   on a premise the test did not check.
+2. **The "layout ships for free" test passed identically on `main` before anything was seeded.**
+   It asserted only that two template ids resolve, never that the `findings/` directories exist.
+   The actual proof of F-D1 at that moment was a stray the orchestrator planted by hand
+   (`templates/ZZZ-not-a-template.txt` → guard red, `discoverTemplateIds` throwing at
+   `build-template-bundle.ts:145`) — real, but living in a terminal rather than the suite.
+
+Both now fail loudly when the condition in their name is false, and the isolation proof widened to
+both seeded templates × both `--with-tests` paths. **A test whose name states a condition it does
+not establish is worse than no test**, because it converts an unproven claim into a green check.
+
+### What the review layer bought, and what verifying it bought
+
+Nine findings fixed in one round, four refuted with mechanism, from a model reviewer (49 tool
+calls) and Qodo. CodeRabbit was rate-limited to a summary.
+
+Two refutations mattered:
+
+- **Qodo: "the arch-linter record is wrong about the linter."** Partly. `contextRootAbs`
+  (`tools/arch-linter/src/cli.ts:585`) uses `layout.contexts[name].root` when mapped and falls
+  back to `packages/<module>` otherwise; `.architecture/layout.yaml` has **no `contexts:` block**,
+  so nothing under `apps/` is opened today. The record's conclusion was right; its prose implied a
+  hard-coded glob, which is what drew the dispute. Sharpened rather than corrected. **The store's
+  credibility rests on findings being exact about mechanism** — a vague finding gets argued with
+  instead of fixed, and this is the first component record, so it sets the pattern.
+- **Qodo: the Windows path bug.** Real in the code, but it could not fail CI: the Windows job runs
+  `turbo run test --filter=@hexagen/sync --filter=@hexagen/arch-linter`, so `template-engine` tests
+  never execute there. Fixed anyway — the filter is one edit from including this package.
+
+### A fifth orchestration failure mode, and the first that was not the orchestrator's
+
+The fix round was **killed by the host system for low memory**, after the lane had finished editing
+and committing but before it pushed: five commits, clean tree, no `EXIT` marker.
+
+The honest reading of "killed, no marker" is a dead lane, and re-dispatching would have cost
+roughly a quarter-million tokens to redo work that already existed on disk. Deriving the state —
+commits, tree, and re-running the lane's own reproduction — showed the work was complete. The
+orchestrator verified it (gate `exit 0`, 61/61, 556 tests, scope unchanged, `src/` and
+`tsup.config.ts` untouched), reproduced the finding-1 red-then-green demonstration independently,
+and pushed the lane's commits **unmodified**. No orchestrator-authored code is on that branch.
+
+**The derived-state rule is symmetric and only one side had been tested.** Every earlier
+application caught something that looked fine and was not; this one caught something that looked
+failed and was not.
+
+### Cost — and evidence the wave-1 cost rules worked
+
+| run          | seat                        | steps   | billed      | cache read    |
+| ------------ | --------------------------- | ------- | ----------- | ------------- |
+| G3 implement | `opencode-go/glm-5.3-flash` | 48      | 352,097     | 2,343,168     |
+| G3 review    | `opencode-go/hy4-preview`   | 38      | 104,659     | 1,479,040     |
+| G3 fix r1    | `opencode-go/glm-5.3-flash` | 44      | 182,143     | 2,783,040     |
+| **total**    | 2 seats, 3 runs             | **130** | **638,899** | **6,605,248** |
+
+Runs per seat: glm-5.3-flash ×2, hy4-preview ×1. gemini and grok unused.
+
+**Cache-to-billed ratio fell from ~25× in wave 1 to ~10× here** (31.1M/1.25M → 6.6M/0.64M), and
+mean steps per run fell from 61 to 43. The rules applied between waves were: narrow the brief's
+read list (AGENTS.md + TESTING.md only, ~15 KB instead of ~75 KB), run the gate **once as the last
+action**, quote decisions into the brief instead of pointing at a document, and supply the facts a
+lane would otherwise go looking for — the three subject versions, the closed class vocabulary, the
+exact line references. Cost is roughly _context × steps_, so those compound.
+
+One fix round instead of wave 1's two, because every review source was gathered **before** the
+brief was written rather than after — the wave-1 defect that cost ~251k tokens.
+
+### Deferred
+
+- **G4** (query API) is unblocked. Inherits G2's module-not-package constraint.
+- **G5**'s §4 DoD says "run inside campaign-foundry", which is not verifiable from this repository.
+  **Amend it before G5 dispatches**, the way F5 was amended.
+- **G6 / G7** — the plan says re-plan once G5 has been used; they should not be dispatched against
+  the current text.
+- `loadState` → required, still needs a lane owning `validate-templates-ports.test.ts`.
+- §8 gap 2: `tools/wave-status/` unported, so `wave-event.sh`'s parity claim stays untestable here.
