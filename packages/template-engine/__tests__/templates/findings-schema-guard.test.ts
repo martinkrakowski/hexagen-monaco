@@ -502,14 +502,17 @@ describe("validate-finding — the closed-schema validator", () => {
     assert.ok(err.message.includes("directory"));
   });
 
-  it("refuses a subjectVersion that is not well-formed semver", () => {
-    expectFailure(
-      findingText({ subjectVersion: "v1.2" }),
-      "subjectVersion",
-      baseContext(),
-      "semver",
-    );
-  });
+  it.each(["v1.2", "01.2.0", "1.02.3", "1.2.03", "1.0.0-01"] as const)(
+    "refuses a subjectVersion that is not well-formed semver (%s)",
+    (version) => {
+      expectFailure(
+        findingText({ subjectVersion: version }),
+        "subjectVersion",
+        baseContext(),
+        "semver",
+      );
+    },
+  );
 
   it("refuses a subjectVersion ahead of the subject's current version", () => {
     const err = expectFailure(

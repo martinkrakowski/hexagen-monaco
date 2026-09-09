@@ -3,13 +3,20 @@
  * network. The only versions that reach this module are template manifest
  * versions and finding front-matter values, which this repo keeps plain
  * `major.minor.patch` (plus optional `-prerelease` / `+build`). The parser
- * accepts strings of that shape; {@link isSemver} is the gate, {@link
- * compareSemver} is a strict semver ordering used for the "not ahead of the
- * subject's current version" check (§3 G2).
+ * accepts strings of that shape and rejects numeric identifiers with leading
+ * zeros per the semver spec, so `01.2.0` can never be compared ahead-or-not
+ * against a manifest `1.2.0` and then string-miss every join key (F-D6).
+ * {@link isSemver} is the gate, {@link compareSemver} is a strict semver
+ * ordering used for the "not ahead of the subject's current version" check
+ * (§3 G2).
  */
 
+// major.minor.patch must be `0` or `[1-9]\d*` (no leading zeros, semver
+// §2); a prerelease identifier must be a zero-free numeric or an
+// alphanumeric containing at least one non-digit (§11.4.3 ordering depends
+// on that split). Build metadata keeps its own looser identifier rule.
 const SEMVER_RE =
-  /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 interface SemverParts {
   major: number;
