@@ -95,6 +95,22 @@ export async function listFindings(
           `${rel(templatesDir, file)} — ${result.error.field}: ${result.error.message}`,
         );
       }
+      const shaped = FINDING_FILENAME_RE.exec(path.basename(file));
+      if (!shaped) {
+        throw new FindingStoreError(
+          file,
+          `${rel(templatesDir, file)} — filename '${path.basename(file)}' does not match ` +
+            `the NNNN-<slug>.md shape (F-D1): four digits, a hyphen, a kebab slug, .md`,
+        );
+      }
+      if (result.value.id !== shaped[1]) {
+        throw new FindingStoreError(
+          file,
+          `${rel(templatesDir, file)} — id '${result.value.id}' does not match ` +
+            `the filename sequence number '${shaped[1]}' — the id is the ` +
+            `zero-padded sequence number its filename opened with (F-D1)`,
+        );
+      }
       if (!findingMatchesQuery(result.value, query)) continue;
       findings.push(result.value);
     }
@@ -249,3 +265,16 @@ function rel(root: string, file: string): string {
  * absent.
  */
 const FINDING_SUFFIX_RE = /\.md$/i;
+
+/**
+ * F-D1's filename shape, as in the guard: four digits, a hyphen, a kebab
+ * slug, then `.md` — extension matched case-insensitively, matching the
+ * suffix rule above. The guard enforces the canonical lower-case spelling
+ * on the committed store it governs; this reader's subjects are an
+ * installed tree it does NOT control, where nothing has run the guard, so
+ * it accepts the same filename in any case rather than lose a finding it
+ * can fully validate. Captured so the id agreement compares the
+ * front-matter `id` against the sequence number the filename actually
+ * carries.
+ */
+const FINDING_FILENAME_RE = /^([0-9]{4})-([a-z0-9]+(?:-[a-z0-9]+)*)\.md$/i;

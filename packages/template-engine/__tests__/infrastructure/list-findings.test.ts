@@ -296,6 +296,54 @@ describe("listFindings — the read path", () => {
     );
   });
 
+  it("a filename without the NNNN-<slug>.md shape fails the call, naming the file", async () => {
+    // The guard enforces F-D1's shape on the committed store; the reader's
+    // subjects are an installed tree it does not control, where nothing
+    // has run the guard — so the shape is re-checked here (F-D6's join
+    // integrity holds for everyone the reader answers, not just the repo).
+    await withTree(
+      async (root) => {
+        await seedTemplate(root, "alpha", "1.0.0", [
+          { name: "0001_bad.md", status: "open" },
+        ]);
+      },
+      async (root) => {
+        await assert.rejects(
+          () => listFindings(root),
+          (err: unknown) =>
+            err instanceof FindingStoreError &&
+            err.file === path.join(root, "alpha", "findings", "0001_bad.md") &&
+            /NNNN-<slug>\.md shape/.test(err.message),
+        );
+      },
+    );
+  });
+
+  it("a finding whose id does not match its filename's sequence fails the call", async () => {
+    await withTree(
+      async (root) => {
+        await seedTemplate(root, "alpha", "1.0.0", []);
+        const mismatch = `---\nid: 0002\nsubject: alpha\nsubjectKind: template\nsubjectVersion: "1.0.0"\nfixedIn: null\nclass: host-assumption\nseverity: high\nsurface: ci\nstatus: open\n---\n\nbody`;
+        // shape-valid filename 0001-bad-id.md, but its front matter claims id 0002
+        await fs.writeFile(
+          path.join(root, "alpha", "findings", "0001-bad-id.md"),
+          mismatch,
+        );
+      },
+      async (root) => {
+        await assert.rejects(
+          () => listFindings(root),
+          (err: unknown) =>
+            err instanceof FindingStoreError &&
+            err.file ===
+              path.join(root, "alpha", "findings", "0001-bad-id.md") &&
+            /id '0002' does not match/.test(err.message) &&
+            /'0001'/.test(err.message),
+        );
+      },
+    );
+  });
+
   it("a finding file that fails validation fails the call, naming the file", async () => {
     await withTree(
       async (root) => {
