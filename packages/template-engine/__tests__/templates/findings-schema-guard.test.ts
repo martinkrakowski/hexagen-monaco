@@ -705,6 +705,21 @@ describe("validate-finding — the closed-schema validator", () => {
  */
 describe("template guard — the findings layout ships for free (lane G3)", () => {
   it("discoverTemplateIds() reports no strays with findings/ directories present", async () => {
+    // The premise in the test's name, asserted rather than assumed: both
+    // seeded templates carry a findings/ directory. Without these checks the
+    // resolution below would pass identically on a tree with no findings/ at
+    // all — exactly the state lane G3 found — and the title would claim a
+    // condition the test never established.
+    for (const id of ["ci-github-actions", "agents-md"] as const) {
+      const findingsDir = path.join(TEMPLATES_DIR, id, "findings");
+      const stat = await fs.stat(findingsDir).catch(() => undefined);
+      assert.ok(
+        stat?.isDirectory(),
+        `fixture error: templates/${id}/findings/ must exist as a directory — ` +
+          `the premise of this test (findings/ directories present in the ` +
+          `tree discoverTemplateIds() resolves) is gone`,
+      );
+    }
     // Throws by name on any stray, so a resolution proves the whole tree.
     const ids = await discoverTemplateIds(TEMPLATES_DIR);
     assert.ok(ids.includes("ci-github-actions"));
