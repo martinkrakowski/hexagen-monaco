@@ -553,4 +553,36 @@ describe("validate-finding — the closed-schema validator", () => {
       "Relevant manifest: /repo/templates/ci-github-actions/manifest.json";
     expectSuccess(findingText({}, body));
   });
+
+  it.each([
+    ["file:///Users/client/secret/src/main.ts", "/Users/client"],
+    ["~/Projects/client/secret/src/app.ts", "~/Projects/client"],
+    ["../../Users/client/secret/src/app.ts", "/Users/client"],
+    ["ROOT=/Users/client/secret/src", "/Users/client"],
+    ["\\\\fileserver\\client\\secret\\main.ts", "fileserver"],
+    ['" /Users/client/secret/src/main.ts"', "/Users/client"],
+  ] as const)(
+    "refuses a client path whatever precedes it (%s)",
+    (path, messageFragment) => {
+      expectFailure(
+        findingText({}, `The reporter saw ${path} and confirmed it exists.`),
+        "body",
+        baseContext(),
+        messageFragment,
+      );
+    },
+  );
+
+  it("refuses a Windows drive path from a downstream repo", () => {
+    const body = "Open C:\\Users\\client\\secret\\app.ts and reproduce.";
+    expectFailure(findingText({}, body), "body", baseContext(), "client");
+  });
+
+  it("still accepts repo-relative prose and bare env words", () => {
+    const body = [
+      "The runner executed node_modules/.bin/x from packages/sync/src/foo.ts",
+      "on ubuntu-latest, which lacks zsh.",
+    ].join("\n");
+    expectSuccess(findingText({}, body));
+  });
 });

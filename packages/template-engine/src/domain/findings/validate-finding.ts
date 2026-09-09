@@ -256,22 +256,78 @@ function enumValue<T extends string>(
 }
 
 /**
- * Absolute-path tokens in a body line. Posix paths must have at least two
- * segments after the leading `/` (a bare `/tmp` or `/foo` in synthetic repro
- * prose is not a feasible client-path leak); Windows drive paths are matched
- * too and can never resolve under a posix generator root, so they are refused.
+ * Absolute-path candidates in a body line, detected by their SHAPE anywhere
+ * in the line — not by what precedes them. A boundary rule keyed on a prefix
+ * class lets a client path through the moment the author omits the space
+ * (`ROOT=/Users/client/...`), so each finder starts a candidate at a character
+ * boundary that cannot extend the path, and the containment check is the
+ * second line of defence. The repo-relative prose a real finding legitimately
+ * carries (`packages/sync/src/foo.ts`, `node_modules/.bin/x`) and bare words
+ * (`ubuntu-latest`) never become candidates at all.
+ *
+ * Posix and `~/` paths need at least two segments after the leading marker: a
+ * bare `/tmp` (or `~/.zshrc`) in synthetic repro prose is an environment-file
+ * reference, not a client-path leak. `file://` URLs keep that depth rule on
+ * the path after the scheme. `..`-leading relatives, Windows UNC and drive
+ * paths resolve such that they can never sit under the generator root, so the
+ * containment test refuses them — `../../x` collapses above `/repo` and UNC /
+ * drive paths normalize to a posix path nothing owns.
  */
-const ABSOLUTE_PATH_IN_LINE =
-  /(?:^|[ \t`'"()>])((?:\/(?:[0-9A-Za-z._~-]+\/)+[0-9A-Za-z._~-]+)|(?:[A-Za-z]:[\\/](?:[^\\/\s]+[\\/])+[^\\/\s]+))/g;
+const POSIX_ABS_IN_LINE =
+  /(?<![A-Za-z0-9_.~/])\/(?:[0-9A-Za-z._~-]+\/)+[0-9A-Za-z._~-]+/g;
+const HOME_ABS_IN_LINE =
+  /(?<![A-Za-z0-9_~])~\/[0-9A-Za-z._~-]+(?:\/[0-9A-Za-z._~-]+)+/g;
+const DOTDOT_REL_IN_LINE = /(?<![A-Za-z0-9_/.])\.\.\/[^\s'"<>()[\]{}]+/g;
+const DRIVE_IN_LINE =
+  /(?<![A-Za-z0-9_.~:])[A-Za-z]:[\\/][0-9A-Za-z._~-]+(?:[\\/][0-9A-Za-z._~-]+)+/g;
+const UNC_IN_LINE = /(?<!\\)\\\\(?:[^\\\s<>()]+(?:\\[^\\\s<>()]+)+)/g;
+const FILE_URL_IN_LINE = /file:\/\/([^\s'"<>()[\]{}]+)/gi;
 
+function eachPathIn(
+  regex: RegExp,
+  line: string,
+  accept: (path: string) => void,
+): void {
+  regex.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(line)) !== null) {
+    accept(m[0]);
+  }
+}
+
+/**
+ * Absolute-path and escaping-relative candidates in one body line. The caller
+ * rules on each candidate by whether it resolves inside the generator root;
+ * the shape that produced it (`~/`-, `file://`-, `..`-, drive- or `/`-) is
+ * irrelevant to that ruling.
+ */
 function absolutePathsIn(line: string): string[] {
   const paths: string[] = [];
-  ABSOLUTE_PATH_IN_LINE.lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = ABSOLUTE_PATH_IN_LINE.exec(line)) !== null) {
-    paths.push(m[1]);
+  for (const regex of [
+    POSIX_ABS_IN_LINE,
+    HOME_ABS_IN_LINE,
+    DOTDOT_REL_IN_LINE,
+    DRIVE_IN_LINE,
+    UNC_IN_LINE,
+  ]) {
+    eachPathIn(regex, line, (p) => paths.push(p));
   }
-  return paths;
+  eachPathIn(FILE_URL_IN_LINE, line, (p) => {
+    // file:///x/y → /x/y; file://x/y → x/y after stripping the scheme. The
+    // same depth rule as the other absolute forms applies.
+    const rest = p.slice("file://".length).replace(/^\/+/, "/");
+    if (rest.split("/").filter((s) => s.length > 0).length >= 2) {
+      paths.push(rest);
+    }
+  });
+  return paths.map(trimTrailing);
+}
+
+/** Strip sentence punctuation (`path,`, `path.`) from a candidate for messages. */
+function trimTrailing(p: string): string {
+  let s = p;
+  while (/[.,;:]/.test(s[s.length - 1] ?? "")) s = s.slice(0, -1);
+  return s;
 }
 
 /**
