@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import crypto from "node:crypto";
 import type { TemplateConfigStorePort } from "../application/ports/template-config-store.port.js";
 import type { TemplateConfig, TemplateConfigState } from "../domain/index.js";
 import {
@@ -57,7 +58,7 @@ export class FileSystemTemplateConfigStore implements TemplateConfigStorePort {
 
   async save(projectRoot: string, config: TemplateConfig): Promise<void> {
     const configPath = path.join(projectRoot, TEMPLATE_CONFIG_FILE);
-    const tmp = `${configPath}.tmp.${Date.now()}`;
+    const tmp = `${configPath}.tmp.${crypto.randomUUID()}`;
     await fs.writeFile(tmp, JSON.stringify(config, null, 2), "utf-8");
     await fs.rename(tmp, configPath);
   }

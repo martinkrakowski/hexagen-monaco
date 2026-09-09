@@ -160,8 +160,12 @@ describe("FileSystemTemplateConfigStore.save", () => {
     assert.deepStrictEqual(await store.load(dir), POPULATED);
   });
 
-  it("leaves no temp file behind — it writes through rename", async () => {
+  it("leaves no temp file behind even for back-to-back saves", async () => {
     await store.save(dir, emptyConfig());
+    await Promise.all([
+      store.save(dir, emptyConfig()),
+      store.save(dir, POPULATED),
+    ]);
 
     assert.deepStrictEqual(await fs.readdir(dir), [TEMPLATE_CONFIG_FILE]);
   });
