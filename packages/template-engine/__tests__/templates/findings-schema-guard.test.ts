@@ -30,6 +30,17 @@ const REPO_ROOT = path.resolve(
 );
 
 /**
+ * Root-relative, POSIX-separated. `path.relative()` is platform-native —
+ * backslashes on Windows — so an assertion compared against slash-separated
+ * literals would fail there. The template-engine suites do not run in the
+ * Windows CI job today, but that filter is one edit away from including this
+ * package; normalize instead of betting on it.
+ */
+function rel(root: string, file: string): string {
+  return path.relative(root, file).split(path.sep).join("/");
+}
+
+/**
  * The guard half of this file: a malformed finding file anywhere under
  * `templates/<id>/findings/` fails CI through the same door the collision and
  * budget guards use. The store is seeded (lane G3, wave 2): the scan must be
@@ -42,6 +53,13 @@ interface LocatedFinding {
   file: string;
   text: string;
 }
+
+/**
+ * F-D1's filename shape: `NNNN-<slug>.md` — four digits, then a lowercase
+ * kebab slug. Captured so the id agreement can compare the front matter's
+ * `id` against the sequence number the filename actually carries.
+ */
+const FINDING_FILENAME_RE = /^([0-9]{4})-([a-z0-9]+(?:-[a-z0-9]+)*)\.md$/;
 
 async function collectTemplateFindings(
   templatesDir: string,
@@ -133,31 +151,40 @@ describe("template guard — finding file schema", () => {
       2,
       "the seeded store holds exactly two template findings",
     );
-    assert.deepStrictEqual(
-      found.map((f) => path.relative(REPO_ROOT, f.file)).sort(),
-      [
-        "packages/template-engine/templates/agents-md/findings/0001-session-log-grows-unbounded.md",
-        "packages/template-engine/templates/ci-github-actions/findings/0001-ci-runners-have-no-zsh.md",
-      ],
-    );
+    assert.deepStrictEqual(found.map((f) => rel(REPO_ROOT, f.file)).sort(), [
+      "packages/template-engine/templates/agents-md/findings/0001-session-log-grows-unbounded.md",
+      "packages/template-engine/templates/ci-github-actions/findings/0001-ci-runners-have-no-zsh.md",
+    ]);
     const failures: string[] = [];
     for (const f of found) {
       const context = await templateContext(TEMPLATES_DIR, f.subjectId);
       const result = validateFinding(f.text, context);
       if (result.success) {
-        // F-D1: the id must be the zero-padded sequence number its filename
-        // carries — the committed store must be internally consistent, not
-        // merely schema-valid.
-        const filenameId = path.basename(f.file).slice(0, 4);
-        if (result.value.id !== filenameId) {
+        // F-D1: the filename must carry the NNNN-<slug>.md shape, and the id
+        // must be the zero-padded sequence number it starts with — the
+        // committed store must be internally consistent, not merely
+        // schema-valid. The whole filename is checked, not a four-character
+        // prefix: `0001anything.md` must not satisfy a check its name implies.
+        const filename = path.basename(f.file);
+        const shaped = FINDING_FILENAME_RE.exec(filename);
+        if (!shaped) {
           failures.push(
-            `${path.relative(REPO_ROOT, f.file)} — id '${result.value.id}' does not match the filename prefix '${filenameId}'`,
+            `${rel(REPO_ROOT, f.file)} — filename '${filename}' does not match ` +
+              `the NNNN-<slug>.md shape (F-D1): four digits, a hyphen, a ` +
+              `lowercase kebab slug, .md`,
+          );
+          continue;
+        }
+        if (result.value.id !== shaped[1]) {
+          failures.push(
+            `${rel(REPO_ROOT, f.file)} — id '${result.value.id}' does not match ` +
+              `the filename sequence number '${shaped[1]}'`,
           );
         }
         continue;
       }
       failures.push(
-        `${path.relative(REPO_ROOT, f.file)} — ${result.error.field}: ${result.error.message}`,
+        `${rel(REPO_ROOT, f.file)} — ${result.error.field}: ${result.error.message}`,
       );
     }
     assert.deepStrictEqual(
@@ -203,19 +230,16 @@ describe("template guard — recursion and symlink coverage", () => {
       await fs.writeFile(nested, bad);
 
       const located = await collectTemplateFindings(tmp);
-      assert.deepStrictEqual(
-        located.map((f) => path.relative(tmp, f.file)).sort(),
-        [
-          "ci-github-actions/findings/1000-bad.md",
-          "ci-github-actions/findings/1001-symlink.md",
-          "ci-github-actions/findings/nested/2000-nested.md",
-        ],
-      );
+      assert.deepStrictEqual(located.map((f) => rel(tmp, f.file)).sort(), [
+        "ci-github-actions/findings/1000-bad.md",
+        "ci-github-actions/findings/1001-symlink.md",
+        "ci-github-actions/findings/nested/2000-nested.md",
+      ]);
       // The guard must be blind to none of them: each is read (symlink
       // dereferenced) and refused by the schema.
       for (const f of located) {
         const result = validateFinding(f.text, baseContext());
-        assert.ok(!result.success, `${path.relative(tmp, f.file)} must fail`);
+        assert.ok(!result.success, `${rel(tmp, f.file)} must fail`);
       }
     } finally {
       await fs.rm(tmp, { recursive: true, force: true });
