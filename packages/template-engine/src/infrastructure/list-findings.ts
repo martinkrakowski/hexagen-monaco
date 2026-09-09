@@ -4,6 +4,7 @@ import path from "node:path";
 import type { Finding } from "../domain/findings/finding.js";
 import type { FindingQuery } from "../domain/findings/finding-query.js";
 import { findingMatchesQuery } from "../domain/findings/finding-query.js";
+import { isSemver } from "../domain/findings/semver.js";
 import {
   validateFinding,
   type FindingContext,
@@ -28,11 +29,16 @@ import { validateManifest } from "../domain/template-manifest.js";
  */
 
 /**
- * A read-path fault that is about a specific finding file (a schema refusal)
- * or the store's own structure, carrying the file the fault is in.
+ * A read-path fault that is about a specific finding file (a schema refusal
+ * or a read fault), the store's own structure (its manifest), or the
+ * caller's query — carrying the file the fault is in, or the empty string
+ * when the fault is in the caller's arguments and no store file is in it.
  */
 export class FindingStoreError extends Error {
-  /** The finding file (or template directory member) the fault is in. */
+  /**
+   * The finding file (or template-directory member) the fault is in — the
+   * empty string when the fault is in the caller's query arguments.
+   */
   readonly file: string;
 
   constructor(file: string, message: string) {
@@ -68,6 +74,20 @@ export async function listFindings(
   templatesDir: string,
   query: FindingQuery = {},
 ): Promise<Finding[]> {
+  // A malformed query version is refused up front, as the exported error
+  // type: the domain predicate checks it lazily (on the first finding it
+  // compares), so on a tree with nothing to compare it would otherwise
+  // resolve "successfully" and the caller's `instanceof FindingStoreError`
+  // handling would never see the argument fault. No store `file` is in it:
+  // the fault is in the caller's arguments, and `file` is "".
+  if (query.version !== undefined && !isSemver(query.version)) {
+    throw new FindingStoreError(
+      "",
+      `query version '${query.version}' is not a well-formed semver version — ` +
+        `the version filter cannot be applied`,
+    );
+  }
+
   let templates: Dirent[];
   try {
     templates = await fs.readdir(templatesDir, {
@@ -87,7 +107,7 @@ export async function listFindings(
     if (files === undefined || files.length === 0) continue;
     const context = await templateContext(templatesDir, subjectId);
     for (const file of files) {
-      const text = await fs.readFile(file, "utf-8");
+      const text = await readFindingFile(templatesDir, file);
       const result = validateFinding(text, context);
       if (!result.success) {
         throw new FindingStoreError(
@@ -214,24 +234,56 @@ async function walkFindingsDir(findingsDir: string): Promise<string[]> {
 }
 
 /**
+ * The finding file's text. Every read fault surfaces TYPED, naming the file
+ * — a permission fault or a dangling symlinked finding carries the file it
+ * is in, exactly like a schema refusal does, so a consumer matching on
+ * FindingStoreError can print "corrupt finding: <file>" for any read-path
+ * fault instead of catching an unhandled raw Error.
+ */
+async function readFindingFile(
+  templatesDir: string,
+  file: string,
+): Promise<string> {
+  try {
+    return await fs.readFile(file, "utf-8");
+  } catch (err) {
+    throw new FindingStoreError(
+      file,
+      `${rel(templatesDir, file)} — the finding file cannot be read — ` +
+        `${(err as NodeJS.ErrnoException).message}`,
+    );
+  }
+}
+
+/**
  * The validation context for one template subject: the subject the file sits
  * under is the directory, the kind is template by construction (the reader
  * only walks `<templatesDir>/<id>/findings/`), and the current version comes
  * from that template's manifest.json — read only once a template actually has
  * finding files, so a tree of finding-less templates costs nothing.
+ *
+ * The manifest read is wrapped, not bare: a corrupt manifest.json is a
+ * FindingStoreError about that manifest, with its path — not a raw
+ * SyntaxError naming no file at all.
  */
 async function templateContext(
   templatesDir: string,
   subjectId: string,
 ): Promise<FindingContext> {
-  const manifest = validateManifest(
-    JSON.parse(
-      await fs.readFile(
-        path.join(templatesDir, subjectId, "manifest.json"),
-        "utf-8",
-      ),
-    ),
-  );
+  const manifestFile = path.join(templatesDir, subjectId, "manifest.json");
+  let manifest;
+  try {
+    manifest = validateManifest(
+      JSON.parse(await fs.readFile(manifestFile, "utf-8")),
+    );
+  } catch (err) {
+    throw new FindingStoreError(
+      manifestFile,
+      `${rel(templatesDir, manifestFile)} — the subject's manifest.json ` +
+        `cannot be read as a valid manifest — ` +
+        `${(err as Error).message}`,
+    );
+  }
   // F-D6's join key is the subject id: the store's whole version filter
   // rests on joining a finding's fixedIn/subjectVersion against the
   // subject's CURRENT version — and that version must come from the

@@ -250,6 +250,101 @@ describe("listFindings — the read path", () => {
     );
   });
 
+  it("an unreadable finding file fails as a FindingStoreError naming the file", async () => {
+    // The EACCES fault carries the file it is in, exactly like a schema
+    // refusal does — a consumer matching on the exported error type to
+    // print "corrupt finding: <file>" gets the typed path, not an
+    // unhandled raw fs error. (Skipped under root: chmod cannot block it.)
+    await withTree(
+      async (root) => {
+        await seedTemplate(root, "alpha", "1.0.0", [
+          { name: "0001-alpha-open.md", status: "open" },
+        ]);
+        await fs.chmod(
+          path.join(root, "alpha", "findings", "0001-alpha-open.md"),
+          0o000,
+        );
+      },
+      async (root) => {
+        await assert.rejects(
+          () => listFindings(root),
+          (err: unknown) =>
+            err instanceof FindingStoreError &&
+            err.file ===
+              path.join(root, "alpha", "findings", "0001-alpha-open.md") &&
+            /EACCES/.test(err.message),
+        );
+      },
+    );
+  });
+
+  it("a dangling symlinked finding fails as a FindingStoreError, not raw ENOENT", async () => {
+    // readFile dereferences — and must dereference, a bad finding behind a
+    // link cannot hide — so an unresolvable link surfaces from the read as
+    // the typed fault naming the file.
+    await withTree(
+      async (root) => {
+        await seedTemplate(root, "alpha", "1.0.0", []);
+        await fs.symlink(
+          path.join(root, "alpha", "findings", "gone.md"),
+          path.join(root, "alpha", "findings", "0001-alpha-open.md"),
+          "file",
+        );
+      },
+      async (root) => {
+        await assert.rejects(
+          () => listFindings(root),
+          (err: unknown) =>
+            err instanceof FindingStoreError &&
+            err.file ===
+              path.join(root, "alpha", "findings", "0001-alpha-open.md") &&
+            /ENOENT/.test(err.message),
+        );
+      },
+    );
+  });
+
+  it("a corrupt manifest.json fails as a FindingStoreError naming the manifest", async () => {
+    // A SyntaxError names no file at all; the manifest is store structure,
+    // so its fault is typed with the manifest's path.
+    await withTree(
+      async (root) => {
+        await seedTemplate(root, "alpha", "1.0.0", [
+          { name: "0001-alpha-open.md", status: "open" },
+        ]);
+        await fs.writeFile(
+          path.join(root, "alpha", "manifest.json"),
+          "{not json",
+        );
+      },
+      async (root) => {
+        await assert.rejects(
+          () => listFindings(root),
+          (err: unknown) =>
+            err instanceof FindingStoreError &&
+            err.file === path.join(root, "alpha", "manifest.json") &&
+            /manifest\.json cannot be read/.test(err.message),
+        );
+      },
+    );
+  });
+
+  it("a malformed query version fails as a FindingStoreError before the walk", async () => {
+    // Deterministic call-level refusal, file "": there is no store file
+    // the fault is in — it is the caller's argument.
+    await withTree(standardTree, async (root) => {
+      await assert.rejects(
+        () => listFindings(root, { version: "banana" }),
+        (err: unknown) =>
+          err instanceof FindingStoreError &&
+          err.file === "" &&
+          /query version 'banana' is not a well-formed semver/.test(
+            err.message,
+          ),
+      );
+    });
+  });
+
   it("a .MD travel-artifact is seen, never dropped as if absent", async () => {
     // On case-insensitive filesystems (macOS, Windows) an upper-case `.MD` is
     // the same file the finder shows; dropping it would leave a silent hole
