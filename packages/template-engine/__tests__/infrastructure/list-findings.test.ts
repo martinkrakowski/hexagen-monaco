@@ -523,15 +523,27 @@ describe("listFindings — the read path", () => {
     );
   });
 
-  it("the real repo tree yields exactly the two seeded template findings", async () => {
+  it("every finding in the real repo tree loads and cites a directory that exists", async () => {
+    // Structural, not a count: this fixture spans 45 directories the lane
+    // does not own — any future finding under templates/**, or any
+    // manifest outside the lane becoming unparseable, must not read as a
+    // G4 failure in an unrelated lane. The assertion states the behaviour
+    // this lane OWNS: the whole real tree loads (so every finding file in
+    // it parses, validates, and matches its own directory — listFindings
+    // would fail the call otherwise) and every returned subject names a
+    // directory that actually sits under templates/. The seeded store
+    // keeps the check non-vacuous.
     const found = await listFindings(TEMPLATES_DIR);
-    assert.deepStrictEqual(
-      found.map((f) => [f.subject, f.id, f.status]).sort(),
-      [
-        ["agents-md", "0001", "open"],
-        ["ci-github-actions", "0001", "open"],
-      ].sort(),
+    assert.ok(
+      found.length >= 1,
+      "the seeded store holds findings — a reader that returns nothing must fail visibly, not pass vacuously",
     );
+    for (const f of found) {
+      await assert.doesNotReject(
+        () => fs.stat(path.join(TEMPLATES_DIR, f.subject)),
+        `subject '${f.subject}' must name a directory under templates/`,
+      );
+    }
   });
 });
 
