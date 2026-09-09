@@ -49,6 +49,8 @@ describe("isInstalled", () => {
 
   it("is false for any id when the config is empty", () => {
     assert.equal(isInstalled(emptyConfig(), "ci-github-actions"), false);
+    assert.equal(isInstalled(emptyConfig(), "constructor"), false);
+    assert.equal(isInstalled(emptyConfig(), "toString"), false);
   });
 });
 

@@ -35,7 +35,7 @@ export function isInstalled(
   config: TemplateConfig,
   templateId: string,
 ): boolean {
-  return templateId in config.templates;
+  return Object.hasOwn(config.templates, templateId);
 }
 
 /**
