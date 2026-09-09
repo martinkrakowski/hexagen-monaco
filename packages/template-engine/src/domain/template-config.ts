@@ -35,5 +35,28 @@ export function isInstalled(
   config: TemplateConfig,
   templateId: string,
 ): boolean {
-  return templateId in config.templates;
+  return Object.hasOwn(config.templates, templateId);
+}
+
+/**
+ * The three-state reading of a template config record (plan F-D7): `absent` —
+ * no record exists, so the project's add-on history is unknown and a query
+ * path must never report it as "no templates"; `empty` — the record exists and
+ * lists no add-on templates; `populated` — the record exists and carries
+ * install records.
+ */
+export type TemplateConfigState =
+  | { state: "absent" }
+  | { state: "empty" }
+  | { state: "populated"; config: TemplateConfig };
+
+/**
+ * Classifies a config value already read from some source. Whether a record
+ * exists at all (`absent` vs the rest) is a property of the source, not of the
+ * value, so the store adapters decide that side.
+ */
+export function configState(config: TemplateConfig): TemplateConfigState {
+  return Object.keys(config.templates).length === 0
+    ? { state: "empty" }
+    : { state: "populated", config };
 }
