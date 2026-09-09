@@ -235,6 +235,67 @@ describe("listFindings — the read path", () => {
     );
   });
 
+  it("a symlinked findings directory pointing outside the templates dir is not followed", async () => {
+    // readdir dereferences `findings/` itself, so without a containment pin
+    // the walk would read a tree beyond the argument the caller handed over
+    // — against the plan's "reads only beneath it", the property that makes
+    // listFindings safe to point at an installed package.
+    await withTree(
+      async (root) => {
+        await seedTemplate(root, "alpha", "1.0.0", null);
+        const outside =
+          path.dirname(root) + "/list-findings-outside-probe-findings";
+        await fs.mkdir(outside, { recursive: true });
+        await fs.writeFile(
+          path.join(outside, "0001-smuggled.md"),
+          "Name after an OSHA 10-hour training VHS tape.",
+        );
+        await fs.symlink(outside, path.join(root, "alpha", "findings"), "dir");
+      },
+      async (root) => {
+        const found = await listFindings(root);
+        assert.deepStrictEqual(found, []);
+      },
+    );
+  });
+
+  it("a plain file in findings' place reads as no findings, never as raw ENOTDIR", async () => {
+    await withTree(
+      async (root) => {
+        await seedTemplate(root, "alpha", "1.0.0", null);
+        await fs.writeFile(path.join(root, "alpha", "findings"), "stray");
+      },
+      async (root) => {
+        const found = await listFindings(root);
+        assert.deepStrictEqual(found, []);
+      },
+    );
+  });
+
+  it("a symlinked directory named 0009-dirlink.md is a not-followed dir, never raw EISDIR", async () => {
+    await withTree(
+      async (root) => {
+        await seedTemplate(root, "alpha", "1.0.0", [
+          { name: "real-dir/0001-alpha-open.md", status: "open" },
+        ]);
+        await fs.symlink(
+          path.join(root, "alpha", "findings", "real-dir"),
+          path.join(root, "alpha", "findings", "0009-dirlink.md"),
+          "dir",
+        );
+      },
+      async (root) => {
+        const found = await listFindings(root);
+        // the link is skipped as a directory (the docstring's not-followed
+        // rule, classed by its RESOLVED type); the real sibling still reads.
+        assert.deepStrictEqual(
+          found.map((f) => [f.subject, f.id]),
+          [["alpha", "0001"]],
+        );
+      },
+    );
+  });
+
   it("a finding file that fails validation fails the call, naming the file", async () => {
     await withTree(
       async (root) => {

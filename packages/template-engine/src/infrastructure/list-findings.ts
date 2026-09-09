@@ -1,4 +1,4 @@
-import type { Dirent } from "node:fs";
+import type { Dirent, Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { Finding } from "../domain/findings/finding.js";
@@ -83,10 +83,8 @@ export async function listFindings(
   for (const entry of sortByName(templates)) {
     if (!entry.isDirectory()) continue;
     const subjectId = entry.name;
-    const files = await collectFindingFiles(
-      path.join(templatesDir, subjectId, "findings"),
-    );
-    if (files.length === 0) continue;
+    const files = await collectFindingFiles(templatesDir, subjectId);
+    if (files === undefined || files.length === 0) continue;
     const context = await templateContext(templatesDir, subjectId);
     for (const file of files) {
       const text = await fs.readFile(file, "utf-8");
@@ -104,8 +102,63 @@ export async function listFindings(
   return findings;
 }
 
-/** Recursively collect the `.md` finding candidates under one findings dir. */
-async function collectFindingFiles(findingsDir: string): Promise<string[]> {
+/**
+ * The finding files one template subject contributes — or undefined when it
+ * contributes nothing: no `findings/` entry, a non-directory `findings`
+ * entry (a stray file is not a findings store), or a symlinked `findings`
+ * directory whose resolved target leaves `templatesDir`.
+ *
+ * Every read under `findings/` dereferences that directory, so its type and
+ * containment are pinned to the RESOLVED path before any walk: a plain
+ * `findings` file reads as "no findings" (a template contributes only
+ * through a real findings walk — readdir on a file is a raw ENOTDIR, which
+ * is a filesystem accident, not a store rule), and a symlinked `findings/`
+ * is walked only when its target resolves inside `templatesDir` (the plan's
+ * "reads only beneath it" — the property that makes `listFindings` safe to
+ * point at an installed package). A symlink pointing outside is not
+ * followed, the same rule the walk applies to the symlinked directories
+ * inside findings/; the caller handed this reader templatesDir and nothing
+ * beyond it is read.
+ */
+async function collectFindingFiles(
+  templatesDir: string,
+  subjectId: string,
+): Promise<string[] | undefined> {
+  const findingsDir = path.join(templatesDir, subjectId, "findings");
+  let findingsResolved: Stats;
+  try {
+    findingsResolved = await fs.stat(findingsDir);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    // ENOENT: absent findings directory — the normal, empty state.
+    // ENOTDIR: a broken path segment — "no findings", not a store fault.
+    if (code === "ENOENT" || code === "ENOTDIR") return undefined;
+    throw err;
+  }
+  if (!findingsResolved.isDirectory()) return undefined;
+  const [resolvedRoot, resolvedFindings] = await Promise.all([
+    fs.realpath(templatesDir),
+    fs.realpath(findingsDir),
+  ]);
+  if (
+    resolvedFindings !== resolvedRoot &&
+    !resolvedFindings.startsWith(resolvedRoot + path.sep)
+  ) {
+    return undefined;
+  }
+  return walkFindingsDir(findingsDir);
+}
+
+/**
+ * The recursive half: descends real directories, classifies every entry by
+ * its RESOLVED type rather than its Dirent flags alone (a symlink named
+ * `0009-dirlink.md` whose target is a directory is a not-followed directory,
+ * not a finding file readFile must die on), reads any `.md` entry that
+ * resolves to a file, and pushes an unresolving `.md`-named entry through to
+ * readFile so the dangling link surfaces from the read as the typed fault
+ * that names the file, never as a silent skip.
+ */
+async function walkFindingsDir(findingsDir: string): Promise<string[]> {
   let entries: Dirent[];
   try {
     entries = await fs.readdir(findingsDir, {
@@ -121,12 +174,25 @@ async function collectFindingFiles(findingsDir: string): Promise<string[]> {
   const files: string[] = [];
   for (const entry of sortByName(entries)) {
     const full = path.join(findingsDir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await collectFindingFiles(full)));
+    let resolved: Stats | null;
+    try {
+      resolved = await fs.stat(full);
+    } catch (err) {
+      // ENOENT = a dangling entry: pin it to the read path below so a
+      // `.md`-named dangling link is surfaced by readFile, not skipped.
+      // Any other stat fault is an IO fault and must surface whole.
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") resolved = null;
+      else throw err;
+    }
+    if (resolved?.isDirectory()) {
+      if (entry.isSymbolicLink()) continue; // a link can point anywhere; a cycle would hang the read
+      files.push(...(await walkFindingsDir(full)));
       continue;
     }
     if (!FINDING_SUFFIX_RE.test(entry.name)) continue;
-    files.push(full);
+    if (resolved === null || resolved.isFile()) {
+      files.push(full);
+    }
   }
   return files;
 }
