@@ -537,41 +537,226 @@ describe("listFindings — the read path", () => {
 
 /**
  * Plan §4 G4: "No network call is possible — assert the module imports
- * nothing that can make one." A statement about the read path's IMPORTS, so
- * the test reads the reader's own source plus everything it pulls from the
- * findings domain (the modules `listFindings` reads beneath it would sit in
- * anyway) and refuses the transport-capable builtins. The scaffold data in
- * `generated/template-bundle.generated.ts` is deliberately out of scope: it
- * is not part of this module's import graph, and template file contents are
- * not imports.
+ * nothing that can make one." A statement about the module's real IMPORT
+ * GRAPH, not about a directory: the test walks transitively from
+ * `list-findings.ts` through its relative specifiers, so a value import
+ * like `validateManifest` from `../domain/template-manifest.js` — in the
+ * graph even though it is not under `findings/` — is asserted too. Bare
+ * specifiers (node: builtins, package names) cannot be walked to a source
+ * file and are refused by name, and the code of every visited file is
+ * scanned for the fetch-family calls. The scaffold data in
+ * `generated/template-bundle.generated.ts` stays out of scope: it is not
+ * part of this import graph, and template file contents are not imports.
  */
 describe("listFindings — no network is possible", () => {
-  it("the read path's source imports no transport module and references no fetch", async () => {
-    const files = [
-      path.join(SRC, "infrastructure", "list-findings.ts"),
-      ...(await fs.readdir(path.join(SRC, "domain", "findings"))).map((f) =>
-        path.join(SRC, "domain", "findings", f),
-      ),
+  /**
+   * Strip comments and (optionally) string/template/regex bodies. The
+   * import scan runs on comment-stripped text with strings KEPT (they are
+   * the specifiers); the fetch-word scan runs on code with strings DROPPED,
+   * so anything written in prose or template literals — including this
+   * file's own descriptions of what is forbidden — is not a call.
+   */
+  function codeOf(source: string, keepStrings: boolean): string {
+    let out = "";
+    let prev = ""; // last significant char emitted, for `/` classification
+    const push = (c: string): void => {
+      if (c === "") return;
+      out += c;
+      if (!/\s/.test(c)) prev = c;
+    };
+    let i = 0;
+    while (i < source.length) {
+      const ch: string = source[i] as string;
+      const next: string = source[i + 1] ?? "";
+      if (ch === "/" && next === "/") {
+        while (i < source.length && source[i] !== "\n") i++;
+        continue;
+      }
+      if (ch === "/" && next === "*") {
+        i += 2;
+        while (
+          i < source.length &&
+          !(source[i] === "*" && source[i + 1] === "/")
+        )
+          i++;
+        i += 2;
+        push(" ");
+        continue;
+      }
+      if (ch === "'" || ch === '"' || ch === "`") {
+        const quote: string = ch;
+        if (keepStrings) push(quote);
+        i++;
+        while (i < source.length && source[i] !== quote) {
+          if (source[i] === "\\") {
+            if (keepStrings) {
+              push(source[i] as string);
+              push(source[i + 1] ?? "");
+            }
+            i += 2;
+            continue;
+          }
+          if (keepStrings) push(source[i] as string);
+          i++;
+        }
+        if (i >= source.length) break;
+        if (keepStrings) push(quote);
+        i++;
+        continue;
+      }
+      // A regex literal only when the `/` lands in operator position;
+      // after an identifier it is division, and neither matters here.
+      const operatorPrecedes =
+        prev === "" || "=,([!&|?:;{}<>+-*%~^".includes(prev);
+      if (ch === "/" && operatorPrecedes) {
+        if (keepStrings) push("/");
+        i++;
+        let inClass = false;
+        while (i < source.length && (inClass || source[i] !== "/")) {
+          const c = source[i] as string;
+          if (c === "\\") {
+            if (keepStrings) {
+              push(c);
+              push(source[i + 1] ?? "");
+            }
+            i += 2;
+            continue;
+          }
+          if (c === "[") inClass = true;
+          else if (c === "]") inClass = false;
+          if (keepStrings) push(c);
+          i++;
+        }
+        push("/");
+        i++;
+        while (i < source.length && /[dgimsuvy]/.test(source[i] as string)) {
+          if (keepStrings) push(source[i] as string);
+          i++;
+        }
+        continue;
+      }
+      push(ch);
+      i++;
+    }
+    return out;
+  }
+
+  /**
+   * The transport-capable specifiers: builtins that open sockets, spawn
+   * subprocesses, or resolve network names, plus the npm transports a
+   * future import could reach for. `node:fs`, `fs/promises`, and `path`
+   * are LOCAL — a filesystem walk needs them and only them.
+   */
+  const FORBIDDEN_SPECIFIERS = new Set([
+    "node:http",
+    "node:https",
+    "node:http2",
+    "node:net",
+    "node:tls",
+    "node:dgram",
+    "node:dns",
+    "node:child_process",
+    "http",
+    "https",
+    "http2",
+    "undici",
+    "axios",
+    "got",
+    "node-fetch",
+    "cross-fetch",
+    "superagent",
+    "needle",
+    "request",
+    "request-promise",
+  ]);
+
+  const FORBIDDEN_CALLS: Array<[RegExp, string]> = [
+    [/\bfetch\b/, "fetch"],
+    [/\bXMLHttpRequest\b/, "XMLHttpRequest"],
+    [/\bWebSocket\b/, "WebSocket"],
+  ];
+
+  /** Where a relative specifier's module really lives, given the `.js`
+   * suffix is compiled-away TypeScript (list-findings.ts imports `.js`). */
+  async function resolveRelative(
+    dir: string,
+    spec: string,
+  ): Promise<string | null> {
+    const base = path.resolve(dir, spec);
+    const candidates = [
+      base,
+      /\.m?[jt]s$/.test(base) ? base.replace(/\.m?js$/, ".ts") : base + ".ts",
+      path.join(base, "index.ts"),
     ];
-    // `node:http` as a substring also covers `node:https`; the rest are
-    // exact specifiers. `fetch` is asserted as a whole word so prose like a
-    // hypothetical variable name cannot pass while a real call would fail.
-    const forbidden: Array<[RegExp, string]> = [
-      [/node:http/, "node:http(s)"],
-      [/node:net/, "node:net"],
-      [/node:dgram/, "node:dgram"],
-      [/node:tls/, "node:tls"],
-      [/\bfetch\b/, "fetch"],
+    for (const candidate of candidates) {
+      try {
+        const stats = await fs.stat(candidate);
+        if (stats.isFile()) return candidate;
+      } catch {
+        // try the next candidate
+      }
+    }
+    return null;
+  }
+
+  it("the read path's IMPORT GRAPH transports nothing and calls no fetch", async () => {
+    const entry = path.join(SRC, "infrastructure", "list-findings.ts");
+    const walked: Array<{ file: string; imports: string[] }> = [];
+    const visited = new Set<string>();
+    const fifo: Array<{ file: string; dir: string }> = [
+      { file: entry, dir: path.dirname(entry) },
     ];
-    for (const file of files) {
-      const text = await fs.readFile(file, "utf-8");
-      for (const [pattern, label] of forbidden) {
+    while (fifo.length > 0) {
+      const { file, dir } = fifo.shift() as { file: string; dir: string };
+      if (visited.has(file)) continue;
+      visited.add(file);
+      const source = await fs.readFile(file, "utf-8");
+      const code = codeOf(source, true); // comments gone, strings kept
+      const stripped = codeOf(source, false); // nothing but code left
+      const specs: string[] = [];
+      const importRe =
+        /(?:\bfrom\s*|\bimport\s*|\bimport\(\s*|\brequire\(\s*)["']([^"']+)["']/g;
+      for (const match of code.matchAll(importRe)) {
+        const spec: string | undefined = match[1];
+        if (spec === undefined) continue;
+        specs.push(spec);
+        assert.ok(
+          !FORBIDDEN_SPECIFIERS.has(spec),
+          `${file} imports '${spec}' — the findings read path is a local walk`,
+        );
+        if (spec.startsWith(".")) {
+          const resolved = await resolveRelative(dir, spec);
+          assert.ok(
+            resolved !== null,
+            `${file} imports '${spec}' — the graph walk must resolve it`,
+          );
+          fifo.push({ file: resolved, dir: path.dirname(resolved) });
+        }
+        // A bare spec (node: builtin or package) is checked above by name;
+        // node:fs-family builtins walk nowhere by design.
+      }
+      for (const [pattern, label] of FORBIDDEN_CALLS) {
         assert.doesNotMatch(
-          text,
+          stripped,
           pattern,
           `${file} must never involve ${label} — the findings read path is a local walk`,
         );
       }
+      walked.push({ file, imports: specs });
     }
+    // Non-vacuous: the graph actually reached the domain modules — a
+    // broken walk must fail loudly, not silently assert on one file.
+    assert.ok(
+      walked.some((w) => w.file.includes("template-manifest")),
+      "the import graph walk reaches template-manifest.ts (the value import line 11 covers)",
+    );
+    assert.ok(
+      walked.some((w) => w.file.includes("finding-query")),
+      "the import graph walk reaches finding-query.ts",
+    );
+    assert.ok(
+      walked.length > 5,
+      "the import graph walk is transitive, not one-file deep",
+    );
   });
 });
