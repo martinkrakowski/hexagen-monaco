@@ -30,11 +30,22 @@ const REPO_ROOT = path.resolve(
 );
 
 /**
+ * Root-relative, POSIX-separated. `path.relative()` is platform-native —
+ * backslashes on Windows — so an assertion compared against slash-separated
+ * literals would fail there. The template-engine suites do not run in the
+ * Windows CI job today, but that filter is one edit away from including this
+ * package; normalize instead of betting on it.
+ */
+function rel(root: string, file: string): string {
+  return path.relative(root, file).split(path.sep).join("/");
+}
+
+/**
  * The guard half of this file: a malformed finding file anywhere under
  * `templates/<id>/findings/` fails CI through the same door the collision and
- * budget guards use. The store is unseeded today (seeding is lane G3, a later
- * wave), so the guard must pass with zero finding files present — it is a
- * scan-then-validate net, not a fixture-dependent test.
+ * budget guards use. The store is seeded (lane G3, wave 2): the scan must be
+ * non-vacuous — the assertions below pin the exact finding files it must find,
+ * so a file that goes missing fails by count, not just "some exist".
  */
 
 interface LocatedFinding {
@@ -42,6 +53,13 @@ interface LocatedFinding {
   file: string;
   text: string;
 }
+
+/**
+ * F-D1's filename shape: `NNNN-<slug>.md` — four digits, then a lowercase
+ * kebab slug. Captured so the id agreement can compare the front matter's
+ * `id` against the sequence number the filename actually carries.
+ */
+const FINDING_FILENAME_RE = /^([0-9]{4})-([a-z0-9]+(?:-[a-z0-9]+)*)\.md$/;
 
 async function collectTemplateFindings(
   templatesDir: string,
@@ -72,8 +90,8 @@ async function collectFindingsDir(
       encoding: "utf8",
     });
   } catch (err) {
-    // Most templates have no findings/ dir yet — that is the normal state
-    // until G3 seeds the store.
+    // Most templates have no findings/ dir yet — absent is the normal state
+    // and must read as "no findings", not as a fault.
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
     throw err; // any other IO fault must surface, not read as "no findings"
   }
@@ -125,23 +143,49 @@ async function templateContext(
 describe("template guard — finding file schema", () => {
   it("every template finding file parses and validates against its template", async () => {
     const found = await collectTemplateFindings(TEMPLATES_DIR);
-    if (found.length === 0) {
-      // Vacuous until lane G3 seeds the store; the guard must pass with no
-      // finding files present anywhere (the repo's state until then).
-      // eslint-disable-next-line no-console
-      console.warn(
-        "no finding files under templates/*/findings/ — the store is unseeded (lane G3)",
-      );
-    }
+    // Non-vacuous since lane G3 seeded the store: assert the count and the
+    // exact file set, so a missing finding file fails instead of an empty
+    // (vacuously green) scan.
+    assert.equal(
+      found.length,
+      2,
+      "the seeded store holds exactly two template findings",
+    );
+    assert.deepStrictEqual(found.map((f) => rel(REPO_ROOT, f.file)).sort(), [
+      "packages/template-engine/templates/agents-md/findings/0001-session-log-grows-unbounded.md",
+      "packages/template-engine/templates/ci-github-actions/findings/0001-ci-runners-have-no-zsh.md",
+    ]);
     const failures: string[] = [];
     for (const f of found) {
       const context = await templateContext(TEMPLATES_DIR, f.subjectId);
       const result = validateFinding(f.text, context);
-      if (!result.success) {
-        failures.push(
-          `${path.relative(REPO_ROOT, f.file)} — ${result.error.field}: ${result.error.message}`,
-        );
+      if (result.success) {
+        // F-D1: the filename must carry the NNNN-<slug>.md shape, and the id
+        // must be the zero-padded sequence number it starts with — the
+        // committed store must be internally consistent, not merely
+        // schema-valid. The whole filename is checked, not a four-character
+        // prefix: `0001anything.md` must not satisfy a check its name implies.
+        const filename = path.basename(f.file);
+        const shaped = FINDING_FILENAME_RE.exec(filename);
+        if (!shaped) {
+          failures.push(
+            `${rel(REPO_ROOT, f.file)} — filename '${filename}' does not match ` +
+              `the NNNN-<slug>.md shape (F-D1): four digits, a hyphen, a ` +
+              `lowercase kebab slug, .md`,
+          );
+          continue;
+        }
+        if (result.value.id !== shaped[1]) {
+          failures.push(
+            `${rel(REPO_ROOT, f.file)} — id '${result.value.id}' does not match ` +
+              `the filename sequence number '${shaped[1]}'`,
+          );
+        }
+        continue;
       }
+      failures.push(
+        `${rel(REPO_ROOT, f.file)} — ${result.error.field}: ${result.error.message}`,
+      );
     }
     assert.deepStrictEqual(
       failures,
@@ -158,8 +202,8 @@ describe("template guard — finding file schema", () => {
  * `findings/9000-bad.md` fails the suite, while the identical file symlinked in
  * as `findings/9001-symlink.md` (and any file one directory down) sailed
  * through because the scan was `isFile()`-only and non-recursive. These tests
- * build a fixture in a temp dir (seeding the real store is lane G3) and prove
- * every shape is collected and refused.
+ * build a fixture in a temp dir and prove every shape is collected and
+ * refused.
  */
 describe("template guard — recursion and symlink coverage", () => {
   it("collects a finding file behind a symlink and one directory down", async () => {
@@ -186,19 +230,16 @@ describe("template guard — recursion and symlink coverage", () => {
       await fs.writeFile(nested, bad);
 
       const located = await collectTemplateFindings(tmp);
-      assert.deepStrictEqual(
-        located.map((f) => path.relative(tmp, f.file)).sort(),
-        [
-          "ci-github-actions/findings/1000-bad.md",
-          "ci-github-actions/findings/1001-symlink.md",
-          "ci-github-actions/findings/nested/2000-nested.md",
-        ],
-      );
+      assert.deepStrictEqual(located.map((f) => rel(tmp, f.file)).sort(), [
+        "ci-github-actions/findings/1000-bad.md",
+        "ci-github-actions/findings/1001-symlink.md",
+        "ci-github-actions/findings/nested/2000-nested.md",
+      ]);
       // The guard must be blind to none of them: each is read (symlink
       // dereferenced) and refused by the schema.
       for (const f of located) {
         const result = validateFinding(f.text, baseContext());
-        assert.ok(!result.success, `${path.relative(tmp, f.file)} must fail`);
+        assert.ok(!result.success, `${rel(tmp, f.file)} must fail`);
       }
     } finally {
       await fs.rm(tmp, { recursive: true, force: true });
@@ -207,8 +248,8 @@ describe("template guard — recursion and symlink coverage", () => {
 });
 
 /**
- * Fixture half of this file (tests construct their own findings; seeding the
- * real store is lane G3). The canonical fixture mirrors §2 of the plan.
+ * Fixture half of this file (tests construct their own findings). The
+ * canonical fixture mirrors §2 of the plan.
  */
 
 const FIXTURE_BODY = [
@@ -645,5 +686,156 @@ describe("validate-finding — the closed-schema validator", () => {
       "on ubuntu-latest, which lacks zsh.",
     ].join("\n");
     expectSuccess(findingText({}, body));
+  });
+});
+
+/**
+ * Lane G3 layout proofs (F-D0, F-D1, F-D2). `templates/` is copied verbatim
+ * and unfiltered into the published CLI (packages/sync/tsup.config.ts
+ * onSuccess), and `discoverTemplateIds()` is the single authoritative check
+ * on what that directory may contain — it throws by name on anything that is
+ * not a template. A findings/ directory inside a template is invisible to
+ * that check and rides along with zero build changes; the store seeded here
+ * must prove that, not assume it. The component finding (arch-linter) lives
+ * at tools/arch-linter/findings/ — outside the copy input — and therefore
+ * cannot ship; these tests assert on the copy INPUT (the templates/ directory
+ * itself), because a real tarball/packaging run is disproportionate for a
+ * unit guard and the verbatim copy makes the input fully determine the
+ * tarball contents. That verbatim-copy premise is itself pinned from the test
+ * side against packages/sync/tsup.config.ts: exactly one cpSync into
+ * dist/templates, sourced from ../template-engine/templates.
+ */
+describe("template guard — the findings layout ships for free (lane G3)", () => {
+  it("discoverTemplateIds() reports no strays with findings/ directories present", async () => {
+    // The premise in the test's name, asserted rather than assumed: both
+    // seeded templates carry a findings/ directory. Without these checks the
+    // resolution below would pass identically on a tree with no findings/ at
+    // all — exactly the state lane G3 found — and the title would claim a
+    // condition the test never established.
+    for (const id of ["ci-github-actions", "agents-md"] as const) {
+      const findingsDir = path.join(TEMPLATES_DIR, id, "findings");
+      const stat = await fs.stat(findingsDir).catch(() => undefined);
+      assert.ok(
+        stat?.isDirectory(),
+        `fixture error: templates/${id}/findings/ must exist as a directory — ` +
+          `the premise of this test (findings/ directories present in the ` +
+          `tree discoverTemplateIds() resolves) is gone`,
+      );
+    }
+    // Throws by name on any stray, so a resolution proves the whole tree.
+    const ids = await discoverTemplateIds(TEMPLATES_DIR);
+    assert.ok(ids.includes("ci-github-actions"));
+    assert.ok(ids.includes("agents-md"));
+  });
+
+  it("the seeded component finding validates against the arch-linter component context", async () => {
+    // The one component record lane G3 seeded is validated like the template
+    // findings: schema gates, the subject kind/id/version gates against the
+    // component's own package.json version, the body rules (F-D4's second
+    // line of defence), and the F-D1 filename shape. This is not a general
+    // component-finding scan — F-D0 keeps component findings author-facing
+    // and out of the tarball; this guards the one file this lane committed.
+    const findingPath = path.join(
+      REPO_ROOT,
+      "tools",
+      "arch-linter",
+      "findings",
+      "0001-layer-rules-skip-apps.md",
+    );
+    const stat = await fs.stat(findingPath).catch(() => undefined);
+    assert.ok(
+      stat?.isFile(),
+      "fixture error: the component finding is missing at " +
+        "tools/arch-linter/findings/0001-layer-rules-skip-apps.md — the " +
+        "record this test validates was removed or relocated",
+    );
+    const pkg = JSON.parse(
+      await fs.readFile(
+        path.join(REPO_ROOT, "tools", "arch-linter", "package.json"),
+        "utf-8",
+      ),
+    ) as { version?: unknown };
+    assert.equal(
+      typeof pkg.version,
+      "string",
+      "fixture error: tools/arch-linter/package.json must carry a version string — the component context has nothing to validate the finding against",
+    );
+    const componentContext: FindingContext = {
+      subjectId: "arch-linter",
+      subjectKind: "component",
+      locationLabel: "tools/arch-linter/findings/",
+      currentVersion: (kind, id) =>
+        kind === "component" && id === "arch-linter"
+          ? (pkg.version as string)
+          : undefined,
+      generatorRoot: REPO_ROOT,
+    };
+    const result = validateFinding(
+      await fs.readFile(findingPath, "utf-8"),
+      componentContext,
+    );
+    if (!result.success) {
+      assert.fail(
+        `the component finding must pass the finding schema validator: ` +
+          `${result.error.field}: ${result.error.message}`,
+      );
+    }
+    // The F-D1 filename shape and id agreement, same as the template findings.
+    const filename = path.basename(findingPath);
+    const shaped = FINDING_FILENAME_RE.exec(filename);
+    assert.ok(
+      shaped,
+      `filename '${filename}' does not match the NNNN-<slug>.md shape (F-D1)`,
+    );
+    assert.equal(result.value.id, shaped[1]);
+  });
+
+  it("the component finding lives outside templates/, so the verbatim copy input holds no component finding", async () => {
+    // The copy input is exactly packages/template-engine/templates: the set of
+    // finding files under it must be exactly the two template findings, and no
+    // template directory named arch-linter may exist.
+    const found = await collectTemplateFindings(TEMPLATES_DIR);
+    assert.deepStrictEqual(
+      found.map((f) => f.subjectId).sort(),
+      ["agents-md", "ci-github-actions"],
+      "the copy input carries exactly the two template findings",
+    );
+    assert.ok(
+      !found.some(
+        (f) => f.subjectId === "arch-linter" || f.file.includes("arch-linter"),
+      ),
+      "no component finding may sit under templates/ — it would ship",
+    );
+  });
+
+  it("the verbatim-copy premise holds: tsup.config.ts copies templates/ into dist/templates with exactly one cpSync", async () => {
+    // The isolation suite (file-emitter-finding-isolation.test.ts) and the
+    // copy-input assertion above reason about the copy INPUT (templates/);
+    // that is only sound while packages/sync/tsup.config.ts keeps a single,
+    // unfiltered cpSync of ../template-engine/templates into dist/templates.
+    // This pin reads the config and enforces that property from the test side
+    // (the config itself must not be edited for this layout — F-D1), so a
+    // second cpSync or a widened source fails here, by name, instead of
+    // shipping findings with the suite green.
+    const config = await fs.readFile(
+      path.join(REPO_ROOT, "packages", "sync", "tsup.config.ts"),
+      "utf-8",
+    );
+    const copyCalls = config.match(/cpSync\(/g) ?? [];
+    assert.equal(
+      copyCalls.length,
+      1,
+      "packages/sync/tsup.config.ts must contain exactly one cpSync call — " +
+        "the findings isolation guarantees reason about the verbatim copy " +
+        "input; a second copy source is a packaging change that must revisit " +
+        "that premise in the template-engine guard suite",
+    );
+    assert.match(
+      config,
+      /cpSync\(\s*["']\.\.\/template-engine\/templates["']\s*,\s*["']dist\/templates["']/,
+      "the single cpSync must copy ../template-engine/templates into " +
+        "dist/templates — the verbatim, unfiltered copy the input-level " +
+        "assertions depend on",
+    );
   });
 });
