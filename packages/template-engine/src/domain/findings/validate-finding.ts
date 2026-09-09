@@ -58,6 +58,12 @@ export interface FindingContext {
   generatorRoot: string;
 }
 
+/**
+ * A finding id is the zero-padded sequence number from its filename (F-D1:
+ * `templates/<id>/findings/NNNN-<slug>.md`). Exactly four digits.
+ */
+const FINDING_ID_RE = /^[0-9]{4}$/;
+
 export function validateFinding(
   text: string,
   context: FindingContext,
@@ -101,6 +107,18 @@ export function validateFinding(
   const fixedIn = frontMatter.get("fixedIn") ?? null;
 
   if (id === "") return reject("id", "field 'id' must be a non-empty value");
+  // The id is the zero-padded sequence number from the finding's filename
+  // (F-D1: templates/<id>/findings/NNNN-<slug>.md, canonical example `id: 0001`).
+  // Four digits and nothing else: a free-text id would be the one field that
+  // could carry a project or client name past the F-D4 closed-set defence,
+  // so the shape is enforced, not just the presence.
+  if (!FINDING_ID_RE.test(id)) {
+    return reject(
+      "id",
+      `field 'id' must be a zero-padded sequence number — exactly four digits ` +
+        `(F-D1), found '${id}'`,
+    );
+  }
   if (subject === "")
     return reject("subject", "field 'subject' must be a non-empty value");
 

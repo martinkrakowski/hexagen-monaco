@@ -405,9 +405,35 @@ describe("parse-finding — the hand-rolled front-matter parser", () => {
 describe("validate-finding — the closed-schema validator", () => {
   it("validates the canonical fixed finding", () => {
     const finding = expectSuccess(findingText());
+    assert.equal(finding.id, "0001");
     assert.equal(finding.subjectVersion, "1.2.0");
     assert.equal(finding.fixedIn, "1.3.0");
     assert.ok(finding.body.includes("ubuntu-latest"));
+  });
+
+  it.each([
+    "client-name",
+    "acme-corp-bug",
+    "1.2.3",
+    "00001",
+    "123",
+    "000a",
+  ] as const)(
+    "refuses an id that is not a zero-padded sequence number (%s)",
+    (id) => {
+      const err = expectFailure(
+        findingText({ id }),
+        "id",
+        baseContext(),
+        "zero-padded",
+      );
+      assert.ok(err.message.includes(id), err.message);
+    },
+  );
+
+  it("accepts the canonical zero-padded id of 0001", () => {
+    const finding = expectSuccess(findingText({ id: "0001" }));
+    assert.equal(finding.id, "0001");
   });
 
   it("validates an open finding with fixedIn null", () => {

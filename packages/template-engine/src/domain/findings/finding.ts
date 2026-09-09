@@ -86,7 +86,7 @@ export const FINDING_FRONT_MATTER_KEYS: readonly string[] = [
 ];
 
 export interface Finding {
-  /** Zero-padded sequence number, e.g. "0001". */
+  /** Zero-padded sequence number from the filename — exactly four digits (e.g. "0001"). */
   id: string;
   /** Subject id this finding is about — a template id or a component id. */
   subject: string;
