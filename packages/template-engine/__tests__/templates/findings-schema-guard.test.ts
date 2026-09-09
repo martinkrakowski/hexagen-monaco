@@ -32,9 +32,9 @@ const REPO_ROOT = path.resolve(
 /**
  * The guard half of this file: a malformed finding file anywhere under
  * `templates/<id>/findings/` fails CI through the same door the collision and
- * budget guards use. The store is unseeded today (seeding is lane G3, a later
- * wave), so the guard must pass with zero finding files present — it is a
- * scan-then-validate net, not a fixture-dependent test.
+ * budget guards use. The store is seeded (lane G3, wave 2): the scan must be
+ * non-vacuous — the assertions below pin the exact finding files it must find,
+ * so a file that goes missing fails by count, not just "some exist".
  */
 
 interface LocatedFinding {
@@ -72,8 +72,8 @@ async function collectFindingsDir(
       encoding: "utf8",
     });
   } catch (err) {
-    // Most templates have no findings/ dir yet — that is the normal state
-    // until G3 seeds the store.
+    // Most templates have no findings/ dir yet — absent is the normal state
+    // and must read as "no findings", not as a fault.
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
     throw err; // any other IO fault must surface, not read as "no findings"
   }
@@ -125,23 +125,40 @@ async function templateContext(
 describe("template guard — finding file schema", () => {
   it("every template finding file parses and validates against its template", async () => {
     const found = await collectTemplateFindings(TEMPLATES_DIR);
-    if (found.length === 0) {
-      // Vacuous until lane G3 seeds the store; the guard must pass with no
-      // finding files present anywhere (the repo's state until then).
-      // eslint-disable-next-line no-console
-      console.warn(
-        "no finding files under templates/*/findings/ — the store is unseeded (lane G3)",
-      );
-    }
+    // Non-vacuous since lane G3 seeded the store: assert the count and the
+    // exact file set, so a missing finding file fails instead of an empty
+    // (vacuously green) scan.
+    assert.equal(
+      found.length,
+      2,
+      "the seeded store holds exactly two template findings",
+    );
+    assert.deepStrictEqual(
+      found.map((f) => path.relative(REPO_ROOT, f.file)).sort(),
+      [
+        "packages/template-engine/templates/agents-md/findings/0001-session-log-grows-unbounded.md",
+        "packages/template-engine/templates/ci-github-actions/findings/0001-ci-runners-have-no-zsh.md",
+      ],
+    );
     const failures: string[] = [];
     for (const f of found) {
       const context = await templateContext(TEMPLATES_DIR, f.subjectId);
       const result = validateFinding(f.text, context);
-      if (!result.success) {
-        failures.push(
-          `${path.relative(REPO_ROOT, f.file)} — ${result.error.field}: ${result.error.message}`,
-        );
+      if (result.success) {
+        // F-D1: the id must be the zero-padded sequence number its filename
+        // carries — the committed store must be internally consistent, not
+        // merely schema-valid.
+        const filenameId = path.basename(f.file).slice(0, 4);
+        if (result.value.id !== filenameId) {
+          failures.push(
+            `${path.relative(REPO_ROOT, f.file)} — id '${result.value.id}' does not match the filename prefix '${filenameId}'`,
+          );
+        }
+        continue;
       }
+      failures.push(
+        `${path.relative(REPO_ROOT, f.file)} — ${result.error.field}: ${result.error.message}`,
+      );
     }
     assert.deepStrictEqual(
       failures,
@@ -158,8 +175,8 @@ describe("template guard — finding file schema", () => {
  * `findings/9000-bad.md` fails the suite, while the identical file symlinked in
  * as `findings/9001-symlink.md` (and any file one directory down) sailed
  * through because the scan was `isFile()`-only and non-recursive. These tests
- * build a fixture in a temp dir (seeding the real store is lane G3) and prove
- * every shape is collected and refused.
+ * build a fixture in a temp dir and prove every shape is collected and
+ * refused.
  */
 describe("template guard — recursion and symlink coverage", () => {
   it("collects a finding file behind a symlink and one directory down", async () => {
@@ -207,8 +224,8 @@ describe("template guard — recursion and symlink coverage", () => {
 });
 
 /**
- * Fixture half of this file (tests construct their own findings; seeding the
- * real store is lane G3). The canonical fixture mirrors §2 of the plan.
+ * Fixture half of this file (tests construct their own findings). The
+ * canonical fixture mirrors §2 of the plan.
  */
 
 const FIXTURE_BODY = [
@@ -645,5 +662,58 @@ describe("validate-finding — the closed-schema validator", () => {
       "on ubuntu-latest, which lacks zsh.",
     ].join("\n");
     expectSuccess(findingText({}, body));
+  });
+});
+
+/**
+ * Lane G3 layout proofs (F-D0, F-D1, F-D2). `templates/` is copied verbatim
+ * and unfiltered into the published CLI (packages/sync/tsup.config.ts
+ * onSuccess), and `discoverTemplateIds()` is the single authoritative check
+ * on what that directory may contain — it throws by name on anything that is
+ * not a template. A findings/ directory inside a template is invisible to
+ * that check and rides along with zero build changes; the store seeded here
+ * must prove that, not assume it. The component finding (arch-linter) lives
+ * at tools/arch-linter/findings/ — outside the copy input — and therefore
+ * cannot ship; these tests assert on the copy INPUT (the templates/ directory
+ * itself), because a real tarball/packaging run is disproportionate for a
+ * unit guard and the verbatim copy makes the input fully determine the
+ * tarball contents.
+ */
+describe("template guard — the findings layout ships for free (lane G3)", () => {
+  it("discoverTemplateIds() reports no strays with findings/ directories present", async () => {
+    // Throws by name on any stray, so a resolution proves the whole tree.
+    const ids = await discoverTemplateIds(TEMPLATES_DIR);
+    assert.ok(ids.includes("ci-github-actions"));
+    assert.ok(ids.includes("agents-md"));
+  });
+
+  it("the component finding lives outside templates/, so the verbatim copy input holds no component finding", async () => {
+    // The copy input is exactly packages/template-engine/templates: the set of
+    // finding files under it must be exactly the two template findings, and no
+    // template directory named arch-linter may exist.
+    await assert.doesNotReject(
+      fs.access(
+        path.join(
+          REPO_ROOT,
+          "tools",
+          "arch-linter",
+          "findings",
+          "0001-layer-rules-skip-apps.md",
+        ),
+      ),
+      "the component finding should exist at tools/arch-linter/findings/ as an author-facing record",
+    );
+    const found = await collectTemplateFindings(TEMPLATES_DIR);
+    assert.deepStrictEqual(
+      found.map((f) => f.subjectId).sort(),
+      ["agents-md", "ci-github-actions"],
+      "the copy input carries exactly the two template findings",
+    );
+    assert.ok(
+      !found.some(
+        (f) => f.subjectId === "arch-linter" || f.file.includes("arch-linter"),
+      ),
+      "no component finding may sit under templates/ — it would ship",
+    );
   });
 });
