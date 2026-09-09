@@ -2,6 +2,7 @@ import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import type { Dirent } from "node:fs";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateManifest } from "../../src/domain/template-manifest.js";
@@ -48,32 +49,54 @@ async function collectTemplateFindings(
   const ids = await discoverTemplateIds(templatesDir);
   const findings: LocatedFinding[] = [];
   for (const id of ids) {
-    const findingsDir = path.join(templatesDir, id, "findings");
-    let entries: Dirent[];
-    try {
-      // `encoding` must be pinned: without it @types/node's readdir overload
-      // yields `Dirent<Buffer>` and `e.name` is no longer a string.
-      entries = await fs.readdir(findingsDir, {
-        withFileTypes: true,
-        encoding: "utf8",
-      });
-    } catch (err) {
-      // Most templates have no findings/ dir yet — that is the normal state
-      // until G3 seeds the store.
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
-      throw err; // any other IO fault must surface, not read as "no findings"
-    }
-    for (const e of entries) {
-      if (!e.isFile() || !e.name.endsWith(".md")) continue;
-      const file = path.join(findingsDir, e.name);
-      findings.push({
-        subjectId: id,
-        file,
-        text: await fs.readFile(file, "utf-8"),
-      });
-    }
+    await collectFindingsDir(
+      path.join(templatesDir, id, "findings"),
+      id,
+      findings,
+    );
   }
   return findings;
+}
+
+async function collectFindingsDir(
+  dir: string,
+  subjectId: string,
+  out: LocatedFinding[],
+): Promise<void> {
+  let entries: Dirent[];
+  try {
+    // `encoding` must be pinned: without it @types/node's readdir overload
+    // yields `Dirent<Buffer>` and `e.name` is no longer a string.
+    entries = await fs.readdir(dir, {
+      withFileTypes: true,
+      encoding: "utf8",
+    });
+  } catch (err) {
+    // Most templates have no findings/ dir yet — that is the normal state
+    // until G3 seeds the store.
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw err; // any other IO fault must surface, not read as "no findings"
+  }
+  for (const e of entries) {
+    const full = path.join(dir, e.name);
+    // Recurse so a bad finding one directory down cannot hide from the scan.
+    if (e.isDirectory()) {
+      await collectFindingsDir(full, subjectId, out);
+      continue;
+    }
+    // A symlink is scanned as a finding file too, not skipped: readFile
+    // dereferences the target, so a bad finding smuggled in behind a link
+    // would otherwise escape the net exactly as a real file. A broken .md
+    // link surfaces as an IO error rather than a silent skip. Symlinked
+    // directories are NOT recursed — a link can point anywhere, and a cycle
+    // would hang the scan.
+    if (!e.name.endsWith(".md")) continue;
+    out.push({
+      subjectId,
+      file: full,
+      text: await fs.readFile(full, "utf-8"),
+    });
+  }
 }
 
 async function templateContext(
@@ -126,6 +149,60 @@ describe("template guard — finding file schema", () => {
       `Template finding files must pass the finding schema validator:\n  ` +
         failures.join("\n  "),
     );
+  });
+});
+
+/**
+ * The guard's collection must see finding files however they are smuggled in —
+ * not just as flat regular files. The reviewer's demo: a bad finding in
+ * `findings/9000-bad.md` fails the suite, while the identical file symlinked in
+ * as `findings/9001-symlink.md` (and any file one directory down) sailed
+ * through because the scan was `isFile()`-only and non-recursive. These tests
+ * build a fixture in a temp dir (seeding the real store is lane G3) and prove
+ * every shape is collected and refused.
+ */
+describe("template guard — recursion and symlink coverage", () => {
+  it("collects a finding file behind a symlink and one directory down", async () => {
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "findings-guard-"));
+    try {
+      const subject = path.join(tmp, "ci-github-actions");
+      await fs.mkdir(path.join(subject, "findings", "nested"), {
+        recursive: true,
+      });
+      await fs.writeFile(
+        path.join(subject, "manifest.json"),
+        JSON.stringify({
+          id: "ci-github-actions",
+          name: "CI",
+          description: "d",
+          version: "1.3.0",
+        }),
+      );
+      const bad = findingText({ projectName: "campaign-foundry" });
+      const flat = path.join(subject, "findings", "1000-bad.md");
+      await fs.writeFile(flat, bad);
+      await fs.symlink(flat, path.join(subject, "findings", "1001-symlink.md"));
+      const nested = path.join(subject, "findings", "nested", "2000-nested.md");
+      await fs.writeFile(nested, bad);
+
+      const located = await collectTemplateFindings(tmp);
+      assert.deepStrictEqual(
+        located.map((f) => path.relative(tmp, f.file)).sort(),
+        [
+          "ci-github-actions/findings/1000-bad.md",
+          "ci-github-actions/findings/1001-symlink.md",
+          "ci-github-actions/findings/nested/2000-nested.md",
+        ],
+      );
+      // The guard must be blind to none of them: each is read (symlink
+      // dereferenced) and refused by the schema.
+      for (const f of located) {
+        const result = validateFinding(f.text, baseContext());
+        assert.ok(!result.success, `${path.relative(tmp, f.file)} must fail`);
+      }
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
   });
 });
 
