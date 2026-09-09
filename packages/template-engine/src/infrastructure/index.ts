@@ -5,6 +5,10 @@ export { FileSystemTemplateConfigStore } from "./template-config-store.adapter.j
 export { FileSystemProjectFilePresence } from "./project-file-presence.adapter.js";
 export { ProcessEnvironmentReader } from "./environment-reader.adapter.js";
 
+// The findings read path (plan §3 G4). The caller resolves the templates
+// directory; this only reads beneath it.
+export { listFindings, FindingStoreError } from "./list-findings.js";
+
 // In-memory adapters for headless materialization (web code-view / ZIP / GitHub).
 export { InMemoryFileEmitter } from "./in-memory-file-emitter.adapter.js";
 export type { TemplateFileLoader } from "./in-memory-file-emitter.adapter.js";
