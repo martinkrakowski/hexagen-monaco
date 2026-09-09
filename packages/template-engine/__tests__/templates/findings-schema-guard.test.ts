@@ -1,5 +1,6 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
+import type { Dirent } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,9 +49,14 @@ async function collectTemplateFindings(
   const findings: LocatedFinding[] = [];
   for (const id of ids) {
     const findingsDir = path.join(templatesDir, id, "findings");
-    let entries: Awaited<ReturnType<typeof fs.readdir>>;
+    let entries: Dirent[];
     try {
-      entries = await fs.readdir(findingsDir, { withFileTypes: true });
+      // `encoding` must be pinned: without it @types/node's readdir overload
+      // yields `Dirent<Buffer>` and `e.name` is no longer a string.
+      entries = await fs.readdir(findingsDir, {
+        withFileTypes: true,
+        encoding: "utf8",
+      });
     } catch (err) {
       // Most templates have no findings/ dir yet — that is the normal state
       // until G3 seeds the store.
