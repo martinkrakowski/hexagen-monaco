@@ -215,6 +215,41 @@ describe("listFindings — the read path", () => {
     });
   });
 
+  it("a template directory whose manifest declares another id fails the call", async () => {
+    // The F-D6 join key: alpha's findings must join against alpha's own
+    // manifest version. A directory holding another template's manifest
+    // would hang that template's version off this subject's findings —
+    // the not-ahead check then runs against a version that has nothing to
+    // do with the subject — so the mismatch is refused, naming the
+    // directory and both ids.
+    await withTree(
+      async (root) => {
+        await seedTemplate(root, "alpha", "1.0.0", [
+          { name: "0001-alpha-open.md", status: "open" },
+        ]);
+        await fs.writeFile(
+          path.join(root, "alpha", "manifest.json"),
+          JSON.stringify({
+            id: "beta",
+            name: "beta",
+            description: "betrayed alpha",
+            version: "9.9.9",
+          }),
+        );
+      },
+      async (root) => {
+        await assert.rejects(
+          () => listFindings(root),
+          (err: unknown) =>
+            err instanceof FindingStoreError &&
+            err.file === path.join(root, "alpha", "manifest.json") &&
+            /directory 'alpha'/.test(err.message) &&
+            /'beta'/.test(err.message),
+        );
+      },
+    );
+  });
+
   it("a .MD travel-artifact is seen, never dropped as if absent", async () => {
     // On case-insensitive filesystems (macOS, Windows) an upper-case `.MD` is
     // the same file the finder shows; dropping it would leave a silent hole

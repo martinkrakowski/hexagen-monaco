@@ -232,6 +232,24 @@ async function templateContext(
       ),
     ),
   );
+  // F-D6's join key is the subject id: the store's whole version filter
+  // rests on joining a finding's fixedIn/subjectVersion against the
+  // subject's CURRENT version — and that version must come from the
+  // manifest that belongs to THIS directory. A directory whose
+  // manifest.json declares another id is a misplaced or half-updated tree;
+  // trusting its version here would hang beta's version off alpha's
+  // findings, and the not-ahead check would then run against a version
+  // that has nothing to do with the subject. Refuse it, naming the
+  // directory and both ids.
+  if (manifest.id !== subjectId) {
+    throw new FindingStoreError(
+      path.join(templatesDir, subjectId, "manifest.json"),
+      `template directory '${subjectId}' holds a manifest declaring id ` +
+        `'${manifest.id}' — the subject id a finding's version joins ` +
+        `against is the directory name, so a manifest must name the ` +
+        `directory it lives in (F-D6)`,
+    );
+  }
   const versions = new Map([[subjectId, manifest.version]]);
   return {
     subjectId,
