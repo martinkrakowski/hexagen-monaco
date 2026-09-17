@@ -205,7 +205,87 @@ its fault, L4 names its fault. A lane that cannot produce a red run has not ship
 
 ---
 
-## 5. Open decisions — owner, before dispatch
+## 5. Decisions — resolved by the owner, 2026-09-17
+
+All three open decisions are answered. The lanes below are re-targeted accordingly;
+§3's L1 and L4 are superseded by this section.
+
+### D-A · Applications are **not** lint units. The claim is withdrawn.
+
+Do not extend the manifest schema or the linter to make them units.
+
+A lint unit has to be something the bootstrap creates, the schema names, and the
+linter can fail on. **The generator does not emit applications.** Making them
+units would mean schema fields for paths the generator never writes, discovery
+over directories that may be absent, empty, or a later hand-rolled framework app,
+and two gate lanes that cannot run on a fresh scaffold — the only tree the plan
+can prove anything against.
+
+It would also encode a product boundary that does not exist: _the generator
+governs application composition roots_. It does not. An application a user adds
+later is outside the architectural scaffold; the root linter may pick it up if
+they opt in, and the generator's gates must not require it.
+
+**Retarget both blocked lanes:**
+
+| Lane assumption                                | Replace with                                                                                                  |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| each application is an ESLint / arch-lint unit | each **generated package** is a unit (`packages/*` matching a bounded context, adapter, or the shared kernel) |
+| a CI matrix over applications                  | a CI matrix over **workspaces the generator added a lint script to**                                          |
+| an application-level import allow-list         | the existing package / context allow-lists in `linter-config.yaml`                                            |
+
+Revisit only if the product scope changes to generating drivers under an
+applications directory. That is a generator feature, not a linter patch.
+
+**Consequence for the findings store:** `findings/0001-layer-rules-skip-apps.md`
+is closed **wontfix** with this reasoning recorded, and the separate silent-skip
+defect it previously blamed is split out as `0002-missing-root-skips-silently.md`,
+which stays **open** — a module whose resolved root is absent returns with no
+diagnostic, and that is true whatever the unit set is.
+
+### D-B · The coverage floor reaches the tree only through core-owned root config
+
+Delivery is unchanged in shape: **core provider + a root Vitest config owned by
+the generator, or defer.** An add-on still cannot patch `package.json` or a
+per-package Vitest config, and the plan's own F6 says so.
+
+What D-A changes is the **denominator**:
+
+- `coverage.include` — generated package source (`packages/*/src/**`, or whatever
+  the scaffold actually emits).
+- `coverage.exclude` — tests, `.d.ts`, conflict copies, and **everything under an
+  applications directory**: user-owned, out of scope.
+- Root `test` / `test:coverage` scripts and `@vitest/coverage-v8` land in the
+  **root files core already owns**.
+- An add-on may add a reporter or a CI step that invokes that script. **It must
+  not set the threshold.**
+
+Do **not** invent a per-application Vitest project. There is no generated
+application to attach one to, and Vitest coverage is process-scoped anyway.
+
+**If core will not emit the root coverage block, defer the floor.** A schema
+number with no runner is not a gate — it is the `abortIfVacuous` failure in a new
+costume.
+
+### D-C · The floor is **80**, not 100
+
+D-A makes 100 worse, not better. The scaffold is ports, use cases, adapters, the
+shared kernel and generated wiring. 100 % across that set forces a test for every
+adapter branch and every generated barrel, or a pile of excludes that make the
+number fake. **80** fails a tree with almost no package tests, and leaves room for
+an add-on to add surface without immediately reddening the gate.
+
+100 is reasonable later, on a **named generated glob you fully control** — a
+domain subtree, say — never as the workspace floor.
+
+**Sequencing:** keep the floor **off** until D-B exists. When it turns on: on by
+default, **80**, generated packages only, applications excluded.
+
+---
+
+## 6. Superseded by §5
+
+### The original open-decision list (now answered)
 
 1. **L1: are apps lint units?** (a) extend the schema and linter, or (b) withdraw the claim and
    re-scope the finding. Blocks L2 and L5.
