@@ -1,19 +1,74 @@
 import { describe, it } from "vitest";
 import assert from "node:assert";
 import { promises as fs } from "node:fs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import prettier from "prettier";
 import { generateRootFiles } from "../../src/generators/root-files.js";
 import type { Manifest } from "../../src/types/manifest.js";
 import type { SyncConfig, LoggerPort } from "../../src/config.js";
+
+const execFileAsync = promisify(execFile);
 
 const PACKAGE_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
   "..",
 );
+
+// Deliberately NOT `import prettier from "prettier"`: this package does not
+// (and must not) declare a `prettier` dependency — `yarn install --immutable`
+// rejects an undeclared workspace dependency regardless of whether the exact
+// range is already declared elsewhere (Yarn Berry records dependencies per
+// workspace, not repo-wide), and `yarn.lock` is a never-edit file (AGENTS.md).
+// `prettier` IS a root devDependency, so its binary is on disk in the
+// repo-root `node_modules/` regardless — invoked here as a subprocess (no
+// module resolution, no package.json footprint), anchored to a filesystem
+// path derived from this test file's own location rather than PATH/hoisting,
+// which is exactly the ambient-resolution failure mode
+// `workspace-tool-declaration.guard.test.ts` (in this same directory's
+// parent) exists to catch for `scripts`, applied here to a source import.
+const REPO_ROOT = path.resolve(PACKAGE_ROOT, "..", "..");
+const PRETTIER_BIN = path.join(
+  REPO_ROOT,
+  "node_modules",
+  "prettier",
+  "bin",
+  "prettier.cjs",
+);
+
+/**
+ * Asserts `filePath` needs no reformatting under `prettierrcPath` — i.e.
+ * `prettier --check` exits 0. `--no-editorconfig` keeps the check hermetic:
+ * an `.editorconfig` found by walking up from a `mkdtemp` path (however
+ * unlikely) must never change the result. Exit code 1 means "would
+ * reformat"; anything else (parse error, missing binary, …) is a hard
+ * failure, not a silent pass.
+ */
+async function assertPrettierClean(
+  filePath: string,
+  prettierrcPath: string,
+): Promise<void> {
+  try {
+    await execFileAsync(process.execPath, [
+      PRETTIER_BIN,
+      "--check",
+      "--config",
+      prettierrcPath,
+      "--no-editorconfig",
+      filePath,
+    ]);
+  } catch (err) {
+    const e = err as { code?: number; stdout?: string; stderr?: string };
+    assert.fail(
+      `${filePath} is not Prettier-clean under ${prettierrcPath} ` +
+        `(a freshly generated project's first \`yarn format\` must produce ` +
+        `no diff) — prettier --check exited ${e.code}:\n${e.stdout ?? ""}${e.stderr ?? ""}`,
+    );
+  }
+}
 
 const silentLogger: LoggerPort = {
   error: () => {},
@@ -1002,9 +1057,10 @@ describe("root files", () => {
 
     // The strongest test in this lane: it is not enough that a config
     // exists — the DoD is that `yarn format` on a freshly generated project
-    // produces NO diff. This runs the real `prettier` package (a devDependency
-    // of this package, matching the root workspace's own pinned range) against
-    // every JSON/YAML/Markdown root file the generator emits, using the exact
+    // produces NO diff. This runs the real `prettier` binary (the root
+    // workspace's own devDependency, invoked as a subprocess — see
+    // assertPrettierClean above for why not an `import`) against every
+    // JSON/YAML/Markdown root file the generator emits, using the exact
     // config content the generator itself just wrote, on a manifest that
     // exercises every dynamic array path (custom workspaces, turboConfig
     // pipeline + globalDependencies, and Next.js/Nitro framework build
@@ -1038,9 +1094,7 @@ describe("root files", () => {
           makeConfig(workspaceRoot, manifest, { forceRoot: true }),
         );
 
-        const prettierrc = JSON.parse(
-          await readFile(path.join(workspaceRoot, ".prettierrc.json")),
-        ) as Record<string, unknown>;
+        const prettierrcPath = path.join(workspaceRoot, ".prettierrc.json");
 
         // .gitignore is deliberately excluded: Prettier has no parser for
         // gitignore syntax (`getFileInfo(".gitignore")` reports
@@ -1051,40 +1105,14 @@ describe("root files", () => {
           "package.json",
           "tsconfig.base.json",
           "turbo.json",
+          ".yarnrc.yml",
+          "SETUP.md",
         ]) {
-          const content = await readFile(path.join(workspaceRoot, name));
-          const formatted = await prettier.format(content, {
-            ...prettierrc,
-            parser: "json",
-          });
-          assert.strictEqual(
-            formatted,
-            content,
-            `${name} must already be Prettier-clean under the emitted config — a freshly generated project's first \`yarn format\` must produce no diff`,
+          await assertPrettierClean(
+            path.join(workspaceRoot, name),
+            prettierrcPath,
           );
         }
-
-        const yarnrc = await readFile(path.join(workspaceRoot, ".yarnrc.yml"));
-        const formattedYarnrc = await prettier.format(yarnrc, {
-          ...prettierrc,
-          parser: "yaml",
-        });
-        assert.strictEqual(
-          formattedYarnrc,
-          yarnrc,
-          ".yarnrc.yml must already be Prettier-clean under the emitted config",
-        );
-
-        const setup = await readFile(path.join(workspaceRoot, "SETUP.md"));
-        const formattedSetup = await prettier.format(setup, {
-          ...prettierrc,
-          parser: "markdown",
-        });
-        assert.strictEqual(
-          formattedSetup,
-          setup,
-          "SETUP.md must already be Prettier-clean under the emitted config (out of the format script's glob today, but still governed by the same config)",
-        );
       });
     });
   });

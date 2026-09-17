@@ -116,7 +116,19 @@ function buildVars(
       ? manifest.monorepo!.workspaces!
       : ["apps/*", "packages/*"];
 
-  const workspaces = formatJsonArray(workspacesArray, 2, '  "workspaces": ');
+  // NOT formatJsonArray: Prettier infers the special `json-stringify` parser
+  // for a file literally named `package.json` (also package-lock.json,
+  // composer.json) — verified via `prettier.getFileInfo("package.json")`.
+  // That parser ignores printWidth entirely and always renders exactly like
+  // `JSON.stringify(value, null, 2)`: every array fully expanded, regardless
+  // of how short it is. `formatJsonArray`'s width-based collapsing is correct
+  // for turbo.json/tsconfig.base.json (plain `json` parser, confirmed via the
+  // same probe) but would make package.json NOT Prettier-clean — this is the
+  // one array field the emitted JSON always fully expands.
+  const workspaces =
+    "[\n" +
+    workspacesArray.map((w) => `    ${JSON.stringify(w)}`).join(",\n") +
+    "\n  ]";
 
   // toolchainVersion: the workspace package is `@hexagen/sync` but the pins
   // are emitted under the public `@hexagen-monaco/*` scope — same version
