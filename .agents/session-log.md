@@ -263,3 +263,115 @@ brief was written rather than after — the wave-1 defect that cost ~251k tokens
   the current text.
 - `loadState` → required, still needs a lane owning `validate-templates-ports.test.ts`.
 - §8 gap 2: `tools/wave-status/` unported, so `wave-event.sh`'s parity claim stays untestable here.
+
+## Wave 3 — the findings store, lane G4 (2026-09-08/09, merged 2026-09-17)
+
+Plan: `docs/planning/findings-store.md`. Single lane: the read path.
+
+### What merged
+
+| PR   | Lane                                                    | Squash     |
+| ---- | ------------------------------------------------------- | ---------- |
+| #676 | G4's ownership, layer split, and the packaging question | `5fc27a50` |
+| #677 | **G4** — the findings query API and file-system reader  | `732e9591` |
+
+`template-engine`: **61 test files / 592 tests**, from 54 / 479 at the start of wave 1.
+
+### The plan was wrong about G4, and it was caught before a lane paid for it
+
+Two stale premises in one table row. Ownership named `packages/template-findings` — the package
+decided against for G2 (a new workspace needs a `yarn.lock` entry; every CI job installs
+`--immutable`). And it said to reuse `resolveTemplatesDir()`, which lives in `packages/sync`,
+resolves relative to **its own** module, and sits on the wrong side of the dependency arrow:
+`sync` depends on `template-engine`, never the reverse.
+
+The correction moved resolution to the caller that already owns it. `listFindings` takes the
+templates directory as an argument, so one function serves both layouts because the caller
+supplies the difference. That also turned "no network call is possible" into a **checkable
+statement about imports** rather than a claim about path logic.
+
+**Then the same method caught a defect in the correction itself**: it put an fs-walking function in
+`src/domain/`, where nothing imports `node:fs` by design. Reader moved to `infrastructure/`, pure
+filtering kept in `domain/`. Four defects of this shape across the arc — F-D7's premise, F5's
+gate, G4's ownership, and the orchestrator's own layer assignment. The method does not care
+whose text it is.
+
+### The finding class went one layer deeper than wave 2
+
+Wave 2 found tests that pass without their premises. Wave 3 found **contracts the happy path
+never exercises**. All seven review findings were in failure paths reachable only by constructing
+the bad case:
+
+1. **The walk could read outside the directory it was given.** Symlinked directories _under_
+   `findings/` were skipped as documented, but `findings/` itself was dereferenced — so a
+   symlinked `findings/` escaped the argument. "Reads only beneath it" is the property that makes
+   `listFindings` safe to point at an installed `node_modules` tree, which is its entire purpose.
+   Found independently by both reviewers.
+2. **A manifest declaring another id corrupted the join key.** `versions` was keyed on the
+   directory name with its value taken from the manifest, unchecked — so `alpha/` holding a
+   manifest for `beta@9.9.9` joined alpha's findings against beta's version. **This is the second
+   join-key defect of the arc**: G2 shipped a semver comparator accepting leading zeros, so
+   `01.2.0` validated and then matched no manifest version that would ever exist. Both invisible
+   to every gate; both would have produced findings that quietly describe the wrong thing, which
+   for a findings store is worse than producing none.
+3. **The no-network assertion scanned a directory, not the import graph** — missing a _value_
+   import in that graph, while its name claimed otherwise. Its fix was proven the right way:
+   injecting `node:dns` and `undici`, confirming both slip past the old pattern set and are caught
+   by the new one.
+
+Plus: `.md` matched case-sensitively so a `.MD` finding vanished silently; read-path faults
+escaped as raw FS errors against the module's own typed contract; and the reader accepted a
+finding whose filename did not match its id — the guard enforces that on the **committed** store,
+but the reader's subject is an **installed tree nothing has guarded**, so an invariant maintained
+at commit time may not be assumed at read time.
+
+### A lane interrupted mid-run, and why it was continued rather than re-run
+
+The implement run died on a **malformed tool call** after building everything and completing three
+of four mutations, but **before committing**: six files in the worktree, no `EXIT` marker.
+
+That looks identical to wave 2's OOM kill from the marker alone, and the two needed opposite
+responses. Wave 2's lane had _committed_, so pushing it was mechanical. This one had not — **and
+its uncommitted work carried `TS2322` in its own test file**, green under `vitest` and red under
+`typecheck:test`. Packaging it as recovery would have pushed a red CI while three merged records
+insist CI is the real gate.
+
+**The gate is what distinguished them.** F5's correction, added two waves earlier after G2 passed
+the stated gate and reddened CI, caught its second defect here — one step before the orchestrator
+would have repeated the mistake it was written to prevent.
+
+The response was a **narrow continuation brief** rather than a re-run: it carried everything
+already verified (files intact, no mutation left applied, 25 tests green, the layer split
+confirmed, and **mutation 4 run by the orchestrator** — it kills 2 tests, so the fail-loudly
+decision is pinned), leaving one real task. Re-running the lane would have redone the design work
+to fix one line.
+
+### Cost — and a gap in the measurement discipline
+
+**The raw logs for this wave are gone.** They lived in a session scratchpad under `/private/tmp`,
+which was cleaned on 2026-09-14 before the wave record was written. What survives is what the
+orchestrator read at the time:
+
+| run                    | steps                                     | billed                         |
+| ---------------------- | ----------------------------------------- | ------------------------------ |
+| G4 implement (cut off) | 50                                        | 279,570                        |
+| G4 review              | 17                                        | 93,060                         |
+| G4 fix round           | 90                                        | 523,113 (cache read 8,986,752) |
+| G4 continuation        | _not extracted before the logs were lost_ | —                              |
+
+**The lesson is the rule, not the numbers**: cast.md rule 7 says a dispatch that cannot be costed
+is a dispatch that ignored the rule, and that there is no retroactive accounting. That applies to
+the _orchestrator_ too. A wave's cost must be written into its record — or at least into
+`events.jsonl` in a durable location — **when it is observed**, not reconstructed at close-out.
+Waves 1 and 2 recorded theirs in time; this one did not, because the wave stayed open across an
+eight-day gap. **Close a wave's record when its lanes settle, not when its PRs merge.**
+
+### Deferred
+
+- **G5 is blocked.** Its §4 DoD says "run inside campaign-foundry", which is not verifiable from
+  this repository. Amend it the way F5 was amended, before dispatch.
+- **G6 / G7** — the plan says re-plan once G5 has been used; do not dispatch against current text.
+- `loadState` → required, still needs a lane owning `validate-templates-ports.test.ts`.
+- §8 gap 2: `tools/wave-status/` unported, so `wave-event.sh`'s parity claim stays untestable.
+- **Put `events.jsonl` somewhere durable.** A session scratchpad under `/private/tmp` is cleaned
+  on a timer, which silently destroys the wave-status record this orchestration is built to emit.
