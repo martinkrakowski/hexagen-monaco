@@ -129,12 +129,12 @@ const FASTIFY_TSCONFIG: TsConfigTemplate = {
 };
 
 const FASTIFY_ENTRY_TEMPLATE = `// Auto-generated Fastify application
-import fastify from 'fastify';
+import fastify from "fastify";
 
 const server = fastify();
 
-server.get('/', async () => {
-  return { status: 'ok' };
+server.get("/", async () => {
+  return { status: "ok" };
 });
 
 export default server;

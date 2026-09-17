@@ -1,5 +1,6 @@
 import path from "node:path";
 import { SyncConfig } from "../config.js";
+import type { LoggerPort } from "../config.js";
 import {
   createEmptyResult,
   recordWriteStatus,
@@ -24,18 +25,88 @@ import {
 import type { ReportRecorder } from "../domain/types.js";
 import { resolveToolchainVersion } from "../toolchain-version.js";
 
-// Prettier's default printWidth. Kept in lockstep with BUILTIN_PRETTIERRC_TEMPLATE
-// (root-file-templates.ts) by the no-diff generator test — that test is the
-// thing that would go red if the two drifted apart.
-const PRETTIER_PRINT_WIDTH = 80;
+// Prettier's own defaults (also what BUILTIN_PRETTIERRC_TEMPLATE pins
+// explicitly). Used ONLY as the fallback when a manifest `rootFiles.prettierrc`
+// override doesn't specify a value, or its content isn't valid JSON — the
+// effective values (see resolveEffectivePrettierOptions) are threaded through
+// instead of these constants wherever a real override is in play.
+const DEFAULT_PRETTIER_PRINT_WIDTH = 80;
+const DEFAULT_PRETTIER_TAB_WIDTH = 2;
+
+/**
+ * Reads `printWidth`/`tabWidth` out of the .prettierrc.json content that is
+ * ACTUALLY about to be written (built-in or manifest override alike), so the
+ * generator's own array-collapsing and indentation match the config it just
+ * emitted rather than a hard-coded assumption. A manifest override with a
+ * different printWidth/tabWidth previously broke this silently (the emitted
+ * JSON stayed collapsed/indented for the OLD defaults while the new config
+ * told Prettier to expect something else) — this is the fix.
+ * Falls back to Prettier's own defaults, logged at debug, if the resolved
+ * content isn't valid JSON (an author-supplied override is never validated
+ * here — it is still written verbatim; only OUR formatting decisions fall
+ * back).
+ */
+function resolveEffectivePrettierOptions(
+  prettierrcContent: string,
+  logger: LoggerPort,
+): { printWidth: number; tabWidth: number } {
+  try {
+    const parsed = JSON.parse(prettierrcContent) as {
+      printWidth?: unknown;
+      tabWidth?: unknown;
+    };
+    const printWidth =
+      typeof parsed.printWidth === "number" && parsed.printWidth > 0
+        ? parsed.printWidth
+        : DEFAULT_PRETTIER_PRINT_WIDTH;
+    const tabWidth =
+      typeof parsed.tabWidth === "number" && parsed.tabWidth > 0
+        ? parsed.tabWidth
+        : DEFAULT_PRETTIER_TAB_WIDTH;
+    return { printWidth, tabWidth };
+  } catch {
+    logger.debug(
+      "root-files: .prettierrc.json content is not valid JSON — falling back " +
+        "to Prettier's own defaults (printWidth 80, tabWidth 2) when deciding " +
+        "the generator's own JSON array formatting",
+    );
+    return {
+      printWidth: DEFAULT_PRETTIER_PRINT_WIDTH,
+      tabWidth: DEFAULT_PRETTIER_TAB_WIDTH,
+    };
+  }
+}
+
+/**
+ * Rescales every line's leading indentation from this file's native 2-space
+ * convention to `tabWidth` spaces per level. Every hand-authored built-in
+ * JSON template (and JSON.stringify's own output) indents at exactly 2
+ * spaces per nesting level with no other leading whitespace use (no embedded
+ * multi-line string values) — so "leading run of N*2 spaces = depth N" holds
+ * for every line, and rescaling is a safe, purely mechanical text transform
+ * rather than a real JSON reprint. A no-op at tabWidth 2 (the default).
+ *
+ * Only applied to BUILT-IN template output — an author-supplied
+ * `rootFiles.*.template` is written verbatim (see generateRootFiles), same
+ * as every other root file's override behavior.
+ */
+function reindentJson(text: string, tabWidth: number): string {
+  if (tabWidth === 2) return text;
+  return text.replace(/^( +)/gm, (spaces) =>
+    " ".repeat(Math.round(spaces.length / 2) * tabWidth),
+  );
+}
 
 /**
  * Renders a JSON array the way Prettier (default objectWrap aside — arrays
  * have no "preserve": they are always re-decided by width) would: one line
- * if `[item, item, ...]` fits inside printWidth at `linePrefix`'s column,
- * otherwise one item per line with the closing bracket back at `indent`.
+ * if `[item, item, ...]` (plus a trailing comma, when the array isn't the
+ * last key in its enclosing object — Prettier counts it toward the line)
+ * fits inside `printWidth` at `linePrefix`'s column, otherwise one item per
+ * line, indented one `tabWidth` deeper, with the closing bracket back at
+ * `indent`.
  *
- * Unlike `JSON.stringify(doc, null, 2)` — which always fully expands every
+ * Unlike `JSON.stringify(doc, null, N)` — which always fully expands every
  * array — this is what makes the generator's own JSON output already
  * Prettier-clean, so `yarn format` on a freshly generated project is a
  * no-op instead of reformatting every short array it touches.
@@ -44,50 +115,79 @@ function formatJsonArray(
   items: readonly string[],
   indent: number,
   linePrefix: string,
+  printWidth: number,
+  tabWidth: number,
+  hasTrailingComma: boolean,
 ): string {
   const rendered = items.map((item) => JSON.stringify(item));
   const inline = `[${rendered.join(", ")}]`;
-  if (linePrefix.length + inline.length <= PRETTIER_PRINT_WIDTH) {
+  const commaWidth = hasTrailingComma ? 1 : 0;
+  if (linePrefix.length + inline.length + commaWidth <= printWidth) {
     return inline;
   }
   const inner = rendered
-    .map((r) => `${" ".repeat(indent + 2)}${r}`)
+    .map((r) => `${" ".repeat(indent + tabWidth)}${r}`)
     .join(",\n");
   return `[\n${inner}\n${" ".repeat(indent)}]`;
 }
 
-// The only array-valued fields buildTurboContentFromConfig's doc can ever
-// contain (TurboPipeline.dependsOn/outputs, TurboConfig.globalDependencies —
-// see ../types/manifest/monorepo.ts). Bounded and known, so a targeted
-// post-process on JSON.stringify's output is safe: no free-form JSON is
-// ever routed through this, only turbo.json's own fixed shape.
+// The array-valued fields buildTurboContentFromConfig's doc can carry.
+// `dependsOn`/`outputs` are declared on TurboPipeline; `globalDependencies`
+// on TurboConfig — but a manifest's `turboConfig.pipeline` entries are spread
+// through (`{ ...task }`, below) WITHOUT validation against that interface,
+// so a manifest can legally carry any real Turbo 2 task-level array field
+// here at runtime even though the TS type only names two. `inputs`, `env`,
+// and `passThroughEnv` are Turbo 2's other task-level array fields (Turbo
+// docs, `turbo.json` schema) — omitting them left a manifest that used one
+// with an expanded, non-Prettier-clean array in the emitted turbo.json.
 const TURBO_COLLAPSIBLE_ARRAY_FIELDS = [
   "dependsOn",
   "outputs",
+  "inputs",
+  "env",
+  "passThroughEnv",
   "globalDependencies",
 ];
 
 /**
- * Re-collapses the array fields `JSON.stringify(doc, null, 2)` always
+ * Re-collapses the array fields `JSON.stringify(doc, null, tabWidth)` always
  * expands, so buildTurboContentFromConfig's output matches what Prettier
- * would produce from it (see {@link formatJsonArray}). Only touches arrays
- * JSON.stringify rendered multi-line with 2+ items; an empty/one-shot array
- * JSON.stringify already inlines (`"outputs": []`) passes through untouched.
+ * would produce from it (see {@link formatJsonArray}). `JSON.stringify` only
+ * ever renders an array on one line when it is EMPTY (`"outputs": []`) —
+ * every non-empty array, even a single short item, is always expanded
+ * multi-line regardless of count. The regex below requires a newline right
+ * after `[`, so it only ever matches what JSON.stringify expanded (1+
+ * items); an empty array never matches and passes through untouched,
+ * already correct as `[]`.
  */
-function collapseShortJsonArrays(json: string): string {
+function collapseShortJsonArrays(
+  json: string,
+  printWidth: number,
+  tabWidth: number,
+): string {
   const fieldPattern = TURBO_COLLAPSIBLE_ARRAY_FIELDS.join("|");
+  // Captures an optional trailing comma (group 4) so both the width check
+  // (finding #4 — Prettier counts it toward the line) and the replacement
+  // (which must put it back) see it.
   const re = new RegExp(
-    `^([ \\t]*)"(${fieldPattern})": \\[\\n([\\s\\S]*?)\\n\\1\\]`,
+    `^([ \\t]*)"(${fieldPattern})": \\[\\n([\\s\\S]*?)\\n\\1\\](,?)`,
     "gm",
   );
   return json.replace(
     re,
-    (_match: string, indent: string, field: string, body: string) => {
+    (
+      _match: string,
+      indent: string,
+      field: string,
+      body: string,
+      trailingComma: string,
+    ) => {
       const items = body
         .split(",\n")
         .map((line) => JSON.parse(line.trim()) as string);
       const linePrefix = `${indent}"${field}": `;
-      return `${linePrefix}${formatJsonArray(items, indent.length, linePrefix)}`;
+      const hasTrailingComma = trailingComma === ",";
+      return `${linePrefix}${formatJsonArray(items, indent.length, linePrefix, printWidth, tabWidth, hasTrailingComma)}${trailingComma}`;
     },
   );
 }
@@ -185,7 +285,10 @@ function frameworkBuildOutputs(manifest: Manifest): string[] {
  * `sync --check` counts protected files as zero ops, so converged trees stay
  * green).
  */
-function buildTurboContentFromConfig(manifest: Manifest): string {
+function buildTurboContentFromConfig(
+  manifest: Manifest,
+  prettierOptions: { printWidth: number; tabWidth: number },
+): string {
   const turboConfig = manifest.monorepo?.turboConfig ?? {};
   const builtin = JSON.parse(BUILTIN_TURBO_TEMPLATE) as {
     $schema: string;
@@ -214,7 +317,18 @@ function buildTurboContentFromConfig(manifest: Manifest): string {
     ...(globalDependencies.length > 0 ? { globalDependencies } : {}),
     tasks,
   };
-  return collapseShortJsonArrays(JSON.stringify(doc, null, 2)) + "\n";
+  // `prettierOptions.tabWidth` (NOT a hard-coded 2): JSON.stringify's own
+  // indent unit becomes the real final indent, so collapseShortJsonArrays'
+  // width check (which reads that indent back via regex) needs no separate
+  // rescale — see reindentJson's doc comment for why the two static-template
+  // JSON files (package.json, tsconfig.base.json) need a rescale pass instead.
+  return (
+    collapseShortJsonArrays(
+      JSON.stringify(doc, null, prettierOptions.tabWidth),
+      prettierOptions.printWidth,
+      prettierOptions.tabWidth,
+    ) + "\n"
+  );
 }
 
 function interpolateAndWarn(
@@ -270,16 +384,45 @@ export async function generateRootFiles(
     const rootFiles = config.manifest.monorepo?.rootFiles;
     const vars = buildVars(config.manifest, toolchainVersion);
 
+    // Resolved FIRST, and not yet written: every other JSON root file below
+    // must match what THIS exact content would tell Prettier to do — a
+    // manifest override (`rootFiles.prettierrc.template`) changing
+    // printWidth/tabWidth previously left the generator silently formatting
+    // against the OLD defaults. See resolveEffectivePrettierOptions.
+    const prettierrcTemplate = resolveTemplate(
+      rootFiles?.prettierrc?.template,
+      BUILTIN_PRETTIERRC_TEMPLATE,
+    );
+    const prettierrcContent = interpolateAndWarn(
+      prettierrcTemplate,
+      vars,
+      config,
+      ".prettierrc.json",
+    );
+    const prettierOptions = resolveEffectivePrettierOptions(
+      prettierrcContent,
+      config.logger,
+    );
+
+    const usingBuiltinPackageJson = !rootFiles?.packageJson?.template;
     const packageJsonTemplate = resolveTemplate(
       rootFiles?.packageJson?.template,
       BUILTIN_PACKAGE_JSON_TEMPLATE,
     );
-    const packageJsonContent = interpolateAndWarn(
+    let packageJsonContent = interpolateAndWarn(
       packageJsonTemplate,
       vars,
       config,
       "package.json",
     );
+    // Reindent only the BUILT-IN template's output — an author-supplied
+    // template is written verbatim, same as every other root file override.
+    if (usingBuiltinPackageJson) {
+      packageJsonContent = reindentJson(
+        packageJsonContent,
+        prettierOptions.tabWidth,
+      );
+    }
     await writeRootFile(
       path.join(config.workspaceRoot, "package.json"),
       packageJsonContent,
@@ -288,16 +431,20 @@ export async function generateRootFiles(
       result,
     );
 
+    const usingBuiltinTsconfig = !rootFiles?.tsConfig?.template;
     const tsconfigTemplate = resolveTemplate(
       rootFiles?.tsConfig?.template,
       BUILTIN_TSCONFIG_BASE_TEMPLATE,
     );
-    const tsconfigContent = interpolateAndWarn(
+    let tsconfigContent = interpolateAndWarn(
       tsconfigTemplate,
       vars,
       config,
       "tsconfig.base.json",
     );
+    if (usingBuiltinTsconfig) {
+      tsconfigContent = reindentJson(tsconfigContent, prettierOptions.tabWidth);
+    }
     await writeRootFile(
       path.join(config.workspaceRoot, "tsconfig.base.json"),
       tsconfigContent,
@@ -313,15 +460,26 @@ export async function generateRootFiles(
     const hasExplicitTurboTemplate =
       typeof explicitTurboTemplate === "string" &&
       explicitTurboTemplate.length > 0;
-    const turboContent =
-      !hasExplicitTurboTemplate && config.manifest.monorepo?.turboConfig
-        ? buildTurboContentFromConfig(config.manifest)
-        : interpolateAndWarn(
-            resolveTemplate(explicitTurboTemplate, BUILTIN_TURBO_TEMPLATE),
-            vars,
-            config,
-            "turbo.json",
-          );
+    let turboContent: string;
+    if (!hasExplicitTurboTemplate && config.manifest.monorepo?.turboConfig) {
+      turboContent = buildTurboContentFromConfig(
+        config.manifest,
+        prettierOptions,
+      );
+    } else if (!hasExplicitTurboTemplate) {
+      turboContent = reindentJson(
+        interpolateAndWarn(BUILTIN_TURBO_TEMPLATE, vars, config, "turbo.json"),
+        prettierOptions.tabWidth,
+      );
+    } else {
+      // Author-supplied full file — most-specific override, written verbatim.
+      turboContent = interpolateAndWarn(
+        explicitTurboTemplate,
+        vars,
+        config,
+        "turbo.json",
+      );
+    }
     await writeRootFile(
       path.join(config.workspaceRoot, "turbo.json"),
       turboContent,
@@ -372,13 +530,35 @@ export async function generateRootFiles(
     // L3 (gates-for-generated-projects): the emitted `format` script
     // (package.json, above) needs a config or it reformats to Prettier's
     // defaults on first run, burying real changes under whole-file churn.
-    const prettierrcTemplate = resolveTemplate(
-      rootFiles?.prettierrc?.template,
-      BUILTIN_PRETTIERRC_TEMPLATE,
-    );
+    // Content was already resolved above (before package.json/tsconfig/turbo)
+    // so their formatting could match it — written here, last, purely for
+    // read order (the six pre-existing root files first, this one after).
+    //
+    // Two decisions recorded deliberately, not artefacts of this ordering:
+    //
+    // - EXISTING projects (generated before this file existed) do not
+    //   receive .prettierrc.json on their next `sync` unless it runs with
+    //   --force-root: like every other protected root file (isProtectedRoot
+    //   in fs-utils.ts checks protection before existence, uniformly, for
+    //   all seven), a NEW protected file is skipped exactly like an existing
+    //   one would be — `sync --check` reports zero pending ops, same as the
+    //   SETUP.md precedent (see "does NOT recreate a deleted SETUP.md on a
+    //   normal re-sync" above). Silent non-adoption on pre-existing projects
+    //   is the accepted, established tradeoff for every protected root file,
+    //   not a gap introduced by adding a seventh one.
+    // - A manifest override containing a literal `}}` (e.g. a compact-JSON
+    //   `overrides` block, the shape this file's own comment above invites
+    //   for opting prose formatting back in) is silently mangled: `}}` → `}`
+    //   is `interpolate()`'s (packages/shared/src/types/interpolate.ts)
+    //   escape rule for EVERY root file's template, not something specific
+    //   to prettierrc, and rewriting that shared escaping rule is out of
+    //   this lane's scope — a manifest author using pretty-printed JSON
+    //   (the existing test/example style throughout this repo) never hits
+    //   it; only a hand-compacted override with adjacent closing braces
+    //   would. Documented here rather than fixed.
     await writeRootFile(
       path.join(config.workspaceRoot, ".prettierrc.json"),
-      interpolateAndWarn(prettierrcTemplate, vars, config, ".prettierrc.json"),
+      prettierrcContent,
       config,
       report,
       result,

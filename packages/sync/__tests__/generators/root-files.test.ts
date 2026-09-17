@@ -7,7 +7,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateRootFiles } from "../../src/generators/root-files.js";
-import type { Manifest } from "../../src/types/manifest.js";
+import { generateApps } from "../../src/generators/apps.js";
+import type { Manifest, AppFramework } from "../../src/types/manifest.js";
 import type { SyncConfig, LoggerPort } from "../../src/config.js";
 
 const execFileAsync = promisify(execFile);
@@ -66,6 +67,43 @@ async function assertPrettierClean(
       `${filePath} is not Prettier-clean under ${prettierrcPath} ` +
         `(a freshly generated project's first \`yarn format\` must produce ` +
         `no diff) — prettier --check exited ${e.code}:\n${e.stdout ?? ""}${e.stderr ?? ""}`,
+    );
+  }
+}
+
+/**
+ * Asserts that NOTHING matching `glob` under `cwd` needs reformatting —
+ * i.e. runs the emitted `format` script's own check
+ * (`prettier --check "**\/*.{ts,tsx}"`) for real, from `cwd`, exactly as
+ * `yarn format` would invoke it (the glob is passed as a single argv
+ * element, unexpanded by a shell, matching how the package.json script
+ * quotes it — `execFile` never invokes a shell either, so this is the same
+ * invocation shape, not an approximation of it).
+ */
+async function assertPrettierCleanGlob(
+  cwd: string,
+  glob: string,
+  prettierrcPath: string,
+): Promise<void> {
+  try {
+    await execFileAsync(
+      process.execPath,
+      [
+        PRETTIER_BIN,
+        "--check",
+        "--config",
+        prettierrcPath,
+        "--no-editorconfig",
+        glob,
+      ],
+      { cwd },
+    );
+  } catch (err) {
+    const e = err as { code?: number; stdout?: string; stderr?: string };
+    assert.fail(
+      `\`prettier --check "${glob}"\` (from ${cwd}) is not clean under ` +
+        `${prettierrcPath} — a freshly generated project's first \`yarn format\` ` +
+        `must produce no diff — exited ${e.code}:\n${e.stdout ?? ""}${e.stderr ?? ""}`,
     );
   }
 }
@@ -973,7 +1011,16 @@ describe("root files", () => {
         >;
         assert.deepStrictEqual(
           parsed,
-          { semi: true, singleQuote: false, trailingComma: "all" },
+          {
+            semi: true,
+            singleQuote: false,
+            trailingComma: "all",
+            printWidth: 80,
+            tabWidth: 2,
+            arrowParens: "always",
+            endOfLine: "lf",
+            objectWrap: "preserve",
+          },
           "built-in .prettierrc.json must pin Prettier 3's own defaults explicitly",
         );
         assert.ok(
@@ -1055,17 +1102,24 @@ describe("root files", () => {
       });
     });
 
-    // The strongest test in this lane: it is not enough that a config
-    // exists — the DoD is that `yarn format` on a freshly generated project
-    // produces NO diff. This runs the real `prettier` binary (the root
-    // workspace's own devDependency, invoked as a subprocess — see
-    // assertPrettierClean above for why not an `import`) against every
-    // JSON/YAML/Markdown root file the generator emits, using the exact
-    // config content the generator itself just wrote, on a manifest that
-    // exercises every dynamic array path (custom workspaces, turboConfig
-    // pipeline + globalDependencies, and Next.js/Nitro framework build
-    // outputs) — not just the static built-in defaults.
-    it("yarn format on a freshly generated project produces no diff (DoD)", async () => {
+    // Root-file coverage: it is not enough that a config exists — the DoD is
+    // that `yarn format` on a freshly generated project produces NO diff.
+    // This runs the real `prettier` binary (the root workspace's own
+    // devDependency, invoked as a subprocess — see assertPrettierClean above
+    // for why not an `import`) against every JSON/YAML/Markdown root file the
+    // generator emits, using the exact config content the generator itself
+    // just wrote, on a manifest that exercises every dynamic array path
+    // (custom workspaces, turboConfig pipeline + globalDependencies, and
+    // Next.js/Nitro framework build outputs) — not just the static built-in
+    // defaults.
+    //
+    // NOTE — this alone does NOT establish the DoD: the emitted `format`
+    // script is `prettier --write "**/*.{ts,tsx}"`, and every file checked
+    // here is JSON/YAML/Markdown — disjoint from what that glob will ever
+    // touch. Proving those five files are clean says nothing about whether
+    // `yarn format` itself is a no-op. See the next test for the glob the
+    // script actually targets.
+    it("root files (package.json, tsconfig.base.json, turbo.json, .yarnrc.yml, SETUP.md) are Prettier-clean", async () => {
       await withTempWorkspace(async ({ workspaceRoot }) => {
         const manifest: Manifest = {
           system: "no-diff-project",
@@ -1113,6 +1167,86 @@ describe("root files", () => {
             prettierrcPath,
           );
         }
+      });
+    });
+
+    // THE DoD, proven against what the format script actually targets.
+    //
+    // Two independent reviewers found the same structural gap: the test
+    // above checks root files, but `format` is
+    // `prettier --write "**/*.{ts,tsx}"` — zero overlap with what it proved.
+    // This generates the emitted .ts/.tsx CONTENT through the real engine
+    // (`generateApps`, not by listing BUILTIN_FRAMEWORK_TEMPLATES constants
+    // by hand — a hand-copied list would silently stop covering a template
+    // the moment someone added a new framework or edited an existing one),
+    // for every built-in app framework, then runs the real
+    // `prettier --check "**/*.{ts,tsx}"` from the workspace root — the exact
+    // command the generated `format` script's glob resolves, not an
+    // approximation of it.
+    //
+    // Scope: this covers root files + every built-in app-framework template
+    // (apps-framework-templates.ts) — the ts/tsx the CORE generator emits
+    // outside a bounded context. It does NOT additionally regenerate a
+    // bounded-context's own stub source (entities/ports/adapters via
+    // generateStubs + SyncEngine); that path was independently verified
+    // clean against this config by a live SyncEngine run during review
+    // (2 contexts, 6 ts files, `prettier --check` reported all clean) and is
+    // unaffected by anything this lane changed. Add-on templates
+    // (packages/template-engine/templates/*/files/**) are OUT of scope —
+    // see the PR body for the measured, unfixed count.
+    it("yarn format on a freshly generated project produces no diff (DoD — ts/tsx, the glob the format script actually targets)", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const ALL_FRAMEWORKS: AppFramework[] = [
+          "next.js",
+          "fastify",
+          "plain-ts",
+          "nitro",
+          "express",
+          "nestjs",
+          "serverless",
+          "vue",
+          "react-router",
+          "remix",
+          "angular",
+        ];
+        const manifest: Manifest = {
+          system: "no-diff-ts-project",
+          scope: "no-diff-ts-project",
+          apps: ALL_FRAMEWORKS.map((framework, i) => ({
+            name: `app${i}`,
+            framework,
+          })),
+          generator: { sync: { apps: { enabled: true } } },
+        };
+
+        const rootResult = await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+        assert.strictEqual(
+          rootResult.error,
+          undefined,
+          "generateRootFiles must not error",
+        );
+
+        const appsResult = await generateApps(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+        assert.strictEqual(
+          appsResult.error,
+          undefined,
+          "generateApps must not error",
+        );
+        assert.ok(
+          appsResult.created.length > 0,
+          "generateApps must have created at least one file — an empty run would make this test vacuous",
+        );
+
+        const prettierrcPath = path.join(workspaceRoot, ".prettierrc.json");
+        await assertPrettierCleanGlob(
+          workspaceRoot,
+          "**/*.{ts,tsx}",
+          prettierrcPath,
+        );
       });
     });
   });

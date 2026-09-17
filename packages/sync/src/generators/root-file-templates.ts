@@ -159,14 +159,25 @@ adding \`--immutable\` to the \`yarn install\` step in
 // file exists to close). Values chosen are Prettier 3's own defaults —
 // pinned explicitly, not to change behavior today, but so a future Prettier
 // major version bump can't silently reformat the whole generated tree out
-// from under a project that never opted in. `md` is deliberately excluded
-// from the emitted `format` script's glob (see the script above): a Markdown
-// formatter rewraps hand-wrapped prose (planning docs, AGENTS.md) into an
-// unreviewable diff; a project can opt prose back in deliberately.
+// from under a project that never opted in. `printWidth`/`tabWidth` are
+// pinned for the same reason AND because root-files.ts's own array-collapsing
+// and indentation read them back off this exact content (see
+// resolveEffectivePrettierOptions there) — an override that changes them
+// is still honored (that function has its own defaults-only fallback), but
+// pinning here means the common case needs no override at all. `md` is
+// deliberately excluded from the emitted `format` script's glob (see the
+// script above): a Markdown formatter rewraps hand-wrapped prose (planning
+// docs, AGENTS.md) into an unreviewable diff; a project can opt prose back
+// in deliberately.
 const BUILTIN_PRETTIERRC_TEMPLATE = `{
   "semi": true,
   "singleQuote": false,
-  "trailingComma": "all"
+  "trailingComma": "all",
+  "printWidth": 80,
+  "tabWidth": 2,
+  "arrowParens": "always",
+  "endOfLine": "lf",
+  "objectWrap": "preserve"
 }
 `;
 
