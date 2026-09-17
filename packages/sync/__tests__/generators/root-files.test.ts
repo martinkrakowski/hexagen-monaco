@@ -1055,6 +1055,87 @@ describe("root files", () => {
       });
     });
 
+    // Finding #3 (fix round 2, both reviewers): the existing override test
+    // above never COMBINED the override with the no-diff check, so the
+    // generator's own array-collapsing silently drifting from an overridden
+    // printWidth/tabWidth passed unnoticed. These two combine them.
+    it("a printWidth:100 override stays no-diff-clean (finding #3)", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = {
+          system: "printwidth-override",
+          monorepo: {
+            turboConfig: {
+              pipeline: {
+                // Long enough that a printWidth-80 decision would collapse
+                // it and a printWidth-100 decision (the override) inlines
+                // it differently — exercises the actual threading, not just
+                // "still parses".
+                build: {
+                  dependsOn: ["^build"],
+                  outputs: [
+                    "dist/**",
+                    "a-fairly-long-glob-pattern/**",
+                    "another-one/**",
+                  ],
+                },
+              },
+            },
+            rootFiles: {
+              prettierrc: { template: `{"printWidth":100}\n` },
+            },
+          },
+        };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+        const prettierrcPath = path.join(workspaceRoot, ".prettierrc.json");
+        for (const name of [
+          "package.json",
+          "tsconfig.base.json",
+          "turbo.json",
+        ]) {
+          await assertPrettierClean(
+            path.join(workspaceRoot, name),
+            prettierrcPath,
+          );
+        }
+      });
+    });
+
+    it("a tabWidth:4 override stays no-diff-clean (finding #3)", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = {
+          system: "tabwidth-override",
+          monorepo: {
+            workspaces: ["apps/*", "packages/*", "libs/*"],
+            turboConfig: {
+              globalDependencies: ["**/.env.*"],
+              pipeline: {
+                build: { dependsOn: ["^build"], outputs: ["dist/**"] },
+              },
+            },
+            rootFiles: {
+              prettierrc: { template: `{"tabWidth":4}\n` },
+            },
+          },
+        };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+        const prettierrcPath = path.join(workspaceRoot, ".prettierrc.json");
+        for (const name of [
+          "package.json",
+          "tsconfig.base.json",
+          "turbo.json",
+        ]) {
+          await assertPrettierClean(
+            path.join(workspaceRoot, name),
+            prettierrcPath,
+          );
+        }
+      });
+    });
+
     it("does NOT clobber a user-edited .prettierrc.json on re-sync (protected)", async () => {
       await withTempWorkspace(async ({ workspaceRoot }) => {
         const manifest: Manifest = { system: "prettier-protected" };
@@ -1098,6 +1179,82 @@ describe("root files", () => {
         assert.ok(
           !pkg.scripts?.format?.includes("md"),
           "the format script glob must not include md",
+        );
+      });
+    });
+
+    // Finding #4 (fix round 2): formatJsonArray's width check didn't count
+    // a trailing comma — Prettier does, when the array isn't the last key in
+    // its object. Crafted so `"outputs": [...]` is EXACTLY 80 columns
+    // WITHOUT a comma (fits) and 81 WITH one (doesn't) — `cache` follows, so
+    // a comma is emitted. Before the fix this stayed inlined at 81 columns;
+    // now it correctly expands.
+    it("collapses/expands turbo.json arrays counting the trailing comma (finding #4)", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = {
+          system: "trailing-comma",
+          monorepo: {
+            turboConfig: {
+              pipeline: {
+                build: {
+                  outputs: ["a".repeat(59)],
+                  cache: true,
+                },
+              },
+            },
+          },
+        };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+        const turboPath = path.join(workspaceRoot, "turbo.json");
+        const content = await readFile(turboPath);
+        assert.ok(
+          content.includes(`"outputs": [\n`),
+          "an 81-column-with-comma array must be expanded, not inlined",
+        );
+        await assertPrettierClean(
+          turboPath,
+          path.join(workspaceRoot, ".prettierrc.json"),
+        );
+      });
+    });
+
+    // Finding #5 (fix round 2): buildTurboContentFromConfig spreads every
+    // manifest task key through (`{ ...task }`) untyped, so a manifest using
+    // Turbo 2's other real task-level array fields (inputs/env/
+    // passThroughEnv) produced an un-collapsed turbo.json. All three must
+    // collapse the same way dependsOn/outputs do.
+    it("collapses inputs/env/passThroughEnv, not just dependsOn/outputs/globalDependencies (finding #5)", async () => {
+      await withTempWorkspace(async ({ workspaceRoot }) => {
+        const manifest: Manifest = {
+          system: "extra-turbo-keys",
+          monorepo: {
+            turboConfig: {
+              pipeline: {
+                lint: {
+                  inputs: ["src/**/*.ts", "src/**/*.tsx"],
+                  env: ["NODE_ENV", "CI"],
+                  passThroughEnv: ["GITHUB_TOKEN"],
+                },
+              },
+            },
+          },
+        };
+        await generateRootFiles(
+          makeConfig(workspaceRoot, manifest, { forceRoot: true }),
+        );
+        const turboPath = path.join(workspaceRoot, "turbo.json");
+        const content = await readFile(turboPath);
+        for (const field of ["inputs", "env", "passThroughEnv"]) {
+          assert.ok(
+            !new RegExp(`"${field}": \\[\\n`).test(content),
+            `${field} must be collapsed inline, not left expanded by JSON.stringify`,
+          );
+        }
+        await assertPrettierClean(
+          turboPath,
+          path.join(workspaceRoot, ".prettierrc.json"),
         );
       });
     });
