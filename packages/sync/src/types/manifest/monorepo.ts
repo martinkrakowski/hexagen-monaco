@@ -77,6 +77,7 @@ export interface RootFilesConfig {
   gitignore?: FileTemplate;
   yarnrc?: FileTemplate;
   setup?: FileTemplate;
+  prettierrc?: FileTemplate;
 }
 
 export interface ArchInvariantsConfig {

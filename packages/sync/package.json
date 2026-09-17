@@ -53,6 +53,7 @@
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.19.0",
+    "prettier": "^3.2.5",
     "tsup": "^8.1.0",
     "tsx": "^4.21.0",
     "typescript": "^5.4.5",

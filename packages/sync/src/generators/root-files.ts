@@ -19,9 +19,78 @@ import {
   BUILTIN_GITIGNORE_TEMPLATE,
   BUILTIN_YARNRC_TEMPLATE,
   BUILTIN_SETUP_MD_TEMPLATE,
+  BUILTIN_PRETTIERRC_TEMPLATE,
 } from "./root-file-templates.js";
 import type { ReportRecorder } from "../domain/types.js";
 import { resolveToolchainVersion } from "../toolchain-version.js";
+
+// Prettier's default printWidth. Kept in lockstep with BUILTIN_PRETTIERRC_TEMPLATE
+// (root-file-templates.ts) by the no-diff generator test — that test is the
+// thing that would go red if the two drifted apart.
+const PRETTIER_PRINT_WIDTH = 80;
+
+/**
+ * Renders a JSON array the way Prettier (default objectWrap aside — arrays
+ * have no "preserve": they are always re-decided by width) would: one line
+ * if `[item, item, ...]` fits inside printWidth at `linePrefix`'s column,
+ * otherwise one item per line with the closing bracket back at `indent`.
+ *
+ * Unlike `JSON.stringify(doc, null, 2)` — which always fully expands every
+ * array — this is what makes the generator's own JSON output already
+ * Prettier-clean, so `yarn format` on a freshly generated project is a
+ * no-op instead of reformatting every short array it touches.
+ */
+function formatJsonArray(
+  items: readonly string[],
+  indent: number,
+  linePrefix: string,
+): string {
+  const rendered = items.map((item) => JSON.stringify(item));
+  const inline = `[${rendered.join(", ")}]`;
+  if (linePrefix.length + inline.length <= PRETTIER_PRINT_WIDTH) {
+    return inline;
+  }
+  const inner = rendered
+    .map((r) => `${" ".repeat(indent + 2)}${r}`)
+    .join(",\n");
+  return `[\n${inner}\n${" ".repeat(indent)}]`;
+}
+
+// The only array-valued fields buildTurboContentFromConfig's doc can ever
+// contain (TurboPipeline.dependsOn/outputs, TurboConfig.globalDependencies —
+// see ../types/manifest/monorepo.ts). Bounded and known, so a targeted
+// post-process on JSON.stringify's output is safe: no free-form JSON is
+// ever routed through this, only turbo.json's own fixed shape.
+const TURBO_COLLAPSIBLE_ARRAY_FIELDS = [
+  "dependsOn",
+  "outputs",
+  "globalDependencies",
+];
+
+/**
+ * Re-collapses the array fields `JSON.stringify(doc, null, 2)` always
+ * expands, so buildTurboContentFromConfig's output matches what Prettier
+ * would produce from it (see {@link formatJsonArray}). Only touches arrays
+ * JSON.stringify rendered multi-line with 2+ items; an empty/one-shot array
+ * JSON.stringify already inlines (`"outputs": []`) passes through untouched.
+ */
+function collapseShortJsonArrays(json: string): string {
+  const fieldPattern = TURBO_COLLAPSIBLE_ARRAY_FIELDS.join("|");
+  const re = new RegExp(
+    `^([ \\t]*)"(${fieldPattern})": \\[\\n([\\s\\S]*?)\\n\\1\\]`,
+    "gm",
+  );
+  return json.replace(
+    re,
+    (_match: string, indent: string, field: string, body: string) => {
+      const items = body
+        .split(",\n")
+        .map((line) => JSON.parse(line.trim()) as string);
+      const linePrefix = `${indent}"${field}": `;
+      return `${linePrefix}${formatJsonArray(items, indent.length, linePrefix)}`;
+    },
+  );
+}
 
 function buildVars(
   manifest: Manifest,
@@ -47,10 +116,7 @@ function buildVars(
       ? manifest.monorepo!.workspaces!
       : ["apps/*", "packages/*"];
 
-  const workspaces =
-    "[\n" +
-    workspacesArray.map((w) => `    ${JSON.stringify(w)}`).join(",\n") +
-    "\n  ]";
+  const workspaces = formatJsonArray(workspacesArray, 2, '  "workspaces": ');
 
   // toolchainVersion: the workspace package is `@hexagen/sync` but the pins
   // are emitted under the public `@hexagen-monaco/*` scope — same version
@@ -136,7 +202,7 @@ function buildTurboContentFromConfig(manifest: Manifest): string {
     ...(globalDependencies.length > 0 ? { globalDependencies } : {}),
     tasks,
   };
-  return JSON.stringify(doc, null, 2);
+  return collapseShortJsonArrays(JSON.stringify(doc, null, 2)) + "\n";
 }
 
 function interpolateAndWarn(
@@ -286,6 +352,21 @@ export async function generateRootFiles(
     await writeRootFile(
       path.join(config.workspaceRoot, "SETUP.md"),
       interpolateAndWarn(setupTemplate, vars, config, "SETUP.md"),
+      config,
+      report,
+      result,
+    );
+
+    // L3 (gates-for-generated-projects): the emitted `format` script
+    // (package.json, above) needs a config or it reformats to Prettier's
+    // defaults on first run, burying real changes under whole-file churn.
+    const prettierrcTemplate = resolveTemplate(
+      rootFiles?.prettierrc?.template,
+      BUILTIN_PRETTIERRC_TEMPLATE,
+    );
+    await writeRootFile(
+      path.join(config.workspaceRoot, ".prettierrc.json"),
+      interpolateAndWarn(prettierrcTemplate, vars, config, ".prettierrc.json"),
       config,
       report,
       result,

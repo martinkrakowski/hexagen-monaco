@@ -25,7 +25,7 @@ const BUILTIN_PACKAGE_JSON_TEMPLATE = `{
     "lint:arch": "hexagen arch validate",
     "templates:add": "hexagen add",
     "templates:validate": "hexagen validate-templates",
-    "format": "prettier --write \\"**/*.{ts,tsx,md}\\""
+    "format": "prettier --write \\"**/*.{ts,tsx}\\""
   },
   "devDependencies": {
     "turbo": "^2.0.0",
@@ -35,7 +35,8 @@ const BUILTIN_PACKAGE_JSON_TEMPLATE = `{
     "@hexagen-monaco/sync": "^{toolchainVersion}",
     "@hexagen-monaco/arch-linter": "^{toolchainVersion}"
   }
-}`;
+}
+`;
 
 const BUILTIN_TSCONFIG_BASE_TEMPLATE = `{
   "compilerOptions": {
@@ -48,47 +49,37 @@ const BUILTIN_TSCONFIG_BASE_TEMPLATE = `{
     "declaration": true,
     "emitDeclarationOnly": true,
     "paths": {
-      "@{scope}/*": [
-        "./packages/*/src/index.ts"
-      ]
+      "@{scope}/*": ["./packages/*/src/index.ts"]
     }
   }
-}`;
+}
+`;
 
 const BUILTIN_TURBO_TEMPLATE = `{
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
     "build": {
-      "dependsOn": [
-        "^build"
-      ],
-      "outputs": [
-        "dist/**"
-      ]
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
     },
     "dev": {
       "cache": false,
       "persistent": true
     },
     "lint": {
-      "dependsOn": [
-        "^build"
-      ]
+      "dependsOn": ["^build"]
     },
     "typecheck": {
-      "dependsOn": [
-        "^build"
-      ],
+      "dependsOn": ["^build"],
       "outputs": [],
       "cache": true
     },
     "test": {
-      "dependsOn": [
-        "^build"
-      ]
+      "dependsOn": ["^build"]
     }
   }
-}`;
+}
+`;
 
 const BUILTIN_GITIGNORE_TEMPLATE = `# Dependencies
 node_modules/
@@ -162,6 +153,23 @@ adding \`--immutable\` to the \`yarn install\` step in
   \`hexagen sync\` won't bring it back — it's a protected root file.)
 `;
 
+// Prettier config for the format script above (`root-file-templates.ts:28`).
+// Without this, `prettier --write` reformats to Prettier's own defaults on
+// first run and buries real changes under whole-file churn (the defect this
+// file exists to close). Values chosen are Prettier 3's own defaults —
+// pinned explicitly, not to change behavior today, but so a future Prettier
+// major version bump can't silently reformat the whole generated tree out
+// from under a project that never opted in. `md` is deliberately excluded
+// from the emitted `format` script's glob (see the script above): a Markdown
+// formatter rewraps hand-wrapped prose (planning docs, AGENTS.md) into an
+// unreviewable diff; a project can opt prose back in deliberately.
+const BUILTIN_PRETTIERRC_TEMPLATE = `{
+  "semi": true,
+  "singleQuote": false,
+  "trailingComma": "all"
+}
+`;
+
 export {
   BUILTIN_PACKAGE_JSON_TEMPLATE,
   BUILTIN_TSCONFIG_BASE_TEMPLATE,
@@ -169,4 +177,5 @@ export {
   BUILTIN_GITIGNORE_TEMPLATE,
   BUILTIN_YARNRC_TEMPLATE,
   BUILTIN_SETUP_MD_TEMPLATE,
+  BUILTIN_PRETTIERRC_TEMPLATE,
 };
