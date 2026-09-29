@@ -2,9 +2,11 @@
 
 **Status:** historical — **not for dispatch.** The findings-store waves this prompt launches have
 shipped: wave 1 (G1 #670, G2 #671) and wave 2 (#673, #674; recorded by #675). The current kickoff is
-`docs/planning/implementation/2026-09-29-remaining-work-kickoff.md`. One premise below is stale:
-`.agents/session-log.md` exists. The skill is still gitignored (`.gitignore:85`), so it must still be
-copied into each lane worktree. Kept as the record of how the findings-store wave was launched.
+`docs/planning/implementation/2026-09-29-remaining-work-kickoff.md`. Three premises below are stale:
+`.agents/session-log.md` exists; `scripts/wave-event.sh` and `scripts/merge-prs.sh` are tracked
+(#669); and the lane gate also runs `yarn workspace <pkg> typecheck:test` (`findings-store.md:136`).
+The skill is still gitignored (`.gitignore:85`), so it must still be copied into each lane worktree.
+Kept as the record of how the findings-store wave was launched.
 
 Paste the block below into a fresh Claude Code session **whose working directory is
 `~/Projects/hexagen-monaco`**. Everything above the line is for you, not for the agent.
