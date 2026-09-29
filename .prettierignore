@@ -11,3 +11,5 @@ packages/template-engine/src/infrastructure/generated/**
 # each entry over four lines and then disagree with what `hexagen-lint
 # --update-baseline` writes, churning the file on every regeneration.
 .architecture/arch-lint-baseline.json
+packages/template-engine/__tests__/fixtures/orchestration/
+.agents/skills/orchestrate-wave/
