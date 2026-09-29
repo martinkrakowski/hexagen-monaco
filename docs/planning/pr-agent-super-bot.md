@@ -1,25 +1,9 @@
 # PR-Agent LLM Reviewer Plan
 
-**Status:** superseded — **do not implement from this document.** The live
-`.github/workflows/pr-agent.yml` replaced every prescription below that the review bots flagged, and
-each replacement fixed a failure this plan would reinstate:
-
-- **Concurrency** — this plan's single per-PR `cancel-in-progress` group let an ordinary comment
-  cancel an active review. #610 (merged 2026-08-22) keys the group on what the run produces; see the
-  workflow's own `concurrency:` comment.
-- **Pin** — the image is pinned by **digest**, `docker://pragent/pr-agent@sha256:…`, not by an action
-  SHA: that action's Dockerfile resolves a rolling image, so an action-SHA pin is still mutable.
-- **Credential** — PR-Agent reads the nested Dynaconf key `OPENROUTER__KEY`; a bare `OPENROUTER_KEY`
-  leaves the provider unset.
-- **Fallback model** — the one named here is not in the OpenRouter catalogue; the workflow falls back
-  to `openrouter/anthropic/claude-haiku-4.5`, verified against `/api/v1/models`.
-- **Mode** — the workflow runs `auto_review: false`, `auto_improve: true`: `auto_review` emits the
-  reviewer guide instead of line-anchored findings.
-- **Path filters** — ignoring `.architecture/**` and `packages/template-engine/templates/**` would hide
-  exactly the guards and the shipped payload a specialist reviewer exists to read
-  (`pr-agent-review-replication.md`).
-
-Kept as the record of the first design.
+**Date:** 2026-09-08
+**Status:** ❌ superseded by the shipped implementation
+**Superseded by:** `.github/workflows/pr-agent.yml` + `.pr_agent.toml` on `main`;
+`docs/planning/pr-agent-review-replication.md` for anything still open.
 
 ## 1. Role vs Existing Bots (CodeRabbit / Qodo)
 

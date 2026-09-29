@@ -1,10 +1,10 @@
 # Kickoff prompt — the findings store
 
-**Status:** historical — **not for dispatch.** The waves this prompt launches have shipped: wave 1
-(G1, G2) and wave 2 (lane G3, #674, recorded in #675). Its premises are also stale — it says this
-repository has no `.agents/session-log.md` (one exists) and that the skill is absent from a fresh
-worktree (the orchestration template, `docs/planning/2026-09-29_orchestration-template.md`, gives it
-a tracked home). Kept as the record of how the findings-store wave was launched.
+**Status:** historical — **not for dispatch.** The findings-store waves this prompt launches have
+shipped: wave 1 (G1 #670, G2 #671) and wave 2 (#673, #674; recorded by #675). The current kickoff is
+`docs/planning/implementation/2026-09-29-remaining-work-kickoff.md`. One premise below is stale:
+`.agents/session-log.md` exists. The skill is still gitignored (`.gitignore:85`), so it must still be
+copied into each lane worktree. Kept as the record of how the findings-store wave was launched.
 
 Paste the block below into a fresh Claude Code session **whose working directory is
 `~/Projects/hexagen-monaco`**. Everything above the line is for you, not for the agent.

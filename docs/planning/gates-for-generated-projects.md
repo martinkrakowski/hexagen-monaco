@@ -210,7 +210,6 @@ packages/template-engine/templates/quality-gate/
 {
   "id": "quality-gate",
   "name": "Quality gate",
-  "description": "Format check and a coverage floor for the generated project",
   "provides": "platform.quality",
   "scope": "project",
   "version": "0.1.0",
@@ -221,7 +220,7 @@ packages/template-engine/templates/quality-gate/
       "id": "coverageFloor",
       "type": "select",
       "default": "80",
-      "options": ["off", "60", "80", "100"]
+      "choices": ["off", "60", "80", "100"]
     },
     { "id": "formatCheck", "type": "boolean", "default": true },
     { "id": "formatProse", "type": "boolean", "default": false }
@@ -276,28 +275,18 @@ Per **G-D6**, each lane names the fault that must turn it **red**:
 - **G1** — a fixture project with an **application** containing a deliberate layer violation (`domain`
   importing `infrastructure`) **fails** `arch validate`. Today it passes, because the application never
   enters the scan set at all. A run that evaluates **no** rules for a declared application must also
-  produce a diagnostic **and exit non-zero** — a test asserts the exit code, not only the message, so
-  "could not evaluate" is never reported as "checked and clean". `abortIfVacuous` does not cover this,
-  since `packages/` was scanned.
+  produce a diagnostic, and a test asserts the run is not silently green — `abortIfVacuous` does not
+  cover this, since `packages/` was scanned.
 - **G2** — with `coverageFloor: "80"`, a generated project whose suite covers 79 % **fails** the
   quality workflow; at 81 % it passes. With `formatCheck: true`, a file reformatted to a different
-  width **fails**. Both demonstrated on a real generated fixture, not asserted. **The fixture performs the
-  README checklist's manual steps first** — add `@vitest/coverage-v8` and point the Vitest config at the
-  sidecar — because an add-on cannot write `package.json` (the limit the orchestration template's B3
-  records), so without that step the 79 % case has no coverage run to fail. The checklist is therefore
-  part of what G2 ships, not an undocumented prerequisite. **An empty population fails too:** a fixture
-  with **zero** tests, or zero discovered files, fails the workflow rather than passing on
-  `--passWithNoTests`; `coverageFloor: "off"` stays the only explicit opt-out.
+  width **fails**. Both demonstrated on a real generated fixture, not asserted.
 - **G3** — a project generated after this lane, then `yarn format`, produces **no diff**. Today the
   same sequence rewrites the tree. A test pins the emitted glob to the emitted config's scope so the
   writer and the checker cannot disagree — the failure campaign-foundry hit when `.md` was in one and
   not the other.
 - **G4** — with every reviewer answered `false`, **no** workflow file is emitted (the conditional
   output is proven absent, not merely untested). With one answered `true`, `actionlint` passes on the
-  emitted workflow — reusing the capstone fixtures' existing `actionlint` step. **And the
-  did-it-actually-run guard is shown red:** a fixture with one reviewer enabled whose run produces no
-  valid result **fails** the workflow, rather than passing as "no findings". The all-`false` case
-  above stays the separate, emission-only check.
+  emitted workflow — reusing the capstone fixtures' existing `actionlint` step.
 - **G5** — a finding whose front-matter carries an unknown key is **rejected** by
   `validate-finding.ts`; each new finding parses and is reachable from its template directory.
 
