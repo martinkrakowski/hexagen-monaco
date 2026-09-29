@@ -1220,6 +1220,36 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@hexagen/orchestration@workspace:tools/orchestration":
+  version: 0.0.0-use.local
+  resolution: "@hexagen/orchestration@workspace:tools/orchestration"
+  dependencies:
+    "@types/js-yaml": "npm:^4.0.9"
+    "@types/node": "npm:^20.12.7"
+    js-yaml: "npm:^4.1.1"
+    tsup: "npm:^8.1.0"
+    typescript: "npm:^5.4.5"
+    vitest: "npm:^4.1.9"
+  bin:
+    hexagen-orchestration-control-bytes: dist/bins/control-bytes.js
+    hexagen-orchestration-doctor: dist/bins/doctor.js
+    hexagen-orchestration-gate: dist/bins/gate.js
+    hexagen-orchestration-gate-lock: bin/gate-lock
+    hexagen-orchestration-handoff-check: dist/bins/handoff-check.js
+    hexagen-orchestration-init: dist/bins/init.js
+    hexagen-orchestration-merge-prs: bin/merge-prs
+    hexagen-orchestration-mutate: dist/bins/mutate.js
+    hexagen-orchestration-mutate-anchors: dist/bins/mutate-anchors.js
+    hexagen-orchestration-mutate-verify: dist/bins/mutate-verify.js
+    hexagen-orchestration-plan-review: dist/bins/plan-review.js
+    hexagen-orchestration-plan-verify: dist/bins/plan-verify.js
+    hexagen-orchestration-sweep: dist/bins/sweep.js
+    hexagen-orchestration-verify-manifests: bin/verify-manifests
+    hexagen-orchestration-wave-event: dist/bins/wave-event.js
+    hexagen-orchestration-wave-status: dist/bins/wave-status.js
+  languageName: unknown
+  linkType: soft
+
 "@hexagen/persistence@workspace:packages/persistence":
   version: 0.0.0-use.local
   resolution: "@hexagen/persistence@workspace:packages/persistence"
