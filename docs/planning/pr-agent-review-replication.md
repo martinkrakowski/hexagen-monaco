@@ -96,11 +96,16 @@ which is most of the work in R2.
 
 - **R1**: the three replayed PRs produce **no** "symbol X does not exist" finding where X is defined
   in the same file. That class is the measurable target; if it survives, the key names are wrong or
-  0.42.0 ignores them, and the lane reports that rather than proceeding.
+  0.42.0 ignores them, and the lane reports that rather than proceeding. **Zero output is not a pass:**
+  R1 is evaluated only after each replay shows execution evidence — the action concluded `success` and
+  the reviewer posted on the replayed head — and a **positive control** still fires: one replayed PR
+  carrying a known genuine finding, which the reviewer must still raise. A skipped action, a bad
+  trigger or an empty result is a failure of R1, never zero findings.
 - **R2**: every emitted finding names an input or state and a line. A finding phrased _"consider…"_
   with no failing case is a lane defect, caught by reading the first wave's threads.
 - **R3**: the wave record carries a per-bot table. **No reviewer is added while PR-Agent is under
-  20 %.**
+  20 %.** A wave with **zero** raised findings has no ratio and does not satisfy R3 — the measure needs
+  a non-empty population, as R1's positive control does.
 - **R4/R5**: each new reviewer's first wave is measured the same way, and each is judged on unique
   findings — a reviewer that only echoes CodeRabbit and Qodo is a cost with no yield.
 

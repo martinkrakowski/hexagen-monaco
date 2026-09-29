@@ -1,5 +1,11 @@
 # Kickoff prompt — the findings store
 
+**Status:** historical — **not for dispatch.** The waves this prompt launches have shipped: wave 1
+(G1, G2) and wave 2 (lane G3, #674, recorded in #675). Its premises are also stale — it says this
+repository has no `.agents/session-log.md` (one exists) and that the skill is absent from a fresh
+worktree (the orchestration template, `docs/planning/2026-09-29_orchestration-template.md`, gives it
+a tracked home). Kept as the record of how the findings-store wave was launched.
+
 Paste the block below into a fresh Claude Code session **whose working directory is
 `~/Projects/hexagen-monaco`**. Everything above the line is for you, not for the agent.
 
