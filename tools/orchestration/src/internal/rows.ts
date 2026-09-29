@@ -136,7 +136,7 @@ export function rowRisk(markdown: string, id: string): Risk {
   if (secondCell === "**high**") return "high";
   if (secondCell === "normal") return "normal";
   if (RISK_WORD_AT_START.test(secondCell)) {
-    return "normal";
+    throw new InvalidRiskCellError(id, secondCell);
   }
   return "normal";
 }
