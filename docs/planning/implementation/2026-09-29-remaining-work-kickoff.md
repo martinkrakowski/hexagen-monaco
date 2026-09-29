@@ -85,6 +85,8 @@ PARALLEL/SEQUENTIAL/GATE tags, the Global Governance block, Step 5 as definition
 2. **`19-wave-status`** (template series #19) — independent of everything else. Two amendments:
    the AGENTS.md "append" has no engine support (collision → `.hexagen-update` sidecar), and
    there is no coverage bar to run tests at.
+   **Superseded 2026-09-29 — do not dispatch.** `docs/planning/2026-09-29_orchestration-template.md`
+   (OW-D11) ships wave-status as a bin of `@hexagen-monaco/orchestration`, not as template #19.
 
 **Blocked, each on one thing:**
 
@@ -123,6 +125,7 @@ PARALLEL/SEQUENTIAL/GATE tags, the Global Governance block, Step 5 as definition
    `__tests__/application/validate-templates-ports.test.ts`.
 10. `tools/wave-status/` unported, so `wave-event.sh`'s "byte-identical to `emit.ts`" claim is
     untestable here (§8 gap 2).
+    Addressed by that plan's OW3, which ports `tools/wave-status` into the package.
 11. `trend()` in `apps/web/lib/platform/run-history-store.ts` reads the clock internally, so its
     boundary cases are untestable. It cost a red `main` for eight days. An injected clock fixes
     it; that is a design change, not a hotfix.
