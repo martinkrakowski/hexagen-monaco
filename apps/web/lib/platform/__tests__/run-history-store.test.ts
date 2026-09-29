@@ -16,6 +16,27 @@ const telemetry = {
   modelName: "mercury-2",
 };
 
+/**
+ * Noon UTC, `daysAgo` days back. The trend window is computed from `Date.now()`
+ * inside `trend()` (run-history-store.ts:254), so a record seeded at a fixed
+ * calendar date silently ages out of it: this suite pinned 2026-08-17 and began
+ * failing on 2026-09-17, thirty-one days later, with no code change. Seeding
+ * relative to now keeps the record inside any window these tests ask for, and
+ * snapping to noon UTC keeps both records of a pair on the same UTC day so the
+ * daily grouping stays a single row regardless of when the suite runs.
+ */
+function noonUtcDaysAgo(daysAgo: number): number {
+  const d = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
+  return Date.UTC(
+    d.getUTCFullYear(),
+    d.getUTCMonth(),
+    d.getUTCDate(),
+    12,
+    0,
+    0,
+  );
+}
+
 describe("run history + price table", () => {
   it("computes cost-per-run from the seeded price table", () => {
     const cents = computeCostCents(1000, 400, {
@@ -29,7 +50,7 @@ describe("run history + price table", () => {
   it("persists telemetry and groups a daily trend", () => {
     const store = createPlatformStore(":memory:");
     const runs = store.runsFor("owner-a");
-    const day = Date.UTC(2026, 7, 17, 12, 0, 0);
+    const day = noonUtcDaysAgo(1);
     const first = runs.record({
       runId: "run-1",
       projectId: "11111111-1111-4111-8111-111111111111",
@@ -64,7 +85,7 @@ describe("run history + price table", () => {
   it("upserts the same owner/run/stage so reconnects do not double cost", () => {
     const store = createPlatformStore(":memory:");
     const runs = store.runsFor("owner-a");
-    const day = Date.UTC(2026, 7, 17, 12, 0, 0);
+    const day = noonUtcDaysAgo(1);
     runs.record({
       runId: "run-1",
       telemetry,

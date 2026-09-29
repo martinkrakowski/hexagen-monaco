@@ -20,6 +20,7 @@ export const protectedFiles = new Set([
   ".gitignore",
   ".yarnrc.yml",
   "SETUP.md",
+  ".prettierrc.json",
   "package.json",
   "tsconfig.base.json",
   "turbo.json",

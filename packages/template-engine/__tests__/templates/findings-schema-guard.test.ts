@@ -728,27 +728,34 @@ describe("template guard — the findings layout ships for free (lane G3)", () =
     assert.ok(ids.includes("agents-md"));
   });
 
-  it("the seeded component finding validates against the arch-linter component context", async () => {
-    // The one component record lane G3 seeded is validated like the template
-    // findings: schema gates, the subject kind/id/version gates against the
-    // component's own package.json version, the body rules (F-D4's second
-    // line of defence), and the F-D1 filename shape. This is not a general
-    // component-finding scan — F-D0 keeps component findings author-facing
-    // and out of the tarball; this guards the one file this lane committed.
-    const findingPath = path.join(
+  it("every seeded component finding validates against its component context", async () => {
+    // Component records are author-facing and never ship (F-D0), but they are
+    // still records: the same schema gates, the same body rules (F-D4's second
+    // line of defence) and the same F-D1 filename shape apply.
+    //
+    // This DISCOVERS the directory rather than naming a file. It previously
+    // pinned one hardcoded path, so a second component finding was validated by
+    // nothing — the same shape of hole review already found twice on this
+    // surface: a guard that reads as covering a surface while covering one file.
+    const findingsDir = path.join(
       REPO_ROOT,
       "tools",
       "arch-linter",
       "findings",
-      "0001-layer-rules-skip-apps.md",
     );
-    const stat = await fs.stat(findingPath).catch(() => undefined);
+    const entries = await fs.readdir(findingsDir, { withFileTypes: true });
+    const files = entries
+      .filter((e) => !e.isDirectory() && /\.md$/i.test(e.name))
+      .map((e) => e.name)
+      .sort();
+
+    // Non-vacuity: a scan that found nothing must fail rather than pass quietly.
     assert.ok(
-      stat?.isFile(),
-      "fixture error: the component finding is missing at " +
-        "tools/arch-linter/findings/0001-layer-rules-skip-apps.md — the " +
-        "record this test validates was removed or relocated",
+      files.length > 0,
+      `fixture error: no component findings under tools/arch-linter/findings/ — ` +
+        `the records this test validates were removed or relocated`,
     );
+
     const pkg = JSON.parse(
       await fs.readFile(
         path.join(REPO_ROOT, "tools", "arch-linter", "package.json"),
@@ -770,24 +777,31 @@ describe("template guard — the findings layout ships for free (lane G3)", () =
           : undefined,
       generatorRoot: REPO_ROOT,
     };
-    const result = validateFinding(
-      await fs.readFile(findingPath, "utf-8"),
-      componentContext,
-    );
-    if (!result.success) {
-      assert.fail(
-        `the component finding must pass the finding schema validator: ` +
-          `${result.error.field}: ${result.error.message}`,
+
+    const seen = new Set<string>();
+    for (const filename of files) {
+      const result = validateFinding(
+        await fs.readFile(path.join(findingsDir, filename), "utf-8"),
+        componentContext,
       );
+      if (!result.success) {
+        assert.fail(
+          `${filename} must pass the finding schema validator: ` +
+            `${result.error.field}: ${result.error.message}`,
+        );
+      }
+      const shaped = FINDING_FILENAME_RE.exec(filename);
+      assert.ok(
+        shaped,
+        `filename '${filename}' does not match the NNNN-<slug>.md shape (F-D1)`,
+      );
+      assert.equal(result.value.id, shaped[1]);
+      assert.ok(
+        !seen.has(result.value.id),
+        `two component findings share id '${result.value.id}'`,
+      );
+      seen.add(result.value.id);
     }
-    // The F-D1 filename shape and id agreement, same as the template findings.
-    const filename = path.basename(findingPath);
-    const shaped = FINDING_FILENAME_RE.exec(filename);
-    assert.ok(
-      shaped,
-      `filename '${filename}' does not match the NNNN-<slug>.md shape (F-D1)`,
-    );
-    assert.equal(result.value.id, shaped[1]);
   });
 
   it("the component finding lives outside templates/, so the verbatim copy input holds no component finding", async () => {

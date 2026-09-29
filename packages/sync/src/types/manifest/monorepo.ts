@@ -56,6 +56,13 @@ export interface WorkspaceDefaults {
 export interface TurboPipeline {
   dependsOn?: string[];
   outputs?: string[];
+  // Turbo 2's other task-level array fields (turbo.json schema). Not wired
+  // into any generator logic here — declared so a manifest task carrying one
+  // is spread through `{ ...task }` (root-files.ts buildTurboContentFromConfig)
+  // as a KNOWN field, matching TURBO_COLLAPSIBLE_ARRAY_FIELDS there.
+  inputs?: string[];
+  env?: string[];
+  passThroughEnv?: string[];
   cache?: boolean;
   persistent?: boolean;
 }
@@ -77,6 +84,7 @@ export interface RootFilesConfig {
   gitignore?: FileTemplate;
   yarnrc?: FileTemplate;
   setup?: FileTemplate;
+  prettierrc?: FileTemplate;
 }
 
 export interface ArchInvariantsConfig {
