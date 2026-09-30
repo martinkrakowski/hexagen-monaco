@@ -63,10 +63,7 @@ export function compileGrant(
       `Grant names unknown manifest context(s): ${unknown.join(", ")}`,
     );
   }
-  const compiledPaths = [
-    ...contexts.map(contextPathPrefix),
-    ...extraPaths,
-  ];
+  const compiledPaths = [...contexts.map(contextPathPrefix), ...extraPaths];
   return {
     contexts: [...contexts],
     paths: [...new Set(compiledPaths)],

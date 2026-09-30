@@ -11,11 +11,7 @@
  */
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
-import {
-  checkTrace,
-  type GrantRef,
-  type Trace,
-} from "./trace.js";
+import { checkTrace, type GrantRef, type Trace } from "./trace.js";
 
 const activeGrant: GrantRef = {
   id: "grant-001",
@@ -65,10 +61,14 @@ describe("checkTrace — Rule 3: a Trace without a matching Grant.id is invalid"
 
 describe("checkTrace — Rule 2: a write whose grant is expired or revoked is fail closed", () => {
   it("is invalid when a tool call happened after the grant's expires_at", () => {
-    const expired: GrantRef = { id: "grant-001", expires_at: "2026-09-30T09:00:00.000Z" };
+    const expired: GrantRef = {
+      id: "grant-001",
+      expires_at: "2026-09-30T09:00:00.000Z",
+    };
     const check = checkTrace(trace(), [expired]);
     assert.equal(check.valid, false);
-    if (!check.valid) assert.match(check.reason, /after grant 'grant-001' expires_at/);
+    if (!check.valid)
+      assert.match(check.reason, /after grant 'grant-001' expires_at/);
   });
 
   it("is invalid when a tool call happened at or after the grant's revoked_at", () => {
@@ -93,7 +93,10 @@ describe("checkTrace — Rule 2: a write whose grant is expired or revoked is fa
   });
 
   it("a call exactly at expires_at is still allowed (at-or-before is in-window)", () => {
-    const grant: GrantRef = { id: "grant-001", expires_at: "2026-09-30T10:00:00.000Z" };
+    const grant: GrantRef = {
+      id: "grant-001",
+      expires_at: "2026-09-30T10:00:00.000Z",
+    };
     const check = checkTrace(trace(), [grant]);
     assert.equal(check.valid, true);
   });
@@ -125,7 +128,10 @@ describe("checkTrace — ordered tool calls, multiple grants", () => {
   });
 
   it("selects the right grant among several by id", () => {
-    const other: GrantRef = { id: "grant-002", expires_at: "2020-01-01T00:00:00.000Z" };
+    const other: GrantRef = {
+      id: "grant-002",
+      expires_at: "2020-01-01T00:00:00.000Z",
+    };
     const check = checkTrace(trace(), [other, activeGrant]);
     assert.equal(check.valid, true);
   });

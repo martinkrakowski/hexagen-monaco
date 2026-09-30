@@ -53,7 +53,10 @@ describe("compileGrant", () => {
 
   it("compiling zero contexts yields a grant that denies everything", () => {
     const grant = compileGrant([], manifest);
-    const mutation: MutationRef = { kind: "create-context", context: "billing" };
+    const mutation: MutationRef = {
+      kind: "create-context",
+      context: "billing",
+    };
     const check = checkMutationAgainstGrant(grant, mutation);
     assert.equal(check.allowed, false);
   });
@@ -62,7 +65,10 @@ describe("compileGrant", () => {
 describe("checkMutationAgainstGrant — default deny, in-scope allowed", () => {
   it("allows a mutation whose context the grant names", () => {
     const grant = compileGrant(["billing"], manifest);
-    const mutation: MutationRef = { kind: "scaffold-module", context: "billing" };
+    const mutation: MutationRef = {
+      kind: "scaffold-module",
+      context: "billing",
+    };
     const check = checkMutationAgainstGrant(grant, mutation);
     assert.equal(check.allowed, true);
   });
@@ -89,7 +95,10 @@ describe("checkMutationAgainstGrant — default deny, in-scope allowed", () => {
     // reviewer scopes the cycle to one sub-directory). Naming the context
     // is not by itself sufficient if `paths` was overridden to exclude it.
     const grant = compileGrant(["shared"], manifest, []);
-    const narrowed = { contexts: grant.contexts, paths: ["packages/shared/types/"] };
+    const narrowed = {
+      contexts: grant.contexts,
+      paths: ["packages/shared/types/"],
+    };
     const mutation: MutationRef = { kind: "create-port", context: "shared" };
 
     const check = checkMutationAgainstGrant(narrowed, mutation);
@@ -103,13 +112,17 @@ describe("checkMutationAgainstGrant — default deny, in-scope allowed", () => {
   it("two independently granted contexts each stay scoped to their own paths", () => {
     const grant = compileGrant(["billing", "shared"], manifest);
     assert.equal(
-      checkMutationAgainstGrant(grant, { kind: "create-context", context: "billing" })
-        .allowed,
+      checkMutationAgainstGrant(grant, {
+        kind: "create-context",
+        context: "billing",
+      }).allowed,
       true,
     );
     assert.equal(
-      checkMutationAgainstGrant(grant, { kind: "create-context", context: "shared" })
-        .allowed,
+      checkMutationAgainstGrant(grant, {
+        kind: "create-context",
+        context: "shared",
+      }).allowed,
       true,
     );
     assert.equal(

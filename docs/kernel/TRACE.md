@@ -2,7 +2,7 @@
 
 Status: design spec + acceptance tests. Not wired into any running server.
 Does not reopen Grant design — see `docs/kernel/GRANT.md`, which is source
-of truth for the Grant schema; this document only ever *references*
+of truth for the Grant schema; this document only ever _references_
 `Grant.id`, never redefines it.
 
 ## Why
@@ -105,7 +105,7 @@ Stated as fail-closed checks — each one denies (refuses to treat the
 write, or the trace, as valid evidence) rather than warns:
 
 1. **A write with no `grant_id` is fail closed.** This is a rule on the
-   *write*, enforced at the same point `GRANT.md`'s enforcement point
+   _write_, enforced at the same point `GRANT.md`'s enforcement point
    describes (`hexagen_accept_transaction` for the MCP adapter) — a
    mutation that would produce a trace entry with no grant to attribute it
    to must never be allowed to happen, symmetrically with "no Transaction
@@ -123,10 +123,10 @@ write, or the trace, as valid evidence) rather than warns:
    identity for a trace to carry independent of its grant; `grant_id` is
    the only identity a Trace has an opinion about.
 
-Rules 1–2 are checks a future *write*-side enforcement point makes (the
+Rules 1–2 are checks a future _write_-side enforcement point makes (the
 same accept-transaction choke point `GRANT.md` describes, extended to also
 refuse an unattributed or out-of-window write); rule 3 is a check a
-*reader* of a trace file makes (a `hexagen evidence pack` run, or a CI
+_reader_ of a trace file makes (a `hexagen evidence pack` run, or a CI
 gate) before trusting what it finds. Both directions matter: a producer
 that never emits an invalid trace, and a consumer that never trusts one it
 didn't produce itself.
@@ -136,8 +136,8 @@ didn't produce itself.
 - **Grant → Trace:** every Trace's `grant_id` names the Grant that
   authorized the cycle it records. Trace never re-derives `contexts` /
   `paths` / `tools` / `mode` from itself — a reader who needs to know what
-  the cycle was *allowed* to do looks up the grant by `grant_id`; a Trace
-  only records what it *did*.
+  the cycle was _allowed_ to do looks up the grant by `grant_id`; a Trace
+  only records what it _did_.
 - **Transaction → Trace:** `transaction_ids` ties a cycle's trace to the
   `@hexagen/transaction-system` transactions it created or accepted, so a
   reader can cross-reference "this trace says it touched these
@@ -157,7 +157,7 @@ no Transaction to reference and therefore cannot produce a valid Trace
 either — that is the same gap one layer up, not a new one, and it is out
 of scope for this slice for the same reason it was out of scope for Grant:
 closing it needs a second adapter (editor/shell-write), not a change to
-what Trace or Grant *mean*.
+what Trace or Grant _mean_.
 
 ## Command spec (design only — not built)
 

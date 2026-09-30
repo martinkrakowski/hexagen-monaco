@@ -12,7 +12,7 @@ Today `docs/agent-constraint-workflow.md` pins an agent to one bounded
 context by **telling it so in the system prompt** ("You are working only
 in the `<context>` bounded context..."). That is advice, not a limit: an
 agent (or a bug in a tool call) that ignores it hits no runtime check, only
-a linter run *after* the fact (`hexagen-lint --staged`). Grant closes that
+a linter run _after_ the fact (`hexagen-lint --staged`). Grant closes that
 gap: it is a **compiled object**, not a sentence, checked at the one point
 where a mutation stops being speculative and starts touching disk —
 transaction accept. Prompt text is not the limit; `hexagen_accept_transaction`
@@ -29,7 +29,7 @@ Grant only, and does not reopen Trace.
 A Grant is the smallest contract for **one agent cycle**: who is running it,
 which agent identity, which manifest contexts and workspace paths it may
 write to, which write tools it may invoke, and whether it may only propose
-or may also land. It is *compiled*, not authored free-hand — a human (or a
+or may also land. It is _compiled_, not authored free-hand — a human (or a
 CI policy) names the contexts and tools, and the grant expands them into
 concrete path prefixes and a required expiry. It is symmetric in intent —
 the same compiled object is what a human reviewer reads to know the cycle's
@@ -70,7 +70,7 @@ The first spec of this document had only `contexts` and `paths` — an
 allowlist, not a grant. `id` is what a Trace record references (without it,
 the next thread would have invented a second identity); `principal`/`agent`
 separate who authorized a cycle from who executes it; `tools` scopes
-*actions*, not only *locations*; `mode` distinguishes an agent that may
+_actions_, not only _locations_; `mode` distinguishes an agent that may
 draft a change from one that may land it; `expires_at`/`revoked_at` make
 time and revocation first-class even though this slice always mints a
 fresh, short-lived grant rather than reading from a store.
@@ -141,7 +141,7 @@ empty `grant.tools`) denies every mutation. This is what "slice-scoped
 rules default deny outside the slice" means concretely: every check is a
 positive allowlist match, never a blocklist.
 
-**Fail closed.** The check runs *before* `transactionManager` claims the
+**Fail closed.** The check runs _before_ `transactionManager` claims the
 transaction (`compareAndSetStatus(..., "pending", "speculative")`), so a
 rejected mutation never transitions state and never reaches
 `ManifestWritePort`/`ScaffoldingPort` — no compensating rollback is needed
