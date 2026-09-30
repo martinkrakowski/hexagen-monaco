@@ -34,7 +34,10 @@ export default defineConfig({
     "bins/mutate": "src/bins/mutate.ts",
     "bins/mutate-verify": "src/bins/mutate-verify.ts",
     "bins/mutate-anchors": "src/bins/mutate-anchors.ts",
-    // OW3c
+    // OW3c. Its page is served from the PINNED path
+    // tools/orchestration/public/wave-status/index.html (shipped by the
+    // `public` entry in package.json `files`); OW3c creates that file and
+    // edits neither this config nor package.json.
     "bins/wave-status": "src/bins/wave-status.ts",
     // OW3d
     "bins/gate": "src/bins/gate.ts",

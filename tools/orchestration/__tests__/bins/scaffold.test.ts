@@ -132,7 +132,14 @@ describe("the bin list (OW-D14)", () => {
   });
 
   it("publishes dist and bin, which is where the two bin kinds live", () => {
-    expect(manifest.files).toEqual(["dist", "bin"]);
+    expect(manifest.files).toEqual(expect.arrayContaining(["dist", "bin"]));
+  });
+
+  // F19: wave-status (OW3c) serves tools/orchestration/public/wave-status/index.html.
+  // `files` is owned by this package's scaffold and no later lane may edit
+  // package.json, so the directory is published from day one.
+  it("publishes public/, where wave-status's page will live", () => {
+    expect(manifest.files).toContain("public");
   });
 
   // F18: mutate-anchors (OW3b) imports the TypeScript compiler API at run time.
