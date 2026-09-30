@@ -1,6 +1,7 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -77,29 +78,30 @@ describe("the orchestration skill paths are tracked, and nothing else is un-igno
     }
   });
 
-  it("the edit is exactly the four approved lines, in order", () => {
-    // gitignore negation is last-match-wins, so the four lines only win while
-    // nothing after them re-ignores the paths. They are read from the working
-    // tree's own diff, so a future `yarn sync --force-root` that drops or
-    // reorders them fails here rather than in CI on a missing skill.
-    const diff = spawnSync("git", ["diff", "--", ".gitignore"], {
-      cwd: REPO_ROOT,
-      encoding: "utf8",
-    });
-    assert.equal(diff.status, 0, diff.stderr);
-    const added = diff.stdout
-      .split("\n")
-      .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
-      .map((line) => line.slice(1));
+  it("the four lines sit in order, immediately after the unanchored `skills/`", () => {
+    // Read from the file's CONTENT, not from a diff: a diff-based reading of
+    // "the edit is exactly these four lines" holds only while the edit is
+    // uncommitted and fails the moment it lands, which is a guard that guards
+    // the wrong window. What has to stay true permanently is the ORDER, because
+    // gitignore negation is last-match-wins — the four lines win only while
+    // nothing after them re-ignores the paths.
+    const text = readFileSync(path.join(REPO_ROOT, ".gitignore"), "utf8");
+    const lines = text.split("\n");
+    const anchor = lines.indexOf("skills/");
+    assert.notEqual(
+      anchor,
+      -1,
+      "the unanchored `skills/` rule must still exist",
+    );
     assert.deepStrictEqual(
-      added,
+      lines.slice(anchor + 1, anchor + 5),
       [
         "!.agents/skills/",
         ".agents/skills/*",
         "!.agents/skills/orchestrate-wave/",
         "!/packages/template-engine/templates/orchestration/files/.agents/skills/",
       ],
-      "the edit is exactly the four approved lines, in order",
+      "the four lines must follow `skills/` directly, in this order",
     );
   });
 });

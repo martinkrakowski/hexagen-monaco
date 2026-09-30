@@ -21,6 +21,22 @@ const EXTRACTOR = path.join(
   "extract-gate-steps.mjs",
 );
 const FIXTURE = path.resolve(HERE, "..", "fixtures", "orchestration");
+// The scrubbed skill's ONE canonical home, since OW4 moved it out of the fixture: the template's
+// `files/` tree, the bytes `hexagen add orchestration` emits into a consumer project. OW-D2/OW-D13
+// keep the template copy as the single owner, and a fixture copy alongside it would be a second one
+// that could drift. The fixture keeps `source/` (the left-hand side of the coverage question) and
+// `campaign-foundry/` (the worked overlay); the skill itself is read, and tested, where it ships.
+const GENERIC = path.resolve(
+  HERE,
+  "..",
+  "..",
+  "templates",
+  "orchestration",
+  "files",
+  ".agents",
+  "skills",
+  "orchestrate-wave",
+);
 // The live memory directory is the owner's, outside the repository. The audit against it runs only
 // when ORCHESTRATION_MEMORY_DIR points at it; CI runs the committed manifest instead.
 // turbo/no-undeclared-env-vars: ORCHESTRATION_MEMORY_DIR is an operator-set variable that enables an
@@ -71,11 +87,14 @@ const MANIFEST = path.join(FIXTURE, "campaign-foundry", "memory-manifest.txt");
 
 function copyFixture(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "skill-coverage-"));
-  for (const entry of ["source", "generic", "campaign-foundry"]) {
+  for (const entry of ["source", "campaign-foundry"]) {
     fs.cpSync(path.join(FIXTURE, entry), path.join(dir, entry), {
       recursive: true,
     });
   }
+  // The skill is not in the fixture any more, so the temp tree gets it under
+  // the name every `path.join(fixture, "generic", …)` below already expects.
+  fs.cpSync(GENERIC, path.join(dir, "generic"), { recursive: true });
   return dir;
 }
 
@@ -90,12 +109,23 @@ function run(args: string[]): { status: number | null; out: string } {
   };
 }
 
+/**
+ * Where the scrubbed skill sits for a given fixture root. The real fixture has
+ * no `generic/` directory any more — the skill moved into the template — so it
+ * resolves to `GENERIC`; a `copyFixture()` temp tree keeps a `generic/` copy
+ * that the red cases below mutate in place, and those mutations must be the
+ * tree the CLI reads or they would prove nothing.
+ */
+function skillDir(fixture: string): string {
+  return fixture === FIXTURE ? GENERIC : path.join(fixture, "generic");
+}
+
 function coverageArgs(fixture: string, extra: string[] = []): string[] {
   return [
     "--source",
     path.join(fixture, "source"),
     "--tree",
-    path.join(fixture, "generic"),
+    skillDir(fixture),
     "--tree",
     path.join(fixture, "campaign-foundry", "overlay"),
     "--allowlist",
@@ -103,7 +133,7 @@ function coverageArgs(fixture: string, extra: string[] = []): string[] {
     "--sites",
     path.join(fixture, "campaign-foundry", "specific-sites.txt"),
     "--generic",
-    path.join(fixture, "generic"),
+    skillDir(fixture),
     "--token-review",
     path.join(fixture, "campaign-foundry", "generic-token-review.txt"),
     "--hexagen-root",
@@ -334,7 +364,7 @@ describe("orchestration skill coverage", () => {
       "--source",
       path.join(FIXTURE, "source"),
       "--tree",
-      path.join(FIXTURE, "generic"),
+      GENERIC,
       "--allowlist",
       path.join(
         FIXTURE,
@@ -665,7 +695,7 @@ describe("orchestration skill coverage", () => {
       }
       return out;
     };
-    const generic = path.join(FIXTURE, "generic");
+    const generic = GENERIC;
     const skill = path.join(generic, "SKILL.md");
     const rationale = path.join(generic, "references", "rationale.md");
     const targets: Record<string, Set<string>> = {
@@ -692,7 +722,7 @@ describe("orchestration skill coverage", () => {
 
   it("generic/ names no incident date", () => {
     for (const name of ["SKILL.md", path.join("references", "rationale.md")]) {
-      const text = fs.readFileSync(path.join(FIXTURE, "generic", name), "utf8");
+      const text = fs.readFileSync(path.join(GENERIC, name), "utf8");
       expect(text.match(/2026-\d\d-\d\d/g) ?? [], name).toEqual([]);
     }
   });
@@ -706,7 +736,7 @@ describe("orchestration skill coverage", () => {
       .split("\n")
       .filter((line) => line.trim());
     expect(sites.length).toBe(43);
-    const genericDir = path.join(FIXTURE, "generic");
+    const genericDir = GENERIC;
     const files: string[] = [];
     const walk = (dir: string): void => {
       for (const entry of fs.readdirSync(dir)) {
@@ -755,10 +785,7 @@ describe("orchestration skill coverage", () => {
   });
 
   it("generic/SKILL.md states the loading defaults, the invariants and the precedence rule", () => {
-    const raw = fs.readFileSync(
-      path.join(FIXTURE, "generic", "SKILL.md"),
-      "utf8",
-    );
+    const raw = fs.readFileSync(path.join(GENERIC, "SKILL.md"), "utf8");
     const skill = raw.replace(/\s+/g, " ");
     for (const text of DEFAULT_STRINGS) {
       expect(skill.includes(text), `default present: ${text}`).toBe(true);

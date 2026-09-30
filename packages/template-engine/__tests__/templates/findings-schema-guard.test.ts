@@ -148,12 +148,14 @@ describe("template guard — finding file schema", () => {
     // (vacuously green) scan.
     assert.equal(
       found.length,
-      2,
-      "the seeded store holds exactly two template findings",
+      4,
+      "the seeded store holds exactly four template findings",
     );
     assert.deepStrictEqual(found.map((f) => rel(REPO_ROOT, f.file)).sort(), [
       "packages/template-engine/templates/agents-md/findings/0001-session-log-grows-unbounded.md",
       "packages/template-engine/templates/ci-github-actions/findings/0001-ci-runners-have-no-zsh.md",
+      "packages/template-engine/templates/orchestration/findings/0001-relative-runbook-links-escape-the-skill.md",
+      "packages/template-engine/templates/orchestration/findings/0002-interpolation-hazard-in-graphql-line.md",
     ]);
     const failures: string[] = [];
     for (const f of found) {
@@ -806,13 +808,13 @@ describe("template guard — the findings layout ships for free (lane G3)", () =
 
   it("the component finding lives outside templates/, so the verbatim copy input holds no component finding", async () => {
     // The copy input is exactly packages/template-engine/templates: the set of
-    // finding files under it must be exactly the two template findings, and no
+    // finding files under it must be exactly the four template findings, and no
     // template directory named arch-linter may exist.
     const found = await collectTemplateFindings(TEMPLATES_DIR);
     assert.deepStrictEqual(
       found.map((f) => f.subjectId).sort(),
-      ["agents-md", "ci-github-actions"],
-      "the copy input carries exactly the two template findings",
+      ["agents-md", "ci-github-actions", "orchestration", "orchestration"],
+      "the copy input carries exactly the four template findings",
     );
     assert.ok(
       !found.some(
