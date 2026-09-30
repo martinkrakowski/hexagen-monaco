@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { load as parseYaml } from "js-yaml";
 import { describe, expect, test } from "vitest";
 import {
   CONFIG_RELATIVE_PATH,
@@ -56,15 +57,15 @@ describe("hexagen-monaco's own orchestration overlay", () => {
   });
 
   test("requiredCheck matches at least one job name in the ciWorkflow", () => {
-    const workflow = fs.readFileSync(
-      path.join(REPO_ROOT, config.ciWorkflow),
-      "utf8",
+    const workflow = parseYaml(
+      fs.readFileSync(path.join(REPO_ROOT, config.ciWorkflow), "utf8"),
+    ) as { jobs?: Record<string, { name?: unknown } | null> };
+    // A job's check name is `jobs.<id>.name`, or the id when it has none. Step names are not checks.
+    const jobNames = Object.entries(workflow.jobs ?? {}).map(([id, job]) =>
+      typeof job?.name === "string" ? job.name : id,
     );
-    const names = [
-      ...workflow.matchAll(/^\s+name:\s*"?([^"\n]+?)"?\s*$/gm),
-    ].map((m) => m[1]!);
     const pattern = new RegExp(config.requiredCheck);
-    expect(names.some((n) => pattern.test(n))).toBe(true);
+    expect(jobNames.some((n) => pattern.test(n))).toBe(true);
   });
 
   test("the gate runs CI's steps in order, including the test-source typecheck", () => {
