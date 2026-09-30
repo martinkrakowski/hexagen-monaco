@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 /**
  * The gate's run loop. Every test drives the real `bin/gate-run.sh` with a
@@ -83,16 +83,19 @@ function runGate(
   timeout = 15_000,
 ): RunResult {
   const dir = scratch();
-  const overrides: Record<string, string> = {};
+  const childEnv: NodeJS.ProcessEnv = { ...process.env, TMPDIR: dir };
   for (const [key, value] of Object.entries(env)) {
     // An explicit `undefined` DELETES the variable from the child's
-    // environment — which is how a test asks "what does the loop do when the
-    // bin passed nothing?" rather than "what does an empty value do?".
-    if (value !== undefined) overrides[key] = value;
+    // environment, including one inherited from this process — which is how a
+    // test asks "what does the loop do when the bin passed nothing?" rather
+    // than "what does an empty value do?". Assigning `undefined` would not
+    // delete an inherited value.
+    if (value === undefined) delete childEnv[key];
+    else childEnv[key] = value;
   }
   const result = spawnSync("sh", [gateRunSh, ...args], {
     encoding: "utf8",
-    env: { ...process.env, TMPDIR: dir, ...overrides },
+    env: childEnv,
     timeout,
   });
   return {
@@ -180,9 +183,13 @@ describe("the gate run loop", () => {
     // The loop has no default step list of its own — a gate that supplied one
     // would be a second source of truth for the same thing — so with nothing
     // injected it must refuse rather than run nothing and report green.
+    // A usable list is inherited from this process, so the unset case is only
+    // unset if the helper truly deletes it from the child's environment.
+    vi.stubEnv("HEXAGEN_GATE_STEPS", "build\ttrue");
     const unset = runGate(["--lane", "lane-b"], {
       HEXAGEN_GATE_STEPS: undefined,
     });
+    vi.unstubAllEnvs();
     expect(unset.status).toBe(2);
     expect(unset.stderr).toContain("HEXAGEN_GATE_STEPS");
 
