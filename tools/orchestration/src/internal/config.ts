@@ -13,10 +13,18 @@ import { load as parseYaml } from "js-yaml";
  *
  * - `parseConfig` validates the file's SHAPE (the 15 fields, their types, the
  *   closed `invariants` set, the `overrides[]` contract) and applies every
- *   default. It is total: it returns a `Config`, or a list of problems.
+ *   default. It is total: it returns its `config` ALONGSIDE its problems. A field
+ *   that failed validation holds its default in that config; `config` is absent
+ *   only for a whole-file fault (not YAML, not a mapping).
  * - `loadConfig` adds the one thing that needs the outside world — `repo`,
  *   derived from `gh` when the file omits it — and the one thing that needs a
  *   filesystem — whether the file was there at all.
+ *
+ * THE CONTRACT for a bin: `loadConfigFor` always returns a `config`, but when the
+ * file is present and has problems that config cannot be trusted. A bin that
+ * ACTS on it must refuse: exit 2, print every problem, write nothing (see
+ * `refusal.ts`). Only a diagnostic bin (`doctor`) prints the problems and keeps
+ * going.
  *
  * A field that is absent takes its documented default. A field that is PRESENT
  * and wrong is an error: a gate that quietly substitutes a default for a

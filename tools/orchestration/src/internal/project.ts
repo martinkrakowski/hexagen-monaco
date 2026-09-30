@@ -144,9 +144,15 @@ export async function emptyConfigFor(
  * A MISSING overlay is not an error here: `emptyConfigFor` semantics, with
  * `repo` still derived from `gh`. An INVALID one is reported through
  * `problems` — including a `repo` that `gh` answered with something that is not
- * `owner/name` — and the bins that care (`doctor`) read those. A bin that
- * merely needs a setting reads the defaulted config and does not second-guess
- * it, except `repo`, which it must have.
+ * `owner/name`.
+ *
+ * `config` is ALWAYS present on the result, and a field that failed validation
+ * holds its default. That is exactly why the contract is refuse-or-report: a bin
+ * that acts on the result (writes, verifies, scaffolds) must, when `present` is
+ * true and `problems` is not empty, exit 2, print every problem and write
+ * nothing (`configRefusal` builds that text). Only a diagnostic bin (`doctor`)
+ * prints the problems and carries on. A bin that needs `repo` and has none says
+ * so itself.
  */
 export async function loadConfigFor(
   rootArg?: string,
