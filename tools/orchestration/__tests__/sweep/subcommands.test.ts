@@ -118,6 +118,38 @@ describe("keep-both", () => {
     expect(onDisk).toBe(unterminated);
   });
 
+  test("a CRLF conflict resolves, and the file is written with LF line endings", async () => {
+    const crlf =
+      "before\r\n<<<<<<< HEAD\r\nours\r\n=======\r\ntheirs\r\n>>>>>>> origin/main\r\nafter\r\n";
+    const { code, onDisk } = await run(crlf);
+    expect(code).toBe(0);
+    expect(onDisk).toBe("before\nours\ntheirs\nafter\n");
+  });
+
+  test("a lone-CR conflict resolves the same way", async () => {
+    const cr =
+      "before\r<<<<<<< HEAD\rours\r=======\rtheirs\r>>>>>>> origin/main\rafter\r";
+    const { code, onDisk } = await run(cr);
+    expect(code).toBe(0);
+    expect(onDisk).toBe("before\nours\ntheirs\nafter\n");
+  });
+
+  test("a CRLF file with no markers exits 1 and is left byte-identical", async () => {
+    const original = "no markers\r\nhere\r\n";
+    const { code, onDisk } = await run(original);
+    expect(code).toBe(1);
+    expect(onDisk).toBe(original);
+  });
+
+  test("a closing marker with no trailing newline exits 1 and the file is unchanged", async () => {
+    const original =
+      "<<<<<<< HEAD\r\nours\r\n=======\r\ntheirs\r\n>>>>>>> origin/main";
+    const { code, err, onDisk } = await run(original);
+    expect(code).toBe(1);
+    expect(err).toContain("made no progress on f.txt");
+    expect(onDisk).toBe(original);
+  });
+
   test("a file that cannot be read exits 1, naming the file", async () => {
     const root = tempRoot();
     const h = harness({ argv: ["keep-both", "absent.txt"], root });

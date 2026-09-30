@@ -180,7 +180,12 @@ async function runKeepBoth(
     io.logError(`could not read ${path}: ${errorText(error)}`);
     return 1;
   }
-  const merged = original.replace(
+  // The source read through Python's universal newlines, so `\r\n` and a lone
+  // `\r` both arrived as `\n` and the hunk pattern's `\n` matched them. A raw
+  // read does not, so the same normalisation happens here, and the normalised
+  // text is what is written (and what "no progress" is measured against).
+  const text = original.replace(/\r\n?/g, "\n");
+  const merged = text.replace(
     CONFLICT_HUNK,
     (_match, ours: string, theirs: string) => ours + theirs,
   );
@@ -189,7 +194,7 @@ async function runKeepBoth(
   // conflicted, or was already resolved), or a marker survived (a nested or
   // unterminated hunk). Writing either would destroy the file's conflict
   // markers and leave a merge nothing can resolve by hand.
-  if (merged === original || merged.includes("<<<<<<<")) {
+  if (merged === text || merged.includes("<<<<<<<")) {
     io.logError(`keep-both resolver made no progress on ${path}`);
     return 1;
   }
