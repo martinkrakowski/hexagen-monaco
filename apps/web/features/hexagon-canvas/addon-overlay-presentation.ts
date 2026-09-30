@@ -23,6 +23,7 @@ export const CAPABILITY_LABEL: Record<string, string> = {
   "platform.lint": "lint / format",
   "platform.runtime": "runtime platform",
   "platform.mcp": "MCP server",
+  "platform.orchestration": "Orchestration",
   "platform.observability": "observability",
   "platform.rate-limiting": "rate limiting",
   "platform.design-system": "design system",
