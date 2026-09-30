@@ -424,6 +424,29 @@ describe("orchestration skill coverage", () => {
     expect(result.out).toContain("manifest-only-name.md is in the manifest");
   });
 
+  it("F2: the committed manifest classifies clean with no memory directory (the CI path)", () => {
+    const manifest = path.join(
+      FIXTURE,
+      "campaign-foundry",
+      "memory-manifest.txt",
+    );
+    const names = fs
+      .readFileSync(manifest, "utf8")
+      .split("\n")
+      .filter((line) => line.trim());
+    expect(names).toHaveLength(51);
+    const result = run(
+      coverageArgs(FIXTURE, [
+        "--memory-manifest",
+        manifest,
+        "--lessons",
+        path.join(FIXTURE, "campaign-foundry", "overlay", "lessons.md"),
+      ]),
+    );
+    expect(result.status, result.out).toBe(0);
+    expect(result.out).toContain("memory: 51 files, 32 cited, 19 allowlisted");
+  });
+
   it("F6: every #anchor link in generic/ resolves to a heading slug", () => {
     const slug = (heading: string): string =>
       heading
