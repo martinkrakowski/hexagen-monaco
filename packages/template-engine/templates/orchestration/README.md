@@ -78,8 +78,9 @@ own, so CI and a human running `hexagen-orchestration-gate` consult the same fil
 - **Upgrades.** `hexagen add --force orchestration` re-emits the five outputs above, per file,
   writing a `.hexagen-update.*` conflict copy where you have edited one. It does not touch
   `.agents/orchestration/**`.
-- **The skill is one copy.** The template's `files/` tree is the canonical source; hexagen's own
-  tracked `.agents/skills/orchestrate-wave/` is a byte-identical mirror with a guard test.
+- **The skill is one copy.** The template's `files/` tree is the canonical source. A
+  byte-identical mirror at hexagen's own `.agents/skills/orchestrate-wave/`, and the guard test
+  that holds it so, are OW6's deliverables; neither exists yet.
 
 ## Related
 
