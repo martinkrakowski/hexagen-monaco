@@ -1,14 +1,51 @@
 #!/usr/bin/env node
 /**
- * `hexagen-orchestration-plan-review` — not yet ported.
+ * `hexagen-orchestration-plan-review` — the bin.
  *
- * Placeholder for OW-D14's canonical sixteen-bin list. The bin name and its
- * `dist/bins/plan-review.js` path are FINAL and pinned here so no later lane touches
- * package.json or tsup.config.ts; the implementing lane replaces this file and
- * nothing else.
+ * The three subcommands are in `../plan-review/cli.ts`; this is the thin edge
+ * that supplies the real filesystem, the real environment, and the project's
+ * overlay. The overlay is read ONCE, here, and a file that is present and has
+ * problems is a refusal before any subcommand runs — a gate that hashed rows or
+ * cleared a merge on settings nobody had cleared would be the failure this
+ * package exists to prevent.
  *
- * A stub must never exit 0: a caller that shells out to a bin and reads the exit
- * code would otherwise see a completed step that never ran.
+ * `planDir`, `repo` and `waveLogDir` reach the CLI as `config`, never as a
+ * constant and never as a value looked up from the working directory.
  */
-process.stderr.write("hexagen-orchestration-plan-review: not yet ported\n");
-process.exit(2);
+import { existsSync } from "node:fs";
+import { readFile, readdir } from "node:fs/promises";
+import { resolve } from "node:path";
+import { errorText } from "../internal/artifact.js";
+import { loadConfigFor } from "../internal/project.js";
+import { configRefusal } from "../internal/refusal.js";
+import { waveEventEnv } from "../internal/wave-event-wiring.js";
+import { runCli } from "../plan-review/cli.js";
+
+const loaded = await loadConfigFor();
+const { root, config } = loaded;
+
+const refusal = configRefusal("plan-review", "judge plan rows", loaded);
+if (refusal !== undefined) {
+  for (const line of refusal) console.error(line);
+  process.exitCode = 2;
+} else {
+  try {
+    process.exitCode = await runCli({
+      argv: process.argv.slice(2),
+      config,
+      root,
+      log: (text) => console.log(text),
+      logError: (text) => console.error(text),
+      readFile: (path) => readFile(resolve(root, path), "utf8"),
+      readdir: (dir) => readdir(dir),
+      exists: (path) => existsSync(path),
+      // The ONE projection of the environment `defaultLogDir` reads, shared
+      // with the event writer so a gate and the writer it is checking can never
+      // name a different directory for the same wave.
+      env: waveEventEnv(process.env),
+    });
+  } catch (error: unknown) {
+    console.error(errorText(error));
+    process.exitCode = 1;
+  }
+}
