@@ -263,6 +263,27 @@ describe("realDeps", () => {
     expect(red.launchError).toBeUndefined();
   });
 
+  test("execute does not call more than 1 MiB of output a launch failure", async () => {
+    const res = await realDeps.execute([
+      process.execPath,
+      "-e",
+      "process.stdout.write('x'.repeat(2 * 1024 * 1024))",
+    ]);
+    expect(res.launchError).toBeUndefined();
+    expect(res.exitCode).toBe(0);
+    expect(res.stdout).toHaveLength(2 * 1024 * 1024);
+  });
+
+  test("execute names an output overflow as its own reason, not a launch failure or an exit code", async () => {
+    const res = await realDeps.execute([
+      process.execPath,
+      "-e",
+      "process.stdout.write('x'.repeat(33 * 1024 * 1024))",
+    ]);
+    expect(res.launchError).toContain("output exceeded");
+    expect(res.launchError).not.toContain("ENOENT");
+  });
+
   test("execute reports a launch failure as one, not as an exit code", async () => {
     const res = await realDeps.execute([
       "/nonexistent/binary/that/cannot/launch",

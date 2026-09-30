@@ -61,6 +61,9 @@ export const onSignal: NonNullable<MutationDeps["onSignal"]> = (cleanup) => {
 /* Deferred imports: importing this module — a test does — must cost nothing. */
 const nodeFs = () => import("node:fs/promises");
 
+/** The same 32 MiB `mutate-anchors` allows a test command. Node's default, 1 MiB, is too small for a chatty suite. */
+const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
+
 /** `execFileImpl` is a parameter so a test can hand in a child it controls. */
 export function createRealDeps(
   execFileImpl?: typeof import("node:child_process").execFile,
@@ -75,23 +78,40 @@ export function createRealDeps(
         execFileImpl ?? (await import("node:child_process")).execFile;
       return new Promise((resolve) => {
         const [bin, ...rest] = command;
-        const child = execFile(bin as string, rest, (error, stdout, stderr) => {
-          running = undefined;
-          if (error === null) {
-            resolve({ exitCode: 0, stdout, stderr });
-            return;
-          }
-          const code = (error as NodeJS.ErrnoException & { code?: number })
-            .code;
-          // A numeric code is the exit status of a process that ran and failed. Any other
-          // code means it never launched, so the 1 below is a placeholder rather than a
-          // result: name the failure instead of letting the 1 be read as a catch.
-          resolve(
-            typeof code === "number"
-              ? { exitCode: code, stdout, stderr }
-              : { exitCode: 1, stdout, stderr, launchError: error.message },
-          );
-        });
+        const child = execFile(
+          bin as string,
+          rest,
+          { maxBuffer: MAX_OUTPUT_BYTES },
+          (error, stdout, stderr) => {
+            running = undefined;
+            if (error === null) {
+              resolve({ exitCode: 0, stdout, stderr });
+              return;
+            }
+            const code = (
+              error as NodeJS.ErrnoException & { code?: number | string }
+            ).code;
+            // Node kills a child whose output outgrows the buffer. That is neither a
+            // launch failure nor a result: the exit status is not the command's own.
+            if (code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
+              resolve({
+                exitCode: 1,
+                stdout,
+                stderr,
+                launchError: `the command's output exceeded ${MAX_OUTPUT_BYTES} bytes and it was stopped, so its exit status is not evidence`,
+              });
+              return;
+            }
+            // A numeric code is the exit status of a process that ran and failed. Any other
+            // code means it never launched, so the 1 below is a placeholder rather than a
+            // result: name the failure instead of letting the 1 be read as a catch.
+            resolve(
+              typeof code === "number"
+                ? { exitCode: code, stdout, stderr }
+                : { exitCode: 1, stdout, stderr, launchError: error.message },
+            );
+          },
+        );
         running = child;
       });
     },
