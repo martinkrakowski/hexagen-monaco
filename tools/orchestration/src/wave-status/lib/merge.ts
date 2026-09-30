@@ -29,6 +29,13 @@ export function mergeStatus(
   observed: Readonly<Record<string, LaneObservation>>,
   now: string,
   waveOrder?: readonly string[],
+  /**
+   * Whether the PR listing the observations were joined against was whole.
+   * When it is not (a row was skipped), a lane with no PR joined may simply
+   * have had its PR in the row nothing could read, so "no PR found" is not
+   * something the collector can honestly claim.
+   */
+  prsComplete = true,
 ): WaveStatus {
   const groups = new Map<string, { id: string; lanes: string[] }>();
   const latestByKey = new Map<string, WaveEvent>();
@@ -90,6 +97,7 @@ export function mergeStatus(
           latestByKey.get(`${group.id}/${lane}`),
           observed[`${group.id}/${lane}`],
           seatByKey.get(`${group.id}/${lane}`),
+          prsComplete,
         ),
       ),
     })),
@@ -113,6 +121,7 @@ function buildLane(
   latest: WaveEvent | undefined,
   obs: LaneObservation | undefined,
   seat: string | undefined,
+  prsComplete: boolean,
 ): LaneStatus {
   const derived: DerivedLane =
     obs === undefined ? { alive: false } : deriveLane(obs);
@@ -123,7 +132,12 @@ function buildLane(
     ...(seat !== undefined ? { seat } : {}),
     ...(reported !== undefined ? { reported } : {}),
     derived,
-    disagreements: findDisagreements(reported, derived, obs !== undefined),
+    disagreements: findDisagreements(
+      reported,
+      derived,
+      obs !== undefined,
+      prsComplete,
+    ),
   };
 }
 
@@ -147,6 +161,7 @@ function findDisagreements(
   reported: LaneStatus["reported"],
   derived: DerivedLane,
   observed: boolean,
+  prsComplete: boolean,
 ): readonly string[] {
   if (reported === undefined) return [];
 
@@ -156,6 +171,7 @@ function findDisagreements(
   // a missing derived.pr there is "nobody looked", not "there is no PR".
   if (
     observed &&
+    prsComplete &&
     reported.stage === "implement" &&
     reported.event === "settled" &&
     reported.pr === undefined &&

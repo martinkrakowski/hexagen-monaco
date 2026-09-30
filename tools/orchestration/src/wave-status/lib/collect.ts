@@ -472,7 +472,13 @@ export async function collect(
     };
   }
 
-  const status = mergeStatus(events, observed, now, orderedWaves);
+  const status = mergeStatus(
+    events,
+    observed,
+    now,
+    orderedWaves,
+    corpus.skipped === 0,
+  );
   const backlogPath =
     deps.planVerifyArtifactPath ??
     artifactPathFor(process.env, {

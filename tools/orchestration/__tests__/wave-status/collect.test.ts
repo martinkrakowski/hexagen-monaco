@@ -1219,6 +1219,36 @@ describe("prFacts", () => {
     expect(skipped).toBe(0);
   });
 
+  test('a skipped PR row means no lane is told "no PR found", and the gap is still reported', async () => {
+    const events = `${JSON.stringify({
+      ts: "2026-09-28T10:00:00Z",
+      wave: "R",
+      lane: "k9",
+      stage: "implement",
+      event: "settled",
+    })}\n`;
+    const listing = [
+      JSON.stringify({ number: 5, state: "OPEN" }), // unreadable: no head fields
+      JSON.stringify({
+        number: 6,
+        state: "MERGED",
+        headRefName: "feat/other",
+        headRefOid: "o6",
+      }),
+    ].join("\n");
+    const status = await collect(
+      fakeDeps({
+        dirs: { [ROOT]: ["waveR"], [`${ROOT}/waveR`]: ["events.jsonl"] },
+        files: { [`${ROOT}/waveR/events.jsonl`]: events },
+        gh: async () => listing,
+      }),
+      ROOT,
+      "2026-09-28T12:00:00Z",
+    );
+    expect(status.prs).toEqual({ skipped: 1 });
+    expect(status.waves[0]?.lanes[0]?.disagreements).toEqual([]);
+  });
+
   test("parses paginated PR stream into facts", async () => {
     const lines = [
       JSON.stringify({

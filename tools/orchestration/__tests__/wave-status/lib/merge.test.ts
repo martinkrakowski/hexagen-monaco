@@ -285,6 +285,17 @@ describe("mergeStatus — disagreements are flagged, never resolved", () => {
     ]);
   });
 
+  test("sibling: with an incomplete PR listing the lane is not flagged for a missing PR", () => {
+    const status = mergeStatus(
+      [event({ stage: "implement", event: "settled" })],
+      { "S/s4": observation() },
+      "now",
+      undefined,
+      false,
+    );
+    expect(status.waves[0]?.lanes[0]?.disagreements).toEqual([]);
+  });
+
   test("sibling: an unobserved lane (events only) is never told no PR found — nobody looked", () => {
     const status = mergeStatus(
       [event({ stage: "implement", event: "settled" })],
