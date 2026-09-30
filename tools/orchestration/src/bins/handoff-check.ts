@@ -10,8 +10,10 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { loadConfigFor } from "../internal/project.js";
+
+const { root } = await loadConfigFor();
 import { EXIT_MALFORMED, runCli } from "../handoff-check/cli.js";
 import type { HandoffDeps } from "../handoff-check/lib/types.js";
 
@@ -22,8 +24,8 @@ import type { HandoffDeps } from "../handoff-check/lib/types.js";
  * and is not an error, because a stage-1 handoff is supposed to be red.
  */
 const failingTests = (files: readonly string[]): Promise<readonly string[]> =>
-  new Promise((resolve, reject) => {
-    const local = join("node_modules", ".bin", "vitest");
+  new Promise((resolvePromise, reject) => {
+    const local = join(root, "node_modules", ".bin", "vitest");
     const [command, args] = existsSync(local)
       ? ([local, ["run", "--reporter=json", ...files]] as const)
       : ([
@@ -33,7 +35,8 @@ const failingTests = (files: readonly string[]): Promise<readonly string[]> =>
     execFile(
       command,
       [...args],
-      { maxBuffer: 64 * 1024 * 1024 },
+      // The declared files are repo-relative, so vitest runs from the root.
+      { cwd: root, maxBuffer: 64 * 1024 * 1024 },
       (_error, stdout) => {
         const start = stdout.indexOf("{");
         if (start === -1) {
@@ -53,7 +56,7 @@ const failingTests = (files: readonly string[]): Promise<readonly string[]> =>
                 failed.push(a.title);
             }
           }
-          resolve(failed);
+          resolvePromise(failed);
         } catch (error) {
           reject(error instanceof Error ? error : new Error(String(error)));
         }
@@ -61,10 +64,8 @@ const failingTests = (files: readonly string[]): Promise<readonly string[]> =>
     );
   });
 
-const { root } = await loadConfigFor();
-
 const deps: HandoffDeps = {
-  readFile: (path) => readFile(join(root, path), "utf8"),
+  readFile: (path) => readFile(resolve(root, path), "utf8"),
   failingTests,
 };
 
@@ -73,7 +74,7 @@ try {
     argv: process.argv.slice(2),
     log: (text) => console.log(text),
     logError: (text) => console.error(text),
-    readFile: (path) => readFile(join(root, path), "utf8"),
+    readFile: (path) => readFile(resolve(root, path), "utf8"),
     deps,
   });
 } catch (error: unknown) {

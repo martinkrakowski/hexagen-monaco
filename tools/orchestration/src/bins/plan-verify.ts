@@ -10,7 +10,7 @@
  */
 import { execFile } from "node:child_process";
 import { readFile, readdir, mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import {
   artifactPathFor,
   errorText,
@@ -22,14 +22,21 @@ import { runCli } from "../plan-verify/cli.js";
 import { PREMISE_TIMEOUT_MS } from "../plan-verify/lib/verify.js";
 import type { VerifyDeps } from "../internal/premise-types.js";
 
-/** Run a premise as a POSIX `sh` script, killing it at the ceiling. */
+const loaded = await loadConfigFor();
+const { root, config } = loaded;
+
+/**
+ * Run a premise as a POSIX `sh` script, killing it at the ceiling. It runs FROM
+ * THE REPOSITORY ROOT: premises are written against repo-relative paths, and the
+ * caller may have started this bin in any subdirectory.
+ */
 const deps: VerifyDeps = {
   execute: (script) =>
     new Promise((resolve) => {
       execFile(
         "sh",
         ["-c", script],
-        { timeout: PREMISE_TIMEOUT_MS },
+        { timeout: PREMISE_TIMEOUT_MS, cwd: root },
         (error, stdout, stderr) => {
           const err = (error ?? null) as
             | (NodeJS.ErrnoException & {
@@ -51,8 +58,6 @@ const deps: VerifyDeps = {
     }),
 };
 
-const loaded = await loadConfigFor();
-const { root, config } = loaded;
 // This bin ACTS on `planDir`, so an invalid overlay is a refusal, not a run.
 const refusal = configRefusal("plan-verify", "verify", loaded);
 if (refusal !== undefined) {
@@ -63,7 +68,7 @@ if (refusal !== undefined) {
     process.exitCode = await runCli({
       argv: process.argv.slice(2),
       log: (text) => console.log(text),
-      readFile: (path) => readFile(path, "utf8"),
+      readFile: (path) => readFile(resolve(root, path), "utf8"),
       listPlanDir: () => readdir(`${root}/${config.planDir}`),
       deps,
       now: () => new Date().toISOString(),

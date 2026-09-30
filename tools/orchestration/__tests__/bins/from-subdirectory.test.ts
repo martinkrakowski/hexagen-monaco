@@ -6,10 +6,11 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 /**
  * F8: `init` and `doctor` bound to the current directory.
@@ -109,5 +110,79 @@ describe("F8: the bins find the repository root from a subdirectory", () => {
       readFileSync(join(root, ".agents/orchestration/config.yaml"), "utf8"),
     ).toBe(configBefore);
     expect(existsSync(join(sub, ".agents"))).toBe(false);
+  });
+});
+
+/** `run` with arguments and an explicit environment. */
+const runWith = (
+  name: string,
+  cwd: string,
+  args: readonly string[],
+  env: Record<string, string>,
+) =>
+  spawnSync(process.execPath, [bin(name), ...args], {
+    cwd,
+    encoding: "utf8",
+    env,
+  });
+
+describe("the other bins read and spawn from the repository root, not the cwd", () => {
+  test("plan-verify: the plan is read from the root and its premise runs there", () => {
+    const { root, sub } = repository(["config.yaml"]);
+    writeFileSync(join(root, "marker.txt"), "here");
+    mkdirSync(join(root, "docs/planning"), { recursive: true });
+    writeFileSync(
+      join(root, "docs/planning/p.md"),
+      "# plan\n\n```premise L1\ntest -f marker.txt\n```\n",
+    );
+    const out = mkdtempSync(join(tmpdir(), "orchestration-art-"));
+    dirs.push(out);
+    const result = runWith("plan-verify", sub, [], {
+      HOME: out,
+      PLAN_VERIFY_ARTIFACT: join(out, "plan-verify.json"),
+    });
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("1 premise(s) hold");
+    expect(result.status).toBe(0);
+    expect(existsSync(join(out, "plan-verify.json"))).toBe(true);
+  });
+
+  test("handoff-check: the declared test file is read and run from the root", () => {
+    const { root, sub } = repository(["config.yaml"]);
+    // The temp repo has no vitest of its own, so borrow this worktree's.
+    symlinkSync(
+      resolve(PACKAGE_ROOT, "../../node_modules"),
+      join(root, "node_modules"),
+    );
+    writeFileSync(
+      join(root, "t.test.ts"),
+      'import { test } from "vitest";\ntest("a rule", () => {\n  throw new Error("red");\n});\n',
+    );
+    writeFileSync(
+      join(root, "handoff.json"),
+      JSON.stringify({
+        version: 1,
+        lane: "L1",
+        files: ["t.test.ts"],
+        rules: [{ id: "R1", statement: "s", test: "a rule" }],
+      }),
+    );
+    const result = runWith("handoff-check", sub, ["handoff.json"], {
+      HOME: root,
+      // vitest's bin is `#!/usr/bin/env node`, so node's own directory is enough.
+      PATH: dirname(process.execPath),
+    });
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("each bound to a failing");
+    expect(result.status).toBe(0);
+  }, 60_000);
+
+  test("control-bytes: a control byte planted at the root is reported from a subdirectory", () => {
+    const { root, sub } = repository(["config.yaml"]);
+    writeFileSync(join(root, "planted.txt"), Buffer.from("ok\u0000bad\n"));
+    const result = runWith("control-bytes", sub, [], { HOME: root });
+    expect(result.status).not.toBe(0);
+    expect(result.status).not.toBe(2);
+    expect(result.stderr).toContain("planted.txt");
   });
 });

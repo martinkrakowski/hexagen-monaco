@@ -7,6 +7,7 @@
  */
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { loadConfigFor } from "../internal/project.js";
 import { EXIT_UNUSABLE, runCli } from "../control-bytes/cli.js";
 
@@ -44,7 +45,8 @@ try {
     log: (text) => console.log(text),
     logError: (text) => console.error(text),
     listFiles,
-    readBytes: (path) => readFile(path),
+    // `git ls-files` paths are root-relative, so they are read from the root.
+    readBytes: (path) => readFile(resolve(root, path)),
     now: () => performance.now(),
   });
 } catch (error: unknown) {
