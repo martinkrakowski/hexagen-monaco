@@ -99,11 +99,24 @@ const BOLD_LEAD = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?\*\*/;
 // `## Current  seats` stand in for `## Current seats`.
 const collapse = (text) => text.replace(/\s+/g, " ").trim();
 
+// An unreadable directory at any depth is a bad path (exit 2), never an uncaught exception.
 function walk(dir) {
   const out = [];
-  for (const entry of readdirSync(dir)) {
+  let entries;
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return fail(`cannot read directory: ${dir}`);
+  }
+  for (const entry of entries) {
     const path = join(dir, entry);
-    if (statSync(path).isDirectory()) out.push(...walk(path));
+    let isDirectory;
+    try {
+      isDirectory = statSync(path).isDirectory();
+    } catch {
+      return fail(`cannot stat: ${path}`);
+    }
+    if (isDirectory) out.push(...walk(path));
     else out.push(path);
   }
   return out;
@@ -233,6 +246,9 @@ function parseArgs(argv) {
   if (!opts.lessons !== !(opts.memory || opts.memoryManifest)) {
     fail("--lessons goes with --memory and/or --memory-manifest, and needs one of them");
   }
+  if (opts.tokenReview && !opts.generic) {
+    fail("--token-review also needs --generic (and --sites), so the sweep knows which tree to read");
+  }
   if (opts.tokenReview && !opts.hexagenRoot) {
     fail("--token-review also needs --hexagen-root, so the sweep knows what counts as tracked");
   }
@@ -293,7 +309,12 @@ function checkSnapshot(sourceDir) {
     bad("SOURCE.md records no blob ids, so the snapshot cannot be proven to be the pinned bytes");
   }
   for (const [dest, blob] of recorded) {
-    const bytes = readFileSync(join(sourceDir, dest));
+    let bytes;
+    try {
+      bytes = readFileSync(join(sourceDir, dest));
+    } catch {
+      return fail(`cannot read source/${dest}, which SOURCE.md records`);
+    }
     const actual = createHash("sha1")
       .update(`blob ${bytes.length}\0`)
       .update(bytes)

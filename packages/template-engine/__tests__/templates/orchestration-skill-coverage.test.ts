@@ -325,6 +325,45 @@ describe("orchestration skill coverage", () => {
     expect(units.fencedWords(text)).toContain("four-tick");
   });
 
+  it("args: --token-review without --generic exits 2", () => {
+    const result = run([
+      "--source",
+      path.join(FIXTURE, "source"),
+      "--tree",
+      path.join(FIXTURE, "generic"),
+      "--allowlist",
+      path.join(
+        FIXTURE,
+        "campaign-foundry",
+        "overlay",
+        "coverage-allowlist.txt",
+      ),
+      "--token-review",
+      path.join(FIXTURE, "campaign-foundry", "generic-token-review.txt"),
+      "--hexagen-root",
+      REPO_ROOT,
+    ]);
+    expect(result.status, result.out).toBe(2);
+    expect(result.out).toContain("--token-review also needs --generic");
+  });
+
+  it.skipIf(process.getuid?.() === 0)(
+    "args: an unreadable nested source directory exits 2, not an uncaught 1",
+    () => {
+      const fixture = copyFixture();
+      const nested = path.join(fixture, "source", "extra");
+      fs.mkdirSync(nested);
+      fs.chmodSync(nested, 0o000);
+      try {
+        const result = run(coverageArgs(fixture));
+        expect(result.status, result.out).toBe(2);
+        expect(result.out).toContain("cannot read directory");
+      } finally {
+        fs.chmodSync(nested, 0o755);
+      }
+    },
+  );
+
   it("exits 2 on bad arguments and on an unreadable path", () => {
     expect(run([]).status).toBe(2);
     expect(run(["--source", FIXTURE]).status).toBe(2);
