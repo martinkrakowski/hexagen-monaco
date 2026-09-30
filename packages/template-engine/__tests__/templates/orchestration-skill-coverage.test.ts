@@ -608,7 +608,11 @@ describe("orchestration skill coverage", () => {
     fs.mkdirSync(path.dirname(mirror), { recursive: true });
     fs.writeFileSync(mirror, `planted: ${canary}\n`);
     fs.writeFileSync(path.join(root, "README.md"), "unrelated\n");
-    git("add", ".");
+    // Force-add the exact mirror path: a plain `add .` can silently omit it under a global ignore.
+    const mirrorRel = ".agents/skills/orchestrate-wave/references/planted.md";
+    expect(git("add", "-f", mirrorRel).status).toBe(0);
+    expect(git("add", "README.md").status).toBe(0);
+    expect(git("ls-files", "--error-unmatch", mirrorRel).status).toBe(0);
     const result = run(coverageArgs(fixture, ["--hexagen-root", root]));
     expect(result.status, result.out).toBe(1);
     const line = result.out.split("\n").find((l) => l.includes(canary));
