@@ -130,10 +130,14 @@ export function renderConfig(config: Config): string {
     "# The check a pull request must show green before it merges.",
     `requiredCheck: ${JSON.stringify(config.requiredCheck)}`,
     "",
-    "# Append-only paths, as a regular expression. A gate step that edits one",
-    "# of these is a gate step that rewrote history.",
-    `appendOnlyPaths: ${JSON.stringify(config.appendOnlyPaths)}`,
-    "",
+    ...(config.appendOnlyPaths !== undefined
+      ? [
+          "# Append-only paths, as a regular expression. A gate step that edits one",
+          "# of these is a gate step that rewrote history.",
+          `appendOnlyPaths: ${JSON.stringify(config.appendOnlyPaths)}`,
+          "",
+        ]
+      : []),
     "# Ports the status server must refuse. This is the ONLY source of refused",
     "# ports (A-20): a port nobody listed here is a port nothing refuses.",
     `forbiddenPorts: [${forbidden.join(", ")}]`,

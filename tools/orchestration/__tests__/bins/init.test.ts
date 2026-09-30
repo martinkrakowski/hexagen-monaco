@@ -14,6 +14,7 @@ import {
 } from "../../src/init/init.js";
 import {
   emptyConfig,
+  matchesAppendOnly,
   parseConfig,
   type Config,
 } from "../../src/internal/config.js";
@@ -186,6 +187,19 @@ describe("the scaffolded config.yaml (A-18, A-20)", () => {
       const body = await readFile(join(root, OVERLAY_DIR, name), "utf8");
       expect(body, name).not.toContain("<repo name>");
     }
+  });
+
+  test("F3: it scaffolds no appendOnlyPaths line, so nothing is append-only by accident", async () => {
+    const root = project();
+    await init(root);
+    const text = await readFile(join(root, OVERLAY_DIR, "config.yaml"), "utf8");
+    expect(text).not.toContain("appendOnlyPaths");
+    const parsed = parseConfig(text);
+    expect(parsed.problems).toEqual([]);
+    expect(parsed.config?.appendOnlyPaths).toBeUndefined();
+    expect(
+      matchesAppendOnly(parsed.config!, "packages/sync/src/index.ts"),
+    ).toBe(false);
   });
 
   test("it writes forbiddenPorts as [3000, 3001] (A-20)", async () => {

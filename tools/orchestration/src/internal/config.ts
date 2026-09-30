@@ -58,7 +58,12 @@ export interface Config {
   readonly planDir: string;
   readonly gateSteps: readonly GateStep[];
   readonly requiredCheck: string;
-  readonly appendOnlyPaths: string;
+  /**
+   * Absent when unset. NEVER `""`: `new RegExp("")` matches every path, so an
+   * empty default would make the whole tree append-only. Consumers go through
+   * `matchesAppendOnly`, which treats absent as "matches nothing".
+   */
+  readonly appendOnlyPaths?: string;
   readonly forbiddenPorts: readonly number[];
   readonly operatorDataPaths: readonly string[];
   /** Absent when the file omits it and `gh` could not answer; `doctor` fails. */
@@ -380,12 +385,11 @@ export function parseConfig(text: string): ParseConfigResult {
   const requiredCheck =
     parseOptionalString(document.requiredCheck, "requiredCheck", problems) ??
     "^Build";
-  const appendOnlyPaths =
-    parseOptionalString(
-      document.appendOnlyPaths,
-      "appendOnlyPaths",
-      problems,
-    ) ?? "";
+  const appendOnlyPaths = parseOptionalString(
+    document.appendOnlyPaths,
+    "appendOnlyPaths",
+    problems,
+  );
   // A-20: refused ports come ONLY from the file. The default is empty, because
   // 4317 is campaign-foundry's port and refusing it here would refuse a
   // project that legitimately wants it (A-20).
@@ -461,7 +465,7 @@ export function parseConfig(text: string): ParseConfigResult {
     planDir,
     gateSteps,
     requiredCheck,
-    appendOnlyPaths,
+    ...(appendOnlyPaths !== undefined ? { appendOnlyPaths } : {}),
     forbiddenPorts,
     operatorDataPaths,
     ...(opencodeServerUrl !== undefined ? { opencodeServerUrl } : {}),
@@ -486,7 +490,6 @@ export function emptyConfig(): Config {
     planDir: "docs/planning",
     gateSteps: [],
     requiredCheck: "^Build",
-    appendOnlyPaths: "",
     forbiddenPorts: [],
     operatorDataPaths: [],
     mutate: false,
@@ -494,6 +497,17 @@ export function emptyConfig(): Config {
     invariants: { ...LOCKED_INVARIANTS },
     waveStatusPort: DEFAULT_WAVE_STATUS_PORT,
   };
+}
+
+/**
+ * Whether `path` is an append-only path. An unset `appendOnlyPaths` matches
+ * NOTHING (and an empty one is treated the same, rather than as the regex that
+ * matches everything), so the append-only check is skipped, not universal.
+ */
+export function matchesAppendOnly(config: Config, path: string): boolean {
+  const pattern = config.appendOnlyPaths;
+  if (pattern === undefined || pattern === "") return false;
+  return new RegExp(pattern).test(path);
 }
 
 /** The default `waveStatusPort` — 4318, deliberately not campaign-foundry's 4317. */

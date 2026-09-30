@@ -5,6 +5,7 @@ import {
   LOCKED_INVARIANTS,
   emptyConfig,
   loadConfig,
+  matchesAppendOnly,
   parseConfig,
   readOverrides,
 } from "../../src/internal/config.js";
@@ -91,6 +92,7 @@ describe("a field that is absent takes its documented default", () => {
     ).toBe(
       field === "opencodeServerUrl" ||
         field === "waveLogDir" ||
+        field === "appendOnlyPaths" ||
         field === "coverageRequirement" ||
         field === "tokensCssPath" ||
         field === "repo"
@@ -160,8 +162,22 @@ describe("a field that is absent takes its documented default", () => {
     absent("repo");
   });
 
-  test("appendOnlyPaths defaults to the empty regex, which matches nothing", () => {
-    expect(ok("{}").appendOnlyPaths).toBe("");
+  test("F3: appendOnlyPaths is absent, and the default matches nothing", () => {
+    expect(ok("{}").appendOnlyPaths).toBeUndefined();
+    absent("appendOnlyPaths");
+    // `new RegExp("")` matches every path; the absent default must not.
+    for (const path of ["packages/sync/src/index.ts", "", "docs/x.md"]) {
+      expect(matchesAppendOnly(ok("{}"), path), path).toBe(false);
+    }
+  });
+
+  test("F3: a set appendOnlyPaths matches as a regex, and an empty one still matches nothing", () => {
+    const config = ok("appendOnlyPaths: '^docs/'");
+    expect(matchesAppendOnly(config, "docs/x.md")).toBe(true);
+    expect(matchesAppendOnly(config, "src/x.ts")).toBe(false);
+    expect(matchesAppendOnly(ok("appendOnlyPaths: ''"), "src/x.ts")).toBe(
+      false,
+    );
   });
 
   test("waveStatusPort defaults to 4318", () => {
