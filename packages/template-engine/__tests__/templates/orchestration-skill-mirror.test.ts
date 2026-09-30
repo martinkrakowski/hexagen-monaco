@@ -67,12 +67,13 @@ describe("the tracked skill mirror", () => {
   });
 
   it("is tracked, not ignored: git check-ignore exits 1", () => {
+    // --no-index: without it git skips tracked files, so exit 1 would hold even if an ignore rule matched.
     // execFileSync throws on a non-zero exit; exit 1 means "not ignored", any other status is wrong.
     let status = 0;
     try {
       execFileSync(
         "git",
-        ["check-ignore", "-v", path.join(SKILL, "SKILL.md")],
+        ["check-ignore", "--no-index", "--quiet", path.join(SKILL, "SKILL.md")],
         {
           cwd: REPO_ROOT,
           encoding: "utf8",
