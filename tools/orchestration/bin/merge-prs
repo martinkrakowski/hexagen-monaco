@@ -346,7 +346,11 @@ for spec in "$@"; do
   npx --no-install hexagen-orchestration-sweep gate --pr "$pr" --sha "$head_sha" \
     || die "merge condition unmet for #$pr — not merging"
 
-  gh pr merge "$pr" --squash || die "squash-merge failed for #$pr"
+  # Bind the merge to the head that was verified: the check-runs above and the
+  # gate's --sha are both $head_sha, and without this a push landing after the
+  # gate passed would be merged unverified. The forge refuses when the head moved.
+  gh pr merge "$pr" --squash --match-head-commit "$head_sha" \
+    || die "squash-merge failed for #$pr — the head may have moved since $head_sha was verified"
   echo "merged #$pr"
 done
 

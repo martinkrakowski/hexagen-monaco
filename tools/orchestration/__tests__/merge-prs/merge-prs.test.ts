@@ -814,6 +814,25 @@ describe.skipIf(!hasZsh())(
         }
       });
 
+      test("the squash-merge is bound to the head whose checks were read", () => {
+        const s = makeScenario(false);
+        try {
+          runScenario(s, green);
+          const calls = readFileSync(join(s.root, "gh.log"), "utf8").split(
+            "\n",
+          );
+          const sha = /commits\/([0-9a-f]{40})\/check-runs/.exec(
+            calls.find((l) => l.includes("check-runs")) ?? "",
+          )?.[1];
+          expect(sha).toBeDefined();
+          const merge = calls.find((l) => l.includes("pr merge"));
+          expect(merge).toContain("--squash");
+          expect(merge).toContain(`--match-head-commit ${sha}`);
+        } finally {
+          s.cleanup();
+        }
+      });
+
       test("a failed final pull dies after the merge, naming what did not sync", () => {
         const s = makeScenario(false);
         try {
