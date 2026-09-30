@@ -606,6 +606,71 @@ for (const fixture of fixtures) {
         );
       });
 
+      // Red (spec §7): an invariant moved off its locked default with no
+      // overrides[] entry naming it. Restored, doctor is green again.
+      gate("orch:doctor-invariant-drift", () => {
+        expect(
+          configured.includes("  eventDuty: true"),
+          "scaffolded config.yaml has no `eventDuty: true` to flip",
+        );
+        setConfig(
+          configured.replace("  eventDuty: true", "  eventDuty: false"),
+        );
+        let red;
+        try {
+          red = run("node_modules/.bin/hexagen-orchestration-doctor");
+        } finally {
+          setConfig(configured);
+        }
+        expect(
+          red.status === 1,
+          `doctor with a drifted invariant: expected exit 1, got ${red.status}\n${red.out}`,
+        );
+        expect(
+          red.out.includes(
+            "invariants.eventDuty differs from its locked default (true) with no overrides[] entry naming it",
+          ),
+          `doctor did not name the un-overridden invariant drift\n${red.out}`,
+        );
+        const green = run("node_modules/.bin/hexagen-orchestration-doctor");
+        expect(
+          green.status === 0,
+          `doctor after restoring the invariant: exit ${green.status}\n${green.out}`,
+        );
+      });
+
+      // Red (spec §7): an overrides[].invariant outside the closed set
+      // {statusSource, eventDuty, mergeRequiresGreenGate, attribution}.
+      gate("orch:doctor-override-unknown-invariant", () => {
+        setConfig(
+          configured.replace(
+            "invariants:",
+            "overrides:\n  - invariant: notAnInvariant\n    reason: the capstone red\ninvariants:",
+          ),
+        );
+        let red;
+        try {
+          red = run("node_modules/.bin/hexagen-orchestration-doctor");
+        } finally {
+          setConfig(configured);
+        }
+        expect(
+          red.status === 1,
+          `doctor with an unknown override invariant: expected exit 1, got ${red.status}\n${red.out}`,
+        );
+        expect(
+          red.out.includes(
+            'overrides[0].invariant "notAnInvariant" is not one of: statusSource, eventDuty, mergeRequiresGreenGate, attribution',
+          ),
+          `doctor did not name the unknown override invariant\n${red.out}`,
+        );
+        const green = run("node_modules/.bin/hexagen-orchestration-doctor");
+        expect(
+          green.status === 0,
+          `doctor after restoring the overrides: exit ${green.status}\n${green.out}`,
+        );
+      });
+
       // Green: the configured project is healthy.
       gate("orch:doctor-green", () => {
         const g = run("node_modules/.bin/hexagen-orchestration-doctor");
