@@ -34,26 +34,33 @@
  *   orchestration (OW7, fixtures that install the orchestration template —
  *                 minimal-addons). Hard gates, each a red/green pair run
  *                 against the PACKED @hexagen-monaco/orchestration tarball:
- *                   orch:gate.yml-emitted      absent without the template
- *                                              (a twin generated with
- *                                              --omit=orchestration), present
- *                                              and scanned by workflows +
- *                                              actionlint with it.
- *                   orch:package-files         every `bin` target and the
- *                                              wave-status page is in the
- *                                              installed package.
- *                   orch:doctor-no-overlay     red: doctor before init → exit 2.
- *                   orch:init-idempotent       init twice → byte-identical.
- *                   orch:doctor-ci-workflow    red: ci.yml removed → FAIL
- *                                              naming it; restored → no FAIL.
- *                   orch:doctor-override       red: an override without a
- *                                              reason → FAIL.
- *                   orch:doctor-green          configured project → exit 0.
- *                   orch:print-steps-mutate    mutate false omits mutate +
- *                                              verify-manifests; true keeps them.
- *                   orch:gate-runs             real gate run: a failing step
- *                                              exits non-zero naming the step;
- *                                              a passing list exits 0.
+ *                   orch:gate.yml-emitted                   absent without the template (a twin
+ *                                                           generated with --omit=orchestration),
+ *                                                           present and scanned by workflows +
+ *                                                           actionlint with it.
+ *                   orch:package-files                      every `bin` target and the wave-status
+ *                                                           page is in the installed package.
+ *                   orch:doctor-no-overlay                  red: doctor before init → exit 2.
+ *                   orch:init-scaffold                      first init scaffolds the overlay.
+ *                   orch:config-repo-placeholder            the scaffolded config has the repo
+ *                                                           placeholder; it is seeded with a repo.
+ *                   orch:init-idempotent                    second init, after the seed: seed survives,
+ *                                                           every scaffold file reported kept,
+ *                                                           tree byte-identical.
+ *                   orch:doctor-ci-workflow                 red: ci.yml removed → FAIL naming it;
+ *                                                           restored → no FAIL.
+ *                   orch:doctor-override                    red: an override without a reason →
+ *                                                           FAIL `overrides[0].reason is required`.
+ *                   orch:doctor-invariant-drift             red: an invariant off its locked default
+ *                                                           with no overrides[] entry → FAIL.
+ *                   orch:doctor-override-unknown-invariant  red: overrides[].invariant outside the
+ *                                                           closed set → FAIL; restored → exit 0.
+ *                   orch:doctor-green                       configured project → exit 0.
+ *                   orch:print-steps-mutate                 mutate false omits mutate +
+ *                                                           verify-manifests; true keeps them.
+ *                   orch:gate-runs                          real gate run: a failing step exits
+ *                                                           with its own code (3), naming the step;
+ *                                                           a passing list exits 0.
  *
  * Advisory rows (reported, never fail the run — open findings F5/F6/F7, F9,
  * F19 are surfaced here and flip to hard gates when fixed):
