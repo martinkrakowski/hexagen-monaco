@@ -501,6 +501,10 @@ function checkTokenReview(reviewPath, genericDir, sourceDir, hexagenRoot) {
   const excluded = [
     "packages/template-engine/__tests__/fixtures/orchestration/",
     "packages/template-engine/templates/orchestration/files/.agents/skills/orchestrate-wave/",
+    // hexagen's own tracked mirror of that template copy (OW6), byte-identical to it and guarded by a
+    // test. It is the skill again, exactly like the template copy above: left in the corpus, every
+    // skill token would occur "somewhere else" in it and the sweep would pass vacuously.
+    ".agents/skills/orchestrate-wave/",
     "docs/planning/",
     // The generated bundle embeds the skill's text verbatim, so it is the skill again, not a second
     // place a token lives. Left in the corpus, every skill-only token would be "found" in it.
