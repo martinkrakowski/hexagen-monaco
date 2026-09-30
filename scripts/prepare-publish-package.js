@@ -15,7 +15,13 @@
  *        - Filters `dependencies` to remove any spec using the `workspace:`
  *          protocol (those packages are assumed to be bundled into dist/)
  *        - Retains only fields meaningful to an external consumer
- *   3. Copies `<package>/dist/` into `<package>/publish/dist/`
+ *   3. Copies `<package>/dist/` into `<package>/publish/dist/` (a missing
+ *      dist/ is exit 1), then every OTHER entry of the source package.json's
+ *      `files` array (e.g. `bin`, `public`) into `publish/`, keeping file
+ *      modes. `files` is the single source of truth for what ships: a package
+ *      declaring `files: ["dist"]` ships only dist/ even if it has a bin/
+ *      directory. A listed entry that does not exist, is a glob, or escapes the
+ *      package directory is a hard error (exit 1) naming the entry.
  *   4. Copies `<package>/README.md` if present
  *   5. Copies `<package>/LICENSE`. A missing package-local LICENSE is a hard
  *      error — the repo-root LICENSE is the proprietary platform license and
@@ -33,7 +39,8 @@
  *
  * Exit codes:
  *   0  Success
- *   1  Invalid package dir, missing dist/, or missing package-local LICENSE
+ *   1  Invalid package dir, missing dist/, a missing/invalid `files` entry, or
+ *      missing package-local LICENSE
  *   2  Package.json malformed or missing required fields
  */
 
@@ -119,6 +126,7 @@ function copyRecursive(src, dest) {
     if (entry.isDirectory()) {
       copyRecursive(s, d);
     } else if (entry.isFile()) {
+      // copyFileSync keeps the source mode (an executable bin stays executable).
       fs.copyFileSync(s, d);
     }
     // Symlinks intentionally ignored — not portable in tarballs
@@ -204,6 +212,60 @@ function prepare(packageDir) {
   // 2. Copy dist/
   copyRecursive(distDir, path.join(publishDir, "dist"));
 
+  // 2b. Every other `files` entry. `dist` is handled above; README/LICENSE are
+  // handled below (copied if present, LICENSE required) and listing them here
+  // must not be an error when the source has them.
+  const filesField = Array.isArray(srcPkg.files) ? srcPkg.files : [];
+  for (const entry of filesField) {
+    const rel = typeof entry === "string" ? path.normalize(entry) : "";
+    if (rel === "dist" || rel === "dist/") continue;
+    const src = path.resolve(absPackageDir, rel);
+    const inside =
+      rel !== "" &&
+      !path.isAbsolute(rel) &&
+      src !== absPackageDir &&
+      src.startsWith(absPackageDir + path.sep);
+    if (!inside || /[*?[\]{}!]/.test(rel)) {
+      console.error(
+        `❌ package.json "files" entry ${JSON.stringify(entry)} must be a plain path inside the package (no globs, no "..").`,
+      );
+      process.exit(1);
+    }
+    if (!fs.existsSync(src)) {
+      console.error(
+        `❌ package.json "files" entry ${JSON.stringify(entry)} does not exist at ${src}.`,
+      );
+      process.exit(1);
+    }
+    // The string check above cannot see a symlink: an entry that is a link to a
+    // directory outside the package would be dereferenced and copied. Compare
+    // REAL paths, so the escape is refused and the entry named.
+    const realSrc = fs.realpathSync(src);
+    const realPackageDir = fs.realpathSync(absPackageDir);
+    if (
+      realSrc !== realPackageDir &&
+      !realSrc.startsWith(realPackageDir + path.sep)
+    ) {
+      console.error(
+        `❌ package.json "files" entry ${JSON.stringify(entry)} resolves outside the package (real path ${realSrc}); refusing to stage it.`,
+      );
+      process.exit(1);
+    }
+    if (realSrc === realPackageDir) {
+      console.error(
+        `❌ package.json "files" entry ${JSON.stringify(entry)} resolves to the package root itself; refusing to stage it.`,
+      );
+      process.exit(1);
+    }
+    const dest = path.join(publishDir, rel);
+    if (fs.statSync(src).isDirectory()) {
+      copyRecursive(src, dest);
+    } else {
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.copyFileSync(src, dest);
+    }
+  }
+
   // 3. Copy README.md (package-local only — repo-root README is not consumer-facing)
   const readmePath = path.join(absPackageDir, "README.md");
   const readmeIncluded = fs.existsSync(readmePath);
@@ -224,7 +286,9 @@ function prepare(packageDir) {
   }
   const licenseContent = fs.readFileSync(packageLicense, "utf8");
   if (!licenseContent.trim()) {
-    console.error(`❌ Package-local LICENSE at ${packageLicense} is empty or whitespace-only.`);
+    console.error(
+      `❌ Package-local LICENSE at ${packageLicense} is empty or whitespace-only.`,
+    );
     process.exit(1);
   }
   fs.copyFileSync(packageLicense, path.join(publishDir, "LICENSE"));

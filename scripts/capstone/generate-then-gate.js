@@ -31,6 +31,36 @@
  *                 no live `cache: yarn`.
  *   actionlint    actionlint over the emitted workflows (skips with a notice
  *                 when the binary is absent — CI installs it).
+ *   orchestration (OW7, fixtures that install the orchestration template —
+ *                 minimal-addons). Hard gates, each a red/green pair run
+ *                 against the PACKED @hexagen-monaco/orchestration tarball:
+ *                   orch:gate.yml-emitted                   absent without the template (a twin
+ *                                                           generated with --omit=orchestration),
+ *                                                           present and scanned by workflows +
+ *                                                           actionlint with it.
+ *                   orch:package-files                      every `bin` target and the wave-status
+ *                                                           page is in the installed package.
+ *                   orch:doctor-no-overlay                  red: doctor before init → exit 2.
+ *                   orch:init-scaffold                      first init scaffolds the overlay.
+ *                   orch:config-repo-placeholder            the scaffolded config has the repo
+ *                                                           placeholder; it is seeded with a repo.
+ *                   orch:init-idempotent                    second init, after the seed: seed survives,
+ *                                                           every scaffold file reported kept,
+ *                                                           tree byte-identical.
+ *                   orch:doctor-ci-workflow                 red: ci.yml removed → FAIL naming it;
+ *                                                           restored → no FAIL.
+ *                   orch:doctor-override                    red: an override without a reason →
+ *                                                           FAIL `overrides[0].reason is required`.
+ *                   orch:doctor-invariant-drift             red: an invariant off its locked default
+ *                                                           with no overrides[] entry → FAIL.
+ *                   orch:doctor-override-unknown-invariant  red: overrides[].invariant outside the
+ *                                                           closed set → FAIL; restored → exit 0.
+ *                   orch:doctor-green                       configured project → exit 0.
+ *                   orch:print-steps-mutate                 mutate false omits mutate +
+ *                                                           verify-manifests; true keeps them.
+ *                   orch:gate-runs                          real gate run: a failing step exits
+ *                                                           with its own code (3), naming the step;
+ *                                                           a passing list exits 0.
  *
  * Advisory rows (reported, never fail the run — open findings F5/F6/F7, F9,
  * F19 are surfaced here and flip to hard gates when fixed):
@@ -41,13 +71,16 @@
  * Usage: node scripts/capstone/generate-then-gate.js [--fixture=<name>|all]
  *        (yarn capstone:gate)
  */
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -80,7 +113,17 @@ for (const f of fixtures) {
 const PACKAGES = [
   { short: "sync", dir: "packages/sync" },
   { short: "arch-linter", dir: "tools/arch-linter" },
+  { short: "orchestration", dir: "tools/orchestration" },
 ];
+// Tooling the generator itself emits a devDependency range for (RCA #1 pin
+// gate). orchestration is NOT in this set: no generator emits its range — the
+// template's checklist is `yarn add -D @hexagen-monaco/orchestration` — so the
+// harness performs that step, with the packed version, for the fixtures that
+// install the template.
+const PIN_CHECKED = ["sync", "arch-linter"];
+const ORCH = "orchestration";
+// Fixtures whose add-on answers include the orchestration template.
+const ORCH_FIXTURES = ["minimal-addons"];
 const pkgVersion = (dir) =>
   JSON.parse(readFileSync(path.join(REPO, dir, "package.json"), "utf8"))
     .version;
@@ -115,6 +158,7 @@ const tail = (s, lines = 40) => s.split("\n").slice(-lines).join("\n");
 step("Building tooling + fixture-helper packages…");
 sh(
   "yarn turbo run build --filter=@hexagen/sync --filter=@hexagen/arch-linter" +
+    " --filter=@hexagen/orchestration" +
     " --filter=@hexagen/project-configuration --filter=@hexagen/template-engine",
 );
 
@@ -134,7 +178,7 @@ for (const { short, dir } of PACKAGES) {
   }
   tarball[short] = path.join(packDir, `hexagen-monaco-${short}-${version}.tgz`);
 }
-step("Packed @hexagen-monaco/{sync,arch-linter}");
+step("Packed @hexagen-monaco/{sync,arch-linter,orchestration}");
 
 const haveActionlint = (() => {
   try {
@@ -205,7 +249,7 @@ for (const fixture of fixtures) {
   const pkgPath = path.join(proj, "package.json");
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
   const pinOk = gate("pin-gate", () => {
-    for (const { short } of PACKAGES) {
+    for (const short of PIN_CHECKED) {
       const name = `@hexagen-monaco/${short}`;
       const range = pkg.devDependencies?.[name];
       if (!range) throw new Error(`root package.json missing ${name}`);
@@ -221,6 +265,18 @@ for (const fixture of fixtures) {
     "@hexagen-monaco/sync": `file:${tarball.sync}`,
     "@hexagen-monaco/arch-linter": `file:${tarball["arch-linter"]}`,
   };
+  const hasOrch = ORCH_FIXTURES.includes(fixture);
+  if (hasOrch) {
+    // The template's checklist step 1 (`yarn add -D …`), done by the harness:
+    // the devDependency is aligned with OW-D1 (published name), its range is the
+    // packed version, and the resolution swaps in the tarball — same hermetic
+    // mechanism as sync/arch-linter.
+    pkg.devDependencies = {
+      ...pkg.devDependencies,
+      [`@hexagen-monaco/${ORCH}`]: `^${packedVersion[ORCH]}`,
+    };
+    pkg.resolutions[`@hexagen-monaco/${ORCH}`] = `file:${tarball[ORCH]}`;
+  }
   writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
 
   // Install.
@@ -319,9 +375,7 @@ for (const fixture of fixtures) {
           }
           const cache = step?.with?.cache;
           if (typeof cache === "string" && cache.startsWith("yarn")) {
-            throw new Error(
-              `${wf}: job ${jobName}: live \`cache: ${cache}\``,
-            );
+            throw new Error(`${wf}: job ${jobName}: live \`cache: ${cache}\``);
           }
           if (
             typeof step?.uses === "string" &&
@@ -350,6 +404,366 @@ for (const fixture of fixtures) {
     gate("actionlint", () => projSh("actionlint -shellcheck= -pyflakes="));
   } else {
     record(fixture, "actionlint", "SKIP", "actionlint binary not on PATH");
+  }
+
+  // -- orchestration (OW7) --------------------------------------------------
+  // Hard gates against the PACKED package, in the generated project. Each red
+  // asserts the failure it claims (exit code AND the named cause), then the
+  // state is restored and the green is asserted — "a gate that has not been
+  // shown to fail has not been shown to exist" (plan §7).
+  if (hasOrch) {
+    const ORCH_DIR = ".agents/orchestration";
+    const CONFIG = path.join(proj, ORCH_DIR, "config.yaml");
+    // Run a bin from the project's own node_modules/.bin WITHOUT throwing, so a
+    // red can assert its exit code and output.
+    const run = (cmd) => {
+      const r = spawnSync(cmd, {
+        cwd: proj,
+        shell: true,
+        encoding: "utf8",
+        env: { ...process.env },
+      });
+      return { status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+    };
+    const expect = (cond, msg) => {
+      if (!cond) throw new Error(msg);
+    };
+    const hashTree = (rel) => {
+      const out = {};
+      const walk = (dir) => {
+        for (const name of readdirSync(dir).sort()) {
+          const full = path.join(dir, name);
+          if (statSync(full).isDirectory()) walk(full);
+          else
+            out[path.relative(proj, full)] = createHash("sha256")
+              .update(readFileSync(full))
+              .digest("hex");
+        }
+      };
+      walk(path.join(proj, rel));
+      return JSON.stringify(out);
+    };
+
+    // gate.yml: absent without the template, present with it — and it is the
+    // REAL emitted file the workflows (F21) and actionlint gates above just ran
+    // over (they scan every file in .github/workflows).
+    gate("orch:gate.yml-emitted", () => {
+      const twin = mkdtempSync(path.join(tmpdir(), "capstone-gate-noorch-"));
+      cleanup.push(() => rmSync(twin, { recursive: true, force: true }));
+      sh(
+        `yarn tsx scripts/capstone/generate-fixture.ts ${fixture} "${twin}" --omit=${ORCH}`,
+      );
+      expect(
+        !existsSync(path.join(twin, ".github/workflows/gate.yml")),
+        "gate.yml exists WITHOUT the orchestration template (red side broke)",
+      );
+      const emitted = path.join(proj, ".github/workflows/gate.yml");
+      expect(
+        existsSync(emitted),
+        "gate.yml missing WITH the orchestration template",
+      );
+      expect(
+        readFileSync(emitted, "utf8").includes("hexagen-orchestration-gate"),
+        "gate.yml does not run hexagen-orchestration-gate",
+      );
+      // node_version is auto-derived from ci-github-actions: no unresolved token.
+      expect(
+        !/\{node_version\}/.test(readFileSync(emitted, "utf8")),
+        "gate.yml still contains an uninterpolated {node_version}",
+      );
+    });
+
+    // Every declared bin target, and the wave-status page, must be in the
+    // installed package: the tarball is what users get.
+    gate("orch:package-files", () => {
+      const pdir = path.join(proj, "node_modules/@hexagen-monaco", ORCH);
+      const pj = JSON.parse(
+        readFileSync(path.join(pdir, "package.json"), "utf8"),
+      );
+      const missing = Object.entries(pj.bin)
+        .filter(([, target]) => !existsSync(path.join(pdir, target)))
+        .map(([name, target]) => `${name} -> ${target}`);
+      for (const rel of ["bin/gate-run.sh", "public/wave-status/index.html"]) {
+        if (!existsSync(path.join(pdir, rel))) missing.push(rel);
+      }
+      expect(
+        missing.length === 0,
+        `installed @hexagen-monaco/${ORCH} is missing: ${missing.join(", ")}`,
+      );
+    });
+
+    // Red: no overlay yet → doctor exits 2 naming the missing config.
+    gate("orch:doctor-no-overlay", () => {
+      const r = run("node_modules/.bin/hexagen-orchestration-doctor");
+      expect(
+        r.status === 2,
+        `doctor before init: expected exit 2, got ${r.status}\n${r.out}`,
+      );
+      expect(
+        r.out.includes(`no overlay at ${ORCH_DIR}/config.yaml`),
+        `doctor before init did not name the missing config\n${r.out}`,
+      );
+    });
+
+    // First init scaffolds the overlay.
+    const inited = gate("orch:init-scaffold", () => {
+      const first = run("node_modules/.bin/hexagen-orchestration-init");
+      expect(
+        first.status === 0,
+        `init (1st) exit ${first.status}\n${first.out}`,
+      );
+      expect(existsSync(CONFIG), "init did not scaffold config.yaml");
+    });
+
+    // The generated project is not hexagen and has no GitHub remote, so the
+    // loader cannot derive `repo` (gh). Seed it the way an operator would. A
+    // missing placeholder is a named FAIL row, not a throw past the summary.
+    let configured;
+    const marker = /^# repo: \(derive it.*$/m;
+    const seeded =
+      inited &&
+      gate("orch:config-repo-placeholder", () => {
+        const scaffolded = readFileSync(CONFIG, "utf8");
+        expect(
+          marker.test(scaffolded),
+          "scaffolded config.yaml has no repo placeholder",
+        );
+        configured = scaffolded.replace(
+          marker,
+          'repo: "capstone/vellum-minimal"',
+        );
+      });
+
+    if (seeded) {
+      const setConfig = (text) => writeFileSync(CONFIG, text);
+      setConfig(configured);
+
+      // init twice (F-14): a second run is a SKIP, not a rewrite. It runs AFTER
+      // the repo seed above, so a deterministic init that overwrote its
+      // scaffold would erase the seed and fail here; a byte-identical hash
+      // alone could not tell the two apart.
+      gate("orch:init-idempotent", () => {
+        const before = hashTree(ORCH_DIR) + hashTree(".lane");
+        const second = run("node_modules/.bin/hexagen-orchestration-init");
+        expect(
+          second.status === 0,
+          `init (2nd) exit ${second.status}\n${second.out}`,
+        );
+        expect(
+          readFileSync(CONFIG, "utf8") === configured,
+          "second init overwrote the seeded config.yaml",
+        );
+        expect(
+          second.out.includes("wrote 0, left 5 untouched") &&
+            !/^created /m.test(second.out),
+          `second init did not report every scaffold file as kept\n${second.out}`,
+        );
+        expect(
+          hashTree(ORCH_DIR) + hashTree(".lane") === before,
+          "second init changed the scaffolded tree",
+        );
+      });
+
+      // Red: the configured ciWorkflow is missing → FAIL naming the file.
+      // (Spec §7 OW3 doctor red; the fixture installs ci-github-actions, which
+      // provides ci.yml, so the green side is the real emitted file.)
+      gate("orch:doctor-ci-workflow", () => {
+        const ci = path.join(proj, ".github/workflows/ci.yml");
+        expect(existsSync(ci), "ci-github-actions did not emit ci.yml");
+        const aside = `${ci}.aside`;
+        renameSync(ci, aside);
+        let red;
+        try {
+          red = run("node_modules/.bin/hexagen-orchestration-doctor");
+        } finally {
+          renameSync(aside, ci);
+        }
+        expect(
+          red.status === 1,
+          `doctor without ci.yml: expected exit 1, got ${red.status}\n${red.out}`,
+        );
+        expect(
+          red.out.includes("ci-workflow") &&
+            red.out.includes(".github/workflows/ci.yml"),
+          `doctor did not name the missing ci.yml\n${red.out}`,
+        );
+      });
+
+      // Red: an override with no `reason` fails validation.
+      gate("orch:doctor-override", () => {
+        setConfig(
+          configured.replace(
+            "invariants:",
+            "overrides:\n  - invariant: eventDuty\ninvariants:",
+          ),
+        );
+        let red;
+        try {
+          red = run("node_modules/.bin/hexagen-orchestration-doctor");
+        } finally {
+          setConfig(configured);
+        }
+        expect(
+          red.status === 1,
+          `doctor with reasonless override: expected exit 1, got ${red.status}\n${red.out}`,
+        );
+        expect(
+          red.out.includes("overrides[0].reason is required"),
+          `doctor did not name overrides[0].reason as required\n${red.out}`,
+        );
+      });
+
+      // Red (spec §7): an invariant moved off its locked default with no
+      // overrides[] entry naming it. Restored, doctor is green again.
+      gate("orch:doctor-invariant-drift", () => {
+        expect(
+          configured.includes("  eventDuty: true"),
+          "scaffolded config.yaml has no `eventDuty: true` to flip",
+        );
+        setConfig(
+          configured.replace("  eventDuty: true", "  eventDuty: false"),
+        );
+        let red;
+        try {
+          red = run("node_modules/.bin/hexagen-orchestration-doctor");
+        } finally {
+          setConfig(configured);
+        }
+        expect(
+          red.status === 1,
+          `doctor with a drifted invariant: expected exit 1, got ${red.status}\n${red.out}`,
+        );
+        expect(
+          red.out.includes(
+            "invariants.eventDuty differs from its locked default (true) with no overrides[] entry naming it",
+          ),
+          `doctor did not name the un-overridden invariant drift\n${red.out}`,
+        );
+        const green = run("node_modules/.bin/hexagen-orchestration-doctor");
+        expect(
+          green.status === 0,
+          `doctor after restoring the invariant: exit ${green.status}\n${green.out}`,
+        );
+      });
+
+      // Red (spec §7): an overrides[].invariant outside the closed set
+      // {statusSource, eventDuty, mergeRequiresGreenGate, attribution}.
+      gate("orch:doctor-override-unknown-invariant", () => {
+        setConfig(
+          configured.replace(
+            "invariants:",
+            "overrides:\n  - invariant: notAnInvariant\n    reason: the capstone red\ninvariants:",
+          ),
+        );
+        let red;
+        try {
+          red = run("node_modules/.bin/hexagen-orchestration-doctor");
+        } finally {
+          setConfig(configured);
+        }
+        expect(
+          red.status === 1,
+          `doctor with an unknown override invariant: expected exit 1, got ${red.status}\n${red.out}`,
+        );
+        expect(
+          red.out.includes(
+            'overrides[0].invariant "notAnInvariant" is not one of: statusSource, eventDuty, mergeRequiresGreenGate, attribution',
+          ),
+          `doctor did not name the unknown override invariant\n${red.out}`,
+        );
+        const green = run("node_modules/.bin/hexagen-orchestration-doctor");
+        expect(
+          green.status === 0,
+          `doctor after restoring the overrides: exit ${green.status}\n${green.out}`,
+        );
+      });
+
+      // Green: the configured project is healthy.
+      gate("orch:doctor-green", () => {
+        const g = run("node_modules/.bin/hexagen-orchestration-doctor");
+        expect(
+          g.status === 0,
+          `doctor on a configured project: exit ${g.status}\n${g.out}`,
+        );
+      });
+
+      // `mutate` toggles whether mutate + verify-manifests are in the gate.
+      gate("orch:print-steps-mutate", () => {
+        const withMutators = configured.replace(
+          "gateSteps:\n",
+          "gateSteps:\n  - name: mutate\n    command: npx --no-install hexagen-orchestration-mutate\n" +
+            "  - name: verify-manifests\n    command: npx --no-install hexagen-orchestration-verify-manifests\n",
+        );
+        const steps = (mutateOn) => {
+          setConfig(
+            withMutators.replace(/^mutate: .*$/m, `mutate: ${mutateOn}`),
+          );
+          const r = run(
+            "node_modules/.bin/hexagen-orchestration-gate --print-steps",
+          );
+          expect(
+            r.status === 0,
+            `--print-steps (mutate ${mutateOn}) exit ${r.status}\n${r.out}`,
+          );
+          return r.out;
+        };
+        try {
+          const off = steps(false);
+          expect(
+            !/mutate|verify-manifests/.test(off) && /build/.test(off),
+            `mutate: false must omit mutate + verify-manifests:\n${off}`,
+          );
+          const on = steps(true);
+          expect(
+            /^mutate\t/m.test(on) && /^verify-manifests\t/m.test(on),
+            `mutate: true must include mutate + verify-manifests:\n${on}`,
+          );
+        } finally {
+          setConfig(configured);
+        }
+      });
+
+      // A real gate run, through the packaged gate-run.sh: a failing step exits
+      // non-zero and is named; an all-passing list exits 0.
+      gate("orch:gate-runs", () => {
+        const withSteps = (steps) =>
+          configured.replace(
+            /gateSteps:\n(?:  .*\n|    .*\n)+/,
+            `gateSteps:\n${steps.map((st) => `  - name: ${st.name}\n    command: ${JSON.stringify(st.command)}\n`).join("")}`,
+          );
+        try {
+          setConfig(
+            withSteps([
+              { name: "fine", command: "node -e 0" },
+              { name: "boom", command: 'node -e "process.exit(3)"' },
+            ]),
+          );
+          const red = run("node_modules/.bin/hexagen-orchestration-gate");
+          expect(
+            red.status !== 0,
+            `gate with a failing step exited 0\n${red.out}`,
+          );
+          // gate-run.sh must hand the step's own exit code back verbatim: 3, not
+          // the 1 a shell syntax error would give.
+          expect(
+            red.status === 3,
+            `gate with a step exiting 3: expected exit 3, got ${red.status}\n${red.out}`,
+          );
+          expect(
+            red.out.includes("boom"),
+            `gate did not name the failing step\n${red.out}`,
+          );
+          setConfig(withSteps([{ name: "fine", command: "node -e 0" }]));
+          const green = run("node_modules/.bin/hexagen-orchestration-gate");
+          expect(
+            green.status === 0,
+            `gate with only passing steps: exit ${green.status}\n${green.out}`,
+          );
+        } finally {
+          setConfig(configured);
+        }
+      });
+    }
   }
 
   // -- Advisory rows (open findings; flip to `gate(...)` when fixed) --------

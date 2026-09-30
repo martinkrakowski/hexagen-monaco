@@ -28,6 +28,9 @@ on:
       - "packages/wizard-orchestration/**"
       - "packages/project-generation/**"
       - "tools/arch-linter/**"
+      # orchestration (OW7): the packed package + the template the fixture installs.
+      - "tools/orchestration/**"
+      - "packages/template-engine/templates/orchestration/**"
       - "scripts/capstone/**"
       - "scripts/prepare-publish-package.js"
       - ".github/workflows/capstone.yml"
