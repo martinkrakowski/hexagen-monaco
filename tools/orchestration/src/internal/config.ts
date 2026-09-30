@@ -1,9 +1,15 @@
 import { load as parseYaml } from "js-yaml";
+import {
+  parseLaneHosts,
+  type LaneHost,
+  type LaneHostGate,
+  type Seat,
+} from "./lane-hosts.js";
 
 /**
  * The consumer overlay's configuration — the ONE source for everything the
  * package needs to know about a project (OW-D4, OW-D7 as amended by §12 A-15,
- * A-20, A-21 and A-22).
+ * A-20, A-21, A-22 and A-30).
  *
  * Nothing in this package hardcodes a repository, a port, a log root or a gate
  * step. A bin that needed one of those and could not find it here would be a
@@ -11,7 +17,7 @@ import { load as parseYaml } from "js-yaml";
  *
  * The loader is deliberately two-layered, because `doctor` needs both halves:
  *
- * - `parseConfig` validates the file's SHAPE (the 15 fields, their types, the
+ * - `parseConfig` validates the file's SHAPE (the 16 fields, their types, the
  *   closed `invariants` set, the `overrides[]` contract) and applies every
  *   default. It is total: it returns its `config` ALONGSIDE its problems. A field
  *   that failed validation holds its default in that config; `config` is absent
@@ -29,7 +35,15 @@ import { load as parseYaml } from "js-yaml";
  * A field that is absent takes its documented default. A field that is PRESENT
  * and wrong is an error: a gate that quietly substitutes a default for a
  * misspelled value is a gate that passes without running what was asked.
+ *
+ * A third channel sits next to `problems`: `deprecations` (A-30). A deprecation
+ * is a setting that still works and should no longer be written — today
+ * `opencodeServerUrl`, which is synthesized into a local `laneHosts` entry. A
+ * deprecation NEVER refuses: `configRefusal` ignores it, and `doctor` prints it
+ * as a WARN.
  */
+
+export type { LaneHost, LaneHostGate, Seat };
 
 /** Where the overlay lives, relative to the repository root. */
 export const CONFIG_RELATIVE_PATH = ".agents/orchestration/config.yaml";
@@ -76,8 +90,18 @@ export interface Config {
   readonly appendOnlyPaths?: string;
   readonly forbiddenPorts: readonly number[];
   readonly operatorDataPaths: readonly string[];
-  /** Absent when the file omits it and `gh` could not answer; `doctor` fails. */
-  readonly opencodeServerUrl?: string;
+  /**
+   * Where a delegated lane dispatches, and how. Empty when the project declares
+   * none, which is not a problem: a project that dispatches nowhere is a project
+   * with no lane hosts (A-30).
+   */
+  readonly laneHosts: readonly LaneHost[];
+  /**
+   * The opencode-dispatched seats, each naming a `laneHosts[].name`. Empty is
+   * legal, and `doctor` then WARNs for every host no seat references — the
+   * dispatch identity is missing, not the host (A-30).
+   */
+  readonly seats: readonly Seat[];
   /** Absent when unset — `logdir.ts` then derives `$HOME/.waves-<name>`. */
   readonly waveLogDir?: string;
   readonly coverageRequirement?: number;
@@ -98,6 +122,16 @@ export interface ConfigProblem {
   readonly message: string;
 }
 
+/**
+ * A setting that still parses and should no longer be written (A-30 §1.3).
+ *
+ * Same shape as a problem, different channel, and never the same consequence:
+ * `configRefusal` does not see it and `doctor` reports it as a WARN. Carrying it
+ * as a problem would break every overlay that has not migrated yet, for the sake
+ * of a migration no one asked to be broken.
+ */
+export type ConfigDeprecation = ConfigProblem;
+
 export interface ParseConfigResult {
   /**
    * Absent only for a whole-file fault (not YAML, not a mapping). Otherwise
@@ -106,6 +140,8 @@ export interface ParseConfigResult {
    */
   readonly config?: Config;
   readonly problems: readonly ConfigProblem[];
+  /** Never refuses. Reported by `doctor` as a WARN. */
+  readonly deprecations: readonly ConfigDeprecation[];
 }
 
 /** `gh repo view --json nameWithOwner`, and whatever else a caller needs to ask. */
@@ -381,23 +417,27 @@ export function parseConfig(text: string): ParseConfigResult {
           message: `is not valid YAML: ${err instanceof Error ? err.message : String(err)}`,
         },
       ],
+      deprecations: [],
     };
   }
 
   if (document === null || document === undefined) {
-    return { config: emptyConfig(), problems: [] };
+    return { config: emptyConfig(), problems: [], deprecations: [] };
   }
   if (!isRecord(document)) {
     return {
       problems: [{ at: "<file>", message: "must be a mapping of settings" }],
+      deprecations: [],
     };
   }
 
   const problems = new Problems();
 
   // OW-D7 calls this list exhaustive, and `doctor` refuses an unknown key.
-  // `cast` was in an earlier draft of the list and is NOT one of the fifteen;
-  // it is named separately only so the message says so.
+  // `cast` was in an earlier draft of the list and is NOT one of the sixteen;
+  // it is named separately only so the message says so. `opencodeServerUrl` is
+  // in `KNOWN_FIELDS` as a DEPRECATED ALIAS (A-30): it is accepted, synthesized
+  // into a local lane host and deprecation-reported, but it is not a field.
   for (const key of Object.keys(document)) {
     if (key === "cast") {
       problems.add(
@@ -462,6 +502,14 @@ export function parseConfig(text: string): ParseConfigResult {
     "opencodeServerUrl",
     problems,
   );
+  const laneHostFields = parseLaneHosts(
+    document.laneHosts,
+    document.seats,
+    opencodeServerUrl,
+  );
+  for (const problem of laneHostFields.problems) {
+    problems.add(problem.at, problem.message);
+  }
   const waveLogDir = parseOptionalString(
     document.waveLogDir,
     "waveLogDir",
@@ -520,7 +568,8 @@ export function parseConfig(text: string): ParseConfigResult {
     ...(appendOnlyPaths !== undefined ? { appendOnlyPaths } : {}),
     forbiddenPorts,
     operatorDataPaths,
-    ...(opencodeServerUrl !== undefined ? { opencodeServerUrl } : {}),
+    laneHosts: laneHostFields.hosts,
+    seats: laneHostFields.seats,
     ...(waveLogDir !== undefined ? { waveLogDir } : {}),
     ...(coverageRequirement !== undefined ? { coverageRequirement } : {}),
     mutate,
@@ -533,9 +582,13 @@ export function parseConfig(text: string): ParseConfigResult {
 
   // The config comes back WITH its problems. A field that failed validation is
   // at its default, but every field that was fine holds what the file said, so
-  // `doctor` can go on to check the ports and the URL the file actually names
-  // instead of the defaults, and report every failure in one run.
-  return { config, problems: problems.list };
+  // `doctor` can go on to check the ports and the lane hosts the file actually
+  // names instead of the defaults, and report every failure in one run.
+  return {
+    config,
+    problems: problems.list,
+    deprecations: laneHostFields.deprecations,
+  };
 }
 
 /** The whole-file-absent case: every field at its default, and no `repo`. */
@@ -546,6 +599,8 @@ export function emptyConfig(): Config {
     requiredCheck: "^Build",
     forbiddenPorts: [],
     operatorDataPaths: [],
+    laneHosts: [],
+    seats: [],
     mutate: false,
     overrides: [],
     invariants: { ...LOCKED_INVARIANTS },
@@ -574,6 +629,9 @@ const KNOWN_FIELDS: ReadonlySet<string> = new Set([
   "appendOnlyPaths",
   "forbiddenPorts",
   "operatorDataPaths",
+  "laneHosts",
+  "seats",
+  // A-30: accepted as a DEPRECATED ALIAS, and not one of the sixteen fields.
   "opencodeServerUrl",
   "waveLogDir",
   "coverageRequirement",
@@ -601,17 +659,26 @@ function ghRepoProblem(repo: string): ConfigProblem {
  * is the thing that decides whether a project with no overlay is a problem. The
  * brief's per-field defaults are the same ones that apply to a whole absent
  * file, except that `repo` then needs `gh`.
+ *
+ * `deprecations` is carried on EVERY path, for the same reason `problems` is:
+ * a result that rebuilt itself to add `repo` must not drop what the file asked
+ * for. Losing a deprecation loses the one warning an unmigrated overlay gets.
  */
 export async function loadConfig(io: ConfigIo): Promise<ParseConfigResult> {
   const text = await io.readConfig();
   if (text === undefined) {
     const repo = await io.repo();
     if (repo !== undefined && !REPO_PATTERN.test(repo)) {
-      return { config: emptyConfig(), problems: [ghRepoProblem(repo)] };
+      return {
+        config: emptyConfig(),
+        problems: [ghRepoProblem(repo)],
+        deprecations: [],
+      };
     }
     return {
       config: { ...emptyConfig(), ...(repo !== undefined ? { repo } : {}) },
       problems: [],
+      deprecations: [],
     };
   }
 
@@ -628,7 +695,12 @@ export async function loadConfig(io: ConfigIo): Promise<ParseConfigResult> {
     return {
       config: parsed.config,
       problems: [...parsed.problems, ghRepoProblem(repo)],
+      deprecations: parsed.deprecations,
     };
   }
-  return { config: { ...parsed.config, repo }, problems: parsed.problems };
+  return {
+    config: { ...parsed.config, repo },
+    problems: parsed.problems,
+    deprecations: parsed.deprecations,
+  };
 }

@@ -6,6 +6,7 @@ import {
   CONFIG_RELATIVE_PATH,
   loadConfig,
   type Config,
+  type ConfigDeprecation,
   type ConfigProblem,
 } from "./config.js";
 
@@ -129,13 +130,18 @@ export async function emptyConfigFor(
 ): Promise<{
   readonly config: Config;
   readonly problems: readonly ConfigProblem[];
+  readonly deprecations: readonly ConfigDeprecation[];
 }> {
   const read = deps.readRepository ?? readRepositoryFromGh;
   const result = await loadConfig({
     readConfig: async () => undefined,
     repo: async () => read(root),
   });
-  return { config: result.config!, problems: result.problems };
+  return {
+    config: result.config!,
+    problems: result.problems,
+    deprecations: result.deprecations,
+  };
 }
 
 /**
@@ -165,6 +171,12 @@ export async function loadConfigFor(
     readonly at: string;
     readonly message: string;
   }[];
+  /**
+   * Never refuses. `doctor` prints these as WARNs; `configRefusal` does not
+   * see them, so an overlay that has not migrated off `opencodeServerUrl` keeps
+   * working and is told once to migrate.
+   */
+  readonly deprecations: readonly ConfigDeprecation[];
 }> {
   // Start from the repository root, never the cwd: an operator runs a bin from
   // a subdirectory as often as from the top, and a bin that read the overlay
@@ -196,6 +208,7 @@ export async function loadConfigFor(
       config: fallback.config,
       present: true,
       problems: [unreadable, ...fallback.problems],
+      deprecations: fallback.deprecations,
     };
   }
 
@@ -218,6 +231,7 @@ export async function loadConfigFor(
     config: result.config ?? fallback!.config,
     present: text !== undefined,
     problems: [...result.problems, ...(fallback?.problems ?? [])],
+    deprecations: [...result.deprecations, ...(fallback?.deprecations ?? [])],
   };
 }
 

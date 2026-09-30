@@ -58,6 +58,8 @@ const configFor = (over: Partial<Config> = {}): Config => ({
   requiredCheck: "^Build",
   forbiddenPorts: [],
   operatorDataPaths: [],
+  laneHosts: [],
+  seats: [],
   mutate: false,
   overrides: [],
   invariants: { ...LOCKED_INVARIANTS },
