@@ -616,5 +616,18 @@ describe.skipIf(!hasZsh())(
         s.cleanup();
       }
     });
+
+    test("a failed check named with spaces is reported whole, not cut at the first space", () => {
+      const s = makeScenario(false);
+      try {
+        const result = runScenario(s);
+        expect(result.stdout).toContain(
+          "CHECKS FAILED for #42: Build and Test",
+        );
+        expect(result.status).toBe(1);
+      } finally {
+        s.cleanup();
+      }
+    });
   },
 );

@@ -276,7 +276,9 @@ for spec in "$@"; do
     sleep 15
   done
   [ "$concluded" -eq 1 ] || { echo "CHECKS STILL PENDING for #$pr after ~30m — not merging"; exit 1 }
-  bad="${${(s: :)summary}[3]#bad=}"
+  # Everything after `bad=`: a check name may itself contain spaces, so the
+  # third field is not a word but the remainder of the line.
+  bad="${summary#*bad=}"
   [ -z "$bad" ] || { echo "CHECKS FAILED for #$pr: $bad"; gh pr checks "$pr"; exit 1 }
   echo "checks green on $head_sha"; gh pr checks "$pr" 2>&1 | tail -3
 
