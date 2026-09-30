@@ -557,7 +557,15 @@ describe("orchestration skill coverage", () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), "skill-coverage-bundle-"),
     );
-    spawnSync("git", ["init", "-q"], { cwd: root });
+    const git = (...args: string[]) =>
+      spawnSync(
+        "git",
+        ["-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args],
+        {
+          cwd: root,
+        },
+      );
+    git("init", "-q");
     const bundle = path.join(
       root,
       "packages/template-engine/src/infrastructure/generated/template-bundle.generated.ts",
@@ -565,11 +573,14 @@ describe("orchestration skill coverage", () => {
     fs.mkdirSync(path.dirname(bundle), { recursive: true });
     fs.writeFileSync(bundle, `export const x = "${canary}";\n`);
     fs.writeFileSync(path.join(root, "README.md"), "unrelated\n");
-    spawnSync("git", ["add", "."], { cwd: root });
+    git("add", ".");
     const result = run(coverageArgs(fixture, ["--hexagen-root", root]));
     expect(result.status, result.out).toBe(1);
-    expect(result.out).toContain("unaccounted");
-    expect(result.out).toContain(canary);
+    // The stand-in tracks little, so many other tokens are flagged too: assert on the canary's own
+    // line, not on anything about the rest of the report.
+    const line = result.out.split("\n").find((l) => l.includes(canary));
+    expect(line, result.out).toBeDefined();
+    expect(line).toMatch(/needs a line/);
   });
 
   it("a report larger than the pipe buffer is delivered whole to a slow reader", () => {
