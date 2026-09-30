@@ -23,6 +23,10 @@ const EXTRACTOR = path.join(
 const FIXTURE = path.resolve(HERE, "..", "fixtures", "orchestration");
 // The live memory directory is the owner's, outside the repository. The audit against it runs only
 // when ORCHESTRATION_MEMORY_DIR points at it; CI runs the committed manifest instead.
+// turbo/no-undeclared-env-vars: ORCHESTRATION_MEMORY_DIR is an operator-set variable that enables an
+// optional local audit. It is not a build input, so turbo's cache has nothing to invalidate, and
+// turbo.json is a never-edit file.
+// eslint-disable-next-line turbo/no-undeclared-env-vars
 const MEMORY_DIR: string | undefined = process.env.ORCHESTRATION_MEMORY_DIR;
 const HAS_MEMORY_DIR = Boolean(MEMORY_DIR && fs.existsSync(MEMORY_DIR));
 
