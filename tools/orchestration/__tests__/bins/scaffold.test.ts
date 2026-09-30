@@ -20,6 +20,8 @@ const manifest = JSON.parse(
   bin: Record<string, string>;
   version: string;
   files: string[];
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
 };
 
 /** Every bin, and which sub-lane implements it. */
@@ -131,6 +133,16 @@ describe("the bin list (OW-D14)", () => {
 
   it("publishes dist and bin, which is where the two bin kinds live", () => {
     expect(manifest.files).toEqual(["dist", "bin"]);
+  });
+
+  // F18: mutate-anchors (OW3b) imports the TypeScript compiler API at run time.
+  // tsup keeps third-party modules external, so a consumer without `typescript`
+  // would fail to resolve it.
+  it("declares typescript as a RUNTIME dependency, at the range the repo uses", () => {
+    expect(manifest.dependencies?.typescript).toBe(
+      manifest.devDependencies?.typescript,
+    );
+    expect(manifest.dependencies?.typescript).toBe("^5.4.5");
   });
 });
 
