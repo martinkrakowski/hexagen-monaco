@@ -163,8 +163,12 @@ every row of its tables — 137 changed lines over about twenty lines of real pr
 then filed a finding against `§` usage on lines that were pre-existing content Prettier had merely
 re-wrapped. A whole reply cycle went into refuting a finding the formatting had manufactured.
 
-This is why a verbatim snapshot directory has to be Prettier-ignored rather than merely
-well-formatted: the bytes are the evidence, and the evidence is what the comparison reads.
+The rule: format only what a gate actually checks, which here is TypeScript and nothing else.
+Edit planning documents surgically, by line or by unique string, and never run Prettier over them,
+so that a one-line status fix is a one-line diff.
+
+The same reasoning is why a verbatim snapshot directory has to be Prettier-ignored rather than
+merely well-formatted: the bytes are the evidence, and the evidence is what the comparison reads.
 
 source: format-check-covers-only-ts-tsx.md
 
@@ -305,7 +309,9 @@ A direct instruction from the owner outranks a session-start reminder that asks 
 exactly why lanes keep adding them: they are told to, notice, and cannot always amend afterwards.
 And the obvious grep is not enough — a pre-merge check for two spellings reported zero while a
 third form reached main. Check every form, over every lane branch's commit bodies, and again on
-main after each merge. Trailers already on main are left alone: stripping them means rewriting
+main after each merge. The third form is a bare `Claude-Session:` trailer, or a `claude.ai/code`
+session link, which reached main folded in by a squash from a lane commit while the check for the
+other two forms reported zero. Trailers already on main are left alone: stripping them means rewriting
 published history, which was not asked for.
 
 source: no-ai-attribution-in-prs.md
@@ -317,13 +323,15 @@ themselves. Attach to it with the worktree's absolute path as the working direct
 waits on stdin never reaches the model, so redirect stdin on every invocation.
 
 Check the server is up first, and if it is down ask the owner to restart it. Do not start one
-yourself: it has to outlive the session. Never bind 3000, 3001 or the wave-status port — those are
-the operator's, and a request to one of them spends their credits and overwrites their output.
+yourself: it has to outlive the session. Never bind 3000, 3001 or 4317.
 
-Two older rules here were corrected rather than kept: "never two runs at once" applied to
-standalone runs that each started their own embedded server, and the claim that no process listing
-ever shows a live lane was concluded on a day the lanes were genuinely dead from a broken launch.
-Check the process and the worktree, and do not generalise from a broken run.
+The old rule, "never two runs at once", is corrected rather than kept. A probe showed attached runs
+in parallel with distinct working directories each writing only their own output, and a later
+correction from timestamps showed that two standalone runs had already overlapped without harm
+before the server existed. The rule was probably a stale artefact of an older version of the tool.
+So the shared server is the recommended setup, but it is not proven to be what enables parallel
+runs. The measured gain from parallel lanes was roughly 35 to 50 percent less wave wall-clock time
+and about zero per lane, because the gate lock and host load add minutes to each.
 
 source: opencode-shared-server.md
 
@@ -338,6 +346,12 @@ pull-request URLs in it. Before reporting any lane as progressing, list its PRs:
 two never started, and stage two is the only stage that finds defects. When the owner says a change
 is not visible, check whether the work was ever dispatched *before* theorising about caches,
 builds or CSS.
+
+A corollary from the same week: do not block a green, CI-passing pull request on cosmetic findings
+such as an ARIA attribute or where a string lives; fold them into the next lane that touches the
+file. Do not re-run a full gate that the lane already ran and CI will run again. Do re-run the
+cheap checks a lane's self-report can be wrong about, `plan:verify` and `verify-manifests.sh`,
+which is what caught a lane reporting `plan:verify` exit 0 when it exited 1.
 
 source: planning-docs-are-not-progress.md
 
@@ -450,13 +464,14 @@ source: use-jq-and-node-not-python.md
 ## Verification follows signal, not habit
 
 The owner said on 2026-09-08 that too much time was spent verifying work that turned out to be
-nonsense. The record agrees: across a run of pull requests, one review bot left about thirty
-comments and nearly every one was refuted at the cost of a read, a verification, a reply and a
-resolve. The defects that mattered came from the other bot, from the orchestrator's own gate, and
+nonsense. The record agrees: across a run of pull requests, one review bot, PR-Agent, left about
+thirty comments and nearly every one was refuted at the cost of a read, a verification, a reply and a
+resolve. The defects that mattered came from the other bot, Qodo, from the orchestrator's own gate, and
 from CI.
 
-Verification is the expensive step now, so it has to follow the hit rate. Bulk-resolve the
-near-zero-source threads with one line and read them only if the PR's own claims fail. Spend model
+Verification is the expensive step now, so it has to follow the hit rate. Bulk-resolve PR-Agent's
+threads with one line and read them only if the PR's own claims fail; keep verifying Qodo's, whose
+hit rate was high. Spend model
 review on lanes that change rendering, the kit or user-visible behaviour, and give a domain or
 boundary lane the gate plus one mutation instead. One orchestrator mutation per pull request, with
 the diff printed before the run, and a second attempt only if the first did not apply. No fix round
@@ -493,8 +508,10 @@ source: vitest-resolves-the-node-export-condition.md
 
 ## Lane worktrees live in one folder, and the disk is checked with df
 
-Every new lane worktree is created under a single folder the owner excludes from backups, and the
-briefs name that absolute path. Throwaway worktrees carry about 0.9 GB of `node_modules` each; the
+Every new lane worktree is created with `git worktree add ../.worktrees/<name>` from the main
+checkout, which puts it in one folder the owner excludes from backups, and the briefs name that
+absolute path. No new `../wt-*` siblings of the checkout are created; existing ones finish where
+they are. Throwaway worktrees carry about 0.9 GB of `node_modules` each; the
 owner moved backups from hourly to daily specifically to stop shipping them.
 
 The same day the disk filled, an uncompressed archive of the projects crashed at ENOSPC and killed
