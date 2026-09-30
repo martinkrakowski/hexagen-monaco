@@ -242,7 +242,7 @@ describe("checkAnchors", () => {
 
 /**
  * The second address. `-t` is a regex, and one that matches nothing skips every
- * test and exits 0 — which `mutate:verify` reads as `survived`. These are the
+ * test and exits 0 — which the replay reads as `survived`. These are the
  * cases that separate "the pattern still selects its test" from "the pattern
  * selects nothing and nobody can tell".
  */
