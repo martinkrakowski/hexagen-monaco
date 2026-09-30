@@ -141,6 +141,9 @@ function track(pid: number | undefined): void {
  *   outlives the kill. That is the tunnel doing what `-f` asks (a check that
  *   opens one is leaving it for the dispatch), not a leak in this runner.
  * - `stdio` is `ignore`, so a forked tunnel inherits no pipe of ours to hold open.
+ *   That is also why this runner does NOT capture stderr, as `runRemote` does:
+ *   a pipe here would be inherited by an `ssh -f` tunnel and, with the settle on
+ *   `close`, hang the probe on a tunnel that is working as intended.
  * - it settles on the child's **`exit`**, not `close`. Were any descendant to
  *   inherit a pipe, `close` would wait for a writer that is never going to exit
  *   and report a working host as a timeout, forever.
@@ -193,6 +196,24 @@ export interface RemoteResult {
   readonly status: CheckStatus;
   /** Trimmed stdout. The email read needs the value; nothing else does. */
   readonly stdout: string;
+  /**
+   * The LAST non-empty line ssh wrote to stderr, trimmed and capped at
+   * `STDERR_LINE_MAX` characters; empty when it wrote none. It is what says WHY a
+   * probe failed ("Permission denied (publickey)."), which an exit code cannot.
+   */
+  readonly stderr: string;
+}
+
+/** The cap on the surfaced stderr line. */
+export const STDERR_LINE_MAX = 200;
+
+/** The last non-empty line of `text`, trimmed and capped. */
+function lastLine(text: string): string {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  return (lines.at(-1) ?? "").slice(0, STDERR_LINE_MAX);
 }
 
 /**
@@ -233,7 +254,7 @@ export function runRemote(
       ],
       {
         ...SPAWN_BASE,
-        stdio: ["ignore", "pipe", "ignore"],
+        stdio: ["ignore", "pipe", "pipe"],
         ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
       },
     );
@@ -242,6 +263,13 @@ export function runRemote(
     child.stdout?.setEncoding("utf8");
     child.stdout?.on("data", (chunk: string) => {
       stdout += chunk;
+    });
+    // Only the tail is kept: the last line is all that is surfaced, and a noisy
+    // host must not grow this without bound.
+    let stderr = "";
+    child.stderr?.setEncoding("utf8");
+    child.stderr?.on("data", (chunk: string) => {
+      stderr = (stderr + chunk).slice(-4_096);
     });
     track(child.pid);
     const timer = setTimeout(() => {
@@ -253,12 +281,13 @@ export function runRemote(
       settled = true;
       clearTimeout(timer);
       if (child.pid !== undefined) live.delete(child.pid);
-      resolve({ status, stdout: stdout.trim() });
+      resolve({ status, stdout: stdout.trim(), stderr: lastLine(stderr) });
     };
     child.on("error", () => settle("failed"));
     // `close`, not `exit`: this runner READS stdout, and `exit` can fire before the
     // last of it has been delivered. Nothing here forks a tunnel that would hold the
     // pipe open (`-n`, no `-f`), and the timeout bounds it if something does.
+    // The same `close` is what delivers the last of stderr.
     child.on("close", (code) => settle(code === 0 ? "ok" : "failed"));
   });
 }

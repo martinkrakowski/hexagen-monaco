@@ -17,6 +17,7 @@ import {
   runCheck,
   runRemote,
   shellQuote,
+  STDERR_LINE_MAX,
 } from "../../src/internal/capabilities.js";
 
 /**
@@ -311,6 +312,33 @@ describe("runRemote quotes what reaches the remote shell", () => {
       "$(echo pwned)",
       "it's",
     ]);
+  }, 20_000);
+
+  test("ssh's last non-empty stderr line is surfaced, trimmed and capped", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "orchestration-ssh-"));
+    dirs.push(dir);
+    const fake = join(dir, "ssh");
+    writeFileSync(
+      fake,
+      "#!/bin/sh\necho 'warning: first' >&2\necho '  Permission denied (publickey).  ' >&2\necho >&2\nexit 255\n",
+    );
+    chmodSync(fake, 0o755);
+    const result = await runRemote("alias", ["true"], 5_000, {
+      sshCommand: fake,
+    });
+    expect(result.status).toBe("failed");
+    expect(result.stderr).toBe("Permission denied (publickey).");
+
+    const long = join(dir, "ssh-long");
+    writeFileSync(
+      long,
+      `#!/bin/sh\nprintf '%s\\n' ${"x".repeat(500)} >&2\nexit 255\n`,
+    );
+    chmodSync(long, 0o755);
+    const capped = await runRemote("alias", ["true"], 5_000, {
+      sshCommand: long,
+    });
+    expect(capped.stderr).toHaveLength(STDERR_LINE_MAX);
   }, 20_000);
 
   test("it settles on close, so stdout written just before exit is not lost", async () => {

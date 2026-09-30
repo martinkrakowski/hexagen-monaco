@@ -503,6 +503,45 @@ describe("A-30 §7: doctor on a lane host", () => {
     expect(messages).toContain("ConnectTimeout=5 m true");
   });
 
+  test("ssh's own words ride on the probe FAIL, and on the email-read SKIP", async () => {
+    const yaml = `repo: owner/demo\n${REMOTE_HOST}\nseats:\n  - id: s\n    agent: lane\n    model: m\n    host: midnight\n`;
+    const refused = await doctor(yaml, {
+      runRemote: async () => ({
+        status: "failed",
+        stdout: "",
+        stderr: "Permission denied (publickey).",
+      }),
+    });
+    expect(fails(refused.findings, "lane-host midnight").message).toContain(
+      "ssh said: Permission denied (publickey).",
+    );
+
+    // The probe answers; the email read is what fails.
+    let calls = 0;
+    const skipped = await doctor(yaml, {
+      runRemote: async () =>
+        ++calls === 1
+          ? { status: "ok" as const, stdout: "" }
+          : {
+              status: "failed" as const,
+              stdout: "",
+              stderr: "fatal: not a git repository",
+            },
+    });
+    const skip = skipped.findings.find(
+      (f) => f.severity === "skip" && f.message.includes("user.email"),
+    );
+    expect(skip?.message).toContain("ssh said: fatal: not a git repository");
+
+    // Nothing said, nothing appended.
+    const quiet = await doctor(yaml, {
+      runRemote: async () => ({ status: "failed", stdout: "" }),
+    });
+    expect(fails(quiet.findings, "lane-host midnight").message).not.toContain(
+      "ssh said",
+    );
+  });
+
   test("check: [/bin/false] is a FAIL, and check: [sleep, 30] is a FAIL naming the 10 s timeout", async () => {
     // The plan writes these as argv. In YAML a bare `false` and a bare `30` are
     // booleans and numbers, which is a `parseConfig` refusal, not a check that

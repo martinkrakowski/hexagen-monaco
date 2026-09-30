@@ -93,7 +93,12 @@ export interface DoctorDeps {
     alias: string,
     argv: readonly string[],
     timeoutMs: number,
-  ) => Promise<{ readonly status: CheckStatus; readonly stdout: string }>;
+  ) => Promise<{
+    readonly status: CheckStatus;
+    readonly stdout: string;
+    /** ssh's last stderr line, when it wrote one. Optional for a caller with none. */
+    readonly stderr?: string;
+  }>;
   /**
    * This repository's own `user.email`, or `undefined`. It is compared against
    * the clone's, because a squash merge turns a host-local email into a public
@@ -130,6 +135,11 @@ function howItFailed(status: CheckStatus): string {
   return status === "timeout"
     ? `did not finish within the ${CHECK_TIMEOUT_MS / 1_000} s check timeout`
     : "did not succeed";
+}
+
+/** ` ssh said: …` when ssh wrote something, so a failure says WHY, not only that. */
+function sshSaid(stderr: string | undefined): string {
+  return stderr === undefined || stderr === "" ? "" : ` ssh said: ${stderr}`;
 }
 
 /**
@@ -172,8 +182,8 @@ async function checkLaneHost(
       push(
         "fail",
         `the ssh probe \`ssh -n -o BatchMode=yes -o ConnectTimeout=5 ${host.ssh} true\` ` +
-          `${howItFailed(probe.status)}. It is how worktrees, briefs and fetch-back reach ` +
-          `this host, and a lane cannot be sent to a host this tool cannot reach.`,
+          `${howItFailed(probe.status)}.${sshSaid(probe.stderr)} It is how worktrees, briefs and ` +
+          `fetch-back reach this host, and a lane cannot be sent to a host this tool cannot reach.`,
       );
     }
   }
@@ -215,7 +225,7 @@ async function checkLaneHost(
         push(
           "skip",
           `the clone's \`user.email\` ${howItFailed(remote.status)}, so it could not be ` +
-            `compared with this repository's.`,
+            `compared with this repository's.${sshSaid(remote.stderr)}`,
         );
       } else if (local === undefined || local === "") {
         push(
