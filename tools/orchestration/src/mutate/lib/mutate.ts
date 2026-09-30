@@ -226,12 +226,18 @@ export async function runMutation(
   );
 
   let isMutated = false;
+  // The mutation write, while it is in flight. A signal can arrive before it
+  // settles, and a restore that wrote first would be overwritten by it.
+  let mutationWrite: Promise<void> | undefined;
   let restorePromise: Promise<void> | undefined;
   const restore = async (): Promise<void> => {
     if (!isMutated) return;
     if (!restorePromise) {
       restorePromise = (async () => {
         try {
+          // Let a pending mutation write land first, so the original bytes are
+          // always the LAST write. Its own failure is the main flow's to report.
+          await mutationWrite?.catch(() => undefined);
           await deps.writeFileBuffer(args.file, originalBuffer);
           isMutated = false;
         } catch (error) {
@@ -251,7 +257,8 @@ export async function runMutation(
   try {
     const mutatedBuffer = Buffer.from(mutatedContent, "utf8");
     isMutated = true;
-    await deps.writeFileBuffer(args.file, mutatedBuffer);
+    mutationWrite = deps.writeFileBuffer(args.file, mutatedBuffer);
+    await mutationWrite;
 
     // Rule 4: Confirm the file holds the intended mutation after writing, and refuse if it does not.
     const readBack = await deps.readFile(args.file);
@@ -284,8 +291,13 @@ export async function runMutation(
       launchError: execResult.launchError,
     };
   } finally {
-    unregisterSignal?.();
-    await restore();
+    // The handlers stay registered until the restore has completed: a signal
+    // during the restoring write must still reach the restore, not the default.
+    try {
+      await restore();
+    } finally {
+      unregisterSignal?.();
+    }
   }
 }
 

@@ -794,6 +794,113 @@ describe("runMutation", () => {
     expect(restoreWrites).toBe(1);
   });
 
+  describe("a signal that arrives while a write is pending", () => {
+    const originalBytes = Buffer.from("export const flag = true;\n");
+    const deferred = () => {
+      let resolve!: () => void;
+      const promise = new Promise<void>((r) => {
+        resolve = r;
+      });
+      return { promise, resolve };
+    };
+    // Every write to the target goes through a gate the test opens by hand. A
+    // write lands on disk only when its gate opens, as a slow disk would.
+    const slowDeps = (gates: Array<ReturnType<typeof deferred>>) => {
+      const events: string[] = [];
+      let signal: (() => Promise<void>) | undefined;
+      let unregistered = false;
+      const made = makeFakeDeps(
+        {
+          "target.ts": originalBytes,
+          "before.txt": "flag = true",
+          "after.txt": "flag = false",
+        },
+        { exitCode: 0, stdout: "", stderr: "" },
+      );
+      let n = 0;
+      const deps: MutationDeps = {
+        ...made.deps,
+        writeFileBuffer: async (path, content) => {
+          const gate = gates[n++];
+          events.push(`write ${n} started`);
+          await gate?.promise;
+          made.store.set(path, Buffer.from(content));
+          events.push(`write ${n} landed`);
+        },
+        onSignal: (cleanup) => {
+          signal = async () => {
+            await cleanup();
+            events.push("exit callback");
+          };
+          return () => {
+            unregistered = true;
+          };
+        },
+      };
+      return {
+        deps,
+        events,
+        store: made.store,
+        signal: () => signal!(),
+        isUnregistered: () => unregistered,
+      };
+    };
+
+    test("during the mutation write, the original bytes are the last write and exit waits for them", async () => {
+      const mutationGate = deferred();
+      const restoreGate = deferred();
+      const h = slowDeps([mutationGate, restoreGate]);
+
+      const running = runMutation(baseArgs, h.deps);
+      await vi.waitFor(() => expect(h.events).toContain("write 1 started"));
+
+      const exiting = h.signal();
+      // Nothing may restore over a write that is still in flight.
+      await new Promise((r) => setTimeout(r, 20));
+      expect(h.events).toEqual(["write 1 started"]);
+
+      mutationGate.resolve();
+      await vi.waitFor(() => expect(h.events).toContain("write 2 started"));
+      expect(h.events).not.toContain("exit callback");
+      restoreGate.resolve();
+      await exiting;
+      await running.catch(() => undefined);
+
+      expect(h.store.get("target.ts")?.equals(originalBytes)).toBe(true);
+      expect(h.events.at(-1)).not.toBe("write 1 landed");
+      expect(h.events.indexOf("exit callback")).toBeGreaterThan(
+        h.events.indexOf("write 2 landed"),
+      );
+    });
+
+    test("during the restoring write, the handlers stay registered and exit waits for it", async () => {
+      const mutationGate = deferred();
+      const restoreGate = deferred();
+      const h = slowDeps([mutationGate, restoreGate]);
+
+      const running = runMutation(baseArgs, h.deps);
+      await vi.waitFor(() => expect(h.events).toContain("write 1 started"));
+      mutationGate.resolve();
+      await vi.waitFor(() => expect(h.events).toContain("write 2 started"));
+
+      // The restoring write is pending, so the process is still exposed.
+      expect(h.isUnregistered()).toBe(false);
+      const exiting = h.signal();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(h.events).not.toContain("exit callback");
+
+      restoreGate.resolve();
+      await exiting;
+      await running;
+
+      expect(h.store.get("target.ts")?.equals(originalBytes)).toBe(true);
+      expect(h.events.indexOf("exit callback")).toBeGreaterThan(
+        h.events.indexOf("write 2 landed"),
+      );
+      expect(h.isUnregistered()).toBe(true);
+    });
+  });
+
   test("each refusal path leaves file byte-identical", async () => {
     const originalBytes = Buffer.from("alpha beta gamma\n");
 
