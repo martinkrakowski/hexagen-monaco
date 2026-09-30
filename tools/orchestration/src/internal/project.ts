@@ -131,7 +131,7 @@ export async function emptyConfigFor(root: string): Promise<Config> {
  * needs a setting reads the defaulted config and does not second-guess it —
  * except `repo`, which it must have.
  */
-export async function loadConfigFor(root: string = process.cwd()): Promise<{
+export async function loadConfigFor(rootArg?: string): Promise<{
   readonly root: string;
   readonly config: Config;
   readonly present: boolean;
@@ -140,6 +140,11 @@ export async function loadConfigFor(root: string = process.cwd()): Promise<{
     readonly message: string;
   }[];
 }> {
+  // Start from the repository root, never the cwd: an operator runs a bin from
+  // a subdirectory as often as from the top, and a bin that read the overlay
+  // relative to wherever it happened to be started would report "no overlay"
+  // (or scaffold a second one) from any directory but one.
+  const root = rootArg ?? (await findRepositoryRoot());
   const path = configPath(root);
   let text: string | undefined;
   try {
