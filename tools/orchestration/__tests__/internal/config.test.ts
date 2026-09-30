@@ -180,6 +180,18 @@ describe("a field that is absent takes its documented default", () => {
     );
   });
 
+  test("F15: an invalid appendOnlyPaths regex is a problem, and the field is left off", () => {
+    const result = parseConfig('appendOnlyPaths: "("');
+    expect(result.problems.map((p) => p.at)).toEqual(["appendOnlyPaths"]);
+    expect(result.config).not.toHaveProperty("appendOnlyPaths");
+    expect(() =>
+      matchesAppendOnly(result.config!, "packages/sync/src/index.ts"),
+    ).not.toThrow();
+    expect(
+      matchesAppendOnly(result.config!, "packages/sync/src/index.ts"),
+    ).toBe(false);
+  });
+
   test("waveStatusPort defaults to 4318", () => {
     expect(ok("{}").waveStatusPort).toBe(4318);
   });

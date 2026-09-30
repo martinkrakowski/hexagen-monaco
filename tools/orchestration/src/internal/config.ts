@@ -401,11 +401,26 @@ export function parseConfig(text: string): ParseConfigResult {
   const requiredCheck =
     parseOptionalString(document.requiredCheck, "requiredCheck", problems) ??
     "^Build";
-  const appendOnlyPaths = parseOptionalString(
+  let appendOnlyPaths = parseOptionalString(
     document.appendOnlyPaths,
     "appendOnlyPaths",
     problems,
   );
+  // Compile it NOW. A pattern that is a string but not a regex would otherwise
+  // parse clean, pass `doctor`, and throw a SyntaxError from the first
+  // `matchesAppendOnly` call, in the middle of a gate. The field is left off the
+  // config so nothing downstream can trip on it.
+  if (appendOnlyPaths !== undefined) {
+    try {
+      new RegExp(appendOnlyPaths);
+    } catch (err) {
+      problems.add(
+        "appendOnlyPaths",
+        `must be a valid regular expression: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      appendOnlyPaths = undefined;
+    }
+  }
   // A-20: refused ports come ONLY from the file. The default is empty, because
   // 4317 is campaign-foundry's port and refusing it here would refuse a
   // project that legitimately wants it (A-20).

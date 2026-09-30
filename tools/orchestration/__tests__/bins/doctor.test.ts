@@ -188,6 +188,16 @@ describe("F4 — an overrides value that is not a list", () => {
   });
 });
 
+describe("F15 — an appendOnlyPaths that is not a regular expression", () => {
+  test("is a failure naming appendOnlyPaths", async () => {
+    const { code, findings } = await doctor(
+      'repo: owner/demo\nappendOnlyPaths: "("\n',
+    );
+    expect(code).toBe(EXIT_UNHEALTHY);
+    expect(fails(findings, "config").message).toMatch(/^appendOnlyPaths /);
+  });
+});
+
 describe("red case 5 — an overrides[].invariant outside the locked set", () => {
   test("is a failure naming the set", async () => {
     const { code, findings } = await doctor(
