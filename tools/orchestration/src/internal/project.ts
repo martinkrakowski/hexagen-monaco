@@ -2,12 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  CONFIG_RELATIVE_PATH,
-  loadConfig,
-  parseConfig,
-  type Config,
-} from "./config.js";
+import { CONFIG_RELATIVE_PATH, loadConfig, type Config } from "./config.js";
 
 /**
  * Locating the project, and the `gh` fallback, for the bins that need both.
@@ -112,12 +107,22 @@ export function configPath(root: string): string {
   return join(root, CONFIG_RELATIVE_PATH);
 }
 
+/** The collaborators `loadConfigFor` needs from outside, so a test can supply `gh`. */
+export interface ProjectDeps {
+  /** `owner/name` as `gh` reports it (unvalidated), or `undefined`. */
+  readonly readRepository?: (cwd: string) => string | undefined;
+}
+
 /** Every default, for a project with no overlay at all. */
-export async function emptyConfigFor(root: string): Promise<Config> {
+export async function emptyConfigFor(
+  root: string,
+  deps: ProjectDeps = {},
+): Promise<Config> {
+  const read = deps.readRepository ?? readRepositoryFromGh;
   return (
     await loadConfig({
       readConfig: async () => undefined,
-      repo: async () => readRepositoryFromGh(root),
+      repo: async () => read(root),
     })
   ).config!;
 }
@@ -126,12 +131,16 @@ export async function emptyConfigFor(root: string): Promise<Config> {
  * The project's configuration.
  *
  * A MISSING overlay is not an error here: `emptyConfigFor` semantics, with
- * `repo` still derived from `gh`. A MISSING or INVALID one is reported through
- * `problems`, and the bins that care (`doctor`) read those. A bin that merely
- * needs a setting reads the defaulted config and does not second-guess it —
- * except `repo`, which it must have.
+ * `repo` still derived from `gh`. An INVALID one is reported through
+ * `problems` — including a `repo` that `gh` answered with something that is not
+ * `owner/name` — and the bins that care (`doctor`) read those. A bin that
+ * merely needs a setting reads the defaulted config and does not second-guess
+ * it, except `repo`, which it must have.
  */
-export async function loadConfigFor(rootArg?: string): Promise<{
+export async function loadConfigFor(
+  rootArg?: string,
+  deps: ProjectDeps = {},
+): Promise<{
   readonly root: string;
   readonly config: Config;
   readonly present: boolean;
@@ -145,48 +154,30 @@ export async function loadConfigFor(rootArg?: string): Promise<{
   // relative to wherever it happened to be started would report "no overlay"
   // (or scaffold a second one) from any directory but one.
   const root = rootArg ?? (await findRepositoryRoot());
-  const path = configPath(root);
+  const read = deps.readRepository ?? readRepositoryFromGh;
   let text: string | undefined;
   try {
-    text = await readFile(path, "utf8");
+    text = await readFile(configPath(root), "utf8");
   } catch {
     text = undefined;
   }
 
-  if (text === undefined) {
-    return {
-      root,
-      config: await emptyConfigFor(root),
-      present: false,
-      problems: [],
-    };
-  }
+  // One implementation of "file + gh -> config + problems", shared with the
+  // loader's own tests. `gh`'s answer is validated there, and its problem is
+  // KEPT here rather than replaced by an empty list.
+  const result = await loadConfig({
+    readConfig: async () => text,
+    repo: async () => read(root),
+  });
 
-  const parsed = parseConfig(text);
-  if (parsed.config === undefined) {
-    // Invalid: give the caller the problems, and a defaulted config so a bin
-    // that only needs `planDir` still runs and says something useful.
-    return {
-      root,
-      config: await emptyConfigFor(root),
-      present: true,
-      problems: parsed.problems,
-    };
-  }
-
-  const config =
-    parsed.config.repo !== undefined
-      ? parsed.config
-      : {
-          ...parsed.config,
-          ...(await repoFromGh(root)),
-        };
-  return { root, config, present: true, problems: parsed.problems };
-}
-
-async function repoFromGh(root: string): Promise<{ repo?: string }> {
-  const repo = readRepositoryFromGh(root);
-  return repo !== undefined ? { repo } : {};
+  return {
+    root,
+    // Invalid: a defaulted config, so a bin that only needs `planDir` still
+    // runs and says something useful.
+    config: result.config ?? (await emptyConfigFor(root, deps)),
+    present: text !== undefined,
+    problems: result.problems,
+  };
 }
 
 /** Convenience for a bin that wants the project root and nothing else. */

@@ -542,6 +542,14 @@ const KNOWN_FIELDS: ReadonlySet<string> = new Set([
   "waveStatusPort",
 ]);
 
+/** `gh` answered, but not with an `owner/name`. Never assigned, always reported. */
+function ghRepoProblem(repo: string): ConfigProblem {
+  return {
+    at: "repo",
+    message: `\`gh\` reported ${JSON.stringify(repo)}, which is not owner/name`,
+  };
+}
+
 /**
  * Load the overlay config for a project, deriving `repo` from `gh` when the
  * file omits it (OW-D7: `repo` defaults to `gh repo view --json nameWithOwner`).
@@ -555,6 +563,9 @@ export async function loadConfig(io: ConfigIo): Promise<ParseConfigResult> {
   const text = await io.readConfig();
   if (text === undefined) {
     const repo = await io.repo();
+    if (repo !== undefined && !REPO_PATTERN.test(repo)) {
+      return { config: emptyConfig(), problems: [ghRepoProblem(repo)] };
+    }
     return {
       config: { ...emptyConfig(), ...(repo !== undefined ? { repo } : {}) },
       problems: [],
@@ -570,13 +581,7 @@ export async function loadConfig(io: ConfigIo): Promise<ParseConfigResult> {
   if (!REPO_PATTERN.test(repo)) {
     return {
       config: parsed.config,
-      problems: [
-        ...parsed.problems,
-        {
-          at: "repo",
-          message: `\`gh\` reported ${JSON.stringify(repo)}, which is not owner/name`,
-        },
-      ],
+      problems: [...parsed.problems, ghRepoProblem(repo)],
     };
   }
   return { config: { ...parsed.config, repo }, problems: parsed.problems };
