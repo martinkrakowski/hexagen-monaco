@@ -225,7 +225,7 @@ export async function fetchAllThreads(
  * The disposition itself: ONE class comment on the PR conversation
  * (`addComment`), then a `resolveReviewThread` for every member — one
  * request for the whole class. The two verbs in one mutation: a resolver
- * without the comment leaves the reply cost (F2) unchanged, and a comment
+ * without the comment leaves the reply cost unchanged, and a comment
  * without the resolves is just a comment. The variables are declared by
  * the same count that `sweep` binds, so the query shape cannot drift from
  * what is sent.
@@ -308,8 +308,7 @@ interface SweepReply extends PullRequestShape {
  *
  * The tool posts and resolves what it is told to. Whether the finding is
  * real is a judgement made against the code before the text is written —
- * the budget's own rules exist to keep that judgement out of the tool
- * (V-D3).
+ * the budget's own rules exist to keep that judgement out of the tool.
  */
 export async function sweep(
   plan: SweepPlan,
