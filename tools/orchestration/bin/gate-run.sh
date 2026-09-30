@@ -175,7 +175,7 @@ release_lock() {
     # The release's status and diagnostics are not discarded: a release that
     # failed (or was refused — see gate-lock) must be reported, never
     # announced as released.
-    if HEXAGEN_GATE_CALLER_PID=$$ sh "$LOCK_SCRIPT" release "$LANE"; then
+    if HEXAGEN_GATE_CALLER_PID=$$ /bin/sh "$LOCK_SCRIPT" release "$LANE"; then
       printf '%s\n' "gate: lock released, heartbeat stopped"
     else
       release_failed=1
@@ -222,7 +222,7 @@ start_heartbeat() {
       # instead of refreshing whoever replaced us. Its failure is recorded in
       # a marker file the foreground gate checks at every locked-step boundary
       # — a dead loop is a zombie its parent's kill -0 cannot see.
-      if HEXAGEN_GATE_CALLER_PID=$$ sh "$LOCK_SCRIPT" heartbeat >/dev/null 2>&1; then
+      if HEXAGEN_GATE_CALLER_PID=$$ /bin/sh "$LOCK_SCRIPT" heartbeat >/dev/null 2>&1; then
         continue
       fi
       printf '%s\n' "lost" > "$HB_FAILED" 2>/dev/null
@@ -247,7 +247,7 @@ check_lock_intact() {
   if [ -z "$HEARTBEAT_PID" ] || ! kill -0 "$HEARTBEAT_PID" 2>/dev/null; then
     return 1
   fi
-  HEXAGEN_GATE_CALLER_PID=$$ sh "$LOCK_SCRIPT" verify "$LANE" >/dev/null 2>&1
+  HEXAGEN_GATE_CALLER_PID=$$ /bin/sh "$LOCK_SCRIPT" verify "$LANE" >/dev/null 2>&1
 }
 
 # Run one step with its output captured, replayed for the human, and scanned for
@@ -284,7 +284,7 @@ while IFS="$TAB" read -r name cmd; do
   if is_locked_step "$name" && [ "$LOCK_HELD" -eq 0 ]; then
     # The caller's pid travels in HEXAGEN_GATE_CALLER_PID: the lock must outlive
     # this acquire call, so it names this shell, not the gate-lock child.
-    HEXAGEN_GATE_CALLER_PID=$$ sh "$LOCK_SCRIPT" acquire "$LANE"
+    HEXAGEN_GATE_CALLER_PID=$$ /bin/sh "$LOCK_SCRIPT" acquire "$LANE"
     acq=$?
     if [ "$acq" -ne 0 ]; then
       printf '%s\n' "gate: could not acquire the gate lock (exit $acq) — 75 means busy: sleep and retry" >&2

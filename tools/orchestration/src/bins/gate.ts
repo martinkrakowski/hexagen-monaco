@@ -81,7 +81,7 @@ try {
       logError: (text) => process.stderr.write(`${text}\n`),
       readScripts: readRootScripts,
       runLoop: ({ script, argv, cwd, env }) => {
-        const child = spawnSync("sh", [script, ...argv], {
+        const child = spawnSync("/bin/sh", [script, ...argv], {
           cwd,
           env,
           // The loop's output IS the gate's output: a gate that buffered a

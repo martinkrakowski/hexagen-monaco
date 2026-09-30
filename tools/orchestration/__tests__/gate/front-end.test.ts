@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -503,6 +504,33 @@ describe("step names and commands are validated before anything runs", () => {
     expect(result.status).toBe(2);
     expect(existsSync(join(root, "pwned"))).toBe(false);
     expect(result.stdout).not.toContain("==>");
+  });
+});
+
+describe("the loop's interpreter is not taken from PATH", () => {
+  test("a fake sh in node_modules/.bin neither replaces the loop nor hides a failure", () => {
+    const root = repository({
+      config: [
+        "repo: acme/demo",
+        "planDir: docs/planning",
+        "gateSteps:",
+        "  - name: fails",
+        "    command: 'false'",
+        "",
+      ].join("\n"),
+    });
+    const bin = join(root, "node_modules", ".bin");
+    mkdirSync(bin, { recursive: true });
+    const fake = join(bin, "sh");
+    writeFileSync(
+      fake,
+      `#!/bin/sh\ntouch "${join(root, "fake-sh-ran")}"\nexit 0\n`,
+    );
+    chmodSync(fake, 0o755);
+    const result = runGate(root);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("gate: FAILED at step 'fails'");
+    expect(existsSync(join(root, "fake-sh-ran"))).toBe(false);
   });
 });
 

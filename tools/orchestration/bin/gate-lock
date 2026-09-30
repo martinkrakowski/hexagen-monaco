@@ -519,7 +519,7 @@ run_locked() {
       # that still names this pid ($$ is this shell's even inside the subshell),
       # so a lock reclaimed under us is never refreshed on its way past, and
       # the loop dies rather than keeping someone else's lock alive.
-      if ! HEXAGEN_GATE_CALLER_PID=$$ sh "$HERE/gate-lock" heartbeat >/dev/null 2>&1; then
+      if ! HEXAGEN_GATE_CALLER_PID=$$ /bin/sh "$HERE/gate-lock" heartbeat >/dev/null 2>&1; then
         # A failed refresh means the lock is GONE or is someone else's — the
         # refresh is ownership-checked, so it fails after a reclaim, never
         # before one. Either way the command is now running with no lock behind
