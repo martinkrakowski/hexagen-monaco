@@ -26,5 +26,5 @@ export interface TraceAppendInput {
  * — see docs/kernel/TRACE.md. Never rewrites or truncates existing lines.
  */
 export interface TraceWritePort {
-  appendLine(input: TraceAppendInput): Promise<Result<void>>;
+  appendLine(input: TraceAppendInput): Promise<Result<void, Error>>;
 }

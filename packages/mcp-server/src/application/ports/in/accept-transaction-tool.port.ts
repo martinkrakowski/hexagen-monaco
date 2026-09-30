@@ -37,6 +37,13 @@ export interface AcceptTransactionToolResult {
   previous_status: string;
   new_status: string;
   applied?: { message: string; details: Record<string, unknown> };
+  /**
+   * Set when the accept succeeded (the mutation is committed and cannot be
+   * rolled back from here) but appending the Trace evidence line failed.
+   * Surfaced rather than swallowed, so a caller can tell the commit
+   * happened without its audit record — see docs/kernel/TRACE.md.
+   */
+  trace_write_error?: string;
 }
 
 export interface AcceptTransactionToolPort {

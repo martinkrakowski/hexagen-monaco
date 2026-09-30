@@ -111,7 +111,7 @@ class EventBusFake implements EventBusPort {
 
 class TraceWriteSpy implements TraceWritePort {
   lines: TraceRecord[] = [];
-  async appendLine(input: TraceAppendInput): Promise<Result<void>> {
+  async appendLine(input: TraceAppendInput): Promise<Result<void, Error>> {
     this.lines.push({
       grant_id: input.grant_id,
       goal_id: input.goal_id,

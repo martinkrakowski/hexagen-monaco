@@ -86,15 +86,18 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
       const grantCheck = this.checkGrant(input.grant, pending);
 
       if (!grantCheck.allowed) {
-        await this.appendTrace(
+        const traceResult = await this.appendTrace(
           input,
           tx.id,
           pending,
           haltReasonFor(grantCheck.reason),
         );
+        const reason = traceResult.success
+          ? grantCheck.reason
+          : `${grantCheck.reason}; additionally, trace evidence write failed: ${traceResult.error.message}`;
         return {
           success: false,
-          error: new Error(grantCheck.reason),
+          error: new Error(reason),
         };
       }
 
@@ -138,7 +141,12 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
         };
       }
 
-      await this.appendTrace(input, tx.id, pending, "completed");
+      const traceResult = await this.appendTrace(
+        input,
+        tx.id,
+        pending,
+        "completed",
+      );
 
       return {
         success: true,
@@ -147,6 +155,9 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
           previous_status: previousStatus,
           new_status: committed.status,
           applied,
+          ...(traceResult.success
+            ? {}
+            : { trace_write_error: traceResult.error.message }),
         },
       };
     } catch (error) {
@@ -192,21 +203,28 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
     return { allowed: true };
   }
 
+  /**
+   * Returns the write's own Result rather than swallowing it: a caller
+   * that commits a mutation but loses its evidence line needs to know,
+   * not be told a silent success (docs/kernel/TRACE.md — an accept
+   * without a Trace line is a defect, one layer up from a write with no
+   * grant check at all).
+   */
   private async appendTrace(
     input: AcceptTransactionToolInput,
     transactionId: string,
     pending: ReturnType<typeof readPendingMutation>,
     haltReason: HaltReason,
-  ): Promise<void> {
+  ): Promise<Result<void, Error>> {
     const grant = input.grant;
-    if (!grant?.id) return;
+    if (!grant?.id) return { success: true, value: undefined };
 
     const toolName = pending
       ? deriveMutationRef(pending).tool
       : "hexagen_accept_transaction";
     const now = this.now().toISOString();
 
-    await this.traceWritePort.appendLine({
+    return this.traceWritePort.appendLine({
       grant_id: grant.id,
       goal_id: input.goal_id ?? input.transaction_id,
       tool_call: {

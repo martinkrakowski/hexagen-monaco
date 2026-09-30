@@ -27,7 +27,7 @@ function digest(value: unknown): string {
 export class TraceWriteAdapter implements TraceWritePort {
   constructor(private readonly workspaceRoot: string) {}
 
-  async appendLine(input: TraceAppendInput): Promise<Result<void>> {
+  async appendLine(input: TraceAppendInput): Promise<Result<void, Error>> {
     try {
       const trace: TraceRecord = {
         grant_id: input.grant_id,

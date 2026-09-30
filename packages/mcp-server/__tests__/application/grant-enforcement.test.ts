@@ -87,7 +87,7 @@ class EventBusFake implements EventBusPort {
 
 class TraceWriteSpy implements TraceWritePort {
   lines: TraceRecord[] = [];
-  async appendLine(input: TraceAppendInput): Promise<Result<void>> {
+  async appendLine(input: TraceAppendInput): Promise<Result<void, Error>> {
     this.lines.push({
       grant_id: input.grant_id,
       goal_id: input.goal_id,
@@ -105,6 +105,14 @@ class TraceWriteSpy implements TraceWritePort {
       ended_at: input.ended_at,
     });
     return { success: true, value: undefined };
+  }
+}
+
+class FailingTraceWriteSpy implements TraceWritePort {
+  calls = 0;
+  async appendLine(): Promise<Result<void, Error>> {
+    this.calls += 1;
+    return { success: false, error: new Error("disk full") };
   }
 }
 
@@ -260,5 +268,64 @@ describe("Grant enforcement at hexagen_accept_transaction", () => {
     assert.match(String(result.error), /mode 'propose'/);
     assert.equal(h.write.writes.length, 0);
     assert.equal(h.trace.lines[0]?.halt_reason, "grant_denied");
+  });
+
+  it("surfaces trace_write_error when the Trace write fails, without hiding a successful accept", async () => {
+    const write = new ManifestWriteSpy();
+    const scaffolding = new ScaffoldingStub();
+    const events = new EventBusFake();
+    const trace = new FailingTraceWriteSpy();
+    const tm = new InMemoryTransactionManager();
+    const accept = new AcceptTransactionToolUseCase(
+      tm,
+      write,
+      scaffolding,
+      events,
+      trace,
+      () => NOW,
+    );
+    const proposed = await new CreateContextToolUseCase(tm).execute({
+      name: "billing",
+      type: "core",
+    });
+    const result = await accept.execute({
+      transaction_id: proposed.transactionId ?? "",
+      grant: baseGrant(),
+    });
+    assert.equal(result.success, true);
+    assert.deepEqual(write.writes, ["registerBoundedContext"]);
+    if (result.success) {
+      assert.match(String(result.value.trace_write_error), /disk full/);
+    }
+    assert.equal(trace.calls, 1);
+  });
+
+  it("folds a Trace write failure into the deny reason when the grant is also denied", async () => {
+    const write = new ManifestWriteSpy();
+    const scaffolding = new ScaffoldingStub();
+    const events = new EventBusFake();
+    const trace = new FailingTraceWriteSpy();
+    const tm = new InMemoryTransactionManager();
+    const accept = new AcceptTransactionToolUseCase(
+      tm,
+      write,
+      scaffolding,
+      events,
+      trace,
+      () => NOW,
+    );
+    const proposed = await new CreateContextToolUseCase(tm).execute({
+      name: "billing",
+      type: "core",
+    });
+    const result = await accept.execute({
+      transaction_id: proposed.transactionId ?? "",
+      grant: baseGrant({ contexts: ["local-llm"] }),
+    });
+    assert.equal(result.success, false);
+    assert.match(String(result.error), /does not include context 'billing'/);
+    assert.match(String(result.error), /trace evidence write failed: disk full/);
+    assert.equal(write.writes.length, 0);
+    assert.equal(trace.calls, 1);
   });
 });
