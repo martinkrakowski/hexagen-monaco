@@ -39,6 +39,21 @@ describe("parseHandoff", () => {
     );
   });
 
+  test.each([
+    "/etc/x.test.ts",
+    "../../x.test.ts",
+    "a/../../x.test.ts",
+    "..",
+    "C:\\x.test.ts",
+  ])("refuses a declared file outside the repository: %s", (file) => {
+    expect(() => parse({ files: [file] })).toThrow(/outside the repository/);
+    expect(() => parse({ files: [file] })).toThrow(HandoffError);
+  });
+
+  test("accepts a relative path that stays inside, even after a .. segment", () => {
+    expect(parse({ files: ["a/../b/c.test.ts", "./d.test.ts"] })).toBeDefined();
+  });
+
   test("refuses an empty files list", () => {
     expect(() => parse({ files: [] })).toThrow(/non-empty array/);
     expect(() => parse({ files: [""] })).toThrow(/non-empty array/);

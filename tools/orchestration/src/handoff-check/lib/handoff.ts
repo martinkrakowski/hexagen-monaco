@@ -1,3 +1,4 @@
+import { isAbsolute, posix } from "node:path";
 import type { Handoff, RuleBinding } from "./types.js";
 
 export class HandoffError extends Error {}
@@ -35,6 +36,29 @@ function parseRule(raw: unknown, index: number): RuleBinding {
   };
 }
 
+/**
+ * A declared file must stay inside the repository. The handoff is data a lane
+ * wrote, and its `files` are read and handed to a test runner; an absolute
+ * path or a `..` climb would read and execute something outside the project.
+ * The check is lexical, so it needs no root and cannot be defeated by a path
+ * that does not exist yet.
+ */
+function repoRelative(file: string): string {
+  const normalised = posix.normalize(file.replace(/\\/g, "/"));
+  if (
+    isAbsolute(file) ||
+    isAbsolute(normalised) ||
+    /^[A-Za-z]:/.test(file) ||
+    normalised === ".." ||
+    normalised.startsWith("../")
+  ) {
+    throw new HandoffError(
+      `files: ${JSON.stringify(file)} is outside the repository — a declared file must be a relative path that stays inside it`,
+    );
+  }
+  return file;
+}
+
 export function parseHandoff(text: string): Handoff {
   let raw: unknown;
   try {
@@ -61,7 +85,7 @@ export function parseHandoff(text: string): Handoff {
   return {
     version: 1,
     lane: str(raw["lane"], "lane"),
-    files: strings(raw["files"], "files"),
+    files: strings(raw["files"], "files").map(repoRelative),
     rules: parsed,
   };
 }
