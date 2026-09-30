@@ -26,7 +26,7 @@ the name is what a human reads on the status page at a glance.
 
 ```text
 wave:  <plan-slug>-w<NN>        <plan-slug>-w03
-lane:  <plan-id>-<what-it-does>  <plan-id>-layer-props   <plan-id>-template-library
+lane:  <plan-id>-<what-it-does>  <plan-id>-parse-input   <plan-id>-report-export
 ```
 
 ### Never a bare id, or a wave with no plan slug
@@ -150,7 +150,7 @@ a scanned directory must also run the framework's route preparation itself.**
 
 ### A green local gate is not a green CI
 
-A green local gate is not a green CI. Found 2026-09-08 by the hexagen-monaco orchestrator, which
+A green local gate is not a green CI. Found by the hexagen-monaco orchestrator, which
 hit the same class in its own repo: it ran the stated gate, passed, and reddened `main` on
 `typecheck:test` — a step the stated gate never included. **Rule: when you write a gate into a
 brief, diff it against the CI workflow first. Whatever CI runs and the gate does not, name in the
@@ -281,7 +281,7 @@ brief's mistake faithfully, which costs the full cycle and passes review.
    dispatching any lane from it**, whenever the plan *introduces or rewrites lanes* or *changes a
    premise*. It is read-only by construction, so it returns a review and cannot patch around what it
    finds. On its first use it caught a rule in an **already-dispatched** brief that contradicted both
-   the plan and the code — a counter tracked per track where the plan defines it per motion kind —
+   the plan and the code — a counter the brief tracks per item where the plan defines it per group —
    which the lane would otherwise have pinned in a test. The lane was stopped with nothing committed.
    Nothing else needs this seat; it is not a review gate on prose.
 
@@ -364,7 +364,7 @@ brief's mistake faithfully, which costs the full cycle and passes review.
    anything commits**: a mutation applies a change to the source and restores it at the end, so a
    run that dies in the middle leaves the source mutated and the next commit ships it. The check is
    five lines — for each manifest entry, assert its `before` text is present and its `after` text is
-   not. It ran four times on 2026-09-16 (0 stranded each time) and is cheap enough to be
+   not. It ran four times on one day (0 stranded each time) and is cheap enough to be
    unconditional; a killed verification is the one moment the working tree can be silently wrong.
 
 ### The merge bin enforces this

@@ -18,8 +18,8 @@ You are the **ORCHESTRATOR**. Plan: `$plan`. Wave: `$wave`. If either is empty, 
 proceed — do not guess a plan file.
 
 The full runbook is the delegated-implementation-pipeline document (stage detail, prompt
-templates A–D, invariants, failure playbook) and the orchestrator-kickoff-prompt document, both
-shipped beside this file. **Read the plan and both documents before acting.** This file is the
+templates A–D, invariants, failure playbook) and the orchestrator-kickoff-prompt document, at
+`docs/workflows/delegated-implementation-pipeline.md` and `docs/workflows/orchestrator-kickoff-prompt.md`. **Read the plan and both documents before acting.** This file is the
 operating contract and wins where they differ; it deliberately does not copy them, so they
 cannot drift apart.
 
@@ -219,8 +219,12 @@ output for a cell, the cell is *unknown* — a valid answer. A confident wrong o
       declaration will implement the subset the brief happened to mention, and each field it omits
       ships untested.
     - **Write one test requirement per field**, so a missed field fails a test instead of shipping.
+    - **If a value is parsed from a string, name the hazards**: leading zeros, values past
+      `Number.MAX_SAFE_INTEGER`, delimiters that can appear in the data.
+    - **If the lane compares or gates on state, list the inputs and their refresh cadence.** Two
+      sides collected at different times need a carve-out, not a threshold.
 
-(why: [rationale](references/rationale.md#four-defects-on-2026-09-16-came-from-briefs-that-failed-exactly-this))
+(why: [rationale](references/rationale.md#four-defects-came-from-briefs-that-failed-exactly-this))
 
    The tell is an adjective standing where a list belongs. When you write one, stop and enumerate.
 
@@ -385,7 +389,7 @@ locked decision; or a seat runs out of credit.
 - **Never spawn a funded model seat to reproduce a defect.** Reproduce dispatch and launcher
   behaviour with a stub process, never a paid CLI. (why: [rationale](references/rationale.md#never-spawn-a-funded-model-seat-to-reproduce-a-defect))
 
-   - **Touching a manifest arms it.** CI replays only the manifests a change *touches*, so editing
+- **Touching a manifest arms it.** CI replays only the manifests a change *touches*, so editing
   one for an unrelated reason pulls it into the replay set. `hexagen-orchestration-mutate-anchors`
   checks every anchor cheaply ahead of the replay, and also checks whether the `command`'s `-t` still
   selects a test — verify it against the test file's own listing before you record it. Re-anchor

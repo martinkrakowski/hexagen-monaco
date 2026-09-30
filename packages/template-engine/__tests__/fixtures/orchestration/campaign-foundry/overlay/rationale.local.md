@@ -404,3 +404,30 @@ From `source/references/rationale.md` lines 433–444 — the test-selection che
   patterns, 207 proved by syntax, 5 listed, ~8s all in. **When you write a `-t`, verify it selects
   before you record it** (`yarn vitest list <file> -t '<pattern>'` prints the tests it picks, or
   nothing), and escape the metacharacters in a title you are copying.
+
+## Originals of paragraphs the generic skill words without a date or an incident link
+
+The generic skill drops an incident date, or repoints a link to a renamed heading. The original
+paragraphs stay here, verbatim, so nothing is lost.
+
+From `source/SKILL.md` — the why-link that targeted the heading before it was renamed.
+
+(why: [rationale](references/rationale.md#four-defects-on-2026-09-16-came-from-briefs-that-failed-exactly-this))
+
+From `source/references/rationale.md` — the paragraph that carried a discovery date.
+
+A green local gate is not a green CI. Found 2026-09-08 by the hexagen-monaco orchestrator, which
+hit the same class in its own repo: it ran the stated gate, passed, and reddened `main` on
+`typecheck:test` — a step the stated gate never included. **Rule: when you write a gate into a
+brief, diff it against the CI workflow first. Whatever CI runs and the gate does not, name in the
+brief as what a green does not cover.**
+
+From `source/references/rationale.md` — the remediation step that carried the date of the incident.
+
+3. **Remediate.** Merge verified findings into a fix brief (Template C), listing refuted items with
+   reasons. **After any interrupted or killed `mutate:verify`, scan for a stranded mutation before
+   anything commits**: a mutation applies a change to the source and restores it at the end, so a
+   run that dies in the middle leaves the source mutated and the next commit ships it. The check is
+   five lines — for each manifest entry, assert its `before` text is present and its `after` text is
+   not. It ran four times on 2026-09-16 (0 stranded each time) and is cheap enough to be
+   unconditional; a killed verification is the one moment the working tree can be silently wrong.
