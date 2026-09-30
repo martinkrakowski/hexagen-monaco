@@ -97,6 +97,12 @@ export interface InitDeps {
    * names it instead. Optional so a caller with no such notion keeps working.
    */
   readonly occupied?: (path: string) => Promise<boolean>;
+  /**
+   * The root-relative path of an existing ANCESTOR of `path` that is not a
+   * directory (a regular `.lane` file, say), or `undefined`. Writing under it
+   * would throw, so `initProject` refuses and names it. Optional, as `occupied`.
+   */
+  readonly blockedAncestor?: (path: string) => Promise<string | undefined>;
   readonly write: (path: string, contents: string) => Promise<void>;
   /** The project's `.hexagen-template-config.json`, or `undefined` when absent. */
   readonly readTemplateConfig: () => Promise<string | undefined>;
@@ -428,6 +434,15 @@ export async function initProject(
   const refusal = configRefusal("init", "scaffold", loaded);
   if (refusal !== undefined) return { code: 2, lines: refusal };
   for (const file of SCAFFOLD_FILES) {
+    const blocker = await deps.blockedAncestor?.(file.path);
+    if (blocker !== undefined) {
+      return {
+        code: 2,
+        lines: [
+          `init: refusing to scaffold: ${blocker} exists but is not a directory, so ${file.path} cannot be written under it. Remove or rename it, then retry.`,
+        ],
+      };
+    }
     if ((await deps.occupied?.(file.path)) === true) {
       return {
         code: 2,

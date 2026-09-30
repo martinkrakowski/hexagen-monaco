@@ -7,7 +7,11 @@
  */
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { isFile, isOccupiedByNonFile } from "../internal/fs-probe.js";
+import {
+  isFile,
+  isOccupiedByNonFile,
+  nonDirectoryAncestor,
+} from "../internal/fs-probe.js";
 import { loadConfigFor } from "../internal/project.js";
 import { TEMPLATE_CONFIG_PATH, initProject } from "../init/init.js";
 
@@ -17,6 +21,7 @@ const at = (path: string): string => `${loaded.root}/${path}`;
 const { code, lines } = await initProject(loaded, {
   exists: (path) => isFile(at(path)),
   occupied: (path) => isOccupiedByNonFile(at(path)),
+  blockedAncestor: (path) => nonDirectoryAncestor(loaded.root, path),
   write: async (path, contents) => {
     const full = at(path);
     await mkdir(dirname(full), { recursive: true });
