@@ -79,7 +79,7 @@ try {
       env: { ...process.env, PATH: pathWithLocalBins },
       log: (text) => process.stdout.write(text),
       logError: (text) => process.stderr.write(`${text}\n`),
-      scripts: readRootScripts(),
+      readScripts: readRootScripts,
       runLoop: ({ script, argv, cwd, env }) => {
         const child = spawnSync("sh", [script, ...argv], {
           cwd,

@@ -70,11 +70,14 @@ export interface GateCliDeps {
   readonly log: (text: string) => void;
   readonly logError: (text: string) => void;
   /**
-   * The root `package.json`'s `scripts` map, or `undefined` when there is no
-   * readable `package.json`. `undefined` and an empty map behave identically:
-   * every `yarn <script>` step names a script that is not there.
+   * Reads the root `package.json`'s `scripts` map: `undefined` when there is
+   * no readable `package.json`. `undefined` and an empty map behave
+   * identically: every `yarn <script>` step names a script that is not there.
+   *
+   * A function, not a value, so the read happens only on the real-run path:
+   * `--print-steps` must never touch `package.json`.
    */
-  readonly scripts: Readonly<Record<string, unknown>> | undefined;
+  readonly readScripts: () => Readonly<Record<string, unknown>> | undefined;
   readonly runLoop: (spawn: GateSpawn) => number;
 }
 
@@ -173,7 +176,7 @@ export function runGate(
     return 0;
   }
 
-  const planned = planSkips(steps, deps.scripts);
+  const planned = planSkips(steps, deps.readScripts());
   if ("refused" in planned) {
     deps.logError(planned.refused);
     return EXIT_UNUSABLE;

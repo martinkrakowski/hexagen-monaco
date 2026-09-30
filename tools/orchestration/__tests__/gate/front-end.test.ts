@@ -9,7 +9,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import type { Config } from "../../src/internal/config.js";
+import { runGate as runGateCli } from "../../src/gate/cli.js";
 
 /**
  * The gate's front end, at the built bin.
@@ -330,6 +332,49 @@ describe("skips (a skipped step is never a passed step)", () => {
     expect(result.stdout).toContain("ran the env check");
     expect(result.stdout).not.toContain("SKIPPED");
     expect(result.stdout).toContain("gate: 1/1 steps passed");
+  });
+});
+
+describe("--print-steps and package.json", () => {
+  test("never reads package.json: the reader is not called", () => {
+    const readScripts = vi.fn(() => ({}));
+    const runLoop = vi.fn(() => 0);
+    const out: string[] = [];
+    const code = runGateCli(
+      ["--print-steps"],
+      {
+        config: {
+          gateSteps: [{ name: "build", command: "yarn build" }],
+        } as unknown as Config,
+        present: true,
+        problems: [],
+      },
+      {
+        env: {},
+        log: (text) => out.push(text),
+        logError: () => undefined,
+        readScripts,
+        runLoop,
+      },
+      "/loop.sh",
+      "/root",
+    );
+    expect(code).toBe(0);
+    expect(out.join("")).toBe("build\tyarn build\n");
+    expect(readScripts).not.toHaveBeenCalled();
+    expect(runLoop).not.toHaveBeenCalled();
+  });
+
+  test("an unreadable package.json still prints the steps and exits 0", () => {
+    const root = repository({
+      config: WITH_BOTH_MUTATE_STEPS,
+    });
+    // A directory at the path: readFileSync throws EISDIR.
+    rmSync(join(root, "package.json"));
+    mkdirSync(join(root, "package.json"));
+    const result = runGate(root, ["--print-steps"]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("build\tyarn build\n");
   });
 });
 
