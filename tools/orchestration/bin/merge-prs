@@ -1,11 +1,406 @@
-#!/bin/sh
-# hexagen-orchestration-merge-prs — not yet ported.
+#!/usr/bin/env zsh
 #
-# Placeholder for OW-D14's canonical sixteen-bin list. The bin name and its
-# bin/merge-prs path are FINAL and pinned here so no later lane touches package.json;
-# the implementing lane replaces this file and nothing else.
+# hexagen-orchestration-merge-prs — sequentially refresh, verify and squash-merge
+# a set of PRs.
 #
-# A stub must never exit 0: a caller that shells out to a bin and reads the exit
-# code would otherwise see a completed step that never ran.
-echo "hexagen-orchestration-merge-prs: not yet ported" >&2
-exit 2
+# Usage:
+#   bin/merge-prs [--logdir <dir>] "<pr>|<worktree-or-empty>|<branch>|<lane-or-empty>|<wave-or-empty>" ...
+#
+# Example:
+#   bin/merge-prs "42|../wt-row-grammar|feat/row-grammar" "43||fix/typo"
+#   bin/merge-prs "44|../wt-seal-reserved|RX-2-reserved-slots|wave-provisioning-wv-2"
+#
+# For each PR, in order:
+#   0. The pre-PR-review gate, ONLY when the spec names a lane: refuse the
+#      whole run before touching git or the forge at all — a refused lane
+#      costs no fetch, no push and no CI run — unless
+#      `npx --no-install hexagen-orchestration-plan-review pre-pr-check <lane> --wave <wave>
+#      [--logdir <dir>]` exits 0. An empty lane field is today's behaviour
+#      exactly: no lane, no gate, no wave required. A lane given with an empty
+#      wave is a malformed spec and dies outright, since the gate cannot be
+#      asked anything without one.
+#   1. Refresh the branch from origin/<main>. Conflicts are auto-resolved ONLY for
+#      ordinary text conflicts in append-only files (the project's own pattern)
+#      by keeping both sides; anything else — a different path, a modify/delete,
+#      a binary conflict, a failed resolution — aborts the merge and exits
+#      non-zero.
+#   2. Push the refreshed branch.
+#   3. Wait for CI on the new head — poll until checks are REGISTERED, then watch
+#      the same API until the check that gates this repository has concluded. A
+#      fixed sleep races the forge: when the refresh push outruns registration,
+#      the check list reports "no checks reported", `--fail-fast` treats that as a
+#      failure, and the merge aborts on a PR that is perfectly healthy.
+#   4. Wait a bounded settle period for review bots (a wait, not proof any bot ran),
+#      then ask the merge condition of `npx --no-install hexagen-orchestration-sweep gate`:
+#      zero unresolved review threads on the final head, and a head unchanged since
+#      its check-runs were read. Both are decided in TypeScript.
+#   5. Squash-merge.
+# Then remove the worktrees and delete the merged branches, and fast-forward main.
+#
+# When the worktree field is empty a temporary worktree is created for the refresh and
+# removed afterwards, so EVERY pr is refreshed and re-verified — never merged stale.
+#
+# Why sequential: each merge changes main, so every later PR must be re-verified against
+# it. Why not `gh pr merge --auto`: repos without auto-merge enabled reject it. Why no
+# `--delete-branch` on merge: git refuses to delete a branch that a worktree holds, so
+# branches are deleted after the worktrees are removed.
+set -u -o pipefail
+
+REPO=$(git rev-parse --show-toplevel) || exit 1
+MAIN=${MAIN_BRANCH:-main}
+
+die() { echo "ERROR: $*" >&2; exit 1 }
+
+# A leading --logdir names the wave log directory outright, for every spec in
+# this run that carries a lane. Omitted, `pre-pr-check` resolves it itself —
+# the same resolution the event writer uses — so this script never invents a
+# default of its own to drift from that one.
+LOGDIR_OVERRIDE=""
+if [[ $# -ge 1 && "$1" == "--logdir" ]]; then
+  [[ $# -ge 2 ]] || die "--logdir requires a directory"
+  LOGDIR_OVERRIDE="$2"
+  shift 2
+fi
+
+# The repository every `gh` call in this run is about. `gh` otherwise infers one
+# from the working directory's remotes, which need not be the project's: the
+# overlay's `repo` is the one source, asked ONCE here, and exported as GH_REPO so
+# every `gh pr` call and every `{owner}/{repo}` placeholder in a `gh api` path
+# resolves to it. A GH_REPO the caller already exported is honoured only when it
+# agrees; two answers to "which repository" is a refusal, not a choice.
+CONFIG_REPO=$(npx --no-install hexagen-orchestration-sweep config repo) \
+  || die "could not resolve the repository from the project overlay — refusing to act on an inferred one"
+[[ -n "$CONFIG_REPO" ]] \
+  || die "the project overlay resolved no repository — refusing to act on an inferred one"
+if [[ -n "${GH_REPO:-}" && "$GH_REPO" != "$CONFIG_REPO" ]]; then
+  die "GH_REPO is $GH_REPO but the project overlay says $CONFIG_REPO — refusing to guess which is meant"
+fi
+export GH_REPO="$CONFIG_REPO"
+
+# The check whose conclusion gates a merge (a regular expression over check-run
+# names). A run that registers instantly — a review bot — must never satisfy
+# the wait on its own.
+#
+# There is deliberately no default here. The project owns the pattern, in
+# `.agents/orchestration/config.yaml`, and this script asks the package for the
+# resolved value ONCE, before the loop, so every PR in a run is judged by the
+# same check. A caller that exports REQUIRED_CHECK is taken at its word and no
+# lookup happens. A lookup that fails or answers nothing dies here rather than
+# downstream: an empty pattern matches EVERY check name, and a gate that matched
+# everything would pass a PR whose build never ran.
+if [[ -z "${REQUIRED_CHECK:-}" ]]; then
+  REQUIRED_CHECK=$(npx --no-install hexagen-orchestration-sweep config requiredCheck) \
+    || die "could not resolve REQUIRED_CHECK from the project overlay — refusing to gate on an unknown check"
+  [[ -n "$REQUIRED_CHECK" ]] \
+    || die "the project overlay resolved no REQUIRED_CHECK — refusing to gate on an empty pattern"
+fi
+# Whatever its source, the pattern must compile. `sweep checks` compiles it, and
+# an empty array is enough input to make it do so, so a bad pattern dies here,
+# before the first fetch or push, instead of after a PR has been refreshed and
+# pushed. Run from the repository, where npx resolves the bins.
+( cd "$REPO" && printf '[]' | npx --no-install hexagen-orchestration-sweep checks >/dev/null ) \
+  || die "REQUIRED_CHECK is not a valid pattern — see above"
+
+# How long the review bots get to post on the refreshed head before the merge
+# condition is asked about. Bounded: a bot that has not run yet is invisible to
+# a check-run read, so this waits, but a wave must not be able to stall here.
+# This is this script's own setting, not the overlay's: it is about how long an
+# OPERATOR waits, not about what the project is.
+REVIEW_SETTLE_SECONDS=${REVIEW_SETTLE_SECONDS:-120}
+
+# Auto-resolve the current merge, or fail. Only ordinary text conflicts (index stages
+# 1+2+3, regular file, conflict markers present) in append-only paths are eligible —
+# and the pattern is the project's, read through the package, never a shell default
+# that would shadow it.
+resolve_append_only_or_die() {
+  # NB: never name a local `path` in zsh — it is tied to $PATH and shadowing it
+  # empties PATH inside the function (every git/awk/sort call then fails).
+  local conflicts file stages abs
+  # `git ls-files -u` is the canonical unmerged listing; `git diff --diff-filter=U`
+  # carries diff exit-code semantics that vary with config.
+  conflicts=$(git ls-files -u | awk '{print $4}' | sort -u)
+  [[ -n "$conflicts" ]] || die "merge failed with no conflicted paths (check the working tree)"
+
+  for file in ${(f)conflicts}; do
+    # Package resolution: `npx --no-install` finds the bins only from inside the
+    # repository that has them installed, and this function also runs in a
+    # throwaway worktree under $TMPDIR, which has no node_modules. So both calls
+    # run from $REPO in a subshell. `append-only` tests the path as written
+    # (repo-relative); `keep-both` resolves a relative path against the repository
+    # root rather than the caller's directory, so it is handed an absolute one.
+    ( cd "$REPO" && npx --no-install hexagen-orchestration-sweep append-only "$file" ) \
+      || { git merge --abort; die "UNEXPECTED CONFLICT in: ${conflicts//$'\n'/ }" }
+    # 1=base 2=ours 3=theirs. Anything else is modify/delete or add/add of a special file.
+    stages=$(git ls-files -u -- "$file" | awk '{print $3}' | sort -u | tr '\n' ',')
+    [[ "$stages" == "1,2,3," ]] \
+      || { git merge --abort; die "non-content conflict (stages $stages) in $file — resolve by hand" }
+    git ls-files -u -- "$file" | awk '{print $1}' | grep -qv '^100644$' \
+      && { git merge --abort; die "non-regular-file conflict in $file — resolve by hand" }
+    grep -q '^<<<<<<< ' "$file" \
+      || { git merge --abort; die "no conflict markers in $file (binary or already resolved) — resolve by hand" }
+  done
+
+  for file in ${(f)conflicts}; do
+    abs="$PWD/$file"
+    ( cd "$REPO" && npx --no-install hexagen-orchestration-sweep keep-both "$abs" ) \
+      || { git merge --abort; die "keep-both failed on $file" }
+    git add -- "$file" || { git merge --abort; die "git add failed for $file" }
+  done
+
+  [[ -z "$(git ls-files -u)" ]] \
+    || { git merge --abort; die "unmerged entries remain after resolution" }
+  git commit -q --no-edit || die "merge commit failed after resolution"
+  echo "resolved append-only conflicts: ${conflicts//$'\n'/ }"
+}
+
+# Merge origin/$MAIN into the checked-out branch here, resolving only append-only files.
+refresh_here() {
+  git merge -q --no-edit "origin/$MAIN" || resolve_append_only_or_die
+}
+
+# Every check run on a commit, as one JSON object per line, across ALL pages: a
+# repository with more than one page of runs would otherwise hide a failing run
+# on page two. `--jq` runs per page, so the output is NDJSON, which `sweep
+# checks` reads as it reads an array.
+fetch_runs() {
+  gh api --paginate "repos/{owner}/{repo}/commits/$1/check-runs?per_page=100" \
+    --jq '.check_runs[] | {n:.name, s:.status, c:.conclusion}' 2>/dev/null
+}
+
+typeset -a WORKTREES BRANCHES
+for spec in "$@"; do
+  # Array-split on "|", not the old ${%%|*}/${#*|} chain: that chain reused
+  # trailing text for a field a shorter spec never gave it, once a fourth and
+  # fifth field existed to fall into. An out-of-range element is a parameter
+  # not set under `set -u`, so every field defaults explicitly instead.
+  typeset -a fields
+  fields=("${(@s:|:)spec}")
+  pr="${fields[1]:-}"; worktree="${fields[2]:-}"; branch="${fields[3]:-}"
+  lane="${fields[4]:-}"; wave="${fields[5]:-}"
+  WORKTREES+=("$worktree"); BRANCHES+=("$branch")
+
+  # The pre-PR-review merge gate — before ANY of this PR's own work, so a
+  # refusal costs no fetch, no push and no CI run. An empty lane is today's
+  # behaviour exactly: no gate, no wave required. `pre-pr-check` itself decides
+  # risk (a `normal` row always passes) — this script never reads the plan.
+  if [[ -n "$lane" ]]; then
+    [[ -n "$wave" ]] || die "PR #$pr: a lane ($lane) was given with no wave — the pre-PR-review gate needs both"
+    typeset -a preprcheck_args
+    preprcheck_args=(pre-pr-check "$lane" --wave "$wave")
+    [[ -z "$LOGDIR_OVERRIDE" ]] || preprcheck_args+=(--logdir "$LOGDIR_OVERRIDE")
+    ( cd "$REPO" && npx --no-install hexagen-orchestration-plan-review "${preprcheck_args[@]}" )
+    preprcheck_status=$?
+    # Distinguish a REFUSAL (exit 1, the gate ran and said no) from every
+    # other non-zero exit (2 is pre-pr-check's own usage error; anything
+    # else is the bin or the process itself failing to run at all) — a
+    # refusal and a broken gate are different problems, and the message
+    # must say which one this is.
+    if [[ "$preprcheck_status" -eq 1 ]]; then
+      die "PR #$pr ($lane): the pre-PR-review gate refused the merge — see above"
+    elif [[ "$preprcheck_status" -ne 0 ]]; then
+      die "PR #$pr ($lane): the pre-PR-review gate could not run (exit $preprcheck_status) — see above"
+    fi
+  fi
+
+  echo "=== PR #$pr ($branch)"
+
+  cd "$REPO" || die "cannot cd to $REPO"
+  git fetch -q origin "$MAIN" || die "git fetch origin $MAIN failed — refusing to merge against a stale ref"
+
+  if [[ -n "$worktree" && -d "$worktree" ]]; then
+    cd "$worktree" || die "cannot cd to $worktree"
+    refresh_here
+    git push -q origin "$branch" || die "push failed for $branch"
+    pushed_sha=$(git rev-parse HEAD)
+    cd "$REPO" || die "cannot cd back to $REPO"
+  else
+    # No worktree supplied: refresh in a throwaway one so this PR is not merged stale.
+    # Detached at origin/<branch>, then push HEAD to the branch ref: `git worktree add`
+    # refuses a branch that is already checked out somewhere else, which is the common
+    # case (the main checkout, or another lane's worktree).
+    git fetch -q origin "$branch" || die "cannot fetch $branch"
+    tmp=$(mktemp -d "${TMPDIR:-/tmp}/merge-prs-XXXXXX") || die "mktemp failed"
+    git worktree add -q --detach "$tmp" "origin/$branch" \
+      || { rm -rf "$tmp"; die "cannot create temp worktree for $branch" }
+    ( cd "$tmp" && refresh_here && git push -q origin "HEAD:refs/heads/$branch" ) \
+      || { git worktree remove --force "$tmp"; die "refresh/push failed for $branch" }
+    pushed_sha=$(git -C "$tmp" rev-parse HEAD)
+    git worktree remove --force "$tmp" || die "cannot remove temp worktree $tmp"
+  fi
+
+  # Wait for the forge to REGISTER checks on the new head before watching them.
+  # A fixed sleep is a race: when the refresh push outruns registration, the PR
+  # check list reports "no checks reported", `--fail-fast` treats that as a
+  # failure, and the merge aborts on a PR that is perfectly healthy. Observed on
+  # a real lane whose refresh push outran registration. Poll for checks to exist,
+  # then watch; a PR that genuinely has no checks configured still errors out,
+  # but only after we have given the forge a fair chance to say so.
+  # Poll the NEW HEAD's check-runs, not the PR's check list. The PR-level list
+  # answers at PR level and is satisfied by a check that registered instantly (a
+  # review bot) or by one carried from the pre-refresh head — so it returns >0
+  # while the head that `--watch` resolves still has none, and the watch reports
+  # "no checks reported" anyway. That is how the first version of this guard still
+  # lost the race, twice. Re-read the head each pass rather than pinning it once:
+  # `--watch` resolves the PR's head independently, so a push landing mid-poll
+  # would leave the guard asking about a commit the watch has already moved past
+  # — the same guard-and-watch-disagree shape as the bug this whole block exists to
+  # fix. An empty answer counts as not-yet-registered rather than aborting, because
+  # a transient API hiccup is not a verdict.
+  # Ask about the commit THIS script just pushed, never about whatever `gh` says the
+  # head is. Observed on a real lane: after the refresh push, `gh pr view --json
+  # headRefOid` still answered the previous SHA for a while; that SHA's runs had
+  # just been CANCELLED by the new push, so "not success" read as a failed PR while
+  # the real head's checks were pending. If the forge later reports a head that is
+  # not ours, someone else pushed — stop rather than verify a commit we did not
+  # refresh.
+  head_sha=$pushed_sha
+  registered=0
+  for _ in $(seq 1 40); do            # up to ~10 minutes at 15s
+    forge_head=$(gh pr view "$pr" --json headRefOid --jq .headRefOid 2>/dev/null || true)
+    if [ -n "$forge_head" ] && [ "$forge_head" != "$head_sha" ] && [ "$(git merge-base --is-ancestor "$head_sha" "$forge_head" 2>/dev/null; echo $?)" = "0" ]; then
+      die "PR #$pr head moved to $forge_head after our push of $head_sha — someone else pushed; not merging"
+    fi
+    if [ -n "$head_sha" ]; then
+      # Registered means the REQUIRED check has a run on this head. The pattern is
+      # applied by `sweep checks`, never spliced into a jq program: a pattern with
+      # a backslash or a quote in it would break the program, and a broken program
+      # reads exactly like "nothing registered yet". A gh that fails, or answers
+      # nothing, is "not yet"; a `checks` that cannot read what gh printed is not.
+      if runs=$(fetch_runs "$head_sha") && [ -n "$runs" ]; then
+        summary=$(printf '%s' "$runs" | npx --no-install hexagen-orchestration-sweep checks) \
+          || die "could not read the check runs for #$pr — not merging"
+        n="${${(s: :)summary}[2]#required=}"
+        if [ "${n:-0}" -gt 0 ]; then registered=1; break; fi
+      fi
+    fi
+    sleep 15
+  done
+  [ "$registered" -eq 1 ] \
+    || { echo "NO CHECKS REGISTERED for #$pr after ~10m — not merging"; exit 1 }
+  # Do NOT use `gh pr checks --watch` here. Observed on a real lane: the
+  # check-runs API for the head reported 2 runs registered, and `--watch` on the
+  # same PR still said "no checks reported" — the two resolve the head differently
+  # for a window after a push, and `--fail-fast` turns that window into an aborted
+  # merge on a healthy PR. Poll the same API the registration guard used, until
+  # every run has concluded.
+  # Both loops key on REQUIRED_CHECK, not on "whatever has registered": observed on
+  # two real lanes, a review bot's run registers and concludes within seconds of the
+  # push, so "the list is non-empty and every run is completed" was true before the
+  # build workflow had registered at all, and the script declared green beside a
+  # `pending` line. The question is never "has everything so far finished" — it is
+  # "has the check that gates this repo finished".
+  echo "waiting for checks on $head_sha …"
+  concluded=0
+  summary=""
+  for _ in $(seq 1 120); do          # up to ~30 minutes at 15s
+    runs=$(fetch_runs "$head_sha") || runs=''
+    [[ -n "$runs" ]] || runs='[]'
+    # One read of the array, one answer, in TypeScript: the counts this loop
+    # needs (how many runs have not concluded, how many match the pattern, and
+    # which concluded badly) come from a single parse rather than from three
+    # separate interpreter invocations over the same JSON. The line is
+    # `pending=<n> required=<n> bad=<names>`, always three fields, always with
+    # `bad=` present and the names joined by `,` and no spaces — which is what
+    # makes the split below safe. A non-zero exit means the array could not be
+    # read at all, and a merge decided on a half-read array is a merge decided
+    # on nothing.
+    summary=$(printf '%s' "$runs" | npx --no-install hexagen-orchestration-sweep checks) \
+      || die "could not read the check runs for #$pr — not merging"
+    pending="${${(s: :)summary}[1]#pending=}"
+    required="${${(s: :)summary}[2]#required=}"
+    if [[ "$pending" == "0" && "${required:-0}" -gt 0 ]]; then
+      concluded=1; break
+    fi
+    sleep 15
+  done
+  [ "$concluded" -eq 1 ] || { echo "CHECKS STILL PENDING for #$pr after ~30m — not merging"; exit 1 }
+  # Everything after `bad=`: a check name may itself contain spaces, so the
+  # third field is not a word but the remainder of the line.
+  bad="${summary#*bad=}"
+  [ -z "$bad" ] || { echo "CHECKS FAILED for #$pr: $bad"; gh pr checks "$pr"; exit 1 }
+  echo "checks green on $head_sha"; gh pr checks "$pr" 2>&1 | tail -3
+
+  # Give the review bots a bounded window to post on THIS head. A check-run
+  # conclusion says nothing about a bot that has not run yet, and the whole
+  # point of the merge condition is the finding that lands after CI is green.
+  # This is a wait, not a proof: only bots that re-run on push can post on a
+  # refreshed head at all — the review-agent workflows trigger on
+  # opened/reopened/ready_for_review only — and nothing here checks that any bot
+  # actually ran. What IS enforced is below: zero unresolved threads, and a head
+  # unchanged since its checks were read.
+  # nounset and pipefail are on but errexit is not, so a bad duration must be
+  # refused here: `sleep` failing would otherwise skip the wait silently.
+  [[ "$REVIEW_SETTLE_SECONDS" == <-> ]] \
+    || die "REVIEW_SETTLE_SECONDS must be a whole number of seconds (got '$REVIEW_SETTLE_SECONDS')"
+  echo "settling ${REVIEW_SETTLE_SECONDS}s for review bots on $head_sha …"
+  sleep "$REVIEW_SETTLE_SECONDS" || die "the review-bot settle wait failed — not merging #$pr"
+
+  # The merge condition itself, decided in TypeScript
+  # (`hexagen-orchestration-sweep gate`): zero unresolved review threads on
+  # every page, and a head that is still the SHA whose check-runs were just read.
+  # Why not here: the runners have no zsh, so a condition written in this file is
+  # one the gate can never test — which is how a script ends up enforcing less
+  # than the stage it implements.
+  # 0 = merge, 1 = refused (every reason printed, including the offending
+  # thread's author), 2 = the call itself was wrong. Only 0 merges.
+  npx --no-install hexagen-orchestration-sweep gate --pr "$pr" --sha "$head_sha" \
+    || die "merge condition unmet for #$pr — not merging"
+
+  # Bind the merge to the head that was verified: the check-runs above and the
+  # gate's --sha are both $head_sha, and without this a push landing after the
+  # gate passed would be merged unverified. The forge refuses when the head moved.
+  gh pr merge "$pr" --squash --match-head-commit "$head_sha" \
+    || die "squash-merge failed for #$pr — the head may have moved since $head_sha was verified"
+  echo "merged #$pr"
+done
+
+# Everything above this line is the merge, and it has happened. What follows is
+# housekeeping, and it must not report success it did not achieve: a worktree
+# that would not go, a branch that would not delete, or a local ${MAIN} that did
+# not catch up is something the operator has to act on, so each is a WARN and the
+# run ends "DONE WITH WARNINGS" with a non-zero exit instead of "ALL DONE".
+cd "$REPO" || die "cannot cd to $REPO"
+warnings=0
+warn() { echo "WARN: $*" >&2; warnings=1 }
+for worktree in $WORKTREES; do
+  [[ -n "$worktree" && -d "$worktree" ]] || continue
+  if git worktree remove --force "$worktree"; then
+    echo "removed $worktree"
+  else
+    warn "could not remove worktree $worktree"
+  fi
+done
+git worktree prune || warn "git worktree prune failed"
+for branch in $BRANCHES; do
+  [[ -n "$branch" ]] || continue
+  # A branch that is already gone is the normal case (a temporary worktree never
+  # made a local one; the forge may delete a merged head itself), not a failure.
+  if git show-ref --verify --quiet "refs/heads/$branch"; then
+    git branch -D "$branch" >/dev/null || warn "could not delete local branch $branch"
+  fi
+  # `ls-remote --exit-code` answers 2 for "no such ref" (nothing to delete) and
+  # anything else non-zero (128 on a network or auth failure) for "could not
+  # ask". Only the first is a reason to skip; the second must not be read as
+  # "already gone", or a branch that still exists is reported as cleaned up.
+  git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1
+  ls_status=$?
+  if [[ $ls_status -eq 0 ]]; then
+    if git push -q origin --delete "$branch"; then
+      echo "deleted origin/$branch"
+    else
+      warn "could not delete origin/$branch"
+    fi
+  elif [[ $ls_status -ne 2 ]]; then
+    warn "could not list origin/$branch"
+  fi
+done
+if git checkout -q "$MAIN" && git pull -q --ff-only origin "$MAIN"; then
+  git log --oneline -8
+else
+  die "merged, but the local $MAIN did not sync (checkout or pull --ff-only failed) — bring it up to date by hand$( [[ $warnings -eq 0 ]] || echo '; earlier WARN lines also need attention')"
+fi
+if [[ $warnings -ne 0 ]]; then
+  echo "DONE WITH WARNINGS"
+  exit 1
+fi
+echo "ALL DONE"
