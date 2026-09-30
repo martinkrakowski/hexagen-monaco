@@ -1,4 +1,4 @@
-import { repoFlag, SweepRefusal } from "./types.js";
+import { SweepRefusal } from "./types.js";
 import type {
   PullRequestShape,
   RepoRef,
@@ -370,15 +370,15 @@ export async function sweep(
 
   if (!post) return { commentUrl: null, resolvedThreadIds: [] };
 
-  // The disposition names the same repository the read did, so a run can never
-  // post its class comment to a different PR than the one it verified.
+  // No `--repo`: `gh api` does not take one. The repository is fixed by the
+  // node ids, which were read from it a moment ago (`subject` is the PR's id,
+  // each `thread` a thread of that PR), so a run cannot post its class comment
+  // to a PR other than the one it verified.
   const args = [
     "api",
     "graphql",
     "-f",
     `query=${dispositionMutation(ids.length)}`,
-    "--repo",
-    repoFlag(deps.repo),
   ];
   ids.forEach((id, i) => args.push("-f", `thread${i}=${id}`));
   args.push("-f", `subject=${prId}`, "-f", `body=${body}`);

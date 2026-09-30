@@ -154,7 +154,7 @@ describe("the repository every gh call is pointed at", () => {
     }
   });
 
-  test("the disposition mutation names the repository too, so a class is never posted elsewhere", async () => {
+  test("--post succeeds against a strict `gh api`: the mutation carries no --repo, the node ids fix the repository", async () => {
     const calls: string[][] = [];
     const h = harness({
       argv: [
@@ -182,7 +182,11 @@ describe("the repository every gh call is pointed at", () => {
     });
     expect(await runCli(h.io)).toBe(0);
     const write = calls.find((c) => c.some((a) => a.includes("mutation")))!;
-    expect(write[write.indexOf("--repo") + 1]).toBe("acme/demo");
+    // `gh api` has no --repo/-R (the harness's stub rejects them as the real
+    // CLI does). The subject and thread node ids are what pin the repository.
+    expect(write).not.toContain("--repo");
+    expect(write).not.toContain("-R");
+    expect(write).toContain("thread0=PRRT_a");
   });
 });
 

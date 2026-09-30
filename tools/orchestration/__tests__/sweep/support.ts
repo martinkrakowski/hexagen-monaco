@@ -48,6 +48,22 @@ export interface Harness {
 const NO_GH: SweepCliIo["gh"] = async () => "{}";
 
 /**
+ * The real CLI's answer to a flag `gh api` does not have. `gh api` takes no
+ * `--repo` and no `-R` (it addresses the forge by endpoint or query), so a
+ * stub that accepted either would pass a call the real `gh` refuses with exit 1
+ * and `unknown flag: --repo` — which is how a broken `--post` shipped once.
+ */
+export function strictApi(gh: SweepCliIo["gh"]): SweepCliIo["gh"] {
+  return async (args) => {
+    if (args[0] === "api") {
+      const bad = args.find((a) => a === "--repo" || a === "-R");
+      if (bad !== undefined) throw new Error(`unknown flag: ${bad}`);
+    }
+    return gh(args);
+  };
+}
+
+/**
  * A `runCli` io with every world stubbed. `over` replaces any part of it, so a
  * test that only cares about `gh` does not have to restate the rest.
  */
@@ -78,6 +94,8 @@ export function harness(
       env,
       gh: NO_GH,
       ...over,
+      // Every stub is strict for `api`, whatever a test replaced it with.
+      ...{ gh: strictApi(over.gh ?? NO_GH) },
     },
   };
 }
