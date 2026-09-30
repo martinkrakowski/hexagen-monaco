@@ -3,8 +3,10 @@ import {
   open as fsOpen,
   readdir as fsReaddir,
   readFile as fsReadFile,
+  realpath as fsRealpath,
+  stat as fsStat,
 } from "node:fs/promises";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { readEvents } from "../../internal/events.js";
 import { readBacklog } from "../../internal/backlog.js";
 import { artifactPathFor } from "../../internal/artifact.js";
@@ -45,6 +47,13 @@ export interface TailHandle {
 export interface CollectDeps {
   readonly readdir: (dir: string) => Promise<readonly string[]>;
   readonly readFile: (path: string) => Promise<string>;
+  /**
+   * Reads a plan file an EVENT named. The path is data from a log, so the real
+   * reader refuses anything that is not a regular file inside the repository
+   * (a device, a pipe, a symlink out) and anything over `PLAN_MAX_BYTES`,
+   * throwing a `PlanPathRefusal`. When absent, `readFile` is used.
+   */
+  readonly readPlan?: (path: string) => Promise<string>;
   readonly open: (path: string) => Promise<TailHandle>;
   readonly pgrep: (pattern: string) => Promise<number>;
   readonly gh: (args: readonly string[]) => Promise<string>;
@@ -82,6 +91,23 @@ export interface CollectDeps {
 export interface StatusBody extends WaveStatus {
   /** The message of the collection that failed, when one did. */
   readonly error?: string;
+}
+
+/** The most of a plan file an event's path may make the collector read. */
+export const PLAN_MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * A plan path that an event named and the collector will not read: outside the
+ * repository, not a regular file, or too large. It is a COLLECTION error — it
+ * propagates out of `collect` and reaches the page as the failure's message —
+ * because a plan path that cannot be trusted is not "the plan could not be
+ * read"; it is a log asking the collector to read something else.
+ */
+export class PlanPathRefusal extends Error {
+  constructor(path: string, why: string) {
+    super(`plan path ${JSON.stringify(path)} refused: ${why}`);
+    this.name = "PlanPathRefusal";
+  }
 }
 
 /** How much of a lane log travels with the observation (the EXIT marker lives at the end). */
@@ -472,12 +498,24 @@ async function planReviewFor(
       rowHashMissing: "the governing review named no plan file",
     };
   }
+  const planPath = fromRepoRoot(deps.repoRoot, facts.reviewedPlan);
+  const fromRoot = relative(deps.repoRoot, planPath);
+  if (
+    fromRoot === "" ||
+    fromRoot === ".." ||
+    fromRoot.startsWith(`..${sep}`) ||
+    isAbsolute(fromRoot)
+  ) {
+    throw new PlanPathRefusal(
+      facts.reviewedPlan,
+      "it resolves outside the repository",
+    );
+  }
   let planText: string | undefined;
   try {
-    planText = await deps.readFile(
-      fromRepoRoot(deps.repoRoot, facts.reviewedPlan),
-    );
-  } catch {
+    planText = await (deps.readPlan ?? deps.readFile)(planPath);
+  } catch (error) {
+    if (error instanceof PlanPathRefusal) throw error;
     return { ...facts, rowHashMissing: "the plan file could not be read" };
   }
   try {
@@ -1117,6 +1155,34 @@ export function realDepsFor(repoRoot: string): CollectDeps {
     planningDir: resolve(repoRoot, "docs/planning"),
     readdir: (dir) => fsReaddir(dir),
     readFile: (path) => fsReadFile(path, "utf8"),
+    readPlan: async (path) => {
+      // Resolve symlinks first: the lexical check above cannot see one.
+      const real = await fsRealpath(path);
+      const realRoot = await fsRealpath(repoRoot);
+      if (!real.startsWith(realRoot + sep)) {
+        throw new PlanPathRefusal(path, "it resolves outside the repository");
+      }
+      // Looked at BEFORE it is opened: opening a pipe for reading blocks until
+      // a writer appears.
+      if (!(await fsStat(real)).isFile()) {
+        throw new PlanPathRefusal(path, "it is not a regular file");
+      }
+      const fh = await fsOpen(real, "r");
+      try {
+        const st = await fh.stat();
+        if (!st.isFile())
+          throw new PlanPathRefusal(path, "it is not a regular file");
+        if (st.size > PLAN_MAX_BYTES) {
+          throw new PlanPathRefusal(
+            path,
+            `it is larger than ${PLAN_MAX_BYTES} bytes`,
+          );
+        }
+        return await fh.readFile("utf8");
+      } finally {
+        await fh.close();
+      }
+    },
     open: async (path) => {
       const fh = await fsOpen(path, "r");
       return {

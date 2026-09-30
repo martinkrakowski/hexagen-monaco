@@ -15,6 +15,7 @@ import {
   pgrepPattern,
   prFacts,
   PR_PULLS_JQ,
+  PLAN_MAX_BYTES,
   realDepsFor,
   resolveScanRoots,
   waveIdFromDirName,
@@ -24,7 +25,7 @@ import {
   type TailHandle,
 } from "../../src/wave-status/lib/collect.js";
 import type { WaveEvent, WaveStatus } from "../../src/internal/wave-types.js";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -2752,6 +2753,83 @@ describe("collect — the plan-review gate", () => {
     expect(lanes[0]?.reported?.stage).toBe("implement");
     expect(lanes[0]?.derived.log).toBeDefined();
     expect(lanes[0]?.derived.exit).toBe(0);
+  });
+
+  /** A dispatched lane whose governing review names `planPath` — data from a log. */
+  const eventsNaming = (planPath: string): string =>
+    `${JSON.stringify({
+      ts: "2026-09-28T10:00:00Z",
+      wave: "R",
+      lane: "_plan",
+      stage: "plan-review",
+      event: "settled",
+      detail: {
+        plan: planPath,
+        reviewer: "plan-review-seat",
+        rows: { "PV-7a": "aa" },
+        verdict: "clear",
+      },
+    })}\n${dispatchLine("PV-7a")}`;
+
+  test.each(["/dev/zero", "../../outside.md", "docs/../../outside.md"])(
+    "a plan path from an event that resolves outside the repository (%s) is a collection error, and is never read",
+    async (planPath) => {
+      const readFile = vi.fn(async (path: string): Promise<string> => {
+        throw new Error(`unexpected read of ${path}`);
+      });
+      const deps: CollectDeps = {
+        ...fakeDeps(tree(eventsNaming(planPath))),
+        readFile: async (path) =>
+          path.endsWith("events.jsonl")
+            ? eventsNaming(planPath)
+            : readFile(path),
+      };
+      await expect(collect(deps, ROOT, "2026-09-28T12:00:00Z")).rejects.toThrow(
+        /plan path .* refused: it resolves outside the repository/,
+      );
+      expect(readFile).not.toHaveBeenCalled();
+    },
+  );
+
+  test("the real reader refuses a plan path that is a directory, or over the size cap, and does not hang on a device", async () => {
+    const repo = await mkdtemp(join(tmpdir(), "wave-status-planpath-"));
+    const scan = await mkdtemp(join(tmpdir(), "wave-status-planscan-"));
+    await mkdir(join(repo, "docs", "planning", "a-directory.md"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(repo, "docs", "planning", "big.md"),
+      Buffer.alloc(PLAN_MAX_BYTES + 1, 0x61),
+    );
+    await mkdir(join(scan, "waveR"));
+    const collectNaming = async (planPath: string): Promise<WaveStatus> => {
+      await writeFile(
+        join(scan, "waveR", "events.jsonl"),
+        eventsNaming(planPath),
+      );
+      return collect(
+        {
+          ...realDepsFor(repo),
+          repo: REPO,
+          planningDir: join(repo, "docs", "planning"),
+          planVerifyArtifactPath: join(scan, "plan-verify.json"),
+          pgrep: async () => 0,
+          gh: async () => "[]",
+          git: async () => "",
+        },
+        scan,
+        "2026-09-28T12:00:00Z",
+      );
+    };
+    await expect(collectNaming("docs/planning/a-directory.md")).rejects.toThrow(
+      /refused: it is not a regular file/,
+    );
+    await expect(collectNaming("docs/planning/big.md")).rejects.toThrow(
+      /refused: it is larger than/,
+    );
+    await expect(collectNaming("/dev/zero")).rejects.toThrow(
+      /refused: it resolves outside the repository/,
+    );
   });
 
   test("a lane that never dispatched carries no plan-review facts", async () => {
