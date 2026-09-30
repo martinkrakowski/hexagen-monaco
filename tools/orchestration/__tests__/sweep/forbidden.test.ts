@@ -105,14 +105,14 @@ function filesUnder(dir: string): string[] {
 }
 
 /**
- * The test directories that exist. The merge-prs suite is added with the
- * merge-prs script, so this list grows in the same commit that adds the
- * directory — a grep that silently stopped watching a directory would be worse
+ * The test directories, walked whole. This list grows in the same commit that
+ * adds a directory — a grep that silently stopped watching one would be worse
  * than one that never watched it.
  */
 const OWN_DIRS: readonly string[] = [
   "__tests__/plan-review",
   "__tests__/sweep",
+  "__tests__/merge-prs",
 ];
 
 const files: readonly string[] = [
