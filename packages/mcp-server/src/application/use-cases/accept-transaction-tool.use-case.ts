@@ -1,6 +1,9 @@
 import type { EventBusPort } from "@hexagen/messaging";
 import type { Result } from "@hexagen/shared";
-import type { TransactionManagerPort } from "@hexagen/transaction-system";
+import type {
+  Transaction,
+  TransactionManagerPort,
+} from "@hexagen/transaction-system";
 import {
   checkGrantMode,
   checkGrantWindow,
@@ -13,6 +16,8 @@ import type { HaltReason } from "../kernel/trace.js";
 import {
   applyPendingManifestMutation,
   readPendingMutation,
+  type AppliedMutation,
+  type PendingManifestMutation,
 } from "../pending-manifest-mutation.js";
 import type {
   AcceptTransactionToolInput,
@@ -29,12 +34,6 @@ function isTerminalStatus(status: string): boolean {
   );
 }
 
-function haltReasonFor(reason: string): HaltReason {
-  if (/revoked/i.test(reason)) return "grant_revoked";
-  if (/expired/i.test(reason)) return "grant_expired";
-  return "grant_denied";
-}
-
 /**
  * AcceptTransactionToolUseCase — apply a pending manifest mutation, then
  * mark the transaction committed.
@@ -46,8 +45,8 @@ function haltReasonFor(reason: string): HaltReason {
  * "Enforcement point"): before any write port is touched, the caller-
  * supplied Grant is checked for presence, mode, expiry/revocation, and —
  * when the transaction carries a pending mutation — the mutation's tool,
- * context, and write path against the grant. Every accept or grant-deny
- * appends one Trace evidence line (docs/kernel/TRACE.md) via
+ * context, and write path(s) against the grant. Every accept, grant-deny,
+ * or failure appends one Trace evidence line (docs/kernel/TRACE.md) via
  * `TraceWritePort`.
  */
 export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
@@ -63,8 +62,11 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
   async execute(
     input: AcceptTransactionToolInput,
   ): Promise<Result<AcceptTransactionToolResult>> {
+    let tx: Transaction | null = null;
+    let pending: PendingManifestMutation | null = null;
+
     try {
-      const tx = this.transactionManager.get(input.transaction_id);
+      tx = this.transactionManager.get(input.transaction_id);
 
       if (!tx) {
         return {
@@ -82,7 +84,7 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
         };
       }
 
-      const pending = readPendingMutation(tx);
+      pending = readPendingMutation(tx);
       const grantCheck = this.checkGrant(input.grant, pending);
 
       if (!grantCheck.allowed) {
@@ -90,7 +92,7 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
           input,
           tx.id,
           pending,
-          haltReasonFor(grantCheck.reason),
+          grantCheck.code,
         );
         const reason = traceResult.success
           ? grantCheck.reason
@@ -108,6 +110,7 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
       );
 
       if (!claimed) {
+        await this.appendTrace(input, tx.id, pending, "error");
         return {
           success: false,
           error: new Error(
@@ -117,7 +120,7 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
       }
 
       const previousStatus = tx.status;
-      let applied: AcceptTransactionToolResult["applied"];
+      let applied: AppliedMutation | undefined;
 
       try {
         if (pending) {
@@ -129,12 +132,14 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
         }
       } catch (error) {
         this.transactionManager.fail(input.transaction_id, String(error));
+        await this.appendTrace(input, tx.id, pending, "error");
         return { success: false, error: error as Error };
       }
 
       const committed = this.transactionManager.commit(input.transaction_id);
 
       if (!committed) {
+        await this.appendTrace(input, tx.id, pending, "error");
         return {
           success: false,
           error: new Error("Failed to commit transaction"),
@@ -146,6 +151,7 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
         tx.id,
         pending,
         "completed",
+        applied,
       );
 
       return {
@@ -161,6 +167,9 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
         },
       };
     } catch (error) {
+      if (tx) {
+        await this.appendTrace(input, tx.id, pending, "error");
+      }
       return {
         success: false,
         error: error as Error,
@@ -171,17 +180,18 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
   /**
    * Grant present, mode "write", within its expiry/revocation window, and
    * — when there is a pending mutation to apply — that mutation's tool,
-   * context, and write path are all within the grant. Fail closed: any
+   * context, and write path(s) are all within the grant. Fail closed: any
    * missing or failing check denies before `compareAndSetStatus` claims
    * the transaction, so nothing is written and no compensation is needed.
    */
   private checkGrant(
     grant: Grant | undefined,
-    pending: ReturnType<typeof readPendingMutation>,
+    pending: PendingManifestMutation | null,
   ): GrantCheck {
     if (!grant) {
       return {
         allowed: false,
+        code: "grant_denied",
         reason: "No Grant supplied; refusing to accept",
       };
     }
@@ -196,6 +206,7 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
       const mutationCheck = checkMutationAgainstGrant(
         grant,
         deriveMutationRef(pending),
+        pending,
       );
       if (!mutationCheck.allowed) return mutationCheck;
     }
@@ -209,12 +220,19 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
    * not be told a silent success (docs/kernel/TRACE.md — an accept
    * without a Trace line is a defect, one layer up from a write with no
    * grant check at all).
+   *
+   * The call's `args`/`result` are the pending mutation's own input and
+   * (when the mutation actually ran) its outcome — not the accept
+   * wrapper's own `transaction_id`/halt_reason — so a reader digesting
+   * this record's tool_call is verifying the named mutation's evidence,
+   * not the accept call that carried it.
    */
   private async appendTrace(
     input: AcceptTransactionToolInput,
     transactionId: string,
-    pending: ReturnType<typeof readPendingMutation>,
+    pending: PendingManifestMutation | null,
     haltReason: HaltReason,
+    appliedResult?: AppliedMutation,
   ): Promise<Result<void, Error>> {
     const grant = input.grant;
     if (!grant?.id) return { success: true, value: undefined };
@@ -222,6 +240,10 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
     const toolName = pending
       ? deriveMutationRef(pending).tool
       : "hexagen_accept_transaction";
+    const args: unknown = pending
+      ? pending.input
+      : { transaction_id: input.transaction_id };
+    const result: unknown = appliedResult ?? { halt_reason: haltReason };
     const now = this.now().toISOString();
 
     return this.traceWritePort.appendLine({
@@ -229,8 +251,8 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
       goal_id: input.goal_id ?? input.transaction_id,
       tool_call: {
         name: toolName,
-        args: { transaction_id: input.transaction_id },
-        result: { halt_reason: haltReason },
+        args,
+        result,
         time: now,
       },
       halt_reason: haltReason,

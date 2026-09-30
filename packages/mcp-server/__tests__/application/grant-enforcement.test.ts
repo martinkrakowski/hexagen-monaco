@@ -324,7 +324,10 @@ describe("Grant enforcement at hexagen_accept_transaction", () => {
     });
     assert.equal(result.success, false);
     assert.match(String(result.error), /does not include context 'billing'/);
-    assert.match(String(result.error), /trace evidence write failed: disk full/);
+    assert.match(
+      String(result.error),
+      /trace evidence write failed: disk full/,
+    );
     assert.equal(write.writes.length, 0);
     assert.equal(trace.calls, 1);
   });

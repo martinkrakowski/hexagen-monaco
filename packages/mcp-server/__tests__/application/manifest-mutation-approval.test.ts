@@ -138,8 +138,8 @@ function grant(overrides: Partial<Grant> = {}): Grant {
     id: "grant-test",
     principal: "martin",
     agent: "test-agent",
-    contexts: ["billing", "local-llm", "shared", "x"],
-    paths: [MANIFEST_WRITE_PATH],
+    contexts: ["billing", "local-llm", "shared", "x", "stripe"],
+    paths: [MANIFEST_WRITE_PATH, "packages/billing/", "packages/stripe/"],
     tools: [
       "hexagen_create_context",
       "hexagen_add_dependency",

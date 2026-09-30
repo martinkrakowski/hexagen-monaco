@@ -90,12 +90,28 @@ describe("deriveMutationRef", () => {
   });
 });
 
+const createContextMutation: PendingManifestMutation = {
+  kind: "create-context",
+  input: { name: "billing", type: "core" },
+};
+
+const createPortMutation: PendingManifestMutation = {
+  kind: "create-port",
+  input: { domain_name: "billing", port_name: "P", type: "outbound" },
+};
+
+const scaffoldModuleMutation: PendingManifestMutation = {
+  kind: "scaffold-module",
+  input: { name: "billing", layer: "domain" },
+};
+
 describe("checkMutationAgainstGrant", () => {
   it("allows when tool, context, and manifest write path are all granted", () => {
-    const check = checkMutationAgainstGrant(grant(), {
-      tool: "hexagen_create_context",
-      context: "billing",
-    });
+    const check = checkMutationAgainstGrant(
+      grant(),
+      { tool: "hexagen_create_context", context: "billing" },
+      createContextMutation,
+    );
     assert.equal(check.allowed, true);
   });
 
@@ -103,15 +119,17 @@ describe("checkMutationAgainstGrant", () => {
     const check = checkMutationAgainstGrant(
       grant({ tools: ["hexagen_scaffold_module"] }),
       { tool: "hexagen_create_context", context: "billing" },
+      createContextMutation,
     );
     assert.equal(check.allowed, false);
   });
 
   it("an empty contexts list denies every mutation", () => {
-    const check = checkMutationAgainstGrant(grant({ contexts: [] }), {
-      tool: "hexagen_create_context",
-      context: "billing",
-    });
+    const check = checkMutationAgainstGrant(
+      grant({ contexts: [] }),
+      { tool: "hexagen_create_context", context: "billing" },
+      createContextMutation,
+    );
     assert.equal(check.allowed, false);
   });
 
@@ -119,9 +137,59 @@ describe("checkMutationAgainstGrant", () => {
     const check = checkMutationAgainstGrant(
       grant({ paths: ["packages/billing/"] }),
       { tool: "hexagen_create_context", context: "billing" },
+      createContextMutation,
     );
     assert.equal(check.allowed, false);
     if (!check.allowed) assert.match(check.reason, /manifest write target/);
+  });
+
+  it("denies create-port when the grant covers .architecture/ but not packages/<context>/", () => {
+    const check = checkMutationAgainstGrant(
+      grant({ tools: ["hexagen_create_port"], paths: [MANIFEST_WRITE_PATH] }),
+      { tool: "hexagen_create_port", context: "billing" },
+      createPortMutation,
+    );
+    assert.equal(check.allowed, false);
+    if (!check.allowed) assert.match(check.reason, /packages\/billing\//);
+  });
+
+  it("allows create-port when the grant covers both .architecture/ and packages/<context>/", () => {
+    const check = checkMutationAgainstGrant(
+      grant({
+        tools: ["hexagen_create_port"],
+        paths: [MANIFEST_WRITE_PATH, "packages/billing/"],
+      }),
+      { tool: "hexagen_create_port", context: "billing" },
+      createPortMutation,
+    );
+    assert.equal(check.allowed, true);
+  });
+
+  it("denies scaffold-module when max_files is smaller than its worst-case file count", () => {
+    const check = checkMutationAgainstGrant(
+      grant({
+        tools: ["hexagen_scaffold_module"],
+        paths: [MANIFEST_WRITE_PATH, "packages/billing/"],
+        max_files: 1,
+      }),
+      { tool: "hexagen_scaffold_module", context: "billing" },
+      scaffoldModuleMutation,
+    );
+    assert.equal(check.allowed, false);
+    if (!check.allowed) assert.match(check.reason, /max_files/);
+  });
+
+  it("allows scaffold-module when max_files covers its worst-case file count", () => {
+    const check = checkMutationAgainstGrant(
+      grant({
+        tools: ["hexagen_scaffold_module"],
+        paths: [MANIFEST_WRITE_PATH, "packages/billing/"],
+        max_files: 4,
+      }),
+      { tool: "hexagen_scaffold_module", context: "billing" },
+      scaffoldModuleMutation,
+    );
+    assert.equal(check.allowed, true);
   });
 });
 
@@ -159,6 +227,29 @@ describe("checkGrantWindow", () => {
       checkGrantWindow(active, new Date("2026-09-30T12:00:00.001Z")).allowed,
       false,
     );
+  });
+
+  it("denies a malformed expires_at instead of treating it as never-expiring", () => {
+    const malformed = grant({ expires_at: "not-a-date" });
+    const check = checkGrantWindow(
+      malformed,
+      new Date("2026-09-30T12:00:00.000Z"),
+    );
+    assert.equal(check.allowed, false);
+    if (!check.allowed) assert.match(check.reason, /invalid expires_at/);
+  });
+
+  it("denies a malformed revoked_at instead of ignoring it", () => {
+    const malformed = grant({
+      expires_at: "2026-09-30T18:00:00.000Z",
+      revoked_at: "not-a-date",
+    });
+    const check = checkGrantWindow(
+      malformed,
+      new Date("2026-09-30T12:00:00.000Z"),
+    );
+    assert.equal(check.allowed, false);
+    if (!check.allowed) assert.match(check.reason, /invalid revoked_at/);
   });
 });
 

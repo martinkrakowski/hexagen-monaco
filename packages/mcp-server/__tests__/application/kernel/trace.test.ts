@@ -81,6 +81,64 @@ describe("checkTrace — tool allowlist (new: not covered by the spike)", () => 
   });
 });
 
+describe("checkTrace — non-completed records document a refused attempt", () => {
+  it("is valid for a grant_denied record even though its tool is outside grant.tools", () => {
+    const check = checkTrace(
+      trace({
+        halt_reason: "grant_denied",
+        tool_calls: [
+          {
+            name: "hexagen_remove_context",
+            args_digest: "sha256:aaa",
+            result_digest: "sha256:bbb",
+            time: "2026-09-30T10:00:00.000Z",
+          },
+        ],
+      }),
+      [activeGrant],
+    );
+    assert.equal(check.valid, true);
+  });
+
+  it("is valid for a grant_expired record even though its call time is after expires_at", () => {
+    const expired: Grant = {
+      ...activeGrant,
+      expires_at: "2026-09-30T09:00:00.000Z",
+    };
+    const check = checkTrace(trace({ halt_reason: "grant_expired" }), [
+      expired,
+    ]);
+    assert.equal(check.valid, true);
+  });
+
+  it("still requires grant_id to resolve, even for a non-completed record", () => {
+    const check = checkTrace(
+      trace({ halt_reason: "error", grant_id: "grant-999" }),
+      [activeGrant],
+    );
+    assert.equal(check.valid, false);
+  });
+});
+
+describe("checkTrace — hexagen_accept_transaction is implicitly allowed", () => {
+  it("is valid for a completed, mutation-less accept naming a tool not in grant.tools", () => {
+    const check = checkTrace(
+      trace({
+        tool_calls: [
+          {
+            name: "hexagen_accept_transaction",
+            args_digest: "sha256:aaa",
+            result_digest: "sha256:bbb",
+            time: "2026-09-30T10:00:00.000Z",
+          },
+        ],
+      }),
+      [activeGrant],
+    );
+    assert.equal(check.valid, true);
+  });
+});
+
 describe("checkTrace — expiry/revocation window (Rule 2)", () => {
   it("is invalid after expires_at", () => {
     const expired: Grant = {

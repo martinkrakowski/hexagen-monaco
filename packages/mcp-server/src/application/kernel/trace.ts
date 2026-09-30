@@ -56,13 +56,25 @@ function isoToMillis(iso: string): number {
 }
 
 /**
+ * `hexagen_accept_transaction` itself is never listed in `grant.tools` —
+ * grants name the seven mutation tools they authorize, not the accept step
+ * that carries them. A record whose only call is this one documents an
+ * accept with no pending mutation (nothing was written), so it is always
+ * in-scope for whatever grant it cites.
+ */
+const IMPLICITLY_ALLOWED_TOOL = "hexagen_accept_transaction";
+
+/**
  * Retrospective validator for a Trace against the Grant(s) it names.
- * Checks, per tool call: the grant_id resolves to a known Grant, the call
- * falls within that grant's expiry/revocation window (docs/kernel/TRACE.md
- * Rules 2 and 3, same at-or-after / strictly-after asymmetry as
- * `checkGrantWindow`), and the call's tool name is one the grant actually
- * allows (docs/kernel/GRANT.md `tools`) — a trace line naming a tool
- * outside `grant.tools` is not valid evidence, whatever the timing.
+ * Checks that the grant_id resolves to a known Grant, and — only for a
+ * record whose `halt_reason` is "completed" — that each call falls within
+ * that grant's expiry/revocation window (docs/kernel/TRACE.md Rules 2 and
+ * 3) and names a tool the grant allows (docs/kernel/GRANT.md `tools`). A
+ * record with any other halt_reason documents a refused attempt, not an
+ * authorized write — the mutation's tool being outside `grant.tools`, or
+ * the grant being expired or revoked, is exactly why it was refused, so
+ * those two checks would otherwise reject the evidence of every denial
+ * they are supposed to explain.
  */
 export function checkTrace(
   trace: TraceRecord,
@@ -80,11 +92,18 @@ export function checkTrace(
     };
   }
 
+  if (trace.halt_reason !== "completed") {
+    return { valid: true };
+  }
+
   const expiresAt = isoToMillis(grant.expires_at);
   const revokedAt = grant.revoked_at ? isoToMillis(grant.revoked_at) : null;
 
   for (const call of trace.tool_calls) {
-    if (!grant.tools.includes(call.name)) {
+    if (
+      call.name !== IMPLICITLY_ALLOWED_TOOL &&
+      !grant.tools.includes(call.name)
+    ) {
       return {
         valid: false,
         reason: `Tool call '${call.name}' is not in grant '${grant.id}' tools`,

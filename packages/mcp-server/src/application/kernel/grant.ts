@@ -33,9 +33,26 @@ export interface MutationRef {
   readonly context: string;
 }
 
+/**
+ * Machine-readable denial category, set once at the point each check fails
+ * rather than re-derived later by pattern-matching the human-readable
+ * `reason` string (that string can embed caller-controlled values — a
+ * context or grant id containing the word "expired" — so matching against
+ * it is not safe; see accept-transaction-tool.use-case.ts `haltReasonFor`,
+ * which this field replaces).
+ */
+export type GrantDenialCode =
+  | "grant_denied"
+  | "grant_expired"
+  | "grant_revoked";
+
 export type GrantCheck =
   | { readonly allowed: true }
-  | { readonly allowed: false; readonly reason: string };
+  | {
+      readonly allowed: false;
+      readonly reason: string;
+      readonly code: GrantDenialCode;
+    };
 
 /**
  * The one path every monaco manifest mutation actually writes through
@@ -103,7 +120,48 @@ function isPathInGrant(grant: Grant, relativePath: string): boolean {
 }
 
 /**
- * Rule from GRANT.md "Enforcement point": all three independent checks
+ * The three scaffolding mutations write into `packages/<context>/` before
+ * the manifest is ever touched (`SyncEngineAdapter.createPort` /
+ * `createAdapter` / `scaffoldModule` — the target directory is derived from
+ * the mutation's own input, deterministically, before any file is written).
+ * A grant scoped to `.architecture/` alone does not cover that write, so it
+ * is checked as a second, independent required path for these three kinds.
+ * `create-context`, `add-dependency`, `remove-port`, and `remove-context`
+ * only ever touch the manifest.
+ */
+function additionalWritePath(mutation: PendingManifestMutation): string | null {
+  switch (mutation.kind) {
+    case "create-port":
+    case "create-adapter":
+    case "scaffold-module":
+      return `packages/${deriveMutationRef(mutation).context}/`;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Upper bound on the files a mutation can create, known from its kind alone
+ * (before any port is called): `create-port` and `create-adapter` each
+ * write exactly one file; `scaffold-module` writes at most four
+ * (`package.json`, `tsconfig.json`, `src/index.ts`, and the layer's
+ * `index.ts` — fewer when some already exist); every other kind only edits
+ * the manifest in place and creates nothing.
+ */
+function maxPossibleFiles(mutation: PendingManifestMutation): number {
+  switch (mutation.kind) {
+    case "create-port":
+    case "create-adapter":
+      return 1;
+    case "scaffold-module":
+      return 4;
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Rule from GRANT.md "Enforcement point": every independent check below
  * must hold, or the mutation is denied outright — no partial-match, no
  * warn-but-allow. An empty `grant.tools` or `grant.contexts` denies
  * everything by construction (nothing can match an empty allowlist).
@@ -111,23 +169,43 @@ function isPathInGrant(grant: Grant, relativePath: string): boolean {
 export function checkMutationAgainstGrant(
   grant: Grant,
   mutation: MutationRef,
+  pending: PendingManifestMutation,
 ): GrantCheck {
   if (!grant.tools.includes(mutation.tool)) {
     return {
       allowed: false,
+      code: "grant_denied",
       reason: `Grant does not include tool '${mutation.tool}'`,
     };
   }
   if (!grant.contexts.includes(mutation.context)) {
     return {
       allowed: false,
+      code: "grant_denied",
       reason: `Grant does not include context '${mutation.context}' (tool: ${mutation.tool})`,
     };
   }
   if (!isPathInGrant(grant, MANIFEST_WRITE_PATH)) {
     return {
       allowed: false,
+      code: "grant_denied",
       reason: `Grant does not include path '${MANIFEST_WRITE_PATH}' (the manifest write target)`,
+    };
+  }
+  const packagePath = additionalWritePath(pending);
+  if (packagePath && !isPathInGrant(grant, packagePath)) {
+    return {
+      allowed: false,
+      code: "grant_denied",
+      reason: `Grant does not include path '${packagePath}' (the scaffolding write target for tool: ${mutation.tool})`,
+    };
+  }
+  const cap = maxPossibleFiles(pending);
+  if (grant.max_files !== undefined && cap > grant.max_files) {
+    return {
+      allowed: false,
+      code: "grant_denied",
+      reason: `Grant's max_files (${grant.max_files}) is smaller than the up to ${cap} file(s) tool '${mutation.tool}' can create`,
     };
   }
   return { allowed: true };
@@ -141,19 +219,35 @@ export function checkMutationAgainstGrant(
  */
 export function checkGrantWindow(grant: Grant, now: Date): GrantCheck {
   const nowMillis = now.getTime();
-  if (grant.revoked_at) {
+  const expiresAtMillis = Date.parse(grant.expires_at);
+  if (Number.isNaN(expiresAtMillis)) {
+    return {
+      allowed: false,
+      code: "grant_expired",
+      reason: `Grant '${grant.id}' has an invalid expires_at timestamp: '${grant.expires_at}'`,
+    };
+  }
+  if (grant.revoked_at !== undefined) {
     const revokedAtMillis = Date.parse(grant.revoked_at);
+    if (Number.isNaN(revokedAtMillis)) {
+      return {
+        allowed: false,
+        code: "grant_revoked",
+        reason: `Grant '${grant.id}' has an invalid revoked_at timestamp: '${grant.revoked_at}'`,
+      };
+    }
     if (nowMillis >= revokedAtMillis) {
       return {
         allowed: false,
+        code: "grant_revoked",
         reason: `Grant '${grant.id}' was revoked at ${grant.revoked_at}`,
       };
     }
   }
-  const expiresAtMillis = Date.parse(grant.expires_at);
   if (nowMillis > expiresAtMillis) {
     return {
       allowed: false,
+      code: "grant_expired",
       reason: `Grant '${grant.id}' expired at ${grant.expires_at}`,
     };
   }
@@ -167,6 +261,7 @@ export function checkGrantMode(grant: Grant): GrantCheck {
   if (grant.mode !== "write") {
     return {
       allowed: false,
+      code: "grant_denied",
       reason: `Grant '${grant.id}' has mode '${grant.mode}'; only 'write' grants may accept transactions`,
     };
   }
