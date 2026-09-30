@@ -1,10 +1,12 @@
 import { describe, expect, test } from "vitest";
 import { readFile, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { mkdtempSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach } from "vitest";
 import {
+  LANE_DIR,
   OVERLAY_DIR,
   SCAFFOLD_FILES,
   TEMPLATE_CONFIG_PATH,
@@ -68,13 +70,21 @@ async function init(root: string, config: Config = emptyConfig()) {
   });
 }
 
-/** Every scaffolded file's bytes, keyed by name. */
+/** Every scaffolded file's bytes, keyed by its root-relative path. */
 async function snapshot(root: string): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
-  for (const name of await readdir(join(root, OVERLAY_DIR))) {
-    out[name] = await readFile(join(root, OVERLAY_DIR, name), "utf8");
+  for (const file of SCAFFOLD_FILES) {
+    out[file.path] = await readFile(join(root, file.path), "utf8");
   }
   return out;
+}
+
+/** A real git repository, because `git check-ignore` is the claim under test. */
+function gitRepository(): string {
+  const root = mkdtempSync(join(tmpdir(), "orchestration-init-git-"));
+  dirs.push(root);
+  expect(spawnSync("git", ["init", "-q"], { cwd: root }).status).toBe(0);
+  return root;
 }
 
 describe("§7 init: run twice, everything is byte-identical (F-14)", () => {
@@ -122,19 +132,32 @@ describe("§7 init: run twice, everything is byte-identical (F-14)", () => {
       result.outcomes.find((o) => o.file === "house-rules.md")?.action,
     ).toBe("skipped");
     expect(result.outcomes.filter((o) => o.action === "created")).toHaveLength(
-      3,
+      4,
     );
     expect(
       await readFile(join(root, OVERLAY_DIR, "house-rules.md"), "utf8"),
     ).toBe(mine);
   });
 
-  test("it scaffolds exactly the four files, under .agents/orchestration/", async () => {
+  test("it scaffolds four files under .agents/orchestration/ and one under .lane/", async () => {
     const root = project();
     await init(root);
-    expect((await readdir(join(root, OVERLAY_DIR))).sort()).toEqual(
-      [...SCAFFOLD_FILES].sort(),
-    );
+    expect((await readdir(join(root, OVERLAY_DIR))).sort()).toEqual([
+      "cast.md",
+      "config.yaml",
+      "house-rules.md",
+      "lessons.md",
+    ]);
+    expect((await readdir(join(root, LANE_DIR))).sort()).toEqual([
+      ".gitignore",
+    ]);
+    expect(SCAFFOLD_FILES.map((f) => f.path)).toEqual([
+      OVERLAY_DIR + "/config.yaml",
+      OVERLAY_DIR + "/house-rules.md",
+      OVERLAY_DIR + "/cast.md",
+      OVERLAY_DIR + "/lessons.md",
+      LANE_DIR + "/.gitignore",
+    ]);
   });
 
   test("the report says what it left alone, so silence never reads as 'nothing to do'", async () => {
@@ -143,8 +166,13 @@ describe("§7 init: run twice, everything is byte-identical (F-14)", () => {
     const second = await init(root);
     const text = formatReport(second.outcomes);
     expect(text).toContain("kept");
-    expect(text).toContain("left 4 untouched");
+    expect(text).toContain("left 5 untouched");
     expect(text).toContain("never overwritten");
+    // Both directories are named, because the scaffold no longer writes only one.
+    const fresh = await init(project());
+    expect(formatReport(fresh.outcomes)).toContain(
+      "into .agents/orchestration/ and .lane/.",
+    );
   });
 });
 
@@ -326,5 +354,97 @@ describe("the Wave Observability section follows the recorded agents_md answer",
     ).toBe(true);
     expect(readAgentsMdAnswer("{not json")).toBe(true);
     expect(readAgentsMdAnswer("[]")).toBe(true);
+  });
+});
+
+/**
+ * A-30 §4: a lane's brief lives at `<worktree>/.lane/brief.md`, and the
+ * orchestrator verifies it with `git check-ignore` BEFORE dispatching. A brief
+ * that is not ignored is a brief a lane can stage, and a lane that stages broadly
+ * commits its own instructions into the repository.
+ *
+ * These run `init` against a REAL git repository and then ask git itself, because
+ * the whole claim is a claim about git's resolution order, and a hand-rolled
+ * model of it proves nothing.
+ */
+describe("A-30 §4: .lane/.gitignore is a nested ignore file, not a root edit", () => {
+  const LANE_IGNORE_PATH = LANE_DIR + "/.gitignore";
+
+  test("it holds exactly '*' and '!.gitignore', so the file is itself tracked", async () => {
+    const root = project();
+    await init(root);
+    expect(await readFile(join(root, LANE_IGNORE_PATH), "utf8")).toBe(
+      "*\n!.gitignore\n",
+    );
+  });
+
+  test("git check-ignore says a brief is ignored, with NO root .gitignore edit", async () => {
+    const root = gitRepository();
+    await init(root);
+
+    // Nothing at the root was touched. The file that ignores the brief lives
+    // inside .lane/, and the engine cannot append to a root .gitignore (B-2).
+    const rootIgnore = await readFile(join(root, ".gitignore"), "utf8").catch(
+      () => "",
+    );
+    expect(rootIgnore, "init must not create a root .gitignore").toBe("");
+
+    await writeFile(join(root, LANE_DIR, "brief.md"), "# brief\n", "utf8");
+    const check = spawnSync("git", ["check-ignore", ".lane/brief.md"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    expect(check.status, check.stderr).toBe(0);
+    expect(check.stdout).toContain(".lane/brief.md");
+
+    // And the ignore file itself is trackable, which is the whole reason for the
+    // `!.gitignore` line: a file nothing can see is a file nobody commits, and a
+    // lane worktree without it stops ignoring briefs.
+    expect(
+      spawnSync("git", ["check-ignore", ".lane/.gitignore"], { cwd: root })
+        .status,
+      ".lane/.gitignore must NOT be ignored, or it is untrackable",
+    ).not.toBe(0);
+  });
+
+  test("a second run is byte-identical, .lane/.gitignore included", async () => {
+    const root = project();
+    const first = await init(root);
+    const afterFirst = await snapshot(root);
+    const second = await init(root);
+    expect(first.outcomes).toHaveLength(5);
+    expect(second.outcomes.every((o) => o.action === "skipped")).toBe(true);
+    expect(
+      second.outcomes.find((o) => o.path === LANE_IGNORE_PATH)?.action,
+    ).toBe("skipped");
+    expect(await snapshot(root)).toEqual(afterFirst);
+  });
+
+  test("an existing .lane/.gitignore is left untouched, edits and all", async () => {
+    const root = project();
+    await mkdir(join(root, LANE_DIR), { recursive: true });
+    const mine = "*\n!.gitignore\n!keep-me/\n";
+    await writeFile(join(root, LANE_IGNORE_PATH), mine, "utf8");
+
+    await init(root);
+
+    expect(await readFile(join(root, LANE_IGNORE_PATH), "utf8")).toBe(mine);
+  });
+
+  test("the scaffolded config.yaml documents both new fields and scaffolds neither", async () => {
+    const root = project();
+    await init(root);
+    const text = await readFile(join(root, OVERLAY_DIR, "config.yaml"), "utf8");
+    expect(text).toContain("laneHosts");
+    expect(text).toContain("seats");
+    // Documented, not declared: an entry here would be a lane host nobody chose.
+    expect(text).toMatch(/^# laneHosts: \[\]/m);
+    expect(text).toMatch(/^# seats: \[\]/m);
+    // And it still parses against the schema the comment describes.
+    const parsed = parseConfig(text);
+    expect(parsed.problems).toEqual([]);
+    expect(parsed.deprecations).toEqual([]);
+    expect(parsed.config?.laneHosts).toEqual([]);
+    expect(parsed.config?.seats).toEqual([]);
   });
 });

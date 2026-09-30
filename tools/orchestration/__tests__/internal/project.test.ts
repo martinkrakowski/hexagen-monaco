@@ -89,14 +89,20 @@ describe("F9: a schema error does not make doctor check the defaults", () => {
     exists: async () => true,
     hasCommand: async () => true,
     supportsWorktrees: async () => true,
-    httpReachable: async () => false,
+    runCheck: async () => "failed",
+    runRemote: async () => ({ status: "failed", stdout: "" }),
+    localUserEmail: async () => undefined,
   };
 
-  test("the unknown key, the port in forbiddenPorts and the unreachable URL are all reported in one run", async () => {
+  test("the unknown key, the port in forbiddenPorts and a failing host check are all reported in one run", async () => {
     const root = project(
       [
         "forbiddenPorts: [4318]",
-        "opencodeServerUrl: http://127.0.0.1:9",
+        "laneHosts:",
+        "  - name: local-opencode",
+        "    dispatch: [opencode, run, --attach, http://127.0.0.1:9]",
+        "    gate: full",
+        "    check: [curl, -sf, http://127.0.0.1:9/doc]",
         "nope: 1",
         "",
       ].join("\n"),
@@ -104,16 +110,17 @@ describe("F9: a schema error does not make doctor check the defaults", () => {
     const loaded = await loadConfigFor(root, {
       readRepository: () => "acme/demo",
     });
-    const probed: string[] = [];
+    const probed: string[][] = [];
     const { findings, exitCode } = await runDoctor(
       loaded.config,
       loaded.problems,
+      loaded.deprecations,
       loaded.present,
       {
         ...healthy,
-        httpReachable: async (url) => {
-          probed.push(url);
-          return false;
+        runCheck: async (argv) => {
+          probed.push([...argv]);
+          return "failed";
         },
       },
     );
@@ -126,10 +133,11 @@ describe("F9: a schema error does not make doctor check the defaults", () => {
     expect(
       failing.find((f) => f.check === "waveStatusPort")?.message,
     ).toContain("4318");
+    // The host's OWN check ran, on the argv the file wrote, not on a default.
     expect(
-      failing.find((f) => f.check === "opencode-server")?.message,
-    ).toContain("http://127.0.0.1:9 did not answer");
-    expect(probed).toEqual(["http://127.0.0.1:9"]);
+      failing.find((f) => f.check === "lane-host local-opencode"),
+    ).toBeDefined();
+    expect(probed).toEqual([["curl", "-sf", "http://127.0.0.1:9/doc"]]);
   });
 
   test("a file that is not YAML falls back to defaults, since there is nothing to read", async () => {
@@ -174,5 +182,43 @@ describe("an unreadable overlay is present-with-a-problem, never absent", () => 
     const loaded = await loadConfigFor(project(undefined), gh);
     expect(loaded.present).toBe(false);
     expect(loaded.problems).toEqual([]);
+  });
+});
+
+describe("A-30: loadConfigFor carries deprecations on every path", () => {
+  const gh = { readRepository: () => "acme/demo" };
+  const ALIAS = "opencodeServerUrl: http://127.0.0.1:4096\n";
+
+  test("a present file with the deprecated alias hands the deprecation to the bin", async () => {
+    const loaded = await loadConfigFor(project(ALIAS), gh);
+    expect(loaded.deprecations.map((d) => d.at)).toEqual(["opencodeServerUrl"]);
+    expect(loaded.problems).toEqual([]);
+    // A deprecation does not make the file untrusted: the bins still act on it.
+    expect(loaded.config.laneHosts.map((host) => host.name)).toEqual([
+      "opencode-server",
+    ]);
+  });
+
+  test("the file's own repo does not drop it", async () => {
+    const loaded = await loadConfigFor(project(ALIAS + "repo: acme/own\n"), gh);
+    expect(loaded.config.repo).toBe("acme/own");
+    expect(loaded.deprecations).toHaveLength(1);
+  });
+
+  test("gh's repo does not drop it", async () => {
+    expect((await loadConfigFor(project(ALIAS), gh)).deprecations).toHaveLength(
+      1,
+    );
+  });
+
+  test("a file that is not YAML has no config to deprecate, and says so plainly", async () => {
+    const loaded = await loadConfigFor(project("planDir: [unclosed\n"), gh);
+    expect(loaded.deprecations).toEqual([]);
+  });
+
+  test("an absent file has nothing to deprecate", async () => {
+    expect((await loadConfigFor(project(undefined), gh)).deprecations).toEqual(
+      [],
+    );
   });
 });

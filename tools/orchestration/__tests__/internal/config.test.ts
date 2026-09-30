@@ -12,7 +12,7 @@ import {
 
 /**
  * The overlay loader's contract (OW-D7, as amended by §12 A-15, A-20, A-21,
- * A-22).
+ * A-22 and A-30).
  *
  * Two things are being held here at once. A field that is ABSENT must take its
  * documented default, or a bin reads `undefined` and guesses. A field that is
@@ -26,12 +26,12 @@ const ok = (text: string) => {
   return result.config!;
 };
 
-describe("the schema is exactly these fifteen fields", () => {
+describe("the schema is exactly these sixteen fields", () => {
   test("an empty file validates and yields every default", () => {
     expect(ok("{}")).toEqual(emptyConfig());
   });
 
-  test("all fifteen field names are accepted together", () => {
+  test("all sixteen field names are accepted together", () => {
     const config = ok(
       [
         "planDir: docs/planning",
@@ -42,7 +42,15 @@ describe("the schema is exactly these fifteen fields", () => {
         "appendOnlyPaths: '^docs/'",
         "forbiddenPorts: [3000, 3001]",
         "operatorDataPaths: ['.env.local']",
-        "opencodeServerUrl: http://127.0.0.1:4096",
+        "laneHosts:",
+        "  - name: local",
+        "    dispatch: [opencode, run]",
+        "    gate: full",
+        "seats:",
+        "  - id: space-bunny",
+        "    agent: lane",
+        "    model: openrouter/stealth/space-bunny-alpha",
+        "    host: local",
         "waveLogDir: $HOME/.waves-hexagen",
         "coverageRequirement: 80",
         "mutate: true",
@@ -68,7 +76,17 @@ describe("the schema is exactly these fifteen fields", () => {
     expect(config.appendOnlyPaths).toBe("^docs/");
     expect(config.forbiddenPorts).toEqual([3000, 3001]);
     expect(config.operatorDataPaths).toEqual([".env.local"]);
-    expect(config.opencodeServerUrl).toBe("http://127.0.0.1:4096");
+    expect(config.laneHosts).toEqual([
+      { name: "local", dispatch: ["opencode", "run"], gate: "full" },
+    ]);
+    expect(config.seats).toEqual([
+      {
+        id: "space-bunny",
+        agent: "lane",
+        model: "openrouter/stealth/space-bunny-alpha",
+        host: "local",
+      },
+    ]);
     expect(config.waveLogDir).toBe("$HOME/.waves-hexagen");
     expect(config.coverageRequirement).toBe(80);
     expect(config.mutate).toBe(true);
@@ -90,8 +108,7 @@ describe("a field that is absent takes its documented default", () => {
       Object.prototype.hasOwnProperty.call(config, field),
       `${field} must be absent`,
     ).toBe(
-      field === "opencodeServerUrl" ||
-        field === "waveLogDir" ||
+      field === "waveLogDir" ||
         field === "appendOnlyPaths" ||
         field === "coverageRequirement" ||
         field === "tokensCssPath" ||
@@ -126,8 +143,12 @@ describe("a field that is absent takes its documented default", () => {
     expect(ok("{}").operatorDataPaths).toEqual([]);
   });
 
-  test("opencodeServerUrl is absent, so doctor skips the reachability probe", () => {
-    expect(ok("{}").opencodeServerUrl).toBeUndefined();
+  test("A30: laneHosts defaults to [] — a project may declare no lane host", () => {
+    expect(ok("{}").laneHosts).toEqual([]);
+  });
+
+  test("A30: seats defaults to []", () => {
+    expect(ok("{}").seats).toEqual([]);
   });
 
   test("waveLogDir is absent, so logdir.ts derives $HOME/.waves-<name>", () => {
@@ -248,6 +269,7 @@ describe("an unknown key is refused", () => {
     expect(result.config).toBeUndefined();
     expect(result.problems[0].at).toBe("<file>");
     expect(result.problems[0].message).toContain("not valid YAML");
+    expect(result.deprecations).toEqual([]);
   });
 
   test("a document that is not a mapping is refused", () => {
@@ -456,6 +478,31 @@ describe("loadConfig", () => {
     repo: async () => repo,
   });
 
+  test("A30: a deprecation survives every path loadConfig rebuilds", async () => {
+    const alias = "opencodeServerUrl: http://127.0.0.1:4096\n";
+    // The file's own repo: returned whole.
+    expect(
+      (await loadConfig(io(alias + "repo: owner/one\n", "octocat/two")))
+        .deprecations,
+    ).toHaveLength(1);
+    // gh supplies repo: rebuilt config, carried deprecations.
+    expect(
+      (await loadConfig(io(alias, "octocat/two"))).deprecations,
+    ).toHaveLength(1);
+    // gh cannot supply repo: returned untouched, carried them anyway.
+    expect((await loadConfig(io(alias, undefined))).deprecations).toHaveLength(
+      1,
+    );
+    // gh answers with rubbish: problems are appended, deprecations carried.
+    const bad = await loadConfig(io(alias, "garbage"));
+    expect(bad.problems.map((p) => p.at)).toContain("repo");
+    expect(bad.deprecations).toHaveLength(1);
+    // An absent file has nothing to deprecate.
+    expect(
+      (await loadConfig(io(undefined, "octocat/two"))).deprecations,
+    ).toEqual([]);
+  });
+
   test("derives repo from gh when the file omits it", async () => {
     const result = await loadConfig(
       io("planDir: docs/planning\n", "octocat/Hello-World"),
@@ -522,11 +569,16 @@ describe("loadConfig", () => {
 describe("F9: parseConfig returns the parsed config alongside its problems", () => {
   test("the fields that were fine hold what the file said; the bad one is at its default", () => {
     const result = parseConfig(
-      "forbiddenPorts: [4318]\nopencodeServerUrl: http://127.0.0.1:9\nmutate: 'yes'\nnope: 1\n",
+      "forbiddenPorts: [4318]\nlaneHosts:\n  - name: local\n    dispatch: [opencode]\n    gate: full\nmutate: 'yes'\nnope: 1\n",
     );
     expect(result.problems.map((p) => p.at).sort()).toEqual(["mutate", "nope"]);
     expect(result.config?.forbiddenPorts).toEqual([4318]);
-    expect(result.config?.opencodeServerUrl).toBe("http://127.0.0.1:9");
+    // A-30: a deprecated alias never becomes a config field, but the host it is
+    // synthesized into is a first-class one.
+    expect(result.config).not.toHaveProperty("opencodeServerUrl");
+    // Nothing deprecated is written here, so there is nothing to deprecate.
+    expect(result.deprecations).toEqual([]);
+    expect(result.config?.laneHosts).toHaveLength(1);
     expect(result.config?.mutate).toBe(false);
   });
 });

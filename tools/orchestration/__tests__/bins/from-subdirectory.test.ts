@@ -2,6 +2,7 @@ import { afterEach, beforeAll, describe, expect, test } from "vitest";
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -89,6 +90,61 @@ describe("F8: the bins find the repository root from a subdirectory", () => {
     // forbidden port from the file is honoured.
     expect(out).not.toContain("[repo]");
     expect(result.status).not.toBe(2);
+  });
+
+  test("a relative `check` resolves against the repository root, not the subdirectory", () => {
+    const { root, sub } = repository(["config.yaml"]);
+    mkdirSync(join(root, "scripts"), { recursive: true });
+    writeFileSync(join(root, "scripts/x"), "#!/bin/sh\nexit 0\n");
+    chmodSync(join(root, "scripts/x"), 0o755);
+    writeFileSync(
+      join(root, ".agents/orchestration/config.yaml"),
+      [
+        "repo: acme/demo",
+        "laneHosts:",
+        "  - name: here",
+        "    dispatch: [sh]",
+        "    gate: full",
+        "    check: [./scripts/x]",
+        "",
+      ].join("\n"),
+    );
+    const result = run("doctor", sub);
+    const out = `${result.stdout}${result.stderr}`;
+    // A positive floor first: a bin that crashed, or dropped the host, would
+    // also print nothing about `./scripts/x`, and the negative alone would pass.
+    expect(out, "doctor did not walk the host `here`").toContain(
+      "WARN  [lane-host here]",
+    );
+    expect(out, "the check ran from the subdirectory").not.toContain(
+      "./scripts/x",
+    );
+  });
+
+  test("a relative `dispatch[0]` resolves against the repository root, not the subdirectory", () => {
+    const { root, sub } = repository(["config.yaml"]);
+    mkdirSync(join(root, "scripts"), { recursive: true });
+    writeFileSync(join(root, "scripts/x"), "#!/bin/sh\nexit 0\n");
+    chmodSync(join(root, "scripts/x"), 0o755);
+    writeFileSync(
+      join(root, ".agents/orchestration/config.yaml"),
+      [
+        "repo: acme/demo",
+        "laneHosts:",
+        "  - name: here",
+        "    dispatch: [./scripts/x]",
+        "    gate: full",
+        "",
+      ].join("\n"),
+    );
+    const result = run("doctor", sub);
+    const out = `${result.stdout}${result.stderr}`;
+    expect(out, "doctor did not walk the host `here`").toContain(
+      "WARN  [lane-host here]",
+    );
+    expect(out, "dispatch[0] was resolved from the subdirectory").not.toContain(
+      "is not on PATH",
+    );
   });
 
   test("init scaffolds at the root, honours agents_md: false, and writes nothing in the subdirectory", () => {

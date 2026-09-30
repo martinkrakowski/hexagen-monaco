@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
   EXIT_HEALTHY,
@@ -22,8 +24,8 @@ import {
  * override with no reason, an override naming something that is not an
  * invariant, an invariant moved with no override, an underivable `repo`, the
  * resolved status port appearing in `forbiddenPorts`, a missing `ci.yml`, a
- * missing `gh`, a missing `yarn`, unavailable worktrees, and an
- * `opencodeServerUrl` that does not answer.
+ * missing `gh`, a missing `yarn`, unavailable worktrees, and — for A-30 —
+ * every lane-host row of §12.4 §7's doctor table.
  *
  * Each is asserted on the MESSAGE as well as the exit code, because a check
  * that fails without saying which file or which key is a check an operator
@@ -34,7 +36,9 @@ const HEALTHY: DoctorDeps = {
   exists: async () => true,
   hasCommand: async () => true,
   supportsWorktrees: async () => true,
-  httpReachable: async () => true,
+  runCheck: async () => "ok",
+  runRemote: async () => ({ status: "ok" as const, stdout: "lane@host" }),
+  localUserEmail: async () => "lane@host",
 };
 
 const depsOver = (over: Partial<DoctorDeps> = {}): DoctorDeps => ({
@@ -57,6 +61,7 @@ async function doctor(
   const { findings, exitCode } = await runDoctor(
     config,
     parsed.problems,
+    parsed.deprecations,
     true,
     depsOver(over),
   );
@@ -96,21 +101,24 @@ describe("a valid config with every capability present passes", () => {
     expect(text).toContain("doctor: OK");
   });
 
-  test("an absent opencodeServerUrl SKIPS the probe, and that is not a failure", async () => {
-    let probed = false;
+  test("a project with no laneHosts says nothing about lane hosts at all", async () => {
+    let ran = false;
     const { code, findings, text } = await doctor("repo: owner/demo\n", {
-      httpReachable: async () => {
-        probed = true;
-        return false;
+      runCheck: async () => {
+        ran = true;
+        return "failed";
+      },
+      runRemote: async () => {
+        ran = true;
+        return { status: "failed", stdout: "" };
       },
     });
     expect(code).toBe(EXIT_HEALTHY);
-    expect(probed).toBe(false);
+    // Nothing was probed, because there is nothing to probe.
+    expect(ran).toBe(false);
     expect(findings.some((f) => f.severity === "fail")).toBe(false);
-    expect(findings.find((f) => f.check === "opencode-server")?.severity).toBe(
-      "skip",
-    );
-    expect(text).toContain("skipping the reachability probe");
+    expect(findings.some((f) => f.check.startsWith("lane-host"))).toBe(false);
+    expect(text).not.toContain("opencodeServerUrl");
   });
 });
 
@@ -281,6 +289,7 @@ describe("red case 8 — the resolved waveStatusPort appearing in forbiddenPorts
     const { exitCode: code, findings } = await runDoctor(
       config,
       [],
+      [],
       true,
       depsOver(),
     );
@@ -362,57 +371,6 @@ describe("red cases 10-12 — a missing capability", () => {
   });
 });
 
-describe("red case 13 — opencodeServerUrl set but not answering HTTP", () => {
-  test("is a failure naming the URL", async () => {
-    const { code, findings } = await doctor(
-      "repo: owner/demo\nopencodeServerUrl: http://127.0.0.1:4096\n",
-      {
-        httpReachable: async () => false,
-      },
-    );
-    expect(code).toBe(EXIT_UNHEALTHY);
-    const message = fails(findings, "opencode-server").message;
-    expect(message).toContain("http://127.0.0.1:4096");
-    expect(message).toContain("did not answer");
-  });
-
-  test("a redirect is a failure naming its target", async () => {
-    const { code, findings } = await doctor(
-      "repo: owner/demo\nopencodeServerUrl: http://127.0.0.1:4096\n",
-      { httpReachable: async () => ({ redirect: "http://elsewhere/" }) },
-    );
-    expect(code).toBe(EXIT_UNHEALTHY);
-    const message = fails(findings, "opencode-server").message;
-    expect(message).toContain("redirect");
-    expect(message).toContain("http://elsewhere/");
-  });
-
-  test("a URL that answers passes", async () => {
-    const { code } = await doctor(
-      "repo: owner/demo\nopencodeServerUrl: http://127.0.0.1:4096\n",
-    );
-    expect(code).toBe(EXIT_HEALTHY);
-  });
-
-  test("a value that is not a URL is a failure rather than a probe that never runs", async () => {
-    let probed = false;
-    const { code, findings } = await doctor(
-      "repo: owner/demo\nopencodeServerUrl: 127.0.0.1:4096\n",
-      {
-        httpReachable: async () => {
-          probed = true;
-          return true;
-        },
-      },
-    );
-    expect(code).toBe(EXIT_UNHEALTHY);
-    expect(probed).toBe(false);
-    expect(fails(findings, "opencode-server").message).toContain(
-      "not an http or https URL",
-    );
-  });
-});
-
 describe("every overrides entry is printed, including on success", () => {
   test("a passing run still shows the override and its reason", async () => {
     const { code, text } = await doctor(
@@ -455,9 +413,368 @@ describe("every overrides entry is printed, including on success", () => {
 
 describe("a project with no overlay at all", () => {
   test("is told to run init, and the capability wall is not piled on top", async () => {
-    const result = await runDoctor(undefined, [], false, depsOver());
+    const result = await runDoctor(undefined, [], [], false, depsOver());
     expect(result.exitCode).toBe(EXIT_NO_CONFIG);
     expect(result.findings).toHaveLength(1);
     expect(result.findings[0]?.message).toContain("hexagen-orchestration-init");
+  });
+});
+
+/**
+ * A-30 §3 and §12.4 §7's doctor table, driven through the seams.
+ *
+ * Every lane-host sub-check runs and is reported on its OWN. A host that is
+ * missing its transport AND whose `check` fails must report both, because an
+ * operator told about one of them fixes that one and runs the tool again to find
+ * the other. Only the `user.email` read is ever skipped.
+ */
+const REMOTE_HOST = [
+  "laneHosts:",
+  "  - name: midnight",
+  "    dispatch: [ocm-run]",
+  "    gate: targeted-only",
+  "    check: [ocm-run, --check]",
+  "    ssh: m",
+  "    clone: /srv/cf",
+  "    worktrees: /srv/wt",
+].join("\n");
+
+const LOCAL_HOST = [
+  "laneHosts:",
+  "  - name: local-opencode",
+  "    dispatch: [opencode, run]",
+  "    check: [curl, -sf, http://127.0.0.1:4096/doc]",
+  "    gate: full",
+].join("\n");
+
+const warns = (findings: readonly Finding[], check: string): Finding => {
+  const found = findings.filter(
+    (f) => f.severity === "warn" && f.check === check,
+  );
+  expect(
+    found,
+    `no warning named ${check} in:\n${findings.map((f) => f.message).join("\n")}`,
+  ).toHaveLength(1);
+  return found[0]!;
+};
+
+describe("A-30 §7: doctor on a lane host", () => {
+  test("dispatch[0] absent from PATH is a FAIL on that host, and no other check runs away", async () => {
+    const { code, findings } = await doctor(`repo: owner/demo\n${LOCAL_HOST}`, {
+      hasCommand: async (c) => c !== "opencode",
+    });
+    expect(code).toBe(EXIT_UNHEALTHY);
+    const message = fails(findings, "lane-host local-opencode").message;
+    expect(message).toContain("opencode");
+    expect(message).toContain("not on PATH");
+  });
+
+  test("a host that fails BOTH PATH and check reports both", async () => {
+    const { code, findings } = await doctor(`repo: owner/demo\n${LOCAL_HOST}`, {
+      hasCommand: async (c) => c !== "opencode",
+      runCheck: async () => "failed",
+    });
+    expect(code).toBe(EXIT_UNHEALTHY);
+    const onThisHost = findings.filter(
+      (f) => f.severity === "fail" && f.check === "lane-host local-opencode",
+    );
+    // Two failures, one host: the sub-checks do not stop at the first.
+    expect(onThisHost).toHaveLength(2);
+    const messages = onThisHost.map((f) => f.message).join("\n");
+    expect(messages).toContain("not on PATH");
+    expect(messages).toContain(
+      'check ["curl","-sf","http://127.0.0.1:4096/doc"]',
+    );
+  });
+
+  test("an ssh probe that is refused is a FAIL naming the alias and the probe", async () => {
+    const { code, findings } = await doctor(
+      `repo: owner/demo\n${REMOTE_HOST}\nseats:\n  - id: s\n    agent: lane\n    model: m\n    host: midnight\n`,
+      { runRemote: async () => ({ status: "failed", stdout: "" }) },
+    );
+    expect(code).toBe(EXIT_UNHEALTHY);
+    const onThisHost = findings.filter(
+      (f) => f.check === "lane-host midnight" && f.severity === "fail",
+    );
+    const messages = onThisHost.map((f) => f.message).join("\n");
+    expect(messages).toContain("ssh probe");
+    expect(messages).toContain("BatchMode=yes");
+    // The alias IN POSITION: a bare "m" is in the message's fixed text already.
+    expect(messages).toContain("ConnectTimeout=5 m true");
+  });
+
+  test("ssh's own words ride on the probe FAIL, and on the email-read SKIP", async () => {
+    const yaml = `repo: owner/demo\n${REMOTE_HOST}\nseats:\n  - id: s\n    agent: lane\n    model: m\n    host: midnight\n`;
+    const refused = await doctor(yaml, {
+      runRemote: async () => ({
+        status: "failed",
+        stdout: "",
+        stderr: "Permission denied (publickey).",
+      }),
+    });
+    expect(fails(refused.findings, "lane-host midnight").message).toContain(
+      "ssh said: Permission denied (publickey).",
+    );
+
+    // The probe answers; the email read is what fails.
+    let calls = 0;
+    const skipped = await doctor(yaml, {
+      runRemote: async () =>
+        ++calls === 1
+          ? { status: "ok" as const, stdout: "" }
+          : {
+              status: "failed" as const,
+              stdout: "",
+              stderr: "fatal: not a git repository",
+            },
+    });
+    const skip = skipped.findings.find(
+      (f) => f.severity === "skip" && f.message.includes("user.email"),
+    );
+    expect(skip?.message).toContain("ssh said: fatal: not a git repository");
+
+    // Nothing said, nothing appended.
+    const quiet = await doctor(yaml, {
+      runRemote: async () => ({ status: "failed", stdout: "" }),
+    });
+    expect(fails(quiet.findings, "lane-host midnight").message).not.toContain(
+      "ssh said",
+    );
+  });
+
+  test("check: [/bin/false] is a FAIL, and check: [sleep, 30] is a FAIL naming the 10 s timeout", async () => {
+    // The plan writes these as argv. In YAML a bare `false` and a bare `30` are
+    // booleans and numbers, which is a `parseConfig` refusal, not a check that
+    // fails — so the argv is written the way an overlay would write it.
+    const failed = await doctor(
+      `repo: owner/demo\n${LOCAL_HOST.replace(
+        "[curl, -sf, http://127.0.0.1:4096/doc]",
+        '["/bin/false"]',
+      )}`,
+      { runCheck: async () => "failed" },
+    );
+    expect(failed.code).toBe(EXIT_UNHEALTHY);
+    expect(
+      fails(failed.findings, "lane-host local-opencode").message,
+    ).toContain("did not succeed");
+
+    const timedOut = await doctor(
+      `repo: owner/demo\n${LOCAL_HOST.replace(
+        "[curl, -sf, http://127.0.0.1:4096/doc]",
+        '[sleep, "30"]',
+      )}`,
+      { runCheck: async () => "timeout" },
+    );
+    expect(timedOut.code).toBe(EXIT_UNHEALTHY);
+    const message = fails(
+      timedOut.findings,
+      "lane-host local-opencode",
+    ).message;
+    expect(message).toContain("10 s check timeout");
+  });
+
+  test("no check on a local host is a SKIP, and the run stays healthy", async () => {
+    const yaml =
+      "repo: owner/demo\nlaneHosts:\n  - name: here\n    dispatch: [opencode]\n    gate: full\n" +
+      "seats:\n  - id: s\n    agent: lane\n    model: m\n    host: here\n";
+    let checked = false;
+    const { code, findings } = await doctor(yaml, {
+      runCheck: async () => {
+        checked = true;
+        return "failed";
+      },
+    });
+    expect(checked).toBe(false);
+    const skip = findings.find(
+      (f) => f.check === "lane-host here" && f.severity === "skip",
+    );
+    expect(skip?.message).toContain("declares no `check`");
+    expect(code).toBe(EXIT_HEALTHY);
+  });
+
+  test("a clone email that differs is a WARN, and it never moves the exit code", async () => {
+    const yaml = `repo: owner/demo\n${REMOTE_HOST}\nseats:\n  - id: s\n    agent: lane\n    model: m\n    host: midnight\n`;
+    const { code, findings } = await doctor(yaml, {
+      runRemote: async (_alias, argv) => ({
+        status: "ok",
+        stdout: argv.includes("config") ? "other@host" : "",
+      }),
+      localUserEmail: async () => "lane@here",
+    });
+    expect(code).toBe(EXIT_HEALTHY);
+    const message = warns(findings, "lane-host midnight").message;
+    expect(message).toContain("other@host");
+    expect(message).toContain("Co-authored-by");
+  });
+
+  test("a clone email that MATCHES is silent", async () => {
+    const yaml = `repo: owner/demo\n${REMOTE_HOST}\nseats:\n  - id: s\n    agent: lane\n    model: m\n    host: midnight\n`;
+    const { code, findings } = await doctor(yaml, {
+      runRemote: async () => ({ status: "ok", stdout: "lane@here" }),
+      localUserEmail: async () => "lane@here",
+    });
+    expect(code).toBe(EXIT_HEALTHY);
+    expect(
+      findings.some(
+        (f) => f.check === "lane-host midnight" && f.severity === "warn",
+      ),
+    ).toBe(false);
+  });
+
+  test("the email read is SKIPPED when the ssh probe failed, and is not attempted", async () => {
+    const asked: string[][] = [];
+    const { findings } = await doctor(`repo: owner/demo\n${REMOTE_HOST}`, {
+      runRemote: async (_alias, argv) => {
+        asked.push([...argv]);
+        return { status: "failed", stdout: "" };
+      },
+    });
+    // Two probes were not two: only the ssh probe ran.
+    expect(asked).toEqual([["true"]]);
+    const skip = findings.find(
+      (f) =>
+        f.check === "lane-host midnight" &&
+        f.severity === "skip" &&
+        f.message.includes("user.email"),
+    );
+    expect(skip?.message).toContain("ssh probe failed");
+  });
+
+  test("a host no seat references is a WARN, and the host itself is not failed for it", async () => {
+    const { code, findings } = await doctor(`repo: owner/demo\n${LOCAL_HOST}`);
+    expect(code).toBe(EXIT_HEALTHY);
+    expect(warns(findings, "lane-host local-opencode").message).toContain(
+      "no seat dispatches through this host",
+    );
+  });
+
+  test("a seat that names the host silences that WARN", async () => {
+    const { code, findings } = await doctor(
+      `repo: owner/demo\n${LOCAL_HOST}\nseats:\n  - id: local-seat\n    agent: lane\n    model: m\n    host: local-opencode\n`,
+    );
+    expect(code).toBe(EXIT_HEALTHY);
+    expect(findings.some((f) => f.severity === "warn")).toBe(false);
+  });
+
+  test("the order is PATH, ssh, check, email, then the unreferenced WARN", async () => {
+    const order: string[] = [];
+    await doctor(`repo: owner/demo\n${REMOTE_HOST}`, {
+      hasCommand: async (c) => {
+        if (c === "ocm-run") order.push("path");
+        return true;
+      },
+      runRemote: async (_alias, argv) => {
+        order.push(argv.includes("config") ? "email" : "ssh");
+        return { status: "ok", stdout: "lane@here" };
+      },
+      runCheck: async () => {
+        order.push("check");
+        return "ok";
+      },
+    });
+    expect(order).toEqual(["path", "ssh", "check", "email"]);
+  });
+});
+
+describe("A-30 §1.3: the deprecated alias in doctor", () => {
+  test("opencodeServerUrl set gives the synthesized host plus a WARN, and never a FAIL", async () => {
+    const checked: string[][] = [];
+    const { code, findings, text } = await doctor(
+      "repo: owner/demo\nopencodeServerUrl: http://127.0.0.1:4096\n",
+      {
+        runCheck: async (argv) => {
+          checked.push([...argv]);
+          return "ok";
+        },
+      },
+    );
+    expect(code).toBe(EXIT_HEALTHY);
+    // TWO warns: the deprecation, and the synthesized host no seat names.
+    const warned = findings.filter((f) => f.severity === "warn");
+    expect(warned).toHaveLength(2);
+    expect(warned.filter((f) => f.check === "config")[0]?.message).toContain(
+      "opencodeServerUrl is deprecated",
+    );
+    expect(
+      warned.filter((f) => f.check === "lane-host opencode-server")[0]?.message,
+    ).toContain("no seat dispatches through this host");
+    // It replaced the old HTTP probe: the synthesized host's `check` runs, and
+    // nothing else is probed.
+    expect(checked).toEqual([["curl", "-sf", "http://127.0.0.1:4096/doc"]]);
+    expect(text).toContain("WARN");
+    expect(text).toContain("warning(s) that do not affect this exit code");
+  });
+
+  test("a deprecation is a WARN in the report and never a FAIL line", async () => {
+    const { text } = await doctor(
+      "repo: owner/demo\nopencodeServerUrl: http://127.0.0.1:4096\n",
+    );
+    expect(text).toContain("WARN  [config] opencodeServerUrl is deprecated");
+    expect(text).not.toContain("FAIL  [config] opencodeServerUrl");
+  });
+});
+
+/**
+ * OW1's migrated fixture overlay, run through doctor.
+ *
+ * This is the exact set OW8's seeded run asserts, and it is pinned here because
+ * a WARN nobody asserts is a WARN that silently grows: adding a seat to the
+ * fixture would change what a CI runner is expected to report, and the only
+ * place that can be caught is a test that names the whole set.
+ */
+const FIXTURE = resolve(
+  import.meta.dirname,
+  "../../../../packages/template-engine/__tests__/fixtures/orchestration/campaign-foundry/overlay/config.yaml",
+);
+
+describe("A-30 §6: doctor's findings on OW1's fixture overlay", () => {
+  test("it is exactly one WARN, for local-opencode, and nothing else", async () => {
+    const parsed = parseConfig(readFileSync(FIXTURE, "utf8"));
+    expect(parsed.problems).toEqual([]);
+
+    const { findings } = await runDoctor(
+      parsed.config,
+      parsed.problems,
+      parsed.deprecations,
+      true,
+      depsOver(),
+    );
+    const warned = findings.filter((f) => f.severity === "warn");
+    expect(warned).toHaveLength(1);
+    expect(warned[0]?.check).toBe("lane-host local-opencode");
+    expect(warned[0]?.message).toContain(
+      "no seat dispatches through this host",
+    );
+    // With every capability present, the fixture is healthy.
+    expect(findings.filter((f) => f.severity === "fail")).toEqual([]);
+  });
+
+  test("on a CI runner the ONLY findings are the two local-opencode FAILs and that one WARN", async () => {
+    const parsed = parseConfig(readFileSync(FIXTURE, "utf8"));
+    const { findings, exitCode } = await runDoctor(
+      parsed.config,
+      parsed.problems,
+      parsed.deprecations,
+      true,
+      {
+        ...HEALTHY,
+        // `opencode` is not installed on a runner, and `curl` cannot reach a
+        // server nobody started. Both are on ONE host, so both must appear.
+        hasCommand: async (command) => command !== "opencode",
+        runCheck: async () => "failed",
+      },
+    );
+    const failed = findings.filter((f) => f.severity === "fail");
+    expect(
+      failed.map((f) => f.check),
+      "two failures, both on the one host the fixture declares",
+    ).toEqual(["lane-host local-opencode", "lane-host local-opencode"]);
+    const messages = failed.map((f) => f.message).join("\n");
+    expect(messages).toContain("dispatch[0] (opencode) is not on PATH");
+    expect(messages).toContain(
+      'check ["curl","-sf","http://127.0.0.1:4096/doc"]',
+    );
+    expect(findings.filter((f) => f.severity === "warn")).toHaveLength(1);
+    expect(exitCode).toBe(EXIT_UNHEALTHY);
   });
 });

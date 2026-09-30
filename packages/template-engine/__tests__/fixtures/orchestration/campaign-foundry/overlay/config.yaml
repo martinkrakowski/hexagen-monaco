@@ -57,8 +57,10 @@ requiredCheck: ^Build
 # is the correct resolution. campaign-foundry's own regex, verbatim: its session log, its
 # changelog, its package port barrels, its UI barrel and its message catalogue. Only ever add a
 # file whose lanes append at the END — the resolver preserves order, not intent.
-appendOnlyPaths:
-  - ^(\.agents/session-log\.md|CHANGELOG\.md|packages/[^/]+/src/application/ports/out/index\.ts|apps/web/src/components/ui/index\.ts|apps/web/src/components/campaign/messages\.ts)$
+#
+# ONE alternation, not a list: this field is a single regular expression, and a YAML list here
+# is refused ("must be a string").
+appendOnlyPaths: '^(\.agents/session-log\.md|CHANGELOG\.md|packages/[^/]+/src/application/ports/out/index\.ts|apps/web/src/components/ui/index\.ts|apps/web/src/components/campaign/messages\.ts)$'
 
 # Ports no lane may bind or request. These are the operator's live dev servers: a request
 # there overwrites their output and spends their credits. This is where the refusal lives; the
@@ -72,9 +74,18 @@ operatorDataPaths:
   - briefs/
   - assets/inputs/*/
 
-# The shared model server this project attaches to. Reachability is a `doctor` capability
-# check. Never start this server yourself; ask the operator to restart it.
-opencodeServerUrl: http://127.0.0.1:4096
+# The shared model server this project attaches to, as a lane host (A-30). Reachability is
+# `doctor`'s capability check, and it is the host's OWN `check`, not an HTTP probe of a URL: a
+# check that only proves the server is up can go green while the dispatch fails. Never start
+# this server yourself; ask the operator to restart it.
+#
+# No `seats` entry names this host, so `doctor` WARNs that the dispatch identity is missing.
+# That is the point of the warning, and the WARN never moves the exit code.
+laneHosts:
+  - name: local-opencode
+    dispatch: [opencode, run, --attach, http://127.0.0.1:4096]
+    check: [curl, -sf, http://127.0.0.1:4096/doc]
+    gate: full
 
 # Where this repository's wave events are logged. campaign-foundry's own value, which is also
 # what its status server scans. A hexagen project uses `$HOME/.waves-<name>` instead, because a

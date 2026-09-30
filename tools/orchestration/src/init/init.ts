@@ -25,26 +25,64 @@ import { configRefusal } from "../internal/refusal.js";
 
 export const TEMPLATE_ID = "orchestration";
 
-/** Where the scaffolded files go, relative to the project root. */
+/** Where the scaffolded overlay goes, relative to the project root. */
 export const OVERLAY_DIR = ".agents/orchestration";
 
 /**
- * The four files `init` scaffolds. `config.yaml` is first because it is the
- * one every other bin reads, and a project with the other three but not this
- * one has a house style and no configuration.
+ * Where a lane's brief goes inside the worktree it runs in (A-30 §4).
+ *
+ * A tracked handoff directory, because `git check-ignore .lane/brief.md` has to
+ * answer without a root `.gitignore` edit — and the engine cannot append to a
+ * `.gitignore` (B-2). It is never a template output for the same reason
+ * `.agents/orchestration/` is not: the overlay and the brief directory belong to
+ * the operator, not to the engine.
  */
-export const SCAFFOLD_FILES = [
-  "config.yaml",
-  "house-rules.md",
-  "cast.md",
-  "lessons.md",
-] as const;
+export const LANE_DIR = ".lane";
 
-export type ScaffoldFile = (typeof SCAFFOLD_FILES)[number];
+/** One scaffolded file: where it goes, and how its bytes are produced. */
+export interface ScaffoldFile {
+  /** Root-relative, e.g. `.agents/orchestration/config.yaml`. */
+  readonly path: string;
+  readonly render: (
+    config: Config,
+    includeWaveObservability: boolean,
+  ) => string;
+}
+
+/** The lane handoff directory's own ignore file, tracked so it can ignore. */
+const LANE_GITIGNORE = ["*", "!.gitignore", ""].join("\n");
+
+const renderLaneGitignore = (): string => LANE_GITIGNORE;
+
+/**
+ * The files `init` scaffolds, in the order it writes them.
+ *
+ * `config.yaml` is first because it is the one every other bin reads, and a
+ * project with the other three but not this one has a house style and no
+ * configuration. `.lane/.gitignore` is last because it belongs to neither
+ * directory the rest of the scaffold writes to: it is the repository root's
+ * child, and it is the only file here outside `.agents/orchestration/`.
+ */
+export const SCAFFOLD_FILES: readonly ScaffoldFile[] = [
+  {
+    path: `${OVERLAY_DIR}/config.yaml`,
+    render: (config) => renderConfig(config),
+  },
+  {
+    path: `${OVERLAY_DIR}/house-rules.md`,
+    render: (config, includeWaveObservability) =>
+      renderHouseRules(includeWaveObservability, defaultWaveLogDir(config)),
+  },
+  { path: `${OVERLAY_DIR}/cast.md`, render: () => CAST },
+  { path: `${OVERLAY_DIR}/lessons.md`, render: () => LESSONS },
+  { path: `${LANE_DIR}/.gitignore`, render: renderLaneGitignore },
+];
 
 /** What `init` did, per file. */
 export interface ScaffoldOutcome {
-  readonly file: ScaffoldFile;
+  /** The file's basename, e.g. `config.yaml` or `.gitignore`. */
+  readonly file: string;
+  /** Root-relative, e.g. `.agents/orchestration/config.yaml`. */
   readonly path: string;
   readonly action: "created" | "skipped";
 }
@@ -59,6 +97,12 @@ export interface InitDeps {
    * names it instead. Optional so a caller with no such notion keeps working.
    */
   readonly occupied?: (path: string) => Promise<boolean>;
+  /**
+   * The root-relative path of an existing ANCESTOR of `path` that is not a
+   * directory (a regular `.lane` file, say), or `undefined`. Writing under it
+   * would throw, so `initProject` refuses and names it. Optional, as `occupied`.
+   */
+  readonly blockedAncestor?: (path: string) => Promise<string | undefined>;
   readonly write: (path: string, contents: string) => Promise<void>;
   /** The project's `.hexagen-template-config.json`, or `undefined` when absent. */
   readonly readTemplateConfig: () => Promise<string | undefined>;
@@ -91,7 +135,7 @@ export function readAgentsMdAnswer(
   if (typeof templates !== "object" || templates === null) return true;
   const record = (templates as Record<string, unknown>)[TEMPLATE_ID];
   if (typeof record !== "object" || record === null) return true;
-  const answers = (record as { answers?: unknown }).answers;
+  const answers = (record as Record<string, unknown>).answers;
   if (typeof answers !== "object" || answers === null) return true;
   const answer = (answers as Record<string, unknown>).agents_md;
   return answer !== false;
@@ -157,6 +201,22 @@ export function renderConfig(config: Config): string {
     "",
     "# Operator data the gate must not read, print, or diff.",
     `operatorDataPaths: [${config.operatorDataPaths.map((p) => JSON.stringify(p)).join(", ")}]`,
+    "",
+    "# Where a delegated lane dispatches (A-30). Left empty here, and that is not a",
+    "# failure: this project declares no lane host, so nothing about one is checked.",
+    "#",
+    "# `laneHosts` says where and how. Each entry needs `name` (this overlay's label",
+    "# for the host, not an ssh alias), `dispatch` (the transport prefix ONLY — never",
+    "# --dir, --agent, -m, --model or --format, which the orchestrator appends), and",
+    "# `gate` (`full` or `targeted-only`, the gate scope ON THAT HOST). A host is",
+    "# REMOTE when it carries `ssh`, `clone` or `worktrees`, and a remote host must",
+    "# carry all three plus `check`. `check` exits 0 if and only if the dispatch path",
+    "# itself works; it runs no lane and writes no opencode session.",
+    "#",
+    "# `seats` says who. Each entry needs `id` (cast.md refers to a seat by its id),",
+    "# `agent`, `model`, and `host` naming a `laneHosts[].name`.",
+    "# laneHosts: []",
+    "# seats: []",
     "",
     "# The repository, as `gh repo view --json nameWithOwner` reports it. Also",
     "# derives the wave log directory below when that is left as the default.",
@@ -289,25 +349,13 @@ const LESSONS = [
   "",
 ].join("\n");
 
-/** The contents `init` would write for one file, given the project's config. */
+/** The contents `init` would write for one scaffold path, given the config. */
 export function renderFile(
   file: ScaffoldFile,
   config: Config,
   includeWaveObservability: boolean,
 ): string {
-  switch (file) {
-    case "config.yaml":
-      return renderConfig(config);
-    case "house-rules.md":
-      return renderHouseRules(
-        includeWaveObservability,
-        defaultWaveLogDir(config),
-      );
-    case "cast.md":
-      return CAST;
-    case "lessons.md":
-      return LESSONS;
-  }
+  return file.render(config, includeWaveObservability);
 }
 
 /**
@@ -329,13 +377,16 @@ export async function runInit(
   const outcomes: ScaffoldOutcome[] = [];
 
   for (const file of SCAFFOLD_FILES) {
-    const path = `${OVERLAY_DIR}/${file}`;
-    if (await deps.exists(path)) {
-      outcomes.push({ file, path, action: "skipped" });
+    const basename = file.path.split("/").pop() ?? file.path;
+    if (await deps.exists(file.path)) {
+      outcomes.push({ file: basename, path: file.path, action: "skipped" });
       continue;
     }
-    await deps.write(path, renderFile(file, config, includeWaveObservability));
-    outcomes.push({ file, path, action: "created" });
+    await deps.write(
+      file.path,
+      renderFile(file, config, includeWaveObservability),
+    );
+    outcomes.push({ file: basename, path: file.path, action: "created" });
   }
 
   return { outcomes, includeWaveObservability };
@@ -351,7 +402,7 @@ export function formatReport(outcomes: readonly ScaffoldOutcome[]): string {
   const kept = outcomes.length - created;
   lines.push(
     kept === 0
-      ? `init: wrote ${created} file(s) into ${OVERLAY_DIR}/.`
+      ? `init: wrote ${created} file(s) into ${OVERLAY_DIR}/ and ${LANE_DIR}/.`
       : `init: wrote ${created}, left ${kept} untouched (an existing file is never overwritten).`,
   );
   return lines.join("\n");
@@ -369,7 +420,8 @@ export const TEMPLATE_CONFIG_PATH = TEMPLATE_CONFIG_FILE;
  * file created and none touched. A file that fails validation holds defaults
  * for the bad fields, and scaffolding from those would write a house style that
  * disagrees with the config sitting next to it. An ABSENT file is the normal
- * case for `init` and is not a refusal.
+ * case for `init` and is not a refusal. A DEPRECATION is not a refusal either
+ * (A-30): `configRefusal` cannot see one.
  */
 export async function initProject(
   loaded: {
@@ -382,12 +434,20 @@ export async function initProject(
   const refusal = configRefusal("init", "scaffold", loaded);
   if (refusal !== undefined) return { code: 2, lines: refusal };
   for (const file of SCAFFOLD_FILES) {
-    const path = `${OVERLAY_DIR}/${file}`;
-    if ((await deps.occupied?.(path)) === true) {
+    const blocker = await deps.blockedAncestor?.(file.path);
+    if (blocker !== undefined) {
       return {
         code: 2,
         lines: [
-          `init: refusing to scaffold: ${path} exists but is not a regular file, so it cannot be kept or written. Remove or rename it, then retry.`,
+          `init: refusing to scaffold: ${blocker} exists but is not a directory, so ${file.path} cannot be written under it. Remove or rename it, then retry.`,
+        ],
+      };
+    }
+    if ((await deps.occupied?.(file.path)) === true) {
+      return {
+        code: 2,
+        lines: [
+          `init: refusing to scaffold: ${file.path} exists but is not a regular file, so it cannot be kept or written. Remove or rename it, then retry.`,
         ],
       };
     }
@@ -399,7 +459,7 @@ export async function initProject(
       formatReport(outcomes),
       outcomes.some((o) => o.action === "created")
         ? "init: run `hexagen-orchestration-doctor` next to check the overlay."
-        : `init: ${OVERLAY_DIR}/ is already complete; nothing was changed.`,
+        : `init: ${OVERLAY_DIR}/ and ${LANE_DIR}/ are already complete; nothing was changed.`,
     ],
   };
 }

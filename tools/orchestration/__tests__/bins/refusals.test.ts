@@ -129,4 +129,20 @@ describe("a directory is not a file", () => {
     expect(result.stderr).toContain("not a regular file");
     expect(readdirSync(overlay).sort()).toEqual(before);
   });
+
+  test("init: a regular file where the .lane directory belongs is refused by name, not a crash", () => {
+    const root = repository("repo: acme/demo\n");
+    writeFileSync(join(root, ".lane"), "not a directory\n");
+    const overlay = join(root, ".agents/orchestration");
+    const before = readdirSync(overlay).sort();
+    const result = run("init", root);
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain(".lane");
+    expect(result.stderr).toContain("not a directory");
+    expect(result.stderr, "an uncaught throw, not a refusal").not.toContain(
+      "at file://",
+    );
+    expect(readdirSync(overlay).sort()).toEqual(before);
+    expect(readFileSync(join(root, ".lane"), "utf8")).toBe("not a directory\n");
+  });
 });
