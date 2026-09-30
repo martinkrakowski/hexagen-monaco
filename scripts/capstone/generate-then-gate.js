@@ -601,8 +601,8 @@ for (const fixture of fixtures) {
           `doctor with reasonless override: expected exit 1, got ${red.status}\n${red.out}`,
         );
         expect(
-          red.out.includes("reason"),
-          `doctor did not name the missing reason\n${red.out}`,
+          red.out.includes("overrides[0].reason is required"),
+          `doctor did not name overrides[0].reason as required\n${red.out}`,
         );
       });
 
