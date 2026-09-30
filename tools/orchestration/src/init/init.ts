@@ -51,7 +51,14 @@ export interface ScaffoldOutcome {
 
 /** The filesystem `init` needs, injected so the bin is testable. */
 export interface InitDeps {
+  /** True only for a regular file already at the path. */
   readonly exists: (path: string) => Promise<boolean>;
+  /**
+   * True when something that is NOT a regular file (a directory, say) is in the
+   * way. Scaffolding around it would fail on write, so `initProject` refuses and
+   * names it instead. Optional so a caller with no such notion keeps working.
+   */
+  readonly occupied?: (path: string) => Promise<boolean>;
   readonly write: (path: string, contents: string) => Promise<void>;
   /** The project's `.hexagen-template-config.json`, or `undefined` when absent. */
   readonly readTemplateConfig: () => Promise<string | undefined>;
@@ -374,6 +381,17 @@ export async function initProject(
 ): Promise<{ readonly code: number; readonly lines: readonly string[] }> {
   const refusal = configRefusal("init", "scaffold", loaded);
   if (refusal !== undefined) return { code: 2, lines: refusal };
+  for (const file of SCAFFOLD_FILES) {
+    const path = `${OVERLAY_DIR}/${file}`;
+    if ((await deps.occupied?.(path)) === true) {
+      return {
+        code: 2,
+        lines: [
+          `init: refusing to scaffold: ${path} exists but is not a regular file, so it cannot be kept or written. Remove or rename it, then retry.`,
+        ],
+      };
+    }
+  }
   const { outcomes } = await runInit(loaded.config, deps);
   return {
     code: 0,

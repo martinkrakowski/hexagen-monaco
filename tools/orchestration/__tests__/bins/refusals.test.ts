@@ -66,8 +66,21 @@ describe("F13: plan-verify refuses an invalid overlay", () => {
   });
 
   test("an absent file still runs, with the defaults", () => {
-    const result = run("plan-verify", repository(undefined));
+    const root = repository(undefined);
+    const result = spawnSync(process.execPath, [dist("plan-verify")], {
+      cwd: root,
+      encoding: "utf8",
+      // The artifact's default location is per-repository and this temp repo
+      // has no name, so the documented override supplies one.
+      env: { HOME: root, PLAN_VERIFY_ARTIFACT: join(root, "pv.json") },
+    });
     expect(result.status).toBe(0);
+  });
+
+  test("with no repo and no override the artifact location is refused, not defaulted to a shared root", () => {
+    const result = run("plan-verify", repository(undefined));
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("no repository name");
   });
 });
 
@@ -91,5 +104,29 @@ describe("F14: init refuses to scaffold from an invalid overlay", () => {
     expect(existsSync(join(root, ".agents/orchestration/house-rules.md"))).toBe(
       true,
     );
+  });
+});
+
+describe("a directory is not a file", () => {
+  test("doctor: a directory at .github/workflows/ci.yml fails the ci.yml check", () => {
+    const root = repository("repo: acme/demo\n");
+    mkdirSync(join(root, ".github/workflows/ci.yml"), { recursive: true });
+    const result = run("doctor", root);
+    expect(`${result.stdout}${result.stderr}`).toContain(
+      ".github/workflows/ci.yml is missing",
+    );
+    expect(result.status).toBe(1);
+  });
+
+  test("init: a directory at a scaffold file path is reported, and nothing is written", () => {
+    const root = repository("repo: acme/demo\n");
+    const overlay = join(root, ".agents/orchestration");
+    mkdirSync(join(overlay, "lessons.md"));
+    const before = readdirSync(overlay).sort();
+    const result = run("init", root);
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("lessons.md");
+    expect(result.stderr).toContain("not a regular file");
+    expect(readdirSync(overlay).sort()).toEqual(before);
   });
 });

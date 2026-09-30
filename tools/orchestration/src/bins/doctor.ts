@@ -5,9 +5,9 @@
  * Supplies the real filesystem, the real PATH and the real network probe; the
  * checks themselves are in `../doctor/doctor.ts`.
  */
-import { access } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { hasCommand } from "../internal/capabilities.js";
+import { isFile } from "../internal/fs-probe.js";
 import { loadConfigFor } from "../internal/project.js";
 import { formatReport, runDoctor } from "../doctor/doctor.js";
 
@@ -34,14 +34,7 @@ const httpReachable = (url: string): Promise<boolean> =>
   });
 
 const { findings, exitCode } = await runDoctor(config, problems, present, {
-  exists: async (path) => {
-    try {
-      await access(`${root}/${path}`);
-      return true;
-    } catch {
-      return false;
-    }
-  },
+  exists: (path) => isFile(`${root}/${path}`),
   hasCommand,
   supportsWorktrees,
   httpReachable,

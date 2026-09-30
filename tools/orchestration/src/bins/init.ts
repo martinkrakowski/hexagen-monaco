@@ -5,8 +5,9 @@
  * All the behaviour is in `../init/init.ts` (`initProject`); this is the thin
  * edge supplying the real filesystem.
  */
-import { readFile, writeFile, mkdir, access } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
+import { isFile, isOccupiedByNonFile } from "../internal/fs-probe.js";
 import { loadConfigFor } from "../internal/project.js";
 import { TEMPLATE_CONFIG_PATH, initProject } from "../init/init.js";
 
@@ -14,14 +15,8 @@ const loaded = await loadConfigFor();
 const at = (path: string): string => `${loaded.root}/${path}`;
 
 const { code, lines } = await initProject(loaded, {
-  exists: async (path) => {
-    try {
-      await access(at(path));
-      return true;
-    } catch {
-      return false;
-    }
-  },
+  exists: (path) => isFile(at(path)),
+  occupied: (path) => isOccupiedByNonFile(at(path)),
   write: async (path, contents) => {
     const full = at(path);
     await mkdir(dirname(full), { recursive: true });
