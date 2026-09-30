@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://hexagen.dev/kernel/trace.schema.json",
+  "title": "Trace",
+  "description": "The append-only record of one agent cycle run under one Grant. One JSON object per line in .hexagen/evidence/trace.jsonl. See docs/kernel/TRACE.md. Never redefines Grant — grant_id must equal some Grant.id (docs/kernel/grant.schema.json).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "grant_id",
+    "goal_id",
+    "tool_calls",
+    "halt_reason",
+    "transaction_ids",
+    "started_at",
+    "ended_at"
+  ],
+  "properties": {
+    "grant_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Must equal some Grant's `id`. A Trace whose grant_id matches nothing is invalid evidence, not a trace with an unknown grant to be tolerated. Never a second identity independent of the Grant that authorized this cycle."
+    },
+    "goal_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Opaque identifier for whatever prompted this cycle (a work-plan row, a ticket, a project thread id). Not defined further by this schema."
+    },
+    "tool_calls": {
+      "type": "array",
+      "description": "Every tool call the cycle made, in the order it made them.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "args_digest", "result_digest", "time"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Tool name, as it appears in the owning Grant's `tools`."
+          },
+          "args_digest": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Digest of the call's arguments (e.g. \"sha256:<hex>\"), not the arguments themselves. Trace is evidence of what ran, not a payload store."
+          },
+          "result_digest": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Digest of the call's result, same reasoning as args_digest."
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp of this specific call. Checked against the owning Grant's expires_at/revoked_at — a call timestamped at or after either is what makes a Trace invalid under the fail-closed rules in TRACE.md."
+          }
+        }
+      }
+    },
+    "halt_reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Why the cycle stopped. Not a closed enum (a kit adapter may need its own reasons), but TRACE.md names a shared vocabulary to reuse: completed, grant_denied, grant_expired, grant_revoked, budget_exceeded, error."
+    },
+    "transaction_ids": {
+      "type": "array",
+      "description": "Transaction ids (from @hexagen/transaction-system) this cycle created or touched, in the order they were touched. Ties this Trace to the transaction manager's own record of what those transactions did, without duplicating their contents.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601. Should be at or before every tool_calls[].time and at or before ended_at."
+    },
+    "ended_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601. Should be at or after every tool_calls[].time and at or after started_at."
+    }
+  }
+}
