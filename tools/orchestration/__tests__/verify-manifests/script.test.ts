@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, test } from "vitest";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   ANCHORS_BIN,
@@ -74,9 +74,6 @@ describe("the repository root, not the cwd", () => {
       // A directory the caller might plausibly be standing in, which must NOT
       // decide the answer.
       r.subdir("packages", "deep", "er");
-      mkdirSync(join(r.subdir("packages"), ".agents", "manifests"), {
-        recursive: true,
-      });
 
       const result = runScript(shell.command, r, {
         cwd: join(r.root, "packages", "deep", "er"),
@@ -89,6 +86,9 @@ describe("the repository root, not the cwd", () => {
       ]);
       expect(out, out).not.toContain("no .agents/manifests directory");
       expect(out, out).not.toContain("cannot list");
+      // The root's one manifest was counted: a check that ran against some other
+      // directory could not print this.
+      expect(result.stdout, out).toContain("1 manifest(s)");
       expect(result.status, out).toBe(0);
       expect(result.stdout, out).toContain(
         "verify-manifests: no manifest changed against origin/main; nothing to replay",
