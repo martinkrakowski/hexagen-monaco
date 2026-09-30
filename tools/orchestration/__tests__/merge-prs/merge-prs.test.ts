@@ -430,7 +430,10 @@ describe.skipIf(!hasZsh())("merge-prs — the repository", () => {
   });
 
   test("a lookup that fails, or answers nothing, dies before any PR", () => {
-    for (const env of [{ STUB_REPO_EXIT: "1" }, { STUB_REPO: "" }]) {
+    for (const env of [
+      { STUB_REPO_EXIT: "1" },
+      { STUB_REPO: "" },
+    ] as readonly Record<string, string>[]) {
       const harness = makeHarness();
       try {
         const result = runMergePrs(harness, ["42|wt|feat/x"], env);

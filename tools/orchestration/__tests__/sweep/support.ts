@@ -92,10 +92,9 @@ export function harness(
       },
       readStdin: async () => "",
       env,
-      gh: NO_GH,
       ...over,
       // Every stub is strict for `api`, whatever a test replaced it with.
-      ...{ gh: strictApi(over.gh ?? NO_GH) },
+      gh: strictApi(over.gh ?? NO_GH),
     },
   };
 }
