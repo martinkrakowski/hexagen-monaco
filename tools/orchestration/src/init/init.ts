@@ -1,5 +1,10 @@
 import { TEMPLATE_CONFIG_FILE } from "../internal/template-config.js";
-import { CONFIG_RELATIVE_PATH, type Config } from "../internal/config.js";
+import {
+  CONFIG_RELATIVE_PATH,
+  type Config,
+  type ConfigProblem,
+} from "../internal/config.js";
+import { configRefusal } from "../internal/refusal.js";
 
 /**
  * `hexagen-orchestration-init` — scaffold a project's overlay.
@@ -346,3 +351,36 @@ export function formatReport(outcomes: readonly ScaffoldOutcome[]): string {
 
 /** The path of the install record `init` reads the template's answers from. */
 export const TEMPLATE_CONFIG_PATH = TEMPLATE_CONFIG_FILE;
+
+/**
+ * The whole bin, minus the process: refuse on an invalid overlay, otherwise
+ * scaffold and report.
+ *
+ * `init` ACTS on the config (it renders `config.yaml`'s neighbours from it), so a
+ * present file with problems is a refusal: exit 2, every problem printed, no
+ * file created and none touched. A file that fails validation holds defaults
+ * for the bad fields, and scaffolding from those would write a house style that
+ * disagrees with the config sitting next to it. An ABSENT file is the normal
+ * case for `init` and is not a refusal.
+ */
+export async function initProject(
+  loaded: {
+    readonly config: Config;
+    readonly present: boolean;
+    readonly problems: readonly ConfigProblem[];
+  },
+  deps: InitDeps,
+): Promise<{ readonly code: number; readonly lines: readonly string[] }> {
+  const refusal = configRefusal("init", "scaffold", loaded);
+  if (refusal !== undefined) return { code: 2, lines: refusal };
+  const { outcomes } = await runInit(loaded.config, deps);
+  return {
+    code: 0,
+    lines: [
+      formatReport(outcomes),
+      outcomes.some((o) => o.action === "created")
+        ? "init: run `hexagen-orchestration-doctor` next to check the overlay."
+        : `init: ${OVERLAY_DIR}/ is already complete; nothing was changed.`,
+    ],
+  };
+}

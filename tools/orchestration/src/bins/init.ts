@@ -2,23 +2,18 @@
 /**
  * `hexagen-orchestration-init` — the bin.
  *
- * All the behaviour is in `../init/init.ts`; this is the thin edge supplying the
- * real filesystem.
+ * All the behaviour is in `../init/init.ts` (`initProject`); this is the thin
+ * edge supplying the real filesystem.
  */
 import { readFile, writeFile, mkdir, access } from "node:fs/promises";
 import { dirname } from "node:path";
 import { loadConfigFor } from "../internal/project.js";
-import {
-  OVERLAY_DIR,
-  TEMPLATE_CONFIG_PATH,
-  formatReport,
-  runInit,
-} from "../init/init.js";
+import { TEMPLATE_CONFIG_PATH, initProject } from "../init/init.js";
 
-const { root, config } = await loadConfigFor();
-const at = (path: string): string => `${root}/${path}`;
+const loaded = await loadConfigFor();
+const at = (path: string): string => `${loaded.root}/${path}`;
 
-const { outcomes } = await runInit(config, {
+const { code, lines } = await initProject(loaded, {
   exists: async (path) => {
     try {
       await access(at(path));
@@ -41,13 +36,5 @@ const { outcomes } = await runInit(config, {
   },
 });
 
-console.log(formatReport(outcomes));
-if (outcomes.some((o) => o.action === "created")) {
-  console.log(
-    `init: run \`hexagen-orchestration-doctor\` next to check the overlay.`,
-  );
-} else {
-  console.log(
-    `init: ${OVERLAY_DIR}/ is already complete; nothing was changed.`,
-  );
-}
+for (const line of lines) (code === 0 ? console.log : console.error)(line);
+process.exitCode = code;

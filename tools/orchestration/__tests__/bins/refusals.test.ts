@@ -2,6 +2,8 @@ import { afterEach, beforeAll, describe, expect, test } from "vitest";
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
+  readFileSync,
+  readdirSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -66,5 +68,28 @@ describe("F13: plan-verify refuses an invalid overlay", () => {
   test("an absent file still runs, with the defaults", () => {
     const result = run("plan-verify", repository(undefined));
     expect(result.status).toBe(0);
+  });
+});
+
+describe("F14: init refuses to scaffold from an invalid overlay", () => {
+  test("a present config.yaml with an unknown key exits 2 and every file is byte-identical", () => {
+    const original = "repo: acme/demo\nnope: 1\n";
+    const root = repository(original);
+    const overlay = join(root, ".agents/orchestration");
+    const before = readdirSync(overlay);
+    const result = run("init", root);
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("nope");
+    expect(readdirSync(overlay)).toEqual(before);
+    expect(readFileSync(join(overlay, "config.yaml"), "utf8")).toBe(original);
+  });
+
+  test("an absent overlay is still scaffolded", () => {
+    const root = repository(undefined);
+    const result = run("init", root);
+    expect(result.status).toBe(0);
+    expect(existsSync(join(root, ".agents/orchestration/house-rules.md"))).toBe(
+      true,
+    );
   });
 });
