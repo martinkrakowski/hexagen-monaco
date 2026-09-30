@@ -217,14 +217,15 @@ inventing flags ad hoc.
 
 ## Acceptance tests
 
-`packages/mcp-server/__tests__/kernel/grant.acceptance.test.ts` exercises a
-standalone reference module (`packages/mcp-server/src/domain/grant.ts`) —
-pure, dependency-free, no `fs`, no wiring into `AcceptTransactionToolUseCase`,
-no CLI. It covers the "Keep" slice only: compiling `contexts`/`paths` from
-a manifest, default deny, fail closed, and `paths` as a second, narrower
-check. It does **not** yet cover `id`/`principal`/`agent`/`tools`/`mode`/
+`docs/kernel/spike/grant.acceptance.test.ts` exercises a standalone
+reference module (`docs/kernel/spike/grant.ts`) — pure, dependency-free,
+no `fs`, no wiring into `AcceptTransactionToolUseCase`, no CLI. It covers
+the "Keep" slice only: compiling `contexts`/`paths` from a manifest,
+default deny, fail closed, and `paths` as a second, narrower check. It
+does **not** yet cover `id`/`principal`/`agent`/`tools`/`mode`/
 `expires_at`/`revoked_at` — those are schema-only until the Trace thread
 gives `id` somewhere to be referenced from, per the explicit scope for that
 thread: add those fields to the schema, don't rebuild this enforcement
-slice around them yet. Both files are uncommitted spikes, not merged into
-the running `mcp-server` package.
+slice around them yet. Both files live under `docs/kernel/spike/`, deliberately
+outside `packages/mcp-server/src` and its barrel — `mcp-server` does not
+import them, and they are not merged into the running package.

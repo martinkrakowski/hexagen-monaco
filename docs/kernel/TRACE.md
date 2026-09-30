@@ -162,12 +162,15 @@ what Trace or Grant *mean*.
 ## Command spec (design only — not built)
 
 ```
-hexagen evidence pack <trace-file> [--grant <grant-file>] [--out <bundle>]
-    Reads one JSONL line (a Trace) plus the Grant it names, validates the
-    three Rules above against it, and emits a bundle (the trace, the
-    grant, and a pass/fail verdict) for a CI gate or a human reviewer.
-    Non-zero exit if the trace fails any Rule — an invalid trace never
-    produces a bundle that reads as evidence of anything.
+hexagen evidence pack <trace-jsonl-file> [--grant <grant-file>] [--out <bundle>]
+    Reads every line of the JSONL file (one Trace per line, per "Storage"
+    above — not a single record), validates the three Rules above against
+    each one, and emits a bundle (all traces, the grants they name, and a
+    pass/fail verdict per line) for a CI gate or a human reviewer.
+    Non-zero exit if ANY line fails any Rule — one invalid trace in the
+    file is enough to fail the whole pack; an invalid trace never produces
+    a bundle that reads as evidence of anything, and a bundle never
+    reports "pass" while silently dropping a bad line.
 ```
 
 Only this one subcommand is specified here. `hexagen grant compile|show|
@@ -175,13 +178,16 @@ check` remain as specified in `GRANT.md`; nothing here redefines them.
 
 ## Acceptance tests
 
-`packages/mcp-server/__tests__/kernel/trace.acceptance.test.ts` exercises a
-standalone reference module (`packages/mcp-server/src/domain/trace.ts`) —
-pure, dependency-free, no `fs`, no wiring into any running tool or the CLI.
-It covers exactly the three Rules above as a retrospective validator (the
-logic `hexagen evidence pack` would run): a trace matching a live grant is
+`docs/kernel/spike/trace.acceptance.test.ts` exercises a standalone
+reference module (`docs/kernel/spike/trace.ts`) — pure, dependency-free,
+no `fs`, no wiring into any running tool or the CLI. It covers exactly the
+three Rules above as a retrospective validator (the logic
+`hexagen evidence pack` would run): a trace matching a live grant is
 valid; a trace with no `grant_id` is invalid; a trace whose `grant_id`
 matches no supplied grant is invalid; a trace with a call timestamped at or
-after `revoked_at` is invalid; a trace with a call timestamped after
-`expires_at` is invalid. Both files are uncommitted spikes, matching how
-`grant.ts` and its tests were left in `GRANT.md`.
+after `revoked_at` is invalid; a trace with a call timestamped strictly
+after `expires_at` is invalid (exactly at `expires_at` is still in-window
+and valid). Both files live under `docs/kernel/spike/`, matching where
+`grant.ts` and its tests were moved in `GRANT.md` — deliberately outside
+`packages/mcp-server/src` and its barrel; `mcp-server` does not import
+them.
