@@ -325,6 +325,38 @@ describe("checks", () => {
     expect(out).toBe("pending=0 required=0 bad=");
   });
 
+  test("NDJSON, one object per line, is read like the array", async () => {
+    const nd = [
+      { n: "Build", s: "completed", c: "success" },
+      { n: "Lint", s: "in_progress", c: null },
+    ]
+      .map((r) => JSON.stringify(r))
+      .join("\n");
+    const { code, out } = await run(`${nd}\n`);
+    expect(code).toBe(0);
+    expect(out).toBe("pending=1 required=1 bad=Lint");
+  });
+
+  test("a failing run on the second page is reported bad", async () => {
+    const page1 = Array.from({ length: 100 }, (_, i) =>
+      JSON.stringify({ n: `Job ${i}`, s: "completed", c: "success" }),
+    );
+    const page2 = [
+      JSON.stringify({ n: "Build (linux)", s: "completed", c: "failure" }),
+    ];
+    const { code, out } = await run([...page1, ...page2].join("\n"));
+    expect(code).toBe(0);
+    expect(out).toBe("pending=0 required=1 bad=Build (linux)");
+  });
+
+  test("an NDJSON line that is not a valid run still exits 2 and prints nothing", async () => {
+    const { code, out } = await run(
+      `{"n":"Build","s":"completed","c":"success"}\n{"n":"Lint"}\n`,
+    );
+    expect(code).toBe(2);
+    expect(out).toBe("");
+  });
+
   test("the required pattern comes from the overlay", async () => {
     const { out } = await run(runs(["Deploy", "completed", "success"]), {
       config: configFor({ requiredCheck: "^Deploy" }),

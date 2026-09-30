@@ -284,15 +284,10 @@ const GOOD_CONCLUSIONS: ReadonlySet<string> = new Set([
  * and a broken one as clean.
  */
 function parseCheckRuns(text: string): readonly CheckRun[] | undefined {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-  if (!Array.isArray(parsed)) return undefined;
+  const rows = parseRows(text);
+  if (rows === undefined) return undefined;
   const runs: CheckRun[] = [];
-  for (const row of parsed) {
+  for (const row of rows) {
     if (row === null || typeof row !== "object" || Array.isArray(row))
       return undefined;
     const { n, s, c } = row as { n?: unknown; s?: unknown; c?: unknown };
@@ -301,6 +296,33 @@ function parseCheckRuns(text: string): readonly CheckRun[] | undefined {
     runs.push({ n, s, c });
   }
   return runs;
+}
+
+/**
+ * The rows of the payload: one JSON array, or NDJSON — one object per line,
+ * which is what `gh api --paginate --jq '.check_runs[] | {…}'` emits across
+ * every page (a `--jq` filter runs per page, so it cannot produce one array).
+ * A payload that is neither is `undefined`, and so is an empty one: a caller
+ * with no runs to report sends `[]`.
+ */
+function parseRows(text: string): readonly unknown[] | undefined {
+  try {
+    const whole: unknown = JSON.parse(text);
+    return Array.isArray(whole) ? whole : [whole];
+  } catch {
+    // Not one JSON value; try one value per line.
+  }
+  const lines = text.split("\n").filter((line) => line.trim() !== "");
+  if (lines.length < 2) return undefined;
+  const rows: unknown[] = [];
+  for (const line of lines) {
+    try {
+      rows.push(JSON.parse(line));
+    } catch {
+      return undefined;
+    }
+  }
+  return rows;
 }
 
 /** The check name whose run gates the merge: the caller's override, else the project's. */
