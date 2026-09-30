@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
   EXIT_HEALTHY,
@@ -669,5 +671,70 @@ describe("A-30 §1.3: the deprecated alias in doctor", () => {
     );
     expect(text).toContain("WARN  [config] opencodeServerUrl is deprecated");
     expect(text).not.toContain("FAIL  [config] opencodeServerUrl");
+  });
+});
+
+/**
+ * OW1's migrated fixture overlay, run through doctor.
+ *
+ * This is the exact set OW8's seeded run asserts, and it is pinned here because
+ * a WARN nobody asserts is a WARN that silently grows: adding a seat to the
+ * fixture would change what a CI runner is expected to report, and the only
+ * place that can be caught is a test that names the whole set.
+ */
+const FIXTURE = resolve(
+  import.meta.dirname,
+  "../../../../packages/template-engine/__tests__/fixtures/orchestration/campaign-foundry/overlay/config.yaml",
+);
+
+describe("A-30 §6: doctor's findings on OW1's fixture overlay", () => {
+  test("it is exactly one WARN, for local-opencode, and nothing else", async () => {
+    const parsed = parseConfig(readFileSync(FIXTURE, "utf8"));
+    expect(parsed.problems).toEqual([]);
+
+    const { findings } = await runDoctor(
+      parsed.config,
+      parsed.problems,
+      parsed.deprecations,
+      true,
+      depsOver(),
+    );
+    const warned = findings.filter((f) => f.severity === "warn");
+    expect(warned).toHaveLength(1);
+    expect(warned[0]?.check).toBe("lane-host local-opencode");
+    expect(warned[0]?.message).toContain(
+      "no seat dispatches through this host",
+    );
+    // With every capability present, the fixture is healthy.
+    expect(findings.filter((f) => f.severity === "fail")).toEqual([]);
+  });
+
+  test("on a CI runner the ONLY findings are the two local-opencode FAILs and that one WARN", async () => {
+    const parsed = parseConfig(readFileSync(FIXTURE, "utf8"));
+    const { findings, exitCode } = await runDoctor(
+      parsed.config,
+      parsed.problems,
+      parsed.deprecations,
+      true,
+      {
+        ...HEALTHY,
+        // `opencode` is not installed on a runner, and `curl` cannot reach a
+        // server nobody started. Both are on ONE host, so both must appear.
+        hasCommand: async (command) => command !== "opencode",
+        runCheck: async () => "failed",
+      },
+    );
+    const failed = findings.filter((f) => f.severity === "fail");
+    expect(
+      failed.map((f) => f.check),
+      "two failures, both on the one host the fixture declares",
+    ).toEqual(["lane-host local-opencode", "lane-host local-opencode"]);
+    const messages = failed.map((f) => f.message).join("\n");
+    expect(messages).toContain("dispatch[0] (opencode) is not on PATH");
+    expect(messages).toContain(
+      'check ["curl","-sf","http://127.0.0.1:4096/doc"]',
+    );
+    expect(findings.filter((f) => f.severity === "warn")).toHaveLength(1);
+    expect(exitCode).toBe(EXIT_UNHEALTHY);
   });
 });

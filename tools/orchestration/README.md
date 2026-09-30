@@ -16,13 +16,44 @@ The package reads one file from the project root:
 ```
 
 `hexagen-orchestration-init` scaffolds it (skipping any file that already
-exists) alongside `house-rules.md`, `cast.md` and `lessons.md`.
+exists) alongside `house-rules.md`, `cast.md`, `lessons.md`, and the lane
+handoff directory's own `.lane/.gitignore`.
 `hexagen-orchestration-doctor` validates it and reports anything the project is
 missing.
 
 Nothing in the package hardcodes a repository, a port or a log root — every one
 of those comes from the overlay, so the same package serves any project that
 adopts it.
+
+## Lane hosts and seats
+
+A delegated lane can run on a remote opencode server that executes tools on the
+server side, so where a lane runs is not a URL. Two settings say it:
+
+`laneHosts` — **where and how.** Each entry declares `name`, `dispatch` (the
+transport prefix only; never `--dir`, `--agent`, `-m`, `--model` or `--format`,
+which the orchestrator appends) and `gate` (`full` or `targeted-only`, the gate
+scope on that host). A host is **remote** when it carries `ssh`, `clone` or
+`worktrees`, and a remote host must carry all three plus `check`. `check` exits 0
+if and only if the dispatch path itself works: it runs no lane and writes no
+opencode session.
+
+`seats` — **who.** Each entry declares `id`, `agent`, `model`, and a `host`
+naming a `laneHosts[].name`. `cast.md` refers to a seat by its `id` and never
+restates its agent or model.
+
+`doctor` reports on both: that `dispatch[0]` is on `PATH`, that the ssh probe
+reaches a remote host, that `check` passes, and that the clone's `user.email`
+matches this repository's. A host no seat references is a `WARN`, and a `WARN`
+never affects the exit code.
+
+### `opencodeServerUrl` is deprecated
+
+`opencodeServerUrl` is no longer a setting. An overlay that still sets it keeps
+working: `parseConfig` synthesizes a local `laneHosts` entry named
+`opencode-server`, and reports a deprecation, which `doctor` prints as a `WARN`.
+A deprecation never refuses — `init`, `gate` and every other bin act on the
+config regardless — so an overlay can be migrated on its own schedule.
 
 ## Bins
 
