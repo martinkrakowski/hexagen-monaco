@@ -1,0 +1,118 @@
+# campaign-foundry's orchestration overlay config
+#
+# The consumer-owned half of the split. hexagen never emits this file, never hashes it and
+# never writes to it: `hexagen add orchestration --force` and any future upgrade leave
+# `.agents/orchestration/**` byte-identical. `hexagen-orchestration-doctor` validates it
+# against the schema at wave start, refuses an unknown key, refuses a missing `repo`, refuses
+# a `waveStatusPort` that appears in `forbiddenPorts`, and fails any `invariants` key that
+# differs from its locked default without a matching `overrides[]` entry naming it with a
+# reason.
+#
+# These are campaign-foundry's real values, not the package's defaults. The distinction is
+# load-bearing: `waveLogDir` is `$HOME/.waves` because that is where this repository's own
+# wave-status server scans, and `waveStatusPort` is 4317 because that is its default. A hexagen
+# project sets neither.
+
+# Where the plans live. `doctor` resolves the plan directory for plan review from here.
+planDir: docs/planning
+
+# The ordered list `hexagen-orchestration-gate` runs, and the single source for both CI and the
+# local gate. `optional: true` is the only legal way a step may not run: the gate reports
+# `SKIPPED <step> (<reason>)` and counts it in its summary. A step without it whose script is
+# absent fails the gate by name, because a gate that passes when it did not run is the one
+# failure class a gate must never have.
+gateSteps:
+  - name: check:env
+    command: yarn check:env
+    optional: true
+  - name: build
+    command: yarn build
+  - name: typecheck
+    command: yarn typecheck
+  - name: lint
+    command: yarn lint
+  - name: format:check
+    command: yarn format:check
+  - name: lint:arch
+    command: yarn lint:arch
+  - name: sync:check
+    command: yarn sync:check
+  - name: lint:bytes
+    command: yarn lint:bytes
+  - name: plan:verify
+    command: yarn plan:verify
+  - name: test:cov
+    command: yarn test:cov
+  - name: verify-manifests
+    command: hexagen-orchestration-verify-manifests
+
+# The CI check whose conclusion gates a merge — a regex over check-run names, not a display
+# name. A review bot that registers instantly must never satisfy the wait on its own.
+requiredCheck: ^Build
+
+# Files that concurrent lanes routinely append to, where keeping BOTH sides of a conflict hunk
+# is the correct resolution. campaign-foundry's own regex, verbatim: its session log, its
+# changelog, its package port barrels, its UI barrel and its message catalogue. Only ever add a
+# file whose lanes append at the END — the resolver preserves order, not intent.
+appendOnlyPaths:
+  - ^(\.agents/session-log\.md|CHANGELOG\.md|packages/[^/]+/src/application/ports/out/index\.ts|apps/web/src/components/ui/index\.ts|apps/web/src/components/campaign/messages\.ts)$
+
+# Ports no lane may bind or request. These are the operator's live dev servers: a request
+# there overwrites their output and spends their credits. This is where the refusal lives; the
+# server has no built-in list of its own.
+forbiddenPorts:
+  - 3000
+  - 3001
+
+# Operator data no lane may ever stage. `git add -A` in this repository reaches both.
+operatorDataPaths:
+  - briefs/
+  - assets/inputs/*/
+
+# The shared model server this project attaches to. Reachability is a `doctor` capability
+# check. Never start this server yourself; ask the operator to restart it.
+opencodeServerUrl: http://127.0.0.1:4096
+
+# Where this repository's wave events are logged. campaign-foundry's own value, which is also
+# what its status server scans. A hexagen project uses `$HOME/.waves-<name>` instead, because a
+# wave logged in a shared bare root is joined against the wrong repository and reports false
+# "no PR" flags.
+waveLogDir: $HOME/.waves
+
+# Coverage the gate requires, in percent, for each of the four measures. The repo is fully
+# tested and enforces 100% so coverage can never regress.
+coverageRequirement: 100
+
+# The mutation-family steps stay in the resolved list. `doctor` and the gate read this to
+# decide whether the manifest replay and its verification are part of the step list.
+mutate: true
+
+# Where the wave-status server reads the project's design tokens from. Optional: absent, the
+# server falls back to its own neutral custom-property set.
+tokensCssPath: apps/web/src/styles/tokens.css
+
+# The only legal way to weaken one of the four invariants below. Each entry is
+# {invariant, reason}; `doctor` fails an entry whose invariant is not one of the four, and
+# fails an `invariants` key that differs from its default with no entry naming it. Empty here:
+# campaign-foundry weakens nothing.
+overrides: []
+
+# The four core invariants, locked to exactly these defaults.
+#   statusSource: derived            — status comes from the branch, never from a report
+#   eventDuty: true                  — no lane launches without its event already written
+#   mergeRequiresGreenGate: true     — a red gate is never merged
+#   attribution: false               — no attribution in commits or PRs
+invariants:
+  statusSource: derived
+  eventDuty: true
+  mergeRequiresGreenGate: true
+  attribution: false
+
+# owner/name. Required. The wave-status server scopes itself to this repository and ignores
+# waves whose events name a different one; the sweep bin derives its query from it too, so no
+# ported tool hardcodes a repository.
+repo: martinkrakowski/campaign-foundry
+
+# This repository's own wave-status server. 4317 is its default and is not forbidden above;
+# hexagen's own server runs on a different port and adds 4317 to `forbiddenPorts` instead.
+waveStatusPort: 4317
