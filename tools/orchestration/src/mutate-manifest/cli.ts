@@ -25,12 +25,20 @@ export interface ManifestCliIo {
  * verification cannot leave the working tree mutated — the one thing a mutate
  * tool must never do. Same shape as `src/mutate/cli.ts`, which this mirrors.
  */
+/**
+ * The command that is running, so an interrupt can stop it before the file is
+ * put back: a suite still running would read, and report on, a file that is
+ * changing beneath it.
+ */
+let running: { kill: (signal: NodeJS.Signals) => unknown } | undefined;
+
 export const onSignal: NonNullable<MutationDeps["onSignal"]> = (cleanup) => {
   let cleanPromise: Promise<void> | null = null;
   const handler = () => {
     if (!cleanPromise) {
       cleanPromise = (async () => {
         try {
+          running?.kill("SIGTERM");
           await cleanup();
           process.exit(130);
         } catch (error) {
@@ -53,34 +61,45 @@ export const onSignal: NonNullable<MutationDeps["onSignal"]> = (cleanup) => {
 /* Deferred imports: importing this module — a test does — must cost nothing. */
 const nodeFs = () => import("node:fs/promises");
 
-export const realDeps: MutationDeps = {
-  readFile: async (path) => (await nodeFs()).readFile(path, "utf8"),
-  readFileBuffer: async (path) => (await nodeFs()).readFile(path),
-  writeFileBuffer: async (path, content) =>
-    (await nodeFs()).writeFile(path, content),
-  execute: async (command) => {
-    const { execFile } = await import("node:child_process");
-    return new Promise((resolve) => {
-      const [bin, ...rest] = command;
-      execFile(bin as string, rest, (error, stdout, stderr) => {
-        if (error === null) {
-          resolve({ exitCode: 0, stdout, stderr });
-          return;
-        }
-        const code = (error as NodeJS.ErrnoException & { code?: number }).code;
-        // A numeric code is the exit status of a process that ran and failed. Any other
-        // code means it never launched, so the 1 below is a placeholder rather than a
-        // result: name the failure instead of letting the 1 be read as a catch.
-        resolve(
-          typeof code === "number"
-            ? { exitCode: code, stdout, stderr }
-            : { exitCode: 1, stdout, stderr, launchError: error.message },
-        );
+/** `execFileImpl` is a parameter so a test can hand in a child it controls. */
+export function createRealDeps(
+  execFileImpl?: typeof import("node:child_process").execFile,
+): MutationDeps {
+  return {
+    readFile: async (path) => (await nodeFs()).readFile(path, "utf8"),
+    readFileBuffer: async (path) => (await nodeFs()).readFile(path),
+    writeFileBuffer: async (path, content) =>
+      (await nodeFs()).writeFile(path, content),
+    execute: async (command) => {
+      const execFile =
+        execFileImpl ?? (await import("node:child_process")).execFile;
+      return new Promise((resolve) => {
+        const [bin, ...rest] = command;
+        const child = execFile(bin as string, rest, (error, stdout, stderr) => {
+          running = undefined;
+          if (error === null) {
+            resolve({ exitCode: 0, stdout, stderr });
+            return;
+          }
+          const code = (error as NodeJS.ErrnoException & { code?: number })
+            .code;
+          // A numeric code is the exit status of a process that ran and failed. Any other
+          // code means it never launched, so the 1 below is a placeholder rather than a
+          // result: name the failure instead of letting the 1 be read as a catch.
+          resolve(
+            typeof code === "number"
+              ? { exitCode: code, stdout, stderr }
+              : { exitCode: 1, stdout, stderr, launchError: error.message },
+          );
+        });
+        running = child;
       });
-    });
-  },
-  onSignal,
-};
+    },
+    onSignal,
+  };
+}
+
+export const realDeps: MutationDeps = createRealDeps();
 
 export async function runCli(io: ManifestCliIo): Promise<number> {
   const [path] = io.argv;

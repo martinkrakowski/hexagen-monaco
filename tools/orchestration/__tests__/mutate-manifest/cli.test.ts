@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import type { execFile } from "node:child_process";
 import { join } from "node:path";
 import {
   EXIT_MALFORMED,
   EXIT_UNRESTORED,
+  createRealDeps,
   onSignal,
   realDeps,
   runCli,
@@ -277,5 +279,34 @@ describe("realDeps", () => {
     expect((await realDeps.readFileBuffer(path)).toString("utf8")).toBe(
       "alpha",
     );
+  });
+});
+
+describe("an interrupt while the command is running", () => {
+  test("the child gets SIGTERM before the file is restored and the process exits", async () => {
+    const order: string[] = [];
+    const child = {
+      kill: vi.fn((signal: string) => {
+        order.push(`kill ${signal}`);
+        return true;
+      }),
+    };
+    const fakeExecFile = (() => child) as unknown as typeof execFile;
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
+      order.push("exit");
+    }) as never);
+
+    const deps = createRealDeps(fakeExecFile);
+    const unregister = deps.onSignal!(async () => {
+      order.push("restore");
+    });
+    void deps.execute(["some-suite"]);
+
+    process.emit("SIGTERM");
+    await vi.waitFor(() => expect(exitSpy).toHaveBeenCalledWith(130));
+    expect(order).toEqual(["kill SIGTERM", "restore", "exit"]);
+
+    unregister();
+    exitSpy.mockRestore();
   });
 });

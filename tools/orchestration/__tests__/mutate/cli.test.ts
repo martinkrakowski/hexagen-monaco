@@ -1,8 +1,15 @@
 import { describe, expect, test, vi, afterEach } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { EventEmitter } from "node:events";
+import type { spawn } from "node:child_process";
 import { join } from "node:path";
-import { runCli, realDeps, type MutateCliIo } from "../../src/mutate/cli.js";
+import {
+  runCli,
+  realDeps,
+  createRealDeps,
+  type MutateCliIo,
+} from "../../src/mutate/cli.js";
 import {
   EXIT_CAUGHT,
   EXIT_SURVIVED,
@@ -507,6 +514,39 @@ describe("realDeps integration", () => {
     expect(dummyCleanup).not.toHaveBeenCalled();
     expect(exitSpy).not.toHaveBeenCalled();
 
+    exitSpy.mockRestore();
+  });
+});
+
+describe("an interrupt while the command is running", () => {
+  test("the child gets SIGTERM before the file is restored and the process exits", async () => {
+    const order: string[] = [];
+    const child = Object.assign(new EventEmitter(), {
+      stdout: Object.assign(new EventEmitter(), { setEncoding: () => {} }),
+      stderr: Object.assign(new EventEmitter(), { setEncoding: () => {} }),
+      kill: vi.fn((signal: string) => {
+        order.push(`kill ${signal}`);
+        return true;
+      }),
+    });
+    const fakeSpawn = (() => child) as unknown as typeof spawn;
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
+      order.push("exit");
+    }) as never);
+
+    const deps = createRealDeps(fakeSpawn);
+    const unregister = deps.onSignal!(async () => {
+      order.push("restore");
+    });
+    const running = deps.execute(["some-suite"]);
+
+    process.emit("SIGTERM");
+    await vi.waitFor(() => expect(exitSpy).toHaveBeenCalledWith(130));
+    expect(order).toEqual(["kill SIGTERM", "restore", "exit"]);
+
+    unregister();
+    child.emit("close", null);
+    await running;
     exitSpy.mockRestore();
   });
 });
