@@ -30,8 +30,21 @@ const ALLOWED_COMMANDS = ["pgrep", "gh", "git"];
  */
 const ALLOWED_PLAN_VERIFY = ["src/internal/artifact.ts"];
 
+// Every way a module specifier reaches the file: `from "x"`, a side-effect
+// `import "x"`, a dynamic `import("x")` (quoted or a plain template literal),
+// and `require("x")`.
 const IMPORT =
-  /\bfrom\s+["']([^"']+)["']|\bimport\s*\(\s*["']([^"']+)["']\s*\)/g;
+  /\bfrom\s+["'`]([^"'`]+)["'`]|\bimport\s*["']([^"']+)["']|\bimport\s*\(\s*["'`]([^"'`]+)["'`]\s*\)|\brequire\s*\(\s*["'`]([^"'`]+)["'`]\s*\)/g;
+/** The only `child_process` bindings this lane may name, each as itself. */
+const ALLOWED_CHILD_PROCESS_BINDINGS = [
+  "execFile",
+  "spawn",
+  "execFileSync",
+  "spawnSync",
+];
+const CHILD_PROCESS_SPECIFIER = /["'`](?:node:)?child_process["'`]/g;
+const NAMED_CHILD_PROCESS_IMPORT =
+  /\bimport\s+(type\s+)?\{([^}]*)\}\s*from\s*["'](?:node:)?child_process["']/g;
 // A bare call, not a method: `pattern.exec(text)` is a RegExp, not a subprocess.
 const SUBPROCESS =
   /(?<![.\w$])(execFile|execFileSync|spawn|spawnSync|exec|execSync|fork)\s*\(\s*([^,)]*)/g;
@@ -58,10 +71,46 @@ function ownedFiles(): string[] {
   });
 }
 
+function importsOfText(text: string): string[] {
+  return [...text.matchAll(IMPORT)].map((m) => m[1] ?? m[2] ?? m[3] ?? m[4]);
+}
+
 function importsOf(file: string): string[] {
-  return [...readFileSync(file, "utf8").matchAll(IMPORT)].map(
-    (m) => m[1] ?? m[2],
-  );
+  return importsOfText(readFileSync(file, "utf8"));
+}
+
+/**
+ * Every way `child_process` is reached other than a NAMED import of exactly
+ * `execFile`, `spawn`, `execFileSync` or `spawnSync`, unaliased: a namespace
+ * import, a default import, an `as` alias, a `require`, a dynamic import, a
+ * side-effect import. An aliased or namespaced binding is a subprocess call the
+ * matcher below cannot see by name, so it may not exist.
+ */
+function childProcessViolations(text: string): string[] {
+  const violations: string[] = [];
+  const allowedAt = new Set<number>();
+  for (const m of text.matchAll(NAMED_CHILD_PROCESS_IMPORT)) {
+    const start = (m.index ?? 0) + m[0].search(CHILD_PROCESS_SPECIFIER);
+    if (m[1] !== undefined) {
+      allowedAt.add(start); // `import type`: nothing runs.
+      continue;
+    }
+    const bindings = m[2]
+      .split(",")
+      .map((binding) => binding.trim())
+      .filter((binding) => binding !== "");
+    const bad = bindings.filter(
+      (binding) => !ALLOWED_CHILD_PROCESS_BINDINGS.includes(binding),
+    );
+    if (bad.length === 0) allowedAt.add(start);
+    else violations.push(`binding ${bad.join(", ")}`);
+  }
+  for (const m of text.matchAll(CHILD_PROCESS_SPECIFIER)) {
+    if (!allowedAt.has(m.index ?? 0)) {
+      violations.push(`reference at ${m.index ?? 0}`);
+    }
+  }
+  return violations;
 }
 
 describe("the status server's charter", () => {
@@ -82,6 +131,40 @@ describe("the status server's charter", () => {
     expect(names).not.toContain(join("src", "wave-status", "lib", "events.ts"));
     expect(names).not.toContain(join("src", "wave-status", "lib", "emit.ts"));
     expect(names).not.toContain(join("src", "wave-status", "lib", "types.ts"));
+  });
+
+  test("child_process is reached only by a named, unaliased import of an allowed binding", () => {
+    for (const file of files) {
+      expect(
+        childProcessViolations(readFileSync(file, "utf8")),
+        relative(PACKAGE_ROOT, file),
+      ).toEqual([]);
+    }
+  });
+
+  test("the child_process rule flags a namespace import, an alias, a default import, a require and a dynamic import", () => {
+    const clean = 'import { execFile, spawn } from "node:child_process";';
+    expect(childProcessViolations(clean)).toEqual([]);
+    for (const planted of [
+      'import * as cp from "node:child_process";',
+      'import { execFile as run } from "node:child_process";',
+      'import cp from "child_process";',
+      'const cp = require("node:child_process");',
+      'const cp = await import("node:child_process");',
+      'import { exec } from "node:child_process";',
+      'import "node:child_process";',
+    ]) {
+      expect(childProcessViolations(planted), planted).not.toEqual([]);
+    }
+  });
+
+  test("the import scan sees a side-effect import, a require and a template-literal dynamic import", () => {
+    expect(importsOfText('import "./a.js";')).toEqual(["./a.js"]);
+    expect(importsOfText('const x = require("./b.js");')).toEqual(["./b.js"]);
+    expect(importsOfText("const x = await import(`./c.js`);")).toEqual([
+      "./c.js",
+    ]);
+    expect(importsOfText('import { y } from "./d.js";')).toEqual(["./d.js"]);
   });
 
   test("every subprocess it starts is a fixed, allowed command — never a shell", () => {
