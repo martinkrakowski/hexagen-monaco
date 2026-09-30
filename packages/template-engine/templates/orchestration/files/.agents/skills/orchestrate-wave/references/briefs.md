@@ -33,6 +33,14 @@ Shared seams with lane <OTHER> (coordinate, keep each addition on its own line):
 
 Deliver <TASKS: numbered, each with acceptance criteria from the plan>.
 
+Lane-host variant. It applies when this brief names a `gate: targeted-only` host or a remote lane host,
+and it overrides every rule below that says to run the full gate, push, open a PR, or report a PR URL.
+Then: Commit only. Never push, and never open a PR; the orchestrator fetches your commits back, runs
+the full gate, pushes and opens the PR. Run the targeted checks <TARGETED_CHECKS: the exact commands>
+this brief lists, not the full gate. Your final message is the commit list and the exit code of each
+targeted check, in place of a PR URL. STUCK means a targeted check fails; it does not mean there is
+no PR. Otherwise (no such host named) ignore this paragraph.
+
 Rules:
 
 - Before pushing, run the gate: `npx --no-install hexagen-orchestration-gate`, in the lane's own worktree, on the
@@ -46,6 +54,7 @@ Rules:
   verification incl. the coverage line, and a **Deviations** section). Do NOT merge.
 
 Final message: PR URL, files changed, coverage line, deviations. Nothing else.
+(Under the lane-host variant: the commit list and targeted check exit codes instead.)
 If you cannot produce a PR URL and a passing gate, say **STUCK** and what blocks it —
 do not report progress. The orchestrator verifies both independently either way.
 ```
@@ -87,7 +96,8 @@ Mode: Implementer. Work ONLY in <WORKTREE_PATH> (branch <BRANCH>, PR #<N>).
 Read AGENTS.md and .agents/*.md first.
 
 Apply the findings below as Conventional Commits, each with no attribution trailer. Run the
-gate: `npx --no-install hexagen-orchestration-gate`. Commit, push. Do not open a new PR or merge.
+gate: `npx --no-install hexagen-orchestration-gate`. Commit, push. Do not open a new PR or merge. Under the lane-host variant (Template A), commit only:
+never push.
 
 Findings — each was verified against the code:
 

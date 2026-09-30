@@ -321,7 +321,8 @@ that did not happen.
 
    1. A remote opencode server executes its tools on the server side. `--dir` is the server
       worktree path. The orchestrator creates that worktree over `ssh`, fetches the lane's commits
-      back, then runs the full gate, pushes and opens the PR itself. The lane never pushes.
+      back, then runs the full gate, pushes and opens the PR itself. The lane never pushes; its brief
+      carries Template A's lane-host variant.
    2. A sandboxed seat can read only its worktree. Its brief lives at `.lane/brief.md` inside the
       worktree, and is verified with `git check-ignore` before dispatch.
    3. A `gate: targeted-only` host runs targeted tests and replays only. Its briefs forbid the full

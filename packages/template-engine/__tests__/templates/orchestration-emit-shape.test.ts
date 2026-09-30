@@ -285,6 +285,41 @@ describe("orchestration template — emit shape", () => {
     assert.equal(result.totalErrors, 0);
   });
 
+  describe("briefs.md — Template A carries the lane-host variant", () => {
+    it("tells a lane-host implementer to commit only, run targeted checks, and report commits, not a PR", async () => {
+      const briefs = await read(
+        projectRoot,
+        `${SKILL_DIR}/references/briefs.md`,
+      );
+      const start = briefs.indexOf("## Template A");
+      const end = briefs.indexOf("## Template B");
+      assert.ok(start >= 0 && end > start, "Template A must be delimited");
+      const a = briefs.slice(start, end);
+      const at = a.indexOf("Lane-host variant");
+      assert.ok(at >= 0, "Template A must carry an explicit lane-host variant");
+      const variant = a.slice(at);
+      for (const needle of [
+        "gate: targeted-only",
+        "remote lane host",
+        "Commit only",
+        "Never push",
+        "never open a PR",
+        "targeted checks",
+        "commit list",
+        "exit codes",
+        "STUCK means a targeted check fails",
+      ]) {
+        assert.ok(variant.includes(needle), `the variant must say: ${needle}`);
+      }
+      // The variant must come BEFORE the unconditional "run the full gate, push, PR"
+      // rules, or those rules read as applying to every lane.
+      assert.ok(
+        at < a.indexOf("Before pushing, run the gate"),
+        "the lane-host variant must precede the push-and-PR rules it overrides",
+      );
+    });
+  });
+
   describe("gate.yml — the workflow the emit-shape test is the only gate for", () => {
     let gate: string;
 
