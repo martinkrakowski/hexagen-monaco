@@ -600,6 +600,7 @@ describe.skipIf(!hasZsh())(
         '  *) echo "npx: command not found in project" >&2; exit 127 ;;',
         "esac",
         'case " $* " in',
+        '  *" hexagen-orchestration-sweep gate "*) exit 0 ;;',
         '  *" hexagen-orchestration-sweep "*) shift 2; exec node "$SWEEP_BIN" "$@" ;;',
         "esac",
         "exit 0",
@@ -614,15 +615,29 @@ describe.skipIf(!hasZsh())(
         // spaces, one with parentheses — as a later "page" would deliver them.
         "  *check-runs*)",
         '    echo \'{"n":"Lint","s":"completed","c":"success"}\'',
+        '    [ -n "${GH_GREEN:-}" ] && { echo \'{"n":"Build","s":"completed","c":"success"}\'; exit 0; }',
         '    echo \'{"n":"Build and Test","s":"completed","c":"failure"}\'',
         '    echo \'{"n":"Build (linux)","s":"completed","c":"failure"}\' ;;',
         "esac",
         "exit 0",
         "",
       ].join("\n");
+      // A git that fails ONE named operation and passes everything else to the
+      // real one, to observe what the script does when housekeeping fails.
+      const gitStub = [
+        "#!/bin/sh",
+        'if [ -n "${STUB_GIT_FAIL:-}" ]; then',
+        '  case " $* " in',
+        '    *" $STUB_GIT_FAIL "*) echo "fatal: stubbed failure of $STUB_GIT_FAIL" >&2; exit 1 ;;',
+        "  esac",
+        "fi",
+        'exec "$REAL_GIT" "$@"',
+        "",
+      ].join("\n");
       for (const [name, body] of [
         ["npx", npx],
         ["gh", gh],
+        ["git", gitStub],
       ] as const) {
         writeFileSync(join(stubBinDir, name), body);
         chmodSync(join(stubBinDir, name), 0o755);
@@ -650,6 +665,10 @@ describe.skipIf(!hasZsh())(
           REPO_DIR: s.repoDir,
           SWEEP_BIN,
           GH_LOG: join(s.root, "gh.log"),
+          REAL_GIT: spawnSync("sh", ["-c", "command -v git"], {
+            encoding: "utf8",
+          }).stdout.trim(),
+          REVIEW_SETTLE_SECONDS: "0",
           ...extra,
         },
       });
@@ -730,6 +749,55 @@ describe.skipIf(!hasZsh())(
       } finally {
         s.cleanup();
       }
+    });
+
+    describe("the housekeeping after the merge", () => {
+      const green = { GH_GREEN: "1" };
+
+      test("a clean run merges, cleans up and says ALL DONE with exit 0", () => {
+        const s = makeScenario(false);
+        try {
+          const result = runScenario(s, green);
+          expect(result.stdout).toContain("merged #42");
+          expect(result.stdout).toContain("ALL DONE");
+          expect(result.stderr).not.toContain("WARN:");
+          expect(result.status).toBe(0);
+        } finally {
+          s.cleanup();
+        }
+      });
+
+      test("a failed final pull dies after the merge, naming what did not sync", () => {
+        const s = makeScenario(false);
+        try {
+          const result = runScenario(s, { ...green, STUB_GIT_FAIL: "pull" });
+          expect(result.stdout).toContain("merged #42");
+          expect(result.status).not.toBe(0);
+          expect(result.stderr).toContain("did not sync");
+          expect(result.stdout).not.toContain("ALL DONE");
+        } finally {
+          s.cleanup();
+        }
+      });
+
+      test("a failed branch delete is a WARN, and the run ends DONE WITH WARNINGS with exit 1", () => {
+        const s = makeScenario(false);
+        try {
+          const result = runScenario(s, {
+            ...green,
+            STUB_GIT_FAIL: "--delete",
+          });
+          expect(result.stdout).toContain("merged #42");
+          expect(result.stderr).toContain(
+            "WARN: could not delete origin/feat/x",
+          );
+          expect(result.stdout).toContain("DONE WITH WARNINGS");
+          expect(result.stdout).not.toContain("ALL DONE");
+          expect(result.status).toBe(1);
+        } finally {
+          s.cleanup();
+        }
+      });
     });
   },
 );

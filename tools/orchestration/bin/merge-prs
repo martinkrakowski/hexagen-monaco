@@ -344,15 +344,45 @@ for spec in "$@"; do
   echo "merged #$pr"
 done
 
+# Everything above this line is the merge, and it has happened. What follows is
+# housekeeping, and it must not report success it did not achieve: a worktree
+# that would not go, a branch that would not delete, or a local ${MAIN} that did
+# not catch up is something the operator has to act on, so each is a WARN and the
+# run ends "DONE WITH WARNINGS" with a non-zero exit instead of "ALL DONE".
 cd "$REPO" || die "cannot cd to $REPO"
+warnings=0
+warn() { echo "WARN: $*" >&2; warnings=1 }
 for worktree in $WORKTREES; do
-  [[ -n "$worktree" && -d "$worktree" ]] && git worktree remove --force "$worktree" \
-    && echo "removed $worktree"
+  [[ -n "$worktree" && -d "$worktree" ]] || continue
+  if git worktree remove --force "$worktree"; then
+    echo "removed $worktree"
+  else
+    warn "could not remove worktree $worktree"
+  fi
 done
-git worktree prune
+git worktree prune || warn "git worktree prune failed"
 for branch in $BRANCHES; do
-  git branch -D "$branch" 2>/dev/null
-  git push -q origin --delete "$branch" 2>/dev/null && echo "deleted origin/$branch"
+  [[ -n "$branch" ]] || continue
+  # A branch that is already gone is the normal case (a temporary worktree never
+  # made a local one; the forge may delete a merged head itself), not a failure.
+  if git show-ref --verify --quiet "refs/heads/$branch"; then
+    git branch -D "$branch" >/dev/null || warn "could not delete local branch $branch"
+  fi
+  if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+    if git push -q origin --delete "$branch"; then
+      echo "deleted origin/$branch"
+    else
+      warn "could not delete origin/$branch"
+    fi
+  fi
 done
-git checkout -q "$MAIN" && git pull -q --ff-only origin "$MAIN" && git log --oneline -8
+if git checkout -q "$MAIN" && git pull -q --ff-only origin "$MAIN"; then
+  git log --oneline -8
+else
+  die "merged, but the local $MAIN did not sync (checkout or pull --ff-only failed) — bring it up to date by hand$( [[ $warnings -eq 0 ]] || echo '; earlier WARN lines also need attention')"
+fi
+if [[ $warnings -ne 0 ]]; then
+  echo "DONE WITH WARNINGS"
+  exit 1
+fi
 echo "ALL DONE"
