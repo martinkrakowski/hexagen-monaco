@@ -88,6 +88,10 @@ Thumbs.db
 .opencode/
 skills-lock.json
 skills/
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/orchestrate-wave/
+!/packages/template-engine/templates/orchestration/files/.agents/skills/
 
 # ───────────────────────────────────────────────
 # Temporary / generated / project-specific files
