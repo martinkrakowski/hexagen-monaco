@@ -502,6 +502,9 @@ function checkTokenReview(reviewPath, genericDir, sourceDir, hexagenRoot) {
     "packages/template-engine/__tests__/fixtures/orchestration/",
     "packages/template-engine/templates/orchestration/files/.agents/skills/orchestrate-wave/",
     "docs/planning/",
+    // The generated bundle embeds the skill's text verbatim, so it is the skill again, not a second
+    // place a token lives. Left in the corpus, every skill-only token would be "found" in it.
+    "packages/template-engine/src/infrastructure/generated/template-bundle.generated.ts",
   ];
   let tracked;
   try {

@@ -547,6 +547,31 @@ describe("orchestration skill coverage", () => {
     expect(result.out).toContain(canary);
   });
 
+  it("bundle: a skill-only token that the generated bundle also embeds is still named", () => {
+    const fixture = copyFixture();
+    const canary = `cf-bundle-canary-${randomUUID().slice(0, 8)}`;
+    plantInlineCanary(fixture, canary);
+    // A stand-in hexagen checkout: the generated bundle embeds the skill text, so it carries the
+    // canary too, next to an unrelated tracked file that keeps the corpus non-empty. The bundle is
+    // not a second place the token lives; it is the skill again, and must not count as one.
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "skill-coverage-bundle-"),
+    );
+    spawnSync("git", ["init", "-q"], { cwd: root });
+    const bundle = path.join(
+      root,
+      "packages/template-engine/src/infrastructure/generated/template-bundle.generated.ts",
+    );
+    fs.mkdirSync(path.dirname(bundle), { recursive: true });
+    fs.writeFileSync(bundle, `export const x = "${canary}";\n`);
+    fs.writeFileSync(path.join(root, "README.md"), "unrelated\n");
+    spawnSync("git", ["add", "."], { cwd: root });
+    const result = run(coverageArgs(fixture, ["--hexagen-root", root]));
+    expect(result.status, result.out).toBe(1);
+    expect(result.out).toContain("unaccounted");
+    expect(result.out).toContain(canary);
+  });
+
   it("F16: a code span with internal whitespace, planted in source and generic, is named", () => {
     const fixture = copyFixture();
     // Generated at runtime, with two spaces inside: a literal in this file would be found by the

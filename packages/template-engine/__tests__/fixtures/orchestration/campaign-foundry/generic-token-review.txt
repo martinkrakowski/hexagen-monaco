@@ -4,7 +4,9 @@
 # `source/` snapshot, and appears in **no** tracked hexagen file outside
 # `packages/template-engine/__tests__/fixtures/orchestration/`,
 # `packages/template-engine/templates/orchestration/files/.agents/skills/orchestrate-wave/` (the
-# template's own tracked copy of this same tree) and `docs/planning/`. A
+# template's own tracked copy of this same tree), `docs/planning/` and
+# `packages/template-engine/src/infrastructure/generated/template-bundle.generated.ts` (the generated
+# bundle, which embeds that same skill text verbatim). A
 # hand-written list of campaign-foundry's own strings cannot catch everything, so this is the
 # mechanical sweep behind it: the test recomputes the same set and fails on anything missing here.
 #
