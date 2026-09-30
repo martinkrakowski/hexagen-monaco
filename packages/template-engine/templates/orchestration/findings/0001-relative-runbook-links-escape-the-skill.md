@@ -19,7 +19,7 @@ relative path that escapes the emitting directory only resolves when the skill i
 repository that happens to carry both files at those relative depths.
 
 Everywhere else the link is dead. The file lands at `.agents/skills/orchestrate-wave/`, three
-directories above the project root, so the upward climb the link performs points outside the project
+directories deep under the project root, so the upward climb the link performs points outside the project
 entirely, and the anchor fragment that named a specific heading has nothing to resolve against. A
 skill whose runbook reference is dead is a skill whose stage detail is missing, and the failure is
 silent: the link renders as ordinary text and the reader never learns a runbook was supposed to be

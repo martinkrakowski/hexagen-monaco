@@ -7,7 +7,7 @@ unfilled is an unfunded seat — the implementer inherits none of this conversat
 Scrubbed from the source runbook in three ways, all of them load-bearing:
 
 - **No attribution trailer.** Commits and PR bodies carry none.
-- **No session-log append.** A lane reports on itself; the orchestrator owns the wave record.
+- **No session-log entry is appended.** A lane reports on itself; the orchestrator owns the wave record.
 - **One gate.** `hexagen-orchestration-gate`, named rather than spelled out as a command list, so
   there is no second copy of a project's step list to keep in sync.
 
@@ -35,8 +35,8 @@ Deliver <TASKS: numbered, each with acceptance criteria from the plan>.
 
 Rules:
 
-- The gate before pushing is the gate: `hexagen-orchestration-gate`. Run it in the lane's own
-  worktree, on the tree you are about to push.
+- Before pushing, run the gate: `hexagen-orchestration-gate`, in the lane's own worktree, on the
+  tree you are about to push.
 - Tests live <WHERE>, one behaviour per test, no real clock/network/filesystem in unit tests.
 - Never hand-edit generated files; change the generator/manifest and regenerate.
 - Do not reference paths that do not exist. If the plan and the code disagree, implement the
@@ -86,8 +86,8 @@ Mode: Implementer. Work ONLY in <WORKTREE_PATH> (branch <BRANCH>, PR #<N>).
 <APPEND-ONLY FILES> by keeping both sides.]
 Read AGENTS.md and .agents/*.md first.
 
-Apply the findings below as Conventional Commits, each with no attribution trailer. The gate is
-the gate: `hexagen-orchestration-gate`. Commit, push. Do not open a new PR or merge.
+Apply the findings below as Conventional Commits, each with no attribution trailer. Run the
+gate: `hexagen-orchestration-gate`. Commit, push. Do not open a new PR or merge.
 
 Findings — each was verified against the code:
 
