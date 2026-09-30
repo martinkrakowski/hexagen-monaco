@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfigFor } from "../../src/internal/project.js";
+import { runDoctor, type DoctorDeps } from "../../src/doctor/doctor.js";
 
 /**
  * `loadConfigFor` — the project-facing loader the bins call.
@@ -65,5 +66,63 @@ describe("F5: a repo from gh is validated, and its problem is kept", () => {
     });
     expect(loaded.config.repo).toBe("acme/own");
     expect(asked).toBe(false);
+  });
+});
+
+describe("F9: a schema error does not make doctor check the defaults", () => {
+  const healthy: DoctorDeps = {
+    exists: async () => true,
+    hasCommand: async () => true,
+    supportsWorktrees: async () => true,
+    httpReachable: async () => false,
+  };
+
+  test("the unknown key, the port in forbiddenPorts and the unreachable URL are all reported in one run", async () => {
+    const root = project(
+      [
+        "forbiddenPorts: [4318]",
+        "opencodeServerUrl: http://127.0.0.1:9",
+        "nope: 1",
+        "",
+      ].join("\n"),
+    );
+    const loaded = await loadConfigFor(root, {
+      readRepository: () => "acme/demo",
+    });
+    const probed: string[] = [];
+    const { findings, exitCode } = await runDoctor(
+      loaded.config,
+      loaded.problems,
+      loaded.present,
+      {
+        ...healthy,
+        httpReachable: async (url) => {
+          probed.push(url);
+          return false;
+        },
+      },
+    );
+
+    expect(exitCode).toBe(1);
+    const failing = findings.filter((f) => f.severity === "fail");
+    expect(failing.find((f) => f.check === "config")?.message).toMatch(
+      /^nope /,
+    );
+    expect(
+      failing.find((f) => f.check === "waveStatusPort")?.message,
+    ).toContain("4318");
+    expect(
+      failing.find((f) => f.check === "opencode-server")?.message,
+    ).toContain("http://127.0.0.1:9 did not answer");
+    expect(probed).toEqual(["http://127.0.0.1:9"]);
+  });
+
+  test("a file that is not YAML falls back to defaults, since there is nothing to read", async () => {
+    const loaded = await loadConfigFor(project("planDir: [unclosed\n"), {
+      readRepository: () => "acme/demo",
+    });
+    expect(loaded.problems[0]?.at).toBe("<file>");
+    expect(loaded.config.planDir).toBe("docs/planning");
+    expect(loaded.present).toBe(true);
   });
 });

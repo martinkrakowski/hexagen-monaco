@@ -368,6 +368,7 @@ describe("gateSteps", () => {
 
     test("a bad value never yields an optional step", () => {
       const result = parseConfig(step("    optional: no\n"));
+      expect(result.config?.gateSteps).toHaveLength(1);
       expect(result.config?.gateSteps[0]?.optional).not.toBe(true);
     });
 
@@ -440,17 +441,43 @@ describe("loadConfig", () => {
     expect(result.config?.repo).toBeUndefined();
   });
 
-  test("a malformed file is reported without asking gh anything", async () => {
+  test("a file with a schema problem still gets its repo from gh, and keeps its problems", async () => {
+    const result = await loadConfig(io("nope: 1\n", "octocat/Hello-World"));
+    expect(result.problems.map((p) => p.at)).toEqual(["nope"]);
+    expect(result.config?.repo).toBe("octocat/Hello-World");
+  });
+
+  test("a repo the file got wrong is not papered over with gh's answer", async () => {
+    const result = await loadConfig(
+      io("repo: no-slash\n", "octocat/Hello-World"),
+    );
+    expect(result.problems.map((p) => p.at)).toEqual(["repo"]);
+    expect(result.config?.repo).toBeUndefined();
+  });
+
+  test("a file that is not YAML has no config at all, and gh is not asked", async () => {
     let asked = false;
     const result = await loadConfig({
-      readConfig: async () => "nope: 1\n",
+      readConfig: async () => "planDir: [unclosed\n",
       repo: async () => {
         asked = true;
         return "octocat/Hello-World";
       },
     });
     expect(result.config).toBeUndefined();
-    expect(result.problems.map((p) => p.at)).toContain("nope");
+    expect(result.problems[0]?.at).toBe("<file>");
     expect(asked).toBe(false);
+  });
+});
+
+describe("F9: parseConfig returns the parsed config alongside its problems", () => {
+  test("the fields that were fine hold what the file said; the bad one is at its default", () => {
+    const result = parseConfig(
+      "forbiddenPorts: [4318]\nopencodeServerUrl: http://127.0.0.1:9\nmutate: 'yes'\nnope: 1\n",
+    );
+    expect(result.problems.map((p) => p.at).sort()).toEqual(["mutate", "nope"]);
+    expect(result.config?.forbiddenPorts).toEqual([4318]);
+    expect(result.config?.opencodeServerUrl).toBe("http://127.0.0.1:9");
+    expect(result.config?.mutate).toBe(false);
   });
 });

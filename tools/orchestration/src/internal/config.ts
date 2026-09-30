@@ -89,6 +89,11 @@ export interface ConfigProblem {
 }
 
 export interface ParseConfigResult {
+  /**
+   * Absent only for a whole-file fault (not YAML, not a mapping). Otherwise
+   * present even when `problems` is not empty: fields that failed validation
+   * hold their defaults and the rest hold what the file said.
+   */
   readonly config?: Config;
   readonly problems: readonly ConfigProblem[];
 }
@@ -490,9 +495,11 @@ export function parseConfig(text: string): ParseConfigResult {
     waveStatusPort,
   };
 
-  return problems.list.length > 0
-    ? { problems: problems.list }
-    : { config, problems: [] };
+  // The config comes back WITH its problems. A field that failed validation is
+  // at its default, but every field that was fine holds what the file said, so
+  // `doctor` can go on to check the ports and the URL the file actually names
+  // instead of the defaults, and report every failure in one run.
+  return { config, problems: problems.list };
 }
 
 /** The whole-file-absent case: every field at its default, and no `repo`. */
@@ -575,6 +582,9 @@ export async function loadConfig(io: ConfigIo): Promise<ParseConfigResult> {
   const parsed = parseConfig(text);
   if (parsed.config === undefined) return parsed;
   if (parsed.config.repo !== undefined) return parsed;
+  // A `repo` the file wrote but got wrong is already a problem. Filling it in
+  // from `gh` would hide the typo behind a value nobody wrote.
+  if (parsed.problems.some((problem) => problem.at === "repo")) return parsed;
 
   const repo = await io.repo();
   if (repo === undefined) return parsed;
