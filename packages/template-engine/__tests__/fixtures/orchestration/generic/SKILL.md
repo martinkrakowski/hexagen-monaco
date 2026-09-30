@@ -18,9 +18,10 @@ You are the **ORCHESTRATOR**. Plan: `$plan`. Wave: `$wave`. If either is empty, 
 proceed — do not guess a plan file.
 
 The full runbook is the delegated-implementation-pipeline document (stage detail, prompt
-templates A–D, invariants, failure playbook) and the orchestrator-kickoff-prompt document, at
-`docs/workflows/delegated-implementation-pipeline.md` and `docs/workflows/orchestrator-kickoff-prompt.md`. **Read the plan and both documents before acting.** This file is the
-operating contract and wins where they differ; it deliberately does not copy them, so they
+templates A–D, invariants, failure playbook) and the orchestrator-kickoff-prompt document. **Read the plan before acting, and, where the project
+ships them, both runbooks** (`docs/workflows/delegated-implementation-pipeline.md` and
+`docs/workflows/orchestrator-kickoff-prompt.md`). This file is the operating contract either way,
+and wins where they differ; it deliberately does not copy them, so they
 cannot drift apart.
 
 - The cast, and each seat's track record: the overlay's `cast.md`, at `.agents/orchestration/cast.md`
@@ -139,8 +140,9 @@ a dependency, and if it may, that the regenerated `yarn.lock` travels with it. (
 **The gate's byte-level scan is in the step list deliberately — it is not inside the
 typecheck step.** Nothing else in a usual gate set looks at bytes. (why: [rationale](references/rationale.md#the-byte-level-scan))
 
-**A route-registry guard is a gate step**, so a lane that adds or moves a test file into a
-scanned directory is covered by the gate itself rather than by a reviewer's memory. (why: [rationale](references/rationale.md#the-other-two-a-conditional-no-op-and-a-route-registry-guard))
+**A project-specific guard (for example a route-registry scan) belongs in `gateSteps` as its own
+step**, so a lane that adds or moves a test file into a scanned directory is covered by the gate
+itself rather than by a reviewer's memory. (why: [rationale](references/rationale.md#the-other-two-a-conditional-no-op-and-a-route-registry-guard))
 
 **A green local gate is not a green CI: diff your gate against the CI workflow first.** (why: [rationale](references/rationale.md#a-green-local-gate-is-not-a-green-ci))
 

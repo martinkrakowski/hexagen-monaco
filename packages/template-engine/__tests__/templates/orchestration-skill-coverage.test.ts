@@ -775,6 +775,15 @@ describe("orchestration skill coverage", () => {
     expect(skill).toContain(
       "An `overrides:` entry is surfaced before the first lane dispatches",
     );
+    // Project-specific guards and runbooks are conditional in the generic skill.
+    expect(skill).toContain(
+      "A project-specific guard (for example a route-registry scan) belongs in `gateSteps` as its own step",
+    );
+    expect(skill).not.toContain("A route-registry guard is a gate step");
+    expect(skill).toContain("where the project ships them, both runbooks");
+    expect(skill).not.toContain(
+      "Read the plan and both documents before acting",
+    );
   });
 
   it("expected-steps.tsv is the 11 lines the extractor derives, and stays derived", () => {
