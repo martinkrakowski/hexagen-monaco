@@ -259,12 +259,16 @@ describe("orchestration template — emit shape", () => {
       )
     ).mode;
     // Owner-execute only: group/other bits follow the runner's umask, so asserting them
-    // would make this test depend on the machine it runs on.
-    assert.notEqual(
-      mode & 0o100,
-      0,
-      "the emitted script lost its owner exec bit",
-    );
+    // would make this test depend on the machine it runs on. Windows has no POSIX mode bits
+    // (stat reports 0o666 whatever was written), so the assertion is POSIX-only; the file
+    // still has to exist and stat there.
+    if (process.platform !== "win32") {
+      assert.notEqual(
+        mode & 0o100,
+        0,
+        "the emitted script lost its owner exec bit",
+      );
+    }
   });
 
   it("passes hexagen validate-templates with zero missing files", async () => {
