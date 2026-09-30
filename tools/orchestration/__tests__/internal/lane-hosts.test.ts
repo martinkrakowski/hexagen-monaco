@@ -150,6 +150,22 @@ describe("A-30 §7: every parseConfig red case, at the path the plan names", () 
     ).toContain("laneHosts[0].worktrees");
   });
 
+  test("a NUL byte in a path or an argv word is refused at that key, because spawn would throw", () => {
+    expect(
+      problemsAt(REMOTE.replace("clone: /srv/cf", 'clone: "/srv\\u0000cf"')),
+    ).toContain("laneHosts[0].clone");
+    expect(
+      problemsAt(
+        REMOTE.replace("worktrees: /srv/wt", 'worktrees: "/srv\\u0000wt"'),
+      ),
+    ).toContain("laneHosts[0].worktrees");
+    expect(
+      problemsAt(
+        REMOTE.replace("dispatch: [ocm-run]", 'dispatch: ["ocm\\u0000run"]'),
+      ),
+    ).toContain("laneHosts[0].dispatch");
+  });
+
   test("a duplicate laneHosts[].name is refused at the LATER name", () => {
     // ONE `laneHosts:` key with two entries: a second key would be a YAML
     // duplicate key, which is a different defect with a different path.

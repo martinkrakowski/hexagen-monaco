@@ -118,6 +118,12 @@ function parseArgv(
     add(at, "must be a non-empty list of non-empty strings");
     return undefined;
   }
+  // `spawn` throws synchronously on a NUL in any argv word, so it is refused
+  // here, at the path, rather than crashing doctor later.
+  if (raw.some((item) => (item as string).includes("\0"))) {
+    add(at, "must not contain a NUL byte in any word");
+    return undefined;
+  }
   return raw as readonly string[];
 }
 
@@ -130,6 +136,10 @@ function parseHostPath(
   if (raw === undefined) return undefined;
   if (!isNonEmptyString(raw)) {
     add(at, "must be a non-empty string");
+    return undefined;
+  }
+  if (raw.includes("\0")) {
+    add(at, "must not contain a NUL byte");
     return undefined;
   }
   if (!raw.startsWith("/")) {

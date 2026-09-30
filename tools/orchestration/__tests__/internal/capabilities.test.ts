@@ -63,6 +63,10 @@ describe("hasCommand, un-injected", () => {
     expect(await hasCommand("hexagen-fake-yarn", env)).toBe(false);
   });
 
+  test("a NUL byte in the name is false, not a throw", async () => {
+    expect(await hasCommand("no\u0000pe")).toBe(false);
+  });
+
   test("a name is never interpreted as shell", async () => {
     expect(await hasCommand("node; echo pwned")).toBe(false);
   });
@@ -110,6 +114,11 @@ describe("runCheck, the real runner", () => {
   test("a command that does not exist is failed, not a throw", async () => {
     const name = `hexagen-no-such-cmd-${Math.random().toString(36).slice(2)}`;
     expect(await runCheck([name])).toBe("failed");
+  });
+
+  test("a NUL byte in a word is failed, not a synchronous throw", async () => {
+    expect(await runCheck(["a\u0000b"])).toBe("failed");
+    expect(await runCheck(["true", "a\u0000b"])).toBe("failed");
   });
 
   test("an empty argv is failed, because there is nothing to run", async () => {
@@ -231,6 +240,11 @@ describe("Ctrl-C does not leave a detached probe running", () => {
 });
 
 describe("runRemote, the real runner", () => {
+  test("a NUL byte in a word is failed, not a synchronous throw", async () => {
+    const result = await runRemote("alias", ["a\u0000b"], 5_000);
+    expect(result.status).toBe("failed");
+  });
+
   test("an alias that cannot resolve is failed, not a throw or a hang", async () => {
     const alias = `hexagen-no-such-host-${Math.random().toString(36).slice(2)}`;
     // A resolver that answers NXDOMAIN at once gives `failed`; one that stalls

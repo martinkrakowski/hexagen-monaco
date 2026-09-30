@@ -23,12 +23,17 @@ export function hasCommand(
   options: RunOptions = {},
 ): Promise<boolean> {
   return new Promise((resolve) => {
-    execFile(
-      "/bin/sh",
-      ["-c", 'command -v "$1"', "sh", command],
-      { env, ...(options.cwd !== undefined ? { cwd: options.cwd } : {}) },
-      (error) => resolve(error === null),
-    );
+    try {
+      execFile(
+        "/bin/sh",
+        ["-c", 'command -v "$1"', "sh", command],
+        { env, ...(options.cwd !== undefined ? { cwd: options.cwd } : {}) },
+        (error) => resolve(error === null),
+      );
+    } catch {
+      // A NUL in `command` throws synchronously; it is not a command on PATH.
+      resolve(false);
+    }
   });
 }
 
@@ -158,11 +163,19 @@ export function runCheck(
   const [command, ...args] = argv;
   if (command === undefined) return Promise.resolve("failed");
   return new Promise((resolve) => {
-    const child = spawn(command, args, {
-      ...SPAWN_BASE,
-      stdio: "ignore",
-      ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
-    });
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(command, args, {
+        ...SPAWN_BASE,
+        stdio: "ignore",
+        ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+      });
+    } catch {
+      // `spawn` throws synchronously on a NUL in any word. That is `failed`, as
+      // the docstring says, not an exception out of doctor.
+      resolve("failed");
+      return;
+    }
     track(child.pid);
     let settled = false;
     const timer = setTimeout(() => {
@@ -241,23 +254,30 @@ export function runRemote(
   } = {},
 ): Promise<RemoteResult> {
   return new Promise((resolve) => {
-    const child = spawn(
-      options.sshCommand ?? "ssh",
-      [
-        "-n",
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "ConnectTimeout=5",
-        alias,
-        ...argv.map(shellQuote),
-      ],
-      {
-        ...SPAWN_BASE,
-        stdio: ["ignore", "pipe", "pipe"],
-        ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
-      },
-    );
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(
+        options.sshCommand ?? "ssh",
+        [
+          "-n",
+          "-o",
+          "BatchMode=yes",
+          "-o",
+          "ConnectTimeout=5",
+          alias,
+          ...argv.map(shellQuote),
+        ],
+        {
+          ...SPAWN_BASE,
+          stdio: ["ignore", "pipe", "pipe"],
+          ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+        },
+      );
+    } catch {
+      // A NUL in any word throws synchronously; report it as a failed probe.
+      resolve({ status: "failed", stdout: "", stderr: "" });
+      return;
+    }
     let settled = false;
     let stdout = "";
     child.stdout?.setEncoding("utf8");
