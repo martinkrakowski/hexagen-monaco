@@ -9,7 +9,7 @@ modified, and no file under it was created or deleted.
 | | |
 | --- | --- |
 | **Repository** | campaign-foundry |
-| **Local path (read-only)** | `/Users/martin/Projects/Client-work/ADOBE/campaign-foundry` |
+| **Local path (read-only)** | `$CAMPAIGN_FOUNDRY_REPO`, set by the reader to their own checkout of campaign-foundry |
 | **Pinned commit** | `205b8142d311b05a1802287a35e9a1d38d185ea8` |
 | **Pinned commit date** | 2026-09-29T17:03:37-04:00 |
 | **Pinned commit subject** | `feat(campaigns): reserve every static /campaigns route segment as a campaign id (D181) (#632)` |
@@ -35,10 +35,10 @@ Each file is byte-identical to the pinned blob. From the repository root, with
 
 ```sh
 git show HEAD:packages/template-engine/__tests__/fixtures/orchestration/source/SKILL.md \
-  | cmp - <(git -C /Users/martin/Projects/Client-work/ADOBE/campaign-foundry show 205b8142:.claude/skills/orchestrate-wave/SKILL.md)
+  | cmp - <(git -C "$CAMPAIGN_FOUNDRY_REPO" show 205b8142:.claude/skills/orchestrate-wave/SKILL.md)
 ```
 
-Repeat for the other four with the paths in the table above. The `git hash-object` of
+Set `CAMPAIGN_FOUNDRY_REPO` to your own checkout of campaign-foundry first. Repeat for the other four with the paths in the table above. The `git hash-object` of
 each file here also equals the blob id recorded above.
 
 ## What was deliberately not read
