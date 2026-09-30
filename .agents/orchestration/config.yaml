@@ -1,0 +1,107 @@
+# The orchestration overlay's single source (OW-D7).
+# Every value here is read at run time by the hexagen-orchestration bins;
+# none of them hardcodes a repository, a port or a log root.
+
+# Where plans live. plan-review and plan-verify read this, not a constant.
+planDir: "docs/planning"
+
+# The ordered gate steps. The `gate` bin runs exactly this list, in this
+# order, and prints it for --print-steps. `optional: true` may skip and is
+# reported as SKIPPED, never as passed. `locked: true` runs the step under
+# the machine-wide gate lock.
+gateSteps:
+  - name: build
+    command: yarn build
+  - name: typecheck
+    command: yarn typecheck
+  - name: typecheck:test
+    command: yarn typecheck:test
+  - name: lint
+    command: yarn lint
+  - name: test
+    command: yarn test
+
+# The check a pull request must show green before it merges. This is hexagen's
+# gating CI job, "Verify Sync Engine & Hexagonal Structure".
+requiredCheck: "^Verify Sync Engine"
+
+# The workflow file doctor reads to confirm requiredCheck names a real job.
+ciWorkflow: .github/workflows/sync-integrity.yml
+
+# Ports the status server must refuse. This is the ONLY source of refused
+# ports (A-20): a port nobody listed here is a port nothing refuses.
+forbiddenPorts: [3000, 3001, 4317]
+
+# Operator data the gate must not read, print, or diff.
+operatorDataPaths: []
+
+# Where a delegated lane dispatches (A-30).
+#
+# `laneHosts` says where and how. Each entry needs `name` (this overlay's label
+# for the host, not an ssh alias), `dispatch` (the transport prefix ONLY — never
+# --dir, --agent, -m, --model or --format, which the orchestrator appends), and
+# `gate` (`full` or `targeted-only`, the gate scope ON THAT HOST). A host is
+# REMOTE when it carries `ssh`, `clone` or `worktrees`, and a remote host must
+# carry all three plus `check`. `check` exits 0 if and only if the dispatch path
+# itself works; it runs no lane and writes no opencode session.
+#
+# `seats` says who. Each entry needs `id` (cast.md refers to a seat by its id),
+# `agent`, `model`, and `host` naming a `laneHosts[].name`.
+laneHosts:
+  - name: midnight
+    dispatch: [ocm-run]
+    gate: targeted-only
+    check: [ocm-run, --check]
+    # Provisional until the follow-up lands: today lane-usage is a shim into a
+    # campaign-foundry checkout.
+    usage: [lane-usage, --host, m]
+    ssh: m
+    clone: /mnt/pool/cloud-services/projects/hexagen-monaco
+    worktrees: /mnt/pool/cloud-services/projects/.worktrees
+    install:
+      - env
+      - PATH=/home/martin/.nvm/versions/node/v22.23.3/bin:/usr/local/bin:/usr/bin:/bin
+      - YARN_NM_MODE=classic
+      - TMPDIR=/mnt/pool/cloud-services/tmp-hx
+      - yarn
+      - install
+      - --immutable
+
+seats:
+  - id: space-bunny
+    agent: lane
+    model: openrouter/stealth/space-bunny-alpha
+    host: midnight
+  # The owner's fallback seat.
+  - id: glm-flash
+    agent: lane-glm
+    model: openrouter/z-ai/glm-5.3-flash
+    host: midnight
+
+# The repository, as `gh repo view --json nameWithOwner` reports it. Also
+# derives the wave log directory below when that is left as the default.
+repo: "martinkrakowski/hexagen-monaco"
+
+# The port the status server binds. 4318 rather than 4317, so two projects
+# on one machine never collide.
+waveStatusPort: 4318
+
+# Where wave logs live. NEVER `~/.waves`: that directory is shared, and a
+# status server that scans it joins one project's waves against another
+# project's pull requests. `$HOME/.waves-<name>` is per-repository.
+waveLogDir: "$HOME/.waves-hexagen"
+
+# Mutation replay. Off by default: it is opt-in, and a project that has not
+# asked for it does not get the cost.
+mutate: false
+
+# Invariants are LOCKED. Change one only by saying so here, and saying why:
+#
+# overrides:
+#   - invariant: eventDuty
+#     reason: the gate emits its own events, so a second writer would race
+invariants:
+  statusSource: derived
+  eventDuty: true
+  mergeRequiresGreenGate: true
+  attribution: false
