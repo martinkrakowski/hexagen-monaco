@@ -64,6 +64,16 @@ describe("hasCommand, un-injected", () => {
   test("a name is never interpreted as shell", async () => {
     expect(await hasCommand("node; echo pwned")).toBe(false);
   });
+
+  test("a relative command resolves against the cwd option", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "orchestration-has-cwd-"));
+    dirs.push(dir);
+    const script = join(dir, "probe");
+    writeFileSync(script, "#!/bin/sh\nexit 0\n");
+    chmodSync(script, 0o755);
+    expect(await hasCommand("./probe", process.env, { cwd: dir })).toBe(true);
+    expect(await hasCommand("./probe", process.env)).toBe(false);
+  });
 });
 
 /** Whether a pid still exists. ESRCH is how a kernel says it does not. */

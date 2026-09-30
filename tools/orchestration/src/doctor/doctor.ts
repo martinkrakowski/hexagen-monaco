@@ -72,6 +72,12 @@ export interface DoctorDeps {
   readonly exists: (path: string) => Promise<boolean>;
   /** Whether a command is on PATH. */
   readonly hasCommand: (command: string) => Promise<boolean>;
+  /**
+   * Whether a lane host's `dispatch[0]` is runnable. A relative `dispatch[0]`
+   * is written relative to the repository, so the bin resolves it from the
+   * root. Falls back to `hasCommand` when a caller has no such notion.
+   */
+  readonly hasDispatchCommand?: (command: string) => Promise<boolean>;
   /** Whether `git worktree` works, which is not the same as `git` existing. */
   readonly supportsWorktrees: () => Promise<boolean>;
   /**
@@ -146,7 +152,10 @@ async function checkLaneHost(
   };
 
   const dispatch = host.dispatch[0];
-  if (dispatch !== undefined && !(await deps.hasCommand(dispatch))) {
+  if (
+    dispatch !== undefined &&
+    !(await (deps.hasDispatchCommand ?? deps.hasCommand)(dispatch))
+  ) {
     push(
       "fail",
       `dispatch[0] (${dispatch}) is not on PATH. It is the transport prefix every ` +

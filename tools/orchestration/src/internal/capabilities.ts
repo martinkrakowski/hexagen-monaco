@@ -12,16 +12,21 @@ import { execFile, spawn } from "node:child_process";
  *
  * `env` is a parameter so a test can hand it a PATH with no `command` shim in
  * it, which is what a Linux runner looks like.
+ *
+ * `options.cwd` is where a RELATIVE name (`./scripts/x`, which contains a `/`)
+ * resolves, so a lane host's `dispatch[0]` means the same thing from any
+ * subdirectory. A bare name is looked up on PATH and does not care.
  */
 export function hasCommand(
   command: string,
   env: NodeJS.ProcessEnv = process.env,
+  options: RunOptions = {},
 ): Promise<boolean> {
   return new Promise((resolve) => {
     execFile(
       "/bin/sh",
       ["-c", 'command -v "$1"', "sh", command],
-      { env },
+      { env, ...(options.cwd !== undefined ? { cwd: options.cwd } : {}) },
       (error) => resolve(error === null),
     );
   });

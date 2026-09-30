@@ -44,7 +44,10 @@ const { findings, exitCode } = await runDoctor(
   present,
   {
     exists: (path) => isFile(`${root}/${path}`),
-    hasCommand,
+    hasCommand: (command) => hasCommand(command),
+    // `dispatch[0]` only: a relative one is written relative to the repository.
+    hasDispatchCommand: (command) =>
+      hasCommand(command, process.env, { cwd: root }),
     supportsWorktrees,
     // From the repository root, so a relative `check` means the same thing from
     // any subdirectory.
