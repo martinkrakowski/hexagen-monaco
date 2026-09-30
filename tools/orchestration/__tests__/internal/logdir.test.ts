@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { defaultLogDir, type LogDirConfig } from "../../src/internal/logdir.js";
+import {
+  defaultLogDir,
+  waveLogRoot,
+  type LogDirConfig,
+} from "../../src/internal/logdir.js";
 
 /** `exists` backed by a fixed set of paths — every candidate not listed reads as absent. */
 const existsIn =
@@ -260,6 +264,58 @@ describe("the default root is per-repo, never the shared ~/.waves (A-18)", () =>
     // The hazard A-18 guards is the SHARED root, which this never reaches.
     expect(defaultLogDir("w06", { HOME: "/h" }, NONE, { repo: "demo" })).toBe(
       "/h/.waves-demo/wave-w06",
+    );
+  });
+});
+
+describe("F23: waveLogRoot is the root half of defaultLogDir", () => {
+  const demo = { repo: "acme/demo" };
+
+  test("WAVE_LOG_ROOT wins over waveLogDir and the default", () => {
+    expect(
+      waveLogRoot(
+        { HOME: "/home/op", WAVE_LOG_ROOT: "/r" },
+        { ...demo, waveLogDir: "/w" },
+      ),
+    ).toBe("/r");
+  });
+
+  test.each([
+    ["$HOME/.waves-x", "/home/op/.waves-x"],
+    ["${HOME}/.waves-x", "/home/op/.waves-x"],
+    ["~/.waves-x", "/home/op/.waves-x"],
+  ])("waveLogDir %s expands to %s", (waveLogDir, expected) => {
+    expect(waveLogRoot({ HOME: "/home/op" }, { ...demo, waveLogDir })).toBe(
+      expected,
+    );
+  });
+
+  test("the default is $HOME/.waves-<name>, never ~/.waves", () => {
+    expect(waveLogRoot({ HOME: "/home/op" }, demo)).toBe(
+      "/home/op/.waves-demo",
+    );
+  });
+
+  test("an empty or unset HOME falls back to /tmp", () => {
+    expect(waveLogRoot({ HOME: "" }, demo)).toBe("/tmp/.waves-demo");
+    expect(waveLogRoot({}, demo)).toBe("/tmp/.waves-demo");
+  });
+
+  test("an empty WAVE_LOG_ROOT falls back like an unset one", () => {
+    expect(waveLogRoot({ HOME: "/h", WAVE_LOG_ROOT: "" }, demo)).toBe(
+      "/h/.waves-demo",
+    );
+  });
+
+  test("no repo and nothing else to go on throws", () => {
+    expect(() => waveLogRoot({ HOME: "/home/op" })).toThrow(
+      /no repository name/,
+    );
+  });
+
+  test("LOGDIR is not a root and is ignored", () => {
+    expect(waveLogRoot({ HOME: "/h", LOGDIR: "/one-wave" }, demo)).toBe(
+      "/h/.waves-demo",
     );
   });
 });

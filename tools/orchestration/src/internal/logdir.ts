@@ -50,6 +50,29 @@ function nonEmpty(value: string | undefined): value is string {
 }
 
 /**
+ * The log ROOT: the directory that holds every wave's own directory. It is the
+ * root half of `defaultLogDir`, exported so a reader that scans all waves
+ * (wave-status) resolves exactly the root the writer used and cannot drift.
+ *
+ * In order: `$WAVE_LOG_ROOT`; `config.waveLogDir` with `$HOME`, `${HOME}` and
+ * `~` expanded; `$HOME/.waves-<name>` from the name half of `repo`, which
+ * THROWS when there is no name (never the shared `~/.waves`). `$LOGDIR` is not
+ * considered: it names ONE wave's directory, not a root.
+ */
+export function waveLogRoot(env: LogDirEnv, config: LogDirConfig = {}): string {
+  // `??` alone triggers only on unset (null/undefined); POSIX `${VAR:-word}`
+  // triggers on unset OR empty. An exported HOME="" or WAVE_LOG_ROOT="" must
+  // fall back the same way, or the gate looks in a different directory from
+  // the one the event writer actually wrote to.
+  const home = nonEmpty(env.HOME) ? env.HOME : "/tmp";
+  return nonEmpty(env.WAVE_LOG_ROOT)
+    ? env.WAVE_LOG_ROOT
+    : nonEmpty(config.waveLogDir)
+      ? expandHome(config.waveLogDir, home)
+      : `${home}/.waves-${repoName(config.repo)}`;
+}
+
+/**
  * The default log directory for a wave id, used when neither `$LOGDIR` nor a
  * `--logdir` flag names one.
  *
@@ -91,16 +114,7 @@ export function defaultLogDir(
     return env.LOGDIR;
   }
 
-  // `??` alone triggers only on unset (null/undefined); POSIX `${VAR:-word}`
-  // triggers on unset OR empty. An exported HOME="" or WAVE_LOG_ROOT="" must
-  // fall back the same way, or the gate looks in a different directory from
-  // the one the event writer actually wrote to.
-  const home = nonEmpty(env.HOME) ? env.HOME : "/tmp";
-  const root = nonEmpty(env.WAVE_LOG_ROOT)
-    ? env.WAVE_LOG_ROOT
-    : nonEmpty(config.waveLogDir)
-      ? expandHome(config.waveLogDir, home)
-      : `${home}/.waves-${repoName(config.repo)}`;
+  const root = waveLogRoot(env, config);
   const startsWithWave = wave.startsWith("wave");
 
   const candidates = [
