@@ -499,7 +499,8 @@ describe("A-30 §7: doctor on a lane host", () => {
     const messages = onThisHost.map((f) => f.message).join("\n");
     expect(messages).toContain("ssh probe");
     expect(messages).toContain("BatchMode=yes");
-    expect(messages).toContain("m");
+    // The alias IN POSITION: a bare "m" is in the message's fixed text already.
+    expect(messages).toContain("ConnectTimeout=5 m true");
   });
 
   test("check: [/bin/false] is a FAIL, and check: [sleep, 30] is a FAIL naming the 10 s timeout", async () => {
