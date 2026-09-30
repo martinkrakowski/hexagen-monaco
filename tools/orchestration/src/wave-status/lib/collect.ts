@@ -171,6 +171,118 @@ export function waveIdFromDirName(name: string): string {
 }
 
 /**
+ * One wave directory as `collect` sees it, and as the log route must see it:
+ * the wave id its EVENTS name (the directory name only when no event names
+ * one), the lanes those events create, and the listing. `defaultLogDir` may
+ * place a wave whose id itself starts with `wave` at `<root>/wave3`, where
+ * stripping the prefix would give `3` while the events say `wave3`.
+ */
+export interface WaveDirView {
+  readonly dirName: string;
+  readonly wave: string;
+  readonly dir: string;
+  readonly entries: readonly string[];
+  readonly dirEvents: readonly WaveEvent[];
+  readonly reportedPrByLane: ReadonlyMap<string, number>;
+  /** Every lane an event names, the reserved plan-review token excluded. */
+  readonly eventLanes: ReadonlySet<string>;
+}
+
+/**
+ * The wave directories under `root` that `collect` lists, in its order: sorted
+ * by name, the first directory for a wave id winning, a wave whose events name
+ * another repository hidden. `collect` and the log route BOTH go through this,
+ * so a log is served only for a lane the page would show.
+ * `skip` holds wave ids already taken by an earlier root.
+ */
+export async function scanWaveDirs(
+  deps: Pick<CollectDeps, "readdir" | "readFile" | "repo">,
+  root: string,
+  skip: ReadonlySet<string> = new Set(),
+): Promise<WaveDirView[]> {
+  let dirNames: readonly string[];
+  try {
+    dirNames = await deps.readdir(root);
+  } catch {
+    return [];
+  }
+  const taken = new Set(skip);
+  const views: WaveDirView[] = [];
+  // Lexicographic is not the output order — it is the stable base the output
+  // order is a permutation of: waves of equal (or absent) newest activity must
+  // come out in a deterministic order, not readdir's.
+  for (const name of dirNames.filter((n) => n.startsWith("wave")).sort()) {
+    const dir = join(root, name);
+    let entries: readonly string[];
+    try {
+      entries = await deps.readdir(dir);
+    } catch {
+      continue;
+    }
+
+    // Events are read before anything else because they are the lane
+    // evidence itself: every lane an event names gets exactly one row, and
+    // only then does an identically named `<lane>.log` attach to it. A log
+    // no event names is the orchestrator's working litter — a gate round, a
+    // fix transcript, a probe — and the page says nothing about it. The
+    // directory that holds a log also holds the events reporting that log's
+    // PR, whatever the events' own wave field says.
+    const reportedPrByLane = new Map<string, number>();
+    const eventLanes = new Set<string>();
+    let dirEvents: readonly WaveEvent[] = [];
+    if (entries.includes("events.jsonl")) {
+      try {
+        const text = await deps.readFile(join(dir, "events.jsonl"));
+        dirEvents = readEvents(text).events;
+        for (const event of dirEvents) {
+          // The reserved token reviews the wave; it is never a lane — no
+          // row, no probe, no gate-log lookup, no PR join. The events stay
+          // in dirEvents, where the plan-review derivation reads them.
+          if (event.lane !== PLAN_REVIEW_LANE) {
+            eventLanes.add(event.lane);
+            if (event.pr !== undefined)
+              reportedPrByLane.set(event.lane, event.pr);
+          }
+        }
+      } catch {
+        // The event writer writes events.jsonl; absent or unreadable is
+        // "nobody reported", not an error.
+      }
+    }
+
+    // REPO SCOPING. A wave belongs to the repository its events say it does.
+    // A single event naming a DIFFERENT repository hides the whole wave:
+    // joining another project's lanes against this repository's pull requests
+    // is how a wave shows false "no PR" flags. An event with no `repo` at all
+    // is a legacy or repo-less write and never hides anything, and a wave
+    // directory whose events could not be read is shown — a just-dispatched
+    // wave is the state an operator most wants to see.
+    if (
+      dirEvents.some(
+        (event) => event.repo !== undefined && event.repo !== deps.repo,
+      )
+    ) {
+      continue;
+    }
+
+    const named = dirEvents.find((event) => event.wave !== "")?.wave;
+    const wave = named ?? waveIdFromDirName(name);
+    if (taken.has(wave)) continue;
+    taken.add(wave);
+    views.push({
+      dirName: name,
+      wave,
+      dir,
+      entries,
+      dirEvents,
+      reportedPrByLane,
+      eventLanes,
+    });
+  }
+  return views;
+}
+
+/**
  * The roots a collection scans. Exactly one, and it is the one the caller
  * chose: the source's shared home-directory root and its machine-wide `/tmp`
  * fallback are both gone, because a scan that reads either one joins this
@@ -235,77 +347,9 @@ export async function collect(
   const scanRoots = resolveScanRoots(scanRoot);
 
   for (const root of scanRoots) {
-    let dirNames: readonly string[];
-    try {
-      dirNames = await deps.readdir(root);
-    } catch {
-      continue;
-    }
-
-    // Lexicographic is not the output order — it is the stable base the output
-    // order is a permutation of: waves of equal (or absent) newest activity must
-    // come out in a deterministic order, not readdir's.
-    const waveDirs = dirNames.filter((name) => name.startsWith("wave")).sort();
-    for (const name of waveDirs) {
-      const wave = waveIdFromDirName(name);
-      if (discovered.has(wave)) continue;
-
-      const dir = join(root, name);
-      let entries: readonly string[];
-      try {
-        entries = await deps.readdir(dir);
-      } catch {
-        continue;
-      }
-
-      // Events are read before anything else because they are the lane
-      // evidence itself: every lane an event names gets exactly one row, and
-      // only then does an identically named `<lane>.log` attach to it. A log
-      // no event names is the orchestrator's working litter — a gate round, a
-      // fix transcript, a probe — and the page says nothing about it. The
-      // directory that holds a log also holds the events reporting that log's
-      // PR, whatever the events' own wave field says.
-      const reportedPrByLane = new Map<string, number>();
-      const eventLanes = new Set<string>();
-      let dirEvents: readonly WaveEvent[] = [];
-      if (entries.includes("events.jsonl")) {
-        try {
-          const text = await deps.readFile(join(dir, "events.jsonl"));
-          dirEvents = readEvents(text).events;
-          for (const event of dirEvents) {
-            // The reserved token reviews the wave; it is never a lane — no
-            // row, no probe, no gate-log lookup, no PR join. The events stay
-            // in dirEvents, where the plan-review derivation reads them.
-            if (event.lane !== PLAN_REVIEW_LANE) {
-              eventLanes.add(event.lane);
-              if (event.pr !== undefined)
-                reportedPrByLane.set(event.lane, event.pr);
-            }
-          }
-        } catch {
-          // The event writer writes events.jsonl; absent or unreadable is
-          // "nobody reported", not an error.
-        }
-      }
-
-      // REPO SCOPING. A wave belongs to the repository its events say it does.
-      // A single event naming a DIFFERENT repository hides the whole wave:
-      // joining another project's lanes against this repository's pull requests
-      // is how a wave shows false "no PR" flags. An event with no `repo` at all
-      // is a legacy or repo-less write and never hides anything, and a wave
-      // directory whose events could not be read is shown — a just-dispatched
-      // wave is the state an operator most wants to see.
-      if (
-        dirEvents.some(
-          (event) => event.repo !== undefined && event.repo !== deps.repo,
-        )
-      ) {
-        continue;
-      }
-
-      // Discovered is enough to list it: a wave directory with no lane log and
-      // no events yet is a dispatched wave, and that is a state an operator
-      // most wants to see. Absent is the one answer that is never useful.
+    for (const view of await scanWaveDirs(deps, root, discovered)) {
+      const { wave, dir, entries, dirEvents, reportedPrByLane, eventLanes } =
+        view;
       discovered.add(wave);
       for (const event of dirEvents) events.push(event);
 

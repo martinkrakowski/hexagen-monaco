@@ -2683,9 +2683,9 @@ describe("collect — the plan-review gate", () => {
   test("a directory whose name differs from the events' wave id still gathers the gate's facts", async () => {
     // wave-event.sh writes a wave id like `wave5` to $root/wave5 — the
     // directory stripped of its prefix is "5", which matches no event. The
-    // gate's facts match the wave the events themselves claim, the same
-    // identity the merge groups by: here the dispatch is found, and the
-    // plan edited after its review is flagged.
+    // wave is keyed by the id the events themselves claim, the same identity
+    // the merge groups by: one row, with the dispatch found, and the plan
+    // edited after its review flagged.
     const { rowHash } = await import("../../src/internal/rows.js");
     const edited = PLAN.replace(
       "shown and resolvable",
@@ -2716,8 +2716,42 @@ describe("collect — the plan-review gate", () => {
       ROOT,
       "2026-09-28T12:00:00Z",
     );
-    const row = status.waves.find((wave) => wave.id === "5")?.lanes[0];
+    const row = status.waves.find((wave) => wave.id === "wave5")?.lanes[0];
     expect(row?.derived.planReview).toBe("dispatched on an unreviewed row");
+  });
+
+  test("a <root>/wave3 directory whose events say wave3 renders ONE row carrying both the log and the event facts", async () => {
+    // defaultLogDir places a wave whose id itself starts with `wave` at
+    // `<root>/wave3`. Keyed by the directory name that wave was "3" while its
+    // events said "wave3": the lane split in two, and the events' row had no
+    // log, no PR and no gate.
+    const event = `${JSON.stringify({
+      ts: "2026-09-28T10:00:00Z",
+      wave: "wave3",
+      lane: "k9",
+      stage: "implement",
+      event: "started",
+    })}\n`;
+    const status = await collect(
+      fakeDeps({
+        dirs: {
+          [ROOT]: ["wave3"],
+          [`${ROOT}/wave3`]: ["events.jsonl", "k9.log"],
+        },
+        files: {
+          [`${ROOT}/wave3/events.jsonl`]: event,
+          [`${ROOT}/wave3/k9.log`]: "building\nEXIT 0\n",
+        },
+      }),
+      ROOT,
+      "2026-09-28T12:00:00Z",
+    );
+    expect(status.waves.map((wave) => wave.id)).toEqual(["wave3"]);
+    const lanes = status.waves[0]?.lanes ?? [];
+    expect(lanes.map((lane) => lane.lane)).toEqual(["k9"]);
+    expect(lanes[0]?.reported?.stage).toBe("implement");
+    expect(lanes[0]?.derived.log).toBeDefined();
+    expect(lanes[0]?.derived.exit).toBe(0);
   });
 
   test("a lane that never dispatched carries no plan-review facts", async () => {
@@ -2976,7 +3010,7 @@ describe("collect — the pre-PR-review gate (risk)", () => {
       ROOT,
       "2026-09-28T12:00:00Z",
     );
-    const row = status.waves.find((wave) => wave.id === "5")?.lanes[0];
+    const row = status.waves.find((wave) => wave.id === "wave5")?.lanes[0];
     expect(row?.derived.risk).toBeUndefined();
   });
 
