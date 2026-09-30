@@ -33,9 +33,9 @@ import {
  *    is said about one. The absences that ARE reported are the ones that stop a
  *    check running: a lane host with no `check`, and a clone whose `user.email`
  *    could not be read because the ssh probe already failed. The one absence
- *    that IS a failure is the one the plan made so: the configured `ciWorkflow`
- *    (default `.github/workflows/ci.yml`)
- *    (OW-D5/B-1 gave that duty here when the template's `requires` was dropped).
+ *    that IS a failure is the one the plan made so: the configured `ciWorkflow`,
+ *    `.github/workflows/ci.yml` by default (OW-D5/B-1 gave that duty here when the
+ *    template's `requires` was dropped; A-32 made the path configurable).
  * 4. **A WARN is a finding that never moves the exit code** (A-30). A
  *    deprecated setting, a host no seat dispatches through, and a clone whose
  *    `user.email` differs from this repository's are all worth saying out loud,
