@@ -102,6 +102,10 @@ case "$HB_SECONDS" in
     exit 2
     ;;
 esac
+if [ "$HB_SECONDS" -lt 1 ]; then
+  printf '%s\n' "gate: HEXAGEN_GATE_HEARTBEAT_SECONDS must be at least one second: $HB_SECONDS" >&2
+  exit 2
+fi
 
 STEPS="${HEXAGEN_GATE_STEPS:-}"
 SKIP="${HEXAGEN_GATE_SKIP:-}"

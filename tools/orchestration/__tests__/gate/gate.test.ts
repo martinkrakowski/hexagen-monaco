@@ -509,6 +509,16 @@ describe("the gate run loop", () => {
     expect(r.stdout).toContain("gate: 2/2 steps passed");
   });
 
+  test("a zero heartbeat interval is refused, and names the variable", () => {
+    const r = runGate(["--lane", "lane-b"], {
+      HEXAGEN_GATE_HEARTBEAT_SECONDS: "0",
+      ...stepsEnv([["build", "true"]]),
+    });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("HEXAGEN_GATE_HEARTBEAT_SECONDS");
+    expect(r.stdout).not.toContain("==>");
+  });
+
   test("an unknown flag exits 2, and so does a --lane without a value", () => {
     const unknown = runGate(["--wat"], stepsEnv([["build", "true"]]));
     expect(unknown.status).toBe(2);
