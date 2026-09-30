@@ -518,19 +518,26 @@ for (const fixture of fixtures) {
       );
     });
 
-    if (inited) {
-      // The generated project is not hexagen and has no GitHub remote, so the
-      // loader cannot derive `repo` (gh). Seed it the way an operator would.
-      const scaffolded = readFileSync(CONFIG, "utf8");
-      const marker = /^# repo: \(derive it.*$/m;
-      expect(
-        marker.test(scaffolded),
-        "scaffolded config.yaml has no repo placeholder",
-      );
-      const configured = scaffolded.replace(
-        marker,
-        'repo: "capstone/vellum-minimal"',
-      );
+    // The generated project is not hexagen and has no GitHub remote, so the
+    // loader cannot derive `repo` (gh). Seed it the way an operator would. A
+    // missing placeholder is a named FAIL row, not a throw past the summary.
+    let configured;
+    const marker = /^# repo: \(derive it.*$/m;
+    const seeded =
+      inited &&
+      gate("orch:config-repo-placeholder", () => {
+        const scaffolded = readFileSync(CONFIG, "utf8");
+        expect(
+          marker.test(scaffolded),
+          "scaffolded config.yaml has no repo placeholder",
+        );
+        configured = scaffolded.replace(
+          marker,
+          'repo: "capstone/vellum-minimal"',
+        );
+      });
+
+    if (seeded) {
       const setConfig = (text) => writeFileSync(CONFIG, text);
       setConfig(configured);
 
