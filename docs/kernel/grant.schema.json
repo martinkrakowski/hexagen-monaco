@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://hexagen.dev/kernel/grant.schema.json",
+  "title": "Grant (monaco compiler profile)",
+  "description": "The compiled object naming what one agent cycle may write to, as produced by monaco's manifest-driven compile step. This is NOT the Field Kit's generic schema — see docs/kernel/GRANT.md \"Monaco profile vs. the Field Kit Grant\". A client-repo kit schema (.hexagen/grant.schema.json) requires only `paths` + `tools` as its core; `contexts` here is a monaco-specific extra that compiles into `paths`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "principal",
+    "agent",
+    "contexts",
+    "paths",
+    "tools",
+    "mode",
+    "expires_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable identifier for this grant. A Trace record references the cycle it evidences by this id — it is never reconstructed after the fact from contexts/paths, which are not unique per grant."
+    },
+    "principal": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who authorized this cycle — a human account, a CI policy name, an approval workflow id. Distinct from `agent`: the principal accepts responsibility for the grant existing; the agent is who executes under it."
+    },
+    "agent": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Which agent/tool identity this grant was issued to (an MCP client id, a CI job name, an editor-agent session id). A grant is issued to one agent identity, not a class of agents."
+    },
+    "contexts": {
+      "type": "array",
+      "description": "Manifest bounded-context names (manifest.yaml bounded_contexts[].name) this cycle may mutate. Monaco-specific: the compile step expands each entry into a `packages/<context>/` prefix in `paths` against this repo's manifest.yaml. A repo with no manifest to compile against (the Field Kit's general case) omits this field entirely — `paths` is what every enforcement point actually checks, `contexts` is only how monaco fills it in.",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "paths": {
+      "type": "array",
+      "description": "Workspace-relative path prefixes this cycle may write to. The one field every enforcement point checks, on any profile. For a monaco-compiled grant: `packages/<context>/` for each entry in `contexts`, plus any caller-supplied extras — extras are listed here for a human to review (`hexagen grant show`), never compiled from a guess, and `check` applies the same prefix rule to them as to the context-derived entries.",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "tools": {
+      "type": "array",
+      "description": "Which write tools this cycle may invoke — the seven MCP mutation tool names today, an editor-write capability id or a shell-write id once that adapter exists. `paths` alone is not sufficient: a grant naming the right path but not the tool that would use it still denies that tool. This is what makes a grant a scope on *actions*, not only on *locations*.",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["write", "propose"],
+      "description": "\"propose\" grants may only create a Transaction (reach hexagen_create_context / add_dependency / etc., never hexagen_accept_transaction); \"write\" grants may also accept. This is the difference between an agent that may draft a change and one that may land it — independent of which contexts/paths/tools it's scoped to."
+    },
+    "max_files": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Optional cap on distinct files touched in one cycle, independent of path scope — a blast-radius limit even within an otherwise-legitimate path."
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp. Required even though v1 always mints a fresh grant per cycle and discards it immediately after: \"discarded per cycle\" is a usage policy this slice follows, not a reason to omit the field a persistent grant store will need on day one."
+    },
+    "revoked_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Set when a grant is revoked before its natural expiry (a human pulls it mid-cycle). Absent on an active, unrevoked grant."
+    }
+  }
+}
