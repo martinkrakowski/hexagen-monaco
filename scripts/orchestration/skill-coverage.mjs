@@ -641,10 +641,14 @@ function main() {
   say(`totals: ${totals.anchors} anchors, ${totals.content} paragraphs, over ${trees.length} tree(s)`);
   if (failures > 0) {
     say(`UNCOVERED: ${failures} finding(s)`);
-    process.exit(1);
+    // exitCode, not process.exit(): a piped stdout is written asynchronously, and exiting at once
+    // drops whatever the reader has not yet drained (a 110 KB report lost its tail at the 64 KB pipe
+    // buffer, summary line included).
+    process.exitCode = 1;
+    return;
   }
   say("clean: every anchor and every paragraph of the snapshot survives somewhere");
-  process.exit(0);
+  process.exitCode = 0;
 }
 
 // Run only as a script, so the unit extractors can be imported and tested on their own.

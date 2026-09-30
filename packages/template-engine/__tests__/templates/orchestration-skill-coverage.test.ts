@@ -572,6 +572,32 @@ describe("orchestration skill coverage", () => {
     expect(result.out).toContain(canary);
   });
 
+  it("a report larger than the pipe buffer is delivered whole to a slow reader", () => {
+    const fixture = copyFixture();
+    // An empty-ish hexagen checkout flags hundreds of tokens, so the report is ~100 KB, well past a
+    // 64 KB pipe. The reader sleeps before it drains; a process.exit() on the way out would drop the
+    // tail, summary line and all.
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "skill-coverage-pipe-"));
+    spawnSync("git", ["init", "-q"], { cwd: root });
+    fs.writeFileSync(path.join(root, "README.md"), "unrelated\n");
+    spawnSync("git", ["add", "."], { cwd: root });
+    const args = coverageArgs(fixture, ["--hexagen-root", root]);
+    const result = spawnSync(
+      "sh",
+      [
+        "-c",
+        `"$0" "$@" 2>&1 | (sleep 1; cat)`,
+        process.execPath,
+        SCRIPT,
+        ...args,
+      ],
+      { cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 1 << 26 },
+    );
+    expect(result.stdout.length).toBeGreaterThan(70_000);
+    expect(result.stdout).toMatch(/tokens: .* \d+ unaccounted/);
+    expect(result.stdout).toContain("UNCOVERED:");
+  });
+
   it("F16: a code span with internal whitespace, planted in source and generic, is named", () => {
     const fixture = copyFixture();
     // Generated at runtime, with two spaces inside: a literal in this file would be found by the
