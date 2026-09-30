@@ -401,12 +401,18 @@ function checkMemory(memoryDir, manifestPath, lessonsPath, allowlistPath) {
   // Classify the union, so a name present on only one side is still held to the cited-or-allowlisted rule.
   files = [...new Set([...files, ...(manifest ?? [])])].sort();
   const lessons = readFile(lessonsPath, "lessons file");
-  const allowlist = new Set(
-    readFile(allowlistPath, "allowlist")
-      .split("\n")
-      .filter((line) => line.trim() && !line.trim().startsWith("#"))
-      .map((line) => line.trim()),
-  );
+  const allowlist = new Set(parseAllowlist(allowlistPath).keys());
+  if (files.length === 0) {
+    bad("memory: no memory files to classify, so nothing was checked (an empty manifest or directory)");
+  }
+  // An allowlist entry for a file that is not classified is stale: it excuses nothing, and would
+  // silently excuse a file of that name if one appeared.
+  const classified = new Set(files);
+  for (const entry of allowlist) {
+    if (!classified.has(entry)) {
+      bad(`allowlist entry ${JSON.stringify(entry)} is not one of the ${files.length} classified memory files`);
+    }
+  }
   for (const name of files) {
     const cited = lessons.split("\n").some((line) => line.trim() === `source: ${name}`);
     if (!cited && !allowlist.has(name)) {

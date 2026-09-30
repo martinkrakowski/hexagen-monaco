@@ -63,6 +63,8 @@ const precedenceRule = [
   "may not silently WEAKEN a core invariant",
 ];
 
+const MANIFEST = path.join(FIXTURE, "campaign-foundry", "memory-manifest.txt");
+
 function copyFixture(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "skill-coverage-"));
   for (const entry of ["source", "generic", "campaign-foundry"]) {
@@ -207,6 +209,49 @@ describe("orchestration skill coverage", () => {
     expect(result.out).toContain("another-bare-entry.md");
   });
 
+  it("memory: an empty manifest is a failure, not a clean check of nothing", () => {
+    const fixture = copyFixture();
+    const manifest = path.join(fixture, "empty-manifest.txt");
+    fs.writeFileSync(manifest, "# nothing here\n");
+    const result = run(
+      coverageArgs(fixture, [
+        "--memory-manifest",
+        manifest,
+        "--lessons",
+        path.join(fixture, "campaign-foundry", "overlay", "lessons.md"),
+      ]),
+    );
+    expect(result.status, result.out).toBe(1);
+    expect(result.out).toContain("no memory files to classify");
+  });
+
+  it("memory: an allowlist entry that is not a classified file is named", () => {
+    const fixture = copyFixture();
+    const allowlist = path.join(
+      fixture,
+      "campaign-foundry",
+      "overlay",
+      "coverage-allowlist.txt",
+    );
+    fs.appendFileSync(
+      allowlist,
+      "\n# A reason, but for a file that is not in the manifest.\na-stale-entry.md\n",
+    );
+    const result = run(
+      coverageArgs(fixture, [
+        "--memory-manifest",
+        path.join(fixture, "campaign-foundry", "memory-manifest.txt"),
+        "--lessons",
+        path.join(fixture, "campaign-foundry", "overlay", "lessons.md"),
+      ]),
+    );
+    expect(result.status, result.out).toBe(1);
+    expect(result.out).toContain("a-stale-entry.md");
+    expect(result.out).toContain(
+      "is not one of the 51 classified memory files",
+    );
+  });
+
   it("exits 2 on bad arguments and on an unreadable path", () => {
     expect(run([]).status).toBe(2);
     expect(run(["--source", FIXTURE]).status).toBe(2);
@@ -260,6 +305,10 @@ describe("orchestration skill coverage", () => {
       path.join(memory, "a-brand-new-lesson.md"),
       "# a lesson\n\nIt is about nothing yet.\n",
     );
+    // Every allowlisted name must exist too, or the stale-entry check fires first.
+    for (const name of readLines(MANIFEST).filter((line) => line.trim())) {
+      fs.writeFileSync(path.join(memory, name), "# stand-in\n");
+    }
     const lessons = path.join(
       fixture,
       "campaign-foundry",
