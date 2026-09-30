@@ -381,6 +381,18 @@ function isHttpUrl(text: string): boolean {
   }
 }
 
+/**
+ * Whether an http(s) URL carries a query or a fragment. The text is checked as
+ * well as the parsed parts, because `http://h/?` and `http://h/#` parse to an
+ * EMPTY search and hash, and appending `/doc` to either still lands inside them.
+ */
+function hasQueryOrFragment(text: string): boolean {
+  const { search, hash } = new URL(text);
+  return (
+    search !== "" || hash !== "" || text.includes("?") || text.includes("#")
+  );
+}
+
 function parseOptionalString(
   raw: unknown,
   at: string,
@@ -517,7 +529,14 @@ export function parseConfig(text: string): ParseConfigResult {
   // on its first lane instead of at the file.
   let opencodeServerUrl: string | undefined;
   if (rawServerUrl !== undefined) {
-    if (isHttpUrl(rawServerUrl)) {
+    if (isHttpUrl(rawServerUrl) && hasQueryOrFragment(rawServerUrl)) {
+      // The synthesized check appends `/doc`, which would land INSIDE a query or
+      // a fragment and probe a URL nobody wrote.
+      problems.add(
+        "opencodeServerUrl",
+        `must not carry a query (\`?\`) or a fragment (\`#\`): the synthesized check appends /doc to it. Read ${JSON.stringify(rawServerUrl)}`,
+      );
+    } else if (isHttpUrl(rawServerUrl)) {
       opencodeServerUrl = rawServerUrl;
     } else {
       problems.add(

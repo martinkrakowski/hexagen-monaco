@@ -475,8 +475,10 @@ export function parseLaneHosts(
         name: SYNTHESIZED_HOST_NAME,
         dispatch: ["opencode", "run", "--attach", serverUrl],
         gate: "full",
-        // One trailing `/` is dropped, so `http://h:4096/` does not become `//doc`.
-        check: ["curl", "-sf", `${serverUrl.replace(/\/$/, "")}/doc`],
+        // EVERY trailing `/` is dropped, so `http://h:4096/` and `http://h:4096//`
+        // do not become `//doc`. (The config loader has already refused a query
+        // or a fragment, which `/doc` would otherwise land inside.)
+        check: ["curl", "-sf", `${serverUrl.replace(/\/+$/, "")}/doc`],
       });
       declared.set(SYNTHESIZED_HOST_NAME, hosts.length - 1);
     } else {
