@@ -991,6 +991,20 @@ export const TEMPLATE_QUESTIONS: Record<
       default: false,
     },
   ],
+  orchestration: [
+    {
+      id: "agents_md",
+      type: "boolean",
+      prompt: "Paste the Wave Observability section into AGENTS.md after init?",
+      default: true,
+    },
+    {
+      id: "node_version",
+      type: "auto",
+      derivedFrom: "ci-github-actions.node_version",
+      default: "22",
+    },
+  ],
   "rate-limiting": [
     {
       id: "framework",

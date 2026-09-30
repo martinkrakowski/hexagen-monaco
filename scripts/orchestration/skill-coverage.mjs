@@ -483,14 +483,28 @@ function checkTokenReview(reviewPath, genericDir, sourceDir, hexagenRoot) {
   }
 
   // The tracked-hexagen corpus, read once. This is the same question `git grep -F -e <token> --`
-  // asks — does this fixed string occur in any tracked file outside the fixture and
-  // docs/planning/ — and it is asked that way for speed. One `git grep` process per token is
-  // minutes of wall clock for the few hundred tokens a scrubbed skill produces, which is a test
-  // suite nobody runs twice. One `git ls-files`, one read of each file, one substring test per
-  // token. Binary files are skipped, as git grep skips them.
+  // asks — does this fixed string occur in any tracked file outside the fixture, the template's own
+  // copy of the skill, and docs/planning/ — and it is asked that way for speed. One `git grep`
+  // process per token is minutes of wall clock for the few hundred tokens a scrubbed skill produces,
+  // which is a test suite nobody runs twice. One `git ls-files`, one read of each file, one
+  // substring test per token. Binary files are skipped, as git grep skips them.
+  //
+  // THREE excluded prefixes, and the third is why the filter below cannot be two
+  // hard-coded startsWith calls. The template's `files/.agents/skills/orchestrate-wave/**` IS a
+  // tracked file that IS the generic tree being swept: since OW4 moved the skill into the template
+  // it is both the subject of the check and a member of the corpus, so every one of its tokens
+  // occurs "somewhere else" and the sweep would match everything, flagging nothing. That is not a
+  // cosmetic wart: F16's red case (a span planted in source and generic with no review line) then
+  // passes VACUOUSLY, because the planted token is "found" in the template copy of itself.
+  // Excluded here so the question keeps its meaning: is this token in some OTHER tracked hexagen
+  // file?
   const excluded = [
     "packages/template-engine/__tests__/fixtures/orchestration/",
+    "packages/template-engine/templates/orchestration/files/.agents/skills/orchestrate-wave/",
     "docs/planning/",
+    // The generated bundle embeds the skill's text verbatim, so it is the skill again, not a second
+    // place a token lives. Left in the corpus, every skill-only token would be "found" in it.
+    "packages/template-engine/src/infrastructure/generated/template-bundle.generated.ts",
   ];
   let tracked;
   try {
@@ -504,7 +518,7 @@ function checkTokenReview(reviewPath, genericDir, sourceDir, hexagenRoot) {
   }
   let corpus = "";
   for (const relative of tracked.split("\0")) {
-    if (!relative || relative.startsWith(excluded[0]) || relative.startsWith(excluded[1])) {
+    if (!relative || excluded.some((p) => relative.startsWith(p))) {
       continue;
     }
     let text;
@@ -627,10 +641,14 @@ function main() {
   say(`totals: ${totals.anchors} anchors, ${totals.content} paragraphs, over ${trees.length} tree(s)`);
   if (failures > 0) {
     say(`UNCOVERED: ${failures} finding(s)`);
-    process.exit(1);
+    // exitCode, not process.exit(): a piped stdout is written asynchronously, and exiting at once
+    // drops whatever the reader has not yet drained (a 110 KB report lost its tail at the 64 KB pipe
+    // buffer, summary line included).
+    process.exitCode = 1;
+    return;
   }
   say("clean: every anchor and every paragraph of the snapshot survives somewhere");
-  process.exit(0);
+  process.exitCode = 0;
 }
 
 // Run only as a script, so the unit extractors can be imported and tested on their own.

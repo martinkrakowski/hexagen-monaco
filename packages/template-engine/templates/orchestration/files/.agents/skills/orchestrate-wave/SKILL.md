@@ -22,7 +22,9 @@ templates A–D, invariants, failure playbook) and the orchestrator-kickoff-prom
 ships them, both runbooks** (`docs/workflows/delegated-implementation-pipeline.md` and
 `docs/workflows/orchestrator-kickoff-prompt.md`). This file is the operating contract either way,
 and wins where they differ; it deliberately does not copy them, so they
-cannot drift apart.
+cannot drift apart. **Prompt templates A–D ship with this skill**, in
+`references/briefs.md`, so the four briefs this file orders by name never depend on a runbook the
+project may not have.
 
 - The cast, and each seat's track record: the overlay's `cast.md`, at `.agents/orchestration/cast.md`
 
@@ -46,7 +48,11 @@ absent, or a field of it is absent, these are the defaults and you state them in
 - `forbiddenPorts` — **no forbidden ports.** The absent default is an empty list. A scaffolded
   config may name ports; an absent field names none.
 - `operatorDataPaths` — empty. With none declared, the project stages nothing it was not told to.
-- `opencodeServerUrl` — unset. Ask the owner which server; never start one.
+- `laneHosts` and `seats` — both `[]`, unset. `laneHosts` says where and how a delegated lane runs
+  (its transport prefix, its gate scope, and for a remote host the checks and paths to reach it);
+  `seats` says who runs it (an agent and a model, each naming a host). Both are declared in
+  `.agents/orchestration/config.yaml`. With none declared, ask the owner which host and seat; never
+  start a server.
 - `waveLogDir` — `$HOME/.waves-<name>`, where `<name>` is the name half of `repo`. Never a
   bare shared wave-log root: another project's status server scans one, and a wave logged there
   reports against the wrong repository.
@@ -124,7 +130,7 @@ the status:
 ```bash
 gh pr list --head "<branch>" --json number,url --jq '.[] | "#\(.number) \(.url)"'   # empty ⇒ stuck
 git -C "<worktree>" rev-list --count origin/main..HEAD                             # 0 ⇒ it wrote nothing
-(cd "<worktree>" && hexagen-orchestration-gate)
+(cd "<worktree>" && npx --no-install hexagen-orchestration-gate)
 git -C "<worktree>" status --porcelain=v1 -b && git -C "<worktree>" diff --stat origin/main...HEAD
 ```
 
@@ -160,11 +166,9 @@ status wins and your summary says so.
   typecheck.
 
 - *Measure a file's coverage the way the gate does — a claim of per-file 100% without the JSON
-  reporter's per-file listing is not evidence.* (Template A, the delegated-implementation-pipeline
-  document, lane-brief-implementer section.)
+  reporter's per-file listing is not evidence.* (Template A, in `references/briefs.md`.)
 - *A loaded host is a reason to show the isolated pass and let CI be the gate, never to raise a test
-  timeout.* (Template A, the delegated-implementation-pipeline document, lane-brief-implementer
-  section.)
+  timeout.* (Template A, in `references/briefs.md`.)
 
 **Know which gates are enforced by CI and which are enforced by you.** The plan verifier, a
 lane retiring its own premise, and the mutation verifier on a changed manifest are **CI**; a
@@ -286,9 +290,9 @@ that did not happen.
    The repair is to delete the stripped package directory and reinstall — a plain `yarn install` will
    not restore it, because the directory's presence makes the package look installed.
 
-   Write each brief from Template A, then dispatch it as an `Agent`. **Record the worktree tip
-   first** — an agent that reports success having committed nothing looks identical to one that did
-   the work. Never let two lanes own the same file at the same time.
+   Write each brief from Template A in `references/briefs.md`, then dispatch it as an `Agent`.
+   **Record the worktree tip first** — an agent that reports success having committed nothing looks
+   identical to one that did the work. Never let two lanes own the same file at the same time.
 
    **A lane is not done until the PR exists, and lanes routinely stop one step short.** Write
    "commit, push, and open the PR with `gh pr create`" as the explicit final instruction in every
@@ -312,6 +316,22 @@ that did not happen.
    that worktree** is a dead lane, while a CLI that writes nothing until it exits must be watched by
    its process and the worktree's commits. Never call a lane dead from the log alone.
 
+   **Delegated seats and lane hosts.** The overlay's `laneHosts` and `seats` name where a delegated
+   lane runs and who runs it. These rules hold for every host:
+
+   1. A remote opencode server executes its tools on the server side. `--dir` is the server
+      worktree path. The orchestrator creates that worktree over `ssh`, fetches the lane's commits
+      back, then runs the full gate, pushes and opens the PR itself. The lane never pushes; its brief
+      carries Template A's lane-host variant.
+   2. A sandboxed seat can read only its worktree. Its brief lives at `.lane/brief.md` inside the
+      worktree, and is verified with `git check-ignore` before dispatch.
+   3. A `gate: targeted-only` host runs targeted tests and replays only. Its briefs forbid the full
+      gate. The full gate runs on the orchestrator's host, and CI stays the gate.
+   4. Lane liveness is the bytes streamed from the dispatch, plus the lane's commit count against
+      the tip recorded before dispatch. An exit code of 0 is not evidence.
+   5. A lane host's `check` exercises the same path as its `dispatch`. A check that only proves the
+      remote server is up can pass while the dispatch fails.
+
    **Every brief carries the checkpoint rule**: commit failing tests once seen to fail, commit
    again after each green step, push only when the gate passes — a scoped, owner-confirmed exception
    to `.agents/testing.md`, limited to a lane's own branch. **Do not rewrite history to hide them.**
@@ -329,9 +349,10 @@ that did not happen.
    When the review of a PR is dispositioned, emit `review settled` with the counts of BUG /
    SUGGESTION / NIT findings in `--detail`.
 
-3. **Remediate.** Merge verified findings into a fix brief (Template C), listing refuted items
-   with reasons. **After any interrupted or killed `mutate:verify`, scan for a stranded mutation
-   before anything commits.** (why: [rationale](references/rationale.md#3-remediate))
+3. **Remediate.** Merge verified findings into a fix brief (Template C, in
+   `references/briefs.md`), listing refuted items with reasons. **After any interrupted or killed
+   `mutate:verify`, scan for a stranded mutation before anything commits.** (why:
+   [rationale](references/rationale.md#3-remediate))
 
    Run the remediator in that worktree, then **verify it yourself**: full gate, re-read the
    diff. Never merge on a remediator's self-report.

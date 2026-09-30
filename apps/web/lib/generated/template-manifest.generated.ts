@@ -500,6 +500,16 @@ export const TEMPLATE_MANIFESTS: Record<string, TemplateManifestMeta> = {
     provides: "platform.observability",
     scope: "project",
   },
+  orchestration: {
+    id: "orchestration",
+    name: "Orchestration",
+    description:
+      "Delegated wave orchestration: the orchestrate-wave skill (operating contract, rationale, lane/fix/sweep briefs, wave-event emitter) and a gate.yml that runs the one gate your own config declares. The skill is a template output; the .agents/orchestration/ overlay it reads is yours, scaffolded once by hexagen-orchestration-init and never written again.",
+    requires: [],
+    conflicts: [],
+    provides: "platform.orchestration",
+    scope: "project",
+  },
   "rate-limiting": {
     id: "rate-limiting",
     name: "Rate Limiting",

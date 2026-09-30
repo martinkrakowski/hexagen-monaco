@@ -1,0 +1,41 @@
+{
+  "id": "orchestration",
+  "name": "Orchestration",
+  "description": "Delegated wave orchestration: the orchestrate-wave skill (operating contract, rationale, lane/fix/sweep briefs, wave-event emitter) and a gate.yml that runs the one gate your own config declares. The skill is a template output; the .agents/orchestration/ overlay it reads is yours, scaffolded once by hexagen-orchestration-init and never written again.",
+  "provides": "platform.orchestration",
+  "scope": "project",
+  "version": "1.0.0",
+  "requires": [],
+  "conflicts": [],
+  "questions": [
+    {
+      "id": "agents_md",
+      "type": "boolean",
+      "prompt": "Paste the Wave Observability section into AGENTS.md after init?",
+      "default": true
+    },
+    {
+      "id": "node_version",
+      "type": "auto",
+      "derivedFrom": "ci-github-actions.node_version",
+      "default": "22"
+    }
+  ],
+  "envVars": [],
+  "outputs": [
+    ".github/workflows/gate.yml",
+    ".agents/skills/orchestrate-wave/SKILL.md",
+    ".agents/skills/orchestrate-wave/references/rationale.md",
+    ".agents/skills/orchestrate-wave/references/briefs.md",
+    ".agents/skills/orchestrate-wave/scripts/wave-event.sh"
+  ],
+  "checklist": [
+    "yarn add -D @hexagen-monaco/orchestration",
+    "Optionally add a \"gate\": \"hexagen-orchestration-gate\" script to package.json by hand, for local convenience.",
+    "npx hexagen-orchestration-init",
+    "If you answered yes to `agents_md`, paste the Wave Observability section from `.agents/orchestration/house-rules.md` into `AGENTS.md`.",
+    "npx hexagen-orchestration-doctor",
+    "`mutate` and `verify-manifests` run only when `.agents/orchestration/config.yaml` sets `mutate: true`."
+  ],
+  "branch": "feature/generator-template-orchestration"
+}
