@@ -497,6 +497,18 @@ describe("the gate run loop", () => {
     expect(existsSync(join(r.dir, "hexagen-gate.lock"))).toBe(false);
   });
 
+  test("locked names match whole names: foo and bar locked, foo-bar is not", () => {
+    const r = runGate(["--lane", "lane-b"], {
+      ...lockedEnv(["foo", "bar"]),
+      ...stepsEnv([
+        ["foo", 'test -d "$TMPDIR/hexagen-gate.lock"'],
+        ["foo-bar", 'test ! -d "$TMPDIR/hexagen-gate.lock"'],
+      ]),
+    });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("gate: 2/2 steps passed");
+  });
+
   test("an unknown flag exits 2, and so does a --lane without a value", () => {
     const unknown = runGate(["--wat"], stepsEnv([["build", "true"]]));
     expect(unknown.status).toBe(2);

@@ -128,3 +128,34 @@ export interface GateSkip {
   readonly name: string;
   readonly reason: string;
 }
+
+/** What a step name may look like: it is matched whole, by name, in the loop. */
+const STEP_NAME = /^[A-Za-z0-9][A-Za-z0-9:._-]*$/;
+
+/**
+ * The first reason the step list cannot be handed to the loop, or undefined.
+ *
+ * The loop's protocol is text: `name<TAB>command` lines, a space-delimited list
+ * of locked names and a `name<TAB>reason` skip list. A name with a space, a
+ * name shared by two steps, or a command holding a line break or a tab would
+ * each let one step's lock or skip land on another, or forge a step line, so
+ * they are refused before anything runs.
+ */
+export function stepListProblem(
+  steps: readonly GateStepPlan[],
+): string | undefined {
+  const seen = new Set<string>();
+  for (const step of steps) {
+    if (!STEP_NAME.test(step.name)) {
+      return `step name ${JSON.stringify(step.name)} is not allowed — it must match ${STEP_NAME.source}`;
+    }
+    if (seen.has(step.name)) {
+      return `step '${step.name}' appears more than once — step names must be unique`;
+    }
+    seen.add(step.name);
+    if (/[\n\r\t]/.test(step.command)) {
+      return `step '${step.name}' has a command containing a newline, carriage return or tab — a command must be one line without tabs`;
+    }
+  }
+  return undefined;
+}

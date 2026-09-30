@@ -6,6 +6,7 @@ import {
   renderSteps,
   resolveGateSteps,
   scriptNameOf,
+  stepListProblem,
   skipReason,
   type GateSkip,
   type GateStepPlan,
@@ -193,6 +194,12 @@ export function runGate(
           ? ", and the ones it lists are mutate-only steps that `mutate: false` omits."
           : "."),
     );
+    return EXIT_UNUSABLE;
+  }
+
+  const malformed = stepListProblem(steps);
+  if (malformed !== undefined) {
+    deps.logError(`gate: refusing to run — ${malformed}.`);
     return EXIT_UNUSABLE;
   }
 

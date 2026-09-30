@@ -425,6 +425,87 @@ describe("the empty-list refusal message", () => {
   });
 });
 
+describe("step names and commands are validated before anything runs", () => {
+  function refusalFor(steps: unknown[]): {
+    code: number;
+    errors: string;
+    ran: boolean;
+  } {
+    const errors: string[] = [];
+    const runLoop = vi.fn(() => 0);
+    const code = runGateCli(
+      [],
+      {
+        config: { gateSteps: steps, mutate: true } as unknown as Config,
+        present: true,
+        problems: [],
+      },
+      {
+        env: {},
+        log: () => undefined,
+        logError: (text) => errors.push(text),
+        readScripts: () => ({}),
+        runLoop,
+      },
+      "/loop.sh",
+      "/root",
+    );
+    return {
+      code,
+      errors: errors.join("\n"),
+      ran: runLoop.mock.calls.length > 0,
+    };
+  }
+
+  test("a duplicate name is refused and names the step", () => {
+    const r = refusalFor([
+      { name: "build", command: "true" },
+      { name: "build", command: "true" },
+    ]);
+    expect(r.code).toBe(2);
+    expect(r.errors).toContain("build");
+    expect(r.errors).toContain("more than once");
+    expect(r.ran).toBe(false);
+  });
+
+  test("a name with a space is refused", () => {
+    const r = refusalFor([{ name: "unit tests", command: "true" }]);
+    expect(r.code).toBe(2);
+    expect(r.errors).toContain("unit tests");
+    expect(r.ran).toBe(false);
+  });
+
+  test("a name that does not start alphanumeric is refused", () => {
+    expect(refusalFor([{ name: ":lead", command: "true" }]).code).toBe(2);
+  });
+
+  test("a command with a newline, carriage return or tab is refused", () => {
+    for (const command of ["true\nx\ttouch pwned", "true\rtrue", "a\tb"]) {
+      const r = refusalFor([{ name: "build", command }]);
+      expect(r.code).toBe(2);
+      expect(r.errors).toContain("build");
+      expect(r.ran).toBe(false);
+    }
+  });
+
+  test("the built bin exits 2 for a forged step line and creates nothing", () => {
+    const root = repository({
+      config: [
+        "repo: acme/demo",
+        "planDir: docs/planning",
+        "gateSteps:",
+        "  - name: build",
+        '    command: "true\nx\ttouch pwned"',
+        "",
+      ].join("\n"),
+    });
+    const result = runGate(root);
+    expect(result.status).toBe(2);
+    expect(existsSync(join(root, "pwned"))).toBe(false);
+    expect(result.stdout).not.toContain("==>");
+  });
+});
+
 describe("a loop killed by a signal", () => {
   test("maps through the host's signal table: SIGPIPE is 141, SIGABRT is 134", () => {
     expect(exitForSignal("SIGPIPE")).toEqual({ code: 141 });

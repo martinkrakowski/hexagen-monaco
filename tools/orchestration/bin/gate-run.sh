@@ -59,9 +59,14 @@ TAB=$(printf '\t')
 BUSY=75
 
 # The locked names, exactly as the bin computed them. A leading and a trailing
-# space are part of the contract: the match below is a plain substring test.
+# space are part of the contract: the match below is a plain substring test, and
+# it is a WHOLE-NAME match only because a name holds no whitespace, so a name
+# that does can never be locked.
 HEXAGEN_GATE_LOCKED="${HEXAGEN_GATE_LOCKED:- }"
 is_locked_step() {
+  case "$1" in
+    ''|*[[:space:]]*) return 1 ;;
+  esac
   case "$HEXAGEN_GATE_LOCKED" in
     *" $1 "*) return 0 ;;
     *) return 1 ;;
