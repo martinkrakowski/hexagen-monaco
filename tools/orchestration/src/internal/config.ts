@@ -275,12 +275,19 @@ function parseGateSteps(raw: unknown, problems: Problems): GateStep[] {
       problems.add(`gateSteps[${i}].command`, "must be a non-empty string");
       return;
     }
+    // Only a literal `true` marks a step optional. `no`, `null`, `"false"` are
+    // not booleans, and reading any of them as "optional" would let a step the
+    // author meant to require be skipped: the gate would pass without running it.
+    if (entry.optional !== undefined && typeof entry.optional !== "boolean") {
+      problems.add(
+        `gateSteps[${i}].optional`,
+        `must be true or false. Read ${JSON.stringify(entry.optional)}; only \`optional: true\` lets a step skip`,
+      );
+    }
     steps.push({
       name: entry.name,
       command: entry.command,
-      ...(entry.optional !== undefined
-        ? { optional: entry.optional !== false }
-        : {}),
+      ...(entry.optional === true ? { optional: true } : {}),
     });
   });
   return steps;

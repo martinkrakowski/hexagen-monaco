@@ -331,6 +331,43 @@ describe("gateSteps", () => {
     });
   });
 
+  describe("F2: only a literal true marks a step optional", () => {
+    const step = (optional: string) =>
+      `gateSteps:\n  - name: coverage\n    command: yarn coverage\n${optional}`;
+
+    test.each([
+      [
+        "optional: no",
+        "a YAML 1.1 boolean word that YAML 1.2 reads as a string",
+      ],
+      ["optional:", "null"],
+      ['optional: "false"', "a quoted string"],
+      ["optional: 0", "a number"],
+    ])("%s is a problem at gateSteps[0].optional (%s)", (line) => {
+      const result = parseConfig(step(`    ${line}\n`));
+      expect(result.problems.map((p) => p.at)).toEqual([
+        "gateSteps[0].optional",
+      ]);
+    });
+
+    test("a bad value never yields an optional step", () => {
+      const result = parseConfig(step("    optional: no\n"));
+      expect(result.config?.gateSteps[0]?.optional).not.toBe(true);
+    });
+
+    test("optional: true is optional", () => {
+      const config = ok(step("    optional: true\n"));
+      expect(config.gateSteps[0]?.optional).toBe(true);
+    });
+
+    test("optional: false and an absent key are both required", () => {
+      expect(ok(step("    optional: false\n")).gateSteps[0]?.optional).not.toBe(
+        true,
+      );
+      expect(ok(step("")).gateSteps[0]?.optional).not.toBe(true);
+    });
+  });
+
   test("a step with no name or no command is refused, naming the index", () => {
     expect(
       parseConfig("gateSteps:\n  - command: yarn build\n").problems[0].at,
