@@ -1,10 +1,7 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { statSync } from "node:fs";
-import {
-  CONFIG_RELATIVE_PATH,
-  type Config,
-  type ConfigProblem,
-} from "./config.js";
+import { type Config, type ConfigProblem } from "./config.js";
+import { configRefusal } from "./refusal.js";
 import { runWaveEvent, type WaveEventDeps } from "./wave-event-cli.js";
 
 /**
@@ -115,17 +112,11 @@ export async function runWaveEventForProject(
   loaded: LoadedProject,
   io: WaveEventIo,
 ): Promise<number> {
-  if (loaded.present && loaded.problems.length > 0) {
+  const refusal = configRefusal("wave-event", "append", loaded);
+  if (refusal !== undefined) {
     const say =
       io.stderr ?? ((line: string) => void process.stderr.write(`${line}\n`));
-    say(
-      `wave-event: refusing to append: ${CONFIG_RELATIVE_PATH} has ` +
-        `${loaded.problems.length} problem(s), so the log directory cannot be trusted:`,
-    );
-    for (const problem of loaded.problems) {
-      say(`  ${problem.at} ${problem.message}`);
-    }
-    say("Fix the file (run `hexagen-orchestration-doctor`), then retry.");
+    for (const line of refusal) say(line);
     return 2;
   }
   return runWaveEvent(argv, buildWaveEventDeps(processEnv, loaded.config, io));

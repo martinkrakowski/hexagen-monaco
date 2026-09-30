@@ -17,6 +17,7 @@ import {
   writeArtifact,
 } from "../internal/artifact.js";
 import { loadConfigFor } from "../internal/project.js";
+import { configRefusal } from "../internal/refusal.js";
 import { runCli } from "../plan-verify/cli.js";
 import { PREMISE_TIMEOUT_MS } from "../plan-verify/lib/verify.js";
 import type { VerifyDeps } from "../internal/premise-types.js";
@@ -50,31 +51,38 @@ const deps: VerifyDeps = {
     }),
 };
 
-const { root, config } = await loadConfigFor();
-
-try {
-  process.exitCode = await runCli({
-    argv: process.argv.slice(2),
-    log: (text) => console.log(text),
-    readFile: (path) => readFile(path, "utf8"),
-    listPlanDir: () => readdir(`${root}/${config.planDir}`),
-    deps,
-    now: () => new Date().toISOString(),
-    git: (args) =>
-      new Promise((resolve, reject) => {
-        execFile("git", args, { cwd: root }, (err, stdout) => {
-          if (err) reject(err);
-          else resolve(stdout);
-        });
-      }),
-    artifactPath: () => artifactPathFor(process.env),
-    writeArtifact: async (path, contents) => {
-      await mkdir(dirname(path), { recursive: true });
-      await writeArtifact(path, contents);
-    },
-    planDir: config.planDir,
-  });
-} catch (error: unknown) {
-  console.error(error instanceof Error ? error.message : errorText(error));
-  process.exitCode = 1;
+const loaded = await loadConfigFor();
+const { root, config } = loaded;
+// This bin ACTS on `planDir`, so an invalid overlay is a refusal, not a run.
+const refusal = configRefusal("plan-verify", "verify", loaded);
+if (refusal !== undefined) {
+  for (const line of refusal) console.error(line);
+  process.exitCode = 2;
+} else {
+  try {
+    process.exitCode = await runCli({
+      argv: process.argv.slice(2),
+      log: (text) => console.log(text),
+      readFile: (path) => readFile(path, "utf8"),
+      listPlanDir: () => readdir(`${root}/${config.planDir}`),
+      deps,
+      now: () => new Date().toISOString(),
+      git: (args) =>
+        new Promise((resolve, reject) => {
+          execFile("git", args, { cwd: root }, (err, stdout) => {
+            if (err) reject(err);
+            else resolve(stdout);
+          });
+        }),
+      artifactPath: () => artifactPathFor(process.env),
+      writeArtifact: async (path, contents) => {
+        await mkdir(dirname(path), { recursive: true });
+        await writeArtifact(path, contents);
+      },
+      planDir: config.planDir,
+    });
+  } catch (error: unknown) {
+    console.error(error instanceof Error ? error.message : errorText(error));
+    process.exitCode = 1;
+  }
 }
