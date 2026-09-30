@@ -1,11 +1,157 @@
 #!/bin/sh
-# hexagen-orchestration-verify-manifests — not yet ported.
+# Check every anchor in every manifest, then replay the manifests this change touches.
 #
-# Placeholder for OW-D14's canonical sixteen-bin list. The bin name and its
-# bin/verify-manifests path are FINAL and pinned here so no later lane touches package.json;
-# the implementing lane replaces this file and nothing else.
+# A manifest records the mutations a lane claims its tests catch. Replaying it
+# is what makes the claim evidence rather than a report: two seats stated
+# verdicts they had never observed, one quoting failure messages from a suite
+# whose own log showed it had not started.
 #
-# A stub must never exit 0: a caller that shells out to a bin and reads the exit
-# code would otherwise see a completed step that never ran.
-echo "hexagen-orchestration-verify-manifests: not yet ported" >&2
-exit 2
+# Only CHANGED manifests are replayed. Each mutation runs a real test command,
+# so replaying all of them every time grows without bound as manifests
+# accumulate. A claim is checked when it is made.
+#
+# EVERY failure here is loud. A gate that cannot work out what changed must say
+# so and stop, never quietly report nothing to do: silence is indistinguishable
+# from success, and that is how a gate stops being one.
+#
+# POSIX sh, and tested under dash — the runners' /bin/sh. In particular there is
+# no `read -d`, which dash rejects outright ("Illegal option -d"). An earlier
+# draft used it, and under dash the loop body never ran: the script replayed
+# nothing and exited 0. That is the precise failure this file is written to
+# avoid, so it is worth naming here.
+set -eu
+
+# The manifests are addressed from the repository ROOT, never from wherever the
+# caller happened to be. A gate invoked from a subdirectory that has no
+# `.agents/manifests` of its own would otherwise report "nothing to replay" and
+# exit 0 — a pass earned by standing in the wrong place. So the root comes
+# first, and a repository this cannot find is a failure, not an excuse.
+if ! ROOT=$(git rev-parse --show-toplevel 2>/dev/null); then
+  echo "verify-manifests: cannot find the repository root (git rev-parse --show-toplevel failed) — refusing to call that no changes" >&2
+  exit 2
+fi
+cd "$ROOT"
+
+MANIFEST_DIR=".agents/manifests"
+
+if [ ! -d "$MANIFEST_DIR" ]; then
+  echo "verify-manifests: no $MANIFEST_DIR directory; nothing to replay"
+  exit 0
+fi
+
+# The branch this repository's own work lands on. Set once, read everywhere, so
+# a mirror whose default is not `main` (and a CI job that says so) does not
+# silently diff against a branch that does not exist.
+MAIN=${MAIN_BRANCH:-main}
+
+# ---------------------------------------------------------------------------
+# First, the cheap half: is every anchor still live — in EVERY manifest?
+#
+# The replay below is diff-scoped by necessity (each mutation runs a real
+# suite). That scoping is also a hole, and it was wide open: a lane that
+# reformats one source file breaks anchors in manifests its diff never names,
+# and `runMutation` refuses zero-occurrence before-text permanently (Rule 2),
+# so those claims are not merely unchecked — they can never replay again. On
+# one revision, a large share of the anchors across the whole manifest set were
+# in that state behind a green gate.
+#
+# Asking "does this before-text still appear exactly once?" costs a string
+# count, so it is affordable over every manifest every time — under a second,
+# which is the only reason it can be unscoped. It runs BEFORE the replay: a dead
+# anchor should be reported in a second rather than after minutes of suites.
+#
+# Explicit `if !` rather than leaning on `set -e`: every failure in this file
+# is loud and named, because a gate that fails quietly has stopped being one.
+# ---------------------------------------------------------------------------
+if ! npx --no-install hexagen-orchestration-mutate-anchors "$MANIFEST_DIR"; then
+  echo "verify-manifests: a mutation anchor no longer resolves — see above." >&2
+  echo "verify-manifests: re-anchor it if the code moved, or retire it with a reason" >&2
+  echo "verify-manifests: (\"retired\": \"<why>\") if the code is gone. Never re-point a" >&2
+  echo "verify-manifests: mutation at different code to make a replay pass." >&2
+  exit 1
+fi
+
+# The base to diff against, in order of how well it describes "what this change
+# touched":
+#   pull_request — the target branch.
+#   push         — the commit that was there before. On a push to the main
+#                  branch, origin/$MAIN IS the pushed commit, so diffing against
+#                  it is empty and every manifest would be skipped in silence.
+#   otherwise    — the default branch, for a local run.
+if [ -n "${GITHUB_BASE_REF:-}" ]; then
+  BASE="origin/${GITHUB_BASE_REF}"
+elif [ -n "${MANIFEST_DIFF_BASE:-}" ] &&
+     [ "${MANIFEST_DIFF_BASE}" != "0000000000000000000000000000000000000000" ]; then
+  BASE="${MANIFEST_DIFF_BASE}"
+else
+  BASE="origin/$MAIN"
+fi
+
+# A base can be named and still be gone: `github.event.before` on a force-pushed
+# branch points at a commit that no longer exists. That is a *stale* base, not a
+# broken checkout, and falling back to the default branch still answers "what
+# did this change touch" — so degrade, loudly, rather than failing the build for
+# a rewritten history. Anything else that breaks `git diff` is still an error:
+# reporting "no changes" because the diff failed is the fail-open case this
+# script exists to avoid.
+if ! git rev-parse --verify --quiet "${BASE}^{commit}" >/dev/null 2>&1; then
+  # Only a 40-hex object name is treated as "a commit that existed and was
+  # rewritten away". Anything else is a malformed base — a typo, an empty
+  # variable, a branch name nobody fetched — and guessing a fallback for it
+  # would let a broken configuration pass the gate quietly.
+  case "$BASE" in
+    *[!0-9a-f]* | "")
+      echo "verify-manifests: base '$BASE' is not a resolvable commit — refusing to guess" >&2
+      exit 2 ;;
+  esac
+  if [ "${#BASE}" -ne 40 ]; then
+    echo "verify-manifests: base '$BASE' is not a resolvable commit — refusing to guess" >&2
+    exit 2
+  fi
+  echo "verify-manifests: base '$BASE' is unreachable (a force push rewrote it?); falling back"
+  if ! git rev-parse --verify --quiet "origin/$MAIN^{commit}" >/dev/null 2>&1; then
+    echo "verify-manifests: origin/$MAIN is unreachable too — refusing to call that no changes" >&2
+    exit 2
+  fi
+  BASE="origin/$MAIN"
+fi
+
+# A fallback that lands on HEAD itself diffs a commit against itself and finds
+# nothing — which is what happens on a force-pushed main, and is the same silent
+# skip this script exists to prevent. Step back one commit instead.
+if [ "$(git rev-parse "${BASE}^{commit}")" = "$(git rev-parse 'HEAD^{commit}')" ]; then
+  if git rev-parse --verify --quiet 'HEAD~1^{commit}' >/dev/null 2>&1; then
+    echo "verify-manifests: base resolves to HEAD; using HEAD~1 so the diff is not empty by construction"
+    BASE="HEAD~1"
+  else
+    echo "verify-manifests: base resolves to HEAD and there is no parent — refusing to call that no changes" >&2
+    exit 2
+  fi
+fi
+
+CHANGED_LIST=$(mktemp)
+trap 'rm -f "$CHANGED_LIST"' EXIT
+if ! git diff --name-only --diff-filter=d "$BASE"...HEAD -- "$MANIFEST_DIR" > "$CHANGED_LIST" 2>/dev/null; then
+  echo "verify-manifests: cannot diff against '$BASE' — refusing to call that no changes" >&2
+  exit 2
+fi
+
+# One name per line, read with `IFS= read -r`: a name containing a space or a
+# glob character must not be word-split or expanded. A name containing a newline
+# is the one case this cannot carry; git quotes those, so they arrive visibly
+# wrong rather than silently skipped.
+STATUS=0
+REPLAYED=0
+while IFS= read -r manifest; do
+  [ -n "$manifest" ] || continue
+  [ -f "$manifest" ] || continue
+  REPLAYED=$((REPLAYED + 1))
+  echo "verify-manifests: replaying $manifest"
+  if ! npx --no-install hexagen-orchestration-mutate-verify "$manifest"; then
+    echo "verify-manifests: $manifest did not reproduce" >&2
+    STATUS=1
+  fi
+done < "$CHANGED_LIST"
+
+[ "$REPLAYED" -eq 0 ] && echo "verify-manifests: no manifest changed against $BASE; nothing to replay"
+exit "$STATUS"
