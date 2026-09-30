@@ -184,11 +184,14 @@ export function runGate(
 
   const steps = resolveGateSteps(loaded.config);
   if (steps.length === 0) {
+    // The mutate clause is true only when steps were listed and `mutate: false`
+    // omitted every one of them; an overlay that listed none has nothing to
+    // blame it on.
     deps.logError(
       "gate: refusing to run — gateSteps resolved to no steps" +
-        (loaded.config.mutate
-          ? "."
-          : ", and the ones it lists are mutate-only steps that `mutate: false` omits;"),
+        (loaded.config.gateSteps.length > 0
+          ? ", and the ones it lists are mutate-only steps that `mutate: false` omits."
+          : "."),
     );
     return EXIT_UNUSABLE;
   }

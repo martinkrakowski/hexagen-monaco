@@ -378,6 +378,53 @@ describe("--print-steps and package.json", () => {
   });
 });
 
+describe("the empty-list refusal message", () => {
+  function refusal(gateSteps: unknown[], mutate: boolean): string {
+    const errors: string[] = [];
+    const code = runGateCli(
+      [],
+      {
+        config: { gateSteps, mutate } as unknown as Config,
+        present: true,
+        problems: [],
+      },
+      {
+        env: {},
+        log: () => undefined,
+        logError: (text) => errors.push(text),
+        readScripts: () => ({}),
+        runLoop: () => 0,
+      },
+      "/loop.sh",
+      "/root",
+    );
+    expect(code).toBe(2);
+    return errors.join("\n");
+  }
+
+  test("no gateSteps at all gives the plain message, with no mutate clause", () => {
+    const message = refusal([], false);
+    expect(message).toContain("gateSteps resolved to no steps");
+    expect(message).not.toContain("mutate");
+    expect(message.endsWith(".")).toBe(true);
+  });
+
+  test("only mutate-only steps with mutate: false gives the mutate clause", () => {
+    const message = refusal(
+      [
+        {
+          name: "verify",
+          command: "npx --no-install hexagen-orchestration-verify-manifests",
+        },
+      ],
+      false,
+    );
+    expect(message).toContain("gateSteps resolved to no steps");
+    expect(message).toContain("mutate: false");
+    expect(message.endsWith(".")).toBe(true);
+  });
+});
+
 describe("a loop killed by a signal", () => {
   test("maps through the host's signal table: SIGPIPE is 141, SIGABRT is 134", () => {
     expect(exitForSignal("SIGPIPE")).toEqual({ code: 141 });
