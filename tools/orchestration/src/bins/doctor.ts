@@ -7,16 +7,11 @@
  */
 import { access } from "node:fs/promises";
 import { execFile } from "node:child_process";
+import { hasCommand } from "../internal/capabilities.js";
 import { loadConfigFor } from "../internal/project.js";
 import { formatReport, runDoctor } from "../doctor/doctor.js";
 
 const { root, config, present, problems } = await loadConfigFor();
-
-/** Whether a command is on PATH, without running it. */
-const hasCommand = (command: string): Promise<boolean> =>
-  new Promise((resolve) => {
-    execFile("command", ["-v", command], (error) => resolve(error === null));
-  });
 
 /** `git worktree` succeeding is not the same as `git` existing. */
 const supportsWorktrees = (): Promise<boolean> =>
