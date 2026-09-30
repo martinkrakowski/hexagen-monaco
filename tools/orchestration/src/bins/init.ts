@@ -1,14 +1,53 @@
 #!/usr/bin/env node
 /**
- * `hexagen-orchestration-init` — not yet ported.
+ * `hexagen-orchestration-init` — the bin.
  *
- * Placeholder for OW-D14's canonical sixteen-bin list. The bin name and its
- * `dist/bins/init.js` path are FINAL and pinned here so no later lane touches
- * package.json or tsup.config.ts; the implementing lane replaces this file and
- * nothing else.
- *
- * A stub must never exit 0: a caller that shells out to a bin and reads the exit
- * code would otherwise see a completed step that never ran.
+ * All the behaviour is in `../init/init.ts`; this is the thin edge supplying the
+ * real filesystem.
  */
-process.stderr.write("hexagen-orchestration-init: not yet ported\n");
-process.exit(2);
+import { readFile, writeFile, mkdir, access } from "node:fs/promises";
+import { dirname } from "node:path";
+import { loadConfigFor } from "../internal/project.js";
+import {
+  OVERLAY_DIR,
+  TEMPLATE_CONFIG_PATH,
+  formatReport,
+  runInit,
+} from "../init/init.js";
+
+const { root, config } = await loadConfigFor();
+const at = (path: string): string => `${root}/${path}`;
+
+const { outcomes } = await runInit(config, {
+  exists: async (path) => {
+    try {
+      await access(at(path));
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  write: async (path, contents) => {
+    const full = at(path);
+    await mkdir(dirname(full), { recursive: true });
+    await writeFile(full, contents, "utf8");
+  },
+  readTemplateConfig: async () => {
+    try {
+      return await readFile(at(TEMPLATE_CONFIG_PATH), "utf8");
+    } catch {
+      return undefined;
+    }
+  },
+});
+
+console.log(formatReport(outcomes));
+if (outcomes.some((o) => o.action === "created")) {
+  console.log(
+    `init: run \`hexagen-orchestration-doctor\` next to check the overlay.`,
+  );
+} else {
+  console.log(
+    `init: ${OVERLAY_DIR}/ is already complete; nothing was changed.`,
+  );
+}
