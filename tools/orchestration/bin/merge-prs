@@ -94,6 +94,12 @@ if [[ -z "${REQUIRED_CHECK:-}" ]]; then
   [[ -n "$REQUIRED_CHECK" ]] \
     || die "the project overlay resolved no REQUIRED_CHECK — refusing to gate on an empty pattern"
 fi
+# Whatever its source, the pattern must compile. `sweep checks` compiles it, and
+# an empty array is enough input to make it do so, so a bad pattern dies here,
+# before the first fetch or push, instead of after a PR has been refreshed and
+# pushed. Run from the repository, where npx resolves the bins.
+( cd "$REPO" && printf '[]' | npx --no-install hexagen-orchestration-sweep checks >/dev/null ) \
+  || die "REQUIRED_CHECK is not a valid pattern — see above"
 
 # How long the review bots get to post on the refreshed head before the merge
 # condition is asked about. Bounded: a bot that has not run yet is invisible to
@@ -368,12 +374,20 @@ for branch in $BRANCHES; do
   if git show-ref --verify --quiet "refs/heads/$branch"; then
     git branch -D "$branch" >/dev/null || warn "could not delete local branch $branch"
   fi
-  if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+  # `ls-remote --exit-code` answers 2 for "no such ref" (nothing to delete) and
+  # anything else non-zero (128 on a network or auth failure) for "could not
+  # ask". Only the first is a reason to skip; the second must not be read as
+  # "already gone", or a branch that still exists is reported as cleaned up.
+  git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1
+  ls_status=$?
+  if [[ $ls_status -eq 0 ]]; then
     if git push -q origin --delete "$branch"; then
       echo "deleted origin/$branch"
     else
       warn "could not delete origin/$branch"
     fi
+  elif [[ $ls_status -ne 2 ]]; then
+    warn "could not list origin/$branch"
   fi
 done
 if git checkout -q "$MAIN" && git pull -q --ff-only origin "$MAIN"; then

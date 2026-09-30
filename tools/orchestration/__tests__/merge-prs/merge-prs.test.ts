@@ -654,9 +654,10 @@ describe.skipIf(!hasZsh())(
       // real one, to observe what the script does when housekeeping fails.
       const gitStub = [
         "#!/bin/sh",
+        'echo "$*" >> "$GIT_LOG"',
         'if [ -n "${STUB_GIT_FAIL:-}" ]; then',
         '  case " $* " in',
-        '    *" $STUB_GIT_FAIL "*) echo "fatal: stubbed failure of $STUB_GIT_FAIL" >&2; exit 1 ;;',
+        '    *" $STUB_GIT_FAIL "*) echo "fatal: stubbed failure of $STUB_GIT_FAIL" >&2; exit "${STUB_GIT_FAIL_CODE:-1}" ;;',
         "  esac",
         "fi",
         'exec "$REAL_GIT" "$@"',
@@ -692,6 +693,7 @@ describe.skipIf(!hasZsh())(
           REPO_DIR: s.repoDir,
           SWEEP_BIN,
           GH_LOG: join(s.root, "gh.log"),
+          GIT_LOG: join(s.root, "git.log"),
           REAL_GIT: spawnSync("sh", ["-c", "command -v git"], {
             encoding: "utf8",
           }).stdout.trim(),
@@ -778,6 +780,24 @@ describe.skipIf(!hasZsh())(
       }
     });
 
+    test("a REQUIRED_CHECK that will not compile dies before any fetch or push", () => {
+      const s = makeScenario(false);
+      try {
+        const result = runScenario(s, { REQUIRED_CHECK: "[" });
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain(
+          "REQUIRED_CHECK is not a valid pattern",
+        );
+        expect(result.stdout).not.toContain("=== PR #42");
+        const gitLog = existsSync(join(s.root, "git.log"))
+          ? readFileSync(join(s.root, "git.log"), "utf8")
+          : "";
+        expect(gitLog).not.toMatch(/(^| )(fetch|push)( |$)/m);
+      } finally {
+        s.cleanup();
+      }
+    });
+
     describe("the housekeeping after the merge", () => {
       const green = { GH_GREEN: "1" };
 
@@ -802,6 +822,23 @@ describe.skipIf(!hasZsh())(
           expect(result.status).not.toBe(0);
           expect(result.stderr).toContain("did not sync");
           expect(result.stdout).not.toContain("ALL DONE");
+        } finally {
+          s.cleanup();
+        }
+      });
+
+      test('an ls-remote that fails for a reason other than a missing ref is a WARN, not "already gone"', () => {
+        const s = makeScenario(false);
+        try {
+          const result = runScenario(s, {
+            ...green,
+            STUB_GIT_FAIL: "ls-remote",
+            STUB_GIT_FAIL_CODE: "128",
+          });
+          expect(result.stdout).toContain("merged #42");
+          expect(result.stderr).toContain("WARN: could not list origin/feat/x");
+          expect(result.stdout).toContain("DONE WITH WARNINGS");
+          expect(result.status).toBe(1);
         } finally {
           s.cleanup();
         }
