@@ -111,6 +111,11 @@ describe("F8: the bins find the repository root from a subdirectory", () => {
     );
     const result = run("doctor", sub);
     const out = `${result.stdout}${result.stderr}`;
+    // A positive floor first: a bin that crashed, or dropped the host, would
+    // also print nothing about `./scripts/x`, and the negative alone would pass.
+    expect(out, "doctor did not walk the host `here`").toContain(
+      "WARN  [lane-host here]",
+    );
     expect(out, "the check ran from the subdirectory").not.toContain(
       "./scripts/x",
     );
