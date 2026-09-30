@@ -8,8 +8,8 @@ here, so each one says what to do rather than what to avoid.
 A delegated wave is only as good as its record. Three things make that
 record, and all three come from this overlay rather than from a constant:
 
-**Events.** Every lane appends to `<wave log dir>/events.jsonl` through
-`hexagen-orchestration-wave-event`. The log is the only source of what a
+**Events.** The orchestrator appends every lane's events to `<wave log dir>/events.jsonl` through
+`hexagen-orchestration-wave-event`, on the orchestrator's host. A lane on a remote lane host never emits: its `$HOME` is not the log the status page reads. The log is the only source of what a
 wave did. Nothing is inferred from a process list or a directory name.
 
 **Status.** `hexagen-orchestration-wave-status` serves the wave from that
