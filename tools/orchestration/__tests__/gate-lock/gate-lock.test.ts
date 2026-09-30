@@ -1009,8 +1009,8 @@ describe("the gate lock: run <lane> -- <command>", () => {
    * command above takes TWO SECONDS to tear down after its TERM, and a `run`
    * that killed and exited in the same breath would have handed the lock to
    * this contender while the command was still writing to the tree. So the lock
-   * is asked about, by name, in exactly that window — after the signal has been
-   * delivered and before the marker exists — and it must answer 75. After the
+   * is asked about, by name, in exactly that window — after the command's TERM
+   * trap has been entered and before the marker exists — and it must answer 75. After the
    * marker exists, the lock directory is gone.
    *
    * Removing `wait "$cmd_pid"` from forward_signal makes this red: the lock is
@@ -1022,6 +1022,7 @@ describe("the gate lock: run <lane> -- <command>", () => {
       const dir = scratch();
       const stopped = join(dir, "stopped");
       const commandPidFile = join(dir, "command.pid");
+      const trapEntered = join(dir, "trap-entered");
       const { child, done } = startLockIn(
         dir,
         [
@@ -1030,7 +1031,7 @@ describe("the gate lock: run <lane> -- <command>", () => {
           "--",
           "sh",
           "-c",
-          `exec >/dev/null 2>&1; trap 'sleep 2; echo stopped > "${stopped}"; exit 0' TERM; printf '%s\\n' "$$" > "${commandPidFile}"; sleep 30 >/dev/null 2>&1 & wait`,
+          `exec >/dev/null 2>&1; trap 'echo entered > "${trapEntered}"; sleep 2; echo stopped > "${stopped}"; exit 0' TERM; printf '%s\\n' "$$" > "${commandPidFile}"; sleep 30 >/dev/null 2>&1 & wait`,
         ],
         { HEXAGEN_GATE_HEARTBEAT_SECONDS: "1" },
         shell,
@@ -1039,20 +1040,20 @@ describe("the gate lock: run <lane> -- <command>", () => {
       expect(lockFile(dir, "pid").trim()).toBe(String(child.pid));
       process.kill(child.pid as number, "SIGTERM");
 
-      // While the marker is absent, the lock is still this run's: a contender
-      // is busy, and busy is the only answer a caller can act on.
-      const contender = await waitFor(
-        () => isAlive(child.pid as number),
-        2_000,
-        "the run exited before the contender could ask",
-      ).catch(() => false);
-      expect(contender).toBe(true);
+      // Wait for the command's TERM trap to have been ENTERED. Sampling before
+      // that would measure the signal's delivery latency, not the lock: the
+      // contender could land before the command had been told to stop at all.
+      // While the done-marker is absent the lock is still this run's, and a
+      // contender is busy — busy is the only answer a caller can act on.
+      await waitForContent(trapEntered);
       const during = runLockIn(dir, ["acquire", "lane-b"], {
         HEXAGEN_GATE_CALLER_PID: String(process.pid),
       });
       expect(during.status).toBe(75);
       expect(during.stderr).toContain("busy");
-      // Nothing was taken while the command was still tearing down.
+      // The command was mid-teardown when the contender asked, and nothing was
+      // taken while it was.
+      expect(existsSync(trapEntered)).toBe(true);
       expect(existsSync(stopped)).toBe(false);
       expect(lockFile(dir, "owner").trim()).toBe("lane-a");
 
