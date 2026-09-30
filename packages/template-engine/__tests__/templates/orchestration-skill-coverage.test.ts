@@ -188,6 +188,25 @@ describe("orchestration skill coverage", () => {
     expect(result.out).toContain("source/SKILL.md is not the pinned snapshot");
   });
 
+  it("allowlist: an entry with no comment block directly above it is named", () => {
+    const fixture = copyFixture();
+    const allowlist = path.join(
+      fixture,
+      "campaign-foundry",
+      "overlay",
+      "coverage-allowlist.txt",
+    );
+    fs.appendFileSync(allowlist, "\na-bare-entry.md\n");
+    let result = run(coverageArgs(fixture));
+    expect(result.status, result.out).toBe(1);
+    expect(result.out).toContain("a-bare-entry.md");
+    expect(result.out).toContain("has no reason");
+    // A blank line between the comment and the entry also leaves it bare.
+    fs.appendFileSync(allowlist, "# a reason\n\nanother-bare-entry.md\n");
+    result = run(coverageArgs(fixture));
+    expect(result.out).toContain("another-bare-entry.md");
+  });
+
   it("exits 2 on bad arguments and on an unreadable path", () => {
     expect(run([]).status).toBe(2);
     expect(run(["--source", FIXTURE]).status).toBe(2);

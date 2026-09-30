@@ -307,6 +307,26 @@ function checkSnapshot(sourceDir) {
   say(`snapshot: ${recorded.size} file(s) match the blob ids recorded in SOURCE.md`);
 }
 
+/**
+ * Allowlist entries, each with the reason above it. An entry is a non-comment line; its reason is
+ * the block of `#` lines directly above it, with no blank line between. A bare entry is a failure:
+ * "not relevant" is not a reason, and no reason at all cannot be reviewed.
+ */
+function parseAllowlist(path) {
+  const entries = new Map();
+  let block = 0;
+  for (const raw of readFile(path, "allowlist").split("\n")) {
+    const line = raw.trim();
+    if (line === "") block = 0;
+    else if (line.startsWith("#")) block++;
+    else {
+      entries.set(line, block > 0);
+      block = 0;
+    }
+  }
+  return entries;
+}
+
 function checkCounts(name, sourceText) {
   const expected = EXPECTED_UNITS[name];
   const anchors = anchorUnits(sourceText, expected.anchorKinds).length;
@@ -486,12 +506,16 @@ function checkTokenReview(reviewPath, genericDir, sourceDir, hexagenRoot) {
 function main() {
   const opts = parseArgs(process.argv.slice(2));
   const sourceDir = resolve(opts.source);
-  const allowlistEntries = new Set(
-    readFile(opts.allowlist, "allowlist")
-      .split("\n")
-      .filter((line) => line.trim() && !line.trim().startsWith("#"))
-      .map((line) => line.trim()),
-  );
+  const allowlist = parseAllowlist(opts.allowlist);
+  const allowlistEntries = new Set(allowlist.keys());
+  for (const [entry, hasReason] of allowlist) {
+    if (!hasReason) {
+      bad(
+        `allowlist entry ${JSON.stringify(entry)} has no reason: it needs a block of # comment lines ` +
+          `directly above it, with no blank line between`,
+      );
+    }
+  }
 
   const trees = opts.trees.map((dir) => readTree(resolve(dir)));
   const treeLines = new Set();
