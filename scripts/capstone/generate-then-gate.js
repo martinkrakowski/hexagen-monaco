@@ -498,24 +498,14 @@ for (const fixture of fixtures) {
       );
     });
 
-    // init twice: the second run leaves every file byte-identical (F-14).
-    const inited = gate("orch:init-idempotent", () => {
+    // First init scaffolds the overlay.
+    const inited = gate("orch:init-scaffold", () => {
       const first = run("node_modules/.bin/hexagen-orchestration-init");
       expect(
         first.status === 0,
         `init (1st) exit ${first.status}\n${first.out}`,
       );
       expect(existsSync(CONFIG), "init did not scaffold config.yaml");
-      const before = hashTree(ORCH_DIR) + hashTree(".lane");
-      const second = run("node_modules/.bin/hexagen-orchestration-init");
-      expect(
-        second.status === 0,
-        `init (2nd) exit ${second.status}\n${second.out}`,
-      );
-      expect(
-        hashTree(ORCH_DIR) + hashTree(".lane") === before,
-        "second init changed the scaffolded tree",
-      );
     });
 
     // The generated project is not hexagen and has no GitHub remote, so the
@@ -540,6 +530,32 @@ for (const fixture of fixtures) {
     if (seeded) {
       const setConfig = (text) => writeFileSync(CONFIG, text);
       setConfig(configured);
+
+      // init twice (F-14): a second run is a SKIP, not a rewrite. It runs AFTER
+      // the repo seed above, so a deterministic init that overwrote its
+      // scaffold would erase the seed and fail here; a byte-identical hash
+      // alone could not tell the two apart.
+      gate("orch:init-idempotent", () => {
+        const before = hashTree(ORCH_DIR) + hashTree(".lane");
+        const second = run("node_modules/.bin/hexagen-orchestration-init");
+        expect(
+          second.status === 0,
+          `init (2nd) exit ${second.status}\n${second.out}`,
+        );
+        expect(
+          readFileSync(CONFIG, "utf8") === configured,
+          "second init overwrote the seeded config.yaml",
+        );
+        expect(
+          second.out.includes("wrote 0, left 5 untouched") &&
+            !/^created /m.test(second.out),
+          `second init did not report every scaffold file as kept\n${second.out}`,
+        );
+        expect(
+          hashTree(ORCH_DIR) + hashTree(".lane") === before,
+          "second init changed the scaffolded tree",
+        );
+      });
 
       // Red: the configured ciWorkflow is missing → FAIL naming the file.
       // (Spec §7 OW3 doctor red; the fixture installs ci-github-actions, which
