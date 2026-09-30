@@ -461,17 +461,33 @@ describe("the gate run loop", () => {
     const r = runGate(["--lane", "lane-b"], {
       ...lockedEnv(["test:cov", "verify-manifests"]),
       ...stepsEnv([
-        ["test:cov", 'test -d "$TMPDIR/hexagen-gate.lock"'],
-        ["verify-manifests", "true"],
+        // The skipped locked step. Were it ever run, or were it to acquire, the
+        // probe below would find the lock.
+        ["test:cov", 'touch "$TMPDIR/skipped-ran"'],
+        // Not locked, and between the two: if the skip had taken the lock this
+        // is where it would be visible. The lock must not exist yet.
+        [
+          "probe",
+          'test ! -d "$TMPDIR/hexagen-gate.lock" && touch "$TMPDIR/no-lock-at-probe"',
+        ],
+        // The next locked step acquires for itself, so the lock exists while
+        // it runs.
+        [
+          "verify-manifests",
+          'test -d "$TMPDIR/hexagen-gate.lock" && touch "$TMPDIR/lock-held-during"',
+        ],
       ]),
-      // The FIRST locked step is the one that skips, so nothing takes the
-      // lock at all and the second one must find none.
       ...skipEnv([["test:cov", "no test:cov script in package.json"]]),
     });
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("SKIPPED test:cov");
     expect(r.stdout).toContain("<== verify-manifests: exit 0");
-    expect(r.stdout).toContain("gate: 1/2 steps passed, 1 skipped");
+    expect(r.stdout).toContain("gate: 2/3 steps passed, 1 skipped");
+    expect(existsSync(join(r.dir, "skipped-ran"))).toBe(false);
+    expect(existsSync(join(r.dir, "no-lock-at-probe"))).toBe(true);
+    expect(existsSync(join(r.dir, "lock-held-during"))).toBe(true);
+    // Released after the last locked step that ran, not held open.
+    expect(existsSync(join(r.dir, "hexagen-gate.lock"))).toBe(false);
   });
 
   test("an unknown flag exits 2, and so does a --lane without a value", () => {
