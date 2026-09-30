@@ -137,6 +137,15 @@ refresh_here() {
   git merge -q --no-edit "origin/$MAIN" || resolve_append_only_or_die
 }
 
+# Every check run on a commit, as one JSON object per line, across ALL pages: a
+# repository with more than one page of runs would otherwise hide a failing run
+# on page two. `--jq` runs per page, so the output is NDJSON, which `sweep
+# checks` reads as it reads an array.
+fetch_runs() {
+  gh api --paginate "repos/{owner}/{repo}/commits/$1/check-runs?per_page=100" \
+    --jq '.check_runs[] | {n:.name, s:.status, c:.conclusion}' 2>/dev/null
+}
+
 typeset -a WORKTREES BRANCHES
 for spec in "$@"; do
   # Array-split on "|", not the old ${%%|*}/${#*|} chain: that chain reused
@@ -231,9 +240,17 @@ for spec in "$@"; do
       die "PR #$pr head moved to $forge_head after our push of $head_sha — someone else pushed; not merging"
     fi
     if [ -n "$head_sha" ]; then
-      n=$(gh api "repos/{owner}/{repo}/commits/$head_sha/check-runs" \
-        --jq "[.check_runs[] | select(.name | test(\"$REQUIRED_CHECK\"))] | length" 2>/dev/null || echo 0)
-      if [ "${n:-0}" -gt 0 ]; then registered=1; break; fi
+      # Registered means the REQUIRED check has a run on this head. The pattern is
+      # applied by `sweep checks`, never spliced into a jq program: a pattern with
+      # a backslash or a quote in it would break the program, and a broken program
+      # reads exactly like "nothing registered yet". A gh that fails, or answers
+      # nothing, is "not yet"; a `checks` that cannot read what gh printed is not.
+      if runs=$(fetch_runs "$head_sha") && [ -n "$runs" ]; then
+        summary=$(printf '%s' "$runs" | npx --no-install hexagen-orchestration-sweep checks) \
+          || die "could not read the check runs for #$pr — not merging"
+        n="${${(s: :)summary}[2]#required=}"
+        if [ "${n:-0}" -gt 0 ]; then registered=1; break; fi
+      fi
     fi
     sleep 15
   done
@@ -255,8 +272,8 @@ for spec in "$@"; do
   concluded=0
   summary=""
   for _ in $(seq 1 120); do          # up to ~30 minutes at 15s
-    runs=$(gh api "repos/{owner}/{repo}/commits/$head_sha/check-runs" \
-      --jq '[.check_runs[] | {n:.name, s:.status, c:.conclusion}]' 2>/dev/null || echo '[]')
+    runs=$(fetch_runs "$head_sha") || runs=''
+    [[ -n "$runs" ]] || runs='[]'
     # One read of the array, one answer, in TypeScript: the counts this loop
     # needs (how many runs have not concluded, how many match the pattern, and
     # which concluded badly) come from a single parse rather than from three

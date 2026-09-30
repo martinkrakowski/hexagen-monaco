@@ -559,9 +559,14 @@ describe.skipIf(!hasZsh())(
       // The forge: one failing run on the pushed head, named with spaces.
       const gh = [
         "#!/bin/sh",
+        'echo "$*" >> "$GH_LOG"',
         'case " $* " in',
-        '  *"check-runs"*"length"*) echo 1 ;;',
-        '  *"check-runs"*) echo \'[{"n":"Build and Test","s":"completed","c":"failure"}]\' ;;',
+        // The forge: one healthy run, then two failing ones — one named with
+        // spaces, one with parentheses — as a later "page" would deliver them.
+        "  *check-runs*)",
+        '    echo \'{"n":"Lint","s":"completed","c":"success"}\'',
+        '    echo \'{"n":"Build and Test","s":"completed","c":"failure"}\'',
+        '    echo \'{"n":"Build (linux)","s":"completed","c":"failure"}\' ;;',
         "esac",
         "exit 0",
         "",
@@ -581,7 +586,10 @@ describe.skipIf(!hasZsh())(
       };
     }
 
-    const runScenario = (s: Scenario) => {
+    const runScenario = (
+      s: Scenario,
+      extra: Readonly<Record<string, string>> = {},
+    ) => {
       const inherited: Readonly<Record<string, string | undefined>> =
         process.env;
       return spawnSync("zsh", [SCRIPT, "42||feat/x"], {
@@ -592,6 +600,8 @@ describe.skipIf(!hasZsh())(
           PATH: `${s.stubBinDir}:${inherited.PATH ?? ""}`,
           REPO_DIR: s.repoDir,
           SWEEP_BIN,
+          GH_LOG: join(s.root, "gh.log"),
+          ...extra,
         },
       });
     };
@@ -622,9 +632,38 @@ describe.skipIf(!hasZsh())(
       try {
         const result = runScenario(s);
         expect(result.stdout).toContain(
-          "CHECKS FAILED for #42: Build and Test",
+          "CHECKS FAILED for #42: Build and Test,Build (linux)",
         );
         expect(result.status).toBe(1);
+      } finally {
+        s.cleanup();
+      }
+    });
+
+    test("a REQUIRED_CHECK with regex escapes still registers: the pattern never enters a jq program", () => {
+      const s = makeScenario(false);
+      try {
+        const result = runScenario(s, { REQUIRED_CHECK: "^Build \\(linux\\)" });
+        expect(result.stdout).toContain("waiting for checks on");
+        expect(result.stdout).not.toContain("NO CHECKS REGISTERED");
+        expect(result.stdout).toContain("CHECKS FAILED for #42:");
+      } finally {
+        s.cleanup();
+      }
+    });
+
+    test("both polls read every page of check runs", () => {
+      const s = makeScenario(false);
+      try {
+        runScenario(s);
+        const calls = readFileSync(join(s.root, "gh.log"), "utf8")
+          .split("\n")
+          .filter((line) => line.includes("check-runs"));
+        expect(calls.length).toBeGreaterThanOrEqual(2);
+        for (const call of calls) {
+          expect(call).toContain("--paginate");
+          expect(call).toContain("per_page=100");
+        }
       } finally {
         s.cleanup();
       }
