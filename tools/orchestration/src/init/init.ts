@@ -117,7 +117,7 @@ export function renderConfig(config: Config): string {
     "# none of them hardcodes a repository, a port or a log root.",
     "",
     "# Where plans live. plan-review and plan-verify read this, not a constant.",
-    `planDir: ${config.planDir}`,
+    `planDir: ${JSON.stringify(config.planDir)}`,
     "",
     "# The ordered gate steps. The `gate` bin runs exactly this list, in this",
     "# order, and prints it for --print-steps. `optional: true` may skip and is",

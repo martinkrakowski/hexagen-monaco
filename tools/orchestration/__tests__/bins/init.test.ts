@@ -202,6 +202,16 @@ describe("the scaffolded config.yaml (A-18, A-20)", () => {
     ).toBe(false);
   });
 
+  test("a planDir holding YAML syntax round-trips through init then parseConfig unchanged", async () => {
+    const root = project();
+    const planDir = "docs/a: b #c";
+    await init(root, { ...emptyConfig(), planDir });
+    const text = await readFile(join(root, OVERLAY_DIR, "config.yaml"), "utf8");
+    const parsed = parseConfig(text);
+    expect(parsed.problems).toEqual([]);
+    expect(parsed.config?.planDir).toBe(planDir);
+  });
+
   test("it writes forbiddenPorts as [3000, 3001] (A-20)", async () => {
     const root = project();
     await init(root);
