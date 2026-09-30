@@ -93,7 +93,7 @@ the problem. These rules are, in order of what they save:
 7. **Measure every run.** `agy` reports its own cost when given `--output-format json`: the result
    is one JSON object with `usage` (`input_tokens`, `output_tokens`, `thinking_tokens`,
    `cache_read_tokens`, `total_tokens`), plus `duration_seconds`, `num_turns` and `status`. `opencode
-run --format json` emits raw JSON events. **The flag is in the seat commands above and `dispatch-lane.sh` passes `--format json` to opencode by default** (`USAGE_FLAGS`, opt out with `USAGE_FLAGS=""`). Record the numbers in the wave record;
+run --format json` emits raw JSON events. **The flag is in the seat commands above; pass `--format json` to opencode through the skill's dispatch procedure (`laneHosts[].dispatch`).** (The retired `dispatch-lane.sh` added it by default.) Record the numbers in the wave record;
    there is no retroactive accounting — nothing on disk keeps a per-conversation token record, so a
    run launched without it can never be costed. With the flag, an agy reply (and its PR URL) is the
    `.response` field — `jq -r .response` — and the `EXIT n` marker the wrapper appends is written by
@@ -148,7 +148,7 @@ nohup zsh -c 'CLI … > /tmp/<lane>.log 2>&1; echo "EXIT $?" >> /tmp/<lane>.log'
 while ! grep -qE '^EXIT [0-9]+$' /tmp/<lane>.log 2>/dev/null; do sleep 30; done
 ```
 
-`scripts/dispatch-lane.sh` does both, with the stagger below.
+The skill's dispatch procedure (`laneHosts[].dispatch`) does both, with the stagger below. (The retired `scripts/dispatch-lane.sh` used to.)
 
 ## Traps that have each cost a cycle
 
@@ -248,7 +248,7 @@ the other had approved it.
   same shape as the ones it completed within a minute. Every healthy run wrote within ~60 s. Rule:
   a 0-byte log at five minutes is a hang — kill and re-dispatch; a second silent start on the same
   brief → move the lane to grok-4.6 (T3/T4 both wrote within a minute of the switch). The
-  `dispatch-lane.sh` wait does not kill; the kill's `EXIT 143` is a marker it accepts.
+  retired `dispatch-lane.sh` wait did not kill; the kill's `EXIT 143` was a marker it accepted.
 - **agy model ids (2026-09-07).** `gemini-3.7-flash-high` and `gemini-3.1-pro-high` stopped
   resolving the day gemini-3.8-flash shipped; launches died in seconds with _timeout waiting for
   response_. Current reviewer-B / plan-reviewer id: `gemini-3.8-flash-high`. Re-probe with

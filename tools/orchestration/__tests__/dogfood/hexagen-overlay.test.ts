@@ -139,6 +139,14 @@ describe("hexagen-monaco's cast.md", () => {
     }
   });
 
+  test("never names the retired dispatch-lane.sh without saying it is retired", () => {
+    const offenders = cast
+      .split("\n")
+      .filter((line) => line.includes("dispatch-lane.sh"))
+      .filter((line) => !/retired|no longer exists/.test(line));
+    expect(offenders).toEqual([]);
+  });
+
   test("carries no credential-file path", () => {
     expect(cast).not.toContain("auth.json");
   });
