@@ -252,6 +252,43 @@ describe("orchestration skill coverage", () => {
     );
   });
 
+  it("floors: a comment-only sites file, an empty generic dir and a spanless generic dir each fail", () => {
+    const fixture = copyFixture();
+    const sites = path.join(fixture, "campaign-foundry", "specific-sites.txt");
+    const real = fs.readFileSync(sites, "utf8");
+    fs.writeFileSync(sites, "# nothing listed\n");
+    let result = run(coverageArgs(fixture));
+    expect(result.status, result.out).toBe(1);
+    expect(result.out).toContain("lists no strings");
+    fs.writeFileSync(sites, real);
+
+    const empty = fs.mkdtempSync(
+      path.join(os.tmpdir(), "skill-coverage-empty-"),
+    );
+    result = run(coverageArgs(fixture, ["--generic", empty]));
+    expect(result.status, result.out).toBe(1);
+    expect(result.out).toContain("has no files");
+    expect(result.out).toContain("yielded no code spans");
+
+    const plain = fs.mkdtempSync(
+      path.join(os.tmpdir(), "skill-coverage-plain-"),
+    );
+    fs.writeFileSync(path.join(plain, "SKILL.md"), "Plain prose, no spans.\n");
+    result = run(coverageArgs(fixture, ["--generic", plain]));
+    expect(result.status, result.out).toBe(1);
+    expect(result.out).toContain("yielded no code spans");
+    expect(result.out).not.toContain("has no files");
+  });
+
+  it("floors: a hexagen root with no tracked files fails the token sweep", () => {
+    const fixture = copyFixture();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "skill-coverage-root-"));
+    spawnSync("git", ["init", "-q"], { cwd: root });
+    const result = run(coverageArgs(fixture, ["--hexagen-root", root]));
+    expect(result.status, result.out).toBe(1);
+    expect(result.out).toContain("no tracked hexagen file was readable");
+  });
+
   it("exits 2 on bad arguments and on an unreadable path", () => {
     expect(run([]).status).toBe(2);
     expect(run(["--source", FIXTURE]).status).toBe(2);

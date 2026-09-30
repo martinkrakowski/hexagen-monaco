@@ -352,6 +352,9 @@ function checkSites(sitesPath, genericDir) {
   } catch {
     return fail(`cannot read generic tree: ${genericDir}`);
   }
+  // A check over nothing passes vacuously, which is the failure this whole script exists to refuse.
+  if (sites.length === 0) bad(`sites: ${sitesPath} lists no strings, so the ban checks nothing`);
+  if (files.length === 0) bad(`sites: the generic tree ${genericDir} has no files, so nothing was checked`);
   for (const path of files) {
     const text = readFile(path, `file in generic tree ${genericDir}`);
     for (const site of sites) {
@@ -492,6 +495,12 @@ function checkTokenReview(reviewPath, genericDir, sourceDir, hexagenRoot) {
     corpus += `\n${text}`;
   }
 
+  if (tokens.size === 0) {
+    bad(`tokens: the generic tree ${genericDir} yielded no code spans and no fenced words, so the sweep checked nothing`);
+  }
+  if (corpus.trim() === "") {
+    bad(`tokens: no tracked hexagen file was readable under ${hexagenRoot}, so "in no other file" holds vacuously`);
+  }
   const unaccounted = [];
   for (const token of tokens) {
     if (!sourceText.includes(token)) continue;
