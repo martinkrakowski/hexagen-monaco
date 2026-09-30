@@ -1,7 +1,7 @@
 # Template: Wave Status
 
 **Branch:** `feature/generator-template-wave-status`
-**Status:** Proposed. Not implemented — this document is the plan.
+**Status:** Superseded by `docs/planning/2026-09-29_orchestration-template.md` (OW-D11: the server ships in `@hexagen-monaco/orchestration` as `hexagen-orchestration-wave-status`). Kept as the historical record of the design.
 **Origin:** Built first as a one-off in `campaign-foundry`
 (`docs/planning/2026-09-07_wave-status-server.md`, D102–D107). This document generalises it.
 
