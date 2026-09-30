@@ -18,7 +18,8 @@ export const acceptTransactionTool: ToolDefinition = {
       },
       goal_id: {
         type: "string",
-        description: "Opaque id for what prompted this cycle; defaults to transaction_id.",
+        description:
+          "Opaque id for what prompted this cycle; defaults to transaction_id.",
       },
     },
     required: ["transaction_id"],

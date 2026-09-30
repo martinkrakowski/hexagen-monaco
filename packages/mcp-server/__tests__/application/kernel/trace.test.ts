@@ -6,7 +6,10 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { checkTrace } from "../../../src/application/kernel/trace.js";
-import { MANIFEST_WRITE_PATH, type Grant } from "../../../src/application/kernel/grant.js";
+import {
+  MANIFEST_WRITE_PATH,
+  type Grant,
+} from "../../../src/application/kernel/grant.js";
 import type { TraceRecord } from "../../../src/application/kernel/trace.js";
 
 const activeGrant: Grant = {
@@ -73,18 +76,25 @@ describe("checkTrace — tool allowlist (new: not covered by the spike)", () => 
       [activeGrant],
     );
     assert.equal(check.valid, false);
-    if (!check.valid) assert.match(check.reason, /not in grant 'grant-001' tools/);
+    if (!check.valid)
+      assert.match(check.reason, /not in grant 'grant-001' tools/);
   });
 });
 
 describe("checkTrace — expiry/revocation window (Rule 2)", () => {
   it("is invalid after expires_at", () => {
-    const expired: Grant = { ...activeGrant, expires_at: "2026-09-30T09:00:00.000Z" };
+    const expired: Grant = {
+      ...activeGrant,
+      expires_at: "2026-09-30T09:00:00.000Z",
+    };
     assert.equal(checkTrace(trace(), [expired]).valid, false);
   });
 
   it("is invalid at or after revoked_at", () => {
-    const revoked: Grant = { ...activeGrant, revoked_at: "2026-09-30T09:30:00.000Z" };
+    const revoked: Grant = {
+      ...activeGrant,
+      revoked_at: "2026-09-30T09:30:00.000Z",
+    };
     assert.equal(checkTrace(trace(), [revoked]).valid, false);
   });
 

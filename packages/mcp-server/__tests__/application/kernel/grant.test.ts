@@ -33,7 +33,10 @@ describe("deriveMutationRef", () => {
         "billing",
       ],
       [
-        { kind: "scaffold-module", input: { name: "billing", layer: "domain" } },
+        {
+          kind: "scaffold-module",
+          input: { name: "billing", layer: "domain" },
+        },
         "hexagen_scaffold_module",
         "billing",
       ],
@@ -64,7 +67,11 @@ describe("deriveMutationRef", () => {
       [
         {
           kind: "remove-port",
-          input: { context_name: "billing", port_name: "P", direction: "outbound" },
+          input: {
+            context_name: "billing",
+            port_name: "P",
+            direction: "outbound",
+          },
         },
         "hexagen_remove_port",
         "billing",

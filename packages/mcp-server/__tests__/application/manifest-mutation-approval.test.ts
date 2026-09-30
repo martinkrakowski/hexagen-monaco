@@ -21,7 +21,10 @@ import { RemoveContextToolUseCase } from "../../src/application/use-cases/remove
 import { RemovePortToolUseCase } from "../../src/application/use-cases/remove-port-tool.use-case.js";
 import { ScaffoldModuleToolUseCase } from "../../src/application/use-cases/scaffold-module-tool.use-case.js";
 import { applyPendingManifestMutation } from "../../src/application/pending-manifest-mutation.js";
-import { MANIFEST_WRITE_PATH, type Grant } from "../../src/application/kernel/grant.js";
+import {
+  MANIFEST_WRITE_PATH,
+  type Grant,
+} from "../../src/application/kernel/grant.js";
 import type { TraceRecord } from "../../src/application/kernel/trace.js";
 import type { ManifestWritePort } from "../../src/application/ports/out/manifest-write.port.js";
 import type { ScaffoldingPort } from "../../src/application/ports/out/scaffolding.port.js";

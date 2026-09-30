@@ -15,7 +15,10 @@ import type { Result } from "@hexagen/shared";
 import { InMemoryTransactionManager } from "@hexagen/transaction-system";
 import { AcceptTransactionToolUseCase } from "../../src/application/use-cases/accept-transaction-tool.use-case.js";
 import { CreateContextToolUseCase } from "../../src/application/use-cases/create-context-tool.use-case.js";
-import { MANIFEST_WRITE_PATH, type Grant } from "../../src/application/kernel/grant.js";
+import {
+  MANIFEST_WRITE_PATH,
+  type Grant,
+} from "../../src/application/kernel/grant.js";
 import type { TraceRecord } from "../../src/application/kernel/trace.js";
 import type { ManifestWritePort } from "../../src/application/ports/out/manifest-write.port.js";
 import type { ScaffoldingPort } from "../../src/application/ports/out/scaffolding.port.js";
@@ -173,7 +176,10 @@ describe("Grant enforcement at hexagen_accept_transaction", () => {
       grant: baseGrant({ tools: ["hexagen_scaffold_module"] }),
     });
     assert.equal(result.success, false);
-    assert.match(String(result.error), /does not include tool 'hexagen_create_context'/);
+    assert.match(
+      String(result.error),
+      /does not include tool 'hexagen_create_context'/,
+    );
     assert.equal(h.write.writes.length, 0);
   });
 
@@ -184,7 +190,10 @@ describe("Grant enforcement at hexagen_accept_transaction", () => {
       grant: baseGrant({ paths: ["packages/billing/"] }),
     });
     assert.equal(result.success, false);
-    assert.match(String(result.error), /does not include path '\.architecture\/'/);
+    assert.match(
+      String(result.error),
+      /does not include path '\.architecture\/'/,
+    );
     assert.equal(h.write.writes.length, 0);
   });
 
