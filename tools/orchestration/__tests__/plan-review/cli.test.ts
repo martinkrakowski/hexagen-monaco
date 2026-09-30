@@ -1373,10 +1373,12 @@ describe("the built bin", () => {
     expect(result.stderr).toContain("hexagen-orchestration-plan-review");
   });
 
-  test("a command that throws prints the error and exits 1", () => {
+  test("a command that throws prints the error and exits 2 — could not run, which is not a refusal", () => {
     const root = repository();
     const result = run(root, ["hashes", "docs/planning/absent.md", "RX-1"]);
-    expect(result.status).toBe(1);
+    // 1 is a refusal (merge-prs stops on it as a verdict); a crash is "could
+    // not run", the same class as a usage error.
+    expect(result.status).toBe(2);
     expect(result.stderr).toMatch(/absent\.md/);
   });
 });

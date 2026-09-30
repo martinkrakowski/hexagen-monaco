@@ -49,7 +49,10 @@ if (refusal !== undefined) {
       env: waveEventEnv(process.env),
     });
   } catch (error: unknown) {
+    // An unexpected throw means the command could not RUN. Exit 1 is reserved for
+    // a refusal (an `InvalidRiskCellError` is caught inside `runCli` and still
+    // returns 1), so a crash must not read as a verdict about a lane.
     console.error(errorText(error));
-    process.exitCode = 1;
+    process.exitCode = 2;
   }
 }
