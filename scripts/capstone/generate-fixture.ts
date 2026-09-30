@@ -11,11 +11,18 @@
  *   monolith-15     15 bounded contexts (+ auto-added shared) on the
  *                   modular-monolith template, Next.js web + Nitro api —
  *                   the F2/F8/F15 reproduction surface.
- *   minimal-addons  1 bounded context + 5 add-on templates (env-setup,
+ *   minimal-addons  1 bounded context + 6 add-on templates (env-setup,
  *                   eslint-no-console, ci-github-actions, bullmq,
- *                   rate-limiting) — the F3/F9/F19/F21 surface.
+ *                   rate-limiting, orchestration) — the F3/F9/F19/F21 surface
+ *                   plus the orchestration template (OW7). ci-github-actions is
+ *                   what provides the `.github/workflows/ci.yml` doctor's
+ *                   `ci-workflow` check looks for, and what the
+ *                   orchestration template's `node_version` derives from.
  *
- *   tsx scripts/capstone/generate-fixture.ts <monolith-15|minimal-addons> <targetDir>
+ *   tsx scripts/capstone/generate-fixture.ts <monolith-15|minimal-addons> <targetDir> [--omit=<addOnId>]
+ *
+ * `--omit=<addOnId>` drops one add-on answer, so the harness can generate the
+ * same fixture WITHOUT it (the "before" side of a red/green pair).
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -299,18 +306,25 @@ const FIXTURES: Record<string, () => WizardData> = {
       // brings the F21 workflows; three committed `.env*.example` files land
       // on disk (env-setup, bullmq, rate-limiting) for the F3 staged-count
       // gate. All answers default (the wizard's DefaultingQuestionEngine).
+      // orchestration (OW7) is installed the way the harness installs every
+      // add-on: its answers reach AddTemplateUseCase as `overrideAnswers`
+      // (in-memory-add-on-materializer.ts), never through a live `hexagen add`.
       addOnsAnswers: {
         "env-setup": {},
         "eslint-no-console": {},
         "ci-github-actions": {},
         bullmq: {},
         "rate-limiting": {},
+        orchestration: {},
       },
     }),
 };
 
 async function main(): Promise<void> {
-  const [fixtureName, targetDir] = process.argv.slice(2);
+  const [fixtureName, targetDir, ...flags] = process.argv.slice(2);
+  const omit = new Set(
+    flags.filter((f) => f.startsWith("--omit=")).map((f) => f.slice(7)),
+  );
   const makeFixture = fixtureName ? FIXTURES[fixtureName] : undefined;
   if (!makeFixture || !targetDir) {
     console.error(
@@ -320,6 +334,9 @@ async function main(): Promise<void> {
   }
 
   const wizardData = makeFixture();
+  if (omit.size > 0 && wizardData.addOnsAnswers) {
+    for (const id of omit) delete wizardData.addOnsAnswers[id];
+  }
   const manifest = wizardToManifest(wizardData) as Manifest;
 
   // 1. Core generation — the same adapter+config the cloud wizard uses.
