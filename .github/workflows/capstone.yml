@@ -32,7 +32,12 @@ on:
       - "tools/orchestration/**"
       - "packages/template-engine/templates/orchestration/**"
       - "scripts/capstone/**"
+      # orchestration round trip (OW8): the script, and the coverage script it drives.
+      - "scripts/orchestration/**"
       - "scripts/prepare-publish-package.js"
+      # the job's package manager (packageManager field) and dependency resolution.
+      - "package.json"
+      - "yarn.lock"
       - ".github/workflows/capstone.yml"
   workflow_dispatch:
 
@@ -227,3 +232,59 @@ jobs:
 
       - name: "Run generate-then-gate (monolith-15)"
         run: yarn capstone:gate --fixture=monolith-15
+
+  # Orchestration round trip (OW8, plan §5/§7/§12 A-16): installs the template
+  # through AddTemplateUseCase (filesystem emitter + disk config store) into a
+  # generated project, installs the PACKED @hexagen-monaco/orchestration with
+  # `yarn add`, seeds the overlay, runs init + doctor, force-reinstalls, and
+  # asserts coverage / steps / stability, each with its red. It lives in this
+  # workflow, not in a package's `yarn test`, because it needs a build, three
+  # packs and a fresh-project `yarn add` (minutes the test job should not carry),
+  # and this workflow's paths filter already selects exactly the inputs it
+  # depends on. A failure fails the PR.
+  orchestration-round-trip:
+    name: "Orchestration round trip"
+    runs-on: ubuntu-latest
+    # A hung `yarn add` or install must not hold a runner for the 6-hour default.
+    timeout-minutes: 30
+    steps:
+      - name: "Checkout Repository"
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: "Enable Corepack"
+        run: corepack enable
+
+      - name: "Prepare Yarn"
+        run: corepack prepare --activate
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22.7"
+          package-manager-cache: false
+
+      - name: "Cache Yarn global cache"
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.yarn/berry/cache
+          key: capstone-gate-yarn-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            capstone-gate-yarn-${{ runner.os }}-
+
+      - name: "Install Dependencies"
+        env:
+          YARN_HTTP_TIMEOUT: "120000"
+        run: |
+          for attempt in 1 2 3; do
+            yarn install --immutable && exit 0
+            echo "yarn install failed (attempt ${attempt}/3)"
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep 15
+          done
+
+      - name: "Run the orchestration round trip"
+        run: yarn tsx scripts/orchestration/round-trip/round-trip.ts
