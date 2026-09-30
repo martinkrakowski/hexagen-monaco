@@ -36,12 +36,9 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  AddTemplateUseCase,
-  FileSystemFileEmitter,
-  FileSystemTemplateConfigStore,
-  FileSystemTemplateRegistry,
-} from "../../../packages/template-engine/src/index.js";
+// Type-only: template-engine sources import @hexagen/shared through its built dist/, so the
+// runtime import is dynamic and happens after the turbo build below (cold-checkout safe).
+import type { AddTemplateUseCase as AddTemplateUseCaseType } from "../../../packages/template-engine/src/index.js";
 import type {
   QuestionEnginePort,
   TemplateConfig,
@@ -185,7 +182,7 @@ const linesOf = (file: string): string[] =>
 // ---------------------------------------------------------------------------
 try {
   step(
-    "Build the tooling and pack @hexagen-monaco/{sync,arch-linter,orchestration}",
+    "Build @hexagen/shared (imported by the template-engine sources), build the tooling and pack @hexagen-monaco/{sync,arch-linter,orchestration}",
   );
   sh(
     "yarn",
@@ -193,6 +190,7 @@ try {
       "turbo",
       "run",
       "build",
+      "--filter=@hexagen/shared",
       "--filter=@hexagen/sync",
       "--filter=@hexagen/arch-linter",
       "--filter=@hexagen/orchestration",
@@ -340,6 +338,12 @@ try {
       throw new Error(`unexpected interactive question '${q.id}'`);
     },
   };
+  const {
+    AddTemplateUseCase,
+    FileSystemFileEmitter,
+    FileSystemTemplateConfigStore,
+    FileSystemTemplateRegistry,
+  } = await import("../../../packages/template-engine/src/index.js");
   const registry = new FileSystemTemplateRegistry(TEMPLATES_DIR);
   const emitter = new FileSystemFileEmitter(TEMPLATES_DIR);
   const store = new FileSystemTemplateConfigStore();
@@ -353,7 +357,7 @@ try {
   const overrideAnswers = { [ORCH]: { agents_md: true, node_version: "22" } };
 
   let firstInstall:
-    | Awaited<ReturnType<AddTemplateUseCase["execute"]>>
+    | Awaited<ReturnType<AddTemplateUseCaseType["execute"]>>
     | undefined;
   try {
     firstInstall = await addUseCase.execute({
