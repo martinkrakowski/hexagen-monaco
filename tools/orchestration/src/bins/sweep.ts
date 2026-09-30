@@ -22,7 +22,7 @@ import { resolve } from "node:path";
 import { errorText } from "../internal/artifact.js";
 import { loadConfigFor } from "../internal/project.js";
 import { configRefusal } from "../internal/refusal.js";
-import { ghChildEnv, runCli } from "../sweep/cli.js";
+import { makeGh, runCli } from "../sweep/cli.js";
 import { parseRepoRef } from "../sweep/lib/types.js";
 
 /**
@@ -76,25 +76,7 @@ if (refusal !== undefined) {
           ? { REQUIRED_CHECK: processEnv.REQUIRED_CHECK }
           : {}),
       },
-      gh: (args) =>
-        new Promise((resolvePromise, reject) => {
-          execFile(
-            "gh",
-            [...args],
-            { maxBuffer: 16 * 1024 * 1024, env: ghChildEnv(processEnv) },
-            (error, stdout, stderr) => {
-              if (error !== null) {
-                reject(
-                  new Error(
-                    `gh ${args.slice(0, 2).join(" ")}: ${stderr.trim() || error.message}`,
-                  ),
-                );
-              } else {
-                resolvePromise(stdout);
-              }
-            },
-          );
-        }),
+      gh: makeGh(execFile, processEnv),
     });
   } catch (error: unknown) {
     console.error(errorText(error));

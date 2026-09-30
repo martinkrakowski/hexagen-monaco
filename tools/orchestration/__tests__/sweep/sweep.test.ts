@@ -6,6 +6,7 @@ import {
   type SweepPlan,
 } from "../../src/sweep/lib/sweep.js";
 import { SweepRefusal } from "../../src/sweep/lib/types.js";
+import { makeGh } from "../../src/sweep/cli.js";
 import { REPO } from "./support.js";
 
 /**
@@ -249,6 +250,30 @@ describe("sweep — the mutation carries the whole class", () => {
     expect(error?.message).toContain("may already have been posted");
     expect(error?.message).toContain("before retrying");
     expect(error?.message).toContain("https://gh/c#issuecomment-9");
+  });
+
+  test("through the bin's own gh wrapper: a rejection carrying stdout still yields the comment url", async () => {
+    // The real dep REJECTS on a non-zero exit (`gh api graphql` exits 1 when the
+    // response holds `errors`) and hands the body over on the rejection.
+    const body = JSON.stringify({
+      data: { addComment: { comment: { url: "https://x/c/1" } } },
+      errors: [{ message: "resolve failed" }],
+    });
+    const gh = makeGh((_file, args, _options, callback) => {
+      if (args.some((a) => a.includes("mutation")))
+        callback(new Error("Command failed: gh"), body, "gh: exit 1");
+      else callback(null, threads(["PRRT_a", false]), "");
+    }, {});
+    const error = await sweep(
+      { pr: 361, requested: ["PRRT_a"], disposition: "x" },
+      true,
+      { gh, out: () => undefined, repo: { owner: "acme", name: "demo" } },
+    ).then(
+      () => undefined,
+      (e: unknown) => e as Error,
+    );
+    expect(error?.message).toContain("may already have been posted");
+    expect(error?.message).toContain("https://x/c/1");
   });
 
   test("a gh that exits non-zero on the write gets the same warning", async () => {

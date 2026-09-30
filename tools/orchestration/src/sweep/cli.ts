@@ -43,6 +43,51 @@ export function ghChildEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return next;
 }
 
+/** `node:child_process`'s `execFile`, as far as `makeGh` uses it. */
+export type ExecFileLike = (
+  file: string,
+  args: readonly string[],
+  options: { maxBuffer: number; env: NodeJS.ProcessEnv },
+  callback: (error: Error | null, stdout: string, stderr: string) => void,
+) => unknown;
+
+/**
+ * The bin's `gh`: run it, resolve its stdout, reject on a non-zero exit.
+ *
+ * The rejection CARRIES the child's stdout. `gh api graphql` exits 1 when the
+ * response holds `errors`, and it still prints the whole body — including the
+ * `data` a partly applied mutation returned. Discarding it would make "a comment
+ * may already have been posted" unanswerable, so a caller that wants the body
+ * reads `error.stdout`.
+ */
+export function makeGh(
+  exec: ExecFileLike,
+  env: NodeJS.ProcessEnv,
+): (args: readonly string[]) => Promise<string> {
+  return (args) =>
+    new Promise((resolvePromise, reject) => {
+      exec(
+        "gh",
+        [...args],
+        { maxBuffer: 16 * 1024 * 1024, env: ghChildEnv(env) },
+        (error, stdout, stderr) => {
+          if (error !== null) {
+            reject(
+              Object.assign(
+                new Error(
+                  `gh ${args.slice(0, 2).join(" ")}: ${stderr.trim() || error.message}`,
+                ),
+                { stdout },
+              ),
+            );
+          } else {
+            resolvePromise(stdout);
+          }
+        },
+      );
+    });
+}
+
 /** The two environment variables the merge-script subcommands read. */
 export interface SweepEnv {
   /**

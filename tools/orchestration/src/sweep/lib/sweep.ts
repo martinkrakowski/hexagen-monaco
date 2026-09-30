@@ -393,8 +393,24 @@ export async function sweep(
     raw = await deps.gh(args);
   } catch (error) {
     const reason = errorText(error);
+    // `gh api graphql` exits non-zero when the response carries `errors` and
+    // still prints the body, which the real `gh` dep attaches as `stdout`. A
+    // comment the mutation did create is in it, so recover its url.
+    const stdout = (error as { stdout?: unknown } | null)?.stdout;
+    let recovered: string | undefined;
+    if (typeof stdout === "string") {
+      try {
+        recovered = (
+          (JSON.parse(stdout) as { data?: Record<string, unknown> }).data?.[
+            "addComment"
+          ] as { comment?: { url?: string } } | null | undefined
+        )?.comment?.url;
+      } catch {
+        // Not JSON (a transport failure): there is nothing to recover.
+      }
+    }
     throw new SweepRefusal(
-      `the mutation on PR #${plan.pr} failed: ${reason}; ${mayHavePosted(undefined)}`,
+      `the mutation on PR #${plan.pr} failed: ${reason}; ${mayHavePosted(recovered)}`,
       [reason],
     );
   }

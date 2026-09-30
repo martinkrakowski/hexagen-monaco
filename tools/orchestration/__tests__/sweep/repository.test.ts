@@ -27,6 +27,9 @@ import { FOREIGN_OWNER, FOREIGN_REPO } from "./foreign-literals.js";
  * so a hardcoded one would be visible in every recorded argv.
  */
 
+/** The environment taken whole: a `.PATH` member access is an undeclared task input. */
+const inheritedEnv: Readonly<Record<string, string | undefined>> = process.env;
+
 const PACKAGE_ROOT = resolve(import.meta.dirname, "../..");
 
 const dirs: string[] = [];
@@ -331,6 +334,39 @@ describe("the built bin", () => {
     const result = run(root, ["checks"], "not json");
     expect(result.status).toBe(2);
     expect(result.stdout).toBe("");
+  });
+
+  test("the real bin recovers the posted comment's url from a failed mutation's stdout", () => {
+    // A stub `gh` that behaves as the real one does: the fetch answers, and the
+    // mutation prints the body `{data, errors}` on stdout and exits 1.
+    const root = repository("repo: acme/demo\n");
+    const stubs = mkdtempSync(join(tmpdir(), "sweep-gh-"));
+    dirs.push(stubs);
+    const fetched = page({ id: "PRRT_a", isResolved: false });
+    const body = JSON.stringify({
+      data: { addComment: { comment: { url: "https://x/c/1" } } },
+      errors: [{ message: "resolve failed" }],
+    });
+    writeFileSync(join(stubs, "fetched.json"), fetched);
+    writeFileSync(join(stubs, "body.json"), body);
+    const script = [
+      "#!/bin/sh",
+      'case "$*" in',
+      '  *mutation*) cat "$STUBS/body.json"; echo "gh: exit 1" >&2; exit 1 ;;',
+      '  *) cat "$STUBS/fetched.json" ;;',
+      "esac",
+      "",
+    ].join("\n");
+    writeFileSync(join(stubs, "gh"), script, { mode: 0o755 });
+    const result = run(
+      root,
+      ["threads", "--pr", "361", "--thread", "PRRT_a", "--body", "x", "--post"],
+      "",
+      { PATH: `${stubs}:${inheritedEnv.PATH ?? ""}`, STUBS: stubs },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("may already have been posted");
+    expect(result.stderr).toContain("https://x/c/1");
   });
 
   test("`keep-both` accepts an absolute path and keeps it, from any working directory", () => {
