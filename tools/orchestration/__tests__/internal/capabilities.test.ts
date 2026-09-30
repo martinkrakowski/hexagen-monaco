@@ -223,4 +223,20 @@ describe("runRemote quotes what reaches the remote shell", () => {
       "it's",
     ]);
   }, 20_000);
+
+  test("it settles on close, so stdout written just before exit is not lost", async () => {
+    // The fake exits at once while a forked writer still holds stdout open and
+    // prints a moment later. `exit` would settle with an empty stdout; `close`
+    // waits for the pipe to end, which is what a probe that READS stdout needs.
+    const dir = mkdtempSync(join(tmpdir(), "orchestration-ssh-"));
+    dirs.push(dir);
+    const fake = join(dir, "ssh");
+    writeFileSync(fake, "#!/bin/sh\n(sleep 0.3; echo late-value) &\nexit 0\n");
+    chmodSync(fake, 0o755);
+    const result = await runRemote("alias", ["true"], 5_000, {
+      sshCommand: fake,
+    });
+    expect(result.status).toBe("ok");
+    expect(result.stdout).toBe("late-value");
+  }, 20_000);
 });

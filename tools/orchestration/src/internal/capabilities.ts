@@ -182,6 +182,9 @@ export function runRemote(
       resolve({ status, stdout: stdout.trim() });
     };
     child.on("error", () => settle("failed"));
-    child.on("exit", (code) => settle(code === 0 ? "ok" : "failed"));
+    // `close`, not `exit`: this runner READS stdout, and `exit` can fire before the
+    // last of it has been delivered. Nothing here forks a tunnel that would hold the
+    // pipe open (`-n`, no `-f`), and the timeout bounds it if something does.
+    child.on("close", (code) => settle(code === 0 ? "ok" : "failed"));
   });
 }
