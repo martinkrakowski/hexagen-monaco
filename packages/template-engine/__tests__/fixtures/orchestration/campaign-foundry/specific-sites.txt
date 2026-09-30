@@ -1,0 +1,43 @@
+arch:inventory
+nitro-route-scan
+Nitro
+nitro
+apps/api/server/
+scripts/dispatch-lane.sh
+scripts/wave-event.sh
+scripts/merge-prs.sh
+scripts/verify-manifests.sh
+tools/sweep
+openrouter/
+yarn mutate
+yarn plan:verify
+yarn handoff:check
+yarn sweep
+yarn lint:bytes
+yarn gate
+lint:bytes
+localhost:3000
+:3001
+CopyTimeline
+CopyBeat
+D183
+briefs/
+assets/inputs
+~/.waves
+references/cast.md
+cf-w1
+the-unowned-gaps.md
+studio-editor.md
+REVIEW_SETTLE_SECONDS
+MANIFEST_DIFF_BASE
+creative-templates-w03
+L3b-layer-props
+L7a-template-library
+ct-3/L3b
+waveT/fix-a4
+copy.timeline
+beat.weight
+keyBeat
+localizedMessage
+restT
+REST_T
