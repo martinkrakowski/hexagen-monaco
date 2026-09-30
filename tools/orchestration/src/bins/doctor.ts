@@ -6,7 +6,7 @@
  * checks themselves are in `../doctor/doctor.ts`.
  */
 import { execFile } from "node:child_process";
-import { hasCommand } from "../internal/capabilities.js";
+import { hasCommand, probeHttp } from "../internal/capabilities.js";
 import { isFile } from "../internal/fs-probe.js";
 import { loadConfigFor } from "../internal/project.js";
 import { formatReport, runDoctor } from "../doctor/doctor.js";
@@ -21,23 +21,11 @@ const supportsWorktrees = (): Promise<boolean> =>
     );
   });
 
-/** A plain reachability probe. Any HTTP answer counts; only a failure is a failure. */
-const httpReachable = (url: string): Promise<boolean> =>
-  new Promise((resolve) => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5_000);
-    globalThis
-      .fetch(url, { method: "GET", signal: controller.signal })
-      .then(() => resolve(true))
-      .catch(() => resolve(false))
-      .finally(() => clearTimeout(timer));
-  });
-
 const { findings, exitCode } = await runDoctor(config, problems, present, {
   exists: (path) => isFile(`${root}/${path}`),
   hasCommand,
   supportsWorktrees,
-  httpReachable,
+  httpReachable: probeHttp,
 });
 
 const text = formatReport(findings, config);

@@ -55,8 +55,13 @@ export interface DoctorDeps {
   readonly hasCommand: (command: string) => Promise<boolean>;
   /** Whether `git worktree` works, which is not the same as `git` existing. */
   readonly supportsWorktrees: () => Promise<boolean>;
-  /** An HTTP reachability probe. Rejecting means "did not answer". */
-  readonly httpReachable: (url: string) => Promise<boolean>;
+  /**
+   * An HTTP reachability probe. `false` means "did not answer"; `{ redirect }`
+   * means it answered with a redirect, which is reported and never followed.
+   */
+  readonly httpReachable: (
+    url: string,
+  ) => Promise<boolean | { readonly redirect: string }>;
 }
 
 const CI_WORKFLOW = ".github/workflows/ci.yml";
@@ -195,12 +200,23 @@ export async function runDoctor(
       severity: "fail",
       message: `opencodeServerUrl ${JSON.stringify(config.opencodeServerUrl)} is not an http or https URL.`,
     });
-  } else if (!(await deps.httpReachable(config.opencodeServerUrl))) {
-    findings.push({
-      check: "opencode-server",
-      severity: "fail",
-      message: `opencodeServerUrl ${config.opencodeServerUrl} did not answer.`,
-    });
+  } else {
+    const probe = await deps.httpReachable(config.opencodeServerUrl);
+    if (typeof probe === "object") {
+      findings.push({
+        check: "opencode-server",
+        severity: "fail",
+        message:
+          `opencodeServerUrl ${config.opencodeServerUrl} answered with a redirect to ` +
+          `${probe.redirect}. Redirects are not followed; set opencodeServerUrl to the final URL.`,
+      });
+    } else if (!probe) {
+      findings.push({
+        check: "opencode-server",
+        severity: "fail",
+        message: `opencodeServerUrl ${config.opencodeServerUrl} did not answer.`,
+      });
+    }
   }
 
   return {

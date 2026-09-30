@@ -2,7 +2,9 @@ import { afterEach, describe, expect, test } from "vitest";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { hasCommand } from "../../src/internal/capabilities.js";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { hasCommand, probeHttp } from "../../src/internal/capabilities.js";
 
 /**
  * F6: `doctor` reported `gh` and `yarn` missing on every Linux runner, because
@@ -43,5 +45,61 @@ describe("hasCommand, un-injected", () => {
 
   test("a name is never interpreted as shell", async () => {
     expect(await hasCommand("node; echo pwned")).toBe(false);
+  });
+});
+
+describe("probeHttp (the doctor's opencode reachability probe)", () => {
+  const servers: Server[] = [];
+  afterEach(async () => {
+    for (const server of servers.splice(0)) {
+      server.closeAllConnections();
+      await new Promise((done) => server.close(done));
+    }
+  });
+
+  const listen = async (
+    handler: Parameters<typeof createServer>[1],
+  ): Promise<string> => {
+    const server = createServer(handler);
+    servers.push(server);
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    return `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
+  };
+
+  test("a 302 is reported as a redirect, and its target is never requested", async () => {
+    let targetHits = 0;
+    const target = await listen((_req, res) => {
+      targetHits += 1;
+      res.end("secret");
+    });
+    const redirecting = await listen((_req, res) => {
+      res.writeHead(302, { Location: target });
+      res.end();
+    });
+
+    expect(await probeHttp(redirecting)).toEqual({ redirect: target });
+    expect(targetHits).toBe(0);
+  });
+
+  test("any ordinary answer, even a 500, is reachable", async () => {
+    const url = await listen((_req, res) => {
+      res.writeHead(500);
+      res.end();
+    });
+    expect(await probeHttp(url)).toBe(true);
+  });
+
+  test("nothing listening is unreachable", async () => {
+    const url = await listen((_req, res) => res.end());
+    const [server] = servers.splice(0);
+    await new Promise((done) => server!.close(done));
+    expect(await probeHttp(url)).toBe(false);
+  });
+
+  test("a server that never answers is cut off at the timeout", async () => {
+    const url = await listen(() => undefined);
+    const started = Date.now();
+    expect(await probeHttp(url, 150)).toBe(false);
+    expect(Date.now() - started).toBeLessThan(2_000);
   });
 });

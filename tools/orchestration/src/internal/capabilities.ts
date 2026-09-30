@@ -26,3 +26,38 @@ export function hasCommand(
     );
   });
 }
+
+/** What an HTTP reachability probe found. */
+export type HttpProbe = boolean | { readonly redirect: string };
+
+/** The probe's ceiling. Short: a configured server that needs longer is not "reachable". */
+export const HTTP_PROBE_TIMEOUT_MS = 3_000;
+
+/**
+ * A plain reachability probe of the configured server (OW-D7), and nothing more.
+ *
+ * Any HTTP ANSWER counts as reachable; only a failure to answer is unreachable.
+ * A redirect is NOT followed (`redirect: "manual"`): the URL is operator
+ * config, and following a 30x would let whatever answers there send this
+ * process at a host nobody configured. It is reported instead, with its target,
+ * and that target is never requested. The wait is bounded by
+ * `AbortSignal.timeout`.
+ */
+export async function probeHttp(
+  url: string,
+  timeoutMs: number = HTTP_PROBE_TIMEOUT_MS,
+): Promise<HttpProbe> {
+  try {
+    const response = await globalThis.fetch(url, {
+      method: "GET",
+      redirect: "manual",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (response.status >= 300 && response.status < 400) {
+      return { redirect: response.headers.get("location") ?? "(no Location)" };
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}

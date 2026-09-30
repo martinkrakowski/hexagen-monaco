@@ -376,6 +376,17 @@ describe("red case 13 — opencodeServerUrl set but not answering HTTP", () => {
     expect(message).toContain("did not answer");
   });
 
+  test("a redirect is a failure naming its target", async () => {
+    const { code, findings } = await doctor(
+      "repo: owner/demo\nopencodeServerUrl: http://127.0.0.1:4096\n",
+      { httpReachable: async () => ({ redirect: "http://elsewhere/" }) },
+    );
+    expect(code).toBe(EXIT_UNHEALTHY);
+    const message = fails(findings, "opencode-server").message;
+    expect(message).toContain("redirect");
+    expect(message).toContain("http://elsewhere/");
+  });
+
   test("a URL that answers passes", async () => {
     const { code } = await doctor(
       "repo: owner/demo\nopencodeServerUrl: http://127.0.0.1:4096\n",
