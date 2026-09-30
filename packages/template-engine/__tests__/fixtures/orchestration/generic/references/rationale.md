@@ -100,8 +100,8 @@ The case that makes this concrete: a branch carried the earlier round's commit a
 fix, so `origin/main..HEAD` would have looked healthy even if the second round had written nothing
 at all.
 
-Four lanes in one session exited `0` having written nothing — two answered with a plan, two
-read files and stopped. **A pull request was merged with four verified defects still in it** because
+Four lanes once exited `0` having written nothing — two answered with a plan, two read
+files and stopped. **A pull request was merged with four verified defects still in it** because
 its fix round reported success and committed nothing. An exit code is not evidence of work, which is
 the same rule this file already applies to lane reports.
 
