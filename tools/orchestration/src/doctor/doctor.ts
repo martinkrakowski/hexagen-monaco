@@ -130,6 +130,22 @@ export async function runDoctor(
     });
   }
 
+  // `repo` is what scopes wave-status, sweep and the log root to THIS project.
+  // The loader has already tried `gh`; if it is still absent, nothing can name
+  // the repository. A malformed `repo` is reported above, once, by the schema.
+  if (
+    config.repo === undefined &&
+    !problems.some((problem) => problem.at === "repo")
+  ) {
+    findings.push({
+      check: "repo",
+      severity: "fail",
+      message:
+        `repo is not set in ${CONFIG_RELATIVE_PATH} and could not be derived. Set ` +
+        `repo: owner/name, or make \`gh repo view --json nameWithOwner\` succeed here.`,
+    });
+  }
+
   const portFinding = checkStatusPort(config);
   if (portFinding !== undefined) findings.push(portFinding);
 

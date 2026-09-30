@@ -213,16 +213,22 @@ describe("red case 6 — an invariants key moved from its default with no overri
 });
 
 describe("red case 7 — repo missing and not derivable", () => {
-  test("is a failure, and says where to set it", async () => {
-    const config = emptyConfig();
-    const result = await runDoctor(config, [], true, depsOver());
-    const finding = result.findings.find((f) => f.check === "repo");
-    // `runDoctor` is handed an already-resolved config; the resolution and the
-    // reporting of an underivable `repo` happen in the loader and the bin.
-    // Asserting the loader's half here, since that is where it lives.
-    const parsed = parseConfig("planDir: docs/planning\n");
-    expect(parsed.config?.repo).toBeUndefined();
-    expect(finding).toBeUndefined();
+  test("F7: is a failure exiting 1, naming repo and the gh command that would derive it", async () => {
+    const { code, findings } = await doctor("planDir: docs/planning\n");
+    expect(code).toBe(EXIT_UNHEALTHY);
+    const message = fails(findings, "repo").message;
+    expect(message).toContain("repo");
+    expect(message).toContain("gh repo view --json nameWithOwner");
+  });
+
+  test("F7: a repo the file did set is not reported missing", async () => {
+    const { findings } = await doctor("repo: owner/demo\n");
+    expect(findings.some((f) => f.check === "repo")).toBe(false);
+  });
+
+  test("F7: a malformed repo is reported once, by the schema, not twice", async () => {
+    const { findings } = await doctor("repo: no-slash\n");
+    expect(findings.some((f) => f.check === "repo")).toBe(false);
   });
 
   test("a repo that is present but malformed is a failure", async () => {
