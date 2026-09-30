@@ -1158,7 +1158,8 @@ describe("runCli pre-pr-check", () => {
     mkdirSync(logdir, { recursive: true });
     writeFileSync(join(logdir, "events.jsonl"), preprReviewLine("clear"));
     // An isolated HOME: nothing this test asserts may depend on the host's own
-    // log root, and the shared `$HOME/.waves` is not a candidate at any rate.
+    // log root, and the shared, un-suffixed home log root is not a candidate at
+    // any rate — every root this package resolves is per-repository.
     const home = join(dir, "isolated-home");
     mkdirSync(home, { recursive: true });
     const code = await runCli({
