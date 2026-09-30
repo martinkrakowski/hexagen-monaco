@@ -25,7 +25,8 @@ gateSteps:
 # gating CI job, "Verify Sync Engine & Hexagonal Structure".
 requiredCheck: "^Verify Sync Engine"
 
-# The workflow file doctor reads to confirm requiredCheck names a real job.
+# The CI workflow `doctor` requires to exist, as a repository-relative path.
+# requiredCheck must match the name of that workflow's gating job.
 ciWorkflow: .github/workflows/sync-integrity.yml
 
 # Ports the status server must refuse. This is the ONLY source of refused

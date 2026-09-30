@@ -55,6 +55,18 @@ describe("hexagen-monaco's own orchestration overlay", () => {
     expect(fs.existsSync(path.join(REPO_ROOT, config.ciWorkflow))).toBe(true);
   });
 
+  test("requiredCheck matches at least one job name in the ciWorkflow", () => {
+    const workflow = fs.readFileSync(
+      path.join(REPO_ROOT, config.ciWorkflow),
+      "utf8",
+    );
+    const names = [
+      ...workflow.matchAll(/^\s+name:\s*"?([^"\n]+?)"?\s*$/gm),
+    ].map((m) => m[1]!);
+    const pattern = new RegExp(config.requiredCheck);
+    expect(names.some((n) => pattern.test(n))).toBe(true);
+  });
+
   test("the gate runs CI's steps in order, including the test-source typecheck", () => {
     expect(config.gateSteps.map((s) => [s.name, s.command])).toEqual([
       ["build", "yarn build"],

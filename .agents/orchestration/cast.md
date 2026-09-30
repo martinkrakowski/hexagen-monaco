@@ -46,7 +46,7 @@ unfunded, hangs (0-byte log at five minutes), or dies on arrival twice. **grok n
 >    one reviewer, and two sources agreeing on a security control is worth more than either alone.
 >    Keep them on different families.
 > 3. **The opencode seats leave the implementer rotation.** Note what that costs, because the
->    number is measured rather than felt: the `glm-flash` seat carried G1, G3 and G4 in this
+>    number is measured rather than felt: the model behind the `glm-flash` seat (then on the `opencode-go/` prefix) carried G1, G3 and G4 in this
 >    repository — clean lanes, honest reports, real mutation checks, and it twice corrected an
 >    orchestrator brief with evidence. It remains funded and probed-live. If a lane needs a known
 >    quantity rather than a new one, it is still there.
