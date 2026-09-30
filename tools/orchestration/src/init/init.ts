@@ -85,8 +85,25 @@ export function readAgentsMdAnswer(
   return answer !== false;
 }
 
+/**
+ * The per-repository log directory `init` writes, or `undefined` when the
+ * repository's name cannot be resolved.
+ *
+ * Nothing expands a `<placeholder>`: `logdir.ts` understands `$HOME`, `${HOME}`
+ * and `~` and nothing else, so a scaffolded `.waves-<repo name>` would be a
+ * directory with that literal name. The name half of `repo` is substituted
+ * HERE, at scaffold time. With no `repo`, the key is omitted and the loader's
+ * own default (`$HOME/.waves-<name>`, derived at run time) applies.
+ */
+export function defaultWaveLogDir(config: Config): string | undefined {
+  if (config.waveLogDir !== undefined) return config.waveLogDir;
+  const name = config.repo?.split("/")[1];
+  return name !== undefined && name !== "" ? `$HOME/.waves-${name}` : undefined;
+}
+
 /** The scaffolded `config.yaml`, written with the values that must not be implied. */
 export function renderConfig(config: Config): string {
+  const waveLogDir = defaultWaveLogDir(config);
   const forbidden =
     config.forbiddenPorts.length > 0 ? config.forbiddenPorts : [3000, 3001];
   return [
@@ -137,7 +154,12 @@ export function renderConfig(config: Config): string {
     "# Where wave logs live. NEVER `~/.waves`: that directory is shared, and a",
     "# status server that scans it joins one project's waves against another",
     "# project's pull requests. `$HOME/.waves-<name>` is per-repository.",
-    `waveLogDir: ${JSON.stringify(config.waveLogDir ?? "$HOME/.waves-<repo name>")}`,
+    ...(waveLogDir !== undefined
+      ? [`waveLogDir: ${JSON.stringify(waveLogDir)}`]
+      : [
+          "# waveLogDir is left unset: with no `repo` there is no name to derive it",
+          "# from, so the loader's default applies once `repo` is known.",
+        ]),
     "",
     "# Mutation replay. Off by default: it is opt-in, and a project that has not",
     "# asked for it does not get the cost.",
@@ -158,7 +180,14 @@ export function renderConfig(config: Config): string {
 }
 
 /** The scaffolded `house-rules.md`, with or without the Wave Observability section. */
-export function renderHouseRules(includeWaveObservability: boolean): string {
+export function renderHouseRules(
+  includeWaveObservability: boolean,
+  waveLogDir?: string,
+): string {
+  const defaultDir =
+    waveLogDir !== undefined
+      ? `\`${waveLogDir}\``
+      : "`$HOME/.waves-` followed by the name half of `repo`";
   const observability = includeWaveObservability
     ? [
         "## Wave Observability",
@@ -176,7 +205,7 @@ export function renderHouseRules(includeWaveObservability: boolean): string {
         "",
         "**The log directory is yours.** `waveLogDir` decides where waves are read",
         "from. It is per-repository on purpose. The default is",
-        "`$HOME/.waves-<repo name>` and never `~/.waves`: that directory is shared",
+        `${defaultDir} and never \`~/.waves\`. That directory is shared`,
         "between projects, and a status server that scans it will read another",
         "project's waves and report them as this project's.",
         "",
@@ -253,7 +282,10 @@ export function renderFile(
     case "config.yaml":
       return renderConfig(config);
     case "house-rules.md":
-      return renderHouseRules(includeWaveObservability);
+      return renderHouseRules(
+        includeWaveObservability,
+        defaultWaveLogDir(config),
+      );
     case "cast.md":
       return CAST;
     case "lessons.md":

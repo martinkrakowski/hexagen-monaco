@@ -12,7 +12,11 @@ import {
   readAgentsMdAnswer,
   runInit,
 } from "../../src/init/init.js";
-import { emptyConfig, parseConfig } from "../../src/internal/config.js";
+import {
+  emptyConfig,
+  parseConfig,
+  type Config,
+} from "../../src/internal/config.js";
 
 /**
  * `hexagen-orchestration-init` (OW-D7; F-14).
@@ -37,9 +41,9 @@ afterEach(async () => {
 });
 
 /** Run `init` against a real directory, as the bin does. */
-async function init(root: string) {
+async function init(root: string, config: Config = emptyConfig()) {
   const at = (path: string): string => join(root, path);
-  return runInit(emptyConfig(), {
+  return runInit(config, {
     exists: async (path) => {
       try {
         await readFile(at(path), "utf8");
@@ -146,13 +150,42 @@ describe("§7 init: run twice, everything is byte-identical (F-14)", () => {
 describe("the scaffolded config.yaml (A-18, A-20)", () => {
   test("it writes waveLogDir explicitly, never leaving the shared root implied", async () => {
     const root = project();
-    await init(root);
+    await init(root, { ...emptyConfig(), repo: "acme/demo" });
     const text = await readFile(join(root, OVERLAY_DIR, "config.yaml"), "utf8");
     expect(text).toContain("waveLogDir:");
     // And the value it writes parses as this package's own schema.
     const parsed = parseConfig(text);
     expect(parsed.problems).toEqual([]);
-    expect(parsed.config?.waveLogDir).toBe("$HOME/.waves-<repo name>");
+  });
+
+  test("F1: for repo acme/demo the value is exactly $HOME/.waves-demo, and no file carries a placeholder", async () => {
+    const root = project();
+    await init(root, { ...emptyConfig(), repo: "acme/demo" });
+    const text = await readFile(join(root, OVERLAY_DIR, "config.yaml"), "utf8");
+    const parsed = parseConfig(text);
+    expect(parsed.problems).toEqual([]);
+    expect(parsed.config?.waveLogDir).toBe("$HOME/.waves-demo");
+    for (const name of await readdir(join(root, OVERLAY_DIR))) {
+      const body = await readFile(join(root, OVERLAY_DIR, name), "utf8");
+      expect(body, name).not.toContain("<repo name>");
+    }
+    const rules = await readFile(
+      join(root, OVERLAY_DIR, "house-rules.md"),
+      "utf8",
+    );
+    expect(rules).toContain("$HOME/.waves-demo");
+  });
+
+  test("F1: with no resolvable repo the key is omitted, and no file carries a placeholder", async () => {
+    const root = project();
+    await init(root);
+    const text = await readFile(join(root, OVERLAY_DIR, "config.yaml"), "utf8");
+    expect(text).not.toMatch(/^waveLogDir:/m);
+    expect(parseConfig(text).config?.waveLogDir).toBeUndefined();
+    for (const name of await readdir(join(root, OVERLAY_DIR))) {
+      const body = await readFile(join(root, OVERLAY_DIR, name), "utf8");
+      expect(body, name).not.toContain("<repo name>");
+    }
   });
 
   test("it writes forbiddenPorts as [3000, 3001] (A-20)", async () => {
