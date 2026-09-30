@@ -8,7 +8,7 @@ Scrubbed from the source runbook in three ways, all of them load-bearing:
 
 - **No attribution trailer.** Commits and PR bodies carry none.
 - **No session-log entry is appended.** A lane reports on itself; the orchestrator owns the wave record.
-- **One gate.** `hexagen-orchestration-gate`, named rather than spelled out as a command list, so
+- **One gate.** `npx --no-install hexagen-orchestration-gate`, named rather than spelled out as a command list, so
   there is no second copy of a project's step list to keep in sync.
 
 ## Template A — Lane brief (implementer)
@@ -35,7 +35,7 @@ Deliver <TASKS: numbered, each with acceptance criteria from the plan>.
 
 Rules:
 
-- Before pushing, run the gate: `hexagen-orchestration-gate`, in the lane's own worktree, on the
+- Before pushing, run the gate: `npx --no-install hexagen-orchestration-gate`, in the lane's own worktree, on the
   tree you are about to push.
 - Tests live <WHERE>, one behaviour per test, no real clock/network/filesystem in unit tests.
 - Never hand-edit generated files; change the generator/manifest and regenerate.
@@ -87,7 +87,7 @@ Mode: Implementer. Work ONLY in <WORKTREE_PATH> (branch <BRANCH>, PR #<N>).
 Read AGENTS.md and .agents/*.md first.
 
 Apply the findings below as Conventional Commits, each with no attribution trailer. Run the
-gate: `hexagen-orchestration-gate`. Commit, push. Do not open a new PR or merge.
+gate: `npx --no-install hexagen-orchestration-gate`. Commit, push. Do not open a new PR or merge.
 
 Findings — each was verified against the code:
 

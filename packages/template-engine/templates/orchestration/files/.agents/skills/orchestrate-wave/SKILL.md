@@ -130,7 +130,7 @@ the status:
 ```bash
 gh pr list --head "<branch>" --json number,url --jq '.[] | "#\(.number) \(.url)"'   # empty ⇒ stuck
 git -C "<worktree>" rev-list --count origin/main..HEAD                             # 0 ⇒ it wrote nothing
-(cd "<worktree>" && hexagen-orchestration-gate)
+(cd "<worktree>" && npx --no-install hexagen-orchestration-gate)
 git -C "<worktree>" status --porcelain=v1 -b && git -C "<worktree>" diff --stat origin/main...HEAD
 ```
 
