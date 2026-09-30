@@ -76,11 +76,15 @@ interface GateRun {
   root: string;
 }
 
-function runGate(root: string, args: string[] = []): GateRun {
+function runGate(
+  root: string,
+  args: string[] = [],
+  extraEnv: Record<string, string> = {},
+): GateRun {
   const result = spawnSync(process.execPath, [dist("gate"), ...args], {
     cwd: root,
     encoding: "utf8",
-    env: { ...process.env, HOME: root },
+    env: { ...process.env, HOME: root, ...extraEnv },
   });
   return {
     status: result.status,
@@ -330,6 +334,29 @@ describe("skips (a skipped step is never a passed step)", () => {
 });
 
 describe("the run itself", () => {
+  test("a skip list inherited from the caller's environment never skips a step the bin did not skip", () => {
+    const root = repository({
+      config: [
+        "repo: acme/demo",
+        "planDir: docs/planning",
+        "gateSteps:",
+        "  - name: lint",
+        "    command: touch lint-ran",
+        "",
+      ].join("\n"),
+      scripts: { lint: "true" },
+    });
+    // The parent shell already exports a skip for `lint`. The bin decided there
+    // are no skips, so the loop must be told so explicitly, not left to inherit.
+    const result = runGate(root, [], {
+      HEXAGEN_GATE_SKIP: "lint\tno lint script in package.json",
+    });
+    expect(result.status).toBe(0);
+    expect(existsSync(join(root, "lint-ran"))).toBe(true);
+    expect(result.stdout).not.toContain("SKIPPED lint");
+    expect(result.stdout).toContain("gate: 1/1 steps passed");
+  });
+
   test("runs every resolved step, in order, and adopts the loop's exit code", () => {
     const root = repository({
       config: [

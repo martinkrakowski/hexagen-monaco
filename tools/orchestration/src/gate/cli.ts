@@ -121,13 +121,12 @@ export function loopEnv(
     ...base,
     HEXAGEN_GATE_STEPS: renderSteps(steps),
     HEXAGEN_GATE_LOCKED: lockedNameList(steps),
-    ...(skips.length > 0
-      ? {
-          HEXAGEN_GATE_SKIP: skips
-            .map((skip) => `${skip.name}\t${skip.reason}`)
-            .join("\n"),
-        }
-      : {}),
+    // Always set, `""` when there are none. The loop reads this variable, and a
+    // value the CALLER exported would otherwise survive the spread above and
+    // make the loop skip a step the bin decided to run.
+    HEXAGEN_GATE_SKIP: skips
+      .map((skip) => `${skip.name}\t${skip.reason}`)
+      .join("\n"),
   };
 }
 
