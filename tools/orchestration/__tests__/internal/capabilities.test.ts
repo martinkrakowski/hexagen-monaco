@@ -7,6 +7,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -14,6 +15,7 @@ import {
   hasCommand,
   runCheck,
   runRemote,
+  shellQuote,
 } from "../../src/internal/capabilities.js";
 
 /**
@@ -163,5 +165,62 @@ describe("runRemote, the real runner", () => {
     );
     expect(["timeout", "failed"]).toContain(result.status);
     expect(Date.now() - started).toBeLessThan(10_000);
+  }, 20_000);
+});
+
+/**
+ * Security: `ssh` joins the remote argv with spaces and the remote login shell
+ * PARSES the result. These run a REAL `sh`, because whether a string is one
+ * word is a fact about a shell, not something to reason out.
+ */
+describe("shellQuote, evaluated by a real sh", () => {
+  /** The words `sh` sees when it evaluates `printf '%s\n' <quoted>`. */
+  const words = (quoted: string): string[] =>
+    execFileSync("sh", ["-c", `printf '%s\\n' ${quoted}`], {
+      encoding: "utf8",
+    })
+      .split("\n")
+      .slice(0, -1);
+
+  test.each(["a b", "; rm -rf x", "$(id)", "it's", "`id`", "a'b'c", "*", ""])(
+    "%j comes back as exactly one literal word",
+    (word) => {
+      expect(words(shellQuote(word))).toEqual([word]);
+    },
+  );
+
+  test("an injection through a clone path is one word, not a command", () => {
+    const clone = "/srv/cf; echo pwned";
+    expect(words(["git", "-C", clone].map(shellQuote).join(" "))).toEqual([
+      "git",
+      "-C",
+      clone,
+    ]);
+  });
+});
+
+describe("runRemote quotes what reaches the remote shell", () => {
+  test("an argv word carrying shell syntax arrives as one literal word", async () => {
+    // A fake `ssh` that behaves like the real one where it matters: it drops
+    // the six arguments runRemote puts before the remote argv (-n, two -o pairs, alias)
+    // and hands the REST, joined with spaces, to a shell.
+    const dir = mkdtempSync(join(tmpdir(), "orchestration-ssh-"));
+    dirs.push(dir);
+    const fake = join(dir, "ssh");
+    writeFileSync(fake, '#!/bin/sh\nshift 6\nexec /bin/sh -c "$*"\n');
+    chmodSync(fake, 0o755);
+    const result = await runRemote(
+      "alias",
+      ["printf", "%s\\n", "a b", "; echo pwned", "$(echo pwned)", "it's"],
+      5_000,
+      { sshCommand: fake },
+    );
+    expect(result.status).toBe("ok");
+    expect(result.stdout.split("\n")).toEqual([
+      "a b",
+      "; echo pwned",
+      "$(echo pwned)",
+      "it's",
+    ]);
   }, 20_000);
 });
