@@ -46,8 +46,11 @@ const { findings, exitCode } = await runDoctor(
     exists: (path) => isFile(`${root}/${path}`),
     hasCommand,
     supportsWorktrees,
-    runCheck,
-    runRemote,
+    // From the repository root, so a relative `check` means the same thing from
+    // any subdirectory.
+    runCheck: (argv, timeoutMs) => runCheck(argv, timeoutMs, { cwd: root }),
+    runRemote: (alias, argv, timeoutMs) =>
+      runRemote(alias, argv, timeoutMs, { cwd: root }),
     localUserEmail,
   },
 );

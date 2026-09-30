@@ -45,6 +45,15 @@ export type CheckStatus = "ok" | "failed" | "timeout";
  */
 export const CHECK_TIMEOUT_MS = 10_000;
 
+/**
+ * Where a probe runs. `cwd` is the repository root for a bin: an overlay's
+ * `check: [./scripts/x]` is written relative to the repository, and a doctor run
+ * from a subdirectory would otherwise resolve it against that subdirectory.
+ */
+export interface RunOptions {
+  readonly cwd?: string;
+}
+
 /** The options every probe here runs under. No shell, and its own process group. */
 const SPAWN_BASE = {
   // No shell, always: argv is the transport prefix from the overlay, and a shell
@@ -93,11 +102,16 @@ function killGroup(pid: number | undefined): void {
 export function runCheck(
   argv: readonly string[],
   timeoutMs: number = CHECK_TIMEOUT_MS,
+  options: RunOptions = {},
 ): Promise<CheckStatus> {
   const [command, ...args] = argv;
   if (command === undefined) return Promise.resolve("failed");
   return new Promise((resolve) => {
-    const child = spawn(command, args, { ...SPAWN_BASE, stdio: "ignore" });
+    const child = spawn(command, args, {
+      ...SPAWN_BASE,
+      stdio: "ignore",
+      ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+    });
     let settled = false;
     const timer = setTimeout(() => {
       killGroup(child.pid);
@@ -150,7 +164,7 @@ export function runRemote(
   alias: string,
   argv: readonly string[],
   timeoutMs: number = CHECK_TIMEOUT_MS,
-  options: {
+  options: RunOptions & {
     /** The ssh executable. A seam for tests, which stand a fake in for it. */
     readonly sshCommand?: string;
   } = {},
@@ -167,7 +181,11 @@ export function runRemote(
         alias,
         ...argv.map(shellQuote),
       ],
-      { ...SPAWN_BASE, stdio: ["ignore", "pipe", "ignore"] },
+      {
+        ...SPAWN_BASE,
+        stdio: ["ignore", "pipe", "ignore"],
+        ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+      },
     );
     let settled = false;
     let stdout = "";

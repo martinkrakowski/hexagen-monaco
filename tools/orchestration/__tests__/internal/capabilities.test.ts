@@ -110,6 +110,16 @@ describe("runCheck, the real runner", () => {
     expect(await runCheck(["test", "1", "-eq", "1; true"])).toBe("failed");
   });
 
+  test("a relative command resolves against the cwd option", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "orchestration-cwd-"));
+    dirs.push(dir);
+    const script = join(dir, "probe");
+    writeFileSync(script, "#!/bin/sh\nexit 0\n");
+    chmodSync(script, 0o755);
+    expect(await runCheck(["./probe"], 5_000, { cwd: dir })).toBe("ok");
+    expect(await runCheck(["./probe"], 5_000)).toBe("failed");
+  });
+
   test("CHECK_TIMEOUT_MS is the 10 s ceiling A-30 §3 fixes", () => {
     expect(CHECK_TIMEOUT_MS).toBe(10_000);
   });
