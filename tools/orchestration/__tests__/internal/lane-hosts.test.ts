@@ -499,8 +499,8 @@ describe("A-30 §1.3: the alias is a URL, or it is refused at opencodeServerUrl"
  * OW1's fixture overlay, which A-30 §6 migrates. It is the one overlay in this
  * repository that a real project already runs against, so it is the one that
  * proves the schema against a file nobody here wrote for the schema — including
- * the `appendOnlyPaths` that was a YAML LIST, where a field that is one regex
- * silently matched nothing.
+ * the `appendOnlyPaths` that was a YAML LIST, which the parser refuses ("must be
+ * a string") because the field is one regular expression.
  */
 const FIXTURE = resolve(
   import.meta.dirname,
