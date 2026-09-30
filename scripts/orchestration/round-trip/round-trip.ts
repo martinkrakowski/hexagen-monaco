@@ -12,7 +12,11 @@
  *
  *   yarn tsx scripts/orchestration/round-trip/round-trip.ts
  *
- * Exit 0 only when every named assertion holds. Nothing here writes outside a temp directory.
+ * Exit 0 only when every named assertion holds. The fixture, the packed tarballs and the pinned
+ * PATH all live in temp directories that are removed on exit, even on an uncaught error. It does
+ * write outside them: turbo build outputs in the repo (`dist/`, `.turbo/`, both gitignored), a
+ * transient `<pkg>/publish/` per packed package (removed in a `finally`), and
+ * `corepack prepare --activate` touches the host corepack state.
  */
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
