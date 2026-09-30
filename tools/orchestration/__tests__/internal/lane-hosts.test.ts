@@ -122,7 +122,17 @@ describe("A-30 §7: every parseConfig red case, at the path the plan names", () 
   });
 
   test("a dispatch carrying a flag the orchestrator appends is refused at dispatch", () => {
-    for (const flag of ["--dir", "--agent", "-m", "--model", "--format"]) {
+    for (const flag of [
+      "--dir",
+      "--agent",
+      "-m",
+      "--model",
+      "--format",
+      "--model=x",
+      "--dir=/tmp",
+      "--agent=lane",
+      "--format=json",
+    ]) {
       const yaml = REMOTE.replace(
         "dispatch: [ocm-run]",
         `dispatch: [ocm-run, ${flag}]`,

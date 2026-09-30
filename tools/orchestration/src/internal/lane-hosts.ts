@@ -206,7 +206,17 @@ function parseHost(
   }
   if (dispatch !== undefined) {
     for (const flag of RESERVED_DISPATCH_FLAGS) {
-      if (dispatch.includes(flag)) {
+      // The LONG flags are also refused in their `--flag=value` form. The short
+      // flag's attached form (`-mfoo`) is deliberately NOT tried: `-m` followed by
+      // anything is ambiguous with other short flags and with a value that merely
+      // starts with `m`, so a prefix match there would refuse legitimate words.
+      if (
+        dispatch.some(
+          (word) =>
+            word === flag ||
+            (flag.startsWith("--") && word.startsWith(`${flag}=`)),
+        )
+      ) {
         add(
           `${at}.dispatch`,
           `must not contain ${flag}: the orchestrator appends it, so a ${flag} here would dispatch with the wrong value`,
