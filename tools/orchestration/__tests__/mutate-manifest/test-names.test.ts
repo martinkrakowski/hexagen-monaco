@@ -40,12 +40,27 @@ describe("testNames", () => {
     ]);
   });
 
-  test("keeps a literal title behind a modifier call — `skipIf` does not change the name", () => {
+  test("does not claim a test behind `skipIf` or `runIf`: it may not run", () => {
     expect(
       names(
-        `test.skipIf(!ok)("the encode spawns the resolved binary", () => {});`,
+        `test.skipIf(!ok)("the encode spawns the resolved binary", () => {});
+        test.runIf(ok)("the other one", () => {});`,
       ),
-    ).toEqual(["the encode spawns the resolved binary"]);
+    ).toEqual([]);
+  });
+
+  test("does not claim a skipped or todo test, or anything inside a skipped suite", () => {
+    expect(
+      names(
+        `test.skip("ghost", () => {});
+        it.todo("ghost too");
+        xit("ghost three", () => {});
+        xtest("ghost four", () => {});
+        describe.skip("hidden", () => { test("inside", () => {}); });
+        xdescribe("hidden too", () => { test("inside two", () => {}); });
+        test("real", () => {});`,
+      ),
+    ).toEqual(["real"]);
   });
 
   test("drops an `each` title: vitest formats it per case, so the literal is not a name", () => {

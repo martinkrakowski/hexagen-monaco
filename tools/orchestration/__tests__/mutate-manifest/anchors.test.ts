@@ -321,6 +321,24 @@ describe("checkAnchors — the -t pattern", () => {
     ]);
   });
 
+  test("a skipped test is not proof: the pattern falls through to the listing", async () => {
+    const listTests = vi.fn(async () => []);
+    const report = await checkAnchors(
+      ["m.json"],
+      fs(
+        {
+          "m.json": manifestText(mutation({ command: selecting("ghost") })),
+          "src/target.ts": source,
+          "src/__tests__/target.test.ts": `test.skip("ghost", () => {});`,
+        },
+        { listTests },
+      ),
+    );
+    expect(report).toMatchObject({ proved: 0 });
+    expect(listTests).toHaveBeenCalled();
+    expect(report.faults).not.toEqual([]);
+  });
+
   test("FAILS a pattern vitest lists no test for — the silent 'survived' this exists to stop", async () => {
     const report = await checkAnchors(
       ["m.json"],

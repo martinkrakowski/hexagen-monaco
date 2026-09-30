@@ -53,7 +53,18 @@ interface Namer {
   readonly suite: boolean;
   /** `.each` formats the title per case at runtime, so the literal is not a name. */
   readonly each: boolean;
+  /**
+   * Reached through `.skip`, `.todo`, `.skipIf` or `.runIf` (or `xit`/`xtest`/
+   * `xdescribe`): the call may not run, and a test that does not run is not
+   * proof that a `-t` pattern still selects one.
+   */
+  readonly skipped: boolean;
 }
+
+/** Modifiers after which the registration is not certain to run. */
+const CONDITIONAL = new Set(["skip", "todo", "skipIf", "runIf"]);
+/** The `x`-prefixed spellings vitest also accepts. */
+const X_NAMERS = new Set(["xit", "xtest", "xdescribe"]);
 
 /**
  * Walks `it`, `test.skipIf(x)`, `describe.each([…])`, ``test.each`…` `` and the
@@ -63,9 +74,11 @@ interface Namer {
 function namerOf(expression: ts.Expression): Namer | undefined {
   let node: ts.Node = expression;
   let each = false;
+  let skipped = false;
   for (;;) {
     if (ts.isPropertyAccessExpression(node)) {
       if (node.name.text === "each") each = true;
+      if (CONDITIONAL.has(node.name.text)) skipped = true;
       node = node.expression;
       continue;
     }
@@ -79,8 +92,16 @@ function namerOf(expression: ts.Expression): Namer | undefined {
     }
     break;
   }
-  if (!ts.isIdentifier(node) || !NAMERS.has(node.text)) return undefined;
-  return { suite: node.text === "describe" || node.text === "suite", each };
+  if (!ts.isIdentifier(node)) return undefined;
+  if (X_NAMERS.has(node.text)) {
+    return { suite: node.text === "xdescribe", each, skipped: true };
+  }
+  if (!NAMERS.has(node.text)) return undefined;
+  return {
+    suite: node.text === "describe" || node.text === "suite",
+    each,
+    skipped,
+  };
 }
 
 /**
@@ -111,7 +132,14 @@ export function testNames(source: string, fileName: string): readonly string[] {
     if (ts.isCallExpression(node)) {
       const namer = namerOf(node.expression);
       if (namer !== undefined) {
-        const title = namer.each ? undefined : literalTitle(node.arguments[0]);
+        // A skipped registration is treated like an unreadable title: no name
+        // is claimed, and a skipped suite takes its subtree with it. What this
+        // cannot see — an unreachable `if (false) test(…)` — is left to the
+        // `vitest list` confirmation, because syntax cannot prove reachability.
+        const title =
+          namer.each || namer.skipped
+            ? undefined
+            : literalTitle(node.arguments[0]);
         const full =
           title === undefined || prefix === undefined
             ? undefined
