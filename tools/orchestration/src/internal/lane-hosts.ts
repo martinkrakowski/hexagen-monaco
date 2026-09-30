@@ -190,6 +190,10 @@ function parseHost(
     );
   } else {
     name = entry.name;
+    // Recorded HERE, not at the return: a host dropped below for a bad gate or
+    // dispatch still declared this name, and a later duplicate, a seat naming it
+    // and the synthesized `opencode-server` all have to see that.
+    seen.set(name, index);
   }
 
   // `dispatch` — required, and the transport prefix ONLY.
@@ -319,7 +323,6 @@ function parseHost(
   if (name === undefined || dispatch === undefined || gate === undefined) {
     return undefined;
   }
-  if (name !== undefined) seen.set(name, index);
   return {
     name,
     dispatch,

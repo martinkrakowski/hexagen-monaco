@@ -316,6 +316,50 @@ describe("A-30 §7: what a valid overlay parses into", () => {
     expect(parseConfig(yaml).config?.laneHosts).toEqual([]);
   });
 
+  test("a host dropped for a bad gate still holds its name: a seat naming it is not also a dangling reference", () => {
+    const yaml = [
+      LOCAL.replace("gate: full", "gate: partial"),
+      "seats:",
+      "  - id: s1",
+      "    agent: lane",
+      "    model: m",
+      "    host: local-opencode",
+    ].join("\n");
+    const result = parseConfig(yaml);
+    expect(result.config?.laneHosts).toEqual([]);
+    expect(result.problems.map((p) => p.at)).toEqual(["laneHosts[0].gate"]);
+  });
+
+  test("a host dropped for a bad dispatch still holds its name, so a later duplicate is caught", () => {
+    const yaml = [
+      "laneHosts:",
+      "  - name: dup",
+      "    dispatch: []",
+      "    gate: full",
+      "  - name: dup",
+      "    dispatch: [opencode, run]",
+      "    gate: full",
+    ].join("\n");
+    const at = problemsAt(yaml);
+    expect(at).toContain("laneHosts[0].dispatch");
+    expect(at).toContain("laneHosts[1].name");
+  });
+
+  test("a host dropped for a bad gate still collides with the synthesized opencode-server", () => {
+    const yaml = [
+      "opencodeServerUrl: http://127.0.0.1:4096",
+      "laneHosts:",
+      `  - name: ${SYNTHESIZED_HOST_NAME}`,
+      "    dispatch: [opencode, run]",
+      "    gate: partial",
+    ].join("\n");
+    const result = parseConfig(yaml);
+    expect(result.problems.map((p) => p.at)).toContain("laneHosts[0].name");
+    // The declared host wins the name even though it was dropped, so the
+    // synthesized one is not added beside it: the file has to be fixed first.
+    expect(result.config?.laneHosts).toEqual([]);
+  });
+
   test("a host kept with one refused optional key is still reported on by doctor", () => {
     // `clone` is present, so the host is remote, so a missing `ssh` is a problem
     // — and the host survives, because doctor still has to walk it.
