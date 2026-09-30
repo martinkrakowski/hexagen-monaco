@@ -32,7 +32,7 @@
 //
 // Usage:
 //   node scripts/orchestration/skill-coverage.mjs --source <dir> --tree <dir> [--tree <dir>…]
-//     --allowlist <file> [--sites <file> --generic <dir>] [--memory <dir> --lessons <file>]
+//     --allowlist <file> [--sites <file> --generic <dir>] [--memory <dir>] [--memory-manifest <file>] [--lessons <file>]
 //     [--token-review <file>] [--hexagen-root <dir>]
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -43,10 +43,11 @@ import { join, resolve } from "node:path";
 // not documented: if the extractor changes shape and starts seeing fewer units, that is a
 // regression in the check and has to fail loudly.
 //
-// `boldLeads` says whether a bold-lead line is an anchor unit in that file, on top of its
-// headings. It is true for SKILL.md (9 headings + 62 bold leads = 71) and false for the other two,
-// whose anchors are their headings alone: 1 + 7 + 37 = 45 and 1 + 15 + 19 = 35. Those are the
-// counts the plan enumerates per file and the counts the test asserts.
+// `anchorKinds` is the per-file anchor rule, stated as data rather than left to an implicit
+// branch: which kinds of line count as an anchor in that file. SKILL.md anchors on headings AND
+// bold-lead lines (9 headings + 62 bold leads = 71). rationale.md and cast.md anchor on their
+// `#`/`##`/`###` headings ONLY: 1 + 7 + 37 = 45 and 1 + 15 + 19 = 35. Those are the counts the
+// plan enumerates per file and the counts the test asserts.
 //
 // Nothing is checked less for it. In both of those files every bold-lead line is the *first* line
 // of a paragraph, so the content tier already requires that exact line to survive verbatim; an
@@ -54,9 +55,9 @@ import { join, resolve } from "node:path";
 // enforcing. The anchor tier earns its place in SKILL.md because a heading there is its own unit,
 // separate from the paragraph beneath it.
 const EXPECTED_UNITS = {
-  "SKILL.md": { path: "SKILL.md", anchors: 71, content: 86, boldLeads: true },
-  "rationale.md": { path: "references/rationale.md", anchors: 45, content: 98, boldLeads: false },
-  "cast.md": { path: "references/cast.md", anchors: 35, content: 145, boldLeads: false },
+  "SKILL.md": { path: "SKILL.md", anchors: 71, content: 86, anchorKinds: ["heading", "boldLead"] },
+  "rationale.md": { path: "references/rationale.md", anchors: 45, content: 98, anchorKinds: ["heading"] },
+  "cast.md": { path: "references/cast.md", anchors: 35, content: 145, anchorKinds: ["heading"] },
 };
 
 // The snapshot files the two tiers are computed over. `gate.sh` and `wave-event.sh` are
@@ -68,6 +69,9 @@ const FENCE_OPEN = /^\s{0,3}(`{3,}|~{3,})/;
 const HEADING = /^\s{0,3}#{1,6}\s/;
 const BOLD_LEAD = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?\*\*/;
 
+// `collapse` belongs to the content tier only. Anchors are whole-line equality on `trim()`: a
+// heading whose inner spacing changed is a different line, and collapsing it would let
+// `## Current  seats` stand in for `## Current seats`.
 const collapse = (text) => text.replace(/\s+/g, " ").trim();
 
 function walk(dir) {
@@ -122,7 +126,9 @@ function contentUnits(text) {
 }
 
 /** Heading lines and bold-lead lines, outside fenced code. */
-function anchorUnits(text, boldLeads = true) {
+function anchorUnits(text, anchorKinds) {
+  const headings = anchorKinds.includes("heading");
+  const boldLeads = anchorKinds.includes("boldLead");
   const anchors = [];
   let inFence = false;
   let fenceChar = null;
@@ -138,13 +144,27 @@ function anchorUnits(text, boldLeads = true) {
       continue;
     }
     if (inFence) continue;
-    if (HEADING.test(line) || (boldLeads && BOLD_LEAD.test(line))) anchors.push(line);
+    if ((headings && HEADING.test(line)) || (boldLeads && BOLD_LEAD.test(line))) anchors.push(line);
   }
   return anchors;
 }
 
-/** Inline code spans: one matched backtick run, the interior whole, one surrounding space stripped. */
+/**
+ * Inline code spans: one matched backtick run, the interior whole, one surrounding space stripped.
+ * Spans are looked for paragraph by paragraph and never inside a fenced block, as in CommonMark:
+ * a span cannot cross a blank line, and the backtick run of a fence delimiter is not a span
+ * delimiter. (Fenced blocks are covered by `fencedWords`.)
+ */
 function codeSpans(text) {
+  const spans = [];
+  for (const unit of contentUnits(text)) {
+    if (FENCE_OPEN.test(unit)) continue;
+    spans.push(...spansIn(unit));
+  }
+  return spans;
+}
+
+function spansIn(text) {
   const spans = [];
   const pattern = /(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g;
   let match;
@@ -187,6 +207,7 @@ function parseArgs(argv) {
     "--sites",
     "--generic",
     "--memory",
+    "--memory-manifest",
     "--lessons",
     "--token-review",
     "--hexagen-root",
@@ -207,8 +228,8 @@ function parseArgs(argv) {
   if ((opts.sites && !opts.generic) || (opts.generic && !opts.sites)) {
     fail("--sites and --generic must be given together");
   }
-  if ((opts.memory && !opts.lessons) || (opts.lessons && !opts.memory)) {
-    fail("--memory and --lessons must be given together");
+  if (!opts.lessons !== !(opts.memory || opts.memoryManifest)) {
+    fail("--lessons goes with --memory and/or --memory-manifest, and needs one of them");
   }
   if (opts.tokenReview && !opts.hexagenRoot) {
     fail("--token-review also needs --hexagen-root, so the sweep knows what counts as tracked");
@@ -247,7 +268,7 @@ function readTree(dir) {
   const content = new Set();
   for (const path of entries) {
     const text = readFile(path, `file in tree ${dir}`);
-    for (const line of text.split("\n")) lines.add(collapse(line));
+    for (const line of text.split("\n")) lines.add(line.trim());
     for (const unit of contentUnits(text)) content.add(collapse(unit));
   }
   return { lines, content, files: entries };
@@ -255,7 +276,7 @@ function readTree(dir) {
 
 function checkCounts(name, sourceText) {
   const expected = EXPECTED_UNITS[name];
-  const anchors = anchorUnits(sourceText, expected.boldLeads).length;
+  const anchors = anchorUnits(sourceText, expected.anchorKinds).length;
   const content = contentUnits(sourceText).length;
   if (anchors !== expected.anchors || content !== expected.content) {
     bad(
@@ -289,13 +310,43 @@ function checkSites(sitesPath, genericDir) {
   say(`sites: ${sites.length} campaign-foundry strings, none present in ${files.length} generic file(s)`);
 }
 
-function checkMemory(memoryDir, lessonsPath, allowlistPath) {
-  let files;
-  try {
-    files = readdirSync(memoryDir).filter((name) => name.endsWith(".md")).sort();
-  } catch {
-    return fail(`cannot read memory directory: ${memoryDir}`);
+function checkMemory(memoryDir, manifestPath, lessonsPath, allowlistPath) {
+  // The manifest is the memory directory's file NAMES, committed, so CI (which has no memory
+  // directory) can run the classification. The live directory, when given, is the source of truth
+  // for what exists: the two must agree. With no directory, the manifest is what is classified.
+  const rel = (path) => path.replace(`${process.cwd()}/`, "");
+  let manifest = null;
+  if (manifestPath) {
+    manifest = readFile(manifestPath, "memory manifest")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("#"))
+      .sort();
   }
+  let files = manifest;
+  if (memoryDir) {
+    try {
+      files = readdirSync(memoryDir).filter((name) => name.endsWith(".md")).sort();
+    } catch {
+      return fail(`cannot read memory directory: ${memoryDir}`);
+    }
+    if (manifest) {
+      const live = new Set(files);
+      const listed = new Set(manifest);
+      for (const name of files) {
+        if (!listed.has(name)) {
+          bad(`memory file ${name} is in the memory directory but not in the manifest ${rel(manifestPath)}`);
+        }
+      }
+      for (const name of manifest) {
+        if (!live.has(name)) {
+          bad(`memory file ${name} is in the manifest ${rel(manifestPath)} but not in the memory directory`);
+        }
+      }
+    }
+  }
+  // Classify the union, so a name present on only one side is still held to the cited-or-allowlisted rule.
+  files = [...new Set([...files, ...(manifest ?? [])])].sort();
   const lessons = readFile(lessonsPath, "lessons file");
   const allowlist = new Set(
     readFile(allowlistPath, "allowlist")
@@ -327,7 +378,9 @@ function checkTokenReview(reviewPath, genericDir, sourceDir, hexagenRoot) {
       bad(`${reviewPath}: "${line.slice(0, 60)}" has no tab, so it carries no reason`);
       continue;
     }
-    const token = collapse(line.slice(0, tab));
+    // One line per token, so an internal newline is written as the two characters \n, and a
+    // literal backslash as \\. Nothing else is touched: the token is the RAW span interior.
+    const token = line.slice(0, tab).replace(/\\(n|\\)/g, (_, c) => (c === "n" ? "\n" : "\\"));
     const reason = line.slice(tab + 1).trim();
     if (!reason) {
       bad(`${reviewPath}: ${JSON.stringify(token)} has an empty reason`);
@@ -342,7 +395,7 @@ function checkTokenReview(reviewPath, genericDir, sourceDir, hexagenRoot) {
   const tokens = new Set();
   for (const path of walk(genericDir)) {
     const text = readFile(path, `file in generic tree ${genericDir}`);
-    for (const token of [...codeSpans(text), ...fencedWords(text)]) tokens.add(collapse(token));
+    for (const token of [...codeSpans(text), ...fencedWords(text)]) tokens.add(token);
   }
 
   // The tracked-hexagen corpus, read once. This is the same question `git grep -F -e <token> --`
@@ -421,10 +474,10 @@ function main() {
     const text = readFile(path, `source file ${name}`);
     const counts = checkCounts(name, text);
 
-    for (const anchor of anchorUnits(text, EXPECTED_UNITS[name].boldLeads)) {
+    for (const anchor of anchorUnits(text, EXPECTED_UNITS[name].anchorKinds)) {
       totals.anchors++;
-      if (!treeLines.has(collapse(anchor))) {
-        bad(`${name} anchor uncovered: ${JSON.stringify(collapse(anchor).slice(0, 100))}`);
+      if (!treeLines.has(anchor.trim())) {
+        bad(`${name} anchor uncovered: ${JSON.stringify(anchor.trim().slice(0, 100))}`);
       }
     }
     for (const unit of contentUnits(text)) {
@@ -433,7 +486,10 @@ function main() {
         bad(`${name} paragraph uncovered: ${JSON.stringify(collapse(unit).slice(0, 100))}`);
       }
     }
-    say(`${name}: ${counts.anchors} anchors, ${counts.content} paragraphs, both asserted`);
+    say(
+      `${name}: ${counts.anchors} anchors [${EXPECTED_UNITS[name].anchorKinds.join(", ")}], ` +
+        `${counts.content} paragraphs, both asserted`,
+    );
   }
 
   // The allowlist covers memory files only. A source unit may never be allowlisted: if one cannot
@@ -455,7 +511,14 @@ function main() {
   }
 
   if (opts.sites) checkSites(resolve(opts.sites), resolve(opts.generic));
-  if (opts.memory) checkMemory(resolve(opts.memory), resolve(opts.lessons), resolve(opts.allowlist));
+  if (opts.lessons) {
+    checkMemory(
+      opts.memory && resolve(opts.memory),
+      opts.memoryManifest && resolve(opts.memoryManifest),
+      resolve(opts.lessons),
+      resolve(opts.allowlist),
+    );
+  }
   if (opts.tokenReview) {
     checkTokenReview(
       resolve(opts.tokenReview),

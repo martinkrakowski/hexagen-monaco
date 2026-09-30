@@ -6,10 +6,12 @@
 # hand-written list of campaign-foundry's own strings cannot catch everything, so this is the
 # mechanical sweep behind it: the test recomputes the same set and fails on anything missing here.
 #
-# The token is the text of an inline code span, or one whitespace-separated word of a fenced
-# block, in `SKILL.md` or `references/rationale.md`. Whitespace inside a token is collapsed to
-# single spaces here, because one of them contains a line break and a review file cannot hold a line
-# break and stay one line per token; the test collapses both sides the same way before matching.
+# The token is the RAW text of an inline code span (one surrounding space stripped), or one
+# whitespace-separated word of a fenced block, in `SKILL.md` or `references/rationale.md`. Nothing
+# is collapsed: internal whitespace, including a line break, is part of the token, and the test
+# looks for it as-is in the pinned `source/` and in the tracked hexagen files. A review file holds
+# one line per token, so an internal newline is written here as the two characters \n (and a literal
+# backslash as \\) and unescaped when the file is loaded.
 #
 # Format: <token><TAB><why the token is generic>. Every line below is reviewed by hand — the
 # test can only check that a reason is present and non-empty, never that it is right. A reason
@@ -47,7 +49,7 @@ $wave	the skill's own wave argument, same declaration; the contract addresses th
 <plan-slug>-w<NN>	the wave half of that same grammar, with the zero-padding placeholder intact
 BEFORE=$(git	first line of the fix-round tip fence; plain shell
 SIGHUP	the POSIX signal the launch rule turns on; `nohup` ignores only this one
-TIMED-OUT — not stale, make the premise decide quickly	the plan verifier's own timeout message, quoted so an author can recognise it when a fence they wrote hits it
+TIMED-OUT — not stale, make the premise decide\n   quickly	the plan verifier's own timeout message, quoted so an author can recognise it when a fence they wrote hits it
 `bin/esbuild`,	same probe, in the comment above it: one of the two example packages the source uses to show that "has a .node file" is the wrong test. `@esbuild` is named in the brief as generic mechanism
 `lib/`,	same probe, the second of the two example packages; the libvips image ships a directory, not a .node file
 changes>"	whitespace-truncated remainder of that same quoted argument

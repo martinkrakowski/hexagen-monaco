@@ -145,13 +145,13 @@ describe("orchestration skill coverage", () => {
     const result = run(coverageArgs(FIXTURE));
     expect(result.status, result.out).toBe(0);
     expect(result.out).toContain(
-      "SKILL.md: 71 anchors, 86 paragraphs, both asserted",
+      "SKILL.md: 71 anchors [heading, boldLead], 86 paragraphs, both asserted",
     );
     expect(result.out).toContain(
-      "rationale.md: 45 anchors, 98 paragraphs, both asserted",
+      "rationale.md: 45 anchors [heading], 98 paragraphs, both asserted",
     );
     expect(result.out).toContain(
-      "cast.md: 35 anchors, 145 paragraphs, both asserted",
+      "cast.md: 35 anchors [heading], 145 paragraphs, both asserted",
     );
     expect(result.out).toContain(
       "totals: 151 anchors, 329 paragraphs, over 2 tree(s)",
@@ -159,6 +159,16 @@ describe("orchestration skill coverage", () => {
     expect(result.out).toContain(
       "clean: every anchor and every paragraph of the snapshot survives",
     );
+  });
+
+  it("F1: bold leads anchor in SKILL.md only, headings alone in the other two files", () => {
+    const script = fs.readFileSync(SCRIPT, "utf8");
+    expect(script).toContain('anchorKinds: ["heading", "boldLead"]');
+    expect(script.match(/anchorKinds: \["heading"\]/g)).toHaveLength(2);
+    const result = run(coverageArgs(FIXTURE));
+    expect(result.out).toContain("SKILL.md: 71 anchors [heading, boldLead]");
+    expect(result.out).toContain("rationale.md: 45 anchors [heading]");
+    expect(result.out).toContain("cast.md: 35 anchors [heading]");
   });
 
   it("exits 2 on bad arguments and on an unreadable path", () => {
@@ -304,6 +314,163 @@ describe("orchestration skill coverage", () => {
     expect(result.status, result.out).toBe(1);
     expect(result.out).toContain("unaccounted");
     expect(result.out).toContain(canary);
+  });
+
+  it("F16: a code span with internal whitespace, planted in source and generic, is named", () => {
+    const fixture = copyFixture();
+    // Generated at runtime, with two spaces inside: a literal in this file would be found by the
+    // tracked-file sweep and never flagged.
+    const span = `cf-only  ${randomUUID().slice(0, 8)}`;
+    const marker =
+      "**Every lane brief ends with two lines, and they are not optional.** Both were earned:";
+    for (const file of [
+      path.join(fixture, "source", "SKILL.md"),
+      path.join(fixture, "generic", "SKILL.md"),
+    ]) {
+      const lines = readLines(file);
+      const index = lines.indexOf(marker);
+      if (index === -1) throw new Error(`marker not found in ${file}`);
+      lines[index] = `${lines[index]} \`${span}\``;
+      writeLines(file, lines);
+    }
+    const result = run(coverageArgs(fixture));
+    expect(result.status, result.out).toBe(1);
+    expect(result.out).toContain(span);
+    expect(result.out).toContain("unaccounted");
+  });
+
+  it("F16: the wrapped TIMED-OUT span needs its review line, matched raw", () => {
+    const fixture = copyFixture();
+    const review = path.join(
+      fixture,
+      "campaign-foundry",
+      "generic-token-review.txt",
+    );
+    const raw = readLines(review).find((line) => line.startsWith("TIMED-OUT"));
+    expect(raw).toContain("decide\\n   quickly");
+    dropLine(review, (line) => line.startsWith("TIMED-OUT"));
+    const result = run(coverageArgs(fixture));
+    expect(result.status, result.out).toBe(1);
+    expect(result.out).toContain("TIMED-OUT");
+    expect(result.out).toContain("unaccounted");
+  });
+
+  it("F17: an anchor whose inner spacing changed is not the same line", () => {
+    const fixture = copyFixture();
+    const cast = path.join(fixture, "campaign-foundry", "overlay", "cast.md");
+    const lines = readLines(cast);
+    const index = lines.indexOf("## Current seats");
+    expect(index).toBeGreaterThan(-1);
+    lines[index] = "## Current  seats";
+    writeLines(cast, lines);
+    const result = run(coverageArgs(fixture));
+    expect(result.status, result.out).toBe(1);
+    expect(result.out).toContain("cast.md anchor uncovered");
+    expect(result.out).toContain("## Current seats");
+  });
+
+  it("F2: a manifest name that is neither cited nor allowlisted is named", () => {
+    const fixture = copyFixture();
+    const manifest = path.join(fixture, "manifest.txt");
+    fs.writeFileSync(manifest, "a-name-nobody-cited.md\n");
+    const lessons = path.join(
+      fixture,
+      "campaign-foundry",
+      "overlay",
+      "lessons.md",
+    );
+    const result = run(
+      coverageArgs(fixture, [
+        "--memory-manifest",
+        manifest,
+        "--lessons",
+        lessons,
+      ]),
+    );
+    expect(result.status, result.out).toBe(1);
+    expect(result.out).toContain("a-name-nobody-cited.md");
+    expect(result.out).toContain("neither cited");
+  });
+
+  it("F2: a memory directory file missing from the manifest is named", () => {
+    const fixture = copyFixture();
+    const memory = fs.mkdtempSync(
+      path.join(os.tmpdir(), "skill-coverage-memory-"),
+    );
+    fs.writeFileSync(path.join(memory, "MEMORY.md"), "# index\n");
+    fs.writeFileSync(path.join(memory, "extra-not-in-manifest.md"), "# x\n");
+    const manifest = path.join(fixture, "manifest.txt");
+    fs.writeFileSync(manifest, "MEMORY.md\nmanifest-only-name.md\n");
+    const lessons = path.join(
+      fixture,
+      "campaign-foundry",
+      "overlay",
+      "lessons.md",
+    );
+    const result = run(
+      coverageArgs(fixture, [
+        "--memory",
+        memory,
+        "--memory-manifest",
+        manifest,
+        "--lessons",
+        lessons,
+      ]),
+    );
+    expect(result.status, result.out).toBe(1);
+    expect(result.out).toContain(
+      "extra-not-in-manifest.md is in the memory directory but not in the manifest",
+    );
+    expect(result.out).toContain("manifest-only-name.md is in the manifest");
+  });
+
+  it("F6: every #anchor link in generic/ resolves to a heading slug", () => {
+    const slug = (heading: string): string =>
+      heading
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s-]/gu, "")
+        .trim()
+        .replace(/\s/g, "-");
+    const slugsOf = (file: string): Set<string> => {
+      const out = new Set<string>();
+      let inFence = false;
+      for (const line of readLines(file)) {
+        if (/^\s{0,3}(`{3,}|~{3,})/.test(line)) inFence = !inFence;
+        const match = !inFence && line.match(/^#{1,6}\s+(.*?)\s*#*\s*$/);
+        if (match) out.add(slug(match[1]));
+      }
+      return out;
+    };
+    const generic = path.join(FIXTURE, "generic");
+    const skill = path.join(generic, "SKILL.md");
+    const rationale = path.join(generic, "references", "rationale.md");
+    const targets: Record<string, Set<string>> = {
+      "": slugsOf(skill),
+      "references/rationale.md": slugsOf(rationale),
+    };
+    let checked = 0;
+    for (const file of [skill, rationale]) {
+      const own = file === skill ? "" : "references/rationale.md";
+      const text = fs.readFileSync(file, "utf8");
+      for (const link of text.matchAll(/\]\(([^)#\s]*)#([^)\s]+)\)/g)) {
+        const target = link[1] === "" ? own : link[1];
+        const slugs = targets[target];
+        if (!slugs) continue;
+        checked++;
+        expect(
+          slugs.has(link[2]),
+          `${path.basename(file)} links #${link[2]}, which is no heading of ${target || "SKILL.md"}`,
+        ).toBe(true);
+      }
+    }
+    expect(checked).toBeGreaterThan(10);
+  });
+
+  it("generic/ names no incident date", () => {
+    for (const name of ["SKILL.md", path.join("references", "rationale.md")]) {
+      const text = fs.readFileSync(path.join(FIXTURE, "generic", name), "utf8");
+      expect(text.match(/2026-\d\d-\d\d/g) ?? [], name).toEqual([]);
+    }
   });
 
   it("generic/ contains no line of specific-sites.txt", () => {
