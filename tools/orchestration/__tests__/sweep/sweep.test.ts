@@ -227,6 +227,48 @@ describe("sweep — the mutation carries the whole class", () => {
     expect(write).toContain("PR_I_1"); // the PR node id — subject of the comment
   });
 
+  test("a failed mutation says a comment may already have been posted, and prints the url it can recover", async () => {
+    const gh = async (args: readonly string[]): Promise<string> =>
+      args.some((a) => a.includes("mutation"))
+        ? JSON.stringify({
+            data: {
+              addComment: { comment: { url: "https://gh/c#issuecomment-9" } },
+            },
+            errors: [{ message: "resolve failed" }],
+          })
+        : threads(["PRRT_a", false]);
+    const error = await sweep(
+      { pr: 361, requested: ["PRRT_a"], disposition: "x" },
+      true,
+      { gh, out: () => undefined, repo: { owner: "acme", name: "demo" } },
+    ).then(
+      () => undefined,
+      (e: unknown) => e as Error,
+    );
+    expect(error?.message).toContain("resolve failed");
+    expect(error?.message).toContain("may already have been posted");
+    expect(error?.message).toContain("before retrying");
+    expect(error?.message).toContain("https://gh/c#issuecomment-9");
+  });
+
+  test("a gh that exits non-zero on the write gets the same warning", async () => {
+    const gh = async (args: readonly string[]): Promise<string> => {
+      if (args.some((a) => a.includes("mutation")))
+        throw new Error("gh: HTTP 502");
+      return threads(["PRRT_a", false]);
+    };
+    const error = await sweep(
+      { pr: 361, requested: ["PRRT_a"], disposition: "x" },
+      true,
+      { gh, out: () => undefined, repo: { owner: "acme", name: "demo" } },
+    ).then(
+      () => undefined,
+      (e: unknown) => e as Error,
+    );
+    expect(error?.message).toContain("HTTP 502");
+    expect(error?.message).toContain("may already have been posted");
+  });
+
   test("a class of one posts one comment and one resolve", async () => {
     const r = recorder(threads(["PRRT_a", false]));
     await sweep(plan({ requested: ["PRRT_a"] }), true, {

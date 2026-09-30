@@ -382,7 +382,23 @@ export async function sweep(
   ];
   ids.forEach((id, i) => args.push("-f", `thread${i}=${id}`));
   args.push("-f", `subject=${prId}`, "-f", `body=${body}`);
-  const written = JSON.parse(await deps.gh(args)) as {
+  // One mutation carries the comment and every resolve, and the platform can
+  // apply the comment and then fail a resolve. So a failed write is never a
+  // clean "nothing happened": the operator is told to look before retrying, or
+  // a retry posts the same class comment twice.
+  const mayHavePosted = (url: string | undefined): string =>
+    `a comment may already have been posted on PR #${plan.pr} — check the PR conversation before retrying${url === undefined ? "" : ` (posted comment: ${url})`}`;
+  let raw: string;
+  try {
+    raw = await deps.gh(args);
+  } catch (error) {
+    const reason = errorText(error);
+    throw new SweepRefusal(
+      `the mutation on PR #${plan.pr} failed: ${reason}; ${mayHavePosted(undefined)}`,
+      [reason],
+    );
+  }
+  const written = JSON.parse(raw) as {
     readonly data?: Record<string, unknown>;
     readonly errors?: readonly { readonly message?: string }[];
   };
@@ -390,8 +406,14 @@ export async function sweep(
     String(e.message ?? "unknown GraphQL error"),
   );
   if (writeErrors !== undefined && writeErrors.length > 0) {
+    const recovered = (
+      written.data?.["addComment"] as
+        | { comment?: { url?: string } }
+        | null
+        | undefined
+    )?.comment?.url;
     throw new SweepRefusal(
-      `the mutation on PR #${plan.pr} returned errors: ${writeErrors.join("; ")}`,
+      `the mutation on PR #${plan.pr} returned errors: ${writeErrors.join("; ")}; ${mayHavePosted(recovered)}`,
       writeErrors,
     );
   }
