@@ -37,6 +37,17 @@ import { join, resolve } from "node:path";
 const PACKAGE_ROOT = resolve(import.meta.dirname, "../..");
 const SCRIPT = resolve(PACKAGE_ROOT, "bin/merge-prs");
 
+/**
+ * The inherited environment WITHOUT any `GIT_*` variable. A test run inside a
+ * git hook (or any tool that exports `GIT_DIR`, `GIT_INDEX_FILE`, …) would
+ * otherwise point every git call here — the script's and the fixtures' — at the
+ * caller's repository instead of the throwaway one.
+ */
+const cleanEnv = (): Record<string, string | undefined> =>
+  Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+  );
+
 function hasZsh(): boolean {
   return spawnSync("zsh", ["-c", "exit 0"]).status === 0;
 }
@@ -67,13 +78,18 @@ function makeHarness(): Harness {
   const root = mkdtempSync(join(tmpdir(), "merge-prs-test-"));
   const repoDir = join(root, "repo");
   mkdirSync(repoDir, { recursive: true });
-  const init = spawnSync("git", ["init", "-q"], { cwd: repoDir });
+  const gitEnv = cleanEnv();
+  const init = spawnSync("git", ["init", "-q"], { cwd: repoDir, env: gitEnv });
   if (init.status !== 0)
     throw new Error(`git init failed: ${init.stderr?.toString()}`);
   spawnSync("git", ["config", "user.email", "test@example.invalid"], {
     cwd: repoDir,
+    env: gitEnv,
   });
-  spawnSync("git", ["config", "user.name", "Test"], { cwd: repoDir });
+  spawnSync("git", ["config", "user.name", "Test"], {
+    cwd: repoDir,
+    env: gitEnv,
+  });
 
   const stubBinDir = join(root, "bin");
   mkdirSync(stubBinDir, { recursive: true });
@@ -125,7 +141,7 @@ function makeHarness(): Harness {
  * access — the same reason the bins hand `process.env` around whole.
  */
 const runEnv = (harness: Harness, extra: Readonly<Record<string, string>>) => {
-  const inherited: Readonly<Record<string, string | undefined>> = process.env;
+  const inherited = cleanEnv();
   return {
     ...inherited,
     PATH: `${harness.stubBinDir}:${inherited.PATH ?? ""}`,
@@ -332,7 +348,12 @@ describe.skipIf(!hasZsh())("merge-prs — the required-check pattern", () => {
     try {
       // A lane with no wave dies at the top of the first iteration.
       runMergePrs(harness, ["42|wt|feat/x|RX-1|"]);
-      expect(configMarker(harness).trim().split("\n")).toHaveLength(1);
+      // It must have HAPPENED (an empty marker would also "not ask twice"),
+      // exactly once, and for the required check.
+      const asked = configMarker(harness);
+      expect(asked).not.toBe("");
+      expect(asked).toContain("requiredCheck");
+      expect(asked.trim().split("\n")).toHaveLength(1);
     } finally {
       harness.cleanup();
     }
@@ -543,7 +564,11 @@ describe.skipIf(!hasZsh())(
     }
 
     const git = (cwd: string, ...args: string[]) => {
-      const r = spawnSync("git", args, { cwd, encoding: "utf8" });
+      const r = spawnSync("git", args, {
+        cwd,
+        encoding: "utf8",
+        env: cleanEnv(),
+      });
       if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
       return r.stdout;
     };
@@ -654,8 +679,7 @@ describe.skipIf(!hasZsh())(
       s: Scenario,
       extra: Readonly<Record<string, string>> = {},
     ) => {
-      const inherited: Readonly<Record<string, string | undefined>> =
-        process.env;
+      const inherited = cleanEnv();
       return spawnSync("zsh", [SCRIPT, "42||feat/x"], {
         cwd: s.repoDir,
         encoding: "utf8",
