@@ -236,10 +236,10 @@ describe("orchestration template — emit shape", () => {
 
   it("emits every skill file byte-identical to its template source", async () => {
     for (const rel of EXPECTED_OUTPUTS.filter((r) => r !== GATE)) {
-      const source = await fs.readFile(path.join(TEMPLATE_FILES, rel), "utf8");
+      const source = await fs.readFile(path.join(TEMPLATE_FILES, rel));
       const emitted = await fs.readFile(path.join(projectRoot, rel));
       assert.ok(
-        Buffer.from(source, "utf8").equals(emitted),
+        source.equals(emitted),
         `${rel} is not byte-identical to its template source`,
       );
     }
