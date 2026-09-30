@@ -89,6 +89,12 @@ function makeHarness(): Harness {
     "    ;;",
     "esac",
     'case "$joined" in',
+    '  *" config repo "*)',
+    '    printf "%s" "${STUB_REPO-acme/demo}"',
+    '    exit "${STUB_REPO_EXIT:-0}"',
+    "    ;;",
+    "esac",
+    'case "$joined" in',
     '  *" config requiredCheck "*)',
     '    echo "$*" >> "$CONFIG_MARKER_FILE"',
     '    printf "%s" "${STUB_CONFIG_OUT-^Build}"',
@@ -374,6 +380,49 @@ describe.skipIf(!hasZsh())("merge-prs — the required-check pattern", () => {
   });
 });
 
+describe.skipIf(!hasZsh())("merge-prs — the repository", () => {
+  test("a GH_REPO that disagrees with the overlay dies, naming both, before any PR", () => {
+    const harness = makeHarness();
+    try {
+      const result = runMergePrs(harness, ["42|wt|feat/x"], {
+        GH_REPO: "globex/rollup",
+      });
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("globex/rollup");
+      expect(result.stderr).toContain("acme/demo");
+      expect(result.stdout).not.toContain("=== PR #42");
+    } finally {
+      harness.cleanup();
+    }
+  });
+
+  test("a GH_REPO that agrees is accepted", () => {
+    const harness = makeHarness();
+    try {
+      const result = runMergePrs(harness, ["42|wt|feat/x"], {
+        GH_REPO: "acme/demo",
+      });
+      expect(result.stdout).toContain("=== PR #42");
+    } finally {
+      harness.cleanup();
+    }
+  });
+
+  test("a lookup that fails, or answers nothing, dies before any PR", () => {
+    for (const env of [{ STUB_REPO_EXIT: "1" }, { STUB_REPO: "" }]) {
+      const harness = makeHarness();
+      try {
+        const result = runMergePrs(harness, ["42|wt|feat/x"], env);
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain("repository");
+        expect(result.stdout).not.toContain("=== PR #42");
+      } finally {
+        harness.cleanup();
+      }
+    }
+  });
+});
+
 /**
  * The script's own text.
  *
@@ -559,7 +608,7 @@ describe.skipIf(!hasZsh())(
       // The forge: one failing run on the pushed head, named with spaces.
       const gh = [
         "#!/bin/sh",
-        'echo "$*" >> "$GH_LOG"',
+        'echo "GH_REPO=$GH_REPO $*" >> "$GH_LOG"',
         'case " $* " in',
         // The forge: one healthy run, then two failing ones — one named with
         // spaces, one with parentheses — as a later "page" would deliver them.
@@ -664,6 +713,20 @@ describe.skipIf(!hasZsh())(
           expect(call).toContain("--paginate");
           expect(call).toContain("per_page=100");
         }
+      } finally {
+        s.cleanup();
+      }
+    });
+
+    test("every gh call runs with GH_REPO set to the overlay's repository", () => {
+      const s = makeScenario(false);
+      try {
+        runScenario(s);
+        const calls = readFileSync(join(s.root, "gh.log"), "utf8")
+          .split("\n")
+          .filter((line) => line !== "");
+        expect(calls.length).toBeGreaterThanOrEqual(2);
+        for (const call of calls) expect(call).toMatch(/^GH_REPO=acme\/demo /);
       } finally {
         s.cleanup();
       }

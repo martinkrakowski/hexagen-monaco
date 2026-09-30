@@ -471,6 +471,25 @@ describe("config", () => {
     expect(h.log).toEqual(["^Build"]);
   });
 
+  test("repo prints the resolved owner/name", async () => {
+    const h = harness({
+      argv: ["config", "repo"],
+      config: configFor({ repo: "globex/rollup" }),
+    });
+    expect(await runCli(h.io)).toBe(0);
+    expect(h.log).toEqual(["globex/rollup"]);
+  });
+
+  test("repo exits 2 and prints nothing when there is none", async () => {
+    const h = harness({
+      argv: ["config", "repo"],
+      config: { ...configFor(), repo: undefined },
+    });
+    expect(await runCli(h.io)).toBe(2);
+    expect(h.log).toEqual([]);
+    expect(h.err.join("\n")).toContain("repo");
+  });
+
   test("a field this command cannot answer exits 2", async () => {
     const h = harness({ argv: ["config", "planDir"] });
     expect(await runCli(h.io)).toBe(2);

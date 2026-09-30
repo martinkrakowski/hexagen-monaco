@@ -62,6 +62,21 @@ if [[ $# -ge 1 && "$1" == "--logdir" ]]; then
   shift 2
 fi
 
+# The repository every `gh` call in this run is about. `gh` otherwise infers one
+# from the working directory's remotes, which need not be the project's: the
+# overlay's `repo` is the one source, asked ONCE here, and exported as GH_REPO so
+# every `gh pr` call and every `{owner}/{repo}` placeholder in a `gh api` path
+# resolves to it. A GH_REPO the caller already exported is honoured only when it
+# agrees; two answers to "which repository" is a refusal, not a choice.
+CONFIG_REPO=$(npx --no-install hexagen-orchestration-sweep config repo) \
+  || die "could not resolve the repository from the project overlay — refusing to act on an inferred one"
+[[ -n "$CONFIG_REPO" ]] \
+  || die "the project overlay resolved no repository — refusing to act on an inferred one"
+if [[ -n "${GH_REPO:-}" && "$GH_REPO" != "$CONFIG_REPO" ]]; then
+  die "GH_REPO is $GH_REPO but the project overlay says $CONFIG_REPO — refusing to guess which is meant"
+fi
+export GH_REPO="$CONFIG_REPO"
+
 # The check whose conclusion gates a merge (a regular expression over check-run
 # names). A run that registers instantly — a review bot — must never satisfy
 # the wait on its own.

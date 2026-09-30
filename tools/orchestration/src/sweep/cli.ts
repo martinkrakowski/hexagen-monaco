@@ -420,6 +420,18 @@ async function runConfig(
     io.log(requiredCheck(io.config, io.env));
     return 0;
   }
+  if (field === "repo") {
+    // The resolved `owner/name`, as the bin's own refusal already guarantees it
+    // exists; still answered defensively, because an empty line would read as a
+    // repository to a caller that only checks the exit code.
+    const repo = io.config.repo;
+    if (repo === undefined || repo === "") {
+      io.logError("config has no repo: set `repo` in the overlay");
+      return 2;
+    }
+    io.log(repo);
+    return 0;
+  }
   io.logError(`config has no field '${field}'\n${CONFIG_USAGE}`);
   return 2;
 }

@@ -271,7 +271,7 @@ export function parseChecksArgs(
 }
 
 /** The one field `sweep config` can report. */
-export const CONFIG_FIELDS = ["requiredCheck"] as const;
+export const CONFIG_FIELDS = ["requiredCheck", "repo"] as const;
 
 export const CONFIG_USAGE = `usage: hexagen-orchestration-sweep config <${CONFIG_FIELDS.join("|")}>`;
 
