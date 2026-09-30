@@ -45,6 +45,21 @@ describe("parseVitestCommand", () => {
     ).toBe("a case");
   });
 
+  test("reads the inline spellings, `--testNamePattern=<p>` and `-t=<p>`, as the pattern", () => {
+    expect(
+      parseVitestCommand([
+        "yarn",
+        "vitest",
+        "run",
+        "a/b.test.ts",
+        "--testNamePattern=renamed-test",
+      ]),
+    ).toEqual({ files: ["a/b.test.ts"], pattern: "renamed-test" });
+    expect(
+      parseVitestCommand(["yarn", "vitest", "run", "-t=a=b case"]).pattern,
+    ).toBe("a=b case");
+  });
+
   test("never mistakes a flag's value for a file — `--project web` is not a filter", () => {
     expect(
       parseVitestCommand(["yarn", "vitest", "run", "--project", "web"]).files,

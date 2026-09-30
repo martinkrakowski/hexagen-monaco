@@ -73,6 +73,12 @@ export function parseVitestCommand(argv: readonly string[]): ParsedCommand {
       i++;
       continue;
     }
+    // The inline form: `--testNamePattern=x` and `-t=x` carry their own value.
+    const inline = /^(?:-t|--testNamePattern)=([\s\S]*)$/.exec(arg);
+    if (inline !== null) {
+      pattern = inline[1];
+      continue;
+    }
     if (arg.startsWith("-")) {
       // `--maxWorkers=2` carries its own value; `--project web` takes the next.
       if (!arg.includes("=") && VALUE_FLAGS.has(arg)) i++;
