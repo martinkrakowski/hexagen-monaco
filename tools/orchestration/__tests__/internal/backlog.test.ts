@@ -90,3 +90,32 @@ describe("readBacklog", () => {
     });
   });
 });
+
+describe("readBacklog and the repository an artifact was written for", () => {
+  const forRepo = (repo: string | undefined) =>
+    serializeArtifact({ ...artifact, ...(repo !== undefined ? { repo } : {}) });
+
+  test("an artifact recorded for a different repository is rejected", async () => {
+    const readFile = async () => forRepo("other/repo");
+    expect(await readBacklog(readFile, "/p.json", "acme/demo")).toEqual({
+      state: "unknown",
+    });
+  });
+
+  test("an artifact for this repository is recorded", async () => {
+    const readFile = async () => forRepo("acme/demo");
+    const result = await readBacklog(readFile, "/p.json", "acme/demo");
+    expect(result.state).toBe("recorded");
+  });
+
+  test("an artifact with no repo field is still readable", async () => {
+    const readFile = async () => forRepo(undefined);
+    const result = await readBacklog(readFile, "/p.json", "acme/demo");
+    expect(result.state).toBe("recorded");
+  });
+
+  test("without a repo to compare against, any artifact is accepted", async () => {
+    const readFile = async () => forRepo("other/repo");
+    expect((await readBacklog(readFile, "/p.json")).state).toBe("recorded");
+  });
+});

@@ -1,5 +1,5 @@
-import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { waveLogRoot, type LogDirConfig } from "./logdir.js";
 import type { PremiseResult, PremiseStatus } from "./premise-types.js";
 
 export const ARTIFACT_FILE_NAME = "plan-verify.json";
@@ -27,26 +27,45 @@ export interface PlanVerifyArtifact {
   readonly version: number;
   readonly at: string;
   readonly git: GitProvenance;
+  /**
+   * `owner/name` the artifact was written for. Absent on artifacts written
+   * before this field existed; a reader that knows its own repo rejects a
+   * recorded artifact whose repo differs.
+   */
+  readonly repo?: string;
   readonly scope: ArtifactScope;
   readonly plans: readonly string[];
   readonly premises: readonly ArtifactPremiseRecord[];
 }
 
+/**
+ * Where the artifact lives: `PLAN_VERIFY_ARTIFACT` if set, otherwise
+ * `plan-verify.json` under THIS repository's wave log root (`waveLogRoot`).
+ *
+ * The default used to be `~/.waves`, one directory shared by every project on
+ * the machine and the root this package exists to stay out of: two projects'
+ * verdicts would overwrite each other.
+ */
 export function artifactPathFor(
   env: Record<string, string | undefined>,
-  defaultRoot?: string,
+  config: LogDirConfig = {},
 ): string {
   const override = env[PLAN_VERIFY_ARTIFACT_ENV];
   if (override !== undefined && override !== "") {
     return override;
   }
-  const root =
-    defaultRoot !== undefined && defaultRoot !== ""
-      ? defaultRoot
-      : env.WAVE_LOG_ROOT && env.WAVE_LOG_ROOT !== ""
-        ? env.WAVE_LOG_ROOT
-        : join(homedir(), ".waves");
-  return join(root, ARTIFACT_FILE_NAME);
+  return join(
+    waveLogRoot(
+      {
+        ...(env.HOME !== undefined ? { HOME: env.HOME } : {}),
+        ...(env.WAVE_LOG_ROOT !== undefined
+          ? { WAVE_LOG_ROOT: env.WAVE_LOG_ROOT }
+          : {}),
+      },
+      config,
+    ),
+    ARTIFACT_FILE_NAME,
+  );
 }
 
 export function buildArtifact(
@@ -56,12 +75,14 @@ export function buildArtifact(
     readonly git: GitProvenance;
     readonly scope: ArtifactScope;
     readonly plans: readonly string[];
+    readonly repo?: string;
   },
 ): PlanVerifyArtifact {
   return {
     version: ARTIFACT_VERSION,
     at: meta.at,
     git: meta.git,
+    ...(meta.repo !== undefined ? { repo: meta.repo } : {}),
     scope: meta.scope,
     plans: meta.plans,
     premises: results.map((r) => ({
@@ -162,6 +183,10 @@ export function parseArtifact(text: string): PlanVerifyArtifact {
     head: rawGit.head,
   };
 
+  if (record.repo !== undefined && typeof record.repo !== "string") {
+    throw new Error("malformed artifact: repo must be a string");
+  }
+
   if (
     typeof record.scope !== "object" ||
     record.scope === null ||
@@ -239,6 +264,7 @@ export function parseArtifact(text: string): PlanVerifyArtifact {
     version: ARTIFACT_VERSION,
     at: record.at,
     git,
+    ...(typeof record.repo === "string" ? { repo: record.repo } : {}),
     scope,
     plans: [...record.plans],
     premises,

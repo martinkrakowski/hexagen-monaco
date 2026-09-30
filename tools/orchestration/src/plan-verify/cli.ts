@@ -28,6 +28,8 @@ export interface PlanVerifyIo {
    * source). Defaults to the source's own value so a direct caller keeps working.
    */
   readonly planDir?: string;
+  /** `owner/name`, stamped into the artifact so a reader can reject a foreign one. */
+  readonly repo?: string;
 }
 
 /** The fallback plan directory, matching the source's own constant. */
@@ -72,6 +74,7 @@ export async function runCli(io: PlanVerifyIo): Promise<number> {
     git: { branch, head },
     scope,
     plans,
+    ...(io.repo !== undefined ? { repo: io.repo } : {}),
   });
 
   const path = io.artifactPath();

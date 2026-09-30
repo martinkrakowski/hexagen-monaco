@@ -8,6 +8,7 @@ export type BacklogState =
 export async function readBacklog(
   readFile: (path: string) => Promise<string>,
   path: string,
+  repo?: string,
 ): Promise<BacklogState> {
   let text: string;
   try {
@@ -26,6 +27,15 @@ export async function readBacklog(
 
   try {
     const artifact = parseArtifact(text);
+    // An artifact written for a different repository is not this project's
+    // backlog, and showing it would report another repo's stale lanes here.
+    if (
+      repo !== undefined &&
+      artifact.repo !== undefined &&
+      artifact.repo !== repo
+    ) {
+      return { state: "unknown" };
+    }
     return { state: "recorded", artifact };
   } catch {
     return { state: "unknown" };

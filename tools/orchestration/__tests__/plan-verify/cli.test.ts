@@ -49,6 +49,18 @@ const io = (over: Partial<PlanVerifyIo> = {}): Harness => {
   };
 };
 
+describe("the artifact carries the repository it was written for", () => {
+  test("repo is stamped when the bin knows it, and absent when it does not", async () => {
+    const stamped = io({ repo: "acme/demo" });
+    await runCli(stamped.io);
+    expect(parseArtifact(stamped.artifact()!.contents).repo).toBe("acme/demo");
+
+    const bare = io();
+    await runCli(bare.io);
+    expect(parseArtifact(bare.artifact()!.contents).repo).toBeUndefined();
+  });
+});
+
 describe("runCli", () => {
   test("exits 0 and says so when every premise holds", async () => {
     const { io: i, log } = io();

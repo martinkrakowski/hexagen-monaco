@@ -1,5 +1,4 @@
 import { describe, expect, test } from "vitest";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   ARTIFACT_FILE_NAME,
@@ -54,6 +53,8 @@ const valid = () =>
   });
 
 describe("artifactPathFor", () => {
+  const demo = { repo: "acme/demo" };
+
   test("the env var overrides the default location — the test and CI seam", () => {
     expect(
       artifactPathFor({ [PLAN_VERIFY_ARTIFACT_ENV]: "/tmp/pv.json" }),
@@ -72,21 +73,31 @@ describe("artifactPathFor", () => {
     );
   });
 
-  test("with no env at all the default is ~/.waves/plan-verify.json — never a tracked path", () => {
-    const path = artifactPathFor({});
-    expect(path).toBe(join(homedir(), ".waves", ARTIFACT_FILE_NAME));
+  test("with no override and no root, the default is THIS repo's root — never the shared ~/.waves", () => {
+    const path = artifactPathFor({ HOME: "/home/op" }, demo);
+    expect(path).toBe(join("/home/op/.waves-demo", ARTIFACT_FILE_NAME));
+    expect(path).not.toContain("/.waves/");
     expect(path).not.toContain("docs");
   });
 
-  test("uses defaultRoot when provided and not overridden", () => {
-    expect(artifactPathFor({}, "/custom/root")).toBe(
-      join("/custom/root", ARTIFACT_FILE_NAME),
+  test("the config's waveLogDir is honoured, with HOME expanded", () => {
+    expect(
+      artifactPathFor(
+        { HOME: "/home/op" },
+        { ...demo, waveLogDir: "$HOME/.waves-hexagen" },
+      ),
+    ).toBe(join("/home/op/.waves-hexagen", ARTIFACT_FILE_NAME));
+  });
+
+  test("an unset HOME falls back to /tmp/.waves-<name>, the per-repo root rule", () => {
+    expect(artifactPathFor({}, demo)).toBe(
+      join("/tmp/.waves-demo", ARTIFACT_FILE_NAME),
     );
   });
 
-  test("an empty defaultRoot falls back to env or homedir", () => {
-    expect(artifactPathFor({ WAVE_LOG_ROOT: "/w" }, "")).toBe(
-      join("/w", ARTIFACT_FILE_NAME),
+  test("with no repo to name a root it refuses rather than using a shared one", () => {
+    expect(() => artifactPathFor({ HOME: "/home/op" })).toThrow(
+      /no repository name/,
     );
   });
 });

@@ -79,12 +79,19 @@ if (refusal !== undefined) {
             else resolve(stdout);
           });
         }),
-      artifactPath: () => artifactPathFor(process.env),
+      artifactPath: () =>
+        artifactPathFor(process.env, {
+          ...(config.repo !== undefined ? { repo: config.repo } : {}),
+          ...(config.waveLogDir !== undefined
+            ? { waveLogDir: config.waveLogDir }
+            : {}),
+        }),
       writeArtifact: async (path, contents) => {
         await mkdir(dirname(path), { recursive: true });
         await writeArtifact(path, contents);
       },
       planDir: config.planDir,
+      ...(config.repo !== undefined ? { repo: config.repo } : {}),
     });
   } catch (error: unknown) {
     console.error(error instanceof Error ? error.message : errorText(error));
