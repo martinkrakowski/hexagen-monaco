@@ -144,7 +144,15 @@ STATUS=0
 REPLAYED=0
 while IFS= read -r manifest; do
   [ -n "$manifest" ] || continue
-  [ -f "$manifest" ] || continue
+  # `--diff-filter=d` already drops deletions, so an entry that is not a file
+  # here is a name git quoted (a tab, a newline, a non-ASCII byte) and this shell
+  # cannot open. Skipping it would report "nothing to replay" for a claim that
+  # changed, which is the silence this script exists to refuse.
+  if [ ! -f "$manifest" ]; then
+    # printf, not echo: dash's echo turns the backslash-t git wrote into a tab.
+    printf "verify-manifests: changed manifest '%s' is not a readable file (git may have quoted its name) — refusing to skip it\n" "$manifest" >&2
+    exit 2
+  fi
   REPLAYED=$((REPLAYED + 1))
   echo "verify-manifests: replaying $manifest"
   if ! npx --no-install hexagen-orchestration-mutate-verify "$manifest"; then

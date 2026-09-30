@@ -374,6 +374,26 @@ describe("replaying what changed", () => {
     },
   );
 
+  forEachShell(
+    "11b. a changed manifest whose name git quotes is refused, not skipped",
+    (shell) => {
+      const r = repo();
+      r.commitManifest();
+      const base = r.commit("seed");
+      r.remote("main", base);
+      r.manifest({ name: "with\ttab.json" });
+      r.commit("add a manifest with a tab in its name");
+
+      const result = runScript(shell.command, r, { cwd: r.root });
+      const out = `${result.stdout}${result.stderr}`;
+
+      expect(result.status, out).toBe(2);
+      expect(result.stderr, out).toContain(
+        "verify-manifests: changed manifest '\".agents/manifests/with\\ttab.json\"' is not a readable file (git may have quoted its name) — refusing to skip it",
+      );
+    },
+  );
+
   forEachShell("12. no changed manifest says so and exits 0", (shell) => {
     const r = repo();
     r.commitManifest();
