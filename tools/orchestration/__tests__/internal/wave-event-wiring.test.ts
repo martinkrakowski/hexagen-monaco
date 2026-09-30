@@ -1,8 +1,18 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { emptyConfig } from "../../src/internal/config.js";
+import { loadConfigFor } from "../../src/internal/project.js";
 import {
   buildWaveEventDeps,
   nodeWaveEventIo,
@@ -59,6 +69,15 @@ function recorder(directories: readonly string[] = []): Recorder {
 }
 
 const ARGV = ["W3", "l1", "dispatch", "started"];
+
+function project(config: string | undefined): string {
+  const root = scratch();
+  if (config !== undefined) {
+    mkdirSync(join(root, ".agents/orchestration"), { recursive: true });
+    writeFileSync(join(root, ".agents/orchestration/config.yaml"), config);
+  }
+  return root;
+}
 
 describe("buildWaveEventDeps", () => {
   const config = { ...emptyConfig(), repo: "owner/demo" };
@@ -117,5 +136,82 @@ describe("F11: HOME is passed through, never replaced by the passwd home", () =>
       LOGDIR: "/l",
       WAVE_LOG_ROOT: "/r",
     });
+  });
+});
+
+describe("F10: a present-but-invalid config refuses instead of re-routing events", () => {
+  const INVALID = [
+    "cast: []",
+    'waveLogDir: "$HOME/.waves-hexagen"',
+    "repo: owner/demo",
+    "",
+  ].join("\n");
+
+  test("exits 2, appends nothing, creates nothing, and names the problem", async () => {
+    const loaded = await loadConfigFor(project(INVALID), {
+      readRepository: () => "someone/else",
+    });
+    const rec = recorder();
+    const code = await runWaveEventForProject(
+      ARGV,
+      { HOME: "/home/op" },
+      loaded,
+      rec.io,
+    );
+    expect(code).toBe(2);
+    expect(rec.appended).toEqual([]);
+    expect(rec.created).toEqual([]);
+    const said = rec.stderr.join("\n");
+    expect(said).toContain("cast");
+    expect(said).toContain("refusing to append");
+  });
+
+  test("an ABSENT file keeps today's defaults, and still appends", async () => {
+    const loaded = await loadConfigFor(project(undefined), {
+      readRepository: () => "acme/demo",
+    });
+    const rec = recorder();
+    const code = await runWaveEventForProject(
+      ARGV,
+      { HOME: "/home/op" },
+      loaded,
+      rec.io,
+    );
+    expect(code).toBe(0);
+    expect(rec.appended).toEqual(["/home/op/.waves-demo/wave-W3/events.jsonl"]);
+  });
+
+  test("a VALID file routes to its own waveLogDir", async () => {
+    const loaded = await loadConfigFor(
+      project('repo: owner/demo\nwaveLogDir: "$HOME/.waves-hexagen"\n'),
+      { readRepository: () => "someone/else" },
+    );
+    const rec = recorder();
+    const code = await runWaveEventForProject(
+      ARGV,
+      { HOME: "/home/op" },
+      loaded,
+      rec.io,
+    );
+    expect(code).toBe(0);
+    expect(rec.appended).toEqual([
+      "/home/op/.waves-hexagen/wave-W3/events.jsonl",
+    ]);
+  });
+
+  test("the BUILT bin refuses, and writes nothing under HOME", () => {
+    const dist = resolve(import.meta.dirname, "../../dist/bins/wave-event.js");
+    expect(existsSync(dist), "run `yarn build` first").toBe(true);
+    const root = project(INVALID);
+    expect(spawnSync("git", ["init", "-q"], { cwd: root }).status).toBe(0);
+    const home = scratch();
+    const result = spawnSync(process.execPath, [dist, ...ARGV], {
+      cwd: root,
+      encoding: "utf8",
+      env: { HOME: home },
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("cast");
+    expect(readdirSync(home)).toEqual([]);
   });
 });
