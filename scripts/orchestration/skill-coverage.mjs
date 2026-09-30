@@ -376,7 +376,7 @@ function checkTokenReview(reviewPath, genericDir, sourceDir, hexagenRoot) {
     } catch {
       continue;
     }
-    if (text.includes(" ")) continue;
+    if (text.includes("\0")) continue;
     corpus += `\n${text}`;
   }
 
