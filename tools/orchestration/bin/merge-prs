@@ -94,14 +94,20 @@ REVIEW_SETTLE_SECONDS=${REVIEW_SETTLE_SECONDS:-120}
 resolve_append_only_or_die() {
   # NB: never name a local `path` in zsh — it is tied to $PATH and shadowing it
   # empties PATH inside the function (every git/awk/sort call then fails).
-  local conflicts file stages
+  local conflicts file stages abs
   # `git ls-files -u` is the canonical unmerged listing; `git diff --diff-filter=U`
   # carries diff exit-code semantics that vary with config.
   conflicts=$(git ls-files -u | awk '{print $4}' | sort -u)
   [[ -n "$conflicts" ]] || die "merge failed with no conflicted paths (check the working tree)"
 
   for file in ${(f)conflicts}; do
-    npx --no-install hexagen-orchestration-sweep append-only "$file" \
+    # Package resolution: `npx --no-install` finds the bins only from inside the
+    # repository that has them installed, and this function also runs in a
+    # throwaway worktree under $TMPDIR, which has no node_modules. So both calls
+    # run from $REPO in a subshell. `append-only` tests the path as written
+    # (repo-relative); `keep-both` resolves a relative path against the repository
+    # root rather than the caller's directory, so it is handed an absolute one.
+    ( cd "$REPO" && npx --no-install hexagen-orchestration-sweep append-only "$file" ) \
       || { git merge --abort; die "UNEXPECTED CONFLICT in: ${conflicts//$'\n'/ }" }
     # 1=base 2=ours 3=theirs. Anything else is modify/delete or add/add of a special file.
     stages=$(git ls-files -u -- "$file" | awk '{print $3}' | sort -u | tr '\n' ',')
@@ -114,7 +120,8 @@ resolve_append_only_or_die() {
   done
 
   for file in ${(f)conflicts}; do
-    npx --no-install hexagen-orchestration-sweep keep-both "$file" \
+    abs="$PWD/$file"
+    ( cd "$REPO" && npx --no-install hexagen-orchestration-sweep keep-both "$abs" ) \
       || { git merge --abort; die "keep-both failed on $file" }
     git add -- "$file" || { git merge --abort; die "git add failed for $file" }
   done

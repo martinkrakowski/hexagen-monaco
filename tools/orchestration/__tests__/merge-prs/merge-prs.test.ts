@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -468,3 +469,152 @@ describe.skipIf(!hasZsh())(`merge-prs — the script parses (${NO_ZSH})`, () => 
     expect(result.status).toBe(0);
   });
 });
+
+/**
+ * The refresh and the check read, end to end against the real built `sweep`.
+ *
+ * `npx --no-install` resolves a package's bins only from inside the project
+ * that has them installed. The refresh for a PR with no worktree runs in a
+ * throwaway worktree under the temp directory, which has no `node_modules`, so a
+ * call made from there finds nothing. The stub here emulates that resolution —
+ * it answers 127, as npx does, unless the working directory is inside the
+ * repository — and otherwise hands the call to the real built bin, so the
+ * append-only test, the resolver and the check parse are the shipped ones.
+ */
+describe.skipIf(!hasZsh())(
+  "merge-prs — the refresh and the check read, against the real sweep bin",
+  () => {
+    const SWEEP_BIN = resolve(PACKAGE_ROOT, "dist/bins/sweep.js");
+
+    interface Scenario {
+      readonly repoDir: string;
+      readonly stubBinDir: string;
+      readonly root: string;
+      cleanup(): void;
+    }
+
+    const git = (cwd: string, ...args: string[]) => {
+      const r = spawnSync("git", args, { cwd, encoding: "utf8" });
+      if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
+      return r.stdout;
+    };
+
+    /**
+     * A clone of a bare origin. `feat/x` and `main` each appended a line to
+     * CHANGELOG.md when `conflict` is set, so refreshing `feat/x` conflicts in
+     * a file the overlay declares append-only.
+     */
+    function makeScenario(conflict: boolean): Scenario {
+      const root = realpathSync(
+        mkdtempSync(join(tmpdir(), "merge-prs-refresh-")),
+      );
+      const origin = join(root, "origin.git");
+      const repoDir = join(root, "repo");
+      git(root, "init", "-q", "--bare", "-b", "main", origin);
+      git(root, "clone", "-q", origin, repoDir);
+      git(repoDir, "config", "user.email", "test@example.invalid");
+      git(repoDir, "config", "user.name", "Test");
+      git(repoDir, "checkout", "-q", "-b", "main");
+      writeFileSync(join(repoDir, "CHANGELOG.md"), "# Log\n");
+      git(repoDir, "add", "CHANGELOG.md");
+      git(repoDir, "commit", "-q", "-m", "base");
+      git(repoDir, "push", "-q", "origin", "main");
+      git(repoDir, "checkout", "-q", "-b", "feat/x");
+      writeFileSync(join(repoDir, "feature.txt"), "feature\n");
+      git(repoDir, "add", "feature.txt");
+      if (conflict)
+        writeFileSync(join(repoDir, "CHANGELOG.md"), "# Log\n- feature\n");
+      git(repoDir, "add", "CHANGELOG.md");
+      git(repoDir, "commit", "-q", "-m", "feature");
+      git(repoDir, "push", "-q", "origin", "feat/x");
+      git(repoDir, "checkout", "-q", "main");
+      writeFileSync(
+        join(repoDir, "CHANGELOG.md"),
+        conflict ? "# Log\n- main change\n" : "# Log\n",
+      );
+      writeFileSync(join(repoDir, "other.txt"), "other\n");
+      git(repoDir, "add", "CHANGELOG.md", "other.txt");
+      git(repoDir, "commit", "-q", "-m", "main moves");
+      git(repoDir, "push", "-q", "origin", "main");
+      mkdirSync(join(repoDir, ".agents/orchestration"), { recursive: true });
+      writeFileSync(
+        join(repoDir, ".agents/orchestration/config.yaml"),
+        "repo: acme/demo\nappendOnlyPaths: ^CHANGELOG\\.md$\n",
+      );
+
+      const stubBinDir = join(root, "bin");
+      mkdirSync(stubBinDir, { recursive: true });
+      const npx = [
+        "#!/bin/sh",
+        'case "$PWD" in',
+        '  "$REPO_DIR"|"$REPO_DIR"/*) ;;',
+        '  *) echo "npx: command not found in project" >&2; exit 127 ;;',
+        "esac",
+        'case " $* " in',
+        '  *" hexagen-orchestration-sweep "*) shift 2; exec node "$SWEEP_BIN" "$@" ;;',
+        "esac",
+        "exit 0",
+        "",
+      ].join("\n");
+      // The forge: one failing run on the pushed head, named with spaces.
+      const gh = [
+        "#!/bin/sh",
+        'case " $* " in',
+        '  *"check-runs"*"length"*) echo 1 ;;',
+        '  *"check-runs"*) echo \'[{"n":"Build and Test","s":"completed","c":"failure"}]\' ;;',
+        "esac",
+        "exit 0",
+        "",
+      ].join("\n");
+      for (const [name, body] of [
+        ["npx", npx],
+        ["gh", gh],
+      ] as const) {
+        writeFileSync(join(stubBinDir, name), body);
+        chmodSync(join(stubBinDir, name), 0o755);
+      }
+      return {
+        repoDir,
+        stubBinDir,
+        root,
+        cleanup: () => rmSync(root, { recursive: true, force: true }),
+      };
+    }
+
+    const runScenario = (s: Scenario) => {
+      const inherited: Readonly<Record<string, string | undefined>> =
+        process.env;
+      return spawnSync("zsh", [SCRIPT, "42||feat/x"], {
+        cwd: s.repoDir,
+        encoding: "utf8",
+        env: {
+          ...inherited,
+          PATH: `${s.stubBinDir}:${inherited.PATH ?? ""}`,
+          REPO_DIR: s.repoDir,
+          SWEEP_BIN,
+        },
+      });
+    };
+
+    test("an append-only conflict in the temporary worktree resolves, and the run proceeds past the refresh", () => {
+      const s = makeScenario(true);
+      try {
+        const result = runScenario(s);
+        expect(result.stderr).not.toContain("command not found in project");
+        expect(result.stdout).toContain(
+          "resolved append-only conflicts: CHANGELOG.md",
+        );
+        expect(result.stdout).toContain("waiting for checks on");
+        // Ours (the branch) then theirs (main), pushed to the branch ref.
+        expect(
+          git(s.repoDir, "show", "origin/feat/x:CHANGELOG.md").replace(
+            /\r/g,
+            "",
+          ),
+        ).toBe("# Log\n- feature\n- main change\n");
+      } finally {
+        s.cleanup();
+      }
+    });
+  },
+);

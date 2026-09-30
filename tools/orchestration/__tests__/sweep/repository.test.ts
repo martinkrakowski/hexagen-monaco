@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { runCli } from "../../src/sweep/cli.js";
@@ -321,6 +327,19 @@ describe("the built bin", () => {
     const result = run(root, ["checks"], "not json");
     expect(result.status).toBe(2);
     expect(result.stdout).toBe("");
+  });
+
+  test("`keep-both` accepts an absolute path and keeps it, from any working directory", () => {
+    // `resolve(root, abs)` returns `abs`: the merge script hands the resolver an
+    // absolute path because it may run from a worktree that is not the root.
+    const root = repository("repo: acme/demo\n");
+    const elsewhere = mkdtempSync(join(tmpdir(), "sweep-elsewhere-"));
+    dirs.push(elsewhere);
+    const file = join(elsewhere, "f.txt");
+    writeFileSync(file, "<<<<<<< HEAD\no\n=======\nt\n>>>>>>> origin/main\n");
+    const result = run(root, ["keep-both", file]);
+    expect(result.status).toBe(0);
+    expect(readFileSync(file, "utf8")).toBe("o\nt\n");
   });
 
   test("`keep-both` resolves a file under the repository root, not the working directory", () => {
