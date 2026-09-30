@@ -65,6 +65,7 @@ const configFor = (over: Partial<Config> = {}): Config => ({
   invariants: { ...LOCKED_INVARIANTS },
   repo: "acme/demo",
   waveStatusPort: 4318,
+  ciWorkflow: ".github/workflows/ci.yml",
   ...over,
 });
 
