@@ -56,6 +56,15 @@ describe("F5: a repo from gh is validated, and its problem is kept", () => {
     }
   });
 
+  test("F17: invalid YAML with a bad gh answer reports both the file and the repo", async () => {
+    const loaded = await loadConfigFor(
+      project("planDir: [unclosed\n"),
+      gh("not-a-repo"),
+    );
+    expect(loaded.problems.map((p) => p.at).sort()).toEqual(["<file>", "repo"]);
+    expect(loaded.config.repo).toBeUndefined();
+  });
+
   test("the file's own repo wins, and gh is not consulted", async () => {
     let asked = false;
     const loaded = await loadConfigFor(project("repo: acme/own\n"), {

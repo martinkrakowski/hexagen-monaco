@@ -2,7 +2,12 @@ import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CONFIG_RELATIVE_PATH, loadConfig, type Config } from "./config.js";
+import {
+  CONFIG_RELATIVE_PATH,
+  loadConfig,
+  type Config,
+  type ConfigProblem,
+} from "./config.js";
 
 /**
  * Locating the project, and the `gh` fallback, for the bins that need both.
@@ -113,18 +118,24 @@ export interface ProjectDeps {
   readonly readRepository?: (cwd: string) => string | undefined;
 }
 
-/** Every default, for a project with no overlay at all. */
+/**
+ * Every default, for a project with no overlay at all, WITH the problems
+ * resolving it raised (a `gh` answer that is not `owner/name`). Callers must
+ * carry those problems; keeping only `.config` silently discards them.
+ */
 export async function emptyConfigFor(
   root: string,
   deps: ProjectDeps = {},
-): Promise<Config> {
+): Promise<{
+  readonly config: Config;
+  readonly problems: readonly ConfigProblem[];
+}> {
   const read = deps.readRepository ?? readRepositoryFromGh;
-  return (
-    await loadConfig({
-      readConfig: async () => undefined,
-      repo: async () => read(root),
-    })
-  ).config!;
+  const result = await loadConfig({
+    readConfig: async () => undefined,
+    repo: async () => read(root),
+  });
+  return { config: result.config!, problems: result.problems };
 }
 
 /**
@@ -170,13 +181,17 @@ export async function loadConfigFor(
     repo: async () => read(root),
   });
 
+  // A whole-file fault (not YAML, not a mapping) has no config to return, so
+  // the defaults stand in, and whatever THEIR resolution raised is kept
+  // alongside the `<file>` problem rather than dropped.
+  const fallback =
+    result.config === undefined ? await emptyConfigFor(root, deps) : undefined;
+
   return {
     root,
-    // Invalid: a defaulted config, so a bin that only needs `planDir` still
-    // runs and says something useful.
-    config: result.config ?? (await emptyConfigFor(root, deps)),
+    config: result.config ?? fallback!.config,
     present: text !== undefined,
-    problems: result.problems,
+    problems: [...result.problems, ...(fallback?.problems ?? [])],
   };
 }
 
