@@ -1,7 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { accessSync, constants, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import {
+  accessSync,
+  constants,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 /**
  * The scaffold's contract (OW-D1, OW-D12, OW-D14).
@@ -24,83 +32,72 @@ const manifest = JSON.parse(
   devDependencies?: Record<string, string>;
 };
 
-/** Every bin, and which sub-lane implements it. */
-const EXPECTED: ReadonlyArray<{ name: string; path: string; stub: boolean }> = [
+/**
+ * Every bin and its pinned final path. This list is the contract; it does NOT
+ * say which bins are still stubs. That is derived from each bin's own source
+ * (below), so a sub-lane that replaces a stub needs no edit to this file.
+ */
+const EXPECTED: ReadonlyArray<{ name: string; path: string }> = [
   {
     name: "hexagen-orchestration-wave-event",
     path: "dist/bins/wave-event.js",
-    stub: false,
   },
   {
     name: "hexagen-orchestration-plan-verify",
     path: "dist/bins/plan-verify.js",
-    stub: false,
   },
   {
     name: "hexagen-orchestration-handoff-check",
     path: "dist/bins/handoff-check.js",
-    stub: false,
   },
   {
     name: "hexagen-orchestration-control-bytes",
     path: "dist/bins/control-bytes.js",
-    stub: false,
   },
   {
     name: "hexagen-orchestration-init",
     path: "dist/bins/init.js",
-    stub: false,
   },
   {
     name: "hexagen-orchestration-doctor",
     path: "dist/bins/doctor.js",
-    stub: false,
   },
   {
     name: "hexagen-orchestration-plan-review",
     path: "dist/bins/plan-review.js",
-    stub: true,
   },
   {
     name: "hexagen-orchestration-sweep",
     path: "dist/bins/sweep.js",
-    stub: true,
   },
   {
     name: "hexagen-orchestration-mutate",
     path: "dist/bins/mutate.js",
-    stub: true,
   },
   {
     name: "hexagen-orchestration-mutate-verify",
     path: "dist/bins/mutate-verify.js",
-    stub: true,
   },
   {
     name: "hexagen-orchestration-mutate-anchors",
     path: "dist/bins/mutate-anchors.js",
-    stub: true,
   },
   {
     name: "hexagen-orchestration-verify-manifests",
     path: "bin/verify-manifests",
-    stub: true,
   },
   {
     name: "hexagen-orchestration-merge-prs",
     path: "bin/merge-prs",
-    stub: true,
   },
   {
     name: "hexagen-orchestration-wave-status",
     path: "dist/bins/wave-status.js",
-    stub: true,
   },
-  { name: "hexagen-orchestration-gate", path: "dist/bins/gate.js", stub: true },
+  { name: "hexagen-orchestration-gate", path: "dist/bins/gate.js" },
   {
     name: "hexagen-orchestration-gate-lock",
     path: "bin/gate-lock",
-    stub: true,
   },
 ];
 
@@ -164,11 +161,37 @@ describe("the built artifacts", () => {
   });
 });
 
-describe("the ten stubs", () => {
-  const stubs = EXPECTED.filter((bin) => bin.stub);
+/** The line every stub carries, and the only thing that makes a bin one. */
+const STUB_MARKER = "not yet ported";
 
-  it("are exactly ten", () => {
-    expect(stubs).toHaveLength(10);
+/** Whether a bin's SOURCE is still the stub. */
+function isStubSource(text: string): boolean {
+  return text.includes(STUB_MARKER);
+}
+
+/** A bin's source file: the TypeScript behind a dist path, or the script itself. */
+function sourceOf(path: string): string {
+  const built = /^dist\/bins\/(.+)\.js$/.exec(path);
+  return built ? `src/bins/${built[1]}.ts` : path;
+}
+
+const stubs = EXPECTED.filter((bin) =>
+  isStubSource(readFileSync(resolve(PACKAGE_ROOT, sourceOf(bin.path)), "utf8")),
+);
+
+describe("the stubs", () => {
+  it("the six OW3a bins are never stubs", () => {
+    const names = stubs.map((bin) => bin.name);
+    for (const done of [
+      "wave-event",
+      "plan-verify",
+      "handoff-check",
+      "control-bytes",
+      "init",
+      "doctor",
+    ]) {
+      expect(names).not.toContain(`hexagen-orchestration-${done}`);
+    }
   });
 
   // `spawnSync`, not `execFileSync`: a stub that wrongly exits 0 is exactly the
@@ -186,4 +209,37 @@ describe("the ten stubs", () => {
       expect(result.stdout, `${name} stdout`).toBe("");
     },
   );
+});
+
+describe("the stub classifier", () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const dir of dirs.splice(0))
+      rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("treats a copy of a real bin as not a stub, and the same copy with the marker as one", () => {
+    const real = readFileSync(
+      resolve(PACKAGE_ROOT, "src/bins/doctor.ts"),
+      "utf8",
+    );
+    const dir = mkdtempSync(join(tmpdir(), "orchestration-stub-"));
+    dirs.push(dir);
+    writeFileSync(join(dir, "real.ts"), real);
+    writeFileSync(
+      join(dir, "marked.ts"),
+      `${real}\nconsole.error("hexagen-orchestration-doctor: not yet ported");\n`,
+    );
+    expect(isStubSource(readFileSync(join(dir, "real.ts"), "utf8"))).toBe(
+      false,
+    );
+    expect(isStubSource(readFileSync(join(dir, "marked.ts"), "utf8"))).toBe(
+      true,
+    );
+  });
+
+  it("maps a dist path to its source and a shell bin to itself", () => {
+    expect(sourceOf("dist/bins/gate.js")).toBe("src/bins/gate.ts");
+    expect(sourceOf("bin/gate-lock")).toBe("bin/gate-lock");
+  });
 });
