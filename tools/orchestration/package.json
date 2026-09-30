@@ -54,6 +54,7 @@
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.12.7",
+    "eslint": "^8.57.0",
     "tsup": "^8.1.0",
     "typescript": "^5.4.5",
     "vitest": "^4.1.9"

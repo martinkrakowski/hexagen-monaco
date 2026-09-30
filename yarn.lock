@@ -1226,6 +1226,7 @@ __metadata:
   dependencies:
     "@types/js-yaml": "npm:^4.0.9"
     "@types/node": "npm:^20.12.7"
+    eslint: "npm:^8.57.0"
     js-yaml: "npm:^4.1.1"
     tsup: "npm:^8.1.0"
     typescript: "npm:^5.4.5"
