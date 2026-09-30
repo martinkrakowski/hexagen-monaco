@@ -1,3 +1,4 @@
+import { constants } from "node:os";
 import type { Config, ConfigProblem } from "../internal/config.js";
 import { configRefusal } from "../internal/refusal.js";
 import {
@@ -131,6 +132,28 @@ export function loopEnv(
       .map((skip) => `${skip.name}\t${skip.reason}`)
       .join("\n"),
   };
+}
+
+/**
+ * The exit code for a loop that was killed by a signal: 128 + the signal's
+ * number, the shell convention, taken from the host's own table so no signal is
+ * mapped by a hand-kept list. A name the host has no number for cannot be
+ * mapped honestly, so it is exit 1 with a message naming the signal.
+ */
+export function exitForSignal(
+  signal: string,
+  signals: Readonly<Record<string, number>> = constants.signals,
+): { readonly code: number; readonly message?: string } {
+  const number = Object.prototype.hasOwnProperty.call(signals, signal)
+    ? signals[signal]
+    : undefined;
+  if (number === undefined) {
+    return {
+      code: 1,
+      message: `gate: the loop was killed by ${signal}, which has no signal number on this host`,
+    };
+  }
+  return { code: 128 + number };
 }
 
 /** The caller's argv with `--print-steps` taken out of it, wherever it appears. */

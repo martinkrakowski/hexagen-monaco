@@ -17,7 +17,7 @@ import { readFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findRepositoryRoot, loadConfigFor } from "../internal/project.js";
-import { EXIT_UNUSABLE, runGate } from "../gate/cli.js";
+import { EXIT_UNUSABLE, exitForSignal, runGate } from "../gate/cli.js";
 
 const root = await findRepositoryRoot();
 const loaded = await loadConfigFor(root);
@@ -99,9 +99,11 @@ try {
         // Killed by a signal: `status` is null and the convention is 128+signo,
         // which is also what the loop itself would have reported had it been
         // the process that died.
-        return child.signal === null
-          ? EXIT_UNUSABLE
-          : 128 + signalNumber(child.signal);
+        if (child.signal === null) return EXIT_UNUSABLE;
+        const exit = exitForSignal(child.signal);
+        if (exit.message !== undefined)
+          process.stderr.write(`${exit.message}\n`);
+        return exit.code;
       },
     },
     loopScript,
@@ -110,16 +112,4 @@ try {
 } catch (error: unknown) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = EXIT_UNUSABLE;
-}
-
-/** `SIGTERM` → 15, by name. Node does not export the numbers. */
-function signalNumber(signal: NodeJS.Signals): number {
-  const table: Partial<Record<NodeJS.Signals, number>> = {
-    SIGHUP: 1,
-    SIGINT: 2,
-    SIGQUIT: 3,
-    SIGKILL: 9,
-    SIGTERM: 15,
-  };
-  return table[signal] ?? 1;
 }

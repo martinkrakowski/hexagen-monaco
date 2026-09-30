@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { Config } from "../../src/internal/config.js";
-import { runGate as runGateCli } from "../../src/gate/cli.js";
+import { exitForSignal, runGate as runGateCli } from "../../src/gate/cli.js";
 
 /**
  * The gate's front end, at the built bin.
@@ -375,6 +375,20 @@ describe("--print-steps and package.json", () => {
     const result = runGate(root, ["--print-steps"]);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("build\tyarn build\n");
+  });
+});
+
+describe("a loop killed by a signal", () => {
+  test("maps through the host's signal table: SIGPIPE is 141, SIGABRT is 134", () => {
+    expect(exitForSignal("SIGPIPE")).toEqual({ code: 141 });
+    expect(exitForSignal("SIGABRT")).toEqual({ code: 134 });
+    expect(exitForSignal("SIGTERM")).toEqual({ code: 143 });
+  });
+
+  test("a name with no number is exit 1 and names the signal", () => {
+    const result = exitForSignal("SIGNOPE");
+    expect(result.code).toBe(1);
+    expect(result.message).toContain("SIGNOPE");
   });
 });
 
