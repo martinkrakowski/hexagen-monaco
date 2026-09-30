@@ -1,10 +1,7 @@
 /* eslint-disable no-control-regex -- this file asserts that control bytes from disk never reach the terminal, so it must name them. */
-import { describe, expect, test } from "vitest";
-import {
-  isLaneStalled,
-  renderStatus,
-  truncate,
-} from "../../../src/wave-status/lib/render.js";
+import { describe, expect, test, vi } from "vitest";
+import { renderStatus, truncate } from "../../../src/wave-status/lib/render.js";
+import { laneState } from "../../../src/wave-status/lib/lane-state.js";
 import type {
   LaneStatus,
   WaveStatus,
@@ -484,7 +481,42 @@ describe("renderStatus", () => {
     expect(truncate("ab\x1b", 3)).toBe("ab\x1b[0m");
   });
 
-  test("a lane whose reported stage is started but process is not alive renders as stalled", () => {
+  test("is pure for a lane that is not alive: the wall clock never changes the answer", () => {
+    // An alive lane is never judged against a clock, so it cannot show a render
+    // that reads one. A dead `started` lane can: it is the case that did.
+    const status = makeStatus([
+      makeLane("t1", {
+        reported: { stage: "dispatch", event: "started", ts: TS },
+        alive: false,
+      }),
+    ]);
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-09-07T17:00:10Z"));
+      const early = renderStatus(status);
+      vi.setSystemTime(new Date("2031-01-01T00:00:00Z"));
+      expect(renderStatus(status)).toBe(early);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("a non-alive started lane past the grace renders the word laneState returns, not a term of its own", () => {
+    const lane = makeLane("t1", {
+      reported: { stage: "dispatch", event: "started", ts: TS },
+      alive: false,
+    });
+    const nowMs = Date.parse(TS) + 61_000;
+    expect(laneState(lane, nowMs)).toBe("unknown");
+    const out = renderStatus(makeStatus([lane]), { nowMs });
+    expect(out).toContain("dispatch unknown");
+    expect(out).not.toContain("stalled");
+    expect(renderStatus(makeStatus([lane]), { nowMs, color: true })).toContain(
+      "\x1b[33mdispatch unknown\x1b[0m",
+    );
+  });
+
+  test("a lane whose reported stage is started but process is not alive is overdue, and says so in laneState's word", () => {
     const status = makeStatus([
       makeLane("t1", {
         reported: { stage: "dispatch", event: "started", ts: TS },
@@ -492,9 +524,10 @@ describe("renderStatus", () => {
       }),
     ]);
     const outPlain = renderStatus(status, { color: false });
-    expect(outPlain).toContain("dispatch stalled");
+    // The status was collected two days after the event: the word is laneState's.
+    expect(outPlain).toContain("dispatch unknown");
     const outColor = renderStatus(status, { color: true });
-    expect(outColor).toContain("\x1b[33mdispatch stalled\x1b[0m");
+    expect(outColor).toContain("\x1b[33mdispatch unknown\x1b[0m");
   });
 
   test("a lane whose reported stage is started and process not alive yet within grace period renders as started", () => {
@@ -503,23 +536,26 @@ describe("renderStatus", () => {
         reported: {
           stage: "dispatch",
           event: "started",
-          ts: new Date().toISOString(),
+          ts: TS,
         },
         alive: false,
       }),
     ]);
-    const outPlain = renderStatus(status, { color: false });
+    const nowMs = Date.parse(TS) + 30_000;
+    const outPlain = renderStatus(status, { color: false, nowMs });
     expect(outPlain).toContain("dispatch started");
-    const outColor = renderStatus(status, { color: true });
+    const outColor = renderStatus(status, { color: true, nowMs });
     expect(outColor).toContain("\x1b[36mdispatch started\x1b[0m");
   });
 
-  test("isLaneStalled returns false for invalid timestamps", () => {
+  test("an unreadable timestamp never makes a started lane overdue", () => {
     const lane = makeLane("t1", {
       reported: { stage: "dispatch", event: "started", ts: "invalid-date" },
       alive: false,
     });
-    expect(isLaneStalled(lane)).toBe(false);
+    expect(renderStatus(makeStatus([lane]), { nowMs: 1e15 })).toContain(
+      "dispatch started",
+    );
   });
 
   test("the plan-review column shows the gate's flag, or — for a lane it says nothing about", () => {

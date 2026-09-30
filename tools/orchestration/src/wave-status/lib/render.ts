@@ -1,6 +1,7 @@
 /* eslint-disable no-control-regex -- every escape and control byte in this module is named on purpose: neutralising them is the module's whole job, and a regex is the only way to recognise one. */
 import type { BacklogState } from "../../internal/backlog.js";
 import type { LaneStatus, WaveStatus } from "../../internal/wave-types.js";
+import { laneState } from "./lane-state.js";
 
 /**
  * The terminal face of the wave-status tool: the same columns the page renders
@@ -32,6 +33,13 @@ const FOREIGN_ESCAPE =
 export interface RenderOptions {
   readonly width?: number;
   readonly color?: boolean;
+  /**
+   * The instant lanes are judged against. Given by the caller, never read from
+   * a clock here; when omitted it is the status's own `generatedAt`, the
+   * instant the facts were collected, so the same status renders the same
+   * string wherever and whenever it is rendered.
+   */
+  readonly nowMs?: number;
 }
 
 const withCode = (code: string, text: string): string =>
@@ -48,8 +56,8 @@ function sanitize(identifier: string): string {
 /** A table column: its plain text, and how that text is painted when colour is on. */
 interface Column {
   readonly header: string;
-  readonly cell: (lane: LaneStatus) => string;
-  readonly paint: (lane: LaneStatus, text: string) => string;
+  readonly cell: (lane: LaneStatus, nowMs: number) => string;
+  readonly paint: (lane: LaneStatus, text: string, nowMs: number) => string;
 }
 
 function laneCell(lane: LaneStatus): string {
@@ -67,28 +75,36 @@ function seatCell(lane: LaneStatus): string {
 
 export const STALLED_GRACE_MS = 60_000;
 
-export function isLaneStalled(lane: LaneStatus, nowMs?: number): boolean {
-  if (
-    lane.reported === undefined ||
-    lane.reported.event !== "started" ||
-    lane.derived.alive
-  ) {
-    return false;
+/**
+ * The word the stage column shows for a lane's last event. A `started` event
+ * that has gone unanswered past the launch grace, on a lane no process is
+ * running, is no longer "started": the word is then what `laneState` says of
+ * the lane — the ONE vocabulary the page and every face share — never a second
+ * term of this module's own. Within the grace, or with a timestamp that cannot
+ * be read, it stays the event.
+ */
+function stageWord(
+  lane: LaneStatus,
+  nowMs: number,
+): { readonly word: string; readonly overdue: boolean } {
+  const reported = lane.reported;
+  if (reported === undefined) return { word: ABSENT, overdue: false };
+  if (reported.event !== "started" || lane.derived.alive) {
+    return { word: reported.event, overdue: false };
   }
-  const ts = Date.parse(lane.reported.ts);
-  if (Number.isNaN(ts)) return false;
-  const now = nowMs ?? Date.now();
-  return now - ts > STALLED_GRACE_MS;
+  const ts = Date.parse(reported.ts);
+  if (Number.isNaN(ts) || !(nowMs - ts > STALLED_GRACE_MS)) {
+    return { word: reported.event, overdue: false };
+  }
+  return { word: laneState(lane, nowMs), overdue: true };
 }
 
-function stageCell(lane: LaneStatus): string {
+function stageCell(lane: LaneStatus, nowMs: number): string {
   const reported = lane.reported;
   if (reported === undefined) return ABSENT;
   const round =
     reported.round === undefined ? "" : ` (round ${reported.round})`;
-  const isStalled = isLaneStalled(lane);
-  const event = isStalled ? "stalled" : reported.event;
-  return `${reported.stage} ${event}${round}`;
+  return `${reported.stage} ${stageWord(lane, nowMs).word}${round}`;
 }
 
 function livenessCell(lane: LaneStatus): string {
@@ -148,12 +164,12 @@ const COLUMNS: readonly Column[] = [
   {
     header: "stage",
     cell: stageCell,
-    paint: (lane, text) => {
+    paint: (lane, text, nowMs) => {
       const event = lane.reported?.event;
       if (event === undefined) return withCode(DIM, text);
       if (event === "failed") return withCode(RED, text);
       if (event === "settled") return withCode(GREEN, text);
-      if (event === "started" && isLaneStalled(lane))
+      if (event === "started" && stageWord(lane, nowMs).overdue)
         return withCode(YELLOW, text);
       return withCode(CYAN, text);
     },
@@ -276,13 +292,16 @@ function row(
 export function renderStatus(status: WaveStatus, opts?: RenderOptions): string {
   const width = opts?.width ?? DEFAULT_WIDTH;
   const color = opts?.color === true;
+  // Given, or the instant the status was collected — never the wall clock.
+  const generated = Date.parse(status.generatedAt);
+  const nowMs = opts?.nowMs ?? (Number.isNaN(generated) ? 0 : generated);
 
   // Plain text first: column widths come from what the eye sees, not from codes.
   const waves = status.waves.map((wave) => ({
     id: wave.id,
     rows: wave.lanes.map((lane) => ({
       lane,
-      cells: COLUMNS.map((column) => column.cell(lane)),
+      cells: COLUMNS.map((column) => column.cell(lane, nowMs)),
     })),
   }));
   const widths = COLUMNS.map((column, i) =>
@@ -309,7 +328,9 @@ export function renderStatus(status: WaveStatus, opts?: RenderOptions): string {
             row(
               r.cells,
               widths,
-              color ? (text, i) => COLUMNS[i].paint(r.lane, text) : undefined,
+              color
+                ? (text, i) => COLUMNS[i].paint(r.lane, text, nowMs)
+                : undefined,
             ),
         );
       }
