@@ -1,0 +1,103 @@
+# Memory files this overlay does not cite
+#
+# One line per file, each saying what the file is about. The coverage check in
+# `scripts/orchestration/skill-coverage.mjs` requires every file in the memory directory to be
+# either cited with a `source:` line in `overlay/lessons.md` or listed here. There is no third
+# category, and "not relevant" is not a reason: a reason that does not say what the file is about
+# cannot be reviewed.
+#
+# This list covers memory files only. A source unit from the pinned snapshot may never be
+# allowlisted — if one genuinely cannot be preserved, that is a stop-and-report to the owner, not
+# a line in this file.
+#
+# The rule for choosing between the two: a lesson travels when it is about *running a wave* — how
+# to dispatch, how to derive status, what evidence counts, what a brief has to contain, what the
+# merge and review stages do. A record does not travel when its home is already elsewhere in the
+# overlay (the cast), or when it is a product, infrastructure or tooling fact that belongs to this
+# repository rather than to the orchestrator.
+
+# The index of the memory directory, not a lesson: a list of the other 50 files with one-line
+# descriptions. It describes the collection rather than recording anything.
+MEMORY.md
+
+# Provenance of the material: the owner's statement that this repository began as a take-home
+# assessment, that its code and incidents are the owner's own, and that the folder name is
+# misleading. It is the basis of the port's licence decision, which lives in the plan.
+campaign-foundry-ownership.md
+
+# The recorded per-seat invocation shapes and model ids for every delegation CLI, including the
+# effort-flag and quota history. That roster is the overlay's `cast.md`, reproduced verbatim from
+# the snapshot; keeping a second copy here would let the two drift.
+delegation-cli-invocations.md
+
+# The owner's model-choice rule for one review seat: which id to use, which more expensive id to
+# avoid, and which three job shapes it is for. A roster fact whose home is `cast.md`.
+grok-model-choice.md
+
+# Two local model servers, their provider entries, model ids and measured latencies, plus the
+# memory-pressure incident from running one beside a gate. Seat and host configuration, of which
+# only the headless-stdin rule is a lesson and that rule already stands in `cast.md`.
+local-lmstudio-seats.md
+
+# Wave-level seat grades for one wave: which seat was the paid default, which was a trial, which
+# failed and how. A dated track record whose home is `cast.md`'s graded-record table.
+seat-trials-w05.md
+
+# Product direction: the multi-tenant cloud migration, its decision ids, the platform-and-tenancy
+# plan, and per-wave progress. A roadmap record for this application, not a wave-operations fact.
+cloud-migration-direction.md
+
+# The HTML5 display-ad pipeline's delivery state, its decision ids, the two open follow-ups, and
+# why a display verdict needs a manual upload. Product delivery status for the ad arc.
+html5-ad-pipeline-built-but-unreachable.md
+
+# Which image generator leads the selection chain and by how little code adopting it took, plus a
+# count of the ways a desktop architecture PDF has drifted from the code. A product and
+# documentation-drift record.
+campaign-foundry-firefly-and-pdf-drift.md
+
+# Golden-image recording: why container-recorded bytes are not the runner's bytes, and how to
+# record and prove them. A test-fixture fact about one asset family's goldens.
+goldens-must-be-recorded-by-the-runner-itself.md
+
+# A fixed responsive-layout bug, kept for the refuted CSS theory it records. Historical UI
+# debugging, with its live threshold explicitly retired.
+preview-rail-hidden-below-1264px.md
+
+# The owner's design decision that software authors the brief files and that batch processing owns
+# the import/export flow, with the decisions it closed. A product-design decision about brief
+# authoring, not a wave-operations lesson.
+software-authors-the-yaml-batch-is-the-future.md
+
+# The planning-document format used by another repository: file naming, header block, section
+# order and table shapes. A documentation convention for this project's plans, not a lesson about
+# running a wave.
+planning-doc-convention.md
+
+# A dated status snapshot for one day: which plan was closed, which PRs landed, which seats were
+# funded, and which mode was in force. Superseded by every later status note in the directory.
+project-state-2026-09-08.md
+
+# The owner's Option-2 decision to port the orchestrator into hexagen-monaco, and the packaging
+# proposal that followed. A porting decision whose full text is the plan this lane implements.
+orchestrator-portability-option2.md
+
+# Hexagen's own generator, its lockstep version trap, and the recurring failure mode where a
+# scaffolded repository's tooling is older than the files it wrote. A cross-repository tooling
+# record, kept for diagnosis inside this repository.
+hexagen-monaco-generator.md
+
+# The architecture linter's live scope limit: layer rules cover package sources only, so a claim
+# about an application directory cannot cite it. A tooling-capability fact about the linter, not
+# about orchestration.
+hexagen-arch-linter-relative-import-gap.md
+
+# A generator hazard: the interactive port/context commands rewrite the architecture manifest
+# without its generator block, so a hand-edited naming override would be silently deleted. A
+# tooling hazard with a workaround, recorded against the generator's own repository.
+hexagen-arch-port-drops-generator-block.md
+
+# The operator's staging node: how it is reached, which workloads share it, why image pushes fail
+# TLS, and which steps need the owner. Infrastructure facts about one LAN host. Nothing from it is
+# reproduced in this fixture, and no credential, token or key appears in it.
+staging-on-midnight-k3s.md
