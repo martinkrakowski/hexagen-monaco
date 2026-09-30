@@ -44,6 +44,7 @@ absent, or a field of it is absent, these are the defaults and you state them in
 - `gateSteps` — the ordered list the gate reads. With no config, the steps named in the brief
   are the list.
 - `requiredCheck: ^Build` — the CI check whose conclusion a merge waits for.
+- `ciWorkflow: .github/workflows/ci.yml` — the CI workflow `doctor` requires to exist, as a repository-relative path.
 - `appendOnlyPaths` — empty. Nothing is append-only until the project says which paths are.
 - `forbiddenPorts` — **no forbidden ports.** The absent default is an empty list. A scaffolded
   config may name ports; an absent field names none.
