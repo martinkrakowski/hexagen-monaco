@@ -300,11 +300,14 @@ function parseHost(
       );
     }
     // §7's "a local host that carries ssh": `ssh` is the key that PROMISED a
-    // remote host, so the broken promise is reported on `ssh` too, where the
-    // operator has to act on it.
+    // remote host, so when it arrives with NEITHER `clone` nor `worktrees` the
+    // broken promise is reported on `ssh` too, where the operator has to act on
+    // it. With one of them present the missing key is already named on its own,
+    // and a second problem at `ssh` would only send the operator to the wrong line.
     if (
       entry.ssh !== undefined &&
-      (entry.clone === undefined || entry.worktrees === undefined)
+      entry.clone === undefined &&
+      entry.worktrees === undefined
     ) {
       add(
         `${at}.ssh`,

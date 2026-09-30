@@ -83,6 +83,11 @@ describe("A-30 §7: every parseConfig red case, at the path the plan names", () 
     expect(problemsAt(yaml)).toContain("laneHosts[0].ssh");
   });
 
+  test("ssh plus clone with no worktrees names worktrees only: ssh did not break its promise", () => {
+    const yaml = REMOTE.replace("\n    worktrees: /srv/wt", "");
+    expect(problemsAt(yaml)).toEqual(["laneHosts[0].worktrees"]);
+  });
+
   test("a remote host without check names check", () => {
     const yaml = REMOTE.replace("    check: [ocm-run, --check]\n", "");
     expect(problemsAt(yaml)).toContain("laneHosts[0].check");
