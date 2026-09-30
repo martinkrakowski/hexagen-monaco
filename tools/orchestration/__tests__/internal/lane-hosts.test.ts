@@ -464,6 +464,32 @@ describe("A-30 §1.3: the deprecated alias synthesizes a host and never refuses"
   });
 });
 
+describe("A-30 §1.3: the alias is a URL, or it is refused at opencodeServerUrl", () => {
+  test.each([
+    ["an empty string", '""'],
+    ["a host:port with no scheme", "127.0.0.1:4096"],
+    ["a non-http scheme", "ftp://127.0.0.1:4096"],
+  ])(
+    "%s is a problem at opencodeServerUrl, and synthesizes nothing",
+    (_, value) => {
+      const result = parseConfig(`opencodeServerUrl: ${value}\n`);
+      expect(result.problems.map((p) => p.at)).toEqual(["opencodeServerUrl"]);
+      expect(result.config?.laneHosts).toEqual([]);
+      expect(result.deprecations).toEqual([]);
+    },
+  );
+
+  test("a trailing slash is stripped before /doc is appended", () => {
+    const result = parseConfig("opencodeServerUrl: http://127.0.0.1:4096/\n");
+    expect(result.problems).toEqual([]);
+    expect(result.config?.laneHosts[0]?.check).toEqual([
+      "curl",
+      "-sf",
+      "http://127.0.0.1:4096/doc",
+    ]);
+  });
+});
+
 /**
  * OW1's fixture overlay, which A-30 §6 migrates. It is the one overlay in this
  * repository that a real project already runs against, so it is the one that

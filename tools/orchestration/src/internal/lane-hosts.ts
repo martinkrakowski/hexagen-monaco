@@ -459,7 +459,8 @@ export function parseLaneHosts(
         name: SYNTHESIZED_HOST_NAME,
         dispatch: ["opencode", "run", "--attach", serverUrl],
         gate: "full",
-        check: ["curl", "-sf", `${serverUrl}/doc`],
+        // One trailing `/` is dropped, so `http://h:4096/` does not become `//doc`.
+        check: ["curl", "-sf", `${serverUrl.replace(/\/$/, "")}/doc`],
       });
       declared.set(SYNTHESIZED_HOST_NAME, hosts.length - 1);
     } else {

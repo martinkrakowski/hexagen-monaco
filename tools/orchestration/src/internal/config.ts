@@ -371,6 +371,16 @@ function parseGateSteps(raw: unknown, problems: Problems): GateStep[] {
   return steps;
 }
 
+/** Whether `text` is an absolute http(s) URL. `host:port` parses as a scheme, so it is not. */
+function isHttpUrl(text: string): boolean {
+  try {
+    const { protocol } = new URL(text);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function parseOptionalString(
   raw: unknown,
   at: string,
@@ -497,11 +507,25 @@ export function parseConfig(text: string): ParseConfigResult {
     [],
     problems,
   );
-  const opencodeServerUrl = parseOptionalString(
+  const rawServerUrl = parseOptionalString(
     document.opencodeServerUrl,
     "opencodeServerUrl",
     problems,
   );
+  // A deprecated alias still has to be a URL the synthesized host can dispatch
+  // to and curl: `""` and `127.0.0.1:4096` would synthesize a host that fails
+  // on its first lane instead of at the file.
+  let opencodeServerUrl: string | undefined;
+  if (rawServerUrl !== undefined) {
+    if (isHttpUrl(rawServerUrl)) {
+      opencodeServerUrl = rawServerUrl;
+    } else {
+      problems.add(
+        "opencodeServerUrl",
+        `must be an http(s) URL, such as http://127.0.0.1:4096. Read ${JSON.stringify(rawServerUrl)}`,
+      );
+    }
+  }
   const laneHostFields = parseLaneHosts(
     document.laneHosts,
     document.seats,
