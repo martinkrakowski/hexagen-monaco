@@ -35,6 +35,7 @@ export function configFor(over: Partial<Config> = {}): Config {
     invariants: { ...LOCKED_INVARIANTS },
     repo: `${REPO.owner}/${REPO.name}`,
     waveStatusPort: 4318,
+    ciWorkflow: ".github/workflows/ci.yml",
     ...over,
   };
 }

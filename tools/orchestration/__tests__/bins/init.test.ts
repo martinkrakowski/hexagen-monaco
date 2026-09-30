@@ -260,6 +260,16 @@ describe("the scaffolded config.yaml (A-18, A-20)", () => {
     );
   });
 
+  test("A-32: init does not write ciWorkflow, so a scaffolded overlay keeps the default", async () => {
+    const root = project();
+    await init(root);
+    const text = await readFile(join(root, OVERLAY_DIR, "config.yaml"), "utf8");
+    expect(text).not.toContain("ciWorkflow");
+    expect(parseConfig(text).config!.ciWorkflow).toBe(
+      ".github/workflows/ci.yml",
+    );
+  });
+
   test("the scaffolded config validates against the loader's schema", async () => {
     const root = project();
     await init(root);

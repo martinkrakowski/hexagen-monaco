@@ -25,6 +25,15 @@ Nothing in the package hardcodes a repository, a port or a log root — every on
 of those comes from the overlay, so the same package serves any project that
 adopts it.
 
+### `ciWorkflow`
+
+`ciWorkflow` — the repository-relative path of the CI workflow `doctor` requires.
+Default `.github/workflows/ci.yml`. A project whose gate workflow has another
+name sets it, for example `ciWorkflow: .github/workflows/sync-integrity.yml`;
+`doctor` then FAILs, naming that path, when the file is missing. It must be a
+non-empty string, not absolute, with no `..` segment and no NUL. `init` does
+not write it, so a scaffolded overlay keeps the default.
+
 ## Lane hosts and seats
 
 A delegated lane can run on a remote opencode server that executes tools on the

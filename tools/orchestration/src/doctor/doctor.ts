@@ -24,7 +24,7 @@ import {
  * 1. **Name every failure, check all of them.** A doctor that stops at the
  *    first problem makes the operator fix them one at a time, and the ones
  *    behind it are the ones that were not obvious.
- * 2. **A check that could not look is not a pass.** An absent `ci.yml` is
+ * 2. **A check that could not look is not a pass.** An absent CI workflow is
  *    reported; so is a `gh` that is not installed, and a lane host whose
  *    `check` does not finish. "I could not check" and "it is fine" are
  *    different answers, and only one of them is a pass.
@@ -33,8 +33,9 @@ import {
  *    is said about one. The absences that ARE reported are the ones that stop a
  *    check running: a lane host with no `check`, and a clone whose `user.email`
  *    could not be read because the ssh probe already failed. The one absence
- *    that IS a failure is the one the plan made so: `.github/workflows/ci.yml`
- *    (OW-D5/B-1 gave that duty here when the template's `requires` was dropped).
+ *    that IS a failure is the one the plan made so: the configured `ciWorkflow`,
+ *    `.github/workflows/ci.yml` by default (OW-D5/B-1 gave that duty here when the
+ *    template's `requires` was dropped; A-32 made the path configurable).
  * 4. **A WARN is a finding that never moves the exit code** (A-30). A
  *    deprecated setting, a host no seat dispatches through, and a clone whose
  *    `user.email` differs from this repository's are all worth saying out loud,
@@ -106,8 +107,6 @@ export interface DoctorDeps {
    */
   readonly localUserEmail: () => Promise<string | undefined>;
 }
-
-const CI_WORKFLOW = ".github/workflows/ci.yml";
 
 /**
  * The resolved `waveStatusPort` appearing in `forbiddenPorts` (A-20).
@@ -308,13 +307,13 @@ export async function runDoctor(
   const portFinding = checkStatusPort(config);
   if (portFinding !== undefined) findings.push(portFinding);
 
-  // `.github/workflows/ci.yml` (OW-D5/B-1, and the red case review 3 asked for).
-  if (!(await deps.exists(CI_WORKFLOW))) {
+  // The configured `ciWorkflow` (A-32; OW-D5/B-1, and the red case review 3 asked for).
+  if (!(await deps.exists(config.ciWorkflow))) {
     findings.push({
       check: "ci-workflow",
       severity: "fail",
       message:
-        `${CI_WORKFLOW} is missing from this project. The gate needs a workflow to ` +
+        `${config.ciWorkflow} is missing from this project. The gate needs a workflow to ` +
         `run in. It is a capability check here rather than a template dependency ` +
         `precisely so a project that never had one is told so.`,
     });
