@@ -78,11 +78,15 @@ function killGroup(pid: number | undefined): void {
  *
  * Three things about this are load-bearing:
  *
- * - `detached: true`, so a timeout kills the whole group and a `-f`-forked tunnel
- *   that inherited this process's fds goes with it.
- * - it settles on the child's **`exit`**, not `close`. A forked tunnel holds the
- *   inherited stdout open, so `close` would wait for a writer that is never going
- *   to exit and report a working host as a timeout, forever.
+ * - `detached: true`, so a timeout kills the whole group of anything that stayed
+ *   in it. Note what that does NOT cover: OpenSSH `-f` goes through `daemon()`
+ *   and `setsid`, so a tunnel it forks runs OUTSIDE this process group and
+ *   outlives the kill. That is the tunnel doing what `-f` asks (a check that
+ *   opens one is leaving it for the dispatch), not a leak in this runner.
+ * - `stdio` is `ignore`, so a forked tunnel inherits no pipe of ours to hold open.
+ * - it settles on the child's **`exit`**, not `close`. Were any descendant to
+ *   inherit a pipe, `close` would wait for a writer that is never going to exit
+ *   and report a working host as a timeout, forever.
  * - a spawn failure is `failed`, not a throw. `dispatch[0]` not being on PATH is
  *   `doctor`'s job to report, and this is the seam it reports it through.
  */
