@@ -1,3 +1,4 @@
+import type { Grant } from "../../../application/kernel/grant.js";
 import type { ToolDefinition } from "./tool-definition.js";
 
 export const acceptTransactionTool: ToolDefinition = {
@@ -10,6 +11,16 @@ export const acceptTransactionTool: ToolDefinition = {
         type: "string",
         description: "Transaction ID to accept",
       },
+      grant: {
+        type: "object",
+        description:
+          "The Grant authorizing this cycle (docs/kernel/GRANT.md). Required — an accept call with no grant is denied. Must carry a `signature` verified against this repo's trusted signing key (.hexagen/grant-signing.key); a grant with no signature, or one that doesn't verify, is denied before any other check runs.",
+      },
+      goal_id: {
+        type: "string",
+        description:
+          "Opaque id for what prompted this cycle; defaults to transaction_id.",
+      },
     },
     required: ["transaction_id"],
   },
@@ -17,6 +28,8 @@ export const acceptTransactionTool: ToolDefinition = {
     const a = args as Record<string, unknown>;
     const result = await deps.acceptTransactionToolUseCase.execute({
       transaction_id: a.transaction_id as string,
+      grant: a.grant as Grant | undefined,
+      goal_id: a.goal_id as string | undefined,
     });
     if (!result.success) {
       return {

@@ -1,5 +1,6 @@
 import type { Transaction } from "@hexagen/transaction-system";
 import type { Result } from "@hexagen/shared";
+import type { Grant } from "../../kernel/grant.js";
 
 /**
  * Inbound (driving) port per ADR-0048: the use case implements this contract
@@ -20,6 +21,15 @@ import type { Result } from "@hexagen/shared";
 export interface AcceptTransactionToolInput {
   transaction_id: string;
   reason?: string;
+  /**
+   * The Grant for this cycle (docs/kernel/GRANT.md). Required to accept:
+   * a transaction whose accept call carries no grant is denied, not
+   * silently claimed. Passed as a call argument — the smallest existing
+   * hook on this tool — rather than a new grant store or service.
+   */
+  grant?: Grant;
+  /** Opaque id for whatever prompted this cycle; defaults to transaction_id. */
+  goal_id?: string;
 }
 
 export interface AcceptTransactionToolResult {
@@ -27,6 +37,13 @@ export interface AcceptTransactionToolResult {
   previous_status: string;
   new_status: string;
   applied?: { message: string; details: Record<string, unknown> };
+  /**
+   * Set when the accept succeeded (the mutation is committed and cannot be
+   * rolled back from here) but appending the Trace evidence line failed.
+   * Surfaced rather than swallowed, so a caller can tell the commit
+   * happened without its audit record — see docs/kernel/TRACE.md.
+   */
+  trace_write_error?: string;
 }
 
 export interface AcceptTransactionToolPort {

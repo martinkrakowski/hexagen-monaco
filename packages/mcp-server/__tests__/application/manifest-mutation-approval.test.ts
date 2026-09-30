@@ -1,6 +1,10 @@
 /**
  * The seven MCP mutation tools must not write the manifest except via
  * hexagen_accept_transaction. Reject leaves the write port untouched.
+ *
+ * Every accept call below carries a Grant: since PR kit/grant-trace-accept,
+ * accept defaults to deny with no grant. See grant-enforcement.test.ts for
+ * the deny-path coverage (missing/expired/revoked/out-of-scope/propose).
  */
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
@@ -17,8 +21,18 @@ import { RemoveContextToolUseCase } from "../../src/application/use-cases/remove
 import { RemovePortToolUseCase } from "../../src/application/use-cases/remove-port-tool.use-case.js";
 import { ScaffoldModuleToolUseCase } from "../../src/application/use-cases/scaffold-module-tool.use-case.js";
 import { applyPendingManifestMutation } from "../../src/application/pending-manifest-mutation.js";
+import {
+  MANIFEST_WRITE_PATH,
+  type Grant,
+} from "../../src/application/kernel/grant.js";
+import type { TraceRecord } from "../../src/application/kernel/trace.js";
 import type { ManifestWritePort } from "../../src/application/ports/out/manifest-write.port.js";
 import type { ScaffoldingPort } from "../../src/application/ports/out/scaffolding.port.js";
+import type {
+  TraceAppendInput,
+  TraceWritePort,
+} from "../../src/application/ports/out/trace-write.port.js";
+import type { GrantSignaturePort } from "../../src/application/ports/out/grant-signature.port.js";
 
 class ManifestWriteSpy implements ManifestWritePort {
   writes: string[] = [];
@@ -96,19 +110,76 @@ class EventBusFake implements EventBusPort {
   clear(): void {}
 }
 
+class TraceWriteSpy implements TraceWritePort {
+  lines: TraceRecord[] = [];
+  async appendLine(input: TraceAppendInput): Promise<Result<void, Error>> {
+    this.lines.push({
+      grant_id: input.grant_id,
+      goal_id: input.goal_id,
+      tool_calls: [
+        {
+          name: input.tool_call.name,
+          args_digest: "sha256:test",
+          result_digest: "sha256:test",
+          time: input.tool_call.time,
+        },
+      ],
+      halt_reason: input.halt_reason,
+      transaction_ids: [...input.transaction_ids],
+      started_at: input.started_at,
+      ended_at: input.ended_at,
+    });
+    return { success: true, value: undefined };
+  }
+}
+
+/** Every test grant here is treated as validly signed — signature verification itself is covered in grant-enforcement.test.ts. */
+class AlwaysValidGrantSignatureSpy implements GrantSignaturePort {
+  async verify() {
+    return { success: true as const, value: true };
+  }
+}
+
+/** A grant covering every context these tests exercise plus the manifest write path. */
+function grant(overrides: Partial<Grant> = {}): Grant {
+  return {
+    id: "grant-test",
+    principal: "martin",
+    agent: "test-agent",
+    contexts: ["billing", "local-llm", "shared", "x", "stripe"],
+    paths: [MANIFEST_WRITE_PATH, "packages/billing/", "packages/stripe/"],
+    tools: [
+      "hexagen_create_context",
+      "hexagen_add_dependency",
+      "hexagen_create_port",
+      "hexagen_create_adapter",
+      "hexagen_remove_port",
+      "hexagen_remove_context",
+      "hexagen_scaffold_module",
+    ],
+    mode: "write",
+    expires_at: "2099-01-01T00:00:00.000Z",
+    signature: "test-signature",
+    ...overrides,
+  };
+}
+
 function harness() {
   const write = new ManifestWriteSpy();
   const scaffolding = new ScaffoldingSpy();
   const events = new EventBusFake();
+  const trace = new TraceWriteSpy();
   const tm = new InMemoryTransactionManager();
   const accept = new AcceptTransactionToolUseCase(
     tm,
     write,
     scaffolding,
     events,
+    trace,
+    new AlwaysValidGrantSignatureSpy(),
   );
   const reject = new RejectTransactionToolUseCase(tm);
-  return { write, scaffolding, events, tm, accept, reject };
+  return { write, scaffolding, events, trace, tm, accept, reject };
 }
 
 describe("MCP mutation tools require transaction approval", () => {
@@ -122,10 +193,13 @@ describe("MCP mutation tools require transaction approval", () => {
     assert.equal(proposed.pendingApproval, true);
     const accepted = await h.accept.execute({
       transaction_id: proposed.transactionId ?? "",
+      grant: grant(),
     });
     assert.equal(accepted.success, true);
     assert.deepEqual(h.write.writes, ["registerBoundedContext"]);
     assert.equal(h.events.published.length, 1);
+    assert.equal(h.trace.lines.length, 1);
+    assert.equal(h.trace.lines[0]?.halt_reason, "completed");
   });
 
   it("rejecting create-context never writes the manifest", async () => {
@@ -150,6 +224,7 @@ describe("MCP mutation tools require transaction approval", () => {
     assert.ok(!h.write.writes.includes("addDependency"));
     const accepted = await h.accept.execute({
       transaction_id: proposed.transactionId ?? "",
+      grant: grant(),
     });
     assert.equal(accepted.success, true);
     assert.ok(h.write.writes.includes("addDependency"));
@@ -166,6 +241,7 @@ describe("MCP mutation tools require transaction approval", () => {
     assert.equal(h.write.writes.length, 0);
     const accepted = await h.accept.execute({
       transaction_id: proposed.transactionId ?? "",
+      grant: grant(),
     });
     assert.equal(accepted.success, true);
     assert.deepEqual(h.scaffolding.writes, ["createPort"]);
@@ -181,6 +257,7 @@ describe("MCP mutation tools require transaction approval", () => {
     assert.equal(h.write.writes.length, 0);
     const accepted = await h.accept.execute({
       transaction_id: proposed.transactionId ?? "",
+      grant: grant({ contexts: ["stripe"] }),
     });
     assert.equal(accepted.success, true);
     assert.deepEqual(h.write.writes, ["registerAdapter"]);
@@ -196,6 +273,7 @@ describe("MCP mutation tools require transaction approval", () => {
     assert.equal(h.write.writes.length, 0);
     const accepted = await h.accept.execute({
       transaction_id: proposed.transactionId ?? "",
+      grant: grant(),
     });
     assert.equal(accepted.success, true);
     assert.deepEqual(h.write.writes, ["removePort"]);
@@ -209,6 +287,7 @@ describe("MCP mutation tools require transaction approval", () => {
     assert.equal(h.write.writes.length, 0);
     const accepted = await h.accept.execute({
       transaction_id: proposed.transactionId ?? "",
+      grant: grant(),
     });
     assert.equal(accepted.success, true);
     assert.deepEqual(h.write.writes, ["removeContext"]);
@@ -222,11 +301,13 @@ describe("MCP mutation tools require transaction approval", () => {
     });
     const first = await h.accept.execute({
       transaction_id: proposed.transactionId ?? "",
+      grant: grant(),
     });
     assert.equal(first.success, true);
     assert.deepEqual(h.write.writes, ["registerBoundedContext"]);
     const second = await h.accept.execute({
       transaction_id: proposed.transactionId ?? "",
+      grant: grant(),
     });
     assert.equal(second.success, false);
     assert.match(String(second.error), /already committed/);
@@ -247,6 +328,7 @@ describe("MCP mutation tools require transaction approval", () => {
     assert.equal(rejected.success, true);
     const accepted = await h.accept.execute({
       transaction_id: proposed.transactionId ?? "",
+      grant: grant(),
     });
     assert.equal(accepted.success, false);
     assert.equal(h.write.writes.length, 0);
@@ -263,6 +345,7 @@ describe("MCP mutation tools require transaction approval", () => {
     assert.equal(h.scaffolding.writes.length, 0);
     const accepted = await h.accept.execute({
       transaction_id: proposed.transactionId ?? "",
+      grant: grant(),
     });
     assert.equal(accepted.success, true);
     assert.deepEqual(h.scaffolding.writes, ["scaffoldModule"]);
@@ -330,6 +413,7 @@ describe("MCP mutation tools require transaction approval", () => {
     });
     const accepted = await h.accept.execute({
       transaction_id: proposed.transactionId ?? "",
+      grant: grant(),
     });
     assert.equal(accepted.success, false);
     assert.deepEqual(h.scaffolding.writes, ["createPort"]);
@@ -353,6 +437,7 @@ describe("MCP mutation tools require transaction approval", () => {
     });
     const accepted = await h.accept.execute({
       transaction_id: proposed.transactionId ?? "",
+      grant: grant({ contexts: ["stripe"] }),
     });
     assert.equal(accepted.success, false);
     assert.deepEqual(h.scaffolding.writes, ["createAdapter"]);
@@ -376,6 +461,7 @@ describe("MCP mutation tools require transaction approval", () => {
     });
     const accepted = await h.accept.execute({
       transaction_id: proposed.transactionId ?? "",
+      grant: grant(),
     });
     assert.equal(accepted.success, false);
     assert.deepEqual(h.scaffolding.writes, ["scaffoldModule"]);
@@ -400,6 +486,7 @@ describe("MCP mutation tools require transaction approval", () => {
     });
     const accepted = await h.accept.execute({
       transaction_id: proposed.transactionId ?? "",
+      grant: grant(),
     });
     assert.equal(accepted.success, false);
     assert.deepEqual(h.scaffolding.writes, ["createPort"]);

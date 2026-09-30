@@ -37,6 +37,8 @@ import type { LinterPort } from "./application/ports/out/linter.port.js";
 import type { ScaffoldingPort } from "./application/ports/out/scaffolding.port.js";
 import type { ReportGovernancePort } from "./application/ports/out/report-governance.port.js";
 import type { ManifestGenerationPort } from "./application/ports/out/manifest-generation.port.js";
+import type { GrantSignaturePort } from "./application/ports/out/grant-signature.port.js";
+import type { TraceWritePort } from "./application/ports/out/trace-write.port.js";
 import { GovernanceReadAdapter } from "./infrastructure/adapters/governance-read.adapter.js";
 import { LinterAdapter } from "./infrastructure/adapters/linter.adapter.js";
 import { ManifestDiffAdapter } from "./infrastructure/adapters/manifest-diff.adapter.js";
@@ -46,6 +48,8 @@ import { SyncEngineAdapter } from "./infrastructure/adapters/sync-engine.adapter
 import { InMemoryEventBusAdapter } from "./infrastructure/adapters/in-memory-event-bus.adapter.js";
 import { OpenAIManifestGenerationAdapter } from "./infrastructure/adapters/manifest-generation.adapter.js";
 import { ReportGovernanceAdapter } from "./infrastructure/adapters/report-governance.adapter.js";
+import { GrantSignatureAdapter } from "./infrastructure/adapters/grant-signature.adapter.js";
+import { TraceWriteAdapter } from "./infrastructure/adapters/trace-write.adapter.js";
 
 function envOptional(name: string): string | undefined {
   return process.env[name];
@@ -63,6 +67,8 @@ export interface MCPCompositionRoot {
   reportGovernancePort: ReportGovernancePort;
   transactionManagerPort: TransactionManagerPort;
   manifestGenerationPort: ManifestGenerationPort;
+  traceWritePort: TraceWritePort;
+  grantSignaturePort: GrantSignaturePort;
 }
 
 export function createDefaultMCPCompositionRoot(
@@ -96,6 +102,8 @@ export function createDefaultMCPCompositionRoot(
     reportGovernancePort: new ReportGovernanceAdapter(workspaceRoot),
     transactionManagerPort: new InMemoryTransactionManager(),
     manifestGenerationPort,
+    traceWritePort: new TraceWriteAdapter(workspaceRoot),
+    grantSignaturePort: new GrantSignatureAdapter(workspaceRoot),
   };
 }
 
@@ -166,6 +174,8 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
     root.manifestWritePort,
     root.scaffoldingPort,
     root.eventBusPort,
+    root.traceWritePort,
+    root.grantSignaturePort,
   );
   const rejectTransactionToolUseCase = new RejectTransactionToolUseCase(
     root.transactionManagerPort,
