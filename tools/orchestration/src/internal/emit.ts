@@ -30,6 +30,7 @@ export function formatEvent(input: EventInput, clock: () => string): string {
   const candidate: WaveEvent = {
     ts: input.ts ?? clock(),
     wave: input.wave,
+    ...(input.repo !== undefined ? { repo: input.repo } : {}),
     lane: input.lane,
     stage: input.stage,
     event: input.event,

@@ -173,3 +173,25 @@ describe("readEvents (plan §2.1, D103)", () => {
     });
   });
 });
+
+describe("F20: the repo field is optional on read", () => {
+  const base = '"ts":"2026-09-29T00:00:00Z","wave":"W3"';
+  const tail = '"lane":"l1","stage":"dispatch","event":"started"';
+
+  test("a legacy line without repo still parses", () => {
+    const { events, rejected } = readEvents(`{${base},${tail}}\n`);
+    expect(rejected).toEqual([]);
+    expect(events[0]?.repo).toBeUndefined();
+  });
+
+  test("a line with repo parses and keeps it", () => {
+    const { events } = readEvents(`{${base},"repo":"acme/demo",${tail}}\n`);
+    expect(events[0]?.repo).toBe("acme/demo");
+  });
+
+  test("a non-string repo is rejected", () => {
+    const { events, rejected } = readEvents(`{${base},"repo":7,${tail}}\n`);
+    expect(events).toEqual([]);
+    expect(rejected).toHaveLength(1);
+  });
+});

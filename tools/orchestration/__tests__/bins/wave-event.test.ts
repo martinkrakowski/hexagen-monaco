@@ -319,3 +319,24 @@ describe("the default log root", () => {
     expect(result.created).toEqual([]);
   });
 });
+
+describe("F20: every event is stamped with the repository", () => {
+  test("an event for repo acme/demo carries repo right after wave", async () => {
+    const result = await run(
+      positional("/logs/w1", "W3", "l1", "dispatch", "started"),
+      { config: { repo: "acme/demo" } },
+    );
+    expect(result.code).toBe(0);
+    const line = result.appended[0]!.data;
+    expect(JSON.parse(line).repo).toBe("acme/demo");
+    expect(line).toContain('"wave":"W3","repo":"acme/demo","lane":"l1"');
+    expect(readEvents(line).events[0]?.repo).toBe("acme/demo");
+  });
+
+  test("with no repo resolved the key is omitted, never null", async () => {
+    const result = await run(
+      positional("/logs/w1", "W3", "l1", "dispatch", "started"),
+    );
+    expect(result.appended[0]!.data).not.toContain("repo");
+  });
+});

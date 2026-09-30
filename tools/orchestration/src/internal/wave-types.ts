@@ -14,6 +14,11 @@ export type EventKind = "started" | "settled" | "failed";
 export interface WaveEvent {
   readonly ts: string;
   readonly wave: string;
+  /**
+   * `owner/name` of the repository the event belongs to. Absent on legacy
+   * events and when no repo resolved; wave-status scopes by it when present.
+   */
+  readonly repo?: string;
   readonly lane: string;
   readonly stage: Stage;
   readonly event: EventKind;

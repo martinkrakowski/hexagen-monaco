@@ -218,6 +218,9 @@ async function write(args: string[], deps: WaveEventDeps): Promise<number> {
 
   const input: EventInput = {
     wave,
+    // Stamped so a status server can scope a shared log root to ITS repository.
+    // Omitted (never null) when no repo resolved; legacy lines simply lack it.
+    ...(deps.config?.repo !== undefined ? { repo: deps.config.repo } : {}),
     lane,
     stage: stage as Stage,
     event: event as EventKind,

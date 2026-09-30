@@ -56,6 +56,7 @@ function asWaveEvent(value: unknown): WaveEvent | undefined {
   const rec = value as Record<string, unknown>;
   if (typeof rec.ts !== "string") return undefined;
   if (typeof rec.wave !== "string") return undefined;
+  if (rec.repo !== undefined && typeof rec.repo !== "string") return undefined;
   if (typeof rec.lane !== "string") return undefined;
   if (!isStage(rec.stage)) return undefined;
   if (!isEventKind(rec.event)) return undefined;
@@ -67,6 +68,7 @@ function asWaveEvent(value: unknown): WaveEvent | undefined {
   return {
     ts: rec.ts,
     wave: rec.wave,
+    ...(rec.repo !== undefined ? { repo: rec.repo } : {}),
     lane: rec.lane,
     stage: rec.stage,
     event: rec.event,
