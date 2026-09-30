@@ -640,13 +640,19 @@ for (const fixture of fixtures) {
           setConfig(
             withSteps([
               { name: "fine", command: "node -e 0" },
-              { name: "boom", command: "node -e process.exit(3)" },
+              { name: "boom", command: 'node -e "process.exit(3)"' },
             ]),
           );
           const red = run("node_modules/.bin/hexagen-orchestration-gate");
           expect(
             red.status !== 0,
             `gate with a failing step exited 0\n${red.out}`,
+          );
+          // gate-run.sh must hand the step's own exit code back verbatim: 3, not
+          // the 1 a shell syntax error would give.
+          expect(
+            red.status === 3,
+            `gate with a step exiting 3: expected exit 3, got ${red.status}\n${red.out}`,
           );
           expect(
             red.out.includes("boom"),
