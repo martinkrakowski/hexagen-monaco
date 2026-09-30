@@ -7,6 +7,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -213,5 +214,36 @@ describe("F10: a present-but-invalid config refuses instead of re-routing events
     expect(result.status).toBe(2);
     expect(result.stderr).toContain("cast");
     expect(readdirSync(home)).toEqual([]);
+  });
+});
+
+describe("F12: only a directory counts as a candidate", () => {
+  test("wave-<id> a FILE and wave<id> a DIRECTORY appends to the directory", async () => {
+    const wave = `Wx${Math.random().toString(36).slice(2, 8)}`;
+    const root = scratch();
+    writeFileSync(join(root, `wave-${wave}`), "not a directory");
+    mkdirSync(join(root, `wave${wave}`));
+
+    const code = await runWaveEventForProject(
+      [wave, "l1", "dispatch", "started"],
+      { HOME: "/home/op", WAVE_LOG_ROOT: root },
+      { config: emptyConfig(), present: false, problems: [] },
+      nodeWaveEventIo,
+    );
+
+    expect(code).toBe(0);
+    expect(existsSync(join(root, `wave${wave}`, "events.jsonl"))).toBe(true);
+    expect(
+      readFileSync(join(root, `wave${wave}`, "events.jsonl"), "utf8"),
+    ).toContain(`"wave":"${wave}"`);
+    expect(statSync(join(root, `wave-${wave}`)).isFile()).toBe(true);
+  });
+
+  test("the real probe is false for a regular file and for a missing path", () => {
+    const root = scratch();
+    writeFileSync(join(root, "f"), "x");
+    expect(nodeWaveEventIo.isDirectory(join(root, "f"))).toBe(false);
+    expect(nodeWaveEventIo.isDirectory(join(root, "missing"))).toBe(false);
+    expect(nodeWaveEventIo.isDirectory(root)).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
 import { appendFile, mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { statSync } from "node:fs";
 import {
   CONFIG_RELATIVE_PATH,
   type Config,
@@ -40,7 +40,13 @@ export const nodeWaveEventIo: WaveEventIo = {
   // (`wave-event.sh:66-76`), so a regular file named like a candidate is NOT
   // one. `existsSync` would say yes, the port would pick the file, and `mkdir`
   // on it would throw EEXIST while the shell went on to the real directory.
-  isDirectory: existsSync,
+  isDirectory: (path) => {
+    try {
+      return statSync(path).isDirectory();
+    } catch {
+      return false;
+    }
+  },
   mkdir: async (path) => {
     await mkdir(path, { recursive: true });
   },
