@@ -206,6 +206,12 @@ describe("parseArtifact", () => {
       }),
     ],
     [
+      "a partial scope with a numeric plans entry",
+      corrupt((raw) => {
+        raw.scope = { kind: "partial", plans: ["docs/a.md", 7] };
+      }),
+    ],
+    [
       "a full scope smuggling a plans list",
       corrupt((raw) => {
         raw.scope = { kind: "full", plans: ["a"] };

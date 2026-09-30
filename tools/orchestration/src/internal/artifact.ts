@@ -206,6 +206,13 @@ export function parseArtifact(text: string): PlanVerifyArtifact {
     if (!Array.isArray(rawScope.plans)) {
       throw new Error("malformed artifact: partial scope missing plans array");
     }
+    for (const plan of rawScope.plans) {
+      if (typeof plan !== "string") {
+        throw new Error(
+          "malformed artifact: scope plan entry must be a string",
+        );
+      }
+    }
     scope = {
       kind: "partial",
       plans: [...(rawScope.plans as readonly string[])],
