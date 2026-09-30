@@ -82,13 +82,57 @@ describe("hasCommand, un-injected", () => {
   });
 });
 
-/** Whether a pid still exists. ESRCH is how a kernel says it does not. */
+/**
+ * Whether a pid is still a RUNNING process.
+ *
+ * `kill(pid, 0)` answers "does the pid exist", and a killed process whose parent
+ * has not reaped it yet still does: it is a zombie (state `Z`), dead in every way
+ * this suite cares about. After a group SIGKILL the runner has already re-raised
+ * and exited, so the dead probe is an orphan of whatever PID 1 or subreaper the
+ * host has, and any ancestor or PID 1 that reaps late under load keeps it in the
+ * table. That zombie path is one of two known sources of a "survived" failure in
+ * the Ctrl-C test; the other is a slow SIGINT dispatch (see that test). On Linux the state is read from `/proc/<pid>/stat`; ESRCH, a vanished
+ * proc entry, and `Z`/`X` all mean gone. Elsewhere (macOS has no procfs, and its
+ * launchd reaps at once) `kill(pid, 0)` is the whole answer.
+ */
 function alive(pid: number): boolean {
   try {
     process.kill(pid, 0);
-    return true;
   } catch {
     return false;
+  }
+  if (process.platform !== "linux") return true;
+  try {
+    // The state is the first field after the `(comm)` one, and comm may itself
+    // contain spaces or parens, so anchor on the LAST `)`.
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const state = stat.slice(
+      stat.lastIndexOf(")") + 2,
+      stat.lastIndexOf(")") + 3,
+    );
+    return state !== "Z" && state !== "X";
+  } catch (error) {
+    // The proc entry vanished between the two calls: gone. Reading the stat of a
+    // process that is exiting mid-read can also give ESRCH rather than ENOENT.
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ESRCH") return false;
+    // Anything else (an unreadable procfs) proves nothing, and `kill(pid, 0)`
+    // already said the pid exists: report alive, so the group-kill tests cannot
+    // pass without checking anything.
+    return true;
+  }
+}
+
+/** The fields after the last `)` of /proc/<pid>/stat, as a printable summary. */
+function procSummary(pid: number | undefined): string {
+  if (pid === undefined || !Number.isFinite(pid)) return "unknown pid";
+  if (process.platform !== "linux") return "no procfs on this platform";
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const f = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+    return `state ${f[0]}, ppid ${f[1]}, pgrp ${f[2]}, session ${f[3]}`;
+  } catch {
+    return "gone";
   }
 }
 
@@ -191,7 +235,7 @@ describe("Ctrl-C does not leave a detached probe running", () => {
       script,
       [
         `import { runCheck } from ${JSON.stringify(capabilities)};`,
-        `await runCheck(["sh", "-c", 'sleep 30 & echo $! > "$0"; wait', ${JSON.stringify(pidfile)}], 30_000);`,
+        `await runCheck(["sh", "-c", 'sleep 30 & echo "$$ $!" > "$0"; wait', ${JSON.stringify(pidfile)}], 30_000);`,
         "",
       ].join("\n"),
     );
@@ -201,6 +245,7 @@ describe("Ctrl-C does not leave a detached probe running", () => {
       { stdio: "ignore" },
     );
     let grandchild: number | undefined;
+    let shell: number | undefined;
     try {
       // Generous, and guarded: a slow fork is not a survivor.
       const deadline = Date.now() + 8_000;
@@ -216,15 +261,43 @@ describe("Ctrl-C does not leave a detached probe running", () => {
         if (text !== "") break;
         await new Promise((done) => setTimeout(done, 20));
       }
-      grandchild = Number.parseInt(readFileSync(pidfile, "utf8").trim(), 10);
+      // The probe writes "<shell pid> <grandchild pid>"; wait for both.
+      let parts: string[] = [];
+      while (Date.now() < deadline) {
+        parts = readFileSync(pidfile, "utf8").trim().split(/\s+/);
+        if (parts.length >= 2) break;
+        await new Promise((done) => setTimeout(done, 20));
+      }
+      shell = Number.parseInt(parts[0] ?? "", 10);
+      grandchild = Number.parseInt(parts[1] ?? "", 10);
       expect(
-        Number.isFinite(grandchild),
-        "the grandchild recorded its pid",
+        Number.isFinite(grandchild) && Number.isFinite(shell),
+        "the probe recorded its shell and grandchild pids",
       ).toBe(true);
+      const sentAt = Date.now();
       expect(runner.kill("SIGINT")).toBe(true);
+      // Two known ways to fail here, and neither is a product contract on
+      // latency: a zombie not yet reaped (handled in `alive`), and a runner whose
+      // event loop is slow to dispatch SIGINT under CI load, so the grandchild is
+      // genuinely alive in state S for longer than 2 s. A 2 s kill latency is not
+      // a product contract, so the window matches the 8 s fork allowance.
+      //
+      // Reading a failure (the message carries the evidence):
+      //  - state Z: a zombie, i.e. reaping latency.
+      //  - state S, ppid == the shell, the runner still alive: the handler had
+      //    not dispatched, i.e. latency.
+      //  - state S, ppid 1 or another reaper, the shell gone: the group kill
+      //    missed the grandchild, i.e. a product bug.
+      const died = await waitForDeath(grandchild, 8_000);
       expect(
-        await waitForDeath(grandchild, 2_000),
-        `grandchild ${grandchild} survived Ctrl-C: the detached group was never killed`,
+        died,
+        [
+          `grandchild ${grandchild} survived Ctrl-C: the detached group was never killed`,
+          `grandchild: ${procSummary(grandchild)}`,
+          `shell ${shell}: ${procSummary(shell)}`,
+          `runner exitCode=${runner.exitCode} signalCode=${runner.signalCode}`,
+          `elapsed since SIGINT: ${Date.now() - sentAt} ms`,
+        ].join("\n"),
       ).toBe(true);
     } finally {
       runner.kill("SIGKILL");
@@ -236,7 +309,7 @@ describe("Ctrl-C does not leave a detached probe running", () => {
         }
       }
     }
-  }, 30_000);
+  }, 45_000); // 8 s fork + 8 s death + slack: at least 5 s above the waits.
 });
 
 describe("runRemote, the real runner", () => {

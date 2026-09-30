@@ -583,6 +583,43 @@ describe("orchestration skill coverage", () => {
     expect(line).toMatch(/needs a line/);
   });
 
+  it("mirror: a skill-only token that the tracked skill mirror also carries is still named", () => {
+    const fixture = copyFixture();
+    const canary = `cf-mirror-canary-${randomUUID().slice(0, 8)}`;
+    plantInlineCanary(fixture, canary);
+    // A stand-in hexagen checkout whose ONLY tracked copy of the canary is the hexagen-only skill
+    // mirror (`.agents/skills/orchestrate-wave/`, byte-identical to the template's copy). The mirror
+    // is the skill again, not a second place a token lives: left in the corpus it would make the
+    // sweep pass vacuously, so the canary must still be flagged.
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "skill-coverage-mirror-"),
+    );
+    const git = (...args: string[]) =>
+      spawnSync(
+        "git",
+        ["-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args],
+        { cwd: root },
+      );
+    git("init", "-q");
+    const mirror = path.join(
+      root,
+      ".agents/skills/orchestrate-wave/references/planted.md",
+    );
+    fs.mkdirSync(path.dirname(mirror), { recursive: true });
+    fs.writeFileSync(mirror, `planted: ${canary}\n`);
+    fs.writeFileSync(path.join(root, "README.md"), "unrelated\n");
+    // Force-add the exact mirror path: a plain `add .` can silently omit it under a global ignore.
+    const mirrorRel = ".agents/skills/orchestrate-wave/references/planted.md";
+    expect(git("add", "-f", mirrorRel).status).toBe(0);
+    expect(git("add", "README.md").status).toBe(0);
+    expect(git("ls-files", "--error-unmatch", mirrorRel).status).toBe(0);
+    const result = run(coverageArgs(fixture, ["--hexagen-root", root]));
+    expect(result.status, result.out).toBe(1);
+    const line = result.out.split("\n").find((l) => l.includes(canary));
+    expect(line, result.out).toBeDefined();
+    expect(line).toMatch(/needs a line/);
+  });
+
   it("a report larger than the pipe buffer is delivered whole to a slow reader", () => {
     const fixture = copyFixture();
     // An empty-ish hexagen checkout flags hundreds of tokens, so the report is ~100 KB, well past a
