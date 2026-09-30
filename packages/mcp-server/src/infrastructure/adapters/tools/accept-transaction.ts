@@ -14,7 +14,7 @@ export const acceptTransactionTool: ToolDefinition = {
       grant: {
         type: "object",
         description:
-          "The Grant authorizing this cycle (docs/kernel/GRANT.md). Required — an accept call with no grant is denied.",
+          "The Grant authorizing this cycle (docs/kernel/GRANT.md). Required — an accept call with no grant is denied. Must carry a `signature` verified against this repo's trusted signing key (.hexagen/grant-signing.key); a grant with no signature, or one that doesn't verify, is denied before any other check runs.",
       },
       goal_id: {
         type: "string",

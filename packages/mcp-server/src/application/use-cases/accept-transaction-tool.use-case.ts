@@ -24,6 +24,7 @@ import type {
   AcceptTransactionToolPort,
   AcceptTransactionToolResult,
 } from "../ports/in/accept-transaction-tool.port.js";
+import type { GrantSignaturePort } from "../ports/out/grant-signature.port.js";
 import type { ManifestWritePort } from "../ports/out/manifest-write.port.js";
 import type { ScaffoldingPort } from "../ports/out/scaffolding.port.js";
 import type { TraceWritePort } from "../ports/out/trace-write.port.js";
@@ -43,11 +44,12 @@ function isTerminalStatus(status: string): boolean {
  *
  * This is also the Grant enforcement choke point (docs/kernel/GRANT.md
  * "Enforcement point"): before any write port is touched, the caller-
- * supplied Grant is checked for presence, mode, expiry/revocation, and —
- * when the transaction carries a pending mutation — the mutation's tool,
- * context, and write path(s) against the grant. Every accept, grant-deny,
- * or failure appends one Trace evidence line (docs/kernel/TRACE.md) via
- * `TraceWritePort`.
+ * supplied Grant is verified against the trusted signing key (a grant this
+ * repo never issued is never trusted, whatever fields it claims), then
+ * checked for mode, expiry/revocation, and — when the transaction carries a
+ * pending mutation — the mutation's tool, context, and write path(s).
+ * Every accept, grant-deny, or failure appends one Trace evidence line
+ * (docs/kernel/TRACE.md) via `TraceWritePort`.
  */
 export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
   constructor(
@@ -56,6 +58,7 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
     private readonly scaffoldingPort: ScaffoldingPort,
     private readonly eventBusPort: EventBusPort,
     private readonly traceWritePort: TraceWritePort,
+    private readonly grantSignaturePort: GrantSignaturePort,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -85,7 +88,7 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
       }
 
       pending = readPendingMutation(tx);
-      const grantCheck = this.checkGrant(input.grant, pending);
+      const grantCheck = await this.checkGrant(input.grant, pending);
 
       if (!grantCheck.allowed) {
         const traceResult = await this.appendTrace(
@@ -178,21 +181,44 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
   }
 
   /**
-   * Grant present, mode "write", within its expiry/revocation window, and
-   * — when there is a pending mutation to apply — that mutation's tool,
-   * context, and write path(s) are all within the grant. Fail closed: any
-   * missing or failing check denies before `compareAndSetStatus` claims
-   * the transaction, so nothing is written and no compensation is needed.
+   * Grant present and signed by this repo's trusted issuer, mode "write",
+   * within its expiry/revocation window, and — when there is a pending
+   * mutation to apply — that mutation's tool, context, and write path(s)
+   * are all within the grant. Fail closed: any missing or failing check
+   * denies before `compareAndSetStatus` claims the transaction, so nothing
+   * is written and no compensation is needed.
+   *
+   * The signature check runs first and independently of every other check:
+   * a grant with every field a caller could want, but no valid signature,
+   * is not "close" to authorized — it is exactly the self-asserted grant
+   * docs/kernel/GRANT.md's "Enforcement point" warns is not enforcement at
+   * all on its own. Scope checks below only run once provenance is settled.
    */
-  private checkGrant(
+  private async checkGrant(
     grant: Grant | undefined,
     pending: PendingManifestMutation | null,
-  ): GrantCheck {
+  ): Promise<GrantCheck> {
     if (!grant) {
       return {
         allowed: false,
         code: "grant_denied",
         reason: "No Grant supplied; refusing to accept",
+      };
+    }
+
+    const signatureResult = await this.grantSignaturePort.verify(grant);
+    if (!signatureResult.success) {
+      return {
+        allowed: false,
+        code: "grant_denied",
+        reason: `Grant '${grant.id}' signature could not be verified: ${signatureResult.error.message}`,
+      };
+    }
+    if (!signatureResult.value) {
+      return {
+        allowed: false,
+        code: "grant_denied",
+        reason: `Grant '${grant.id}' has no valid signature from a trusted issuer; refusing to trust a self-asserted grant`,
       };
     }
 

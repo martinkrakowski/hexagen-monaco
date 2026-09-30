@@ -68,6 +68,11 @@
       "type": "string",
       "format": "date-time",
       "description": "Set when a grant is revoked before its natural expiry (a human pulls it mid-cycle). Absent on an active, unrevoked grant."
+    },
+    "signature": {
+      "type": "string",
+      "minLength": 1,
+      "description": "HMAC-SHA256 (hex) over every field above except this one, keyed by the trust root at .hexagen/grant-signing.key (see docs/kernel/GRANT.md \"Enforcement point\"). Not in `required`: a grant without one is syntactically valid but is denied at accept time all the same, since an unsigned or wrongly-signed grant is never trusted as authorization, whatever its other fields claim."
     }
   }
 }

@@ -25,6 +25,38 @@ export interface Grant {
   readonly max_files?: number;
   readonly expires_at: string;
   readonly revoked_at?: string;
+  /**
+   * HMAC-SHA256 (hex) over `canonicalGrantPayload(this)`, keyed by the
+   * trusted secret at `.hexagen/grant-signing.key` — see
+   * `GrantSignaturePort`/`GrantSignatureAdapter`. A caller-supplied grant
+   * with no signature, or one that doesn't verify, is never trusted as
+   * authorization (docs/kernel/GRANT.md "Enforcement point"): the fields
+   * above describe a scope, but only a valid signature says a trusted
+   * issuer actually granted it.
+   */
+  readonly signature?: string;
+}
+
+/**
+ * The exact bytes a Grant's signature is computed over: every field except
+ * `signature` itself, as JSON with keys in a fixed sorted order — so the
+ * same grant always canonicalizes to the same string regardless of the
+ * property order it was constructed or parsed in.
+ */
+export function canonicalGrantPayload(grant: Grant): string {
+  const signable: Omit<Grant, "signature"> = {
+    id: grant.id,
+    principal: grant.principal,
+    agent: grant.agent,
+    contexts: grant.contexts,
+    paths: grant.paths,
+    tools: grant.tools,
+    mode: grant.mode,
+    max_files: grant.max_files,
+    expires_at: grant.expires_at,
+    revoked_at: grant.revoked_at,
+  };
+  return JSON.stringify(signable, Object.keys(signable).sort());
 }
 
 /** What one pending mutation would write: its proposing tool and owning context. */

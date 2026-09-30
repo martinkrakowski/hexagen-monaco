@@ -2,6 +2,7 @@ import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import {
   MANIFEST_WRITE_PATH,
+  canonicalGrantPayload,
   checkGrantMode,
   checkGrantWindow,
   checkMutationAgainstGrant,
@@ -23,6 +24,44 @@ function grant(overrides: Partial<Grant> = {}): Grant {
     ...overrides,
   };
 }
+
+describe("canonicalGrantPayload", () => {
+  it("is stable across different property insertion orders", () => {
+    const a: Grant = {
+      id: "g1",
+      principal: "martin",
+      agent: "a1",
+      contexts: ["billing"],
+      paths: [MANIFEST_WRITE_PATH],
+      tools: ["hexagen_create_context"],
+      mode: "write",
+      expires_at: "2026-09-30T18:00:00.000Z",
+    };
+    const b: Grant = {
+      expires_at: "2026-09-30T18:00:00.000Z",
+      mode: "write",
+      tools: ["hexagen_create_context"],
+      paths: [MANIFEST_WRITE_PATH],
+      contexts: ["billing"],
+      agent: "a1",
+      principal: "martin",
+      id: "g1",
+    };
+    assert.equal(canonicalGrantPayload(a), canonicalGrantPayload(b));
+  });
+
+  it("excludes the signature field itself, so signing is not self-referential", () => {
+    const base = grant({ signature: undefined });
+    const signed = grant({ signature: "deadbeef" });
+    assert.equal(canonicalGrantPayload(base), canonicalGrantPayload(signed));
+  });
+
+  it("changes when any signable field changes", () => {
+    const a = canonicalGrantPayload(grant({ contexts: ["billing"] }));
+    const b = canonicalGrantPayload(grant({ contexts: ["stripe"] }));
+    assert.notEqual(a, b);
+  });
+});
 
 describe("deriveMutationRef", () => {
   it("maps each PendingManifestMutation kind to its proposing tool and owning context", () => {

@@ -26,6 +26,7 @@ import type {
   TraceAppendInput,
   TraceWritePort,
 } from "../../src/application/ports/out/trace-write.port.js";
+import type { GrantSignaturePort } from "../../src/application/ports/out/grant-signature.port.js";
 
 class ManifestWriteSpy implements ManifestWritePort {
   writes: string[] = [];
@@ -116,6 +117,16 @@ class FailingTraceWriteSpy implements TraceWritePort {
   }
 }
 
+/** Configurable stand-in for the trusted-issuer check; defaults to "signed by a trusted issuer". */
+class GrantSignatureSpy implements GrantSignaturePort {
+  calls = 0;
+  result: Result<boolean, Error> = { success: true, value: true };
+  async verify(): Promise<Result<boolean, Error>> {
+    this.calls += 1;
+    return this.result;
+  }
+}
+
 const NOW = new Date("2026-09-30T12:00:00.000Z");
 
 function baseGrant(overrides: Partial<Grant> = {}): Grant {
@@ -128,11 +139,14 @@ function baseGrant(overrides: Partial<Grant> = {}): Grant {
     tools: ["hexagen_create_context"],
     mode: "write",
     expires_at: "2026-09-30T18:00:00.000Z",
+    signature: "test-signature",
     ...overrides,
   };
 }
 
-async function harnessWithPendingCreateContext() {
+async function harnessWithPendingCreateContext(
+  grantSignaturePort: GrantSignaturePort = new GrantSignatureSpy(),
+) {
   const write = new ManifestWriteSpy();
   const scaffolding = new ScaffoldingStub();
   const events = new EventBusFake();
@@ -144,6 +158,7 @@ async function harnessWithPendingCreateContext() {
     scaffolding,
     events,
     trace,
+    grantSignaturePort,
     () => NOW,
   );
   const proposed = await new CreateContextToolUseCase(tm).execute({
@@ -282,6 +297,7 @@ describe("Grant enforcement at hexagen_accept_transaction", () => {
       scaffolding,
       events,
       trace,
+      new GrantSignatureSpy(),
       () => NOW,
     );
     const proposed = await new CreateContextToolUseCase(tm).execute({
@@ -312,6 +328,7 @@ describe("Grant enforcement at hexagen_accept_transaction", () => {
       scaffolding,
       events,
       trace,
+      new GrantSignatureSpy(),
       () => NOW,
     );
     const proposed = await new CreateContextToolUseCase(tm).execute({
@@ -330,5 +347,52 @@ describe("Grant enforcement at hexagen_accept_transaction", () => {
     );
     assert.equal(write.writes.length, 0);
     assert.equal(trace.calls, 1);
+  });
+
+  it("denies a grant with no signature, and never claims the transaction", async () => {
+    const signaturePort = new GrantSignatureSpy();
+    signaturePort.result = { success: true, value: false };
+    const h = await harnessWithPendingCreateContext(signaturePort);
+    const result = await h.accept.execute({
+      transaction_id: h.transactionId,
+      grant: baseGrant({ signature: undefined }),
+    });
+    assert.equal(result.success, false);
+    assert.match(String(result.error), /no valid signature/);
+    assert.equal(h.write.writes.length, 0);
+    assert.equal(signaturePort.calls, 1);
+    assert.equal(h.trace.lines[0]?.halt_reason, "grant_denied");
+  });
+
+  it("denies a grant whose signature does not verify, before any scope check runs", async () => {
+    const signaturePort = new GrantSignatureSpy();
+    signaturePort.result = { success: true, value: false };
+    const h = await harnessWithPendingCreateContext(signaturePort);
+    // Scope is otherwise fully out of bounds too, to prove signature is
+    // checked first: the error names the signature, not the scope.
+    const result = await h.accept.execute({
+      transaction_id: h.transactionId,
+      grant: baseGrant({ signature: "wrong", contexts: ["nowhere"] }),
+    });
+    assert.equal(result.success, false);
+    assert.match(String(result.error), /no valid signature/);
+    assert.equal(h.write.writes.length, 0);
+  });
+
+  it("denies and reports when the signature port itself fails (e.g. the trust root is unreadable)", async () => {
+    const signaturePort = new GrantSignatureSpy();
+    signaturePort.result = {
+      success: false,
+      error: new Error("EACCES reading .hexagen/grant-signing.key"),
+    };
+    const h = await harnessWithPendingCreateContext(signaturePort);
+    const result = await h.accept.execute({
+      transaction_id: h.transactionId,
+      grant: baseGrant(),
+    });
+    assert.equal(result.success, false);
+    assert.match(String(result.error), /could not be verified/);
+    assert.match(String(result.error), /EACCES/);
+    assert.equal(h.write.writes.length, 0);
   });
 });

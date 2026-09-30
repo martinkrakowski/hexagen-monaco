@@ -63,6 +63,10 @@ interface Grant {
   expires_at: string;
   /** Set on early revocation; absent on an active grant. */
   revoked_at?: string;
+  /** HMAC-SHA256 (hex) over every field above, keyed by the trust root at
+   *  .hexagen/grant-signing.key. Verified before any other check — see
+   *  "Enforcement point" below. */
+  signature?: string;
 }
 ```
 
@@ -100,6 +104,33 @@ are not compiled from the manifest — they come from whoever is issuing the
 grant (a human, or a CI policy) and are opaque to this compile step.
 
 ## Enforcement point
+
+**Signature check runs first, before any scope check.** A caller-supplied
+grant with every field a reviewer would want — the right tools, contexts,
+paths, a future `expires_at` — is not authorization on its own: nothing
+about those fields says a trusted issuer actually minted this grant rather
+than the same agent it's meant to limit assembling one for itself.
+`GrantSignaturePort.verify(grant)` checks `grant.signature` as an
+HMAC-SHA256 (hex) over `canonicalGrantPayload(grant)` — every other field,
+as JSON with keys in a fixed sorted order — keyed by the secret at
+`.hexagen/grant-signing.key`. A grant with no signature, a signature from
+the wrong key, or a signature over fields that were changed after signing
+all verify false and are denied with the same `grant_denied` code as any
+other check, before `checkGrantMode`/`checkGrantWindow`/
+`checkMutationAgainstGrant` ever run. `GrantSignatureAdapter` fails closed
+on every way trust can't be established — no key file, malformed hex in
+either the key or the signature, an I/O error reading the key — never by
+throwing past the check.
+
+**No issuer exists yet.** This closes the "self-asserted grant" gap (a
+Qodo finding on PR #697) on the verification side: `hexagen_accept_
+transaction` now refuses anything not signed by `.hexagen/grant-signing.key`.
+Nothing in this repo yet _mints_ a signed grant — `hexagen grant compile`
+(see "Command spec" below) is still design-only. Until it exists, whoever
+tests or dogfoods this adapter signs a grant themselves with the same
+`canonicalGrantPayload` + HMAC-SHA256 scheme, using the key at
+`.hexagen/grant-signing.key` (create it — a single hex-encoded secret — if
+it doesn't exist; treat it like any other credential, never commit it).
 
 **The general rule:** any write — through any tool, MCP or otherwise —
 whose target path falls outside `grant.paths`, or whose tool identity falls

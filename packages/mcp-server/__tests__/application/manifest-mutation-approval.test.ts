@@ -32,6 +32,7 @@ import type {
   TraceAppendInput,
   TraceWritePort,
 } from "../../src/application/ports/out/trace-write.port.js";
+import type { GrantSignaturePort } from "../../src/application/ports/out/grant-signature.port.js";
 
 class ManifestWriteSpy implements ManifestWritePort {
   writes: string[] = [];
@@ -132,6 +133,13 @@ class TraceWriteSpy implements TraceWritePort {
   }
 }
 
+/** Every test grant here is treated as validly signed — signature verification itself is covered in grant-enforcement.test.ts. */
+class AlwaysValidGrantSignatureSpy implements GrantSignaturePort {
+  async verify() {
+    return { success: true as const, value: true };
+  }
+}
+
 /** A grant covering every context these tests exercise plus the manifest write path. */
 function grant(overrides: Partial<Grant> = {}): Grant {
   return {
@@ -151,6 +159,7 @@ function grant(overrides: Partial<Grant> = {}): Grant {
     ],
     mode: "write",
     expires_at: "2099-01-01T00:00:00.000Z",
+    signature: "test-signature",
     ...overrides,
   };
 }
@@ -167,6 +176,7 @@ function harness() {
     scaffolding,
     events,
     trace,
+    new AlwaysValidGrantSignatureSpy(),
   );
   const reject = new RejectTransactionToolUseCase(tm);
   return { write, scaffolding, events, trace, tm, accept, reject };
