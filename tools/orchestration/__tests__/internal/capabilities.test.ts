@@ -82,13 +82,36 @@ describe("hasCommand, un-injected", () => {
   });
 });
 
-/** Whether a pid still exists. ESRCH is how a kernel says it does not. */
+/**
+ * Whether a pid is still a RUNNING process.
+ *
+ * `kill(pid, 0)` answers "does the pid exist", and a killed process whose parent
+ * has not reaped it yet still does: it is a zombie (state `Z`), dead in every way
+ * this suite cares about. After a group SIGKILL the runner has already re-raised
+ * and exited, so the dead probe is an orphan of whatever PID 1 or subreaper the
+ * host has, and a CI container whose init reaps lazily (or never) keeps it in the
+ * table. On Linux the state is read from `/proc/<pid>/stat`; ESRCH, a vanished
+ * proc entry, and `Z`/`X` all mean gone. Elsewhere (macOS has no procfs, and its
+ * launchd reaps at once) `kill(pid, 0)` is the whole answer.
+ */
 function alive(pid: number): boolean {
   try {
     process.kill(pid, 0);
-    return true;
   } catch {
     return false;
+  }
+  if (process.platform !== "linux") return true;
+  try {
+    // The state is the first field after the `(comm)` one, and comm may itself
+    // contain spaces or parens, so anchor on the LAST `)`.
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const state = stat.slice(
+      stat.lastIndexOf(")") + 2,
+      stat.lastIndexOf(")") + 3,
+    );
+    return state !== "Z" && state !== "X";
+  } catch {
+    return false; // The proc entry vanished between the two calls: gone.
   }
 }
 
