@@ -1,6 +1,5 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
 import { type Config, type ConfigProblem } from "./config.js";
 import { runWaveEvent, type WaveEventDeps } from "./wave-event-cli.js";
 
@@ -60,7 +59,7 @@ export function waveEventEnv(
 ): WaveEventDeps["env"] {
   return {
     ...(processEnv.LOGDIR !== undefined ? { LOGDIR: processEnv.LOGDIR } : {}),
-    HOME: homedir(),
+    ...(processEnv.HOME !== undefined ? { HOME: processEnv.HOME } : {}),
     ...(processEnv.WAVE_LOG_ROOT !== undefined
       ? { WAVE_LOG_ROOT: processEnv.WAVE_LOG_ROOT }
       : {}),

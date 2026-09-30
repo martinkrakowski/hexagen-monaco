@@ -6,6 +6,8 @@ import { emptyConfig } from "../../src/internal/config.js";
 import {
   buildWaveEventDeps,
   nodeWaveEventIo,
+  runWaveEventForProject,
+  waveEventEnv,
   type WaveEventIo,
 } from "../../src/internal/wave-event-wiring.js";
 
@@ -56,6 +58,8 @@ function recorder(directories: readonly string[] = []): Recorder {
   };
 }
 
+const ARGV = ["W3", "l1", "dispatch", "started"];
+
 describe("buildWaveEventDeps", () => {
   const config = { ...emptyConfig(), repo: "owner/demo" };
 
@@ -75,5 +79,43 @@ describe("nodeWaveEventIo", () => {
     await nodeWaveEventIo.appendFile(join(dir, "events.jsonl"), "one\n");
     await nodeWaveEventIo.appendFile(join(dir, "events.jsonl"), "two\n");
     expect(readFileSync(join(dir, "events.jsonl"), "utf8")).toBe("one\ntwo\n");
+  });
+});
+
+describe("F11: HOME is passed through, never replaced by the passwd home", () => {
+  const config = { ...emptyConfig(), repo: "owner/demo" };
+
+  test("an empty HOME resolves to /tmp/.waves-demo, as wave-event.sh does", async () => {
+    const rec = recorder();
+    const code = await runWaveEventForProject(
+      ARGV,
+      { HOME: "" },
+      { config, present: false, problems: [] },
+      rec.io,
+    );
+    expect(code).toBe(0);
+    expect(rec.appended).toEqual(["/tmp/.waves-demo/wave-W3/events.jsonl"]);
+  });
+
+  test("an unset HOME does too, and the env carries no HOME key at all", async () => {
+    expect(waveEventEnv({})).not.toHaveProperty("HOME");
+    const rec = recorder();
+    await runWaveEventForProject(
+      ARGV,
+      {},
+      { config, present: false, problems: [] },
+      rec.io,
+    );
+    expect(rec.appended).toEqual(["/tmp/.waves-demo/wave-W3/events.jsonl"]);
+  });
+
+  test("a set HOME is passed through untouched", () => {
+    expect(
+      waveEventEnv({ HOME: "/home/op", LOGDIR: "/l", WAVE_LOG_ROOT: "/r" }),
+    ).toEqual({
+      HOME: "/home/op",
+      LOGDIR: "/l",
+      WAVE_LOG_ROOT: "/r",
+    });
   });
 });
