@@ -35,6 +35,7 @@
 //     --allowlist <file> [--sites <file> --generic <dir>] [--memory <dir>] [--memory-manifest <file>] [--lessons <file>]
 //     [--token-review <file>] [--hexagen-root <dir>]
 
+import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join, resolve } from "node:path";
@@ -274,6 +275,38 @@ function readTree(dir) {
   return { lines, content, files: entries };
 }
 
+/**
+ * The snapshot is only evidence if it is still the pinned bytes. SOURCE.md records the git blob id
+ * of each file at the pin; recompute each blob id here (sha1 over "blob <bytes>\0<bytes>", which is
+ * what `git hash-object` prints) and compare. Counting units is not enough: a one-byte edit keeps
+ * every count.
+ */
+function checkSnapshot(sourceDir) {
+  const recorded = new Map();
+  const row = /^\|\s*`[^`]+`\s*\|\s*`([0-9a-f]{40})`\s*\|\s*`([^`]+)`\s*\|/;
+  for (const line of readFile(join(sourceDir, "SOURCE.md"), "SOURCE.md").split("\n")) {
+    const match = line.match(row);
+    if (match) recorded.set(match[2], match[1]);
+  }
+  if (recorded.size === 0) {
+    bad("SOURCE.md records no blob ids, so the snapshot cannot be proven to be the pinned bytes");
+  }
+  for (const [dest, blob] of recorded) {
+    const bytes = readFileSync(join(sourceDir, dest));
+    const actual = createHash("sha1")
+      .update(`blob ${bytes.length}\0`)
+      .update(bytes)
+      .digest("hex");
+    if (actual !== blob) {
+      bad(`source/${dest} is not the pinned snapshot: its blob id is ${actual}, SOURCE.md records ${blob}`);
+    }
+  }
+  for (const { path } of UNIT_FILES) {
+    if (!recorded.has(path)) bad(`source/${path} has no blob id recorded in SOURCE.md`);
+  }
+  say(`snapshot: ${recorded.size} file(s) match the blob ids recorded in SOURCE.md`);
+}
+
 function checkCounts(name, sourceText) {
   const expected = EXPECTED_UNITS[name];
   const anchors = anchorUnits(sourceText, expected.anchorKinds).length;
@@ -467,6 +500,8 @@ function main() {
     for (const line of tree.lines) treeLines.add(line);
     for (const unit of tree.content) treeContent.add(unit);
   }
+
+  checkSnapshot(sourceDir);
 
   const totals = { anchors: 0, content: 0 };
   for (const { name, path: relative } of UNIT_FILES) {

@@ -171,6 +171,21 @@ describe("orchestration skill coverage", () => {
     expect(result.out).toContain("cast.md: 35 anchors [heading]");
   });
 
+  it("snapshot: a one-byte edit of source/SKILL.md is named, though every count holds", () => {
+    const clean = run(coverageArgs(FIXTURE));
+    expect(clean.out).toContain("snapshot: 5 file(s) match");
+    const fixture = copyFixture();
+    const file = path.join(fixture, "source", "SKILL.md");
+    const bytes = fs.readFileSync(file);
+    // "the" -> "thf" inside a paragraph changes one byte and no unit count.
+    const at = bytes.indexOf("the ");
+    bytes[at + 2] = "f".charCodeAt(0);
+    fs.writeFileSync(file, bytes);
+    const result = run(coverageArgs(fixture));
+    expect(result.status, result.out).toBe(1);
+    expect(result.out).toContain("source/SKILL.md is not the pinned snapshot");
+  });
+
   it("exits 2 on bad arguments and on an unreadable path", () => {
     expect(run([]).status).toBe(2);
     expect(run(["--source", FIXTURE]).status).toBe(2);
