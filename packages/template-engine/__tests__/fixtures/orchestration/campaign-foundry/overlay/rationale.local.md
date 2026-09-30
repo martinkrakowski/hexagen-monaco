@@ -431,3 +431,28 @@ From `source/references/rationale.md` — the remediation step that carried the 
    five lines — for each manifest entry, assert its `before` text is present and its `after` text is
    not. It ran four times on 2026-09-16 (0 stranded each time) and is cheap enough to be
    unconditional; a killed verification is the one moment the working tree can be silently wrong.
+
+## Originals of the two paragraphs OW4 rewrote to name the shipped briefs
+
+The generic skill now says "Template A (in the shipped reference)" rather than "Template A (in the
+pipeline runbook)", because the pipeline runbook is not something this skill can reach and the four
+prompt templates ship with it. Those two paragraphs were the only place in the repository where the
+pinned source wording survived — the overlay at house-rules.md keeps the runbook paragraphs, but not
+these two — so without this section the coverage check would report them uncovered and, correctly,
+there would be no tree left to restore them into.
+
+From `source/SKILL.md` lines 238-240 — the lane-dispatch paragraph, whose "Template A" citation now
+names `references/briefs.md`. Appended byte-for-byte, wrapping included.
+
+   Write each brief from Template A, then dispatch it as an `Agent`. **Record the worktree tip
+   first** — an agent that reports success having committed nothing looks identical to one that did
+   the work. Never let two lanes own the same file at the same time.
+
+From `source/SKILL.md` lines 282-284 — the Remediate stage, whose "Template C" citation now names
+`references/briefs.md`. Appended byte-for-byte, and the first line is left unwrapped exactly as in
+the source because anchors match trimmed whole lines: `3. **Remediate.** …` is a bold-lead anchor and
+reflowing it would be a different anchor.
+
+3. **Remediate.** Merge verified findings into a fix brief (Template C), listing refuted items
+   with reasons. **After any interrupted or killed `mutate:verify`, scan for a stranded mutation
+   before anything commits.** (why: [rationale](references/rationale.md#3-remediate))

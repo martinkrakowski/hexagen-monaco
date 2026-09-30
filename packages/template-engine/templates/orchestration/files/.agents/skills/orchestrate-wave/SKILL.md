@@ -22,7 +22,9 @@ templates A–D, invariants, failure playbook) and the orchestrator-kickoff-prom
 ships them, both runbooks** (`docs/workflows/delegated-implementation-pipeline.md` and
 `docs/workflows/orchestrator-kickoff-prompt.md`). This file is the operating contract either way,
 and wins where they differ; it deliberately does not copy them, so they
-cannot drift apart.
+cannot drift apart. **Prompt templates A–D ship with this skill**, in
+`references/briefs.md`, so the four briefs this file orders by name never depend on a runbook the
+project may not have.
 
 - The cast, and each seat's track record: the overlay's `cast.md`, at `.agents/orchestration/cast.md`
 
@@ -160,11 +162,9 @@ status wins and your summary says so.
   typecheck.
 
 - *Measure a file's coverage the way the gate does — a claim of per-file 100% without the JSON
-  reporter's per-file listing is not evidence.* (Template A, the delegated-implementation-pipeline
-  document, lane-brief-implementer section.)
+  reporter's per-file listing is not evidence.* (Template A, in `references/briefs.md`.)
 - *A loaded host is a reason to show the isolated pass and let CI be the gate, never to raise a test
-  timeout.* (Template A, the delegated-implementation-pipeline document, lane-brief-implementer
-  section.)
+  timeout.* (Template A, in `references/briefs.md`.)
 
 **Know which gates are enforced by CI and which are enforced by you.** The plan verifier, a
 lane retiring its own premise, and the mutation verifier on a changed manifest are **CI**; a
@@ -286,9 +286,9 @@ that did not happen.
    The repair is to delete the stripped package directory and reinstall — a plain `yarn install` will
    not restore it, because the directory's presence makes the package look installed.
 
-   Write each brief from Template A, then dispatch it as an `Agent`. **Record the worktree tip
-   first** — an agent that reports success having committed nothing looks identical to one that did
-   the work. Never let two lanes own the same file at the same time.
+   Write each brief from Template A in `references/briefs.md`, then dispatch it as an `Agent`.
+   **Record the worktree tip first** — an agent that reports success having committed nothing looks
+   identical to one that did the work. Never let two lanes own the same file at the same time.
 
    **A lane is not done until the PR exists, and lanes routinely stop one step short.** Write
    "commit, push, and open the PR with `gh pr create`" as the explicit final instruction in every
@@ -329,9 +329,10 @@ that did not happen.
    When the review of a PR is dispositioned, emit `review settled` with the counts of BUG /
    SUGGESTION / NIT findings in `--detail`.
 
-3. **Remediate.** Merge verified findings into a fix brief (Template C), listing refuted items
-   with reasons. **After any interrupted or killed `mutate:verify`, scan for a stranded mutation
-   before anything commits.** (why: [rationale](references/rationale.md#3-remediate))
+3. **Remediate.** Merge verified findings into a fix brief (Template C, in
+   `references/briefs.md`), listing refuted items with reasons. **After any interrupted or killed
+   `mutate:verify`, scan for a stranded mutation before anything commits.** (why:
+   [rationale](references/rationale.md#3-remediate))
 
    Run the remediator in that worktree, then **verify it yourself**: full gate, re-read the
    diff. Never merge on a remediator's self-report.
