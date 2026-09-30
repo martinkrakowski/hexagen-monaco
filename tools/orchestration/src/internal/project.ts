@@ -173,10 +173,30 @@ export async function loadConfigFor(
   const root = rootArg ?? (await findRepositoryRoot());
   const read = deps.readRepository ?? readRepositoryFromGh;
   let text: string | undefined;
+  let unreadable: ConfigProblem | undefined;
   try {
     text = await readFile(configPath(root), "utf8");
-  } catch {
+  } catch (err) {
+    // ONLY ENOENT means "no overlay". A permission error, or a directory sitting
+    // at the config path, means the overlay EXISTS and cannot be read; treating
+    // that as absent would let every bin skip `configRefusal` and run on defaults.
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      unreadable = {
+        at: "<file>",
+        message: `could not be read: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
     text = undefined;
+  }
+
+  if (unreadable !== undefined) {
+    const fallback = await emptyConfigFor(root, deps);
+    return {
+      root,
+      config: fallback.config,
+      present: true,
+      problems: [unreadable, ...fallback.problems],
+    };
   }
 
   // One implementation of "file + gh -> config + problems", shared with the

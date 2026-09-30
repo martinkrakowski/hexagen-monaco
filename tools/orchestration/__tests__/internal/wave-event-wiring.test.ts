@@ -167,6 +167,26 @@ describe("F10: a present-but-invalid config refuses instead of re-routing events
     expect(said).toContain("refusing to append");
   });
 
+  test("an UNREADABLE file (a directory at the config path) refuses too", async () => {
+    const root = project(undefined);
+    mkdirSync(join(root, ".agents/orchestration/config.yaml"), {
+      recursive: true,
+    });
+    const loaded = await loadConfigFor(root, {
+      readRepository: () => "acme/demo",
+    });
+    const rec = recorder();
+    const code = await runWaveEventForProject(
+      ARGV,
+      { HOME: "/home/op" },
+      loaded,
+      rec.io,
+    );
+    expect(code).toBe(2);
+    expect(rec.appended).toEqual([]);
+    expect(rec.stderr.join("\n")).toContain("<file>");
+  });
+
   test("an ABSENT file keeps today's defaults, and still appends", async () => {
     const loaded = await loadConfigFor(project(undefined), {
       readRepository: () => "acme/demo",

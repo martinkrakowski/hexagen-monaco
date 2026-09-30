@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfigFor } from "../../src/internal/project.js";
@@ -133,5 +139,40 @@ describe("F9: a schema error does not make doctor check the defaults", () => {
     expect(loaded.problems[0]?.at).toBe("<file>");
     expect(loaded.config.planDir).toBe("docs/planning");
     expect(loaded.present).toBe(true);
+  });
+});
+
+describe("an unreadable overlay is present-with-a-problem, never absent", () => {
+  const gh = { readRepository: () => "acme/demo" };
+
+  test("a directory at the config path", async () => {
+    const root = project(undefined);
+    mkdirSync(join(root, ".agents/orchestration/config.yaml"), {
+      recursive: true,
+    });
+    const loaded = await loadConfigFor(root, gh);
+    expect(loaded.present).toBe(true);
+    expect(loaded.problems.map((p) => p.at)).toContain("<file>");
+    expect(loaded.problems[0]?.message).toContain("EISDIR");
+  });
+
+  test.skipIf(process.getuid?.() === 0)("a chmod 000 file", async () => {
+    const root = project("repo: acme/demo\n");
+    const file = join(root, ".agents/orchestration/config.yaml");
+    chmodSync(file, 0o000);
+    try {
+      const loaded = await loadConfigFor(root, gh);
+      expect(loaded.present).toBe(true);
+      expect(loaded.problems[0]?.at).toBe("<file>");
+      expect(loaded.problems[0]?.message).toContain("EACCES");
+    } finally {
+      chmodSync(file, 0o600);
+    }
+  });
+
+  test("a genuinely missing file is still absent", async () => {
+    const loaded = await loadConfigFor(project(undefined), gh);
+    expect(loaded.present).toBe(false);
+    expect(loaded.problems).toEqual([]);
   });
 });
