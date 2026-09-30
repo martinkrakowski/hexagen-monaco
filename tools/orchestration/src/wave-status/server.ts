@@ -5,8 +5,8 @@ import {
   type ServerResponse,
 } from "node:http";
 import { createReadStream, watch as fsWatch, type FSWatcher } from "node:fs";
-import { readdir, readFile, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { readFile, realpath, stat } from "node:fs/promises";
+import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   collect,
@@ -14,7 +14,7 @@ import {
   readTail,
   realDepsFor,
   resolveScanRoots,
-  waveIdFromDirName,
+  scanWaveDirs,
   type CollectDeps,
   type PrCorpus,
   type StatusBody,
@@ -507,6 +507,7 @@ export async function startServer(
     }
     await serveLog(
       res,
+      deps,
       scanRoots,
       route.wave,
       route.lane,
@@ -571,6 +572,7 @@ export async function startServer(
 /** `/api/log/:wave/:lane` — tail of the lane log or a full export with `?full=1`. */
 async function serveLog(
   res: ServerResponse,
+  deps: CollectDeps,
   roots: readonly string[],
   wave: string,
   lane: string,
@@ -578,7 +580,7 @@ async function serveLog(
   open: (path: string) => Promise<TailHandle>,
 ): Promise<void> {
   if (search.get("full") === "1") {
-    const logPath = await resolveLogPath(roots, wave, lane);
+    const logPath = await resolveLogPath(deps, roots, wave, lane);
     if (logPath === undefined) {
       res.writeHead(404);
       res.end();
@@ -612,7 +614,7 @@ async function serveLog(
     res.end();
     return;
   }
-  const logPath = await resolveLogPath(roots, wave, lane);
+  const logPath = await resolveLogPath(deps, roots, wave, lane);
   if (logPath === undefined) {
     res.writeHead(404);
     res.end();
@@ -764,24 +766,37 @@ export function extractRootBlock(css: string): string | undefined {
   return extractTopLevelBlock(css, ":root");
 }
 
-/** Map a wave id back to its log directory by re-deriving ids from the roots. */
+/**
+ * The log file for a lane the page would list, or undefined (a 404).
+ *
+ * It is decided by the SAME scan `collect` runs (`scanWaveDirs`), so the route
+ * serves a log only when: the wave's events pass the repository check, the
+ * lane is one an event creates, and the directory is the one `collect` would
+ * pick for that wave id, in its sorted first-match order. The path is then
+ * resolved with `realpath` and must lie under the realpath of the scan root: a
+ * log that is a symlink out of the root is not served, and a missing file
+ * stays a 404.
+ */
 async function resolveLogPath(
+  deps: CollectDeps,
   roots: readonly string[],
   wave: string,
   lane: string,
 ): Promise<string | undefined> {
   for (const root of roots) {
-    let names: readonly string[];
-    try {
-      names = await readdir(root);
-    } catch {
-      continue;
-    }
-    const dir = names.find(
-      (name) => name.startsWith("wave") && waveIdFromDirName(name) === wave,
+    const view = (await scanWaveDirs(deps, root)).find(
+      (candidate) => candidate.wave === wave,
     );
-    if (dir !== undefined) {
-      return join(root, dir, `${lane}.log`);
+    if (view === undefined) continue;
+    if (!view.eventLanes.has(lane)) return undefined;
+    const logName = `${lane}.log`;
+    if (!view.entries.includes(logName)) return undefined;
+    try {
+      const real = await realpath(join(view.dir, logName));
+      const realRoot = await realpath(root);
+      return real.startsWith(realRoot + sep) ? real : undefined;
+    } catch {
+      return undefined;
     }
   }
   return undefined;

@@ -18,7 +18,9 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -156,6 +158,35 @@ function expectStylesheetLink(html: string): void {
  * collector's newest-first rule is a function of lane-log activity, so
  * sub-second write order here would make that assertion wall-clock luck.
  */
+/**
+ * Name lanes in a wave directory's events. The log route serves only a lane the
+ * collector would list, and an event is what creates a lane, so a log with no
+ * event is not one.
+ */
+async function nameLanes(
+  waveDir: string,
+  wave: string,
+  lanes: readonly string[],
+  extra: Record<string, unknown> = {},
+): Promise<void> {
+  await writeFile(
+    join(waveDir, "events.jsonl"),
+    lanes
+      .map(
+        (lane) =>
+          `${JSON.stringify({
+            ts: "2026-09-07T17:00:00Z",
+            wave,
+            lane,
+            stage: "gate",
+            event: "started",
+            ...extra,
+          })}\n`,
+      )
+      .join(""),
+  );
+}
+
 async function makeFixture(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "wave-status-srv-"));
   roots.push(root);
@@ -179,6 +210,7 @@ async function makeFixture(): Promise<string> {
     })}\n`,
   );
   await writeFile(join(root, "waveU", "u2.log"), "short\n");
+  await nameLanes(join(root, "waveU"), "U", ["u2"]);
   const base = Date.now();
   const tMtime = new Date(base - 60_000);
   const uMtime = new Date(base - 600_000);
@@ -1043,16 +1075,62 @@ describe("the server over real HTTP", () => {
     expect(res.body.equals(whole.subarray(whole.length - 1024))).toBe(true);
   });
 
+  test("a lane log that is a symlink out of the scan root is 404, tail and full=1 alike", async () => {
+    const root = await makeFixture();
+    const outside = await mkdtemp(join(tmpdir(), "wave-status-outside-"));
+    roots.push(outside);
+    await writeFile(join(outside, "secret.txt"), "not this repository's\n");
+    await mkdir(join(root, "waveS"));
+    await nameLanes(join(root, "waveS"), "S", ["s1"]);
+    await symlink(join(outside, "secret.txt"), join(root, "waveS", "s1.log"));
+    const handle = await start({
+      port: 0,
+      scanRoot: root,
+      collect: async () => statusAt(0),
+    });
+    expect((await get(handle.port, "/api/log/S/s1")).status).toBe(404);
+    expect((await get(handle.port, "/api/log/S/s1?full=1")).status).toBe(404);
+    // A regular log beside it is still served.
+    expect((await get(handle.port, "/api/log/T/t1?tail=1")).status).toBe(200);
+  });
+
+  test("the log route applies collect's scoping: another repository's wave and a lane no event names are 404", async () => {
+    const root = await makeFixture();
+    await mkdir(join(root, "waveO"));
+    await nameLanes(join(root, "waveO"), "O", ["o1"], { repo: "other/repo" });
+    await writeFile(join(root, "waveO", "o1.log"), "belongs elsewhere\n");
+    // A wave of this repository, whose directory also holds a log no event names.
+    await mkdir(join(root, "waveM"));
+    await nameLanes(join(root, "waveM"), "M", ["m1"], { repo: REPO });
+    await writeFile(join(root, "waveM", "m1.log"), "mine\n");
+    await writeFile(join(root, "waveM", "litter.log"), "a probe\n");
+    const handle = await start({
+      port: 0,
+      scanRoot: root,
+      collect: async () => statusAt(0),
+      deps: { ...realDepsFor(REPO_ROOT), repo: REPO },
+    });
+    expect((await get(handle.port, "/api/log/O/o1")).status).toBe(404);
+    expect((await get(handle.port, "/api/log/O/o1?full=1")).status).toBe(404);
+    expect((await get(handle.port, "/api/log/M/litter")).status).toBe(404);
+    const mine = await get(handle.port, "/api/log/M/m1");
+    expect(mine.status).toBe(200);
+    expect(mine.body.toString("utf8")).toBe("mine\n");
+  });
+
   test("a >1 MB log is tailed without reading the whole file; ?tail=99999 is 400", async () => {
     const root = await mkdtemp(join(tmpdir(), "wave-status-big-"));
     roots.push(root);
     await mkdir(join(root, "waveT"));
+    await nameLanes(join(root, "waveT"), "T", ["t1", "t2"]);
     const payload = Buffer.concat([
       Buffer.alloc(1_500_000, 0x61),
       Buffer.from("TAILEND\n"),
     ]);
-    const logPath = join(root, "waveT", "t1.log");
-    await writeFile(logPath, payload);
+    // The route serves the realpath (a symlinked temp dir resolves), so the
+    // byte counter below compares against that spelling.
+    await writeFile(join(root, "waveT", "t1.log"), payload);
+    const logPath = await realpath(join(root, "waveT", "t1.log"));
 
     let bytesRead = 0;
     const handle = await start({
@@ -1117,6 +1195,7 @@ describe("the server over real HTTP", () => {
     const root = await mkdtemp(join(tmpdir(), "wave-status-full-"));
     roots.push(root);
     await mkdir(join(root, "waveT"));
+    await nameLanes(join(root, "waveT"), "T", ["t1", "t2"]);
     // 32 KB payload is larger than the default 16 KB tail
     const payload = Buffer.concat([
       Buffer.alloc(32_000, 0x61),
@@ -1145,6 +1224,7 @@ describe("the server over real HTTP", () => {
     const root = await mkdtemp(join(tmpdir(), "wave-status-full-wins-"));
     roots.push(root);
     await mkdir(join(root, "waveT"));
+    await nameLanes(join(root, "waveT"), "T", ["t1", "t2"]);
     const payload = Buffer.concat([
       Buffer.alloc(32_000, 0x62),
       Buffer.from("FULL_WINS_END\n"),
@@ -1213,6 +1293,7 @@ describe("the server over real HTTP", () => {
     const root = await mkdtemp(join(tmpdir(), "wave-status-stream-error-"));
     roots.push(root);
     await mkdir(join(root, "waveT"));
+    await nameLanes(join(root, "waveT"), "T", ["t1", "t2"]);
     // A directory at t1.log stats successfully (so 200 headers are sent),
     // but reading it as a stream fails asynchronously with EISDIR.
     await mkdir(join(root, "waveT", "t1.log"));
@@ -1385,6 +1466,7 @@ describe("the server over real HTTP", () => {
         join(root, "waveT", "events.jsonl"),
         join(root, "waveT", "gate-t1.log"),
         join(root, "waveT", "t1.log"),
+        join(root, "waveU", "events.jsonl"),
         join(root, "waveU", "u2.log"),
       ].sort(),
     );
@@ -2091,7 +2173,7 @@ describe("cleanup", () => {
     // The contract the cleanup promises runs against real watchers: a directory
     // fs.watch whose close() flushes a pending batch is what hung this test
     // hang behind it, so here the arming itself is asserted through the injected seam.
-    expect(listeners.length).toBe(4);
+    expect(listeners.length).toBe(5);
 
     await handle.close();
     handles.pop();
@@ -2101,6 +2183,7 @@ describe("cleanup", () => {
         join(root, "waveT", "events.jsonl"),
         join(root, "waveT", "gate-t1.log"),
         join(root, "waveT", "t1.log"),
+        join(root, "waveU", "events.jsonl"),
         join(root, "waveU", "u2.log"),
       ].sort(),
     );
