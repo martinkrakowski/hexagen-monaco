@@ -148,9 +148,14 @@ describe("runCheck, the real runner", () => {
 describe("runRemote, the real runner", () => {
   test("an alias that cannot resolve is failed, not a throw or a hang", async () => {
     const alias = `hexagen-no-such-host-${Math.random().toString(36).slice(2)}`;
+    // A resolver that answers NXDOMAIN at once gives `failed`; one that stalls
+    // gives `timeout`. Both are a bounded answer, and a host that took longer
+    // than the bound is the only wrong result.
+    const started = Date.now();
     const result = await runRemote(alias, ["true"], 5_000);
-    expect(result.status).toBe("failed");
+    expect(["failed", "timeout"]).toContain(result.status);
     expect(result.stdout).toBe("");
+    expect(Date.now() - started).toBeLessThan(10_000);
   }, 20_000);
 
   test("the probe is bounded: an unroutable alias times out rather than waiting on DNS", async () => {
