@@ -35,6 +35,9 @@ on:
       # orchestration round trip (OW8): the script, and the coverage script it drives.
       - "scripts/orchestration/**"
       - "scripts/prepare-publish-package.js"
+      # the job's package manager (packageManager field) and dependency resolution.
+      - "package.json"
+      - "yarn.lock"
       - ".github/workflows/capstone.yml"
   workflow_dispatch:
 
