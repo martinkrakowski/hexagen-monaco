@@ -138,6 +138,26 @@ const PORT_EXCEPTIONS: readonly {
 
 const PORT_PATTERN = /3000|3001/g;
 
+/**
+ * The 4-5 digit literals that are legitimately in the server, each with its
+ * reason. Anything else that looks like a port is a hardcoded one.
+ */
+const ALLOWED_NUMBER_LITERALS: Readonly<Record<string, string>> = {
+  "65535": "the highest valid TCP port, the bound resolvePort checks against",
+  "1024": "bytes per KB, converting the ?tail= parameter",
+};
+
+/**
+ * Every 4-5 digit literal in `text` that could be a port: not part of a hex
+ * colour or hex number, a dotted address or version, an underscore-separated
+ * number, or an identifier; and not one of the allow-listed constants.
+ */
+function portLiterals(text: string): string[] {
+  return [...text.matchAll(/(?<![\w#]|\d\.)(\d{4,5})(?!\w|\.\d)/g)]
+    .map((match) => match[1])
+    .filter((literal) => !(literal in ALLOWED_NUMBER_LITERALS));
+}
+
 /** The whole line a match at `index` sits on. */
 function lineAt(text: string, index: number): string {
   const start = text.lastIndexOf("\n", index) + 1;
@@ -311,6 +331,15 @@ describe("nothing this lane owns carries another project's facts", () => {
     expect(server).toContain("DEFAULT_WAVE_STATUS_PORT");
     // And no literal port number in the server at all: it can only arrive
     // through `resolvePort`, which is the one place a refusal can happen.
-    expect(/\b\d{4,5}\b/.test(server.replace(/\b\d+_?\d*\b/g, ""))).toBe(false);
+    expect(portLiterals(server)).toEqual([]);
+  });
+
+  test("the port-literal check can fail: a planted 4317 is found, and hex colours, dotted addresses and underscored numbers are not", () => {
+    expect(portLiterals("const port = 4317;")).toEqual(["4317"]);
+    expect(portLiterals("listen(31337, host)")).toEqual(["31337"]);
+    expect(portLiterals("color: #1234; x = 0x1F90; v = 10.4317.1")).toEqual([]);
+    expect(portLiterals("const n = 4_317; const m = 12_345;")).toEqual([]);
+    // The two legitimate literals, allow-listed by name below.
+    expect(portLiterals("if (port > 65535 || kb > 1024) fail();")).toEqual([]);
   });
 });
