@@ -39,6 +39,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 // The unit counts at the pin, keyed by the snapshot file's path relative to --source. Asserted,
 // not documented: if the extractor changes shape and starts seeing fewer units, that is a
@@ -66,7 +67,30 @@ const EXPECTED_UNITS = {
 // four directories, so there is nothing in it to preserve verbatim.
 const UNIT_FILES = Object.entries(EXPECTED_UNITS).map(([name, spec]) => ({ name, ...spec }));
 
-const FENCE_OPEN = /^\s{0,3}(`{3,}|~{3,})/;
+/**
+ * The one place that knows what a fence is. CommonMark: an opener is up to three spaces, then a run
+ * of three or more backticks or tildes (a backtick fence's info string may not contain a backtick).
+ * It closes only on a line of the SAME character, at least as long as the opener, followed by
+ * nothing but whitespace — so a ``` followed by text inside a ```bash fence is content, not a close.
+ *
+ * `open` is null outside a fence, or {char, length} inside one. Returns the next state and what the
+ * line was: "open", "close", or "body" (inside a fence, not a closer), or null (outside, no fence).
+ */
+function stepFence(line, open) {
+  if (open) {
+    const closer = line.match(/^ {0,3}(`+|~+)\s*$/);
+    if (closer && closer[1][0] === open.char && closer[1].length >= open.length) {
+      return { open: null, event: "close" };
+    }
+    return { open, event: "body" };
+  }
+  const opener = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+  if (opener && !(opener[1][0] === "`" && opener[2].includes("`"))) {
+    return { open: { char: opener[1][0], length: opener[1].length }, event: "open" };
+  }
+  return { open: null, event: null };
+}
+
 const HEADING = /^\s{0,3}#{1,6}\s/;
 const BOLD_LEAD = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?\*\*/;
 
@@ -86,33 +110,28 @@ function walk(dir) {
 }
 
 /** Paragraphs and fenced blocks, in order. Fences are returned whole, delimiters included. */
-function contentUnits(text) {
+export function contentUnits(text) {
   const units = [];
   let paragraph = [];
-  let inFence = false;
-  let fenceChar = null;
+  let open = null;
   const flush = () => {
     if (paragraph.length) units.push(paragraph.join("\n"));
     paragraph = [];
   };
   for (const line of text.split("\n")) {
-    const fence = line.match(FENCE_OPEN);
-    if (fence) {
-      if (!inFence) {
-        flush();
-        inFence = true;
-        fenceChar = fence[1][0];
-        paragraph = [line];
-      } else if (fence[1][0] === fenceChar) {
-        paragraph.push(line);
-        flush();
-        inFence = false;
-      } else {
-        paragraph.push(line);
-      }
+    const step = stepFence(line, open);
+    open = step.open;
+    if (step.event === "open") {
+      flush();
+      paragraph = [line];
       continue;
     }
-    if (inFence) {
+    if (step.event === "close") {
+      paragraph.push(line);
+      flush();
+      continue;
+    }
+    if (step.event === "body") {
       paragraph.push(line);
       continue;
     }
@@ -127,24 +146,15 @@ function contentUnits(text) {
 }
 
 /** Heading lines and bold-lead lines, outside fenced code. */
-function anchorUnits(text, anchorKinds) {
+export function anchorUnits(text, anchorKinds) {
   const headings = anchorKinds.includes("heading");
   const boldLeads = anchorKinds.includes("boldLead");
   const anchors = [];
-  let inFence = false;
-  let fenceChar = null;
+  let open = null;
   for (const line of text.split("\n")) {
-    const fence = line.match(FENCE_OPEN);
-    if (fence) {
-      if (!inFence) {
-        inFence = true;
-        fenceChar = fence[1][0];
-      } else if (fence[1][0] === fenceChar) {
-        inFence = false;
-      }
-      continue;
-    }
-    if (inFence) continue;
+    const step = stepFence(line, open);
+    open = step.open;
+    if (step.event) continue;
     if ((headings && HEADING.test(line)) || (boldLeads && BOLD_LEAD.test(line))) anchors.push(line);
   }
   return anchors;
@@ -159,7 +169,7 @@ function anchorUnits(text, anchorKinds) {
 function codeSpans(text) {
   const spans = [];
   for (const unit of contentUnits(text)) {
-    if (FENCE_OPEN.test(unit)) continue;
+    if (stepFence(unit.split("\n")[0], null).event === "open") continue;
     spans.push(...spansIn(unit));
   }
   return spans;
@@ -178,22 +188,13 @@ function spansIn(text) {
 }
 
 /** Every whitespace-separated word inside a fenced block. */
-function fencedWords(text) {
+export function fencedWords(text) {
   const words = [];
-  let inFence = false;
-  let fenceChar = null;
+  let open = null;
   for (const line of text.split("\n")) {
-    const fence = line.match(FENCE_OPEN);
-    if (fence) {
-      if (!inFence) {
-        inFence = true;
-        fenceChar = fence[1][0];
-      } else if (fence[1][0] === fenceChar) {
-        inFence = false;
-      }
-      continue;
-    }
-    if (!inFence) continue;
+    const step = stepFence(line, open);
+    open = step.open;
+    if (step.event !== "body") continue;
     for (const word of line.split(/\s+/)) if (word) words.push(word);
   }
   return words;
@@ -611,4 +612,5 @@ function main() {
   process.exit(0);
 }
 
-main();
+// Run only as a script, so the unit extractors can be imported and tested on their own.
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main();

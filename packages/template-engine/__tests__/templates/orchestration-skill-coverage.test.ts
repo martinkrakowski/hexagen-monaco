@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "..", "..", "..", "..");
@@ -287,6 +287,42 @@ describe("orchestration skill coverage", () => {
     const result = run(coverageArgs(fixture, ["--hexagen-root", root]));
     expect(result.status, result.out).toBe(1);
     expect(result.out).toContain("no tracked hexagen file was readable");
+  });
+
+  it("fences: a line of backticks followed by text does not close a fence", async () => {
+    const units = (await import(pathToFileURL(SCRIPT).href)) as {
+      contentUnits: (text: string) => string[];
+      anchorUnits: (text: string, kinds: string[]) => string[];
+      fencedWords: (text: string) => string[];
+    };
+    const text = [
+      "Before.",
+      "",
+      "```bash",
+      "echo one",
+      "``` not a closer",
+      "# not a heading, still inside",
+      "echo two",
+      "```",
+      "",
+      "After.",
+      "",
+      "````md",
+      "```",
+      "inside a four-tick fence",
+      "````",
+      "",
+      "## Real heading",
+      "",
+    ].join("\n");
+    const found = units.contentUnits(text);
+    expect(found).toHaveLength(5);
+    expect(found[1]).toContain("``` not a closer");
+    expect(found[1]).toContain("echo two");
+    expect(found[3]).toContain("inside a four-tick fence");
+    expect(units.anchorUnits(text, ["heading"])).toEqual(["## Real heading"]);
+    expect(units.fencedWords(text)).toContain("closer");
+    expect(units.fencedWords(text)).toContain("four-tick");
   });
 
   it("exits 2 on bad arguments and on an unreadable path", () => {
