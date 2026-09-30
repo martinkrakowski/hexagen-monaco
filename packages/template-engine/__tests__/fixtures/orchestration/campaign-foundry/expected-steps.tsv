@@ -1,0 +1,11 @@
+check:env	yarn check:env
+build	yarn build
+typecheck	yarn typecheck
+lint	yarn lint
+format:check	yarn format:check
+lint:arch	yarn lint:arch
+sync:check	yarn sync:check
+lint:bytes	yarn lint:bytes
+plan:verify	yarn plan:verify
+test:cov	yarn test:cov
+verify-manifests	hexagen-orchestration-verify-manifests
