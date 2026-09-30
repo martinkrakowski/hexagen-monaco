@@ -21,6 +21,7 @@ planDir: docs/planning
 # `SKIPPED <step> (<reason>)` and counts it in its summary. A step without it whose script is
 # absent fails the gate by name, because a gate that passes when it did not run is the one
 # failure class a gate must never have.
+# The two steps that hold the gate lock are the ones source/gate.sh:63 names in LOCKED_STEPS.
 gateSteps:
   - name: check:env
     command: yarn check:env
@@ -43,8 +44,10 @@ gateSteps:
     command: yarn plan:verify
   - name: test:cov
     command: yarn test:cov
+    locked: true
   - name: verify-manifests
     command: hexagen-orchestration-verify-manifests
+    locked: true
 
 # The CI check whose conclusion gates a merge — a regex over check-run names, not a display
 # name. A review bot that registers instantly must never satisfy the wait on its own.
