@@ -242,6 +242,8 @@ jobs:
   orchestration-round-trip:
     name: "Orchestration round trip"
     runs-on: ubuntu-latest
+    # A hung `yarn add` or install must not hold a runner for the 6-hour default.
+    timeout-minutes: 30
     steps:
       - name: "Checkout Repository"
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
