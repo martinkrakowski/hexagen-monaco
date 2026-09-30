@@ -36,7 +36,11 @@ if (refusal !== undefined) {
       root,
       log: (text) => console.log(text),
       logError: (text) => console.error(text),
+      // Plan paths are the repository's: relative to the root, never the cwd.
       readFile: (path) => readFile(resolve(root, path), "utf8"),
+      // Log paths are the event writer's: relative to the cwd, as `wave-event`
+      // resolves them, so a gate reads the file the writer wrote.
+      readLogFile: (path) => readFile(path, "utf8"),
       readdir: (dir) => readdir(dir),
       exists: (path) => existsSync(path),
       // The ONE projection of the environment `defaultLogDir` reads, shared

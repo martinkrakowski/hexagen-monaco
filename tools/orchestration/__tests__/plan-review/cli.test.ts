@@ -125,6 +125,8 @@ const io = (
   // `src/bins/plan-review.ts`), so the fixture does the same: a repo-relative
   // plan path must be readable, and an absolute one must be left alone.
   readFile: (path: string) => readFile(resolve(root, path), "utf8"),
+  // Log paths are the writer's: relative to the working directory, not the root.
+  readLogFile: (path: string) => readFile(path, "utf8"),
   readdir: (dir: string) => readdir(dir),
   exists: (path: string): boolean => existsSync(path),
   env: over.env ?? {},
@@ -1301,6 +1303,50 @@ describe("the built bin", () => {
       LOGDIR: logdir,
     });
     expect(result.status).toBe(0);
+    expect(result.stdout).toContain("risk=high");
+  });
+
+  test("a relative --logdir reads the events.jsonl wave-event wrote from the same directory", () => {
+    const root = repository("repo: acme/demo\nplanDir: docs/planning\n");
+    writeFileSync(
+      join(root, "docs", "planning", "plan.md"),
+      [
+        "| Lane | Risk | Delivers |",
+        "|---|---|---|",
+        "| **RX-1** | **high** | Split. |",
+      ].join("\n"),
+    );
+    const sub = join(root, "packages", "deep");
+    mkdirSync(sub, { recursive: true });
+    const writer = resolve(PACKAGE_ROOT, "dist/bins/wave-event.js");
+    const written = spawnSync(
+      process.execPath,
+      [
+        writer,
+        "--logdir",
+        "wave-logs",
+        "wv-2",
+        "RX-1",
+        "review",
+        "settled",
+        "--detail",
+        '{"verdict":"clear"}',
+      ],
+      { cwd: sub, encoding: "utf8", env: {} },
+    );
+    expect(written.status, written.stderr).toBe(0);
+    // The writer put it under the CWD, not under the repository root.
+    expect(existsSync(join(sub, "wave-logs", "events.jsonl"))).toBe(true);
+    expect(existsSync(join(root, "wave-logs"))).toBe(false);
+    const result = run(sub, [
+      "pre-pr-check",
+      "RX-1",
+      "--wave",
+      "wv-2",
+      "--logdir",
+      "wave-logs",
+    ]);
+    expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("risk=high");
   });
 

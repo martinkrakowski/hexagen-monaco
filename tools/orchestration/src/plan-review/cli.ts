@@ -66,7 +66,16 @@ export interface PlanReviewIo {
   readonly root: string;
   readonly log: (text: string) => void;
   readonly logError: (text: string) => void;
+  /** Reads a PLAN path: resolved against `root`, an absolute one left alone. */
   readonly readFile: (path: string) => Promise<string>;
+  /**
+   * Reads an EVENT LOG path (`--logdir`, `$LOGDIR`, `waveLogDir`, the wave-log
+   * root), resolved exactly as `wave-event` writes it: against the process's
+   * working directory. A relative `--logdir` names the directory the writer was
+   * given from wherever it ran, and resolving it against the repository root
+   * instead would read a different (or no) file.
+   */
+  readonly readLogFile: (path: string) => Promise<string>;
   readonly readdir: (dir: string) => Promise<readonly string[]>;
   /** Whether `path` exists — the same test `defaultLogDir` reclaims a real directory with. */
   readonly exists: (path: string) => boolean;
@@ -230,7 +239,7 @@ async function check(
 
   let eventsText: string;
   try {
-    eventsText = await io.readFile(logPath);
+    eventsText = await io.readLogFile(logPath);
   } catch (error: unknown) {
     io.logError(`could not read ${logPath}: ${errorText(error)}`);
     return 2;
@@ -455,7 +464,7 @@ async function prePrCheck(
   const logPath = `${logdir}/events.jsonl`;
   let eventsText: string;
   try {
-    eventsText = await io.readFile(logPath);
+    eventsText = await io.readLogFile(logPath);
   } catch (error: unknown) {
     // Fail closed: a high-risk lane whose log cannot be read has not been
     // shown to hold a settled review, so this is a refusal, not a usage
