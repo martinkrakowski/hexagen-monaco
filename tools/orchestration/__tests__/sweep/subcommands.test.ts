@@ -232,11 +232,20 @@ describe("append-only", () => {
     expect(refused.code).toBe(1);
   });
 
-  test("an APPEND_ONLY that will not compile matches nothing", async () => {
-    // The shell test this replaces failed to match on an invalid expression
-    // too, and the caller's answer to "no match" is to die.
-    const { code } = await run(["src/a.ts"], { env: { APPEND_ONLY: "[" } });
-    expect(code).toBe(1);
+  test("an APPEND_ONLY that will not compile exits 2 with the regex error, never 1", async () => {
+    const { code, err } = await run(["src/a.ts"], {
+      env: { APPEND_ONLY: "[" },
+    });
+    expect(code).toBe(2);
+    expect(err).toMatch(/not a valid regular expression/);
+  });
+
+  test("an invalid override is refused even when the path list is otherwise fine", async () => {
+    const { code } = await run(["CHANGELOG.md"], {
+      env: { APPEND_ONLY: "(" },
+      config: withPattern("^CHANGELOG\\.md$"),
+    });
+    expect(code).toBe(2);
   });
 
   test("no path at all exits 2 with the usage", async () => {

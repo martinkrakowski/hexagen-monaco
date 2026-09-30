@@ -218,19 +218,6 @@ function appendOnlyConfig(config: Config, env: SweepEnv): Config {
   return { ...config, appendOnlyPaths: override };
 }
 
-/** Whether `path` is append-only, or `undefined` when the pattern will not compile. */
-function isAppendOnly(path: string, config: Config): boolean {
-  try {
-    return matchesAppendOnly(config, path);
-  } catch {
-    // A pattern that will not compile matches nothing. The shell test this
-    // replaces (`grep -qE "$APPEND_ONLY"`) also failed to match on an invalid
-    // expression, and the caller's answer to "no match" is to die — which is
-    // the fail-closed direction.
-    return false;
-  }
-}
-
 /**
  * `sweep append-only <path>…`
  *
@@ -250,8 +237,23 @@ async function runAppendOnly(
     return 2;
   }
   const config = appendOnlyConfig(io.config, io.env);
+  // Compile the effective pattern ONCE, up front. A pattern that will not
+  // compile is a fault in the caller's input, not a path that failed to match:
+  // 1 means "this path is not append-only" and a merge script answers it by
+  // dying with a conflict report, which would blame the file for the pattern.
+  const effective = config.appendOnlyPaths;
+  if (effective !== undefined && effective !== "") {
+    try {
+      new RegExp(effective);
+    } catch (error: unknown) {
+      io.logError(
+        `the append-only pattern is not a valid regular expression: ${errorText(error)}`,
+      );
+      return 2;
+    }
+  }
   for (const path of paths) {
-    if (!isAppendOnly(path, config)) {
+    if (!matchesAppendOnly(config, path)) {
       io.logError(`${path} is not an append-only path`);
       return 1;
     }
