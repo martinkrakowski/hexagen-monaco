@@ -334,6 +334,19 @@ describe("orchestration template — emit shape", () => {
       assert.match(gate, /^ {2}workflow_dispatch:/m);
     });
 
+    it("grants the workflow contents: read and no other scope", () => {
+      const lines = gate.split("\n");
+      const at = lines.findIndex((l) => /^permissions:\s*$/.test(l));
+      assert.ok(at >= 0, "gate.yml must declare workflow-level permissions");
+      const scopes: Record<string, string> = {};
+      for (const l of lines.slice(at + 1)) {
+        const m = /^ {2}([a-z-]+):\s*(\S+)\s*$/.exec(l);
+        if (!m) break;
+        scopes[m[1]] = m[2];
+      }
+      assert.deepStrictEqual(scopes, { contents: "read" });
+    });
+
     it("runs the gate bin exactly once, and nothing else", () => {
       const runs = gate
         .split("\n")

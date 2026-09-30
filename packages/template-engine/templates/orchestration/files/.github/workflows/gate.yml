@@ -17,6 +17,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Read-only: this workflow only checks out code and runs the gate, so the token it
+# receives needs no write scope.
+permissions:
+  contents: read
+
 jobs:
   gate:
     name: Gate
