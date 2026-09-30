@@ -1,0 +1,2735 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wave status</title>
+    <link rel="stylesheet" href="/tokens.css" />
+    <style>
+      /* The colour tokens (--color-*) come from /tokens.css. The server serves the
+     projects own tokens file when it set tokensCssPath, extracting :root as a
+     base and .dark after it; with no such setting it serves this packages neutral
+     built-in set instead. Either way this page never redeclares them, so a token
+     change cannot silently drift.
+     The served blocks are scoped to :root and .dark, so <html> carries that class —
+     without it the served rules match nothing.
+     Only the non-colour tokens are defined here. */
+      :root {
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-6: 24px;
+        --radius-sm: 4px;
+        --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        --font-sans: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--color-background);
+        color: var(--color-text-primary);
+        font-family: var(--font-sans);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      ::selection {
+        background: color-mix(
+          in srgb,
+          var(--color-brand-primary) 30%,
+          transparent
+        );
+      }
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      /* The page is a full-height grid: the header is auto-sized, the area below
+     it splits evenly between the table pane and the log pane — and with no
+     log open the table takes the whole area. Sizing is CSS only; a resize is
+     handled by the layout, never by a listener. */
+      #page {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: var(--space-4);
+        height: 100vh;
+        height: 100dvh;
+        padding: var(--space-6);
+      }
+      #page.with-log {
+        grid-template-rows: auto 1fr 1fr;
+      }
+      #page.with-log.expanded {
+        grid-template-rows: auto 0 1fr;
+      }
+      /* Belt and braces: the 0fr row above already collapses the table
+     pane's height, but its content would still be present underneath —
+     reachable by a scroll gesture or a stray Tab — without this. */
+      #page.expanded #table-pane {
+        display: none;
+      }
+      .title-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2) var(--space-3);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        /* 10px matches no step on the scale below (--space-2 is 8px,
+       --space-3 is 12px); the mark-to-title gap reads right at neither,
+       so this stays a literal rather than forcing the design to a step
+       that isn't it. */
+        gap: 10px;
+      }
+      .brand-mark {
+        /* 10px (size) and 3px (radius) both fall between scale steps —
+       --space-1 is 4px, --radius-sm is 4px — and rounding either up
+       would visibly change this mark. Literals, not a forced fit. */
+        width: 10px;
+        height: 10px;
+        flex: none;
+        border-radius: 3px;
+        background: var(--color-brand-primary);
+      }
+      h1 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1.2;
+        letter-spacing: -0.01em;
+        color: var(--color-text-emphasis);
+      }
+      .header-tools {
+        margin-left: auto;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2);
+      }
+      /* A control's own edge uses the control-border pair (WCAG 1.4.11): its fill
+         (surface on background) is 1.05 : 1 from its ground, so the hairline is the
+         only thing identifying it. */
+      #filter {
+        width: 220px;
+        height: 26px;
+        padding: 0 10px;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border-control);
+        border-radius: var(--radius-sm);
+        color: var(--color-text-primary);
+        font-family: var(--font-mono);
+        font-size: 12px;
+      }
+      #filter::placeholder {
+        color: var(--color-text-muted);
+      }
+      #filter:focus {
+        outline: none;
+        border-color: var(--color-border-control-hover);
+        box-shadow: 0 0 0 2px
+          color-mix(in srgb, var(--color-brand-primary) 50%, transparent);
+      }
+      /* Shown only when a var(--color-*) the page references does not resolve:
+         the page names the problem instead of rendering unstyled. */
+      #palette-warning {
+        margin: var(--space-2) 0 0;
+        padding: var(--space-2) var(--space-3);
+        font-size: 12px;
+        background: rgba(245, 158, 11, 0.12);
+        border: 1px solid var(--color-warning);
+        border-radius: var(--radius-sm);
+        color: var(--color-warning);
+      }
+      #palette-warning[hidden] {
+        display: none;
+      }
+      /* A collection that failed. The server publishes the failure as itself —
+         the reason and NO waves — so this banner is never a footnote under rows
+         that are still on screen: there are none. It is an alert, because a
+         status page that cannot read its own waves is the one thing a reader
+         must be told about rather than left to infer from an empty table. */
+      #collect-error {
+        margin: var(--space-2) 0 0;
+        padding: var(--space-2) var(--space-3);
+        font-size: 12px;
+        background: rgba(0, 0, 0, 0.05);
+        border: 1px solid var(--color-error);
+        border-radius: var(--radius-sm);
+        color: var(--color-error);
+        font-weight: 600;
+      }
+      #collect-error[hidden] {
+        display: none;
+      }
+      /* The connection indicator: state in words, the dot only ever agrees
+     with them. It is wired to the real EventSource and its poll fallback
+     below — never a class set once and left alone. */
+      #connection {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        height: 26px;
+        padding: 0 10px 0 9px;
+        border: 1px solid var(--color-border);
+        border-radius: 999px;
+        background: var(--color-surface);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--color-text-secondary);
+        white-space: nowrap;
+      }
+      .conn-dot {
+        /* 6px sits between --space-1 (4px) and --space-2 (8px); a dot
+       this small on the scale would read as either cramped or bloated,
+       so the size stays a literal. (border-radius: 50% is a proportion,
+       not a spacing value — it's what makes the dot round at any size,
+       so it isn't one of these.) */
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--color-text-muted);
+        flex: none;
+      }
+      #connection.live .conn-dot {
+        background: var(--color-success);
+        animation: pulse 2.4s ease-in-out infinite;
+      }
+      #connection.polling .conn-dot {
+        background: var(--color-warning);
+      }
+      #connection.connecting .conn-dot {
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+      #connection.down .conn-dot {
+        background: var(--color-error);
+      }
+      #connection.down {
+        color: var(--color-error);
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.35;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .conn-dot,
+        #log {
+          animation: none !important;
+        }
+        tr.lane td,
+        .row-go,
+        #log-expand svg,
+        #log-toolbar button {
+          transition: none !important;
+        }
+      }
+      /* Nine numbers are three questions: what is running, how it ended,
+     what the PRs are doing. The groups are hairline-separated and wrap as
+     units. */
+      #metrics {
+        display: flex;
+        flex-wrap: wrap;
+        row-gap: var(--space-2);
+        margin-top: var(--space-3);
+      }
+      .mgroup {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 0 var(--space-6);
+        border-left: 1px solid var(--color-border);
+      }
+      .mgroup:first-child {
+        padding-left: 0;
+        border-left: none;
+      }
+      .mlabel {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--color-text-muted);
+      }
+      .mstats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-1) var(--space-4);
+      }
+      .metric {
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      .metric .value {
+        font-family: var(--font-mono);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: var(--color-text-primary);
+      }
+      /* A problem count only turns red when there is a problem — "failed 0"
+     is a good answer and must not read as an alarm. */
+      .metric .value.hot {
+        color: var(--color-error);
+      }
+      .metric .label {
+        color: var(--color-text-muted);
+        font-size: 11px;
+        margin-left: 3px;
+      }
+      /* The page-level answer to "how many need me": the derived-state rollup,
+      bucketed from the same laneStateOf the rows lead with. The lead count is
+      the needs-a-human total (running, stalled, conflict, failed); the chips
+      break it down by state in the rollup's order, only the states present, so
+      the bar never shows "0 merged". Its ink is the same tone vocabulary as the
+      pills — a count can never disagree with the rows it counts. */
+      #state-summary {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: var(--space-2) var(--space-4);
+        margin-top: var(--space-3);
+        font-size: 12px;
+      }
+      #state-summary .ss-lead {
+        display: inline-flex;
+        align-items: baseline;
+        gap: var(--space-1);
+      }
+      #state-summary .ss-lead .value {
+        font-family: var(--font-mono);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: var(--color-text-primary);
+      }
+      #state-summary .ss-lead .value.hot {
+        color: var(--color-error);
+      }
+      #state-summary .ss-lead .label {
+        color: var(--color-text-muted);
+        font-size: 11px;
+      }
+      #state-summary .ss-chips {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: var(--space-1) var(--space-3);
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+      }
+      #state-summary .ss-chip {
+        color: var(--color-text-muted);
+      }
+      #state-summary .ss-chip .n {
+        font-weight: 600;
+      }
+      #table-pane {
+        min-height: 0;
+        overflow: auto; /* wide content scrolls inside its own box; the page never scrolls sideways */
+        scrollbar-gutter: stable;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+      }
+      /* Separate borders so the sticky thead keeps its underline while scrolled
+     (collapse would let it be painted away by the rows beneath). The floor is
+     the sum of the column widths plus a little: the state column added 128px,
+     and a table squeezed below its own widths stops being a table and starts
+     being a wrapped paragraph. */
+      table {
+        width: 100%;
+        min-width: 1208px;
+        border-collapse: separate;
+        border-spacing: 0;
+      }
+      th,
+      td {
+        padding: 7px var(--space-3); /* 7px sits between --space-1 (4px) and --space-2 (8px); the row reads cramped at one step and loose at the other */
+        text-align: left;
+        border-bottom: 1px solid var(--color-border);
+        vertical-align: middle;
+        white-space: nowrap;
+      }
+      td {
+        font-size: 13px;
+      }
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      thead th {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        height: 36px; /* pinned so the sticky wave band can sit flush beneath it; falls between no two steps on the local scale, so it stays a literal */
+        padding: 0 var(--space-3);
+        background: var(--color-surface); /* opaque, so scrolled rows cannot paint it away */
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--color-text-muted);
+      }
+      th.c-state {
+        /* the widest word ("conflict") plus its dot and a quiet time ("quiet 14m") */
+        width: 128px;
+      }
+      th.c-lane {
+        width: 200px;
+      }
+      th.c-seat {
+        /* the widest seat a roster records ("anvil-orbit-4.2-flash-max") plus room
+           for a second. A column width is not a design token: the served tokens carry
+           none, and the pages own resolution guard rejects a token it cannot resolve,
+           so every column width here is a literal like this one. */
+        width: 176px;
+      }
+      th.c-stage {
+        width: 160px;
+      }
+      th.c-live {
+        width: 96px;
+      }
+      th.c-log {
+        width: 190px;
+      }
+      th.c-pr {
+        width: 150px;
+      }
+      th.c-gate {
+        width: 165px;
+      }
+      th.c-find {
+        width: 118px;
+      }
+      /* Wave bands stay on screen under the header while their lanes scroll,
+     and carry a rollup of their own so each block answers at a glance. */
+      tr.wave td {
+        position: sticky;
+        top: 36px; /* matches thead th's pinned height above */
+        z-index: 2;
+        background: var(--color-surface-2);
+        padding: 5px var(--space-3); /* 5px sits between --space-1 (4px) and --space-2 (8px); the band reads cramped at the higher step and loose at the lower one */
+        cursor: pointer;
+      }
+      tr.wave:hover td {
+        background: var(--color-surface);
+      }
+      tr[hidden] {
+        display: none;
+      }
+      /* tr.wave .wave-band (not a bare .wave-band rule) so this beats the
+     shared button reset below on specificity — both are (0, b, c) tuples
+     and the reset's two type selectors (tr, button) otherwise outrank a
+     single class. */
+      tr.wave .wave-band {
+        display: flex;
+        width: 100%;
+        align-items: baseline;
+        gap: var(--space-2);
+      }
+      .wave-eyebrow {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--color-text-muted);
+      }
+      .wave-id {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--color-text-primary);
+      }
+      .wave-meta {
+        margin-left: auto;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        /* Tabular so the per-state counts — the same tone ink as the pills they
+        summarise (see .ok/.warn/.bad/.info/.dim) — do not jitter as a number
+        rolls over a poll tick. */
+        font-variant-numeric: tabular-nums;
+        color: var(--color-text-muted);
+      }
+      /* The header's age answers "is this current" before the reader opens
+       anything, so it sits beside the wave id in the same quiet mono as the
+       rollup — a fact about time, not a status to colour. */
+      .wave-age {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--color-text-muted);
+      }
+      /* A wave whose newest artefact is days old belongs to a past
+       * wave, and must not sit in the same visual register as a live one.
+       * The word never changes — "3d ago" was always printed — so this is
+       * never colour or styling alone carrying the meaning; it only fades
+       * what the text has already said. */
+      .wave-age.past {
+        font-style: italic;
+        opacity: 0.55;
+      }
+      /* Lanes open the log on a click anywhere on the row; hover, focus and
+     the open state all say so, because a clickable row that looks like
+     text is not discoverable. The row itself can never be the focus
+     target — HTML-ARIA forbids role="button" on a <tr>, and #299 removed
+     it, so the inner <button> holds focus instead — which is why these
+     use :focus-within rather than :focus-visible: a <tr> can never match
+     :focus-visible directly. */
+      tr.lane {
+        cursor: pointer;
+      }
+      tr.lane td {
+
+        transition:
+          background 150ms ease,
+          box-shadow 150ms ease;
+      }
+      tr.lane:hover td,
+      tr.lane:focus-within td {
+        background: var(--color-surface-2);
+      }
+      /* The one highlight on a row that means "this lane's log is open here" —
+     and nothing else. It used to carry the name *active*, which a reader scanning
+     for liveness took to mean *this row is the live one*: exactly one row
+     carried it — whichever log happened to be open, however long ago that
+     lane stopped — and no running lane carried anything at all. The derived
+     state column now says who is live, so this class is renamed to what it
+     has always meant. */
+      /* The state pill is the row's leftmost thing now, so the lane's name is
+     no longer `td:first-child`: the bar is scoped to `td.c-lane` by name
+     rather than by position, and marks the name either way. */
+      tr.lane:focus-within td.c-lane,
+      tr.lane.selected td.c-lane {
+        box-shadow: inset 2px 0 0 var(--color-brand-primary);
+      }
+      tr.lane.selected td {
+        background: var(--color-brand-tint);
+      }
+      /* The quiet time beside a state pill is a measurement, not a state — mono
+     and small, the same read as `.round`. Its ink is *secondary*, not muted:
+     muted on a selected row's brand tint measures 4.0 : 1, and this label has
+     to stay legible on every ground a row can be on. */
+      .quiet {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--color-text-secondary);
+        margin-left: 6px; /* see .row-go above — same in-between value, same reason */
+      }
+      /* tr.lane .key, for the same specificity reason as tr.wave .wave-band
+     above: it needs to beat the shared button reset's own color/font. */
+      tr.lane .key {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--color-text-primary);
+      }
+      tr.lane:hover .key,
+      tr.lane:focus-within .key {
+        text-decoration: underline;
+        text-decoration-color: var(--color-border-control-hover);
+        text-underline-offset: 3px;
+      }
+      .row-go {
+        width: 12px;
+        height: 12px;
+        margin-left: 6px; /* between --space-1 (4px) and --space-2 (8px); the glyph crowds the text at either step */
+        vertical-align: -1px;
+        color: var(--color-text-muted);
+        opacity: 0;
+        transition: opacity 150ms ease;
+      }
+      tr.lane:hover .row-go,
+      tr.lane:focus-within .row-go {
+        opacity: 1;
+      }
+      /* The row stays a row (default `row` role) — HTML-ARIA forbids putting
+     role="button" on a <tr> inside a table. The actual control is this
+     <button>, unstyled down to plain text so the row's own look is
+     unchanged; the row's click handler still delegates to it. */
+      tr.wave button,
+      tr.lane button {
+        display: block;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        border: 0;
+        font: inherit;
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .c-stage .stage-name {
+        color: var(--color-text-secondary);
+      }
+      .round {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--color-text-muted);
+        margin-left: 6px; /* see .row-go above — same in-between value, same reason */
+      }
+      /* tbody td.c-* (not the bare class) so these body-cell rules never
+     outrank thead th's own typography on the same class — a bare class
+     selector is (0,1,0), which already beats thead th's (0,0,2) on
+     specificity alone regardless of source order. */
+      tbody td.c-live {
+        font-size: 12px;
+      }
+      tbody td.c-state {
+        font-size: 12px;
+      }
+      tbody td.c-seat {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--color-text-secondary);
+      }
+      .live-ok {
+        color: var(--color-success);
+      }
+      tbody td.c-log,
+      tbody td.c-gate {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--color-text-secondary);
+      }
+      tbody td.c-find {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--color-text-primary);
+      }
+      .sep {
+        color: var(--color-text-muted);
+      }
+      .pr-num {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--color-text-primary);
+      }
+      .ok {
+        color: var(--color-success);
+      }
+      .warn {
+        color: var(--color-warning);
+      }
+      .bad {
+        color: var(--color-error);
+      }
+      .info {
+        color: var(--color-info);
+      }
+      .dim {
+        color: var(--color-text-muted);
+      }
+      /* State is encoded in form as well as colour, never a bare hue: a
+     tinted pill carries a dot and a word, and the word is always the
+     state's name — WCAG 1.4.1 needs more than colour to tell pills apart,
+     and this is the "more". */
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px; /* between --space-1 (4px) and --space-2 (8px); the dot crowds the word at either step */
+        padding: 1px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.45;
+      }
+      .pill-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+        flex: none;
+      }
+      .pill.ok {
+        color: var(--color-success);
+        background: color-mix(in srgb, var(--color-success) 15%, transparent);
+      }
+      .pill.bad {
+        color: var(--color-error);
+        background: color-mix(in srgb, var(--color-error) 15%, transparent);
+      }
+      .pill.warn {
+        color: var(--color-warning);
+        background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+      }
+      .pill.info {
+        color: var(--color-info);
+        background: color-mix(in srgb, var(--color-info) 15%, transparent);
+      }
+      .pill.dim {
+        color: var(--color-text-secondary);
+        background: var(--color-surface-2);
+      }
+      tr.disagreement td {
+        background: var(--color-surface);
+        border-left: 3px solid var(--color-warning);
+        color: var(--color-warning);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        white-space: normal;
+      }
+      tr.empty td {
+        padding: 32px var(--space-3);
+        text-align: center;
+        color: var(--color-text-muted);
+        font-size: 12px;
+        white-space: normal;
+      }
+      #sort-switch {
+        display: inline-flex;
+        align-items: center;
+        height: 26px;
+        background: transparent;
+        border: 1px solid var(--color-border-control);
+        border-radius: var(--radius-sm);
+        color: var(--color-text-primary);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        padding: 0 var(--space-2);
+        cursor: pointer;
+      }
+      #sort-switch:hover {
+        background: var(--color-surface);
+        border-color: var(--color-border-control-hover);
+      }
+      /* The hide-inactive switch is the sort switch's sibling in every way that
+      matters — same control edge, same mono, same hover — so it restates the
+      rule rather than sharing a grouped selector, which would put the sort
+      switch's own border-token test in front of a comma. When it is on it is
+      doing something, so it tints to say so: aria-checked is the state, and the
+      box reads its condition from the attribute, never from a class the script
+      would have to keep in step with it. */
+      #hide-inactive {
+        display: inline-flex;
+        align-items: center;
+        height: 26px;
+        background: transparent;
+        border: 1px solid var(--color-border-control);
+        border-radius: var(--radius-sm);
+        color: var(--color-text-primary);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        padding: 0 var(--space-2);
+        cursor: pointer;
+      }
+      #hide-inactive:hover {
+        background: var(--color-surface);
+        border-color: var(--color-border-control-hover);
+      }
+      #hide-inactive[aria-checked="true"] {
+        color: var(--color-info);
+        border-color: color-mix(
+          in srgb,
+          var(--color-info) 45%,
+          var(--color-border-control)
+        );
+      }
+      #log-pane {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+        overflow: hidden;
+      }
+      #log-pane[hidden] {
+        display: none;
+      }
+      /* Focused programmatically on open (see openLog) so the pane, not
+     just a control inside it, is where keyboard attention lands. Visible
+     2px brand outline so keyboard users can see where focus landed. */
+      #log-pane:focus {
+        outline: 2px solid;
+        outline-color: var(--color-brand-primary);
+        outline-offset: -1px;
+      }
+      #log-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        padding: var(--space-2) var(--space-3);
+        border-bottom: 1px solid var(--color-border);
+        background: var(--color-surface-2);
+      }
+      #log-toolbar .log-info {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-3);
+        align-items: baseline;
+        min-width: 0;
+      }
+      #log-lane {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--color-text-primary);
+      }
+      #log-size {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--color-text-muted);
+      }
+      /* The reference has no follow control, so it carries no typography
+     for one. #log-toolbar used to set mono/12px/secondary for everything
+     inside it, which this container's <label> rode for free; that shared
+     rule is gone now that each toolbar piece owns its own type (see
+     #log-lane, #log-size, #log-toolbar button above) — restate it here so
+     "follow" still reads like the row of controls it sits beside, not the
+     body's 14px sans default. */
+      #log-follow-container {
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--color-text-primary);
+      }
+      /* --color-brand-primary is the :root-only token (see the brand-mark
+     comment above) — the checkbox takes the tint that .dark does serve. */
+      #log-follow {
+        cursor: pointer;
+        accent-color: var(--color-brand-primary);
+      }
+      #log-toolbar .log-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+      }
+      #log-toolbar button {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px; /* between --space-1 (4px) and --space-2 (8px); the icon crowds the label at either step */
+        height: 26px;
+        padding: 0 10px; /* between --space-2 (8px) and --space-3 (12px); the control reads cramped at one step, loose at the other */
+        background: var(--color-surface-2);
+        border: 1px solid var(--color-border-control);
+        border-radius: var(--radius-sm);
+        color: var(--color-text-primary);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition:
+          background 150ms ease,
+          border-color 150ms ease;
+      }
+      #log-toolbar button:hover {
+        background: var(--color-surface);
+        border-color: var(--color-border-control-hover);
+      }
+      #log-toolbar button:focus-visible {
+        outline: none;
+        border-color: var(--color-border-control-hover);
+        box-shadow: 0 0 0 2px
+          color-mix(in srgb, var(--color-brand-primary) 50%, transparent);
+      }
+      /* 13px, like .row-go above: no step on the local scale fits an icon
+     this small. */
+      .tb-icon {
+        width: 13px;
+        height: 13px;
+        flex: none;
+      }
+      #log-expand svg {
+        transition: transform 150ms ease;
+      }
+      #log-expand[aria-expanded="true"] svg {
+        transform: rotate(180deg);
+      }
+      /* A fixed min-width so "copy failed" — the widest label the button
+     ever carries — does not shift the rest of the bar when it appears. */
+      #log-copy {
+        justify-content: center;
+        min-width: 92px;
+      }
+      /* The reference mixes the state colour toward transparent (over the
+     button's own surface-2 ground); mixed toward border-control instead —
+     the base control edge already the worst-ground floor clears 3:1,
+     and mixing toward transparent would let the 1.6 s feedback edge dip
+     under it. This keeps the tint while never falling below the boundary
+     the plain state does. */
+      #log-copy.ok {
+        color: var(--color-success);
+        border-color: color-mix(
+          in srgb,
+          var(--color-success) 45%,
+          var(--color-border-control)
+        );
+      }
+      #log-copy.bad {
+        color: var(--color-error);
+        border-color: color-mix(
+          in srgb,
+          var(--color-error) 45%,
+          var(--color-border-control)
+        );
+      }
+      #log {
+        flex: 1;
+        min-height: 0;
+        margin: 0;
+        padding: var(--space-2) 0;
+        overflow: auto;
+        scrollbar-gutter: stable;
+        background: var(--color-surface);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        line-height: 1.7;
+        color: var(--color-text-secondary);
+        animation: log-in 250ms ease;
+      }
+      @keyframes log-in {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      .log-line {
+        display: flex;
+        width: max-content;
+        min-width: 100%;
+        background: var(--color-surface);
+      }
+      .log-line:hover {
+        background: var(--color-surface-2);
+      }
+      /* The gutter stays put when a long line is scrolled sideways, and
+     matches whatever ground its line currently has. */
+      .gutter {
+        flex: none;
+        width: 48px;
+        padding-right: var(--space-3);
+        text-align: right;
+        color: var(--color-text-muted);
+        user-select: none;
+        position: sticky;
+        left: 0;
+        background: inherit;
+      }
+      .line {
+        white-space: pre;
+        padding-left: var(--space-3);
+      }
+      .log-empty {
+        padding: var(--space-4) var(--space-3);
+        color: var(--color-text-muted);
+      }
+      #backlog-pane {
+        border-top: 1px solid var(--color-border);
+        padding: var(--space-4);
+        background: var(--color-surface);
+      }
+      .backlog-toolbar {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-3);
+        margin-bottom: var(--space-3);
+      }
+      .backlog-title {
+        font-size: 13px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--color-text-secondary);
+      }
+      .backlog-provenance {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--color-text-muted);
+        display: flex;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+      }
+      .backlog-empty,
+      .backlog-unknown {
+        font-size: 12px;
+        color: var(--color-text-muted);
+        padding: var(--space-2) 0;
+      }
+      .backlog-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+      .backlog-item {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-size: 12px;
+      }
+      .backlog-lane {
+        font-family: var(--font-mono);
+        font-weight: 600;
+        color: var(--color-text-primary);
+      }
+      .backlog-plan {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--color-text-muted);
+      }
+      .backlog-reason {
+        color: var(--color-text-secondary);
+        font-size: 11px;
+      }
+      @media (max-width: 760px) {
+        #filter {
+          width: 150px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="page">
+      <header>
+        <div class="title-row">
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <h1>Wave status</h1>
+          </div>
+          <div class="header-tools">
+            <input
+              id="filter"
+              type="search"
+              placeholder="filter lanes…"
+              aria-label="Filter lanes by wave or lane"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button
+              type="button"
+              role="switch"
+              id="sort-switch"
+              aria-checked="true"
+              aria-label="sort lanes by most recently updated"
+            >
+              <span class="label">sort:</span> <span class="value">recent</span>
+            </button>
+            <button
+              type="button"
+              role="switch"
+              id="hide-inactive"
+              aria-checked="false"
+              aria-label="hide inactive lanes — show only those running, stalled, conflicted or failed"
+            >
+              <span class="label">show:</span> <span class="value">all</span>
+            </button>
+            <span id="connection" class="connecting" role="status">
+              <span class="conn-dot" aria-hidden="true"></span
+              ><span class="conn-text">connecting…</span>
+            </span>
+          </div>
+        </div>
+        <p id="palette-warning" hidden>
+          tokens.css did not load — the colour tokens are served by the wave status server at
+          /tokens.css. Open this page through the server.
+        </p>
+        <p id="collect-error" role="alert" hidden></p>
+        <div id="metrics">
+          <div class="mgroup">
+            <span class="mlabel">run</span>
+            <div class="mstats">
+              <span class="metric" data-metric="waves"
+                ><span class="value">—</span>
+                <span class="label">waves</span></span
+              >
+              <span class="metric" data-metric="lanes"
+                ><span class="value">—</span>
+                <span class="label">lanes</span></span
+              >
+              <span class="metric" data-metric="alive"
+                ><span class="value">—</span>
+                <span class="label">alive</span></span
+              >
+            </div>
+          </div>
+          <div class="mgroup">
+            <span class="mlabel">outcomes</span>
+            <div class="mstats">
+              <span class="metric" data-metric="settled"
+                ><span class="value">—</span>
+                <span class="label">settled</span></span
+              >
+              <span class="metric" data-metric="failed"
+                ><span class="value">—</span>
+                <span class="label">failed</span></span
+              >
+              <span class="metric" data-metric="running"
+                ><span class="value">—</span>
+                <span class="label">running</span></span
+              >
+            </div>
+          </div>
+          <div class="mgroup">
+            <span class="mlabel">pull requests</span>
+            <div class="mstats">
+              <span class="metric" data-metric="open"
+                ><span class="value">—</span>
+                <span class="label">PRs open</span></span
+              >
+              <span class="metric" data-metric="merged"
+                ><span class="value">—</span>
+                <span class="label">PRs merged</span></span
+              >
+              <span class="metric" data-metric="failing"
+                ><span class="value">—</span>
+                <span class="label">checks failing</span></span
+              >
+            </div>
+          </div>
+        </div>
+        <div id="state-summary" role="group" aria-label="Lanes by derived state">
+          <span class="ss-lead" data-state="attention"
+            ><span class="value">—</span> <span class="label">need a human</span></span
+          >
+          <span class="ss-chips"></span>
+        </div>
+      </header>
+      <section id="table-pane">
+        <table id="status-table">
+          <caption class="visually-hidden">Lane status by wave</caption>
+          <thead>
+            <tr>
+              <th class="c-state" scope="col">state</th>
+              <th class="c-lane" scope="col">lane</th>
+              <th class="c-seat" scope="col" aria-label="seat (model that ran the lane)">seat</th>
+              <th class="c-stage" scope="col">stage</th>
+              <th class="c-live" scope="col">liveness</th>
+              <th class="c-log" scope="col">log</th>
+              <th class="c-pr" scope="col">pr · checks</th>
+              <th class="c-gate" scope="col">gate (exit · coverage)</th>
+              <th class="c-find" scope="col">fixed / refuted / mutations</th>
+            </tr>
+          </thead>
+        </table>
+      </section>
+      <section id="backlog-pane" aria-label="Backlog">
+        <div class="backlog-toolbar">
+          <span class="backlog-title">backlog</span>
+          <div id="backlog-provenance" class="backlog-provenance"></div>
+        </div>
+        <div id="backlog-body"></div>
+      </section>
+      <section id="log-pane" hidden tabindex="-1" aria-label="Log">
+        <header id="log-toolbar">
+          <div class="log-info">
+            <span id="log-lane"></span>
+            <span id="log-size"></span>
+          </div>
+          <div class="log-actions">
+            <button
+              type="button"
+              id="log-expand"
+              aria-label="expand"
+              aria-expanded="false"
+              aria-controls="log-pane"
+            >
+              <svg
+                class="tb-icon"
+                viewBox="0 0 14 14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                focusable="false"
+              ><path d="M3.5 8.8 7 5.3l3.5 3.5" /></svg>
+              <span id="log-expand-label">expand</span>
+            </button>
+            <button type="button" id="log-copy" aria-label="copy">
+              <svg
+                class="tb-icon"
+                viewBox="0 0 14 14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                focusable="false"
+              ><rect x="4.75" y="4.75" width="7.5" height="7.5" rx="1.5" /><path
+                  d="M9.25 4.75V3.2A1.45 1.45 0 0 0 7.8 1.75H3.2A1.45 1.45 0 0 0 1.75 3.2v4.6a1.45 1.45 0 0 0 1.45 1.45h1.55"
+                /></svg>
+              <span id="log-copy-label">copy</span>
+            </button>
+            <button type="button" id="log-download" aria-label="download">
+              <svg
+                class="tb-icon"
+                viewBox="0 0 14 14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                focusable="false"
+              ><path d="M7 1.75v7.5" /><path d="m3.9 6.4 3.1 3.1 3.1-3.1" /><path
+                  d="M1.9 12.25h10.2"
+                /></svg>
+              <span>download</span>
+            </button>
+            <button type="button" id="log-close" aria-label="close">
+              <svg
+                class="tb-icon"
+                viewBox="0 0 14 14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                focusable="false"
+              ><path d="m3.2 3.2 7.6 7.6" /><path d="M10.8 3.2 3.2 10.8" /></svg>
+              <span>close</span>
+            </button>
+          </div>
+        </header>
+        <div id="log" hidden></div>
+      </section>
+      <template id="log-follow-template">
+        <div id="log-follow-container">
+          <input type="checkbox" id="log-follow" />
+          <label for="log-follow">follow</label>
+        </div>
+      </template>
+    </div>
+    <script>
+      "use strict";
+      const table = document.getElementById("status-table");
+      const connection = document.getElementById("connection");
+      const connText = connection.querySelector(".conn-text");
+      const filterInput = document.getElementById("filter");
+      const logPane = document.getElementById("log-pane");
+      const logToolbar = document.getElementById("log-toolbar");
+      const logView = document.getElementById("log");
+      const logLane = document.getElementById("log-lane");
+      const logSize = document.getElementById("log-size");
+      const expandBtn = document.getElementById("log-expand");
+      const expandLabel = document.getElementById("log-expand-label");
+      const copyBtn = document.getElementById("log-copy");
+      const copyLabel = document.getElementById("log-copy-label");
+      const downloadBtn = document.getElementById("log-download");
+      const closeBtn = document.getElementById("log-close");
+      const pageGrid = document.getElementById("page");
+      const sortSwitch = document.getElementById("sort-switch");
+      const hideInactiveSwitch = document.getElementById("hide-inactive");
+      const stateSummaryValue = document.querySelector(
+        '#state-summary [data-state="attention"] .value',
+      );
+      const stateSummaryChips = document.querySelector("#state-summary .ss-chips");
+      const defaultExpanded = false;
+      const expandedWaves = new Set();
+      const SORT_STORAGE_KEY = "wave-status:sort";
+      const HIDE_INACTIVE_STORAGE_KEY = "wave-status:hide-inactive";
+      let lastStatus = null;
+      let filterText = "";
+      let connState = "connecting";
+      let copyTimer = null;
+      // Reserved for a follow refresh armed on a timer. Follow is currently
+      // driven by the checkbox and by each status render, so nothing sets it
+      // yet — but closeLog clears it unconditionally, and an undeclared name
+      // there threw a ReferenceError the moment a followed log was closed.
+      let followTimer = null;
+
+      // Palette guard: verifies that every var(--color-*) custom property
+      // referenced in the page's stylesheets resolves to a non-empty value.
+      function checkPalette() {
+        const warning = document.getElementById("palette-warning");
+        if (warning === null) return;
+        const styleEls = document.querySelectorAll("style");
+        const referenced = new Set();
+        for (const el of styleEls) {
+          if (el.hasAttribute("data-tokens")) continue;
+          const text = el.textContent || "";
+          for (const m of text.matchAll(/var\(\s*(--color-[a-z0-9-]+)/g)) {
+            referenced.add(m[1]);
+          }
+        }
+        const win =
+          typeof window !== "undefined"
+            ? window
+            : (document.defaultView ?? globalThis);
+        const getStyles = win.getComputedStyle
+          ? win.getComputedStyle.bind(win)
+          : typeof getComputedStyle === "function"
+            ? getComputedStyle
+            : null;
+        if (!getStyles) return;
+        const computed = getStyles(document.documentElement);
+        const unresolving = [];
+        for (const token of referenced) {
+          const val = computed.getPropertyValue(token).trim();
+          if (!val) {
+            unresolving.push(token);
+          }
+        }
+        if (unresolving.length > 0) {
+          warning.hidden = false;
+          warning.textContent = `Unresolved colour token(s): ${unresolving.join(", ")}`;
+        } else {
+          warning.hidden = true;
+        }
+      }
+
+      checkPalette();
+
+      // Two controls can empty a wave, and they answer different questions: the
+      // text filter says "nothing here matches your query", the state control says
+      // "these lanes match and are not waiting for a person". The one place that
+      // reported an empty wave read only `filterText` and blamed the query for
+      // rows hide-inactive had removed — *not found* and *hidden* are different
+      // facts, and only the second has a remedy the reader can act on. So each
+      // half of the predicate stands on its own, and the empty row names the
+      // control that actually took the rows out.
+      function laneMatchesText(wave, lane) {
+        if (filterText === "") return true;
+        const key = `${wave.id}/${lane.lane}`.toLowerCase();
+        const name = (lane.lane || "").toLowerCase();
+        return name.includes(filterText) || key.includes(filterText);
+      }
+
+      function laneHiddenByInactive(lane, nowMs) {
+        // Hide-inactive: a lane that is not running, stalled, conflicted or
+        // failed is not a question for a human, so it leaves the view whatever
+        // the text filter says. The clock is the render's own — the same instant
+        // that paints the row's state and the header's count of it — so the row
+        // that is hidden and the state that hides it can never disagree.
+        return hideInactive && !isLaneActive(lane, nowMs);
+      }
+
+      const plural = (n) => `${n} ${n === 1 ? "lane" : "lanes"}`;
+
+      // The empty row's three answers, in the order the controls bite: nothing to
+      // show, nothing matched, and matched-but-hidden (which is the state
+      // control's doing, and names it so the reader can turn it off).
+      function emptyWaveMessage(query, lanes, textMatches) {
+        if (lanes.length === 0) return "No lanes in wave";
+        if (textMatches.length === 0) return `No lanes match “${esc(query)}”`;
+        if (query.trim() === "") {
+          return (
+            `No lanes need a human here — “hide inactive” is hiding ` +
+            plural(lanes.length)
+          );
+        }
+        return (
+          `${plural(textMatches.length)} matching “${esc(query)}” ` +
+          `hidden by “hide inactive”`
+        );
+      }
+
+      function applyFilter() {
+        filterText = filterInput ? filterInput.value.trim().toLowerCase() : "";
+        if (lastStatus !== null) {
+          render(lastStatus, { skipFollow: true });
+        }
+      }
+
+      if (filterInput !== null) {
+        filterInput.addEventListener("input", applyFilter);
+      }
+
+      // One counter for every tail request — an open, and every follow
+      // refresh, each claims its own generation here. A response is only
+      // ever acted on if it is still the newest request outstanding, so an
+      // older response landing after a newer one is silently discarded, and
+      // two follow refreshes for the same lane can never race each other.
+      let requestSeq = 0;
+      let selectedWave = null;
+      let selectedLane = null;
+      let following = false;
+      const metricValues = {};
+      for (const metric of document.querySelectorAll(
+        "#metrics [data-metric]",
+      )) {
+        metricValues[metric.getAttribute("data-metric")] =
+          metric.querySelector(".value");
+      }
+
+      function loadSortPreference() {
+        try {
+          const storage = (typeof window !== "undefined" ? window : globalThis)
+            .localStorage;
+          const stored = storage ? storage.getItem(SORT_STORAGE_KEY) : null;
+          if (stored === null || stored === undefined) return true;
+          return stored !== "false" && stored !== "off" && stored !== "0";
+        } catch {
+          return true;
+        }
+      }
+
+      function saveSortPreference(val) {
+        try {
+          const storage = (typeof window !== "undefined" ? window : globalThis)
+            .localStorage;
+          if (storage) {
+            storage.setItem(SORT_STORAGE_KEY, val ? "true" : "false");
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      let sortByRecent = loadSortPreference();
+
+      // Hide-inactive is off by default — the opposite polarity of the sort,
+      // which defaults to its more useful setting. A monitor that hides
+      // something you did not ask it to hide is a monitor you stop trusting;
+      // the owner asked to hide what is not moving, so the choice is offered and
+      // then kept, exactly as the sort is, across a refresh. Only an explicit
+      // truthy read turns it on: a throw (no storage at all) is a page that has
+      // never been told, which is off.
+      function loadHideInactive() {
+        try {
+          const storage = (typeof window !== "undefined" ? window : globalThis)
+            .localStorage;
+          const stored = storage ? storage.getItem(HIDE_INACTIVE_STORAGE_KEY) : null;
+          return stored === "true" || stored === "on" || stored === "1";
+        } catch {
+          return false;
+        }
+      }
+
+      function saveHideInactive(val) {
+        try {
+          const storage = (typeof window !== "undefined" ? window : globalThis)
+            .localStorage;
+          if (storage) {
+            storage.setItem(HIDE_INACTIVE_STORAGE_KEY, val ? "true" : "false");
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      let hideInactive = loadHideInactive();
+
+      function laneOf(status, wave, lane) {
+        if (status === null) return null;
+        for (const w of status.waves) {
+          if (w.id === wave) {
+            for (const l of w.lanes) {
+              if (l.lane === lane) return l;
+            }
+          }
+        }
+        return null;
+      }
+
+      let followControlElement = null;
+
+      function syncFollowControl(alive) {
+        if (alive) {
+          if (followControlElement === null) {
+            const template = document.getElementById(
+              "log-follow-template",
+            );
+            if (template && template.content) {
+              const fragment = template.content.cloneNode(true);
+              const wrapper = document.createElement("div");
+              wrapper.appendChild(fragment);
+              const element = wrapper.querySelector("#log-follow-container");
+              if (element) {
+                followControlElement = element;
+                const toolbar = document.getElementById("log-toolbar");
+                if (toolbar !== null) {
+                  const actions = toolbar.querySelector(".log-actions");
+                  if (actions !== null) {
+                    actions.insertBefore(
+                      followControlElement,
+                      actions.firstChild,
+                    );
+                    const checkbox = document.getElementById("log-follow");
+                    if (checkbox) {
+                      checkbox.addEventListener("change", () => {
+                        following = checkbox.checked;
+                        if (
+                          following &&
+                          selectedWave !== null &&
+                          selectedLane !== null
+                        ) {
+                          void maybeFollow();
+                        }
+                      });
+                    }
+                  }
+                }
+              }
+            }
+          }
+          // The control's checked state must match `following` on every
+          // sync, not only at creation — a reused control that never gets
+          // told follow turned off would keep showing "ticked" while the
+          // view is no longer live.
+          const checkbox = document.getElementById("log-follow");
+          if (checkbox) {
+            checkbox.checked = following;
+          }
+        } else {
+          following = false;
+          if (followControlElement !== null) {
+            followControlElement.remove();
+            followControlElement = null;
+          }
+        }
+      }
+
+      // A follow refresh that cannot be trusted — the fetch rejected, or
+      // came back non-ok — must not leave the box ticked over a view that
+      // has stopped updating. Turning follow off and saying so is the
+      // honest minimum; a frozen view with a ticked box claims the opposite
+      // of what is true.
+      function stopFollowOnError() {
+        if (!following) return;
+        following = false;
+        const checkbox = document.getElementById("log-follow");
+        if (checkbox) {
+          checkbox.checked = false;
+        }
+        logSize.textContent = "follow stopped: refresh failed";
+      }
+
+      async function loadTail(wave, lane, seq) {
+        // loadTail is only ever called from maybeFollow, for a follow
+        // refresh — so every failure path here, caught or not, is a follow
+        // failure and must be reported rather than left silent.
+        try {
+          const res = await fetch(`/api/log/${wave}/${lane}?tail=16`);
+          let buf = null;
+          if (res.ok) {
+            buf = await res.arrayBuffer();
+          }
+          // A newer request — another follow refresh, an open, or a close —
+          // has started since this one did. Its answer is stale; say nothing.
+          if (seq !== requestSeq) return;
+          if (res.ok && buf !== null) {
+            const bytes = buf.byteLength;
+            logSize.textContent = `${bytes.toLocaleString()} B`;
+            const text = new TextDecoder().decode(buf);
+            renderLogLines(text);
+            // Only yank the view to the bottom if the user still wants
+            // that — they may have unchecked follow, or scrolled away to
+            // read history, while this request was in flight.
+            if (following) {
+              logView.scrollTop = logView.scrollHeight;
+            }
+          } else {
+            stopFollowOnError();
+          }
+        } catch {
+          if (seq === requestSeq) {
+            stopFollowOnError();
+          }
+        }
+      }
+
+      async function maybeFollow() {
+        if (!following) return;
+        if (selectedWave === null || selectedLane === null) return;
+        // Each call claims its own generation, even for the same lane —
+        // without this, two overlapping refreshes for one lane share a
+        // sequence and cannot tell which of them is newer.
+        const seq = ++requestSeq;
+        try {
+          await loadTail(selectedWave, selectedLane, seq);
+        } catch {
+          // loadTail already reports its own failures (see stopFollowOnError).
+          // This only guards the callers below, which invoke maybeFollow with
+          // `void` and so would otherwise leave a rejection unhandled.
+        }
+      }
+
+      function updateSortSwitch() {
+        if (!sortSwitch) return;
+        sortSwitch.setAttribute("aria-checked", String(sortByRecent));
+        sortSwitch.innerHTML = sortByRecent
+          ? '<span class="label">sort:</span> <span class="value">recent</span>'
+          : '<span class="label">sort:</span> <span class="value">server order</span>';
+      }
+
+      if (sortSwitch) {
+        Object.defineProperty(sortSwitch, "checked", {
+          get: () => sortByRecent,
+          configurable: true,
+        });
+        sortSwitch.addEventListener("click", () => {
+          sortByRecent = !sortByRecent;
+          updateSortSwitch();
+          saveSortPreference(sortByRecent);
+          if (lastStatus !== null) {
+            render(lastStatus);
+          }
+        });
+      }
+
+      updateSortSwitch();
+
+      function updateHideInactiveSwitch() {
+        if (!hideInactiveSwitch) return;
+        hideInactiveSwitch.setAttribute("aria-checked", String(hideInactive));
+        hideInactiveSwitch.innerHTML = `<span class="label">show:</span> <span class="value">${esc(hideInactive ? "active" : "all")}</span>`;
+      }
+
+      if (hideInactiveSwitch) {
+        Object.defineProperty(hideInactiveSwitch, "checked", {
+          get: () => hideInactive,
+          configurable: true,
+        });
+        hideInactiveSwitch.addEventListener("click", () => {
+          hideInactive = !hideInactive;
+          updateHideInactiveSwitch();
+          saveHideInactive(hideInactive);
+          if (lastStatus !== null) {
+            render(lastStatus, { skipFollow: true });
+          }
+        });
+      }
+
+      updateHideInactiveSwitch();
+
+      function laneMtime(lane) {
+        return lane.derived &&
+          lane.derived.log &&
+          typeof lane.derived.log.mtimeMs === "number"
+          ? lane.derived.log.mtimeMs
+          : lane.log && typeof lane.log.mtimeMs === "number"
+            ? lane.log.mtimeMs
+            : undefined;
+      }
+
+      function compareMtimes(aTime, bTime) {
+        if (aTime !== undefined && bTime !== undefined) {
+          return bTime - aTime;
+        }
+        if (aTime !== undefined && bTime === undefined) {
+          return -1;
+        }
+        if (aTime === undefined && bTime !== undefined) {
+          return 1;
+        }
+        return 0;
+      }
+
+      function compareLanes(a, b) {
+        return compareMtimes(laneEvidenceMs(a), laneEvidenceMs(b));
+      }
+
+      // An event is dated evidence too. A wave whose lanes emitted events
+      // and wrote no log used to age as "no dated activity" forever — silence
+      // wearing the same face as a stopped clock — while its last truth was
+      // days old. Newest of the log's write and the last event's stamp; no
+      // invented date when neither carries one.
+      function laneEvidenceMs(lane) {
+        const logMs = laneMtime(lane);
+        const reportedMs =
+          lane.reported === undefined ? NaN : Date.parse(lane.reported.ts);
+        const eventMs = isNaN(reportedMs) ? undefined : reportedMs;
+        if (logMs === undefined) return eventMs;
+        if (eventMs === undefined) return logMs;
+        return Math.max(logMs, eventMs);
+      }
+
+      function waveMtime(wave) {
+        let max;
+        for (const lane of wave.lanes) {
+          const time = laneEvidenceMs(lane);
+          if (time !== undefined && (max === undefined || time > max)) {
+            max = time;
+          }
+        }
+        return max;
+      }
+
+      function compareWaves(a, b) {
+        return compareMtimes(waveMtime(a), waveMtime(b));
+      }
+
+      // Relative and short: the header answers *is this current*, not *what
+      // time was it*. Bins floor down — 22.5m reads "22m ago" — and a
+      // clock-ahead mtime is "now", never a negative age. A wave with nothing
+      // to date says so plainly: no fabricated age, no silent blank.
+      function waveAge(wave) {
+        const newest = waveMtime(wave);
+        if (newest === undefined) return "no dated activity";
+        const elapsed = Date.now() - newest;
+        if (elapsed < 60000) return "now";
+        if (elapsed < 3600000) return `${Math.floor(elapsed / 60000)}m ago`;
+        if (elapsed < 86400000) return `${Math.floor(elapsed / 3600000)}h ago`;
+        return `${Math.floor(elapsed / 86400000)}d ago`;
+      }
+
+      // Wave-level age, for the register the header wears: the header is the
+      // only place the wave's own verdict is stated — a wave is past when its
+      // *newest* evidence has aged out. A row reads the same threshold against
+      // its *own* evidence and says "stale evidence" (see stateCell), never
+      // "past wave": in a mixed-age wave the two subjects genuinely differ,
+      // and one voice on screen must not contradict the other. The age tick
+      // rebuilds the whole table, so a wave crossing the line re-ages on the
+      // page's own clock, with no new status arriving.
+      function isPastWave(wave, nowMs) {
+        const newest = waveMtime(wave);
+        return newest !== undefined && nowMs - newest > PAST_WAVE_THRESHOLD_MS;
+      }
+
+      function toggleWave(waveId) {
+        if (expandedWaves.has(waveId)) {
+          expandedWaves.delete(waveId);
+        } else {
+          expandedWaves.add(waveId);
+        }
+        const isExpanded = expandedWaves.has(waveId);
+        const waveRows = table.querySelectorAll("tr.wave");
+        for (const waveRow of waveRows) {
+          if (waveRow.dataset.wave === waveId) {
+            waveRow
+              .querySelector("button")
+              ?.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+            let next = waveRow.nextElementSibling;
+            while (next && !next.classList.contains("wave")) {
+              if (!next.classList.contains("empty")) {
+                next.hidden = !isExpanded;
+              }
+              next = next.nextElementSibling;
+            }
+            break;
+          }
+        }
+      }
+
+      function esc(value) {
+        return String(value).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[c],
+        );
+      }
+
+      // A pill's accessible text is always the state name — the dot and the
+      // tint reinforce it, but WCAG 1.4.1 means colour alone can never be
+      // the only thing telling two pills apart.
+      function pill(tone, text, dot = false) {
+        const dotHtml = dot ? '<span class="pill-dot"></span>' : "";
+        return `<span class="pill ${tone}">${dotHtml}${esc(text)}</span>`;
+      }
+
+      // Decorative only; the words in the row already carry the meaning —
+      // this just hints, on hover or focus, that the row opens the log.
+      const ROW_GO =
+        '<svg class="row-go" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5.2 3.6 3.4 3.4-3.4 3.4"/></svg>';
+
+      const STALLED_GRACE_MS = 60000;
+
+      /* The derived lane state — the row's verdict — computed here from the
+     same facts `lib/lane-state.ts` computes it from. The page's script cannot
+     import a module (the server serves this file verbatim and the script runs
+     inline), so this is a second implementation of one rule, exactly as
+     STALLED_GRACE_MS above already is. Two tests hold the copies together: a
+     parity test feeds every PR input the types permit — state × checks, plus
+     the no-PR cases — to the module *and* to the rendered row and fails if the
+     words ever differ, and a pin test reads this file's own threshold literal
+     against `stallThresholdMs`. Fifteen minutes, then —
+     a decision about patience rather than an inference from data, because a
+     lane legitimately goes quiet through a build. */
+      const STALL_THRESHOLD_MS = 900000;
+
+      // The other clock, mirrored the same way and pinned by its own test:
+      // artefacts older than this — log write or event — are stale, and a
+      // lane whose every dated fact is one says so in its row, while only a
+      // wave whose *newest* fact is one ages out of the header's live
+      // register: a session three days old must not read in the same voice
+      // as one in progress.
+      const PAST_WAVE_THRESHOLD_MS = 86400000;
+
+      function isPastWaveLane(lane, nowMs) {
+        const evidence = laneEvidenceMs(lane);
+        return evidence !== undefined && nowMs - evidence > PAST_WAVE_THRESHOLD_MS;
+      }
+
+      const STATE_TONE = {
+        conflict: "bad",
+        failed: "bad",
+        stalled: "warn",
+        running: "info",
+        vanished: "bad",
+        blocked: "warn",
+        ready: "ok",
+        merged: "dim",
+        unknown: "dim",
+      };
+
+      // First match wins, in the order lib/lane-state.ts states it: a lane that
+      // reports success while reality disagrees outranks an honest failure,
+      // because the honest one is the one a reader would otherwise skip.
+      function laneStateOf(lane, nowMs) {
+        const derived = lane.derived;
+        if (lane.disagreements.length > 0) return "conflict";
+        const gateExit = derived.gate === undefined ? undefined : derived.gate.exit;
+        if (
+          (derived.exit !== undefined && derived.exit !== 0) ||
+          (gateExit !== undefined && gateExit !== 0) ||
+          (derived.pr !== undefined && derived.pr.checks === "fail")
+        ) {
+          return "failed";
+        }
+        if (
+          derived.alive &&
+          derived.log !== undefined &&
+          derived.log.mtimeMs < nowMs - STALL_THRESHOLD_MS
+        ) {
+          return "stalled";
+        }
+        if (derived.alive) return "running";
+        if (derived.pr === undefined) {
+          // Mirrored from the module: `vanished` accuses; a lane whose
+          // last words were `started`, with no EXIT and no PR, has not been
+          // seen vanishing — it has not been seen. That is no verdict, which
+          // is the one thing `unknown` is for.
+          if (
+            lane.reported !== undefined &&
+            lane.reported.event === "started" &&
+            derived.exit === undefined
+          ) {
+            return "unknown";
+          }
+          return "vanished";
+        }
+        // The precedence rule, mirrored from lib/lane-state.ts: a measured
+        // unresolved thread blocks; a checks read that could not be taken is
+        // the word for "no verdict" (unknown), never blocked — blocked asserts
+        // something is in the way, this value asserts we do not know; and
+        // ready is earned only by green checks AND a counted zero threads.
+        if (derived.pr.state === "open") {
+          const threads =
+            derived.pr.unresolvedThreads === undefined
+              ? "unknown"
+              : derived.pr.unresolvedThreads;
+          if (typeof threads === "number" && threads > 0) return "blocked";
+          if (derived.pr.checks === "pending" || derived.pr.checks === "none") return "blocked";
+          if (derived.pr.checks === "pass" && threads === 0) return "ready";
+          return "unknown";
+        }
+        if (derived.pr.state === "merged") return "merged";
+        // The only PR state left is `closed` — the lane's PR was shut without
+        // merging, which is not a verdict this ranking owns. Say the gap rather
+        // than guess at it: an unnamed state is a question, a wrong state is a
+        // lie. The module states the same word for the same input.
+        return "unknown";
+      }
+
+      // The rollup's vocabulary and ranking, the second copy — like laneStateOf
+      // itself, and pinned to the module by a test over the state fixture: the
+      // states in the order a reader is shown them (highest-consequence first),
+      // and the states that mean "a human is wanted" — the set *hide inactive*
+      // keeps. A count bucketed off a different list, or a filter that dropped a
+      // state the rollup still shows, is the same drift the parity test exists to
+      // keep out of the derivation, so both lists live here beside it.
+      const LANE_STATE_ORDER = [
+        "conflict",
+        "failed",
+        "stalled",
+        "running",
+        "vanished",
+        "blocked",
+        "ready",
+        "merged",
+        "unknown",
+      ];
+      const NEEDS_HUMAN = ["running", "stalled", "conflict", "failed"];
+
+      // Count lanes by state, through `laneStateOf` — the same call the row's
+      // leading cell makes. One computation for the number and the word beside
+      // it: a header can only ever say what its rows say.
+      function laneStateCountsOf(lanes, nowMs) {
+        const counts = {};
+        for (const lane of lanes) {
+          const state = laneStateOf(lane, nowMs);
+          counts[state] = (counts[state] ?? 0) + 1;
+        }
+        return counts;
+      }
+
+      // Mirrored from the module: `alive` and a PR's
+      // `checks`/`unresolvedThreads` are live probes re-read every
+      // collection, fresher than the dated evidence `isPastWaveLane` reads,
+      // so the guard yields to any of the three. `checks: "unknown"` stays
+      // excluded — "could not ask" is never a verdict.
+      function hasFreshActionableSignal(lane) {
+        if (lane.derived.alive) return true;
+        const pr = lane.derived.pr;
+        if (pr === undefined || pr.state !== "open") return false;
+        if (pr.checks === "fail") return true;
+        return typeof pr.unresolvedThreads === "number" && pr.unresolvedThreads > 0;
+      }
+
+      // Mirrored from the module: a past wave stops counting
+      // toward "needs a human" — `laneStateOf` above is untouched, so the row
+      // still names `conflict`/`failed`/whatever it earned; only the count a
+      // person is meant to act on, and the *hide inactive* set built from it,
+      // let a day-old lane go — unless `hasFreshActionableSignal` says
+      // something about it is true right now, in which case the guard yields.
+      function laneNeedsHuman(lane, nowMs) {
+        if (isPastWaveLane(lane, nowMs) && !hasFreshActionableSignal(lane)) return false;
+        const state = laneStateOf(lane, nowMs);
+        if (NEEDS_HUMAN.includes(state)) return true;
+        if (state === "blocked") {
+          const threads = lane.derived?.pr?.unresolvedThreads;
+          return typeof threads === "number" && threads > 0;
+        }
+        return false;
+      }
+
+      function isLaneActive(lane, nowMs) {
+        return laneNeedsHuman(lane, nowMs);
+      }
+
+      // Bins floor down and a clock-ahead mtime reads as quiet now, never as a
+      // negative age — the same honesty `waveAge` keeps in the header.
+      function quietSpan(elapsedMs) {
+        if (elapsedMs < 0) return "quiet now";
+        if (elapsedMs < 60000) return `quiet ${Math.floor(elapsedMs / 1000)}s`;
+        if (elapsedMs < 3600000) return `quiet ${Math.floor(elapsedMs / 60000)}m`;
+        if (elapsedMs < 86400000) return `quiet ${Math.floor(elapsedMs / 3600000)}h`;
+        return `quiet ${Math.floor(elapsedMs / 86400000)}d`;
+      }
+
+      // One reading of the clock for a whole render (see render): the row's
+      // state and the header's count of it must be the same measurement, taken
+      // the same instant, or a lane could render as `running` in its cell and be
+      // counted as `stalled` beside it by the millisecond it crossed the
+      // threshold. The quiet time beside the state reads from that same clock.
+      function stateCell(lane, nowMs) {
+        const state = laneStateOf(lane, nowMs);
+        // One note beside the pill, chosen so a reader who cannot see the
+        // word still learns *why* from the row's own text. Stale evidence is
+        // named first, whatever state the lane's silence lands on — days-old
+        // artefacts belong to an earlier session, and no state word should
+        // make them look like today's breakage. The quiet time stays the
+        // living state's measurement, read from the log like it always was.
+        // And a silence that is merely recent says what it is: nothing has
+        // been reported since the start.
+        let note = "";
+        if (isPastWaveLane(lane, nowMs)) {
+          // The row owns only its lane's evidence clock, so it names that:
+          // calling a stale lane a "past wave" would state a wave verdict the
+          // header itself refuses when the wave holds fresher lanes too.
+          note = `<span class="quiet">stale evidence</span>`;
+        } else if (state === "running" && lane.derived.log !== undefined) {
+          note = `<span class="quiet">${esc(quietSpan(nowMs - lane.derived.log.mtimeMs))}</span>`;
+        } else if (
+          state === "unknown" &&
+          lane.reported !== undefined &&
+          lane.reported.event === "started" &&
+          lane.derived.exit === undefined
+        ) {
+          note = `<span class="quiet">nothing since ${esc(lane.reported.stage)} started</span>`;
+        }
+        return pill(STATE_TONE[state], state, true) + note;
+      }
+
+      function isLaneStalled(lane) {
+        if (lane.reported === undefined || lane.reported.event !== "started" || lane.derived.alive) {
+          return false;
+        }
+        const reportedMs = Date.parse(lane.reported.ts);
+        if (isNaN(reportedMs)) return false;
+        return Date.now() - reportedMs > STALLED_GRACE_MS;
+      }
+
+      function stageCell(lane) {
+        if (lane.reported === undefined) return '<span class="dim">no events</span>';
+        const isStalled = isLaneStalled(lane);
+        const tone = isStalled
+          ? "warn"
+          : lane.reported.event === "failed"
+            ? "bad"
+            : lane.reported.event === "settled"
+              ? "ok"
+              : "info";
+        const eventText = isStalled ? "stalled" : lane.reported.event;
+        const round =
+          lane.reported.round === undefined
+            ? ""
+            : `<span class="round">round ${esc(lane.reported.round)}</span>`;
+        return `<span class="stage-name">${esc(lane.reported.stage)}</span> ${pill(tone, eventText, true)}${round}`;
+      }
+
+      function liveness(lane) {
+        return lane.derived.alive
+          ? '<span class="live-ok">alive</span>'
+          : '<span class="dim">not alive</span>';
+      }
+
+      function logCell(lane) {
+        const log = lane.derived.log;
+        if (log === undefined) return '<span class="dim">no log</span>';
+        const exit =
+          lane.derived.exit === undefined
+            ? '<span class="dim">no EXIT</span>'
+            : lane.derived.exit === 0
+              ? '<span class="ok">EXIT 0</span>'
+              : `<span class="bad">EXIT ${esc(lane.derived.exit)}</span>`;
+        const age = Math.round((Date.now() - log.mtimeMs) / 1000);
+        return `${exit}<span class="sep"> · </span>${log.bytes.toLocaleString()} B<span class="sep"> · </span>${age}s ago`;
+      }
+
+      // A lane is only "no PR" when the corpus was read whole. Rows that came
+      // back and could not be parsed are a gap in the corpus, not an absence
+      // in the repository: this lane's PR may be one of them, so say the read
+      // is short rather than claiming an answer it cannot have.
+      function prCell(lane, gap) {
+        const pr = lane.derived.pr;
+        if (pr === undefined) {
+          return gap === undefined
+            ? '<span class="dim">no PR</span>'
+            : `<span class="dim" title="${esc(gap.skipped)} PR row(s) could not be read">no PR read</span>`;
+        }
+        const tone =
+          pr.state === "merged" ? "ok" : pr.state === "open" ? "info" : "bad";
+        const checks = {
+          none: "dim",
+          pending: "warn",
+          pass: "ok",
+          fail: "bad",
+          // Could not ask: warn, not dim — a gap must not render like the
+          // measured nothing that `none` now uniquely means.
+          unknown: "warn",
+        }[pr.checks];
+        let html = `<span class="pr-num">#${esc(pr.number)}</span> ${pill(tone, pr.state)} ${pill(checks, pr.checks)}`;
+        // Open PRs always state their thread situation: the count of
+        // unresolved threads, or `?` for a read that could not be taken.
+        // Counts and states only — why a thread is open lives in the thread.
+        if (pr.state === "open") {
+          const threads = pr.unresolvedThreads;
+          const label =
+            typeof threads === "number" ? `threads:${threads}` : "threads:?";
+          html += ` ${pill(threads === 0 ? "dim" : "warn", label)}`;
+          // The pre-PR-review gate: `derived.risk` is already the flag's
+          // own words, set by the server only for a high-risk lane whose PR
+          // is open and whose wave log holds no settled pre-PR review (or a
+          // changes-required one with no later remediation) — nothing here
+          // recomputes that verdict.
+          if (lane.derived.risk !== undefined) {
+            html += ` ${pill("bad", lane.derived.risk)}`;
+          }
+        }
+        return html;
+      }
+
+      function gateCell(lane) {
+        const gate = lane.derived.gate;
+        if (gate === undefined) return '<span class="dim">no gate log</span>';
+        const exit =
+          gate.exit === undefined
+            ? '<span class="dim">exit —</span>'
+            : gate.exit === 0
+              ? '<span class="ok">exit 0</span>'
+              : `<span class="bad">exit ${esc(gate.exit)}</span>`;
+        const cov =
+          gate.coverage === undefined
+            ? ""
+            : `<span class="sep"> · </span>${esc(gate.coverage.statements)}/${esc(gate.coverage.branches)}/${esc(gate.coverage.functions)}/${esc(gate.coverage.lines)}%`;
+        return exit + cov;
+      }
+
+      // The wave band's rollup: a lane count, plus a breakdown by *derived
+      // state* — the same verdict each lane's leading cell renders, not the
+      // event the lane reported. The rows now lead with state, so a header that
+      // counted reported events disagreed with them: it said "1 settled" over a
+      // row that said "running". Only the states actually present are shown, so
+      // a wave with nothing failed never reads "0 failed".
+      function waveMeta(lanes, nowMs) {
+        const counts = laneStateCountsOf(lanes, nowMs);
+        let out = `${lanes.length} ${lanes.length === 1 ? "lane" : "lanes"}`;
+        for (const state of LANE_STATE_ORDER) {
+          const n = counts[state] ?? 0;
+          if (n > 0) {
+            out += ` · <span class="${STATE_TONE[state]}">${n} ${state}</span>`;
+          }
+        }
+        return out;
+      }
+
+      // The page-level summary bar: across every lane row that is rendered, the
+      // derived-state rollup — the leading number is how many need a human, then
+      // the states present. It is `laneStateCountsOf` over the *same* lanes the
+      // wave headers just counted through the same `laneStateOf` the rows lead
+      // with, so the page total is literally the sum of the rows on screen,
+      // never a second opinion. Reported events live in the `#metrics` strip
+      // (what the agent claimed); this bar is what is true — and the two
+      // disagreeing is the page's whole thesis, not a drift to reconcile.
+      function renderSummaryBar(lanes, nowMs) {
+        const counts = laneStateCountsOf(lanes, nowMs);
+        let attention = 0;
+        for (const lane of lanes) {
+          if (laneNeedsHuman(lane, nowMs)) attention += 1;
+        }
+        if (stateSummaryValue !== null) {
+          stateSummaryValue.textContent = String(attention);
+          stateSummaryValue.classList.toggle("hot", attention > 0);
+        }
+        if (stateSummaryChips !== null) {
+          const chips = [];
+          for (const state of LANE_STATE_ORDER) {
+            const n = counts[state] ?? 0;
+            if (n > 0) {
+              chips.push(
+                `<span class="ss-chip ${STATE_TONE[state]}"><span class="n">${n}</span> ${esc(state)}</span>`,
+              );
+            }
+          }
+          stateSummaryChips.innerHTML = chips.join("");
+        }
+        return counts;
+      }
+
+      function renderBacklog(backlog) {
+        const pane = document.getElementById("backlog-pane");
+        const provEl = document.getElementById("backlog-provenance");
+        const bodyEl = document.getElementById("backlog-body");
+        if (!pane || !provEl || !bodyEl) return;
+
+        if (!backlog || backlog.state === "absent") {
+          provEl.innerHTML = "";
+          bodyEl.innerHTML = '<div class="backlog-empty">no plan:verify run recorded</div>';
+          return;
+        }
+
+        if (backlog.state === "unknown") {
+          provEl.innerHTML = "";
+          bodyEl.innerHTML = '<div class="backlog-unknown">unknown</div>';
+          return;
+        }
+
+        const artifact = backlog.artifact;
+        const isPartial = artifact.scope.kind === "partial";
+        const scopeLabel = isPartial
+          ? `partial run (${artifact.scope.plans.length} plans)`
+          : `full run (${artifact.plans.length} plans)`;
+        const headSha = artifact.git.head.slice(0, 8);
+        const branch = artifact.git.branch;
+
+        provEl.innerHTML =
+          `<span class="backlog-scope ${isPartial ? "warn" : "ok"}">${esc(scopeLabel)}</span>` +
+          `<span class="sep">·</span>` +
+          `<span class="backlog-at">${esc(artifact.at)}</span>` +
+          `<span class="sep">·</span>` +
+          `<span class="backlog-git">${esc(branch)}@${esc(headSha)}</span>`;
+
+        if (artifact.premises.length === 0) {
+          bodyEl.innerHTML = '<div class="backlog-empty">no premises</div>';
+          return;
+        }
+
+        const items = artifact.premises.map((p) => {
+          let tone = "info";
+          if (p.status === "stale") tone = "bad";
+          else if (p.status === "timed-out" || p.status === "error") tone = "warn";
+          else if (p.status === "holds") tone = "info";
+
+          const reasonHtml = p.reason ? ` <span class="backlog-reason">${esc(p.reason)}</span>` : "";
+          return (
+            `<li class="backlog-item backlog-item-${esc(p.status)}">` +
+            `<span class="backlog-lane">${esc(p.lane)}</span>` +
+            `<span class="pill ${tone}"><span class="pill-dot"></span>${esc(p.status)}</span>` +
+            `<span class="backlog-plan">(${esc(p.plan)})</span>` +
+            reasonHtml +
+            `</li>`
+          );
+        });
+
+        bodyEl.innerHTML = `<ul class="backlog-list">${items.join("")}</ul>`;
+      }
+
+      // The seat that ran the lane, or an honest "unknown" when no event ever
+      // named one. It is never inferred from the lane's name, its worktree or
+      // its model family: an absent record is a gap, not a guess. The word is
+      // plain text so a screen reader hears it without a styling node around it.
+      function seatCell(lane) {
+        return lane.seat === undefined ? "unknown" : esc(lane.seat);
+      }
+
+      function findingsCell(lane) {
+        const detail =
+          lane.reported === undefined ? undefined : lane.reported.detail;
+        if (detail === undefined) return '<span class="dim">—</span>';
+        return (
+          `${esc(detail.fixed ?? "—")} / ${esc(detail.refuted ?? "—")} / ${esc(detail.mutations ?? "—")}` +
+          (detail.mutationsBit === undefined
+            ? ""
+            : ` <span class="dim">(${esc(detail.mutationsBit)} bit)</span>`)
+        );
+      }
+
+      function setMetric(name, value) {
+        // An unknown value shows —, never 0 — the same rule the cells follow:
+        // "no failures" and "we don't know" are different answers.
+        metricValues[name].textContent =
+          value === undefined ? "—" : String(value);
+        // A problem count only turns red when there is a problem — "failed
+        // 0" is a good answer and must not read as an alarm.
+        metricValues[name].classList.toggle(
+          "hot",
+          (name === "failed" || name === "failing") &&
+            typeof value === "number" &&
+            value > 0,
+        );
+      }
+
+      // The one place connection state is written — so the indicator can
+      // never drift from what the EventSource (and its poll fallback) are
+      // actually doing.
+      function setConn(state, text) {
+        connState = state;
+        connection.className = state;
+        connText.textContent = text;
+      }
+
+      function metricsOf(status) {
+        let lanes = 0;
+        let alive = 0;
+        let waves = 0;
+        let events = 0;
+        let prs = 0;
+        let settled;
+        let failed;
+        let running;
+        let open;
+        let merged;
+        let failing;
+        let checksUnknown = false;
+        for (const wave of status.waves) {
+          waves++;
+          for (const lane of wave.lanes) {
+            lanes++;
+            if (lane.derived.alive) alive++;
+            if (lane.reported !== undefined) {
+              events++;
+              if (lane.reported.event === "settled")
+                settled = (settled ?? 0) + 1;
+              else if (lane.reported.event === "failed")
+                failed = (failed ?? 0) + 1;
+              else if (lane.reported.event === "started") {
+                if (!isLaneStalled(lane)) running = (running ?? 0) + 1;
+              }
+            }
+            const pr = lane.derived.pr;
+            if (pr !== undefined) {
+              prs++;
+              if (pr.state === "open") {
+                open = (open ?? 0) + 1;
+                if (pr.checks === "unknown") checksUnknown = true;
+              } else if (pr.state === "merged") {
+                merged = (merged ?? 0) + 1;
+              }
+              if (pr.checks === "fail") failing = (failing ?? 0) + 1;
+            }
+          }
+        }
+        // With no reported events at all (or no observed PR at all) the outcomes
+        // are unknown; once any observation exists, a zero is a real answer.
+        if (events > 0) {
+          settled ??= 0;
+          failed ??= 0;
+          running ??= 0;
+        }
+        if (prs > 0) {
+          open ??= 0;
+          merged ??= 0;
+          if (!checksUnknown) {
+            failing ??= 0;
+          } else {
+            failing = undefined;
+          }
+        }
+        return {
+          lanes,
+          alive,
+          waves,
+          settled,
+          failed,
+          running,
+          open,
+          merged,
+          failing,
+        };
+      }
+
+      function identityOf(row) {
+        // Rows are identified by their wave and lane, never by their index:
+        // sorting re-orders rows, so a position saved before a render may be
+        // a different lane after it.
+        return row.classList.contains("wave")
+          ? `wave:${row.dataset.wave}`
+          : `lane:${row.dataset.wave}/${row.dataset.lane}`;
+      }
+
+      // Marks the one lane row (if any) whose log is currently open — the
+      // only place the selection class is written, so it can never drift from
+      // selectedWave/selectedLane.
+      function syncSelectedRow() {
+        for (const row of table.querySelectorAll("tr.lane")) {
+          row.classList.toggle(
+            "selected",
+            row.dataset.wave === selectedWave && row.dataset.lane === selectedLane,
+          );
+        }
+      }
+
+      // The failure banner, driven by the payload and nothing else. A status
+      // with no `error` clears it, so a collection that recovers says so by
+      // saying nothing: the two states must be distinguishable, and "the banner
+      // went away" is how a reader learns it did.
+      function showCollectError(message) {
+        const banner = document.getElementById("collect-error");
+        if (banner === null) return;
+        if (typeof message === "string" && message !== "") {
+          banner.textContent = "collection failed — " + message;
+          banner.hidden = false;
+          return;
+        }
+        banner.textContent = "";
+        banner.hidden = true;
+      }
+
+      function render(status, options = {}) {
+        lastStatus = status;
+        showCollectError(status.error);
+        // A render replaces the table body's contents, and every poll tick or
+        // SSE event would otherwise destroy the focused row and drop focus
+        // back to the document. Take the focused row's identity now and give
+        // it back once the rows exist again; if it is gone, do nothing.
+        const active = document.activeElement;
+        let focusKey = null;
+        if (active !== null && active.tagName === "BUTTON") {
+          const row = active.closest("tr.wave, tr.lane");
+          if (row !== null && table.contains(row)) {
+            focusKey = identityOf(row);
+          }
+        }
+        const waves = sortByRecent
+          ? [...status.waves].sort(compareWaves)
+          : status.waves;
+        const groups = [];
+        // One reading of the clock for the whole render. A lane's state is a
+        // function of `Date.now()` through the stall threshold, so if the row,
+        // its wave header and the summary bar each grabbed their own instant a
+        // lane could lead `running`, be counted `stalled`, and be hidden or shown
+        // on a third reading. One clock: the count and the filter can only ever
+        // say what the row says.
+        const nowMs = Date.now();
+        const renderedLanes = [];
+        for (const wave of waves) {
+          const isExpanded = expandedWaves.has(wave.id) || defaultExpanded;
+          const lanes = sortByRecent
+            ? [...wave.lanes].sort(compareLanes)
+            : wave.lanes;
+          const textMatches = lanes.filter((lane) =>
+            laneMatchesText(wave, lane),
+          );
+          const filteredLanes = textMatches.filter(
+            (lane) => !laneHiddenByInactive(lane, nowMs),
+          );
+          for (const lane of filteredLanes) renderedLanes.push(lane);
+          // One tbody per wave: a group of rows a <tr> could never own, and
+          // a single real element for aria-controls to name (a <div> cannot
+          // wrap rows inside a table).
+          // The id and the age are flex children, and `gap` separates them
+          // visually and nowhere else: a bare "9" before "2m ago" reaches a
+          // screen reader as one token — "92m ago". The separator is real text,
+          // and it sits outside the age span, so no age ever renders without
+          // one.
+          const rowHtml = [
+            `<tr class="wave" data-wave="${esc(wave.id)}"><td colspan="9">` +
+              `<button type="button" class="wave-band" tabindex="0" aria-expanded="${isExpanded ? "true" : "false"}" aria-controls="waves-${esc(wave.id)}">` +
+              `<span class="wave-eyebrow">wave</span> <span class="wave-id">${esc(wave.id)}</span><span class="sep"> · </span><span class="wave-age${isPastWave(wave, nowMs) ? " past" : ""}">${esc(waveAge(wave))}</span><span class="wave-meta">${waveMeta(filteredLanes, nowMs)}</span>` +
+              `</button></td></tr>`,
+          ];
+          if (filteredLanes.length === 0) {
+            const emptyMsg = emptyWaveMessage(
+              filterInput ? filterInput.value : "",
+              lanes,
+              textMatches,
+            );
+            rowHtml.push(
+              `<tr class="empty" data-wave="${esc(wave.id)}"><td colspan="9">${emptyMsg}</td></tr>`,
+            );
+          } else {
+            for (const lane of filteredLanes) {
+              const key = `${esc(wave.id)}/${esc(lane.lane)}`;
+              rowHtml.push(
+                `<tr class="lane" data-wave="${esc(wave.id)}" data-lane="${esc(lane.lane)}"${isExpanded ? "" : " hidden"}>` +
+                  `<td class="c-state">${stateCell(lane, nowMs)}</td>` +
+                  `<td class="c-lane"><button type="button" class="key" tabindex="0">${key}</button></td>` +
+                  `<td class="c-seat">${seatCell(lane)}</td>` +
+                  `<td class="c-stage">${stageCell(lane)}</td>` +
+                  `<td class="c-live">${liveness(lane)}</td>` +
+                  `<td class="c-log">${logCell(lane)}${ROW_GO}</td>` +
+                  `<td class="c-pr">${prCell(lane, status.prs)}</td>` +
+                  `<td class="c-gate">${gateCell(lane)}</td>` +
+                  `<td class="c-find">${findingsCell(lane)}</td>` +
+                  "</tr>",
+              );
+              // A banner per disagreement, in the lane's own words.
+              for (const disagreement of lane.disagreements) {
+                rowHtml.push(
+                  `<tr class="disagreement" data-wave="${esc(wave.id)}"${isExpanded ? "" : " hidden"}><td colspan="9">${esc(disagreement)}</td></tr>`,
+                );
+              }
+            }
+          }
+          groups.push({ id: wave.id, rowHtml });
+        }
+        // No waves at all — say so, instead of leaving the pane blank.
+        if (groups.length === 0) {
+          groups.push({
+            id: "none",
+            rowHtml: [
+              '<tr class="empty"><td colspan="9">No waves yet — the table fills in as soon as the first status event arrives.</td></tr>',
+            ],
+          });
+        }
+        for (const old of Array.from(table.tBodies)) old.remove();
+        for (const group of groups) {
+          const body = document.createElement("tbody");
+          body.id = `waves-${group.id}`;
+          body.innerHTML = group.rowHtml.join("");
+          table.appendChild(body);
+        }
+        if (focusKey !== null) {
+          for (const row of table.querySelectorAll("tr.wave, tr.lane")) {
+            if (identityOf(row) === focusKey) {
+              row.querySelector("button")?.focus();
+              break;
+            }
+          }
+        }
+        syncSelectedRow();
+        const m = metricsOf(status);
+        setMetric("lanes", m.lanes);
+        setMetric("alive", m.alive);
+        setMetric("settled", m.settled);
+        setMetric("failed", m.failed);
+        setMetric("running", m.running);
+        setMetric("open", m.open);
+        setMetric("merged", m.merged);
+        setMetric("failing", m.failing);
+        setMetric("waves", m.waves);
+        // The page-level derived-state bar is the sum of the rows just rendered,
+        // counted through the same laneStateOf — so it can never out-rank a wave
+        // header into a different total, and with the default view (no filter,
+        // hide-inactive off) it is every lane on the page.
+        renderSummaryBar(renderedLanes, nowMs);
+        renderBacklog(status.backlog);
+
+        // Update follow control visibility based on the selected lane's alive state
+        if (selectedWave !== null && selectedLane !== null) {
+          const selectedLaneData = laneOf(status, selectedWave, selectedLane);
+          syncFollowControl(
+            selectedLaneData !== null && selectedLaneData.derived.alive === true,
+          );
+        }
+
+        // If follow is on, refetch the log tail and scroll to bottom
+        if (!options.skipFollow) {
+          void maybeFollow();
+        }
+      }
+
+      // One generation governs both transports — the same idiom loadTail
+      // uses for log tails below. A poll claims a generation when it
+      // starts and checks it once its await returns; an SSE arrival (a
+      // status event, or the stream opening live) claims one the instant
+      // it writes, since it never awaits anything, so it is always its
+      // own newest generation. Whichever wrote most recently owns the
+      // generation, so a slow poll that resolves after a newer SSE
+      // payload — or a newer poll — already landed must not act at all:
+      // not on the table, and not on the connection indicator.
+      let statusSeq = 0;
+      async function refresh() {
+        const seq = ++statusSeq;
+        try {
+          const res = await fetch("/api/status");
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const body = await res.json();
+          if (seq !== statusSeq) return;
+          render(body);
+          // A poll that lands while the indicator still says "down" is the
+          // signal that connectivity came back — say so.
+          if (connState === "down") setConn("polling", "polling every 10 s");
+        } catch {
+          if (seq === statusSeq) setConn("down", "status unreachable");
+        }
+      }
+
+      function renderLogLines(text) {
+        const lines = text.split("\n");
+        const fragments = [];
+        for (let i = 0; i < lines.length; i++) {
+          fragments.push(
+            `<div class="log-line"><span class="gutter">${i + 1}</span><span class="line">${esc(lines[i])}</span></div>`,
+          );
+        }
+        logView.innerHTML = fragments.join("");
+      }
+
+      // A missing log is not a zero-line log: no gutter, no numbered line
+      // that would misleadingly imply the file has one empty line.
+      function showLogEmpty(text) {
+        logView.innerHTML = `<div class="log-empty">${esc(text)}</div>`;
+      }
+
+      // The one place the expand control's tri-state (label text, its
+      // aria-label, and aria-expanded for the icon rotation) is written —
+      // called both from openLog (a fresh pane inherits whatever expanded
+      // state survived the previous close) and from the button's own click.
+      function syncExpandBtn() {
+        const isExpanded = pageGrid.classList.contains("expanded");
+        const nextAction = isExpanded ? "collapse" : "expand";
+        expandLabel.textContent = nextAction;
+        expandBtn.setAttribute("aria-label", nextAction);
+        expandBtn.setAttribute("aria-expanded", String(isExpanded));
+      }
+
+      async function openLog(row) {
+        const seq = ++requestSeq;
+        const wave = row.dataset.wave;
+        const lane = row.dataset.lane;
+        const laneKey = `${wave}/${lane}`;
+        // Settle the selected lane's identity — and turn follow off — before
+        // the request starts, not after it resolves. A render that lands
+        // while this fetch is in flight (SSE fires independently of any
+        // fetch) must already see the new lane, never the outgoing one: it
+        // is this settling, done synchronously, that stops such a render
+        // from starting a follow refresh for the lane being switched away
+        // from.
+        following = false;
+        selectedWave = wave;
+        selectedLane = lane;
+        syncSelectedRow();
+        logPane.hidden = false;
+        logView.hidden = false;
+        pageGrid.classList.add("with-log");
+        syncExpandBtn();
+        logLane.textContent = laneKey;
+        logPane.setAttribute("aria-label", `Log for ${laneKey}`);
+        // Update follow control based on the lane's alive state
+        const laneData = laneOf(lastStatus, wave, lane);
+        syncFollowControl(
+          laneData !== null && laneData.derived.alive === true,
+        );
+
+        // A rejected fetch (the server went away, the body broke off) is a
+        // failure to show, not an exception to leave behind: the pane already
+        // carries this lane's label, so its text must be this lane's answer
+        // too, never the outgoing lane's lines.
+        let res = null;
+        let buf = null;
+        let failure = null;
+        try {
+          res = await fetch(`/api/log/${wave}/${lane}?tail=16`);
+          if (res.ok) {
+            buf = await res.arrayBuffer();
+          } else if (res.status !== 404) {
+            failure = `HTTP ${res.status}`;
+          }
+        } catch (error) {
+          failure = error instanceof Error ? error.message : "request failed";
+        }
+        // A newer open (or a close) has started since — its answer belongs
+        // to a lane that is no longer the one on screen.
+        if (seq !== requestSeq) return;
+        if (res !== null && res.ok && buf !== null) {
+          const bytes = buf.byteLength;
+          logSize.textContent = `${bytes.toLocaleString()} B`;
+          const text = new TextDecoder().decode(buf);
+          renderLogLines(text);
+        } else {
+          logSize.textContent = "0 B";
+          showLogEmpty(
+            failure !== null
+              ? `could not load the log for ${laneKey} (${failure})`
+              : `no log for ${laneKey}`,
+          );
+        }
+        // Moves keyboard focus into the pane once its content is settled —
+        // still guarded by the seq check above, so a superseded open never
+        // steals focus from whatever the newer one already gave it.
+        logPane.focus({ preventScroll: true });
+      }
+
+      function closeLog() {
+        clearTimeout(followTimer);
+        followTimer = null;
+        clearTimeout(copyTimer);
+        copyLabel.textContent = "copy";
+        copyBtn.setAttribute("aria-label", "copy");
+        copyBtn.classList.remove("ok", "bad");
+        requestSeq++;
+        selectedWave = null;
+        selectedLane = null;
+        syncSelectedRow();
+        following = false;
+        logPane.hidden = true;
+        logView.hidden = true;
+        logPane.setAttribute("aria-label", "Log");
+        pageGrid.classList.remove("with-log");
+        pageGrid.classList.remove("expanded");
+        syncExpandBtn();
+        syncFollowControl(false);
+      }
+
+      table.addEventListener("click", (event) => {
+        const waveRow = event.target.closest("tr.wave");
+        if (waveRow !== null) {
+          toggleWave(waveRow.dataset.wave);
+          return;
+        }
+        const row = event.target.closest("tr.lane");
+        if (row === null) return;
+        void openLog(row);
+      });
+
+      // No keydown handler here: the accordion and log-opener are real
+      // <button> elements now, and a native button already answers Enter
+      // and Space with a click event — adding our own would either fire
+      // the action twice or duplicate what the browser already does.
+
+      expandBtn.addEventListener("click", () => {
+        pageGrid.classList.toggle("expanded");
+        syncExpandBtn();
+      });
+
+      copyBtn.addEventListener("click", async () => {
+        const win =
+          typeof window !== "undefined" ? window : document.defaultView;
+        const lines = Array.from(logView.querySelectorAll(".line"));
+        const text = lines.map((el) => el.textContent).join("\n");
+        let ok = false;
+        try {
+          if (!win.navigator?.clipboard?.writeText) {
+            throw new Error("clipboard unavailable");
+          }
+          await win.navigator.clipboard.writeText(text);
+          ok = true;
+        } catch {
+          // ok stays false; reported below
+        }
+        const feedback = ok ? "copied" : "copy failed";
+        copyLabel.textContent = feedback;
+        copyBtn.setAttribute("aria-label", feedback);
+        copyBtn.classList.toggle("ok", ok);
+        copyBtn.classList.toggle("bad", !ok);
+        clearTimeout(copyTimer);
+        copyTimer = setTimeout(() => {
+          copyLabel.textContent = "copy";
+          copyBtn.setAttribute("aria-label", "copy");
+          copyBtn.classList.remove("ok", "bad");
+        }, 1600);
+      });
+
+      downloadBtn.addEventListener("click", () => {
+        const wave = selectedWave;
+        const lane = selectedLane;
+        if (!wave || !lane) return;
+        const a = document.createElement("a");
+        a.href = `/api/log/${wave}/${lane}?full=1`;
+        a.download = `${wave}-${lane}.log`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      });
+
+      closeBtn.addEventListener("click", closeLog);
+
+      // When follow is on and user scrolls away from the bottom, turn off follow.
+      // This prevents the view from being yanked back to the bottom when the user
+      // deliberately scrolls up to read history.
+      logView.addEventListener("scroll", () => {
+        if (!following) return;
+        const isAtBottom =
+          logView.scrollHeight - logView.scrollTop - logView.clientHeight <= 1;
+        if (!isAtBottom) {
+          following = false;
+          const checkbox = document.getElementById("log-follow");
+          if (checkbox) {
+            checkbox.checked = false;
+          }
+        }
+      });
+
+      // The clock is not in the payload. Everything time-derived here — a
+      // wave's age, a log's "Ns ago", whether a started lane has gone stalled —
+      // is measured against `Date.now()` at render time, and the live path
+      // renders only when the server has something new to say. The server says
+      // nothing while nothing changes, so a quiet wave's header would go on
+      // announcing "2m ago" for hours: a stale clock reads as recent activity,
+      // which is the one lie this column exists to prevent. So the page renews
+      // its own times from the status it already holds. A quarter of the
+      // smallest bin the header displays (a minute) keeps the shown number
+      // honest, and the rebuild is the same one the poll fallback already does
+      // every 10 s — with follow skipped, so a tick never refetches a log.
+      const AGE_TICK_MS = 15_000;
+      setInterval(() => {
+        if (lastStatus !== null) {
+          render(lastStatus, { skipFollow: true });
+        }
+      }, AGE_TICK_MS);
+
+      // Live updates over SSE; if the stream drops, fall back to a 10 s poll.
+      const source = new EventSource("/api/stream");
+      let pollTimer = null;
+      source.addEventListener("status", (event) => {
+        // Claim the generation before writing — a poll already in flight,
+        // still awaiting its own fetch, must find this generation newer
+        // than the one it captured and discard its answer when it lands.
+        ++statusSeq;
+        setConn("live", "live · sse");
+        render(JSON.parse(event.data));
+      });
+      source.onopen = () => {
+        // Same claim as the status listener above: the stream coming up
+        // is itself news, and must outrank a poll already in flight — a
+        // poll that then fails must not be read as "the connection is
+        // down" when the connection just opened.
+        ++statusSeq;
+        setConn("live", "live · sse");
+      };
+      source.onerror = () => {
+        source.close();
+        setConn("polling", "polling every 10 s");
+        if (pollTimer !== null) clearInterval(pollTimer);
+        pollTimer = setInterval(refresh, 10000);
+        refresh();
+      };
+
+      refresh();
+    </script>
+  </body>
+</html>
