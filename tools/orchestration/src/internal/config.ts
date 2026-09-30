@@ -607,6 +607,8 @@ export function parseConfig(text: string): ParseConfigResult {
     if (
       !isNonEmptyString(rawCiWorkflow) ||
       rawCiWorkflow.startsWith("/") ||
+      rawCiWorkflow.startsWith("\\") ||
+      /^[A-Za-z]:/.test(rawCiWorkflow) ||
       rawCiWorkflow.includes("\0") ||
       rawCiWorkflow.split(/[\\/]/).includes("..")
     ) {

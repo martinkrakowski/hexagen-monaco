@@ -234,6 +234,12 @@ describe("a field that is absent takes its documented default", () => {
       "ciWorkflow: ..",
       'ciWorkflow: "a\\0b.yml"',
       "ciWorkflow: [a.yml]",
+      // Windows-absolute forms: drive-qualified, backslash-rooted, UNC.
+      "ciWorkflow: 'C:\\repo\\ci.yml'",
+      "ciWorkflow: C:/x.yml",
+      "ciWorkflow: c:x.yml",
+      "ciWorkflow: '\\x.yml'",
+      "ciWorkflow: '\\\\server\\share\\ci.yml'",
     ]) {
       const result = parseConfig(yaml);
       expect(
