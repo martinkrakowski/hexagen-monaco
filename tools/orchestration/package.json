@@ -1,0 +1,65 @@
+{
+  "name": "@hexagen/orchestration",
+  "version": "0.1.0",
+  "description": "Wave orchestration tooling: wave events, plan verification and review, status, gate and project health",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "engines": {
+    "node": ">=22.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/martinkrakowski/hexagen-monaco.git",
+    "directory": "tools/orchestration"
+  },
+  "homepage": "https://github.com/martinkrakowski/hexagen-monaco/tree/main/tools/orchestration#readme",
+  "bugs": "https://github.com/martinkrakowski/hexagen-monaco/issues",
+  "bin": {
+    "hexagen-orchestration-control-bytes": "dist/bins/control-bytes.js",
+    "hexagen-orchestration-doctor": "dist/bins/doctor.js",
+    "hexagen-orchestration-gate": "dist/bins/gate.js",
+    "hexagen-orchestration-gate-lock": "bin/gate-lock",
+    "hexagen-orchestration-handoff-check": "dist/bins/handoff-check.js",
+    "hexagen-orchestration-init": "dist/bins/init.js",
+    "hexagen-orchestration-merge-prs": "bin/merge-prs",
+    "hexagen-orchestration-mutate": "dist/bins/mutate.js",
+    "hexagen-orchestration-mutate-anchors": "dist/bins/mutate-anchors.js",
+    "hexagen-orchestration-mutate-verify": "dist/bins/mutate-verify.js",
+    "hexagen-orchestration-plan-review": "dist/bins/plan-review.js",
+    "hexagen-orchestration-plan-verify": "dist/bins/plan-verify.js",
+    "hexagen-orchestration-sweep": "dist/bins/sweep.js",
+    "hexagen-orchestration-verify-manifests": "bin/verify-manifests",
+    "hexagen-orchestration-wave-event": "dist/bins/wave-event.js",
+    "hexagen-orchestration-wave-status": "dist/bins/wave-status.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "public"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "lint": "eslint src __tests__"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.1",
+    "typescript": "^5.4.5"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.12.7",
+    "eslint": "^8.57.0",
+    "happy-dom": "^20.10.2",
+    "tsup": "^8.1.0",
+    "typescript": "^5.4.5",
+    "vitest": "^4.1.9"
+  }
+}

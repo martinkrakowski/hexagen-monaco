@@ -1,0 +1,11 @@
+#!/bin/sh
+# hexagen-orchestration-merge-prs — not yet ported.
+#
+# Placeholder for OW-D14's canonical sixteen-bin list. The bin name and its
+# bin/merge-prs path are FINAL and pinned here so no later lane touches package.json;
+# the implementing lane replaces this file and nothing else.
+#
+# A stub must never exit 0: a caller that shells out to a bin and reads the exit
+# code would otherwise see a completed step that never ran.
+echo "hexagen-orchestration-merge-prs: not yet ported" >&2
+exit 2
