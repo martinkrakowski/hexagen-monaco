@@ -60,6 +60,12 @@ export interface CollectDeps {
   readonly git?: (args: readonly string[]) => Promise<string>;
   readonly planVerifyArtifactPath?: string;
   /**
+   * `config.requiredCheck`: a regular expression (source text) naming the
+   * check runs a pull request's checks are read from. Default `^Build`, the
+   * same default the config carries. Compiled once per collection.
+   */
+  readonly requiredCheck?: string;
+  /**
    * The REPOSITORY root, as `findRepositoryRoot` resolved it. Every `git` child
    * process runs from here, and a plan a review named by a repo-relative path
    * is read from here — a bin must not depend on the directory it happened to
@@ -109,6 +115,16 @@ export class PlanPathRefusal extends Error {
     this.name = "PlanPathRefusal";
   }
 }
+
+/**
+ * `gh api --paginate` over `state=all` returns the repository's WHOLE pull
+ * request history, which outgrows Node's 1 MiB `execFile` default (the child
+ * is killed with ERR_CHILD_PROCESS_STDIO_MAXBUFFER and the collection fails)
+ * and can outlast a 10 s bound. Both are set for every `gh` call, generously:
+ * a hung `gh` still ends, and a large repository still lists.
+ */
+export const GH_MAX_BUFFER_BYTES = 32 * 1024 * 1024;
+export const GH_TIMEOUT_MS = 60_000;
 
 /** How much of a lane log travels with the observation (the EXIT marker lives at the end). */
 export const LOG_TAIL_BYTES = 16 * 1024;
@@ -775,6 +791,7 @@ export async function prFacts(
   scope?: PrScope,
 ): Promise<PrCorpus> {
   const { owner, name } = repoPath(deps.repo);
+  const required = compileRequiredCheck(deps.requiredCheck);
   let stdout: string;
   try {
     stdout = await deps.gh([
@@ -817,6 +834,7 @@ export async function prFacts(
             "api",
             `repos/${owner}/${name}/commits/${entry.headRefOid}/check-runs`,
           ]),
+          required,
         );
       } catch {
         // Transient check-runs failure: keep the PR, and say the read failed
@@ -1043,14 +1061,39 @@ function asPr(fact: PrFact): LaneObservation["pr"] {
   };
 }
 
+/** The default `requiredCheck`, the same text `config` defaults to. */
+const DEFAULT_REQUIRED_CHECK = "^Build";
+
+/**
+ * Compile `requiredCheck` once. The config loader already validated it, so an
+ * invalid pattern here means a caller bypassed the loader: that is a
+ * collection error naming the pattern, never a silent fall back to `^Build`.
+ */
+function compileRequiredCheck(source: string | undefined): RegExp {
+  const text = source ?? DEFAULT_REQUIRED_CHECK;
+  try {
+    return new RegExp(text);
+  } catch (error) {
+    throw new Error(
+      `requiredCheck ${JSON.stringify(text)} is not a valid regular expression: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      { cause: error },
+    );
+  }
+}
+
 /**
  * The check conclusions keyed on the runs this pipeline cares about — the
- * ones named `Build`. No Build runs → none (we asked, and nothing has run);
+ * ones whose name matches `requiredCheck` (default `^Build`). No matching runs → none (we asked, and nothing has run);
  * any unfinished → pending; any failed → fail; otherwise pass. A response
  * that cannot be read is unknown — *could not ask*, never a silent none:
  * bad JSON must never wear the same word as an empty list. Never a throw.
  */
-export function parseChecks(json: string): PrChecks {
+export function parseChecks(
+  json: string,
+  required: RegExp = compileRequiredCheck(undefined),
+): PrChecks {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
@@ -1060,7 +1103,7 @@ export function parseChecks(json: string): PrChecks {
   if (!isRecord(parsed) || !Array.isArray(parsed.check_runs)) return "unknown";
   const builds = parsed.check_runs.filter(
     (run) =>
-      isRecord(run) && typeof run.name === "string" && /^Build/.test(run.name),
+      isRecord(run) && typeof run.name === "string" && required.test(run.name),
   );
   if (builds.length === 0) return "none";
   if (
@@ -1208,13 +1251,18 @@ export function realDepsFor(repoRoot: string): CollectDeps {
       }),
     gh: (args) =>
       new Promise((resolve, reject) => {
-        execFile("gh", args, { timeout: 10_000 }, (error, stdout) => {
-          if (error !== null) {
-            reject(error);
-          } else {
-            resolve(stdout);
-          }
-        });
+        execFile(
+          "gh",
+          args,
+          { timeout: GH_TIMEOUT_MS, maxBuffer: GH_MAX_BUFFER_BYTES },
+          (error, stdout) => {
+            if (error !== null) {
+              reject(error);
+            } else {
+              resolve(stdout);
+            }
+          },
+        );
       }),
     git: (args) =>
       new Promise((resolve, reject) => {
@@ -1280,6 +1328,13 @@ function escapeRegExp(value: string): string {
 }
 
 /**
+ * The left boundary of every liveness pattern: the token must start at a line
+ * start or right after `/`, a space or `=`. Without it the lane `t1` matched
+ * inside `pytest1 run` or `abct1/x` and reported a dead lane alive.
+ */
+const PGREP_LEFT = "(^|[/ =])";
+
+/**
  * `pgrep -f` is ERE against the full command line. Derive the pattern from
  * the worktree path the lane actually runs in (or the worktree naming convention
  * discovered from git), so the probe cannot silently drift from reality.
@@ -1297,15 +1352,15 @@ export function pgrepPattern(
     for (const wt of worktrees) {
       const base = basename(wt);
       if (base.endsWith(`-${lane}`) || base === lane) {
-        return `${escapeRegExp(base)}(/|$| )`;
+        return `${PGREP_LEFT}${escapeRegExp(base)}(/|$| )`;
       }
     }
     const prefix = derivePrefix(worktrees);
     if (prefix !== undefined) {
-      return `${escapeRegExp(prefix)}${escapeRegExp(lane)}(/|$| )`;
+      return `${PGREP_LEFT}${escapeRegExp(prefix)}${escapeRegExp(lane)}(/|$| )`;
     }
   }
-  return `${escapeRegExp(lane)}(/|$| )`;
+  return `${PGREP_LEFT}${escapeRegExp(lane)}(/|$| )`;
 }
 
 /**

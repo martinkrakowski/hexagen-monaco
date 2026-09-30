@@ -15,6 +15,8 @@ import {
   pgrepPattern,
   prFacts,
   PR_PULLS_JQ,
+  GH_MAX_BUFFER_BYTES,
+  GH_TIMEOUT_MS,
   PLAN_MAX_BYTES,
   realDepsFor,
   resolveScanRoots,
@@ -197,9 +199,9 @@ const TREE: FakeTree = {
     // gate-v3.log is listed but unreadable: the row stands on its event, minus the gate.
   },
   pgrep: async (pattern) => {
-    if (pattern === "z1(/|$| )") return 0;
-    if (pattern === "u2(/|$| )") return 2;
-    if (pattern === "v3(/|$| )") throw new Error("pgrep exploded");
+    if (pattern === "(^|[/ =])z1(/|$| )") return 0;
+    if (pattern === "(^|[/ =])u2(/|$| )") return 2;
+    if (pattern === "(^|[/ =])v3(/|$| )") throw new Error("pgrep exploded");
     return 0;
   },
   gh: async (args) => {
@@ -436,7 +438,8 @@ describe("collect", () => {
             '{"ts":"2026-09-12T10:00:00Z","wave":"L","lane":"k6-fix2","stage":"implement","event":"started"}\n',
           [`${ROOT}/waveL/k6-fix2.log`]: "rerunning gate\n",
         },
-        pgrep: async (pattern) => (pattern === "k6-fix2(/|$| )" ? 1 : 0),
+        pgrep: async (pattern) =>
+          pattern === "(^|[/ =])k6-fix2(/|$| )" ? 1 : 0,
       }),
       ROOT,
       "now",
@@ -581,7 +584,7 @@ describe("collect", () => {
       ROOT,
       "now",
     );
-    expect(seen).toEqual(["s2(/|$| )"]);
+    expect(seen).toEqual(["(^|[/ =])s2(/|$| )"]);
   });
 
   test("the liveness probe matches a process running in the worktree layout actually used, and fails if the convention changes", async () => {
@@ -597,7 +600,7 @@ describe("collect", () => {
     const obsoleteCmd = `cd ${join(root, "bay-c5")} && anvil`;
     expect(re.test(obsoleteCmd)).toBe(false);
 
-    expect(pattern).toBe("wt-c5(/|$| )");
+    expect(pattern).toBe("(^|[/ =])wt-c5(/|$| )");
   });
 
   test("the liveness probe dynamically derives pattern from worktrees when layout changes", async () => {
@@ -607,14 +610,14 @@ describe("collect", () => {
       join(root, "custom-c5"),
     ];
     const pattern = pgrepPattern("c5", customWorktrees);
-    expect(pattern).toBe("custom-c5(/|$| )");
+    expect(pattern).toBe("(^|[/ =])custom-c5(/|$| )");
     const re = new RegExp(pattern);
     expect(re.test(`cd ${customWorktrees[1]} && anvil`)).toBe(true);
     expect(re.test(`cd ${join(root, "wt-c5")} && anvil`)).toBe(false);
 
     // Deriving prefix for a lane not yet in worktree list
     const unlistedLanePattern = pgrepPattern("c6", customWorktrees);
-    expect(unlistedLanePattern).toBe("custom-c6(/|$| )");
+    expect(unlistedLanePattern).toBe("(^|[/ =])custom-c6(/|$| )");
   });
 
   test("with no worktree to learn from the pattern is the lane token alone — no project prefix", () => {
@@ -622,11 +625,13 @@ describe("collect", () => {
     // project that used a different one had every lane reported dead. The port
     // asks the only question it can still answer: is this lane token in the
     // command line at all?
-    expect(pgrepPattern("c5")).toBe("c5(/|$| )");
-    expect(pgrepPattern("c5", [])).toBe("c5(/|$| )");
-    expect(pgrepPattern("c5", ["/path/nomatch"])).toBe("c5(/|$| )");
+    expect(pgrepPattern("c5")).toBe("(^|[/ =])c5(/|$| )");
+    expect(pgrepPattern("c5", [])).toBe("(^|[/ =])c5(/|$| )");
+    expect(pgrepPattern("c5", ["/path/nomatch"])).toBe("(^|[/ =])c5(/|$| )");
     const re = new RegExp(pgrepPattern("c5", ["/path/nomatch"]));
-    expect(re.test("cd /elsewhere/bay-c5 && anvil")).toBe(true);
+    expect(re.test("cd /elsewhere/c5 && anvil")).toBe(true);
+    // A token that merely ENDS a longer word is not the lane.
+    expect(re.test("cd /elsewhere/bay-c5 && anvil")).toBe(false);
   });
 
   test("cached PR facts are reused and gh is not called", async () => {
@@ -1157,6 +1162,61 @@ describe("prFacts", () => {
       "--jq",
       PR_PULLS_JQ,
     ]);
+  });
+
+  describe("the required check", () => {
+    const openRow = JSON.stringify({
+      number: 41,
+      state: "OPEN",
+      headRefName: "feat/lane-0",
+      headRefOid: "o0",
+    });
+    const ghWithRuns =
+      (names: readonly string[]) =>
+      async (args: readonly string[]): Promise<string> =>
+        args[1]?.includes("check-runs")
+          ? JSON.stringify({
+              check_runs: names.map((name) => ({
+                name,
+                status: "completed",
+                conclusion: "success",
+              })),
+            })
+          : openRow;
+
+    test("requiredCheck ^CI reads a green CI / test run as passing, where the default reads none", async () => {
+      const gh = ghWithRuns(["CI / test"]);
+      const custom = await prFacts({
+        ...fakeDeps({ gh }),
+        requiredCheck: "^CI",
+      });
+      expect(custom.facts[0]?.checks).toBe("pass");
+      const fallback = await prFacts(fakeDeps({ gh }));
+      expect(fallback.facts[0]?.checks).toBe("none");
+    });
+
+    test("an invalid requiredCheck is a collection error naming the pattern", async () => {
+      await expect(
+        prFacts({ ...fakeDeps({ gh: ghWithRuns([]) }), requiredCheck: "(" }),
+      ).rejects.toThrow(/requiredCheck "\(" is not a valid regular expression/);
+    });
+  });
+
+  test("a PR listing larger than 1 MiB parses in full", async () => {
+    const rows = Array.from({ length: 4000 }, (_, i) =>
+      JSON.stringify({
+        number: i + 1,
+        state: "MERGED",
+        headRefName: `feat/lane-${i}-${"x".repeat(300)}`,
+        headRefOid: `o${i}`,
+      }),
+    ).join("\n");
+    expect(rows.length).toBeGreaterThan(1024 * 1024);
+    const { facts, skipped } = await prFacts(
+      fakeDeps({ gh: async () => rows }),
+    );
+    expect(facts).toHaveLength(4000);
+    expect(skipped).toBe(0);
   });
 
   test("parses paginated PR stream into facts", async () => {
@@ -1996,7 +2056,7 @@ describe("collect — event-only lanes", () => {
         },
         pgrep: async (pattern) => {
           seen.push(pattern);
-          return pattern === "e1(/|$| )" ? 1 : 0;
+          return pattern === "(^|[/ =])e1(/|$| )" ? 1 : 0;
         },
         gh: async (args) => {
           if (args[0] === "api" && args[1].includes("pulls")) {
@@ -2030,7 +2090,7 @@ describe("collect — event-only lanes", () => {
       pr: 350,
     });
     // Liveness is a probe result, not a default: the pattern was run.
-    expect(seen).toEqual(["e1(/|$| )"]);
+    expect(seen).toEqual(["(^|[/ =])e1(/|$| )"]);
     expect(lane?.derived.alive).toBe(true);
     expect(lane?.derived.log).toBeUndefined();
     // The event's own pr is the join, and the head it names is claimed for
@@ -2068,7 +2128,7 @@ describe("collect — event-only lanes", () => {
     );
     const lanes = status.waves[0]?.lanes ?? [];
     expect(lanes.map((lane) => lane.lane)).toEqual(["f1", "f2"]);
-    expect(seen).toEqual(["f1(/|$| )", "f2(/|$| )"]);
+    expect(seen).toEqual(["(^|[/ =])f1(/|$| )", "(^|[/ =])f2(/|$| )"]);
     // The log lane is unchanged by the second source: same row, log intact.
     expect(lanes[0]?.derived.log?.tail).toBe("building\n");
     expect(lanes[1]?.derived.log).toBeUndefined();
@@ -2418,6 +2478,29 @@ describe("realDepsFor — the process-level wiring", () => {
     await expect(realDeps.gh(["pr", "list"])).rejects.toThrow("gh: not found");
   });
 
+  test("every gh call carries the full-history buffer and timeout bounds", async () => {
+    const seen: Record<string, unknown>[] = [];
+    execFileMock.mockImplementation(
+      (
+        _file: string,
+        _args: readonly string[],
+        options: Record<string, unknown>,
+        callback: ExecCallback,
+      ) => {
+        seen.push(options);
+        queueMicrotask(() => callback(null, "[]"));
+        return undefined;
+      },
+    );
+    await realDeps.gh(["api", "repos/acme/demo/pulls"]);
+    expect(seen[0]).toMatchObject({
+      maxBuffer: GH_MAX_BUFFER_BYTES,
+      timeout: GH_TIMEOUT_MS,
+    });
+    expect(GH_MAX_BUFFER_BYTES).toBeGreaterThan(1024 * 1024);
+    expect(GH_TIMEOUT_MS).toBeGreaterThan(10_000);
+  });
+
   test("git resolves stdout; a git failure rejects (collect turns that into no worktrees)", async () => {
     stubExec(() => [null, "worktree /path\n"]);
     await expect(realDeps.git?.(["worktree", "list"])).resolves.toBe(
@@ -2489,9 +2572,22 @@ describe("realDepsFor — the process-level wiring", () => {
     expect(derivePrefix([])).toBeUndefined();
   });
 
+  test("the liveness pattern needs a left boundary: pytest1 and abct1/x are not lane t1, a worktree path still is", () => {
+    const bare = new RegExp(pgrepPattern("t1"));
+    expect(bare.test("pytest1 run")).toBe(false);
+    expect(bare.test("abct1/x")).toBe(false);
+    expect(bare.test("t1 run")).toBe(true);
+    expect(bare.test("cd /w/t1/x")).toBe(true);
+    expect(bare.test("--lane=t1 ")).toBe(true);
+    const worktrees = ["/w/the-repository", "/w/wt-t1"];
+    const derived = new RegExp(pgrepPattern("t1", worktrees));
+    expect(derived.test("cd /w/wt-t1/src && anvil")).toBe(true);
+    expect(derived.test("cd /w/pywt-t1/src && anvil")).toBe(false);
+  });
+
   test("pgrepPattern handles base === lane and unmatched worktrees fallback", () => {
-    expect(pgrepPattern("c5", ["/path/c5"])).toBe("c5(/|$| )");
-    expect(pgrepPattern("c5", ["/path/nomatch"])).toBe("c5(/|$| )");
+    expect(pgrepPattern("c5", ["/path/c5"])).toBe("(^|[/ =])c5(/|$| )");
+    expect(pgrepPattern("c5", ["/path/nomatch"])).toBe("(^|[/ =])c5(/|$| )");
   });
 
   test("the default backlog path is derived from the overlay's wave log root, not a module-load env", async () => {

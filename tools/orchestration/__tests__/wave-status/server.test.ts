@@ -743,8 +743,9 @@ describe("the built-in token set", () => {
     );
     const deps: CollectDeps = defaultDeps(
       REPO_ROOT,
-      config({ planDir: "plans" }),
+      config({ planDir: "plans", requiredCheck: "^CI" }),
     );
+    expect(deps.requiredCheck).toBe("^CI");
     expect(deps.repo).toBe(REPO);
     expect(deps.repoRoot).toBe(REPO_ROOT);
     expect(deps.planningDir).toBe("/repo/plans");

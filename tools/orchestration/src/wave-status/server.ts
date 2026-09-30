@@ -241,6 +241,7 @@ export function defaultDeps(repoRoot: string, config: Config): CollectDeps {
     ...realDepsFor(repoRoot),
     repo,
     planningDir: resolve(repoRoot, config.planDir),
+    requiredCheck: config.requiredCheck,
     ...(config.waveLogDir !== undefined
       ? { waveLogDir: config.waveLogDir }
       : {}),
