@@ -54,8 +54,13 @@ describe("prepare-publish-package `files` staging", () => {
         await exists(path.join(pub, "public", "x", "index.html")),
         true,
       );
-      const mode = (await fs.stat(path.join(pub, "bin", "run.sh"))).mode;
-      assert.ok((mode & 0o111) !== 0, "bin/run.sh must stay executable");
+      assert.equal(await exists(path.join(pub, "bin", "run.sh")), true);
+      // The copy above is asserted everywhere; the exec bit is POSIX-only
+      // (Windows has no such mode bit, so stat() never reports one there).
+      if (process.platform !== "win32") {
+        const mode = (await fs.stat(path.join(pub, "bin", "run.sh"))).mode;
+        assert.ok((mode & 0o111) !== 0, "bin/run.sh must stay executable");
+      }
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
