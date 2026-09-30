@@ -48,7 +48,11 @@ absent, or a field of it is absent, these are the defaults and you state them in
 - `forbiddenPorts` — **no forbidden ports.** The absent default is an empty list. A scaffolded
   config may name ports; an absent field names none.
 - `operatorDataPaths` — empty. With none declared, the project stages nothing it was not told to.
-- `opencodeServerUrl` — unset. Ask the owner which server; never start one.
+- `laneHosts` and `seats` — both `[]`, unset. `laneHosts` says where and how a delegated lane runs
+  (its transport prefix, its gate scope, and for a remote host the checks and paths to reach it);
+  `seats` says who runs it (an agent and a model, each naming a host). Both are declared in
+  `.agents/orchestration/config.yaml`. With none declared, ask the owner which host and seat; never
+  start a server.
 - `waveLogDir` — `$HOME/.waves-<name>`, where `<name>` is the name half of `repo`. Never a
   bare shared wave-log root: another project's status server scans one, and a wave logged there
   reports against the wrong repository.
@@ -311,6 +315,21 @@ that did not happen.
    by CLI: some stream within seconds, so a log still at 0 bytes after ~30 s **with no process for
    that worktree** is a dead lane, while a CLI that writes nothing until it exits must be watched by
    its process and the worktree's commits. Never call a lane dead from the log alone.
+
+   **Delegated seats and lane hosts.** The overlay's `laneHosts` and `seats` name where a delegated
+   lane runs and who runs it. These rules hold for every host:
+
+   1. A remote opencode server executes its tools on the server side. `--dir` is the server
+      worktree path. The orchestrator creates that worktree over `ssh`, fetches the lane's commits
+      back, then runs the full gate, pushes and opens the PR itself. The lane never pushes.
+   2. A sandboxed seat can read only its worktree. Its brief lives at `.lane/brief.md` inside the
+      worktree, and is verified with `git check-ignore` before dispatch.
+   3. A `gate: targeted-only` host runs targeted tests and replays only. Its briefs forbid the full
+      gate. The full gate runs on the orchestrator's host, and CI stays the gate.
+   4. Lane liveness is the bytes streamed from the dispatch, plus the lane's commit count against
+      the tip recorded before dispatch. An exit code of 0 is not evidence.
+   5. A lane host's `check` exercises the same path as its `dispatch`. A check that only proves the
+      remote server is up can pass while the dispatch fails.
 
    **Every brief carries the checkpoint rule**: commit failing tests once seen to fail, commit
    again after each green step, push only when the gate passes — a scoped, owner-confirmed exception
