@@ -386,7 +386,7 @@ describe("orchestration template — emit shape", () => {
         "corepack enable must come BEFORE setup-node (its cache probe runs global Yarn Classic and fails on a packageManager-pinned yarn@4 project)",
       );
       assert.ok(
-        gate.includes('corepack prepare "$(node -p'),
+        gate.includes('corepack prepare "$pm" --activate'),
         "gate.yml must prepare the package manager pinned in package.json",
       );
       // Line-anchored so the explanatory comments cannot satisfy the checks.
@@ -420,9 +420,23 @@ describe("orchestration template — emit shape", () => {
       // package manager and every run would fail at the install step.
       assert.ok(
         gate.includes(
-          `corepack prepare "$(node -p 'require("./package.json").packageManager')" --activate`,
+          `pm=$(node -p "require('./package.json').packageManager || ''")`,
         ),
         "the $(…) package-manager expansion must survive interpolation verbatim",
+      );
+      // A project with no packageManager field must fail here, clearly, rather than
+      // hand an empty string to corepack.
+      assert.ok(
+        gate.includes(`[ -n "$pm" ] || {`) &&
+          gate.includes(
+            "::error::package.json has no packageManager field; corepack cannot pin the package manager",
+          ) &&
+          gate.includes("exit 1; }"),
+        "gate.yml must fail with a clear error when packageManager is missing",
+      );
+      assert.ok(
+        gate.indexOf(`[ -n "$pm" ]`) < gate.indexOf(`corepack prepare "$pm"`),
+        "the emptiness check must come before corepack prepare",
       );
     });
   });

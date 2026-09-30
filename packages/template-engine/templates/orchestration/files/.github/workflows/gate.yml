@@ -37,10 +37,13 @@ jobs:
         run: corepack enable
 
       # Read the pinned version from package.json's `packageManager` at runtime
-      # so CI can never drift from what the project declares (no baked version).
+      # so CI can never drift from what the project declares (no baked version). A project
+      # without the field fails here with a clear message instead of an empty corepack argument.
       - name: Prepare package manager
         run: |
-          corepack prepare "$(node -p 'require("./package.json").packageManager')" --activate
+          pm=$(node -p "require('./package.json').packageManager || ''")
+          [ -n "$pm" ] || { echo "::error::package.json has no packageManager field; corepack cannot pin the package manager"; exit 1; }
+          corepack prepare "$pm" --activate
 
       - uses: actions/setup-node@v5
         with:
