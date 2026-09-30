@@ -84,5 +84,5 @@ own, so CI and a human running `hexagen-orchestration-gate` consult the same fil
 
 ## Related
 
-Pairs with [`ci-github-actions`](../ci-github-actions) (`ci.yml`), which `doctor` checks for, and
-[`agents-md`](../agents-md) (`AGENTS.md`, which you paste into by hand).
+Pairs with [`ci-github-actions`](../ci-github-actions), whose `ci.yml` is the default `ciWorkflow`
+that `doctor` checks for (A-32), and [`agents-md`](../agents-md) (`AGENTS.md`, which you paste into by hand).
