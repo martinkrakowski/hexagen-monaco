@@ -274,6 +274,10 @@ describe("the diff base", () => {
     expect(result.stdout).toContain(
       "verify-manifests: base resolves to HEAD; using HEAD~1 so the diff is not empty by construction",
     );
+    // The base that was actually diffed, not only the notice that announced it.
+    expect(result.stdout, out).toContain(
+      "verify-manifests: no manifest changed against HEAD~1",
+    );
   });
 
   forEachShell("9b. a base that is HEAD with no parent is refused", (shell) => {
