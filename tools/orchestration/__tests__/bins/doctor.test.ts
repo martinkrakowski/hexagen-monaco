@@ -174,6 +174,20 @@ describe("red case 4 — an overrides[] entry with no non-empty reason", () => {
   });
 });
 
+describe("F4 — an overrides value that is not a list", () => {
+  test.each([
+    ["a mapping", "overrides:\n  invariant: eventDuty\n  reason: because\n"],
+    ["null", "overrides:\n"],
+    ["a string", "overrides: eventDuty\n"],
+  ])("%s is a failure naming overrides", async (_label, yaml) => {
+    const { code, findings } = await doctor(`repo: owner/demo\n${yaml}`);
+    expect(code).toBe(EXIT_UNHEALTHY);
+    const message = fails(findings, "config").message;
+    expect(message).toMatch(/^overrides /);
+    expect(message).toContain("must be a list");
+  });
+});
+
 describe("red case 5 — an overrides[].invariant outside the locked set", () => {
   test("is a failure naming the set", async () => {
     const { code, findings } = await doctor(

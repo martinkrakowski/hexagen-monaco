@@ -131,6 +131,17 @@ export function readOverrides(raw: unknown): readonly unknown[] {
 }
 
 function parseOverrides(raw: unknown, problems: Problems): ConfigOverride[] {
+  // `readOverrides` reads a non-list as "no entries", which is right for the
+  // caller that only wants the raw list and wrong here: a mapping where a list
+  // belongs is a project that WROTE overrides, and dropping them silently turns
+  // its declared exceptions into locked-invariant violations (or worse, none).
+  if (raw !== undefined && !Array.isArray(raw)) {
+    problems.add(
+      "overrides",
+      "must be a list of { invariant, reason } entries",
+    );
+    return [];
+  }
   const entries = readOverrides(raw);
   const parsed: ConfigOverride[] = [];
   entries.forEach((entry, i) => {
