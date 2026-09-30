@@ -23,7 +23,7 @@ import {
  * The list is the plan's: an unknown key, the key `cast`, a wrong type, an
  * override with no reason, an override naming something that is not an
  * invariant, an invariant moved with no override, an underivable `repo`, the
- * resolved status port appearing in `forbiddenPorts`, a missing `ci.yml`, a
+ * resolved status port appearing in `forbiddenPorts`, a missing CI workflow, a
  * missing `gh`, a missing `yarn`, unavailable worktrees, and — for A-30 —
  * every lane-host row of §12.4 §7's doctor table.
  *
@@ -323,6 +323,35 @@ describe("red case 9 — .github/workflows/ci.yml missing from the project", () 
     const message = fails(findings, "ci-workflow").message;
     expect(message).toContain(".github/workflows/ci.yml");
     expect(message).toContain("missing");
+  });
+});
+
+describe("A-32 — the CI workflow path is configurable", () => {
+  test("a custom path that exists passes, and is the path asked about", async () => {
+    const asked: string[] = [];
+    const { findings } = await doctor(
+      "repo: owner/demo\nciWorkflow: .github/workflows/sync-integrity.yml\n",
+      {
+        exists: async (path) => {
+          asked.push(path);
+          return path === ".github/workflows/sync-integrity.yml";
+        },
+      },
+    );
+    expect(findings.filter((f) => f.check === "ci-workflow")).toEqual([]);
+    expect(asked).toContain(".github/workflows/sync-integrity.yml");
+    expect(asked).not.toContain(".github/workflows/ci.yml");
+  });
+
+  test("a custom path that is missing fails, naming that path and not ci.yml", async () => {
+    const { code, findings } = await doctor(
+      "repo: owner/demo\nciWorkflow: .github/workflows/sync-integrity.yml\n",
+      { exists: async (path) => path === ".github/workflows/ci.yml" },
+    );
+    expect(code).toBe(EXIT_UNHEALTHY);
+    const message = fails(findings, "ci-workflow").message;
+    expect(message).toContain(".github/workflows/sync-integrity.yml");
+    expect(message).not.toContain("ci.yml is missing");
   });
 });
 
