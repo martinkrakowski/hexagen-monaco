@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import {
   chmodSync,
+  existsSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -120,10 +121,17 @@ describe("runCheck, the real runner", () => {
     // grandchild holding this pid.
     const status = await runCheck(
       ["sh", "-c", 'sleep 30 & echo $! > "$0"; wait', pidfile],
-      250,
+      // Generous on purpose: under the suite's process-spawn load the shell can
+      // take well over a few hundred ms to fork and write the pidfile, and a
+      // timeout that fires first reads as a missing pidfile, not a survivor.
+      2_000,
     );
     expect(status).toBe("timeout");
 
+    expect(
+      existsSync(pidfile),
+      "the shell had not forked within timeoutMs",
+    ).toBe(true);
     const pid = Number.parseInt(readFileSync(pidfile, "utf8").trim(), 10);
     expect(Number.isFinite(pid), "the grandchild recorded its own pid").toBe(
       true,
