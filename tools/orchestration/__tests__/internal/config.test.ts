@@ -26,12 +26,12 @@ const ok = (text: string) => {
   return result.config!;
 };
 
-describe("the schema is exactly these sixteen fields", () => {
+describe("the schema is exactly these seventeen fields", () => {
   test("an empty file validates and yields every default", () => {
     expect(ok("{}")).toEqual(emptyConfig());
   });
 
-  test("all sixteen field names are accepted together", () => {
+  test("all seventeen field names are accepted together", () => {
     const config = ok(
       [
         "planDir: docs/planning",
@@ -65,6 +65,7 @@ describe("the schema is exactly these sixteen fields", () => {
         "  attribution: false",
         "repo: owner/name",
         "waveStatusPort: 4318",
+        "ciWorkflow: .github/workflows/sync-integrity.yml",
       ].join("\n"),
     );
 
@@ -96,6 +97,7 @@ describe("the schema is exactly these sixteen fields", () => {
     ]);
     expect(config.repo).toBe("owner/name");
     expect(config.waveStatusPort).toBe(4318);
+    expect(config.ciWorkflow).toBe(".github/workflows/sync-integrity.yml");
     // The override above is what makes eventDuty: false legal.
     expect(config.invariants.eventDuty).toBe(false);
   });
@@ -211,6 +213,39 @@ describe("a field that is absent takes its documented default", () => {
     expect(
       matchesAppendOnly(result.config!, "packages/sync/src/index.ts"),
     ).toBe(false);
+  });
+
+  test("A-32: ciWorkflow defaults to .github/workflows/ci.yml", () => {
+    expect(ok("{}").ciWorkflow).toBe(".github/workflows/ci.yml");
+    expect(emptyConfig().ciWorkflow).toBe(".github/workflows/ci.yml");
+  });
+
+  test("A-32: a valid custom ciWorkflow is kept", () => {
+    expect(
+      ok("ciWorkflow: .github/workflows/sync-integrity.yml").ciWorkflow,
+    ).toBe(".github/workflows/sync-integrity.yml");
+  });
+
+  test("A-32: a ciWorkflow that is empty, absolute, climbs, holds NUL, or is not a string is a problem at ciWorkflow", () => {
+    for (const yaml of [
+      'ciWorkflow: ""',
+      "ciWorkflow: /etc/x.yml",
+      "ciWorkflow: a/../b.yml",
+      "ciWorkflow: ..",
+      'ciWorkflow: "a\\0b.yml"',
+      "ciWorkflow: [a.yml]",
+    ]) {
+      const result = parseConfig(yaml);
+      expect(
+        result.problems.map((p) => p.at),
+        yaml,
+      ).toEqual(["ciWorkflow"]);
+      // The field holds its default, so nothing downstream reads the bad value.
+      expect(result.config!.ciWorkflow, yaml).toBe(".github/workflows/ci.yml");
+    }
+    expect(parseConfig("ciWorkflow: [a.yml]").problems[0].message).toBe(
+      "must be a string",
+    );
   });
 
   test("waveStatusPort defaults to 4318", () => {

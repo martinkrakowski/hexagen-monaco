@@ -9,7 +9,7 @@ import {
 /**
  * The consumer overlay's configuration — the ONE source for everything the
  * package needs to know about a project (OW-D4, OW-D7 as amended by §12 A-15,
- * A-20, A-21, A-22 and A-30).
+ * A-20, A-21, A-22, A-30 and A-32).
  *
  * Nothing in this package hardcodes a repository, a port, a log root or a gate
  * step. A bin that needed one of those and could not find it here would be a
@@ -17,7 +17,7 @@ import {
  *
  * The loader is deliberately two-layered, because `doctor` needs both halves:
  *
- * - `parseConfig` validates the file's SHAPE (the 16 fields, their types, the
+ * - `parseConfig` validates the file's SHAPE (the 17 fields, their types, the
  *   closed `invariants` set, the `overrides[]` contract) and applies every
  *   default. It is total: it returns its `config` ALONGSIDE its problems. A field
  *   that failed validation holds its default in that config; `config` is absent
@@ -113,6 +113,11 @@ export interface Config {
   /** `owner/name`, or absent when neither the file nor `gh` could supply it. */
   readonly repo?: string;
   readonly waveStatusPort: number;
+  /**
+   * Repository-relative path of the CI workflow `doctor` requires (A-32).
+   * Default `.github/workflows/ci.yml`; `init` never writes it.
+   */
+  readonly ciWorkflow: string;
 }
 
 /** One thing wrong with the file, phrased so an operator can act on it. */
@@ -456,7 +461,7 @@ export function parseConfig(text: string): ParseConfigResult {
   const problems = new Problems();
 
   // OW-D7 calls this list exhaustive, and `doctor` refuses an unknown key.
-  // `cast` was in an earlier draft of the list and is NOT one of the sixteen;
+  // `cast` was in an earlier draft of the list and is NOT one of the seventeen;
   // it is named separately only so the message says so. `opencodeServerUrl` is
   // in `KNOWN_FIELDS` as a DEPRECATED ALIAS (A-30): it is accepted, synthesized
   // into a local lane host and deprecation-reported, but it is not a field.
@@ -590,6 +595,30 @@ export function parseConfig(text: string): ParseConfigResult {
     if (port !== undefined) waveStatusPort = port;
   }
 
+  // A-32: a repository-relative path. A rule, not a coercion: an absolute path or
+  // a `..` segment would point doctor's existence probe outside the project.
+  let ciWorkflow = DEFAULT_CI_WORKFLOW;
+  const rawCiWorkflow = parseOptionalString(
+    document.ciWorkflow,
+    "ciWorkflow",
+    problems,
+  );
+  if (rawCiWorkflow !== undefined) {
+    if (
+      !isNonEmptyString(rawCiWorkflow) ||
+      rawCiWorkflow.startsWith("/") ||
+      rawCiWorkflow.includes("\0") ||
+      rawCiWorkflow.split(/[\\/]/).includes("..")
+    ) {
+      problems.add(
+        "ciWorkflow",
+        `must be a non-empty repository-relative path: not absolute, with no \`..\` segment and no NUL. Read ${JSON.stringify(rawCiWorkflow)}`,
+      );
+    } else {
+      ciWorkflow = rawCiWorkflow;
+    }
+  }
+
   let repo: string | undefined;
   if (document.repo !== undefined) {
     if (!isNonEmptyString(document.repo)) {
@@ -621,6 +650,7 @@ export function parseConfig(text: string): ParseConfigResult {
     invariants,
     ...(repo !== undefined ? { repo } : {}),
     waveStatusPort,
+    ciWorkflow,
   };
 
   // The config comes back WITH its problems. A field that failed validation is
@@ -648,6 +678,7 @@ export function emptyConfig(): Config {
     overrides: [],
     invariants: { ...LOCKED_INVARIANTS },
     waveStatusPort: DEFAULT_WAVE_STATUS_PORT,
+    ciWorkflow: DEFAULT_CI_WORKFLOW,
   };
 }
 
@@ -662,6 +693,9 @@ export function matchesAppendOnly(config: Config, path: string): boolean {
   return new RegExp(pattern).test(path);
 }
 
+/** The default `ciWorkflow` (A-32). */
+export const DEFAULT_CI_WORKFLOW = ".github/workflows/ci.yml";
+
 /** The default `waveStatusPort` — 4318, deliberately not campaign-foundry's 4317. */
 export const DEFAULT_WAVE_STATUS_PORT = 4318;
 
@@ -674,7 +708,7 @@ const KNOWN_FIELDS: ReadonlySet<string> = new Set([
   "operatorDataPaths",
   "laneHosts",
   "seats",
-  // A-30: accepted as a DEPRECATED ALIAS, and not one of the sixteen fields.
+  // A-30: accepted as a DEPRECATED ALIAS, and not one of the seventeen fields.
   "opencodeServerUrl",
   "waveLogDir",
   "coverageRequirement",
@@ -684,6 +718,7 @@ const KNOWN_FIELDS: ReadonlySet<string> = new Set([
   "invariants",
   "repo",
   "waveStatusPort",
+  "ciWorkflow",
 ]);
 
 /** `gh` answered, but not with an `owner/name`. Never assigned, always reported. */
