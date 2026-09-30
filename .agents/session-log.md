@@ -375,3 +375,139 @@ eight-day gap. **Close a wave's record when its lanes settle, not when its PRs m
 - §8 gap 2: `tools/wave-status/` unported, so `wave-event.sh`'s parity claim stays untestable.
 - **Put `events.jsonl` somewhere durable.** A session scratchpad under `/private/tmp` is cleaned
   on a timer, which silently destroys the wave-status record this orchestration is built to emit.
+
+## Wave 4 — the orchestration template, `orchestration-template-w01` (2026-09-29/30)
+
+Plan: `docs/planning/2026-09-29_orchestration-template.md`, r8 (§12 amendments through A-32).
+Lanes OW1–OW9, with OW3 cut into OW3a–OW3f (A-28, A-31, A-30). Events:
+`$HOME/.waves-hexagen/wave-orchestration-template-w01/events.jsonl`.
+
+### What merged, with the squash commits
+
+| Lane                                | PR   | Squash     |
+| ----------------------------------- | ---- | ---------- |
+| OW1 — scrubbed fixture and coverage | #688 | `17f18026` |
+| OW3a — package scaffold and config  | #689 | `2419cba9` |
+| plan r5 amendments                  | #691 | `a754b4c1` |
+| OW3e — mutate family                | #692 | `d8e30320` |
+| OW3b — plan-review, sweep, merge    | #693 | `0e4f2127` |
+| OW3d — gate, gate-lock              | #694 | `683a4d69` |
+| OW3c — wave-status                  | #695 | `fd1d8b92` |
+| plan r7 (A-30, A-31)                | #696 | `8ebbef09` |
+| OW4 — the template                  | #698 | `ede1b5ca` |
+| OW5 — wave-status checkpoint        | #699 | `2d4ee10c` |
+| OW3f — lane hosts and seats (A-30)  | #700 | `1208e982` |
+| A-32 — configurable `ciWorkflow`    | #701 | `7b5526ab` |
+| OW6 — hexagen dogfoods the template | #702 | `916c5feb` |
+| OW9 — CPM proposal                  | #703 | `2619f70c` |
+| de-flake the Ctrl-C group-kill test | #704 | `6900e24b` |
+| OW7 — capstone and packaging        | #705 | `cbf0b97d` |
+| OW8 — hexagen-side round trip       | #706 | `e336ecc9` |
+
+`main` was green after every merge. Where CI failed, the failure was the known `apps/web`
+`AIGenerationPage.workbench` flake, and a re-run passed.
+
+### Defects found in the _plan_, not the code
+
+- **A-30.** The schema had no place for a remote lane host or a seat's dispatch identity, and
+  `opencodeServerUrl` modelled only a local HTTP server. The fix added `laneHosts` and `seats`.
+  It also added the rule that a host's `check` must exercise the dispatch path itself: an
+  `ssh … curl /doc` probe goes green while the dispatch fails.
+- **A-32.** `doctor` hard-coded `.github/workflows/ci.yml` as the one required workflow, so
+  dogfooding in this repository failed on a workflow it has (`sync-integrity.yml`). The fix
+  made `ciWorkflow` configurable. The owner chose this over accepting the FAIL.
+- **Scaffold defaults that are wrong for this repository.**
+  - `requiredCheck: ^Build` matches no check here. OW6 sets `^Verify Sync Engine`, and a
+    dogfood test proves that pattern names a real job in the configured workflow.
+  - The scaffolded house rules say "every lane appends" events. The skill assigns emission
+    to the orchestrator, and a remote lane's `$HOME` is not the log the status page reads.
+    Fixed in hexagen's overlay; still open in `init`.
+
+### What the review layer bought
+
+Fable 5.1 held the reviewer seat from OW3f on, after grok-4.7's balance ran out (HTTP 402).
+Every lane was reviewed before its first push, and fix rounds went to a separate implementer
+seat. The findings that mattered:
+
+- **OW3f: shell injection over ssh.** `runRemote` passed its remote words unquoted. ssh joins
+  them and hands the string to the remote login shell, so a `clone:` of `/srv/cf; …` would
+  have executed on the lane host. The fix quotes every word, proven against a real `sh`.
+- **OW3f: the group-kill test timing out under suite load.** It failed 3 out of 3 runs inside
+  the full package suite.
+- **OW6: wrong or private content bound for a public file.**
+  - The house rules named the wrong wave-log directory.
+  - The gate lacked `typecheck:test`.
+  - A key-file paragraph in the relocated seat record was trimmed to a generic rule, on the
+    owner's decision. The branch was squashed before its first push, so the original text
+    never reached the remote.
+- **OW9: copied spec text.** The proposal copied two complete enumerations out of the
+  unpublished CPM spec while saying nothing was reproduced. The copy was amended out before
+  the first push.
+- **OW7: red cases that passed for the wrong reason.**
+  - The failing gate step was an unquoted `node -e process.exit(3)`, a shell syntax error,
+    so it exited 1, not 3.
+  - The init idempotence check could not tell skip-if-exists from a deterministic
+    overwrite.
+
+  Review also added a symlink-escape refusal to the publish script.
+
+- **The capstone itself found a release bug.** `prepare-publish-package.js` staged only
+  `dist/`, so the published orchestration package would have had no `bin/` or `public/`. As
+  published, its gate could not run. The script now stages the `files` array. The `sync` and
+  `arch-linter` tarballs were proven unchanged.
+- **CI found what local runs did not.** Two defects passed on the orchestrator's host and
+  failed on the runner:
+  - OW8's script statically imported workspace sources before building them, which only
+    worked because a local `dist/` already existed.
+  - The Ctrl-C test's liveness probe counted a zombie as alive.
+
+  The OW8 fix was reproduced cold, red then green, in a scratch worktree with nothing built.
+
+### What was refuted, and why
+
+- **qodo, "add the control-byte scan to hexagen's gate."** The gate is a subset of CI with
+  the difference named, and CI runs no byte scan. The real mismatch is one level up, between
+  the scaffold defaults and the skill's sentence, and is recorded as a follow-up.
+- **qodo and CodeRabbit, "add `--output-format json` to the `agy` commands."** `cast.md` is
+  the owner's graded record, relocated rather than rewritten (F-10). The flag cannot be
+  verified from this repository.
+- **CodeRabbit, "fail the Darwin diagnostic on empty discovery."** The mirror must match the
+  template byte for byte, so the change belongs to the template.
+- **qodo, "Turbo may pack a stale build."** The cache key hashes the package's inputs, so a
+  hit restores exactly the current build.
+
+### Runs per seat
+
+This is the gap Wave 3 warned about, repeated: costs were not written down when they were
+observed. What survives:
+
+| seat                                        | runs                                                                                                             | measured                                                                                                                                     |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `space-bunny` via `midnight` (`ocm-run`)    | OW3f, OW4                                                                                                        | OW3f: 3,375 s, 778,254 in / 88,187 out, 16.4 M cache read. OW4: 3,469 s, 263,846 in / 73,301 out, 26.9 M cache read. Both from `lane-usage`. |
+| Sonnet subagents on the orchestrator's host | about 21 dispatches and 5 resumptions (lanes that had to read outside a sandboxed worktree, and every fix round) | per-run token totals were visible at the time but not recorded                                                                               |
+| Fable 5.1 (reviewer)                        | about 14 pre-PR reviews and re-reviews                                                                           | not recorded                                                                                                                                 |
+
+Earlier lanes' opencode sessions (OW1, OW3a–OW3e) are not in the midnight database. They ran
+before the lane-host move and cannot be costed now. **The rule stands, and this time applies
+to the orchestrator too: write each run's cost into `events.jsonl` when it finishes.**
+
+### Deferred
+
+- **Owner actions:**
+  - Publish `@hexagen-monaco/orchestration@0.1.0`. Release tags are owner-gated.
+  - Swap the untracked `.claude/skills/orchestrate-wave/` for the symlink after pulling main.
+    A verified copy is in the wave directory.
+  - Paste the Wave Observability section into `AGENTS.md`.
+- **The `merge-prs` red (§7, manual).** It needs a throwaway PR with a failing required
+  check, so it has not been run yet.
+- **Branch protection.** `main` has no required status checks, so every red check here is
+  advisory to the merge button.
+- **Package follow-ups:**
+  - `init`'s house rules should state who emits events and the status server's read-only and
+    loopback guarantee, and should read the default port from its constant.
+  - The scaffold defaults disagree with the skill on the byte scan.
+  - The template's Darwin diagnostic should fail on empty discovery.
+  - `lane-usage` should become a package bin.
+  - There is a `gate-lock` release TOCTOU, a candidate to fix upstream in campaign-foundry.
+- **The `apps/web` `AIGenerationPage.workbench` flake.** It failed CI four times on
+  unrelated commits on 2026-09-30.
