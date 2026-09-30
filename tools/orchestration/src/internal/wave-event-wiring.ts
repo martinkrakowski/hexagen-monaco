@@ -1,5 +1,5 @@
 import { appendFile, mkdir } from "node:fs/promises";
-import { statSync } from "node:fs";
+import { lstatSync, statSync } from "node:fs";
 import { type Config, type ConfigProblem } from "./config.js";
 import { configRefusal } from "./refusal.js";
 import { runWaveEvent, type WaveEventDeps } from "./wave-event-cli.js";
@@ -25,6 +25,8 @@ export interface LoadedProject {
 export interface WaveEventIo {
   /** True only for a DIRECTORY. A missing path and a regular file are both false. */
   readonly isDirectory: (path: string) => boolean;
+  /** True for a symlink itself (an `lstat`); a missing path is false. */
+  readonly isSymlink: (path: string) => boolean;
   readonly mkdir: (path: string) => Promise<void>;
   readonly appendFile: (path: string, data: string) => Promise<void>;
   readonly clock: () => string;
@@ -40,6 +42,13 @@ export const nodeWaveEventIo: WaveEventIo = {
   isDirectory: (path) => {
     try {
       return statSync(path).isDirectory();
+    } catch {
+      return false;
+    }
+  },
+  isSymlink: (path) => {
+    try {
+      return lstatSync(path).isSymbolicLink();
     } catch {
       return false;
     }
@@ -88,6 +97,7 @@ export function buildWaveEventDeps(
         : {}),
     },
     exists: io.isDirectory,
+    isSymlink: io.isSymlink,
     mkdir: io.mkdir,
     appendFile: io.appendFile,
     clock: io.clock,

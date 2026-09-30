@@ -94,29 +94,30 @@ describe("defaultLogDir", () => {
     );
   });
 
-  test("/tmp/wave-<wave> wins once every root candidate is absent", () => {
-    const exists = existsIn(["/tmp/wave-w06"]);
-    expect(defaultLogDir("w06", { HOME: "/h" }, exists, CFG)).toBe(
-      "/tmp/wave-w06",
-    );
-  });
-
-  test("/tmp/wave<wave> wins after /tmp/wave-<wave>", () => {
-    const exists = existsIn(["/tmp/wavew06"]);
-    expect(defaultLogDir("w06", { HOME: "/h" }, exists, CFG)).toBe(
-      "/tmp/wavew06",
-    );
-  });
-
-  test("/tmp/<wave> is the last candidate, and only for a wave id already prefixed", () => {
-    const exists = existsIn(["/tmp/wave-hardening-w06"]);
-    expect(
-      defaultLogDir("wave-hardening-w06", { HOME: "/h" }, exists, CFG),
-    ).toBe("/tmp/wave-hardening-w06");
-  });
+  test.each([
+    ["w06", ["/tmp/wave-w06", "/tmp/wavew06"]],
+    [
+      "wave-hardening-w06",
+      ["/tmp/wave-hardening-w06", "/tmp/wave-wave-hardening-w06"],
+    ],
+  ])(
+    "a pre-existing /tmp candidate for %s is never chosen",
+    (wave, planted) => {
+      // `exists` says YES to every /tmp path; the answer must still be under the root.
+      const seen: string[] = [];
+      const exists = (path: string): boolean => {
+        seen.push(path);
+        return path.startsWith("/tmp/wave");
+      };
+      const dir = defaultLogDir(wave, { HOME: "/h" }, exists, CFG);
+      expect(dir.startsWith(`${ROOT}/`)).toBe(true);
+      for (const path of planted) expect(dir).not.toBe(path);
+      expect(seen.every((path) => path.startsWith(`${ROOT}/`))).toBe(true);
+    },
+  );
 
   test("candidate priority: an earlier candidate wins even when a later one also exists", () => {
-    const exists = existsIn([`${ROOT}/wave-w06`, "/tmp/wave-w06"]);
+    const exists = existsIn([`${ROOT}/wave-w06`, `${ROOT}/wavew06`]);
     expect(defaultLogDir("w06", { HOME: "/h" }, exists, CFG)).toBe(
       `${ROOT}/wave-w06`,
     );

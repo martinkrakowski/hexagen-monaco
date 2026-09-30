@@ -8,6 +8,7 @@ import {
   readdirSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -61,6 +62,7 @@ function recorder(directories: readonly string[] = []): Recorder {
     stderr,
     io: {
       isDirectory: (path) => directories.includes(path),
+      isSymlink: () => false,
       mkdir: async (path) => void created.push(path),
       appendFile: async (path) => void appended.push(path),
       clock: () => "2026-09-29T00:00:00Z",
@@ -265,5 +267,46 @@ describe("F12: only a directory counts as a candidate", () => {
     expect(nodeWaveEventIo.isDirectory(join(root, "f"))).toBe(false);
     expect(nodeWaveEventIo.isDirectory(join(root, "missing"))).toBe(false);
     expect(nodeWaveEventIo.isDirectory(root)).toBe(true);
+  });
+});
+
+describe("a symlinked events.jsonl is refused", () => {
+  test("exits 2 naming the file, and the link's target is untouched", async () => {
+    const root = scratch();
+    const dir = join(root, "wave-W3");
+    mkdirSync(dir);
+    const victim = join(scratch(), "victim.jsonl");
+    writeFileSync(victim, "original\n");
+    symlinkSync(victim, join(dir, "events.jsonl"));
+    const lines: string[] = [];
+
+    const code = await runWaveEventForProject(
+      ARGV,
+      { HOME: "/home/op", WAVE_LOG_ROOT: root },
+      { config: emptyConfig(), present: false, problems: [] },
+      { ...nodeWaveEventIo, stderr: (line) => void lines.push(line) },
+    );
+
+    expect(code).toBe(2);
+    expect(lines.join("\n")).toContain(join(dir, "events.jsonl"));
+    expect(lines.join("\n")).toContain("symlink");
+    expect(readFileSync(victim, "utf8")).toBe("original\n");
+  });
+
+  test("a regular events.jsonl is still appended to", async () => {
+    const root = scratch();
+    const dir = join(root, "wave-W3");
+    mkdirSync(dir);
+    writeFileSync(join(dir, "events.jsonl"), "");
+    const code = await runWaveEventForProject(
+      ARGV,
+      { HOME: "/home/op", WAVE_LOG_ROOT: root },
+      { config: emptyConfig(), present: false, problems: [] },
+      nodeWaveEventIo,
+    );
+    expect(code).toBe(0);
+    expect(readFileSync(join(dir, "events.jsonl"), "utf8")).toContain(
+      '"wave":"W3"',
+    );
   });
 });

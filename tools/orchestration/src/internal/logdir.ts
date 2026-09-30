@@ -97,12 +97,15 @@ export function waveLogRoot(env: LogDirEnv, config: LogDirConfig = {}): string {
  * The source's shared `~/.waves` is absent from this list and unreachable from
  * all three (A-18).
  *
- * The candidate search that follows is the source's, unchanged: in order
- * `<root>/wave-<wave>`, `<root>/wave<wave>`, `<root>/<wave>` (only when `wave`
- * already starts with `wave`), then the same three under `/tmp` — the FIRST
- * that exists wins. When none exists, the default is `<root>/<wave>` when `wave`
- * starts with `wave`, otherwise `<root>/wave-<wave>`; `/tmp` is only ever a
- * fallback for a directory that is already there, never a default of its own.
+ * The candidate search that follows is the source's, MINUS its `/tmp` fallback:
+ * in order `<root>/wave-<wave>`, `<root>/wave<wave>`, `<root>/<wave>` (only when
+ * `wave` already starts with `wave`) — the FIRST that exists wins. The source
+ * also tried the same three under `/tmp`, campaign-foundry's legacy layout; that
+ * is a directory shared by every user and every project on the machine, so a
+ * planted `/tmp/wave-<id>` (or a symlink there) could receive this repository's
+ * events. Resolution is `$LOGDIR`, else a candidate under the per-repository
+ * root, and nothing else. When none exists, the default is `<root>/<wave>` when
+ * `wave` starts with `wave`, otherwise `<root>/wave-<wave>`.
  */
 export function defaultLogDir(
   wave: string,
@@ -121,9 +124,6 @@ export function defaultLogDir(
     `${root}/wave-${wave}`,
     `${root}/wave${wave}`,
     ...(startsWithWave ? [`${root}/${wave}`] : []),
-    `/tmp/wave-${wave}`,
-    `/tmp/wave${wave}`,
-    ...(startsWithWave ? [`/tmp/${wave}`] : []),
   ];
 
   for (const candidate of candidates) {

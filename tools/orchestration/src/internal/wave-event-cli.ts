@@ -64,6 +64,12 @@ export interface WaveEventDeps {
   /** The overlay's `repo` and `waveLogDir`, for the default log root (A-18). */
   readonly config?: LogDirConfig;
   readonly exists: (path: string) => boolean;
+  /**
+   * Whether a path is a symlink (an `lstat`, so the link itself, not its
+   * target). The append refuses a symlinked `events.jsonl`: following one lets
+   * whoever planted it choose where this repository's events are written.
+   */
+  readonly isSymlink?: (path: string) => boolean;
   readonly mkdir: (path: string) => Promise<void>;
   readonly appendFile: (path: string, data: string) => Promise<void>;
   /** ISO-8601 UTC to the second, as `date -u +%Y-%m-%dT%H:%M:%SZ` reports. */
@@ -240,8 +246,14 @@ async function write(args: string[], deps: WaveEventDeps): Promise<number> {
     );
   }
 
+  const eventsPath = `${logdir}/events.jsonl`;
+  if (deps.isSymlink?.(eventsPath) === true) {
+    refuse(
+      `refusing to append: ${eventsPath} is a symlink, and following it would let its author choose where events are written`,
+    );
+  }
   await deps.mkdir(logdir);
-  await deps.appendFile(`${logdir}/events.jsonl`, line);
+  await deps.appendFile(eventsPath, line);
   return 0;
 }
 
