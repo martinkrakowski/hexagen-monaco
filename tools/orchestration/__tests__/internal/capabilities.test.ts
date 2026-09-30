@@ -7,9 +7,10 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   CHECK_TIMEOUT_MS,
   hasCommand,
@@ -163,6 +164,69 @@ describe("runCheck, the real runner", () => {
       `grandchild ${pid} survived the timeout: the group kill reached only the shell`,
     ).toBe(true);
   }, 20_000);
+});
+
+describe("Ctrl-C does not leave a detached probe running", () => {
+  test("SIGINT to the process running runCheck kills the probe's grandchild", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "orchestration-sigint-"));
+    dirs.push(dir);
+    const pidfile = join(dir, "grandchild.pid");
+    const script = join(dir, "runner.mjs");
+    const capabilities = pathToFileURL(
+      resolve(import.meta.dirname, "../../src/internal/capabilities.ts"),
+    ).href;
+    // The probe's shell forks a grandchild and waits, in its OWN group: only the
+    // tracked-group kill on SIGINT can reach the grandchild.
+    writeFileSync(
+      script,
+      [
+        `import { runCheck } from ${JSON.stringify(capabilities)};`,
+        `await runCheck(["sh", "-c", 'sleep 30 & echo $! > "$0"; wait', ${JSON.stringify(pidfile)}], 30_000);`,
+        "",
+      ].join("\n"),
+    );
+    const runner = spawn(
+      process.execPath,
+      ["--experimental-strip-types", script],
+      { stdio: "ignore" },
+    );
+    let grandchild: number | undefined;
+    try {
+      // Generous, and guarded: a slow fork is not a survivor.
+      const deadline = Date.now() + 8_000;
+      while (!existsSync(pidfile) && Date.now() < deadline) {
+        await new Promise((done) => setTimeout(done, 20));
+      }
+      expect(existsSync(pidfile), "the probe had not forked in time").toBe(
+        true,
+      );
+      // The pidfile exists before its content is flushed; wait for a number.
+      while (Date.now() < deadline) {
+        const text = readFileSync(pidfile, "utf8").trim();
+        if (text !== "") break;
+        await new Promise((done) => setTimeout(done, 20));
+      }
+      grandchild = Number.parseInt(readFileSync(pidfile, "utf8").trim(), 10);
+      expect(
+        Number.isFinite(grandchild),
+        "the grandchild recorded its pid",
+      ).toBe(true);
+      expect(runner.kill("SIGINT")).toBe(true);
+      expect(
+        await waitForDeath(grandchild, 2_000),
+        `grandchild ${grandchild} survived Ctrl-C: the detached group was never killed`,
+      ).toBe(true);
+    } finally {
+      runner.kill("SIGKILL");
+      if (grandchild !== undefined && Number.isFinite(grandchild)) {
+        try {
+          process.kill(grandchild, "SIGKILL");
+        } catch {
+          // Already gone, which is the point.
+        }
+      }
+    }
+  }, 30_000);
 });
 
 describe("runRemote, the real runner", () => {

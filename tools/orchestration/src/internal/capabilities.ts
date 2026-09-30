@@ -88,6 +88,49 @@ function killGroup(pid: number | undefined): void {
 }
 
 /**
+ * The process groups of every probe still running.
+ *
+ * A probe is `detached`, so it is OUTSIDE the foreground group a terminal's
+ * Ctrl-C signals: without this, interrupting doctor leaves every live probe
+ * running until its own timer would have fired, and that timer died with doctor.
+ */
+const live = new Set<number>();
+let handlersInstalled = false;
+
+function killLive(): void {
+  for (const pid of live) killGroup(pid);
+}
+
+/**
+ * Install the cleanup handlers, once, on the first spawn (so importing this
+ * module changes nothing about a process that never probes).
+ *
+ * `SIGINT` and `SIGTERM` kill every tracked group, then RE-RAISE the signal:
+ * `process.once` removes the handler before it runs, so `process.kill(process.pid,
+ * sig)` takes the default action and the exit status still says "killed by a
+ * signal" rather than a swallowed interrupt. `exit` is the backstop for a normal
+ * end with a probe somehow still tracked. Deliberately minimal: an `ssh -f` tunnel
+ * is outside the group by design (see `runCheck`) and stays there.
+ */
+function installHandlers(): void {
+  if (handlersInstalled) return;
+  handlersInstalled = true;
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.once(signal, () => {
+      killLive();
+      process.kill(process.pid, signal);
+    });
+  }
+  process.on("exit", killLive);
+}
+
+/** Track a spawned child's group until `settle` says it is done. */
+function track(pid: number | undefined): void {
+  installHandlers();
+  if (pid !== undefined) live.add(pid);
+}
+
+/**
  * Run a lane host's `check`, and report whether the DISPATCH PATH works.
  *
  * Three things about this are load-bearing:
@@ -117,6 +160,7 @@ export function runCheck(
       stdio: "ignore",
       ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
     });
+    track(child.pid);
     let settled = false;
     const timer = setTimeout(() => {
       killGroup(child.pid);
@@ -126,6 +170,7 @@ export function runCheck(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (child.pid !== undefined) live.delete(child.pid);
       resolve(status);
     };
     child.on("error", () => settle("failed"));
@@ -198,6 +243,7 @@ export function runRemote(
     child.stdout?.on("data", (chunk: string) => {
       stdout += chunk;
     });
+    track(child.pid);
     const timer = setTimeout(() => {
       killGroup(child.pid);
       settle("timeout");
@@ -206,6 +252,7 @@ export function runRemote(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (child.pid !== undefined) live.delete(child.pid);
       resolve({ status, stdout: stdout.trim() });
     };
     child.on("error", () => settle("failed"));
