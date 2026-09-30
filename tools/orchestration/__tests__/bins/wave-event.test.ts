@@ -176,6 +176,22 @@ describe("a refusal exits 2, writes nothing, and creates no directory", () => {
       /invalid lane/,
     ));
 
+  // A trailing dollar anchor without the m flag does not match before a trailing
+  // newline, so the token pattern already refuses these. Locked here so a
+  // well-meant tweak to the pattern (an m flag, a whitespace tail) cannot
+  // quietly reopen it.
+  test("a wave with a trailing newline", () =>
+    refusal(
+      positional("/logs/w1", "w1\n", "l1", "dispatch", "started"),
+      /invalid wave/,
+    ));
+
+  test("a lane with a trailing newline", () =>
+    refusal(
+      positional("/logs/w1", "W3", "l1\n", "dispatch", "started"),
+      /invalid lane/,
+    ));
+
   test("a wave with a slash in it", () =>
     refusal(
       positional("/logs/w1", "w/3", "l1", "dispatch", "started"),
