@@ -1247,6 +1247,11 @@
       let filterText = "";
       let connState = "connecting";
       let copyTimer = null;
+      // Reserved for a follow refresh armed on a timer. Follow is currently
+      // driven by the checkbox and by each status render, so nothing sets it
+      // yet — but closeLog clears it unconditionally, and an undeclared name
+      // there threw a ReferenceError the moment a followed log was closed.
+      let followTimer = null;
 
       // Palette guard: verifies that every var(--color-*) custom property
       // referenced in the page's stylesheets resolves to a non-empty value.
@@ -2540,22 +2545,38 @@
           laneData !== null && laneData.derived.alive === true,
         );
 
-        const res = await fetch(`/api/log/${wave}/${lane}?tail=16`);
+        // A rejected fetch (the server went away, the body broke off) is a
+        // failure to show, not an exception to leave behind: the pane already
+        // carries this lane's label, so its text must be this lane's answer
+        // too, never the outgoing lane's lines.
+        let res = null;
         let buf = null;
-        if (res.ok) {
-          buf = await res.arrayBuffer();
+        let failure = null;
+        try {
+          res = await fetch(`/api/log/${wave}/${lane}?tail=16`);
+          if (res.ok) {
+            buf = await res.arrayBuffer();
+          } else if (res.status !== 404) {
+            failure = `HTTP ${res.status}`;
+          }
+        } catch (error) {
+          failure = error instanceof Error ? error.message : "request failed";
         }
         // A newer open (or a close) has started since — its answer belongs
         // to a lane that is no longer the one on screen.
         if (seq !== requestSeq) return;
-        if (res.ok && buf !== null) {
+        if (res !== null && res.ok && buf !== null) {
           const bytes = buf.byteLength;
           logSize.textContent = `${bytes.toLocaleString()} B`;
           const text = new TextDecoder().decode(buf);
           renderLogLines(text);
         } else {
           logSize.textContent = "0 B";
-          showLogEmpty(`no log for ${laneKey}`);
+          showLogEmpty(
+            failure !== null
+              ? `could not load the log for ${laneKey} (${failure})`
+              : `no log for ${laneKey}`,
+          );
         }
         // Moves keyboard focus into the pane once its content is settled —
         // still guarded by the seq check above, so a superseded open never
@@ -2564,9 +2585,8 @@
       }
 
       function closeLog() {
-        if (following) {
-          clearTimeout(followTimer);
-        }
+        clearTimeout(followTimer);
+        followTimer = null;
         clearTimeout(copyTimer);
         copyLabel.textContent = "copy";
         copyBtn.setAttribute("aria-label", "copy");

@@ -910,6 +910,106 @@ describe("the status page", () => {
     expect(logView?.hidden).toBe(true);
   });
 
+  test("open a log, follow it, close it: the pane hides and nothing throws", async () => {
+    const aliveStatus = {
+      generatedAt: "now",
+      waves: [
+        {
+          id: "T",
+          lanes: [
+            {
+              wave: "T",
+              lane: "t1",
+              derived: { alive: true },
+              disagreements: [],
+            },
+          ],
+        },
+      ],
+    } as WaveStatus;
+    const page = await loadPage(aliveStatus, "some log text");
+    const doc = page.window.document;
+    const errors: unknown[] = [];
+    page.window.addEventListener("error", (event: unknown) => {
+      errors.push((event as { error?: unknown }).error ?? event);
+    });
+    press(doc.querySelector("tr.lane")!.querySelector("button")!, "Enter");
+    await vi.waitFor(() => {
+      expect(doc.getElementById("log-follow")).not.toBeNull();
+      expect(doc.getElementById("log")?.textContent).toContain("some log text");
+    });
+    const follow = doc.getElementById(
+      "log-follow",
+    ) as unknown as HTMLInputElement;
+    follow.checked = true;
+    follow.dispatchEvent(
+      new (
+        follow.ownerDocument!.defaultView as unknown as { Event: typeof Event }
+      ).Event("change", { bubbles: true }),
+    );
+    // Following is on: the follow refresh is the second log fetch.
+    await vi.waitFor(() => {
+      expect(
+        page.fetches.filter((url) => url.startsWith("/api/log/")).length,
+      ).toBeGreaterThanOrEqual(2);
+    });
+
+    const logPane = doc.getElementById("log-pane") as unknown as HTMLElement;
+    expect(logPane.hidden).toBe(false);
+    (doc.getElementById("log-close") as unknown as HTMLElement).click();
+    expect(logPane.hidden).toBe(true);
+    expect((doc.getElementById("log") as unknown as HTMLElement).hidden).toBe(
+      true,
+    );
+    expect(errors).toEqual([]);
+  });
+
+  test("a failed log fetch replaces the pane's text with an error line for the lane now selected, never the previous lane's text", async () => {
+    const twoLanes = {
+      generatedAt: "now",
+      waves: [
+        {
+          id: "T",
+          lanes: [
+            {
+              wave: "T",
+              lane: "t1",
+              derived: { alive: false },
+              disagreements: [],
+            },
+            {
+              wave: "T",
+              lane: "t2",
+              derived: { alive: false },
+              disagreements: [],
+            },
+          ],
+        },
+      ],
+    } as WaveStatus;
+    const page = await loadPage(twoLanes, async (url) => {
+      if (url.includes("/T/t2")) throw new Error("network down");
+      return new Response("TEXT OF LANE A", { status: 200 });
+    });
+    const doc = page.window.document;
+    const rows = doc.querySelectorAll("tr.lane");
+    press(rows[0]!.querySelector("button")!, "Enter");
+    await vi.waitFor(() => {
+      expect(doc.getElementById("log")?.textContent).toContain(
+        "TEXT OF LANE A",
+      );
+    });
+    press(rows[1]!.querySelector("button")!, "Enter");
+    await vi.waitFor(() => {
+      expect(doc.getElementById("log")?.textContent).toContain("T/t2");
+    });
+    expect(doc.getElementById("log-lane")?.textContent).toBe("T/t2");
+    expect(doc.getElementById("log")?.textContent).not.toContain(
+      "TEXT OF LANE A",
+    );
+    expect(doc.getElementById("log")?.textContent).toMatch(/could not load/i);
+  });
+
   test("opening a log reveals the second row; closing it returns the table to full height", async () => {
     const page = await loadPage(statusAt());
     const doc = page.window.document;
