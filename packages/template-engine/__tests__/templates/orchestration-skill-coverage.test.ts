@@ -21,8 +21,10 @@ const EXTRACTOR = path.join(
   "extract-gate-steps.mjs",
 );
 const FIXTURE = path.resolve(HERE, "..", "fixtures", "orchestration");
-const MEMORY_DIR =
-  "/Users/martin/.claude/projects/-Users-martin-Projects-Client-work-ADOBE-campaign-foundry/memory";
+// The live memory directory is the owner's, outside the repository. The audit against it runs only
+// when ORCHESTRATION_MEMORY_DIR points at it; CI runs the committed manifest instead.
+const MEMORY_DIR: string | undefined = process.env.ORCHESTRATION_MEMORY_DIR;
+const HAS_MEMORY_DIR = Boolean(MEMORY_DIR && fs.existsSync(MEMORY_DIR));
 
 const REQUIRED_LESSONS = [
   "ci-runners-have-no-zsh.md",
@@ -630,11 +632,11 @@ describe("orchestration skill coverage", () => {
     expect(regenerated.stdout).toBe(text);
   });
 
-  it.skipIf(!fs.existsSync(MEMORY_DIR))(
+  it.skipIf(!HAS_MEMORY_DIR)(
     "every memory file is either cited with a source line or allowlisted with a reason",
     () => {
       const files = fs
-        .readdirSync(MEMORY_DIR)
+        .readdirSync(MEMORY_DIR as string)
         .filter((name) => name.endsWith(".md"));
       const lessons = fs.readFileSync(
         path.join(FIXTURE, "campaign-foundry", "overlay", "lessons.md"),
@@ -669,7 +671,7 @@ describe("orchestration skill coverage", () => {
       const result = run(
         coverageArgs(FIXTURE, [
           "--memory",
-          MEMORY_DIR,
+          MEMORY_DIR as string,
           "--lessons",
           path.join(FIXTURE, "campaign-foundry", "overlay", "lessons.md"),
         ]),
