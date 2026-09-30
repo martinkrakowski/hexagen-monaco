@@ -53,6 +53,8 @@ export interface GateStep {
   readonly name: string;
   readonly command: string;
   readonly optional?: boolean;
+  /** Runs under the machine-wide gate lock. Only `locked: true` marks a step locked. */
+  readonly locked?: boolean;
 }
 
 /** A project that has deliberately departed from a locked invariant, and why. */
@@ -313,10 +315,21 @@ function parseGateSteps(raw: unknown, problems: Problems): GateStep[] {
         `must be true or false. Read ${JSON.stringify(entry.optional)}; only \`optional: true\` lets a step skip`,
       );
     }
+    // Same rule for `locked`: which steps hold the machine-wide lock is the
+    // project's to say (it was a hardcoded list of campaign-foundry step names),
+    // and reading a non-boolean as "locked" or "not locked" would silently run a
+    // step with, or without, the mutual exclusion its author asked for.
+    if (entry.locked !== undefined && typeof entry.locked !== "boolean") {
+      problems.add(
+        `gateSteps[${i}].locked`,
+        `must be true or false. Read ${JSON.stringify(entry.locked)}; only \`locked: true\` runs a step under the gate lock`,
+      );
+    }
     steps.push({
       name: entry.name,
       command: entry.command,
       ...(entry.optional === true ? { optional: true } : {}),
+      ...(entry.locked === true ? { locked: true } : {}),
     });
   });
   return steps;

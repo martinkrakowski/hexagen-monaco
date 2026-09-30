@@ -397,6 +397,43 @@ describe("gateSteps", () => {
     });
   });
 
+  describe("F22: only a literal true marks a step locked", () => {
+    const step = (locked: string) =>
+      `gateSteps:\n  - name: test\n    command: yarn test\n${locked}`;
+
+    test.each([
+      ["locked: no", "a YAML 1.1 boolean word"],
+      ["locked:", "null"],
+      ['locked: "false"', "a quoted string"],
+      ["locked: 0", "a number"],
+    ])("%s is a problem at gateSteps[0].locked (%s)", (line) => {
+      const result = parseConfig(step(`    ${line}\n`));
+      expect(result.problems.map((p) => p.at)).toEqual(["gateSteps[0].locked"]);
+      expect(result.config?.gateSteps[0]?.locked).not.toBe(true);
+    });
+
+    test("locked: true is locked", () => {
+      expect(ok(step("    locked: true\n")).gateSteps[0]?.locked).toBe(true);
+    });
+
+    test("locked: false and an absent key are both not locked", () => {
+      expect(ok(step("    locked: false\n")).gateSteps[0]?.locked).not.toBe(
+        true,
+      );
+      expect(ok(step("")).gateSteps[0]?.locked).not.toBe(true);
+    });
+
+    test("locked and optional are independent", () => {
+      const s = ok(step("    locked: true\n    optional: true\n")).gateSteps[0];
+      expect(s).toEqual({
+        name: "test",
+        command: "yarn test",
+        optional: true,
+        locked: true,
+      });
+    });
+  });
+
   test("a step with no name or no command is refused, naming the index", () => {
     expect(
       parseConfig("gateSteps:\n  - command: yarn build\n").problems[0].at,
