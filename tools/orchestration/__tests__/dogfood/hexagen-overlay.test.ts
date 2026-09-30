@@ -146,4 +146,9 @@ describe("hexagen-monaco's cast.md", () => {
   test("points at laneHosts in config.yaml", () => {
     expect(cast).toContain("laneHosts");
   });
+
+  test("refers to the configured gateSteps instead of hand-keeping the local checks", () => {
+    expect(cast).toContain("`gateSteps`");
+    expect(cast).not.toContain("yarn build && yarn typecheck");
+  });
 });

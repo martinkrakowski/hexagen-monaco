@@ -6,8 +6,7 @@ fail with a misleading error rather than "no such model".
 > **Provenance.** This file was ported from `campaign-foundry` on 2026-09-08. The seats, spending
 > rules and traps are model facts and carry over unchanged. **The track record in the last section
 > was earned on that repository**, whose gate enforces 100 % coverage on four counters; this
-> repository has no root coverage gate, so a lane here is judged by `yarn build && yarn typecheck &&
-yarn lint && yarn test` and by its mutations, nothing else. Re-probe every seat before the first
+> repository has no root coverage gate, so a lane here is judged by the configured `gateSteps` in `config.yaml` (run them with `hexagen-orchestration-gate`) and by its mutations, nothing else. Re-probe every seat before the first
 > dispatch — ids rotate, and quotas here are the same account.
 >
 > `dispatch-lane.sh` was the pre-template wrapper and no longer exists; its roles are now `laneHosts[].dispatch` and `hexagen-orchestration-wave-event`.
