@@ -477,6 +477,22 @@ const PRESENTATION: CatalogPresentation[] = [
     },
   },
   {
+    id: "orchestration",
+    category: "tooling",
+    companions: ["ci-github-actions"],
+    details: {
+      overview:
+        "Runs one wave of a plan across per-lane worktrees: the orchestrate-wave skill (operating contract, why each rule exists, the four prompt briefs, and a wave-event emitter) plus a gate.yml whose single CI step is the packaged gate bin. The skill is a template output; the .agents/orchestration/ overlay it reads is yours — scaffolded once by init and never written again by an add or an upgrade.",
+      includes: [
+        ".github/workflows/gate.yml — one job, one step: hexagen-orchestration-gate",
+        ".agents/skills/orchestrate-wave/SKILL.md — the orchestrator's operating contract",
+        "references/rationale.md — why each rule is what it is",
+        "references/briefs.md — prompt templates A–D (lane brief, reviewer, fix brief, sweep)",
+        "scripts/wave-event.sh — appends one JSON event line per stage transition",
+      ],
+    },
+  },
+  {
     id: "eslint-no-console",
     category: "tooling",
     companions: ["observability"],
