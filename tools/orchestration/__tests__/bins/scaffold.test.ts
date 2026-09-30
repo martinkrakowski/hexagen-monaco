@@ -142,6 +142,12 @@ describe("the bin list (OW-D14)", () => {
   // F18: mutate-anchors (OW3b) imports the TypeScript compiler API at run time.
   // tsup keeps third-party modules external, so a consumer without `typescript`
   // would fail to resolve it.
+  // F24: OW3c's page tests import Window from happy-dom, and OW3c may not edit
+  // package.json.
+  it("declares happy-dom as a devDependency, at campaign-foundry's range", () => {
+    expect(manifest.devDependencies?.["happy-dom"]).toBe("^20.10.2");
+  });
+
   it("declares typescript as a RUNTIME dependency, at the range the repo uses", () => {
     expect(manifest.dependencies?.typescript).toBe(
       manifest.devDependencies?.typescript,
