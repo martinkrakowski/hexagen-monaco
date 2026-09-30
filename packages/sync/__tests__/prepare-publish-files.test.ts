@@ -95,4 +95,24 @@ describe("prepare-publish-package `files` staging", () => {
       }
     }
   });
+
+  it("refuses a `files` entry that is a symlink out of the package, naming it", async () => {
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), "prepublish-out-"));
+    await fs.writeFile(path.join(outside, "secret.txt"), "LEAKED\n");
+    const dir = await makeFixture(["dist", "linked"]);
+    try {
+      await fs.symlink(outside, path.join(dir, "linked"), "dir");
+      const r = stage(dir);
+      assert.equal(r.status, 1);
+      assert.match(r.stderr, /"linked" .*outside the package/);
+      assert.equal(
+        await exists(path.join(dir, "publish", "linked", "secret.txt")),
+        false,
+        "the out-of-package file must not be staged",
+      );
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+      await fs.rm(outside, { recursive: true, force: true });
+    }
+  });
 });

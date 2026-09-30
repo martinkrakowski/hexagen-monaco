@@ -237,6 +237,26 @@ function prepare(packageDir) {
       );
       process.exit(1);
     }
+    // The string check above cannot see a symlink: an entry that is a link to a
+    // directory outside the package would be dereferenced and copied. Compare
+    // REAL paths, so the escape is refused and the entry named.
+    const realSrc = fs.realpathSync(src);
+    const realPackageDir = fs.realpathSync(absPackageDir);
+    if (
+      realSrc !== realPackageDir &&
+      !realSrc.startsWith(realPackageDir + path.sep)
+    ) {
+      console.error(
+        `❌ package.json "files" entry ${JSON.stringify(entry)} resolves outside the package (real path ${realSrc}); refusing to stage it.`,
+      );
+      process.exit(1);
+    }
+    if (realSrc === realPackageDir) {
+      console.error(
+        `❌ package.json "files" entry ${JSON.stringify(entry)} resolves to the package root itself; refusing to stage it.`,
+      );
+      process.exit(1);
+    }
     const dest = path.join(publishDir, rel);
     if (fs.statSync(src).isDirectory()) {
       copyRecursive(src, dest);
