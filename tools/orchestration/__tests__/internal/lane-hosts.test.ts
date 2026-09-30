@@ -185,6 +185,24 @@ describe("A-30 §7: every parseConfig red case, at the path the plan names", () 
     expect(problemsAt(yaml)).toContain("seats[1].id");
   });
 
+  test("a seat dropped for a dangling host still holds its id, so a later duplicate is caught", () => {
+    const yaml = [
+      REMOTE,
+      "seats:",
+      "  - id: a",
+      "    agent: lane",
+      "    model: one",
+      "    host: nowhere",
+      "  - id: a",
+      "    agent: lane",
+      "    model: two",
+      "    host: midnight",
+    ].join("\n");
+    const at = problemsAt(yaml);
+    expect(at).toContain("seats[0].host");
+    expect(at).toContain("seats[1].id");
+  });
+
   test("a seats[].host naming no host is refused at that seat's host", () => {
     expect(
       problemsAt(

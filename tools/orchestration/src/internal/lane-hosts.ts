@@ -386,6 +386,10 @@ function parseSeat(
     );
   } else {
     id = entry.id;
+    // Recorded HERE, not at the return: a seat dropped below for a dangling host
+    // or a missing agent still declared this id, and a later seat with the same id
+    // is a duplicate of it all the same (the same defect as a dropped host's name).
+    seen.add(id);
   }
 
   const agent = isNonEmptyString(entry.agent) ? entry.agent : undefined;
@@ -426,7 +430,6 @@ function parseSeat(
   ) {
     return undefined;
   }
-  seen.add(id);
   return { id, agent, model, host };
 }
 
