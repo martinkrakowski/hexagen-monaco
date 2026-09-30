@@ -563,10 +563,10 @@ Delegated lanes can run on a remote opencode server that executes tools on the s
 
 ##### 1. The schema: `laneHosts` and `seats` are added, and `opencodeServerUrl` is retired
 
-**Field count.** OW-D7's enumeration becomes 16 schema fields: 15, minus `opencodeServerUrl`, plus `laneHosts` and `seats`.
+**Field count.** OW-D7's enumeration becomes 16 schema fields: 15, minus `opencodeServerUrl`, plus `laneHosts` and `seats`. (A-32 later adds `ciWorkflow`, making 17.)
 
 - `KNOWN_FIELDS` still accepts `opencodeServerUrl`, as a **deprecated alias** (§1.3). It is not a schema field.
-- `config.test.ts`'s "exactly these fields" set is the 16.
+- `config.test.ts`'s "exactly these fields" set is the 16 (17 after A-32).
 
 **1.1 `laneHosts`**, a list, default `[]`. It says _where and how_. Unknown keys in an entry are problems at `laneHosts[i].<key>`. This is deliberately stricter than `gateSteps[i]`.
 
@@ -632,7 +632,7 @@ A host is **remote** when any of `ssh`, `clone` or `worktrees` is present. A rem
 1. config problems;
 2. `repo`;
 3. `waveStatusPort`;
-4. `ci.yml`;
+4. `ci.yml`, or the configured `ciWorkflow` (A-32);
 5. `gh` and `yarn`;
 6. `git worktree`;
 7. for each `laneHosts` entry, in file order:
