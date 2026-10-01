@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -562,4 +563,237 @@ describe("the gate run loop", () => {
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("HEXAGEN_GATE_HEARTBEAT_SECONDS");
   });
+});
+
+/**
+ * Every signal test runs under both shells: `/bin/sh` is the script's
+ * interpreter and `dash` is what CI runners use, and the two differ in when
+ * they run a trap that was deferred behind a foreground child.
+ */
+const SIGNAL_SHELLS: string[] = existsSync("/bin/dash")
+  ? ["/bin/sh", "/bin/dash"]
+  : ["/bin/sh"];
+
+/** The real lock script, which the recording stand-in below delegates to. */
+const realGateLock = fileURLToPath(
+  new URL("../../bin/gate-lock", import.meta.url),
+);
+
+interface Harness {
+  /** A copy of gate-run.sh sitting beside the recording stand-in. */
+  script: string;
+  /** One line per gate-lock sub-command the gate invoked, in order. */
+  log: string;
+  dir: string;
+}
+
+/**
+ * A copy of gate-run.sh next to a stand-in `gate-lock` that runs the real one
+ * and records every sub-command it was asked for. On `acquire` it can also
+ * hold the gate inside the acquire child AFTER the lock is won (while
+ * `ACQUIRE_MARKER` exists), which is the window a signal has to land in: the
+ * trap is deferred behind that foreground child, so it fires when the acquire
+ * has already succeeded and before the gate has recorded it.
+ */
+function harness(): Harness {
+  const dir = scratch();
+  const bin = join(dir, "bin");
+  mkdirSync(bin);
+  const script = join(bin, "gate-run.sh");
+  copyFileSync(gateRunSh, script);
+  const log = join(dir, "lock-calls.log");
+  writeFileSync(
+    join(bin, "gate-lock"),
+    [
+      "#!/bin/sh",
+      `printf '%s\\n' "$1" >> "${log}"`,
+      `/bin/sh "${realGateLock}" "$@"`,
+      "rc=$?",
+      'if [ "$1" = acquire ] && [ "$rc" -eq 0 ] && [ -n "${ACQUIRE_MARKER:-}" ]; then',
+      '  touch "$ACQUIRE_MARKER"',
+      '  while [ -f "$ACQUIRE_MARKER" ]; do sleep 0.1; done',
+      "fi",
+      'exit "$rc"',
+      "",
+    ].join("\n"),
+  );
+  return { script, log, dir };
+}
+
+function lockCalls(h: Harness, call: string): number {
+  if (!existsSync(h.log)) return 0;
+  return readFileSync(h.log, "utf8")
+    .split("\n")
+    .filter((line) => line === call).length;
+}
+
+interface Started {
+  child: ReturnType<typeof spawn>;
+  done: Promise<RunResult & { exitedAt: number; closedAt: number }>;
+}
+
+/** Start the harness's gate under `shell`, keeping when it exited and when its pipes closed. */
+function startGateUnder(
+  shell: string,
+  h: Harness,
+  env: Record<string, string>,
+): Started {
+  const child = spawn(shell, [h.script, "--lane", "lane-b"], {
+    env: { ...process.env, HEXAGEN_GATE_SLOTS: "1", TMPDIR: h.dir, ...env },
+  });
+  let stdout = "";
+  let stderr = "";
+  let exitedAt = 0;
+  child.stdout?.on("data", (chunk) => (stdout += chunk));
+  child.stderr?.on("data", (chunk) => (stderr += chunk));
+  const done = new Promise<RunResult & { exitedAt: number; closedAt: number }>(
+    (resolve, reject) => {
+      child.on("error", reject);
+      child.on("exit", () => (exitedAt = Date.now()));
+      child.on("close", (code) =>
+        resolve({
+          status: code ?? -1,
+          stdout,
+          stderr,
+          dir: h.dir,
+          exitedAt,
+          closedAt: Date.now(),
+        }),
+      );
+    },
+  );
+  return { child, done };
+}
+
+describe("signal hygiene (every test runs under /bin/sh and dash)", () => {
+  test("a signal while the acquire child runs, after it won, still releases the lock — once", async () => {
+    for (const shell of SIGNAL_SHELLS) {
+      for (const [signal, expected] of [
+        ["SIGTERM", 143],
+        ["SIGINT", 130],
+      ] as const) {
+        const h = harness();
+        const marker = join(h.dir, "acquire-held");
+        const { child, done } = startGateUnder(shell, h, {
+          ...lockedEnv(["locked"]),
+          ...stepsEnv([["locked", "true"]]),
+          ACQUIRE_MARKER: marker,
+        });
+        // The acquire child has WON the lock and is being held open. Signal
+        // the gate (it defers the trap behind that child), then let it go.
+        await waitForFile(marker);
+        expect(existsSync(join(h.dir, "hexagen-gate.lock"))).toBe(true);
+        child.kill(signal);
+        rmSync(marker);
+        const r = await done;
+        const where = { shell, signal };
+        expect({ ...where, status: r.status }).toEqual({
+          ...where,
+          status: expected,
+        });
+        expect({
+          ...where,
+          held: existsSync(join(h.dir, "hexagen-gate.lock")),
+        }).toEqual({ ...where, held: false });
+        expect({ ...where, releases: lockCalls(h, "release") }).toEqual({
+          ...where,
+          releases: 1,
+        });
+        expect(r.stdout).toContain("gate: lock released");
+      }
+    }
+  }, 60_000);
+
+  test("a green gate releases exactly once, and a failing locked step does too", async () => {
+    for (const shell of SIGNAL_SHELLS) {
+      for (const [step, status] of [
+        ["true", 0],
+        ["exit 3", 3],
+      ] as const) {
+        const h = harness();
+        const r = await startGateUnder(shell, h, {
+          ...lockedEnv(["locked"]),
+          ...stepsEnv([
+            ["locked", step],
+            ["after", "true"],
+          ]),
+        }).done;
+        expect({ shell, step, status: r.status }).toEqual({
+          shell,
+          step,
+          status,
+        });
+        expect({ shell, step, acquires: lockCalls(h, "acquire") }).toEqual({
+          shell,
+          step,
+          acquires: 1,
+        });
+        expect({ shell, step, releases: lockCalls(h, "release") }).toEqual({
+          shell,
+          step,
+          releases: 1,
+        });
+        expect(existsSync(join(h.dir, "hexagen-gate.lock"))).toBe(false);
+      }
+    }
+  }, 60_000);
+
+  test("a TERM between the lock being held and the heartbeat being stopped still releases the lock", async () => {
+    for (const shell of SIGNAL_SHELLS) {
+      const h = harness();
+      const marker = join(h.dir, "paused-before-heartbeat-stop");
+      const { child, done } = startGateUnder(shell, h, {
+        ...lockedEnv(["locked"]),
+        ...stepsEnv([["locked", "true"]]),
+        HEXAGEN_GATE_TEST_PAUSE_BEFORE_HEARTBEAT_STOP: marker,
+      });
+      // The gate is inside its release, before it has stopped the heartbeat or
+      // started the release child. `wait` is interruptible by a trapped
+      // signal, so a TERM here must come back through cleanup and release —
+      // which it can only do if "release started" is not yet recorded.
+      await waitForFile(marker);
+      child.kill("SIGTERM");
+      rmSync(marker);
+      const r = await done;
+      expect({ shell, status: r.status }).toEqual({ shell, status: 143 });
+      expect({
+        shell,
+        held: existsSync(join(h.dir, "hexagen-gate.lock")),
+      }).toEqual({ shell, held: false });
+      expect({ shell, releases: lockCalls(h, "release") }).toEqual({
+        shell,
+        releases: 1,
+      });
+    }
+  }, 60_000);
+
+  test("a signal during a step reports the release to the caller, and leaves no orphan holding its pipe", async () => {
+    for (const shell of SIGNAL_SHELLS) {
+      const h = harness();
+      const marker = join(h.dir, "in-step");
+      const { child, done } = startGateUnder(shell, h, {
+        ...lockedEnv(["a-sleeping-step"]),
+        // 30s: an orphaned heartbeat `sleep` outlives the gate by this long,
+        // and holds the caller's stdout if the subshell did not close fd 3.
+        HEXAGEN_GATE_HEARTBEAT_SECONDS: "30",
+        // Handshake from INSIDE the redirected step: the step writes the
+        // marker, then sleeps. The gate does not forward signals to its
+        // steps, so the trap fires when the sleep ends.
+        ...stepsEnv([["a-sleeping-step", `touch "${marker}"; sleep 2`]]),
+      });
+      await waitForFile(marker);
+      child.kill("SIGTERM");
+      const r = await done;
+      expect({ shell, status: r.status }).toEqual({ shell, status: 143 });
+      // The cleanup ran while the step's redirect was in scope. Its message
+      // must still have reached the caller, not the capture log.
+      expect(r.stdout).toContain("gate: lock released, heartbeat stopped");
+      expect(existsSync(join(h.dir, "hexagen-gate.lock"))).toBe(false);
+      const lag = r.closedAt - r.exitedAt;
+      expect({ shell, closedWithinMs: lag < 10_000 }).toEqual({
+        shell,
+        closedWithinMs: true,
+      });
+    }
+  }, 60_000);
 });
