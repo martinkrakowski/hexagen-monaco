@@ -13,6 +13,8 @@ export const savedProjectBodySchema = z
     githubLink: z.unknown().optional(),
     githubPublishPrefs: z.unknown().optional(),
     layers: z.array(z.unknown()).optional(),
+    // Optional: an absent value means "greenfield" (see `projectMode`).
+    mode: z.enum(["greenfield", "brownfield"]).optional(),
   })
   .passthrough();
 
