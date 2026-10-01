@@ -164,6 +164,51 @@ describe("rowRisk", () => {
   });
 });
 
+describe("duplicate rows name every matching line", () => {
+  // Line 5 is the lane table row; the shipped table repeats its bold id on line 11.
+  const twice = [
+    "# The plan",
+    "",
+    "| Lane | Delivers |",
+    "|---|---|",
+    "| **OW1** | The first row, in the lane table. |",
+    "",
+    "## Shipped",
+    "",
+    "| Lane | PR |",
+    "|---|---|",
+    "| **OW1** | #12 merged, in the shipped table. |",
+  ].join("\n");
+
+  test.each([
+    ["rowHash", (plan?: string) => rowHash(twice, "OW1", plan)],
+    ["rowRisk", (plan?: string) => rowRisk(twice, "OW1", plan)],
+  ])("%s names both line numbers and the start of each line", (_n, call) => {
+    expect(() => call()).toThrow(/found 2/);
+    expect(() => call()).toThrow(/line 5: .*The first row/);
+    expect(() => call()).toThrow(/line 11: .*#12 merged/);
+  });
+
+  test.each([
+    ["rowHash", (plan?: string) => rowHash(twice, "OW1", plan)],
+    ["rowRisk", (plan?: string) => rowRisk(twice, "OW1", plan)],
+  ])("%s names the plan file when the caller knows it", (_n, call) => {
+    expect(() => call("docs/planning/plan.md")).toThrow(
+      /docs\/planning\/plan\.md/,
+    );
+  });
+
+  test("a long line is cut to its start, not printed whole", () => {
+    const long = "| **OW1** | " + "x".repeat(500) + " |";
+    try {
+      rowHash(`${long}\n${long}`, "OW1");
+      expect.unreachable();
+    } catch (error) {
+      expect((error as Error).message.length).toBeLessThan(400);
+    }
+  });
+});
+
 describe("asHashRecord", () => {
   test("a map whose every value is a string is accepted verbatim", () => {
     expect(asHashRecord({ "PT-5a": "aa", D177: "bb" })).toEqual({

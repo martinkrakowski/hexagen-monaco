@@ -1,6 +1,6 @@
 {
   "name": "@hexagen/orchestration",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Wave orchestration tooling: wave events, plan verification and review, status, gate and project health",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",

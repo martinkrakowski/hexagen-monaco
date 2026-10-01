@@ -35,7 +35,9 @@ const ok = (
       args.some((a) => a.includes("mutation"))
         ? JSON.stringify({
             data: {
-              addComment: { comment: { url: "https://gh/issuecomment-1" } },
+              addComment: {
+                commentEdge: { node: { url: "https://gh/issuecomment-1" } },
+              },
               resolve0: { thread: { isResolved: true } },
               resolve1: { thread: { isResolved: true } },
             },
@@ -154,7 +156,9 @@ describe("runCli", () => {
           ? JSON.stringify({
               data: {
                 addComment: {
-                  comment: { url: "https://gh/issuecomment-bodyfile" },
+                  commentEdge: {
+                    node: { url: "https://gh/issuecomment-bodyfile" },
+                  },
                 },
                 resolve0: { thread: { isResolved: true } },
                 resolve1: { thread: { isResolved: true } },
@@ -298,7 +302,7 @@ describe("runCli", () => {
         args.some((a) => a.includes("mutation"))
           ? JSON.stringify({
               data: {
-                addComment: { comment: { url: "u" } },
+                addComment: { commentEdge: { node: { url: "u" } } },
                 resolve0: { thread: { isResolved: true } },
                 resolve1: { thread: { isResolved: false } },
               },

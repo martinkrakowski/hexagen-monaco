@@ -88,7 +88,9 @@ describe("sweep — preview (hazard: the wrong thread is public and unrecoverabl
     const write = JSON.stringify({
       data: {
         addComment: {
-          comment: { url: "https://github.com/o/r/pull/361#issuecomment-1" },
+          commentEdge: {
+            node: { url: "https://github.com/o/r/pull/361#issuecomment-1" },
+          },
         },
         resolve0: { thread: { isResolved: true } },
         resolve1: { thread: { isResolved: true } },
@@ -233,7 +235,9 @@ describe("sweep — the mutation carries the whole class", () => {
       args.some((a) => a.includes("mutation"))
         ? JSON.stringify({
             data: {
-              addComment: { comment: { url: "https://gh/c#issuecomment-9" } },
+              addComment: {
+                commentEdge: { node: { url: "https://gh/c#issuecomment-9" } },
+              },
             },
             errors: [{ message: "resolve failed" }],
           })
@@ -256,7 +260,7 @@ describe("sweep — the mutation carries the whole class", () => {
     // The real dep REJECTS on a non-zero exit (`gh api graphql` exits 1 when the
     // response holds `errors`) and hands the body over on the rejection.
     const body = JSON.stringify({
-      data: { addComment: { comment: { url: "https://x/c/1" } } },
+      data: { addComment: { commentEdge: { node: { url: "https://x/c/1" } } } },
       errors: [{ message: "resolve failed" }],
     });
     const gh = makeGh((_file, args, _options, callback) => {
@@ -313,7 +317,7 @@ describe("sweep — the mutation carries the whole class", () => {
       if (args.some((a) => a.includes("mutation"))) {
         return JSON.stringify({
           data: {
-            addComment: { comment: { url: "https://gh/c" } },
+            addComment: { commentEdge: { node: { url: "https://gh/c" } } },
             resolve0: { thread: { isResolved: true } },
             resolve1: { thread: { isResolved: true } },
           },
@@ -375,7 +379,7 @@ describe("sweep — the mutation carries the whole class", () => {
       if (args.some((a) => a.includes("mutation"))) {
         return JSON.stringify({
           data: {
-            addComment: { comment: { url: "https://gh/c" } },
+            addComment: { commentEdge: { node: { url: "https://gh/c" } } },
             resolve0: { thread: { isResolved: true } },
           },
           errors: [],

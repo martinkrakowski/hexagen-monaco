@@ -541,7 +541,7 @@ async function planReviewFor(
     return { ...facts, rowHashMissing: "the plan file could not be read" };
   }
   try {
-    return { ...facts, rowHash: rowHash(planText, lane) };
+    return { ...facts, rowHash: rowHash(planText, lane, planPath) };
   } catch {
     return {
       ...facts,

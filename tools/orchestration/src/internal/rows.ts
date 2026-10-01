@@ -13,6 +13,51 @@ function rowPrefix(id: string): RegExp {
   return new RegExp(`^[ \\t]*\\|\\s*\\*\\*${escaped}\\*\\*\\s*\\|`);
 }
 
+/** How many characters of a matching line an ambiguity error quotes. */
+const QUOTED_LINE_START = 60;
+
+/**
+ * The error for an id that does not match exactly one row. A match count alone
+ * sends the operator hunting, so each matching line is named by its 1-based
+ * line number and the start of the line, and the plan file too when the caller
+ * knows it. The count stays in the message: the refusal is the same, only
+ * better explained.
+ */
+function ambiguousRowError(
+  id: string,
+  matches: readonly { readonly line: number; readonly text: string }[],
+  plan: string | undefined,
+): Error {
+  const where =
+    matches.length === 0
+      ? ""
+      : `: ${matches
+          .map(({ line, text }) => {
+            const start = text.trim();
+            const quoted =
+              start.length > QUOTED_LINE_START
+                ? `${start.slice(0, QUOTED_LINE_START)}…`
+                : start;
+            return `line ${line}: ${quoted}`;
+          })
+          .join("; ")}`;
+  return new Error(
+    `${plan === undefined ? "" : `${plan}: `}expected exactly one plan row for ${id}, found ${matches.length}${where}`,
+  );
+}
+
+/** Every line of `markdown` the pattern matches, with its 1-based number. */
+function matchingLines(
+  markdown: string,
+  pattern: RegExp,
+): { line: number; text: string }[] {
+  const found: { line: number; text: string }[] = [];
+  markdown.split("\n").forEach((text, index) => {
+    if (pattern.test(text)) found.push({ line: index + 1, text });
+  });
+  return found;
+}
+
 /**
  * The sha256 hex of one plan-table row, normalised: trimmed, with every run of
  * whitespace collapsed to one space, so a whitespace-only reflow of a row keeps
@@ -21,15 +66,10 @@ function rowPrefix(id: string): RegExp {
  * and the row must be unambiguous: zero matches or more than one is an error
  * naming the id and the count, never a hash of the wrong line.
  */
-export function rowHash(markdown: string, id: string): string {
-  const prefix = rowPrefix(id);
-  const matches = markdown.split("\n").filter((line) => prefix.test(line));
-  if (matches.length !== 1) {
-    throw new Error(
-      `expected exactly one plan row for ${id}, found ${matches.length}`,
-    );
-  }
-  const normalised = matches[0].trim().replace(/\s+/g, " ");
+export function rowHash(markdown: string, id: string, plan?: string): string {
+  const matches = matchingLines(markdown, rowPrefix(id));
+  if (matches.length !== 1) throw ambiguousRowError(id, matches, plan);
+  const normalised = matches[0]!.text.trim().replace(/\s+/g, " ");
   return createHash("sha256").update(normalised, "utf8").digest("hex");
 }
 
@@ -118,18 +158,11 @@ const RISK_WORD_AT_START = /^\**\s*(high|normal)\b/i;
  * `normal`. Only the third row changed, and it changed from silently `normal`
  * to loud.
  */
-export function rowRisk(markdown: string, id: string): Risk {
+export function rowRisk(markdown: string, id: string, plan?: string): Risk {
   const pattern = rowSecondCellPattern(id);
-  const matches: RegExpExecArray[] = [];
-  for (const line of markdown.split("\n")) {
-    const match = pattern.exec(line);
-    if (match !== null) matches.push(match);
-  }
-  if (matches.length !== 1) {
-    throw new Error(
-      `expected exactly one plan row for ${id}, found ${matches.length}`,
-    );
-  }
+  const lines = matchingLines(markdown, pattern);
+  if (lines.length !== 1) throw ambiguousRowError(id, lines, plan);
+  const matches = [pattern.exec(lines[0]!.text)!];
   // Non-null: the capture group above is unconditional, so a match here
   // always carries one — see rowSecondCellPattern's own comment.
   const secondCell = matches[0][1]!.trim();
