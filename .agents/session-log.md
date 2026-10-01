@@ -143,7 +143,7 @@ produced nothing). `gemini` unused — its track record says catastrophic on ope
 measured boot floor makes it >2× opencode's cost for a narrow one. `grok` probes as
 unauthenticated; quota resets 2026-09-14.
 
-**Cache read is ~25× billed.** This independently reproduces the campaign-foundry L2a measurement
+**Cache read is ~25× billed.** This independently reproduces the reference project's measurement
 (3,997,888 cache read at 50 steps, 114,486 peak context) on a different repo, task and lane — G1
 came in at 3,897,920 and 104,129. That makes it a structural property of a lane, not of one
 task: cost is roughly _context × steps_, so an extra round is expensive because it accumulates a
@@ -257,7 +257,7 @@ brief was written rather than after — the wave-1 defect that cost ~251k tokens
 ### Deferred
 
 - **G4** (query API) is unblocked. Inherits G2's module-not-package constraint.
-- **G5**'s §4 DoD says "run inside campaign-foundry", which is not verifiable from this repository.
+- **G5**'s §4 DoD says "run inside the reference project", which is not verifiable from this repository.
   **Amend it before G5 dispatches**, the way F5 was amended.
 - **G6 / G7** — the plan says re-plan once G5 has been used; they should not be dispatched against
   the current text.
@@ -368,7 +368,7 @@ eight-day gap. **Close a wave's record when its lanes settle, not when its PRs m
 
 ### Deferred
 
-- **G5 is blocked.** Its §4 DoD says "run inside campaign-foundry", which is not verifiable from
+- **G5 is blocked.** Its §4 DoD says "run inside the reference project", which is not verifiable from
   this repository. Amend it the way F5 was amended, before dispatch.
 - **G6 / G7** — the plan says re-plan once G5 has been used; do not dispatch against current text.
 - `loadState` → required, still needs a lane owning `validate-templates-ports.test.ts`.
@@ -508,6 +508,8 @@ to the orchestrator too: write each run's cost into `events.jsonl` when it finis
   - The scaffold defaults disagree with the skill on the byte scan.
   - The template's Darwin diagnostic should fail on empty discovery.
   - `lane-usage` should become a package bin.
-  - There is a `gate-lock` release TOCTOU, a candidate to fix upstream in campaign-foundry.
+  - There is a `gate-lock` release TOCTOU, a candidate to fix upstream in the reference project.
 - **The `apps/web` `AIGenerationPage.workbench` flake.** It failed CI four times on
   unrelated commits on 2026-09-30.
+
+- Records in this log were edited on 2026-10-01 to remove references to another project, at the owner's instruction.
