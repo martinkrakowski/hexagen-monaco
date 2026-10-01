@@ -3,7 +3,7 @@
  * byte-identical (plan: docs/planning/sync-toolchain-development-plan.md,
  * PR-A2, RCA #3).
  *
- * The campaign-foundry incident: a --dry-run unlinked legacy empty barrels,
+ * The consumer-project incident: a --dry-run unlinked legacy empty barrels,
  * mkdir'd layer folders, and wrote SYNC-MIGRATION-REPORT.md. These tests spawn
  * the BUILT dist/cli.js in the published consumer layout (see
  * ../helpers/published-layout.ts) against a git-committed fixture and assert
@@ -17,7 +17,7 @@
  * The fixture arms every mutation path this self-regen run can reach, so the
  * asserts prove the gates, not an idle run:
  *   - a `export {};` barrel in a NON-layer dir with zero sibling sources →
- *     queued for unlink (the exact campaign-foundry shape);
+ *     queued for unlink (the exact consumer-project shape);
  *   - manifest `generator.sync.layers` with subfolders + a context whose
  *     layer dirs are missing → the layer-folder mkdirs + stub/barrel planning;
  *   - self-regen mode → the migration-report write path runs.
@@ -156,7 +156,7 @@ async function snapshotTreeWithDirs(root: string): Promise<string[]> {
   return out.sort();
 }
 
-/** Seed the campaign-foundry shape: legacy empty barrel in a non-layer dir. */
+/** Seed the consumer-project shape: legacy empty barrel in a non-layer dir. */
 async function seedLegacyEmptyBarrel(
   fix: ContractFixture,
 ): Promise<{ abs: string; rel: string }> {

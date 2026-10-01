@@ -25,7 +25,7 @@ const FIXTURE = path.resolve(HERE, "..", "fixtures", "orchestration");
 // `files/` tree, the bytes `hexagen add orchestration` emits into a consumer project. OW-D2/OW-D13
 // keep the template copy as the single owner, and a fixture copy alongside it would be a second one
 // that could drift. The fixture keeps `source/` (the left-hand side of the coverage question) and
-// `campaign-foundry/` (the worked overlay); the skill itself is read, and tested, where it ships.
+// `reference-project/` (the worked overlay); the skill itself is read, and tested, where it ships.
 const GENERIC = path.resolve(
   HERE,
   "..",
@@ -83,11 +83,11 @@ const precedenceRule = [
   "may not silently WEAKEN a core invariant",
 ];
 
-const MANIFEST = path.join(FIXTURE, "campaign-foundry", "memory-manifest.txt");
+const MANIFEST = path.join(FIXTURE, "reference-project", "memory-manifest.txt");
 
 function copyFixture(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "skill-coverage-"));
-  for (const entry of ["source", "campaign-foundry"]) {
+  for (const entry of ["source", "reference-project"]) {
     fs.cpSync(path.join(FIXTURE, entry), path.join(dir, entry), {
       recursive: true,
     });
@@ -127,15 +127,20 @@ function coverageArgs(fixture: string, extra: string[] = []): string[] {
     "--tree",
     skillDir(fixture),
     "--tree",
-    path.join(fixture, "campaign-foundry", "overlay"),
+    path.join(fixture, "reference-project", "overlay"),
     "--allowlist",
-    path.join(fixture, "campaign-foundry", "overlay", "coverage-allowlist.txt"),
+    path.join(
+      fixture,
+      "reference-project",
+      "overlay",
+      "coverage-allowlist.txt",
+    ),
     "--sites",
-    path.join(fixture, "campaign-foundry", "specific-sites.txt"),
+    path.join(fixture, "reference-project", "specific-sites.txt"),
     "--generic",
     skillDir(fixture),
     "--token-review",
-    path.join(fixture, "campaign-foundry", "generic-token-review.txt"),
+    path.join(fixture, "reference-project", "generic-token-review.txt"),
     "--hexagen-root",
     REPO_ROOT,
     ...extra,
@@ -228,7 +233,7 @@ describe("orchestration skill coverage", () => {
     const fixture = copyFixture();
     const allowlist = path.join(
       fixture,
-      "campaign-foundry",
+      "reference-project",
       "overlay",
       "coverage-allowlist.txt",
     );
@@ -252,7 +257,7 @@ describe("orchestration skill coverage", () => {
         "--memory-manifest",
         manifest,
         "--lessons",
-        path.join(fixture, "campaign-foundry", "overlay", "lessons.md"),
+        path.join(fixture, "reference-project", "overlay", "lessons.md"),
       ]),
     );
     expect(result.status, result.out).toBe(1);
@@ -263,7 +268,7 @@ describe("orchestration skill coverage", () => {
     const fixture = copyFixture();
     const allowlist = path.join(
       fixture,
-      "campaign-foundry",
+      "reference-project",
       "overlay",
       "coverage-allowlist.txt",
     );
@@ -274,9 +279,9 @@ describe("orchestration skill coverage", () => {
     const result = run(
       coverageArgs(fixture, [
         "--memory-manifest",
-        path.join(fixture, "campaign-foundry", "memory-manifest.txt"),
+        path.join(fixture, "reference-project", "memory-manifest.txt"),
         "--lessons",
-        path.join(fixture, "campaign-foundry", "overlay", "lessons.md"),
+        path.join(fixture, "reference-project", "overlay", "lessons.md"),
       ]),
     );
     expect(result.status, result.out).toBe(1);
@@ -288,7 +293,7 @@ describe("orchestration skill coverage", () => {
 
   it("floors: a comment-only sites file, an empty generic dir and a spanless generic dir each fail", () => {
     const fixture = copyFixture();
-    const sites = path.join(fixture, "campaign-foundry", "specific-sites.txt");
+    const sites = path.join(fixture, "reference-project", "specific-sites.txt");
     const real = fs.readFileSync(sites, "utf8");
     fs.writeFileSync(sites, "# nothing listed\n");
     let result = run(coverageArgs(fixture));
@@ -368,12 +373,12 @@ describe("orchestration skill coverage", () => {
       "--allowlist",
       path.join(
         FIXTURE,
-        "campaign-foundry",
+        "reference-project",
         "overlay",
         "coverage-allowlist.txt",
       ),
       "--token-review",
-      path.join(FIXTURE, "campaign-foundry", "generic-token-review.txt"),
+      path.join(FIXTURE, "reference-project", "generic-token-review.txt"),
       "--hexagen-root",
       REPO_ROOT,
     ]);
@@ -414,7 +419,7 @@ describe("orchestration skill coverage", () => {
         "--allowlist",
         path.join(
           FIXTURE,
-          "campaign-foundry",
+          "reference-project",
           "overlay",
           "coverage-allowlist.txt",
         ),
@@ -424,7 +429,7 @@ describe("orchestration skill coverage", () => {
 
   it("red 1: an overlay heading deleted without relocation is named", () => {
     const fixture = copyFixture();
-    const cast = path.join(fixture, "campaign-foundry", "overlay", "cast.md");
+    const cast = path.join(fixture, "reference-project", "overlay", "cast.md");
     dropLine(cast, (line) => line === "## Current seats");
     const result = run(coverageArgs(fixture));
     expect(result.status, result.out).toBe(1);
@@ -457,7 +462,7 @@ describe("orchestration skill coverage", () => {
     }
     const lessons = path.join(
       fixture,
-      "campaign-foundry",
+      "reference-project",
       "overlay",
       "lessons.md",
     );
@@ -476,7 +481,7 @@ describe("orchestration skill coverage", () => {
     const fixture = copyFixture();
     const target = "Four lanes in one session exited";
     let removedFrom = 0;
-    for (const tree of ["generic", path.join("campaign-foundry", "overlay")]) {
+    for (const tree of ["generic", path.join("reference-project", "overlay")]) {
       const dir = path.join(fixture, tree);
       for (const name of fs.readdirSync(dir)) {
         const file = path.join(dir, name);
@@ -508,7 +513,7 @@ describe("orchestration skill coverage", () => {
 
   it("red 5: the graded-record table deleted while its heading survives is named", () => {
     const fixture = copyFixture();
-    const cast = path.join(fixture, "campaign-foundry", "overlay", "cast.md");
+    const cast = path.join(fixture, "reference-project", "overlay", "cast.md");
     const { removed } = dropRun(
       cast,
       (line) => line === "| Seat | Lanes | Result |",
@@ -673,7 +678,7 @@ describe("orchestration skill coverage", () => {
     const fixture = copyFixture();
     const review = path.join(
       fixture,
-      "campaign-foundry",
+      "reference-project",
       "generic-token-review.txt",
     );
     const raw = readLines(review).find((line) => line.startsWith("TIMED-OUT"));
@@ -687,7 +692,7 @@ describe("orchestration skill coverage", () => {
 
   it("F17: an anchor whose inner spacing changed is not the same line", () => {
     const fixture = copyFixture();
-    const cast = path.join(fixture, "campaign-foundry", "overlay", "cast.md");
+    const cast = path.join(fixture, "reference-project", "overlay", "cast.md");
     const lines = readLines(cast);
     const index = lines.indexOf("## Current seats");
     expect(index).toBeGreaterThan(-1);
@@ -705,7 +710,7 @@ describe("orchestration skill coverage", () => {
     fs.writeFileSync(manifest, "a-name-nobody-cited.md\n");
     const lessons = path.join(
       fixture,
-      "campaign-foundry",
+      "reference-project",
       "overlay",
       "lessons.md",
     );
@@ -733,7 +738,7 @@ describe("orchestration skill coverage", () => {
     fs.writeFileSync(manifest, "MEMORY.md\nmanifest-only-name.md\n");
     const lessons = path.join(
       fixture,
-      "campaign-foundry",
+      "reference-project",
       "overlay",
       "lessons.md",
     );
@@ -757,7 +762,7 @@ describe("orchestration skill coverage", () => {
   it("F2: the committed manifest classifies clean with no memory directory (the CI path)", () => {
     const manifest = path.join(
       FIXTURE,
-      "campaign-foundry",
+      "reference-project",
       "memory-manifest.txt",
     );
     const names = fs
@@ -770,7 +775,7 @@ describe("orchestration skill coverage", () => {
         "--memory-manifest",
         manifest,
         "--lessons",
-        path.join(FIXTURE, "campaign-foundry", "overlay", "lessons.md"),
+        path.join(FIXTURE, "reference-project", "overlay", "lessons.md"),
       ]),
     );
     expect(result.status, result.out).toBe(0);
@@ -829,7 +834,7 @@ describe("orchestration skill coverage", () => {
   it("generic/ contains no line of specific-sites.txt", () => {
     const sites = fs
       .readFileSync(
-        path.join(FIXTURE, "campaign-foundry", "specific-sites.txt"),
+        path.join(FIXTURE, "reference-project", "specific-sites.txt"),
         "utf8",
       )
       .split("\n")
@@ -859,14 +864,14 @@ describe("orchestration skill coverage", () => {
 
   it("lessons.md cites the four named memory files, and allowlists none of them", () => {
     const lessons = fs.readFileSync(
-      path.join(FIXTURE, "campaign-foundry", "overlay", "lessons.md"),
+      path.join(FIXTURE, "reference-project", "overlay", "lessons.md"),
       "utf8",
     );
     const allowlist = fs
       .readFileSync(
         path.join(
           FIXTURE,
-          "campaign-foundry",
+          "reference-project",
           "overlay",
           "coverage-allowlist.txt",
         ),
@@ -917,7 +922,7 @@ describe("orchestration skill coverage", () => {
   });
 
   it("expected-steps.tsv is the 11 lines the extractor derives, and stays derived", () => {
-    const tsv = path.join(FIXTURE, "campaign-foundry", "expected-steps.tsv");
+    const tsv = path.join(FIXTURE, "reference-project", "expected-steps.tsv");
     const lines = fs
       .readFileSync(tsv, "utf8")
       .split("\n")
@@ -958,7 +963,7 @@ describe("orchestration skill coverage", () => {
         .readdirSync(MEMORY_DIR as string)
         .filter((name) => name.endsWith(".md"));
       const lessons = fs.readFileSync(
-        path.join(FIXTURE, "campaign-foundry", "overlay", "lessons.md"),
+        path.join(FIXTURE, "reference-project", "overlay", "lessons.md"),
         "utf8",
       );
       const allowlisted = new Set(
@@ -966,7 +971,7 @@ describe("orchestration skill coverage", () => {
           .readFileSync(
             path.join(
               FIXTURE,
-              "campaign-foundry",
+              "reference-project",
               "overlay",
               "coverage-allowlist.txt",
             ),
@@ -992,7 +997,7 @@ describe("orchestration skill coverage", () => {
           "--memory",
           MEMORY_DIR as string,
           "--lessons",
-          path.join(FIXTURE, "campaign-foundry", "overlay", "lessons.md"),
+          path.join(FIXTURE, "reference-project", "overlay", "lessons.md"),
         ]),
       );
       expect(result.status, result.out).toBe(0);

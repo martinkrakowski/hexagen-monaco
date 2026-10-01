@@ -4,7 +4,7 @@ import { readEvents } from "../../src/internal/events.js";
 
 const clock = (): string => "2026-09-07T16:55:43Z";
 
-describe("formatEvent (plan §2.1, D103)", () => {
+describe("formatEvent (plan §2.1)", () => {
   test("round-trips through W1's readEvents to the same object, stamping ts from the injected clock", () => {
     const input = {
       wave: "S",
@@ -110,7 +110,7 @@ describe("the plan-review stage (FU-plan-review-gate)", () => {
   // and its detail is the reviewer's report: the plan it reviewed, who reviewed,
   // the row fingerprints the reviewer took, the findings counts, and the verdict.
   const detail =
-    '{"plan":"docs/planning/p.md","reviewer":"plan-review-seat","rows":{"PT-5a":"aa"},"decisions":{"D177":"bb"},"findings":{"bug":1,"suggestion":2,"nit":3},"applied":1,"refuted":2,"verdict":"clear"}';
+    '{"plan":"docs/planning/p.md","reviewer":"plan-review-seat","rows":{"L5a":"aa"},"decisions":{"D17":"bb"},"findings":{"bug":1,"suggestion":2,"nit":3},"applied":1,"refuted":2,"verdict":"clear"}';
 
   test("formatEvent accepts a plan-review settled event and readEvents round-trips it", () => {
     const input = {

@@ -148,7 +148,7 @@ describe("the bin list (OW-D14)", () => {
   // would fail to resolve it.
   // F24: OW3c's page tests import Window from happy-dom, and OW3c may not edit
   // package.json.
-  it("declares happy-dom as a devDependency, at campaign-foundry's range", () => {
+  it("declares happy-dom as a devDependency, at the reference project's range", () => {
     expect(manifest.devDependencies?.["happy-dom"]).toBe("^20.10.2");
   });
 

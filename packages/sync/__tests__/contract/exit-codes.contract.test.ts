@@ -3,7 +3,7 @@
  * (plan: docs/planning/sync-toolchain-development-plan.md, PR-A1).
  *
  * Every failure mode of `hexagen` / `hexagen-lint` must exit non-zero. The
- * campaign-foundry incident (RCA #2) was a `sync --dry-run` failure that
+ * consumer-project incident (RCA #2) was a `sync --dry-run` failure that
  * exited 0; these tests spawn the real `dist/cli.js` so the contract is pinned
  * against what ships, not against in-process engine behaviour. The fixture
  * layout rationale and process plumbing live in

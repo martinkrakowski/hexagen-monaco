@@ -14,7 +14,7 @@ const eventLine = (overrides: Record<string, unknown> = {}): string =>
     ...overrides,
   });
 
-describe("readEvents (plan §2.1, D103)", () => {
+describe("readEvents (plan §2.1)", () => {
   test("parses one JSON object per line, preserving every field", () => {
     const { events, truncated, rejected } = readEvents(`${eventLine()}\n`);
     expect(truncated).toBe(false);

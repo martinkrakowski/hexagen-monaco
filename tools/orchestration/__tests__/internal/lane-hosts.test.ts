@@ -561,7 +561,7 @@ describe("A-30 §1.3: the alias is a URL, or it is refused at opencodeServerUrl"
  */
 const FIXTURE = resolve(
   import.meta.dirname,
-  "../../../../packages/template-engine/__tests__/fixtures/orchestration/campaign-foundry/overlay/config.yaml",
+  "../../../../packages/template-engine/__tests__/fixtures/orchestration/reference-project/overlay/config.yaml",
 );
 
 describe("A-30 §6: OW1's migrated fixture overlay parses with nothing to fix", () => {

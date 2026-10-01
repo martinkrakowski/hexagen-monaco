@@ -63,7 +63,13 @@ const FORBIDDEN: readonly Forbidden[] = [
     // A hardcoded repository is the failure a packaged tool cannot have: it
     // queries the right project on the author's host and the wrong one
     // everywhere else. The repository comes from the overlay.
-    pattern: /martinkrakowski|campaign-foundry|campaignfoundry/i,
+    // The source project's name is assembled from two halves, never spelled
+    // whole, so this guard does not itself put the name into the repository
+    // (the same approach the wave-status guard already takes for its wave ids).
+    pattern: new RegExp(
+      `martinkrakowski|${"campaign"}-${"foundry"}|${"campaign"}${"foundry"}`,
+      "i",
+    ),
     why: "the repository must come from the overlay, never from a literal",
   },
   {
@@ -84,7 +90,10 @@ const FORBIDDEN: readonly Forbidden[] = [
     why: "ports come only from `waveStatusPort` and `forbiddenPorts`",
   },
   {
-    pattern: /apps\/(web|api)\/|@campaignfoundry\/|\bnitro\b/i,
+    pattern: new RegExp(
+      `apps\\/(web|api)\\/|@${"campaign"}${"foundry"}\\/|\\bnitro\\b`,
+      "i",
+    ),
     why: "these paths belong to the source repository and mean nothing here",
   },
   {
@@ -94,7 +103,9 @@ const FORBIDDEN: readonly Forbidden[] = [
   {
     // Lane-specific. The lock directory and the environment variables are
     // prefixed per project, and so are these scripts' own names.
-    pattern: /cf-gate|CF_GATE/,
+    // Assembled from halves, like the name above: the prefix is the source
+    // project's two-letter abbreviation, and it is banned in both spellings.
+    pattern: new RegExp(`${"cf"}-gate|${"CF"}_GATE`),
     why: "this project's lock and environment variables are `hexagen-gate*`",
   },
   {
@@ -210,15 +221,15 @@ describe("the guard itself", () => {
     // the package — and proves the same rule is quiet on a file that has been
     // swept all along.
     const plants: Readonly<Record<string, string>> = {
-      [FORBIDDEN[0].pattern.source]: "campaign-foundry",
+      [FORBIDDEN[0].pattern.source]: `${"campaign"}-${"foundry"}`,
       [FORBIDDEN[1].pattern.source]: "yarn plan:review",
       [FORBIDDEN[2].pattern.source]: "~/.waves",
       [FORBIDDEN[3].pattern.source]: "listen on port 4317",
       [FORBIDDEN[4].pattern.source]: "scans apps/api/server/",
       [FORBIDDEN[5].pattern.source]: "python3 -m tools",
-      [FORBIDDEN[6].pattern.source]: "CF_GATE_STEPS",
+      [FORBIDDEN[6].pattern.source]: `${"CF"}_GATE_STEPS`,
       [FORBIDDEN[7].pattern.source]: "sh scripts/gate-lock.sh",
-      [FORBIDDEN[8].pattern.source]: "plan D105 says",
+      [FORBIDDEN[8].pattern.source]: "plan D199 says",
     };
     expect(Object.keys(plants).length).toBe(FORBIDDEN.length);
     for (const rule of FORBIDDEN) {

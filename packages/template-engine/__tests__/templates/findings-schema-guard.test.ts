@@ -224,7 +224,7 @@ describe("template guard — recursion and symlink coverage", () => {
           version: "1.3.0",
         }),
       );
-      const bad = findingText({ projectName: "campaign-foundry" });
+      const bad = findingText({ projectName: "acme-widgets" });
       const flat = path.join(subject, "findings", "1000-bad.md");
       await fs.writeFile(flat, bad);
       await fs.symlink(flat, path.join(subject, "findings", "1001-symlink.md"));
@@ -511,7 +511,7 @@ describe("validate-finding — the closed-schema validator", () => {
   });
 
   it("refuses an unknown front-matter key, naming it", () => {
-    const text = findingText({ projectName: "campaign-foundry" });
+    const text = findingText({ projectName: "acme-widgets" });
     expectFailure(text, "projectName", baseContext(), "closed");
   });
 
@@ -643,7 +643,7 @@ describe("validate-finding — the closed-schema validator", () => {
 
   it("refuses a body carrying an absolute path outside the generator", () => {
     const body =
-      "The bug reproduced at /Users/client/projects/campaign-foundry/src/main.ts on macOS.";
+      "The bug reproduced at /Users/client/projects/acme-widgets/src/main.ts on macOS.";
     expectFailure(
       findingText({}, body),
       "body",

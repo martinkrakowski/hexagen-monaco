@@ -134,7 +134,7 @@ describe("a field that is absent takes its documented default", () => {
 
   test("forbiddenPorts defaults to [] — refused ports come only from the file (A-20)", () => {
     // Not [3000, 3001]: `init` writes those into the file it scaffolds, but a
-    // loader default of them would refuse campaign-foundry's own 4317 project
+    // loader default of them would refuse the reference project's own 4317 project
     // without its overlay saying so.
     expect(ok("{}").forbiddenPorts).toEqual([]);
     expect(DEFAULT_WAVE_STATUS_PORT).toBe(4318);

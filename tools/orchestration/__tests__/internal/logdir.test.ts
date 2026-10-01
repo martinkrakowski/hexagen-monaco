@@ -180,7 +180,7 @@ describe("the default root is per-repo, never the shared ~/.waves (A-18)", () =>
 
   test("it never resolves under the shared ~/.waves, whatever exists there", () => {
     // A wave directory left under `~/.waves` by another repo must not be
-    // picked up: campaign-foundry's server scans that root and would show
+    // picked up: the reference project's server scans that root and would show
     // false "no PR" flags for this repo's lanes.
     const exists = existsIn([
       "/h/.waves/wave-w06",
