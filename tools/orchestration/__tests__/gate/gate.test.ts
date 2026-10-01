@@ -4,6 +4,7 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -814,5 +815,20 @@ describe("signal hygiene (every test runs under /bin/sh and dash)", () => {
         closedWithinMs: true,
       });
     }
+  }, 60_000);
+
+  test("the gate's scratch files live in one private per-run directory, removed on exit, never at a predictable name", async () => {
+    const h = harness();
+    const listing = join(h.dir, "tmp-listing");
+    const { done } = startGateUnder("/bin/sh", h, {
+      ...lockedEnv(["lists-tmp"]),
+      ...stepsEnv([["lists-tmp", `ls -a "${h.dir}" > "${listing}"`]]),
+    });
+    const r = await done;
+    expect(r.status).toBe(0);
+    const during = readFileSync(listing, "utf8").split("\n");
+    expect(during.filter((n) => /^hexagen-gate\.(slotout|hbfailed)\./.test(n))).toEqual([]);
+    expect(during.filter((n) => /^hexagen-gate\.run\./.test(n)).length).toBe(1);
+    expect(readdirSync(h.dir).filter((n) => n.startsWith("hexagen-gate.run."))).toEqual([]);
   }, 60_000);
 });

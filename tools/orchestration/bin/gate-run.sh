@@ -184,7 +184,10 @@ LOCK_HELD=0
 ACQUIRING=0
 # The acquire child writes the slot it won into this file (HEXAGEN_GATE_SLOT_OUT,
 # see gate-lock), so cleanup can tell "won, but not yet recorded" from "refused".
-SLOT_OUT="${TMPDIR:-/tmp}/hexagen-gate.slotout.$$"
+# Both scratch files live in one private per-run directory (mktemp -d, mode
+# 0700), never at a name another process could predict and pre-create.
+RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/hexagen-gate.run.XXXXXX") || exit 2
+SLOT_OUT="$RUN_DIR/slotout"
 # 1 once the release child has STARTED, and not before: it is set immediately
 # before that child. It guards against a second release only; it must not be
 # set ahead of the heartbeat kill and `wait` below, because `wait` is
@@ -193,7 +196,7 @@ SLOT_OUT="${TMPDIR:-/tmp}/hexagen-gate.slotout.$$"
 RELEASE_STARTED=0
 RELEASE_PAUSED=0
 HEARTBEAT_PID=""
-HB_FAILED="${TMPDIR:-/tmp}/hexagen-gate.hbfailed.$$"
+HB_FAILED="$RUN_DIR/hbfailed"
 COVLOG=""
 cov_failed=0
 release_failed=0
@@ -251,7 +254,7 @@ cleanup() {
   if [ -n "$COVLOG" ]; then
     rm -f "$COVLOG"
   fi
-  rm -f "$HB_FAILED" "$SLOT_OUT"
+  rm -rf "$RUN_DIR"
   exit "$status"
 }
 trap cleanup EXIT
