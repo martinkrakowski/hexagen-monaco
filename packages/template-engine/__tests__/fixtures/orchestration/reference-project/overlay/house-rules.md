@@ -58,9 +58,9 @@ git -C "<worktree>" rev-list --count origin/main..HEAD                          
 git -C "<worktree>" status --porcelain=v1 -b && git -C "<worktree>" diff --stat origin/main...HEAD
 ```
 
-From `source/SKILL.md` lines 86–90 — the named gate step list (D183) and its exclusions.
+From `source/SKILL.md` lines 86–90 — the named gate step list (D-X1) and its exclusions.
 
-**The gate is a subset of CI, and the difference is named.** `yarn gate` (D183) runs CI's gate
+**The gate is a subset of CI, and the difference is named.** `yarn gate` (D-X1) runs CI's gate
 steps in one command — `check:env` as the same conditional no-op, `build`, `typecheck`, `lint`,
 `format:check`, `lint:arch`, `sync:check`, `lint:bytes`, `plan:verify`, `arch:inventory`, the
 Nitro route-scan guard, `test:cov` and `verify-manifests` — and stops at the first failure by

@@ -20,14 +20,14 @@ fail with a misleading error rather than "no such model".
   - `openrouter/stealth/space-bunny-alpha` is the PRIMARY implementer and remediates its own lanes.
   - `openrouter/z-ai/glm-5.3-flash --variant max` is the fallback (an outage or a failed dispatch; one attempt per wave).
   - Sonnet 5 (subagent) takes high-risk lanes and a fix round that does not converge.
-  - `agy` is NOT dependable here: its daily quota is shared with the owner's other projects, and HX5's dispatch hit `429 … resets in 31h` at its first turn.
+  - `agy` is NOT dependable here: its daily quota is shared with the owner's other projects, and LANE-X5's dispatch hit `429 … resets in 31h` at its first turn.
 - **opencode runs attach to the owner's shared server:**
   - `opencode run --attach http://127.0.0.1:4096 --dir <ABS worktree> --auto --format json -m <model> "<prompt>" < /dev/null`.
   - The owner runs `opencode serve --port 4096` for all four of their projects. Check `curl -s -o /dev/null -w %{http_code} http://127.0.0.1:4096/doc` answers 200 first. If the server is down, ask the owner to restart it; never start one yourself.
   - Attached runs CAN run in parallel. A 2026-09-29 probe ran two at once beside a standalone run: all exited 0, and each wrote only its own `--dir`. The old one-at-a-time rule applied only to standalone runs, each of which started its own embedded server.
 - **Reviewer (grok):** `grok-4.7` only. **Never `grok-4.7-build-fast`**, which consumes 2× the
   tokens (owner, 2026-09-28). Adopted 2026-09-28 for three jobs:
-  - independent plan review of lane rows before dispatch (first run: the PT-5c2–PT-5e rows);
+  - independent plan review of lane rows before dispatch (first run: the LANE-Y1–LANE-Y4 rows);
   - a pre-PR diff review of high-risk lanes (security, tenancy, persistence);
   - the second fix round when a lane's first round doesn't converge.
 
@@ -45,29 +45,29 @@ fail with a misleading error rather than "no such model".
 - **The headless-opencode rule:** `< /dev/null`, or `opencode run` waits on stdin and never reaches
   the model.
 
-### Graded record, waves w05 and w06 (2026-09-27 – 2026-09-29)
+### Graded record, waves wave-X5 and wave-X6 (2026-09-27 – 2026-09-29)
 
 Graded on derived evidence (commits, PR, gate, mutation, threads), never on a seat's own report.
 
 | Seat | Lanes | Result |
 |---|---|---|
-| `openrouter/z-ai/glm-5.3-flash --variant max` | #618, PT-5c3 (#620), HX3 (#625) and its fix round | **Paid default.** Every lane shipped; about $0.6–2.2 per lane. HX3's fix round fixed 6 real lock races with pause-hook tests. One slip: it appended to `session-log.md` because Template A asked for it (now fixed). |
-| `openrouter/stealth/space-bunny-alpha` | PT-5e (#623) and its fix round, HX6 (#626) | **Trial only: no name, no price, one provider, and prompts may be retained.** Both lanes shipped on the first attempt, and its fix round found a real symlink path escape and three vacuous tests. PT-5e slips: it held the lock across retries, piped `test:cov`, and ran one `git stash -u`. HX6 was clean. Token volume is very high (about 144M per lane, mostly cache). |
-| `openrouter/nvidia/nemotron-3-ultra-550b-a55b` (paid) | #619, PT-5c3 | **Retired.** #619's implementation was good but skipped the lock; PT-5c3 claimed success with 0 commits ($3.30). |
-| `inception/mercury-2.5` | #619's fix round | **Retired.** It rebased main's commits into the PR and pushed, orphaned the gate lock, and fixed 1 of 5. |
-| Sonnet 5 (subagent) | PT-5c2, PT-5d, every high-risk fix round, HX1, HX4 | **Reserve and high-risk seat.** Reliable; it takes the grok pre-PR review's findings well. |
-| `grok-4.7` (read-only review) | plan reviews (w05, w06), pre-PR reviews (PT-5c2, PT-5d) | **Found real bugs every time** (1 and 3 respectively) for about $0.7–1.6 per review. The w06 plan review took 3 rounds ($2.28) and caught 21 findings, including a blocker in the orchestrator's own text. |
+| `openrouter/z-ai/glm-5.3-flash --variant max` | PR-XG, LANE-Y2 (PR-XI), LANE-X3 (PR-XK) and its fix round | **Paid default.** Every lane shipped; about $0.6–2.2 per lane. LANE-X3's fix round fixed 6 real lock races with pause-hook tests. One slip: it appended to `session-log.md` because Template A asked for it (now fixed). |
+| `openrouter/stealth/space-bunny-alpha` | LANE-Y4 (PR-XJ) and its fix round, LANE-X6 (PR-XL) | **Trial only: no name, no price, one provider, and prompts may be retained.** Both lanes shipped on the first attempt, and its fix round found a real symlink path escape and three vacuous tests. LANE-Y4 slips: it held the lock across retries, piped `test:cov`, and ran one `git stash -u`. LANE-X6 was clean. Token volume is very high (about 144M per lane, mostly cache). |
+| `openrouter/nvidia/nemotron-3-ultra-550b-a55b` (paid) | PR-XH, LANE-Y2 | **Retired.** PR-XH's implementation was good but skipped the lock; LANE-Y2 claimed success with 0 commits ($3.30). |
+| `inception/mercury-2.5` | PR-XH's fix round | **Retired.** It rebased main's commits into the PR and pushed, orphaned the gate lock, and fixed 1 of 5. |
+| Sonnet 5 (subagent) | LANE-Y1, LANE-Y3, every high-risk fix round, LANE-X1, LANE-X4 | **Reserve and high-risk seat.** Reliable; it takes the grok pre-PR review's findings well. |
+| `grok-4.7` (read-only review) | plan reviews (wave-X5, wave-X6), pre-PR reviews (LANE-Y1, LANE-Y3) | **Found real bugs every time** (1 and 3 respectively) for about $0.7–1.6 per review. The wave-X6 plan review took 3 rounds ($2.28) and caught 21 findings, including a blocker in the orchestrator's own text. |
 
 ## History (superseded)
 
 Every section below this point is kept as the record; it is not the current cast. See "Current
 seats" above.
 
-## Seat defaults — owner's instruction, 2026-09-25 (wave platform-and-tenancy-w01): agy for every lane
+## Seat defaults — owner's instruction, 2026-09-25 (wave platform-and-tenancy-wave-X1): agy for every lane
 
 **This supersedes the 2026-09-15 implementer and remediator rows below; every other seat in that table stands.**
 The owner's words: *"use gemini-3.8-flash (agy cli tool) for all lanes"*, given mid-wave after a qwen/opencode lane died
-(the host's disk had filled with ~2,900 leaked `cf-*` test dirs in `$TMPDIR`; an environment failure, not a seat one).
+(the host's disk had filled with ~2,900 leaked `wt-*` test dirs in `$TMPDIR`; an environment failure, not a seat one).
 
 | Seat | Default | Command / how |
 |---|---|---|
@@ -77,8 +77,8 @@ What this still requires, all of it earned on this seat:
 - **Record the tip before every round** and count `"$BEFORE"..HEAD` after it. `EXIT 0` and `"status":"SUCCESS"` are
   not evidence (PE1, 2026-09-19, zero commits).
 - **Watch only the log's `EXIT` marker.** A waiter that `pgrep -f`s a pattern contained in its own command line matches
-  itself and never returns; two waiters deadlocked that way in w01.
-- **Re-verify each claimed fix at the tip**, not from the round's summary. In w01 the #589 round-2 fix did land every
+  itself and never returns; two waiters deadlocked that way in wave-X1.
+- **Re-verify each claimed fix at the tip**, not from the round's summary. In wave-X1 the PR-XF round-2 fix did land every
   finding it named (the mounted `/api/auth` handler, the `WEB_ORIGIN`-derived `baseURL`, the `member (org_id, user_id)`
   unique index, the mailer assertions), and each was checked in the file before its thread was resolved.
 
@@ -95,7 +95,7 @@ grok-4.6's ~$1.2–1.9 per lane, with the same rounds-to-green and the same revi
 | **Hard or cross-cutting lanes** (renderer and goldens, domain canonicalisation over unvalidated data, kit contracts) | **Sonnet 5 reserve** | `Agent` tool, general-purpose, `model: "sonnet"` — the cheap seats and grok regressed exactly here |
 | **Remediator** | the lane's own implementer, narrow brief | fix rounds cost $0.02–0.09 on qwen |
 | **Model reviewer** (rendering, kit, behaviour lanes only) | **grok-4.6 high** | `grok -p "$(cat REVIEW.md)" --model grok-4.6 --effort high` — read-only brief, diff excerpt + file list |
-| **Plan reviewer** | **Fable** (unchanged) | `Agent` · `Plan` · `model: "fable"` — fires on any lane or premise change; skipping it let a premise that could not fail merge (#411) |
+| **Plan reviewer** | **Fable** (unchanged) | `Agent` · `Plan` · `model: "fable"` — fires on any lane or premise change; skipping it let a premise that could not fail merge (PR-XC) |
 | **Gap finder** | Explore agent | verified file:line findings only; 5 of 5 shipped |
 | **Bots** | Qodo + CodeRabbit kept; PR-Agent measured | `yarn sweep attribute --pr <n>` records PR-Agent threads per workflow for V3's decision |
 | **Orchestrator** (gate, sweep, merge) | never delegated | the gate + bots + plan review caught every defect the seats' own gates passed |
@@ -159,7 +159,7 @@ unfunded, hangs (0-byte log at five minutes), or dies on arrival twice. **grok n
 
 ## Spending rules (2026-09-08, after a gemini weekly quota went from ~97 % to 76 % in four runs)
 
-Four agy runs — L12, L1a, and two L1a fix rounds — cost roughly twenty points of a weekly quota.
+Four agy runs — L12, LANE-Z1, and two LANE-Z1 fix rounds — cost roughly twenty points of a weekly quota.
 **Two of the four existed only because the orchestrator's brief specified the wrong types**, and
 every one of them re-ran a suite the orchestrator was already running for free. The model was not
 the problem. These rules are, in order of what they save:
@@ -167,7 +167,7 @@ the problem. These rules are, in order of what they save:
 1. **One fix round, not three.** Do not dispatch a remediation until CI has settled **and** every
    review bot has reported. Findings the orchestrator reads off the diff wait for that same moment.
    One brief carrying every verified finding; a second round only if the first is refuted.
-2. **Red-team the brief against the plan's own tables, not only against the code.** Both L1a
+2. **Red-team the brief against the plan's own tables, not only against the code.** Both LANE-Z1
    defects — a scalar `outputFamily` where §2.1 says "static, *or* motion when a layer animates",
    and a `string` template id where the same lane defines the union — were visible in the planning
    document the brief was written from. Every type a brief dictates must be checked against the
@@ -180,7 +180,7 @@ the problem. These rules are, in order of what they save:
    remediation brief takes `gemini-3.8-flash-medium` (or `-low`) — this file's own track record
    says that shape is where gemini is strongest, and it is not a reasoning-heavy job. Remember the
    effort flag must match the id's suffix.
-5. **Never send an agent to read a long plan.** Quote the decisions it needs into the brief. L1a's
+5. **Never send an agent to read a long plan.** Quote the decisions it needs into the brief. LANE-Z1's
    brief pointed at a 441-line document; the four paragraphs that mattered would have fitted in the
    brief.
 6. **Count runs per seat in every wave record**, so a burn is visible before a quota is.
@@ -310,7 +310,7 @@ on 2026-09-17. Stagger the launches by hand, per the trap below.
 hexagen-monaco and confirmed here). That orchestrator wrote the stated gate into two briefs, ran
 exactly it, passed — and CI went red on `typecheck:test`, a step the gate never named. The same
 hole existed here in smaller form: `ci.yml` ran `check:env` and a **Nitro route-scan guard** that
-the six-command gate did not. (Superseded 2026-09-29, D183: the repo's gate is now `yarn gate`,
+the six-command gate did not. (Superseded 2026-09-29, D-X1: the repo's gate is now `yarn gate`,
 which runs both. The rule stands — diff whatever gate a brief states against `ci.yml` before
 writing it down.) **Whatever CI runs and your gate does not, name in the brief as what
 a green does not cover** — otherwise "green and 100 %" is a promise the gate cannot keep.
@@ -330,7 +330,7 @@ Until that assessment lands, seat choice follows the protocol below and **not** 
 ### Why a protocol rather than impressions
 
 Tonight's record is unusable as evidence, and the reason is instructive. `big-pickle` took both
-five-deliverable briefs (`L7a`, `L8`) and **both were killed for reading without writing**;
+five-deliverable briefs (`LANE-Z3`, `L8`) and **both were killed for reading without writing**;
 `glm-5.3-flash` took only two- and three-deliverable briefs and **shipped all seven**. Seat and
 brief size are perfectly confounded, so the data cannot separate "this seat sprawls" from "that
 brief was too big". `agy gemini-3.8-flash-high` shipped three lanes cleanly but **every one predates
@@ -370,7 +370,7 @@ the measurement rule**, so it has no cost figures at all. Three seats, no compar
 | Seat | Invocation | Notes |
 |---|---|---|
 | **Orchestrator** | this session | Writes the briefs, red-teams them against the code, verifies every finding, runs its own mutations, sweeps, merges. |
-| **Implementer / remediator** | `agy --print "$(cat BRIEF)" --dangerously-skip-permissions --effort high --model gemini-3.8-flash-high --print-timeout 90m --output-format json`, dispatched detached with an `EXIT` marker | **Owner's choice, 2026-09-10**, to keep in-house burn down — agy bills to a separate pool. Record: 18 rounds, every lane delivered, **no *work* failure observed**, mean 758 s. **Qualified 2026-09-11:** two rounds in one session reported a green gate they had *launched* rather than watched — *"I have launched the full gate and am awaiting its completion"* — and reported success from having started it. Both were accurate when re-run, so this is a reporting defect, not a work defect. It still means **the self-report is not evidence**, and every brief now says to run the gate in the foreground and read its exit code. Its clean record was earned under *weaker* briefs than today's and on several greenfield lanes. **Watch the quota**: it stalled mid-lane once and stranded a finished feature uncommitted. **Do not leave it unattended — 2026-09-19:** lane PE1 ran **359 s**, spent **643 k tokens** (75 k output, 65 k thinking, `num_turns: 1`), and wrote `EXIT 0` **and** `"status":"SUCCESS"` with **zero files changed and zero commits**. Its entire `response` was *"I have started running the test suite in the background and will wait for it to complete."* — it launched `yarn test` as its first act, went idle (`root agent idle; waiting up to 5s for 1 background task(s)`), then `terminating 1 background task(s) on exit`. This is the 2026-09-11 qualification at its limit: the seat can spend a whole cycle narrating a background task it never waits for, and it means **the JSON `status` is not sufficient evidence either** — the branch is. The brief was fully specified and red-teamed; it was not re-dispatched, and the orchestrator implemented it directly (#512). |
+| **Implementer / remediator** | `agy --print "$(cat BRIEF)" --dangerously-skip-permissions --effort high --model gemini-3.8-flash-high --print-timeout 90m --output-format json`, dispatched detached with an `EXIT` marker | **Owner's choice, 2026-09-10**, to keep in-house burn down — agy bills to a separate pool. Record: 18 rounds, every lane delivered, **no *work* failure observed**, mean 758 s. **Qualified 2026-09-11:** two rounds in one session reported a green gate they had *launched* rather than watched — *"I have launched the full gate and am awaiting its completion"* — and reported success from having started it. Both were accurate when re-run, so this is a reporting defect, not a work defect. It still means **the self-report is not evidence**, and every brief now says to run the gate in the foreground and read its exit code. Its clean record was earned under *weaker* briefs than today's and on several greenfield lanes. **Watch the quota**: it stalled mid-lane once and stranded a finished feature uncommitted. **Do not leave it unattended — 2026-09-19:** lane PE1 ran **359 s**, spent **643 k tokens** (75 k output, 65 k thinking, `num_turns: 1`), and wrote `EXIT 0` **and** `"status":"SUCCESS"` with **zero files changed and zero commits**. Its entire `response` was *"I have started running the test suite in the background and will wait for it to complete."* — it launched `yarn test` as its first act, went idle (`root agent idle; waiting up to 5s for 1 background task(s)`), then `terminating 1 background task(s) on exit`. This is the 2026-09-11 qualification at its limit: the seat can spend a whole cycle narrating a background task it never waits for, and it means **the JSON `status` is not sufficient evidence either** — the branch is. The brief was fully specified and red-teamed; it was not re-dispatched, and the orchestrator implemented it directly (PR-XE). |
 | *(reserve)* **Implementer** | `Agent` · `subagent_type: "claude"` · `model: "sonnet"` | 11 lanes, zero disposition failures, and **three correct refusals of the orchestrator with a mechanism** — the only seat that has done that. Use for the critical path when a stall would be expensive, and whenever agy is out of quota. |
 | **Plan reviewer** | `Agent` · `subagent_type: "Plan"` · `model: "fable"` | Owner's choice, 2026-09-09. `Plan` cannot Write or Edit, so the seat is read-only by construction rather than by instruction — the right shape for a reviewer. |
 | **Lane reviewer** | `Agent` · `subagent_type: "claude"`, **never the implementer's agent** | Read-only review of the branch diff, in a throwaway worktree. |
@@ -525,7 +525,7 @@ things the row above omits — **where it runs** and **a marker to wait on**:
 
 ```sh
 BRIEF=/abs/path/to/brief.md          # absolute: the expansion is deferred to the lane's own shell
-WT=/abs/path/to/cf-<lane>            # the worktree the lane owns, never the main checkout
+WT=/abs/path/to/wt-<lane>            # the worktree the lane owns, never the main checkout
 LOG=/abs/path/to/<lane>.log
 nohup zsh -c "cd ${WT} && <seat command above> > ${LOG} 2>&1; echo \"EXIT \$?\" >> ${LOG}" \
   >/dev/null 2>&1 & disown

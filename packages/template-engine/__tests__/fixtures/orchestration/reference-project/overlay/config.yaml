@@ -60,7 +60,7 @@ requiredCheck: ^Build
 #
 # ONE alternation, not a list: this field is a single regular expression, and a YAML list here
 # is refused ("must be a string").
-appendOnlyPaths: '^(\.agents/session-log\.md|CHANGELOG\.md|packages/[^/]+/src/application/ports/out/index\.ts|apps/web/src/components/ui/index\.ts|apps/web/src/components/campaign/messages\.ts)$'
+appendOnlyPaths: '^(\.agents/session-log\.md|CHANGELOG\.md|packages/[^/]+/src/application/ports/out/index\.ts|apps/web/src/components/ui/index\.ts|apps/web/src/messages\.ts)$'
 
 # Ports no lane may bind or request. These are the operator's live dev servers: a request
 # there overwrites their output and spends their credits. This is where the refusal lives; the

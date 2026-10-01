@@ -83,7 +83,7 @@ git -C "<worktree>" status --porcelain=v1 -b && git -C "<worktree>" diff --stat 
 
 **Run the commit count first, and do not skip it because the seat said `SUCCESS`.** (why: [rationale](references/rationale.md#run-the-commit-count-first-and-do-not-skip-it-because-the-seat-said-success))
 
-**The gate is a subset of CI, and the difference is named.** `yarn gate` (D183) runs CI's gate
+**The gate is a subset of CI, and the difference is named.** `yarn gate` (D-X1) runs CI's gate
 steps in one command — `check:env` as the same conditional no-op, `build`, `typecheck`, `lint`,
 `format:check`, `lint:arch`, `sync:check`, `lint:bytes`, `plan:verify`, `arch:inventory`, the
 Nitro route-scan guard, `test:cov` and `verify-manifests` — and stops at the first failure by

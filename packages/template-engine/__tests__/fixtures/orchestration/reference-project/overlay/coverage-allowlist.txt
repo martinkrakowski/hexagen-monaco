@@ -41,7 +41,7 @@ local-lmstudio-seats.md
 
 # Wave-level seat grades for one wave: which seat was the paid default, which was a trial, which
 # failed and how. A dated track record whose home is `cast.md`'s graded-record table.
-seat-trials-w05.md
+seat-trials-wave-X5.md
 
 # Product direction: the multi-tenant cloud migration, its decision ids, the platform-and-tenancy
 # plan, and per-wave progress. A roadmap record for this application, not a wave-operations fact.

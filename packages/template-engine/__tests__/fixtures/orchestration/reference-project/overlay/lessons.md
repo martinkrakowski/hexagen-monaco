@@ -5,9 +5,11 @@ cannot say them: each one is a thing that went wrong, in this repository, in a w
 does not imply. They live in the overlay because they are consumer-specific — every one of them
 names a host, a seat, a workflow or a decision that belongs to the reference project and to nobody else.
 
-Every entry carries the memory file it came from, so the original record stays traceable. Those
-records live outside the repository, in the orchestrator's per-project memory, and hexagen cannot
-read them; the `source:` line is what makes this file their travelling copy.
+Every entry carries the memory file it came from, as a neutralised alias: the names in `source:` and
+in `memory-manifest.txt` are aliases, not the original file names, which are kept outside the
+repository. Those records live in the orchestrator's per-project memory, and hexagen cannot read
+them; the `source:` line is what makes this file their travelling copy, and the alias is the key to
+it.
 
 What is *not* here: the seat roster and the invocation shapes, which are `cast.md`; the
 reference-project-specific incidents from the skill's own rationale, which are `rationale.local.md`;
@@ -287,7 +289,7 @@ source: mutation-test-the-test-not-just-the-code.md
 
 ## `git add -A` here publishes the operator's data
 
-The operator's campaign briefs and generated assets are untracked and unrecoverable. A broad stage
+The operator's briefs and generated assets are untracked and unrecoverable. A broad stage
 swept four briefs and two logos into a commit and pushed them to a remote. An ignore rule now
 backstops the two known directories, and the sample fixtures stay tracked — but the backstop is not
 a licence, because an ignore rule does not cover a path someone later adds elsewhere.

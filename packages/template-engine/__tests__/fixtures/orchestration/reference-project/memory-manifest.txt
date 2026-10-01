@@ -37,7 +37,7 @@ preview-rail-hidden-below-1264px.md
 project-state-2026-09-08.md
 scheduled-lane-may-be-closed-or-blocked.md
 scoped-coverage-must-match-the-gate.md
-seat-trials-w05.md
+seat-trials-wave-X5.md
 smaller-prs-per-lane.md
 software-authors-the-yaml-batch-is-the-future.md
 squash-merge-concatenates-commit-bodies.md

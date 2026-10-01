@@ -524,7 +524,7 @@ describe("orchestration skill coverage", () => {
       "the graded-record table has eight rows of header, rule and body",
     ).toBe(8);
     const text = fs.readFileSync(cast, "utf8");
-    expect(text).toContain("### Graded record, waves w05 and w06");
+    expect(text).toContain("### Graded record, waves wave-X5 and wave-X6");
     expect(text).not.toContain("| Seat | Lanes | Result |");
     const result = run(coverageArgs(fixture));
     expect(result.status, result.out).toBe(1);
@@ -534,7 +534,7 @@ describe("orchestration skill coverage", () => {
 
   it("red 6: a token generated at runtime, planted as an inline code span, is named", () => {
     const fixture = copyFixture();
-    const canary = `cf-sweep-canary-${randomUUID().slice(0, 8)}`;
+    const canary = `sweep-canary-${randomUUID().slice(0, 8)}`;
     plantInlineCanary(fixture, canary);
     const result = run(coverageArgs(fixture));
     expect(result.status, result.out).toBe(1);
@@ -544,7 +544,7 @@ describe("orchestration skill coverage", () => {
 
   it("red 7: the same canary planted only inside a fenced block is named too", () => {
     const fixture = copyFixture();
-    const canary = `cf-sweep-canary-${randomUUID().slice(0, 8)}`;
+    const canary = `sweep-canary-${randomUUID().slice(0, 8)}`;
     plantFencedCanary(fixture, canary);
     const result = run(coverageArgs(fixture));
     expect(result.status, result.out).toBe(1);
@@ -554,7 +554,7 @@ describe("orchestration skill coverage", () => {
 
   it("bundle: a skill-only token that the generated bundle also embeds is still named", () => {
     const fixture = copyFixture();
-    const canary = `cf-bundle-canary-${randomUUID().slice(0, 8)}`;
+    const canary = `bundle-canary-${randomUUID().slice(0, 8)}`;
     plantInlineCanary(fixture, canary);
     // A stand-in hexagen checkout: the generated bundle embeds the skill text, so it carries the
     // canary too, next to an unrelated tracked file that keeps the corpus non-empty. The bundle is
@@ -590,7 +590,7 @@ describe("orchestration skill coverage", () => {
 
   it("mirror: a skill-only token that the tracked skill mirror also carries is still named", () => {
     const fixture = copyFixture();
-    const canary = `cf-mirror-canary-${randomUUID().slice(0, 8)}`;
+    const canary = `mirror-canary-${randomUUID().slice(0, 8)}`;
     plantInlineCanary(fixture, canary);
     // A stand-in hexagen checkout whose ONLY tracked copy of the canary is the hexagen-only skill
     // mirror (`.agents/skills/orchestrate-wave/`, byte-identical to the template's copy). The mirror
@@ -655,7 +655,7 @@ describe("orchestration skill coverage", () => {
     const fixture = copyFixture();
     // Generated at runtime, with two spaces inside: a literal in this file would be found by the
     // tracked-file sweep and never flagged.
-    const span = `cf-only  ${randomUUID().slice(0, 8)}`;
+    const span = `only-here  ${randomUUID().slice(0, 8)}`;
     const marker =
       "**Every lane brief ends with two lines, and they are not optional.** Both were earned:";
     for (const file of [

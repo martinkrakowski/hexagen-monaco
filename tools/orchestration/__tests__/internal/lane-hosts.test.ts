@@ -27,7 +27,7 @@ const REMOTE = [
   "    gate: targeted-only",
   "    check: [ocm-run, --check]",
   "    ssh: m",
-  "    clone: /srv/cf",
+  "    clone: /srv/repo",
   "    worktrees: /srv/wt",
 ].join("\n");
 
@@ -143,7 +143,7 @@ describe("A-30 §7: every parseConfig red case, at the path the plan names", () 
 
   test("a relative clone or worktrees is refused at that key", () => {
     expect(
-      problemsAt(REMOTE.replace("clone: /srv/cf", "clone: srv/cf")),
+      problemsAt(REMOTE.replace("clone: /srv/repo", "clone: srv/repo")),
     ).toContain("laneHosts[0].clone");
     expect(
       problemsAt(REMOTE.replace("worktrees: /srv/wt", "worktrees: ./wt")),
@@ -152,7 +152,7 @@ describe("A-30 §7: every parseConfig red case, at the path the plan names", () 
 
   test("a NUL byte in a path or an argv word is refused at that key, because spawn would throw", () => {
     expect(
-      problemsAt(REMOTE.replace("clone: /srv/cf", 'clone: "/srv\\u0000cf"')),
+      problemsAt(REMOTE.replace("clone: /srv/repo", 'clone: "/srv\\u0000cf"')),
     ).toContain("laneHosts[0].clone");
     expect(
       problemsAt(
@@ -296,8 +296,8 @@ describe("A-30 §7: the required-ness and the unknown keys", () => {
 
   test("install on a remote host is accepted, because it is the recommended answer to N4", () => {
     const yaml = REMOTE.replace(
-      "    clone: /srv/cf",
-      "    clone: /srv/cf\n    install: [env, PATH=/usr/bin, YARN_NM_MODE=classic, yarn, install, --immutable]",
+      "    clone: /srv/repo",
+      "    clone: /srv/repo\n    install: [env, PATH=/usr/bin, YARN_NM_MODE=classic, yarn, install, --immutable]",
     );
     expect(problemsAt(yaml)).toEqual([]);
   });
@@ -340,7 +340,7 @@ describe("A-30 §7: what a valid overlay parses into", () => {
         gate: "targeted-only",
         check: ["ocm-run", "--check"],
         ssh: "m",
-        clone: "/srv/cf",
+        clone: "/srv/repo",
         worktrees: "/srv/wt",
       },
     ]);
@@ -414,7 +414,7 @@ describe("A-30 §7: what a valid overlay parses into", () => {
     // — and the host survives, because doctor still has to walk it.
     const yaml = LOCAL.replace(
       "    gate: full",
-      "    gate: full\n    clone: srv/cf",
+      "    gate: full\n    clone: srv/repo",
     );
     const result = parseConfig(yaml);
     expect(result.problems.map((p) => p.at)).toContain("laneHosts[0].clone");
@@ -600,7 +600,7 @@ describe("A-30 §6: OW1's migrated fixture overlay parses with nothing to fix", 
       "CHANGELOG.md",
       "packages/core/src/application/ports/out/index.ts",
       "apps/web/src/components/ui/index.ts",
-      "apps/web/src/components/campaign/messages.ts",
+      "apps/web/src/messages.ts",
     ]) {
       expect(matches.test(path), `matches ${path}`).toBe(true);
     }
