@@ -128,13 +128,13 @@ async function hashes(
   const risk: Record<string, string> = {};
   try {
     for (const id of ids) {
-      const hash = rowHash(markdown, id);
+      const hash = rowHash(markdown, id, plan);
       if (isDecisionId(id)) {
         decisions[id] = hash;
       } else {
         rows[id] = hash;
         // Decision rows carry no risk tier — the risk column is a lane property.
-        risk[id] = rowRisk(markdown, id);
+        risk[id] = rowRisk(markdown, id, plan);
       }
     }
   } catch (error: unknown) {
@@ -186,10 +186,11 @@ function rowDiff(
   markdown: string,
   id: string,
   reviewed: string,
+  plan: string,
 ): string | undefined {
   let current: string;
   try {
-    current = rowHash(markdown, id);
+    current = rowHash(markdown, id, plan);
   } catch (error: unknown) {
     return `${id} (no unambiguous row: ${errorText(error)})`;
   }
@@ -333,7 +334,7 @@ async function check(
   // nobody cleared, so the command refuses (1) rather than continuing on a
   // plan whose risk column cannot be read (A-1).
   try {
-    io.log(`risk: ${rowRisk(markdown, laneId)}`);
+    io.log(`risk: ${rowRisk(markdown, laneId, plan)}`);
   } catch (error: unknown) {
     if (error instanceof InvalidRiskCellError) {
       io.logError(error.message);
@@ -358,9 +359,9 @@ async function check(
     decisions = parsed;
   }
   const diffs = [
-    rowDiff(markdown, laneId, reviewed),
+    rowDiff(markdown, laneId, reviewed, plan),
     ...Object.entries(decisions).map(([id, hash]) =>
-      rowDiff(markdown, id, hash),
+      rowDiff(markdown, id, hash, plan),
     ),
   ].filter((diff) => diff !== undefined);
   if (diffs.length > 0) {

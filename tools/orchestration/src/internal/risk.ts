@@ -55,7 +55,7 @@ export async function discoverRisk(
     }
     let tier: Risk;
     try {
-      tier = rowRisk(text, laneId);
+      tier = rowRisk(text, laneId, `${planningDir}/${name}`);
     } catch (err) {
       if (err instanceof InvalidRiskCellError) {
         // Not a "this plan does not name the lane" miss. Propagate it, with the
