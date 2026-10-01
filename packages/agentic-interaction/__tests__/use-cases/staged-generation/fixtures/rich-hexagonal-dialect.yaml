@@ -1,34 +1,34 @@
 project:
-  name: CampaignForge
-  description: Hexagonal HITL Orchestrator for enterprise creative generation and brand compliance.
+  name: example-studio
+  description: Hexagonal human-in-the-loop orchestrator for enterprise content generation and policy compliance.
   version: "0.1.0"
   architectural_pattern: "ports_and_adapters"
 
-# Trimmed from the real CampaignForge import. `methods:` lists are omitted here:
+# Trimmed from a larger import. `methods:` lists are omitted here:
 # they aren't read by the dialect normalizer (only port names are), and their
 # unquoted signatures contain colons that js-yaml can't parse as bare scalars.
 bounded_contexts:
-  - name: CampaignOrchestration
+  - name: ContentOrchestration
     description: >
-      The core driving context that manages the full lifecycle of a campaign brief
-      through generation, compositing, compliance, and export.
+      The core driving context that manages the full lifecycle of a content brief
+      through generation, rendering, compliance, and export.
     ports:
       primary:
-        - name: CampaignPipelinePort
+        - name: ContentPipelinePort
           description: The single entry-point contract invoked by the API route.
       secondary_references:
         - ImageGeneratorPort
-        - CompositorPort
+        - CanvasPort
         - CompliancePort
         - ExportPort
 
     domain_models:
       entities:
-        - name: CampaignBrief
+        - name: ContentBrief
           attributes:
             id: string
             targetRegion: string
-            campaignMessage: string
+            briefMessage: string
             products: Product[]
         - name: Product
           attributes:
@@ -51,7 +51,7 @@ bounded_contexts:
             passed: boolean
         - name: PipelineExecutionLog
           attributes:
-            campaignId: string
+            contentId: string
             totalOperations: number
         - name: LogEntry
           attributes:
@@ -64,38 +64,38 @@ bounded_contexts:
     domain_logic:
       rules:
         - name: MinimumProductsRule
-          description: A CampaignBrief must contain at least two unique products.
+          description: A ContentBrief must contain at least two unique products.
         - name: LocalizedMessageFallback
-          description: Fall back to campaignMessage when localizedMessage is null.
+          description: Fall back to briefMessage when localizedMessage is null.
 
     primary_use_cases:
-      - name: GenerateCampaignUseCase
-        implements: CampaignPipelinePort
-        input: CampaignBrief
+      - name: GenerateContentUseCase
+        implements: ContentPipelinePort
+        input: ContentBrief
         output: PipelineResult
 
     domain_events:
-      - name: CampaignBriefIngested
+      - name: ContentBriefIngested
         payload:
-          campaignId: string
-      - name: AssetComposited
+          contentId: string
+      - name: AssetRendered
         payload:
           productId: string
           operationIndex: number
       - name: PipelineHalted
         payload:
-          campaignId: string
+          contentId: string
           reason: string
 
-  - name: CreativeGeneration
-    description: Driven context for background resolution and canvas compositing.
+  - name: AssetGeneration
+    description: Driven context for background resolution and asset rendering.
     ports:
       driven:
         - name: ImageGeneratorPort
-        - name: CompositorPort
+        - name: CanvasPort
 
   - name: GovernanceAndCompliance
-    description: Automated circuit breaker for legal copy and brand adherence.
+    description: Automated circuit breaker for policy and style adherence.
     ports:
       driven:
         - name: CompliancePort

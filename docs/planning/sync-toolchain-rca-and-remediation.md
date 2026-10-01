@@ -121,7 +121,7 @@ Condensed five-whys:
 
 ## #8 — Linter ignores manifest `depends_on`; invariants files are the only source · P2 (Medium, design)
 
-**Observed (consumer).** Adding `CampaignOrchestration` to three contexts' `depends_on` in `manifest.yaml` changed nothing in `arch validate` output; the operative config was `.architecture/invariants/linter-config.yaml` · `global_whitelist`. The manifest says `arch validate` checks "against manifest.yaml" (and its success message claims compliance _with manifest.yaml_), but cross-package import legality is in practice decided by the invariants files alone.
+**Observed (consumer).** Adding `ContentOrchestration` to three contexts' `depends_on` in `manifest.yaml` changed nothing in `arch validate` output; the operative config was `.architecture/invariants/linter-config.yaml` · `global_whitelist`. The manifest says `arch validate` checks "against manifest.yaml" (and its success message claims compliance _with manifest.yaml_), but cross-package import legality is in practice decided by the invariants files alone.
 
 **Fix (pick one, document either way).** Either (a) the linter derives allowed cross-context imports from manifest `depends_on` (per-context precision, manifest as single source of truth) with invariants as additional constraints, or (b) the docs/messages stop claiming the manifest governs imports and the wizard generates the invariants whitelist _from_ `depends_on` at scaffold time. (a) is architecturally cleaner; (b) is cheaper.
 
@@ -131,7 +131,7 @@ Condensed five-whys:
 
 - Scaffolded `AGENTS.md` mandates a structured logger at `src/infrastructure/logging/logger.ts` ("from the observability template") and `eslint-no-console` enforcement — neither exists in the generated project (no logger module, no lint rule, and the monorepo has no root `src/`). A compliance review bot (qodo rule 960794) ingested that text and flagged every PR that logs, demanding a fix pointing at a nonexistent file.
 - `.gitignore.hexagen` says "`hexagen validate-templates` expects every template output to stay present", while `validate-templates` reports "No templates installed in this project."
-- `generator.config.yaml` · `ownership-registry.ports` maps the `ExternalServiceClient` key **twice** (CreativeGeneration and Distribution) — duplicate YAML keys, the first silently dropped, contradicting its own `port-single-ownership` invariant. The same concept is also spelled `workspaceTemplate` (manifest) and `workspace_template` (generator config).
+- `generator.config.yaml` · `ownership-registry.ports` maps the `ExternalServiceClient` key **twice** (AssetGeneration and Distribution) — duplicate YAML keys, the first silently dropped, contradicting its own `port-single-ownership` invariant. The same concept is also spelled `workspaceTemplate` (manifest) and `workspace_template` (generator config).
 
 **Fix.** Scaffolded governance docs must only describe what the scaffold actually installs (template-conditional sections); fix the duplicate-key emission and unify the template-id field spelling. These are template-content fixes in the same files the sibling plan already touches — coordinate there.
 

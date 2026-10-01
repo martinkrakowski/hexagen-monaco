@@ -19,7 +19,7 @@ function singleQuoteScalar(s: string): string {
 /**
  * Best-effort recovery for "pseudo-YAML" specs that embed TypeScript syntax the
  * YAML parser can't handle — most often method signatures under `methods:`
- * (`- execute(brief: CampaignBrief): Promise<Result>`) and quoted union types
+ * (`- execute(brief: ContentBrief): Promise<Result>`) and quoted union types
  * (`level: "info" | "warn" | "error"`). Both have extra/unquoted colons that make
  * js-yaml throw, which otherwise forces the whole spec down the lossy LLM
  * conversion path even though it is otherwise well-structured. This quotes those

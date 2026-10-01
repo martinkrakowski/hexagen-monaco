@@ -17,27 +17,27 @@ import {
  * `domain_events`, and driving/driven `ports` — used to import as 0 use cases
  * (and dropped entities/value-objects/events) because buildDomainAnalysisFromConfig
  * reads only the canonical fields. normalizeDialect (in parseStructuredConfig)
- * now maps the dialect onto those fields. Fixture is the exact CampaignForge spec
+ * now maps the dialect onto those fields. Fixture is a trimmed spec in this dialect
  * that surfaced the miscount.
  */
 const fixturesDir = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "fixtures",
 );
-const campaignForge = fs.readFileSync(
-  path.join(fixturesDir, "campaignforge-dialect.yaml"),
+const richDialect = fs.readFileSync(
+  path.join(fixturesDir, "rich-hexagonal-dialect.yaml"),
   "utf8",
 );
 
-describe("structured-config import — rich hexagonal dialect (CampaignForge)", () => {
+describe("structured-config import — rich hexagonal dialect (example-studio)", () => {
   it("captures domain content authored under the dialect (no silent drop)", () => {
-    const config = parseStructuredConfig(campaignForge);
+    const config = parseStructuredConfig(richDialect);
     const analysis = buildDomainAnalysisFromConfig(config);
 
     // The use case — the visible "0 use cases" symptom — must be captured.
     assert.deepEqual(
       (analysis.useCases ?? []).map((u) => u.name),
-      ["GenerateCampaignUseCase"],
+      ["GenerateContentUseCase"],
       "primary_use_cases must map to the canonical use_cases map",
     );
 
@@ -58,9 +58,9 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
 
     // domain_models.entities → aggregate roots (3), identity from the `id` attr.
     const aggNames = (analysis.aggregateRoots ?? []).map((a) => a.name).sort();
-    assert.deepEqual(aggNames, ["CampaignBrief", "GeneratedAsset", "Product"]);
+    assert.deepEqual(aggNames, ["ContentBrief", "GeneratedAsset", "Product"]);
     assert.deepEqual(
-      (analysis.aggregateRoots ?? []).find((a) => a.name === "CampaignBrief")
+      (analysis.aggregateRoots ?? []).find((a) => a.name === "ContentBrief")
         ?.identityFields,
       ["id"],
     );
@@ -68,22 +68,22 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     // domain_events (objects) → domain events (3).
     const eventNames = (analysis.domainEvents ?? []).map((e) => e.name).sort();
     assert.deepEqual(eventNames, [
-      "AssetComposited",
-      "CampaignBriefIngested",
+      "AssetRendered",
+      "ContentBriefIngested",
       "PipelineHalted",
     ]);
 
     // ports.{primary → in; driven/secondary_references → out} → layers ports,
     // so the pre-defined-port path honours the author's declared contracts.
     const orch = config.bounded_contexts.find(
-      (c) => c.name === "CampaignOrchestration",
+      (c) => c.name === "ContentOrchestration",
     );
     assert.deepEqual(orch?.layers?.application?.ports?.in, [
-      "CampaignPipelinePort",
+      "ContentPipelinePort",
     ]);
     for (const p of [
       "ImageGeneratorPort",
-      "CompositorPort",
+      "CanvasPort",
       "CompliancePort",
       "ExportPort",
     ]) {
@@ -93,11 +93,11 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
       );
     }
     const creative = config.bounded_contexts.find(
-      (c) => c.name === "CreativeGeneration",
+      (c) => c.name === "AssetGeneration",
     );
     assert.deepEqual(
       creative?.layers?.application?.ports?.out?.sort(),
-      ["CompositorPort", "ImageGeneratorPort"],
+      ["CanvasPort", "ImageGeneratorPort"],
       "driven ports map to out-ports",
     );
   });
@@ -217,10 +217,10 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     const config = parseStructuredConfig(
       [
         "bounded_contexts:",
-        "  - name: Campaigns",
+        "  - name: Contents",
         "    domain_models:",
         "      aggregates:",
-        "        - name: CampaignBrief",
+        "        - name: ContentBrief",
         "          attributes:", // array-form attributes
         "            - name: id",
         "              type: string",
@@ -235,7 +235,7 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     const analysis = buildDomainAnalysisFromConfig(config);
     assert.deepEqual(
       (analysis.aggregateRoots ?? []).map((a) => a.name),
-      ["CampaignBrief", "GeneratedAsset"],
+      ["ContentBrief", "GeneratedAsset"],
       "declared aggregates are the roots",
     );
     assert.deepEqual(
@@ -245,7 +245,7 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     );
     // Array-form attributes mapped, with `id` flagged as the identity key.
     const cb = config.bounded_contexts[0].aggregates?.find(
-      (a) => a.name === "CampaignBrief",
+      (a) => a.name === "ContentBrief",
     );
     assert.deepEqual(
       cb?.fields?.map((f) => `${f.name}:${f.type}${f.key ? "*" : ""}`),
@@ -257,10 +257,10 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     const config = parseStructuredConfig(
       [
         "bounded_contexts:",
-        "  - name: Campaigns",
+        "  - name: Contents",
         "    domain_models:",
         "      entities:",
-        "        - name: CampaignBrief",
+        "        - name: ContentBrief",
         "        - name: Product",
         "",
       ].join("\n"),
@@ -268,7 +268,7 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     const analysis = buildDomainAnalysisFromConfig(config);
     assert.deepEqual(
       (analysis.aggregateRoots ?? []).map((a) => a.name),
-      ["CampaignBrief", "Product"],
+      ["ContentBrief", "Product"],
     );
   });
 
@@ -276,7 +276,7 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     const config = parseStructuredConfig(
       [
         "project:",
-        "  name: CampaignForge",
+        "  name: example-studio",
         "  description: An orchestrator",
         '  version: "0.1.0"',
         "bounded_contexts:",
@@ -284,10 +284,10 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
         "",
       ].join("\n"),
     );
-    assert.equal(config.project, "CampaignForge");
+    assert.equal(config.project, "example-studio");
     assert.equal(
       buildNormalizedPromptFromConfig(config).projectName,
-      "CampaignForge",
+      "example-studio",
       "projectName must be the name string, not the stringified object",
     );
   });
@@ -296,17 +296,17 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
     const config = parseStructuredConfig(
       [
         "context_mappings:",
-        "  - upstream: CampaignOrchestration",
-        "    downstream: CreativeGeneration",
+        "  - upstream: ContentOrchestration",
+        "    downstream: AssetGeneration",
         "    relationship: conformist",
         "    via: ImageGeneratorPort",
-        "  - upstream: CampaignOrchestration",
-        "    downstream: CreativeGeneration",
+        "  - upstream: ContentOrchestration",
+        "    downstream: AssetGeneration",
         "    relationship: conformist",
-        "    via: CompositorPort",
+        "    via: CanvasPort",
         "bounded_contexts:",
-        "  - name: CampaignOrchestration",
-        "  - name: CreativeGeneration",
+        "  - name: ContentOrchestration",
+        "  - name: AssetGeneration",
         "",
       ].join("\n"),
     );
@@ -316,8 +316,8 @@ describe("structured-config import — rich hexagonal dialect (CampaignForge)", 
         (m) => `${m.upstream}->${m.downstream}:${m.pattern}/${m.mechanism}`,
       ),
       [
-        "CampaignOrchestration->CreativeGeneration:conformist/ImageGeneratorPort",
-        "CampaignOrchestration->CreativeGeneration:conformist/CompositorPort",
+        "ContentOrchestration->AssetGeneration:conformist/ImageGeneratorPort",
+        "ContentOrchestration->AssetGeneration:conformist/CanvasPort",
       ],
       "the two same-pair mappings are distinct (different mechanism), not duplicates",
     );
