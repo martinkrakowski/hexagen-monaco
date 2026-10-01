@@ -304,9 +304,68 @@ describe("plan-review markers scope the bold-id rows", () => {
   });
 
   test("a marker shown inside a code fence does not make a file marked", () => {
-    const fenced = ["```", "<!-- plan-review: lanes -->", "```", "| **L1** | a |"].join(
-      "\n",
-    );
+    const fenced = [
+      "```",
+      "<!-- plan-review: lanes -->",
+      "```",
+      "| **L1** | a |",
+    ].join("\n");
     expect(rowHash(fenced, "L1")).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe("fence tracking follows CommonMark", () => {
+  const hash = /^[0-9a-f]{64}$/;
+
+  // Each case holds a row BEFORE a fenced example of a marker. Read correctly,
+  // the example is text, the file stays unmarked, and the row counts. Read
+  // wrongly (the fence ends early), the example marks the file and the row,
+  // sitting outside any region, vanishes.
+  test("a backtick pair nested inside a tilde block does not end the block", () => {
+    const text = [
+      "| **L1** | a |",
+      "~~~",
+      "```",
+      "<!-- plan-review: lanes -->",
+      "```",
+      "~~~",
+    ].join("\n");
+    expect(rowHash(text, "L1")).toMatch(hash);
+  });
+
+  test("a four-backtick block containing three backticks stays open", () => {
+    const text = [
+      "| **L1** | a |",
+      "````",
+      "```",
+      "<!-- plan-review: lanes -->",
+      "````",
+    ].join("\n");
+    expect(rowHash(text, "L1")).toMatch(hash);
+  });
+
+  test("a closing fence carrying text does not close the block", () => {
+    const text = [
+      "| **L1** | a |",
+      "```",
+      "``` not a closer",
+      "<!-- plan-review: lanes -->",
+      "```",
+    ].join("\n");
+    expect(rowHash(text, "L1")).toMatch(hash);
+  });
+
+  test("a marker and rows after a properly closed fence are read", () => {
+    const text = [
+      "~~~",
+      "```",
+      "~~~",
+      "<!-- plan-review: lanes -->",
+      "| **L1** | a |",
+      "",
+      "# Other",
+      "| **L1** | stray |",
+    ].join("\n");
+    expect(rowHash(text, "L1")).toMatch(hash);
   });
 });

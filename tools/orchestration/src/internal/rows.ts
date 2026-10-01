@@ -56,8 +56,14 @@ function ambiguousRowError(
 const MARKER = /^[ \t]*<!--\s*plan-review:\s*(?:lanes|decisions)\s*-->[ \t]*$/;
 /** A markdown heading, at any level: it ends the marker's region. */
 const HEADING = /^[ \t]{0,3}#{1,6}(?:\s|$)/;
-/** A code-fence line: a marker or heading inside a fence is example text. */
-const FENCE = /^[ \t]{0,3}(?:```|~~~)/;
+/**
+ * A code-fence line: up to three spaces of indent, then a run of three or more
+ * backticks or tildes. Group 1 is the run, group 2 what follows it. A marker or
+ * heading inside a fence is example text. Per CommonMark the opening run's
+ * character and length are kept, and only a run of the same character, at
+ * least as long, with nothing after it but whitespace, closes the block.
+ */
+const FENCE = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/;
 
 /**
  * Which lines of a plan may hold a row. A plan with no marker outside a code
@@ -70,11 +76,29 @@ const FENCE = /^[ \t]{0,3}(?:```|~~~)/;
 function eligibleLines(lines: readonly string[]): boolean[] {
   const eligible: boolean[] = [];
   let anyMarker = false;
-  let inFence = false;
+  let fence: { readonly char: string; readonly length: number } | undefined;
   let inRegion = false;
   for (const text of lines) {
-    if (FENCE.test(text)) inFence = !inFence;
-    if (!inFence) {
+    const run = FENCE.exec(text);
+    let fenceLine = false;
+    if (fence === undefined) {
+      // A backtick fence's info string may not itself hold a backtick.
+      if (run !== null && !(run[1]![0] === "`" && run[2]!.includes("`"))) {
+        fence = { char: run[1]![0]!, length: run[1]!.length };
+        fenceLine = true;
+      }
+    } else {
+      fenceLine = true;
+      if (
+        run !== null &&
+        run[1]![0] === fence.char &&
+        run[1]!.length >= fence.length &&
+        run[2]!.trim() === ""
+      ) {
+        fence = undefined;
+      }
+    }
+    if (fence === undefined && !fenceLine) {
       if (MARKER.test(text)) {
         anyMarker = true;
         inRegion = true;
