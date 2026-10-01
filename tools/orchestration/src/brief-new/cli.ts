@@ -1,5 +1,5 @@
 import { errorText } from "../internal/artifact.js";
-import type { LaneHost } from "../internal/lane-hosts.js";
+import { isRemoteHost, type LaneHost } from "../internal/lane-hosts.js";
 import {
   BRIEF_NEW_USAGE,
   parseBriefNewArgs,
@@ -71,6 +71,7 @@ export async function runBriefNew(io: BriefNewIo): Promise<number> {
     tip: plan.tip,
     host: host.name,
     gate: host.gate,
+    remote: isRemoteHost(host),
     env: plan.env,
   });
 

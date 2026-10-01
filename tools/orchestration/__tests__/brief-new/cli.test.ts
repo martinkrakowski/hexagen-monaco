@@ -18,6 +18,23 @@ import { TEMPLATE_A } from "../../src/brief-new/template-text.js";
 const HOSTS: readonly LaneHost[] = [
   { name: "midnight", dispatch: ["ocm-run"], gate: "targeted-only" },
   { name: "local", dispatch: ["run"], gate: "full" },
+  {
+    name: "remote-full",
+    dispatch: ["ocm-run"],
+    gate: "full",
+    ssh: "m",
+    clone: "/srv/clone",
+    worktrees: "/srv/wt",
+  },
+  {
+    name: "remote-targeted",
+    dispatch: ["ocm-run"],
+    gate: "targeted-only",
+    ssh: "m",
+    clone: "/srv/clone",
+    worktrees: "/srv/wt",
+  },
+  { name: "ssh-only", dispatch: ["ocm-run"], gate: "full", ssh: "m" },
 ];
 
 const ARGV = [
@@ -108,6 +125,47 @@ describe("brief-new — the brief", () => {
     // `<` is outside the branch alphabet, so this is refused before any render.
     expect(await runBriefNew(h.io)).toBe(2);
     expect(h.out).toEqual([]);
+  });
+});
+
+describe("brief-new — the lane-host variant follows targeted-only OR remote", () => {
+  const briefFor = async (host: string) => {
+    const h = harness({ argv: swap("--host", host) });
+    expect(await runBriefNew(h.io)).toBe(0);
+    return h.out.join("\n");
+  };
+
+  test("a remote full host keeps the variant: commit only, and the orchestrator runs the full gate", async () => {
+    const brief = await briefFor("remote-full");
+    expect(brief).toContain("Lane-host variant. It applies when");
+    expect(brief).toContain("<TARGETED_CHECKS: the exact commands>");
+    expect(brief).toContain("(Under the lane-host variant:");
+    expect(brief).toMatch(/`remote-full`.*remote.*`gate: full`/s);
+    expect(brief).toMatch(
+      /commit only, never push.*the orchestrator runs the full gate/is,
+    );
+  });
+
+  test("a remote targeted-only host keeps the variant", async () => {
+    const brief = await briefFor("remote-targeted");
+    expect(brief).toContain("Lane-host variant. It applies when");
+    expect(brief).toContain("the full gate must NOT be run on this host");
+  });
+
+  test("a local full host drops the variant", async () => {
+    const brief = await briefFor("local");
+    expect(brief).not.toContain("Lane-host variant.");
+    expect(brief).toContain("run the full gate");
+  });
+
+  test("a local targeted-only host keeps the variant", async () => {
+    const brief = await briefFor("midnight");
+    expect(brief).toContain("Lane-host variant. It applies when");
+  });
+
+  test("a host is remote when ssh alone is set, as the overlay defines it", async () => {
+    const brief = await briefFor("ssh-only");
+    expect(brief).toContain("Lane-host variant. It applies when");
   });
 });
 

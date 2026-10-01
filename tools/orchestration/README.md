@@ -142,10 +142,14 @@ host. It fills `<LANE>`, `<PLAN_PATH>`, `<BRANCH>` and `<SHA>`; the rest
 (`<N>`, `<REPO_PATH>`, `<WORKTREE_PATH>`, `<SECTIONS>`, the ownership list,
 the tasks) are for the orchestrator to fill before dispatch.
 
-- `--host` names a `laneHosts[].name` in the overlay, and its `gate` decides the
-  brief. `targeted-only`: the lane-host variant applies, the brief forbids the
-  full gate and tells the lane to run the listed targeted checks only. `full`:
-  the variant is dropped and the brief requires the full gate before pushing.
+- `--host` names a `laneHosts[].name` in the overlay. Its `gate` and whether it
+  is remote (any of `ssh`, `clone` or `worktrees` set) decide the brief. The
+  lane-host variant applies when the host is `targeted-only` OR remote: the
+  lane commits only and never pushes. A `targeted-only` host also forbids the
+  full gate and tells the lane to run the listed targeted checks only; a remote
+  `full` host says the orchestrator runs the full gate after fetching the
+  commits. Only a local `full` host drops the variant, and its brief requires
+  the full gate before pushing.
 - `--env KEY=VALUE` is repeatable. Each line is written into the brief verbatim,
   in a fenced block, in the order given.
 - Refused with exit 2, naming the flag, before the overlay is loaded: a `--lane`

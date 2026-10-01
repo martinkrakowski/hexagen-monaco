@@ -56,6 +56,19 @@ export interface Seat {
   readonly host: string;
 }
 
+/**
+ * Whether a host is remote: any of `ssh`, `clone` or `worktrees` is present.
+ * The same fact the parser derives from the raw entry, for a caller holding a
+ * parsed host.
+ */
+export function isRemoteHost(host: LaneHost): boolean {
+  return (
+    host.ssh !== undefined ||
+    host.clone !== undefined ||
+    host.worktrees !== undefined
+  );
+}
+
 /** The name reserved for the host synthesized from the deprecated alias. */
 export const SYNTHESIZED_HOST_NAME = "opencode-server";
 

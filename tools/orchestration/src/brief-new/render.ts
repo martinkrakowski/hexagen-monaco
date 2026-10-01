@@ -10,6 +10,8 @@ export interface BriefHeader {
   readonly tip: string;
   readonly host: string;
   readonly gate: LaneHostGate;
+  /** Remote hosts (`ssh`, `clone` or `worktrees`) never push, whatever their gate. */
+  readonly remote: boolean;
   readonly env: readonly string[];
 }
 
@@ -34,6 +36,15 @@ function substitute(
   return text.replace(
     /<(LANE|PLAN_PATH|BRANCH|SHA)>/g,
     (_match, name: string) => values[name as Placeholder],
+  );
+}
+
+/** The lead for a remote host whose gate is `full`: it still commits only. */
+function remoteFullLead(host: string): string {
+  return (
+    `Gate policy. This brief names the lane host \`${host}\`, which is remote and has \`gate: full\`. ` +
+    "The lane-host variant below APPLIES: commit only, never push. You do not run the full gate; " +
+    "the orchestrator runs the full gate after fetching your commits, then pushes and opens the PR.\n\n"
   );
 }
 
@@ -89,7 +100,9 @@ export function render(header: BriefHeader): string {
   const gate =
     header.gate === "targeted-only"
       ? `${targetedOnlyLead(header.host)}${fill(variant)}`
-      : fullGateParagraph(header.host);
+      : header.remote
+        ? `${remoteFullLead(header.host)}${fill(variant)}`
+        : fullGateParagraph(header.host);
 
   return (
     fill(TEMPLATE_A.slice(0, envAt)) +
