@@ -1,7 +1,7 @@
 # @hexagen/orchestration
 
-Wave orchestration tooling for a HexaGen project, packaged as command-line
-bins (the table below lists them all).
+Wave orchestration tooling for a HexaGen project, packaged as
+command-line bins (the table below lists them all).
 
 The package carries the machinery a delegated wave needs to be observable and
 verifiable: emitting events, verifying and reviewing the plan, reporting status,
@@ -100,6 +100,7 @@ another dependency's bin in a consumer's `node_modules/.bin`.
 | `hexagen-orchestration-gate-lock`        | Hold the gate lock across a command                 |
 | `hexagen-orchestration-sweep`            | Sweep a PR's review threads                         |
 | `hexagen-orchestration-fix-brief`        | Draft a fix-round brief from a PR's open threads    |
+| `hexagen-orchestration-brief-new`        | Write a lane-brief skeleton for a lane host         |
 | `hexagen-orchestration-lane-watch`       | Follow a lane's progress, read its usage            |
 | `hexagen-orchestration-merge-prs`        | Merge ready pull requests                           |
 | `hexagen-orchestration-verify-manifests` | Verify mutation manifests                           |
@@ -148,6 +149,45 @@ that in the consumer's test-runner config. Never also set `VITEST_MAX_WORKERS`:
 vitest applies it unvalidated and it takes precedence over the config. Vitest 4
 has no `minWorkers` option.
 
+### `hexagen-orchestration-brief-new`
+
+```bash
+hexagen-orchestration-brief-new --lane <id> --plan <path> --branch <name> \
+  --tip <sha> --host <laneHosts name> [--env KEY=VALUE]... [--out <path>]
+```
+
+Writes a lane-brief skeleton from Template A in the orchestrate-wave skill's
+`references/briefs.md`, with its lane-host variant resolved against the named
+host. It fills `<LANE>`, `<PLAN_PATH>`, `<BRANCH>` and `<SHA>`; the rest
+(`<N>`, `<REPO_PATH>`, `<WORKTREE_PATH>`, `<SECTIONS>`, the ownership list,
+the tasks) are for the orchestrator to fill before dispatch.
+
+- Every value flag takes `--flag value` or `--flag=value`. Use the second form for a
+  value that starts with `--` (`--out=--draft.md`): in the first form a word
+  starting with `--` is the next flag, so the value is missing. `--flag=` is an
+  empty value and is refused.
+- `--host` names a `laneHosts[].name` in the overlay. Its `gate` and whether it
+  is remote (any of `ssh`, `clone` or `worktrees` set) decide the brief. The
+  lane-host variant applies when the host is `targeted-only` OR remote: the
+  lane commits only and never pushes. A `targeted-only` host also forbids the
+  full gate and tells the lane to run the listed targeted checks only; a remote
+  `full` host says the orchestrator runs the full gate after fetching the
+  commits. Only a local `full` host drops the variant, and its brief requires
+  the full gate before pushing.
+- `--env KEY=VALUE` is repeatable. Each line is written into the brief verbatim,
+  in a fenced block, in the order given.
+- Refused with exit 2, naming the flag, before the overlay is loaded: a `--lane`
+  outside `^[A-Za-z0-9_-]+$`; a `--plan` or `--branch` outside
+  `^[A-Za-z0-9._/-]+$`; a `--tip` outside `^[0-9a-f]{7,40}$`; any value
+  (including `--host` and `--out`) that carries a control, format, or line or
+  paragraph separator character; an
+  `--env` that is not `KEY=VALUE`; any other flag given twice. An unknown
+  `--host` is also exit 2, once the overlay is read.
+- `--out` is held to the same single-line rule, because it is echoed in the
+  summary line. It creates its directory if it is missing, and refuses an existing file
+  (exit 1), checked before writing and again by an exclusive write. Without it,
+  the brief goes to stdout.
+
 ### `hexagen-orchestration-lane-watch`
 
 ```bash
@@ -188,7 +228,7 @@ before follow connected, run "lane-watch usage")`. Known limitation: `follow`
 
 ### `hexagen-orchestration-fix-brief`
 
-OW-D14 fixed sixteen bins; this is the seventeenth.
+OW-D14 fixed sixteen bins; this is the seventeenth (`brief-new` follows it).
 
 ```bash
 hexagen-orchestration-fix-brief --pr <n> --round <k> --lane <id> \

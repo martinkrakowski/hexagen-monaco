@@ -15,6 +15,7 @@
   "homepage": "https://github.com/martinkrakowski/hexagen-monaco/tree/main/tools/orchestration#readme",
   "bugs": "https://github.com/martinkrakowski/hexagen-monaco/issues",
   "bin": {
+    "hexagen-orchestration-brief-new": "dist/bins/brief-new.js",
     "hexagen-orchestration-control-bytes": "dist/bins/control-bytes.js",
     "hexagen-orchestration-doctor": "dist/bins/doctor.js",
     "hexagen-orchestration-fix-brief": "dist/bins/fix-brief.js",

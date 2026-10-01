@@ -28,6 +28,15 @@
 # and on signal alike. A release that fails or is refused is reported loudly,
 # and a gate whose lock could not be released does not report green.
 #
+# Signals. A signal that lands while the acquire child runs is deferred behind
+# it, so the exit it turns into can arrive after the lock was won and before the
+# gate recorded it: the acquire writes the slot it won to a per-gate slot-out file
+# (HEXAGEN_GATE_SLOT_OUT), and the cleanup releases through it. The release
+# runs once; its "started" flag is set immediately before the release child, never
+# earlier (HEXAGEN_GATE_TEST_PAUSE_BEFORE_HEARTBEAT_STOP holds the window open).
+# Cleanup output goes to the caller's own stdout and stderr, saved as fds 3 and 4,
+# because a signal can fire inside a step whose output is redirected into a log.
+#
 # At every locked-step boundary the loop also verifies the lock is still its
 # own: the heartbeat loop is running (its failure marker catches the zombie a
 # kill -0 cannot) and the lock still names this gate — either failing fails
@@ -49,6 +58,16 @@
 # POSIX sh (not zsh): CI runners do not ship zsh. `sh -n` on this file is part
 # of its tests.
 set -u
+
+# The caller's own stdout and stderr, saved before anything redirects them. The
+# cleanup below can run in the middle of a step, and a step's output is
+# redirected into its capture log; a message written to fd 1 or 2 from there
+# would land in a log that cleanup then deletes. Cleanup messages and the
+# release child go to these two instead. They are closed first in the heartbeat
+# subshell (an orphaned `sleep` holding fd 3 would hold the caller's pipe open),
+# and closed for each step, in a subshell around its eval (never in the gate
+# shell itself, where the cleanup needs them).
+exec 3>&1 4>&2
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 LOCK_SCRIPT="$HERE/gate-lock"
@@ -159,31 +178,75 @@ if [ "$total" -eq 0 ]; then
 fi
 
 LOCK_HELD=0
+# 1 from just before the acquire child starts until the gate knows whether it
+# won: a signal is deferred while that child runs, so the exit it turns into can
+# land before `LOCK_HELD=1` does, with the lock already taken.
+ACQUIRING=0
+# The acquire child writes the slot it won into this file (HEXAGEN_GATE_SLOT_OUT,
+# see gate-lock), so cleanup can tell "won, but not yet recorded" from "refused".
+# Both scratch files live in one private per-run directory (mktemp -d, mode
+# 0700), never at a name another process could predict and pre-create. It is
+# created lazily (ensure_run_dir), right before the first step that runs, so a
+# gate whose steps are all skipped needs no temp storage.
+RUN_DIR=""
+SLOT_OUT=""
+# 1 once the release child has STARTED, and not before: it is set immediately
+# before that child. It guards against a second release only; it must not be
+# set ahead of the heartbeat kill and `wait` below, because `wait` is
+# interrupted by a trapped signal and the cleanup that follows would then see
+# the flag and skip the release, leaving the lock to outlive the gate.
+RELEASE_STARTED=0
+RELEASE_PAUSED=0
 HEARTBEAT_PID=""
-HB_FAILED="${TMPDIR:-/tmp}/hexagen-gate.hbfailed.$$"
+HB_FAILED=""
 COVLOG=""
 cov_failed=0
 release_failed=0
 
 release_lock() {
-  if [ "$LOCK_HELD" -eq 1 ]; then
+  # A lock won in the acquire window — the acquire child succeeded, so the
+  # slot-out file names a slot, but a signal turned into this exit before
+  # LOCK_HELD was set — is held all the same.
+  if [ "$ACQUIRING" -eq 1 ] && [ -s "$SLOT_OUT" ]; then
+    LOCK_HELD=1
+  fi
+  if [ "$LOCK_HELD" -eq 1 ] && [ "$RELEASE_STARTED" -eq 0 ]; then
     if [ -n "$HEARTBEAT_PID" ]; then
       # Kill the heartbeat loop and reap it, so no heartbeat process survives
       # the gate by even a moment.
       kill "$HEARTBEAT_PID" 2>/dev/null
+      # Test hook (HEXAGEN_GATE_TEST_PAUSE_BEFORE_HEARTBEAT_STOP): the window
+      # after the heartbeat is killed and before it is reaped, where a
+      # signal must still end in a release. One-shot, so the cleanup that the
+      # signal triggers does not pause again.
+      if [ -n "${HEXAGEN_GATE_TEST_PAUSE_BEFORE_HEARTBEAT_STOP:-}" ] && [ "$RELEASE_PAUSED" -eq 0 ]; then
+        RELEASE_PAUSED=1
+        touch "$HEXAGEN_GATE_TEST_PAUSE_BEFORE_HEARTBEAT_STOP" 2>/dev/null
+        while [ -f "$HEXAGEN_GATE_TEST_PAUSE_BEFORE_HEARTBEAT_STOP" ]; do sleep 1; done
+      fi
       wait "$HEARTBEAT_PID" 2>/dev/null
       HEARTBEAT_PID=""
     fi
-    rm -f "$HB_FAILED"
+    if [ -n "$HB_FAILED" ]; then
+      rm -f "$HB_FAILED"
+    fi
+    # The release has not started until the next line: a signal that lands
+    # anywhere above re-enters this function from cleanup and releases.
+    # Window, inherent to POSIX sh (it cannot mask signals): between this
+    # assignment and the release child's fork, a trapped signal re-enters
+    # cleanup, which sees the flag and skips the release. The lock then
+    # self-heals: the next acquire judges this pid dead and reclaims the slot.
+    RELEASE_STARTED=1
     LOCK_HELD=0
     # The release's status and diagnostics are not discarded: a release that
     # failed (or was refused — see gate-lock) must be reported, never
-    # announced as released.
-    if HEXAGEN_GATE_CALLER_PID=$$ /bin/sh "$LOCK_SCRIPT" release "$LANE"; then
-      printf '%s\n' "gate: lock released, heartbeat stopped"
+    # announced as released. Both go to the caller (fds 3 and 4), not to the
+    # redirected step log this may be running inside.
+    if HEXAGEN_GATE_CALLER_PID=$$ /bin/sh "$LOCK_SCRIPT" release "$LANE" >&3 2>&4; then
+      printf '%s\n' "gate: lock released, heartbeat stopped" >&3
     else
       release_failed=1
-      printf '%s\n' "gate: FAILED to release the lock — it may still be held at ${TMPDIR:-/tmp}/hexagen-gate.lock" >&2
+      printf '%s\n' "gate: FAILED to release the lock — it may still be held at ${TMPDIR:-/tmp}/hexagen-gate.lock" >&4
     fi
   fi
 }
@@ -199,7 +262,9 @@ cleanup() {
   if [ -n "$COVLOG" ]; then
     rm -f "$COVLOG"
   fi
-  rm -f "$HB_FAILED"
+  if [ -n "$RUN_DIR" ]; then
+    rm -rf "$RUN_DIR"
+  fi
   exit "$status"
 }
 trap cleanup EXIT
@@ -217,6 +282,9 @@ start_heartbeat() {
   # on its own within one interval, and the heartbeat pid itself — what the
   # tests check and what `wait` reaps — is the subshell's.
   (
+    # First, before anything can fork: the caller's stdout and stderr copies
+    # must not reach the `sleep` this loop leaves behind when it is killed.
+    exec 3>&- 4>&-
     trap - INT TERM EXIT
     while :; do
       sleep "$HB_SECONDS"
@@ -261,7 +329,10 @@ check_lock_intact() {
 # scan is recorded separately in `cov_failed`.
 run_step() {
   COVLOG=$(mktemp "${TMPDIR:-/tmp}/hexagen-gate.covlog.XXXXXX")
-  eval "$1" > "$COVLOG" 2>&1
+  # Fds 3 and 4 (the caller's stdout and stderr) are closed for the step, in a
+  # subshell, so a child the step leaves behind cannot hold the caller's pipes
+  # open. The cleanup, which needs them, runs in the gate shell, not here.
+  ( exec 3>&- 4>&-; eval "$1" ) > "$COVLOG" 2>&1
   code=$?
   cat "$COVLOG"
   if grep -q "ERROR: Coverage" "$COVLOG"; then
@@ -270,6 +341,14 @@ run_step() {
   rm -f "$COVLOG"
   COVLOG=""
   return "$code"
+}
+
+ensure_run_dir() {
+  if [ -z "$RUN_DIR" ]; then
+    RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/hexagen-gate.run.XXXXXX") || exit 2
+    SLOT_OUT="$RUN_DIR/slotout"
+    HB_FAILED="$RUN_DIR/hbfailed"
+  fi
 }
 
 step_no=0
@@ -284,17 +363,22 @@ while IFS="$TAB" read -r name cmd; do
     printf 'SKIPPED %s (%s)\n' "$name" "$reason"
     continue
   fi
+  ensure_run_dir
   printf '==> [%s/%s] %s\n' "$step_no" "$total" "$name"
   if is_locked_step "$name" && [ "$LOCK_HELD" -eq 0 ]; then
     # The caller's pid travels in HEXAGEN_GATE_CALLER_PID: the lock must outlive
     # this acquire call, so it names this shell, not the gate-lock child.
-    HEXAGEN_GATE_CALLER_PID=$$ /bin/sh "$LOCK_SCRIPT" acquire "$LANE"
+    rm -f "$SLOT_OUT"
+    ACQUIRING=1
+    HEXAGEN_GATE_SLOT_OUT="$SLOT_OUT" HEXAGEN_GATE_CALLER_PID=$$ /bin/sh "$LOCK_SCRIPT" acquire "$LANE"
     acq=$?
     if [ "$acq" -ne 0 ]; then
+      ACQUIRING=0
       printf '%s\n' "gate: could not acquire the gate lock (exit $acq) — 75 means busy: sleep and retry" >&2
       exit "$acq"
     fi
     LOCK_HELD=1
+    ACQUIRING=0
     start_heartbeat
   fi
   if [ "$LOCK_HELD" -eq 1 ]; then

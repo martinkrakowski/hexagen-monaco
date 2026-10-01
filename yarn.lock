@@ -1233,6 +1233,7 @@ __metadata:
     typescript: "npm:^5.4.5"
     vitest: "npm:^4.1.9"
   bin:
+    hexagen-orchestration-brief-new: dist/bins/brief-new.js
     hexagen-orchestration-control-bytes: dist/bins/control-bytes.js
     hexagen-orchestration-doctor: dist/bins/doctor.js
     hexagen-orchestration-fix-brief: dist/bins/fix-brief.js

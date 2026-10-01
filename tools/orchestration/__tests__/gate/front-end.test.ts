@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, test, vi } from "vitest";
 import type { Config } from "../../src/internal/config.js";
 import { exitForSignal, runGate as runGateCli } from "../../src/gate/cli.js";
 
@@ -41,6 +41,39 @@ const dirs: string[] = [];
 afterEach(() => {
   for (const dir of dirs.splice(0))
     rmSync(dir, { recursive: true, force: true });
+});
+
+/**
+ * A `yarn` that runs a script out of the working directory's package.json and
+ * nothing else. The gate runs its steps under `HOME=<the fixture>`, which gives
+ * Corepack an empty cache, so a REAL `yarn` with no `packageManager` pin
+ * downloads a Yarn release from the network on every run: a test about whether
+ * a script is present then depends on the registry answering within the test's
+ * budget, and flakes when it does not. The shim keeps the step command the
+ * overlay really holds (`yarn check:env`) without that dependency.
+ */
+let yarnShimDir: string | undefined;
+function yarnShim(): string {
+  if (yarnShimDir === undefined) {
+    yarnShimDir = mkdtempSync(join(tmpdir(), "orchestration-yarn-shim-"));
+    const yarn = join(yarnShimDir, "yarn");
+    writeFileSync(
+      yarn,
+      [
+        "#!/bin/sh",
+        'script=$(node -e \'const s=require("./package.json").scripts||{};process.stdout.write(s[process.argv[1]]??"")\' "$1") || exit 1',
+        '[ -n "$script" ] || { echo "yarn shim: no script $1" >&2; exit 1; }',
+        'exec sh -c "$script"',
+        "",
+      ].join("\n"),
+    );
+    chmodSync(yarn, 0o755);
+  }
+  return yarnShimDir;
+}
+afterAll(() => {
+  if (yarnShimDir !== undefined)
+    rmSync(yarnShimDir, { recursive: true, force: true });
 });
 
 /** A git repository holding an overlay and a `package.json`. */
@@ -84,13 +117,18 @@ function runGate(
   args: string[] = [],
   extraEnv: Record<string, string> = {},
 ): GateRun {
+  const inherited = { ...process.env };
   const result = spawnSync(process.execPath, [dist("gate"), ...args], {
     cwd: root,
     encoding: "utf8",
     env: {
-      ...process.env,
+      ...inherited,
       HEXAGEN_GATE_SLOTS: "1",
       HOME: root,
+      PATH: `${yarnShim()}:${inherited.PATH ?? ""}`,
+      // Belt and braces: were a real yarn ever reached it would fail here,
+      // not fetch a release over the network.
+      COREPACK_ENABLE_NETWORK: "0",
       ...extraEnv,
     },
   });
