@@ -175,7 +175,7 @@ describe("the repository every gh call is pointed at", () => {
         if (args.some((a) => a.includes("mutation"))) {
           return JSON.stringify({
             data: {
-              addComment: { comment: { url: "https://gh/c" } },
+              addComment: { commentEdge: { node: { url: "https://gh/c" } } },
               resolve0: { thread: { isResolved: true } },
             },
           });
@@ -344,7 +344,7 @@ describe("the built bin", () => {
     dirs.push(stubs);
     const fetched = page({ id: "PRRT_a", isResolved: false });
     const body = JSON.stringify({
-      data: { addComment: { comment: { url: "https://x/c/1" } } },
+      data: { addComment: { commentEdge: { node: { url: "https://x/c/1" } } } },
       errors: [{ message: "resolve failed" }],
     });
     writeFileSync(join(stubs, "fetched.json"), fetched);

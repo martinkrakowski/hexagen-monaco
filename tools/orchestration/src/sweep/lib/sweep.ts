@@ -246,7 +246,7 @@ export function dispositionMutation(threadCount: number): string {
   ).join("\n");
   return `mutation SweepDisposition($subject: ID!, $body: String!${decl ? `, ${decl}` : ""}) {
   addComment(input: { subjectId: $subject, body: $body }) {
-    comment { url }
+    commentEdge { node { url } }
   }
 ${resolves}
 }`;
@@ -403,8 +403,8 @@ export async function sweep(
         recovered = (
           (JSON.parse(stdout) as { data?: Record<string, unknown> }).data?.[
             "addComment"
-          ] as { comment?: { url?: string } } | null | undefined
-        )?.comment?.url;
+          ] as { commentEdge?: { node?: { url?: string } } } | null | undefined
+        )?.commentEdge?.node?.url;
       } catch {
         // Not JSON (a transport failure): there is nothing to recover.
       }
@@ -424,10 +424,10 @@ export async function sweep(
   if (writeErrors !== undefined && writeErrors.length > 0) {
     const recovered = (
       written.data?.["addComment"] as
-        | { comment?: { url?: string } }
+        | { commentEdge?: { node?: { url?: string } } }
         | null
         | undefined
-    )?.comment?.url;
+    )?.commentEdge?.node?.url;
     throw new SweepRefusal(
       `the mutation on PR #${plan.pr} returned errors: ${writeErrors.join("; ")}; ${mayHavePosted(recovered)}`,
       writeErrors,
@@ -435,8 +435,10 @@ export async function sweep(
   }
   const data = written.data ?? {};
   const comment = (
-    data["addComment"] as { comment?: { url?: string } } | undefined
-  )?.comment;
+    data["addComment"] as
+      | { commentEdge?: { node?: { url?: string } } }
+      | undefined
+  )?.commentEdge?.node;
   const resolvedIds = ids.filter((_, i) => {
     const r = data[`resolve${i}`] as
       | { thread?: { isResolved?: boolean } }

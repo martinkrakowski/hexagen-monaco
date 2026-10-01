@@ -21,7 +21,7 @@ const ghFetch =
         writeResult ??
         JSON.stringify({
           data: {
-            addComment: { comment: { url: "https://gh/c1" } },
+            addComment: { commentEdge: { node: { url: "https://gh/c1" } } },
             resolve0: { thread: { isResolved: true } },
           },
         })
