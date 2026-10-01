@@ -19,6 +19,14 @@ export interface ReviewThread extends ThreadState {
   readonly excerpt: string;
   /** The first comment's full body — attribution matches against it, not the excerpt. */
   readonly body: string;
+  /** The file the thread is anchored to; "" when the API omits it. */
+  readonly path: string;
+  /** The line it sits on now, or null for a file-level thread or an outdated one. */
+  readonly line: number | null;
+  /** The line it sat on when it was written, or null when there is none. */
+  readonly originalLine: number | null;
+  /** True once the file has changed under the thread. */
+  readonly isOutdated: boolean;
 }
 
 /** The pull request shape the fetch response is expected to carry. */
@@ -35,6 +43,10 @@ export interface PullRequestShape {
           readonly nodes?: readonly {
             readonly id: string;
             readonly isResolved: boolean;
+            readonly path?: string | null;
+            readonly line?: number | null;
+            readonly originalLine?: number | null;
+            readonly isOutdated?: boolean;
             readonly comments?: {
               readonly nodes?: readonly {
                 readonly author?: { readonly login?: string } | null;

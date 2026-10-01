@@ -14,7 +14,7 @@ import { join, resolve } from "node:path";
 /**
  * The scaffold's contract (OW-D1, OW-D12, OW-D14).
  *
- * OW3a pins all sixteen bin names and their FINAL paths, and the other three
+ * OW3a pins the sixteen OW-D14 bin names (PB4 adds a seventeenth) and their FINAL paths, and the other three
  * sub-lanes each overwrite exactly one stub. That only stays true if the list is
  * complete, prefixed, and points at files this build actually produces — so this
  * test reads the real `package.json`, the real built `dist/`, and really runs
@@ -99,6 +99,10 @@ const EXPECTED: ReadonlyArray<{ name: string; path: string }> = [
     name: "hexagen-orchestration-gate-lock",
     path: "bin/gate-lock",
   },
+  {
+    name: "hexagen-orchestration-fix-brief",
+    path: "dist/bins/fix-brief.js",
+  },
 ];
 
 const SHELL_BINS = EXPECTED.filter((bin) => !bin.path.endsWith(".js")).map(
@@ -106,7 +110,7 @@ const SHELL_BINS = EXPECTED.filter((bin) => !bin.path.endsWith(".js")).map(
 );
 
 describe("the bin list (OW-D14)", () => {
-  it("declares exactly the sixteen canonical bins, and no others", () => {
+  it(`declares exactly the ${EXPECTED.length} canonical bins, and no others`, () => {
     expect(Object.keys(manifest.bin).sort()).toEqual(
       EXPECTED.map((bin) => bin.name).sort(),
     );

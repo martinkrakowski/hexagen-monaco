@@ -37,6 +37,10 @@ export const THREADS_QUERY = `query SweepThreads($owner: String!, $name: String!
         nodes {
           id
           isResolved
+          path
+          line
+          originalLine
+          isOutdated
           comments(first: 1) { nodes { author { login } body } }
         }
       }
@@ -178,6 +182,11 @@ export async function fetchAllThreads(
         author: first?.author?.login ?? "unknown",
         excerpt: excerptOf(body),
         body,
+        path: typeof n.path === "string" ? n.path : "",
+        line: typeof n.line === "number" ? n.line : null,
+        originalLine:
+          typeof n.originalLine === "number" ? n.originalLine : null,
+        isOutdated: n.isOutdated === true,
       });
     }
     const pageInfo = threadsPage.pageInfo;

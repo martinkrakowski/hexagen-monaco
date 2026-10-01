@@ -17,6 +17,7 @@
   "bin": {
     "hexagen-orchestration-control-bytes": "dist/bins/control-bytes.js",
     "hexagen-orchestration-doctor": "dist/bins/doctor.js",
+    "hexagen-orchestration-fix-brief": "dist/bins/fix-brief.js",
     "hexagen-orchestration-gate": "dist/bins/gate.js",
     "hexagen-orchestration-gate-lock": "bin/gate-lock",
     "hexagen-orchestration-handoff-check": "dist/bins/handoff-check.js",
