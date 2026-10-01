@@ -150,7 +150,8 @@ export async function follow(deps: FollowDeps): Promise<number> {
     } catch (error: unknown) {
       if (stalled) {
         deps.logError(
-          `lane-watch: stalled: no event for session ${session} in ${deps.stallMs / 1000}s`,
+          `lane-watch: stall: no events for ${deps.stallMs / 1000} s ` +
+            `(if the lane finished before follow connected, run "lane-watch usage")`,
         );
         return EXIT_STALL;
       }

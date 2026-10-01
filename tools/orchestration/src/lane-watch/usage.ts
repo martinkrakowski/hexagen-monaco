@@ -11,6 +11,8 @@ export interface UsageDeps {
   readonly controller: AbortController;
   /** Aborted from outside (a signal handler). */
   readonly external?: AbortSignal;
+  /** True once the caller's deadline has fired and aborted the request. */
+  readonly timedOut?: () => boolean;
   readonly session: string;
   readonly log: (text: string) => void;
   readonly logError: (text: string) => void;
@@ -81,6 +83,14 @@ export async function usage(deps: UsageDeps): Promise<number> {
       deps.logError("lane-watch: the session record is not an object");
       return EXIT_ERROR;
     }
+    // A server that answers for another session must not be read as this one.
+    if (record.id !== deps.session) {
+      deps.logError(
+        `lane-watch: asked for session ${deps.session} but the server returned ` +
+          `${typeof record.id === "string" ? JSON.stringify(record.id.slice(0, 80)) : "a record with no id"}`,
+      );
+      return EXIT_ERROR;
+    }
 
     const time = isObject(record.time) ? record.time : {};
     const created = time.created;
@@ -117,6 +127,10 @@ export async function usage(deps: UsageDeps): Promise<number> {
     return EXIT_OK;
   } catch (error: unknown) {
     if (interrupted()) return EXIT_INTERRUPTED;
+    if (deps.timedOut?.() === true) {
+      deps.logError("lane-watch: timeout: server did not answer within 30 s");
+      return EXIT_ERROR;
+    }
     deps.logError(`lane-watch: ${errorText(error)}`);
     return EXIT_ERROR;
   } finally {

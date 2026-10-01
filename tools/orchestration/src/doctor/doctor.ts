@@ -217,17 +217,22 @@ async function checkLaneHost(
   // from this host's `server`. Nothing is run: the argv alone says the pairing is
   // incomplete, and the missing key would otherwise surface mid-wave as a refusal.
   const usage = host.usage?.[0];
-  if (
-    usage !== undefined &&
-    basename(usage) === LANE_WATCH_BIN &&
-    host.server === undefined
-  ) {
-    push(
-      "warn",
-      `usage names lane-watch but the host has no \`server\`. The reader is invoked as ` +
-        `\`<usage…> --server <server> --session <id>\`, so declare \`server\` (a loopback URL) ` +
-        `on this host.`,
-    );
+  if (usage !== undefined && host.server === undefined) {
+    if (basename(usage) === LANE_WATCH_BIN) {
+      push(
+        "warn",
+        `usage names lane-watch but the host has no \`server\`. The reader is invoked as ` +
+          `\`<usage…> --server <server> --session <id>\`, so declare \`server\` (a loopback URL) ` +
+          `on this host.`,
+      );
+    } else {
+      // Not a defect: without `server` the orchestrator keeps the legacy form.
+      push(
+        "info",
+        `usage reader invoked in the legacy worktree form (\`<usage…> <worktree path>\`): ` +
+          `this host declares no \`server\`, which is what selects \`--server <server> --session <id>\`.`,
+      );
+    }
   }
 
   // Side effect #1 of the two doctor has on a remote host.

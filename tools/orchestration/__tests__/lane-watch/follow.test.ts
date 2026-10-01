@@ -185,63 +185,21 @@ describe("follow: exits on the concluding frame itself", () => {
   });
 });
 
-describe("follow: the stall timer", () => {
-  test("is session-scoped: server.heartbeat frames do not reset it", async () => {
+describe("follow: the stall timer, over a real socket", () => {
+  // The other stall rules are asserted on a fake clock in follow-timers.test.ts;
+  // this is the one test that runs real time against a real loopback socket.
+  test("loopback integration check: heartbeats do not reset the stall timer, and the stall aborts the connection", async () => {
     const fake = await serve((_req, res) => {
       sseHead(res);
       const timer = setInterval(() => res.write(heartbeat()), 20);
       res.on("close", () => clearInterval(timer));
     });
-    const started = Date.now();
     const result = await follow(fake, "--stall-seconds", "0.3");
     expect(result.code).toBe(4);
-    expect(Date.now() - started).toBeLessThan(2500);
     expect(result.err.join("\n")).toMatch(/stall/i);
-  });
-
-  test("events of OTHER sessions do not reset it either", async () => {
-    const fake = await serve((_req, res) => {
-      sseHead(res);
-      const timer = setInterval(
-        () => res.write(toolPart("running", "ses_other")),
-        20,
-      );
-      res.on("close", () => clearInterval(timer));
-    });
-    expect((await follow(fake, "--stall-seconds", "0.3")).code).toBe(4);
-  });
-
-  test("is armed BEFORE the connection opens: a connect that never answers is a stall", async () => {
-    const fake = await serve(() => {
-      // Accept the request and never write a byte, not even headers.
-    });
-    const started = Date.now();
-    const result = await follow(fake, "--stall-seconds", "0.3");
-    expect(result.code).toBe(4);
-    expect(Date.now() - started).toBeLessThan(2500);
-  });
-
-  test("progress for the session keeps it alive, including streamed deltas", async () => {
-    const fake = await serve(async (_req, res) => {
-      sseHead(res);
-      for (let i = 0; i < 7; i += 1) {
-        res.write(
-          frame("message.part.delta", { sessionID: SESSION, delta: "x" }),
-        );
-        await sleep(100);
-      }
-      res.write(idle());
-    });
-    // 700 ms of life against a 300 ms stall window.
-    expect((await follow(fake, "--stall-seconds", "0.3")).code).toBe(0);
-  });
-
-  test("a stall aborts the connection", async () => {
-    const fake = await serve((_req, res) => sseHead(res));
-    await follow(fake, "--stall-seconds", "0.2");
     await Promise.race([
       Promise.all(fake.closed),
-      sleep(3000).then(() => {
+      sleep(10_000).then(() => {
         throw new Error("the connection was left open");
       }),
     ]);

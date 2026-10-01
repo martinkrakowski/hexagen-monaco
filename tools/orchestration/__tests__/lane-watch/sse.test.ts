@@ -56,4 +56,43 @@ describe("readFrames", () => {
     const chunks = Array.from({ length: 5000 }, () => "data: ping\n\n");
     expect((await collect(chunks, 64)).length).toBe(5000);
   });
+
+  test("an unterminated FINAL data line is counted against the cap too", async () => {
+    const line = "data: " + "x".repeat(400);
+    // Each line fits on its own and the two terminated ones fit together.
+    await expect(
+      collect([line + "\n" + line + "\n" + line], 1024),
+    ).rejects.toBeInstanceOf(FrameTooLargeError);
+  });
+
+  test("a final frame that fits is still yielded", async () => {
+    expect(await collect(["data: a\ndata: b"], 1024)).toEqual(["a\nb"]);
+  });
+
+  test("frames are yielded one at a time, before the rest of the chunk is parsed", async () => {
+    // The oversized line after the first frame would throw if the whole chunk
+    // were parsed before anything was yielded.
+    const chunk = "data: first\n\n" + "data: " + "x".repeat(5000) + "\n";
+    const frames: string[] = [];
+    for await (const data of readFrames(streamOf([chunk]), 1024)) {
+      frames.push(data);
+      break;
+    }
+    expect(frames).toEqual(["first"]);
+  });
+
+  test("many small frames in ONE large chunk are all yielded, in order", async () => {
+    const chunk = Array.from(
+      { length: 20000 },
+      (_, i) => `data: ${i}\n\n`,
+    ).join("");
+    const frames = await collect([chunk], 64);
+    expect(frames).toHaveLength(20000);
+    expect(frames[0]).toBe("0");
+    expect(frames[19999]).toBe("19999");
+  });
+
+  test("a frame split exactly on the consumer's return resumes correctly in the next chunk", async () => {
+    expect(await collect(["data: a\n\ndata: b", "\n\n"])).toEqual(["a", "b"]);
+  });
 });

@@ -50,13 +50,18 @@ export async function runLaneWatch(io: LaneWatchIo): Promise<number> {
       logError: io.logError,
     });
   }
-  const deadline = setTimeout(() => controller.abort(), USAGE_TIMEOUT_MS);
+  let expired = false;
+  const deadline = setTimeout(() => {
+    expired = true;
+    controller.abort();
+  }, USAGE_TIMEOUT_MS);
   try {
     return await usage({
       get,
       controller,
       ...(io.signal !== undefined ? { external: io.signal } : {}),
       session: args.session,
+      timedOut: () => expired,
       log: io.log,
       logError: io.logError,
     });

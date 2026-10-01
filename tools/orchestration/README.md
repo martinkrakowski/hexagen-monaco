@@ -58,7 +58,10 @@ A non-loopback or malformed value is a problem at `laneHosts[i].server`.
 ```
 
 where `<id>` is the session id the orchestrator recorded from the lane's first
-`--format json` event. It is not given a worktree path. The reader this package
+`--format json` event. That form applies when the host declares `server`. A host
+with no `server` keeps the legacy form, `<usage…> <worktree path>`, and
+`doctor` reports one `INFO` line for it ("usage reader invoked in the legacy
+worktree form"). The reader this package
 ships for it is `hexagen-orchestration-lane-watch usage`, and `doctor` WARNs
 when `usage[0]` is that bin but the host has no `server`. `doctor` never runs
 `usage`.
@@ -167,8 +170,14 @@ is the documented `usage` reader for a lane host (see `laneHosts[].usage`).
   timer (default 120 s) measures silence from the session itself:
   `server.heartbeat` frames and other sessions' events do not reset it, and it is
   armed before the connection opens, so a connect that never answers is a stall.
-  A stall exits 4.
-- `usage` reads `GET /session/<id>` and prints `secs`, `tokens` and `cost`. A
+  A stall exits 4 and prints `stall: no events for <n> s (if the lane finished
+before follow connected, run "lane-watch usage")`. Known limitation: `follow`
+  cannot ask the server whether the session is already idle, because it may only
+  request `/global/event` and `/session/<id>`, so a lane that finished before
+  `follow` connected is seen as a stall; run `usage` for it instead.
+- `usage` reads `GET /session/<id>`, refuses a record whose `id` is not the
+  requested session (exit 1), gives up after 30 s with a `timeout:` line (exit 1),
+  and prints `secs`, `tokens` and `cost`. A
   field the server did not report is printed as `unknown`, and any unknown field
   exits 3, never 0: a partial reading is incomplete.
 - Every request refuses redirects, goes through one helper that allows only

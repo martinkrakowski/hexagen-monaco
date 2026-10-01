@@ -170,3 +170,50 @@ describe("usage", () => {
     expect(result.code).toBe(1);
   });
 });
+
+describe("usage: the record must be the session asked for", () => {
+  test("a complete record carrying another id is refused, naming both", async () => {
+    const result = await usage(
+      await sessionJson({ ...FULL, id: "ses_someone_else" }),
+    );
+    expect(result.code).toBe(1);
+    const text = result.err.join("\n");
+    expect(text).toContain(SESSION);
+    expect(text).toContain("ses_someone_else");
+    expect(result.out).toEqual([]);
+  });
+
+  test("a record with no id is refused too", async () => {
+    const result = await usage(await sessionJson({ ...FULL, id: undefined }));
+    expect(result.code).toBe(1);
+  });
+});
+
+describe("usage: the deadline", () => {
+  test("an unanswered request reads as a timeout, exit 1, not as an abort", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const never: typeof fetch = (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(
+              new DOMException("This operation was aborted", "AbortError"),
+            ),
+          );
+        });
+      const pending = run(
+        ["usage", "--server", "http://127.0.0.1:4097", "--session", SESSION],
+        { fetch: never },
+      );
+      await vi.advanceTimersByTimeAsync(30_000);
+      const result = await pending;
+      expect(result.code).toBe(1);
+      expect(result.err.join("\n")).toContain(
+        "timeout: server did not answer within 30 s",
+      );
+      expect(result.err.join("\n")).not.toContain("aborted");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

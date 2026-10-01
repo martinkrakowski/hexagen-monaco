@@ -29,53 +29,78 @@ export async function* readFrames(
   const decoder = new TextDecoder();
   let pending = "";
   let data: string[] = [];
-  let dataBytes = 0;
+  let dataChars = 0;
 
-  /** Feed the complete lines in `pending`; returns frames that finished. */
-  const drain = (final: boolean): string[] => {
-    const frames: string[] = [];
-    // A trailing CR may be the first half of CRLF, so it waits for the next chunk.
-    const end =
-      final || !pending.endsWith("\r") ? pending.length : pending.length - 1;
-    const text = pending.slice(0, end);
-    const parts = text.split(/\r\n|\n|\r/);
-    const tail = parts.pop() ?? "";
-    for (const line of parts) {
-      if (line === "") {
-        if (data.length > 0) frames.push(data.join("\n"));
-        data = [];
-        dataBytes = 0;
-      } else if (line.startsWith("data:")) {
-        const value = line.slice(5).replace(/^ /, "");
-        dataBytes += value.length + 1;
-        if (dataBytes > maxChars) throw new FrameTooLargeError(maxChars);
-        data.push(value);
-      }
-      // Comments (`:`) and other fields (`event:`, `id:`, `retry:`) carry nothing we read.
-    }
-    pending = pending.slice(end) === "" ? tail : tail + pending.slice(end);
-    if (final) {
-      if (pending !== "" && pending.startsWith("data:")) {
-        data.push(pending.slice(5).replace(/^ /, ""));
-      }
-      pending = "";
-      if (data.length > 0) frames.push(data.join("\n"));
-      data = [];
-    }
-    if (pending.length > maxChars) throw new FrameTooLargeError(maxChars);
-    return frames;
+  /** One data line, with the same accounting whether or not it was terminated. */
+  const addData = (line: string): void => {
+    const value = line.slice(5).replace(/^ /, "");
+    dataChars += value.length + 1;
+    if (dataChars > maxChars) throw new FrameTooLargeError(maxChars);
+    data.push(value);
   };
+
+  /**
+   * Parse `pending` one line at a time, yielding each frame the moment its blank
+   * line is reached. Nothing past the yielded frame is looked at until the
+   * consumer asks again, so a consumer that returns on a frame never has the
+   * rest of the chunk parsed (or refused) on its behalf.
+   */
+  function* consume(final: boolean): Generator<string, void, void> {
+    const terminator = /\r\n|\n|\r/g;
+    let position = 0;
+    try {
+      for (;;) {
+        terminator.lastIndex = position;
+        const found = terminator.exec(pending);
+        // A trailing CR may be the first half of CRLF, so it waits for the next chunk.
+        if (
+          found === null ||
+          (!final && found[0] === "\r" && found.index === pending.length - 1)
+        ) {
+          break;
+        }
+        const line = pending.slice(position, found.index);
+        position = found.index + found[0].length;
+        if (line === "") {
+          if (data.length > 0) {
+            const frame = data.join("\n");
+            data = [];
+            dataChars = 0;
+            yield frame;
+          }
+        } else if (line.startsWith("data:")) {
+          addData(line);
+        }
+        // Comments (`:`) and other fields (`event:`, `id:`, `retry:`) carry nothing we read.
+      }
+    } finally {
+      // Runs on a normal end AND when the consumer returns mid-chunk.
+      pending = pending.slice(position);
+    }
+    if (final) {
+      if (pending.startsWith("data:")) addData(pending);
+      pending = "";
+      if (data.length > 0) {
+        const frame = data.join("\n");
+        data = [];
+        dataChars = 0;
+        yield frame;
+      }
+    } else if (pending.length > maxChars) {
+      throw new FrameTooLargeError(maxChars);
+    }
+  }
 
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) {
         pending += decoder.decode();
-        for (const frame of drain(true)) yield frame;
+        yield* consume(true);
         return;
       }
       pending += decoder.decode(value, { stream: true });
-      for (const frame of drain(false)) yield frame;
+      yield* consume(false);
     }
   } finally {
     await reader.cancel().catch(() => undefined);

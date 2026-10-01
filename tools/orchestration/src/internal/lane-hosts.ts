@@ -38,7 +38,8 @@ export interface LaneHost {
    * The usage reader, for wall time and tokens. doctor never runs it. It is
    * invoked as `<usage…> --server <server> --session <id>` (P-D2): `server` is
    * this host's `server` and `id` is the session the orchestrator recorded from
-   * the lane's first `--format json` event. It is no longer given a worktree path.
+   * the lane's first `--format json` event. That form applies when the host declares `server`; a host
+   * without one keeps the legacy form, `<usage…> <worktree path>`.
    */
   readonly usage?: readonly string[];
   /**

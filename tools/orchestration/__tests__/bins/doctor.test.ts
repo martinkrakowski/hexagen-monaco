@@ -856,7 +856,8 @@ describe("P-D2: a usage that names lane-watch needs the host's server", () => {
     "\n    usage: " +
     usage +
     (server === undefined ? "" : "\n    server: " + server);
-  const seat = "\nseats:\n  - id: s\n    agent: lane\n    model: m\n    host: midnight\n";
+  const seat =
+    "\nseats:\n  - id: s\n    agent: lane\n    model: m\n    host: midnight\n";
   const MESSAGE = "usage names lane-watch but the host has no `server`";
 
   test("WARNs, once, when usage[0] is lane-watch and the host has no server", async () => {
@@ -895,5 +896,39 @@ describe("P-D2: a usage that names lane-watch needs the host's server", () => {
       "repo: owner/demo\n" + host("[lane-usage, --host, m]") + seat,
     );
     expect(findings.filter((f) => f.severity === "warn")).toEqual([]);
+  });
+
+  test("a usage on a host with no server is an INFO that it is invoked in the legacy form, apart from the lane-watch WARN", async () => {
+    const { code, findings } = await doctor(
+      "repo: owner/demo\n" + host("[lane-usage, --host, m]") + seat,
+    );
+    expect(code).toBe(EXIT_HEALTHY);
+    const info = findings.filter(
+      (f) => f.severity === "info" && f.check === "lane-host midnight",
+    );
+    expect(info).toHaveLength(1);
+    expect(info[0]!.message).toContain(
+      "usage reader invoked in the legacy worktree form",
+    );
+    expect(findings.filter((f) => f.severity === "warn")).toEqual([]);
+  });
+
+  test("a lane-watch usage with no server gets the WARN and not the legacy INFO", async () => {
+    const { findings } = await doctor(
+      "repo: owner/demo\n" +
+        host("[hexagen-orchestration-lane-watch, usage]") +
+        seat,
+    );
+    expect(findings.filter((f) => f.severity === "info")).toEqual([]);
+    expect(findings.filter((f) => f.severity === "warn")).toHaveLength(1);
+  });
+
+  test("a host with a server and a usage gets neither", async () => {
+    const { findings } = await doctor(
+      "repo: owner/demo\n" +
+        host("[lane-usage, --host, m]", "http://127.0.0.1:4097") +
+        seat,
+    );
+    expect(findings.filter((f) => f.severity === "info")).toEqual([]);
   });
 });
