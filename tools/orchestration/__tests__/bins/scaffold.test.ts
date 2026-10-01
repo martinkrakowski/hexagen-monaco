@@ -124,8 +124,8 @@ describe("the bin list (OW-D14)", () => {
     }
   });
 
-  it("starts at 0.1.0 and versions independently of the CLI (OW-D12)", () => {
-    expect(manifest.version).toBe("0.1.0");
+  it("is at 0.1.1 and versions independently of the CLI (OW-D12)", () => {
+    expect(manifest.version).toBe("0.1.1");
   });
 
   it("publishes dist and bin, which is where the two bin kinds live", () => {
