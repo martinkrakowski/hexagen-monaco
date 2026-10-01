@@ -1,0 +1,15 @@
+export const LANE_WATCH_USAGE = [
+  "usage: hexagen-orchestration-lane-watch follow --server <url> --session <id> [--stall-seconds <n>]",
+  "       hexagen-orchestration-lane-watch usage  --server <url> --session <id>",
+  "",
+  "  --server   the opencode server: a LOOPBACK http(s) origin, e.g. http://127.0.0.1:4097",
+  "  --session  the lane's session id (letters, digits, '_' and '-')",
+  "",
+  "follow  streams the session's progress until it goes idle.",
+  "usage   prints wall seconds, tokens and cost in one summary.",
+  "",
+  "exit codes: 0 done / complete reading, 1 error, 2 bad command line,",
+  "            3 usage reading incomplete (a field is 'unknown'),",
+  "            4 follow stalled (no event for the session inside the window),",
+  "            130 interrupted",
+].join("\n");

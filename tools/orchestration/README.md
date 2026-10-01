@@ -97,6 +97,7 @@ another dependency's bin in a consumer's `node_modules/.bin`.
 | `hexagen-orchestration-gate-lock`        | Hold the gate lock across a command                 |
 | `hexagen-orchestration-sweep`            | Sweep a PR's review threads                         |
 | `hexagen-orchestration-fix-brief`        | Draft a fix-round brief from a PR's open threads    |
+| `hexagen-orchestration-lane-watch`       | Follow a lane's progress, read its usage            |
 | `hexagen-orchestration-merge-prs`        | Merge ready pull requests                           |
 | `hexagen-orchestration-verify-manifests` | Verify mutation manifests                           |
 | `hexagen-orchestration-mutate`           | Replay mutations                                    |
@@ -143,6 +144,38 @@ so the slots do not oversubscribe the host: `slots x maxWorkers <= threads`. Set
 that in the consumer's test-runner config. Never also set `VITEST_MAX_WORKERS`:
 vitest applies it unvalidated and it takes precedence over the config. Vitest 4
 has no `minWorkers` option.
+
+### `hexagen-orchestration-lane-watch`
+
+```bash
+hexagen-orchestration-lane-watch follow --server <url> --session <id> [--stall-seconds <n>]
+hexagen-orchestration-lane-watch usage  --server <url> --session <id>
+```
+
+Reads an opencode server's HTTP API to report one lane's progress and usage. It
+is the documented `usage` reader for a lane host (see `laneHosts[].usage`).
+
+- `--server` must be a **loopback** http(s) origin (`127.x.x.x`, `localhost` or
+  `[::1]`) with no path, so a non-loopback value exits 2. A remote server is
+  reached through a local tunnel, and keeping that tunnel open while `follow`
+  runs is the caller's job.
+- `--session` must be letters, digits, `_` and `-`; anything else exits 2.
+  Both are checked before any request is made.
+- `follow` reads `GET /global/event` (server-sent events), keeps only frames for
+  the session, prints tool and step progress, and ends 0 on `session.idle` (or a
+  `session.status` of `idle`), at that frame, without another read. The stall
+  timer (default 120 s) measures silence from the session itself:
+  `server.heartbeat` frames and other sessions' events do not reset it, and it is
+  armed before the connection opens, so a connect that never answers is a stall.
+  A stall exits 4.
+- `usage` reads `GET /session/<id>` and prints `secs`, `tokens` and `cost`. A
+  field the server did not report is printed as `unknown`, and any unknown field
+  exits 3, never 0: a partial reading is incomplete.
+- Every request refuses redirects, goes through one helper that allows only
+  `/global/event` and `/session/<id>`, and is aborted on every exit path. An
+  event line or frame over 1 MiB is an error rather than buffered.
+- Exit codes: 0 done or complete, 1 error, 2 bad command line, 3 incomplete
+  usage, 4 stalled, 130 interrupted.
 
 ### `hexagen-orchestration-fix-brief`
 
