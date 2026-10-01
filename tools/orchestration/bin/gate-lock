@@ -63,8 +63,8 @@
 # a rename within one directory is atomic. Today the slots and TMPDIR are the same
 # directory, so the two coincide; the code takes the slot's own directory so a
 # design that pools the slots elsewhere cannot break the rule. The heartbeat's new
-# beat follows it. The slot-out file is staged next to its own destination
-# (`<path>.tmp.<pid>`) for the same reason.
+# beat follows it. The slot-out file is staged next to its own destination, as a
+# mktemp file there (`.slot-out.XXXXXX`), for the same reason.
 #
 # A removal of a slot is a rename aside, then a check that what was moved is
 # still the caller's own (owner and pid), then the delete. A slot that was
@@ -521,21 +521,31 @@ finish_acquire() {
     exit $BUSY
   fi
   if [ -n "${HEXAGEN_GATE_SLOT_OUT:-}" ]; then
-    f_tmp="$HEXAGEN_GATE_SLOT_OUT.tmp.$$"
+    # The staging file is made by mktemp, beside the destination (the staging
+    # rule above), with an unpredictable name and O_EXCL semantics: a name built
+    # from the pid could be pre-planted as a symlink in a shared directory, and
+    # `>` would follow it and truncate whatever it points at. mktemp with an
+    # XXXXXX template is the same on BSD, macOS and GNU, and is not a bashism.
+    case "$HEXAGEN_GATE_SLOT_OUT" in
+      */*) f_dir=${HEXAGEN_GATE_SLOT_OUT%/*} ;;
+      *) f_dir=. ;;
+    esac
+    f_tmp=""
     # `mv file existing-dir` moves the file INSIDE the directory and succeeds, so
     # a slot-out path that exists and is not a regular file is refused before
     # anything is written, and the result is read back after the rename: a gate
     # that is told it holds a slot must be able to find which one.
     if [ -e "$HEXAGEN_GATE_SLOT_OUT" ] && [ ! -f "$HEXAGEN_GATE_SLOT_OUT" ]; then
       f_bad=1
-    elif { printf '%s\n' "$f_slot" > "$f_tmp" && mv "$f_tmp" "$HEXAGEN_GATE_SLOT_OUT"; } 2>/dev/null &&
+    elif f_tmp=$(mktemp "${f_dir:-/}/.slot-out.XXXXXX" 2>/dev/null) &&
+      { printf '%s\n' "$f_slot" > "$f_tmp" && mv "$f_tmp" "$HEXAGEN_GATE_SLOT_OUT"; } 2>/dev/null &&
       [ -f "$HEXAGEN_GATE_SLOT_OUT" ] && [ "$(cat "$HEXAGEN_GATE_SLOT_OUT" 2>/dev/null)" = "$f_slot" ]; then
       f_bad=0
     else
       f_bad=1
     fi
     if [ "$f_bad" -eq 1 ]; then
-      rm -f "$f_tmp" 2>/dev/null
+      [ -z "$f_tmp" ] || rm -f "$f_tmp" 2>/dev/null
       give_back "$f_lane" "$f_slot"
       printf '%s\n' "gate-lock: cannot write the slot-out file $HEXAGEN_GATE_SLOT_OUT — refused" >&2
       exit 2

@@ -8,6 +8,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -2015,5 +2016,35 @@ describe("the gate lock: slots and one gate per worktree", () => {
       );
       expect(readdirSync(saved).sort()).toEqual(["owner", "pid"]);
     }
+  });
+
+  test("the slot-out staging file is not a predictable name: a planted symlink there is never written through", async () => {
+    const dir = scratch();
+    const out = join(dir, "slot-out");
+    const victim = join(dir, "victim");
+    writeFileSync(victim, "precious\n");
+    const pause = join(dir, "pause-mv");
+    const acquire = startLockIn(
+      dir,
+      ["acquire", "lane-a"],
+      slotsEnv(1, {
+        HEXAGEN_GATE_SLOT_OUT: out,
+        HEXAGEN_GATE_TEST_PAUSE_BEFORE_MV: pause,
+      }),
+      "sh",
+      worktree(),
+    );
+    await waitForFile(pause);
+    // Another local user pre-plants the name the pid would give.
+    symlinkSync(victim, `${out}.tmp.${acquire.child.pid}`);
+    rmSync(pause);
+    const result = await acquire.done;
+    expect(result.status).toBe(0);
+    expect(readFileSync(victim, "utf8")).toBe("precious\n");
+    expect(readFileSync(out, "utf8")).toBe("1\n");
+    // Nothing staged is left behind.
+    expect(readdirSync(dir).filter((n) => n.startsWith(".slot-out."))).toEqual(
+      [],
+    );
   });
 });
