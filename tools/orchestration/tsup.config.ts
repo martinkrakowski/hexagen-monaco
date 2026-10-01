@@ -4,7 +4,7 @@ import { defineConfig } from "tsup";
  * Bundles @hexagen-monaco/orchestration into self-contained ESM artifacts for
  * npm publishing (OW-D1, ADR-0068).
  *
- * One entry per TypeScript bin, ALL THIRTEEN declared up front. OW-D14 fixes
+ * One entry per TypeScript bin, ALL THIRTEEN declared up front (a fourteenth, `fix-brief`, was added later). OW-D14 fixes
  * sixteen bin names and their final paths; thirteen of them are TypeScript and
  * therefore built here, three (`verify-manifests`, `merge-prs`, `gate-lock`)
  * ship as shell scripts straight out of `bin/` and are never entries. A later
@@ -41,6 +41,8 @@ export default defineConfig({
     "bins/wave-status": "src/bins/wave-status.ts",
     // OW3d
     "bins/gate": "src/bins/gate.ts",
+    // PB4: the one bin added after the sixteen OW-D14 pinned.
+    "bins/fix-brief": "src/bins/fix-brief.ts",
   },
   outDir: "dist",
   format: ["esm"],

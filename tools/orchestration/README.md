@@ -80,6 +80,7 @@ another dependency's bin in a consumer's `node_modules/.bin`.
 | `hexagen-orchestration-gate`             | Run the project's configured gate steps             |
 | `hexagen-orchestration-gate-lock`        | Hold the gate lock across a command                 |
 | `hexagen-orchestration-sweep`            | Sweep a PR's review threads                         |
+| `hexagen-orchestration-fix-brief`        | Draft a fix-round brief from a PR's open threads    |
 | `hexagen-orchestration-merge-prs`        | Merge ready pull requests                           |
 | `hexagen-orchestration-verify-manifests` | Verify mutation manifests                           |
 | `hexagen-orchestration-mutate`           | Replay mutations                                    |
@@ -87,6 +88,36 @@ another dependency's bin in a consumer's `node_modules/.bin`.
 | `hexagen-orchestration-mutate-anchors`   | Verify a manifest's anchors                         |
 | `hexagen-orchestration-init`             | Scaffold the project's overlay                      |
 | `hexagen-orchestration-doctor`           | Validate the overlay and the project's capabilities |
+
+### `hexagen-orchestration-fix-brief`
+
+OW-D14 fixed sixteen bins; this is the seventeenth.
+
+```bash
+hexagen-orchestration-fix-brief --pr <n> --round <k> --lane <id> \
+  --worktree <path> --branch <name> --tip <sha> [--out <path>]
+```
+
+Drafts the brief for a fix round in which the lane commits only (Template E in
+the orchestrate-wave skill's `references/briefs.md`) from the PR's UNRESOLVED
+review threads. It reads them with the same paginated, fail-closed fetch as
+`sweep`: a page that cannot be read refuses the whole run (exit 1) rather than
+briefing from half a PR.
+
+- `--pr` and `--round` are positive safe integers. `--lane`, `--worktree`,
+  `--branch` and `--tip` are written into the brief's header, so each must be a
+  single line: any control or line-separator character is refused (exit 2),
+  before anything is fetched.
+- `--out` refuses an existing file (exit 1), checked before the fetch and again
+  by an exclusive write. Without it, the brief goes to stdout.
+- Review text is quoted as data, in a fence one backtick longer than the longest
+  backtick run inside it, and each item closes with
+  `— end of quoted text for item N —`. A reviewer's agent-prompt `<details>`
+  block (its own first summary reads "Prompt for AI Agents" or "Agent Prompt")
+  is replaced by a one-line note of how much was withheld; nested `<details>`
+  are handled by a depth-counting scan.
+- The orchestrator sets each item's `Disposition:` line and edits the
+  Verification section before dispatching the brief.
 
 ## Development
 
