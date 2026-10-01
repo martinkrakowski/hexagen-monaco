@@ -6,6 +6,8 @@ import { IsoDateTime, Repo, SchemaVersion, SlicePathString } from "./common.js";
  * own names. Observed is kept separate from proposed, so there is no `type`,
  * `layer`, `plane` or `context` field anywhere and every object is strict.
  *
+ * A package at the repo root has `root: "."` and `manifestFile: "package.json"`.
+ *
  * Each section is a union with a `collected: false` arm that carries a reason,
  * so an empty list never reads as a clean tree.
  */
@@ -24,7 +26,8 @@ const PackageItem = z
   .object({
     /** Exactly as written in the package manifest, scope included. */
     name: z.string().min(1),
-    root: SlicePathString,
+    /** The literal "." is the repo root (a repo with no workspaces); else a directory path. */
+    root: z.union([z.literal("."), SlicePathString]),
     manifestFile: SlicePathString,
   })
   .strict();

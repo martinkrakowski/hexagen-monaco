@@ -333,6 +333,15 @@ describe("observed report invariants", () => {
     expect(ajv.compile(loadSchema("observed.schema.json"))(o)).toBe(true);
   });
 
+  it('accepts "." as a package root (the repo root) in both', () => {
+    const o = clone(observed) as Record<string, unknown>;
+    set(o, "packages.items.0.root", ".");
+    set(o, "packages.items.0.manifestFile", "package.json");
+    expect(ObservedReport.safeParse(o).success).toBe(true);
+    const ajv = new Ajv({ strict: false, validateFormats: false });
+    expect(ajv.compile(loadSchema("observed.schema.json"))(o)).toBe(true);
+  });
+
   it("never declares a type, layer, plane or context property anywhere", () => {
     const names: string[] = [];
     const strictViolations: string[] = [];
