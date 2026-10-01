@@ -1831,4 +1831,77 @@ describe("the gate lock: slots and one gate per worktree", () => {
     expect(lines[1]).toContain("slot 2: free");
     expect(lines[2]).toContain("slot 3: free");
   });
+
+  test("a contender that loses the name leaves no candidate nested inside the winner's lock", async () => {
+    // `mv dir existing-dir` nests instead of failing: a loser's candidate
+    // would land INSIDE the live lock and stay there.
+    const dir = scratch();
+    const pause = join(dir, "pause-mv");
+    const loser = startLockIn(
+      dir,
+      ["acquire", "lane-loser"],
+      slotsEnv(1, { HEXAGEN_GATE_TEST_PAUSE_BEFORE_MV: pause }),
+      "sh",
+      worktree(),
+    );
+    await waitForFile(pause);
+    const winner = runLockIn(
+      dir,
+      ["acquire", "lane-winner"],
+      { HEXAGEN_GATE_SLOTS: "1", HEXAGEN_GATE_CALLER_PID: String(process.pid) },
+      15_000,
+      "sh",
+      worktree(),
+    );
+    expect(winner.status).toBe(0);
+    rmSync(pause);
+    const result = await loser.done;
+    expect(result.status).toBe(75);
+    expect(readdirSync(lockDir(dir)).sort()).toEqual([
+      "beat",
+      "owner",
+      "pid",
+      "started",
+      "worktree",
+    ]);
+    expect(lockFile(dir, "owner").trim()).toBe("lane-winner");
+    expect(readdirSync(dir).filter((n) => n.includes(".cand."))).toEqual([]);
+  });
+
+  test("a restore that finds the name taken in the last instant moves its copy back out and leaves it aside", async () => {
+    const dir = scratch();
+    seedLock(dir, { owner: "lane-a", pid: 434343 });
+    const dropPause = join(dir, "pause-drop");
+    const restorePause = join(dir, "pause-restore");
+    const release = startLockIn(dir, ["release", "lane-a"], {
+      ...CALLER,
+      HEXAGEN_GATE_TEST_PAUSE_BEFORE_DROP: dropPause,
+      HEXAGEN_GATE_TEST_PAUSE_IN_RESTORE: restorePause,
+    });
+    await waitForFile(dropPause);
+    // The lock is replaced, so the removal moves it aside and must put it back…
+    rmSync(lockDir(dir), { recursive: true, force: true });
+    seedLock(dir, { owner: "lane-b" });
+    rmSync(dropPause);
+    await waitForFile(restorePause);
+    // …and in the instant after it saw the name free, a third lock takes it.
+    rmSync(lockDir(dir), { recursive: true, force: true });
+    seedLock(dir, { owner: "lane-c" });
+    rmSync(restorePause);
+    const result = await release.done;
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("left at");
+    expect(readdirSync(lockDir(dir)).sort()).toEqual([
+      "beat",
+      "owner",
+      "pid",
+      "started",
+    ]);
+    expect(lockFile(dir, "owner").trim()).toBe("lane-c");
+    const aside = readdirSync(dir).filter((n) => n.includes(".gone."));
+    expect(aside).toHaveLength(1);
+    expect(readFileSync(join(dir, aside[0]!, "owner"), "utf8").trim()).toBe(
+      "lane-b",
+    );
+  });
 });

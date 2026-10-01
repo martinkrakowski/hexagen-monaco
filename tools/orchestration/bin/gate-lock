@@ -16,7 +16,9 @@
 #   gate-lock heartbeat          refresh the beat — only on the caller's own lock
 #
 # The lock is a directory at ${TMPDIR:-/tmp}/hexagen-gate.lock — a rename onto
-# the name is the atomic test-and-set, there is nothing else in POSIX sh —
+# the name is the test-and-set (a rename onto a name that is already a directory
+# does NOT fail: it moves the source INSIDE it, so every such rename below checks
+# for that and undoes it) —
 # holding five files:
 #   owner    the lane id that took it
 #   pid      the HOLDER's pid (the shell that runs the locked steps, or `run`)
@@ -258,8 +260,12 @@ compute_identity() {
 # metadata can therefore only be one that was abandoned, never one still
 # being written: the old mkdir-then-write ordering had exactly that window,
 # and a contender that reclaimed the half-written name left its creator
-# writing into a directory it no longer owned. A failed `mv` means the name
-# is held (a directory rename onto a non-empty directory fails), i.e. busy.
+# writing into a directory it no longer owned. `mv dir existing-dir` does not
+# fail: it moves `dir` INSIDE the existing directory (BSD and GNU alike, with no
+# -T). So a contender that lost the name has its candidate nested inside the
+# winner's lock, and that nested copy is looked for and removed here — it is the
+# contender's own, and left there it would be an unexplained entry in a live
+# lock. A candidate that landed nested means the name was held, i.e. busy.
 # Returns 0 only if the lock is verifiably ours.
 try_create() {
   cand="$LOCK.cand.$$"
@@ -281,13 +287,41 @@ try_create() {
     while [ -f "$HEXAGEN_GATE_TEST_PAUSE_BEFORE_MV" ]; do sleep 1; done
   fi
   if mv "$cand" "$LOCK" 2>/dev/null; then
-    # Read-back: the name holds OUR metadata — a rename cannot have replaced
-    # a non-empty directory, so nothing could have taken the name in between.
+    # The name was already a directory: the candidate went INSIDE it. It is
+    # ours, so it is removed from the holder's lock, and the acquire failed.
+    if [ -d "$LOCK/${cand##*/}" ]; then
+      rm -rf "$LOCK/${cand##*/}" 2>/dev/null
+      return 1
+    fi
+    # Read-back: the name holds OUR metadata, not whatever took it between.
     [ "$(cat "$LOCK/pid" 2>/dev/null)" = "$recorded_pid" ] || return 1
     return 0
   fi
   rm -rf "$cand"
   return 1
+}
+
+# Put a moved-aside lock back under its name — only if the name is free, and only
+# if it really landed there. `mv dir existing-dir` nests instead of failing, so
+# a lock that was created between the test and the rename swallows the aside copy
+# as `$LOCK/<aside name>`; that is detected and the copy is moved back out to
+# where it was, and the restore is reported as not done (the caller then says it
+# is left aside, and nothing is deleted). Returns 0 only when it is restored.
+restore_aside() {
+  ra_base=${1##*/}
+  [ ! -e "$LOCK" ] || return 1
+  # Test hook (HEXAGEN_GATE_TEST_PAUSE_IN_RESTORE): the name has just been seen
+  # free, the rename has not happened — the window a new lock can take.
+  if [ -n "${HEXAGEN_GATE_TEST_PAUSE_IN_RESTORE:-}" ]; then
+    touch "$HEXAGEN_GATE_TEST_PAUSE_IN_RESTORE" 2>/dev/null
+    while [ -f "$HEXAGEN_GATE_TEST_PAUSE_IN_RESTORE" ]; do sleep 1; done
+  fi
+  mv "$1" "$LOCK" 2>/dev/null || return 1
+  if [ -d "$LOCK/$ra_base" ]; then
+    mv "$LOCK/$ra_base" "$1" 2>/dev/null
+    return 1
+  fi
+  return 0
 }
 
 # Move a judged-stale lock aside and delete it — but only the lock that was
@@ -306,7 +340,8 @@ take_stale() {
   judged_pid="${2:-}"
   judged_beat="${3:-}"
   # The pass suffix keeps a copy left aside by an earlier pass from blocking
-  # this pass's rename (a directory rename onto a non-empty name fails).
+  # this pass's rename (a rename onto an existing directory nests the source
+  # inside it instead of replacing it, which is also why restore_aside checks).
   aside="$LOCK.reclaim.$$.${4:-x}"
   if ! mv "$LOCK" "$aside" 2>/dev/null; then
     return 1
@@ -326,7 +361,7 @@ take_stale() {
     touch "$HEXAGEN_GATE_TEST_PAUSE_BEFORE_RESTORE" 2>/dev/null
     while [ -f "$HEXAGEN_GATE_TEST_PAUSE_BEFORE_RESTORE" ]; do sleep 1; done
   fi
-  if [ ! -d "$LOCK" ] && mv "$aside" "$LOCK" 2>/dev/null; then
+  if restore_aside "$aside"; then
     printf '%s\n' "gate-lock: reclaim aborted — the renamed lock is not the one that was judged stale; restored it at $LOCK" >&2
     return 1
   fi
@@ -397,12 +432,12 @@ drop_own() {
     # The delete failed (permissions, I/O). What is left is still this caller's
     # lock, so it goes back under its name: it must linger where a liveness
     # reclaim can find it, not hide under a name nobody looks at.
-    if [ -d "$gone" ] && [ ! -e "$LOCK" ]; then
-      mv "$gone" "$LOCK" 2>/dev/null
+    if [ -d "$gone" ]; then
+      restore_aside "$gone" >/dev/null
     fi
     return 2
   fi
-  if [ ! -d "$LOCK" ] && mv "$gone" "$LOCK" 2>/dev/null; then
+  if restore_aside "$gone"; then
     printf '%s\n' "gate-lock: removal aborted — the lock was replaced after it was checked; restored it at $LOCK" >&2
     return 1
   fi
@@ -438,6 +473,8 @@ finish_acquire() {
   f_lane=$1
   f_slot=$2
   if other_same_worktree; then
+    # drop_own's stderr is kept: a give-back that leaves a copy aside, or fails,
+    # must be said. Its stdout is not used.
     drop_own "$f_lane" "$recorded_pid" >/dev/null 2>&1
     printf '%s\n' "gate-lock: same worktree — $f_lane was refused: ${other_owner:-unknown} (pid $other_pid) already holds a gate slot from $WORKTREE, and there is one gate per worktree; sleep and retry (75)" >&2
     exit $BUSY
