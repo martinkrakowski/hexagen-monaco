@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://hexagen.dev/kernel/bundle.schema.json",
+  "title": "Workbook bundle index",
+  "description": "`bundle.json` inside a workbook export zip. `hmac` is the pack HMAC (hex) over the index without this field, keyed by the engagement key. The signing key, anything under a `keys/` directory and env files are never listed. Mirrors packages/shared/src/types/brownfield/bundle.ts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "createdAt", "sliceId", "files", "hmac"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^1\\.\\d+\\.\\d+$",
+      "description": "Schema version. Consumers understand the 1.x line only."
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sliceId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "role", "sha256"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
+            "description": "A file path (no trailing /); never a key or env file.",
+            "not": {
+              "anyOf": [
+                {
+                  "pattern": "/$"
+                },
+                {
+                  "pattern": "(^|/)(grant-signing\\.key|[^/]*\\.key|keys|\\.env[^/]*)(/|$)"
+                }
+              ]
+            }
+          },
+          "role": {
+            "enum": [
+              "observed",
+              "slice",
+              "contract",
+              "grant",
+              "proposal",
+              "evidence",
+              "tip"
+            ]
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "hmac": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

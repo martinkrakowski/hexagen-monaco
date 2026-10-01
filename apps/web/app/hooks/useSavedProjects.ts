@@ -8,6 +8,7 @@ import type {
   PersistenceError,
   ProjectLayer,
   ProjectLayerTurn,
+  ProjectMode,
 } from "@hexagen/shared";
 import { SAVED_PROJECT_SCHEMA_VERSION } from "@hexagen/shared";
 import {
@@ -26,6 +27,11 @@ import { subscribeActiveTenant } from "../lib/active-tenant";
 export interface SavedProject extends BaseSavedProject {
   readonly formState: ProjectConfig;
   readonly layers: readonly ProjectLayer[];
+  /**
+   * Stays optional (absent = greenfield): existing rows load unchanged. Read it
+   * with `projectMode`, never by comparing to `undefined`.
+   */
+  readonly mode?: ProjectMode;
 }
 
 /** A new layer without the hook-stamped identity/timestamps. */

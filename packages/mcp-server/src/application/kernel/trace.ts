@@ -33,7 +33,7 @@ export type HaltReason =
   | "grant_revoked"
   | "error";
 
-export interface TraceRecord {
+interface TraceLineFields {
   readonly grant_id: string;
   readonly goal_id: string;
   readonly tool_calls: readonly ToolCallRecord[];
@@ -41,6 +41,41 @@ export interface TraceRecord {
   readonly transaction_ids: readonly string[];
   readonly started_at: string;
   readonly ended_at: string;
+}
+
+/** Greenfield line: no chain fields. */
+export interface GreenfieldTraceRecord extends TraceLineFields {
+  readonly seq?: undefined;
+  readonly prev_hash?: undefined;
+}
+
+/**
+ * Brownfield line (docs/kernel/trace.schema.json `brownfield_line`): `seq` and
+ * `prev_hash` chain it to the line before it. Types only — the writer that
+ * fills them is a later lane, and `checkTrace` ignores them.
+ */
+export interface ChainedTraceRecord extends TraceLineFields {
+  readonly seq: number;
+  readonly prev_hash: string;
+}
+
+/** `seq` and `prev_hash` are both present or both absent. */
+export type TraceRecord = GreenfieldTraceRecord | ChainedTraceRecord;
+
+/**
+ * A denied call that carried no grant, or a grant with no id. It has no
+ * `grant_id` to cite, so it is its own record kind (schema `grant_missing`),
+ * never evidence of a write. Types only; nothing writes or reads it yet.
+ */
+export interface GrantMissingRecord {
+  readonly kind: "grant_missing";
+  readonly seq: number;
+  readonly prev_hash: string;
+  readonly goal_id?: string;
+  readonly tool: string;
+  readonly args_digest?: string;
+  readonly reason: string;
+  readonly time: string;
 }
 
 export type TraceCheck =

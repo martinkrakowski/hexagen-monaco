@@ -26,8 +26,12 @@ export type {
   ProjectLayerTurn,
   ProjectLayerLink,
   ProducedManifestLink,
+  ProjectMode,
 } from "./domain/saved-project.js";
-export { SAVED_PROJECT_SCHEMA_VERSION } from "./domain/saved-project.js";
+export {
+  SAVED_PROJECT_SCHEMA_VERSION,
+  projectMode,
+} from "./domain/saved-project.js";
 export type { GenerationResult } from "./domain/types/generation-result.js";
 // NOTE: ProjectSpecification moved to @hexagen/project-configuration (canonical: ProjectSpec)
 // See: Architectural Remediation Report Phase 1, Item 1.4

@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://hexagen.dev/kernel/slice.schema.json",
+  "title": "Slice",
+  "description": "`.hexagen/slice.json`: the part of the repo an agent is bound to. Everything outside `paths`, or inside `excludes`, is denied. Mirrors packages/shared/src/types/brownfield/slice.ts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "repo",
+    "paths",
+    "excludes",
+    "createdBy",
+    "createdAt"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^1\\.\\d+\\.\\d+$",
+      "description": "Schema version. Consumers understand the 1.x line only."
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit"],
+      "properties": {
+        "remote": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commit": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "paths": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
+        "description": "Repo-relative, case-sensitive. Control characters (U+0000-U+001F, U+007F, U+2028, U+2029) are also refused. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused."
+      }
+    },
+    "excludes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
+        "description": "Repo-relative, case-sensitive. Control characters (U+0000-U+001F, U+007F, U+2028, U+2029) are also refused. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused."
+      }
+    },
+    "createdBy": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

@@ -14,7 +14,8 @@ export interface GrantFields {
   readonly id: string;
   readonly principal: string;
   readonly agent: string;
-  readonly contexts: readonly string[];
+  /** Absent on a client-repo grant (it never writes `[]`); absent and `[]` sign differently. */
+  readonly contexts?: readonly string[];
   readonly paths: readonly string[];
   readonly tools: readonly string[];
   readonly mode: "write" | "propose";

@@ -126,4 +126,22 @@ export interface SavedProject {
    * `[]`, and the app-level `SavedProject` narrows it to a required array.
    */
   readonly layers?: readonly ProjectLayer[];
+  /**
+   * Workbook mode. Optional: an absent value means "greenfield" (read it with
+   * `projectMode`, never `=== undefined`), so existing rows are untouched.
+   */
+  readonly mode?: ProjectMode;
+}
+
+/**
+ * A workbook has one mode and nothing converts between modes. Absent means
+ * greenfield, so every row written before the field existed loads unchanged.
+ */
+export type ProjectMode = "greenfield" | "brownfield";
+
+/** The one reader of `SavedProject.mode`: an absent (or unrecognised) value is greenfield. */
+export function projectMode(project: {
+  readonly mode?: ProjectMode;
+}): ProjectMode {
+  return project.mode === "brownfield" ? "brownfield" : "greenfield";
 }

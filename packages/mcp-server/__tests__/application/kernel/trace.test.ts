@@ -10,7 +10,11 @@ import {
   MANIFEST_WRITE_PATH,
   type Grant,
 } from "../../../src/application/kernel/grant.js";
-import type { TraceRecord } from "../../../src/application/kernel/trace.js";
+import type {
+  GrantMissingRecord,
+  GreenfieldTraceRecord,
+  TraceRecord,
+} from "../../../src/application/kernel/trace.js";
 
 const activeGrant: Grant = {
   id: "grant-001",
@@ -23,7 +27,9 @@ const activeGrant: Grant = {
   expires_at: "2026-09-30T12:00:00.000Z",
 };
 
-function trace(overrides: Partial<TraceRecord> = {}): TraceRecord {
+function trace(
+  overrides: Partial<GreenfieldTraceRecord> = {},
+): GreenfieldTraceRecord {
   return {
     grant_id: "grant-001",
     goal_id: "goal-42",
@@ -159,5 +165,36 @@ describe("checkTrace — expiry/revocation window (Rule 2)", () => {
   it("is valid exactly at expires_at", () => {
     const g: Grant = { ...activeGrant, expires_at: "2026-09-30T10:00:00.000Z" };
     assert.equal(checkTrace(trace(), [g]).valid, true);
+  });
+});
+
+describe("brownfield trace types (types only, no behaviour)", () => {
+  it("a chained line is still checked exactly like a greenfield one", () => {
+    const chained: TraceRecord = {
+      ...trace(),
+      seq: 0,
+      prev_hash: "0".repeat(64),
+    };
+    assert.deepEqual(checkTrace(chained, [activeGrant]), { valid: true });
+  });
+
+  it("seq and prev_hash are both present or both absent (type level)", () => {
+    // @ts-expect-error seq without prev_hash is not a TraceRecord
+    const onlySeq: TraceRecord = { ...trace(), seq: 0 };
+    // @ts-expect-error prev_hash without seq is not a TraceRecord
+    const onlyPrev: TraceRecord = { ...trace(), prev_hash: "0".repeat(64) };
+    assert.ok(onlySeq && onlyPrev);
+  });
+
+  it("a grant_missing record carries no grant_id", () => {
+    const record: GrantMissingRecord = {
+      kind: "grant_missing",
+      seq: 1,
+      prev_hash: "0".repeat(64),
+      tool: "edit_file",
+      reason: "no grant supplied",
+      time: "2026-09-30T11:00:00.000Z",
+    };
+    assert.equal("grant_id" in record, false);
   });
 });

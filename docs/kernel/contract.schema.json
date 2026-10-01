@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://hexagen.dev/kernel/contract.schema.json",
+  "title": "Contract",
+  "description": "`.hexagen/contract.json`: what the slice may and may not depend on. The built-in rule id `unresolved-import` covers an unresolved in-slice specifier. `knownViolations` entries have the shape of the ratchet baseline (tools/arch-linter/src/ratchet-baseline.ts). Mirrors packages/shared/src/types/brownfield/contract.ts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sliceId", "rules", "knownViolations"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^1\\.\\d+\\.\\d+$",
+      "description": "Schema version. Consumers understand the 1.x line only."
+    },
+    "sliceId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "from", "to", "severity"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "not": {
+              "enum": ["unresolved-import"]
+            },
+            "description": "Must not be a built-in rule id (unresolved-import)."
+          },
+          "kind": {
+            "enum": ["forbid", "allow-only"]
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
+            "description": "Repo-relative, case-sensitive. Control characters (U+0000-U+001F, U+007F, U+2028, U+2029) are also refused. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused."
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
+            "description": "Repo-relative, case-sensitive. Control characters (U+0000-U+001F, U+007F, U+2028, U+2029) are also refused. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused."
+          },
+          "severity": {
+            "enum": ["error", "warn"]
+          }
+        }
+      }
+    },
+    "knownViolations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule", "file", "specifier"],
+        "properties": {
+          "rule": {
+            "type": "string",
+            "minLength": 1
+          },
+          "file": {
+            "type": "string",
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
+            "description": "A file path: no trailing /.",
+            "not": {
+              "anyOf": [
+                {
+                  "pattern": "/$"
+                }
+              ]
+            }
+          },
+          "specifier": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expires": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          }
+        }
+      }
+    }
+  }
+}

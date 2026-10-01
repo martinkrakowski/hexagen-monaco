@@ -33,19 +33,28 @@
     "contexts": {
       "type": "array",
       "description": "Manifest bounded-context names, for a repo that has a manifest.yaml to compile against (monaco's own case — see docs/kernel/GRANT.md). Optional here: a client repo with no such manifest omits this field entirely. `paths` is what every enforcement point actually checks; `contexts` is only how a manifest-driven compile step fills it in.",
-      "items": { "type": "string", "minLength": 1 },
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "uniqueItems": true
     },
     "paths": {
       "type": "array",
       "description": "Workspace-relative path prefixes this cycle may write to. The one field every enforcement point checks, on any profile. Extras beyond a manifest-derived prefix are listed here for a human to review, never compiled from a guess.",
-      "items": { "type": "string", "minLength": 1 },
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "uniqueItems": true
     },
     "tools": {
       "type": "array",
       "description": "Which write tools this cycle may invoke. `paths` alone is not sufficient: a grant naming the right path but not the tool that would use it still denies that tool. This is what makes a grant a scope on *actions*, not only on *locations*.",
-      "items": { "type": "string", "minLength": 1 },
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "uniqueItems": true
     },
     "mode": {
@@ -67,6 +76,11 @@
       "type": "string",
       "format": "date-time",
       "description": "Set when a grant is revoked before its natural expiry (a human pulls it mid-cycle). Absent on an active, unrevoked grant."
+    },
+    "signature": {
+      "type": "string",
+      "minLength": 1,
+      "description": "HMAC-SHA256 (hex) over every field above except this one, keyed by the engagement key resolved per BW-D4 (`--key-file`, then `HEXAGEN_GRANT_KEY_FILE`, then `~/.hexagen/keys/<engagement>.key`); monaco's own repo uses `.hexagen/grant-signing.key`. Not in `required`: a grant without one is syntactically valid but is denied at accept time all the same, since an unsigned or wrongly-signed grant is never trusted as authorization, whatever its other fields claim."
     }
   }
 }
