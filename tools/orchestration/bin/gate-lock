@@ -348,10 +348,17 @@ take_stale() {
   judged_owner="${1:-}"
   judged_pid="${2:-}"
   judged_beat="${3:-}"
-  # The pass suffix keeps a copy left aside by an earlier pass from blocking
-  # this pass's rename (a rename onto an existing directory nests the source
-  # inside it instead of replacing it, which is also why restore_aside checks).
-  aside="$LOCK.reclaim.$$.${4:-x}"
+  # An aside name that is not already taken. A copy left aside by an earlier pass
+  # or by an earlier process with this pid (pids are reused) is somebody's lock:
+  # it is never deleted to make room, and `mv` onto an existing directory nests
+  # rather than fails (which is also why restore_aside checks), so the name is
+  # probed for a free one first.
+  aside_n=0
+  aside="$LOCK.reclaim.$$.${4:-x}.$aside_n"
+  while [ -e "$aside" ]; do
+    aside_n=$((aside_n + 1))
+    aside="$LOCK.reclaim.$$.${4:-x}.$aside_n"
+  done
   if ! mv "$LOCK" "$aside" 2>/dev/null; then
     return 1
   fi

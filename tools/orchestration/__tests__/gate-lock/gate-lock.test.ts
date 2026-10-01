@@ -1983,4 +1983,37 @@ describe("the gate lock: slots and one gate per worktree", () => {
     expect((await beat.done).status).toBe(0);
     expect(readdirSync(dir).filter((n) => n.includes(".beatnew."))).toEqual([]);
   });
+
+  test("a reclaim never deletes a saved lock that already sits at its aside name", async () => {
+    const dir = scratch();
+    seedLock(dir, { owner: "lane-dead", pid: reapedPid() });
+    const pause = join(dir, "pause-inspect");
+    const acquire = startLockIn(
+      dir,
+      ["acquire", "lane-x"],
+      slotsEnv(1, { HEXAGEN_GATE_TEST_PAUSE_AFTER_INSPECT: pause }),
+      "sh",
+      worktree(),
+    );
+    await waitForFile(pause);
+    const pid = acquire.child.pid;
+    const planted = [`${pid}.1`, `${pid}.1.0`].map(
+      (suffix) => `${lockDir(dir)}.reclaim.${suffix}`,
+    );
+    for (const saved of planted) {
+      mkdirSync(saved);
+      writeFileSync(join(saved, "owner"), "lane-saved\n");
+      writeFileSync(join(saved, "pid"), "1\n");
+    }
+    rmSync(pause);
+    const result = await acquire.done;
+    expect(result.status).toBe(0);
+    expect(lockFile(dir, "owner").trim()).toBe("lane-x");
+    for (const saved of planted) {
+      expect(readFileSync(join(saved, "owner"), "utf8").trim()).toBe(
+        "lane-saved",
+      );
+      expect(readdirSync(saved).sort()).toEqual(["owner", "pid"]);
+    }
+  });
 });
