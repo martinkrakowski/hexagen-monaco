@@ -47,6 +47,25 @@ scope on that host). A host is **remote** when it carries `ssh`, `clone` or
 if and only if the dispatch path itself works: it runs no lane and writes no
 opencode session.
 
+`server` (optional) is the loopback URL of the host's opencode server, as seen
+from the orchestrator through its tunnel, for example `http://127.0.0.1:4097`.
+A non-loopback or malformed value is a problem at `laneHosts[i].server`.
+
+`usage` (optional) is the argv of the host's usage reader. It is invoked as
+
+```bash
+<usage…> --server <laneHosts[].server> --session <id>
+```
+
+where `<id>` is the session id the orchestrator recorded from the lane's first
+`--format json` event. That form applies when the host declares `server`. A host
+with no `server` keeps the legacy form, `<usage…> <worktree path>`, and
+`doctor` reports one `INFO` line for it ("usage reader invoked in the legacy
+worktree form"). The reader this package
+ships for it is `hexagen-orchestration-lane-watch usage`, and `doctor` WARNs
+when `usage[0]` is that bin but the host has no `server`. `doctor` never runs
+`usage`.
+
 `seats` — **who.** Each entry declares `id`, `agent`, `model`, and a `host`
 naming a `laneHosts[].name`. `cast.md` refers to a seat by its `id` and never
 restates its agent or model.
@@ -60,7 +79,7 @@ never affects the exit code.
 
 `opencodeServerUrl` is no longer a setting. An overlay that still sets it keeps
 working: `parseConfig` synthesizes a local `laneHosts` entry named
-`opencode-server`, and reports a deprecation, which `doctor` prints as a `WARN`.
+`opencode-server` (its `server` is the URL the alias held), and reports a deprecation, which `doctor` prints as a `WARN`.
 A deprecation never refuses — `init`, `gate` and every other bin act on the
 config regardless — so an overlay can be migrated on its own schedule.
 
@@ -82,6 +101,7 @@ another dependency's bin in a consumer's `node_modules/.bin`.
 | `hexagen-orchestration-sweep`            | Sweep a PR's review threads                         |
 | `hexagen-orchestration-fix-brief`        | Draft a fix-round brief from a PR's open threads    |
 | `hexagen-orchestration-brief-new`        | Write a lane-brief skeleton for a lane host         |
+| `hexagen-orchestration-lane-watch`       | Follow a lane's progress, read its usage            |
 | `hexagen-orchestration-merge-prs`        | Merge ready pull requests                           |
 | `hexagen-orchestration-verify-manifests` | Verify mutation manifests                           |
 | `hexagen-orchestration-mutate`           | Replay mutations                                    |
@@ -167,6 +187,44 @@ the tasks) are for the orchestrator to fill before dispatch.
   summary line. It creates its directory if it is missing, and refuses an existing file
   (exit 1), checked before writing and again by an exclusive write. Without it,
   the brief goes to stdout.
+
+### `hexagen-orchestration-lane-watch`
+
+```bash
+hexagen-orchestration-lane-watch follow --server <url> --session <id> [--stall-seconds <n>]
+hexagen-orchestration-lane-watch usage  --server <url> --session <id>
+```
+
+Reads an opencode server's HTTP API to report one lane's progress and usage. It
+is the documented `usage` reader for a lane host (see `laneHosts[].usage`).
+
+- `--server` must be a **loopback** http(s) origin (`127.x.x.x`, `localhost` or
+  `[::1]`) with no path, so a non-loopback value exits 2. A remote server is
+  reached through a local tunnel, and keeping that tunnel open while `follow`
+  runs is the caller's job.
+- `--session` must be letters, digits, `_` and `-`; anything else exits 2.
+  Both are checked before any request is made.
+- `follow` reads `GET /global/event` (server-sent events), keeps only frames for
+  the session, prints tool and step progress, and ends 0 on `session.idle` (or a
+  `session.status` of `idle`), at that frame, without another read. The stall
+  timer (default 120 s) measures silence from the session itself:
+  `server.heartbeat` frames and other sessions' events do not reset it, and it is
+  armed before the connection opens, so a connect that never answers is a stall.
+  A stall exits 4 and prints `stall: no events for <n> s (if the lane finished
+before follow connected, run "lane-watch usage")`. Known limitation: `follow`
+  cannot ask the server whether the session is already idle, because it may only
+  request `/global/event` and `/session/<id>`, so a lane that finished before
+  `follow` connected is seen as a stall; run `usage` for it instead.
+- `usage` reads `GET /session/<id>`, refuses a record whose `id` is not the
+  requested session (exit 1), gives up after 30 s with a `timeout:` line (exit 1),
+  and prints `secs`, `tokens` and `cost`. A
+  field the server did not report is printed as `unknown`, and any unknown field
+  exits 3, never 0: a partial reading is incomplete.
+- Every request refuses redirects, goes through one helper that allows only
+  `/global/event` and `/session/<id>`, and is aborted on every exit path. An
+  event line or frame over 1 MiB is an error rather than buffered.
+- Exit codes: 0 done or complete, 1 error, 2 bad command line, 3 incomplete
+  usage, 4 stalled, 130 interrupted by SIGINT, 143 by SIGTERM (128 plus the signal number).
 
 ### `hexagen-orchestration-fix-brief`
 

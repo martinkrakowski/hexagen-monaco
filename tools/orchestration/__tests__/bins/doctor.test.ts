@@ -849,3 +849,115 @@ describe("HEXAGEN_GATE_SLOTS is printed as INFO", () => {
     expect(findings.some((f) => f.check === "gate-slots")).toBe(false);
   });
 });
+
+describe("P-D2: a usage that names lane-watch needs the host's server", () => {
+  const host = (usage: string, server?: string): string =>
+    REMOTE_HOST +
+    "\n    usage: " +
+    usage +
+    (server === undefined ? "" : "\n    server: " + server);
+  const seat =
+    "\nseats:\n  - id: s\n    agent: lane\n    model: m\n    host: midnight\n";
+  const MESSAGE = "usage names lane-watch but the host has no `server`";
+
+  test("WARNs, once, when usage[0] is lane-watch and the host has no server", async () => {
+    const { code, findings } = await doctor(
+      "repo: owner/demo\n" +
+        host("[hexagen-orchestration-lane-watch, usage]") +
+        seat,
+    );
+    expect(code).toBe(EXIT_HEALTHY);
+    expect(warns(findings, "lane-host midnight").message).toContain(MESSAGE);
+  });
+
+  test("matches on the basename, so an absolute path still names it", async () => {
+    const { findings } = await doctor(
+      "repo: owner/demo\n" +
+        host("[/opt/bin/hexagen-orchestration-lane-watch, usage]") +
+        seat,
+    );
+    expect(warns(findings, "lane-host midnight").message).toContain(MESSAGE);
+  });
+
+  test.each([
+    ["npx", "[npx, hexagen-orchestration-lane-watch, usage]"],
+    ["yarn", "[yarn, hexagen-orchestration-lane-watch, usage]"],
+    ["env", "[env, X=1, hexagen-orchestration-lane-watch, usage]"],
+    [
+      "a path under a launcher",
+      "[node, /opt/bin/hexagen-orchestration-lane-watch, usage]",
+    ],
+  ])(
+    "a launcher form (%s) still names lane-watch: WARN, not the legacy INFO",
+    async (_name, argv) => {
+      const { findings } = await doctor(
+        "repo: owner/demo\n" + host(argv) + seat,
+      );
+      expect(warns(findings, "lane-host midnight").message).toContain(MESSAGE);
+      expect(findings.filter((f) => f.severity === "info")).toEqual([]);
+    },
+  );
+
+  test("a word that merely contains the bin name does not count", async () => {
+    const { findings } = await doctor(
+      "repo: owner/demo\n" +
+        host("[my-hexagen-orchestration-lane-watch-x, usage]") +
+        seat,
+    );
+    expect(findings.filter((f) => f.severity === "warn")).toEqual([]);
+    expect(findings.filter((f) => f.severity === "info")).toHaveLength(1);
+  });
+
+  test("says nothing when the host declares a server", async () => {
+    const { findings } = await doctor(
+      "repo: owner/demo\n" +
+        host(
+          "[hexagen-orchestration-lane-watch, usage]",
+          "http://127.0.0.1:4097",
+        ) +
+        seat,
+    );
+    expect(findings.filter((f) => f.severity === "warn")).toEqual([]);
+  });
+
+  test("says nothing for a usage that is some other reader", async () => {
+    const { findings } = await doctor(
+      "repo: owner/demo\n" + host("[lane-usage, --host, m]") + seat,
+    );
+    expect(findings.filter((f) => f.severity === "warn")).toEqual([]);
+  });
+
+  test("a usage on a host with no server is an INFO that it is invoked in the legacy form, apart from the lane-watch WARN", async () => {
+    const { code, findings } = await doctor(
+      "repo: owner/demo\n" + host("[lane-usage, --host, m]") + seat,
+    );
+    expect(code).toBe(EXIT_HEALTHY);
+    const info = findings.filter(
+      (f) => f.severity === "info" && f.check === "lane-host midnight",
+    );
+    expect(info).toHaveLength(1);
+    expect(info[0]!.message).toContain(
+      "usage reader invoked in the legacy worktree form",
+    );
+    expect(findings.filter((f) => f.severity === "warn")).toEqual([]);
+  });
+
+  test("a lane-watch usage with no server gets the WARN and not the legacy INFO", async () => {
+    const { findings } = await doctor(
+      "repo: owner/demo\n" +
+        host("[hexagen-orchestration-lane-watch, usage]") +
+        seat,
+    );
+    expect(findings.filter((f) => f.severity === "info")).toEqual([]);
+    expect(findings.filter((f) => f.severity === "warn")).toHaveLength(1);
+  });
+
+  test("a host with a server and a usage gets neither", async () => {
+    const { findings } = await doctor(
+      "repo: owner/demo\n" +
+        host("[lane-usage, --host, m]", "http://127.0.0.1:4097") +
+        seat,
+    );
+    expect(findings.filter((f) => f.severity === "info")).toEqual([]);
+  });
+});

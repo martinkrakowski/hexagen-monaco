@@ -45,6 +45,8 @@ export default defineConfig({
     "bins/fix-brief": "src/bins/fix-brief.ts",
     // PB6: the next bin after fix-brief, written from Template A.
     "bins/brief-new": "src/bins/brief-new.ts",
+    // PB5: reads a lane's progress and usage from its server.
+    "bins/lane-watch": "src/bins/lane-watch.ts",
   },
   outDir: "dist",
   format: ["esm"],

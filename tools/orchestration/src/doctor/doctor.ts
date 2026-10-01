@@ -1,3 +1,5 @@
+import { basename } from "node:path";
+import { LANE_WATCH_BIN } from "../internal/lane-hosts.js";
 import {
   CONFIG_RELATIVE_PATH,
   INVARIANT_NAMES,
@@ -209,6 +211,30 @@ async function checkLaneHost(
       `dispatch[0] (${dispatch}) is not on PATH. It is the transport prefix every ` +
         `lane on this host is dispatched through, so no lane can run here until it is.`,
     );
+  }
+
+  // P-D2: a usage reader that is `lane-watch` is invoked with `--server`, taken
+  // from this host's `server`. Nothing is run: the argv alone says the pairing is
+  // incomplete, and the missing key would otherwise surface mid-wave as a refusal.
+  // The bin is matched at ANY index, so a launcher (`npx`, `yarn`, `env X=1`)
+  // in front of it still names it.
+  const usage = host.usage;
+  if (usage !== undefined && host.server === undefined) {
+    if (usage.some((word) => basename(word) === LANE_WATCH_BIN)) {
+      push(
+        "warn",
+        `usage names lane-watch but the host has no \`server\`. The reader is invoked as ` +
+          `\`<usage…> --server <server> --session <id>\`, so declare \`server\` (a loopback URL) ` +
+          `on this host.`,
+      );
+    } else {
+      // Not a defect: without `server` the orchestrator keeps the legacy form.
+      push(
+        "info",
+        `usage reader invoked in the legacy worktree form (\`<usage…> <worktree path>\`): ` +
+          `this host declares no \`server\`, which is what selects \`--server <server> --session <id>\`.`,
+      );
+    }
   }
 
   // Side effect #1 of the two doctor has on a remote host.

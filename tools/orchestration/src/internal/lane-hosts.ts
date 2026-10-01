@@ -1,4 +1,5 @@
 import type { ConfigDeprecation, ConfigProblem } from "./config.js";
+import { parseLoopbackServer } from "./loopback-server.js";
 
 /**
  * `laneHosts` and `seats` — where a delegated lane dispatches, and through which
@@ -33,8 +34,23 @@ export interface LaneHost {
   readonly gate: LaneHostGate;
   /** Exits 0 if and only if the dispatch path itself works. Required on a remote host. */
   readonly check?: readonly string[];
-  /** `<usage…> <server worktree path>`, for wall time and tokens. doctor never runs it. */
+  /**
+   * The usage reader, for wall time and tokens. doctor never runs it. It is
+   * invoked as `<usage…> --server <server> --session <id>` (P-D2): `server` is
+   * this host's `server` and `id` is the session the orchestrator recorded from
+   * the lane's first `--format json` event. That form applies when the host declares `server`; a host
+   * without one keeps the legacy form, `<usage…> <worktree path>`.
+   */
   readonly usage?: readonly string[];
+  /**
+   * The loopback URL of this host's opencode server, as seen from the
+   * orchestrator through its tunnel. It is what `<usage…> --server` receives
+   * (P-D2), and is validated by the rule `lane-watch` itself applies to
+   * `--server`. The one exception is the host synthesized from the legacy
+   * `opencodeServerUrl`: its `server` is carried as written and may not be
+   * loopback, in which case lane-watch refuses it.
+   */
+  readonly server?: string;
   /** An ssh alias. Its presence is what makes a host remote. */
   readonly ssh?: string;
   /** Absolute: this repository's clone on the host. */
@@ -55,6 +71,12 @@ export interface Seat {
   /** Must name a `laneHosts[].name`. */
   readonly host: string;
 }
+
+/**
+ * The bin that reads a lane's usage from its server (P-D2). doctor recognizes a
+ * host's `usage` argv as naming it by `usage[0]`'s basename.
+ */
+export const LANE_WATCH_BIN = "hexagen-orchestration-lane-watch";
 
 /**
  * Whether a host is remote: any of `ssh`, `clone` or `worktrees` is present.
@@ -78,6 +100,7 @@ const HOST_KEYS = [
   "gate",
   "check",
   "usage",
+  "server",
   "ssh",
   "clone",
   "worktrees",
@@ -282,6 +305,18 @@ function parseHost(
   const usage = parseArgv(entry.usage, `${at}.usage`, add);
   const install = parseArgv(entry.install, `${at}.install`, add);
 
+  // `server` — optional, and the SAME loopback rule `lane-watch --server` applies.
+  let server: string | undefined;
+  if (entry.server !== undefined) {
+    if (!isNonEmptyString(entry.server)) {
+      add(`${at}.server`, "must be a non-empty string");
+    } else {
+      const parsed = parseLoopbackServer(entry.server);
+      if (parsed.ok) server = entry.server;
+      else add(`${at}.server`, parsed.message);
+    }
+  }
+
   // A host is REMOTE when any of ssh/clone/worktrees is present. Remote is a
   // fact about the entry as written, not about what survived validation: a host
   // whose `ssh` is malformed is still a remote host, and reporting it as local
@@ -365,6 +400,7 @@ function parseHost(
     gate,
     ...(check !== undefined ? { check } : {}),
     ...(usage !== undefined ? { usage } : {}),
+    ...(server !== undefined ? { server } : {}),
     ...(alias !== undefined ? { ssh: alias } : {}),
     ...(clone !== undefined ? { clone } : {}),
     ...(worktrees !== undefined ? { worktrees } : {}),
@@ -502,6 +538,10 @@ export function parseLaneHosts(
         // do not become `//doc`. (The config loader has already refused a query
         // or a fragment, which `/doc` would otherwise land inside.)
         check: ["curl", "-sf", `${serverUrl.replace(/\/+$/, "")}/doc`],
+        // The alias IS this host's server, so a usage reader that is handed
+        // `--server` finds it here (P-D2). Carried verbatim: the legacy alias
+        // keeps its own, looser validation, and is not refused for it.
+        server: serverUrl,
       });
       declared.set(SYNTHESIZED_HOST_NAME, hosts.length - 1);
     } else {
@@ -517,7 +557,8 @@ export function parseLaneHosts(
       message:
         `is deprecated and will be removed. A local \`laneHosts\` entry named ` +
         `${JSON.stringify(SYNTHESIZED_HOST_NAME)} was synthesized from it; declare that host yourself, ` +
-        `as { name, dispatch: [opencode, run, --attach, <url>], gate: full, check: [curl, -sf, <url>/doc] }.`,
+        `as { name, dispatch: [opencode, run, --attach, <url>], gate: full, check: [curl, -sf, <url>/doc] }. ` +
+        `Its \`server\` is carried as written; lane-watch refuses it unless it is loopback.`,
     });
   }
 
