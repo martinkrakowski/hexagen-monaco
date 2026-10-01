@@ -1,4 +1,4 @@
-# campaign-foundry cast
+# Reference project cast
 
 The seat record, the graded track record and the whole superseded history,
 reproduced byte for byte from the pinned snapshot. The generic skill has no cast of its own —

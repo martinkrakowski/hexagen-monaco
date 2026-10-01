@@ -1,9 +1,9 @@
-# campaign-foundry rationale
+# Reference project rationale
 
 The incidents the scrub removed from `generic/references/rationale.md`, kept here **verbatim**.
 The generic rationale keeps each rule — what to do and why it is not optional. What cannot travel
 is what happened: a lane id, a pull-request number, a seat that burned a quota, a file this
-repository happens to own, a date. That record is campaign-foundry's, and it is what a reviewer
+repository happens to own, a date. That record is the reference project's, and it is what a reviewer
 reading the overlay is actually reading.
 
 Each block below is the source's own text, reproduced byte for byte from the pinned snapshot, with

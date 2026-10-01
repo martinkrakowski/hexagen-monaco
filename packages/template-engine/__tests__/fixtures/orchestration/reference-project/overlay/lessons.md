@@ -1,16 +1,16 @@
-# campaign-foundry's orchestration lessons
+# The reference project's orchestration lessons
 
 Operational lessons the orchestrator accumulated that are not in the skill, because the skill
 cannot say them: each one is a thing that went wrong, in this repository, in a way the rule text
 does not imply. They live in the overlay because they are consumer-specific — every one of them
-names a host, a seat, a workflow or a decision that belongs to campaign-foundry and to nobody else.
+names a host, a seat, a workflow or a decision that belongs to the reference project and to nobody else.
 
 Every entry carries the memory file it came from, so the original record stays traceable. Those
 records live outside the repository, in the orchestrator's per-project memory, and hexagen cannot
 read them; the `source:` line is what makes this file their travelling copy.
 
 What is *not* here: the seat roster and the invocation shapes, which are `cast.md`; the
-campaign-foundry-specific incidents from the skill's own rationale, which are `rationale.local.md`;
+reference-project-specific incidents from the skill's own rationale, which are `rationale.local.md`;
 and the house rules, which are `house-rules.md`. Every memory file is either cited below or
 accounted for in `coverage-allowlist.txt` — there is no third category.
 
@@ -96,7 +96,7 @@ When asked how to land something trivial, offer the direct push as a fine defaul
 PR as the alternative. Do not steer to a PR. Default to branch-and-PR for substantive work, and
 push only when asked.
 
-source: campaign-foundry-direct-push-trivial-copy.md
+source: reference-project-direct-push-trivial-copy.md
 
 ## A CI-load regression hides behind a green gate
 

@@ -2,9 +2,9 @@ a-brief-that-says-in-full-must-enumerate.md
 a-mutation-replay-owns-its-worktree.md
 a-push-to-main-cancels-the-previous-runs-ci.md
 a-test-can-specify-the-bug.md
-campaign-foundry-direct-push-trivial-copy.md
-campaign-foundry-firefly-and-pdf-drift.md
-campaign-foundry-ownership.md
+reference-project-direct-push-trivial-copy.md
+reference-project-firefly-and-pdf-drift.md
+reference-project-ownership.md
 ci-duration-regression-hides-behind-green-gate.md
 ci-runners-have-no-zsh.md
 cloud-migration-direction.md

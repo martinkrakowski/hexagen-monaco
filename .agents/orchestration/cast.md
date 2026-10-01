@@ -3,9 +3,9 @@
 Re-probe before trusting any row: `grok models`, `agy models`, `opencode models`. Two of these
 fail with a misleading error rather than "no such model".
 
-> **Provenance.** This file was ported from `campaign-foundry` on 2026-09-08. The seats, spending
+> **Provenance.** This file was ported from a reference project on 2026-09-08. The seats, spending
 > rules and traps are model facts and carry over unchanged. **The track record in the last section
-> was earned on that repository**, whose gate enforces 100 % coverage on four counters; this
+> was earned on that project**, whose gate enforces 100 % coverage on four counters; this
 > repository has no root coverage gate, so a lane here is judged by the configured `gateSteps` in `config.yaml` (run them with `hexagen-orchestration-gate`) and by its mutations, nothing else. Re-probe every seat before the first
 > dispatch — ids rotate, and quotas here are the same account.
 >
@@ -105,7 +105,7 @@ run --format json` emits raw JSON events. **The flag is in the seat commands abo
    reads a line of the brief. That is the number that makes a third round expensive: not the work,
    the boot.
 
-8. **A lane agent never opens `.agents/session-log.md`.** In campaign-foundry it reached **498 KB — about 125 000 tokens**. **Here it is 2 KB today**, so the
+8. **A lane agent never opens `.agents/session-log.md`.** In the reference project it reached **498 KB — about 125 000 tokens**. **Here it is 2 KB today**, so the
    cost is not yet the point; the _seam_ is. Two lanes that both append share a file, which is
    exactly the 'shared files: none' claim a wave boundary rests on. An agent that reads
    before it writes pays that as input, once per round; four rounds could pay it four times.
@@ -203,7 +203,7 @@ cheap, because it is not. Re-measure rather than trusting this table: both numbe
 with the CLIs' system prompts and tool schemas, and neither is recorded anywhere on disk after
 the run.
 
-**What a real lane costs — measured on campaign-foundry's L2a compositor lane, 2026-09-08.**
+**What a real lane costs — measured on a lane of the reference project, 2026-09-08.**
 The boot floor above is a probe artefact. A working lane is dominated by _context accumulation
 across steps_, not by startup:
 

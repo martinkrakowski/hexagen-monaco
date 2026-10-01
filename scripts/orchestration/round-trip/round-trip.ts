@@ -53,7 +53,7 @@ const FIXTURE = path.join(
   REPO,
   "packages/template-engine/__tests__/fixtures/orchestration",
 );
-const CF = path.join(FIXTURE, "campaign-foundry");
+const REF = path.join(FIXTURE, "reference-project");
 const ORCH_DIR = ".agents/orchestration";
 const SKILL_DIR = ".agents/skills/orchestrate-wave";
 const CONFIG_FILE = ".hexagen-template-config.json";
@@ -426,11 +426,11 @@ try {
   });
 
   // ---------------------------------------------------------------------------
-  // 4. Seed the overlay (OW1's campaign-foundry overlay), run init, then doctor.
+  // 4. Seed the overlay (OW1's reference-project overlay), run init, then doctor.
   // ---------------------------------------------------------------------------
   step("Seed the overlay, run init, run doctor");
   mkdirSync(path.join(proj, ORCH_DIR), { recursive: true });
-  cpSync(path.join(CF, "overlay"), path.join(proj, ORCH_DIR), {
+  cpSync(path.join(REF, "overlay"), path.join(proj, ORCH_DIR), {
     recursive: true,
   });
   const seededHashes = hashList(proj, ORCH_DIR);
@@ -535,7 +535,7 @@ try {
   // ---------------------------------------------------------------------------
   step("Check (b): gate --print-steps equals OW1's expected-steps.tsv (A-17)");
   const expectedSteps = readFileSync(
-    path.join(CF, "expected-steps.tsv"),
+    path.join(REF, "expected-steps.tsv"),
     "utf8",
   );
   const stepsRun = run(bin("hexagen-orchestration-gate"), ["--print-steps"], {
@@ -630,11 +630,11 @@ try {
       "--allowlist",
       path.join(installedOverlay, "coverage-allowlist.txt"),
       "--sites",
-      path.join(CF, "specific-sites.txt"),
+      path.join(REF, "specific-sites.txt"),
       "--generic",
       installedSkill,
       "--token-review",
-      path.join(CF, "generic-token-review.txt"),
+      path.join(REF, "generic-token-review.txt"),
       "--hexagen-root",
       REPO,
     ]);

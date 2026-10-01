@@ -1,5 +1,5 @@
 #!/bin/sh
-# Append one wave-status event to <logdir>/events.jsonl (plan D103, §2.1).
+# Append one wave-status event to <logdir>/events.jsonl (plan §2.1).
 #
 #   wave-event.sh <logdir> <wave> <lane> <stage> <event> [--pr N] [--round N] [--detail '<json>']
 #

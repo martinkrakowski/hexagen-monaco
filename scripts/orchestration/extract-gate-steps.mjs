@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Derives campaign-foundry's expected gate-step list from the pinned gate.sh snapshot.
+// Derives the reference project's expected gate-step list from the pinned gate.sh snapshot.
 //
 // The snapshot is the left-hand side of the round-trip check OW8(b) runs: after
 // `hexagen-orchestration-gate --print-steps` over a seeded overlay, the resolved step list has

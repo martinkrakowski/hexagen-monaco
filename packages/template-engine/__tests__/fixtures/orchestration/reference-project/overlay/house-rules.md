@@ -1,9 +1,9 @@
-# campaign-foundry house rules
+# Reference project house rules
 
-Every rule the scrub removed from `generic/SKILL.md` because it named campaign-foundry and
+Every rule the scrub removed from `generic/SKILL.md` because it named the reference project and
 nothing else, kept here **verbatim**. The generic skill keeps each rule in a form that reads
 against `config.yaml`; the paragraph below is the original wording, and it is the wording
-campaign-foundry's own sessions were given.
+the reference project's own sessions were given.
 
 Nothing here is a new rule and nothing has been edited. Each block is the source's own text,
 reproduced byte for byte from the pinned snapshot, with the line range it came from named
@@ -11,7 +11,7 @@ beside it. The coverage check in `scripts/orchestration/skill-coverage.mjs` is w
 every paragraph and every heading in the snapshot has to appear, whole, in this overlay or in
 the generic skill, and no source unit may be allowlisted away.
 
-The same paragraphs, and campaign-foundry's rationale incidents, are the round-trip input OW8
+The same paragraphs, and the reference project's rationale incidents, are the round-trip input OW8
 seeds an installed tree with.
 
 ## The runbook and the cast
