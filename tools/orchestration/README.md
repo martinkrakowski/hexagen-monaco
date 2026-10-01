@@ -106,7 +106,7 @@ briefing from half a PR.
 
 - `--pr` and `--round` are positive safe integers. `--lane`, `--worktree`,
   `--branch` and `--tip` are written into the brief's header, so each must be a
-  single line: any control or line-separator character is refused (exit 2),
+  single line: any control, format or line-separator character is refused (exit 2),
   before anything is fetched.
 - `--out` refuses an existing file (exit 1), checked before the fetch and again
   by an exclusive write. Without it, the brief goes to stdout.

@@ -54,7 +54,12 @@ describe("fix-brief arguments", () => {
     (flag) => {
       const swap = (value: string): string[] =>
         base.map((a, i) => (base[i - 1] === flag ? value : a));
-      for (const bad of ["a\nb", "a\rb", "a\u0000b", "a b", "a b"]) {
+      // Built from code points so no tool can fold a separator or a format
+      // character into the source file as a literal.
+      const hostile = [
+        0x0a, 0x0d, 0x00, 0x2028, 0x2029, 0x202e, 0x200b, 0xfeff,
+      ];
+      for (const bad of hostile.map((cp) => `a${String.fromCodePoint(cp)}b`)) {
         expect(() => parseFixBriefArgs(swap(bad)), JSON.stringify(bad)).toThrow(
           /single line/,
         );

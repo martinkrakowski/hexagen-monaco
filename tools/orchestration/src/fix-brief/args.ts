@@ -28,7 +28,7 @@ export const FIX_BRIEF_USAGE =
  * `## Item 4` is then an item heading. The value is refused (exit 2), not
  * quietly mangled: it is the caller's own typing.
  */
-const NOT_ONE_LINE = /[\p{Cc}\p{Zl}\p{Zp}]/u;
+const NOT_ONE_LINE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 
 function valueAfter(argv: readonly string[], i: number, flag: string): string {
   const raw = argv[i];
