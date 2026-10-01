@@ -155,7 +155,12 @@ function startLockIn(
   env: Record<string, string> = {},
   shell = "sh",
   cwd?: string,
-): { child: ChildProcess; done: Promise<RunResult> } {
+): {
+  child: ChildProcess;
+  done: Promise<RunResult>;
+  /** What the child has printed to stdout so far. */
+  stdout: () => string;
+} {
   const child = spawn(shell, [gateLock, ...args], {
     cwd,
     env: { ...process.env, HEXAGEN_GATE_SLOTS: "1", TMPDIR: dir, ...env },
@@ -175,7 +180,27 @@ function startLockIn(
       }),
     );
   });
-  return { child, done };
+  return { child, done, stdout: () => stdout };
+}
+
+/**
+ * Poll until `run` has printed its heartbeat line. `run` starts the command
+ * BEFORE it starts the heartbeat and prints that line, so a command that
+ * publishes its pid is up earlier than the line is. A test that signals on the
+ * pid alone can land the signal in that gap, and `run` then exits without ever
+ * printing the line the test goes on to read the heartbeat's pid from
+ * ("no heartbeat pid line"). The wait is for a fact the test asserts on, not a
+ * substitute for the signal handshake, and it is bounded.
+ */
+async function waitForHeartbeatLine(
+  stdout: () => string,
+  timeoutMs = 10_000,
+): Promise<void> {
+  await waitFor(
+    () => /gate-lock: heartbeat pid \d+/.test(stdout()),
+    timeoutMs,
+    "run's heartbeat line",
+  );
 }
 
 /** Run the lock script without waiting for it — for tests that race it. */
@@ -840,7 +865,7 @@ describe("the gate lock: run <lane> -- <command>", () => {
     // publishes IS the sleep's — because "run exited" is not the claim under
     // test: "the command died with it" is, and only its own pid can show it.
     const commandPidFile = join(dir, "command.pid");
-    const { child, done } = startLockIn(
+    const { child, done, stdout } = startLockIn(
       dir,
       [
         "run",
@@ -859,6 +884,7 @@ describe("the gate lock: run <lane> -- <command>", () => {
       shell,
     );
     await waitForContent(commandPidFile);
+    await waitForHeartbeatLine(stdout);
     const commandPid = Number(readFileSync(commandPidFile, "utf8").trim());
     expect(commandPid).toBeGreaterThan(0);
     expect(isAlive(commandPid)).toBe(true);
@@ -965,7 +991,7 @@ describe("the gate lock: run <lane> -- <command>", () => {
     // (a test run, a mutate replay, a manifest verification) all write to the
     // tree.
     const stopped = join(dir, "stopped");
-    const { child, done } = startLockIn(
+    const { child, done, stdout } = startLockIn(
       dir,
       [
         "run",
@@ -986,6 +1012,7 @@ describe("the gate lock: run <lane> -- <command>", () => {
       shell,
     );
     await waitForContent(join(dir, "command.pid"));
+    await waitForHeartbeatLine(stdout);
     const commandPid = Number(
       readFileSync(join(dir, "command.pid"), "utf8").trim(),
     );
@@ -1045,7 +1072,7 @@ describe("the gate lock: run <lane> -- <command>", () => {
       const stopped = join(dir, "stopped");
       const commandPidFile = join(dir, "command.pid");
       const trapEntered = join(dir, "trap-entered");
-      const { child, done } = startLockIn(
+      const { child, done, stdout } = startLockIn(
         dir,
         [
           "run",
@@ -1059,6 +1086,7 @@ describe("the gate lock: run <lane> -- <command>", () => {
         shell,
       );
       await waitForContent(commandPidFile);
+      await waitForHeartbeatLine(stdout);
       expect(lockFile(dir, "pid").trim()).toBe(String(child.pid));
       process.kill(child.pid as number, "SIGTERM");
 
@@ -1204,7 +1232,7 @@ describe("the gate lock: run <lane> -- <command>", () => {
       // this loop, went straight on to `rm -rf` the lock, and that grandchild
       // then renamed a file into the directory being emptied.
       const marker = join(dir, "paused-before-beat-mv");
-      const { child, done } = startLockIn(
+      const { child, done, stdout } = startLockIn(
         dir,
         ["run", "lane-a", "--", "sleep", "30"],
         {
@@ -1215,6 +1243,7 @@ describe("the gate lock: run <lane> -- <command>", () => {
       );
       await waitForLock(dir);
       await waitForFile(marker);
+      await waitForHeartbeatLine(stdout);
       // A refresh is now sitting in the hook with its beat staged. Signalled
       // while it is there, the cleanup has to wait for it: that is the claim.
       expect(lockFile(dir, "pid").trim()).toBe(String(child.pid));
