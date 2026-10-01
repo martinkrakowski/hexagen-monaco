@@ -87,7 +87,7 @@ function runLockIn(
   };
 }
 
-/** The lock directory a test's TMPDIR maps to, and a writer for its four files. */
+/** The lock directory a test's TMPDIR maps to, and a writer for its five files. */
 function lockDir(dir: string): string {
   return join(dir, "hexagen-gate.lock");
 }

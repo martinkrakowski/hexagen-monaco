@@ -475,8 +475,6 @@ finish_acquire() {
   if other_same_worktree; then
     # drop_own's stderr is kept: a give-back that leaves a copy aside, or fails,
     # must be said. Its stdout is not used.
-    # drop_own's stderr is kept: a give-back that leaves a copy aside, or fails,
-    # must be said. Its stdout is not used.
     drop_own "$f_lane" "$recorded_pid" >/dev/null
     printf '%s\n' "gate-lock: same worktree — $f_lane was refused: ${other_owner:-unknown} (pid $other_pid) already holds a gate slot from $WORKTREE, and there is one gate per worktree; sleep and retry (75)" >&2
     exit $BUSY
@@ -620,7 +618,7 @@ acquire() {
 #   command has been reaped. `wait` then has no child left (`wait: pid N is not
 #   a child of this shell`) and the `exit 143` runs without ever entering the
 #   EXIT trap. Observed 6 times in 6: exit 143, no "released by", the lock left
-#   at the name with all four of its files, and the heartbeat still looping
+#   at the name with all of its files, and the heartbeat still looping
 #   under a pid that had died — a lock the next acquire reclaims on pid-death
 #   and an orphan refreshing a dead holder's beat. A CI timeout that sends TERM
 #   twice is exactly that.
@@ -987,7 +985,7 @@ heartbeat() {
   # saw an empty value 10 times in 7 seconds.
   #
   # The new value is staged BESIDE THE LOCK, not inside it, so the lock
-  # directory holds nothing but the four files try_create wrote: a removal never
+  # directory holds nothing but the five files try_create wrote: a removal never
   # has to unlink a file that is still being written, and the only entry that
   # can appear after creation is the finished one this rename delivers.
   # Same filesystem by construction — the lock is itself
