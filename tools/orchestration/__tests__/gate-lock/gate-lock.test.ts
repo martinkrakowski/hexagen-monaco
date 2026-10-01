@@ -1775,6 +1775,9 @@ describe("the gate lock: slots and one gate per worktree", () => {
     );
     // The give-back says what it did instead of swallowing it.
     expect(result.stderr).toContain("removal aborted");
+    // …and never claims a give-back that did not happen.
+    expect(result.stderr).toContain("could not give slot 2 back");
+    expect(result.stderr).not.toContain("slot 2 was given back");
     expect(readdirSync(dir).filter((n) => n.includes(".gone."))).toEqual([]);
   });
 
@@ -1954,6 +1957,7 @@ describe("the gate lock: slots and one gate per worktree", () => {
     expect(result.status).toBe(2);
     expect(result.stderr).toContain(out);
     expect(existsSync(slotDir(dir, 1))).toBe(false);
+    expect(result.stderr).toContain("slot 1 was given back");
     expect(readdirSync(out)).toEqual([]);
   });
 });

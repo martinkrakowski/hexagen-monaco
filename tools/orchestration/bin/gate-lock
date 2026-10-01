@@ -475,15 +475,32 @@ other_same_worktree() {
   return 1
 }
 
+# Give the slot at LOCK back after a refusal, and say how it went: prints
+# "…was given back" or "could not give slot N back" on stderr, never a claim that
+# is not true. Returns the removal's own status (0 given back). The refusal's
+# exit code is the caller's and does not change.
+give_back() {
+  gb_lane=$1
+  gb_slot=$2
+  # drop_own's stderr is kept: a give-back that leaves a copy aside, or fails,
+  # must be said. Its stdout is not used.
+  drop_own "$gb_lane" "$recorded_pid" >/dev/null
+  gb_rc=$?
+  case $gb_rc in
+    0) printf '%s\n' "gate-lock: slot $gb_slot was given back" >&2 ;;
+    2) printf '%s\n' "gate-lock: could not give slot $gb_slot back — the removal failed, so it may still be held at $LOCK until its holder is judged dead" >&2 ;;
+    *) printf '%s\n' "gate-lock: could not give slot $gb_slot back — it no longer names $gb_lane (pid $recorded_pid), so it was left alone" >&2 ;;
+  esac
+  return $gb_rc
+}
+
 # Won a slot (LOCK): apply the worktree rule, then publish the slot. Both refusals
 # give the slot back first, and only while it is still this caller's own.
 finish_acquire() {
   f_lane=$1
   f_slot=$2
   if other_same_worktree; then
-    # drop_own's stderr is kept: a give-back that leaves a copy aside, or fails,
-    # must be said. Its stdout is not used.
-    drop_own "$f_lane" "$recorded_pid" >/dev/null
+    give_back "$f_lane" "$f_slot"
     printf '%s\n' "gate-lock: same worktree — $f_lane was refused: ${other_owner:-unknown} (pid $other_pid) already holds a gate slot from $WORKTREE, and there is one gate per worktree; sleep and retry (75)" >&2
     exit $BUSY
   fi
@@ -503,8 +520,8 @@ finish_acquire() {
     fi
     if [ "$f_bad" -eq 1 ]; then
       rm -f "$f_tmp" 2>/dev/null
-      drop_own "$f_lane" "$recorded_pid" >/dev/null
-      printf '%s\n' "gate-lock: cannot write the slot-out file $HEXAGEN_GATE_SLOT_OUT — refused, and slot $f_slot was given back" >&2
+      give_back "$f_lane" "$f_slot"
+      printf '%s\n' "gate-lock: cannot write the slot-out file $HEXAGEN_GATE_SLOT_OUT — refused" >&2
       exit 2
     fi
   fi
