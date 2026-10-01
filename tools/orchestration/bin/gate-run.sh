@@ -185,9 +185,11 @@ ACQUIRING=0
 # The acquire child writes the slot it won into this file (HEXAGEN_GATE_SLOT_OUT,
 # see gate-lock), so cleanup can tell "won, but not yet recorded" from "refused".
 # Both scratch files live in one private per-run directory (mktemp -d, mode
-# 0700), never at a name another process could predict and pre-create.
-RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/hexagen-gate.run.XXXXXX") || exit 2
-SLOT_OUT="$RUN_DIR/slotout"
+# 0700), never at a name another process could predict and pre-create. It is
+# created lazily (ensure_run_dir), right before the first step that runs, so a
+# gate whose steps are all skipped needs no temp storage.
+RUN_DIR=""
+SLOT_OUT=""
 # 1 once the release child has STARTED, and not before: it is set immediately
 # before that child. It guards against a second release only; it must not be
 # set ahead of the heartbeat kill and `wait` below, because `wait` is
@@ -196,7 +198,7 @@ SLOT_OUT="$RUN_DIR/slotout"
 RELEASE_STARTED=0
 RELEASE_PAUSED=0
 HEARTBEAT_PID=""
-HB_FAILED="$RUN_DIR/hbfailed"
+HB_FAILED=""
 COVLOG=""
 cov_failed=0
 release_failed=0
@@ -225,9 +227,15 @@ release_lock() {
       wait "$HEARTBEAT_PID" 2>/dev/null
       HEARTBEAT_PID=""
     fi
-    rm -f "$HB_FAILED"
+    if [ -n "$HB_FAILED" ]; then
+      rm -f "$HB_FAILED"
+    fi
     # The release has not started until the next line: a signal that lands
     # anywhere above re-enters this function from cleanup and releases.
+    # Window, inherent to POSIX sh (it cannot mask signals): between this
+    # assignment and the release child's fork, a trapped signal re-enters
+    # cleanup, which sees the flag and skips the release. The lock then
+    # self-heals: the next acquire judges this pid dead and reclaims the slot.
     RELEASE_STARTED=1
     LOCK_HELD=0
     # The release's status and diagnostics are not discarded: a release that
@@ -254,7 +262,9 @@ cleanup() {
   if [ -n "$COVLOG" ]; then
     rm -f "$COVLOG"
   fi
-  rm -rf "$RUN_DIR"
+  if [ -n "$RUN_DIR" ]; then
+    rm -rf "$RUN_DIR"
+  fi
   exit "$status"
 }
 trap cleanup EXIT
@@ -333,6 +343,14 @@ run_step() {
   return "$code"
 }
 
+ensure_run_dir() {
+  if [ -z "$RUN_DIR" ]; then
+    RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/hexagen-gate.run.XXXXXX") || exit 2
+    SLOT_OUT="$RUN_DIR/slotout"
+    HB_FAILED="$RUN_DIR/hbfailed"
+  fi
+}
+
 step_no=0
 skipped=0
 while IFS="$TAB" read -r name cmd; do
@@ -345,6 +363,7 @@ while IFS="$TAB" read -r name cmd; do
     printf 'SKIPPED %s (%s)\n' "$name" "$reason"
     continue
   fi
+  ensure_run_dir
   printf '==> [%s/%s] %s\n' "$step_no" "$total" "$name"
   if is_locked_step "$name" && [ "$LOCK_HELD" -eq 0 ]; then
     # The caller's pid travels in HEXAGEN_GATE_CALLER_PID: the lock must outlive

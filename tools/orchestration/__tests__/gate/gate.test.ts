@@ -470,6 +470,21 @@ describe("the gate run loop", () => {
     expect(r.stdout).not.toContain("gate: 3/3 steps passed");
   });
 
+  test("scratch storage is only needed once a step runs: an all-skipped gate passes with an unusable TMPDIR", () => {
+    const missing = join(scratch(), "no-such-dir");
+    const skipped = runGate(["--lane", "lane-b"], {
+      TMPDIR: missing,
+      ...stepsEnv([["build", "true"]]),
+      ...skipEnv([["build", "nothing to build"]]),
+    });
+    expect(skipped.status).toBe(0);
+    const real = runGate(["--lane", "lane-b"], {
+      TMPDIR: missing,
+      ...stepsEnv([["build", "true"]]),
+    });
+    expect(real.status).toBe(2);
+  });
+
   test("a skipped locked step never takes the lock, and never holds it open", () => {
     const r = runGate(["--lane", "lane-b"], {
       ...lockedEnv(["test:cov", "verify-manifests"]),
@@ -805,7 +820,9 @@ describe("signal hygiene (every test runs under /bin/sh and dash)", () => {
         ...lockedEnv(["leaves-a-child"]),
         // The child outlives the step and the gate. If fds 3 and 4 (the
         // caller's stdout and stderr) leak into the step, it holds them.
-        ...stepsEnv([["leaves-a-child", "( sleep 6 >/dev/null 2>&1 & ); true"]]),
+        ...stepsEnv([
+          ["leaves-a-child", "( sleep 6 >/dev/null 2>&1 & ); true"],
+        ]),
       });
       const r = await done;
       expect({ shell, status: r.status }).toEqual({ shell, status: 0 });
@@ -827,8 +844,12 @@ describe("signal hygiene (every test runs under /bin/sh and dash)", () => {
     const r = await done;
     expect(r.status).toBe(0);
     const during = readFileSync(listing, "utf8").split("\n");
-    expect(during.filter((n) => /^hexagen-gate\.(slotout|hbfailed)\./.test(n))).toEqual([]);
+    expect(
+      during.filter((n) => /^hexagen-gate\.(slotout|hbfailed)\./.test(n)),
+    ).toEqual([]);
     expect(during.filter((n) => /^hexagen-gate\.run\./.test(n)).length).toBe(1);
-    expect(readdirSync(h.dir).filter((n) => n.startsWith("hexagen-gate.run."))).toEqual([]);
+    expect(
+      readdirSync(h.dir).filter((n) => n.startsWith("hexagen-gate.run.")),
+    ).toEqual([]);
   }, 60_000);
 });
