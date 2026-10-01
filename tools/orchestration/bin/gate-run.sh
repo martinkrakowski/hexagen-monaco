@@ -207,8 +207,11 @@ release_lock() {
   fi
   if [ "$LOCK_HELD" -eq 1 ] && [ "$RELEASE_STARTED" -eq 0 ]; then
     if [ -n "$HEARTBEAT_PID" ]; then
+      # Kill the heartbeat loop and reap it, so no heartbeat process survives
+      # the gate by even a moment.
+      kill "$HEARTBEAT_PID" 2>/dev/null
       # Test hook (HEXAGEN_GATE_TEST_PAUSE_BEFORE_HEARTBEAT_STOP): the window
-      # between the lock being held and the heartbeat being stopped, where a
+      # after the heartbeat is killed and before it is reaped, where a
       # signal must still end in a release. One-shot, so the cleanup that the
       # signal triggers does not pause again.
       if [ -n "${HEXAGEN_GATE_TEST_PAUSE_BEFORE_HEARTBEAT_STOP:-}" ] && [ "$RELEASE_PAUSED" -eq 0 ]; then
@@ -216,9 +219,6 @@ release_lock() {
         touch "$HEXAGEN_GATE_TEST_PAUSE_BEFORE_HEARTBEAT_STOP" 2>/dev/null
         while [ -f "$HEXAGEN_GATE_TEST_PAUSE_BEFORE_HEARTBEAT_STOP" ]; do sleep 1; done
       fi
-      # Kill the heartbeat loop and reap it, so no heartbeat process survives
-      # the gate by even a moment.
-      kill "$HEARTBEAT_PID" 2>/dev/null
       wait "$HEARTBEAT_PID" 2>/dev/null
       HEARTBEAT_PID=""
     fi
