@@ -14,7 +14,7 @@ import { join, resolve } from "node:path";
 /**
  * The scaffold's contract (OW-D1, OW-D12, OW-D14).
  *
- * OW3a pins the sixteen OW-D14 bin names (PB4 adds a seventeenth) and their FINAL paths, and the other three
+ * OW3a pins the OW-D14 bin names (later lanes add more; the list below is the contract) and their FINAL paths, and the other three
  * sub-lanes each overwrite exactly one stub. That only stays true if the list is
  * complete, prefixed, and points at files this build actually produces — so this
  * test reads the real `package.json`, the real built `dist/`, and really runs
@@ -102,6 +102,10 @@ const EXPECTED: ReadonlyArray<{ name: string; path: string }> = [
   {
     name: "hexagen-orchestration-fix-brief",
     path: "dist/bins/fix-brief.js",
+  },
+  {
+    name: "hexagen-orchestration-brief-new",
+    path: "dist/bins/brief-new.js",
   },
 ];
 
