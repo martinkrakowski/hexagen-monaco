@@ -1,6 +1,7 @@
 import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import {
+  MANIFEST_WRITE_PATH,
   checkMutationAgainstGrant,
   checkWriteAgainstGrant,
   deriveMutationRef,
@@ -104,6 +105,48 @@ describe("checkWriteAgainstGrant", () => {
   });
 });
 
+describe("checkWriteAgainstGrant ordering and strictness", () => {
+  it("compares tools case-sensitively", () => {
+    const reason = denied(
+      checkWriteAgainstGrant(clientGrant(), {
+        tool: "Edit_File",
+        paths: ["packages/bill/a.ts"],
+      }),
+    );
+    assert.match(reason, /Edit_File/);
+  });
+
+  it("checks the tool before the empty-paths rule", () => {
+    const reason = denied(
+      checkWriteAgainstGrant(clientGrant(), { tool: "delete_file", paths: [] }),
+    );
+    assert.match(reason, /delete_file/);
+    assert.doesNotMatch(reason, /No paths/);
+  });
+
+  it("checks the tool before the paths", () => {
+    const reason = denied(
+      checkWriteAgainstGrant(clientGrant(), {
+        tool: "delete_file",
+        paths: ["etc/x"],
+      }),
+    );
+    assert.match(reason, /delete_file/);
+    assert.doesNotMatch(reason, /etc\/x/);
+  });
+
+  it("refuses a directory-shaped write target", () => {
+    const reason = denied(
+      checkWriteAgainstGrant(clientGrant(), {
+        tool: "edit_file",
+        paths: ["packages/bill/"],
+      }),
+    );
+    assert.match(reason, /directory/);
+    assert.match(reason, /packages\/bill\//);
+  });
+});
+
 describe("checkMutationAgainstGrant with contexts absent", () => {
   it("denies without throwing", () => {
     const pending = {
@@ -111,10 +154,15 @@ describe("checkMutationAgainstGrant with contexts absent", () => {
       input: { name: "billing" },
     } as unknown as PendingManifestMutation;
     const result = checkMutationAgainstGrant(
-      clientGrant({ tools: ["hexagen_create_context"] }),
+      clientGrant({
+        tools: ["hexagen_create_context"],
+        paths: [MANIFEST_WRITE_PATH],
+      }),
       deriveMutationRef(pending),
       pending,
     );
     assert.equal(result.allowed, false);
+    if (result.allowed) throw new Error("unreachable");
+    assert.match(result.reason, /context 'billing'/);
   });
 });

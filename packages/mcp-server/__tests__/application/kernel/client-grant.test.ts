@@ -31,9 +31,9 @@ const base = {
   expires_at: "2026-10-02T00:00:00.000Z",
 };
 
-// mcp-server's Grant still types `contexts` as required; a client grant omits it.
-const noContexts = base as never;
-const emptyContexts = { ...base, contexts: [] } as never;
+// A client grant omits `contexts`.
+const noContexts = base;
+const emptyContexts = { ...base, contexts: [] };
 
 const schemaPath = path.resolve(
   __dirname,

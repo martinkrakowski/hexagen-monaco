@@ -204,17 +204,17 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
       this.grantSignaturePort,
     );
     if (!signatureCheck.allowed) return signatureCheck;
-    if (!grant) throw new Error("unreachable: signature check passed");
+    const verified = signatureCheck.grant;
 
-    const modeCheck = checkGrantMode(grant);
+    const modeCheck = checkGrantMode(verified);
     if (!modeCheck.allowed) return modeCheck;
 
-    const windowCheck = checkGrantWindow(grant, this.now());
+    const windowCheck = checkGrantWindow(verified, this.now());
     if (!windowCheck.allowed) return windowCheck;
 
     if (pending) {
       const mutationCheck = checkMutationAgainstGrant(
-        grant,
+        verified,
         deriveMutationRef(pending),
         pending,
       );

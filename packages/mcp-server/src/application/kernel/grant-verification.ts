@@ -1,17 +1,26 @@
 import type { GrantSignaturePort } from "../ports/out/grant-signature.port.js";
-import type { Grant, GrantCheck } from "./grant.js";
+import type { Grant, GrantDenialCode } from "./grant.js";
+
+export type SignatureCheck =
+  | { readonly allowed: true; readonly grant: Grant }
+  | {
+      readonly allowed: false;
+      readonly reason: string;
+      readonly code: GrantDenialCode;
+    };
 
 /**
- * The provenance check shared by every enforcement path (the monaco accept
- * choke point and the client write adapter): a grant must be present and
- * carry a signature that verifies against the trusted issuer. A
- * self-asserted grant is never trusted, whatever fields it claims. Window
- * (expiry) and revocation are `checkGrantWindow` in `./grant.ts`.
+ * The provenance check: a grant must be present and carry a signature that
+ * verifies against the trusted issuer; a self-asserted grant is never
+ * trusted. On success it returns the narrowed grant. Window and revocation
+ * are `checkGrantWindow` in `./grant.ts`. This runs before any scope check
+ * (`checkMutationAgainstGrant`, `checkWriteAgainstGrant`), which are
+ * scope-only and trust nothing on their own.
  */
 export async function checkGrantSignature(
   grant: Grant | undefined,
   signaturePort: GrantSignaturePort,
-): Promise<GrantCheck> {
+): Promise<SignatureCheck> {
   if (!grant) {
     return {
       allowed: false,
@@ -35,5 +44,5 @@ export async function checkGrantSignature(
       reason: `Grant '${grant.id}' has no valid signature from a trusted issuer; refusing to trust a self-asserted grant`,
     };
   }
-  return { allowed: true };
+  return { allowed: true, grant };
 }

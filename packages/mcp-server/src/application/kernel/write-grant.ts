@@ -8,12 +8,22 @@ export interface WriteRef {
 }
 
 /**
- * Field Kit enforcement: tools and paths only (no contexts, no manifest, no
- * `packages/<ctx>/` derivation). Every path goes through the brownfield
- * slice-path rules before matching (`isPathInSlice`, with no excludes): an
- * entry ending `/` is a directory prefix, any other entry is an exact path,
- * matching is case-sensitive, and the filesystem is never consulted. An
- * empty `paths` input is a denial, never an allow.
+ * Field Kit scope check: tools and paths only (no contexts, no manifest, no
+ * `packages/<ctx>/` derivation). Like `checkMutationAgainstGrant`, it is
+ * scope-only: it does not verify provenance or timing. The caller must run
+ * `checkGrantSignature` and then `checkGrantWindow` first, and must touch
+ * no write port if either denies. It must NOT run `checkGrantMode` on the
+ * propose path: client grants are propose-only (`mode: "propose"`), so the
+ * mode check would deny every patch.
+ *
+ * Every path goes through the brownfield slice-path rules before matching
+ * (`isPathInSlice`, no excludes): an entry ending `/` is a directory prefix,
+ * any other entry is an exact path, matching is case-sensitive, and the
+ * filesystem is never consulted. Matching is text-only by intent: there is
+ * no Unicode (NFC) normalisation; the caller's on-disk spelling check is the
+ * guard. A candidate ending `/` is refused (a write target is a file). An
+ * empty `paths` input is a denial, never an allow. The tool is checked
+ * before the paths.
  */
 export function checkWriteAgainstGrant(
   grant: Grant,
@@ -35,6 +45,13 @@ export function checkWriteAgainstGrant(
   }
   const slice = { paths: grant.paths, excludes: [] };
   for (const candidate of write.paths) {
+    if (candidate.endsWith("/")) {
+      return {
+        allowed: false,
+        code: "grant_denied",
+        reason: `Path '${candidate}' is a directory; a write target must be a file (tool: ${write.tool})`,
+      };
+    }
     if (!isPathInSlice(slice, candidate)) {
       return {
         allowed: false,
