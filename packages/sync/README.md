@@ -52,6 +52,29 @@ npx hexagen sync
 
 Consult `npx hexagen arch --help` for the full list of manifest operations.
 
+### `hexagen grant issue`
+
+Mints a signed Grant — the file `hexagen_accept_transaction` trusts as its
+`grant` argument (see `docs/kernel/GRANT.md`). Local, no server:
+
+```bash
+npx hexagen grant issue \
+  --principal martin \
+  --agent lane-ow3b \
+  --paths .architecture/,packages/billing/ \
+  --tools hexagen_accept_transaction,hexagen_create_port \
+  --mode write \
+  --expires-in 4h \
+  --out .hexagen/grants/<id>.json
+```
+
+Signs with the HMAC-SHA256 key at `.hexagen/grant-signing.key` (created on
+first use if missing — never commit it). `--contexts <name[,name...]>` is a
+monaco-only convenience: it looks each name up in `manifest.yaml` and
+expands it to `packages/<name>/`, appended to `--paths`; a client repo with
+no manifest issues on `--paths` alone. Prints the grant JSON to stdout, or
+to `--out <file>` if given.
+
 ---
 
 ## Programmatic Usage
