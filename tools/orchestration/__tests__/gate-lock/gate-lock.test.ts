@@ -1469,7 +1469,7 @@ describe("the gate lock: slots and one gate per worktree", () => {
 
   test("with the variable absent there is exactly one slot, as before", () => {
     const dir = scratch();
-    const env = {
+    const env: NodeJS.ProcessEnv = {
       ...process.env,
       TMPDIR: dir,
       HEXAGEN_GATE_CALLER_PID: String(process.pid),
