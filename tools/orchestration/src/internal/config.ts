@@ -1,5 +1,6 @@
 import { load as parseYaml } from "js-yaml";
 import {
+  parseArgv,
   parseLaneHosts,
   type LaneHost,
   type LaneHostGate,
@@ -17,7 +18,7 @@ import {
  *
  * The loader is deliberately two-layered, because `doctor` needs both halves:
  *
- * - `parseConfig` validates the file's SHAPE (the 17 fields, their types, the
+ * - `parseConfig` validates the file's SHAPE (the 18 fields, their types, the
  *   closed `invariants` set, the `overrides[]` contract) and applies every
  *   default. It is total: it returns its `config` ALONGSIDE its problems. A field
  *   that failed validation holds its default in that config; `config` is absent
@@ -71,6 +72,18 @@ export interface GateStep {
   readonly locked?: boolean;
 }
 
+/**
+ * One install probe (P-D5): after a worktree's install, `check` must exit 0.
+ * A failing `check` runs `repair` once and then `check` again; `doctor` runs
+ * `check` only, on the orchestrator's host, and never `repair`.
+ */
+export interface InstallProbe {
+  /** The dependency whose postinstall output the probe guards; named in a failure. */
+  readonly package: string;
+  readonly check: readonly string[];
+  readonly repair?: readonly string[];
+}
+
 /** A project that has deliberately departed from a locked invariant, and why. */
 export interface ConfigOverride {
   readonly invariant: string;
@@ -118,6 +131,8 @@ export interface Config {
    * Default `.github/workflows/ci.yml`; `init` never writes it.
    */
   readonly ciWorkflow: string;
+  /** Empty when the project declares none (P-D5). */
+  readonly installProbes: readonly InstallProbe[];
 }
 
 /** One thing wrong with the file, phrased so an operator can act on it. */
@@ -324,6 +339,52 @@ function parseNumberArray(
   return raw as number[];
 }
 
+function parseInstallProbes(raw: unknown, problems: Problems): InstallProbe[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    problems.add(
+      "installProbes",
+      "must be a list of { package, check, repair? } entries",
+    );
+    return [];
+  }
+  const probes: InstallProbe[] = [];
+  raw.forEach((entry, i) => {
+    const at = `installProbes[${i}]`;
+    if (!isRecord(entry)) {
+      problems.add(at, "must be a mapping with `package` and `check`");
+      return;
+    }
+    let valid = true;
+    if (!isNonEmptyString(entry.package)) {
+      problems.add(`${at}.package`, "must be a non-empty string");
+      valid = false;
+    }
+    if (entry.check === undefined) {
+      problems.add(
+        `${at}.check`,
+        "is required: a probe with no check proves nothing",
+      );
+      valid = false;
+    }
+    const check = parseArgv(entry.check, `${at}.check`, (a, m) =>
+      problems.add(a, m),
+    );
+    const repair = parseArgv(entry.repair, `${at}.repair`, (a, m) =>
+      problems.add(a, m),
+    );
+    if (entry.check !== undefined && check === undefined) valid = false;
+    if (entry.repair !== undefined && repair === undefined) valid = false;
+    if (!valid || check === undefined) return;
+    probes.push({
+      package: entry.package as string,
+      check,
+      ...(repair !== undefined ? { repair } : {}),
+    });
+  });
+  return probes;
+}
+
 function parseGateSteps(raw: unknown, problems: Problems): GateStep[] {
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) {
@@ -461,7 +522,7 @@ export function parseConfig(text: string): ParseConfigResult {
   const problems = new Problems();
 
   // OW-D7 calls this list exhaustive, and `doctor` refuses an unknown key.
-  // `cast` was in an earlier draft of the list and is NOT one of the seventeen;
+  // `cast` was in an earlier draft of the list and is NOT one of the eighteen;
   // it is named separately only so the message says so. `opencodeServerUrl` is
   // in `KNOWN_FIELDS` as a DEPRECATED ALIAS (A-30): it is accepted, synthesized
   // into a local lane host and deprecation-reported, but it is not a field.
@@ -584,6 +645,7 @@ export function parseConfig(text: string): ParseConfigResult {
   }
 
   const gateSteps = parseGateSteps(document.gateSteps, problems);
+  const installProbes = parseInstallProbes(document.installProbes, problems);
 
   let waveStatusPort = DEFAULT_WAVE_STATUS_PORT;
   if (document.waveStatusPort !== undefined) {
@@ -653,6 +715,7 @@ export function parseConfig(text: string): ParseConfigResult {
     ...(repo !== undefined ? { repo } : {}),
     waveStatusPort,
     ciWorkflow,
+    installProbes,
   };
 
   // The config comes back WITH its problems. A field that failed validation is
@@ -681,6 +744,7 @@ export function emptyConfig(): Config {
     invariants: { ...LOCKED_INVARIANTS },
     waveStatusPort: DEFAULT_WAVE_STATUS_PORT,
     ciWorkflow: DEFAULT_CI_WORKFLOW,
+    installProbes: [],
   };
 }
 
@@ -710,7 +774,7 @@ const KNOWN_FIELDS: ReadonlySet<string> = new Set([
   "operatorDataPaths",
   "laneHosts",
   "seats",
-  // A-30: accepted as a DEPRECATED ALIAS, and not one of the seventeen fields.
+  // A-30: accepted as a DEPRECATED ALIAS, and not one of the eighteen fields.
   "opencodeServerUrl",
   "waveLogDir",
   "coverageRequirement",
@@ -721,6 +785,7 @@ const KNOWN_FIELDS: ReadonlySet<string> = new Set([
   "repo",
   "waveStatusPort",
   "ciWorkflow",
+  "installProbes",
 ]);
 
 /** `gh` answered, but not with an `owner/name`. Never assigned, always reported. */

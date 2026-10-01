@@ -961,3 +961,65 @@ describe("P-D2: a usage that names lane-watch needs the host's server", () => {
     expect(findings.filter((f) => f.severity === "info")).toEqual([]);
   });
 });
+
+describe("P-D5: install probes in doctor", () => {
+  const yaml = (check: string, repair = "") =>
+    [
+      "repo: owner/name",
+      "installProbes:",
+      "  - package: '@esbuild/darwin-arm64'",
+      `    check: ${check}`,
+      ...(repair ? [`    repair: ${repair}`] : []),
+    ].join("\n");
+
+  /** A runCheck that answers by the argv's first word, and records every call. */
+  const fake = (answers: Record<string, "ok" | "fail" | "timeout">) => {
+    const calls: string[][] = [];
+    return {
+      calls,
+      runCheck: async (argv: readonly string[]) => {
+        calls.push([...argv]);
+        return answers[argv[0] as string] ?? "ok";
+      },
+    };
+  };
+
+  test("a passing check is not a finding", async () => {
+    const run = fake({ true: "ok" });
+    const { findings, code } = await doctor(yaml('["true"]'), {
+      runCheck: run.runCheck,
+    });
+    expect(code).toBe(EXIT_HEALTHY);
+    expect(findings.filter((f) => f.check.startsWith("install-probe"))).toEqual(
+      [],
+    );
+    expect(run.calls).toEqual([["true"]]);
+  });
+
+  test("a failing check is a FAIL that names the package, and exits unhealthy", async () => {
+    const run = fake({ false: "fail" });
+    const { findings, code, text } = await doctor(yaml('["false"]'), {
+      runCheck: run.runCheck,
+    });
+    expect(code).toBe(EXIT_UNHEALTHY);
+    const found = fails(findings, "install-probe @esbuild/darwin-arm64");
+    expect(found.message).toContain("false");
+    expect(text).toContain("FAIL");
+  });
+
+  test("repair is never run, even when it is declared", async () => {
+    const run = fake({ false: "fail", fixit: "ok" });
+    await doctor(yaml('["false"]', "[fixit]"), { runCheck: run.runCheck });
+    expect(run.calls).toEqual([["false"]]);
+  });
+
+  test("a check that times out is a FAIL too, not a pass", async () => {
+    const run = fake({ slow: "timeout" });
+    const { findings } = await doctor(yaml("[slow]"), {
+      runCheck: run.runCheck,
+    });
+    expect(
+      fails(findings, "install-probe @esbuild/darwin-arm64").message,
+    ).toContain("did not finish");
+  });
+});

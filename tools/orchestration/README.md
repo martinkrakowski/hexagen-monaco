@@ -83,6 +83,42 @@ working: `parseConfig` synthesizes a local `laneHosts` entry named
 A deprecation never refuses — `init`, `gate` and every other bin act on the
 config regardless — so an overlay can be migrated on its own schedule.
 
+### Fix rounds on an opencode lane
+
+A fix round resumes the lane's own session when the dispatch transport supports
+it, and forks that session when the branch has moved since the lane's last turn
+(a merge, a refresh). With opencode the orchestrator passes `run -s <sessionID>`
+to resume and adds `--fork` to fork, using the `sessionID` it recorded from the
+first `--format json` event of the dispatch. These flags are orchestrator-side:
+they never appear in a lane brief. Stagger forked resumes by about 20 s, because
+two forks launched in the same second fail with "database is locked" (opencode's
+sqlite).
+
+### `installProbes`
+
+`installProbes` is an optional list of `{ package, check, repair? }`. It guards
+against a dependency whose postinstall output is silently skipped when installs
+run concurrently on one host. `check` and `repair` are argv lists, validated
+like `laneHosts[].check`.
+
+```yaml
+installProbes:
+  - package: "@esbuild/darwin-arm64"
+    check: [node, -e, "require.resolve('@esbuild/darwin-arm64/bin/esbuild')"]
+    repair: [yarn, install]
+```
+
+- On a remote lane host, the orchestrator runs each probe as
+  `ssh <alias> -- <check>` inside the new worktree. On a local host it runs the
+  `check` in the worktree directly.
+- After a failed `check` the orchestrator runs `repair` once, in the same
+  worktree on the same host, then runs `check` again. A repair is logged as a
+  wave event. If `check` still fails, or `repair` is absent or exits non-zero,
+  the worktree is not dispatched, and the failure names the package and both
+  exit codes.
+- `doctor` runs each `check` on the orchestrator's host only, never runs
+  `repair`, and reports a failing `check` as `FAIL`.
+
 ## Bins
 
 Every bin is prefixed `hexagen-orchestration-`, so none of them can collide with

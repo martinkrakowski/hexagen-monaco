@@ -26,12 +26,12 @@ const ok = (text: string) => {
   return result.config!;
 };
 
-describe("the schema is exactly these seventeen fields", () => {
+describe("the schema is exactly these eighteen fields", () => {
   test("an empty file validates and yields every default", () => {
     expect(ok("{}")).toEqual(emptyConfig());
   });
 
-  test("all seventeen field names are accepted together", () => {
+  test("all eighteen field names are accepted together", () => {
     const config = ok(
       [
         "planDir: docs/planning",
@@ -66,6 +66,10 @@ describe("the schema is exactly these seventeen fields", () => {
         "repo: owner/name",
         "waveStatusPort: 4318",
         "ciWorkflow: .github/workflows/sync-integrity.yml",
+        "installProbes:",
+        "  - package: '@esbuild/darwin-arm64'",
+        "    check: [node, -e, 'process.exit(0)']",
+        "    repair: [yarn, install]",
       ].join("\n"),
     );
 
@@ -98,6 +102,13 @@ describe("the schema is exactly these seventeen fields", () => {
     expect(config.repo).toBe("owner/name");
     expect(config.waveStatusPort).toBe(4318);
     expect(config.ciWorkflow).toBe(".github/workflows/sync-integrity.yml");
+    expect(config.installProbes).toEqual([
+      {
+        package: "@esbuild/darwin-arm64",
+        check: ["node", "-e", "process.exit(0)"],
+        repair: ["yarn", "install"],
+      },
+    ]);
     // The override above is what makes eventDuty: false legal.
     expect(config.invariants.eventDuty).toBe(false);
   });
@@ -621,5 +632,60 @@ describe("F9: parseConfig returns the parsed config alongside its problems", () 
     expect(result.deprecations).toEqual([]);
     expect(result.config?.laneHosts).toHaveLength(1);
     expect(result.config?.mutate).toBe(false);
+  });
+});
+
+describe("installProbes (P-D5)", () => {
+  const problemsFor = (text: string) => parseConfig(text).problems;
+
+  test("is absent by default, and an empty list is accepted", () => {
+    expect(ok("{}").installProbes).toEqual([]);
+    expect(ok("installProbes: []").installProbes).toEqual([]);
+  });
+
+  test("a probe without repair keeps no repair key", () => {
+    const config = ok(
+      ["installProbes:", "  - package: esbuild", "    check: ['true']"].join("\n"),
+    );
+    expect(config.installProbes).toEqual([
+      { package: "esbuild", check: ["true"] },
+    ]);
+  });
+
+  test("a non-list is refused, naming the field", () => {
+    const problems = problemsFor("installProbes: { package: x }");
+    expect(problems.map((p) => p.at)).toEqual(["installProbes"]);
+  });
+
+  test("a probe with no package, no check, or a malformed argv is refused at its path", () => {
+    const problems = problemsFor(
+      [
+        "installProbes:",
+        "  - check: ['true']",
+        "  - package: a",
+        "  - package: b",
+        "    check: []",
+        "  - package: c",
+        "    check: ['true']",
+        "    repair: ['']",
+        "  - just-a-string",
+      ].join("\n"),
+    );
+    expect(problems.map((p) => p.at)).toEqual([
+      "installProbes[0].package",
+      "installProbes[1].check",
+      "installProbes[2].check",
+      "installProbes[3].repair",
+      "installProbes[4]",
+    ]);
+  });
+
+  test("an invalid probe is dropped, so a gate never runs half of one", () => {
+    const result = parseConfig(
+      ["installProbes:", "  - package: a", "    check: ['true']", "    repair: []"].join(
+        "\n",
+      ),
+    );
+    expect(result.config?.installProbes).toEqual([]);
   });
 });
