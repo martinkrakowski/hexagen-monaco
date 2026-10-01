@@ -65,7 +65,8 @@ set -u
 # would land in a log that cleanup then deletes. Cleanup messages and the
 # release child go to these two instead. They are closed first in the heartbeat
 # subshell (an orphaned `sleep` holding fd 3 would hold the caller's pipe open),
-# and NEVER around the step's eval, because the cleanup runs inside it.
+# and closed for each step, in a subshell around its eval (never in the gate
+# shell itself, where the cleanup needs them).
 exec 3>&1 4>&2
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -315,7 +316,10 @@ check_lock_intact() {
 # scan is recorded separately in `cov_failed`.
 run_step() {
   COVLOG=$(mktemp "${TMPDIR:-/tmp}/hexagen-gate.covlog.XXXXXX")
-  eval "$1" > "$COVLOG" 2>&1
+  # Fds 3 and 4 (the caller's stdout and stderr) are closed for the step, in a
+  # subshell, so a child the step leaves behind cannot hold the caller's pipes
+  # open. The cleanup, which needs them, runs in the gate shell, not here.
+  ( exec 3>&- 4>&-; eval "$1" ) > "$COVLOG" 2>&1
   code=$?
   cat "$COVLOG"
   if grep -q "ERROR: Coverage" "$COVLOG"; then

@@ -796,4 +796,23 @@ describe("signal hygiene (every test runs under /bin/sh and dash)", () => {
       });
     }
   }, 60_000);
+
+  test("a detached child a step leaves behind does not hold the caller's pipes open", async () => {
+    for (const shell of SIGNAL_SHELLS) {
+      const h = harness();
+      const { done } = startGateUnder(shell, h, {
+        ...lockedEnv(["leaves-a-child"]),
+        // The child outlives the step and the gate. If fds 3 and 4 (the
+        // caller's stdout and stderr) leak into the step, it holds them.
+        ...stepsEnv([["leaves-a-child", "( sleep 6 >/dev/null 2>&1 & ); true"]]),
+      });
+      const r = await done;
+      expect({ shell, status: r.status }).toEqual({ shell, status: 0 });
+      const lag = r.closedAt - r.exitedAt;
+      expect({ shell, closedWithinMs: lag < 3_000 }).toEqual({
+        shell,
+        closedWithinMs: true,
+      });
+    }
+  }, 60_000);
 });
