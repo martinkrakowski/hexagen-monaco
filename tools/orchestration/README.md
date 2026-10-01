@@ -47,6 +47,22 @@ scope on that host). A host is **remote** when it carries `ssh`, `clone` or
 if and only if the dispatch path itself works: it runs no lane and writes no
 opencode session.
 
+`server` (optional) is the loopback URL of the host's opencode server, as seen
+from the orchestrator through its tunnel, for example `http://127.0.0.1:4097`.
+A non-loopback or malformed value is a problem at `laneHosts[i].server`.
+
+`usage` (optional) is the argv of the host's usage reader. It is invoked as
+
+```bash
+<usage…> --server <laneHosts[].server> --session <id>
+```
+
+where `<id>` is the session id the orchestrator recorded from the lane's first
+`--format json` event. It is not given a worktree path. The reader this package
+ships for it is `hexagen-orchestration-lane-watch usage`, and `doctor` WARNs
+when `usage[0]` is that bin but the host has no `server`. `doctor` never runs
+`usage`.
+
 `seats` — **who.** Each entry declares `id`, `agent`, `model`, and a `host`
 naming a `laneHosts[].name`. `cast.md` refers to a seat by its `id` and never
 restates its agent or model.
@@ -60,7 +76,7 @@ never affects the exit code.
 
 `opencodeServerUrl` is no longer a setting. An overlay that still sets it keeps
 working: `parseConfig` synthesizes a local `laneHosts` entry named
-`opencode-server`, and reports a deprecation, which `doctor` prints as a `WARN`.
+`opencode-server` (its `server` is the URL the alias held), and reports a deprecation, which `doctor` prints as a `WARN`.
 A deprecation never refuses — `init`, `gate` and every other bin act on the
 config regardless — so an overlay can be migrated on its own schedule.
 

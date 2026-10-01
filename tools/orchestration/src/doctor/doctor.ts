@@ -1,3 +1,5 @@
+import { basename } from "node:path";
+import { LANE_WATCH_BIN } from "../internal/lane-hosts.js";
 import {
   CONFIG_RELATIVE_PATH,
   INVARIANT_NAMES,
@@ -208,6 +210,23 @@ async function checkLaneHost(
       "fail",
       `dispatch[0] (${dispatch}) is not on PATH. It is the transport prefix every ` +
         `lane on this host is dispatched through, so no lane can run here until it is.`,
+    );
+  }
+
+  // P-D2: a usage reader that is `lane-watch` is invoked with `--server`, taken
+  // from this host's `server`. Nothing is run: the argv alone says the pairing is
+  // incomplete, and the missing key would otherwise surface mid-wave as a refusal.
+  const usage = host.usage?.[0];
+  if (
+    usage !== undefined &&
+    basename(usage) === LANE_WATCH_BIN &&
+    host.server === undefined
+  ) {
+    push(
+      "warn",
+      `usage names lane-watch but the host has no \`server\`. The reader is invoked as ` +
+        `\`<usage…> --server <server> --session <id>\`, so declare \`server\` (a loopback URL) ` +
+        `on this host.`,
     );
   }
 

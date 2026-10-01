@@ -53,8 +53,10 @@ laneHosts:
     dispatch: [ocm-run]
     gate: targeted-only
     check: [ocm-run, --check]
-    # Provisional until the follow-up lands: today lane-usage is a shim into a
-    # reference-project checkout.
+    # Provisional: lane-usage is a local shim. hexagen-orchestration-lane-watch
+    # supersedes it once this host declares its `server` (a loopback URL), as
+    # `usage: [hexagen-orchestration-lane-watch, usage]`; it is then invoked as
+    # `<usage…> --server <server> --session <id>`.
     usage: [lane-usage, --host, m]
     ssh: m
     clone: /mnt/pool/cloud-services/projects/hexagen-monaco

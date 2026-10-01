@@ -443,6 +443,7 @@ describe("A-30 §1.3: the deprecated alias synthesizes a host and never refuses"
         dispatch: ["opencode", "run", "--attach", "http://127.0.0.1:4096"],
         gate: "full",
         check: ["curl", "-sf", "http://127.0.0.1:4096/doc"],
+        server: "http://127.0.0.1:4096",
       },
     ]);
     expect(result.deprecations).toHaveLength(1);
@@ -613,5 +614,48 @@ describe("A-30 §6: OW1's migrated fixture overlay parses with nothing to fix", 
     ]) {
       expect(matches.test(path), `does not match ${path}`).toBe(false);
     }
+  });
+});
+
+describe("P-D2: laneHosts[].server is an optional loopback URL", () => {
+  const withServer = (value: string): string =>
+    REMOTE + "\n    server: " + JSON.stringify(value);
+
+  test("a loopback server is kept, and the host stays valid", () => {
+    const result = parseConfig(withServer("http://127.0.0.1:4097"));
+    expect(result.problems).toEqual([]);
+    expect(result.config?.laneHosts[0]?.server).toBe("http://127.0.0.1:4097");
+  });
+
+  test("it is optional: a host without it has no server key at all", () => {
+    expect(parseConfig(REMOTE).config?.laneHosts[0]).not.toHaveProperty(
+      "server",
+    );
+  });
+
+  test.each([
+    "http://example.com:4096",
+    "http://192.168.1.5:4096",
+    "127.0.0.1:4097",
+    "http://127.0.0.1:4097/api",
+    "",
+  ])("a non-loopback or malformed server %j is a problem at laneHosts[0].server", (value) => {
+    expect(problemsAt(withServer(value))).toEqual(["laneHosts[0].server"]);
+  });
+
+  test("a non-string server is a problem at the path", () => {
+    expect(problemsAt(REMOTE + "\n    server: 4097")).toEqual([
+      "laneHosts[0].server",
+    ]);
+  });
+
+  test("server is a key INSIDE laneHosts, not a new top-level field", () => {
+    expect(problemsAt("server: http://127.0.0.1:4097\n")).toEqual(["server"]);
+  });
+
+  test("the problem names the loopback rule the bin uses", () => {
+    const message = parseConfig(withServer("http://example.com")).problems[0]
+      ?.message;
+    expect(message).toContain("LOOPBACK");
   });
 });
