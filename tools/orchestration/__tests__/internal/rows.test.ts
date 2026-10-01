@@ -228,3 +228,85 @@ describe("asHashRecord", () => {
     expect(asHashRecord({ "PT-5a": 7 })).toBeUndefined();
   });
 });
+
+describe("plan-review markers scope the bold-id rows", () => {
+  const marked = [
+    "# Plan",
+    "",
+    "## Shipped",
+    "",
+    "| Lane | PR |",
+    "|---|---|",
+    "| **L1** | #10 |",
+    "",
+    "## Lanes",
+    "",
+    "<!-- plan-review: lanes -->",
+    "",
+    "| Lane | Risk | Scope |",
+    "|---|---|---|",
+    "| **L1** | normal | Build the thing. |",
+    "| **L2** | **high** | Build the other thing. |",
+    "",
+    "Prose between the two halves of the table.",
+    "",
+    "| **L3** | normal | A row after the prose. |",
+    "",
+    "## Decisions",
+    "",
+    "<!-- plan-review: decisions -->",
+    "",
+    "| id | Decision |",
+    "|---|---|",
+    "| **D1** | Decide it. |",
+    "",
+    "## Notes",
+    "",
+    "| **D1** | A stray row after the marker ended. |",
+    "| **L9** | Another stray row. |",
+  ].join("\n");
+
+  test("an unmarked file behaves as before, duplicates included", () => {
+    const unmarked = marked.replace(/<!-- plan-review: \w+ -->\n/g, "");
+    expect(() => rowHash(unmarked, "L1", "p.md")).toThrow(
+      /expected exactly one plan row for L1, found 2: line 7: .*; line 14: /,
+    );
+    expect(rowHash(unmarked, "L2")).toMatch(/^[0-9a-f]{64}$/);
+    expect(rowRisk(unmarked, "L9")).toBe("normal");
+  });
+
+  test("a stray bold id in a table outside the marker no longer collides", () => {
+    expect(rowHash(marked, "L1")).toMatch(/^[0-9a-f]{64}$/);
+    expect(rowRisk(marked, "L1")).toBe("normal");
+  });
+
+  test("a real duplicate inside marked regions still errors, naming both lines", () => {
+    const dup = marked.replace(
+      "| **L2** | **high** | Build the other thing. |",
+      "| **L1** | normal | Build the other thing. |",
+    );
+    expect(() => rowHash(dup, "L1", "p.md")).toThrow(
+      /p\.md: expected exactly one plan row for L1, found 2: line 15: .*; line 16: /,
+    );
+  });
+
+  test("a split table with prose in between stays covered", () => {
+    expect(rowHash(marked, "L3")).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  test("the marker ends at the next heading", () => {
+    expect(() => rowHash(marked, "L9")).toThrow(/found 0/);
+    expect(() => rowRisk(marked, "L9")).toThrow(/found 0/);
+  });
+
+  test("either marker kind satisfies any id lookup", () => {
+    expect(rowHash(marked, "D1")).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  test("a marker shown inside a code fence does not make a file marked", () => {
+    const fenced = ["```", "<!-- plan-review: lanes -->", "```", "| **L1** | a |"].join(
+      "\n",
+    );
+    expect(rowHash(fenced, "L1")).toMatch(/^[0-9a-f]{64}$/);
+  });
+});

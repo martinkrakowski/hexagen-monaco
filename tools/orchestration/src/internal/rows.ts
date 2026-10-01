@@ -46,14 +46,59 @@ function ambiguousRowError(
   );
 }
 
-/** Every line of `markdown` the pattern matches, with its 1-based number. */
+/**
+ * A plan-review marker line: `<!-- plan-review: lanes -->` before a lane table,
+ * `<!-- plan-review: decisions -->` before a decision table. Both kinds scope
+ * a row lookup the same way — every caller asks for a row by id alone, whether
+ * the id names a lane or a decision, so one rule serves them all and no caller
+ * has to say which kind it wants.
+ */
+const MARKER = /^[ \t]*<!--\s*plan-review:\s*(?:lanes|decisions)\s*-->[ \t]*$/;
+/** A markdown heading, at any level: it ends the marker's region. */
+const HEADING = /^[ \t]{0,3}#{1,6}(?:\s|$)/;
+/** A code-fence line: a marker or heading inside a fence is example text. */
+const FENCE = /^[ \t]{0,3}(?:```|~~~)/;
+
+/**
+ * Which lines of a plan may hold a row. A plan with no marker outside a code
+ * fence keeps the original rule — every line counts, so a duplicate row is
+ * still an error. A plan with at least one marker counts a line only inside a
+ * marker's region: from the marker, across prose and further tables, to the
+ * next heading. A bold-id row anywhere else in a marked plan — a "shipped"
+ * table, say — is ignored, so it cannot collide with the real row.
+ */
+function eligibleLines(lines: readonly string[]): boolean[] {
+  const eligible: boolean[] = [];
+  let anyMarker = false;
+  let inFence = false;
+  let inRegion = false;
+  for (const text of lines) {
+    if (FENCE.test(text)) inFence = !inFence;
+    if (!inFence) {
+      if (MARKER.test(text)) {
+        anyMarker = true;
+        inRegion = true;
+      } else if (HEADING.test(text)) {
+        inRegion = false;
+      }
+    }
+    eligible.push(inRegion);
+  }
+  return anyMarker ? eligible : lines.map(() => true);
+}
+
+/** Every eligible line of `markdown` the pattern matches, with its 1-based number. */
 function matchingLines(
   markdown: string,
   pattern: RegExp,
 ): { line: number; text: string }[] {
+  const lines = markdown.split("\n");
+  const eligible = eligibleLines(lines);
   const found: { line: number; text: string }[] = [];
-  markdown.split("\n").forEach((text, index) => {
-    if (pattern.test(text)) found.push({ line: index + 1, text });
+  lines.forEach((text, index) => {
+    if (eligible[index] && pattern.test(text)) {
+      found.push({ line: index + 1, text });
+    }
   });
   return found;
 }
