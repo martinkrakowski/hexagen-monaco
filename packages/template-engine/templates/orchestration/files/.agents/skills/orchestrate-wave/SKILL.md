@@ -22,8 +22,8 @@ templates A–D, invariants, failure playbook) and the orchestrator-kickoff-prom
 ships them, both runbooks** (`docs/workflows/delegated-implementation-pipeline.md` and
 `docs/workflows/orchestrator-kickoff-prompt.md`). This file is the operating contract either way,
 and wins where they differ; it deliberately does not copy them, so they
-cannot drift apart. **Prompt templates A–D ship with this skill**, in
-`references/briefs.md`, so the four briefs this file orders by name never depend on a runbook the
+cannot drift apart. **Prompt templates A–E ship with this skill**, in
+`references/briefs.md`, so the five briefs this file orders by name never depend on a runbook the
 project may not have.
 
 - The cast, and each seat's track record: the overlay's `cast.md`, at `.agents/orchestration/cast.md`
@@ -351,7 +351,9 @@ that did not happen.
    SUGGESTION / NIT findings in `--detail`.
 
 3. **Remediate.** Merge verified findings into a fix brief (Template C, in
-   `references/briefs.md`), listing refuted items with reasons. **After any interrupted or killed
+   `references/briefs.md`), listing refuted items with reasons. For a fix round where the lane commits only,
+   draft the brief with `hexagen-orchestration-fix-brief --pr <n> --round <k> …` instead: it renders Template E
+   from the PR's unresolved threads, and you set each item's `Disposition:` before dispatch. **After any interrupted or killed
    `mutate:verify`, scan for a stranded mutation before anything commits.** (why:
    [rationale](references/rationale.md#3-remediate))
 
