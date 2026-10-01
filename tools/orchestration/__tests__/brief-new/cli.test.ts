@@ -120,9 +120,8 @@ describe("brief-new — the brief", () => {
     expect(head).toContain("<LANE>");
   });
 
-  test("a value that reads like a placeholder is not substituted a second time", async () => {
+  test("a branch that spells a placeholder is refused by the alphabet, before any render", async () => {
     const h = harness({ argv: swap("--branch", "feat/<SHA>") });
-    // `<` is outside the branch alphabet, so this is refused before any render.
     expect(await runBriefNew(h.io)).toBe(2);
     expect(h.out).toEqual([]);
   });
