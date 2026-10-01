@@ -807,3 +807,45 @@ describe("A-30 §6: doctor's findings on OW1's fixture overlay", () => {
     expect(exitCode).toBe(EXIT_UNHEALTHY);
   });
 });
+
+describe("HEXAGEN_GATE_SLOTS is printed as INFO", () => {
+  const yaml = "repo: owner/demo\n";
+  const slots = (value: string | undefined) => ({ gateSlots: () => value });
+
+  test("a value the lock accepts is shown as INFO and never moves the exit code or the counters", async () => {
+    const { code, findings, text } = await doctor(yaml, slots("4"));
+    expect(code).toBe(EXIT_HEALTHY);
+    const info = findings.filter((f) => f.severity === "info");
+    expect(info).toHaveLength(1);
+    expect(info[0]!.check).toBe("gate-slots");
+    expect(text).toMatch(/^INFO {2}\[gate-slots\] HEXAGEN_GATE_SLOTS=4:/m);
+    // INFO is neither a problem nor a warning.
+    expect(text).toContain("doctor: OK.");
+    expect(text).not.toContain("warning(s)");
+  });
+
+  test("an unset variable says the default of 1 slot", async () => {
+    const { text } = await doctor(yaml, slots(undefined));
+    expect(text).toContain("HEXAGEN_GATE_SLOTS is unset");
+    expect(text).toContain("1 slot");
+  });
+
+  test("a value the lock would refuse is a FAIL: named, every gate will refuse, exit non-zero, never OK", async () => {
+    for (const bad of ["0", "65", "abc", "", "07"]) {
+      const { code, findings, text } = await doctor(yaml, slots(bad));
+      expect(code, bad).toBe(EXIT_UNHEALTHY);
+      expect(fails(findings, "gate-slots").message).toContain(
+        `HEXAGEN_GATE_SLOTS=${JSON.stringify(bad)}`,
+      );
+      expect(text).toContain("every gate");
+      expect(text).toContain("will refuse");
+      expect(text).not.toContain("doctor: OK");
+      expect(text).toContain("problem(s) to fix");
+    }
+  });
+
+  test("a caller that supplies no environment gets no line at all", async () => {
+    const { findings } = await doctor(yaml);
+    expect(findings.some((f) => f.check === "gate-slots")).toBe(false);
+  });
+});

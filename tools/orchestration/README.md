@@ -89,6 +89,45 @@ another dependency's bin in a consumer's `node_modules/.bin`.
 | `hexagen-orchestration-init`             | Scaffold the project's overlay                      |
 | `hexagen-orchestration-doctor`           | Validate the overlay and the project's capabilities |
 
+### `hexagen-orchestration-gate-lock`
+
+```bash
+hexagen-orchestration-gate-lock run <lane> -- <command...>
+```
+
+Holds the gate lock around one command. The lock is a directory under
+`${TMPDIR:-/tmp}`, shared by every checkout and project on the host, and a
+holder that dies is reclaimed. Exit 75 means every slot is held by a live
+holder (or, see below, that this worktree already has a gate): sleep and retry.
+
+**Slots.** `HEXAGEN_GATE_SLOTS` is a host-wide environment variable, never an
+overlay field: the count belongs to the host, the lock directory is shared, and
+a lane runs `gate-lock run` without the `gate` bin, so no overlay is read. It is
+an integer from 1 to 64, default 1; anything else exits 2 and names the value.
+With 1 there is one lock, as before. With N > 1 a caller takes the first free of
+N slots. `doctor` prints the value it sees as an `INFO` line; a value that is
+set but invalid is a `FAIL` instead (exit non-zero), because every gate on the
+host would refuse to run. `INFO` is a severity of its own, not a line in the
+summary, because `formatReport` has no access to the environment, so a summary
+line would have needed a new parameter threaded through it; an `INFO` finding
+uses the path every other finding does and never counts as a problem or a
+warning.
+
+**Slot-out file.** Set `HEXAGEN_GATE_SLOT_OUT` to a path and a successful
+acquire writes the slot number it won there. A refused acquire never writes it.
+
+**One gate per worktree.** The caller's worktree is `git rev-parse --show-toplevel`,
+else `pwd -P`, and is stored in its slot. A caller that wins a slot while
+another live holder has the same worktree gives its slot back and exits 75 with
+`same worktree`, before the slot-out file is written. An empty identity (a
+deleted working directory, for one) exits 2.
+
+**Test-worker cap.** More than one slot only helps if the test runner is capped
+so the slots do not oversubscribe the host: `slots x maxWorkers <= threads`. Set
+that in the consumer's test-runner config. Never also set `VITEST_MAX_WORKERS`:
+vitest applies it unvalidated and it takes precedence over the config. Vitest 4
+has no `minWorkers` option.
+
 ### `hexagen-orchestration-fix-brief`
 
 OW-D14 fixed sixteen bins; this is the seventeenth.

@@ -2,11 +2,13 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import {
   chmodSync,
   existsSync,
+  realpathSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -70,10 +72,12 @@ function runLockIn(
   env: Record<string, string> = {},
   timeout = 15_000,
   shell = "sh",
+  cwd?: string,
 ): RunResult {
   const result = spawnSync(shell, [gateLock, ...args], {
     encoding: "utf8",
-    env: { ...process.env, TMPDIR: dir, ...env },
+    cwd,
+    env: { ...process.env, HEXAGEN_GATE_SLOTS: "1", TMPDIR: dir, ...env },
     timeout,
   });
   return {
@@ -84,23 +88,39 @@ function runLockIn(
   };
 }
 
-/** The lock directory a test's TMPDIR maps to, and a writer for its four files. */
+/** The lock directory a test's TMPDIR maps to, and a writer for its five files. */
 function lockDir(dir: string): string {
   return join(dir, "hexagen-gate.lock");
 }
 
 function seedLock(
   dir: string,
-  holder: { owner?: string; pid?: number; started?: number; beat?: number },
+  holder: {
+    owner?: string;
+    pid?: number;
+    started?: number;
+    beat?: number;
+    /** Which slot: 1 is the base lock, K the `.slotK` sibling. */
+    slot?: number;
+    /** The holder's worktree identity; no file is written when absent. */
+    worktree?: string;
+  },
 ): string {
-  const lock = lockDir(dir);
+  const lock = slotDir(dir, holder.slot ?? 1);
   mkdirSync(lock, { recursive: true });
   const now = Math.floor(Date.now() / 1000);
   writeFileSync(join(lock, "owner"), `${holder.owner ?? "other-lane"}\n`);
   writeFileSync(join(lock, "started"), `${holder.started ?? now}\n`);
   writeFileSync(join(lock, "pid"), `${holder.pid ?? process.pid}\n`);
   writeFileSync(join(lock, "beat"), `${holder.beat ?? now}\n`);
+  if (holder.worktree !== undefined)
+    writeFileSync(join(lock, "worktree"), `${holder.worktree}\n`);
   return lock;
+}
+
+/** The directory of slot K under a test's TMPDIR. */
+function slotDir(dir: string, slot: number): string {
+  return slot === 1 ? lockDir(dir) : `${lockDir(dir)}.slot${slot}`;
 }
 
 /** A pid that is not alive: spawn a short child, reap it, use its pid. */
@@ -134,9 +154,11 @@ function startLockIn(
   args: string[],
   env: Record<string, string> = {},
   shell = "sh",
+  cwd?: string,
 ): { child: ChildProcess; done: Promise<RunResult> } {
   const child = spawn(shell, [gateLock, ...args], {
-    env: { ...process.env, TMPDIR: dir, ...env },
+    cwd,
+    env: { ...process.env, HEXAGEN_GATE_SLOTS: "1", TMPDIR: dir, ...env },
   });
   let stdout = "";
   let stderr = "";
@@ -1392,5 +1414,637 @@ describe("the gate lock: run <lane> -- <command>", () => {
     // Refused before the acquire, not after: a run that took the lock and then
     // died on its own validation would leave a lock with no holder to release it.
     expect(existsSync(lockDir(dir))).toBe(false);
+  });
+});
+
+/**
+ * Slots, and one gate per worktree.
+ *
+ * HEXAGEN_GATE_SLOTS is a host-wide variable: every helper above pins it to 1
+ * between the inherited environment and the per-test one, so a host that sets
+ * it globally cannot change another test's result. The tests below set it
+ * themselves, and the one that needs the variable ABSENT deletes it from a copy
+ * of the environment, because a pinned helper could never show the default.
+ *
+ * Holders are seeded with a live pid (this process's) and their own worktree
+ * identity; the caller is a fixed pid that nobody holds. Each caller runs from
+ * its own scratch directory, whose realpath is the identity gate-lock computes
+ * (a scratch directory is not inside a git repository).
+ */
+describe("the gate lock: slots and one gate per worktree", () => {
+  const CALLER = { HEXAGEN_GATE_CALLER_PID: "434343" };
+
+  /** A scratch directory that is a worktree identity of its own. */
+  function worktree(): string {
+    const dir = realpathSync(scratch());
+    return dir;
+  }
+
+  function slotsEnv(n: number | string, extra: Record<string, string> = {}) {
+    return { HEXAGEN_GATE_SLOTS: String(n), ...CALLER, ...extra };
+  }
+
+  test("HEXAGEN_GATE_SLOTS outside 1..64 or not an integer is refused with exit 2, naming the value", () => {
+    for (const bad of ["0", "65", "", "abc", "2.5", "07", "-1", "999", " 2"]) {
+      const dir = scratch();
+      const result = runLockIn(dir, ["status"], { HEXAGEN_GATE_SLOTS: bad });
+      expect(result.status, `value ${JSON.stringify(bad)}`).toBe(2);
+      expect(result.stderr).toContain("HEXAGEN_GATE_SLOTS");
+      expect(result.stderr).toContain(`: ${bad}`);
+      expect(existsSync(lockDir(dir))).toBe(false);
+    }
+    for (const good of ["1", "2", "9", "10", "64"]) {
+      const result = runLockIn(scratch(), ["status"], {
+        HEXAGEN_GATE_SLOTS: good,
+      });
+      expect(result.status, `value ${good}`).toBe(0);
+    }
+  });
+
+  test("a refused value never reaches an acquire: no lock is taken", () => {
+    const dir = scratch();
+    const result = runLockIn(dir, ["acquire", "lane-a"], slotsEnv(65));
+    expect(result.status).toBe(2);
+    expect(existsSync(lockDir(dir))).toBe(false);
+  });
+
+  test("with the variable absent there is exactly one slot, as before", () => {
+    const dir = scratch();
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      TMPDIR: dir,
+      HEXAGEN_GATE_CALLER_PID: String(process.pid),
+    };
+    delete env.HEXAGEN_GATE_SLOTS;
+    const first = spawnSync("sh", [gateLock, "acquire", "lane-a"], {
+      encoding: "utf8",
+      env,
+      cwd: worktree(),
+    });
+    expect(first.status).toBe(0);
+    expect(first.stdout).not.toContain("slot");
+    const second = spawnSync("sh", [gateLock, "acquire", "lane-b"], {
+      encoding: "utf8",
+      env: { ...env, HEXAGEN_GATE_CALLER_PID: "434344" },
+      cwd: worktree(),
+    });
+    expect(second.status).toBe(75);
+    expect(existsSync(slotDir(dir, 2))).toBe(false);
+  });
+
+  test("with N > 1 an acquirer takes the first free slot", () => {
+    const dir = scratch();
+    seedLock(dir, { owner: "lane-1", slot: 1, worktree: "/wt/one" });
+    seedLock(dir, { owner: "lane-3", slot: 3, worktree: "/wt/three" });
+    const result = runLockIn(
+      dir,
+      ["acquire", "lane-x"],
+      slotsEnv(4),
+      15_000,
+      "sh",
+      worktree(),
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("slot 2");
+    expect(readFileSync(join(slotDir(dir, 2), "owner"), "utf8").trim()).toBe(
+      "lane-x",
+    );
+    expect(existsSync(slotDir(dir, 4))).toBe(false);
+  });
+
+  test("busy (75) only when every slot is held by a live holder", () => {
+    const dir = scratch();
+    seedLock(dir, { owner: "lane-1", slot: 1, worktree: "/wt/one" });
+    seedLock(dir, { owner: "lane-2", slot: 2, worktree: "/wt/two" });
+    const out = join(dir, "slot-out");
+    const busy = runLockIn(
+      dir,
+      ["acquire", "lane-x"],
+      slotsEnv(2, { HEXAGEN_GATE_SLOT_OUT: out }),
+      15_000,
+      "sh",
+      worktree(),
+    );
+    expect(busy.status).toBe(75);
+    expect(busy.stderr).toContain("busy");
+    expect(existsSync(out)).toBe(false);
+    expect(existsSync(slotDir(dir, 3))).toBe(false);
+    // One more slot is free, and it is taken.
+    const roomy = runLockIn(
+      dir,
+      ["acquire", "lane-x"],
+      slotsEnv(3, { HEXAGEN_GATE_SLOT_OUT: out }),
+      15_000,
+      "sh",
+      worktree(),
+    );
+    expect(roomy.status).toBe(0);
+    expect(readFileSync(out, "utf8").trim()).toBe("3");
+  });
+
+  test("a dead holder's slot is reclaimed before the next slot is tried", () => {
+    const dir = scratch();
+    seedLock(dir, { owner: "lane-1", slot: 1, pid: reapedPid() });
+    const result = runLockIn(
+      dir,
+      ["acquire", "lane-x"],
+      slotsEnv(3),
+      15_000,
+      "sh",
+      worktree(),
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("reclaiming");
+    expect(readFileSync(join(slotDir(dir, 1), "owner"), "utf8").trim()).toBe(
+      "lane-x",
+    );
+    expect(existsSync(slotDir(dir, 2))).toBe(false);
+  });
+
+  test("the slot-out file names the slot won, with one slot too", () => {
+    const dir = scratch();
+    const out = join(dir, "slot-out");
+    const result = runLockIn(
+      dir,
+      ["acquire", "lane-a"],
+      slotsEnv(1, { HEXAGEN_GATE_SLOT_OUT: out }),
+      15_000,
+      "sh",
+      worktree(),
+    );
+    expect(result.status).toBe(0);
+    expect(readFileSync(out, "utf8")).toBe("1\n");
+  });
+
+  test("an acquire that cannot write the slot-out file is refused and gives its slot back", () => {
+    const dir = scratch();
+    const result = runLockIn(
+      dir,
+      ["acquire", "lane-a"],
+      slotsEnv(2, { HEXAGEN_GATE_SLOT_OUT: join(dir, "no-such-dir", "out") }),
+      15_000,
+      "sh",
+      worktree(),
+    );
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("slot-out");
+    expect(existsSync(slotDir(dir, 1))).toBe(false);
+  });
+
+  test("the slot records the worktree identity it was taken from", () => {
+    const dir = scratch();
+    const wt = worktree();
+    const result = runLockIn(
+      dir,
+      ["acquire", "lane-a"],
+      slotsEnv(2),
+      15_000,
+      "sh",
+      wt,
+    );
+    expect(result.status).toBe(0);
+    expect(readFileSync(join(slotDir(dir, 1), "worktree"), "utf8")).toBe(
+      `${wt}\n`,
+    );
+  });
+
+  test("a second live holder from the same worktree is refused 75 before the slot-out file is written, and its slot is gone", () => {
+    const dir = scratch();
+    const wt = worktree();
+    seedLock(dir, { owner: "lane-1", slot: 1, worktree: wt });
+    const out = join(dir, "slot-out");
+    const result = runLockIn(
+      dir,
+      ["acquire", "lane-x"],
+      slotsEnv(3, { HEXAGEN_GATE_SLOT_OUT: out }),
+      15_000,
+      "sh",
+      wt,
+    );
+    expect(result.status).toBe(75);
+    expect(result.stderr).toContain("same worktree");
+    expect(result.stderr).not.toContain("busy —");
+    expect(existsSync(out)).toBe(false);
+    expect(existsSync(slotDir(dir, 2))).toBe(false);
+    // The holder that was already there is untouched.
+    expect(readFileSync(join(slotDir(dir, 1), "owner"), "utf8").trim()).toBe(
+      "lane-1",
+    );
+  });
+
+  test("a holder in another worktree does not block, and a dead one in this worktree does not either", () => {
+    const dir = scratch();
+    const wt = worktree();
+    seedLock(dir, { owner: "lane-1", slot: 1, worktree: "/elsewhere" });
+    const other = runLockIn(
+      dir,
+      ["acquire", "lane-x"],
+      slotsEnv(2),
+      15_000,
+      "sh",
+      wt,
+    );
+    expect(other.status).toBe(0);
+
+    const dir2 = scratch();
+    seedLock(dir2, {
+      owner: "lane-2",
+      slot: 2,
+      worktree: wt,
+      pid: reapedPid(),
+    });
+    const stale = runLockIn(
+      dir2,
+      ["acquire", "lane-x"],
+      slotsEnv(2),
+      15_000,
+      "sh",
+      wt,
+    );
+    expect(stale.status).toBe(0);
+  });
+
+  test("two gates started together in one worktree are never both admitted", async () => {
+    const dir = scratch();
+    const wt = worktree();
+    const env = (n: string) =>
+      slotsEnv(2, { HEXAGEN_GATE_HEARTBEAT_SECONDS: n });
+    const a = startLockIn(
+      dir,
+      ["run", "lane-a", "--", "sleep", "2"],
+      env("1"),
+      "sh",
+      wt,
+    );
+    const b = startLockIn(
+      dir,
+      ["run", "lane-b", "--", "sleep", "2"],
+      env("1"),
+      "sh",
+      wt,
+    );
+    const [ra, rb] = await Promise.all([a.done, b.done]);
+    expect(ra.status === 0 && rb.status === 0).toBe(false);
+    for (const r of [ra, rb]) {
+      if (r.status !== 0) expect(r.stderr).toContain("same worktree");
+    }
+  });
+
+  test("two gates in two worktrees run side by side in two slots, each with its own slot-out", async () => {
+    const dir = scratch();
+    const outA = join(dir, "out-a");
+    const outB = join(dir, "out-b");
+    const a = startLockIn(
+      dir,
+      ["run", "lane-a", "--", "sleep", "3"],
+      slotsEnv(2, { HEXAGEN_GATE_SLOT_OUT: outA }),
+      "sh",
+      worktree(),
+    );
+    await waitForContent(outA);
+    const b = startLockIn(
+      dir,
+      ["run", "lane-b", "--", "true"],
+      slotsEnv(2, { HEXAGEN_GATE_SLOT_OUT: outB }),
+      "sh",
+      worktree(),
+    );
+    const rb = await b.done;
+    expect(rb.status).toBe(0);
+    expect(readFileSync(outA, "utf8")).toBe("1\n");
+    expect(readFileSync(outB, "utf8")).toBe("2\n");
+    const ra = await a.done;
+    expect(ra.status).toBe(0);
+    expect(existsSync(slotDir(dir, 1))).toBe(false);
+    expect(existsSync(slotDir(dir, 2))).toBe(false);
+  });
+
+  test("an empty worktree identity fails closed with exit 2 (the child removes its own cwd)", () => {
+    for (const shell of SIGNAL_SHELLS) {
+      const dir = scratch();
+      const base = scratch();
+      // The CHILD removes its cwd: a process spawned into a missing cwd fails
+      // before any shell starts, which would test nothing here.
+      const result = spawnSync(
+        "sh",
+        [
+          "-c",
+          'mkdir "$1/gone" && cd "$1/gone" && rmdir "$1/gone" && exec "$2" "$3" acquire lane-a',
+          "sh",
+          base,
+          shell,
+          gateLock,
+        ],
+        {
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            HEXAGEN_GATE_SLOTS: "2",
+            TMPDIR: dir,
+            ...CALLER,
+          },
+        },
+      );
+      expect(result.status, shell).toBe(2);
+      expect(result.stderr).toContain("worktree");
+      expect(existsSync(slotDir(dir, 1))).toBe(false);
+    }
+  });
+
+  test("a refused acquire gives its slot back only while the slot is still its own", async () => {
+    const dir = scratch();
+    const wt = worktree();
+    seedLock(dir, { owner: "lane-1", slot: 1, worktree: wt });
+    const pause = join(dir, "pause-drop");
+    const refused = startLockIn(
+      dir,
+      ["acquire", "lane-x"],
+      slotsEnv(2, { HEXAGEN_GATE_TEST_PAUSE_BEFORE_DROP: pause }),
+      "sh",
+      wt,
+    );
+    await waitForFile(pause);
+    // In the window between the owner/pid check and the removal, the slot is
+    // replaced by someone else's lock.
+    rmSync(slotDir(dir, 2), { recursive: true, force: true });
+    seedLock(dir, { owner: "lane-z", slot: 2, worktree: "/elsewhere" });
+    rmSync(pause);
+    const result = await refused.done;
+    expect(result.status).toBe(75);
+    expect(readFileSync(join(slotDir(dir, 2), "owner"), "utf8").trim()).toBe(
+      "lane-z",
+    );
+    // The give-back says what it did instead of swallowing it.
+    expect(result.stderr).toContain("removal aborted");
+    // …and never claims a give-back that did not happen.
+    expect(result.stderr).toContain("could not give slot 2 back");
+    expect(result.stderr).not.toContain("slot 2 was given back");
+    expect(readdirSync(dir).filter((n) => n.includes(".gone."))).toEqual([]);
+  });
+
+  test("a release re-checks owner and pid immediately before it removes: a replaced lock is left alone", async () => {
+    const dir = scratch();
+    seedLock(dir, { owner: "lane-a", pid: 434343 });
+    const pause = join(dir, "pause-drop");
+    const release = startLockIn(dir, ["release", "lane-a"], {
+      ...CALLER,
+      HEXAGEN_GATE_TEST_PAUSE_BEFORE_DROP: pause,
+    });
+    await waitForFile(pause);
+    rmSync(lockDir(dir), { recursive: true, force: true });
+    seedLock(dir, { owner: "lane-b" });
+    rmSync(pause);
+    const result = await release.done;
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("release refused");
+    expect(lockFile(dir, "owner").trim()).toBe("lane-b");
+    expect(readdirSync(dir).filter((n) => n.includes(".gone."))).toEqual([]);
+  });
+
+  test("release, verify and heartbeat find the caller's own slot, whichever it is", () => {
+    const dir = scratch();
+    seedLock(dir, { owner: "lane-1", slot: 1, pid: process.pid });
+    seedLock(dir, { owner: "lane-a", slot: 2, pid: 434343 });
+    const env = slotsEnv(2);
+    expect(runLockIn(dir, ["verify", "lane-a"], env).status).toBe(0);
+    expect(runLockIn(dir, ["verify", "lane-nobody"], env).status).toBe(1);
+    const before = readFileSync(join(slotDir(dir, 2), "beat"), "utf8");
+    expect(
+      runLockIn(dir, ["heartbeat"], {
+        ...env,
+        HEXAGEN_GATE_STALE_SECONDS: "600",
+      }).status,
+    ).toBe(0);
+    expect(readFileSync(join(slotDir(dir, 2), "beat"), "utf8")).not.toBe("");
+    expect(before).not.toBe("");
+    const released = runLockIn(dir, ["release", "lane-a"], env);
+    expect(released.status).toBe(0);
+    expect(existsSync(slotDir(dir, 2))).toBe(false);
+    // The other holder's slot is never touched.
+    expect(readFileSync(join(slotDir(dir, 1), "owner"), "utf8").trim()).toBe(
+      "lane-1",
+    );
+  });
+
+  test("status prints one line per slot when there is more than one", () => {
+    const dir = scratch();
+    seedLock(dir, { owner: "lane-1", slot: 1 });
+    const result = runLockIn(dir, ["status"], { HEXAGEN_GATE_SLOTS: "3" });
+    expect(result.status).toBe(0);
+    const lines = result.stdout.trim().split("\n");
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toContain("slot 1: held by lane-1");
+    expect(lines[1]).toContain("slot 2: free");
+    expect(lines[2]).toContain("slot 3: free");
+  });
+
+  test("a contender that loses the name leaves no candidate nested inside the winner's lock", async () => {
+    // `mv dir existing-dir` nests instead of failing: a loser's candidate
+    // would land INSIDE the live lock and stay there.
+    const dir = scratch();
+    const pause = join(dir, "pause-mv");
+    const loser = startLockIn(
+      dir,
+      ["acquire", "lane-loser"],
+      slotsEnv(1, { HEXAGEN_GATE_TEST_PAUSE_BEFORE_MV: pause }),
+      "sh",
+      worktree(),
+    );
+    await waitForFile(pause);
+    const winner = runLockIn(
+      dir,
+      ["acquire", "lane-winner"],
+      { HEXAGEN_GATE_SLOTS: "1", HEXAGEN_GATE_CALLER_PID: String(process.pid) },
+      15_000,
+      "sh",
+      worktree(),
+    );
+    expect(winner.status).toBe(0);
+    rmSync(pause);
+    const result = await loser.done;
+    expect(result.status).toBe(75);
+    expect(readdirSync(lockDir(dir)).sort()).toEqual([
+      "beat",
+      "owner",
+      "pid",
+      "started",
+      "worktree",
+    ]);
+    expect(lockFile(dir, "owner").trim()).toBe("lane-winner");
+    expect(readdirSync(dir).filter((n) => n.includes(".cand."))).toEqual([]);
+  });
+
+  test("a restore that finds the name taken in the last instant moves its copy back out and leaves it aside", async () => {
+    const dir = scratch();
+    seedLock(dir, { owner: "lane-a", pid: 434343 });
+    const dropPause = join(dir, "pause-drop");
+    const restorePause = join(dir, "pause-restore");
+    const release = startLockIn(dir, ["release", "lane-a"], {
+      ...CALLER,
+      HEXAGEN_GATE_TEST_PAUSE_BEFORE_DROP: dropPause,
+      HEXAGEN_GATE_TEST_PAUSE_IN_RESTORE: restorePause,
+    });
+    await waitForFile(dropPause);
+    // The lock is replaced, so the removal moves it aside and must put it back…
+    rmSync(lockDir(dir), { recursive: true, force: true });
+    seedLock(dir, { owner: "lane-b" });
+    rmSync(dropPause);
+    await waitForFile(restorePause);
+    // …and in the instant after it saw the name free, a third lock takes it.
+    rmSync(lockDir(dir), { recursive: true, force: true });
+    seedLock(dir, { owner: "lane-c" });
+    rmSync(restorePause);
+    const result = await release.done;
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("left at");
+    expect(readdirSync(lockDir(dir)).sort()).toEqual([
+      "beat",
+      "owner",
+      "pid",
+      "started",
+    ]);
+    expect(lockFile(dir, "owner").trim()).toBe("lane-c");
+    const aside = readdirSync(dir).filter((n) => n.includes(".gone."));
+    expect(aside).toHaveLength(1);
+    expect(readFileSync(join(dir, aside[0]!, "owner"), "utf8").trim()).toBe(
+      "lane-b",
+    );
+  });
+
+  test("a removal never deletes a saved lock that already sits at its aside name", async () => {
+    // An earlier removal left a lock aside; the pid is reused, and the next
+    // release must not delete it to make room for its own aside.
+    const dir = scratch();
+    seedLock(dir, { owner: "lane-a", pid: 434343 });
+    const pause = join(dir, "pause-drop");
+    const release = startLockIn(dir, ["release", "lane-a"], {
+      ...CALLER,
+      HEXAGEN_GATE_TEST_PAUSE_BEFORE_DROP: pause,
+    });
+    await waitForFile(pause);
+    const pid = release.child.pid;
+    for (const suffix of [`${pid}`, `${pid}.0`]) {
+      const saved = `${lockDir(dir)}.gone.${suffix}`;
+      mkdirSync(saved);
+      writeFileSync(join(saved, "owner"), "lane-saved\n");
+      writeFileSync(join(saved, "pid"), "1\n");
+    }
+    rmSync(pause);
+    const result = await release.done;
+    expect(result.status).toBe(0);
+    expect(existsSync(lockDir(dir))).toBe(false);
+    for (const suffix of [`${pid}`, `${pid}.0`]) {
+      expect(
+        readFileSync(
+          join(`${lockDir(dir)}.gone.${suffix}`, "owner"),
+          "utf8",
+        ).trim(),
+      ).toBe("lane-saved");
+    }
+  });
+
+  test("a slot-out path that is a directory is refused: exit 2, the path named, the slot given back, nothing nested in it", () => {
+    const dir = scratch();
+    const out = join(dir, "out-is-a-dir");
+    mkdirSync(out);
+    const result = runLockIn(
+      dir,
+      ["acquire", "lane-a"],
+      slotsEnv(2, { HEXAGEN_GATE_SLOT_OUT: out }),
+      15_000,
+      "sh",
+      worktree(),
+    );
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain(out);
+    expect(existsSync(slotDir(dir, 1))).toBe(false);
+    expect(result.stderr).toContain("slot 1 was given back");
+    expect(readdirSync(out)).toEqual([]);
+  });
+
+  test("a heartbeat stages its new beat beside the slot, in the directory that holds the slot, not inside it", async () => {
+    const dir = scratch();
+    seedLock(dir, { owner: "lane-1", slot: 1 });
+    seedLock(dir, { owner: "lane-a", slot: 2, pid: 434343 });
+    const marker = join(dir, "paused-before-beat-mv");
+    const beat = startLockIn(dir, ["heartbeat"], {
+      ...slotsEnv(2),
+      HEXAGEN_GATE_TEST_PAUSE_BEFORE_BEAT_MV: marker,
+    });
+    await waitForFile(marker);
+    const staged = `hexagen-gate.beatnew.${beat.child.pid}`;
+    expect(readdirSync(dir)).toContain(staged);
+    expect(readdirSync(slotDir(dir, 2)).sort()).toEqual([
+      "beat",
+      "owner",
+      "pid",
+      "started",
+    ]);
+    rmSync(marker);
+    expect((await beat.done).status).toBe(0);
+    expect(readdirSync(dir).filter((n) => n.includes(".beatnew."))).toEqual([]);
+  });
+
+  test("a reclaim never deletes a saved lock that already sits at its aside name", async () => {
+    const dir = scratch();
+    seedLock(dir, { owner: "lane-dead", pid: reapedPid() });
+    const pause = join(dir, "pause-inspect");
+    const acquire = startLockIn(
+      dir,
+      ["acquire", "lane-x"],
+      slotsEnv(1, { HEXAGEN_GATE_TEST_PAUSE_AFTER_INSPECT: pause }),
+      "sh",
+      worktree(),
+    );
+    await waitForFile(pause);
+    const pid = acquire.child.pid;
+    const planted = [`${pid}.1`, `${pid}.1.0`].map(
+      (suffix) => `${lockDir(dir)}.reclaim.${suffix}`,
+    );
+    for (const saved of planted) {
+      mkdirSync(saved);
+      writeFileSync(join(saved, "owner"), "lane-saved\n");
+      writeFileSync(join(saved, "pid"), "1\n");
+    }
+    rmSync(pause);
+    const result = await acquire.done;
+    expect(result.status).toBe(0);
+    expect(lockFile(dir, "owner").trim()).toBe("lane-x");
+    for (const saved of planted) {
+      expect(readFileSync(join(saved, "owner"), "utf8").trim()).toBe(
+        "lane-saved",
+      );
+      expect(readdirSync(saved).sort()).toEqual(["owner", "pid"]);
+    }
+  });
+
+  test("the slot-out staging file is not a predictable name: a planted symlink there is never written through", async () => {
+    const dir = scratch();
+    const out = join(dir, "slot-out");
+    const victim = join(dir, "victim");
+    writeFileSync(victim, "precious\n");
+    const pause = join(dir, "pause-mv");
+    const acquire = startLockIn(
+      dir,
+      ["acquire", "lane-a"],
+      slotsEnv(1, {
+        HEXAGEN_GATE_SLOT_OUT: out,
+        HEXAGEN_GATE_TEST_PAUSE_BEFORE_MV: pause,
+      }),
+      "sh",
+      worktree(),
+    );
+    await waitForFile(pause);
+    // Another local user pre-plants the name the pid would give.
+    symlinkSync(victim, `${out}.tmp.${acquire.child.pid}`);
+    rmSync(pause);
+    const result = await acquire.done;
+    expect(result.status).toBe(0);
+    expect(readFileSync(victim, "utf8")).toBe("precious\n");
+    expect(readFileSync(out, "utf8")).toBe("1\n");
+    // Nothing staged is left behind.
+    expect(readdirSync(dir).filter((n) => n.startsWith(".slot-out."))).toEqual(
+      [],
+    );
   });
 });
