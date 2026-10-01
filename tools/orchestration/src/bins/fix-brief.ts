@@ -12,16 +12,37 @@ import { resolve } from "node:path";
 import { errorText } from "../internal/artifact.js";
 import { loadConfigFor } from "../internal/project.js";
 import { configRefusal } from "../internal/refusal.js";
+import { parseFixBriefArgs } from "../fix-brief/args.js";
 import { runFixBrief } from "../fix-brief/cli.js";
 import { exclusiveWriter, pathExists } from "../fix-brief/files.js";
 import { makeGh } from "../sweep/cli.js";
 import { parseRepoRef } from "../sweep/lib/types.js";
 
-const loaded = await loadConfigFor();
-const refusal = configRefusal("fix-brief", "act on this repository", loaded);
-const repo = parseRepoRef(loaded.config.repo);
+const argv = process.argv.slice(2);
 
-if (refusal !== undefined) {
+/**
+ * The command line is judged BEFORE the overlay is loaded. Loading it can run
+ * `gh repo view`, so a mistyped flag would otherwise cost a forge call and be
+ * answered with whatever the overlay had to say instead of the usage.
+ */
+let argvProblem: string | undefined;
+try {
+  parseFixBriefArgs(argv);
+} catch (error: unknown) {
+  argvProblem = errorText(error);
+}
+
+const loaded = argvProblem === undefined ? await loadConfigFor() : undefined;
+const refusal =
+  loaded === undefined
+    ? undefined
+    : configRefusal("fix-brief", "act on this repository", loaded);
+const repo = parseRepoRef(loaded?.config.repo);
+
+if (argvProblem !== undefined) {
+  console.error(argvProblem);
+  process.exitCode = 2;
+} else if (refusal !== undefined) {
   for (const line of refusal) console.error(line);
   process.exitCode = 2;
 } else if (repo === undefined) {
@@ -34,7 +55,7 @@ if (refusal !== undefined) {
   const write = exclusiveWriter();
   try {
     process.exitCode = await runFixBrief({
-      argv: process.argv.slice(2),
+      argv,
       repo,
       gh: makeGh(execFile, process.env),
       log: (text) => console.log(text),
