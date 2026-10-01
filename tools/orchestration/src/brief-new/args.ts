@@ -28,9 +28,19 @@ const PATH_PATTERN = /^[A-Za-z0-9._/-]+$/;
 const TIP_PATTERN = /^[0-9a-f]{7,40}$/;
 const ENV_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*=/;
 
-function valueAfter(argv: readonly string[], i: number, flag: string): string {
-  const raw = argv[i];
-  if (raw === undefined || raw.startsWith("--")) {
+/**
+ * A flag's value as the command line gave it. `--flag=value` is `inline`: it
+ * may start with `--`, which is how a value such as `--draft.md` is written. In
+ * the spaced form, `--flag value`, a word starting with `--` is the NEXT flag,
+ * so the value is missing.
+ */
+interface Given {
+  readonly raw: string | undefined;
+  readonly inline: boolean;
+}
+
+function valueOf({ raw, inline }: Given, flag: string): string {
+  if (raw === undefined || (!inline && raw.startsWith("--"))) {
     throw new Error(`missing value for ${flag}\n${BRIEF_NEW_USAGE}`);
   }
   if (raw.trim() === "") {
@@ -40,13 +50,8 @@ function valueAfter(argv: readonly string[], i: number, flag: string): string {
 }
 
 /** A value held to one line for a stated reason, with no shape rule of its own. */
-function singleLineAfter(
-  argv: readonly string[],
-  i: number,
-  flag: string,
-  why: string,
-): string {
-  const raw = valueAfter(argv, i, flag);
+function singleLineOf(given: Given, flag: string, why: string): string {
+  const raw = valueOf(given, flag);
   if (NOT_ONE_LINE.test(raw)) {
     throw new Error(
       `${flag} must be a single line: ${why}\n${BRIEF_NEW_USAGE}`,
@@ -60,14 +65,13 @@ function singleLineAfter(
  * holding a newline is refused (it would be a second line of the brief), and
  * the shape rule then says what the flag accepts.
  */
-function headerAfter(
-  argv: readonly string[],
-  i: number,
+function headerOf(
+  given: Given,
   flag: string,
   shape: RegExp,
   shapeText: string,
 ): string {
-  const raw = valueAfter(argv, i, flag);
+  const raw = valueOf(given, flag);
   if (NOT_ONE_LINE.test(raw)) {
     throw new Error(
       `${flag} must be a single line: it is written into the brief verbatim\n${BRIEF_NEW_USAGE}`,
@@ -82,7 +86,8 @@ function headerAfter(
 }
 
 /**
- * Parses the command line. Every flag but `--env` states one value, so a second
+ * Parses the command line. A value is given as `--flag value` or `--flag=value`.
+ * Every flag but `--env` states one value, so a second
  * one is refused rather than letting the last silently win. `--env` is
  * repeatable: each is `KEY=VALUE` with an identifier for the key, and a single
  * line, since it is written into the brief verbatim. `--out` is never written
@@ -109,13 +114,19 @@ export function parseBriefNewArgs(argv: readonly string[]): BriefNewArgs {
   const env: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
-    const flag = argv[i] as string;
+    const word = argv[i] as string;
+    // `--flag=value` splits at the FIRST `=`; the value keeps any others.
+    const eq = word.startsWith("--") ? word.indexOf("=") : -1;
+    const flag = eq === -1 ? word : word.slice(0, eq);
+    const take = (): Given =>
+      eq === -1
+        ? { raw: argv[++i], inline: false }
+        : { raw: word.slice(eq + 1), inline: true };
     switch (flag) {
       case "--lane":
         once(flag);
-        lane = headerAfter(
-          argv,
-          ++i,
+        lane = headerOf(
+          take(),
           flag,
           LANE_PATTERN,
           "letters, digits, '_' and '-' only",
@@ -123,9 +134,8 @@ export function parseBriefNewArgs(argv: readonly string[]): BriefNewArgs {
         break;
       case "--plan":
         once(flag);
-        plan = headerAfter(
-          argv,
-          ++i,
+        plan = headerOf(
+          take(),
           flag,
           PATH_PATTERN,
           "letters, digits, '.', '_', '/' and '-' only",
@@ -133,9 +143,8 @@ export function parseBriefNewArgs(argv: readonly string[]): BriefNewArgs {
         break;
       case "--branch":
         once(flag);
-        branch = headerAfter(
-          argv,
-          ++i,
+        branch = headerOf(
+          take(),
           flag,
           PATH_PATTERN,
           "letters, digits, '.', '_', '/' and '-' only",
@@ -143,9 +152,8 @@ export function parseBriefNewArgs(argv: readonly string[]): BriefNewArgs {
         break;
       case "--tip":
         once(flag);
-        tip = headerAfter(
-          argv,
-          ++i,
+        tip = headerOf(
+          take(),
           flag,
           TIP_PATTERN,
           "7 to 40 lowercase hex digits",
@@ -153,13 +161,12 @@ export function parseBriefNewArgs(argv: readonly string[]): BriefNewArgs {
         break;
       case "--host":
         once(flag);
-        host = singleLineAfter(argv, ++i, flag, "it names a laneHosts entry");
+        host = singleLineOf(take(), flag, "it names a laneHosts entry");
         break;
       case "--env":
         env.push(
-          headerAfter(
-            argv,
-            ++i,
+          headerOf(
+            take(),
             flag,
             ENV_PATTERN,
             "KEY=VALUE, with a key of letters, digits and '_' that does not start with a digit",
@@ -168,12 +175,7 @@ export function parseBriefNewArgs(argv: readonly string[]): BriefNewArgs {
         break;
       case "--out":
         once(flag);
-        out = singleLineAfter(
-          argv,
-          ++i,
-          flag,
-          "it is echoed in the summary line",
-        );
+        out = singleLineOf(take(), flag, "it is echoed in the summary line");
         break;
       default:
         throw new Error(`unknown argument '${flag}'\n${BRIEF_NEW_USAGE}`);

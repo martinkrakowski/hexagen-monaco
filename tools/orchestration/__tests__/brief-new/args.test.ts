@@ -92,6 +92,52 @@ describe("brief-new arguments", () => {
     );
   });
 
+  test("--flag=value is accepted for every value flag, so a value may start with --", () => {
+    expect(parseBriefNewArgs([...GOOD, "--out=--draft.md"]).out).toBe(
+      "--draft.md",
+    );
+    expect(
+      parseBriefNewArgs([
+        "--lane=PB6",
+        "--plan=docs/p.md",
+        "--branch=feat/x",
+        "--tip=abc1234",
+        "--host=midnight",
+        "--env=A=b=c",
+        "--out=o.md",
+      ]),
+    ).toEqual({
+      lane: "PB6",
+      plan: "docs/p.md",
+      branch: "feat/x",
+      tip: "abc1234",
+      host: "midnight",
+      env: ["A=b=c"],
+      out: "o.md",
+    });
+  });
+
+  test("--flag=value is judged like the spaced form: empty, invalid, duplicated and unknown are refused", () => {
+    expect(() => parseBriefNewArgs([...GOOD, "--out="])).toThrow(
+      /--out was given an empty value/,
+    );
+    expect(() => parseBriefNewArgs(["--lane=a b", ...GOOD.slice(2)])).toThrow(
+      /^--lane must be/,
+    );
+    expect(() => parseBriefNewArgs([...GOOD, "--lane=X"])).toThrow(
+      /--lane is given twice/,
+    );
+    expect(() => parseBriefNewArgs([...GOOD, "--nope=1"])).toThrow(
+      /unknown argument '--nope'/,
+    );
+  });
+
+  test("the spaced form still refuses a missing value, and a following flag is not a value", () => {
+    expect(() => parseBriefNewArgs([...GOOD, "--out", "--env"])).toThrow(
+      /missing value for --out/,
+    );
+  });
+
   test("an --env that is not KEY=VALUE is refused, naming the flag", () => {
     for (const bad of ["NOEQUALS", "=v", "1A=v", "A B=v"]) {
       expect(() => parseBriefNewArgs([...GOOD, "--env", bad])).toThrow(

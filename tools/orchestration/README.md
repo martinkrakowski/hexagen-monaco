@@ -142,6 +142,10 @@ host. It fills `<LANE>`, `<PLAN_PATH>`, `<BRANCH>` and `<SHA>`; the rest
 (`<N>`, `<REPO_PATH>`, `<WORKTREE_PATH>`, `<SECTIONS>`, the ownership list,
 the tasks) are for the orchestrator to fill before dispatch.
 
+- Every value flag takes `--flag value` or `--flag=value`. Use the second form for a
+  value that starts with `--` (`--out=--draft.md`): in the first form a word
+  starting with `--` is the next flag, so the value is missing. `--flag=` is an
+  empty value and is refused.
 - `--host` names a `laneHosts[].name` in the overlay. Its `gate` and whether it
   is remote (any of `ssh`, `clone` or `worktrees` set) decide the brief. The
   lane-host variant applies when the host is `targeted-only` OR remote: the
