@@ -114,10 +114,27 @@ describe("brief-new — the brief", () => {
 
   test("no --env: the brief is the template with only the four placeholders and the gate policy changed", async () => {
     const h = harness();
-    await runBriefNew(h.io);
-    expect(h.out.join("\n")).not.toContain("Environment. Set these");
-    const head = TEMPLATE_A.slice(0, TEMPLATE_A.indexOf("Read first"));
-    expect(head).toContain("<LANE>");
+    expect(await runBriefNew(h.io)).toBe(0);
+    const brief = h.out.join("\n");
+    expect(brief).not.toContain("Environment. Set these");
+
+    // Built independently of `render`: the four placeholders substituted, and
+    // the harness host's (midnight, local targeted-only) gate-policy lead put
+    // in front of the variant paragraph, which is otherwise left as it is.
+    const variantAt = TEMPLATE_A.indexOf("Lane-host variant. ");
+    const lead =
+      "Gate policy. This brief names the lane host `midnight`, which has `gate: targeted-only`. " +
+      "The lane-host variant below APPLIES, and the full gate must NOT be run on this host.\n\n";
+    const expected = (
+      TEMPLATE_A.slice(0, variantAt) +
+      lead +
+      TEMPLATE_A.slice(variantAt)
+    )
+      .replaceAll("<LANE>", "PB6")
+      .replaceAll("<PLAN_PATH>", "docs/plan.md")
+      .replaceAll("<BRANCH>", "feat/x")
+      .replaceAll("<SHA>", "abc1234");
+    expect(brief).toBe(expected);
   });
 
   test("a branch that spells a placeholder is refused by the alphabet, before any render", async () => {
