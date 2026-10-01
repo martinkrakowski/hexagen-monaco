@@ -12,6 +12,7 @@ import {
   type Grant,
   type GrantCheck,
 } from "../kernel/grant.js";
+import { checkGrantSignature } from "../kernel/grant-verification.js";
 import type { HaltReason } from "../kernel/trace.js";
 import {
   applyPendingManifestMutation,
@@ -198,29 +199,12 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
     grant: Grant | undefined,
     pending: PendingManifestMutation | null,
   ): Promise<GrantCheck> {
-    if (!grant) {
-      return {
-        allowed: false,
-        code: "grant_denied",
-        reason: "No Grant supplied; refusing to accept",
-      };
-    }
-
-    const signatureResult = await this.grantSignaturePort.verify(grant);
-    if (!signatureResult.success) {
-      return {
-        allowed: false,
-        code: "grant_denied",
-        reason: `Grant '${grant.id}' signature could not be verified: ${signatureResult.error.message}`,
-      };
-    }
-    if (!signatureResult.value) {
-      return {
-        allowed: false,
-        code: "grant_denied",
-        reason: `Grant '${grant.id}' has no valid signature from a trusted issuer; refusing to trust a self-asserted grant`,
-      };
-    }
+    const signatureCheck = await checkGrantSignature(
+      grant,
+      this.grantSignaturePort,
+    );
+    if (!signatureCheck.allowed) return signatureCheck;
+    if (!grant) throw new Error("unreachable: signature check passed");
 
     const modeCheck = checkGrantMode(grant);
     if (!modeCheck.allowed) return modeCheck;
