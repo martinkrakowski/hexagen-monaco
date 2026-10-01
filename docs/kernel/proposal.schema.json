@@ -35,8 +35,11 @@
       "type": "array",
       "items": {
         "type": "string",
-        "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000]).+$",
-        "description": "Repo-relative, case-sensitive. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused."
+        "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
+        "description": "A file path: no trailing /.",
+        "not": {
+          "pattern": "/$"
+        }
       }
     },
     "traceSeq": {

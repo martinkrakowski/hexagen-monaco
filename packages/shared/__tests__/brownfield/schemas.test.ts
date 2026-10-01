@@ -81,13 +81,6 @@ const contract = {
       to: "libs/",
       severity: "warn",
     },
-    {
-      id: UNRESOLVED_IMPORT_RULE_ID,
-      kind: "forbid",
-      from: "packages/bill/",
-      to: "packages/bill/",
-      severity: "error",
-    },
   ],
   knownViolations: [
     {
@@ -128,12 +121,36 @@ const loadSchema = (file: string) =>
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
 const set = (o: Record<string, unknown>, p: string, v: unknown) => {
   const parts = p.split(".");
-  let cur: any = o;
-  for (const k of parts.slice(0, -1)) cur = cur[k];
+  let cur: Record<string, unknown> = o;
+  for (const k of parts.slice(0, -1)) cur = cur[k] as Record<string, unknown>;
   if (v === undefined) delete cur[parts[parts.length - 1]];
   else cur[parts[parts.length - 1]] = v;
   return o;
 };
+
+const TERMINATORS: Array<[string, string]> = [
+  ["LF", "a\nb"],
+  ["CR", "a\rb"],
+  ["U+2028", "a\u2028b"],
+  ["U+2029", "a\u2029b"],
+];
+const BAD_REL: Array<[string, string]> = [
+  ["dot-slash", "./x"],
+  ["double slash", "a//b"],
+  ["absolute", "/abs"],
+];
+type Mut = (v: Record<string, unknown>) => unknown;
+/** One invalid sample per control-character case, writing `value` at `at`. */
+const withBad = (
+  label: string,
+  at: string,
+  samples: Array<[string, string]>,
+  wrap: (x: string) => unknown = (x) => x,
+): Array<[string, Mut]> =>
+  samples.map(([n, bad]) => [
+    `${label} with ${n}`,
+    (v) => set(v, at, wrap(bad)),
+  ]);
 
 interface Case {
   name: string;
@@ -165,6 +182,22 @@ const cases: Case[] = [
         "collected arm with a reason key",
         (v) => set(v, "packages.reason", "x"),
       ],
+      [
+        "collected edges without unreadLanguages",
+        (v) => set(v, "edges.unreadLanguages", undefined),
+      ],
+      ...withBad("package root", "packages.items.0.root", BAD_REL),
+      ...withBad(
+        "package manifestFile",
+        "packages.items.0.manifestFile",
+        BAD_REL,
+      ),
+      ...withBad("generated path", "generated.items.0.path", BAD_REL),
+      ...withBad("dontTouch path", "dontTouch.items.0.path", BAD_REL),
+      ...withBad("edge from", "edges.items.0.from", BAD_REL),
+      ...withBad("edge to", "edges.items.0.to", BAD_REL),
+      ...withBad("unresolved from", "unresolved.items.0.from", BAD_REL),
+      ...withBad("generated path", "generated.items.0.path", TERMINATORS),
       ["bad schemaVersion major", (v) => set(v, "schemaVersion", "2.0.0")],
       ["empty package name", (v) => set(v, "packages.items.0.name", "")],
     ],
@@ -179,6 +212,8 @@ const cases: Case[] = [
       ["absolute path", (v) => set(v, "paths", ["/etc"])],
       ["backslash path", (v) => set(v, "paths", ["a\\b"])],
       ["NUL path", (v) => set(v, "paths", ["a\u0000b"])],
+      ...withBad("path", "paths", TERMINATORS, (x) => [x]),
+      ...withBad("exclude", "excludes", TERMINATORS, (x) => [x]),
       ["dot exclude", (v) => set(v, "excludes", ["."])],
       ["unknown key", (v) => set(v, "layer", "x")],
       ["missing id", (v) => set(v, "id", undefined)],
@@ -190,6 +225,12 @@ const cases: Case[] = [
     file: "contract.schema.json",
     valid: contract,
     invalid: [
+      [
+        "reserved rule id",
+        (v) => set(v, "rules.0.id", UNRESOLVED_IMPORT_RULE_ID),
+      ],
+      ...withBad("rule from", "rules.0.from", TERMINATORS),
+      ...withBad("violation file", "knownViolations.0.file", BAD_REL),
       ["bad kind", (v) => set(v, "rules.0.kind", "deny")],
       ["bad severity", (v) => set(v, "rules.0.severity", "fatal")],
       ["dotdot prefix", (v) => set(v, "rules.0.from", "../x/")],
@@ -207,6 +248,11 @@ const cases: Case[] = [
     file: "proposal.schema.json",
     valid: proposal,
     invalid: [
+      [
+        "directory path (trailing slash)",
+        (v) => set(v, "paths", ["packages/bill/"]),
+      ],
+      ...withBad("path", "paths", TERMINATORS, (x) => [x]),
       ["negative traceSeq", (v) => set(v, "traceSeq", -1)],
       ["fractional traceSeq", (v) => set(v, "traceSeq", 1.5)],
       ["bad path", (v) => set(v, "paths", ["a/../b"])],
@@ -220,6 +266,8 @@ const cases: Case[] = [
     file: "bundle.schema.json",
     valid: bundle,
     invalid: [
+      ["any .key file", (v) => set(v, "files.0.path", "a/engagement.key")],
+      ...withBad("path", "files.0.path", TERMINATORS),
       ["short hmac", (v) => set(v, "hmac", "abc")],
       ["uppercase sha", (v) => set(v, "files.0.sha256", "A".repeat(64))],
       [
@@ -287,9 +335,17 @@ describe("observed report invariants", () => {
 
   it("never declares a type, layer, plane or context property anywhere", () => {
     const names: string[] = [];
+    const strictViolations: string[] = [];
     const walk = (node: unknown): void => {
       if (Array.isArray(node)) return node.forEach(walk);
       if (node && typeof node === "object") {
+        const n = node as Record<string, unknown>;
+        if (
+          (n.type === "object" || "properties" in n) &&
+          n.additionalProperties !== false
+        ) {
+          strictViolations.push(JSON.stringify(Object.keys(n)));
+        }
         for (const [k, v] of Object.entries(node)) {
           if (k === "properties" && v && typeof v === "object") {
             names.push(...Object.keys(v));
@@ -300,6 +356,7 @@ describe("observed report invariants", () => {
     };
     walk(loadSchema("observed.schema.json"));
     expect(names.length).toBeGreaterThan(10);
+    expect(strictViolations).toEqual([]);
     for (const k of ["type", "layer", "plane", "context"]) {
       expect(names).not.toContain(k);
     }

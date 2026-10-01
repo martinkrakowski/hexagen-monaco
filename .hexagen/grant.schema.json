@@ -80,7 +80,7 @@
     "signature": {
       "type": "string",
       "minLength": 1,
-      "description": "HMAC-SHA256 (hex) over every field above except this one, keyed by the trust root at .hexagen/grant-signing.key (see docs/kernel/GRANT.md \"Enforcement point\"). Not in `required`: a grant without one is syntactically valid but is denied at accept time all the same, since an unsigned or wrongly-signed grant is never trusted as authorization, whatever its other fields claim."
+      "description": "HMAC-SHA256 (hex) over every field above except this one, keyed by the engagement key resolved per BW-D4 (`--key-file`, then `HEXAGEN_GRANT_KEY_FILE`, then `~/.hexagen/keys/<engagement>.key`); monaco's own repo uses `.hexagen/grant-signing.key`. Not in `required`: a grant without one is syntactically valid but is denied at accept time all the same, since an unsigned or wrongly-signed grant is never trusted as authorization, whatever its other fields claim."
     }
   }
 }

@@ -4,7 +4,8 @@
  * A slice entry is repo-relative and case-sensitive. An entry ending in `/` is
  * a directory prefix; any other entry is an exact file path. `.` and `..`
  * segments, empty segments, absolute paths (POSIX or drive-letter),
- * backslashes and NUL are refused. Nothing here touches the filesystem: a
+ * backslashes and control characters (U+0000-U+001F, U+007F, U+2028,
+ * U+2029) are refused. Nothing here touches the filesystem: a
  * path is judged by its text alone, never `stat`ed or resolved.
  */
 
@@ -18,11 +19,22 @@ export type SlicePathResult =
  * both against the same samples).
  */
 export const SLICE_PATH_PATTERN =
-  "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000]).+$";
+  "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$";
+
+/** U+0000-U+001F, U+007F, U+2028 and U+2029. */
+function hasControlCharacter(text: string): boolean {
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (c <= 0x1f || c === 0x7f || c === 0x2028 || c === 0x2029) return true;
+  }
+  return false;
+}
 
 export function normalizeSlicePath(input: string): SlicePathResult {
   if (input.length === 0) return { ok: false, reason: "empty path" };
-  if (input.includes("\0")) return { ok: false, reason: "NUL in path" };
+  if (hasControlCharacter(input)) {
+    return { ok: false, reason: "control character in path" };
+  }
   if (input.includes("\\")) return { ok: false, reason: "backslash in path" };
   if (input.startsWith("/") || /^[A-Za-z]:/.test(input)) {
     return { ok: false, reason: "absolute path" };
@@ -53,7 +65,9 @@ export interface SlicePaths {
 
 /**
  * True when `candidate` is inside the slice: valid, matched by `paths`, and not
- * matched by `excludes`. Everything else is denied, including any candidate
+ * matched by `excludes`. A candidate that names a directory must end in `/`; a
+ * bare directory name is judged as a file path (so `src/gen` is not caught by
+ * an `excludes` entry of `src/gen/`). Everything else is denied, including any candidate
  * that fails the path rules (checked before matching).
  */
 export function isPathInSlice(slice: SlicePaths, candidate: string): boolean {

@@ -61,6 +61,22 @@ describe("canonicalGrantPayload with contexts absent", () => {
   });
 });
 
+describe("Field Kit signature description", () => {
+  it("names the engagement key resolution and monaco's own key file", () => {
+    const d = JSON.parse(readFileSync(schemaPath, "utf-8")).properties.signature
+      .description;
+    for (const part of [
+      "BW-D4",
+      "--key-file",
+      "HEXAGEN_GRANT_KEY_FILE",
+      "~/.hexagen/keys/<engagement>.key",
+      ".hexagen/grant-signing.key",
+    ]) {
+      assert.ok(d.includes(part), part);
+    }
+  });
+});
+
 describe("a signed client grant against the Field Kit schema", () => {
   it("validates, and its signature verifies under the same key", () => {
     const keyHex = randomBytes(32).toString("hex");

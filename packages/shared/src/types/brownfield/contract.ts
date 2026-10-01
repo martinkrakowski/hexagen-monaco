@@ -3,14 +3,19 @@ import { SchemaVersion, SlicePathString } from "./common.js";
 
 /**
  * Built-in rule id: an unresolved in-slice import specifier is a violation of
- * this rule, so `knownViolations` may name it like any other rule.
+ * this rule. `knownViolations[].rule` may cite it; `rules[].id` may not use it.
  */
 export const UNRESOLVED_IMPORT_RULE_ID = "unresolved-import";
 export const BUILTIN_RULE_IDS: readonly string[] = [UNRESOLVED_IMPORT_RULE_ID];
 
 const Rule = z
   .object({
-    id: z.string().min(1),
+    id: z
+      .string()
+      .min(1)
+      .refine((id) => !BUILTIN_RULE_IDS.includes(id), {
+        message: "rule id is reserved for a built-in rule",
+      }),
     kind: z.enum(["forbid", "allow-only"]),
     from: SlicePathString,
     to: SlicePathString,
@@ -26,7 +31,7 @@ const Rule = z
 const KnownViolation = z
   .object({
     rule: z.string().min(1),
-    file: z.string().min(1),
+    file: SlicePathString,
     specifier: z.string(),
     reason: z.string().min(1).optional(),
     expires: z

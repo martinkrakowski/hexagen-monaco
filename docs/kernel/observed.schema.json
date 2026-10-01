@@ -67,11 +67,13 @@
                   },
                   "root": {
                     "type": "string",
-                    "minLength": 1
+                    "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
+                    "description": "Repo-relative, case-sensitive. Control characters (U+0000-U+001F, U+007F, U+2028, U+2029) are also refused. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused."
                   },
                   "manifestFile": {
                     "type": "string",
-                    "minLength": 1
+                    "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
+                    "description": "Repo-relative, case-sensitive. Control characters (U+0000-U+001F, U+007F, U+2028, U+2029) are also refused. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused."
                   }
                 }
               }
@@ -205,7 +207,8 @@
                 "properties": {
                   "path": {
                     "type": "string",
-                    "minLength": 1
+                    "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
+                    "description": "Repo-relative, case-sensitive. Control characters (U+0000-U+001F, U+007F, U+2028, U+2029) are also refused. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused."
                   },
                   "source": {
                     "enum": [
@@ -254,7 +257,8 @@
                 "properties": {
                   "path": {
                     "type": "string",
-                    "minLength": 1
+                    "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
+                    "description": "Repo-relative, case-sensitive. Control characters (U+0000-U+001F, U+007F, U+2028, U+2029) are also refused. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused."
                   },
                   "source": {
                     "enum": ["flag", "codeowners"]
@@ -289,7 +293,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["collected", "items"],
+          "required": ["collected", "unreadLanguages", "items"],
           "properties": {
             "collected": {
               "const": true
@@ -300,7 +304,7 @@
                 "type": "string",
                 "minLength": 1
               },
-              "description": "Languages the import pass does not read; their edges are absent, not zero."
+              "description": "Languages the import pass does not read; their edges are absent, not zero. Required; an empty array says every language was read."
             },
             "items": {
               "type": "array",
@@ -311,12 +315,12 @@
                 "properties": {
                   "from": {
                     "type": "string",
-                    "minLength": 1,
+                    "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
                     "description": "Repo-relative file."
                   },
                   "to": {
                     "type": "string",
-                    "minLength": 1,
+                    "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
                     "description": "Repo-relative file or package root."
                   },
                   "specifier": {
@@ -363,7 +367,8 @@
                 "properties": {
                   "from": {
                     "type": "string",
-                    "minLength": 1
+                    "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
+                    "description": "Repo-relative, case-sensitive. Control characters (U+0000-U+001F, U+007F, U+2028, U+2029) are also refused. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused."
                   },
                   "specifier": {
                     "type": "string",

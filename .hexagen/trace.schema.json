@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://hexagen.dev/kernel/trace.schema.json",
   "title": "Trace",
-  "description": "The append-only record of one agent cycle run under one Grant. One JSON object per line in .hexagen/evidence/trace.jsonl. See docs/kernel/TRACE.md. Never redefines Grant — grant_id must equal some Grant.id (docs/kernel/grant.schema.json). Three record kinds: the greenfield line (unchanged), the brownfield line (adds seq and prev_hash), and grant_missing (a denial with no grant_id).",
+  "description": "The append-only record of one agent cycle run under one Grant. One JSON object per line in .hexagen/evidence/trace.jsonl. See docs/kernel/TRACE.md. Never redefines Grant — grant_id must equal some Grant.id (docs/kernel/grant.schema.json). Three record kinds: the greenfield line (unchanged), the brownfield line (adds seq and prev_hash), and grant_missing (a denial with no grant_id). In the brownfield kinds, seq and prev_hash are both present or both absent.",
   "oneOf": [
     {
       "$ref": "#/definitions/greenfield_line"
@@ -177,12 +177,12 @@
         "seq": {
           "type": "integer",
           "minimum": 0,
-          "description": "Position of this line in the brownfield trace chain, starting at 0 for genesis. Present together with prev_hash, or not at all."
+          "description": "Position of this line in the brownfield trace chain, starting at 0 for genesis."
         },
         "prev_hash": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$",
-          "description": "Hex SHA-256 hash of the previous line's exact bytes (the genesis line uses 64 zeros). Present together with seq, or not at all."
+          "description": "SHA-256 of the previous line's canonical bytes (sorted-key JSON, including that line's prev_hash), as 64 lowercase hex characters. The genesis line uses 64 zeros."
         }
       },
       "description": "Brownfield line: today's line plus seq and prev_hash, which chain it to the line before it."
@@ -199,12 +199,12 @@
         "seq": {
           "type": "integer",
           "minimum": 0,
-          "description": "Position of this line in the brownfield trace chain, starting at 0 for genesis. Present together with prev_hash, or not at all."
+          "description": "Position of this line in the brownfield trace chain, starting at 0 for genesis."
         },
         "prev_hash": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$",
-          "description": "Hex SHA-256 hash of the previous line's exact bytes (the genesis line uses 64 zeros). Present together with seq, or not at all."
+          "description": "SHA-256 of the previous line's canonical bytes (sorted-key JSON, including that line's prev_hash), as 64 lowercase hex characters. The genesis line uses 64 zeros."
         },
         "goal_id": {
           "type": "string",

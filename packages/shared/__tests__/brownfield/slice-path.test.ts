@@ -40,6 +40,12 @@ describe("normalizeSlicePath", () => {
     ["a\\b", "backslash"],
     ["a\0b", "NUL"],
     ["a//b", "empty segment"],
+    ["a\nb", "LF"],
+    ["a\rb", "CR"],
+    ["a\u2028b", "U+2028"],
+    ["a\u2029b", "U+2029"],
+    ["a\u007fb", "DEL"],
+    ["a\tb", "tab"],
   ])("refuses %j (%s)", (p) => {
     expect(normalizeSlicePath(p).ok).toBe(false);
   });
@@ -66,6 +72,13 @@ describe("isPathInSlice", () => {
     expect(isPathInSlice(s, "src/a.ts")).toBe(true);
     expect(isPathInSlice(s, "src/gen/a.ts")).toBe(false);
   });
+  it("a bare directory name is judged as a file path, not a prefix", () => {
+    const s = slice(["src/"], ["src/gen/"]);
+    expect(isPathInSlice(s, "src/gen/")).toBe(false);
+    expect(isPathInSlice(s, "src/gen/a.ts")).toBe(false);
+    // `src/gen` is not under the exclude prefix, so it is judged as a file.
+    expect(isPathInSlice(s, "src/gen")).toBe(true);
+  });
   it("denies everything outside paths", () => {
     expect(isPathInSlice(slice(["src/"]), "lib/a.ts")).toBe(false);
     expect(isPathInSlice(slice([]), "src/a.ts")).toBe(false);
@@ -76,5 +89,14 @@ describe("isPathInSlice", () => {
     expect(isPathInSlice(s, "/packages/bill/x")).toBe(false);
     expect(isPathInSlice(s, "packages/bill/a\\b")).toBe(false);
     expect(isPathInSlice(s, "packages/bill/a\0")).toBe(false);
+  });
+});
+
+describe("control characters", () => {
+  it("are named in the reason", () => {
+    expect(normalizeSlicePath("a\nb")).toEqual({
+      ok: false,
+      reason: "control character in path",
+    });
   });
 });

@@ -58,6 +58,7 @@ describe("trace.schema.json", () => {
     ["negative seq", { ...brownfield, seq: -1 }],
     ["fractional seq", { ...brownfield, seq: 0.5 }],
     ["short prev_hash", { ...brownfield, prev_hash: "abc" }],
+    ["extra property on a brownfield line", { ...brownfield, extra: 1 }],
     ["uppercase prev_hash", { ...brownfield, prev_hash: "B".repeat(64) }],
   ])("refuses %s", (_n, line) => {
     expect(validate(line)).toBe(false);
@@ -75,8 +76,20 @@ describe("trace.schema.json", () => {
     ["no tool", { ...missing, tool: undefined }],
     ["no reason", { ...missing, reason: undefined }],
     ["another kind", { ...missing, kind: "other" }],
+    ["an extra property", { ...missing, extra: 1 }],
   ])("refuses a grant_missing record with %s", (_n, line) => {
     expect(validate(line)).toBe(false);
+  });
+  it("describes prev_hash as the hash of the previous line's canonical bytes", () => {
+    const d =
+      schema.definitions.brownfield_line.properties.prev_hash.description;
+    expect(d).toContain(
+      "SHA-256 of the previous line's canonical bytes (sorted-key JSON, including that line's prev_hash)",
+    );
+    expect(d).not.toContain("or not at all");
+    expect(schema.description).toContain(
+      "seq and prev_hash are both present or both absent",
+    );
   });
   it("the Field Kit copy is identical", () => {
     const kit = readFileSync(

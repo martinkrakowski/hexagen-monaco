@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { IsoDateTime, SlicePathString } from "./common.js";
+import { FilePathString, IsoDateTime } from "./common.js";
 
 /** `.hexagen/proposals/<id>.json`: metadata beside `<id>.patch`. */
 export const ProposalMeta = z
@@ -8,7 +8,7 @@ export const ProposalMeta = z
     grantId: z.string().min(1),
     sliceId: z.string().min(1),
     tool: z.string().min(1),
-    paths: z.array(SlicePathString),
+    paths: z.array(FilePathString),
     traceSeq: z.number().int().min(0),
     createdAt: IsoDateTime,
   })

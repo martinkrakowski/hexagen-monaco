@@ -20,6 +20,11 @@ export const SlicePathString = z
     message: "invalid slice path",
   });
 
+/** A repo-relative file path: a slice path with no trailing `/`. */
+export const FilePathString = SlicePathString.refine((p) => !p.endsWith("/"), {
+  message: "a file path must not end in /",
+});
+
 export const Repo = z
   .object({
     remote: z.string().min(1).optional(),

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { IsoDateTime, Repo, SchemaVersion } from "./common.js";
+import { IsoDateTime, Repo, SchemaVersion, SlicePathString } from "./common.js";
 
 /**
  * `.hexagen/observed.json`: what a scan found in a client repo, in the repo's
@@ -24,8 +24,8 @@ const PackageItem = z
   .object({
     /** Exactly as written in the package manifest, scope included. */
     name: z.string().min(1),
-    root: z.string().min(1),
-    manifestFile: z.string().min(1),
+    root: SlicePathString,
+    manifestFile: SlicePathString,
   })
   .strict();
 
@@ -39,14 +39,14 @@ const BuildItem = z
 
 const GeneratedItem = z
   .object({
-    path: z.string().min(1),
+    path: SlicePathString,
     source: z.enum(["linguist-generated", "header", "gitignored-build-dir"]),
   })
   .strict();
 
 const DontTouchItem = z
   .object({
-    path: z.string().min(1),
+    path: SlicePathString,
     source: z.enum(["flag", "codeowners"]),
     owner: z.string().min(1).optional(),
   })
@@ -55,30 +55,31 @@ const DontTouchItem = z
 const EdgeItem = z
   .object({
     /** Repo-relative file. */
-    from: z.string().min(1),
+    from: SlicePathString,
     /** Repo-relative file or package root. */
-    to: z.string().min(1),
+    to: SlicePathString,
     specifier: z.string().min(1),
   })
   .strict();
 
 const UnresolvedItem = z
   .object({
-    from: z.string().min(1),
+    from: SlicePathString,
     specifier: z.string().min(1),
     reason: z.string().min(1),
   })
   .strict();
 
 /**
- * Edges add `unreadLanguages` on the collected arm: a language the import pass
+ * Edges add a required `unreadLanguages` on the collected arm (empty when every
+ * language was read): a language the import pass
  * does not read is named here, so an empty edge list is never a clean bill.
  */
 const EdgesSection = z.union([
   z
     .object({
       collected: z.literal(true),
-      unreadLanguages: z.array(z.string().min(1)).optional(),
+      unreadLanguages: z.array(z.string().min(1)),
       items: z.array(EdgeItem),
     })
     .strict(),

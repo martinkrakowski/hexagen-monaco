@@ -3,11 +3,11 @@ import { IsoDateTime, SchemaVersion, Sha256Hex } from "./common.js";
 import { normalizeSlicePath } from "./slice-path.js";
 
 /**
- * Bundle paths that must never be listed: the signing key, anything under a
+ * Bundle paths that must never be listed: the signing key, any `*.key` file, anything under a
  * `keys/` directory, and env files (plan §4.8).
  */
 export const BUNDLE_FORBIDDEN_PATH_PATTERN =
-  "(^|/)(grant-signing\\.key|keys|\\.env[^/]*)(/|$)";
+  "(^|/)(grant-signing\\.key|[^/]*\\.key|keys|\\.env[^/]*)(/|$)";
 const forbidden = new RegExp(BUNDLE_FORBIDDEN_PATH_PATTERN);
 
 const BundlePath = z
