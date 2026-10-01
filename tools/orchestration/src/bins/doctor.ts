@@ -55,6 +55,7 @@ const { findings, exitCode } = await runDoctor(
     runRemote: (alias, argv, timeoutMs) =>
       runRemote(alias, argv, timeoutMs, { cwd: root }),
     localUserEmail,
+    gateSlots: () => process.env.HEXAGEN_GATE_SLOTS,
   },
 );
 
