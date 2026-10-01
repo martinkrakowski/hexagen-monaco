@@ -342,6 +342,12 @@ that did not happen.
       the tip recorded before dispatch. An exit code of 0 is not evidence.
    5. A lane host's `check` exercises the same path as its `dispatch`. A check that only proves the
       remote server is up can pass while the dispatch fails.
+   6. Record the lane's `sessionID` from the first `--format json` event of its dispatch, alongside
+      the worktree tip recorded before dispatch. A host's `usage` reader is invoked as
+      `<usage…> --server <laneHosts[].server> --session <id>` with that id, and
+      `hexagen-orchestration-lane-watch follow` takes the same two flags to watch the session. Both
+      need the host's `server` (a loopback URL, reached through the tunnel the caller keeps open). A
+      `usage` reading that prints `unknown` and exits 3 is incomplete, not zero.
 
    **Every brief carries the checkpoint rule**: commit failing tests once seen to fail, commit
    again after each green step, push only when the gate passes — a scoped, owner-confirmed exception
