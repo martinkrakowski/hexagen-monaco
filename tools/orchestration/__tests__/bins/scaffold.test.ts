@@ -103,6 +103,10 @@ const EXPECTED: ReadonlyArray<{ name: string; path: string }> = [
     name: "hexagen-orchestration-fix-brief",
     path: "dist/bins/fix-brief.js",
   },
+  {
+    name: "hexagen-orchestration-brief-new",
+    path: "dist/bins/brief-new.js",
+  },
 ];
 
 const SHELL_BINS = EXPECTED.filter((bin) => !bin.path.endsWith(".js")).map(

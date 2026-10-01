@@ -5,8 +5,8 @@ import { defineConfig } from "tsup";
  * npm publishing (OW-D1, ADR-0068).
  *
  * One entry per TypeScript bin. OW-D14 fixed sixteen bin names and their final
- * paths and PB4 added a seventeenth (`fix-brief`): fourteen of the seventeen are
- * TypeScript and therefore built here, three (`verify-manifests`, `merge-prs`,
+ * paths; PB4 added `fix-brief` and PB6 added `brief-new`: the TypeScript bins are
+ * built here, three (`verify-manifests`, `merge-prs`,
  * `gate-lock`) ship as shell scripts straight out of `bin/` and are never entries. A later
  * lane implementing a bin overwrites that one `src/bins/<name>.ts` stub and
  * nothing else — it never edits this file, because every path is already here.
@@ -43,6 +43,8 @@ export default defineConfig({
     "bins/gate": "src/bins/gate.ts",
     // PB4: the seventeenth bin, added after the sixteen OW-D14 pinned.
     "bins/fix-brief": "src/bins/fix-brief.ts",
+    // PB6: the next bin after fix-brief, written from Template A.
+    "bins/brief-new": "src/bins/brief-new.ts",
   },
   outDir: "dist",
   format: ["esm"],

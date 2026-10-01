@@ -81,6 +81,7 @@ another dependency's bin in a consumer's `node_modules/.bin`.
 | `hexagen-orchestration-gate-lock`        | Hold the gate lock across a command                 |
 | `hexagen-orchestration-sweep`            | Sweep a PR's review threads                         |
 | `hexagen-orchestration-fix-brief`        | Draft a fix-round brief from a PR's open threads    |
+| `hexagen-orchestration-brief-new`        | Write a lane-brief skeleton for a lane host         |
 | `hexagen-orchestration-merge-prs`        | Merge ready pull requests                           |
 | `hexagen-orchestration-verify-manifests` | Verify mutation manifests                           |
 | `hexagen-orchestration-mutate`           | Replay mutations                                    |
@@ -128,9 +129,38 @@ that in the consumer's test-runner config. Never also set `VITEST_MAX_WORKERS`:
 vitest applies it unvalidated and it takes precedence over the config. Vitest 4
 has no `minWorkers` option.
 
+### `hexagen-orchestration-brief-new`
+
+```bash
+hexagen-orchestration-brief-new --lane <id> --plan <path> --branch <name> \
+  --tip <sha> --host <laneHosts name> [--env KEY=VALUE]... [--out <path>]
+```
+
+Writes a lane-brief skeleton from Template A in the orchestrate-wave skill's
+`references/briefs.md`, with its lane-host variant resolved against the named
+host. It fills `<LANE>`, `<PLAN_PATH>`, `<BRANCH>` and `<SHA>`; the rest
+(`<N>`, `<REPO_PATH>`, `<WORKTREE_PATH>`, `<SECTIONS>`, the ownership list,
+the tasks) are for the orchestrator to fill before dispatch.
+
+- `--host` names a `laneHosts[].name` in the overlay, and its `gate` decides the
+  brief. `targeted-only`: the lane-host variant applies, the brief forbids the
+  full gate and tells the lane to run the listed targeted checks only. `full`:
+  the variant is dropped and the brief requires the full gate before pushing.
+- `--env KEY=VALUE` is repeatable. Each line is written into the brief verbatim,
+  in a fenced block, in the order given.
+- Refused with exit 2, naming the flag, before the overlay is loaded: a `--lane`
+  outside `^[A-Za-z0-9_-]+$`; a `--plan` or `--branch` outside
+  `^[A-Za-z0-9._/-]+$`; a `--tip` outside `^[0-9a-f]{7,40}$`; any value that
+  carries a control, format, or line or paragraph separator character; an
+  `--env` that is not `KEY=VALUE`; any other flag given twice. An unknown
+  `--host` is also exit 2, once the overlay is read.
+- `--out` creates its directory if it is missing, and refuses an existing file
+  (exit 1), checked before writing and again by an exclusive write. Without it,
+  the brief goes to stdout.
+
 ### `hexagen-orchestration-fix-brief`
 
-OW-D14 fixed sixteen bins; this is the seventeenth.
+OW-D14 fixed sixteen bins; this is the seventeenth (`brief-new` follows it).
 
 ```bash
 hexagen-orchestration-fix-brief --pr <n> --round <k> --lane <id> \
