@@ -1,12 +1,19 @@
 import { access, writeFile } from "node:fs/promises";
 
-/** Whether a path exists. */
+/**
+ * Whether a path exists. Only ENOENT and ENOTDIR mean "it is not there";
+ * anything else (EACCES, ELOOP, …) means the question could not be answered,
+ * and answering "no" would let a pre-check wave through a write it could not
+ * actually see the target of. Those errors propagate.
+ */
 export async function pathExists(path: string): Promise<boolean> {
   try {
     await access(path);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return false;
+    throw error;
   }
 }
 

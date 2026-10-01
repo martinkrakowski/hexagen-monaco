@@ -1,4 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -229,6 +235,30 @@ describe("fix-brief — the real file edge", () => {
     expect(await pathExists(path)).toBe(true);
     await expect(exclusiveWriter()(path, "two")).rejects.toThrow(/EEXIST/);
     expect(readFileSync(path, "utf8")).toBe("one");
+  });
+
+  test("pathExists is false only for a path that is not there, and rethrows every other failure", async () => {
+    const dir = tmp();
+    expect(await pathExists(join(dir, "missing.md"))).toBe(false);
+    // ENOTDIR: a parent that is a file.
+    writeFileSync(join(dir, "plain"), "x");
+    expect(await pathExists(join(dir, "plain", "child.md"))).toBe(false);
+    // ELOOP: not a path that is absent, so the pre-check must not call it one.
+    symlinkSync(join(dir, "b"), join(dir, "a"));
+    symlinkSync(join(dir, "a"), join(dir, "b"));
+    await expect(pathExists(join(dir, "a"))).rejects.toThrow(/ELOOP/);
+  });
+
+  test("a pre-check that cannot decide fails loudly, before any forge call", async () => {
+    const h = harness({
+      argv: [...ARGV, "--out", "r.md"],
+      exists: async () => {
+        throw new Error("EACCES: permission denied, access 'r.md'");
+      },
+    });
+    expect(await runFixBrief(h.io)).toBe(1);
+    expect(h.err.join("\n")).toContain("EACCES");
+    expect(h.out).toEqual([]);
   });
 
   test("an existing file at --out is refused end to end and not modified", async () => {

@@ -44,11 +44,22 @@ export async function runFixBrief(io: FixBriefIo): Promise<number> {
 
   // The pre-check comes before the fetch: a run that would refuse its output
   // should not spend a forge round-trip first.
-  if (plan.out !== undefined && (await io.exists(plan.out))) {
-    io.logError(
-      `refusing to write: ${plan.out} already exists — give this round its own --out`,
-    );
-    return 1;
+  if (plan.out !== undefined) {
+    let taken: boolean;
+    try {
+      taken = await io.exists(plan.out);
+    } catch (error) {
+      io.logError(
+        `could not check whether ${plan.out} exists, so nothing was fetched or written: ${errorText(error)}`,
+      );
+      return 1;
+    }
+    if (taken) {
+      io.logError(
+        `refusing to write: ${plan.out} already exists — give this round its own --out`,
+      );
+      return 1;
+    }
   }
 
   const fetched = await fetchAllThreads(plan.pr, io.gh, io.repo);
