@@ -27,7 +27,23 @@ function ambiguousRowError(
   id: string,
   matches: readonly { readonly line: number; readonly text: string }[],
   plan: string | undefined,
+  outside: readonly { readonly line: number; readonly text: string }[] = [],
 ): Error {
+  const quote = (text: string): string => {
+    const start = text.trim();
+    return start.length > QUOTED_LINE_START
+      ? `${start.slice(0, QUOTED_LINE_START)}…`
+      : start;
+  };
+  // A marked file that holds no row for the id inside its regions, but does
+  // hold some outside them: say so, so the operator looks at the markers.
+  if (matches.length === 0 && outside.length > 0) {
+    return new Error(
+      `${plan === undefined ? "" : `${plan}: `}expected exactly one plan row for ${id}, found 0 in marked regions; ${outside.length} matching ${outside.length === 1 ? "row" : "rows"} outside marked regions at ${outside
+        .map(({ line, text }) => `line ${line}: ${quote(text)}`)
+        .join("; ")}`,
+    );
+  }
   const where =
     matches.length === 0
       ? ""
@@ -115,18 +131,21 @@ function eligibleLines(lines: readonly string[]): boolean[] {
 function matchingLines(
   markdown: string,
   pattern: RegExp,
-): { line: number; text: string }[] {
+): {
+  found: { line: number; text: string }[];
+  outside: { line: number; text: string }[];
+} {
   // A CRLF plan: strip the carriage return per line, so a marker, heading or
   // fence line is recognised and a quoted row never carries one.
   const lines = markdown.split("\n").map((text) => text.replace(/\r$/, ""));
   const eligible = eligibleLines(lines);
   const found: { line: number; text: string }[] = [];
+  const outside: { line: number; text: string }[] = [];
   lines.forEach((text, index) => {
-    if (eligible[index] && pattern.test(text)) {
-      found.push({ line: index + 1, text });
-    }
+    if (!pattern.test(text)) return;
+    (eligible[index] ? found : outside).push({ line: index + 1, text });
   });
-  return found;
+  return { found, outside };
 }
 
 /**
@@ -138,8 +157,8 @@ function matchingLines(
  * naming the id and the count, never a hash of the wrong line.
  */
 export function rowHash(markdown: string, id: string, plan?: string): string {
-  const matches = matchingLines(markdown, rowPrefix(id));
-  if (matches.length !== 1) throw ambiguousRowError(id, matches, plan);
+  const { found: matches, outside } = matchingLines(markdown, rowPrefix(id));
+  if (matches.length !== 1) throw ambiguousRowError(id, matches, plan, outside);
   const normalised = matches[0]!.text.trim().replace(/\s+/g, " ");
   return createHash("sha256").update(normalised, "utf8").digest("hex");
 }
@@ -231,8 +250,8 @@ const RISK_WORD_AT_START = /^\**\s*(high|normal)\b/i;
  */
 export function rowRisk(markdown: string, id: string, plan?: string): Risk {
   const pattern = rowSecondCellPattern(id);
-  const lines = matchingLines(markdown, pattern);
-  if (lines.length !== 1) throw ambiguousRowError(id, lines, plan);
+  const { found: lines, outside } = matchingLines(markdown, pattern);
+  if (lines.length !== 1) throw ambiguousRowError(id, lines, plan, outside);
   const matches = [pattern.exec(lines[0]!.text)!];
   // Non-null: the capture group above is unconditional, so a match here
   // always carries one — see rowSecondCellPattern's own comment.

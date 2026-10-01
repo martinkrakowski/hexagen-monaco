@@ -384,3 +384,40 @@ describe("CRLF plans", () => {
     expect(() => rowHash(text, "L1")).not.toThrow();
   });
 });
+
+describe("a marked file's zero-match error names rows outside the regions", () => {
+  const text = [
+    "# Shipped",
+    "| **L1** | shipped |",
+    "# Lanes",
+    "<!-- plan-review: lanes -->",
+    "| **L2** | real |",
+    "# Notes",
+    "| **L1** | another |",
+  ].join("\n");
+
+  test("rowHash points at the rows it ignored", () => {
+    expect(() => rowHash(text, "L1", "p.md")).toThrow(
+      /p\.md: expected exactly one plan row for L1, found 0 in marked regions; 2 matching rows outside marked regions at line 2: \| \*\*L1\*\* \| shipped \|; line 7: /,
+    );
+  });
+
+  test("rowRisk does too, with a singular row", () => {
+    expect(() => rowRisk(text, "L1")).toThrow(/found 0 in marked regions/);
+    expect(() =>
+      rowHash(text.replace("| **L1** | another |", "x"), "L1"),
+    ).toThrow(/1 matching row outside marked regions at line 2: /);
+  });
+
+  test("an id that appears nowhere keeps the plain message", () => {
+    expect(() => rowHash(text, "L9")).toThrow(
+      /^expected exactly one plan row for L9, found 0$/,
+    );
+  });
+
+  test("an unmarked file's message is unchanged", () => {
+    expect(() => rowHash("| **L2** | a |", "L1")).toThrow(
+      /^expected exactly one plan row for L1, found 0$/,
+    );
+  });
+});
