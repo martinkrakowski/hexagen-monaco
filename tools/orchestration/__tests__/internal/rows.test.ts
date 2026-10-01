@@ -421,3 +421,21 @@ describe("a marked file's zero-match error names rows outside the regions", () =
     );
   });
 });
+
+describe("fenced rows and indented markers", () => {
+  const hash = /^[0-9a-f]{64}$/;
+
+  test("a fenced example repeating a real id inside a marked region is not a duplicate", () => {
+    const text = [
+      "# Lanes",
+      "<!-- plan-review: lanes -->",
+      "| **L1** | real |",
+      "",
+      "```",
+      "| **L1** | example |",
+      "```",
+    ].join("\n");
+    expect(rowHash(text, "L1")).toMatch(hash);
+    expect(rowRisk(text, "L1")).toBe("normal");
+  });
+});

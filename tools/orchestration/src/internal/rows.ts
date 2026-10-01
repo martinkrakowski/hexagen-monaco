@@ -122,7 +122,8 @@ function eligibleLines(lines: readonly string[]): boolean[] {
         inRegion = false;
       }
     }
-    eligible.push(inRegion);
+    // A row inside a code fence is example text, even in a marked region.
+    eligible.push(inRegion && fence === undefined && !fenceLine);
   }
   return anyMarker ? eligible : lines.map(() => true);
 }
