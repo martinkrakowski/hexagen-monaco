@@ -367,6 +367,13 @@ describe("the Wave Observability section follows the recorded agents_md answer",
     );
   });
 
+  test("the scaffolded gate carries no byte-scan step: the gate is a subset of CI and a scaffold never adds a required step", () => {
+    const { config } = parseConfig(renderConfig(emptyConfig()));
+    const names = (config?.gateSteps ?? []).map((step) => step.name);
+    expect(names).toEqual(["build", "typecheck", "lint", "test"]);
+    expect(renderConfig(emptyConfig())).not.toMatch(/control-bytes|lint:bytes/);
+  });
+
   test("readAgentsMdAnswer reads only an explicit false as a refusal", () => {
     expect(readAgentsMdAnswer(undefined)).toBe(true);
     expect(readAgentsMdAnswer(withRecord({ agents_md: true }))).toBe(true);
