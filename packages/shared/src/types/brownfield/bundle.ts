@@ -1,6 +1,10 @@
 import { z } from "zod";
-import { IsoDateTime, SchemaVersion, Sha256Hex } from "./common.js";
-import { normalizeSlicePath } from "./slice-path.js";
+import {
+  FilePathString,
+  IsoDateTime,
+  SchemaVersion,
+  Sha256Hex,
+} from "./common.js";
 
 /**
  * Bundle paths that must never be listed: the signing key, any `*.key` file, anything under a
@@ -10,12 +14,10 @@ export const BUNDLE_FORBIDDEN_PATH_PATTERN =
   "(^|/)(grant-signing\\.key|[^/]*\\.key|keys|\\.env[^/]*)(/|$)";
 const forbidden = new RegExp(BUNDLE_FORBIDDEN_PATH_PATTERN);
 
-const BundlePath = z
-  .string()
-  .refine((p) => normalizeSlicePath(p).ok, { message: "invalid path" })
-  .refine((p) => !forbidden.test(p), {
-    message: "key and env files are never part of a bundle",
-  });
+/** A bundle entry names a file (no trailing `/`), never a key or env file. */
+const BundlePath = FilePathString.refine((p) => !forbidden.test(p), {
+  message: "key and env files are never part of a bundle",
+});
 
 export const BUNDLE_FILE_ROLES = [
   "observed",

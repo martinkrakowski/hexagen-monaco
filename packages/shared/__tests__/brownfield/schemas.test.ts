@@ -5,6 +5,7 @@ import Ajv from "ajv";
 import type { ZodTypeAny } from "zod";
 import {
   ObservedReport,
+  edgesComplete,
   Slice,
   Contract,
   ProposalMeta,
@@ -139,6 +140,16 @@ const BAD_REL: Array<[string, string]> = [
   ["double slash", "a//b"],
   ["absolute", "/abs"],
 ];
+const BAD_FILE: Array<[string, string]> = [
+  ["directory prefix", "src/"],
+  ["file with trailing slash", "package.json/"],
+];
+const BAD_BUILD: Array<[string, string]> = [
+  ["absolute", "/etc/config"],
+  ["dotdot", "../outside"],
+  ["backslash", "a\\b"],
+  ["trailing slash", "Makefile/"],
+];
 type Mut = (v: Record<string, unknown>) => unknown;
 /** One invalid sample per control-character case, writing `value` at `at`. */
 const withBad = (
@@ -198,6 +209,14 @@ const cases: Case[] = [
       ...withBad("edge to", "edges.items.0.to", BAD_REL),
       ...withBad("unresolved from", "unresolved.items.0.from", BAD_REL),
       ...withBad("generated path", "generated.items.0.path", TERMINATORS),
+      ...withBad(
+        "package manifestFile",
+        "packages.items.0.manifestFile",
+        BAD_FILE,
+      ),
+      ...withBad("edge from", "edges.items.0.from", BAD_FILE),
+      ...withBad("unresolved from", "unresolved.items.0.from", BAD_FILE),
+      ...withBad("build path", "build.items.0.path", BAD_BUILD),
       ["bad schemaVersion major", (v) => set(v, "schemaVersion", "2.0.0")],
       ["empty package name", (v) => set(v, "packages.items.0.name", "")],
     ],
@@ -231,6 +250,7 @@ const cases: Case[] = [
       ],
       ...withBad("rule from", "rules.0.from", TERMINATORS),
       ...withBad("violation file", "knownViolations.0.file", BAD_REL),
+      ...withBad("violation file", "knownViolations.0.file", BAD_FILE),
       ["bad kind", (v) => set(v, "rules.0.kind", "deny")],
       ["bad severity", (v) => set(v, "rules.0.severity", "fatal")],
       ["dotdot prefix", (v) => set(v, "rules.0.from", "../x/")],
@@ -266,6 +286,7 @@ const cases: Case[] = [
     file: "bundle.schema.json",
     valid: bundle,
     invalid: [
+      ["directory entry", (v) => set(v, "files.0.path", "packages/app/")],
       ["any .key file", (v) => set(v, "files.0.path", "a/engagement.key")],
       ...withBad("path", "files.0.path", TERMINATORS),
       ["short hmac", (v) => set(v, "hmac", "abc")],
@@ -331,6 +352,26 @@ describe("observed report invariants", () => {
     expect(ObservedReport.safeParse(o).success).toBe(true);
     const ajv = new Ajv({ strict: false, validateFormats: false });
     expect(ajv.compile(loadSchema("observed.schema.json"))(o)).toBe(true);
+  });
+
+  it("accepts an edge into a root package", () => {
+    const o = clone(observed) as Record<string, unknown>;
+    set(o, "edges.items.0.to", ".");
+    expect(ObservedReport.safeParse(o).success).toBe(true);
+    const ajv = new Ajv({ strict: false, validateFormats: false });
+    expect(ajv.compile(loadSchema("observed.schema.json"))(o)).toBe(true);
+  });
+
+  it("edgesComplete is false when uncollected or when a language is unread", () => {
+    const edges = (observed as { edges: Parameters<typeof edgesComplete>[0] })
+      .edges;
+    expect(edgesComplete({ collected: false, reason: "r" })).toBe(false);
+    expect(edgesComplete({ ...edges, unreadLanguages: ["go"] } as never)).toBe(
+      false,
+    );
+    expect(edgesComplete({ ...edges, unreadLanguages: [] } as never)).toBe(
+      true,
+    );
   });
 
   it('accepts "." as a package root (the repo root) in both', () => {

@@ -38,7 +38,11 @@
         "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
         "description": "A file path: no trailing /.",
         "not": {
-          "pattern": "/$"
+          "anyOf": [
+            {
+              "pattern": "/$"
+            }
+          ]
         }
       }
     },

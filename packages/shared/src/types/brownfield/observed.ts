@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { IsoDateTime, Repo, SchemaVersion, SlicePathString } from "./common.js";
+import {
+  FilePathString,
+  IsoDateTime,
+  Repo,
+  SchemaVersion,
+  SlicePathString,
+} from "./common.js";
 
 /**
  * `.hexagen/observed.json`: what a scan found in a client repo, in the repo's
@@ -28,7 +34,7 @@ const PackageItem = z
     name: z.string().min(1),
     /** The literal "." is the repo root (a repo with no workspaces); else a directory path. */
     root: z.union([z.literal("."), SlicePathString]),
-    manifestFile: SlicePathString,
+    manifestFile: FilePathString,
   })
   .strict();
 
@@ -37,7 +43,7 @@ const LanguageItem = z
   .strict();
 
 const BuildItem = z
-  .object({ marker: z.string().min(1), path: z.string().min(1) })
+  .object({ marker: z.string().min(1), path: FilePathString })
   .strict();
 
 const GeneratedItem = z
@@ -58,16 +64,16 @@ const DontTouchItem = z
 const EdgeItem = z
   .object({
     /** Repo-relative file. */
-    from: SlicePathString,
-    /** Repo-relative file or package root. */
-    to: SlicePathString,
+    from: FilePathString,
+    /** Repo-relative file or package root; "." is a root package. */
+    to: z.union([z.literal("."), SlicePathString]),
     specifier: z.string().min(1),
   })
   .strict();
 
 const UnresolvedItem = z
   .object({
-    from: SlicePathString,
+    from: FilePathString,
     specifier: z.string().min(1),
     reason: z.string().min(1),
   })
@@ -75,8 +81,11 @@ const UnresolvedItem = z
 
 /**
  * Edges add a required `unreadLanguages` on the collected arm (empty when every
- * language was read): a language the import pass
- * does not read is named here, so an empty edge list is never a clean bill.
+ * language was read): a language the import pass does not read is named here,
+ * so an empty edge list is never a clean bill.
+ *
+ * Consumers must call `edgesComplete`, never read `collected` alone:
+ * `collected: true` with a non-empty `unreadLanguages` is an incomplete list.
  */
 const EdgesSection = z.union([
   z
@@ -114,3 +123,12 @@ export const ObservedReport = z
   .strict();
 
 export type ObservedReport = z.infer<typeof ObservedReport>;
+
+/**
+ * True only when the edge list is complete: the section was collected and no
+ * language went unread. False when `collected` is false, or when
+ * `unreadLanguages` is non-empty.
+ */
+export function edgesComplete(section: ObservedReport["edges"]): boolean {
+  return section.collected && section.unreadLanguages.length === 0;
+}

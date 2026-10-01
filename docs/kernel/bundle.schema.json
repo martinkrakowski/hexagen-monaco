@@ -30,9 +30,16 @@
           "path": {
             "type": "string",
             "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
-            "description": "Repo-relative, case-sensitive. Control characters (U+0000-U+001F, U+007F, U+2028, U+2029) are also refused. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused.",
+            "description": "A file path (no trailing /); never a key or env file.",
             "not": {
-              "pattern": "(^|/)(grant-signing\\.key|[^/]*\\.key|keys|\\.env[^/]*)(/|$)"
+              "anyOf": [
+                {
+                  "pattern": "/$"
+                },
+                {
+                  "pattern": "(^|/)(grant-signing\\.key|[^/]*\\.key|keys|\\.env[^/]*)(/|$)"
+                }
+              ]
             }
           },
           "role": {

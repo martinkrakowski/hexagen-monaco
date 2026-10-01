@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SchemaVersion, SlicePathString } from "./common.js";
+import { FilePathString, SchemaVersion, SlicePathString } from "./common.js";
 
 /**
  * Built-in rule id: an unresolved in-slice import specifier is a violation of
@@ -31,7 +31,7 @@ const Rule = z
 const KnownViolation = z
   .object({
     rule: z.string().min(1),
-    file: SlicePathString,
+    file: FilePathString,
     specifier: z.string(),
     reason: z.string().min(1).optional(),
     expires: z

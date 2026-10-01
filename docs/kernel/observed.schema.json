@@ -81,7 +81,14 @@
                   "manifestFile": {
                     "type": "string",
                     "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
-                    "description": "Repo-relative, case-sensitive. Control characters (U+0000-U+001F, U+007F, U+2028, U+2029) are also refused. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused."
+                    "description": "A file path: no trailing /.",
+                    "not": {
+                      "anyOf": [
+                        {
+                          "pattern": "/$"
+                        }
+                      ]
+                    }
                   }
                 }
               }
@@ -173,7 +180,15 @@
                   },
                   "path": {
                     "type": "string",
-                    "minLength": 1
+                    "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
+                    "description": "A file path: no trailing /.",
+                    "not": {
+                      "anyOf": [
+                        {
+                          "pattern": "/$"
+                        }
+                      ]
+                    }
                   }
                 }
               }
@@ -324,12 +339,27 @@
                   "from": {
                     "type": "string",
                     "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
-                    "description": "Repo-relative file."
+                    "description": "Repo-relative file.",
+                    "not": {
+                      "anyOf": [
+                        {
+                          "pattern": "/$"
+                        }
+                      ]
+                    }
                   },
                   "to": {
-                    "type": "string",
-                    "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
-                    "description": "Repo-relative file or package root."
+                    "anyOf": [
+                      {
+                        "const": "."
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
+                        "description": "Repo-relative, case-sensitive. Control characters (U+0000-U+001F, U+007F, U+2028, U+2029) are also refused. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused."
+                      }
+                    ],
+                    "description": "Repo-relative file or package root; \".\" is a root package."
                   },
                   "specifier": {
                     "type": "string",
@@ -376,7 +406,14 @@
                   "from": {
                     "type": "string",
                     "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000-\\u001f\\u007f\\u2028\\u2029]).+$",
-                    "description": "Repo-relative, case-sensitive. Control characters (U+0000-U+001F, U+007F, U+2028, U+2029) are also refused. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused."
+                    "description": "A file path: no trailing /.",
+                    "not": {
+                      "anyOf": [
+                        {
+                          "pattern": "/$"
+                        }
+                      ]
+                    }
                   },
                   "specifier": {
                     "type": "string",
