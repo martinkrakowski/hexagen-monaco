@@ -18,8 +18,14 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as PushGithubRequest;
 
-    // BW-D7: a stored brownfield workbook never reaches this route.
-    const brownfield = await guardBrownfieldProject(request, body.projectId);
+    // BW-D7: a resolved brownfield workbook never reaches this route. Callers
+    // already send ids of projects that may be IndexedDB-only or shared, so
+    // this only ADDS a refusal; every other case is today's behaviour.
+    const brownfield = await guardBrownfieldProject(
+      request,
+      body.projectId,
+      "refuse-brownfield-only",
+    );
     if (brownfield) return brownfield;
 
     const token = await getToken({
