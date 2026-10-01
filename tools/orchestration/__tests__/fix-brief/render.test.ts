@@ -128,6 +128,13 @@ describe("render", () => {
     ).toContain("`src/a.ts` (file-level)");
   });
 
+  test("an empty path is labelled, not rendered as an empty code span", () => {
+    const out = render(header, [thread({ path: "" })]);
+    expect(out).toContain("PRRT_1 — reviewer-bot — (no path)\n");
+    expect(out).not.toContain("```:");
+    expect(out).not.toMatch(/— `:?\d*`/);
+  });
+
   test("zero threads still renders a well-formed brief", () => {
     const out = render(header, []);
     expect(out).toContain("Items in this round: 0.");
@@ -137,6 +144,10 @@ describe("render", () => {
 });
 
 describe("sanitiseInline", () => {
+  test("format characters (bidi override, zero-width) become ? too", () => {
+    expect(sanitiseInline("a\u202Eb\u200Bc\uFEFFd")).toBe("a?b?c?d");
+  });
+
   test("controls, line separators and backticks all become ?", () => {
     expect(sanitiseInline("a\nb\tc d e`f\u0000")).toBe("a?b?c?d?e?f?");
   });
@@ -169,9 +180,20 @@ describe("omitAgentPrompts", () => {
     expect(omitAgentPrompts(text)).toBe(text);
   });
 
-  test("an outer block that merely contains a prompt block is kept whole", () => {
-    const text = `<details><summary>Notes</summary>\n${prompt("Prompt for AI Agents")}\n</details>`;
-    expect(omitAgentPrompts(text)).toBe(text);
+  test("a prompt block inside an ordinary outer block is omitted, and the outer block is kept", () => {
+    const text = `<details><summary>Notes</summary>\nkeep me\n${prompt("Prompt for AI Agents", "SECRET")}\nand me\n</details>`;
+    const out = omitAgentPrompts(text);
+    expect(out).not.toContain("SECRET");
+    expect(out).toContain("keep me");
+    expect(out).toContain("and me");
+    expect(out).toMatch(/^<details><summary>Notes<\/summary>/);
+    expect(out.endsWith("</details>")).toBe(true);
+    expect(out.match(/omitted/g)).toHaveLength(1);
+  });
+
+  test("a prompt block nested two levels down inside ordinary blocks is omitted", () => {
+    const text = `<details><summary>A</summary><details><summary>B</summary>${prompt("Agent Prompt", "SECRET")}</details></details>`;
+    expect(omitAgentPrompts(text)).not.toContain("SECRET");
   });
 
   test("nested details inside a prompt block are consumed to the real closing tag", () => {

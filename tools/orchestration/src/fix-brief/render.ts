@@ -43,17 +43,20 @@ function substitute(
 }
 
 /**
- * A field off the wire rendered INLINE in a heading. A control character, a
- * line or paragraph separator, or a backtick becomes `?`: the first three would
+ * A field off the wire rendered INLINE in a heading. A control or format character
+ * (a bidi override, a zero-width space), a line or paragraph separator, or a backtick becomes `?`: the first three would
  * end the heading's line, and a backtick would end its code quoting, so a value
  * from the forge would be writing the line it sits on rather than filling it.
  */
 export function sanitiseInline(text: string): string {
-  return text.replace(/[\p{Cc}\p{Zl}\p{Zp}`]/gu, "?");
+  return text.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}`]/gu, "?");
 }
 
 /** `path:line`, `path:originalLine (outdated)`, or `path (file-level)`; the label sits outside the code span. */
 function anchorOf(thread: ReviewThread): string {
+  // An empty path would render as an empty code span, which reads as a
+  // formatting accident rather than as "the API named no file".
+  if (thread.path === "") return "(no path)";
   const file = sanitiseInline(thread.path);
   const line = thread.isOutdated ? thread.originalLine : thread.line;
   if (line === null) return `\`${file}\` (file-level)`;
@@ -96,34 +99,31 @@ function isAgentPromptBlock(block: string): boolean {
 }
 
 /**
- * Every COMPLETE top-level `<details>…</details>` span, found by counting
- * depth. A non-greedy match would end at the first closing tag and leave the
- * tail of a block that contains another block outside it, in the brief. An
- * unclosed `<details>` and a stray `</details>` are not blocks and are left
- * alone.
+ * Every COMPLETE `<details>…</details>` span at ANY depth, found by matching
+ * each closing tag to the innermost open one. A non-greedy match would end at
+ * the first closing tag and leave the tail of a block that contains another
+ * block outside it, in the brief. An unclosed `<details>` and a stray
+ * `</details>` are not blocks and are left alone (an unclosed outer block does
+ * not stop a complete block inside it being found).
  */
-function topLevelBlocks(
-  text: string,
-): readonly { start: number; end: number }[] {
+function allBlocks(text: string): readonly { start: number; end: number }[] {
   const blocks: { start: number; end: number }[] = [];
-  let depth = 0;
-  let start = 0;
+  const open: number[] = [];
   for (const tag of text.matchAll(DETAILS_TAG)) {
     const at = tag.index;
-    if (tag[0].startsWith("</")) {
-      if (depth === 0) continue;
-      depth -= 1;
-      if (depth === 0) blocks.push({ start, end: at + tag[0].length });
-    } else {
-      if (depth === 0) start = at;
-      depth += 1;
+    if (!tag[0].startsWith("</")) {
+      open.push(at);
+      continue;
     }
+    const start = open.pop();
+    if (start !== undefined) blocks.push({ start, end: at + tag[0].length });
   }
-  return blocks;
+  return blocks.sort((x, y) => x.start - y.start);
 }
 
 /**
- * Replaces each reviewer agent-prompt block with a one-line note of how much
+ * Replaces each reviewer agent-prompt block, however deeply it sits inside
+ * ordinary blocks, with a one-line note of how much
  * was withheld. The block is addressed to a model reading the thread and means
  * nothing to a lane fixing the finding; replacing rather than truncating means
  * no lane follows half a prompt. Everything else is kept verbatim.
@@ -138,7 +138,10 @@ export function omitAgentPrompts(body: string): string {
   );
   let kept = "";
   let copiedTo = 0;
-  for (const { start, end } of topLevelBlocks(scanned)) {
+  for (const { start, end } of allBlocks(scanned)) {
+    // Blocks arrive outermost-first; one inside a span already omitted (or
+    // already copied past) is gone with it.
+    if (start < copiedTo) continue;
     const block = scanned.slice(start, end);
     if (!isAgentPromptBlock(block)) continue;
     kept += body.slice(copiedTo, start);
