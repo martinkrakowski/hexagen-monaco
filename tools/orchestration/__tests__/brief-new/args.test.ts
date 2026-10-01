@@ -77,6 +77,21 @@ describe("brief-new arguments", () => {
     },
   );
 
+  test.each(["\n", "\r", "\u2028", "\u2029", "\u202e", "\u200b", "\u001b"])(
+    "an --out carrying the character %j is refused, so the summary line cannot be forged",
+    (bad) => {
+      expect(() =>
+        parseBriefNewArgs([...GOOD, "--out", `d/b${bad}x.md`]),
+      ).toThrow(/^--out must be a single line/);
+    },
+  );
+
+  test("an --out with spaces or unusual printable characters is still a path", () => {
+    expect(parseBriefNewArgs([...GOOD, "--out", "my dir/b (1).md"]).out).toBe(
+      "my dir/b (1).md",
+    );
+  });
+
   test("an --env that is not KEY=VALUE is refused, naming the flag", () => {
     for (const bad of ["NOEQUALS", "=v", "1A=v", "A B=v"]) {
       expect(() => parseBriefNewArgs([...GOOD, "--env", bad])).toThrow(

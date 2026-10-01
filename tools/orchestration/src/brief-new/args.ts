@@ -39,6 +39,22 @@ function valueAfter(argv: readonly string[], i: number, flag: string): string {
   return raw;
 }
 
+/** A value held to one line for a stated reason, with no shape rule of its own. */
+function singleLineAfter(
+  argv: readonly string[],
+  i: number,
+  flag: string,
+  why: string,
+): string {
+  const raw = valueAfter(argv, i, flag);
+  if (NOT_ONE_LINE.test(raw)) {
+    throw new Error(
+      `${flag} must be a single line: ${why}\n${BRIEF_NEW_USAGE}`,
+    );
+  }
+  return raw;
+}
+
 /**
  * A header value. The one-line rule comes first so the refusal says WHY a value
  * holding a newline is refused (it would be a second line of the brief), and
@@ -69,9 +85,9 @@ function headerAfter(
  * Parses the command line. Every flag but `--env` states one value, so a second
  * one is refused rather than letting the last silently win. `--env` is
  * repeatable: each is `KEY=VALUE` with an identifier for the key, and a single
- * line, since it is written into the brief verbatim. `--out` is a path and a
- * log line, never written into the brief, so it is not held to the single-line
- * rule.
+ * line, since it is written into the brief verbatim. `--out` is never written
+ * into the brief, but it is echoed in the summary line, so it is held to the
+ * same single-line rule rather than being sanitised on the way out.
  */
 export function parseBriefNewArgs(argv: readonly string[]): BriefNewArgs {
   const seen = new Set<string>();
@@ -135,17 +151,10 @@ export function parseBriefNewArgs(argv: readonly string[]): BriefNewArgs {
           "7 to 40 lowercase hex digits",
         );
         break;
-      case "--host": {
+      case "--host":
         once(flag);
-        const raw = valueAfter(argv, ++i, flag);
-        if (NOT_ONE_LINE.test(raw)) {
-          throw new Error(
-            `${flag} must be a single line: it names a laneHosts entry\n${BRIEF_NEW_USAGE}`,
-          );
-        }
-        host = raw;
+        host = singleLineAfter(argv, ++i, flag, "it names a laneHosts entry");
         break;
-      }
       case "--env":
         env.push(
           headerAfter(
@@ -159,7 +168,12 @@ export function parseBriefNewArgs(argv: readonly string[]): BriefNewArgs {
         break;
       case "--out":
         once(flag);
-        out = valueAfter(argv, ++i, flag);
+        out = singleLineAfter(
+          argv,
+          ++i,
+          flag,
+          "it is echoed in the summary line",
+        );
         break;
       default:
         throw new Error(`unknown argument '${flag}'\n${BRIEF_NEW_USAGE}`);

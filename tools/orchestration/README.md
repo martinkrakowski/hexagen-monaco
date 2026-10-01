@@ -154,11 +154,13 @@ the tasks) are for the orchestrator to fill before dispatch.
   in a fenced block, in the order given.
 - Refused with exit 2, naming the flag, before the overlay is loaded: a `--lane`
   outside `^[A-Za-z0-9_-]+$`; a `--plan` or `--branch` outside
-  `^[A-Za-z0-9._/-]+$`; a `--tip` outside `^[0-9a-f]{7,40}$`; any value that
-  carries a control, format, or line or paragraph separator character; an
+  `^[A-Za-z0-9._/-]+$`; a `--tip` outside `^[0-9a-f]{7,40}$`; any value
+  (including `--host` and `--out`) that carries a control, format, or line or
+  paragraph separator character; an
   `--env` that is not `KEY=VALUE`; any other flag given twice. An unknown
   `--host` is also exit 2, once the overlay is read.
-- `--out` creates its directory if it is missing, and refuses an existing file
+- `--out` is held to the same single-line rule, because it is echoed in the
+  summary line. It creates its directory if it is missing, and refuses an existing file
   (exit 1), checked before writing and again by an exclusive write. Without it,
   the brief goes to stdout.
 
