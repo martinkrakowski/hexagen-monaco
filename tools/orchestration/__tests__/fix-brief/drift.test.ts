@@ -37,12 +37,16 @@ export function templateEBody(markdown: string): string {
 }
 
 describe("Template E drift", () => {
-  it.skipIf(!existsSync(CANONICAL))(
-    "the tool's template is byte-identical to the template copy's Template E",
-    () => {
-      expect(TEMPLATE_E).toBe(templateEBody(readFileSync(CANONICAL, "utf8")));
-    },
-  );
+  it("the tool's template is byte-identical to the template copy's Template E", (ctx) => {
+    // Decided at run time so the skip can say why. In a published package the
+    // repository layout is absent, and there is nothing to compare against.
+    if (!existsSync(CANONICAL)) {
+      ctx.skip(
+        "published package: the template's briefs.md is not on disk here, so there is nothing to compare against",
+      );
+    }
+    expect(TEMPLATE_E).toBe(templateEBody(readFileSync(CANONICAL, "utf8")));
+  });
 
   it("the extractor reads the body between same-length fences, and refuses what it cannot find", () => {
     const md = `${HEADING}\n\n\`\`\`\`markdown\nA\n\`\`\`\ninner\n\`\`\`\nB\n\`\`\`\`\n`;
@@ -54,13 +58,14 @@ describe("Template E drift", () => {
     );
   });
 
-  it("the canonical path is where the template lives in this checkout, or this run is a published package", () => {
-    // Guards the skip: if the repository layout is present (the template
-    // directory exists) the canonical file must exist too.
-    const templateDir = resolve(
+  it("the canonical path exists wherever the repository layout does, so the skip above can never hide a moved or deleted file", () => {
+    // The sentinel is a file that stays put when the template moves, not the
+    // template directory itself: anchoring on the directory would let a
+    // deleted or relocated template turn the guard off together with the test.
+    const sentinel = resolve(
       import.meta.dirname,
-      "../../../../packages/template-engine/templates/orchestration",
+      "../../../../packages/template-engine/package.json",
     );
-    if (existsSync(templateDir)) expect(existsSync(CANONICAL)).toBe(true);
+    if (existsSync(sentinel)) expect(existsSync(CANONICAL)).toBe(true);
   });
 });
