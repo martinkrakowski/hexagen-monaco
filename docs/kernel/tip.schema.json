@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://hexagen.dev/kernel/tip.schema.json",
+  "title": "Trace tip",
+  "description": "`tip.json`: the anchored head of the trace chain. Mirrors packages/shared/src/types/brownfield/tip.ts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["seq", "hash", "hmac"],
+  "properties": {
+    "seq": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "hmac": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

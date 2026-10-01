@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://hexagen.dev/kernel/proposal.schema.json",
+  "title": "Proposal metadata",
+  "description": "`.hexagen/proposals/<id>.json`, beside `<id>.patch`. Mirrors packages/shared/src/types/brownfield/proposal.ts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "grantId",
+    "sliceId",
+    "tool",
+    "paths",
+    "traceSeq",
+    "createdAt"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "grantId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sliceId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tool": {
+      "type": "string",
+      "minLength": 1
+    },
+    "paths": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\\\\u0000]).+$",
+        "description": "Repo-relative, case-sensitive. A trailing / makes a directory prefix; anything else is an exact file path. `.` and `..` segments, empty segments, absolute paths, backslashes and NUL are refused."
+      }
+    },
+    "traceSeq": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
