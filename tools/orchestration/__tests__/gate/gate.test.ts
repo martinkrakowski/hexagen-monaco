@@ -83,7 +83,11 @@ function runGate(
   timeout = 15_000,
 ): RunResult {
   const dir = scratch();
-  const childEnv: NodeJS.ProcessEnv = { ...process.env, TMPDIR: dir };
+  const childEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    HEXAGEN_GATE_SLOTS: "1",
+    TMPDIR: dir,
+  };
   for (const [key, value] of Object.entries(env)) {
     // An explicit `undefined` DELETES the variable from the child's
     // environment, including one inherited from this process — which is how a
@@ -135,7 +139,7 @@ function runGateAsyncIn(
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     const child = spawn("sh", [gateRunSh, ...args], {
-      env: { ...process.env, TMPDIR: dir, ...env },
+      env: { ...process.env, HEXAGEN_GATE_SLOTS: "1", TMPDIR: dir, ...env },
     });
     let stdout = "";
     let stderr = "";
