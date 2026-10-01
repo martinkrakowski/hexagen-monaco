@@ -131,7 +131,10 @@ async function issueSignedGrant(
 ): Promise<Grant> {
   const keyHex = randomBytes(32).toString("hex");
   await mkdir(path.join(workspaceRoot, ".hexagen"), { recursive: true });
-  await writeFile(path.join(workspaceRoot, ".hexagen", "grant-signing.key"), keyHex);
+  await writeFile(
+    path.join(workspaceRoot, ".hexagen", "grant-signing.key"),
+    keyHex,
+  );
 
   const unsigned: Grant = {
     id: "grant-001",
@@ -215,8 +218,12 @@ describe("A hexagen-grant-issue-shaped grant, checked by the real GrantSignature
   });
 
   it("denies a grant when checked against a different workspace root (no matching trust root there)", async () => {
-    const workspaceRootA = await mkdtemp(path.join(tmpdir(), "grant-issuer-a-"));
-    const workspaceRootB = await mkdtemp(path.join(tmpdir(), "grant-issuer-b-"));
+    const workspaceRootA = await mkdtemp(
+      path.join(tmpdir(), "grant-issuer-a-"),
+    );
+    const workspaceRootB = await mkdtemp(
+      path.join(tmpdir(), "grant-issuer-b-"),
+    );
     tempDirs.push(workspaceRootA, workspaceRootB);
     const grant = await issueSignedGrant(workspaceRootA);
     const h = await harness(workspaceRootB);

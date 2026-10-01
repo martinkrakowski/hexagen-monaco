@@ -21,7 +21,9 @@ export function parseDurationMs(input: string): number {
   const [, amount, unit] = match;
   const ms = Number(amount) * UNIT_MS[unit];
   if (ms <= 0) {
-    throw new Error(`Invalid --expires-in '${input}': duration must be positive`);
+    throw new Error(
+      `Invalid --expires-in '${input}': duration must be positive`,
+    );
   }
   return ms;
 }

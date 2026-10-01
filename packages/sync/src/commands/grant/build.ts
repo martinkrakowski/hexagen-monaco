@@ -32,7 +32,11 @@ export async function expandContexts(
   workspaceRoot: string,
   contexts: readonly string[],
 ): Promise<string[]> {
-  const manifestPath = path.join(workspaceRoot, ".architecture", "manifest.yaml");
+  const manifestPath = path.join(
+    workspaceRoot,
+    ".architecture",
+    "manifest.yaml",
+  );
   let raw: string;
   try {
     raw = await readFile(manifestPath, "utf-8");

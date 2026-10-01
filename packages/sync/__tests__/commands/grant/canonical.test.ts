@@ -74,7 +74,9 @@ describe("canonicalGrantPayload (sync's copy)", () => {
     assert.ok(!canonicalGrantPayload(base).includes("max_files"));
     assert.ok(!canonicalGrantPayload(base).includes("revoked_at"));
     assert.ok(
-      canonicalGrantPayload({ ...base, max_files: 4 }).includes('"max_files":4'),
+      canonicalGrantPayload({ ...base, max_files: 4 }).includes(
+        '"max_files":4',
+      ),
     );
     assert.ok(
       canonicalGrantPayload({

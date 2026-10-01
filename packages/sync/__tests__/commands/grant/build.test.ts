@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { buildGrant, expandContexts } from "../../../src/commands/grant/build.js";
+import {
+  buildGrant,
+  expandContexts,
+} from "../../../src/commands/grant/build.js";
 import { canonicalGrantPayload } from "../../../src/commands/grant/canonical.js";
 
 const tempDirs: string[] = [];
@@ -61,7 +64,8 @@ describe("expandContexts", () => {
 });
 
 describe("buildGrant", () => {
-  const sign = (payload: string, keyHex: string) => `sig(${keyHex}:${payload.length})`;
+  const sign = (payload: string, keyHex: string) =>
+    `sig(${keyHex}:${payload.length})`;
   const now = new Date("2026-10-01T12:00:00.000Z");
 
   it("assembles a grant from explicit --paths, with a fresh id and computed expiry", async () => {

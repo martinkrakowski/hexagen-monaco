@@ -58,7 +58,9 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
   if (options.maxFiles !== undefined) {
     maxFiles = Number(options.maxFiles);
     if (!Number.isInteger(maxFiles) || maxFiles < 1) {
-      console.error(`--max-files must be a positive integer, got '${options.maxFiles}'`);
+      console.error(
+        `--max-files must be a positive integer, got '${options.maxFiles}'`,
+      );
       process.exitCode = 1;
       return;
     }
@@ -86,7 +88,9 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
       );
     }
   } catch (error) {
-    console.error(`Could not load the signing key: ${(error as Error).message}`);
+    console.error(
+      `Could not load the signing key: ${(error as Error).message}`,
+    );
     process.exitCode = 1;
     return;
   }
@@ -119,7 +123,9 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
     const outPath = path.resolve(workspaceRoot, options.out);
     await mkdir(path.dirname(outPath), { recursive: true });
     await writeFile(outPath, `${json}\n`, "utf-8");
-    console.error(`[grant issue] wrote ${outPath} (id: ${grant.id}, expires: ${grant.expires_at})`);
+    console.error(
+      `[grant issue] wrote ${outPath} (id: ${grant.id}, expires: ${grant.expires_at})`,
+    );
   } else {
     console.log(json);
   }
@@ -135,7 +141,10 @@ grantCommander
     "Mint a signed Grant — the file hexagen_accept_transaction trusts as its `grant` argument",
   )
   .requiredOption("--principal <id>", "Who authorized this cycle")
-  .requiredOption("--agent <id>", "Which agent identity this grant is issued to")
+  .requiredOption(
+    "--agent <id>",
+    "Which agent identity this grant is issued to",
+  )
   .option(
     "--paths <prefix[,prefix...]>",
     "Workspace-relative path prefixes this cycle may write to (comma-separated)",
@@ -153,7 +162,10 @@ grantCommander
     "--contexts <name[,name...]>",
     "Monaco-only: manifest.yaml bounded-context names, expanded to packages/<name>/ and appended to --paths. Fails if a name isn't a real context.",
   )
-  .option("--max-files <n>", "Optional cap on distinct files touched in one cycle")
+  .option(
+    "--max-files <n>",
+    "Optional cap on distinct files touched in one cycle",
+  )
   .option(
     "--workspace-root <path>",
     "Workspace root to resolve .hexagen/grant-signing.key and manifest.yaml against (default: cwd)",

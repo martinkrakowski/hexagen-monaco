@@ -39,7 +39,10 @@ describe("issueGrantCommand", () => {
     errorSpy.mockRestore();
 
     const grant = JSON.parse(
-      await readFile(path.join(workspaceRoot, ".hexagen/grants/test.json"), "utf-8"),
+      await readFile(
+        path.join(workspaceRoot, ".hexagen/grants/test.json"),
+        "utf-8",
+      ),
     );
     assert.equal(grant.principal, "martin");
     assert.equal(grant.agent, "lane-ow3b");
@@ -54,7 +57,10 @@ describe("issueGrantCommand", () => {
     assert.ok(grant.signature);
 
     const keyHex = (
-      await readFile(path.join(workspaceRoot, ".hexagen/grant-signing.key"), "utf-8")
+      await readFile(
+        path.join(workspaceRoot, ".hexagen/grant-signing.key"),
+        "utf-8",
+      )
     ).trim();
     const { signature, ...unsigned } = grant;
     const expected = createHmac("sha256", Buffer.from(keyHex, "hex"))
@@ -114,7 +120,9 @@ describe("issueGrantCommand", () => {
       workspaceRoot,
     });
     assert.ok(
-      errorSpy.mock.calls.some((call) => String(call[0]).includes("--tools is required")),
+      errorSpy.mock.calls.some((call) =>
+        String(call[0]).includes("--tools is required"),
+      ),
     );
     assert.equal(process.exitCode, 1);
     process.exitCode = 0;
@@ -132,7 +140,11 @@ describe("issueGrantCommand", () => {
       expiresIn: "1h",
       workspaceRoot,
     });
-    assert.ok(errorSpy.mock.calls.some((call) => String(call[0]).includes("--mode must be")));
+    assert.ok(
+      errorSpy.mock.calls.some((call) =>
+        String(call[0]).includes("--mode must be"),
+      ),
+    );
     assert.equal(process.exitCode, 1);
     process.exitCode = 0;
   });
@@ -150,7 +162,9 @@ describe("issueGrantCommand", () => {
       workspaceRoot,
     });
     assert.ok(
-      errorSpy.mock.calls.some((call) => String(call[0]).includes("no manifest exists")),
+      errorSpy.mock.calls.some((call) =>
+        String(call[0]).includes("no manifest exists"),
+      ),
     );
     assert.equal(process.exitCode, 1);
     process.exitCode = 0;
