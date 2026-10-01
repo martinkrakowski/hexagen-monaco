@@ -70,7 +70,7 @@ attention, which is why P-D6 exists.**
 
 #### **F4 · M · The two repos' review layers are not interchangeable**
 
-the reference project's reviewers cite `DESIGN.md` sections and `D`-numbered decisions from
+The reference project's reviewers cite `DESIGN.md` sections and `D`-numbered decisions from
 `docs/planning/`. This repository's decisions live in `.architecture/decisions/` as ADRs, its
 invariants in `.architecture/invariants/`, and its planning documents are slug-named without
 D-numbers. **Every instruction block must be rewritten against this repository's own vocabulary**,

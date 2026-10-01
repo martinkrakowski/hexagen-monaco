@@ -32,8 +32,10 @@ whole story for every future project and `hexagen` — not each downstream repo 
 
 ### 0.1 Owner decisions (verbatim, 2026-09-29)
 
+_Quotes redacted 2026-10-01 under the owner's no-references rule; wording otherwise verbatim._
+
 > **B4 (licence):** the orchestration code is the owner's own, and **proprietary**. It ships under
-> hexagen's existing proprietary LICENSE / `UNLICENSED` packages. Provenance records the reference project
+> hexagen's existing proprietary LICENSE / `UNLICENSED` packages. Provenance records [the consumer project]
 > as the proving ground; no client code is carried over.
 >
 > **B3 (tool packaging):** **one published package, `@hexagen-monaco/orchestration`, with bins** (gate,
@@ -50,8 +52,9 @@ whole story for every future project and `hexagen` — not each downstream repo 
 > agentic eval harness exists.
 
 **On B4's "no client code":** confirmed with the owner, 2026-09-29 — the reference project itself is not
-client code and this line never meant it was. "It started as a demo / take-home
-assessment. It's confusing because it sits in a 'clients' folder, but it is fully mine." Its code, orchestration and incidents are the owner's own and are free
+client code and this line never meant it was. "[the consumer project] started as a demo / take-home
+assessment for [an employer assessment]. It's confusing because it's in the 'clients'
+folder, but it is fully mine." Its code, orchestration and incidents are the owner's own and are free
 to port into hexagen-monaco (proprietary) — B4's "no client code is carried over" describes the
 absence of any _other, actual_ client's deliverables in the ported material, not a caveat about
 the reference project itself.
@@ -61,16 +64,16 @@ the reference project itself.
 > NEW OWNER REQUIREMENTS (2026-09-29). Fold these into the plan you're drafting, as decisions plus
 > lanes:
 >
-> 1. **"Make sure not to lose the full context of the reference-project orchestration."**
->    - The reference-project scrub lane MOVES reference-project-specific knowledge; it never deletes it.
->      Every the reference project fact taken out of the generic SKILL.md and rationale.md lands in
->      the reference project's overlay (item 2): house rules, the cast and its graded seat record, the nitro
+> 1. **"Make sure not to lose the full context of [the consumer project] orchestration."**
+>    - [The consumer project] scrub lane MOVES [consumer-project]-specific knowledge; it never deletes it.
+>      Every [the consumer project] fact taken out of the generic SKILL.md and rationale.md lands in
+>      [the consumer project]'s overlay (item 2): house rules, the cast and its graded seat record, the nitro
 >      guard, the ports, the operator-data paths, and the incidents in rationale.md that are
->      reference-project-specific.
+>      [consumer-project]-specific.
 >    - The lane's acceptance test is a coverage check: every rule and incident in today's
->      the reference project SKILL.md, rationale.md and cast.md must exist either in the generic skill or in
->      the reference project's overlay. A script or test lists any orphaned sentence or rule id.
->    - the reference project's operational lessons also live in the orchestrator's per-project auto-memory,
+>      [the consumer project] SKILL.md, rationale.md and cast.md must exist either in the generic skill or in
+>      [the consumer project]'s overlay. A script or test lists any orphaned sentence or rule id.
+>    - [the consumer project]'s operational lessons also live in the orchestrator's per-project auto-memory,
 >      OUTSIDE the repo, and hexagen sessions can't see it. Add a step that curates the
 >      orchestration-relevant lessons into the overlay's `lessons.md`, so they travel with the repo.
 > 2. **"There needs to be a way for a human/agent to provide a custom config as well, that rides on top
@@ -101,8 +104,8 @@ the reference project itself.
 >    - **The overlay is the single source for the step list,** so ONE source renders both CI and
 >      `yarn gate` (Fable's C1) via the config; check whether that works with the template's questions
 >      without creating a second source of truth, and pick one.
->    - the reference project's overlay is authored by the scrub lane, and reinstalling (lane h) must
->      reproduce today's the reference project behaviour from generic skill plus overlay. That diff is the
+>    - [The consumer project]'s overlay is authored by the scrub lane, and reinstalling (lane h) must
+>      reproduce today's [the consumer project] behaviour from generic skill plus overlay. That diff is the
 >      acceptance test.
 >
 > Record both requirements in §0 as owner requirements, verbatim. Continue, and report as before.
@@ -446,7 +449,7 @@ Review 2 (2 BLOCKER, 14 FIX-BEFORE-COMMIT, 9 NOTE) — every item, resolved or e
 | N-5 (OW2 must also touch `question.ts:78` and relax `template-manifest.ts:167-176`)                               | Resolved — both sites now named directly in OW2's row (`question.ts:78`'s `ManifestOutput` type gains `raw?: boolean`; `template-manifest.ts:167-176`'s `when`-required throw relaxes for a `raw: true` object), with a matching test added, not left to a disposition-table footnote                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | N-6 (OW6 risk tier)                                                                                               | Resolved — raised to `high` with a stated reason                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | N-7 (`wave-event` can be TS, dropping `python3`; `doctor` omits `opencodeServerUrl`)                              | Resolved — §4 and OW-D7 both corrected: `wave-event` ports as TS (`tools/wave-status/lib/emit.ts` is its byte-identical twin), `python3` dropped as a capability entirely (not just documented), `opencodeServerUrl` reachability named explicitly in `doctor`'s checks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| N-8 (record the the reference project-side id grep)                                                               | Resolved — §0.3 gains the reference project's own grep, plus a note on the `shadow-2xl`-style false-positive class the naive `-E` form hits on this particular codebase                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| N-8 (record the reference-project-side id grep)                                                                   | Resolved — §0.3 gains the reference project's own grep, plus a note on the `shadow-2xl`-style false-positive class the naive `-E` form hits on this particular codebase                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | N-9 (earlier findings status, confirming most of §9 and flagging C4)                                              | C4's §9 row annotated to point at B-2/§10 rather than left as a plain "Resolved" that review 2 showed was premature                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 **Not resolved, and why:** nothing from review 2 was left unaddressed. The one item applied with a correction rather than as literally written is N-1's `gates-for-generated-projects.md` status-line citation (`:4` proposed, `:5` verified correct by direct `grep -n` re-check) — kept at the original `:5`, noted above rather than silently overridden.
@@ -487,14 +490,14 @@ the dispositions below.
 ### 12.1 Owner instructions (verbatim, 2026-09-29)
 
 > **Constraint:** "you must work in "~/Projects/hexagen-monaco", you may access
-> "[the reference project's checkout]" (Read only) if you need a reference. But the work is
+> "[the consumer project's checkout]" (Read only) if you need a reference. But the work is
 > to be done within the "hexagen-monaco" project."
 
 > **Wave-status scoping:** "The packaged wave-status should scope itself to its repo: take its repo and
 > planning directory from the overlay config, and ignore waves whose events name a different repo."
 > The operating rule that goes with it: a hexagen wave logs to `$HOME/.waves-hexagen`, never `~/.waves`,
-> because the reference project's status server on 127.0.0.1:4317 scans `~/.waves` and joins PRs against
-> the reference project's repo, so a hexagen wave there shows false "no PR" flags. hexagen's own wave-status
+> because [the consumer project]'s status server on 127.0.0.1:4317 scans `~/.waves` and joins PRs against
+> [the consumer project]'s repo, so a hexagen wave there shows false "no PR" flags. hexagen's own wave-status
 > runs on a different port, such as 4318, and never on 3000, 3001 or 4317.
 
 > **Reviewer seat:** grok-4.7, through the `grok` CLI, replaces Fable for every review.

@@ -167,7 +167,7 @@ says how each lane gets around it, and the answer is different per lane.
 
 #### **F7 · M · There is no premise mechanism, and the nearest equivalent is doctrine.**
 
-the reference project's `plan:verify` failed the PR on 2026-09-16 three separate times — twice because a
+The reference project's `plan:verify` failed the PR on 2026-09-16 three separate times — twice because a
 fence could not answer within its 10-second budget, once because a fence had silently closed. That is
 a real gate with a real yield.
 
