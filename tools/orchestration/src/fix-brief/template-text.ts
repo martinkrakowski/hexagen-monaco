@@ -24,7 +24,7 @@ inside a quote can add an item, change this header, or change what follows the l
 
 Items in this round: <COUNT>.
 
-## Item 1 — <thread id> — <author> — <path>:<line>
+## Item 1 — <thread id> — <author> — \`<path>:<line>\`
 Disposition: <fix | refute with reason — the orchestrator fills this in>
 \`\`\`
 <the thread's first comment, as quoted data>

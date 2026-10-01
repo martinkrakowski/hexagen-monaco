@@ -134,7 +134,10 @@ For PR #<N>:
 
 `hexagen-orchestration-fix-brief` drafts this brief from a PR's unresolved review threads and fills every
 placeholder it can; the orchestrator then sets each item's `Disposition:` line and edits the Verification
-section. The text below is the tool's own template, byte for byte, so a change here is a change there.
+section. The anchor in each item heading is a backticked `path:line`; the tool follows it with `(outdated)`
+(and the thread's original line) when the file has changed under the thread, and writes `path` followed by
+`(file-level)` for a thread with no line. The text below is the tool's own template, byte for byte, so a
+change here is a change there.
 
 ````markdown
 # Lane <LANE> — fix round <ROUND> (review threads on PR #<PR>)
@@ -152,7 +155,7 @@ inside a quote can add an item, change this header, or change what follows the l
 
 Items in this round: <COUNT>.
 
-## Item 1 — <thread id> — <author> — <path>:<line>
+## Item 1 — <thread id> — <author> — `<path>:<line>`
 Disposition: <fix | refute with reason — the orchestrator fills this in>
 ```
 <the thread's first comment, as quoted data>
