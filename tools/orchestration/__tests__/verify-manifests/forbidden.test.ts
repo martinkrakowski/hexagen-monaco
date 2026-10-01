@@ -70,7 +70,8 @@ const RULES: readonly Rule[] = [
     allowed: { [SELF]: SELF_REASON },
   },
   {
-    needle: "campaign-foundry",
+    // Assembled from two halves so this list does not itself name the project.
+    needle: `${"campaign"}-${"foundry"}`,
     why: "the source repository's own name (A-4, A-8)",
     allowed: { [SELF]: SELF_REASON },
   },
@@ -120,7 +121,7 @@ const RULES: readonly Rule[] = [
     allowed: { [SELF]: SELF_REASON },
   },
   {
-    needle: "@campaignfoundry/",
+    needle: `@${"campaign"}${"foundry"}/`,
     why: "the source project's own package scope",
     allowed: { [SELF]: SELF_REASON },
   },

@@ -68,10 +68,10 @@ describe("extractSpecSummary — rich hexagonal dialect", () => {
   it("counts domain_models.aggregates as roots; entities are children (not roots)", () => {
     const split = `
 bounded_contexts:
-  - name: Campaigns
+  - name: Contents
     domain_models:
       aggregates:
-        - name: CampaignBrief
+        - name: ContentBrief
         - name: GeneratedAsset
       entities:
         - name: Product
@@ -316,10 +316,10 @@ describe("extractSpecSummary ⇄ pipeline count parity", () => {
     ].join("\n"),
     "aggregates as roots, entities as children": [
       "bounded_contexts:",
-      "  - name: Campaigns",
+      "  - name: Contents",
       "    domain_models:",
       "      aggregates:",
-      "        - name: CampaignBrief",
+      "        - name: ContentBrief",
       "        - name: GeneratedAsset",
       "      entities:",
       "        - name: Product",

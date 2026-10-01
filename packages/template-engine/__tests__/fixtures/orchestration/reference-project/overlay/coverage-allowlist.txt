@@ -23,7 +23,7 @@ MEMORY.md
 # Provenance of the material: the owner's statement that this repository began as a take-home
 # assessment, that its code and incidents are the owner's own, and that the folder name is
 # misleading. It is the basis of the port's licence decision, which lives in the plan.
-campaign-foundry-ownership.md
+reference-project-ownership.md
 
 # The recorded per-seat invocation shapes and model ids for every delegation CLI, including the
 # effort-flag and quota history. That roster is the overlay's `cast.md`, reproduced verbatim from
@@ -41,7 +41,7 @@ local-lmstudio-seats.md
 
 # Wave-level seat grades for one wave: which seat was the paid default, which was a trial, which
 # failed and how. A dated track record whose home is `cast.md`'s graded-record table.
-seat-trials-w05.md
+seat-trials-wave-X5.md
 
 # Product direction: the multi-tenant cloud migration, its decision ids, the platform-and-tenancy
 # plan, and per-wave progress. A roadmap record for this application, not a wave-operations fact.
@@ -54,7 +54,7 @@ html5-ad-pipeline-built-but-unreachable.md
 # Which image generator leads the selection chain and by how little code adopting it took, plus a
 # count of the ways a desktop architecture PDF has drifted from the code. A product and
 # documentation-drift record.
-campaign-foundry-firefly-and-pdf-drift.md
+reference-project-firefly-and-pdf-drift.md
 
 # Golden-image recording: why container-recorded bytes are not the runner's bytes, and how to
 # record and prove them. A test-fixture fact about one asset family's goldens.

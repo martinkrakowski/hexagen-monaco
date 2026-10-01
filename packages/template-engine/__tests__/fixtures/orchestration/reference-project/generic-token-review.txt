@@ -7,7 +7,7 @@
 # template's own tracked copy of this same tree), `docs/planning/` and
 # `packages/template-engine/src/infrastructure/generated/template-bundle.generated.ts` (the generated
 # bundle, which embeds that same skill text verbatim). A
-# hand-written list of campaign-foundry's own strings cannot catch everything, so this is the
+# hand-written list of the reference project's own strings cannot catch everything, so this is the
 # mechanical sweep behind it: the test recomputes the same set and fails on anything missing here.
 #
 # The token is the RAW text of an inline code span (one surrounding space stripped), or one
@@ -20,7 +20,7 @@
 # Format: <token><TAB><why the token is generic>. Every line below is reviewed by hand — the
 # test can only check that a reason is present and non-empty, never that it is right. A reason
 # that is not worth reading is a leak that got through, so each one says what the token is and
-# why it is not a campaign-foundry fact.
+# why it is not a reference-project fact.
 "$BEFORE"..HEAD	second half of the same fence; a git revision range over a shell variable
 "$d"	same probe: the quoted directory variable
 "$n"	same probe: the quoted count variable
@@ -73,7 +73,7 @@ merge settled	same package event vocabulary
 mutate:verify	the bare step name of the package's mutation verifier
 n=$(find	same probe: the command substitution that counts the files
 node_modules/*darwin*/;	same probe: the unscoped-directory glob, trailing semicolon included
-node_modules/@*/*darwin*/	same probe: the scoped-directory glob. `darwin` is the platform, and the brief classes it as generic mechanism rather than a campaign-foundry fact
+node_modules/@*/*darwin*/	same probe: the scoped-directory glob. `darwin` is the platform, and the brief classes it as generic mechanism rather than a reference-project fact
 plan:verify	the bare step name of the package's plan verifier, used in a sentence about which fences CI enforces; every place the contract *invokes* the tool it names the package bin instead
 record settled	same package event vocabulary
 remediate settled	same package event vocabulary

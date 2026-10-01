@@ -1,5 +1,5 @@
 #!/bin/sh
-# The in-repo gate (plan D183, lane HX3-gate-in-repo): `yarn gate [--lane <id>]`.
+# The in-repo gate (a repo-local lock plus a named step list): `yarn gate [--lane <id>]`.
 #
 # Runs CI's gate steps in the foreground, one after another, and prints each
 # step's real exit code, stopping at the first failure by name. The default
@@ -29,21 +29,21 @@
 # kill -0 cannot) and the lock still names this gate — either failing fails
 # the gate as "lock lost", so a holder whose lock was reclaimed stops its
 # protected steps instead of running them beside whoever holds the name. The
-# between-steps window is testable via CF_GATE_TEST_PAUSE_BEFORE_STEP.
+# between-steps window is testable via GATE_TEST_PAUSE_BEFORE_STEP.
 #
 # A coverage threshold failure fails the gate even when vitest exits 0: the
 # test:cov step's output is captured, replayed for the human, and scanned for
 # `ERROR: Coverage` — a piped read (M3) reported exit 0 while coverage failed,
 # and the scan is what stops the same failure arriving through a pipe.
 #
-# For tests the step list is injectable: CF_GATE_STEPS overrides it, one
+# For tests the step list is injectable: GATE_STEPS overrides it, one
 # `name<TAB>command` line per step, run in the given order — so a test runs
 # fake steps (`true`, `sh -c "exit 3"`, a step that prints `ERROR: Coverage`
 # and exits 0) instead of the real suite. The locking rules above apply to
 # injected lists unchanged: a step NAMED test:cov or verify-manifests is
 # locked, whichever command it carries. The nitro guard's prepare command and
-# manifest path are injectable the same way (CF_GATE_NITRO_PREPARE,
-# CF_GATE_NITRO_MANIFEST) so a test can fail preparation without touching the
+# manifest path are injectable the same way (GATE_NITRO_PREPARE,
+# GATE_NITRO_MANIFEST) so a test can fail preparation without touching the
 # workspace.
 #
 # POSIX sh (not zsh): GitHub Linux runners do not ship zsh. Like wave-event.sh
@@ -85,8 +85,8 @@ gate_check_env() {
 # as a route and crashes `yarn dev` at boot — a runtime fault the build and
 # coverage gate do not catch.
 gate_nitro_guard() {
-  MANIFEST="${CF_GATE_NITRO_MANIFEST:-apps/api/.nitro/types/nitro-routes.d.ts}"
-  PREPARE="${CF_GATE_NITRO_PREPARE:-yarn workspace @campaignfoundry/api exec nitro prepare}"
+  MANIFEST="${GATE_NITRO_MANIFEST:-apps/api/.nitro/types/nitro-routes.d.ts}"
+  PREPARE="${GATE_NITRO_PREPARE:-yarn workspace @example/api exec nitro prepare}"
   # A stale manifest must never be validated: remove it BEFORE preparing, so a
   # failed prepare cannot leave old routes behind for the scan to bless.
   rm -f "$MANIFEST"
@@ -134,10 +134,10 @@ case "$LANE" in
     ;;
 esac
 
-HB_SECONDS="${CF_GATE_HEARTBEAT_SECONDS:-60}"
+HB_SECONDS="${GATE_HEARTBEAT_SECONDS:-60}"
 case "$HB_SECONDS" in
   ''|*[!0-9]*)
-    printf '%s\n' "gate: CF_GATE_HEARTBEAT_SECONDS must be a number of seconds: $HB_SECONDS" >&2
+    printf '%s\n' "gate: GATE_HEARTBEAT_SECONDS must be a number of seconds: $HB_SECONDS" >&2
     exit 2
     ;;
 esac
@@ -154,8 +154,8 @@ add_step() {
   fi
   STEPS="${STEPS}${1}${TAB}${2}"
 }
-if [ "${CF_GATE_STEPS+set}" = "set" ]; then
-  STEPS="$CF_GATE_STEPS"
+if [ "${GATE_STEPS+set}" = "set" ]; then
+  STEPS="$GATE_STEPS"
 else
   add_step "check:env" "gate_check_env"
   add_step "build" "yarn build"
@@ -190,13 +190,13 @@ done <<EOF
 $STEPS
 EOF
 if [ "$total" -eq 0 ]; then
-  printf '%s\n' "gate: no steps to run — CF_GATE_STEPS, when set, must hold at least one name<TAB>command line" >&2
+  printf '%s\n' "gate: no steps to run — GATE_STEPS, when set, must hold at least one name<TAB>command line" >&2
   exit 2
 fi
 
 LOCK_HELD=0
 HEARTBEAT_PID=""
-HB_FAILED="${TMPDIR:-/tmp}/cf-gate.hbfailed.$$"
+HB_FAILED="${TMPDIR:-/tmp}/gate.hbfailed.$$"
 COVLOG=""
 cov_failed=0
 release_failed=0
@@ -215,11 +215,11 @@ release_lock() {
     # The release's status and diagnostics are not discarded: a release that
     # failed (or was refused — see gate-lock.sh) must be reported, never
     # announced as released.
-    if CF_GATE_CALLER_PID=$$ sh "$LOCK_SCRIPT" release "$LANE"; then
+    if GATE_CALLER_PID=$$ sh "$LOCK_SCRIPT" release "$LANE"; then
       printf '%s\n' "gate: lock released, heartbeat stopped"
     else
       release_failed=1
-      printf '%s\n' "gate: FAILED to release the lock — it may still be held at ${TMPDIR:-/tmp}/cf-gate.lock" >&2
+      printf '%s\n' "gate: FAILED to release the lock — it may still be held at ${TMPDIR:-/tmp}/gate.lock" >&2
     fi
   fi
 }
@@ -262,7 +262,7 @@ start_heartbeat() {
       # instead of refreshing whoever replaced us. Its failure is recorded in
       # a marker file the foreground gate checks at every locked-step boundary
       # — a dead loop is a zombie its parent's kill -0 cannot see.
-      CF_GATE_CALLER_PID=$$ sh "$LOCK_SCRIPT" heartbeat >/dev/null 2>&1 || {
+      GATE_CALLER_PID=$$ sh "$LOCK_SCRIPT" heartbeat >/dev/null 2>&1 || {
         printf '%s\n' "lost" > "$HB_FAILED" 2>/dev/null
         exit 1
       }
@@ -286,7 +286,7 @@ check_lock_intact() {
   if [ -z "$HEARTBEAT_PID" ] || ! kill -0 "$HEARTBEAT_PID" 2>/dev/null; then
     return 1
   fi
-  CF_GATE_CALLER_PID=$$ sh "$LOCK_SCRIPT" verify "$LANE" >/dev/null 2>&1
+  GATE_CALLER_PID=$$ sh "$LOCK_SCRIPT" verify "$LANE" >/dev/null 2>&1
 }
 
 # The test:cov step runs with its output captured, replayed for the human, and
@@ -295,7 +295,7 @@ check_lock_intact() {
 # mirrors it. The command returns vitest's real exit code; cov_failed records
 # the scan.
 run_test_cov() {
-  COVLOG=$(mktemp "${TMPDIR:-/tmp}/cf-gate.covlog.XXXXXX")
+  COVLOG=$(mktemp "${TMPDIR:-/tmp}/gate.covlog.XXXXXX")
   eval "NODE_ENV=test $1" > "$COVLOG" 2>&1
   code=$?
   cat "$COVLOG"
@@ -319,9 +319,9 @@ while IFS="$TAB" read -r name cmd; do
   step_no=$((step_no + 1))
   printf '==> [%s/%s] %s\n' "$step_no" "$total" "$name"
   if is_locked_step "$name" && [ "$LOCK_HELD" -eq 0 ]; then
-    # The caller's pid travels in CF_GATE_CALLER_PID: the lock must outlive
+    # The caller's pid travels in GATE_CALLER_PID: the lock must outlive
     # this acquire call, so it names this shell, not the gate-lock child.
-    CF_GATE_CALLER_PID=$$ sh "$LOCK_SCRIPT" acquire "$LANE"
+    GATE_CALLER_PID=$$ sh "$LOCK_SCRIPT" acquire "$LANE"
     acq=$?
     if [ "$acq" -ne 0 ]; then
       printf '%s\n' "gate: could not acquire the gate lock (exit $acq) — 75 means busy: sleep and retry" >&2
@@ -331,11 +331,11 @@ while IFS="$TAB" read -r name cmd; do
     start_heartbeat
   fi
   if [ "$LOCK_HELD" -eq 1 ]; then
-    # Test hook (CF_GATE_TEST_PAUSE_BEFORE_STEP): between locked steps, for
+    # Test hook (GATE_TEST_PAUSE_BEFORE_STEP): between locked steps, for
     # the test that removes or replaces the lock in exactly that window.
-    if [ -n "${CF_GATE_TEST_PAUSE_BEFORE_STEP:-}" ]; then
-      touch "$CF_GATE_TEST_PAUSE_BEFORE_STEP" 2>/dev/null
-      while [ -f "$CF_GATE_TEST_PAUSE_BEFORE_STEP" ]; do sleep 1; done
+    if [ -n "${GATE_TEST_PAUSE_BEFORE_STEP:-}" ]; then
+      touch "$GATE_TEST_PAUSE_BEFORE_STEP" 2>/dev/null
+      while [ -f "$GATE_TEST_PAUSE_BEFORE_STEP" ]; do sleep 1; done
     fi
     if ! check_lock_intact; then
       printf '%s\n' "gate: FAILED — lock lost before step '$name' (the heartbeat died or the lock no longer names this gate)" >&2

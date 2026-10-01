@@ -80,7 +80,7 @@ Wave A is the release train: all three are small, independent in code, and ship 
 - `migration-report.ts`: never `createWriteStream` under dry-run — print the summary to stdout; add `--report <path>` as an opt-in flag (real runs keep writing `SYNC-MIGRATION-REPORT.md` by default for now; flip to opt-in only if Martin prefers — see Decision log D5). While here: `writeReport` ends the stream without awaiting `finish` — await it so a prompt exit can't truncate a real-run report.
 - **Mutation-site sweep**: audit every `fs.unlink` / `fs.rm` / `fs.rename` / `fs.mkdir` / raw `fs.writeFile` / `createWriteStream` under `packages/sync/src/` (engine + generators) for a missing `dryRun` gate. Known-good: `reap.ts`, `safeWriteFileAtomic`. Known-bad: the three sites above. Everything else: verify and table the result in the PR — the table doubles as B1's journal-coverage checklist.
 
-**Tests.** `node:test` fixture (tmp dir, `git init`, seeded legacy empty `export {}` barrels — the exact campaign-foundry shape; fixture content only, never committed source barrels, per the house barrel rule): run dry-run via the built CLI → `git status --porcelain` is empty **and** a directory snapshot (`find -type d` before/after) is unchanged — porcelain alone cannot see the empty dirs the ungated mkdirs would create. Capstone phase: `git init` the generated scaffold before the dry-run step, assert porcelain-empty + dir-snapshot-equal afterwards.
+**Tests.** `node:test` fixture (tmp dir, `git init`, seeded legacy empty `export {}` barrels — the exact consumer-project shape; fixture content only, never committed source barrels, per the house barrel rule): run dry-run via the built CLI → `git status --porcelain` is empty **and** a directory snapshot (`find -type d` before/after) is unchanged — porcelain alone cannot see the empty dirs the ungated mkdirs would create. Capstone phase: `git init` the generated scaffold before the dry-run step, assert porcelain-empty + dir-snapshot-equal afterwards.
 
 **Risk.** Low. Purely subtractive under `dryRun`.
 
@@ -110,7 +110,7 @@ Wave A is the release train: all three are small, independent in code, and ship 
 
 1. Merge A1 → A2 → A3 (or A2/A3 in parallel once A1's harness is in).
 2. Push the `v0.7.0` tag → `publish.yml` co-releases both packages. **Tag push stays Martin-gated** (repo rule: release tags trigger live npm publish — explicit go-ahead only).
-3. Consumer follow-up (campaign-foundry, branch `fix/hexagen-tooling`): bump pins to `^0.7.0`, wire `yarn sync:dry` + `yarn lint:arch` into CI — _now meaningful because failures exit ≠ 0_. The `--check` drift gate follows after B2.
+3. Consumer follow-up (the reference project): bump pins to `^0.7.0`, wire `yarn sync:dry` + `yarn lint:arch` into CI — _now meaningful because failures exit ≠ 0_. The `--check` drift gate follows after B2.
 4. Ordering invariant: if the prod wizard deploy (pending on the LLM-overhaul wave) goes out first, it scaffolds `^0.7.0` consumers against an npm that only has 0.6.0 → loud install failures. **Publish v0.7.0 before or with that deploy.**
 
 ---
@@ -216,9 +216,9 @@ Row 2 is asserted **after** the first real sync — capstone injects the manifes
 | 1    | Wave A merges to main                                                                 | capstone + contract suites green              |
 | 2    | Push `v0.7.0` tag → npm co-publish                                                    | **Martin's explicit go-ahead** (live publish) |
 | 3    | Prod wizard deploy (LLM-overhaul wave or later)                                       | **must not precede step 2** (pin/npm lag)     |
-| 4    | campaign-foundry: bump `^0.7.0`, wire `sync:dry` + `lint:arch` CI                     | after step 2                                  |
+| 4    | The reference project: bump `^0.7.0`, wire `sync:dry` + `lint:arch` CI                | after step 2                                  |
 | 5    | Wave B merges → `v0.7.x` patch release                                                | go-ahead per tag, as always                   |
-| 6    | campaign-foundry: switch CI to `sync --check` drift gate                              | after step 5                                  |
+| 6    | The reference project: switch CI to `sync --check` drift gate                         | after step 5                                  |
 | 7    | Wave C as capacity allows (C1 before the next schema-evolving feature lands, ideally) | —                                             |
 
 ## Decision log (flagged for Martin; recommendations applied above)
@@ -233,5 +233,5 @@ Row 2 is asserted **after** the first real sync — capstone injects the manifes
 ## Out of scope
 
 - The sibling plan's remaining items (#2 / PR #267 tsconfig work, #7 wizard Applications-model redesign) — tracked there.
-- campaign-foundry's own repairs — already done on its `fix/hexagen-tooling` branch; only the post-release bumps (Release sequencing 4/6) remain.
+- The reference project's own repairs — already done on its own branch; only the post-release bumps (Release sequencing 4/6) remain.
 - Broader template-content overhauls beyond the specific dishonesty in RCA #9.

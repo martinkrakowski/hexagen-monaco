@@ -10,8 +10,8 @@ export interface LogDirEnv {
  * resolves them: `repo` (`owner/name`) and an explicit `waveLogDir`.
  *
  * A-18: the source's default root was `$HOME/.waves`, a SHARED directory.
- * campaign-foundry's status server scans it and joins PRs against
- * campaign-foundry's own repo, so a wave belonging to any other repo written
+ * The reference project's status server scans it and joins PRs against
+ * that project's own repo, so a wave belonging to any other repo written
  * there shows false "no PR" flags. The root is therefore per-repo:
  * `$HOME/.waves-<name>`, where `<name>` is the name half of `repo`, unless the
  * project configured `waveLogDir` outright.
@@ -100,7 +100,7 @@ export function waveLogRoot(env: LogDirEnv, config: LogDirConfig = {}): string {
  * The candidate search that follows is the source's, MINUS its `/tmp` fallback:
  * in order `<root>/wave-<wave>`, `<root>/wave<wave>`, `<root>/<wave>` (only when
  * `wave` already starts with `wave`) — the FIRST that exists wins. The source
- * also tried the same three under `/tmp`, campaign-foundry's legacy layout; that
+ * also tried the same three under `/tmp`, the reference project's legacy layout; that
  * is a directory shared by every user and every project on the machine, so a
  * planted `/tmp/wave-<id>` (or a symlink there) could receive this repository's
  * events. Resolution is `$LOGDIR`, else a candidate under the per-repository

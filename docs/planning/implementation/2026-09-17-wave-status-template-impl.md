@@ -50,7 +50,7 @@ root-file-templates.ts:19 emitted `test` is `turbo test`
 ```
 
 `tools/wave-status/__tests__` sits **outside every workspace glob**, so `turbo test` runs it in a
-generated project — never. The D102 trade-off the source plan accepts ("a broken dev tool blocks a
+generated project — never. The RD1 trade-off the source plan accepts ("a broken dev tool blocks a
 product PR") therefore never materialises, and the tests it promises are dead on arrival.
 
 And there is **no coverage bar to run at**: no generated project emits a coverage threshold

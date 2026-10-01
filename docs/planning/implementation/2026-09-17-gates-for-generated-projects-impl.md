@@ -138,7 +138,7 @@ the warning turns a test red.
 `root-file-templates.ts:28` emits `format: prettier --write "**/*.{ts,tsx,md}"` and **no config**
 (verified: no `.prettierrc*` anywhere in `packages/sync/src`, `templates/`, or
 `project-generation/src`). A script without a config reformats to Prettier's defaults on first
-run — campaign-foundry's pre-X1 state, where three PRs had real changes buried under churn.
+run — the reference project's earlier state, where three PRs had real changes buried under churn.
 
 Emit `.prettierrc.json` beside the script, and **drop `md` from the glob** (G-D5): the `.md` glob
 would rewrap hand-wrapped prose.

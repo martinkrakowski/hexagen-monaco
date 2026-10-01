@@ -78,7 +78,7 @@ describe("hexagen-monaco's own orchestration overlay", () => {
     ]);
   });
 
-  test("refuses campaign-foundry's ports and binds 4318", () => {
+  test("refuses the reference project's ports and binds 4318", () => {
     expect(config.forbiddenPorts).toEqual([3000, 3001, 4317]);
     expect(config.waveStatusPort).toBe(4318);
   });

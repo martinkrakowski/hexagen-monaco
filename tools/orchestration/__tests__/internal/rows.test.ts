@@ -11,24 +11,24 @@ const plan = [
   "",
   "| Lane | Delivers |",
   "|---|---|",
-  "| **PT-5a** | The campaign id, exposed and resolvable (D168, D178, D179). |",
-  "| **PT-5b1** | Every campaign-addressed route accepts the id or the slug (D178). |",
+  "| **L5a** | The record id, exposed and resolvable (D16, D18, D19). |",
+  "| **L5b1** | Every record-addressed route accepts the id or the slug (D18). |",
   "",
   "## 2. Decisions",
   "",
   "| id | Decision |",
   "|---|---|",
-  "| **D177** | Create is a server call. |",
-  "| **D178** | Routes and links carry ids; slugs display only. |",
+  "| **D17** | Create is a server call. |",
+  "| **D18** | Routes and links carry ids; slugs display only. |",
 ].join("\n");
 
 describe("rowHash", () => {
   test("a whitespace-only reflow of a row keeps its hash", () => {
     const reflowed = plan.replace(
-      "| **PT-5a** | The campaign id, exposed and resolvable (D168, D178, D179). |",
-      "| **PT-5a** |  The  campaign id,   exposed and resolvable (D168, D178, D179).  |",
+      "| **L5a** | The record id, exposed and resolvable (D16, D18, D19). |",
+      "| **L5a** |  The  record id,   exposed and resolvable (D16, D18, D19).  |",
     );
-    expect(rowHash(reflowed, "PT-5a")).toBe(rowHash(plan, "PT-5a"));
+    expect(rowHash(reflowed, "L5a")).toBe(rowHash(plan, "L5a"));
   });
 
   test("a one-word change to the row gives a different hash", () => {
@@ -36,49 +36,49 @@ describe("rowHash", () => {
       "exposed and resolvable",
       "hidden and unresolvable",
     );
-    expect(rowHash(edited, "PT-5a")).not.toBe(rowHash(plan, "PT-5a"));
+    expect(rowHash(edited, "L5a")).not.toBe(rowHash(plan, "L5a"));
   });
 
   test("the normalisation itself is the fingerprint: trim, then collapse whitespace runs", () => {
-    const row = "  | **PT-5a** |  The   campaign id.  |  \n";
-    expect(rowHash(row, "PT-5a")).toBe(
-      rowHash("| **PT-5a** | The campaign id. |", "PT-5a"),
+    const row = "  | **L5a** |  The   record id.  |  \n";
+    expect(rowHash(row, "L5a")).toBe(
+      rowHash("| **L5a** | The record id. |", "L5a"),
     );
   });
 
   test("a row whose text carries a pipe inside backticks still matches and hashes whole", () => {
     const row =
-      "| **PT-5b1** | The route reads `getPoolStore(scope) | withPools` first. |";
-    expect(() => rowHash(row, "PT-5b1")).not.toThrow();
+      "| **L5b1** | The route reads `getPoolStore(scope) | withPools` first. |";
+    expect(() => rowHash(row, "L5b1")).not.toThrow();
     const reflowed = row.replace(
       "`getPoolStore(scope) | withPools`",
       "`getPoolStore(scope)  |  withPools`",
     );
-    expect(rowHash(reflowed, "PT-5b1")).toBe(rowHash(row, "PT-5b1"));
+    expect(rowHash(reflowed, "L5b1")).toBe(rowHash(row, "L5b1"));
   });
 
   test("zero matches is an error naming the id and the count", () => {
-    expect(() => rowHash(plan, "PT-9")).toThrow(/PT-9/);
-    expect(() => rowHash(plan, "PT-9")).toThrow(/found 0/);
+    expect(() => rowHash(plan, "LX9")).toThrow(/LX9/);
+    expect(() => rowHash(plan, "LX9")).toThrow(/found 0/);
   });
 
   test("a row mentioned twice is an error naming the id and the count", () => {
-    const duplicated = `${plan}\n| **PT-5a** | A second row with the same first cell. |`;
-    expect(() => rowHash(duplicated, "PT-5a")).toThrow(/found 2/);
+    const duplicated = `${plan}\n| **L5a** | A second row with the same first cell. |`;
+    expect(() => rowHash(duplicated, "L5a")).toThrow(/found 2/);
   });
 
   test("an id that is a prefix of another id's cell matches only its own row", () => {
-    const longer = `${plan}\n| **PT-5a2** | A longer id sharing the prefix. |`;
-    expect(rowHash(longer, "PT-5a")).toBe(rowHash(plan, "PT-5a"));
+    const longer = `${plan}\n| **L5a2** | A longer id sharing the prefix. |`;
+    expect(rowHash(longer, "L5a")).toBe(rowHash(plan, "L5a"));
   });
 
   test("a decision row hashes by the same rule as a lane row", () => {
-    expect(rowHash(plan, "D177")).toMatch(/^[0-9a-f]{64}$/);
+    expect(rowHash(plan, "D17")).toMatch(/^[0-9a-f]{64}$/);
     const edited = plan.replace(
       "Create is a server call.",
       "Create is a client call.",
     );
-    expect(rowHash(edited, "D177")).not.toBe(rowHash(plan, "D177"));
+    expect(rowHash(edited, "D17")).not.toBe(rowHash(plan, "D17"));
   });
 });
 
@@ -86,37 +86,37 @@ describe("rowRisk", () => {
   const risked = [
     "| Lane | Risk | Delivers |",
     "|---|---|---|",
-    "| **HX1** | **high** | Split the reserved list. |",
-    "| **HX4** | normal | Plan rows carry a risk tier. |",
+    "| **LX1** | **high** | Split the reserved list. |",
+    "| **LX4** | normal | Plan rows carry a risk tier. |",
   ].join("\n");
 
   test("a bolded **high** second cell is high", () => {
-    expect(rowRisk(risked, "HX1")).toBe("high");
+    expect(rowRisk(risked, "LX1")).toBe("high");
   });
 
   test("the literal word normal is normal", () => {
-    expect(rowRisk(risked, "HX4")).toBe("normal");
+    expect(rowRisk(risked, "LX4")).toBe("normal");
   });
 
   test("a table with no Risk column defaults to normal, as in the platform plan", () => {
-    expect(rowRisk(plan, "PT-5a")).toBe("normal");
+    expect(rowRisk(plan, "L5a")).toBe("normal");
   });
 
   test("a plain unbolded high is refused, not read as normal (A-1)", () => {
-    const unbolded = "| **HX1** | high | Split the reserved list. |";
-    expect(() => rowRisk(unbolded, "HX1")).toThrow(InvalidRiskCellError);
+    const unbolded = "| **LX1** | high | Split the reserved list. |";
+    expect(() => rowRisk(unbolded, "LX1")).toThrow(InvalidRiskCellError);
   });
 
   test("a **high** carrying a trailing note is refused (A-1)", () => {
     const annotated =
-      "| **HX1** | **high** (N-6, raised from normal) | Split the list. |";
-    expect(() => rowRisk(annotated, "HX1")).toThrow(InvalidRiskCellError);
+      "| **LX1** | **high** (N-6, raised from normal) | Split the list. |";
+    expect(() => rowRisk(annotated, "LX1")).toThrow(InvalidRiskCellError);
   });
 
   test("the refusal names the row and quotes the cell it refused", () => {
-    const unbolded = "| **HX1** | high | Split the reserved list. |";
-    expect(() => rowRisk(unbolded, "HX1")).toThrow(/HX1/);
-    expect(() => rowRisk(unbolded, "HX1")).toThrow(/"high"/);
+    const unbolded = "| **LX1** | high | Split the reserved list. |";
+    expect(() => rowRisk(unbolded, "LX1")).toThrow(/LX1/);
+    expect(() => rowRisk(unbolded, "LX1")).toThrow(/"high"/);
   });
 
   test("a row outside any table header still reads its risk cell, as this plan's OW4-OW6 rows do", () => {
@@ -140,27 +140,27 @@ describe("rowRisk", () => {
 
   test("a differently-cased or differently-bolded tier is refused, not guessed at", () => {
     for (const cell of ["**Normal**", "HIGH", "**normal**"]) {
-      const row = `| **HX1** | ${cell} | Split the reserved list. |`;
-      expect(() => rowRisk(row, "HX1"), cell).toThrow(InvalidRiskCellError);
+      const row = `| **LX1** | ${cell} | Split the reserved list. |`;
+      expect(() => rowRisk(row, "LX1"), cell).toThrow(InvalidRiskCellError);
     }
   });
 
   test("a cell that merely contains a risk word later on stays normal", () => {
     const row =
-      "| **PT-5a** | This lane has a high risk of being reimplemented. |";
-    expect(rowRisk(row, "PT-5a")).toBe("normal");
+      "| **L5a** | This lane has a high risk of being reimplemented. |";
+    expect(rowRisk(row, "L5a")).toBe("normal");
   });
 
   test("a pipe inside backticks in the second cell still defaults to normal, not high", () => {
     const row =
-      "| **PT-5b1** | The route reads `getPoolStore(scope) | withPools` first. |";
-    expect(rowRisk(row, "PT-5b1")).toBe("normal");
+      "| **L5b1** | The route reads `getPoolStore(scope) | withPools` first. |";
+    expect(rowRisk(row, "L5b1")).toBe("normal");
   });
 
   test("zero or ambiguous matches throws, same as rowHash", () => {
-    expect(() => rowRisk(plan, "PT-9")).toThrow(/found 0/);
-    const duplicated = `${risked}\n| **HX1** | **high** | A second row with the same id. |`;
-    expect(() => rowRisk(duplicated, "HX1")).toThrow(/found 2/);
+    expect(() => rowRisk(plan, "LX9")).toThrow(/found 0/);
+    const duplicated = `${risked}\n| **LX1** | **high** | A second row with the same id. |`;
+    expect(() => rowRisk(duplicated, "LX1")).toThrow(/found 2/);
   });
 });
 
@@ -211,9 +211,9 @@ describe("duplicate rows name every matching line", () => {
 
 describe("asHashRecord", () => {
   test("a map whose every value is a string is accepted verbatim", () => {
-    expect(asHashRecord({ "PT-5a": "aa", D177: "bb" })).toEqual({
-      "PT-5a": "aa",
-      D177: "bb",
+    expect(asHashRecord({ L5a: "aa", D17: "bb" })).toEqual({
+      L5a: "aa",
+      D17: "bb",
     });
   });
 
@@ -225,7 +225,7 @@ describe("asHashRecord", () => {
     expect(asHashRecord("rows")).toBeUndefined();
     expect(asHashRecord(["aa"])).toBeUndefined();
     expect(asHashRecord(null)).toBeUndefined();
-    expect(asHashRecord({ "PT-5a": 7 })).toBeUndefined();
+    expect(asHashRecord({ L5a: 7 })).toBeUndefined();
   });
 });
 

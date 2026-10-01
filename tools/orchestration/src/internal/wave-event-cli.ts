@@ -4,7 +4,7 @@ import type { EventKind, Stage } from "./wave-types.js";
 
 /**
  * `hexagen-orchestration-wave-event` — append one event to a wave's log
- * (N-7: this is the TypeScript port of campaign-foundry's `scripts/wave-event.sh`,
+ * (N-7: this is the TypeScript port of the reference project's `scripts/wave-event.sh`,
  * so a project needs no `python3`).
  *
  * BOTH calling forms of the source survive, because the skill shim forwards

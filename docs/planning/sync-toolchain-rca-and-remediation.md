@@ -2,13 +2,13 @@
 
 **Status:** Proposed. Not started.
 **Date:** 2026-06-09
-**Parent:** Sibling of [generator-scaffold-and-wizard-remediation.md](./generator-scaffold-and-wizard-remediation.md) — same source project (**campaign-foundry**), different layer. That plan fixes what the generator **emits** (templates, tsconfigs, CI files); this one fixes the **toolchain contract** between the wizard, the published CLIs (`@hexagen-monaco/sync`, `@hexagen-monaco/arch-linter`), and the consumer repo at runtime. Item #5 below supersedes/expands that plan's #8 ("sync rewrites ~50 unrelated files").
+**Parent:** Sibling of [generator-scaffold-and-wizard-remediation.md](./generator-scaffold-and-wizard-remediation.md) — same source project (**the reference project**), different layer. That plan fixes what the generator **emits** (templates, tsconfigs, CI files); this one fixes the **toolchain contract** between the wizard, the published CLIs (`@hexagen-monaco/sync`, `@hexagen-monaco/arch-linter`), and the consumer repo at runtime. Item #5 below supersedes/expands that plan's #8 ("sync rewrites ~50 unrelated files").
 
-Locators are durable (file + symbol / search hint), not line numbers, per the planning house style. Every finding below was **empirically verified** in campaign-foundry on 2026-06-09 against the published npm artifacts (0.4.2 and 0.6.0), not inferred from source; the evidence appendix records the method.
+Locators are durable (file + symbol / search hint), not line numbers, per the planning house style. Every finding below was **empirically verified** in the reference project on 2026-06-09 against the published npm artifacts (0.4.2 and 0.6.0), not inferred from source; the evidence appendix records the method.
 
 ## Incident
 
-campaign-foundry was scaffolded by the wizard (~Jun 6–7) and shipped through several PRs with green CI — while **every hexagen command in it was broken from day one**:
+The reference project was scaffolded by the wizard (~Jun 6–7) and shipped through several PRs with green CI — while **every hexagen command in it was broken from day one**:
 
 ```
 $ yarn sync:dry
@@ -18,7 +18,7 @@ $ echo $?
 0
 ```
 
-`sync`, `sync:dry`, `arch validate`, `validate-templates`, and `hexagen-lint` all failed identically (they all load the manifest first) — and **all exited 0**, so nothing could have gated on it. The consumer was repaired on its branch `fix/hexagen-tooling` (pin bump to `^0.6.0` + `.architecture/` reconciliation + first successful sync, byte-level idempotent, all gates green). This plan ports the underlying fixes upstream so the next generated project never needs that repair.
+`sync`, `sync:dry`, `arch validate`, `validate-templates`, and `hexagen-lint` all failed identically (they all load the manifest first) — and **all exited 0**, so nothing could have gated on it. The consumer was repaired on its own branch (pin bump to `^0.6.0` + `.architecture/` reconciliation + first successful sync, byte-level idempotent, all gates green). This plan ports the underlying fixes upstream so the next generated project never needs that repair.
 
 ## Timeline
 
@@ -27,9 +27,9 @@ $ echo $?
 | Jun 1–2     | `@hexagen-monaco/sync` 0.4.0–0.4.2 published                                                                                                                                                                                                              |
 | Jun 2–3     | 0.5.0–0.5.2 published                                                                                                                                                                                                                                     |
 | Jun 6       | `77f6885a` (#241, "invariant honesty") adds `workspaceTemplate: z.string().optional()` to the manifest schema (`packages/project-configuration` · `ManifestSchema`) — the wizard records the chosen workspace template into `.architecture/manifest.yaml` |
-| ~Jun 6–7    | campaign-foundry scaffolded by the wizard running 0.6.x-era main: manifest contains `workspaceTemplate`; scaffolded `package.json` pins `^0.4.0`                                                                                                          |
+| ~Jun 6–7    | The reference project scaffolded by the wizard running 0.6.x-era main: manifest contains `workspaceTemplate`; scaffolded `package.json` pins `^0.4.0`                                                                                                     |
 | Jun 9 02:53 | 0.6.0 published — the **first artifact whose schema accepts the key**                                                                                                                                                                                     |
-| Jun 9       | Incident diagnosed in campaign-foundry; consumer fixed on `fix/hexagen-tooling`                                                                                                                                                                           |
+| Jun 9       | Incident diagnosed in the reference project; consumer fixed on its own branch                                                                                                                                                                             |
 
 ## Root cause
 
@@ -121,7 +121,7 @@ Condensed five-whys:
 
 ## #8 — Linter ignores manifest `depends_on`; invariants files are the only source · P2 (Medium, design)
 
-**Observed (consumer).** Adding `CampaignOrchestration` to three contexts' `depends_on` in `manifest.yaml` changed nothing in `arch validate` output; the operative config was `.architecture/invariants/linter-config.yaml` · `global_whitelist`. The manifest says `arch validate` checks "against manifest.yaml" (and its success message claims compliance _with manifest.yaml_), but cross-package import legality is in practice decided by the invariants files alone.
+**Observed (consumer).** Adding `ContentOrchestration` to three contexts' `depends_on` in `manifest.yaml` changed nothing in `arch validate` output; the operative config was `.architecture/invariants/linter-config.yaml` · `global_whitelist`. The manifest says `arch validate` checks "against manifest.yaml" (and its success message claims compliance _with manifest.yaml_), but cross-package import legality is in practice decided by the invariants files alone.
 
 **Fix (pick one, document either way).** Either (a) the linter derives allowed cross-context imports from manifest `depends_on` (per-context precision, manifest as single source of truth) with invariants as additional constraints, or (b) the docs/messages stop claiming the manifest governs imports and the wizard generates the invariants whitelist _from_ `depends_on` at scaffold time. (a) is architecturally cleaner; (b) is cheaper.
 
@@ -131,7 +131,7 @@ Condensed five-whys:
 
 - Scaffolded `AGENTS.md` mandates a structured logger at `src/infrastructure/logging/logger.ts` ("from the observability template") and `eslint-no-console` enforcement — neither exists in the generated project (no logger module, no lint rule, and the monorepo has no root `src/`). A compliance review bot (qodo rule 960794) ingested that text and flagged every PR that logs, demanding a fix pointing at a nonexistent file.
 - `.gitignore.hexagen` says "`hexagen validate-templates` expects every template output to stay present", while `validate-templates` reports "No templates installed in this project."
-- `generator.config.yaml` · `ownership-registry.ports` maps the `ExternalServiceClient` key **twice** (CreativeGeneration and Distribution) — duplicate YAML keys, the first silently dropped, contradicting its own `port-single-ownership` invariant. The same concept is also spelled `workspaceTemplate` (manifest) and `workspace_template` (generator config).
+- `generator.config.yaml` · `ownership-registry.ports` maps the `ExternalServiceClient` key **twice** (AssetGeneration and Distribution) — duplicate YAML keys, the first silently dropped, contradicting its own `port-single-ownership` invariant. The same concept is also spelled `workspaceTemplate` (manifest) and `workspace_template` (generator config).
 
 **Fix.** Scaffolded governance docs must only describe what the scaffold actually installs (template-conditional sections); fix the duplicate-key emission and unify the template-id field spelling. These are template-content fixes in the same files the sibling plan already touches — coordinate there.
 
@@ -150,7 +150,7 @@ Extend the sibling plan's generate→clone→build CI loop into a full **toolcha
 ## Release & consumer follow-up
 
 - Ship P0 (#1–#3) as **0.6.1**; P1 in 0.6.2 or alongside.
-- campaign-foundry (already on `^0.6.0`, branch `fix/hexagen-tooling`): after 0.6.1, bump and wire `yarn sync:dry --check` + `yarn lint:arch` into CI — deliberately left unwired today because exit codes are dishonest (its `.agents/session-log.md`, 2026-06-09 entry, records this).
+- The reference project (already on `^0.6.0`): after 0.6.1, bump and wire `yarn sync:dry --check` + `yarn lint:arch` into CI — deliberately left unwired today because exit codes are dishonest (its `.agents/session-log.md`, 2026-06-09 entry, records this).
 
 ## Evidence appendix (how each claim was verified, 2026-06-09)
 

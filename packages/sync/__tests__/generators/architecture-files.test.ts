@@ -566,7 +566,7 @@ describe("architecture files", () => {
   it("qualifies cross-context ownership collisions and keeps the YAML loadable", async () => {
     await withTempWorkspace(async ({ workspaceRoot }) => {
       const archDir = path.join(workspaceRoot, ".architecture");
-      // The campaign-foundry shape (RCA #9): two contexts declare the same
+      // The consumer-project shape (RCA #9): two contexts declare the same
       // port/adapter stem. Bare keys would be a duplicate YAML mapping key —
       // js-yaml load() throws on it — inside the very document whose
       // port-single-ownership invariant promises exactly one owner.

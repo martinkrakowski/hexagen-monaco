@@ -7,7 +7,7 @@ step (#271 + #272); #8 shipped as #268/#269/#270 (`--only` scope filter +
 idempotent no-op sync that writes zero files).
 
 Remediation for bugs and design gaps in the hexagen-monaco generator, surfaced
-end-to-end while scaffolding and shipping a real generated project — **campaign-foundry**,
+end-to-end while scaffolding and shipping a real generated project — **the reference project**,
 a Nitro + Next.js hexagonal modular monolith. Every item below was hit in the
 _generated output_ and patched by hand there (the P0 items), removed outright
 (#5, #6), or worked around in the wizard (#7). This plan ports proper fixes
@@ -50,7 +50,7 @@ directory present in **every** bounded context of the generated hexagonal
 architecture — is silently ignored. The generated source is never committed; a
 fresh clone or CI checkout sees a project missing all its outbound port
 interfaces, and the build/typecheck fails. (`out/` was intended to catch the
-Next.js static-export directory.) In campaign-foundry this broke `main` until the
+Next.js static-export directory.) In the reference project this broke `main` until the
 patterns were anchored and `ports/out/**` was recovered by hand.
 
 **Fix.** Anchor every build-output pattern that could collide with source. Replace
@@ -125,7 +125,7 @@ Extending Nitro's generated config is deliberate and correct (Nitro owns
 resolution + auto-import types), but that config is **not `strict`**, so the API
 app loses strict checking. `Result<T,E>` discriminated-union narrowing stops
 working — the `success: true | false` branches no longer narrow `value`/`error` —
-which is exactly what broke in campaign-foundry's `apps/api` (hand-fixed by
+which is exactly what broke in the reference project's `apps/api` (hand-fixed by
 re-asserting strict).
 
 **Fix.** Add `"strict": true` (and `"skipLibCheck": true`, see #2) to
@@ -192,7 +192,7 @@ _"packageManager yarn@4.12.0 … current global version of Yarn is 1.22"_ at set
 doesn't have. `ci.yml` in the same template does this correctly (`corepack enable`
 → `corepack prepare … --activate`, no setup-node yarn cache, plain `yarn install`);
 `preview.yml` simply diverges. (It also deploys to Vercel using secrets a fresh
-repo lacks.) In campaign-foundry the whole workflow was deleted as out-of-scope.
+repo lacks.) In the reference project the whole workflow was deleted as out-of-scope.
 
 **Fix.** Bring `preview.yml` in line with `ci.yml`: add the `corepack enable` +
 `corepack prepare "$(node -p 'require("./package.json").packageManager')" --activate`
@@ -220,7 +220,7 @@ Corepack mismatch.
 (limit 5) + `npm` (limit 5) but groups **only** dev-dependencies; production deps
 are ungrouped, so each prod-dep bump opens its own PR. On first publish every dep
 is "behind latest" at once → a wave of ~9 PRs (4 actions + 1 grouped dev + N prod),
-several of them breaking-risk majors. Observed live on campaign-foundry's first
+several of them breaking-risk majors. Observed live on the reference project's first
 push (the config was removed there to stop the noise).
 
 **Fix.** Tame the defaults: add a `production-dependencies` group (or group by
@@ -329,7 +329,7 @@ without per-context UI/API toggles; per-context infra no longer over-generates a
 **Root cause.** `hexagen sync` (`packages/sync/src/sync-engine.ts`) regenerates all
 `@generated` barrels/configs across the workspace, so any sync run touches ~50
 unrelated files — hostile to focused PRs (in practice you hand-edit the one barrel
-instead of running sync). Documented DX friction during campaign-foundry's focused
+instead of running sync). Documented DX friction during the reference project's focused
 PRs.
 
 **Fix.** Scope sync output: a `--only <path|glob>` / `--changed` flag, split
@@ -368,7 +368,7 @@ intended package.
   project builds and commits"; each is a one-template PR. Then P1 CI (#5, #6). **#7**
   is its own track (schema + `deriveApps`, then wizard UX, behind an ADR). #8 is DX,
   anytime.
-- **Provenance.** All items were found while building **campaign-foundry** (a Nitro +
+- **Provenance.** All items were found while building **the reference project** (a Nitro +
   Next.js hexagonal monolith). #1–#4 were patched by hand in that repo; #5/#6 were
   removed there to unblock; #7 was worked around manually in the wizard. This plan
   moves the fixes to the source so they're inherited, not re-applied per project.

@@ -75,7 +75,7 @@ async function ensureDirectoryCounted(
 
 /**
  * Keep a LEAF layer directory trackable by git (Wave-C consumer experience —
- * the campaign-foundry CI incident): git cannot represent an empty directory,
+ * a consumer project's CI incident): git cannot represent an empty directory,
  * so a freshly scaffolded layer skeleton existed in every working copy but in
  * no fresh checkout. The first consumer to wire `sync --check` into CI got
  * "Drift detected: 22 pending change(s)" — all `would create directory` — on

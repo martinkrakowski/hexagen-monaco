@@ -84,7 +84,7 @@ const DETERMINISTIC_CORPUS: DeterministicCase[] = [
     contexts: 8,
   },
   {
-    file: "campaignforge-dialect.yaml",
+    file: "rich-hexagonal-dialect.yaml",
     format:
       "rich hexagonal dialect (domain_models / primary_use_cases / ports)",
     contexts: 4,

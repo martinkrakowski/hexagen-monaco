@@ -25,13 +25,13 @@ say what the lane does. Use both — the id is what a PR, a record and the plan 
 what a human reads on the status page at a glance.
 
 ```text
-wave:  <plan-slug>-w<NN>       creative-templates-w03
-lane:  <plan-id>-<what-it-does>  L3b-layer-props   L7a-template-library
+wave:  <plan-slug>-w<NN>       wave-Q3
+lane:  <plan-id>-<what-it-does>  LANE-Z2-layer-props   LANE-Z3-template-library
 ```
 
 ### Never a bare id, or a wave with no plan slug
 
-**Not** `ct-3/L3b`, and not `waveT/fix-a4`. A reader six weeks out has no idea what `A4` was, and
+**Not** `wave-Q3/LANE-Z2`, and not `wave-Q9/fix-q1`. A reader six weeks out has no idea what `A4` was, and
 the id alone makes the status page a lookup table against a planning document. Keep the id first so
 sorting still groups a plan's lanes in order.
 
@@ -96,12 +96,12 @@ BEFORE=$(git -C "<worktree>" rev-parse HEAD)      # BEFORE the fix round runs
 git -C "<worktree>" log --oneline "$BEFORE"..HEAD  # empty ⇒ the round committed NOTHING
 ```
 
-PR #287 is the case that makes this concrete: its branch carried the earlier round's commit as well
+PR-XB is the case that makes this concrete: its branch carried the earlier round's commit as well
 as the fix, so `origin/main..HEAD` would have looked healthy even if the second round had written
 nothing at all.
 
 Four lanes in one session exited `0` having written nothing — two answered with a plan, two read
-files and stopped. **PR #282 was merged with four verified defects still in it** because its fix
+files and stopped. **PR-XA was merged with four verified defects still in it** because its fix
 round reported success and committed nothing. An exit code is not evidence of work, which is the
 same rule this file already applies to lane reports.
 
@@ -222,7 +222,7 @@ brief's mistake faithfully, which costs the full cycle and passes review.
      against the other's claim. It has happened twice: `TL1` named both the template-library routes
      and "one playhead, two positions preserved" in plans written the same day, and `L10`/`L11`
      collided between the templates plan and `run-exclusion-and-the-second-surface`. Both times the
-     colliding ids were **bare sequential** ones; prefixing with the plan's arc (`L7a2`, `CC5`,
+     colliding ids were **bare sequential** ones; prefixing with the plan's arc (`LANE-Z4`, `CC5`,
      `SE3`) is what has kept the other arcs clean. (`the-unowned-gaps.md` §42.)
      The `L10`/`L11` collision is also recorded at `studio-editor.md`'s finding **C2**. BSD `grep -E`
      has no `\b`, so the original word-boundary pattern (`grep -rniE '\b<ID>\b'`) was silent on every
@@ -235,7 +235,7 @@ brief's mistake faithfully, which costs the full cycle and passes review.
      grep for the defect's own numbers cost seconds; re-deriving an inventory with
      `merge-base --is-ancestor` does **not** cover this, because that method proves what shipped
      and cannot see that a recorded gap was closed by something it did not cite. RW-24 was
-     scheduled on 2026-09-20 against a ceiling overcount that #499 had fixed on 2026-09-18, with
+     scheduled on 2026-09-20 against a ceiling overcount that PR-XD had fixed on 2026-09-18, with
      the reported 48-against-32 numbers pinned in a test named after them.
 
 ### Four defects on 2026-09-16 came from briefs that failed exactly this
@@ -301,7 +301,7 @@ brief's mistake faithfully, which costs the full cycle and passes review.
    So: serialise installs; skip them **only for a lane that runs no local command needing
    dependencies** — which in practice means a docs-only lane and very little else. **A deletion lane
    is not one of them**: W1 deletes a test file, and proving the *remaining* suite still passes is
-   exactly the command that needs `node_modules`. (I skipped `cf-w1`'s install on the strength of the
+   exactly the command that needs `node_modules`. (I skipped `lane-Q1`'s install on the strength of the
    first draft of this rule; review caught it before the lane ran.) And
    **after a wave's installs, verify the main checkout still has its native binaries** rather than
    letting the owner's next dev start find out:

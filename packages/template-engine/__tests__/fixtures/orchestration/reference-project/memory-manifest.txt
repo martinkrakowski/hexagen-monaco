@@ -2,9 +2,9 @@ a-brief-that-says-in-full-must-enumerate.md
 a-mutation-replay-owns-its-worktree.md
 a-push-to-main-cancels-the-previous-runs-ci.md
 a-test-can-specify-the-bug.md
-campaign-foundry-direct-push-trivial-copy.md
-campaign-foundry-firefly-and-pdf-drift.md
-campaign-foundry-ownership.md
+reference-project-direct-push-trivial-copy.md
+reference-project-firefly-and-pdf-drift.md
+reference-project-ownership.md
 ci-duration-regression-hides-behind-green-gate.md
 ci-runners-have-no-zsh.md
 cloud-migration-direction.md
@@ -37,7 +37,7 @@ preview-rail-hidden-below-1264px.md
 project-state-2026-09-08.md
 scheduled-lane-may-be-closed-or-blocked.md
 scoped-coverage-must-match-the-gate.md
-seat-trials-w05.md
+seat-trials-wave-X5.md
 smaller-prs-per-lane.md
 software-authors-the-yaml-batch-is-the-future.md
 squash-merge-concatenates-commit-bodies.md

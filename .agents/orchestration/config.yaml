@@ -54,7 +54,7 @@ laneHosts:
     gate: targeted-only
     check: [ocm-run, --check]
     # Provisional until the follow-up lands: today lane-usage is a shim into a
-    # campaign-foundry checkout.
+    # reference-project checkout.
     usage: [lane-usage, --host, m]
     ssh: m
     clone: /mnt/pool/cloud-services/projects/hexagen-monaco

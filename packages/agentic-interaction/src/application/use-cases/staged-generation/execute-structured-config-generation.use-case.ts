@@ -128,7 +128,7 @@ interface StructuredConfigContextMapping {
   coupling?: string;
   // Rich "hexagonal" dialect aliases: `relationship` → pattern, `via` → mechanism.
   // Without these, two mappings between the same pair that differ only by `via`
-  // (e.g. CampaignOrchestration→CreativeGeneration via two ports) collapse into
+  // (e.g. ContentOrchestration→AssetGeneration via two ports) collapse into
   // byte-identical `{ upstream, downstream }` duplicates in the manifest.
   relationship?: string;
   via?: string;

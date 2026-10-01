@@ -39,7 +39,7 @@ function hasLaterRemediateSettled(
 }
 
 /**
- * D184's pre-PR-review gate for a `high`-risk lane: `undefined` when a merge
+ * The pre-PR-review gate for a `high`-risk lane: `undefined` when a merge
  * may proceed, or the reason it may not — naming the missing event — when it
  * may not.
  *

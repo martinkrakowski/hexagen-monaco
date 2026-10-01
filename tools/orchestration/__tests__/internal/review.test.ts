@@ -10,7 +10,7 @@ const review = (over: Partial<WaveEvent> = {}): WaveEvent => ({
   event: "settled",
   detail: {
     plan: "docs/planning/p.md",
-    rows: { "PT-5a": "aa" },
+    rows: { L5a: "aa" },
     verdict: "clear",
   },
   ...over,
@@ -28,7 +28,7 @@ describe("governingPlanReview — the gate's one rule, run by both of its faces"
   test("another wave's, another lane's, or another stage's events never govern", () => {
     const events = [
       review({ wave: "OTHER" }),
-      review({ lane: "PT-5a" }),
+      review({ lane: "L5a" }),
       review({ event: "started" }),
       review({ stage: "dispatch" }),
       review(),

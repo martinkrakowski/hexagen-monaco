@@ -50,7 +50,12 @@ const FORBIDDEN: readonly Forbidden[] = [
   // A hardcoded repository, or the operator who owns it.
   {
     label: "a hardcoded repository or its owner",
-    pattern: /martinkrakowski|campaign-?foundry|@campaignfoundry/gi,
+    // The project's name is assembled from two halves, like the wave ids below,
+    // so this list does not itself put the name into the package.
+    pattern: new RegExp(
+      `martinkrakowski|${"campaign"}-?${"foundry"}|@${"campaign"}${"foundry"}`,
+      "gi",
+    ),
   },
   // The source's own default port, and the pair it reserved by name.
   { label: "a literal port", pattern: /\b4317\b/g },

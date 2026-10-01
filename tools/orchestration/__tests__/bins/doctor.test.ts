@@ -464,7 +464,7 @@ const REMOTE_HOST = [
   "    gate: targeted-only",
   "    check: [ocm-run, --check]",
   "    ssh: m",
-  "    clone: /srv/cf",
+  "    clone: /srv/repo",
   "    worktrees: /srv/wt",
 ].join("\n");
 
@@ -753,7 +753,7 @@ describe("A-30 §1.3: the deprecated alias in doctor", () => {
  */
 const FIXTURE = resolve(
   import.meta.dirname,
-  "../../../../packages/template-engine/__tests__/fixtures/orchestration/campaign-foundry/overlay/config.yaml",
+  "../../../../packages/template-engine/__tests__/fixtures/orchestration/reference-project/overlay/config.yaml",
 );
 
 describe("A-30 §6: doctor's findings on OW1's fixture overlay", () => {

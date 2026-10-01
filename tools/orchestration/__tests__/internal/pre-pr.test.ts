@@ -16,11 +16,11 @@ const event = (partial: {
 describe("prePrReviewRefusal", () => {
   test("no stage=review event at all: refused, naming the missing event", () => {
     const events = [
-      event({ wave: "w06", lane: "HX1", stage: "dispatch", event: "started" }),
+      event({ wave: "w06", lane: "LX1", stage: "dispatch", event: "started" }),
     ];
-    const refusal = prePrReviewRefusal(events, "w06", "HX1");
+    const refusal = prePrReviewRefusal(events, "w06", "LX1");
     expect(refusal).toContain("no stage=review event=settled");
-    expect(refusal).toContain("HX1");
+    expect(refusal).toContain("LX1");
     expect(refusal).toContain("w06");
   });
 
@@ -28,23 +28,23 @@ describe("prePrReviewRefusal", () => {
     const events = [
       event({
         wave: "w06",
-        lane: "HX1",
+        lane: "LX1",
         stage: "review",
         event: "settled",
         detail: { verdict: "clear" },
       }),
     ];
-    expect(prePrReviewRefusal(events, "w06", "HX1")).toBeUndefined();
+    expect(prePrReviewRefusal(events, "w06", "LX1")).toBeUndefined();
   });
 
   test("a review settled with no verdict recorded at all: REFUSED — fail closed", () => {
     // The ordinary post-PR review bots emit stage=review event=settled with
     // only finding counts ({"bug":1,"suggestion":2,"nit":0}) and no verdict
-    // at all. That must never satisfy D184's gate.
+    // at all. That must never satisfy the pre-PR gate.
     const events = [
-      event({ wave: "w06", lane: "HX1", stage: "review", event: "settled" }),
+      event({ wave: "w06", lane: "LX1", stage: "review", event: "settled" }),
     ];
-    const refusal = prePrReviewRefusal(events, "w06", "HX1");
+    const refusal = prePrReviewRefusal(events, "w06", "LX1");
     expect(refusal).toContain("no verdict recorded");
   });
 
@@ -52,13 +52,13 @@ describe("prePrReviewRefusal", () => {
     const events = [
       event({
         wave: "w06",
-        lane: "HX1",
+        lane: "LX1",
         stage: "review",
         event: "settled",
         detail: { verdict: "approved" },
       }),
     ];
-    const refusal = prePrReviewRefusal(events, "w06", "HX1");
+    const refusal = prePrReviewRefusal(events, "w06", "LX1");
     expect(refusal).toContain("unrecognised verdict");
     expect(refusal).toContain("approved");
   });
@@ -67,13 +67,13 @@ describe("prePrReviewRefusal", () => {
     const events = [
       event({
         wave: "w06",
-        lane: "HX1",
+        lane: "LX1",
         stage: "review",
         event: "settled",
         detail: { bug: 1, suggestion: 2, nit: 0 },
       }),
     ];
-    const refusal = prePrReviewRefusal(events, "w06", "HX1");
+    const refusal = prePrReviewRefusal(events, "w06", "LX1");
     expect(refusal).toContain("no verdict recorded");
   });
 
@@ -81,13 +81,13 @@ describe("prePrReviewRefusal", () => {
     const events = [
       event({
         wave: "w06",
-        lane: "HX1",
+        lane: "LX1",
         stage: "review",
         event: "settled",
         detail: { verdict: "changes-required" },
       }),
     ];
-    const refusal = prePrReviewRefusal(events, "w06", "HX1");
+    const refusal = prePrReviewRefusal(events, "w06", "LX1");
     expect(refusal).toContain("changes-required");
     expect(refusal).toContain("stage=remediate event=settled");
   });
@@ -96,28 +96,28 @@ describe("prePrReviewRefusal", () => {
     const events = [
       event({
         wave: "w06",
-        lane: "HX1",
+        lane: "LX1",
         stage: "review",
         event: "settled",
         detail: { verdict: "changes-required" },
       }),
-      event({ wave: "w06", lane: "HX1", stage: "remediate", event: "settled" }),
+      event({ wave: "w06", lane: "LX1", stage: "remediate", event: "settled" }),
     ];
-    expect(prePrReviewRefusal(events, "w06", "HX1")).toBeUndefined();
+    expect(prePrReviewRefusal(events, "w06", "LX1")).toBeUndefined();
   });
 
   test("a remediate settled BEFORE the changes-required review does not count — order matters", () => {
     const events = [
-      event({ wave: "w06", lane: "HX1", stage: "remediate", event: "settled" }),
+      event({ wave: "w06", lane: "LX1", stage: "remediate", event: "settled" }),
       event({
         wave: "w06",
-        lane: "HX1",
+        lane: "LX1",
         stage: "review",
         event: "settled",
         detail: { verdict: "changes-required" },
       }),
     ];
-    const refusal = prePrReviewRefusal(events, "w06", "HX1");
+    const refusal = prePrReviewRefusal(events, "w06", "LX1");
     expect(refusal).toContain("no later stage=remediate event=settled");
   });
 
@@ -125,34 +125,34 @@ describe("prePrReviewRefusal", () => {
     const events = [
       event({
         wave: "w06",
-        lane: "HX1",
+        lane: "LX1",
         stage: "review",
         event: "settled",
         detail: { verdict: "changes-required" },
       }),
-      event({ wave: "w06", lane: "HX5", stage: "remediate", event: "settled" }),
+      event({ wave: "w06", lane: "LX5", stage: "remediate", event: "settled" }),
     ];
-    expect(prePrReviewRefusal(events, "w06", "HX1")).toBeDefined();
+    expect(prePrReviewRefusal(events, "w06", "LX1")).toBeDefined();
   });
 
   test("the LATEST review settled governs — an earlier clear does not survive a later changes-required", () => {
     const events = [
       event({
         wave: "w06",
-        lane: "HX1",
+        lane: "LX1",
         stage: "review",
         event: "settled",
         detail: { verdict: "clear" },
       }),
       event({
         wave: "w06",
-        lane: "HX1",
+        lane: "LX1",
         stage: "review",
         event: "settled",
         detail: { verdict: "changes-required" },
       }),
     ];
-    const refusal = prePrReviewRefusal(events, "w06", "HX1");
+    const refusal = prePrReviewRefusal(events, "w06", "LX1");
     expect(refusal).toContain("changes-required");
   });
 
@@ -160,53 +160,53 @@ describe("prePrReviewRefusal", () => {
     const events = [
       event({
         wave: "w06",
-        lane: "HX1",
+        lane: "LX1",
         stage: "review",
         event: "settled",
         detail: { verdict: "changes-required" },
       }),
-      event({ wave: "w06", lane: "HX1", stage: "remediate", event: "settled" }),
+      event({ wave: "w06", lane: "LX1", stage: "remediate", event: "settled" }),
       event({
         wave: "w06",
-        lane: "HX1",
+        lane: "LX1",
         stage: "review",
         event: "settled",
         detail: { verdict: "clear" },
       }),
     ];
-    expect(prePrReviewRefusal(events, "w06", "HX1")).toBeUndefined();
+    expect(prePrReviewRefusal(events, "w06", "LX1")).toBeUndefined();
   });
 
   test("a different lane's review settled does not satisfy this lane's gate", () => {
     const events = [
       event({
         wave: "w06",
-        lane: "HX5",
+        lane: "LX5",
         stage: "review",
         event: "settled",
         detail: { verdict: "clear" },
       }),
     ];
-    expect(prePrReviewRefusal(events, "w06", "HX1")).toBeDefined();
+    expect(prePrReviewRefusal(events, "w06", "LX1")).toBeDefined();
   });
 
   test("a different wave's review settled does not satisfy this lane's gate", () => {
     const events = [
       event({
         wave: "w05",
-        lane: "HX1",
+        lane: "LX1",
         stage: "review",
         event: "settled",
         detail: { verdict: "clear" },
       }),
     ];
-    expect(prePrReviewRefusal(events, "w06", "HX1")).toBeDefined();
+    expect(prePrReviewRefusal(events, "w06", "LX1")).toBeDefined();
   });
 
   test("a review that only started, never settled, does not satisfy the gate", () => {
     const events = [
-      event({ wave: "w06", lane: "HX1", stage: "review", event: "started" }),
+      event({ wave: "w06", lane: "LX1", stage: "review", event: "started" }),
     ];
-    expect(prePrReviewRefusal(events, "w06", "HX1")).toBeDefined();
+    expect(prePrReviewRefusal(events, "w06", "LX1")).toBeDefined();
   });
 });

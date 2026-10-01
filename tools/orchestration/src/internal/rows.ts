@@ -154,7 +154,7 @@ function matchingLines(
  * The sha256 hex of one plan-table row, normalised: trimmed, with every run of
  * whitespace collapsed to one space, so a whitespace-only reflow of a row keeps
  * its hash and a one-word change breaks it. The id names the row by its first
- * cell — a lane id (`| **PT-5a** | …`) or a decision id (`| **D177** | …`) —
+ * cell — a lane id (`| **L5a** | …`) or a decision id (`| **D17** | …`) —
  * and the row must be unambiguous: zero matches or more than one is an error
  * naming the id and the count, never a hash of the wrong line.
  */
@@ -165,7 +165,7 @@ export function rowHash(markdown: string, id: string, plan?: string): string {
   return createHash("sha256").update(normalised, "utf8").digest("hex");
 }
 
-/** A plan row's risk tier (D184): `high`, or `normal` for everything else. */
+/** A plan row's risk tier: `high`, or `normal` for everything else. */
 export type Risk = "high" | "normal";
 
 /**
@@ -189,7 +189,7 @@ function rowSecondCellPattern(id: string): RegExp {
  *
  * At the source, `rowRisk` returned `high` for a cell exactly `**high**` and
  * `normal` for EVERYTHING else, so a plan row that plainly said `high` read as
- * `normal`, D184's pre-PR gate never fired for it, and the gate failed OPEN.
+ * `normal`, the pre-PR gate never fired for it, and the gate failed OPEN.
  * These cells now fail loud instead.
  *
  * The message names the row, and the plan file when the caller knows it —

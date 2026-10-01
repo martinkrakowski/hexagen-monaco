@@ -5,19 +5,19 @@ import { InvalidRiskCellError } from "../../src/internal/rows.js";
 const highPlan = [
   "| Lane | Risk | Delivers |",
   "|---|---|---|",
-  "| **HX1-route-segments-reserved** | **high** | Split the reserved list. |",
+  "| **LX1-split-reserved-list** | **high** | Split the reserved list. |",
 ].join("\n");
 
 const normalPlan = [
   "| Lane | Risk | Delivers |",
   "|---|---|---|",
-  "| **HX4-pre-pr-review-gate** | normal | Plan rows carry a risk tier. |",
+  "| **LX4-pre-pr-review-gate** | normal | Plan rows carry a risk tier. |",
 ].join("\n");
 
 const noRiskColumnPlan = [
   "| Lane | Delivers |",
   "|---|---|",
-  "| **PT-5a** | The campaign id, exposed and resolvable. |",
+  "| **L5a** | The record id, exposed and resolvable. |",
 ].join("\n");
 
 interface Fixture {
@@ -42,14 +42,14 @@ describe("discoverRisk", () => {
   test("finds the lane's row in the one plan that names it", async () => {
     const io = ioOver({ "docs/planning/a.md": highPlan });
     expect(
-      await discoverRisk("HX1-route-segments-reserved", "docs/planning", io),
+      await discoverRisk("LX1-split-reserved-list", "docs/planning", io),
     ).toBe("high");
   });
 
   test("a normal row reads normal", async () => {
     const io = ioOver({ "docs/planning/a.md": normalPlan });
     expect(
-      await discoverRisk("HX4-pre-pr-review-gate", "docs/planning", io),
+      await discoverRisk("LX4-pre-pr-review-gate", "docs/planning", io),
     ).toBe("normal");
   });
 
@@ -58,28 +58,28 @@ describe("discoverRisk", () => {
     // of this lane" must not read the same as "this gate cleared it".
     const io = ioOver({ "docs/planning/a.md": highPlan });
     expect(
-      await discoverRisk("HX9-nonexistent", "docs/planning", io),
+      await discoverRisk("LX9-nonexistent", "docs/planning", io),
     ).toBeUndefined();
   });
 
   test("a plan without a Risk column parses as normal, as in the platform plan", async () => {
     const io = ioOver({ "docs/planning/a.md": noRiskColumnPlan });
-    expect(await discoverRisk("PT-5a", "docs/planning", io)).toBe("normal");
+    expect(await discoverRisk("L5a", "docs/planning", io)).toBe("normal");
   });
 
   test("a fail-closed union: ANY plan saying high wins, whatever order files sort in", async () => {
     const io = ioOver({
       "docs/planning/b-later.md": highPlan,
       "docs/planning/a-earlier.md": normalPlan.replace(
-        "HX4-pre-pr-review-gate",
-        "HX1-route-segments-reserved",
+        "LX4-pre-pr-review-gate",
+        "LX1-split-reserved-list",
       ),
     });
-    // a-earlier.md sorts first and names HX1 as normal; b-later.md (high)
+    // a-earlier.md sorts first and names LX1 as normal; b-later.md (high)
     // must still win — an old plan's normal row must never shadow a new
     // plan's high one.
     expect(
-      await discoverRisk("HX1-route-segments-reserved", "docs/planning", io),
+      await discoverRisk("LX1-split-reserved-list", "docs/planning", io),
     ).toBe("high");
   });
 
@@ -89,18 +89,18 @@ describe("discoverRisk", () => {
       "docs/planning/b-later.md": normalPlan,
     });
     expect(
-      await discoverRisk("HX4-pre-pr-review-gate", "docs/planning", io),
+      await discoverRisk("LX4-pre-pr-review-gate", "docs/planning", io),
     ).toBe("normal");
   });
 
   test("a plan whose row is ambiguous (0 or 2+ matches) is skipped, not thrown", async () => {
-    const duplicated = `${highPlan}\n| **HX1-route-segments-reserved** | normal | A duplicate row. |`;
+    const duplicated = `${highPlan}\n| **LX1-split-reserved-list** | normal | A duplicate row. |`;
     const io = ioOver({
       "docs/planning/a-ambiguous.md": duplicated,
       "docs/planning/b-clear.md": highPlan,
     });
     expect(
-      await discoverRisk("HX1-route-segments-reserved", "docs/planning", io),
+      await discoverRisk("LX1-split-reserved-list", "docs/planning", io),
     ).toBe("high");
   });
 
@@ -114,7 +114,7 @@ describe("discoverRisk", () => {
       },
     };
     expect(
-      await discoverRisk("HX1-route-segments-reserved", "docs/planning", io),
+      await discoverRisk("LX1-split-reserved-list", "docs/planning", io),
     ).toBe("high");
   });
 
@@ -128,7 +128,7 @@ describe("discoverRisk", () => {
       },
     };
     expect(
-      await discoverRisk("HX1-route-segments-reserved", "docs/planning", io),
+      await discoverRisk("LX1-split-reserved-list", "docs/planning", io),
     ).toBeUndefined();
   });
 
@@ -146,7 +146,7 @@ describe("discoverRisk", () => {
       },
     };
     expect(
-      await discoverRisk("HX1-route-segments-reserved", "docs/planning", io),
+      await discoverRisk("LX1-split-reserved-list", "docs/planning", io),
     ).toBe("high");
   });
 });
@@ -155,7 +155,7 @@ describe("discoverRisk propagates an invalid risk cell (A-1)", () => {
   const malformed = [
     "| Lane | Risk | Delivers |",
     "|---|---|---|",
-    "| **HX1-route-segments-reserved** | high | Split the reserved list. |",
+    "| **LX1-split-reserved-list** | high | Split the reserved list. |",
   ].join("\n");
 
   test("a malformed cell propagates instead of being skipped (A-1)", async () => {
@@ -164,7 +164,7 @@ describe("discoverRisk propagates an invalid risk cell (A-1)", () => {
     // reported `normal` — the gate failing open.
     const io = ioOver({ "docs/planning/a.md": malformed });
     await expect(
-      discoverRisk("HX1-route-segments-reserved", "docs/planning", io),
+      discoverRisk("LX1-split-reserved-list", "docs/planning", io),
     ).rejects.toThrow(InvalidRiskCellError);
   });
 
@@ -174,19 +174,19 @@ describe("discoverRisk propagates an invalid risk cell (A-1)", () => {
     const io = ioOver({
       "docs/planning/a-high.md": malformed,
       "docs/planning/b-normal.md": normalPlan.replace(
-        "HX4-pre-pr-review-gate",
-        "HX1-route-segments-reserved",
+        "LX4-pre-pr-review-gate",
+        "LX1-split-reserved-list",
       ),
     });
     await expect(
-      discoverRisk("HX1-route-segments-reserved", "docs/planning", io),
+      discoverRisk("LX1-split-reserved-list", "docs/planning", io),
     ).rejects.toThrow(InvalidRiskCellError);
   });
 
   test("the propagated error names the plan file and the row (A-1)", async () => {
     const io = ioOver({ "docs/planning/a-high.md": malformed });
     await expect(
-      discoverRisk("HX1-route-segments-reserved", "docs/planning", io),
-    ).rejects.toThrow(/a-high\.md.*HX1-route-segments-reserved/s);
+      discoverRisk("LX1-split-reserved-list", "docs/planning", io),
+    ).rejects.toThrow(/a-high\.md.*LX1-split-reserved-list/s);
   });
 });

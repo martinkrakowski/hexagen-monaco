@@ -6,7 +6,7 @@
 #   scripts/merge-prs.sh "<pr>|<worktree-or-empty>|<branch>" ...
 #
 # Example:
-#   scripts/merge-prs.sh "41|../cf-wt-seeded-random|feat/seeded-random" "42||fix/typo"
+#   scripts/merge-prs.sh "41|../wt-seeded-random|feat/seeded-random" "42||fix/typo"
 #
 # For each PR, in order:
 #   1. Refresh the branch from origin/<main>. Conflicts are auto-resolved ONLY for

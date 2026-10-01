@@ -1,47 +1,53 @@
 # Provenance of this snapshot
 
-Every file in this directory is a byte-for-byte copy of committed content in the
-campaign-foundry repository, read at one pinned commit. Nothing here was written,
-edited or reformatted. The upstream repository is read-only reference for this work
-(§12 A-10 of `docs/planning/2026-09-29_orchestration-template.md`); it was never
-modified, and no file under it was created or deleted.
+This directory is a pinned snapshot of the reference skill: the orchestration skill, its two
+reference documents, its wave-event shim and its gate script, as they stood on 2026-09-29. Only
+`scripts/wave-event.sh` is still a byte-for-byte copy of the reference content. The other four were
+scrubbed on 2026-10-01 so that they name no project, and their blob ids below are the scrubbed
+files' ids. The reference project is read-only reference for this work (§12 A-10 of
+`docs/planning/2026-09-29_orchestration-template.md`); nothing under it was created or deleted.
+
+What the scrub changed, and nothing else:
+
+- `gate.sh`: the project-specific environment-variable prefix, lock-file prefix and package scope
+  became `GATE_`, `gate.` and `@example/`, and the header comment's plan-decision and lane ids were
+  replaced by neutral wording. Behaviour is unchanged for the script in isolation (the fixture is
+  never executed); the extracted gate steps are identical.
+- `SKILL.md`, `references/cast.md`, `references/rationale.md`: the reference project's PR numbers,
+  lane ids, wave ids, decision id and branch names became neutral stand-ins (`PR-X…`, `LANE-X…`,
+  `LANE-Y…`, `LANE-Z…`, `wave-X…`, `wave-Q…`, `D-X1`, `lane-Q1`, `wt-*`, `wt-<lane>`). The same mapping was applied to
+  the overlay, so every snapshot unit still appears whole in the generic skill or the overlay.
 
 | | |
 | --- | --- |
-| **Repository** | campaign-foundry |
-| **Local path (read-only)** | `$CAMPAIGN_FOUNDRY_REPO`, set by the reader to their own checkout of campaign-foundry |
-| **Pinned commit** | `205b8142d311b05a1802287a35e9a1d38d185ea8` |
-| **Pinned commit date** | 2026-09-29T17:03:37-04:00 |
-| **Pinned commit subject** | `feat(campaigns): reserve every static /campaigns route segment as a campaign id (D181) (#632)` |
 | **Snapshot taken** | 2026-09-29 |
+| **Scrubbed** | 2026-10-01 (four of the five files; the blob ids below are the scrubbed files' ids) |
 
-## The five paths read at the pin
+## The five files
 
-| Source path at the pin | Blob at the pin | Destination here |
+| File | Blob | Destination here |
 | --- | --- | --- |
-| `.claude/skills/orchestrate-wave/SKILL.md` | `942001af64158379b5170edea9f1c643a85bcd53` | `SKILL.md` |
-| `.claude/skills/orchestrate-wave/references/rationale.md` | `25f6fd0a7b3279c9441202ed680c32e92fd66217` | `references/rationale.md` |
-| `.claude/skills/orchestrate-wave/references/cast.md` | `12687b070af78c91f42809a81eefab7b367cc9d7` | `references/cast.md` |
-| `.claude/skills/orchestrate-wave/scripts/wave-event.sh` | `6cd1f96986ed78d1394fb8aa1ed571e7aaabeb64` | `scripts/wave-event.sh` |
-| `scripts/gate.sh` | `c3954e2282b9f4d5cb5c02cd48a36d2a34e17d82` | `gate.sh` |
+| `skill` | `d057583f3137a3df3285ec1ccaf5e9ef37e95e38` | `SKILL.md` |
+| `rationale` | `5f83836ec6f7d3f0ce2b4de55cf350bbcf86f518` | `references/rationale.md` |
+| `cast` | `8938fdaeb9a73f7818ff38707d8d5078ae4a01f3` | `references/cast.md` |
+| `wave-event shim` | `6cd1f96986ed78d1394fb8aa1ed571e7aaabeb64` | `scripts/wave-event.sh` |
+| `gate script` | `b8328a585f20060958232603617cdafbbd1e59fb` | `gate.sh` |
 
-`scripts/wave-event.sh` keeps its executable bit; the other four are `100644` upstream
-and `100644` here.
+`scripts/wave-event.sh` keeps its executable bit; the other four are `100644`.
 
 ## Verifying this snapshot
 
-Each file is byte-identical to the pinned blob. From the repository root, with
-`git show` reading the committed object and `cmp` comparing bytes:
+The `git hash-object` of each file here equals the blob id recorded above, and
+`scripts/orchestration/skill-coverage.mjs` recomputes the same ids and fails when any file
+differs. From the repository root:
 
 ```sh
-git show HEAD:packages/template-engine/__tests__/fixtures/orchestration/source/SKILL.md \
-  | cmp - <(git -C "$CAMPAIGN_FOUNDRY_REPO" show 205b8142:.claude/skills/orchestrate-wave/SKILL.md)
+git hash-object packages/template-engine/__tests__/fixtures/orchestration/source/SKILL.md
 ```
 
-Set `CAMPAIGN_FOUNDRY_REPO` to your own checkout of campaign-foundry first. Repeat for the other four with the paths in the table above. The `git hash-object` of
-each file here also equals the blob id recorded above.
+Repeat for the other four with the paths in the table above.
 
 ## What was deliberately not read
 
-`briefs/` and `assets/inputs/` in campaign-foundry are the owner's operator data and
-were never opened. The contents of either directory did not enter this fixture.
+The reference project's operator data (its briefs and input assets) was never opened. The contents
+of those directories did not enter this fixture.

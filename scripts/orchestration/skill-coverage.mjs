@@ -2,7 +2,7 @@
 // Checks that the scrub lost nothing.
 //
 // The owner's requirement is that every rule and incident in the pinned snapshot exists either in
-// the generic skill or in campaign-foundry's overlay. A prose claim that it does is worth nothing,
+// the generic skill or in the reference project's overlay. A prose claim that it does is worth nothing,
 // so this computes the claim: it extracts two kinds of unit from each snapshot file and requires
 // each one to appear, whole, somewhere in the trees it is given.
 //
@@ -381,11 +381,11 @@ function checkSites(sitesPath, genericDir) {
     const text = readFile(path, `file in generic tree ${genericDir}`);
     for (const site of sites) {
       if (text.includes(site)) {
-        bad(`${path.replace(`${process.cwd()}/`, "")}: contains the campaign-foundry string ${JSON.stringify(site)}`);
+        bad(`${path.replace(`${process.cwd()}/`, "")}: contains the reference-project string ${JSON.stringify(site)}`);
       }
     }
   }
-  say(`sites: ${sites.length} campaign-foundry strings, none present in ${files.length} generic file(s)`);
+  say(`sites: ${sites.length} reference-project strings, none present in ${files.length} generic file(s)`);
 }
 
 function checkMemory(memoryDir, manifestPath, lessonsPath, allowlistPath) {

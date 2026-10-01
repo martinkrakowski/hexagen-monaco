@@ -1,4 +1,4 @@
-# campaign-foundry's orchestration overlay config
+# The reference project's orchestration overlay config
 #
 # The consumer-owned half of the split. hexagen never emits this file, never hashes it and
 # never writes to it: `hexagen add orchestration --force` and any future upgrade leave
@@ -8,7 +8,7 @@
 # differs from its locked default without a matching `overrides[]` entry naming it with a
 # reason.
 #
-# These are campaign-foundry's real values, not the package's defaults. The distinction is
+# These are the reference project's real values, not the package's defaults. The distinction is
 # load-bearing: `waveLogDir` is `$HOME/.waves` because that is where this repository's own
 # wave-status server scans, and `waveStatusPort` is 4317 because that is its default. A hexagen
 # project sets neither.
@@ -54,13 +54,13 @@ gateSteps:
 requiredCheck: ^Build
 
 # Files that concurrent lanes routinely append to, where keeping BOTH sides of a conflict hunk
-# is the correct resolution. campaign-foundry's own regex, verbatim: its session log, its
+# is the correct resolution. The reference project's own regex, verbatim: its session log, its
 # changelog, its package port barrels, its UI barrel and its message catalogue. Only ever add a
 # file whose lanes append at the END — the resolver preserves order, not intent.
 #
 # ONE alternation, not a list: this field is a single regular expression, and a YAML list here
 # is refused ("must be a string").
-appendOnlyPaths: '^(\.agents/session-log\.md|CHANGELOG\.md|packages/[^/]+/src/application/ports/out/index\.ts|apps/web/src/components/ui/index\.ts|apps/web/src/components/campaign/messages\.ts)$'
+appendOnlyPaths: '^(\.agents/session-log\.md|CHANGELOG\.md|packages/[^/]+/src/application/ports/out/index\.ts|apps/web/src/components/ui/index\.ts|apps/web/src/messages\.ts)$'
 
 # Ports no lane may bind or request. These are the operator's live dev servers: a request
 # there overwrites their output and spends their credits. This is where the refusal lives; the
@@ -87,7 +87,7 @@ laneHosts:
     check: [curl, -sf, http://127.0.0.1:4096/doc]
     gate: full
 
-# Where this repository's wave events are logged. campaign-foundry's own value, which is also
+# Where this repository's wave events are logged. The reference project's own value, which is also
 # what its status server scans. A hexagen project uses `$HOME/.waves-<name>` instead, because a
 # wave logged in a shared bare root is joined against the wrong repository and reports false
 # "no PR" flags.
@@ -108,7 +108,7 @@ tokensCssPath: apps/web/src/styles/tokens.css
 # The only legal way to weaken one of the four invariants below. Each entry is
 # {invariant, reason}; `doctor` fails an entry whose invariant is not one of the four, and
 # fails an `invariants` key that differs from its default with no entry naming it. Empty here:
-# campaign-foundry weakens nothing.
+# the reference project weakens nothing.
 overrides: []
 
 # The four core invariants, locked to exactly these defaults.
@@ -125,7 +125,7 @@ invariants:
 # owner/name. Required. The wave-status server scopes itself to this repository and ignores
 # waves whose events name a different one; the sweep bin derives its query from it too, so no
 # ported tool hardcodes a repository.
-repo: martinkrakowski/campaign-foundry
+repo: example-owner/reference-project
 
 # This repository's own wave-status server. 4317 is its default and is not forbidden above;
 # hexagen's own server runs on a different port and adds 4317 to `forbiddenPorts` instead.

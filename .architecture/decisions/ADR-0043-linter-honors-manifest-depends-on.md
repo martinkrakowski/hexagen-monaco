@@ -14,7 +14,7 @@ checks code against `manifest.yaml`. In practice, cross-context import
 legality was decided **exclusively** by `.architecture/invariants/`
 (`linter-config.yaml` `global_whitelist` + `package_rules`); the per-context
 `depends_on` declarations the wizard records into the manifest were never
-read. Empirically verified in campaign-foundry (RCA #8): adding a context to
+read. Empirically verified in a consumer project (RCA #8): adding a context to
 three contexts' `depends_on` changed nothing in `arch validate` output.
 
 That split means a scaffolded project's declared architecture (manifest) and
@@ -109,7 +109,7 @@ package, not against maintaining the tool.
 - The linter reads `bounded_contexts[].type === "shared-kernel"` and
   `bounded_contexts[].depends_on` — both long-standing manifest schema
   fields; no schema change.
-- campaign-foundry follow-up: its `global_whitelist` workaround entries can
+- Consumer-project follow-up: its `global_whitelist` workaround entries can
   migrate to `depends_on` declarations at leisure (both keep working).
 - The cross-package decision moves from closures inside the linter's
   `index.ts` into `tools/arch-linter/src/cross-package-violation.ts`
