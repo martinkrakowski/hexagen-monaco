@@ -1773,6 +1773,8 @@ describe("the gate lock: slots and one gate per worktree", () => {
     expect(readFileSync(join(slotDir(dir, 2), "owner"), "utf8").trim()).toBe(
       "lane-z",
     );
+    // The give-back says what it did instead of swallowing it.
+    expect(result.stderr).toContain("removal aborted");
     expect(readdirSync(dir).filter((n) => n.includes(".gone."))).toEqual([]);
   });
 

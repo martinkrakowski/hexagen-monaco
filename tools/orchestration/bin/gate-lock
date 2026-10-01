@@ -475,7 +475,9 @@ finish_acquire() {
   if other_same_worktree; then
     # drop_own's stderr is kept: a give-back that leaves a copy aside, or fails,
     # must be said. Its stdout is not used.
-    drop_own "$f_lane" "$recorded_pid" >/dev/null 2>&1
+    # drop_own's stderr is kept: a give-back that leaves a copy aside, or fails,
+    # must be said. Its stdout is not used.
+    drop_own "$f_lane" "$recorded_pid" >/dev/null
     printf '%s\n' "gate-lock: same worktree — $f_lane was refused: ${other_owner:-unknown} (pid $other_pid) already holds a gate slot from $WORKTREE, and there is one gate per worktree; sleep and retry (75)" >&2
     exit $BUSY
   fi
@@ -483,7 +485,7 @@ finish_acquire() {
     f_tmp="$HEXAGEN_GATE_SLOT_OUT.tmp.$$"
     if ! { printf '%s\n' "$f_slot" > "$f_tmp" && mv "$f_tmp" "$HEXAGEN_GATE_SLOT_OUT"; } 2>/dev/null; then
       rm -f "$f_tmp" 2>/dev/null
-      drop_own "$f_lane" "$recorded_pid" >/dev/null 2>&1
+      drop_own "$f_lane" "$recorded_pid" >/dev/null
       printf '%s\n' "gate-lock: cannot write the slot-out file $HEXAGEN_GATE_SLOT_OUT — refused, and slot $f_slot was given back" >&2
       exit 2
     fi
