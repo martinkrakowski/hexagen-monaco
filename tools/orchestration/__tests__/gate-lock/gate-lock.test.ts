@@ -1906,4 +1906,36 @@ describe("the gate lock: slots and one gate per worktree", () => {
       "lane-b",
     );
   });
+
+  test("a removal never deletes a saved lock that already sits at its aside name", async () => {
+    // An earlier removal left a lock aside; the pid is reused, and the next
+    // release must not delete it to make room for its own aside.
+    const dir = scratch();
+    seedLock(dir, { owner: "lane-a", pid: 434343 });
+    const pause = join(dir, "pause-drop");
+    const release = startLockIn(dir, ["release", "lane-a"], {
+      ...CALLER,
+      HEXAGEN_GATE_TEST_PAUSE_BEFORE_DROP: pause,
+    });
+    await waitForFile(pause);
+    const pid = release.child.pid;
+    for (const suffix of [`${pid}`, `${pid}.0`]) {
+      const saved = `${lockDir(dir)}.gone.${suffix}`;
+      mkdirSync(saved);
+      writeFileSync(join(saved, "owner"), "lane-saved\n");
+      writeFileSync(join(saved, "pid"), "1\n");
+    }
+    rmSync(pause);
+    const result = await release.done;
+    expect(result.status).toBe(0);
+    expect(existsSync(lockDir(dir))).toBe(false);
+    for (const suffix of [`${pid}`, `${pid}.0`]) {
+      expect(
+        readFileSync(
+          join(`${lockDir(dir)}.gone.${suffix}`, "owner"),
+          "utf8",
+        ).trim(),
+      ).toBe("lane-saved");
+    }
+  });
 });

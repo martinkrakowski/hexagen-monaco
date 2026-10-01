@@ -412,8 +412,16 @@ drop_own() {
     touch "$HEXAGEN_GATE_TEST_PAUSE_BEFORE_DROP" 2>/dev/null
     while [ -f "$HEXAGEN_GATE_TEST_PAUSE_BEFORE_DROP" ]; do sleep 1; done
   fi
-  gone="$LOCK.gone.$$"
-  rm -rf "$gone" 2>/dev/null
+  # An aside name that is not already taken. An earlier removal may have left a
+  # saved lock at a name built from this pid (pids are reused), and that is
+  # somebody's lock: it is never deleted to make room, and `mv` onto an
+  # existing directory would nest rather than fail, so the name is probed first.
+  gone_n=0
+  gone="$LOCK.gone.$$.$gone_n"
+  while [ -e "$gone" ]; do
+    gone_n=$((gone_n + 1))
+    gone="$LOCK.gone.$$.$gone_n"
+  done
   if ! mv "$LOCK" "$gone" 2>/dev/null; then
     # Nothing moved. If the name is still this caller's lock, the rename was
     # refused (permissions, I/O) and that is a failed removal; if not, it was
