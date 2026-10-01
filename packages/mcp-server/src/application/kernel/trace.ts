@@ -41,6 +41,29 @@ export interface TraceRecord {
   readonly transaction_ids: readonly string[];
   readonly started_at: string;
   readonly ended_at: string;
+  /**
+   * Brownfield chain fields (docs/kernel/trace.schema.json `brownfield_line`):
+   * both present or both absent. A greenfield line has neither. Types only —
+   * the writer that fills them is a later lane, and `checkTrace` ignores them.
+   */
+  readonly seq?: number;
+  readonly prev_hash?: string;
+}
+
+/**
+ * A denied call that carried no grant, or a grant with no id. It has no
+ * `grant_id` to cite, so it is its own record kind (schema `grant_missing`),
+ * never evidence of a write. Types only; nothing writes or reads it yet.
+ */
+export interface GrantMissingRecord {
+  readonly kind: "grant_missing";
+  readonly seq: number;
+  readonly prev_hash: string;
+  readonly goal_id?: string;
+  readonly tool: string;
+  readonly args_digest?: string;
+  readonly reason: string;
+  readonly time: string;
 }
 
 export type TraceCheck =
