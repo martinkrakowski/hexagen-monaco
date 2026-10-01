@@ -367,7 +367,7 @@ describe("shellQuote, evaluated by a real sh", () => {
   );
 
   test("an injection through a clone path is one word, not a command", () => {
-    const clone = "/srv/cf; echo pwned";
+    const clone = "/srv/repo; echo pwned";
     expect(words(["git", "-C", clone].map(shellQuote).join(" "))).toEqual([
       "git",
       "-C",

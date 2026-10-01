@@ -464,7 +464,7 @@ const REMOTE_HOST = [
   "    gate: targeted-only",
   "    check: [ocm-run, --check]",
   "    ssh: m",
-  "    clone: /srv/cf",
+  "    clone: /srv/repo",
   "    worktrees: /srv/wt",
 ].join("\n");
 

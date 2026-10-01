@@ -430,7 +430,7 @@ Every lane was reviewed before its first push, and fix rounds went to a separate
 seat. The findings that mattered:
 
 - **OW3f: shell injection over ssh.** `runRemote` passed its remote words unquoted. ssh joins
-  them and hands the string to the remote login shell, so a `clone:` of `/srv/cf; …` would
+  them and hands the string to the remote login shell, so a `clone:` of `/srv/repo; …` would
   have executed on the lane host. The fix quotes every word, proven against a real `sh`.
 - **OW3f: the group-kill test timing out under suite load.** It failed 3 out of 3 runs inside
   the full package suite.
