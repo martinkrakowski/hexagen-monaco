@@ -18,6 +18,9 @@ export interface BriefHeader {
 /** The variant paragraph: from its first words to the sentence that ends it. */
 const VARIANT_START = "Lane-host variant. ";
 const VARIANT_END = "ignore this paragraph.\n";
+/** The tail's pointer at the variant: it must go with the paragraph it points at. */
+const VARIANT_POINTER =
+  "(Under the lane-host variant: the commit list and targeted check exit codes instead.)\n";
 /** The line after which the environment block is inserted: the worktree line. */
 const ENV_AFTER = "\n\nRead first, in order:";
 
@@ -97,6 +100,14 @@ export function render(header: BriefHeader): string {
   }
 
   const variant = TEMPLATE_A.slice(vStart, variantEnd);
+  const keepVariant = header.gate === "targeted-only" || header.remote;
+  let tail = TEMPLATE_A.slice(variantEnd);
+  if (!keepVariant) {
+    if (!tail.includes(VARIANT_POINTER)) {
+      throw new Error("the brief-new template has lost its variant pointer");
+    }
+    tail = tail.replace(VARIANT_POINTER, "");
+  }
   const gate =
     header.gate === "targeted-only"
       ? `${targetedOnlyLead(header.host)}${fill(variant)}`
@@ -109,6 +120,6 @@ export function render(header: BriefHeader): string {
     envBlock +
     fill(TEMPLATE_A.slice(envAt, vStart)) +
     gate +
-    fill(TEMPLATE_A.slice(variantEnd))
+    fill(tail)
   );
 }

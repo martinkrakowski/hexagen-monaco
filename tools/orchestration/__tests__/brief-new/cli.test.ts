@@ -155,6 +155,11 @@ describe("brief-new — the lane-host variant follows targeted-only OR remote", 
   test("a local full host drops the variant", async () => {
     const brief = await briefFor("local");
     expect(brief).not.toContain("Lane-host variant.");
+    // no dangling reference to the dropped paragraph in the template's tail
+    expect(brief).not.toContain("(Under the lane-host variant:");
+    expect(brief).toContain(
+      "Final message: PR URL, files changed, coverage line, deviations. Nothing else.\nIf you cannot produce",
+    );
     expect(brief).toContain("run the full gate");
   });
 
