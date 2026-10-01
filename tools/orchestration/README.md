@@ -106,7 +106,11 @@ a lane runs `gate-lock run` without the `gate` bin, so no overlay is read. It is
 an integer from 1 to 64, default 1; anything else exits 2 and names the value.
 With 1 there is one lock, as before. With N > 1 a caller takes the first free of
 N slots. `doctor` prints the value it sees as an `INFO` line, and says so when
-the lock would refuse it.
+the lock would refuse it. `INFO` is a severity of its own, not a line in the
+summary, because `formatReport` has no access to the environment, so a summary
+line would have needed a new parameter threaded through it; an `INFO` finding
+uses the path every other finding does and never counts as a problem or a
+warning.
 
 **Slot-out file.** Set `HEXAGEN_GATE_SLOT_OUT` to a path and a successful
 acquire writes the slot number it won there. A refused acquire never writes it.

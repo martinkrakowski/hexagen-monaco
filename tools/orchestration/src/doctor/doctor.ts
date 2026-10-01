@@ -63,6 +63,14 @@ export const EXIT_NO_CONFIG = 2;
  * `warn` is reported and never affects the exit code (A-30). `info` is a fact
  * the operator should see and nothing is wrong with: it is never counted as a
  * problem or a warning either.
+ *
+ * Why a new severity, rather than printing the slot count in the report's
+ * summary: `formatReport` takes only the findings and the config and has no
+ * access to the environment, so a summary line would need a new parameter
+ * threaded through it and its callers anyway. An `info` finding rides the
+ * existing path (a dep supplies the value, `runDoctor` pushes one finding, the
+ * formatter gains one label), and the exit code and the summary counters already
+ * look only at `fail` and `warn`.
  */
 export type Severity = "fail" | "skip" | "warn" | "info";
 
