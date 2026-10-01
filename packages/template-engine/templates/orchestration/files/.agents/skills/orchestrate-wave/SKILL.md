@@ -219,6 +219,16 @@ output for a cell, the cell is *unknown* — a valid answer. A confident wrong o
    - **Grep the lane id against every plan, not only its own** (`grep -rniw '<ID>' docs/planning/`),
      matching on word boundaries, **never** on `**<ID>**`. (why: [rationale](references/rationale.md#grep-the-lane-id-against-every-plan-not-only-its-own))
 
+   - **Mark the plan's lane and decision tables.** `hexagen-orchestration-plan-review` finds a
+     row by its bold id (`| **<id>** |`), and a plan that bolds the same id in a second table
+     — a shipped list, a findings table — makes the row ambiguous. Put `<!-- plan-review: lanes -->`
+     before a lane table and `<!-- plan-review: decisions -->` before a decision table. A marker
+     holds across prose and further tables until the next heading of any level, so a table split by
+     a paragraph stays covered, and every table needs a marker under its own heading. A plan with
+     no marker keeps the old rule (every bold-id row counts); once a plan has one, only rows inside
+     a marked region count. Either marker satisfies any id lookup. Adding a marker never changes a
+     row's hash.
+
    - **Check the gap is still open before dispatching the lane that closes it.** (why: [rationale](references/rationale.md#check-the-gap-is-still-open-before-dispatching-the-lane-that-closes-it))
 
    - **If it names a type or a document surface, open that type and paste its fields in.** A
