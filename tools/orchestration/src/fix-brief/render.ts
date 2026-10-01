@@ -129,10 +129,17 @@ function topLevelBlocks(
  * no lane follows half a prompt. Everything else is kept verbatim.
  */
 export function omitAgentPrompts(body: string): string {
+  // The scan reads a copy in which every HTML comment is blanked to spaces of
+  // the same length: a `<details>` or `</details>` inside a comment is not
+  // markup, and must not move the depth count. Offsets are unchanged, so the
+  // text kept around a block is still sliced from the original.
+  const scanned = body.replace(/<!--[\s\S]*?-->/g, (comment) =>
+    " ".repeat(comment.length),
+  );
   let kept = "";
   let copiedTo = 0;
-  for (const { start, end } of topLevelBlocks(body)) {
-    const block = body.slice(start, end);
+  for (const { start, end } of topLevelBlocks(scanned)) {
+    const block = scanned.slice(start, end);
     if (!isAgentPromptBlock(block)) continue;
     kept += body.slice(copiedTo, start);
     kept += `[agent prompt omitted: ${block.length} characters]`;

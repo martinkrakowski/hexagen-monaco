@@ -194,6 +194,22 @@ describe("omitAgentPrompts", () => {
     expect(omitAgentPrompts("x </details> y")).toBe("x </details> y");
   });
 
+  test("a commented-out <details> before a prompt block cannot unbalance the depth count", () => {
+    const text = `<!-- <details> -->\nkeep\n${prompt("Prompt for AI Agents", "SECRET")}\nafter`;
+    const out = omitAgentPrompts(text);
+    expect(out).not.toContain("SECRET");
+    expect(out).toContain("<!-- <details> -->\nkeep\n");
+    expect(out.endsWith("\nafter")).toBe(true);
+  });
+
+  test("a commented-out closing tag cannot end a prompt block early", () => {
+    const text = `<details><summary>Prompt for AI Agents</summary>SECRET <!-- </details> --> MORE</details>\nafter`;
+    const out = omitAgentPrompts(text);
+    expect(out).not.toContain("SECRET");
+    expect(out).not.toContain("MORE");
+    expect(out.endsWith("\nafter")).toBe(true);
+  });
+
   test("two sibling prompt blocks are both omitted", () => {
     const out = omitAgentPrompts(
       `${prompt("Agent Prompt")}\nmid\n${prompt("Prompt for AI Agents")}`,
