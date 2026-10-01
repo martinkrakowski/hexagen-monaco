@@ -11,6 +11,7 @@ import {
   type DoctorDeps,
   type Finding,
 } from "../../src/doctor/doctor.js";
+import type { CheckStatus } from "../../src/internal/capabilities.js";
 import {
   emptyConfig,
   parseConfig,
@@ -973,7 +974,7 @@ describe("P-D5: install probes in doctor", () => {
     ].join("\n");
 
   /** A runCheck that answers by the argv's first word, and records every call. */
-  const fake = (answers: Record<string, "ok" | "fail" | "timeout">) => {
+  const fake = (answers: Record<string, CheckStatus>) => {
     const calls: string[][] = [];
     return {
       calls,
@@ -997,7 +998,7 @@ describe("P-D5: install probes in doctor", () => {
   });
 
   test("a failing check is a FAIL that names the package, and exits unhealthy", async () => {
-    const run = fake({ false: "fail" });
+    const run = fake({ false: "failed" });
     const { findings, code, text } = await doctor(yaml('["false"]'), {
       runCheck: run.runCheck,
     });
@@ -1008,7 +1009,7 @@ describe("P-D5: install probes in doctor", () => {
   });
 
   test("repair is never run, even when it is declared", async () => {
-    const run = fake({ false: "fail", fixit: "ok" });
+    const run = fake({ false: "failed", fixit: "ok" });
     await doctor(yaml('["false"]', "[fixit]"), { runCheck: run.runCheck });
     expect(run.calls).toEqual([["false"]]);
   });

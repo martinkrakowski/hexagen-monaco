@@ -54,6 +54,7 @@ absent, or a field of it is absent, these are the defaults and you state them in
   `seats` says who runs it (an agent and a model, each naming a host). Both are declared in
   `.agents/orchestration/config.yaml`. With none declared, ask the owner which host and seat; never
   start a server.
+- `installProbes` — `[]`, no probes. Each is `{package, check, repair?}`; stage 1 says when the orchestrator runs them.
 - `waveLogDir` — `$HOME/.waves-<name>`, where `<name>` is the name half of `repo`. Never a
   bare shared wave-log root: another project's status server scans one, and a wave logged there
   reports against the wrong repository.
