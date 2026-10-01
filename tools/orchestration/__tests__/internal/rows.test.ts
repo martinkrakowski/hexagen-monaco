@@ -369,3 +369,18 @@ describe("fence tracking follows CommonMark", () => {
     expect(rowHash(text, "L1")).toMatch(hash);
   });
 });
+
+describe("CRLF plans", () => {
+  test("a CRLF file with markers is treated as marked", () => {
+    const text = [
+      "| **L1** | stray |",
+      "# Lanes",
+      "<!-- plan-review: lanes -->",
+      "| **L1** | real |",
+      "# Done",
+      "| **L1** | after |",
+    ].join("\r\n");
+    expect(rowHash(text, "L1")).toBe(rowHash(text.replace(/\r/g, ""), "L1"));
+    expect(() => rowHash(text, "L1")).not.toThrow();
+  });
+});

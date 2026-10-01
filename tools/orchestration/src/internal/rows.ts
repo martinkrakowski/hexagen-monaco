@@ -116,7 +116,9 @@ function matchingLines(
   markdown: string,
   pattern: RegExp,
 ): { line: number; text: string }[] {
-  const lines = markdown.split("\n");
+  // A CRLF plan: strip the carriage return per line, so a marker, heading or
+  // fence line is recognised and a quoted row never carries one.
+  const lines = markdown.split("\n").map((text) => text.replace(/\r$/, ""));
   const eligible = eligibleLines(lines);
   const found: { line: number; text: string }[] = [];
   lines.forEach((text, index) => {
