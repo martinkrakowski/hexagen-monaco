@@ -1,6 +1,6 @@
 # Orchestration package parity with campaign-foundry (wave `orchestration-parity-w02`)
 
-**Status:** r2, for the owner's sign-off. Lane PB1 is the only lane in flight. Nothing else in §3 starts until the open decisions in §2 are made. r2 folds in a read-only review of r1. Its findings changed:
+**Status:** r3. **The owner decided every item in §2 on 2026-10-01,** adopting each recommendation, and chose **(G), an explicit marker,** for P-D7. Lane PB1 is in flight; the other lanes follow the order in §3. r2 folds in a read-only review of r1. Its findings changed:
 
 - P-D1: the slot count is a host-wide environment variable;
 - P-D2: three A-30 amendments are now explicit;
@@ -30,7 +30,7 @@ campaign-foundry's PRs are cited per item; read each diff with `gh pr view <n> -
 | A3. A table whose first cell is `\| **<lane-id>** \|` would read as a second plan row. | **Yes, as a mechanism, reproduced by PB1:** `rowHash` and `rowRisk` throw "found 2". There is **no live collision in this tree today**: the wave record already writes shipped ids unbolded (`.agents/session-log.md`). | `src/internal/rows.ts:29,130` | **P-D7** (owner decision) |
 | A4. The closing line "Run the gate in the foreground…" contradicts a `targeted-only` lane host. | **Yes** | The template skill and hexagen's mirror, both at `SKILL.md:165` | **PB1** |
 
-## 2. Decisions the owner is asked to make
+## 2. Decisions (owner-approved 2026-10-01: P-D1–P-D6 as recommended; P-D7 = (G))
 
 | ID | Decision | Recommendation |
 | -- | -------- | -------------- |
@@ -54,6 +54,7 @@ Each row below is written in the form the package's own plan-review reads: `| **
 | **PB4** | normal | — (#638 merged as `95df7191`) | **The `fix-brief` bin (C7).** It drafts a fix-round brief from a PR's unresolved threads, reusing sweep's paginated, fail-closed fetch.<br>• **Template:** it needs a **new Template E** in `references/briefs.md`, "Fix-round brief for a commit-only lane", in campaign-foundry's per-item layout. That layout gives each item an `## Item N — <thread> — <author> — path:line` heading and a `Disposition:` line, and quotes bot text as data in a fence longer than its longest backtick run, closed by `— end of quoted text for item N —`. Our Template C, the pushing fix brief, does not have that body. Also update the file's "A–D" heading and SKILL.md's template ordering (A-29), then regenerate the bundle and the mirror.<br>• **Parsing and inputs:** agent-prompt `<details>` blocks are omitted, using an anchored, depth-counted scan. Inputs are validated, and `--out` refuses an existing file.<br>• **Drift test:** the canonical copy is the template's `files/…/references/briefs.md`. The test states what it does when it runs from a published package, where that path is absent. |
 | **PB5** | **high** | P-D2. campaign-foundry #640: its merge commit if landed by dispatch, otherwise the pinned tip `2877c4dc`. | **The `lane-watch` bin (C8), plus P-D2's three A-30 amendments.**<br>• Read `GET /global/event`, filtered on `sessionID`.<br>• Done means `session.idle`, or a status of `idle`.<br>• The stall timer is session-scoped, and is armed before connecting.<br>• Exit on the concluding frame itself.<br>• Abort on every exit, with `redirect: "error"`, a pathname allowlist, loopback hosts only, and a session-id regex.<br>• Missing `tokens` or `cost` is reported as "unknown", with exit 3. |
 | **PB6** | normal | campaign-foundry HXF7's PR: its merge commit if landed by dispatch, otherwise PB6 builds the skeleton from our Template A directly. | **The `brief-new` bin (C9).** It writes a lane-brief skeleton from Template A and its lane-host variant. The host's gate policy comes from `laneHosts[].gate`; env lines come from the operator, verbatim.<br>• campaign-foundry's Template F working rules (`.agents/briefs/scratch`, `--because`, coverage paths) are read for shape only, never copied (OW-D7).<br>• A drift test, as in PB4. |
+| **PB8** | normal | P-D7 = (G) | **The explicit lane-table marker.** `rowHash` and `rowRisk` count a bold-id row only inside a table preceded by `<!-- plan-review: lanes -->` (lane rows) or `<!-- plan-review: decisions -->` (decision rows), within the same file. A table split by prose stays covered while the marker is in force, up to the next heading. Plans without markers keep today's behaviour, plus (E)'s error, so existing plans keep working. Add the markers to this plan, the parent plan and the template's documented plan format, and document the convention in the skill. |
 | **PB7** | normal | P-D3 to P-D6 | **Process rules and package follow-ups.**<br>• Skill rules for P-D3, P-D4 and P-D6.<br>• doctor and the orchestrator get P-D5's `installProbes`.<br>• From wave 1: `init`'s house rules state who emits events, plus the status server's read-only and loopback guarantee, and use the port constant.<br>• The byte-scan sentence at `SKILL.md:147-148` is reworded, or the scaffold adds `control-bytes` as `optional: true` with a comment. The scaffold never gains a required step, because the gate is a subset of CI (`SKILL.md:143`).<br>• The template's Darwin native-package diagnostic fails on empty discovery. |
 
 **Order:**
@@ -61,7 +62,8 @@ Each row below is written in the form the package's own plan-review reads: `| **
 2. PB4, which has no dependency.
 3. PB2, **then** PB3.
 4. PB5 and PB6, as their sources allow.
-5. PB7 last.
+5. PB8 (any time after PB1).
+6. PB7 last.
 
 Each lane that changes skill text ends with the template bundle regenerated and hexagen's skill mirror re-copied. A release (0.2.0) is cut at the end; releasing is owner-gated.
 
