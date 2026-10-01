@@ -1,7 +1,7 @@
 # @hexagen/orchestration
 
-Wave orchestration tooling for a HexaGen project, packaged as seventeen
-command-line bins.
+Wave orchestration tooling for a HexaGen project, packaged as
+command-line bins (the table below lists them all).
 
 The package carries the machinery a delegated wave needs to be observable and
 verifiable: emitting events, verifying and reviewing the plan, reporting status,
