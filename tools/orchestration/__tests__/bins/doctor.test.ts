@@ -830,12 +830,17 @@ describe("HEXAGEN_GATE_SLOTS is printed as INFO", () => {
     expect(text).toContain("1 slot");
   });
 
-  test("a value the lock would refuse is named, and is still only INFO", async () => {
+  test("a value the lock would refuse is a FAIL: named, every gate will refuse, exit non-zero, never OK", async () => {
     for (const bad of ["0", "65", "abc", "", "07"]) {
-      const { code, text } = await doctor(yaml, slots(bad));
-      expect(code, bad).toBe(EXIT_HEALTHY);
-      expect(text).toContain(`HEXAGEN_GATE_SLOTS=${JSON.stringify(bad)}`);
-      expect(text).toContain("will refuse it");
+      const { code, findings, text } = await doctor(yaml, slots(bad));
+      expect(code, bad).toBe(EXIT_UNHEALTHY);
+      expect(fails(findings, "gate-slots").message).toContain(
+        `HEXAGEN_GATE_SLOTS=${JSON.stringify(bad)}`,
+      );
+      expect(text).toContain("every gate");
+      expect(text).toContain("will refuse");
+      expect(text).not.toContain("doctor: OK");
+      expect(text).toContain("problem(s) to fix");
     }
   });
 

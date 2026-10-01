@@ -105,8 +105,9 @@ overlay field: the count belongs to the host, the lock directory is shared, and
 a lane runs `gate-lock run` without the `gate` bin, so no overlay is read. It is
 an integer from 1 to 64, default 1; anything else exits 2 and names the value.
 With 1 there is one lock, as before. With N > 1 a caller takes the first free of
-N slots. `doctor` prints the value it sees as an `INFO` line, and says so when
-the lock would refuse it. `INFO` is a severity of its own, not a line in the
+N slots. `doctor` prints the value it sees as an `INFO` line; a value that is
+set but invalid is a `FAIL` instead (exit non-zero), because every gate on the
+host would refuse to run. `INFO` is a severity of its own, not a line in the
 summary, because `formatReport` has no access to the environment, so a summary
 line would have needed a new parameter threaded through it; an `INFO` finding
 uses the path every other finding does and never counts as a problem or a

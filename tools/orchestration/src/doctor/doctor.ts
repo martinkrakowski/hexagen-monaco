@@ -128,8 +128,9 @@ export interface DoctorDeps {
 /**
  * `HEXAGEN_GATE_SLOTS` as the gate lock will read it, as an INFO finding. The
  * variable is host-wide (never a config field), so doctor only reports it: an
- * unset one means the default of 1, and one the lock would refuse is said so
- * here rather than at the first gate.
+ * unset or valid one is INFO (unset means the default of 1). One that is set but
+ * invalid is a FAIL, because the gate lock refuses it with exit 2 and so every
+ * gate on the host would fail.
  */
 export function gateSlotsFinding(raw: string | undefined): Finding {
   const valid = raw !== undefined && /^([1-9]|[1-5][0-9]|6[0-4])$/.test(raw);
@@ -138,8 +139,12 @@ export function gateSlotsFinding(raw: string | undefined): Finding {
       ? "HEXAGEN_GATE_SLOTS is unset: the gate lock has 1 slot (the default)."
       : valid
         ? `HEXAGEN_GATE_SLOTS=${raw}: the gate lock has ${raw} slot(s). More than one needs a test-worker cap (slots x maxWorkers <= threads); see the README's gate-lock section.`
-        : `HEXAGEN_GATE_SLOTS=${JSON.stringify(raw)} is not an integer from 1 to 64, so the gate lock will refuse it (exit 2) until it is fixed.`;
-  return { check: "gate-slots", severity: "info", message };
+        : `HEXAGEN_GATE_SLOTS=${JSON.stringify(raw)} is not an integer from 1 to 64, so every gate on this host will refuse to run (the gate lock exits 2) until it is fixed or unset.`;
+  return {
+    check: "gate-slots",
+    severity: raw === undefined || valid ? "info" : "fail",
+    message,
+  };
 }
 
 /**
