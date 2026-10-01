@@ -18,7 +18,7 @@ state plainly:
 | Neither `patch_extra_lines_before` nor `patch_extra_lines_after` is set      | ✅ verified | `grep` over `.pr_agent.toml` and `pr-agent.yml` → no matches  |
 | `pr-agent.yml` pins a docker digest of `0.42.0`, not the rolling tag         | ✅ verified | `:13-15`, `:172` `docker://pragent/pr-agent@sha256:b81235c3…` |
 | Concurrency is keyed by PR × produces-a-review × sender type                 | ✅ verified | `:92-102`, with the `#594/#595/#609` incident recorded inline |
-| One PR-Agent workflow here, three in campaign-foundry                        | ✅ verified | `ls .github/workflows/`                                       |
+| One PR-Agent workflow here, three in the reference project                   | ✅ verified | `ls .github/workflows/`                                       |
 | The toml is ~16 KB with an `[ignore]` block and a context-budget calculation | ✅ verified | 16329 bytes; `[ignore]` at `:217`; arithmetic at `:57-72`     |
 
 **Three amendments, each found by one reviewer and verified by the orchestrator:**
@@ -32,13 +32,13 @@ state plainly:
    suggestion") is _already partly implemented_ at `pr-agent.yml:234-237`. Amend those
    instructions rather than writing new ones.
 3. **R1's DoD targets the wrong failure class for this repo.** It is written for
-   campaign-foundry's "symbol X is undefined" class. This repo's own config documents _different_
+   the reference project's "symbol X is undefined" class. This repo's own config documents _different_
    failures: pruning (`toml:39-46`), ticket analysis (`toml:102-108`), off-remit findings
    (`toml:220-224`), failed-to-generate (`yml:336-339`). R1 could pass trivially here and move
    nothing. **Re-anchor the DoD to a failure this repo has actually recorded.**
 
 **Both reviewers flagged the 18-to-1 table as unverifiable from this repository** — the data is
-campaign-foundry's, and the sibling gates plan cites ≈1-in-10 for the same reviewer family from a
+the reference project's, and the sibling gates plan cites ≈1-in-10 for the same reviewer family from a
 different wave. Neither number is needed for the decisions. **Label the table as one downstream
 night, cite the wave record, and keep P-D6's 20 % stopping rule** — which does not depend on the
 exact ratio.

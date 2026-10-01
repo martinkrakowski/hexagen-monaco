@@ -3,7 +3,7 @@
 **Status date:** 2026-06-12
 **Context:** The sync-toolchain remediation arc (Waves A → B → C) is complete — #319 (C2), #320 (C1), #321 (C3), #322 (C4) are all merged to `main` (`c9100b1f`). No Wave A–C PRs remain open — this plan's own PR #323 and the Track-B follow-ups (#324–#328) came after.
 
-**Scope of this plan:** every remaining hexagen-monaco item **except** the campaign-foundry consumer work (its `^0.7.x` bump, CI gates, and its own Actions/Node-24 update — tracked separately in that repo). hexagen-monaco's own **CI workflows** (`.github/workflows/`) are already on `actions/*@v5` + `action-gh-release@v2`. But the **generator workflow templates the repo ships** are a separate matter: the `ci-github-actions` / `docker` / `bedrock-agentcore-runtime` template families and `project-generation`'s `workflow-template.yml` still pin `actions/*@v4` + `node-version: "20"`, so projects scaffolded from them inherit the June-16 Node-24 deprecation. That bump **is** in scope — see **D13**.
+**Scope of this plan:** every remaining hexagen-monaco item **except** the reference project consumer work (its `^0.7.x` bump, CI gates, and its own Actions/Node-24 update — tracked separately in that repo). hexagen-monaco's own **CI workflows** (`.github/workflows/`) are already on `actions/*@v5` + `action-gh-release@v2`. But the **generator workflow templates the repo ships** are a separate matter: the `ci-github-actions` / `docker` / `bedrock-agentcore-runtime` template families and `project-generation`'s `workflow-template.yml` still pin `actions/*@v4` + `node-version: "20"`, so projects scaffolded from them inherit the June-16 Node-24 deprecation. That bump **is** in scope — see **D13**.
 
 Tracks, in rough priority order:
 

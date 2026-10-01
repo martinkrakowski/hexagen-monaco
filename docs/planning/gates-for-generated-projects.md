@@ -1,9 +1,9 @@
 # Gates for Generated Projects — Implementation Plan
 
 **Date:** 2026-09-17
-**Author:** orchestrator (from campaign-foundry, the second downstream feed after the findings store)
+**Author:** orchestrator (from the reference project, the second downstream feed after the findings store)
 **Status:** draft — for the owner's review. Nothing built.
-**Verified against:** `main` at `5fc27a50`, and campaign-foundry `main` after its 2026-09-16 wave (19 merges)
+**Verified against:** `main` at `5fc27a50`, and the reference project `main` after its 2026-09-16 wave (19 merges)
 **Scope:** what a generated project gets _to defend itself with_ — the gate, the formatter, the
 coverage floor, the reviewers, and the layer rules over `apps/`. Not the generator's own CI.
 
@@ -11,7 +11,7 @@ coverage floor, the reviewers, and the layer rules over `apps/`. Not the generat
 
 ## 0. What this plan answers
 
-campaign-foundry shipped 19 PRs on 2026-09-16 under a rule that every lane pushes and lets CI be the
+The reference project shipped 19 PRs on 2026-09-16 under a rule that every lane pushes and lets CI be the
 gate. That produced an unusually clean record of **which check caught which defect**, and the answer
 is uncomfortable for a generator: almost nothing that caught a defect is something hexagen emits.
 
@@ -35,7 +35,7 @@ The last row is the one that should decide the priority order.
 > all: whatever the manifest claims about their files (ownership, ports, adapters) is backed by
 > nothing the linter actually runs."
 
-Every defect campaign-foundry found on 2026-09-16 lived in `apps/`. The severity on that finding is
+Every defect the reference project found on 2026-09-16 lived in `apps/`. The severity on that finding is
 `medium` because it was written from the generator's side. From the downstream side it is **critical**,
 and §1 restates it as such.
 
@@ -44,13 +44,13 @@ and §1 restates it as such.
 | id       | Decision                                                                                                                   | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | -------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **G-D0** | **Gates ship as add-ons, not as core generation.**                                                                         | Core emits the conformance gate because architectural integrity is hexagen's own claim. A coverage floor is a _project's_ policy. `packages/template-engine/templates/` is the existing, reversible, question-driven mechanism, and 49 templates already prove the shape.                                                                                                                                                                                                                                                                                                                                                        |
-| **G-D1** | **Two add-ons, not one: `quality-gate` and `pr-reviewers`.**                                                               | They have different costs. `quality-gate` is free and deterministic. `pr-reviewers` needs API keys and spends money per PR, and campaign-foundry's measured yield for one reviewer family was **≈1 real finding in 10**. Bundling them would force a paid choice on a free one.                                                                                                                                                                                                                                                                                                                                                  |
-| **G-D2** | **The coverage floor is a _question_, defaulting to `80`, with `100` offered.**                                            | campaign-foundry runs 100 % on four counters and it caught a real defect this session. But 100 % on a greenfield scaffold with generated stubs is a trap: it makes the first honest test-free commit red. Ask, default low, document what 100 buys.                                                                                                                                                                                                                                                                                                                                                                              |
+| **G-D1** | **Two add-ons, not one: `quality-gate` and `pr-reviewers`.**                                                               | They have different costs. `quality-gate` is free and deterministic. `pr-reviewers` needs API keys and spends money per PR, and the reference project's measured yield for one reviewer family was **≈1 real finding in 10**. Bundling them would force a paid choice on a free one.                                                                                                                                                                                                                                                                                                                                             |
+| **G-D2** | **The coverage floor is a _question_, defaulting to `80`, with `100` offered.**                                            | The reference project runs 100 % on four counters and it caught a real defect this session. But 100 % on a greenfield scaffold with generated stubs is a trap: it makes the first honest test-free commit red. Ask, default low, document what 100 buys.                                                                                                                                                                                                                                                                                                                                                                         |
 | **G-D3** | **Fix the `apps/` scope gap in the linter itself, not in an add-on — and the fix is bigger than the first draft thought.** | **Corrected 2026-09-17.** The draft proposed emitting a `layout.yaml` mapping `apps/`-rooted contexts to their real roots. Under the actual mechanism that **does nothing**: mapping a root only matters for something already iterated, and `apps` never enter the loop. The real options are (a) teach the linter to iterate `manifest.apps` with rules appropriate to an app, (b) model applications as bounded contexts — a manifest change with wide blast radius, or (c) a separate app-boundary check, which is what this repo already does by hand in `scripts/validate-ui-boundary.sh`. **G1 must choose and say why.** |
-| **G-D4** | **Emit a Prettier config whenever a `format` script is emitted.**                                                          | `root-file-templates.ts:28` emits `format: prettier --write "**/*.{ts,tsx,md}"` and **no config**. That is precisely campaign-foundry's pre-X1 state: every invocation reformatted to Prettier's 80-column default, three PRs had real changes buried under churn, and every brief carried a "do not run Prettier" rule as a workaround. A script without a config is a loaded gun in the toolchain.                                                                                                                                                                                                                             |
-| **G-D5** | **The `.md` glob comes out of the emitted `format` script.**                                                               | campaign-foundry's `format` glob included `md`; running it would have rewrapped 97 hand-wrapped planning documents. Emit `"**/*.{ts,tsx}"` and let a project opt prose back in deliberately.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **G-D4** | **Emit a Prettier config whenever a `format` script is emitted.**                                                          | `root-file-templates.ts:28` emits `format: prettier --write "**/*.{ts,tsx,md}"` and **no config**. That is precisely the reference project's earlier state: every invocation reformatted to Prettier's 80-column default, three PRs had real changes buried under churn, and every brief carried a "do not run Prettier" rule as a workaround. A script without a config is a loaded gun in the toolchain.                                                                                                                                                                                                                       |
+| **G-D5** | **The `.md` glob comes out of the emitted `format` script.**                                                               | The reference project's `format` glob included `md`; running it would have rewrapped 97 hand-wrapped planning documents. Emit `"**/*.{ts,tsx}"` and let a project opt prose back in deliberately.                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | **G-D6** | **Every gate the add-on emits must be shown to fail before it is considered shipped.**                                     | hexagen's own rule, `2026-08-23-enforcement-remediation-plan.md:35`: _"a gate that has not been shown to fail has not been shown to exist."_ The DoD in §4 names the fault that must turn each one red.                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| **G-D7** | **No mutation automation is proposed.**                                                                                    | It is doctrine in this repo (`findings-store.md:238`) with no enforcing gate, and campaign-foundry's manifests are hand-authored per lane. Generating a mutation harness nobody feeds produces a green check that means nothing — the exact failure `abortIfVacuous` exists to prevent.                                                                                                                                                                                                                                                                                                                                          |
+| **G-D7** | **No mutation automation is proposed.**                                                                                    | It is doctrine in this repo (`findings-store.md:238`) with no enforcing gate, and the reference project's manifests are hand-authored per lane. Generating a mutation harness nobody feeds produces a green check that means nothing — the exact failure `abortIfVacuous` exists to prevent.                                                                                                                                                                                                                                                                                                                                     |
 
 ---
 
@@ -84,7 +84,7 @@ hexagen-monaco itself has **no `.architecture/layout.yaml`**, so its own `apps/`
 compensates with a bespoke shell gate, `scripts/validate-ui-boundary.sh`, whose scope is declared by
 hand at `:9,:18-27`. A generated project inherits the gap and not the compensation.
 
-**Downstream consequence, measured:** in campaign-foundry, `lint:arch` was green through every defect
+**Downstream consequence, measured:** in the reference project, `lint:arch` was green through every defect
 of 2026-09-16 — a memo that made a guard unreachable, a prerender crash, a raw domain value in a
 label, a per-keystroke commit regression. All in `apps/`. A green arch check there is green _by
 construction_, not by inspection, and a reader cannot tell the difference.
@@ -110,7 +110,7 @@ A grep for `prettierrc` across `packages/sync/src`, `packages/template-engine/te
 `packages/project-generation/src` returns **nothing**.
 
 So the first person to run `yarn format` reformats the entire repository to Prettier's 80-column
-default, against code the generator emitted at whatever width it emitted. campaign-foundry lived in
+default, against code the generator emitted at whatever width it emitted. The reference project lived in
 exactly that state: **400 of 679 files** were unformatted at width 100 and **613** at the 80 default,
 three PRs had real changes buried under hundreds of reformatted lines, and every lane brief carried a
 "do not run Prettier" rule — a standing workaround for a missing config file.
@@ -122,7 +122,7 @@ write-once per-package `vitest.config.ts` (`:194-206`) contains only `environmen
 `coverage` block. A generated project's `test` step is therefore green before a single test exists,
 and stays green if every test is deleted.
 
-This is not hypothetical: campaign-foundry's 100 % branch threshold is what caught an untested arm of a
+This is not hypothetical: the reference project's 100 % branch threshold is what caught an untested arm of a
 conditional spread on 2026-09-16 — a field the code _did_ handle but nothing proved it reached.
 
 **hexagen-monaco has the same gap in its own suite:** `vitest.shared.ts` sets environment, timeouts,
@@ -136,7 +136,7 @@ includes and reporters, and has **no `coverage` block at all**. The only CI "cov
 No template emits any of them — a grep across all 49 manifests and `packages/sync/src/generators/`
 hits only `dependabot`.
 
-campaign-foundry independently rebuilt four PR-Agent reviewers, and the operational scaffolding it had
+The reference project independently rebuilt four PR-Agent reviewers, and the operational scaffolding it had
 to rediscover is substantial and non-obvious: concurrency keyed by _what the run produces_ and by
 sender type (so a bot comment cannot cancel a running review), an exact-match command allowlist
 (because PR-Agent exits 0 on an unknown command and the check goes green having done nothing), a
@@ -167,7 +167,7 @@ says how each lane gets around it, and the answer is different per lane.
 
 #### **F7 · M · There is no premise mechanism, and the nearest equivalent is doctrine.**
 
-campaign-foundry's `plan:verify` failed the PR on 2026-09-16 three separate times — twice because a
+the reference project's `plan:verify` failed the PR on 2026-09-16 three separate times — twice because a
 fence could not answer within its 10-second budget, once because a fence had silently closed. That is
 a real gate with a real yield.
 
@@ -181,7 +181,7 @@ high-yield gate that is genuinely _not_ portable: it depends on a planning conve
 
 #### **F8 · ~~H~~ → M · A quoted source fragment is coupled to that source's formatting.**
 
-Downgraded on measurement. campaign-foundry's mutation manifests store `before`/`after` **source
+Downgraded on measurement. The reference project's mutation manifests store `before`/`after` **source
 fragments**, and a 400-file reformat landed without invalidating any of them — but only because those
 fragments happened to fall on lines the formatter left alone. The coupling is real and latent; the
 blast radius turned out to be smaller than feared.
@@ -251,7 +251,7 @@ packages/template-engine/templates/quality-gate/
 | **G1** | **`apps/` gets layer rules — mechanism first, remedy second.** The lane's first job is to choose between G-D3's three options and record why; only then does it implement. It must **not** assume the `layout.yaml` mapping, which the corrected mechanism shows is inert. Whatever it builds, a run that evaluates nothing for an application must **say so** rather than report a pass. | `tools/arch-linter/src/cli.ts:623` (the scan set), `packages/sync/src/generators/architecture-files.ts`, `tools/arch-linter/findings/0001` | The gap that let every downstream defect through                       |
 | **G2** | **`quality-gate` add-on.** The template, its manifest, `quality.yml` (format check + coverage), and the sidecar coverage config.                                                                                                                                                                                                                                                          | `packages/template-engine/templates/quality-gate/**`                                                                                       | A project that can fail for its own quality, not just its architecture |
 | **G3** | **A Prettier config wherever a `format` script is emitted**, and `.md` out of the glob. Core, not add-on — it repairs an existing emission.                                                                                                                                                                                                                                               | `packages/sync/src/generators/root-file-templates.ts:28`                                                                                   | The 400-file churn event, prevented rather than survived               |
-| **G4** | **`pr-reviewers` add-on**, every reviewer off by default, carrying the scaffolding campaign-foundry had to rediscover: concurrency keyed on what the run produces, a command allowlist, a digest-pinned image, a did-it-actually-run guard.                                                                                                                                               | `packages/template-engine/templates/pr-reviewers/**`                                                                                       | The two reviewers that actually paid, without the two that did not     |
+| **G4** | **`pr-reviewers` add-on**, every reviewer off by default, carrying the scaffolding the reference project had to rediscover: concurrency keyed on what the run produces, a command allowlist, a digest-pinned image, a did-it-actually-run guard.                                                                                                                                          | `packages/template-engine/templates/pr-reviewers/**`                                                                                       | The two reviewers that actually paid, without the two that did not     |
 | **G5** | **Findings for both add-ons**, seeded from this document, under each template's `findings/`.                                                                                                                                                                                                                                                                                              | `templates/*/findings/`                                                                                                                    | The store's second real feed                                           |
 
 **Order.** **G1 → G3 ‖ G2 → G4 → G5.** G1 first because it is a live hole in a shipped claim. G3 is
@@ -282,7 +282,7 @@ Per **G-D6**, each lane names the fault that must turn it **red**:
   width **fails**. Both demonstrated on a real generated fixture, not asserted.
 - **G3** — a project generated after this lane, then `yarn format`, produces **no diff**. Today the
   same sequence rewrites the tree. A test pins the emitted glob to the emitted config's scope so the
-  writer and the checker cannot disagree — the failure campaign-foundry hit when `.md` was in one and
+  writer and the checker cannot disagree — the failure the reference project hit when `.md` was in one and
   not the other.
 - **G4** — with every reviewer answered `false`, **no** workflow file is emitted (the conditional
   output is proven absent, not merely untested). With one answered `true`, `actionlint` passes on the
@@ -307,7 +307,7 @@ a silent no-op visible.
 linter's existing `--ratchet` is the answer — adopt the current state as a baseline and forbid growth
 — rather than asking a downstream project to fix N violations before its next PR can land.
 
-**This plan's evidence is one project.** campaign-foundry is a single downstream consumer with one
+**This plan's evidence is one project.** The reference project is a single downstream consumer with one
 unusually instrumented day. The yield table in F5 in particular should not be treated as a general
 claim about reviewer families.
 
@@ -315,12 +315,12 @@ claim about reviewer families.
 
 ## 6. What would justify more, and what it would cost
 
-A **golden/byte-identity harness** caught the highest-severity defect of campaign-foundry's session
+A **golden/byte-identity harness** caught the highest-severity defect of the reference project's session
 (16 of 16 Linux cells differing from the runner's). It is not proposed because it is inherently
 project-specific — it needs a deterministic renderer and a recorded platform baseline, and a generated
 stub has neither. If a future template family ships a renderer, that template should carry its own
 golden harness and its own "record on the platform's own runner" rule, which is the lesson that cost
-campaign-foundry a full lane.
+the reference project a full lane.
 
 A **premise system** (F7) is the other high-yield gate left on the table. Porting it means porting a
 planning convention, not code, and it only pays where plans are written the way this repo writes them.
@@ -342,7 +342,7 @@ a larger piece of work than anything above.
   bears directly on G1's ratchet mitigation.
 - It does not propose mutation testing (G-D7), a coverage threshold for hexagen-monaco's own suite, or
   any change to the conformance gate, which is sound.
-- It does not treat campaign-foundry's numbers as universal. They are one project, one wave, and every
+- It does not treat the reference project's numbers as universal. They are one project, one wave, and every
   one of them is cited so a reader can discount them.
 
 ---
@@ -350,7 +350,7 @@ a larger piece of work than anything above.
 ## 8. Running this plan with the wave orchestration
 
 G1–G5 are five lanes with disjoint file ownership, which is what the wave orchestration wants. Two
-rules from campaign-foundry's 2026-09-16 wave are worth importing with them, because both were learned
+rules from the reference project's 2026-09-16 wave are worth importing with them, because both were learned
 by being wrong:
 
 **Enumerate, do not describe.** A brief that says "cover the config surface in full" and then lists
@@ -359,7 +359,7 @@ each time the lane implemented exactly what was written. G2's brief must name ev
 emits; G1's must name every context root it maps.
 
 **A gate must be shown to fail before it is called a gate.** This is already hexagen's rule
-(`2026-08-23-enforcement-remediation-plan.md:35`) and §4 is written to it. campaign-foundry re-learned
+(`2026-08-23-enforcement-remediation-plan.md:35`) and §4 is written to it. The reference project re-learned
 it three times in one session when its own premise fences could not decide — twice because a probe was
 too slow for its budget, once because it probed a proxy that closed before the work did. **Time every
 check you add, and construct the failing case before you trust the passing one.**

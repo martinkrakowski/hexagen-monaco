@@ -16,7 +16,7 @@ Paste the block below the horizontal rule into a fresh session whose working dir
 2. **Your own checkout** is on `docs/gates-for-generated-projects` with uncommitted work. The
    block tells the agent never to touch it. Confirm that is still where you want to be.
 3. **Two decisions are still yours** and the block asks rather than guesses: what replaces
-   campaign-foundry as G5's proof surface, and whether the findings store grows a third subject
+   the reference project as G5's proof surface, and whether the findings store grows a third subject
    kind for generator-internal defects. Nothing dispatches on either until you answer.
 4. `.claude/` is gitignored, so the skill will not exist in a lane worktree. The block carries
    the owner's resolution (copy it in), but if that changes, change it there.
@@ -81,7 +81,7 @@ PARALLEL/SEQUENTIAL/GATE tags, the Global Governance block, Step 5 as definition
    claims about this repo all verified. Two amendments already in the plan: R4/R5 must override
    the shared `[ignore]` regex (`.pr_agent.toml:242` keeps only `apps/web` + three contract
    files, and the toml is read from the DEFAULT BRANCH), and R1's DoD must be re-anchored to a
-   failure class this repo has recorded rather than campaign-foundry's.
+   failure class this repo has recorded rather than the reference project's.
 2. **`19-wave-status`** (template series #19) — independent of everything else. Two amendments:
    the AGENTS.md "append" has no engine support (collision → `.hexagen-update` sidecar), and
    there is no coverage bar to run tests at.
@@ -90,9 +90,9 @@ PARALLEL/SEQUENTIAL/GATE tags, the Global Governance block, Step 5 as definition
 
 **Blocked, each on one thing:**
 
-3. **G5 `hexagen findings`** — its §4 DoD says "run inside campaign-foundry", unverifiable from
+3. **G5 `hexagen findings`** — its §4 DoD says "run inside the reference project", unverifiable from
    this repo. Needs the F5 treatment. **The amendment needs an owner decision: what replaces
-   campaign-foundry as the proof surface?** A generated capstone fixture is the obvious
+   the reference project as the proof surface?** A generated capstone fixture is the obvious
    candidate and weakens the claim from "works downstream" to "works in a project we generated
    for the test". Ask; do not pick.
 4. **Gates G2 (coverage)** — blocked until core emits the root Vitest config (decision above).

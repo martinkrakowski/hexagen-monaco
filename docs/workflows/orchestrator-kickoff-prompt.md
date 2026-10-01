@@ -1,6 +1,6 @@
 # Orchestrator kickoff prompt
 
-> **Ported from campaign-foundry, 2026-09-08.** The stage structure and the brief templates
+> **Ported from the reference project, 2026-09-08.** The stage structure and the brief templates
 > (A–D) carry over verbatim; they are process, not repo facts. **Every gate command and
 > file-ownership example below was written for that repository.** In this one the gate is
 > `yarn build && yarn typecheck && yarn lint && yarn test` — no coverage counter, no separate
