@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import type { RepositoryLink } from "@hexagen/external-integration";
 import { getRepositoryWriter } from "@/lib/wire.server";
+import { guardBrownfieldProject } from "../../../../lib/platform/brownfield-guard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,10 @@ interface PushGithubRequest {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as PushGithubRequest;
+
+    // BW-D7: a stored brownfield workbook never reaches this route.
+    const brownfield = await guardBrownfieldProject(request, body.projectId);
+    if (brownfield) return brownfield;
 
     const token = await getToken({
       req: request,

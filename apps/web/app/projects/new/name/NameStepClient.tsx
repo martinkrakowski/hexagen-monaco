@@ -35,7 +35,7 @@ import { logger } from "../../../../lib/structured-logger";
  * the submit dispatch and the `handleBack` import-sub-path list, and repoint
  * the `IMPORT_SUB_OPTIONS` href. Five places, all in this file bar the last.
  */
-type NamedPath = "blank" | "ai" | "spec" | "scan" | "artifacts";
+type NamedPath = "blank" | "ai" | "spec" | "scan" | "artifacts" | "brownfield";
 
 const PATH_COPY: Record<NamedPath, { title: string; description: string }> = {
   blank: {
@@ -58,6 +58,11 @@ const PATH_COPY: Record<NamedPath, { title: string; description: string }> = {
     description:
       "Name it before scanning a zip of an existing TypeScript repo. Used for your saved project and generated workspace.",
   },
+  brownfield: {
+    title: "Name your workbook",
+    description:
+      "Name the client engagement. A brownfield workbook never generates into, or pushes to, a client repository.",
+  },
   artifacts: {
     title: "Name your project",
     description:
@@ -71,7 +76,8 @@ function isNamedPath(value: string | null): value is NamedPath {
     value === "ai" ||
     value === "spec" ||
     value === "scan" ||
-    value === "artifacts"
+    value === "artifacts" ||
+    value === "brownfield"
   );
 }
 
@@ -101,17 +107,26 @@ export function NameStepClient() {
     async (name: string) => {
       setError(null);
 
-      if (path === "blank") {
+      if (path === "blank" || path === "brownfield") {
         setBusy(true);
+        const isBrownfield = path === "brownfield";
         try {
           const projectId = await saveProject(
             name,
             createDefaultProjectConfig(name),
             "",
+            [],
+            isBrownfield ? "brownfield" : undefined,
           );
           if (projectId) {
-            // Keep `busy` set while navigating away on success.
-            router.push(`/wizard/1?project=${projectId}`);
+            // Keep `busy` set while navigating away on success. A brownfield
+            // workbook opens its own viewer, never the greenfield wizard or
+            // `ProjectWorkspace` (BW-D7).
+            router.push(
+              isBrownfield
+                ? `/projects/brownfield?project=${projectId}`
+                : `/wizard/1?project=${projectId}`,
+            );
             return;
           }
           // Persistence reported failure (returned null) — surface it instead

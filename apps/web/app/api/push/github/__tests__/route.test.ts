@@ -22,8 +22,10 @@ function post(body: unknown): NextRequest {
   });
 }
 
+// No `projectId`: with one, the route resolves it against the platform store
+// (BW-D7), which these writer-mapping tests do not exercise. The guarded
+// cases are covered in lib/platform/__tests__/brownfield-routes.test.ts.
 const validBody = {
-  projectId: "p1",
   githubLink: { owner: "octocat", repo: "hexagen-app", branch: "main" },
   files: { ".github/workflows/ci.yml": "name: ci\n" },
   message: "ci: add workflow",
