@@ -1938,4 +1938,22 @@ describe("the gate lock: slots and one gate per worktree", () => {
       ).toBe("lane-saved");
     }
   });
+
+  test("a slot-out path that is a directory is refused: exit 2, the path named, the slot given back, nothing nested in it", () => {
+    const dir = scratch();
+    const out = join(dir, "out-is-a-dir");
+    mkdirSync(out);
+    const result = runLockIn(
+      dir,
+      ["acquire", "lane-a"],
+      slotsEnv(2, { HEXAGEN_GATE_SLOT_OUT: out }),
+      15_000,
+      "sh",
+      worktree(),
+    );
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain(out);
+    expect(existsSync(slotDir(dir, 1))).toBe(false);
+    expect(readdirSync(out)).toEqual([]);
+  });
 });

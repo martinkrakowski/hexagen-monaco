@@ -489,7 +489,19 @@ finish_acquire() {
   fi
   if [ -n "${HEXAGEN_GATE_SLOT_OUT:-}" ]; then
     f_tmp="$HEXAGEN_GATE_SLOT_OUT.tmp.$$"
-    if ! { printf '%s\n' "$f_slot" > "$f_tmp" && mv "$f_tmp" "$HEXAGEN_GATE_SLOT_OUT"; } 2>/dev/null; then
+    # `mv file existing-dir` moves the file INSIDE the directory and succeeds, so
+    # a slot-out path that exists and is not a regular file is refused before
+    # anything is written, and the result is read back after the rename: a gate
+    # that is told it holds a slot must be able to find which one.
+    if [ -e "$HEXAGEN_GATE_SLOT_OUT" ] && [ ! -f "$HEXAGEN_GATE_SLOT_OUT" ]; then
+      f_bad=1
+    elif { printf '%s\n' "$f_slot" > "$f_tmp" && mv "$f_tmp" "$HEXAGEN_GATE_SLOT_OUT"; } 2>/dev/null &&
+      [ -f "$HEXAGEN_GATE_SLOT_OUT" ] && [ "$(cat "$HEXAGEN_GATE_SLOT_OUT" 2>/dev/null)" = "$f_slot" ]; then
+      f_bad=0
+    else
+      f_bad=1
+    fi
+    if [ "$f_bad" -eq 1 ]; then
       rm -f "$f_tmp" 2>/dev/null
       drop_own "$f_lane" "$recorded_pid" >/dev/null
       printf '%s\n' "gate-lock: cannot write the slot-out file $HEXAGEN_GATE_SLOT_OUT — refused, and slot $f_slot was given back" >&2
