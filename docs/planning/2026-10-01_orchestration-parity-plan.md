@@ -1,0 +1,79 @@
+# Orchestration package parity with campaign-foundry (wave `orchestration-parity-w02`)
+
+**Status:** r2, for the owner's sign-off. Lane PB1 is the only lane in flight. Nothing else in §3 starts until the open decisions in §2 are made. r2 folds in a read-only review of r1. Its findings changed:
+
+- P-D1: the slot count is a host-wide environment variable;
+- P-D2: three A-30 amendments are now explicit;
+- P-D7: the options and the recommendation are restated;
+- PB3: it now waits on PB2;
+- PB4: it now needs a new Template E;
+- PB6 and P-D4: both are corrected;
+- §3: the rows are now in the form plan-review can read;
+- the bin-list and field-count amendments are now recorded.
+
+**Source.** On 2026-10-01 the campaign-foundry session sent this hexagen session a 14-item list, at the owner's request. The list covers what campaign-foundry learned and shipped in its own copy of these tools. The list itself is recorded only in that message. Its items trace to these sources:
+
+- A1, A4 and C7–C9 trace to campaign-foundry's `docs/planning/2026-09-29_wave-hardening-and-w05-follow-ups.md` §6 (HXF5, HXF6, HXF2, HXF4, HXF7).
+- A2 traces to PR #639's body (the D188 test-helper pin).
+- B5 and B6 trace to `2026-09-30_midnight-hybrid-verification.md` §5 (MH4, MH5).
+- D10 and D12 trace to the "Lessons" and "Open: the opencode proposals" entries of campaign-foundry's `.agents/session-log.md`.
+- A3, D11 and D13 have no written source outside the message.
+
+campaign-foundry's PRs are cited per item; read each diff with `gh pr view <n> -R martinkrakowski/campaign-foundry`. Every change here stays generic, and machine facts stay in consumer config (OW-D7 of `2026-09-29_orchestration-template.md`).
+
+## 1. What was checked in hexagen before writing this
+
+| Item | In `@hexagen-monaco/orchestration` 0.1.0? | Evidence | Where it lands |
+| ---- | ---------------------------------------- | -------- | -------------- |
+| A1. `sweep --post` selects `addComment { comment { url } }`, which GitHub's `AddCommentPayload` does not have. | **Yes** | `tools/orchestration/src/sweep/lib/sweep.ts:248-250` | **PB1** |
+| A2. The gate-lock tests inherit the host's slot count. | **No.** Our `gate-lock` has no slot concept. It was ported from campaign-foundry `e65b26af` (#631); slots arrived later, in `b7bb9ce6` (#636). | `grep -i slot bin/gate-lock bin/gate-run.sh src/gate/*.ts` returns nothing. | Becomes relevant with PB2, which pins the variable in its test helpers from the start. |
+| A3. A table whose first cell is `\| **<lane-id>** \|` would read as a second plan row. | **Yes, as a mechanism, reproduced by PB1:** `rowHash` and `rowRisk` throw "found 2". There is **no live collision in this tree today**: the wave record already writes shipped ids unbolded (`.agents/session-log.md`). | `src/internal/rows.ts:29,130` | **P-D7** (owner decision) |
+| A4. The closing line "Run the gate in the foreground…" contradicts a `targeted-only` lane host. | **Yes** | The template skill and hexagen's mirror, both at `SKILL.md:165` | **PB1** |
+
+## 2. Decisions the owner is asked to make
+
+| ID | Decision | Recommendation |
+| -- | -------- | -------------- |
+| **P-D1** | **Gate slots.** Port campaign-foundry's multi-slot gate-lock (its D188), or keep our single-slot lock? B5's "one gate per worktree" only matters with more than one slot. | **Port slots, then B5 in the same lane.** A single slot serialises every lane on one host. **The slot count is `HEXAGEN_GATE_SLOTS`, a host-wide environment variable,** with default `1` and maximum `64`, validated the way campaign-foundry validates `CF_GATE_SLOTS`. It is never a `config.yaml` field, for three reasons:<br>• The count is a property of the host (campaign-foundry `gate-lock.sh:26-34`).<br>• The lock directory is shared by every checkout and project on that host.<br>• Lanes invoke `gate-lock run` without the `gate` bin, so it reads no overlay.<br>doctor prints the value it sees as INFO. The schema is unchanged. **Operational precondition:** slots > 1 on one host also need campaign-foundry's test-worker cap (HXF8: `slots × maxWorkers ≤ threads`). That is consumer test-runner config, outside this package; the README's slot section states the rule. |
+| **P-D2** | **Usage reader.** `lane-watch` (C8) reads the opencode server's HTTP API, loopback only. Should it become the documented `usage` reader? | **Ship it as a bin and make it the documented `usage` reader, with three A-30 amendments:**<br>1. `usage` is invoked as `<usage…> --server <laneHosts[].server> --session <id>`, no longer `<usage…> <server worktree path>`.<br>2. The orchestrator records the lane's `sessionID` from the first `--format json` event, alongside the worktree tip.<br>3. `laneHosts` gains an optional `server` key: a loopback URL, validated the way lane-watch validates hosts. doctor detects the case from `usage[0]`'s basename. A host whose `usage` names lane-watch but that has no `server` is a WARN: "usage names lane-watch but the host has no `server`". The host that `parseConfig` synthesizes from a legacy `opencodeServerUrl` gets `server: <url>`, so a legacy overlay keeps a working reader.<br>This supersedes §12.4 §8's `lane-usage` follow-up, and the provisional `usage:` line in hexagen's overlay. `usage` stays an argv, so a host without an opencode server can still name its own reader. **Owner question:** who keeps the loopback tunnel open while `lane-watch follow` runs? `ocm-run --check` opens it on demand. |
+| **P-D3** | **Review tiering (D11).** For normal-risk lanes, one combined reviewer pass covers the row and the brief. | **Adopt.** It is a skill rule keyed to the plan row's risk column. High-risk lanes keep separate row, brief and pre-PR reviews. Reviewer bots stay on every PR; in campaign-foundry they found real defects after the model reviewer had approved. |
+| **P-D4** | **Second-host verification (D12).** | **Adopt:** a lane's result is verified on a host other than the one it ran on, before its PR opens.<br>• For a remote lane host, that host is the orchestrator's. A-30 §2 already has the orchestrator run the full gate after every remote lane.<br>• For a local lane host, CI is the second host, and the orchestrator reads CI's result rather than its own gate alone. |
+| **P-D5** | **Install probe (D13).** Probe each binary-bearing dependency after `worktree add` and install. | **Adopt, as a new optional schema field** (working name `installProbes`). Each entry is `{package, check: argv, repair?: argv}`; the repair argv stays generic rather than hard-coding `yarn rebuild`.<br>• On a remote host, the orchestrator runs each probe as `ssh <alias> -- <check>` inside the new worktree, following the precedent of A-30 §1.1's `install`.<br>• doctor runs the probes on the orchestrator's host only.<br>The field count goes from 17 to 18, an amendment to OW-D7. |
+| **P-D6** | **Fix-round resume (D10).** A fix round resumes the lane's own session. | **Adopt, as a generic rule in the skill:** a fix round resumes the lane's own session when the dispatch transport supports it, and forks the session when the branch has moved.<br>The opencode flags (`run -s <id>`, `--fork`) are orchestrator-side dispatch flags. They go in `SKILL.md`'s delegated-seats block, whose rule 1 already names opencode, and in the README, not in a lane brief. |
+| **P-D7** | **The plan-row parser (A3).** There is no unambiguous lane-table signal:<br>• Decision rows share `rowHash` and `rowRisk`.<br>• Lane-table headers vary: `Lane \| Risk \| Delivers …`, `Lane \| What it delivers`, `Lane \| Task \| Owns \| Buys`, and this plan's own `Lane \| Risk \| Waits on \| Scope`.<br>• A shipped table also starts with `Lane`.<br>• `rows.ts:98-106` deliberately rejects header detection, because a plan may split a table with prose (A-27).<br>• `discoverRisk` reads every plan in `planDir` (`src/internal/risk.ts:42-52`), so any rule applies to every plan.<br>**Options:**<br>(D) Exclude any table whose header has a `PR`, `Shipped`, `Merged` or `Result` column, and require a first header cell of `Lane` or `id`/`ID`. A bold-id row under no header is a loud error naming the line.<br>(E) Keep failing closed, but name both files and line numbers in the error.<br>(G) An explicit marker before each lane table, e.g. `<!-- plan-review: lanes -->`.<br>(B) Scope lane rows to tables under a heading containing `Lanes`, per file. It survives A-27's split table without a loud-error rule, but, like D, it is a heading convention.<br>(A), a `Delivers` column, is withdrawn: it would exclude this plan's own lane table. (C), first match wins, is rejected because it fails open. | **Now, needing no decision:** (E) ships in PB1 (0.1.1), together with the convention that shipped rows never bold the id. That is already campaign-foundry's practice and hexagen's wave record.<br>**The owner chooses the heuristic, if one is wanted:**<br>• (G) is unambiguous. It also matches the parser's existing explicit-convention stance, which accepts only an exact `**high**`.<br>• (D) is a header heuristic. It reopens A-27's split-table case, so it needs the loud error for a row under no header. |
+
+## 3. Lanes
+
+Each row below is written in the form the package's own plan-review reads: `| **<id>** | <risk> | …`, with the risk exactly `**high**` or `normal`.
+
+| Lane | Risk | Waits on | Scope |
+| ---- | ---- | -------- | ----- |
+| **PB1** | normal | — | **A1 and A4, plus P-D7's (E) and the 0.1.1 bump.** In flight on branch `fix/orchestration-parity-bugs`. A1, A4 and the bump are committed; (E) is pending. |
+| **PB2** | **high** | P-D1. campaign-foundry #639: its merge commit if it has landed by dispatch, otherwise the pinned tip `0de984fb`. | **Gate-lock slots plus one gate per worktree (B5).**<br>• `HEXAGEN_GATE_SLOTS` is pinned in the test helpers between the inherited env and the per-test env (A2).<br>• Write a per-acquire slot-out file, the equivalent of campaign-foundry's `CF_GATE_SLOT_OUT`. PB3 needs it.<br>• Record the caller's worktree (`git rev-parse --show-toplevel \|\| pwd -P`, computed once) as a lock file.<br>• A second live holder from the same worktree is refused with exit 75, before the slot-out file is written.<br>• An empty identity fails closed with exit 2.<br>• Both rm sites re-check owner and pid.<br>• The deleted-cwd test has the child remove its own cwd.<br>• Also fix wave 1's open gate-lock release TOCTOU here. hexagen fixes it first, and the mechanism is reported back to campaign-foundry as a reference, per OW-D9's note on keeping two implementations. |
+| **PB3** | **high** | PB2, for the slot-out file that (a) releases through. campaign-foundry #641: its merge commit if landed by dispatch, otherwise the pinned tip `79c2b5fb`. | **`gate-run.sh` signal hygiene (B6).**<br>(a) A lock won during the acquire window is released through the slot-out file, once. A green gate still releases exactly once.<br>(b) Save `exec 3>&1 4>&2` early, route cleanup and the release child through fds 3 and 4, and close them first in the heartbeat subshell, never on the eval. This applies to **every** step, because `run_step` captures every step's output.<br>(c) Signal tests handshake from inside the redirected step, through a marker file. They use an arbitrary `sleep` step, not a named one. |
+| **PB4** | normal | — (#638 merged as `95df7191`) | **The `fix-brief` bin (C7).** It drafts a fix-round brief from a PR's unresolved threads, reusing sweep's paginated, fail-closed fetch.<br>• **Template:** it needs a **new Template E** in `references/briefs.md`, "Fix-round brief for a commit-only lane", in campaign-foundry's per-item layout. That layout gives each item an `## Item N — <thread> — <author> — path:line` heading and a `Disposition:` line, and quotes bot text as data in a fence longer than its longest backtick run, closed by `— end of quoted text for item N —`. Our Template C, the pushing fix brief, does not have that body. Also update the file's "A–D" heading and SKILL.md's template ordering (A-29), then regenerate the bundle and the mirror.<br>• **Parsing and inputs:** agent-prompt `<details>` blocks are omitted, using an anchored, depth-counted scan. Inputs are validated, and `--out` refuses an existing file.<br>• **Drift test:** the canonical copy is the template's `files/…/references/briefs.md`. The test states what it does when it runs from a published package, where that path is absent. |
+| **PB5** | **high** | P-D2. campaign-foundry #640: its merge commit if landed by dispatch, otherwise the pinned tip `2877c4dc`. | **The `lane-watch` bin (C8), plus P-D2's three A-30 amendments.**<br>• Read `GET /global/event`, filtered on `sessionID`.<br>• Done means `session.idle`, or a status of `idle`.<br>• The stall timer is session-scoped, and is armed before connecting.<br>• Exit on the concluding frame itself.<br>• Abort on every exit, with `redirect: "error"`, a pathname allowlist, loopback hosts only, and a session-id regex.<br>• Missing `tokens` or `cost` is reported as "unknown", with exit 3. |
+| **PB6** | normal | campaign-foundry HXF7's PR: its merge commit if landed by dispatch, otherwise PB6 builds the skeleton from our Template A directly. | **The `brief-new` bin (C9).** It writes a lane-brief skeleton from Template A and its lane-host variant. The host's gate policy comes from `laneHosts[].gate`; env lines come from the operator, verbatim.<br>• campaign-foundry's Template F working rules (`.agents/briefs/scratch`, `--because`, coverage paths) are read for shape only, never copied (OW-D7).<br>• A drift test, as in PB4. |
+| **PB7** | normal | P-D3 to P-D6 | **Process rules and package follow-ups.**<br>• Skill rules for P-D3, P-D4 and P-D6.<br>• doctor and the orchestrator get P-D5's `installProbes`.<br>• From wave 1: `init`'s house rules state who emits events, plus the status server's read-only and loopback guarantee, and use the port constant.<br>• The byte-scan sentence at `SKILL.md:147-148` is reworded, or the scaffold adds `control-bytes` as `optional: true` with a comment. The scaffold never gains a required step, because the gate is a subset of CI (`SKILL.md:143`).<br>• The template's Darwin native-package diagnostic fails on empty discovery. |
+
+**Order:**
+1. PB1.
+2. PB4, which has no dependency.
+3. PB2, **then** PB3.
+4. PB5 and PB6, as their sources allow.
+5. PB7 last.
+
+Each lane that changes skill text ends with the template bundle regenerated and hexagen's skill mirror re-copied. A release (0.2.0) is cut at the end; releasing is owner-gated.
+
+**Amendments this plan makes to the parent plan.** They are recorded together when the lanes land:
+
+- PB4–PB6 extend OW-D14's canonical bin list from sixteen to **nineteen**: `-fix-brief`, `-lane-watch` and `-brief-new`.
+- P-D5 takes OW-D7's field count from 17 to **18**.
+- P-D2 amends A-30's `usage` invocation, adds the `laneHosts[].server` key, and makes the orchestrator record the session id.
+
+## 4. What this plan does not do
+
+- It never writes to campaign-foundry. campaign-foundry's PRs are read for reference only.
+- It does not build the D14 `tool.execute.before` plugin. That is pending the owner's security review in campaign-foundry: the plugin runs with the opencode server's full privileges.
+- It does not publish. Every release is the owner's action. For CI releases with provenance, `publish.yml` would need an `orchestration-v*` job, and npm trusted publishing would need to be configured for the package. Both are wave-1 follow-ups.
+- `lane-usage`, the SQLite shim, is superseded by P-D2 and is not ported.
