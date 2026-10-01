@@ -228,3 +228,242 @@ describe("asHashRecord", () => {
     expect(asHashRecord({ "PT-5a": 7 })).toBeUndefined();
   });
 });
+
+describe("plan-review markers scope the bold-id rows", () => {
+  const marked = [
+    "# Plan",
+    "",
+    "## Shipped",
+    "",
+    "| Lane | PR |",
+    "|---|---|",
+    "| **L1** | #10 |",
+    "",
+    "## Lanes",
+    "",
+    "<!-- plan-review: lanes -->",
+    "",
+    "| Lane | Risk | Scope |",
+    "|---|---|---|",
+    "| **L1** | normal | Build the thing. |",
+    "| **L2** | **high** | Build the other thing. |",
+    "",
+    "Prose between the two halves of the table.",
+    "",
+    "| **L3** | normal | A row after the prose. |",
+    "",
+    "## Decisions",
+    "",
+    "<!-- plan-review: decisions -->",
+    "",
+    "| id | Decision |",
+    "|---|---|",
+    "| **D1** | Decide it. |",
+    "",
+    "## Notes",
+    "",
+    "| **D1** | A stray row after the marker ended. |",
+    "| **L9** | Another stray row. |",
+  ].join("\n");
+
+  test("an unmarked file behaves as before, duplicates included", () => {
+    const unmarked = marked.replace(/<!-- plan-review: \w+ -->\n/g, "");
+    expect(() => rowHash(unmarked, "L1", "p.md")).toThrow(
+      /expected exactly one plan row for L1, found 2: line 7: .*; line 14: /,
+    );
+    expect(rowHash(unmarked, "L2")).toMatch(/^[0-9a-f]{64}$/);
+    expect(rowRisk(unmarked, "L9")).toBe("normal");
+  });
+
+  test("a stray bold id in a table outside the marker no longer collides", () => {
+    expect(rowHash(marked, "L1")).toMatch(/^[0-9a-f]{64}$/);
+    expect(rowRisk(marked, "L1")).toBe("normal");
+  });
+
+  test("a real duplicate inside marked regions still errors, naming both lines", () => {
+    const dup = marked.replace(
+      "| **L2** | **high** | Build the other thing. |",
+      "| **L1** | normal | Build the other thing. |",
+    );
+    expect(() => rowHash(dup, "L1", "p.md")).toThrow(
+      /p\.md: expected exactly one plan row for L1, found 2: line 15: .*; line 16: /,
+    );
+  });
+
+  test("a split table with prose in between stays covered", () => {
+    expect(rowHash(marked, "L3")).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  test("the marker ends at the next heading", () => {
+    expect(() => rowHash(marked, "L9")).toThrow(/found 0/);
+    expect(() => rowRisk(marked, "L9")).toThrow(/found 0/);
+  });
+
+  test("either marker kind satisfies any id lookup", () => {
+    expect(rowHash(marked, "D1")).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  test("a marker shown inside a code fence does not make a file marked", () => {
+    const fenced = [
+      "```",
+      "<!-- plan-review: lanes -->",
+      "```",
+      "| **L1** | a |",
+    ].join("\n");
+    expect(rowHash(fenced, "L1")).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe("fence tracking follows CommonMark", () => {
+  const hash = /^[0-9a-f]{64}$/;
+
+  // Each case holds a row BEFORE a fenced example of a marker. Read correctly,
+  // the example is text, the file stays unmarked, and the row counts. Read
+  // wrongly (the fence ends early), the example marks the file and the row,
+  // sitting outside any region, vanishes.
+  test("a backtick pair nested inside a tilde block does not end the block", () => {
+    const text = [
+      "| **L1** | a |",
+      "~~~",
+      "```",
+      "<!-- plan-review: lanes -->",
+      "```",
+      "~~~",
+    ].join("\n");
+    expect(rowHash(text, "L1")).toMatch(hash);
+  });
+
+  test("a four-backtick block containing three backticks stays open", () => {
+    const text = [
+      "| **L1** | a |",
+      "````",
+      "```",
+      "<!-- plan-review: lanes -->",
+      "````",
+    ].join("\n");
+    expect(rowHash(text, "L1")).toMatch(hash);
+  });
+
+  test("a closing fence carrying text does not close the block", () => {
+    const text = [
+      "| **L1** | a |",
+      "```",
+      "``` not a closer",
+      "<!-- plan-review: lanes -->",
+      "```",
+    ].join("\n");
+    expect(rowHash(text, "L1")).toMatch(hash);
+  });
+
+  test("a marker and rows after a properly closed fence are read", () => {
+    const text = [
+      "~~~",
+      "```",
+      "~~~",
+      "<!-- plan-review: lanes -->",
+      "| **L1** | a |",
+      "",
+      "# Other",
+      "| **L1** | stray |",
+    ].join("\n");
+    expect(rowHash(text, "L1")).toMatch(hash);
+  });
+});
+
+describe("CRLF plans", () => {
+  test("a CRLF file with markers is treated as marked", () => {
+    const text = [
+      "| **L1** | stray |",
+      "# Lanes",
+      "<!-- plan-review: lanes -->",
+      "| **L1** | real |",
+      "# Done",
+      "| **L1** | after |",
+    ].join("\r\n");
+    expect(rowHash(text, "L1")).toBe(rowHash(text.replace(/\r/g, ""), "L1"));
+    expect(() => rowHash(text, "L1")).not.toThrow();
+  });
+});
+
+describe("a marked file's zero-match error names rows outside the regions", () => {
+  const text = [
+    "# Shipped",
+    "| **L1** | shipped |",
+    "# Lanes",
+    "<!-- plan-review: lanes -->",
+    "| **L2** | real |",
+    "# Notes",
+    "| **L1** | another |",
+  ].join("\n");
+
+  test("rowHash points at the rows it ignored", () => {
+    expect(() => rowHash(text, "L1", "p.md")).toThrow(
+      /p\.md: expected exactly one plan row for L1, found 0 in marked regions; 2 matching rows outside marked regions at line 2: \| \*\*L1\*\* \| shipped \|; line 7: /,
+    );
+  });
+
+  test("rowRisk does too, with a singular row", () => {
+    expect(() => rowRisk(text, "L1")).toThrow(/found 0 in marked regions/);
+    expect(() =>
+      rowHash(text.replace("| **L1** | another |", "x"), "L1"),
+    ).toThrow(/1 matching row outside marked regions at line 2: /);
+  });
+
+  test("an id that appears nowhere keeps the plain message", () => {
+    expect(() => rowHash(text, "L9")).toThrow(
+      /^expected exactly one plan row for L9, found 0$/,
+    );
+  });
+
+  test("an unmarked file's message is unchanged", () => {
+    expect(() => rowHash("| **L2** | a |", "L1")).toThrow(
+      /^expected exactly one plan row for L1, found 0$/,
+    );
+  });
+});
+
+describe("fenced rows and indented markers", () => {
+  const hash = /^[0-9a-f]{64}$/;
+
+  test("a fenced example repeating a real id inside a marked region is not a duplicate", () => {
+    const text = [
+      "# Lanes",
+      "<!-- plan-review: lanes -->",
+      "| **L1** | real |",
+      "",
+      "```",
+      "| **L1** | example |",
+      "```",
+    ].join("\n");
+    expect(rowHash(text, "L1")).toMatch(hash);
+    expect(rowRisk(text, "L1")).toBe("normal");
+  });
+
+  test("a four-space-indented marker is code, so the file stays unmarked", () => {
+    const text = [
+      "| **L1** | real |",
+      "",
+      "    <!-- plan-review: lanes -->",
+    ].join("\n");
+    expect(rowHash(text, "L1")).toMatch(hash);
+  });
+
+  test("a tab-indented marker is code too", () => {
+    const text = [
+      "| **L1** | real |",
+      "",
+      "\t<!-- plan-review: lanes -->",
+    ].join("\n");
+    expect(rowHash(text, "L1")).toMatch(hash);
+  });
+
+  test("a three-space-indented marker still counts", () => {
+    const text = [
+      "| **L1** | stray |",
+      "   <!-- plan-review: lanes -->",
+      "| **L1** | real |",
+    ].join("\n");
+    expect(rowHash(text, "L1")).toMatch(hash);
+    expect(() => rowHash(text.replace("   <!--", "<!--"), "L1")).not.toThrow();
+  });
+});

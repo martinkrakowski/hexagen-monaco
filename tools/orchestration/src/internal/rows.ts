@@ -27,7 +27,23 @@ function ambiguousRowError(
   id: string,
   matches: readonly { readonly line: number; readonly text: string }[],
   plan: string | undefined,
+  outside: readonly { readonly line: number; readonly text: string }[] = [],
 ): Error {
+  const quote = (text: string): string => {
+    const start = text.trim();
+    return start.length > QUOTED_LINE_START
+      ? `${start.slice(0, QUOTED_LINE_START)}…`
+      : start;
+  };
+  // A marked file that holds no row for the id inside its regions, but does
+  // hold some outside them: say so, so the operator looks at the markers.
+  if (matches.length === 0 && outside.length > 0) {
+    return new Error(
+      `${plan === undefined ? "" : `${plan}: `}expected exactly one plan row for ${id}, found 0 in marked regions; ${outside.length} matching ${outside.length === 1 ? "row" : "rows"} outside marked regions at ${outside
+        .map(({ line, text }) => `line ${line}: ${quote(text)}`)
+        .join("; ")}`,
+    );
+  }
   const where =
     matches.length === 0
       ? ""
@@ -46,16 +62,92 @@ function ambiguousRowError(
   );
 }
 
-/** Every line of `markdown` the pattern matches, with its 1-based number. */
+/**
+ * A plan-review marker line: `<!-- plan-review: lanes -->` before a lane table,
+ * `<!-- plan-review: decisions -->` before a decision table. Both kinds scope
+ * a row lookup the same way — every caller asks for a row by id alone, whether
+ * the id names a lane or a decision, so one rule serves them all and no caller
+ * has to say which kind it wants. Up to three spaces of indent are allowed, per
+ * CommonMark; four, or a tab, is an indented code block, not a marker.
+ */
+const MARKER = /^ {0,3}<!--\s*plan-review:\s*(?:lanes|decisions)\s*-->[ \t]*$/;
+/** A markdown heading, at any level: it ends the marker's region. */
+const HEADING = /^ {0,3}#{1,6}(?:\s|$)/;
+/**
+ * A code-fence line: up to three spaces of indent, then a run of three or more
+ * backticks or tildes. Group 1 is the run, group 2 what follows it. A marker or
+ * heading inside a fence is example text. Per CommonMark the opening run's
+ * character and length are kept, and only a run of the same character, at
+ * least as long, with nothing after it but whitespace, closes the block.
+ */
+const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+
+/**
+ * Which lines of a plan may hold a row. A plan with no marker outside a code
+ * fence keeps the original rule — every line counts, so a duplicate row is
+ * still an error. A plan with at least one marker counts a line only inside a
+ * marker's region: from the marker, across prose and further tables, to the
+ * next heading. A bold-id row anywhere else in a marked plan — a "shipped"
+ * table, say — is ignored, so it cannot collide with the real row.
+ */
+function eligibleLines(lines: readonly string[]): boolean[] {
+  const eligible: boolean[] = [];
+  let anyMarker = false;
+  let fence: { readonly char: string; readonly length: number } | undefined;
+  let inRegion = false;
+  for (const text of lines) {
+    const run = FENCE.exec(text);
+    let fenceLine = false;
+    if (fence === undefined) {
+      // A backtick fence's info string may not itself hold a backtick.
+      if (run !== null && !(run[1]![0] === "`" && run[2]!.includes("`"))) {
+        fence = { char: run[1]![0]!, length: run[1]!.length };
+        fenceLine = true;
+      }
+    } else {
+      fenceLine = true;
+      if (
+        run !== null &&
+        run[1]![0] === fence.char &&
+        run[1]!.length >= fence.length &&
+        run[2]!.trim() === ""
+      ) {
+        fence = undefined;
+      }
+    }
+    if (fence === undefined && !fenceLine) {
+      if (MARKER.test(text)) {
+        anyMarker = true;
+        inRegion = true;
+      } else if (HEADING.test(text)) {
+        inRegion = false;
+      }
+    }
+    // A row inside a code fence is example text, even in a marked region.
+    eligible.push(inRegion && fence === undefined && !fenceLine);
+  }
+  return anyMarker ? eligible : lines.map(() => true);
+}
+
+/** Every eligible line of `markdown` the pattern matches, with its 1-based number. */
 function matchingLines(
   markdown: string,
   pattern: RegExp,
-): { line: number; text: string }[] {
+): {
+  found: { line: number; text: string }[];
+  outside: { line: number; text: string }[];
+} {
+  // A CRLF plan: strip the carriage return per line, so a marker, heading or
+  // fence line is recognised and a quoted row never carries one.
+  const lines = markdown.split("\n").map((text) => text.replace(/\r$/, ""));
+  const eligible = eligibleLines(lines);
   const found: { line: number; text: string }[] = [];
-  markdown.split("\n").forEach((text, index) => {
-    if (pattern.test(text)) found.push({ line: index + 1, text });
+  const outside: { line: number; text: string }[] = [];
+  lines.forEach((text, index) => {
+    if (!pattern.test(text)) return;
+    (eligible[index] ? found : outside).push({ line: index + 1, text });
   });
-  return found;
+  return { found, outside };
 }
 
 /**
@@ -67,8 +159,8 @@ function matchingLines(
  * naming the id and the count, never a hash of the wrong line.
  */
 export function rowHash(markdown: string, id: string, plan?: string): string {
-  const matches = matchingLines(markdown, rowPrefix(id));
-  if (matches.length !== 1) throw ambiguousRowError(id, matches, plan);
+  const { found: matches, outside } = matchingLines(markdown, rowPrefix(id));
+  if (matches.length !== 1) throw ambiguousRowError(id, matches, plan, outside);
   const normalised = matches[0]!.text.trim().replace(/\s+/g, " ");
   return createHash("sha256").update(normalised, "utf8").digest("hex");
 }
@@ -160,8 +252,8 @@ const RISK_WORD_AT_START = /^\**\s*(high|normal)\b/i;
  */
 export function rowRisk(markdown: string, id: string, plan?: string): Risk {
   const pattern = rowSecondCellPattern(id);
-  const lines = matchingLines(markdown, pattern);
-  if (lines.length !== 1) throw ambiguousRowError(id, lines, plan);
+  const { found: lines, outside } = matchingLines(markdown, pattern);
+  if (lines.length !== 1) throw ambiguousRowError(id, lines, plan, outside);
   const matches = [pattern.exec(lines[0]!.text)!];
   // Non-null: the capture group above is unconditional, so a match here
   // always carries one — see rowSecondCellPattern's own comment.
