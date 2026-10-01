@@ -69,11 +69,31 @@ npx hexagen grant issue \
 ```
 
 Signs with the HMAC-SHA256 key at `.hexagen/grant-signing.key` (created on
-first use if missing — never commit it). `--contexts <name[,name...]>` is a
-monaco-only convenience: it looks each name up in `manifest.yaml` and
-expands it to `packages/<name>/`, appended to `--paths`; a client repo with
-no manifest issues on `--paths` alone. Prints the grant JSON to stdout, or
-to `--out <file>` if given.
+first use if missing, with a `.gitignore` entry added for it — never commit
+it; the key must be a full 32-byte hex value, so a hand-edited or truncated
+key file is rejected rather than silently used). `--contexts
+<name[,name...]>` is a monaco-only convenience: it looks each name up in
+`manifest.yaml` and expands it to `packages/<name>/`, appended to `--paths`.
+
+`hexagen_accept_transaction`'s enforcement (`checkMutationAgainstGrant`)
+requires `grant.contexts` to independently name every context a mutation
+targets — a grant's `paths` alone never satisfies that check, and an empty
+`contexts` denies everything. So the CLI also reverse-matches any
+`packages/<name>/` prefix already present in `--paths` against the
+manifest, folding matching names into `grant.contexts` automatically
+(`--contexts` can usually be omitted when `--paths` already names the
+context's package directory, as in the example above). Symmetrically,
+`.architecture/` — the one path every manifest mutation actually writes
+through — is always added to the grant's `paths` whenever it authorizes any
+context, so `--contexts` alone is enough without repeating
+`.architecture/` in `--paths`. This reconciliation only works where a
+manifest exists: a grant that names no context at all (no manifest to
+derive contexts from, and no `--contexts` given) is paths-only in the
+literal sense, but since every manifest-mutation tool's enforcement
+requires a context match, such a grant cannot authorize any of those seven
+tools — it is scoped only for a future, generic Field Kit adapter that
+doesn't check `contexts`, not for `hexagen_accept_transaction` as it exists
+today. Prints the grant JSON to stdout, or to `--out <file>` if given.
 
 ---
 

@@ -7,6 +7,8 @@ import { loadOrCreateSigningKey } from "../../../src/commands/grant/signing-key.
 
 const tempDirs: string[] = [];
 
+const FULL_STRENGTH_KEY = "a".repeat(64);
+
 async function makeWorkspace(): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "grant-signing-key-"));
   tempDirs.push(dir);
@@ -30,16 +32,40 @@ describe("loadOrCreateSigningKey", () => {
     assert.equal(onDisk, result.keyHex);
   });
 
-  it("reads an existing key unchanged, and reports created: false", async () => {
+  it("adds a .hexagen ignore entry when creating a fresh key", async () => {
+    const workspaceRoot = await makeWorkspace();
+    await loadOrCreateSigningKey(workspaceRoot);
+    const gitignore = await readFile(
+      path.join(workspaceRoot, ".gitignore"),
+      "utf-8",
+    );
+    assert.match(gitignore, /\.hexagen\/grant-signing\.key/);
+  });
+
+  it("does not duplicate an existing .gitignore entry covering the key", async () => {
+    const workspaceRoot = await makeWorkspace();
+    await writeFile(
+      path.join(workspaceRoot, ".gitignore"),
+      "node_modules/\n.hexagen/\n",
+    );
+    await loadOrCreateSigningKey(workspaceRoot);
+    const gitignore = await readFile(
+      path.join(workspaceRoot, ".gitignore"),
+      "utf-8",
+    );
+    assert.equal(gitignore, "node_modules/\n.hexagen/\n");
+  });
+
+  it("reads an existing full-strength key unchanged, and reports created: false", async () => {
     const workspaceRoot = await makeWorkspace();
     await mkdir(path.join(workspaceRoot, ".hexagen"), { recursive: true });
     await writeFile(
       path.join(workspaceRoot, ".hexagen", "grant-signing.key"),
-      "deadbeef\n",
+      `${FULL_STRENGTH_KEY}\n`,
     );
     const result = await loadOrCreateSigningKey(workspaceRoot);
     assert.equal(result.created, false);
-    assert.equal(result.keyHex, "deadbeef");
+    assert.equal(result.keyHex, FULL_STRENGTH_KEY);
   });
 
   it("rejects a key file that isn't valid hex", async () => {
@@ -51,7 +77,33 @@ describe("loadOrCreateSigningKey", () => {
     );
     await assert.rejects(
       () => loadOrCreateSigningKey(workspaceRoot),
-      /not valid hex/,
+      /64 hex characters/,
+    );
+  });
+
+  it("rejects an existing key shorter than 32 bytes", async () => {
+    const workspaceRoot = await makeWorkspace();
+    await mkdir(path.join(workspaceRoot, ".hexagen"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".hexagen", "grant-signing.key"),
+      "deadbeef\n",
+    );
+    await assert.rejects(
+      () => loadOrCreateSigningKey(workspaceRoot),
+      /64 hex characters/,
+    );
+  });
+
+  it("rejects an existing key with odd-length hex", async () => {
+    const workspaceRoot = await makeWorkspace();
+    await mkdir(path.join(workspaceRoot, ".hexagen"), { recursive: true });
+    await writeFile(
+      path.join(workspaceRoot, ".hexagen", "grant-signing.key"),
+      `${FULL_STRENGTH_KEY.slice(0, -1)}\n`,
+    );
+    await assert.rejects(
+      () => loadOrCreateSigningKey(workspaceRoot),
+      /64 hex characters/,
     );
   });
 
@@ -61,5 +113,19 @@ describe("loadOrCreateSigningKey", () => {
     const second = await loadOrCreateSigningKey(workspaceRoot);
     assert.equal(first.keyHex, second.keyHex);
     assert.equal(second.created, false);
+  });
+
+  it("concurrent first-use creation converges on one key, not whichever wrote last", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const [first, second] = await Promise.all([
+      loadOrCreateSigningKey(workspaceRoot),
+      loadOrCreateSigningKey(workspaceRoot),
+    ]);
+    assert.equal(first.keyHex, second.keyHex);
+    assert.equal(
+      [first.created, second.created].filter(Boolean).length,
+      1,
+      "exactly one caller should report created: true",
+    );
   });
 });

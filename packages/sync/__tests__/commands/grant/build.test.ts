@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   buildGrant,
+  deriveContextsFromPaths,
   expandContexts,
 } from "../../../src/commands/grant/build.js";
 import { canonicalGrantPayload } from "../../../src/commands/grant/canonical.js";
@@ -63,6 +64,33 @@ describe("expandContexts", () => {
   });
 });
 
+describe("deriveContextsFromPaths", () => {
+  it("reverse-matches packages/<name>/ path prefixes against known contexts", async () => {
+    const workspaceRoot = await makeWorkspace(MANIFEST);
+    const contexts = await deriveContextsFromPaths(workspaceRoot, [
+      ".architecture/",
+      "packages/billing/",
+    ]);
+    assert.deepEqual(contexts, ["billing"]);
+  });
+
+  it("ignores a packages/ path that doesn't match a known context", async () => {
+    const workspaceRoot = await makeWorkspace(MANIFEST);
+    const contexts = await deriveContextsFromPaths(workspaceRoot, [
+      "packages/not-a-real-context/",
+    ]);
+    assert.deepEqual(contexts, []);
+  });
+
+  it("returns no contexts when no manifest exists, rather than throwing", async () => {
+    const workspaceRoot = await makeWorkspace();
+    const contexts = await deriveContextsFromPaths(workspaceRoot, [
+      "packages/billing/",
+    ]);
+    assert.deepEqual(contexts, []);
+  });
+});
+
 describe("buildGrant", () => {
   const sign = (payload: string, keyHex: string) =>
     `sig(${keyHex}:${payload.length})`;
@@ -107,6 +135,41 @@ describe("buildGrant", () => {
     );
     assert.deepEqual(grant.paths, [".architecture/", "packages/billing/"]);
     assert.deepEqual(grant.contexts, ["billing"]);
+  });
+
+  it("auto-includes .architecture/ in paths whenever contexts is non-empty", async () => {
+    const grant = await buildGrant(
+      {
+        principal: "martin",
+        agent: "lane-ow3b",
+        paths: ["packages/billing/"],
+        tools: ["hexagen_create_port"],
+        mode: "write",
+        expiresIn: "1h",
+        contexts: ["billing"],
+        now,
+      },
+      "deadbeef",
+      sign,
+    );
+    assert.deepEqual(grant.paths, ["packages/billing/", ".architecture/"]);
+  });
+
+  it("leaves paths untouched when contexts is empty", async () => {
+    const grant = await buildGrant(
+      {
+        principal: "martin",
+        agent: "lane-ow3b",
+        paths: ["packages/billing/"],
+        tools: ["hexagen_create_port"],
+        mode: "write",
+        expiresIn: "1h",
+        now,
+      },
+      "deadbeef",
+      sign,
+    );
+    assert.deepEqual(grant.paths, ["packages/billing/"]);
   });
 
   it("signs exactly canonicalGrantPayload(unsigned) with the given key", async () => {

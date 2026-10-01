@@ -1,10 +1,16 @@
 import { describe, it, afterEach, vi } from "vitest";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { issueGrantCommand } from "../../../src/commands/grant/issue.js";
+
+const MANIFEST = `
+bounded_contexts:
+  - name: billing
+    type: core
+`;
 
 const tempDirs: string[] = [];
 
@@ -147,6 +153,70 @@ describe("issueGrantCommand", () => {
     );
     assert.equal(process.exitCode, 1);
     process.exitCode = 0;
+  });
+
+  it("issuing on --paths alone (no --contexts) still populates grant.contexts, matching what the accept path requires — the documented paths-only flow Qodo flagged as broken", async () => {
+    const workspaceRoot = await makeWorkspace();
+    await mkdir(path.join(workspaceRoot, ".architecture"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(workspaceRoot, ".architecture", "manifest.yaml"),
+      MANIFEST,
+    );
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await issueGrantCommand({
+      principal: "martin",
+      agent: "lane-ow3b",
+      paths: ".architecture/,packages/billing/",
+      tools: "hexagen_accept_transaction,hexagen_create_port",
+      mode: "write",
+      expiresIn: "4h",
+      workspaceRoot,
+      out: ".hexagen/grants/test.json",
+    });
+    errorSpy.mockRestore();
+
+    const grant = JSON.parse(
+      await readFile(
+        path.join(workspaceRoot, ".hexagen/grants/test.json"),
+        "utf-8",
+      ),
+    );
+    assert.deepEqual(grant.contexts, ["billing"]);
+    assert.ok(grant.paths.includes(".architecture/"));
+  });
+
+  it("issuing on --contexts alone (no .architecture/ in --paths) still includes it — the accept path requires it for every mutation", async () => {
+    const workspaceRoot = await makeWorkspace();
+    await mkdir(path.join(workspaceRoot, ".architecture"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(workspaceRoot, ".architecture", "manifest.yaml"),
+      MANIFEST,
+    );
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await issueGrantCommand({
+      principal: "martin",
+      agent: "lane-ow3b",
+      tools: "hexagen_create_port",
+      mode: "write",
+      expiresIn: "4h",
+      contexts: "billing",
+      workspaceRoot,
+      out: ".hexagen/grants/test.json",
+    });
+    errorSpy.mockRestore();
+
+    const grant = JSON.parse(
+      await readFile(
+        path.join(workspaceRoot, ".hexagen/grants/test.json"),
+        "utf-8",
+      ),
+    );
+    assert.ok(grant.paths.includes(".architecture/"));
+    assert.ok(grant.paths.includes("packages/billing/"));
   });
 
   it("rejects an unknown --contexts entry before touching the signing key", async () => {
