@@ -67,11 +67,12 @@ function ambiguousRowError(
  * `<!-- plan-review: decisions -->` before a decision table. Both kinds scope
  * a row lookup the same way — every caller asks for a row by id alone, whether
  * the id names a lane or a decision, so one rule serves them all and no caller
- * has to say which kind it wants.
+ * has to say which kind it wants. Up to three spaces of indent are allowed, per
+ * CommonMark; four, or a tab, is an indented code block, not a marker.
  */
-const MARKER = /^[ \t]*<!--\s*plan-review:\s*(?:lanes|decisions)\s*-->[ \t]*$/;
+const MARKER = /^ {0,3}<!--\s*plan-review:\s*(?:lanes|decisions)\s*-->[ \t]*$/;
 /** A markdown heading, at any level: it ends the marker's region. */
-const HEADING = /^[ \t]{0,3}#{1,6}(?:\s|$)/;
+const HEADING = /^ {0,3}#{1,6}(?:\s|$)/;
 /**
  * A code-fence line: up to three spaces of indent, then a run of three or more
  * backticks or tildes. Group 1 is the run, group 2 what follows it. A marker or
@@ -79,7 +80,7 @@ const HEADING = /^[ \t]{0,3}#{1,6}(?:\s|$)/;
  * character and length are kept, and only a run of the same character, at
  * least as long, with nothing after it but whitespace, closes the block.
  */
-const FENCE = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/;
+const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 
 /**
  * Which lines of a plan may hold a row. A plan with no marker outside a code

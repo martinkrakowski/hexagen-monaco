@@ -438,4 +438,32 @@ describe("fenced rows and indented markers", () => {
     expect(rowHash(text, "L1")).toMatch(hash);
     expect(rowRisk(text, "L1")).toBe("normal");
   });
+
+  test("a four-space-indented marker is code, so the file stays unmarked", () => {
+    const text = [
+      "| **L1** | real |",
+      "",
+      "    <!-- plan-review: lanes -->",
+    ].join("\n");
+    expect(rowHash(text, "L1")).toMatch(hash);
+  });
+
+  test("a tab-indented marker is code too", () => {
+    const text = [
+      "| **L1** | real |",
+      "",
+      "\t<!-- plan-review: lanes -->",
+    ].join("\n");
+    expect(rowHash(text, "L1")).toMatch(hash);
+  });
+
+  test("a three-space-indented marker still counts", () => {
+    const text = [
+      "| **L1** | stray |",
+      "   <!-- plan-review: lanes -->",
+      "| **L1** | real |",
+    ].join("\n");
+    expect(rowHash(text, "L1")).toMatch(hash);
+    expect(() => rowHash(text.replace("   <!--", "<!--"), "L1")).not.toThrow();
+  });
 });
