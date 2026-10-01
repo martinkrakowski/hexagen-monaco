@@ -89,7 +89,7 @@ export function parseLaneWatchArgs(argv: readonly string[]): LaneWatchArgs {
     if (
       rawStall.trim() === "" ||
       !Number.isFinite(stallSeconds) ||
-      stallSeconds <= 0 ||
+      Math.round(stallSeconds * 1000) < 1 ||
       stallSeconds > MAX_STALL_SECONDS
     ) {
       throw new ArgError(

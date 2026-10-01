@@ -1,8 +1,16 @@
-import { EXIT_ERROR, EXIT_OK, EXIT_UNKNOWN, errorText } from "./errors.js";
+import {
+  EXIT_ERROR,
+  EXIT_INTERRUPTED,
+  EXIT_OK,
+  EXIT_UNKNOWN,
+  errorText,
+} from "./errors.js";
 
 export interface UsageDeps {
   readonly get: (pathname: string) => Promise<Response>;
   readonly controller: AbortController;
+  /** Aborted from outside (a signal handler). */
+  readonly external?: AbortSignal;
   readonly session: string;
   readonly log: (text: string) => void;
   readonly logError: (text: string) => void;
@@ -47,7 +55,11 @@ async function readBounded(response: Response): Promise<string> {
  * free.
  */
 export async function usage(deps: UsageDeps): Promise<number> {
+  const interrupted = (): boolean => deps.external?.aborted === true;
+  const onExternal = (): void => deps.controller.abort();
+  deps.external?.addEventListener("abort", onExternal, { once: true });
   try {
+    if (interrupted()) return EXIT_INTERRUPTED;
     const response = await deps.get(`/session/${deps.session}`);
     if (!response.ok) {
       deps.logError(
@@ -104,9 +116,11 @@ export async function usage(deps: UsageDeps): Promise<number> {
     }
     return EXIT_OK;
   } catch (error: unknown) {
+    if (interrupted()) return EXIT_INTERRUPTED;
     deps.logError(`lane-watch: ${errorText(error)}`);
     return EXIT_ERROR;
   } finally {
+    deps.external?.removeEventListener("abort", onExternal);
     deps.controller.abort();
   }
 }

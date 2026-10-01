@@ -451,6 +451,17 @@ describe("A-30 §1.3: the deprecated alias synthesizes a host and never refuses"
     expect(result.deprecations[0].message).toContain("laneHosts");
   });
 
+  test("a non-loopback legacy URL is carried as written, and the deprecation says lane-watch refuses it", () => {
+    const result = parseConfig(
+      "repo: acme/demo\nopencodeServerUrl: http://10.0.0.5:4096\n",
+    );
+    expect(result.problems).toEqual([]);
+    expect(result.config?.laneHosts[0]?.server).toBe("http://10.0.0.5:4096");
+    expect(result.deprecations[0].message).toContain(
+      "`server` is carried as written; lane-watch refuses it unless it is loopback",
+    );
+  });
+
   test("the alias is not a config field, so nothing downstream reads it", () => {
     expect(parseConfig(ALIAS).config).not.toHaveProperty("opencodeServerUrl");
   });
@@ -639,9 +650,12 @@ describe("P-D2: laneHosts[].server is an optional loopback URL", () => {
     "127.0.0.1:4097",
     "http://127.0.0.1:4097/api",
     "",
-  ])("a non-loopback or malformed server %j is a problem at laneHosts[0].server", (value) => {
-    expect(problemsAt(withServer(value))).toEqual(["laneHosts[0].server"]);
-  });
+  ])(
+    "a non-loopback or malformed server %j is a problem at laneHosts[0].server",
+    (value) => {
+      expect(problemsAt(withServer(value))).toEqual(["laneHosts[0].server"]);
+    },
+  );
 
   test("a non-string server is a problem at the path", () => {
     expect(problemsAt(REMOTE + "\n    server: 4097")).toEqual([

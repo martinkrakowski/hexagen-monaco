@@ -78,7 +78,7 @@ describe("the built lane-watch bin", () => {
     expect(result.out).toContain("unknown");
   });
 
-  test("SIGTERM interrupts a follow that is waiting: exit 130", async () => {
+  test("SIGTERM interrupts a follow that is waiting: exit 143", async () => {
     const fake = await startFake((_req, res) => sseHead(res));
     fakes.push(fake);
     const child = spawn(process.execPath, [
@@ -96,6 +96,6 @@ describe("the built lane-watch bin", () => {
     );
     await new Promise((ok) => setTimeout(ok, 500));
     child.kill("SIGTERM");
-    expect(await exited).toBe(130);
+    expect(await exited).toBe(143);
   });
 });

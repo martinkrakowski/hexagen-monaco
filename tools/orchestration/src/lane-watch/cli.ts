@@ -55,6 +55,7 @@ export async function runLaneWatch(io: LaneWatchIo): Promise<number> {
     return await usage({
       get,
       controller,
+      ...(io.signal !== undefined ? { external: io.signal } : {}),
       session: args.session,
       log: io.log,
       logError: io.logError,

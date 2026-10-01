@@ -60,6 +60,7 @@ describe("parseLaneWatchArgs", () => {
     [["follow", ...base, "--stall-seconds", "0"], "zero stall"],
     [["follow", ...base, "--stall-seconds", "abc"], "non-numeric stall"],
     [["follow", "--server"], "flag without value"],
+    [["follow", ...base, "--stall-seconds", "0.0004"], "stall rounds to 0 ms"],
     [["follow", ...base, "extra"], "stray positional"],
   ])("refuses %j (%s)", (argv) => {
     expect(() => parseLaneWatchArgs(argv as string[])).toThrow(ArgError);

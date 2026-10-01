@@ -1,7 +1,7 @@
 # @hexagen/orchestration
 
-Wave orchestration tooling for a HexaGen project, packaged as seventeen
-command-line bins.
+Wave orchestration tooling for a HexaGen project, packaged as command-line
+bins (the table below lists them all).
 
 The package carries the machinery a delegated wave needs to be observable and
 verifiable: emitting events, verifying and reviewing the plan, reporting status,
@@ -175,7 +175,7 @@ is the documented `usage` reader for a lane host (see `laneHosts[].usage`).
   `/global/event` and `/session/<id>`, and is aborted on every exit path. An
   event line or frame over 1 MiB is an error rather than buffered.
 - Exit codes: 0 done or complete, 1 error, 2 bad command line, 3 incomplete
-  usage, 4 stalled, 130 interrupted.
+  usage, 4 stalled, 130 interrupted by SIGINT, 143 by SIGTERM (128 plus the signal number).
 
 ### `hexagen-orchestration-fix-brief`
 

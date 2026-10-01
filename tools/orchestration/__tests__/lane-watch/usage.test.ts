@@ -144,6 +144,21 @@ describe("usage", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  test("an interrupt (external abort) ends usage with 130 and aborts the request", async () => {
+    const fake = await startFake(() => {
+      // never answers
+    });
+    fakes.push(fake);
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 100);
+    const result = await run(
+      ["usage", "--server", fake.origin, "--session", SESSION],
+      { signal: controller.signal },
+    );
+    expect(result.code).toBe(130);
+    expect(result.fetchCalls[0]!.init.signal?.aborted).toBe(true);
+  });
+
   test("a connection refused is an error, exit 1, not 3", async () => {
     const result = await run([
       "usage",

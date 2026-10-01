@@ -45,7 +45,9 @@ export interface LaneHost {
    * The loopback URL of this host's opencode server, as seen from the
    * orchestrator through its tunnel. It is what `<usage…> --server` receives
    * (P-D2), and is validated by the rule `lane-watch` itself applies to
-   * `--server`.
+   * `--server`. The one exception is the host synthesized from the legacy
+   * `opencodeServerUrl`: its `server` is carried as written and may not be
+   * loopback, in which case lane-watch refuses it.
    */
   readonly server?: string;
   /** An ssh alias. Its presence is what makes a host remote. */
@@ -541,7 +543,8 @@ export function parseLaneHosts(
       message:
         `is deprecated and will be removed. A local \`laneHosts\` entry named ` +
         `${JSON.stringify(SYNTHESIZED_HOST_NAME)} was synthesized from it; declare that host yourself, ` +
-        `as { name, dispatch: [opencode, run, --attach, <url>], gate: full, check: [curl, -sf, <url>/doc] }.`,
+        `as { name, dispatch: [opencode, run, --attach, <url>], gate: full, check: [curl, -sf, <url>/doc] }. ` +
+        `Its \`server\` is carried as written; lane-watch refuses it unless it is loopback.`,
     });
   }
 

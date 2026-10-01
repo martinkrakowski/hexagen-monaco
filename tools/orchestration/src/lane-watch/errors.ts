@@ -8,7 +8,7 @@ export const EXIT_USAGE = 2;
 export const EXIT_UNKNOWN = 3;
 /** `follow` saw nothing for its session inside the stall window. */
 export const EXIT_STALL = 4;
-/** Interrupted from outside (SIGINT or SIGTERM). */
+/** Interrupted from outside. The bin turns it into 128 + the signal number: 130 for INT, 143 for TERM. */
 export const EXIT_INTERRUPTED = 130;
 
 export function errorText(error: unknown): string {

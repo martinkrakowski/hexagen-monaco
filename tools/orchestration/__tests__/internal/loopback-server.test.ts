@@ -46,10 +46,18 @@ describe("SESSION_ID_PATTERN", () => {
   test.each(["ses_abc123", "ses_4Fq9ZxLm", "a-b_c"])("accepts %s", (id) => {
     expect(SESSION_ID_PATTERN.test(id)).toBe(true);
   });
-  test.each(["", "../etc", "a/b", "a b", "a?b", "a#b", "x".repeat(129), "a\n"])(
-    "refuses %j",
-    (id) => {
-      expect(SESSION_ID_PATTERN.test(id)).toBe(false);
-    },
-  );
+  test.each([
+    "",
+    "../etc",
+    "a/b",
+    "a b",
+    "a?b",
+    "a#b",
+    "x".repeat(129),
+    "a\n",
+    "a.b",
+    "..",
+  ])("refuses %j", (id) => {
+    expect(SESSION_ID_PATTERN.test(id)).toBe(false);
+  });
 });

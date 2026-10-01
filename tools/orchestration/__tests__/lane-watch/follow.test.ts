@@ -319,6 +319,22 @@ describe("follow: safety", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  test("session.error for the session prints a line and does not change done", async () => {
+    const fake = await serve((_req, res) => {
+      sseHead(res);
+      res.write(
+        frame("session.error", {
+          sessionID: SESSION,
+          error: { name: "ProviderAuthError\u001b[2J" },
+        }),
+      );
+      res.write(idle());
+    });
+    const result = await follow(fake);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain("error ProviderAuthError?[2J");
+  });
+
   test("an interrupt (external abort) ends the run with 130 and aborts the request", async () => {
     const fake = await serve((_req, res) => sseHead(res));
     const controller = new AbortController();

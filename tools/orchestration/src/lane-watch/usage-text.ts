@@ -11,5 +11,5 @@ export const LANE_WATCH_USAGE = [
   "exit codes: 0 done / complete reading, 1 error, 2 bad command line,",
   "            3 usage reading incomplete (a field is 'unknown'),",
   "            4 follow stalled (no event for the session inside the window),",
-  "            130 interrupted",
+  "            130 interrupted by SIGINT, 143 by SIGTERM",
 ].join("\n");

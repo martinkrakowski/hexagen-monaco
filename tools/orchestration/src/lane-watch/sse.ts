@@ -1,10 +1,10 @@
 /** Longest a single line, or one frame's data, may grow before the stream is refused. */
-export const MAX_FRAME_BYTES = 1024 * 1024;
+export const MAX_FRAME_CHARS = 1024 * 1024;
 
 export class FrameTooLargeError extends Error {
   constructor(limit: number) {
     super(
-      `an event stream line or frame exceeded ${limit} bytes: too large to buffer`,
+      `an event stream line or frame exceeded ${limit} characters: too large to buffer`,
     );
   }
 }
@@ -18,12 +18,12 @@ export class FrameTooLargeError extends Error {
  * `finally` cancels the reader, so that return releases the connection.
  *
  * Memory is bounded: nothing but the current partial line and the current
- * frame's data is held, and either growing past `maxBytes` throws
+ * frame's data is held, and either growing past `maxChars` throws
  * `FrameTooLargeError` rather than buffering without limit.
  */
 export async function* readFrames(
   body: ReadableStream<Uint8Array>,
-  maxBytes: number = MAX_FRAME_BYTES,
+  maxChars: number = MAX_FRAME_CHARS,
 ): AsyncGenerator<string, void, void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -48,7 +48,7 @@ export async function* readFrames(
       } else if (line.startsWith("data:")) {
         const value = line.slice(5).replace(/^ /, "");
         dataBytes += value.length + 1;
-        if (dataBytes > maxBytes) throw new FrameTooLargeError(maxBytes);
+        if (dataBytes > maxChars) throw new FrameTooLargeError(maxChars);
         data.push(value);
       }
       // Comments (`:`) and other fields (`event:`, `id:`, `retry:`) carry nothing we read.
@@ -62,7 +62,7 @@ export async function* readFrames(
       if (data.length > 0) frames.push(data.join("\n"));
       data = [];
     }
-    if (pending.length > maxBytes) throw new FrameTooLargeError(maxBytes);
+    if (pending.length > maxChars) throw new FrameTooLargeError(maxChars);
     return frames;
   };
 

@@ -62,6 +62,11 @@ function describe(
     if (kind === "idle") return { done: true };
     return typeof kind === "string" ? `status ${printable(kind)}` : undefined;
   }
+  if (type === "session.error") {
+    // Reported, not concluding: done still means idle.
+    const error = properties.error;
+    return `error ${printable(isObject(error) ? error.name : undefined)}`;
+  }
   if (type === "message.part.updated") {
     const part = properties.part;
     if (!isObject(part)) return undefined;

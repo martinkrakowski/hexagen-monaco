@@ -346,7 +346,7 @@ that did not happen.
       the worktree tip recorded before dispatch. A host's `usage` reader is invoked as
       `<usage…> --server <laneHosts[].server> --session <id>` with that id, and
       `hexagen-orchestration-lane-watch follow` takes the same two flags to watch the session. Both
-      need the host's `server` (a loopback URL, reached through the tunnel the caller keeps open). A
+      need the host's `server` (a loopback URL, reached through a tunnel; the caller is assumed to keep it open, which is an open owner question in P-D2). A
       `usage` reading that prints `unknown` and exits 3 is incomplete, not zero.
 
    **Every brief carries the checkpoint rule**: commit failing tests once seen to fail, commit
