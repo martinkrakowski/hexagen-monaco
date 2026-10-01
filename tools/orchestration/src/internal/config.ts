@@ -357,7 +357,7 @@ function parseGateSteps(raw: unknown, problems: Problems): GateStep[] {
       );
     }
     // Same rule for `locked`: which steps hold the machine-wide lock is the
-    // project's to say (it was a hardcoded list of campaign-foundry step names),
+    // project's to say (it was a hardcoded list of the reference project's step names),
     // and reading a non-boolean as "locked" or "not locked" would silently run a
     // step with, or without, the mutual exclusion its author asked for.
     if (entry.locked !== undefined && typeof entry.locked !== "boolean") {
@@ -510,7 +510,7 @@ export function parseConfig(text: string): ParseConfigResult {
     }
   }
   // A-20: refused ports come ONLY from the file. The default is empty, because
-  // 4317 is campaign-foundry's port and refusing it here would refuse a
+  // 4317 is the reference project's port and refusing it here would refuse a
   // project that legitimately wants it (A-20).
   const forbiddenPorts = parseNumberArray(
     document.forbiddenPorts,
@@ -698,7 +698,7 @@ export function matchesAppendOnly(config: Config, path: string): boolean {
 /** The default `ciWorkflow` (A-32). */
 export const DEFAULT_CI_WORKFLOW = ".github/workflows/ci.yml";
 
-/** The default `waveStatusPort` — 4318, deliberately not campaign-foundry's 4317. */
+/** The default `waveStatusPort` — 4318, deliberately not the reference project's 4317. */
 export const DEFAULT_WAVE_STATUS_PORT = 4318;
 
 const KNOWN_FIELDS: ReadonlySet<string> = new Set([

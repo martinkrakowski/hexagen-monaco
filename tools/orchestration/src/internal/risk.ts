@@ -7,7 +7,7 @@ export interface DiscoverRiskIo {
 
 /**
  * A lane's risk tier, discovered by grepping EVERY plan under `planningDir`
- * for the lane's row — D184's own choice, made because `merge-prs.sh`'s spec
+ * for the lane's row — that gate's own choice, made because `merge-prs.sh`'s spec
  * (`pr|worktree|branch|lane|wave`) carries no plan field: the tier is FOUND,
  * never named on the command line.
  *

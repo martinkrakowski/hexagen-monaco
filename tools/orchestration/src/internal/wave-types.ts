@@ -74,7 +74,7 @@ export interface PlanReviewObservation {
 }
 
 /**
- * D184's pre-PR-review gate facts about one lane, gathered by the collector:
+ * The pre-PR-review gate facts about one lane, gathered by the collector:
  * its risk tier (discovered by grepping `docs/planning/`, exactly as
  * `pre-pr-check` does), and, for a `high` tier only, why the gate would
  * refuse a merge right now — `undefined` there means the gate would pass.
@@ -139,7 +139,7 @@ export interface DerivedLane {
    */
   readonly planReview?: string;
   /**
-   * D184's pre-PR-review gate flag, verbatim: "high-risk PR open without
+   * The pre-PR-review gate flag, verbatim: "high-risk PR open without
    * pre-PR review" — set only for a `high`-risk lane whose PR is open and
    * whose wave log does not yet hold a settled pre-PR review (or holds a
    * `changes-required` one with no later remediation). Derived, exactly like
