@@ -129,9 +129,16 @@ function installHandlers(): void {
   process.on("exit", killLive);
 }
 
-/** Track a spawned child's group until `settle` says it is done. */
+/**
+ * Track a spawned child's group until `settle` says it is done.
+ *
+ * The handlers are NOT installed here: they must already be in place BEFORE
+ * `spawn`. A probe can write its first byte (and so be observed, and the runner
+ * interrupted) between `fork` and the statement after `spawn` returns, and a
+ * runner descheduled in that window takes SIGINT with the default disposition:
+ * it dies, the probe's group is never killed, and the probe is orphaned alive.
+ */
 function track(pid: number | undefined): void {
-  installHandlers();
   if (pid !== undefined) live.add(pid);
 }
 
@@ -164,6 +171,8 @@ export function runCheck(
   if (command === undefined) return Promise.resolve("failed");
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>;
+    // Before `spawn`, never after: see `track`.
+    installHandlers();
     try {
       child = spawn(command, args, {
         ...SPAWN_BASE,
@@ -255,6 +264,8 @@ export function runRemote(
 ): Promise<RemoteResult> {
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>;
+    // Before `spawn`, never after: see `track`.
+    installHandlers();
     try {
       child = spawn(
         options.sshCommand ?? "ssh",
