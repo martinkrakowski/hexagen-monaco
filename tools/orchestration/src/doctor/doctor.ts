@@ -59,8 +59,20 @@ export const EXIT_UNHEALTHY = 1;
 /** The overlay is not there at all — the one state that is not a diagnosis. */
 export const EXIT_NO_CONFIG = 2;
 
-/** `warn` is reported and never affects the exit code (A-30). */
-export type Severity = "fail" | "skip" | "warn";
+/**
+ * `warn` is reported and never affects the exit code (A-30). `info` is a fact
+ * the operator should see and nothing is wrong with: it is never counted as a
+ * problem or a warning either.
+ *
+ * Why a new severity, rather than printing the slot count in the report's
+ * summary: `formatReport` takes only the findings and the config and has no
+ * access to the environment, so a summary line would need a new parameter
+ * threaded through it and its callers anyway. An `info` finding rides the
+ * existing path (a dep supplies the value, `runDoctor` pushes one finding, the
+ * formatter gains one label), and the exit code and the summary counters already
+ * look only at `fail` and `warn`.
+ */
+export type Severity = "fail" | "skip" | "warn" | "info";
 
 export interface Finding {
   readonly check: string;
@@ -106,6 +118,33 @@ export interface DoctorDeps {
    * `Co-authored-by` trailer.
    */
   readonly localUserEmail: () => Promise<string | undefined>;
+  /**
+   * The raw `HEXAGEN_GATE_SLOTS` this process sees, or `undefined` when it is
+   * unset. Optional: a caller with no environment says nothing about it.
+   */
+  readonly gateSlots?: () => string | undefined;
+}
+
+/**
+ * `HEXAGEN_GATE_SLOTS` as the gate lock will read it, as an INFO finding. The
+ * variable is host-wide (never a config field), so doctor only reports it: an
+ * unset or valid one is INFO (unset means the default of 1). One that is set but
+ * invalid is a FAIL, because the gate lock refuses it with exit 2 and so every
+ * gate on the host would fail.
+ */
+export function gateSlotsFinding(raw: string | undefined): Finding {
+  const valid = raw !== undefined && /^([1-9]|[1-5][0-9]|6[0-4])$/.test(raw);
+  const message =
+    raw === undefined
+      ? "HEXAGEN_GATE_SLOTS is unset: the gate lock has 1 slot (the default)."
+      : valid
+        ? `HEXAGEN_GATE_SLOTS=${raw}: the gate lock has ${raw} slot(s). More than one needs a test-worker cap (slots x maxWorkers <= threads); see the README's gate-lock section.`
+        : `HEXAGEN_GATE_SLOTS=${JSON.stringify(raw)} is not an integer from 1 to 64, so every gate on this host will refuse to run (the gate lock exits 2) until it is fixed or unset.`;
+  return {
+    check: "gate-slots",
+    severity: raw === undefined || valid ? "info" : "fail",
+    message,
+  };
 }
 
 /**
@@ -343,6 +382,10 @@ export async function runDoctor(
     findings.push(...(await checkLaneHost(host, deps)));
   }
 
+  if (deps.gateSlots !== undefined) {
+    findings.push(gateSlotsFinding(deps.gateSlots()));
+  }
+
   // A host no seat dispatches through still works: the orchestrator can name the
   // seat from `cast.md`. It is a WARN because the missing thing is the machine-
   // readable dispatch identity, and a dispatch identity nobody declared is an
@@ -396,7 +439,9 @@ export function formatReport(
         ? "FAIL"
         : finding.severity === "warn"
           ? "WARN"
-          : "SKIP";
+          : finding.severity === "info"
+            ? "INFO"
+            : "SKIP";
     lines.push(`${label}  [${finding.check}] ${finding.message}`);
   }
 

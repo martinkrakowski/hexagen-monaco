@@ -87,7 +87,12 @@ function runGate(
   const result = spawnSync(process.execPath, [dist("gate"), ...args], {
     cwd: root,
     encoding: "utf8",
-    env: { ...process.env, HOME: root, ...extraEnv },
+    env: {
+      ...process.env,
+      HEXAGEN_GATE_SLOTS: "1",
+      HOME: root,
+      ...extraEnv,
+    },
   });
   return {
     status: result.status,
@@ -683,7 +688,12 @@ describe("the run itself", () => {
     const result = spawnSync(process.execPath, [dist("gate")], {
       cwd: root,
       encoding: "utf8",
-      env: { ...process.env, HOME: root, TMPDIR: dir },
+      env: {
+        ...process.env,
+        HEXAGEN_GATE_SLOTS: "1",
+        HOME: root,
+        TMPDIR: dir,
+      },
     });
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("<== plain: exit 0");

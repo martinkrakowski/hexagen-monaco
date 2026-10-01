@@ -12,14 +12,66 @@
 #   gate-lock release <lane>     drop it — only the lock's own owner and pid may
 #   gate-lock verify <lane>      exit 0 only while the lock still names this holder
 #   gate-lock status             print who holds it and whether they look alive
+#                                (one line per slot when there is more than one)
 #   gate-lock heartbeat          refresh the beat — only on the caller's own lock
 #
-# The lock is a directory at ${TMPDIR:-/tmp}/hexagen-gate.lock — mkdir is the
-# atomic test-and-set, there is nothing else in POSIX sh — holding four files:
+# The lock is a directory at ${TMPDIR:-/tmp}/hexagen-gate.lock — a rename onto
+# the name is the test-and-set (a rename onto a name that is already a directory
+# does NOT fail: it moves the source INSIDE it, so every such rename below checks
+# for that and undoes it) —
+# holding five files:
 #   owner    the lane id that took it
 #   pid      the HOLDER's pid (the shell that runs the locked steps, or `run`)
 #   started  epoch second of acquisition
 #   beat     epoch second of the last heartbeat
+#   worktree the holder's worktree identity (see "One gate per worktree")
+#
+# SLOTS. HEXAGEN_GATE_SLOTS is a HOST-WIDE environment variable, never a config
+# field: the count is a property of the host, the lock directory is shared by
+# every checkout and project on it, and a lane invokes `gate-lock run` without
+# the `gate` bin, so nothing here reads an overlay. It is an integer from 1 to
+# 64, default 1; anything else (empty, zero, 65, 07, 2.5, text) exits 2 and names
+# the value. With 1 there is one lock, at the path above, exactly as before.
+# With N > 1 there are N locks: slot 1 is that same path and slot K (2..N) is
+# ${TMPDIR:-/tmp}/hexagen-gate.lock.slotK, each a directory with the five files
+# above, and an acquirer takes the FIRST free slot. A slot is judged, reclaimed
+# and released exactly as the single lock is. Busy (exit 75) means every slot is
+# held by a live, fresh holder. release, verify and heartbeat find the caller's
+# own slot by owner and pid, in any of the 64 possible slots, so they still work
+# if the variable changed while a lock was held.
+#
+# SLOT-OUT FILE. HEXAGEN_GATE_SLOT_OUT names a file; on a SUCCESSFUL acquire
+# (`acquire` and `run` alike) the slot number that was won is written to it,
+# after the one-gate-per-worktree check below, replacing the file atomically. A
+# refused acquire never writes it. A caller that cannot write it is refused too
+# (exit 2, the slot given back). Unset or empty means no file.
+#
+# ONE GATE PER WORKTREE. An acquirer computes its worktree identity once —
+# `git rev-parse --show-toplevel`, else `pwd -P` — and stores it in the slot's
+# `worktree` file. An identity that comes out empty (a deleted cwd is one way)
+# is refused: exit 2. After it wins a slot, and before it writes the slot-out
+# file, an acquirer looks for any OTHER live holder (pid alive, beat fresh) with
+# the same identity; if there is one it removes its own slot and exits 75 with
+# "same worktree" on stderr, which is not the "busy" line. Two acquirers racing
+# in one worktree can both refuse, never both proceed: each slot appears with
+# its identity already inside it, so whichever appears second sees the first.
+# "Lower slot wins" is deliberately not used — it is not race-safe.
+#
+# STAGING RULE. Any file that is later renamed into a slot is staged BESIDE the
+# slot, in the directory that holds the slot, never in TMPDIR by name: a rename
+# across filesystems is a copy, which a reader can observe half-written, and only
+# a rename within one directory is atomic. Today the slots and TMPDIR are the same
+# directory, so the two coincide; the code takes the slot's own directory so a
+# design that pools the slots elsewhere cannot break the rule. The heartbeat's new
+# beat follows it. The slot-out file is staged next to its own destination, as a
+# mktemp file there (`.slot-out.XXXXXX`), for the same reason.
+#
+# A removal of a slot is a rename aside, then a check that what was moved is
+# still the caller's own (owner and pid), then the delete. A slot that was
+# replaced between the caller's last look and the removal is therefore put back
+# (or left aside, never deleted), instead of being deleted on the strength of a
+# check that was already stale. Both removals — release, and the refused
+# acquire's give-back — go through that one routine.
 # The pid is the HOLDER's, and a holder only holds while it is alive: a lock
 # whose recorded pid is gone is reclaimed by the next acquire, so the pid has
 # to name a process that outlives the work. It is therefore never guessed.
@@ -87,8 +139,27 @@ set -u
 # directory must not be able to take those invocations with it.
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
-LOCK="${TMPDIR:-/tmp}/hexagen-gate.lock"
+BASE_LOCK="${TMPDIR:-/tmp}/hexagen-gate.lock"
+# The slot a function is working on. Slot 1 is the base path; a function that
+# looks at another slot points this at it.
+LOCK="$BASE_LOCK"
 BUSY=75
+MAX_SLOTS=64
+
+# `-` and not `:-`: a variable that is set but EMPTY is a value, and a bad one.
+SLOTS="${HEXAGEN_GATE_SLOTS-1}"
+case "$SLOTS" in
+  [1-9]|[1-9][0-9])
+    if [ "$SLOTS" -gt "$MAX_SLOTS" ]; then
+      printf '%s\n' "gate-lock: HEXAGEN_GATE_SLOTS must be an integer from 1 to $MAX_SLOTS: $SLOTS" >&2
+      exit 2
+    fi
+    ;;
+  *)
+    printf '%s\n' "gate-lock: HEXAGEN_GATE_SLOTS must be an integer from 1 to $MAX_SLOTS: $SLOTS" >&2
+    exit 2
+    ;;
+esac
 
 STALE_SECONDS="${HEXAGEN_GATE_STALE_SECONDS:-600}"
 case "$STALE_SECONDS" in
@@ -136,14 +207,74 @@ beat_is_stale() {
   [ $((now - $1)) -ge "$STALE_SECONDS" ]
 }
 
+# The path of slot $1 (1..MAX_SLOTS). Slot 1 is the base path, so one slot is
+# exactly the lock this script has always used.
+slot_path() {
+  if [ "$1" -eq 1 ]; then
+    printf '%s' "$BASE_LOCK"
+  else
+    printf '%s' "$BASE_LOCK.slot$1"
+  fi
+}
+
+# The slots an acquirer may take, as a word list: "1 2 ... SLOTS".
+slot_list() {
+  i=1
+  list=""
+  while [ "$i" -le "$1" ]; do
+    list="$list $i"
+    i=$((i + 1))
+  done
+  printf '%s' "$list"
+}
+
+# Point LOCK at the slot that names this caller's pid — and its lane, when one
+# is given (heartbeat has no lane). Every one of the possible slots is looked at,
+# not just the configured SLOTS, so a holder still finds its lock after the
+# variable changed under it. Returns 1, with LOCK on the base slot, when no slot
+# is the caller's: the callers then report on slot 1, which for one slot is the
+# message they have always printed.
+find_own_slot() {
+  s_lane="${1:-}"
+  s_i=1
+  while [ "$s_i" -le "$MAX_SLOTS" ]; do
+    s_path=$(slot_path "$s_i")
+    if [ -d "$s_path" ] &&
+      [ "$(cat "$s_path/pid" 2>/dev/null)" = "$recorded_pid" ] &&
+      { [ -z "$s_lane" ] || [ "$(cat "$s_path/owner" 2>/dev/null)" = "$s_lane" ]; }; then
+      LOCK="$s_path"
+      return 0
+    fi
+    s_i=$((s_i + 1))
+  done
+  LOCK="$BASE_LOCK"
+  return 1
+}
+
+# This caller's worktree identity, computed once per acquire: the top of the git
+# worktree it is in, else its physical directory. Empty is refused — a holder
+# with no identity could never be recognised as the second gate in one worktree,
+# so it fails closed rather than slipping past the rule.
+compute_identity() {
+  WORKTREE=$(git rev-parse --show-toplevel 2>/dev/null || pwd -P 2>/dev/null)
+  if [ -z "$WORKTREE" ]; then
+    printf '%s\n' "gate-lock: cannot tell which worktree this is — git rev-parse --show-toplevel and pwd -P both came back empty (a deleted working directory is one way); refused, since one gate per worktree cannot be enforced without it" >&2
+    exit 2
+  fi
+}
+
 # mkdir the lock and write it. Creation is atomic: the metadata is written
 # into a temp directory first, and `mv` moves the FINISHED directory onto the
 # lock name — the rename is the only moment the name exists. A lock without
 # metadata can therefore only be one that was abandoned, never one still
 # being written: the old mkdir-then-write ordering had exactly that window,
 # and a contender that reclaimed the half-written name left its creator
-# writing into a directory it no longer owned. A failed `mv` means the name
-# is held (a directory rename onto a non-empty directory fails), i.e. busy.
+# writing into a directory it no longer owned. `mv dir existing-dir` does not
+# fail: it moves `dir` INSIDE the existing directory (BSD and GNU alike, with no
+# -T). So a contender that lost the name has its candidate nested inside the
+# winner's lock, and that nested copy is looked for and removed here — it is the
+# contender's own, and left there it would be an unexplained entry in a live
+# lock. A candidate that landed nested means the name was held, i.e. busy.
 # Returns 0 only if the lock is verifiably ours.
 try_create() {
   cand="$LOCK.cand.$$"
@@ -156,6 +287,7 @@ try_create() {
   printf '%s\n' "$now" > "$cand/started" 2>/dev/null || { rm -rf "$cand"; return 1; }
   printf '%s\n' "$recorded_pid" > "$cand/pid" 2>/dev/null || { rm -rf "$cand"; return 1; }
   printf '%s\n' "$now" > "$cand/beat" 2>/dev/null || { rm -rf "$cand"; return 1; }
+  printf '%s\n' "$WORKTREE" > "$cand/worktree" 2>/dev/null || { rm -rf "$cand"; return 1; }
   # Test hook (HEXAGEN_GATE_TEST_PAUSE_BEFORE_MV): a pause point between the
   # fully written temp directory and the rename, so a test can prove no partial
   # lock ever appears at the name and can race a contender in.
@@ -164,13 +296,41 @@ try_create() {
     while [ -f "$HEXAGEN_GATE_TEST_PAUSE_BEFORE_MV" ]; do sleep 1; done
   fi
   if mv "$cand" "$LOCK" 2>/dev/null; then
-    # Read-back: the name holds OUR metadata — a rename cannot have replaced
-    # a non-empty directory, so nothing could have taken the name in between.
+    # The name was already a directory: the candidate went INSIDE it. It is
+    # ours, so it is removed from the holder's lock, and the acquire failed.
+    if [ -d "$LOCK/${cand##*/}" ]; then
+      rm -rf "$LOCK/${cand##*/}" 2>/dev/null
+      return 1
+    fi
+    # Read-back: the name holds OUR metadata, not whatever took it between.
     [ "$(cat "$LOCK/pid" 2>/dev/null)" = "$recorded_pid" ] || return 1
     return 0
   fi
   rm -rf "$cand"
   return 1
+}
+
+# Put a moved-aside lock back under its name — only if the name is free, and only
+# if it really landed there. `mv dir existing-dir` nests instead of failing, so
+# a lock that was created between the test and the rename swallows the aside copy
+# as `$LOCK/<aside name>`; that is detected and the copy is moved back out to
+# where it was, and the restore is reported as not done (the caller then says it
+# is left aside, and nothing is deleted). Returns 0 only when it is restored.
+restore_aside() {
+  ra_base=${1##*/}
+  [ ! -e "$LOCK" ] || return 1
+  # Test hook (HEXAGEN_GATE_TEST_PAUSE_IN_RESTORE): the name has just been seen
+  # free, the rename has not happened — the window a new lock can take.
+  if [ -n "${HEXAGEN_GATE_TEST_PAUSE_IN_RESTORE:-}" ]; then
+    touch "$HEXAGEN_GATE_TEST_PAUSE_IN_RESTORE" 2>/dev/null
+    while [ -f "$HEXAGEN_GATE_TEST_PAUSE_IN_RESTORE" ]; do sleep 1; done
+  fi
+  mv "$1" "$LOCK" 2>/dev/null || return 1
+  if [ -d "$LOCK/$ra_base" ]; then
+    mv "$LOCK/$ra_base" "$1" 2>/dev/null
+    return 1
+  fi
+  return 0
 }
 
 # Move a judged-stale lock aside and delete it — but only the lock that was
@@ -188,9 +348,17 @@ take_stale() {
   judged_owner="${1:-}"
   judged_pid="${2:-}"
   judged_beat="${3:-}"
-  # The pass suffix keeps a copy left aside by an earlier pass from blocking
-  # this pass's rename (a directory rename onto a non-empty name fails).
-  aside="$LOCK.reclaim.$$.${4:-x}"
+  # An aside name that is not already taken. A copy left aside by an earlier pass
+  # or by an earlier process with this pid (pids are reused) is somebody's lock:
+  # it is never deleted to make room, and `mv` onto an existing directory nests
+  # rather than fails (which is also why restore_aside checks), so the name is
+  # probed for a free one first.
+  aside_n=0
+  aside="$LOCK.reclaim.$$.${4:-x}.$aside_n"
+  while [ -e "$aside" ]; do
+    aside_n=$((aside_n + 1))
+    aside="$LOCK.reclaim.$$.${4:-x}.$aside_n"
+  done
   if ! mv "$LOCK" "$aside" 2>/dev/null; then
     return 1
   fi
@@ -209,7 +377,7 @@ take_stale() {
     touch "$HEXAGEN_GATE_TEST_PAUSE_BEFORE_RESTORE" 2>/dev/null
     while [ -f "$HEXAGEN_GATE_TEST_PAUSE_BEFORE_RESTORE" ]; do sleep 1; done
   fi
-  if [ ! -d "$LOCK" ] && mv "$aside" "$LOCK" 2>/dev/null; then
+  if restore_aside "$aside"; then
     printf '%s\n' "gate-lock: reclaim aborted — the renamed lock is not the one that was judged stale; restored it at $LOCK" >&2
     return 1
   fi
@@ -236,51 +404,244 @@ require_caller_pid() {
   exit 2
 }
 
+# Remove the slot at LOCK — but only while it is still the caller's own (owner
+# $1, pid $2). Returns 0 when it was removed, 1 when it is not the caller's (and
+# is left alone), 2 when the removal itself failed.
+#
+# A check followed by `rm -rf` is a check that can be stale by the time the rm
+# runs: another holder can reclaim the name and recreate it in between, and the
+# rm then deletes a lock that was never judged. So the slot is RENAMED aside
+# first — the rename is the arbitration, and only one party can win it — and the
+# owner and pid are re-read from what was actually moved. Only a match is
+# deleted; anything else is put back when the name is still free, and left aside
+# (never deleted) when it is not, as take_stale does. Release and the refused
+# acquire's give-back both come through here, so neither can delete a lock that
+# is not theirs.
+drop_own() {
+  d_owner="$1"
+  d_pid="$2"
+  [ "$(cat "$LOCK/owner" 2>/dev/null)" = "$d_owner" ] || return 1
+  [ "$(cat "$LOCK/pid" 2>/dev/null)" = "$d_pid" ] || return 1
+  # Test hook (HEXAGEN_GATE_TEST_PAUSE_BEFORE_DROP): the check above has passed,
+  # the removal below has not started — the window a replacement lock can take.
+  if [ -n "${HEXAGEN_GATE_TEST_PAUSE_BEFORE_DROP:-}" ]; then
+    touch "$HEXAGEN_GATE_TEST_PAUSE_BEFORE_DROP" 2>/dev/null
+    while [ -f "$HEXAGEN_GATE_TEST_PAUSE_BEFORE_DROP" ]; do sleep 1; done
+  fi
+  # An aside name that is not already taken. An earlier removal may have left a
+  # saved lock at a name built from this pid (pids are reused), and that is
+  # somebody's lock: it is never deleted to make room, and `mv` onto an
+  # existing directory would nest rather than fail, so the name is probed first.
+  gone_n=0
+  gone="$LOCK.gone.$$.$gone_n"
+  while [ -e "$gone" ]; do
+    gone_n=$((gone_n + 1))
+    gone="$LOCK.gone.$$.$gone_n"
+  done
+  if ! mv "$LOCK" "$gone" 2>/dev/null; then
+    # Nothing moved. If the name is still this caller's lock, the rename was
+    # refused (permissions, I/O) and that is a failed removal; if not, it was
+    # taken or replaced and is not this caller's to touch.
+    if [ "$(cat "$LOCK/owner" 2>/dev/null)" = "$d_owner" ] &&
+      [ "$(cat "$LOCK/pid" 2>/dev/null)" = "$d_pid" ]; then
+      return 2
+    fi
+    return 1
+  fi
+  if [ "$(cat "$gone/owner" 2>/dev/null)" = "$d_owner" ] &&
+    [ "$(cat "$gone/pid" 2>/dev/null)" = "$d_pid" ]; then
+    if rm -rf "$gone" 2>/dev/null && [ ! -e "$gone" ]; then
+      return 0
+    fi
+    # The delete failed (permissions, I/O). What is left is still this caller's
+    # lock, so it goes back under its name: it must linger where a liveness
+    # reclaim can find it, not hide under a name nobody looks at.
+    if [ -d "$gone" ]; then
+      restore_aside "$gone" >/dev/null
+    fi
+    return 2
+  fi
+  if restore_aside "$gone"; then
+    printf '%s\n' "gate-lock: removal aborted — the lock was replaced after it was checked; restored it at $LOCK" >&2
+    return 1
+  fi
+  printf '%s\n' "gate-lock: removal aborted — the lock was replaced after it was checked and the name is taken; the moved copy is left at $gone and never deleted" >&2
+  return 1
+}
+
+# Is a OTHER live holder in this worktree? Looks at every possible slot but the
+# one in LOCK. Live means the pid answers and the beat is fresh — the same
+# judgement acquire makes before it calls a lock busy.
+other_same_worktree() {
+  o_i=1
+  while [ "$o_i" -le "$MAX_SLOTS" ]; do
+    o_path=$(slot_path "$o_i")
+    if [ "$o_path" != "$LOCK" ] && [ -d "$o_path" ] &&
+      [ "$(cat "$o_path/worktree" 2>/dev/null)" = "$WORKTREE" ]; then
+      o_pid=$(cat "$o_path/pid" 2>/dev/null)
+      o_beat=$(cat "$o_path/beat" 2>/dev/null)
+      if pid_alive "$o_pid" && ! beat_is_stale "$o_beat"; then
+        other_owner=$(cat "$o_path/owner" 2>/dev/null)
+        other_pid=$o_pid
+        return 0
+      fi
+    fi
+    o_i=$((o_i + 1))
+  done
+  return 1
+}
+
+# Give the slot at LOCK back after a refusal, and say how it went: prints
+# "…was given back" or "could not give slot N back" on stderr, never a claim that
+# is not true. Returns the removal's own status (0 given back). The refusal's
+# exit code is the caller's and does not change.
+give_back() {
+  gb_lane=$1
+  gb_slot=$2
+  # drop_own's stderr is kept: a give-back that leaves a copy aside, or fails,
+  # must be said. Its stdout is not used.
+  drop_own "$gb_lane" "$recorded_pid" >/dev/null
+  gb_rc=$?
+  case $gb_rc in
+    0) printf '%s\n' "gate-lock: slot $gb_slot was given back" >&2 ;;
+    2) printf '%s\n' "gate-lock: could not give slot $gb_slot back — the removal failed, so it may still be held at $LOCK until its holder is judged dead" >&2 ;;
+    *) printf '%s\n' "gate-lock: could not give slot $gb_slot back — it no longer names $gb_lane (pid $recorded_pid), so it was left alone" >&2 ;;
+  esac
+  return $gb_rc
+}
+
+# Won a slot (LOCK): apply the worktree rule, then publish the slot. Both refusals
+# give the slot back first, and only while it is still this caller's own.
+finish_acquire() {
+  f_lane=$1
+  f_slot=$2
+  if other_same_worktree; then
+    give_back "$f_lane" "$f_slot"
+    printf '%s\n' "gate-lock: same worktree — $f_lane was refused: ${other_owner:-unknown} (pid $other_pid) already holds a gate slot from $WORKTREE, and there is one gate per worktree; sleep and retry (75)" >&2
+    exit $BUSY
+  fi
+  if [ -n "${HEXAGEN_GATE_SLOT_OUT:-}" ]; then
+    # The staging file is made by mktemp, beside the destination (the staging
+    # rule above), with an unpredictable name and O_EXCL semantics: a name built
+    # from the pid could be pre-planted as a symlink in a shared directory, and
+    # `>` would follow it and truncate whatever it points at. mktemp with an
+    # XXXXXX template is the same on BSD, macOS and GNU, and is not a bashism.
+    case "$HEXAGEN_GATE_SLOT_OUT" in
+      */*) f_dir=${HEXAGEN_GATE_SLOT_OUT%/*} ;;
+      *) f_dir=. ;;
+    esac
+    f_tmp=""
+    # `mv file existing-dir` moves the file INSIDE the directory and succeeds, so
+    # a slot-out path that exists and is not a regular file is refused before
+    # anything is written, and the result is read back after the rename: a gate
+    # that is told it holds a slot must be able to find which one.
+    if [ -e "$HEXAGEN_GATE_SLOT_OUT" ] && [ ! -f "$HEXAGEN_GATE_SLOT_OUT" ]; then
+      f_bad=1
+    elif f_tmp=$(mktemp "${f_dir:-/}/.slot-out.XXXXXX" 2>/dev/null) &&
+      { printf '%s\n' "$f_slot" > "$f_tmp" && mv "$f_tmp" "$HEXAGEN_GATE_SLOT_OUT"; } 2>/dev/null &&
+      [ -f "$HEXAGEN_GATE_SLOT_OUT" ] && [ "$(cat "$HEXAGEN_GATE_SLOT_OUT" 2>/dev/null)" = "$f_slot" ]; then
+      f_bad=0
+    else
+      f_bad=1
+    fi
+    if [ "$f_bad" -eq 1 ]; then
+      [ -z "$f_tmp" ] || rm -f "$f_tmp" 2>/dev/null
+      give_back "$f_lane" "$f_slot"
+      printf '%s\n' "gate-lock: cannot write the slot-out file $HEXAGEN_GATE_SLOT_OUT — refused" >&2
+      exit 2
+    fi
+  fi
+  if [ "$SLOTS" -gt 1 ]; then
+    printf '%s\n' "gate-lock: acquired by $f_lane (pid $recorded_pid, slot $f_slot)"
+  else
+    printf '%s\n' "gate-lock: acquired by $f_lane (pid $recorded_pid)"
+  fi
+}
+
 acquire() {
   lane=$1
+  compute_identity
+  slots=$(slot_list "$SLOTS")
   pass=0
   while :; do
     pass=$((pass + 1))
-    if try_create "$lane"; then
-      printf '%s\n' "gate-lock: acquired by $lane (pid $recorded_pid)"
+    won=0
+    waiting=0
+    reclaimed=0
+    busy_owner=""
+    busy_pid=""
+    busy_beat=""
+    busy_seen=0
+    for slot in $slots; do
+      LOCK=$(slot_path "$slot")
+      if try_create "$lane"; then
+        won=1
+        break
+      fi
+      pid=$(cat "$LOCK/pid" 2>/dev/null)
+      beat=$(cat "$LOCK/beat" 2>/dev/null)
+      owner=$(cat "$LOCK/owner" 2>/dev/null)
+      # Creation is atomic, so a lock without pid or beat cannot be mid-write —
+      # it is abandoned (or the filesystem is failing). Re-read instead of
+      # judging on the first pass anyway, bounded: an abandoned one is reclaimed
+      # at pass 3. The second wait covers a pid present but beat missing — a
+      # live holder always has a beat, so that too reads as abandoned.
+      if [ -z "$pid" ] && [ -z "$beat" ] && [ "$pass" -lt 3 ]; then
+        waiting=1
+        continue
+      fi
+      if [ -n "$pid" ] && pid_alive "$pid" && [ -z "$beat" ] && [ "$pass" -lt 3 ]; then
+        waiting=1
+        continue
+      fi
+      if [ -n "$pid" ] && pid_alive "$pid" && ! beat_is_stale "$beat"; then
+        if [ "$busy_seen" -eq 0 ]; then
+          busy_seen=1
+          busy_owner=$owner
+          busy_pid=$pid
+          busy_beat=$beat
+        fi
+        continue
+      fi
+      if [ "$pass" -ge 5 ]; then
+        # Five passes without winning the name: someone else is reclaiming it.
+        if [ "$busy_seen" -eq 0 ]; then
+          busy_seen=1
+          busy_owner=$owner
+          busy_pid=${pid:-none}
+          busy_beat=${beat:-none}
+        fi
+        continue
+      fi
+      if [ -n "$pid" ] && pid_alive "$pid"; then
+        printf '%s\n' "gate-lock: reclaiming — owner ${owner:-unknown} (pid $pid) has a stale or missing heartbeat (beat ${beat:-missing}, threshold ${STALE_SECONDS}s)"
+      else
+        printf '%s\n' "gate-lock: reclaiming — owner ${owner:-unknown} (pid ${pid:-none}) is not alive"
+      fi
+      # Test hook (HEXAGEN_GATE_TEST_PAUSE_AFTER_INSPECT): a pause between judging
+      # the lock stale and moving it, so a test can replace the lock in that
+      # window and prove the reclaimer never deletes a lock it did not judge.
+      if [ -n "${HEXAGEN_GATE_TEST_PAUSE_AFTER_INSPECT:-}" ]; then
+        touch "$HEXAGEN_GATE_TEST_PAUSE_AFTER_INSPECT" 2>/dev/null
+        while [ -f "$HEXAGEN_GATE_TEST_PAUSE_AFTER_INSPECT" ]; do sleep 1; done
+      fi
+      take_stale "$owner" "${pid:-}" "${beat:-}" "$pass"
+      reclaimed=1
+      break
+    done
+    if [ "$won" -eq 1 ]; then
+      finish_acquire "$lane" "$slot"
       return 0
     fi
-    pid=$(cat "$LOCK/pid" 2>/dev/null)
-    beat=$(cat "$LOCK/beat" 2>/dev/null)
-    owner=$(cat "$LOCK/owner" 2>/dev/null)
-    # Creation is atomic, so a lock without pid or beat cannot be mid-write —
-    # it is abandoned (or the filesystem is failing). Re-read instead of
-    # judging on the first pass anyway, bounded: an abandoned one is reclaimed
-    # at pass 3. The second wait covers a pid present but beat missing — a
-    # live holder always has a beat, so that too reads as abandoned.
-    if [ -z "$pid" ] && [ -z "$beat" ] && [ "$pass" -lt 3 ]; then
+    # A reclaim attempt, won or lost, is followed by another look at once, as it
+    # always was; a slot still being written or waiting on a beat is re-read in
+    # a second; and only when every slot is held by someone live is it busy.
+    [ "$reclaimed" -eq 1 ] && continue
+    if [ "$waiting" -eq 1 ]; then
       sleep 1
       continue
     fi
-    if [ -n "$pid" ] && pid_alive "$pid" && [ -z "$beat" ] && [ "$pass" -lt 3 ]; then
-      sleep 1
-      continue
-    fi
-    if [ -n "$pid" ] && pid_alive "$pid" && ! beat_is_stale "$beat"; then
-      busy_exit "$owner" "$pid" "$beat"
-    fi
-    if [ "$pass" -ge 5 ]; then
-      # Five passes without winning the name: someone else is reclaiming it.
-      busy_exit "$owner" "${pid:-none}" "${beat:-none}"
-    fi
-    if [ -n "$pid" ] && pid_alive "$pid"; then
-      printf '%s\n' "gate-lock: reclaiming — owner ${owner:-unknown} (pid $pid) has a stale or missing heartbeat (beat ${beat:-missing}, threshold ${STALE_SECONDS}s)"
-    else
-      printf '%s\n' "gate-lock: reclaiming — owner ${owner:-unknown} (pid ${pid:-none}) is not alive"
-    fi
-    # Test hook (HEXAGEN_GATE_TEST_PAUSE_AFTER_INSPECT): a pause between judging
-    # the lock stale and moving it, so a test can replace the lock in that
-    # window and prove the reclaimer never deletes a lock it did not judge.
-    if [ -n "${HEXAGEN_GATE_TEST_PAUSE_AFTER_INSPECT:-}" ]; then
-      touch "$HEXAGEN_GATE_TEST_PAUSE_AFTER_INSPECT" 2>/dev/null
-      while [ -f "$HEXAGEN_GATE_TEST_PAUSE_AFTER_INSPECT" ]; do sleep 1; done
-    fi
-    take_stale "$owner" "${pid:-}" "${beat:-}" "$pass"
+    busy_exit "$busy_owner" "$busy_pid" "$busy_beat"
   done
 }
 
@@ -320,7 +681,7 @@ acquire() {
 #   command has been reaped. `wait` then has no child left (`wait: pid N is not
 #   a child of this shell`) and the `exit 143` runs without ever entering the
 #   EXIT trap. Observed 6 times in 6: exit 143, no "released by", the lock left
-#   at the name with all four of its files, and the heartbeat still looping
+#   at the name with all of its files, and the heartbeat still looping
 #   under a pid that had died — a lock the next acquire reclaims on pid-death
 #   and an orphan refreshing a dead holder's beat. A CI timeout that sends TERM
 #   twice is exactly that.
@@ -561,6 +922,7 @@ run_locked() {
 # anything of ITS OWN to drop, and asking must not print a refusal about a lock
 # that belongs to a run still going somewhere else.
 lock_is_ours() {
+  find_own_slot "$1" || return 1
   [ -d "$LOCK" ] || return 1
   [ "$(cat "$LOCK/owner" 2>/dev/null)" = "$1" ] || return 1
   [ "$(cat "$LOCK/pid" 2>/dev/null)" = "$recorded_pid" ] || return 1
@@ -572,6 +934,7 @@ lock_is_ours() {
 # happens only when the lock still names this owner AND this caller's pid.
 # Anything else warns and fails, and leaves the lock alone.
 release() {
+  find_own_slot "$1"
   if [ ! -d "$LOCK" ]; then
     printf '%s\n' "gate-lock: nothing to release — no lock at $LOCK"
     return 0
@@ -584,11 +947,21 @@ release() {
   fi
   # The removal's status is the release's status: a removal that failed on
   # permissions or I/O must be reported, not announced as released — the lock
-  # would linger until a liveness reclaim picked it up.
-  if ! rm -rf "$LOCK"; then
-    printf '%s\n' "gate-lock: release failed — could not remove $LOCK" >&2
-    return 1
-  fi
+  # would linger until a liveness reclaim picked it up. The owner and pid are
+  # checked AGAIN inside the removal, immediately before the lock is touched
+  # (see drop_own): the check above is only for the message.
+  drop_own "$1" "$recorded_pid"
+  case $? in
+    0) ;;
+    2)
+      printf '%s\n' "gate-lock: release failed — could not remove $LOCK" >&2
+      return 1
+      ;;
+    *)
+      printf '%s\n' "gate-lock: release refused — the lock at $LOCK no longer names $1 (pid $recorded_pid); it was left alone" >&2
+      return 1
+      ;;
+  esac
   printf '%s\n' "gate-lock: released by $1 (pid $recorded_pid)"
   return 0
 }
@@ -599,6 +972,7 @@ release() {
 # unprotected. This holder is the lane AND the caller's pid, exactly what
 # release requires.
 verify() {
+  find_own_slot "$1"
   if [ ! -d "$LOCK" ]; then
     printf '%s\n' "gate-lock: verify — no lock at $LOCK" >&2
     return 1
@@ -613,8 +987,21 @@ verify() {
 }
 
 status() {
+  if [ "$SLOTS" -eq 1 ]; then
+    status_slot ""
+    return 0
+  fi
+  for st_slot in $(slot_list "$SLOTS"); do
+    LOCK=$(slot_path "$st_slot")
+    status_slot "slot $st_slot: "
+  done
+  return 0
+}
+
+# One slot's line, at LOCK. A prefix names the slot when there is more than one.
+status_slot() {
   if [ ! -d "$LOCK" ]; then
-    printf '%s\n' "gate-lock: free (no lock at $LOCK)"
+    printf '%s\n' "gate-lock: $1free (no lock at $LOCK)"
     return 0
   fi
   owner=$(cat "$LOCK/owner" 2>/dev/null)
@@ -631,7 +1018,7 @@ status() {
   else
     heart="heartbeat fresh (beat $beat)"
   fi
-  printf '%s\n' "gate-lock: held by ${owner:-unknown} (started ${started:-?}, $life, $heart)"
+  printf '%s\n' "gate-lock: $1held by ${owner:-unknown} (started ${started:-?}, $life, $heart)"
   return 0
 }
 
@@ -641,6 +1028,7 @@ status() {
 # tells the holder's loop (and the gate, at its next step boundary) that the
 # lock is lost.
 heartbeat() {
+  find_own_slot ""
   if [ ! -d "$LOCK" ]; then
     printf '%s\n' "gate-lock: heartbeat — no lock at $LOCK; nothing to refresh" >&2
     return 1
@@ -660,7 +1048,7 @@ heartbeat() {
   # saw an empty value 10 times in 7 seconds.
   #
   # The new value is staged BESIDE THE LOCK, not inside it, so the lock
-  # directory holds nothing but the four files try_create wrote: a removal never
+  # directory holds nothing but the five files try_create wrote: a removal never
   # has to unlink a file that is still being written, and the only entry that
   # can appear after creation is the finished one this rename delivers.
   # Same filesystem by construction — the lock is itself
@@ -677,7 +1065,7 @@ heartbeat() {
   # directory was read-only from try_create onward, with "nothing in it for a
   # removal to race" — and the directory this function writes into is exactly
   # the thing a removal races.
-  beat_new="${TMPDIR:-/tmp}/hexagen-gate.beatnew.$$"
+  beat_new="${LOCK%/*}/hexagen-gate.beatnew.$$"
   if ! printf '%s\n' "$(date +%s)" > "$beat_new" 2>/dev/null; then
     printf '%s\n' "gate-lock: heartbeat — cannot write $LOCK/beat" >&2
     return 1

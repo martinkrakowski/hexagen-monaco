@@ -14,6 +14,13 @@ import { isFile } from "../internal/fs-probe.js";
 import { loadConfigFor } from "../internal/project.js";
 import { formatReport, runDoctor } from "../doctor/doctor.js";
 
+/**
+ * The process environment, taken whole: `HEXAGEN_GATE_SLOTS` is a host-wide
+ * variable no task declares, so a `process.env.X` member access would trip
+ * `turbo/no-undeclared-env-vars` (the same reason sweep takes it whole).
+ */
+const processEnv: Readonly<Record<string, string | undefined>> = process.env;
+
 const { root, config, present, problems, deprecations } = await loadConfigFor();
 
 /** `git worktree` succeeding is not the same as `git` existing. */
@@ -55,6 +62,7 @@ const { findings, exitCode } = await runDoctor(
     runRemote: (alias, argv, timeoutMs) =>
       runRemote(alias, argv, timeoutMs, { cwd: root }),
     localUserEmail,
+    gateSlots: () => processEnv["HEXAGEN_GATE_SLOTS"],
   },
 );
 
