@@ -1960,4 +1960,27 @@ describe("the gate lock: slots and one gate per worktree", () => {
     expect(result.stderr).toContain("slot 1 was given back");
     expect(readdirSync(out)).toEqual([]);
   });
+
+  test("a heartbeat stages its new beat beside the slot, in the directory that holds the slot, not inside it", async () => {
+    const dir = scratch();
+    seedLock(dir, { owner: "lane-1", slot: 1 });
+    seedLock(dir, { owner: "lane-a", slot: 2, pid: 434343 });
+    const marker = join(dir, "paused-before-beat-mv");
+    const beat = startLockIn(dir, ["heartbeat"], {
+      ...slotsEnv(2),
+      HEXAGEN_GATE_TEST_PAUSE_BEFORE_BEAT_MV: marker,
+    });
+    await waitForFile(marker);
+    const staged = `hexagen-gate.beatnew.${beat.child.pid}`;
+    expect(readdirSync(dir)).toContain(staged);
+    expect(readdirSync(slotDir(dir, 2)).sort()).toEqual([
+      "beat",
+      "owner",
+      "pid",
+      "started",
+    ]);
+    rmSync(marker);
+    expect((await beat.done).status).toBe(0);
+    expect(readdirSync(dir).filter((n) => n.includes(".beatnew."))).toEqual([]);
+  });
 });

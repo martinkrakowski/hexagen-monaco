@@ -57,6 +57,15 @@
 # its identity already inside it, so whichever appears second sees the first.
 # "Lower slot wins" is deliberately not used — it is not race-safe.
 #
+# STAGING RULE. Any file that is later renamed into a slot is staged BESIDE the
+# slot, in the directory that holds the slot, never in TMPDIR by name: a rename
+# across filesystems is a copy, which a reader can observe half-written, and only
+# a rename within one directory is atomic. Today the slots and TMPDIR are the same
+# directory, so the two coincide; the code takes the slot's own directory so a
+# design that pools the slots elsewhere cannot break the rule. The heartbeat's new
+# beat follows it. The slot-out file is staged next to its own destination
+# (`<path>.tmp.<pid>`) for the same reason.
+#
 # A removal of a slot is a rename aside, then a check that what was moved is
 # still the caller's own (owner and pid), then the delete. A slot that was
 # replaced between the caller's last look and the removal is therefore put back
@@ -1039,7 +1048,7 @@ heartbeat() {
   # directory was read-only from try_create onward, with "nothing in it for a
   # removal to race" — and the directory this function writes into is exactly
   # the thing a removal races.
-  beat_new="${TMPDIR:-/tmp}/hexagen-gate.beatnew.$$"
+  beat_new="${LOCK%/*}/hexagen-gate.beatnew.$$"
   if ! printf '%s\n' "$(date +%s)" > "$beat_new" 2>/dev/null; then
     printf '%s\n' "gate-lock: heartbeat — cannot write $LOCK/beat" >&2
     return 1
