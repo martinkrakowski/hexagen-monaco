@@ -110,7 +110,7 @@ const SHELL_BINS = EXPECTED.filter((bin) => !bin.path.endsWith(".js")).map(
 );
 
 describe("the bin list (OW-D14)", () => {
-  it("declares exactly the seventeen canonical bins, and no others", () => {
+  it(`declares exactly the ${EXPECTED.length} canonical bins, and no others`, () => {
     expect(Object.keys(manifest.bin).sort()).toEqual(
       EXPECTED.map((bin) => bin.name).sort(),
     );
