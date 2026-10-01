@@ -184,7 +184,8 @@ export async function fetchAllThreads(
         body,
         path: typeof n.path === "string" ? n.path : "",
         line: typeof n.line === "number" ? n.line : null,
-        originalLine: typeof n.originalLine === "number" ? n.originalLine : null,
+        originalLine:
+          typeof n.originalLine === "number" ? n.originalLine : null,
         isOutdated: n.isOutdated === true,
       });
     }
