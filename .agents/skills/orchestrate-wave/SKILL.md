@@ -162,7 +162,7 @@ status wins and your summary says so.
 
 - *If a finding is wrong, say so with the mechanism rather than changing code to match it.* Counters
   the failure that rots a suite quietly — an assertion weakened until it passes.
-- *Run the gate in the foreground and read its exit code. A task you launched is not a result.* Two
+- *Run every verification command in the foreground and read its exit code. A task you launched is not a result.* Two
   seats reported green gates they had started and never watched; one of those branches did not
   typecheck.
 

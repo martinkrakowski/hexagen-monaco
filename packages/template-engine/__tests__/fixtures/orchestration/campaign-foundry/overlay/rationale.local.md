@@ -432,6 +432,14 @@ From `source/references/rationale.md` — the remediation step that carried the 
    not. It ran four times on 2026-09-16 (0 stranded each time) and is cheap enough to be
    unconditional; a killed verification is the one moment the working tree can be silently wrong.
 
+From `source/SKILL.md` lines 109–113 — the two closing brief lines. The generic skill reworded this line ("every verification command") so a `targeted-only` lane is not told to run a gate it must not run; the original is kept verbatim so the pinned snapshot stays covered.
+
+- *If a finding is wrong, say so with the mechanism rather than changing code to match it.* Counters
+  the failure that rots a suite quietly — an assertion weakened until it passes.
+- *Run the gate in the foreground and read its exit code. A task you launched is not a result.* Two
+  seats reported green gates they had started and never watched; one of those branches did not
+  typecheck.
+
 ## Originals of the two paragraphs OW4 rewrote to name the shipped briefs
 
 The generic skill now says "Template A (in the shipped reference)" rather than "Template A (in the
