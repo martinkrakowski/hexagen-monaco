@@ -216,9 +216,11 @@ async function checkLaneHost(
   // P-D2: a usage reader that is `lane-watch` is invoked with `--server`, taken
   // from this host's `server`. Nothing is run: the argv alone says the pairing is
   // incomplete, and the missing key would otherwise surface mid-wave as a refusal.
-  const usage = host.usage?.[0];
+  // The bin is matched at ANY index, so a launcher (`npx`, `yarn`, `env X=1`)
+  // in front of it still names it.
+  const usage = host.usage;
   if (usage !== undefined && host.server === undefined) {
-    if (basename(usage) === LANE_WATCH_BIN) {
+    if (usage.some((word) => basename(word) === LANE_WATCH_BIN)) {
       push(
         "warn",
         `usage names lane-watch but the host has no \`server\`. The reader is invoked as ` +

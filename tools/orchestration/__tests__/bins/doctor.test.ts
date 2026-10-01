@@ -879,6 +879,35 @@ describe("P-D2: a usage that names lane-watch needs the host's server", () => {
     expect(warns(findings, "lane-host midnight").message).toContain(MESSAGE);
   });
 
+  test.each([
+    ["npx", "[npx, hexagen-orchestration-lane-watch, usage]"],
+    ["yarn", "[yarn, hexagen-orchestration-lane-watch, usage]"],
+    ["env", "[env, X=1, hexagen-orchestration-lane-watch, usage]"],
+    [
+      "a path under a launcher",
+      "[node, /opt/bin/hexagen-orchestration-lane-watch, usage]",
+    ],
+  ])(
+    "a launcher form (%s) still names lane-watch: WARN, not the legacy INFO",
+    async (_name, argv) => {
+      const { findings } = await doctor(
+        "repo: owner/demo\n" + host(argv) + seat,
+      );
+      expect(warns(findings, "lane-host midnight").message).toContain(MESSAGE);
+      expect(findings.filter((f) => f.severity === "info")).toEqual([]);
+    },
+  );
+
+  test("a word that merely contains the bin name does not count", async () => {
+    const { findings } = await doctor(
+      "repo: owner/demo\n" +
+        host("[my-hexagen-orchestration-lane-watch-x, usage]") +
+        seat,
+    );
+    expect(findings.filter((f) => f.severity === "warn")).toEqual([]);
+    expect(findings.filter((f) => f.severity === "info")).toHaveLength(1);
+  });
+
   test("says nothing when the host declares a server", async () => {
     const { findings } = await doctor(
       "repo: owner/demo\n" +
