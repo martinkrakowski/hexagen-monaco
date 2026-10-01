@@ -353,7 +353,9 @@ that did not happen.
 3. **Remediate.** Merge verified findings into a fix brief (Template C, in
    `references/briefs.md`), listing refuted items with reasons. For a fix round where the lane commits only,
    draft the brief with `hexagen-orchestration-fix-brief --pr <n> --round <k> …` instead: it renders Template E
-   from the PR's unresolved threads, and you set each item's `Disposition:` before dispatch. **After any interrupted or killed
+   from the PR's unresolved threads, and you set each item's `Disposition:` before dispatch. Findings from the
+   read-only pre-PR review that were never posted as threads are not in that output: append them yourself as
+   additional items in the same layout. Template C remains the brief for a fix lane that pushes. **After any interrupted or killed
    `mutate:verify`, scan for a stranded mutation before anything commits.** (why:
    [rationale](references/rationale.md#3-remediate))
 

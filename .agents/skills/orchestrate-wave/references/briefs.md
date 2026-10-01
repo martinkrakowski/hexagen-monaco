@@ -143,7 +143,8 @@ change here is a change there.
 # Lane <LANE> — fix round <ROUND> (review threads on PR #<PR>)
 
 - Worktree: <WORKTREE>
-- Branch: <BRANCH>, at <TIP>. Commit only: add ONE commit. Never push, open a PR, amend or rebase,
+- Branch: <BRANCH>, at <TIP>. Commit only. Commit green states only (one commit per item is fine);
+  show each red in the report, not in a commit. Never push, open a PR, amend or rebase,
   and never bypass a hook (no `--no-verify`, no `-c core.hooksPath`).
 - Environment, must-nots and scratch directory: as in this lane's own brief.
 
@@ -166,10 +167,10 @@ Disposition: <fix | refute with reason — the orchestrator fills this in>
 <the commands this round must run, in the foreground>
 
 ## Commit
-One commit. Owned paths only. No trailers.
+Green states only; one commit per item is fine. Owned paths only. No trailers.
 
 ## Report
-The commit SHA, each item's result (fixed, or refuted with the mechanism), and the exit code of each
+The commit SHAs, each item's result (fixed, or refuted with the mechanism), and the exit code of each
 verification command.
 
 If a finding is wrong, say so with the mechanism rather than changing code to match it.
