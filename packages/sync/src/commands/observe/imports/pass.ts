@@ -41,6 +41,8 @@ export interface ImportPassOptions {
   now: () => number;
   start: number;
   notes: string[];
+  /** Per-file read limit; defaults to MAX_FILE_BYTES. A test seam, not a flag. */
+  maxFileBytes?: number;
 }
 
 export interface EdgeRow {
@@ -74,6 +76,7 @@ export async function runImportPass(
 ): Promise<ImportPassResult> {
   const { root, files, notes } = options;
   const fileSet = new Set(files);
+  const maxFileBytes = options.maxFileBytes ?? MAX_FILE_BYTES;
   const sources = files.filter(isReadable);
   if (sources.length > options.maxFiles) {
     return {
@@ -89,6 +92,11 @@ export async function runImportPass(
     file: string,
   ): Promise<Record<string, unknown> | null> => {
     try {
+      const size = (await fs.stat(path.join(root, file))).size;
+      if (size > maxFileBytes) {
+        notes.push(`note: ${file} is larger than 1 MiB; ignored`);
+        return null;
+      }
       const text = await fs.readFile(path.join(root, file), "utf8");
       const parsed = parseJsonc(text);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
@@ -123,6 +131,11 @@ export async function runImportPass(
       if (!cfg) break;
       chain.push({ file: cur, cfg });
       const ext: unknown = cfg.extends;
+      if (Array.isArray(ext) && ext.length > 1) {
+        notes.push(
+          `note: ${cur} has an extends array; only the last entry is followed`,
+        );
+      }
       const spec = Array.isArray(ext) ? ext[ext.length - 1] : ext;
       if (typeof spec !== "string") break;
       if (!/^\.\.?\//.test(spec)) {
@@ -171,7 +184,8 @@ export async function runImportPass(
         }
       }
       if (paths === undefined && o.paths && typeof o.paths === "object") {
-        const clean: Record<string, string[]> = {};
+        // No prototype, so a `__proto__` key is an ordinary key.
+        const clean: Record<string, string[]> = Object.create(null);
         for (const [k, v] of Object.entries(
           o.paths as Record<string, unknown>,
         )) {
@@ -235,6 +249,23 @@ export async function runImportPass(
   let external = 0;
   let bytes = 0;
 
+  /** A file the pass could not read: a note, and a row so the edges never read clean. */
+  const skip = (
+    from: string,
+    why: "unreadable" | "larger than 1 MiB",
+  ): void => {
+    notes.push(
+      why === "unreadable"
+        ? `note: ${from} unreadable; not scanned`
+        : `note: ${from} is larger than 1 MiB; not scanned`,
+    );
+    unresolved.push({
+      from,
+      specifier: `<not scanned: ${why}>`,
+      reason: "not-scanned",
+    });
+  };
+
   const BATCH = 32;
   for (let i = 0; i < sources.length; i += BATCH) {
     if (options.now() - options.start > options.maxMs) {
@@ -250,12 +281,12 @@ export async function runImportPass(
       try {
         size = (await fs.stat(path.join(root, f))).size;
       } catch {
-        notes.push(`note: ${f} unreadable; not scanned`);
+        skip(f, "unreadable");
         texts.push(null);
         continue;
       }
-      if (size > MAX_FILE_BYTES) {
-        notes.push(`note: ${f} is larger than 1 MiB; not scanned`);
+      if (size > maxFileBytes) {
+        skip(f, "larger than 1 MiB");
         texts.push(null);
         continue;
       }
@@ -269,7 +300,7 @@ export async function runImportPass(
       try {
         texts.push(await fs.readFile(path.join(root, f), "utf8"));
       } catch {
-        notes.push(`note: ${f} unreadable; not scanned`);
+        skip(f, "unreadable");
         texts.push(null);
       }
     }

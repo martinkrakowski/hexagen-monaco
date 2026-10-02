@@ -127,6 +127,8 @@ export interface ObserveOptions {
   maxImportFiles?: number;
   maxImportBytes?: number;
   maxImportMs?: number;
+  /** Per-file read limit for the import pass (default 1 MiB); a test seam. */
+  maxImportFileBytes?: number;
   /** Clock seam for the time cap. */
   now?: () => number;
 }
@@ -573,6 +575,15 @@ export async function observe(
     ? notCollected<{ name: string; root: string; manifestFile: string }>()
     : await collectPackages(root, tree.files, notes, declaredManifests);
 
+  // Computed before the import pass: the pass has its own budget and must not
+  // spend the one `generated` is held to.
+  const generatedSection = truncatedReason
+    ? notCollected<{
+        path: string;
+        source: "linguist-generated" | "header" | "gitignored-build-dir";
+      }>()
+    : await collectGenerated(root, tree, now, start, maxMs, notes);
+
   const unreadLanguages = [
     ...new Set(
       tree.files
@@ -606,6 +617,9 @@ export async function observe(
       now,
       start: now(),
       notes,
+      ...(options.maxImportFileBytes !== undefined
+        ? { maxFileBytes: options.maxImportFileBytes }
+        : {}),
     });
     if (pass.collected) {
       edges = { collected: true, unreadLanguages, items: pass.edges };
@@ -624,9 +638,7 @@ export async function observe(
     packages,
     languages: truncatedReason ? notCollected() : collectLanguages(tree.files),
     build: truncatedReason ? notCollected() : collectBuild(tree.files),
-    generated: truncatedReason
-      ? notCollected()
-      : await collectGenerated(root, tree, now, start, maxMs, notes),
+    generated: generatedSection,
     dontTouch,
     edges,
     unresolved,
@@ -822,7 +834,7 @@ export const observeCommander = new Command("observe")
   )
   .option(
     "--max-import-files <n>",
-    `Import pass: stop after this many JS/TS files (default ${DEFAULT_MAX_IMPORT_FILES})`,
+    `Import pass: refuse to run when there are more than <n> JS/TS files (default ${DEFAULT_MAX_IMPORT_FILES})`,
     parsePositiveInt("--max-import-files"),
   )
   .option(

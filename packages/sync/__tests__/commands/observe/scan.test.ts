@@ -130,6 +130,45 @@ describe("scanSpecifiers", () => {
   });
 });
 
+describe("scanSpecifiers: hostile and JSX input", () => {
+  it("stays linear on a failed-regex pattern (F1)", () => {
+    const t0 = Date.now();
+    scanSpecifiers("/[".repeat(512 * 1024));
+    expect(Date.now() - t0).toBeLessThan(500);
+  });
+
+  it("keeps correct results on the short form of that pattern", () => {
+    expect(specs("const a = 1 /[ /[ /[\nimport b from './b';")).toEqual([
+      "./b",
+    ]);
+    expect(specs("x = /[/]\\/ab/.test(s);\nimport c from './c';")).toEqual([
+      "./c",
+    ]);
+  });
+
+  it("does not read the slash of a JSX closing tag as a regex (F4)", () => {
+    expect(specs("const a = <p>x</p>{`a/b`};\nimport z from './z';")).toEqual([
+      "./z",
+    ]);
+    expect(
+      specs("const a = <p>x</p>{`a/b`};\nconst b = `x`;\nimport('./after')"),
+    ).toEqual(["./after"]);
+  });
+
+  it("still reads a regex after a comparison >", () => {
+    expect(specs("if (a > /import 'x'/.test(b)) {}\nrequire('./r');")).toEqual([
+      "./r",
+    ]);
+  });
+
+  it("does not report a method named require or import (F10)", () => {
+    expect(
+      specs("class Loader { require(id) {} async import(x, y) { } }"),
+    ).toEqual([]);
+    expect(specs("if (a) { x = require(name); }")).toEqual([null]);
+  });
+});
+
 describe("parseJsonc", () => {
   it("accepts comments, trailing commas and a BOM, and keeps strings intact", () => {
     const text = `\ufeff{
@@ -145,5 +184,13 @@ describe("parseJsonc", () => {
 
   it("returns undefined for invalid text", () => {
     expect(parseJsonc("{ nope")).toBeUndefined();
+  });
+});
+
+describe("scanSpecifiers: escapes", () => {
+  it("decodes an escaped backslash and quote, so a Windows-style specifier is literal", () => {
+    expect(
+      specs(`import 'D:\\\\y'; import ".\\\\z"; import 'it\\'s';`),
+    ).toEqual(["D:\\y", ".\\z", "it's"]);
   });
 });

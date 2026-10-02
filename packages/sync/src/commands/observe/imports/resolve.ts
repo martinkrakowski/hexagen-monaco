@@ -14,7 +14,8 @@ export type UnresolvedReason =
   | "exports-subpath"
   | "non-literal"
   | "outside-repo"
-  | "package-imports";
+  | "package-imports"
+  | "not-scanned";
 
 export type Resolution =
   | { kind: "edge"; to: string }
@@ -70,13 +71,18 @@ export function joinInRepo(dir: string, rel: string): string | null {
     path.posix.join(dir === "" ? "." : dir, rel),
   );
   if (joined === ".." || joined.startsWith("../")) return null;
-  return joined === "." ? "" : joined.replace(/\/$/, "");
+  const bare = joined.replace(/\/$/, "");
+  return bare === "." || bare === "" ? "" : bare;
 }
 
 /** Find the file a repo-relative path names, with extension and index rules. */
-export function tryFile(files: ReadonlySet<string>, p: string): string | null {
-  if (p !== "" && files.has(p)) return p;
-  if (p !== "") {
+export function tryFile(
+  files: ReadonlySet<string>,
+  p: string,
+  dirOnly = false,
+): string | null {
+  if (p !== "" && !dirOnly && files.has(p)) return p;
+  if (p !== "" && !dirOnly) {
     const dot = p.lastIndexOf(".");
     const mapped =
       dot > p.lastIndexOf("/") ? JS_TO_TS[p.slice(dot)] : undefined;
@@ -98,14 +104,23 @@ export function tryFile(files: ReadonlySet<string>, p: string): string | null {
 type Step = (spec: string, fromDir: string) => Resolution | null;
 
 const RELATIVE = /^\.\.?(\/|$)/;
+/** `.\x` and `..\x`: Windows-style, relative-looking, never resolvable here. */
+const WINDOWS_RELATIVE = /^\.\.?\\/;
+/** `C:/x` and `C:\x`: a drive path, outside any repo. */
+const DRIVE_PATH = /^[A-Za-z]:[\\/]/;
 
 function relativeStep(ctx: ResolveContext): Step {
   return (spec, fromDir) => {
-    const absolute = spec.startsWith("/");
+    if (WINDOWS_RELATIVE.test(spec)) {
+      return { kind: "unresolved", reason: "not-found" };
+    }
+    const absolute = spec.startsWith("/") || DRIVE_PATH.test(spec);
     if (!RELATIVE.test(spec) && !absolute) return null;
     const target = absolute ? null : joinInRepo(fromDir, spec);
     if (target === null) return { kind: "unresolved", reason: "outside-repo" };
-    const file = tryFile(ctx.files, target);
+    // A trailing slash, `.` and `..` name a directory: only its index counts.
+    const dirOnly = spec.endsWith("/") || spec === "." || spec === "..";
+    const file = tryFile(ctx.files, target, dirOnly);
     return file
       ? { kind: "edge", to: file }
       : { kind: "unresolved", reason: "not-found" };

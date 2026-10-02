@@ -366,18 +366,63 @@ describe("hexagen observe: import pass", () => {
     expect(report.limits.truncated).toBe(true);
   });
 
-  it("notes and skips a file larger than 1 MiB", async () => {
+  it("notes a file larger than 1 MiB and reports it as not-scanned (F2)", async () => {
     const root = await mkRepo({
       "package.json": '{"name":"p"}',
       "big.ts": `import './b';\n${"//".padEnd(1024 * 1024, "x")}\n`,
       "b.ts": "export {};\n",
     });
-    const { edges, report } = await run(root);
+    const { edges, unresolved, report } = await run(root);
     expect(edges).toEqual([]);
+    expect(unresolved).toEqual([
+      {
+        from: "big.ts",
+        specifier: "<not scanned: larger than 1 MiB>",
+        reason: "not-scanned",
+      },
+    ]);
     expect(report.limits.reasons).toContain(
       "note: big.ts is larger than 1 MiB; not scanned",
     );
     expect(report.limits.truncated).toBe(false);
+    expect(ObservedReport.safeParse(report).success).toBe(true);
+  });
+
+  it("gives every skipped file a row, past the note cap (F2)", async () => {
+    const files: Record<string, string> = { "package.json": '{"name":"p"}' };
+    for (let i = 0; i < 55; i++) files[`f${i}.ts`] = "export const a = 1;\n";
+    const root = await mkRepo(files);
+    const { unresolved, report } = await run(root, {
+      maxImportFileBytes: 4,
+    });
+    expect(unresolved.filter((u) => u.reason === "not-scanned")).toHaveLength(
+      55,
+    );
+    expect(
+      report.limits.reasons.some((r) => /more note\(s\) omitted/.test(r)),
+    ).toBe(true);
+  });
+
+  it("reports an unreadable file as not-scanned (F2)", async () => {
+    if (process.getuid?.() === 0) return; // root reads anything
+    const root = await mkRepo({
+      "package.json": '{"name":"p"}',
+      "locked.ts": "import './b';\n",
+      "b.ts": "export {};\n",
+    });
+    await fs.chmod(path.join(root, "locked.ts"), 0);
+    try {
+      const { unresolved } = await run(root);
+      expect(unresolved).toEqual([
+        {
+          from: "locked.ts",
+          specifier: "<not scanned: unreadable>",
+          reason: "not-scanned",
+        },
+      ]);
+    } finally {
+      await fs.chmod(path.join(root, "locked.ts"), 0o644);
+    }
   });
 
   it("leaves edges and unresolved not collected when the walk is truncated", async () => {
@@ -398,5 +443,193 @@ describe("hexagen observe: import pass", () => {
     const before = await hashTree(root);
     await observe({ root });
     expect(await hashTree(root)).toEqual(before);
+  });
+
+  it("treats a trailing slash as a directory (F5)", async () => {
+    const root = await mkRepo({
+      "package.json": '{"name":"p"}',
+      "lib.ts": "export {};\n",
+      "a.ts": "import './lib/'; import './dir/'; import '.'; import '..';\n",
+      "dir/index.ts": "export {};\n",
+      "sub/x.ts": "import '..'; import '../';\n",
+      "index.ts": "export {};\n",
+    });
+    const { edges, unresolved } = await run(root);
+    expect(edges.filter((e) => e.from === "a.ts")).toEqual([
+      { from: "a.ts", to: "dir/index.ts", specifier: "./dir/" },
+      { from: "a.ts", to: "index.ts", specifier: "." },
+    ]);
+    expect(unresolved).toContainEqual({
+      from: "a.ts",
+      specifier: "./lib/",
+      reason: "not-found",
+    });
+    expect(edges.filter((e) => e.from === "sub/x.ts")).toEqual([
+      { from: "sub/x.ts", to: "index.ts", specifier: ".." },
+      { from: "sub/x.ts", to: "index.ts", specifier: "../" },
+    ]);
+  });
+
+  it("handles Windows-style specifiers (F6)", async () => {
+    const root = await mkRepo({
+      "package.json": '{"name":"p"}',
+      "a.ts":
+        "import 'C:/x'; import 'D:\\\\y'; import '.\\\\z'; import '..\\\\w';\n",
+    });
+    const { edges, unresolved } = await run(root);
+    expect(edges).toEqual([]);
+    expect(unresolved).toEqual([
+      { from: "a.ts", specifier: "..\\w", reason: "not-found" },
+      { from: "a.ts", specifier: ".\\z", reason: "not-found" },
+      { from: "a.ts", specifier: "C:/x", reason: "outside-repo" },
+      { from: "a.ts", specifier: "D:\\y", reason: "outside-repo" },
+    ]);
+  });
+
+  it("ignores a tsconfig over the size limit, with a note (F7)", async () => {
+    const root = await mkRepo({
+      "package.json": '{"name":"p"}',
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: { paths: { "@a/*": ["a/*"] } },
+        pad: "x".repeat(2000),
+      }),
+      "a/m.ts": "export {};\n",
+      "main.ts": "import '@a/m';\n",
+    });
+    const { edges, report } = await run(root, { maxImportFileBytes: 1000 });
+    expect(edges).toEqual([]);
+    expect(report.limits.reasons).toContain(
+      "note: tsconfig.json is larger than 1 MiB; ignored",
+    );
+  });
+
+  it("uses only the last entry of an extends array, with a note (F8)", async () => {
+    const root = await mkRepo({
+      "package.json": '{"name":"p"}',
+      "one.json": JSON.stringify({
+        compilerOptions: { paths: { "@o/*": ["o/*"] } },
+      }),
+      "two.json": JSON.stringify({
+        compilerOptions: { paths: { "@t/*": ["t/*"] } },
+      }),
+      "tsconfig.json": JSON.stringify({
+        extends: ["./one.json", "./two.json"],
+      }),
+      "o/x.ts": "export {};\n",
+      "t/x.ts": "export {};\n",
+      "main.ts": "import '@o/x'; import '@t/x';\n",
+    });
+    const { edges, report } = await run(root);
+    expect(edges).toEqual([
+      { from: "main.ts", to: "t/x.ts", specifier: "@t/x" },
+    ]);
+    expect(report.limits.reasons.join("\n")).toMatch(
+      /extends array.*last entry/,
+    );
+  });
+
+  it("treats a __proto__ paths key as an ordinary key (F9)", async () => {
+    const root = await mkRepo({
+      "package.json": '{"name":"p"}',
+      "tsconfig.json":
+        '{"compilerOptions":{"paths":{"__proto__":["x"],"@a/*":["a/*"]}}}',
+      "x.ts": "export {};\n",
+      "a/m.ts": "export {};\n",
+      "main.ts": "import '__proto__'; import '@a/m';\n",
+    });
+    const { edges } = await run(root);
+    expect(edges).toEqual([
+      { from: "main.ts", to: "a/m.ts", specifier: "@a/m" },
+      { from: "main.ts", to: "x.ts", specifier: "__proto__" },
+    ]);
+  });
+
+  it("falls back from a missed * key to baseUrl, then to external (F12)", async () => {
+    const root = await mkRepo({
+      "package.json": '{"name":"p"}',
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: { baseUrl: ".", paths: { "*": ["stubs/*"] } },
+      }),
+      "stubs/s.ts": "export {};\n",
+      "lib/util.ts": "export {};\n",
+      "main.ts": "import 's'; import 'lib/util'; import 'react';\n",
+    });
+    const { edges, unresolved } = await run(root);
+    expect(edges).toEqual([
+      { from: "main.ts", to: "lib/util.ts", specifier: "lib/util" },
+      { from: "main.ts", to: "stubs/s.ts", specifier: "s" },
+    ]);
+    expect(unresolved).toEqual([]);
+  });
+
+  it("resolves a bare baseUrl-relative import (F12)", async () => {
+    const root = await mkRepo({
+      "package.json": '{"name":"p"}',
+      "tsconfig.json": JSON.stringify({ compilerOptions: { baseUrl: "src" } }),
+      "src/util.ts": "export {};\n",
+      "src/deep/main.ts": "import 'util'; import 'nope';\n",
+    });
+    const { edges, unresolved } = await run(root);
+    expect(edges).toEqual([
+      { from: "src/deep/main.ts", to: "src/util.ts", specifier: "util" },
+    ]);
+    expect(unresolved).toEqual([]);
+  });
+
+  it("maps .jsx, .mjs and .cjs to their TypeScript sources (F12)", async () => {
+    const root = await mkRepo({
+      "package.json": '{"name":"p"}',
+      "c.tsx": "export {};\n",
+      "m.mts": "export {};\n",
+      "k.cts": "export {};\n",
+      "a.ts": "import './c.jsx'; import './m.mjs'; import './k.cjs';\n",
+    });
+    const { edges } = await run(root);
+    expect(edges.map((e) => e.to)).toEqual(["c.tsx", "k.cts", "m.mts"]);
+  });
+
+  it("follows an extends chain to 5 levels past the nearest file, and no further (F12)", async () => {
+    const chain = (
+      n: number,
+      depthWithPaths: number,
+    ): Record<string, string> => {
+      const files: Record<string, string> = {};
+      for (let i = 0; i <= n; i++) {
+        const name = i === 0 ? "tsconfig.json" : `t${i}.json`;
+        files[name] = JSON.stringify({
+          ...(i < n ? { extends: `./t${i + 1}.json` } : {}),
+          ...(i === depthWithPaths
+            ? { compilerOptions: { paths: { "@d/*": ["d/*"] } } }
+            : {}),
+        });
+      }
+      return files;
+    };
+    const base = {
+      "package.json": '{"name":"p"}',
+      "d/x.ts": "export {};\n",
+      "main.ts": "import '@d/x';\n",
+    };
+    const within = await mkRepo({ ...base, ...chain(7, 5) });
+    expect((await run(within)).edges).toEqual([
+      { from: "main.ts", to: "d/x.ts", specifier: "@d/x" },
+    ]);
+    const beyond = await mkRepo({ ...base, ...chain(7, 6) });
+    const r = await run(beyond);
+    expect(r.edges).toEqual([]);
+    expect(r.report.limits.reasons.join("\n")).toMatch(/deeper than 5/);
+  });
+
+  it("does not take @acme/core-extra for a subpath of @acme/core (F12)", async () => {
+    const root = await mkRepo({
+      "package.json": '{"name":"p"}',
+      "packages/core/package.json": '{"name":"@acme/core"}',
+      "a.ts": "import '@acme/core-extra'; import '@acme/core';\n",
+    });
+    const { edges, unresolved } = await run(root);
+    expect(edges).toEqual([
+      { from: "a.ts", to: "packages/core", specifier: "@acme/core" },
+    ]);
+    expect(unresolved).toEqual([]);
   });
 });
