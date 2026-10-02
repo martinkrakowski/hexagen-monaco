@@ -88,7 +88,7 @@ export function BrownfieldViewerPage({
             <p className="font-medium">
               {cleanText(intake.fileName)} was refused:
             </p>
-            <ul className="mt-1 list-disc pl-5">
+            <ul className="mt-1 list-disc pl-4">
               {intake.errors.map((e, i) => (
                 <li key={i} className="break-all">
                   {cleanText(e)}

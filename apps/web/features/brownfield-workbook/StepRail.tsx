@@ -29,7 +29,7 @@ function EvidenceDetail({ step }: { readonly step: StepView }) {
       <p className="text-muted-foreground">
         Trace tail ({ev.tail.length} lines)
       </p>
-      <ol className="space-y-0.5 font-mono">
+      <ol className="space-y-1 font-mono">
         {ev.tail.map((l) => (
           <li key={l.seq} className="break-all">
             {l.denial && (
@@ -54,7 +54,7 @@ export function StepRail({ steps }: { readonly steps: readonly StepView[] }) {
         >
           <div className="flex items-center justify-between gap-2">
             <span className="font-medium">{step.label}</span>
-            <span className="rounded bg-muted px-2 py-0.5 text-xs">
+            <span className="rounded bg-muted px-2 py-1 text-xs">
               {step.status}
             </span>
           </div>

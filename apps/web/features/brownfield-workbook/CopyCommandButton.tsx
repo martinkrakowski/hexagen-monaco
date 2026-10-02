@@ -40,7 +40,7 @@ export function CopyCommandButton({
         type="button"
         aria-label={`Copy ${stepLabel.toLowerCase()} command${ordinal === undefined ? "" : ` ${ordinal}`}`}
         onClick={() => void copy()}
-        className="rounded border px-2 py-0.5 text-xs hover:bg-muted"
+        className="rounded border px-2 py-1 text-xs hover:bg-muted"
       >
         Copy
       </button>

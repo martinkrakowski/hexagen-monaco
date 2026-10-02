@@ -5,6 +5,7 @@ import { readBundle } from "../bundle/read-bundle";
 import {
   buildBundle,
   damageCentralDirectory,
+  markDirectoryByAttrs,
   markEncrypted,
   patchEocd16,
   renameLocalOnly,
@@ -233,6 +234,13 @@ describe("readBundle: container-level refusals", () => {
     expect(await refused(zip)).toMatch(/directory entry/i);
   });
 
+  for (const kind of ["unix", "dos"] as const) {
+    it(`refuses an entry that is a directory by ${kind} attributes only`, async () => {
+      const zip = markDirectoryByAttrs(await buildBundle(), "slice.json", kind);
+      expect(await refused(zip)).toMatch(/directory entry/i);
+    });
+  }
+
   it("refuses a damaged central directory", async () => {
     const zip = damageCentralDirectory(await buildBundle());
     expect(await refused(zip)).toMatch(/damaged/i);
@@ -250,6 +258,28 @@ describe("readBundle: container-level refusals", () => {
 });
 
 describe("readBundle: fixed paths, BOM, WebCrypto", () => {
+  it("opens a bundle whose proposal is not UTF-8, and lists it by path only", async () => {
+    const bytes = new Uint8Array([0xff, 0xfe, 0x00, 0xc3, 0x28, 0x80]);
+    const files = [
+      ...validFiles(),
+      { path: "proposals/x.patch", role: "proposal", content: bytes },
+    ];
+    const r = await readBundle(await buildBundle(files));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.bundle.proposals).toEqual(["proposals/x.patch"]);
+    expect(r.bundle.texts.has("proposals/x.patch")).toBe(false);
+  });
+
+  it("still refuses a non-UTF-8 document the viewer reads as text", async () => {
+    const files = validFiles().map((f) =>
+      f.path === "evidence/trace.jsonl"
+        ? { ...f, content: new Uint8Array([0xff, 0xfe, 0xfd]) }
+        : f,
+    );
+    expect(await refused(await buildBundle(files))).toMatch(/UTF-8/);
+  });
+
   it("refuses a role at the wrong path", async () => {
     const files = validFiles().map((f) =>
       f.path === "slice.json" ? { ...f, path: "elsewhere/slice.json" } : f,

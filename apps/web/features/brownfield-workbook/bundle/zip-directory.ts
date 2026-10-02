@@ -21,6 +21,7 @@ const CEN_SIG = 0x02014b50;
 const MAX_COMMENT = 0xffff;
 const S_IFMT = 0o170000;
 const S_IFLNK = 0o120000;
+const S_IFDIR = 0o040000;
 const HOST_UNIX = 3;
 
 const utf8 = new TextDecoder("utf-8");
@@ -82,7 +83,10 @@ export function readZipDirectory(
       name,
       declaredSize,
       isSymlink: madeBy >>> 8 === HOST_UNIX && (mode & S_IFMT) === S_IFLNK,
-      isDirectory: name.endsWith("/"),
+      isDirectory:
+        name.endsWith("/") ||
+        (attrs & 0x10) !== 0 ||
+        (madeBy >>> 8 === HOST_UNIX && (mode & S_IFMT) === S_IFDIR),
       encrypted: (flags & 1) !== 0,
     });
     p += 46 + nameLen + extraLen + commentLen;

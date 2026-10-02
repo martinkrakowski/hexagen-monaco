@@ -53,6 +53,7 @@ export const STEP_COMMANDS: Readonly<
     label: "Evidence",
     commands: [
       "hexagen evidence pack .hexagen/evidence/trace.jsonl --grant .hexagen/grants/<id>.json --out .hexagen/pack.zip",
+      "hexagen workbook export --out .hexagen/workbook.zip",
     ],
   },
 };

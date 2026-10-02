@@ -22,6 +22,8 @@ interface Pin {
   /** The `.command("...")` text, or null for a top-level commander. */
   readonly sub: string | null;
   readonly top: string;
+  /** The CLI group when it is not the step id. */
+  readonly group?: string;
   readonly required: readonly string[];
 }
 
@@ -74,6 +76,15 @@ const PINS: readonly Pin[] = [
     top: "hexagen evidence",
     required: ["--grant", "--out"],
   },
+  {
+    id: "evidence",
+    at: 1,
+    file: "workbook/index.ts",
+    sub: "export",
+    top: "hexagen workbook",
+    group: "workbook",
+    required: [],
+  },
 ];
 
 const flagsOf = (cmd: string) =>
@@ -85,7 +96,7 @@ describe("step commands match the real CLI", () => {
     const source = src(pin.file);
 
     it(`${cmd}`, () => {
-      expect(cmd.startsWith(`hexagen ${pin.id}`)).toBe(true);
+      expect(cmd.startsWith(`hexagen ${pin.group ?? pin.id}`)).toBe(true);
       if (pin.sub !== null) {
         expect(source).toContain(`.command("${pin.sub}")`);
         expect(cmd).toMatch(new RegExp(` ${pin.sub.split(" ")[0]}( |$)`));
@@ -101,6 +112,33 @@ describe("step commands match the real CLI", () => {
       }
     });
   }
+
+  it("coverage floor: every hexagen command is matched by exactly one pin", () => {
+    let seen = 0;
+    for (const [id, step] of Object.entries(STEP_COMMANDS)) {
+      step.commands.forEach((cmd, at) => {
+        if (!cmd.startsWith("hexagen ")) return;
+        seen++;
+        const hits = PINS.filter((p) => p.id === id && p.at === at);
+        expect(hits, cmd).toHaveLength(1);
+      });
+    }
+    expect(seen).toBe(PINS.length);
+  });
+
+  it("contract add-rule defines --yes, so the shown command may carry it", () => {
+    const source = src("contract/index.ts");
+    const from = source.indexOf('.command("add-rule")');
+    const to = source.indexOf(".command(", from + 1);
+    expect(from).toBeGreaterThan(-1);
+    expect(source.slice(from, to)).toContain('"--yes"');
+  });
+
+  it("the workbook export writes outside evidence/ and needs no --yes", () => {
+    expect(STEP_COMMANDS.evidence.commands[1]).toBe(
+      "hexagen workbook export --out .hexagen/workbook.zip",
+    );
+  });
 
   it("every command that writes carries --yes, as its source requires", () => {
     for (const [id, file] of [

@@ -137,7 +137,7 @@ describe("BrownfieldViewerPage: the left rail", () => {
       f.path === "observed.json"
         ? {
             ...f,
-            content: f.content.replace(
+            content: String(f.content).replace(
               '"unreadLanguages":[]',
               '"unreadLanguages":["Go"]',
             ),
@@ -183,7 +183,7 @@ describe("BrownfieldViewerPage: the left rail", () => {
     const names = screen
       .getAllByRole("button")
       .map((b) => b.getAttribute("aria-label"));
-    expect(names).toHaveLength(7);
+    expect(names).toHaveLength(8);
     for (const n of names) expect(n).toMatch(/^Copy /);
   });
 });

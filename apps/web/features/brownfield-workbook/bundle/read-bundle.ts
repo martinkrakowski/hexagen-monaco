@@ -145,6 +145,17 @@ function inflateCapped(
   });
 }
 
+const FIXED_TEXT_PATHS = new Set([
+  "observed.json",
+  "slice.json",
+  "contract.json",
+  "tip.json",
+  "evidence/trace.jsonl",
+  "evidence/verdicts.json",
+]);
+const isTextEntry = (f: { path: string; role: string }): boolean =>
+  FIXED_TEXT_PATHS.has(f.path) || f.role === "grant";
+
 export async function readBundle(
   data: Uint8Array,
   overrides: Partial<BundleLimits> = {},
@@ -290,7 +301,10 @@ async function load(
       );
       continue;
     }
-    texts.set(f.path, decode(bytes, f.path));
+    // The sha256 above covers every entry's raw bytes. Only the documents the
+    // viewer reads as text are decoded; a proposal is listed by path, so a
+    // non-UTF-8 patch never blocks opening the bundle.
+    if (isTextEntry(f)) texts.set(f.path, decode(bytes, f.path));
   }
   if (problems.length > 0) throw new Refusal(problems.join("\n"));
 

@@ -176,4 +176,65 @@ describe("brownfield viewer page", () => {
     assert.ok(screen.getByTestId("step-evidence"), "still the second file");
     assert.equal(screen.queryByRole("alert"), null);
   });
+
+  describe("navigating between two workbooks", () => {
+    const withBundle = async () => {
+      const good = await buildBundle();
+      const file = new File(["x"], "one.zip");
+      Object.defineProperty(file, "arrayBuffer", {
+        value: async () =>
+          good.buffer.slice(good.byteOffset, good.byteOffset + good.byteLength),
+      });
+      return file;
+    };
+    beforeEach(() => {
+      state.projects = [
+        { id: "wb-1", name: "First", mode: "brownfield" },
+        { id: "wb-2", name: "Second", mode: "brownfield" },
+      ];
+    });
+
+    it("does not show the first workbook's bundle under the second id", async () => {
+      const view = render(<BrownfieldViewerClient />);
+      fireEvent.change(screen.getByLabelText(/open a workbook bundle/i), {
+        target: { files: [await withBundle()] },
+      });
+      await waitFor(() => assert.ok(screen.getByTestId("step-evidence")));
+      state.project = "wb-2";
+      view.rerender(<BrownfieldViewerClient />);
+      assert.ok(screen.getByText("Second"));
+      assert.equal(screen.queryByTestId("step-evidence"), null);
+      assert.ok(screen.getByLabelText(/open a workbook bundle/i));
+    });
+
+    it("drops a read still in flight when the id changes", async () => {
+      const view = render(<BrownfieldViewerClient />);
+      const good = await buildBundle();
+      const slow = new File(["x"], "slow.zip");
+      let release!: () => void;
+      Object.defineProperty(slow, "arrayBuffer", {
+        value: () =>
+          new Promise<ArrayBuffer>((resolve) => {
+            release = () =>
+              resolve(
+                good.buffer.slice(
+                  good.byteOffset,
+                  good.byteOffset + good.byteLength,
+                ) as ArrayBuffer,
+              );
+          }),
+      });
+      fireEvent.change(screen.getByLabelText(/open a workbook bundle/i), {
+        target: { files: [slow] },
+      });
+      state.project = "wb-2";
+      view.rerender(<BrownfieldViewerClient />);
+      release();
+      await new Promise((r) => setTimeout(r, 50));
+      assert.equal(screen.queryByTestId("step-evidence"), null);
+      state.project = "wb-1";
+      view.rerender(<BrownfieldViewerClient />);
+      assert.equal(screen.queryByTestId("step-evidence"), null);
+    });
+  });
 });

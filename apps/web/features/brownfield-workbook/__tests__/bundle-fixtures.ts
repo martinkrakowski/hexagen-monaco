@@ -9,7 +9,7 @@ export const sha = (data: string | Uint8Array): string =>
 export interface FixtureFile {
   readonly path: string;
   readonly role: string;
-  readonly content: string;
+  readonly content: string | Uint8Array;
 }
 
 const NOW = "2026-10-01T10:00:00.000Z";
@@ -110,7 +110,7 @@ export function validFiles(): FixtureFile[] {
 
 export interface BuildOptions {
   /** Entries to put in the zip but leave out of the index. */
-  readonly extra?: readonly { name: string; content: string }[];
+  readonly extra?: readonly { name: string; content: string | Uint8Array }[];
   /** Index entries whose zip entry is not written. */
   readonly omit?: readonly string[];
   /** Override the index sha for one path. */
@@ -274,4 +274,33 @@ export function damageCentralDirectory(zip: Uint8Array): Uint8Array {
   const eocd = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
   buf.writeUInt32LE(0xdeadbeef, buf.readUInt32LE(eocd + 16));
   return out;
+}
+
+/** Marks a central-directory record as a directory by its external attributes only. */
+export function markDirectoryByAttrs(
+  zip: Uint8Array,
+  name: string,
+  kind: "unix" | "dos",
+): Uint8Array {
+  const out = Uint8Array.from(zip);
+  const buf = Buffer.from(out.buffer, out.byteOffset, out.byteLength);
+  let p = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  const count = buf.readUInt16LE(p + 10);
+  p = buf.readUInt32LE(p + 16);
+  for (let i = 0; i < count; i++) {
+    const nameLen = buf.readUInt16LE(p + 28);
+    const skip = nameLen + buf.readUInt16LE(p + 30) + buf.readUInt16LE(p + 32);
+    if (buf.subarray(p + 46, p + 46 + nameLen).toString() === name) {
+      if (kind === "unix") {
+        buf.writeUInt16LE(0x031e, p + 4);
+        buf.writeUInt32LE((0o040755 << 16) >>> 0, p + 38);
+      } else {
+        buf.writeUInt16LE(0x0014, p + 4);
+        buf.writeUInt32LE(0x10, p + 38);
+      }
+      return out;
+    }
+    p += 46 + skip;
+  }
+  throw new Error(`no entry ${name}`);
 }
