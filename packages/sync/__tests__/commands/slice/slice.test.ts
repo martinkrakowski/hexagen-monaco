@@ -172,7 +172,7 @@ describe("slice check", () => {
     expect(all(r)).toContain("nowhere/");
   });
 
-  it("reports edges crossing the boundary in both directions", async () => {
+  it("reports edges crossing the boundary in both directions, failing only with --closed", async () => {
     const root = await sliceWith();
     await writeObserved(root, {
       edges: [
@@ -180,10 +180,55 @@ describe("slice check", () => {
         { from: "lib/c.ts", to: "src/b.ts", specifier: "../src/b" },
       ],
     });
-    const r = await runSliceCheck({ root });
+    const open = await runSliceCheck({ root });
+    expect(open.exitCode).toBe(0);
+    expect(all(open)).toContain("leaves: src/a.ts -> lib/c.ts");
+    expect(all(open)).toContain("enters: lib/c.ts -> src/b.ts");
+    expect(all(open)).toContain("1 leaving, 1 entering");
+    const closed = await runSliceCheck({ root, closed: true });
+    expect(closed.exitCode).toBe(1);
+    expect(all(closed)).toContain("leaves: src/a.ts -> lib/c.ts");
+  });
+
+  it("an excluded package root is outside the slice under either spelling", async () => {
+    const root = await makeRepo(["src/a.ts", "src/gen/g.ts"]);
+    await runSliceInit({
+      root,
+      paths: ["src/"],
+      exclude: ["src/gen/"],
+      id: "s1",
+      yes: true,
+    });
+    await writeObserved(root, {
+      edges: [{ from: "src/a.ts", to: "src/gen", specifier: "@x/gen" }],
+    });
+    const r = await runSliceCheck({ root, closed: true });
     expect(r.exitCode).toBe(1);
-    expect(all(r)).toContain("src/a.ts -> lib/c.ts");
-    expect(all(r)).toContain("lib/c.ts -> src/b.ts");
+    expect(all(r)).toContain("leaves: src/a.ts -> src/gen");
+  });
+
+  it("an exclude that matches no files is a note, not drift", async () => {
+    const root = await makeRepo(["src/a.ts"]);
+    await runSliceInit({
+      root,
+      paths: ["src/"],
+      exclude: ["src/gen/"],
+      yes: true,
+    });
+    await writeObserved(root);
+    const r = await runSliceCheck({ root });
+    expect(r.exitCode).toBe(0);
+    expect(all(r)).toContain("note:");
+    expect(all(r)).toContain("src/gen/");
+  });
+
+  it("exits 2 from a subdirectory root", async () => {
+    const root = await sliceWith();
+    for (const run of [runSliceCheck, runSliceShow]) {
+      const r = await run({ root: path.join(root, "src") });
+      expect(r.exitCode).toBe(2);
+      expect(all(r)).toContain("top level");
+    }
   });
 
   it("treats a package-root target as inside a directory slice", async () => {
@@ -251,6 +296,6 @@ describe("slice check", () => {
     await writeObserved(root, { commit: old });
     const r = await runSliceCheck({ root });
     expect(r.exitCode).toBe(2);
-    expect(all(r)).toContain("not newer");
+    expect(all(r)).toContain("not newer than");
   });
 });

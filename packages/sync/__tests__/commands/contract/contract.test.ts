@@ -7,6 +7,7 @@ import {
   runContractPropose,
   runContractShow,
 } from "../../../src/commands/contract/index.js";
+import { isSuppressionExpired } from "../../../src/commands/contract/evaluate.js";
 import { runSliceInit } from "../../../src/commands/slice/index.js";
 import { cleanup, git, makeRepo, writeObserved } from "../slice/fixture.js";
 
@@ -347,6 +348,67 @@ describe("contract check: unresolved imports", () => {
     expect(
       (await runContractCheck({ root, baseline: true, yes: true })).exitCode,
     ).toBe(2);
+  });
+});
+
+describe("contract check: expiry and root package", () => {
+  async function baselined(expires: string): Promise<string> {
+    const root = await setup();
+    await writeObserved(root, {
+      unresolved: [
+        { from: "src/a.ts", specifier: "@app/missing", reason: "not-found" },
+      ],
+    });
+    await runContractCheck({ root, baseline: true, yes: true });
+    const c = await readContract(root);
+    c.knownViolations[0]!.expires = expires;
+    const { put } = await import("../slice/fixture.js");
+    await put(root, ".hexagen/contract.json", JSON.stringify(c));
+    return root;
+  }
+
+  it("an expired baseline entry no longer hides its violation", async () => {
+    const root = await baselined("2020-01-01");
+    expect((await runContractCheck({ root })).exitCode).toBe(1);
+  });
+
+  it("an entry that expires today is still valid", async () => {
+    const root = await baselined(new Date().toISOString().slice(0, 10));
+    expect((await runContractCheck({ root })).exitCode).toBe(0);
+  });
+
+  it("isSuppressionExpired is inclusive to the end of the UTC day", () => {
+    expect(
+      isSuppressionExpired("2026-10-01", new Date("2026-10-01T23:59:59.999Z")),
+    ).toBe(false);
+    expect(
+      isSuppressionExpired("2026-10-01", new Date("2026-10-02T00:00:00.000Z")),
+    ).toBe(true);
+    expect(() => isSuppressionExpired("2026-02-30")).toThrow();
+  });
+
+  it("a root-package target always violates allow-only", async () => {
+    const root = await setup();
+    await runContractAddRule({
+      root,
+      kind: "allow-only",
+      from: "ui/",
+      to: "src/",
+      id: "r",
+      yes: true,
+    });
+    await writeObserved(root, {
+      edges: [{ from: "ui/x.ts", to: ".", specifier: "root-pkg" }],
+    });
+    expect((await runContractCheck({ root })).exitCode).toBe(1);
+  });
+
+  it("exits 2 from a subdirectory root", async () => {
+    const root = await setup();
+    await writeObserved(root);
+    const sub = await runContractCheck({ root: path.join(root, "src") });
+    expect(sub.exitCode).toBe(2);
+    expect(all(sub)).toContain("top level");
   });
 });
 

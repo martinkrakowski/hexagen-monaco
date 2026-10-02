@@ -308,13 +308,15 @@ npx hexagen contract check --baseline --yes  # record today's violations
   `origin` with credentials stripped. `createdBy` is `--by`, else
   `git config user.email`. It never overwrites an existing slice.
 - `slice show` prints the slice.
-- `slice check` reports drift: a `paths` or `excludes` entry that matches no
-  file; a file under the slice changed between `repo.commit` and `HEAD`
-  (`excludes` applied); an observed edge crossing the slice boundary, either
-  direction (a package-root target counts as inside a directory prefix); and
-  incomplete edges (`edgesComplete` is false: an unread language, or edges not
-  collected). Incomplete edges are drift, never clean. `--strict` is described
-  below.
+- `slice check` reports drift (exit 1): a `paths` entry that matches no file; a
+  file under the slice changed between `repo.commit` and `HEAD` (`excludes`
+  applied; uncommitted working-tree edits are not drift, only commits since
+  `repo.commit` are); and incomplete edges (`edgesComplete` is false: an unread
+  language, or edges not collected), which are never clean. An `excludes` entry
+  that matches no file only gets a `note:` line. Observed edges that cross the
+  slice boundary are always listed (`leaves` and `enters`, with counts; a
+  package-root target is judged with excludes first, under both spellings) but
+  fail the check only with `--closed`. `--strict` is described below.
 
 **`contract`** writes `.hexagen/contract.json`, whose `sliceId` comes from
 `slice.json`.
@@ -337,11 +339,13 @@ npx hexagen contract check --baseline --yes  # record today's violations
   `edges.unreadLanguages` (`go`, `py`, … joined on the extension, never on the
   display name), so a green result never means "the pass could not see the
   imports". If edges were not collected at all the check cannot be clean (exit
-  1. and cannot be baselined. `--baseline` writes the current failing violations
-     to `knownViolations` (keeping any `reason`/`expires` already there) and needs
-     `--yes`; without it, any violation not in the baseline names its rule, file
-     and specifier and exits 1. A known violation is matched on rule, file and
-     specifier; `expires` is not evaluated yet.
+  code 1) and cannot be baselined. `--baseline` writes the current failing violations
+  to `knownViolations` (keeping any `reason`/`expires` already there) and needs
+  `--yes`; without it, any violation not in the baseline names its rule, file
+  and specifier and exits 1. A known violation is matched on rule, file and
+  specifier, and an entry whose `expires` date has passed (inclusive to the end
+  of that UTC day) no longer hides its violation. A root-package target (`.`)
+  is never inside a `to` prefix, so it always violates an `allow-only` rule.
 
 **Writes.** `slice init`, `contract add-rule` and `contract check --baseline`
 print a `will write:` line for each file, including the git exclude file when

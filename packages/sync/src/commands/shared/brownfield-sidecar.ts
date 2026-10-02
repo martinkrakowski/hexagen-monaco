@@ -1,14 +1,18 @@
 import { execFileSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
   Contract,
   ObservedReport,
   Slice,
-  isPathInSlice,
+  normalizeSlicePath,
   type SlicePaths,
 } from "@hexagen/shared";
-import { excludeWouldChange } from "./git-exclude.js";
+import { ObserveError } from "../observe/index.js";
+import { samePath } from "../observe/same-path.js";
+import { GitExcludeError, excludeWouldChange } from "./git-exclude.js";
+import { SidecarFileExistsError } from "./sidecar-write.js";
 
 /** Result shape shared by the slice and contract commands. */
 export interface CommandResult {
@@ -22,6 +26,23 @@ export interface CommandResult {
 
 /** A refusal, bad input or failed precondition: exit 2. */
 export class UsageError extends Error {}
+
+/** A sidecar file that does not exist (a missing slice, observed report or contract). */
+export class NotFoundError extends UsageError {}
+
+/** Turn a thrown precondition failure into an exit-2 result. */
+export function asResult(e: unknown, messages: string[]): CommandResult {
+  if (
+    e instanceof UsageError ||
+    e instanceof ObserveError ||
+    e instanceof GitExcludeError ||
+    e instanceof SidecarFileExistsError
+  ) {
+    messages.push(e.message);
+    return { exitCode: 2, messages };
+  }
+  throw e;
+}
 
 export const SIDECAR_ENTRY = ".hexagen/";
 
@@ -38,8 +59,12 @@ export function underPrefix(entry: string, candidate: string): boolean {
  * root is a directory, so it is also tried with a trailing `/`.
  */
 export function targetInSlice(slice: SlicePaths, to: string): boolean {
-  if (to === ".") return false;
-  return isPathInSlice(slice, to) || isPathInSlice(slice, `${to}/`);
+  if (to === "." || !normalizeSlicePath(to).ok) return false;
+  const hit = (entry: string): boolean =>
+    underPrefix(entry, to) || underPrefix(entry, `${to}/`);
+  // Excludes win under either spelling, then paths.
+  if (slice.excludes.some(hit)) return false;
+  return slice.paths.some(hit);
 }
 
 /** The first slice `paths` entry that contains `p` (a file or package root). */
@@ -135,7 +160,7 @@ async function readJson(file: string, label: string): Promise<unknown> {
     raw = await readFile(file, "utf8");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new UsageError(`${label} does not exist: ${file}`);
+      throw new NotFoundError(`${label} does not exist: ${file}`);
     }
     throw new UsageError(
       `could not read ${file}: ${e instanceof Error ? e.message : String(e)}`,
@@ -169,7 +194,26 @@ function parseWith<T>(
   }
 }
 
+/** Every command works from the repo top level, never a subdirectory. */
+export function assertTopLevel(root: string): void {
+  const top = git(root, ["rev-parse", "--show-toplevel"])?.trim();
+  if (!top) throw new UsageError(`${root} is not inside a git checkout`);
+  let same = false;
+  try {
+    same = samePath(
+      realpathSync.native(path.resolve(top)),
+      realpathSync.native(path.resolve(root)),
+    );
+  } catch {
+    same = false;
+  }
+  if (!same) {
+    throw new UsageError(`--root must be the repo top level (git says ${top})`);
+  }
+}
+
 export async function loadSlice(root: string): Promise<Slice> {
+  assertTopLevel(root);
   const file = slicePath(root);
   return parseWith(Slice, await readJson(file, "slice"), file);
 }
@@ -192,9 +236,7 @@ export async function loadContract(
   try {
     value = await readJson(file, "contract");
   } catch (e) {
-    if (e instanceof UsageError && e.message.startsWith("contract does not")) {
-      return undefined;
-    }
+    if (e instanceof NotFoundError) return undefined;
     throw e;
   }
   return parseWith(Contract, value, file);
@@ -221,11 +263,13 @@ export function staleInputs(
     );
   } else if (!isAncestor(root, slice.repo.commit, observed.repo.commit)) {
     problems.push(
-      `observed.json (commit ${observed.repo.commit}) is not newer than the slice's commit ${slice.repo.commit}; re-run \`hexagen observe\``,
+      `observed.json (commit ${observed.repo.commit}) is not newer than the slice's commit ${slice.repo.commit}, or one of them is not in this repository; re-run \`hexagen observe\``,
     );
   }
   const head = headCommit(root);
-  if (head !== null && head !== observed.repo.commit) {
+  if (head === null) {
+    if (strict) problems.push("HEAD cannot be resolved (--strict)");
+  } else if (head !== observed.repo.commit) {
     const msg = `observed.json was read at ${observed.repo.commit} but HEAD is ${head}; re-run \`hexagen observe\``;
     if (strict) problems.push(`${msg} (--strict)`);
     else warnings.push(`warning: ${msg}`);

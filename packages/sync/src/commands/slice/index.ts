@@ -10,8 +10,8 @@ import {
   normalizeSlicePath,
 } from "@hexagen/shared";
 import { isValidEngagementId } from "@hexagen/shared/node/grant-key";
-import { ObserveError, readRepo } from "../observe/index.js";
-import { GitExcludeError, ensureExcluded } from "../shared/git-exclude.js";
+import { readRepo } from "../observe/index.js";
+import { ensureExcluded } from "../shared/git-exclude.js";
 import { resolveSidecarOut } from "../shared/sidecar-out.js";
 import {
   SidecarFileExistsError,
@@ -19,6 +19,7 @@ import {
 } from "../shared/sidecar-write.js";
 import {
   UsageError,
+  asResult,
   changedSince,
   git,
   listWorkTreeFiles,
@@ -30,20 +31,6 @@ import {
   underPrefix,
   type CommandResult,
 } from "../shared/brownfield-sidecar.js";
-
-/** Turn a thrown precondition failure into an exit-2 result. */
-export function asResult(e: unknown, messages: string[]): CommandResult {
-  if (
-    e instanceof UsageError ||
-    e instanceof ObserveError ||
-    e instanceof GitExcludeError ||
-    e instanceof SidecarFileExistsError
-  ) {
-    messages.push(e.message);
-    return { exitCode: 2, messages };
-  }
-  throw e;
-}
 
 export interface SliceRootOptions {
   /** Repo top level; the CLI defaults it to cwd and never searches upward. */
@@ -149,6 +136,8 @@ export async function runSliceShow(
 
 export interface SliceCheckOptions extends SliceRootOptions {
   strict?: boolean;
+  /** Fail (exit 1) on edges that cross the slice boundary. */
+  closed?: boolean;
 }
 
 export async function runSliceCheck(
@@ -167,12 +156,20 @@ export async function runSliceCheck(
     }
 
     const drift: string[] = [];
+    const notes: string[] = [];
+    const crossings: string[] = [];
 
     const files = listWorkTreeFiles(root);
-    for (const entry of [...slice.paths, ...slice.excludes]) {
+    for (const entry of slice.paths) {
       if (!files.some((f) => underPrefix(entry, f))) {
-        const kind = slice.paths.includes(entry) ? "path" : "exclude";
-        drift.push(`${kind} "${entry}" matches no files`);
+        drift.push(`path "${entry}" matches no files`);
+      }
+    }
+    for (const entry of slice.excludes) {
+      if (!files.some((f) => underPrefix(entry, f))) {
+        notes.push(
+          `note: exclude "${entry}" matches no files (gitignored generated directories never appear)`,
+        );
       }
     }
 
@@ -199,25 +196,34 @@ export async function runSliceCheck(
         const fromIn = isPathInSlice(slice, e.from);
         const toIn = targetInSlice(slice, e.to);
         if (fromIn && !toIn) {
-          drift.push(
-            `edge leaves the slice: ${e.from} -> ${e.to} (${e.specifier})`,
-          );
+          crossings.push(`leaves: ${e.from} -> ${e.to} (${e.specifier})`);
         } else if (!fromIn && toIn) {
-          drift.push(
-            `edge enters the slice: ${e.from} -> ${e.to} (${e.specifier})`,
-          );
+          crossings.push(`enters: ${e.from} -> ${e.to} (${e.specifier})`);
         }
       }
     }
 
-    if (drift.length === 0) {
+    messages.push(...notes);
+    const closedFail = options.closed === true && crossings.length > 0;
+    const leaving = crossings.filter((c) => c.startsWith("leaves")).length;
+    const lines: string[] = [];
+    if (drift.length > 0) lines.push(...drift.map((d) => `  - drift: ${d}`));
+    if (crossings.length > 0) {
+      lines.push(
+        `  boundary edges (${leaving} leaving, ${crossings.length - leaving} entering; fail only with --closed):`,
+        ...crossings.map((c) => `    ${c}`),
+      );
+    }
+    const failed = drift.length > 0 || closedFail;
+    if (!failed) {
       messages.push(`slice ${slice.id}: clean`);
-      return { exitCode: 0, messages };
     }
     return {
-      exitCode: 1,
+      exitCode: failed ? 1 : 0,
       messages,
-      stdout: `slice ${slice.id}: drift\n${drift.map((d) => `  - ${d}`).join("\n")}\n`,
+      ...(lines.length > 0
+        ? { stdout: `slice ${slice.id}:\n${lines.join("\n")}\n` }
+        : {}),
     };
   } catch (e) {
     return asResult(e, messages);
@@ -288,12 +294,16 @@ sliceCommander
     "Report slice drift. Exit 0 clean, 1 drift, 2 bad input or stale observed.json",
   )
   .option("--strict", "Fail (exit 2) when observed.json was not read at HEAD")
+  .option("--closed", "Also fail (exit 1) on edges crossing the slice boundary")
   .option(ROOT_FLAG, ROOT_DESC)
-  .action(async (opts: { root?: string; strict?: boolean }) => {
-    emit(
-      await runSliceCheck({
-        root: opts.root ?? process.cwd(),
-        strict: opts.strict,
-      }),
-    );
-  });
+  .action(
+    async (opts: { root?: string; strict?: boolean; closed?: boolean }) => {
+      emit(
+        await runSliceCheck({
+          root: opts.root ?? process.cwd(),
+          strict: opts.strict,
+          closed: opts.closed,
+        }),
+      );
+    },
+  );

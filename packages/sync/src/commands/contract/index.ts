@@ -1,5 +1,4 @@
 import { randomBytes } from "node:crypto";
-import { lstat } from "node:fs/promises";
 import path from "node:path";
 import { Command } from "commander";
 import {
@@ -18,7 +17,7 @@ import {
 } from "../shared/sidecar-write.js";
 import {
   UsageError,
-  contractPath,
+  asResult,
   listWorkTreeFiles,
   loadContract,
   loadObserved,
@@ -27,7 +26,7 @@ import {
   staleInputs,
   type CommandResult,
 } from "../shared/brownfield-sidecar.js";
-import { asResult, type SliceRootOptions } from "../slice/index.js";
+import { type SliceRootOptions } from "../slice/index.js";
 import {
   evaluateContract,
   isKnown,
@@ -99,13 +98,6 @@ async function writeContract(
   if (create) await writeFileExclusive(target, text);
   else await writeFileReplace(target, text);
   messages.push(`wrote ${target}`);
-}
-
-async function contractExists(root: string): Promise<boolean> {
-  return lstat(contractPath(root)).then(
-    () => true,
-    () => false,
-  );
 }
 
 export async function runContractAddRule(
@@ -272,7 +264,7 @@ export async function runContractCheck(
     let failing = 0;
     let known = 0;
     for (const v of violations) {
-      if (isKnown(contract, v)) {
+      if (isKnown(contract, v, new Date())) {
         known++;
         continue;
       }
