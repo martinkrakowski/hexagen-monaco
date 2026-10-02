@@ -42,16 +42,25 @@ Required keys (the script refuses to deploy without them):
   `NEXTAUTH_SECRET`, and that is the key the script checks.
 - LLM: `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`, `WEB_LLM_API_KEY`,
   `INCEPTION_API_KEY`, `INCEPTION_MODEL`.
-- Stripe (test mode): `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
-  `STRIPE_PRICE_REPO_MONTHLY`.
 
-Optional: `LLM_REASONING`, `STAGE1_REFINER_*`, `STAGE6_REVIEWER_*`,
+Optional: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+`STRIPE_PRICE_REPO_MONTHLY` (Stripe cannot deliver webhooks to a `.lan` host,
+so billing stays off on staging unless these are set), `LLM_REASONING`, `STAGE1_REFINER_*`, `STAGE6_REVIEWER_*`,
 `STAGE6_VALIDATOR_API_KEY`, `STAGE6_VALIDATOR_BASE_URL`,
 `STAGE6_VALIDATOR_MODEL`, `STAGE6_VALIDATOR_MAX_TOKENS`. Leaving the
 refiner and reviewer keys unset turns those stages off. See `deploy/.env.example`.
 
+`NEXT_PUBLIC_LLM_MODEL` in `build-args.env` must equal the Secret's `LLM_MODEL`.
+
 The GitHub OAuth App's callback URL must be
 `https://hexagen.midnight.lan/api/auth/callback/github`.
+
+## Decisions
+
+- A deploy outage of roughly 30-90 s (Recreate) is accepted.
+- The StorageClass keeps `reclaimPolicy: Delete`; we rely on backups.
+- `NEXT_PUBLIC_LLM_MODEL=z-ai/glm-5.2` stays.
+- Stripe is optional on staging.
 
 ## State
 
