@@ -23,6 +23,7 @@ import { GetWorkspaceContextResourceUseCase } from "./application/use-cases/get-
 import { InitializeFeatureWorktreeToolUseCase } from "./application/use-cases/initialize-feature-worktree-tool.use-case.js";
 import { ListTransactionsToolUseCase } from "./application/use-cases/list-transactions-tool.use-case.js";
 import { LogAgentRemediationToolUseCase } from "./application/use-cases/log-agent-remediation-tool.use-case.js";
+import { ProposePatchToolUseCase } from "./application/use-cases/propose-patch-tool.use-case.js";
 import { RejectTransactionToolUseCase } from "./application/use-cases/reject-transaction-tool.use-case.js";
 import { RemoveContextToolUseCase } from "./application/use-cases/remove-context-tool.use-case.js";
 import { RemovePortToolUseCase } from "./application/use-cases/remove-port-tool.use-case.js";
@@ -52,6 +53,8 @@ import {
   GrantSignatureAdapter,
   type GrantSignatureOptions,
 } from "./infrastructure/adapters/grant-signature.adapter.js";
+import { ProposalWorkspaceAdapter } from "./infrastructure/adapters/proposal-workspace.adapter.js";
+import type { ProposalWorkspacePort } from "./application/ports/out/proposal-workspace.port.js";
 import { TraceWriteAdapter } from "./infrastructure/adapters/trace-write.adapter.js";
 
 function envOptional(name: string): string | undefined {
@@ -72,6 +75,7 @@ export interface MCPCompositionRoot {
   manifestGenerationPort: ManifestGenerationPort;
   traceWritePort: TraceWritePort;
   grantSignaturePort: GrantSignaturePort;
+  proposalWorkspacePort: ProposalWorkspacePort;
 }
 
 export function createDefaultMCPCompositionRoot(
@@ -111,6 +115,7 @@ export function createDefaultMCPCompositionRoot(
       workspaceRoot,
       grantKeyOptions,
     ),
+    proposalWorkspacePort: new ProposalWorkspaceAdapter(workspaceRoot),
   };
 }
 
@@ -196,6 +201,12 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
   const generateManifestPipelineToolUseCase =
     new GenerateManifestPipelineToolUseCase(root.manifestGenerationPort);
 
+  const proposePatchToolUseCase = new ProposePatchToolUseCase(
+    root.proposalWorkspacePort,
+    root.traceWritePort,
+    root.grantSignaturePort,
+  );
+
   return new MCPServerAdapter({
     getManifestResourceUseCase,
     getGraphResourceUseCase,
@@ -223,6 +234,7 @@ export function createMCPServer(root: MCPCompositionRoot): MCPServerAdapter {
     generateTopologyToolUseCase,
     generateAdaptersToolUseCase,
     generateManifestPipelineToolUseCase,
+    proposePatchToolUseCase,
   });
 }
 

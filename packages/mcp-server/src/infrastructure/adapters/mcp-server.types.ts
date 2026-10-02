@@ -9,6 +9,7 @@ import type { GenerateManifestPipelineToolPort } from "../../application/ports/i
 import type { GenerateTopologyToolPort } from "../../application/ports/in/generate-topology-tool.port.js";
 import type { GetTransactionToolPort } from "../../application/ports/in/get-transaction-tool.port.js";
 import type { ListTransactionsToolPort } from "../../application/ports/in/list-transactions-tool.port.js";
+import type { ProposePatchToolPort } from "../../application/ports/in/propose-patch-tool.port.js";
 import type { RejectTransactionToolPort } from "../../application/ports/in/reject-transaction-tool.port.js";
 import type { RemoveContextToolPort } from "../../application/ports/in/remove-context-tool.port.js";
 import type { RemovePortToolPort } from "../../application/ports/in/remove-port-tool.port.js";
@@ -109,6 +110,8 @@ export interface MCPServerAdapterDependencies
   initializeFeatureWorktreeToolUseCase: InitializeFeatureWorktreeToolUseCase;
   submitArchitecturalSpecToolUseCase: SubmitArchitecturalSpecToolUseCase;
   logAgentRemediationToolUseCase: LogAgentRemediationToolUseCase;
+  /** `hexagen_propose_patch` (BW10): an inbound port, never the use-case class. */
+  proposePatchToolUseCase: ProposePatchToolPort;
 }
 
 /**

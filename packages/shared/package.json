@@ -17,6 +17,10 @@
     "./node/trace-chain": {
       "types": "./dist/node/trace-chain.d.ts",
       "default": "./dist/node/trace-chain.js"
+    },
+    "./node/sidecar-write": {
+      "types": "./dist/node/sidecar-write.d.ts",
+      "default": "./dist/node/sidecar-write.js"
     }
   },
   "types": "dist/index.d.ts",

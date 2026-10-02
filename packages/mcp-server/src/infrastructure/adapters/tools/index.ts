@@ -14,6 +14,7 @@ export * from "./get-transaction.js";
 export * from "./initialize-feature-worktree.js";
 export * from "./list-transactions.js";
 export * from "./log-agent-remediation.js";
+export * from "./propose-patch.js";
 export * from "./registry.js";
 export * from "./reject-transaction.js";
 export * from "./remove-context.js";
