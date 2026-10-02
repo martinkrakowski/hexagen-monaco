@@ -49,6 +49,12 @@ export interface LoadedBundle {
   readonly tip: Tip | null;
   readonly grants: readonly { readonly path: string; readonly text: string }[];
   readonly proposals: readonly string[];
+  /**
+   * Each proposal entry's raw bytes, already sha256-checked, by path. They are
+   * NOT decoded here: a non-UTF-8 patch must not block opening the bundle. The
+   * right panel decodes them for display with a non-fatal decoder.
+   */
+  readonly proposalFiles: ReadonlyMap<string, Uint8Array>;
   readonly trace: string | null;
   /** `null` when `evidence/verdicts.json` is absent, `"invalid"` when it cannot be read. */
   readonly verdicts: PackVerdicts | "invalid" | null;
@@ -293,6 +299,7 @@ async function load(
   if (problems.length > 0) throw new Refusal(problems.join("\n"));
 
   const texts = new Map<string, string>();
+  const proposalFiles = new Map<string, Uint8Array>();
   for (const f of index.files) {
     const bytes = await read(f.path);
     if ((await sha256Hex(bytes)) !== f.sha256) {
@@ -305,6 +312,7 @@ async function load(
     // viewer reads as text are decoded; a proposal is listed by path, so a
     // non-UTF-8 patch never blocks opening the bundle.
     if (isTextEntry(f)) texts.set(f.path, decode(bytes, f.path));
+    if (f.role === "proposal") proposalFiles.set(f.path, bytes);
   }
   if (problems.length > 0) throw new Refusal(problems.join("\n"));
 
@@ -349,6 +357,7 @@ async function load(
     proposals: index.files
       .filter((f) => f.role === "proposal")
       .map((f) => f.path),
+    proposalFiles,
     trace: texts.get("evidence/trace.jsonl") ?? null,
     verdicts: verdictText === undefined ? null : parseVerdicts(verdictText),
   };

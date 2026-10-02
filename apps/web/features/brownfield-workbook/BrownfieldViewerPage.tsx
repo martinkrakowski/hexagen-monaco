@@ -2,6 +2,7 @@ import { cleanText } from "@hexagen/shared";
 import { BundleIntake } from "./BundleIntake";
 import { StepRail } from "./StepRail";
 import { deriveSteps } from "./steps";
+import { RightPanel } from "./right/RightPanel";
 import type { LoadedBundle } from "./bundle/read-bundle";
 
 /**
@@ -115,8 +116,9 @@ export function BrownfieldViewerPage({
               aria-label="Middle panel"
               data-testid="slot-middle-panel"
             />
-            {/* BW9 fills this slot: the agent under the grant. Leave it empty here. */}
-            <section aria-label="Right panel" data-testid="slot-right-panel" />
+            <section aria-label="Right panel" data-testid="slot-right-panel">
+              <RightPanel bundle={intake.bundle} />
+            </section>
           </div>
         </>
       )}

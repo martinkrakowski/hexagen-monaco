@@ -175,7 +175,7 @@ describe("BrownfieldViewerPage: the left rail", () => {
   it("leaves named, empty slots for the middle and right panels", async () => {
     page(ready(await load()));
     expect(screen.getByTestId("slot-middle-panel").textContent).toBe("");
-    expect(screen.getByTestId("slot-right-panel").textContent).toBe("");
+    expect(screen.getByTestId("slot-right-panel")).toBeTruthy(); // BW9 fills it; see RightPanel.test.tsx
   });
 
   it("has no chat or advance control: the only buttons are copy buttons", async () => {
