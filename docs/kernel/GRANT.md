@@ -224,7 +224,7 @@ identically — `contexts` is purely how one profile happens to derive
 
 `hexagen grant issue` was built in place of the designed `compile` (it signs
 the grant and takes `--paths`/`--contexts` directly). `show` and `check` are
-built too. All three live in `@hexagen/sync` (`packages/sync/src/commands/grant/`).
+built too, and so is `revoke`. All four live in `@hexagen/sync` (`packages/sync/src/commands/grant/`).
 
 ```
 hexagen grant show <grant-file>
@@ -270,7 +270,52 @@ hexagen grant check <grant-file> <transaction-id>
     wiring that server. It exits 2 and says so. Deferred.
 ```
 
-`revoke` is specified by the brownfield workbook plan (BW2c), not yet built.
+```
+hexagen grant revoke <grant-file> [--at <iso>] [--yes]
+    [--workspace-root <path>] [--key-file <path>] [--engagement <id>]
+    Sets revoked_at (default now; --at is an ISO date-time with an offset)
+    and re-signs the grant with the same key, over the same canonical payload
+    as `issue`. It first verifies the grant under the resolved key and
+    refuses (exit 1, nothing written) one that does not verify: it never signs
+    what it cannot vouch for. Prints a preflight and writes only with --yes
+    (exit 2 without it). The file is replaced through a temp file in the same
+    directory and an atomic rename. In a client repo the grant file must be
+    under <root>/.hexagen/. Idempotent: a grant that already has revoked_at
+    exits 0 with "already revoked at <time>" and no write, unless --at is
+    earlier than the recorded time, which moves it earlier. Prints the grant
+    id, revoked_at, the key path and the fingerprint, never the key.
+    Exit 0 revoked or already revoked; 1 the signature does not verify;
+    2 bad input (invalid --at, unreadable or malformed grant, file outside
+    .hexagen/, no --yes).
+```
+
+`revoke` works in a repo with a manifest too: it verifies and re-signs with the
+in-repo key (`.hexagen/grant-signing.key`), and the grant file may be anywhere
+(the `.hexagen/` restriction applies to client repos only). A future `--at`
+schedules the revocation: the grant stays valid until then, and the preflight
+warns. A value at or after `expires_at` has no effect, and the preflight warns
+about that too. The file's permission bits are preserved.
+The grant path is resolved once and, in a client repo, its directory is checked
+to still be under `.hexagen/` right before the rename; a swap of an ancestor
+in the instant between that check and the rename is a residual window that this
+narrows but does not close. A `<grant>.lock` file (created exclusively, holding
+the pid, never auto-broken) serialises concurrent revokes: a held lock exits 2.
+When `--key-file` or `--engagement` selects a key other than the server's
+default, `revoke` warns with both paths and fingerprints, because the server
+would deny that grant as a signature failure, not report it as revoked.
+
+Two different ways to end up with a `revoked_at` field, and they read
+differently (BW-D5):
+
+- Editing `revoked_at` by hand breaks the signature, because `revoked_at` is
+  part of the signed payload. `check` then denies the grant as a **signature
+  failure**, not as revoked.
+- `hexagen grant revoke` re-signs the grant, so the signature still verifies
+  and `check` denies it with the `grant_revoked` reason.
+
+Deleting the engagement key (`~/.hexagen/keys/<engagement>.key`) revokes every
+grant in that engagement at once: nothing verifies any more, so every write is
+denied. Use it as an emergency stop.
 
 ## Acceptance tests
 

@@ -179,6 +179,22 @@ print the workspace root, the key path and its fingerprint, never the key.
   `--engagement` it names both keys' fingerprints.
 - The monaco form, `grant check <grant-file> <transaction-id>`, is not built:
   pending transactions live in the MCP server's memory. It exits 2.
+- `revoke` sets `revoked_at` and re-signs the grant:
+  `hexagen grant revoke .hexagen/grants/<id>.json [--at <iso>] --yes`. It
+  verifies the grant under the resolved key first and refuses one that does not
+  verify (exit 1). It previews the write and needs `--yes`; the file is replaced
+  by a temp file and an atomic rename; in a client repo it must be under
+  `.hexagen/`. Revoking again is a no-op ("already revoked at ..."), except an
+  earlier `--at` moves the date earlier. Hand-editing `revoked_at` breaks the
+  signature, so `check` denies the grant as a signature failure; `revoke`
+  re-signs it, so `check` reports `grant_revoked`. Deleting the engagement key
+  revokes every grant in that engagement (an emergency stop).
+  A future `--at` schedules the revocation (the grant stays valid until then,
+  and the preflight warns); a value at or after `expires_at` has no effect. In
+  a repo with a manifest it re-signs with the in-repo key.
+  Concurrent revokes are serialised by `<grant>.lock` (a held lock exits 2, never
+  auto-broken), and `--key-file`/`--engagement` pointing at a key other than the
+  server default produces a warning naming both keys.
 
 ### `hexagen observe`
 
