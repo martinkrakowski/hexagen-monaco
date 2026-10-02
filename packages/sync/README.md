@@ -109,12 +109,19 @@ npx hexagen observe --dont-touch src/legacy/ vendor-patches/ # report-only
 ```
 
 - `--root <dir>` is used exactly as given (default: cwd); it is never searched
-  upward. The directory must be a git checkout with at least one commit, whose
-  `HEAD` is recorded in `repo.commit`. Credentials in the `origin` URL are stripped.
+  upward, and it must be the repo top level (exit 2 otherwise, naming the
+  top level git reports). The directory must be a git checkout with at least one
+  commit, whose `HEAD` is recorded in `repo.commit`. Credentials, query and fragment in the `origin` URL are stripped.
 - `--out <file>` must resolve under `<root>/.hexagen/` (symlinks included);
-  anything else exits 2. It prints `will write: <path>` and writes only with
-  `--yes`; without it the command exits 2. The write is a temp file plus rename.
-  `observe` does not edit `.gitignore` or `.git/info/exclude`.
+  anything else exits 2, as does a `.hexagen` that is a regular file. It
+  prints a `will write:` line for `observed.json` and one for the exclude file,
+  and writes only with `--yes` (without it, exit 2). The report is written as a
+  temp file plus rename. `.hexagen/` is then kept out of `git status` by
+  appending it, if absent, to the file `git rev-parse --git-path info/exclude`
+  prints (correct in linked worktrees and submodules); the tracked
+  `.gitignore` is never edited, and `git add -f` can still stage the
+  directory. If that update fails, the command exits 2 before writing the
+  report.
 - `--max-files <n>` (default 50000) and `--max-ms <n>` (default 30000) cap the
   walk. A tripped cap marks `packages`, `languages`, `build` and `generated` as
   `collected: false` with the reason, and sets `limits.truncated`.
@@ -124,9 +131,12 @@ npx hexagen observe --dont-touch src/legacy/ vendor-patches/ # report-only
 
 What it reads:
 
-- **Walk.** Skips `node_modules`, `vendor`, `.git`, `.hg`, `.svn` and `.hexagen`,
+- **Walk.** Skips `node_modules`, `vendor`, `bower_components`, `jspm_packages`,
+  `.yarn`, `.git`, `.hg`, `.svn` and `.hexagen`,
   does not follow symlinks, and honours the root `.gitignore` and nested
-  `.gitignore` files.
+  `.gitignore` files (not `info/exclude` or `core.excludesFile`). A path that
+  fails the slice-path rules (a backslash or control character) is skipped
+  with a note.
 - **Packages.** Every `package.json` the walk reaches is a package: a repo with no
   workspaces has one at `"."`. Names are exactly as written, scope included; a
   manifest with no `name` is reported under its directory path (the root
@@ -140,9 +150,12 @@ What it reads:
 - **Generated** paths: root `.gitattributes` `linguist-generated`, `@generated`
   in the first 5 lines of a source file, and gitignored `dist/` or `build/`.
 - **dontTouch**: `--dont-touch` plus literal anchored `CODEOWNERS` paths
-  (`CODEOWNERS`, `.github/CODEOWNERS`, `docs/CODEOWNERS`), reported with their
+  (`.github/CODEOWNERS`, then `CODEOWNERS`, then `docs/CODEOWNERS`; the first found is read), reported with their
   owners and never turned into a rule. Glob and unanchored CODEOWNERS patterns
   cannot be a path, so they are skipped and noted in `limits.reasons`.
+  `limits.reasons` may carry `note:` lines (an unreadable directory, an
+  unnamed package, a pattern that does not compile) while `truncated` is
+  `false`; only a tripped cap sets `truncated`.
 
 ---
 

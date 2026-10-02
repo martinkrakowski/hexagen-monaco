@@ -18,6 +18,8 @@ export interface IgnoreRule {
 export function parseIgnoreLine(
   raw: string,
   negatedByCaller = false,
+  notes?: string[],
+  label = "ignore file",
 ): IgnoreRule | null {
   let line = raw.replace(/\r$/, "");
   // Trailing unescaped spaces are dropped.
@@ -37,15 +39,27 @@ export function parseIgnoreLine(
   if (line === "") return null;
   const anchored = line.includes("/");
   const body = line.startsWith("/") ? line.slice(1) : line;
-  const source = globToRegexSource(body, false);
-  const regex = new RegExp(anchored ? `^${source}$` : `^(?:.*/)?${source}$`);
+  let regex: RegExp;
+  try {
+    const source = globToRegexSource(body, false);
+    regex = new RegExp(anchored ? `^${source}$` : `^(?:.*/)?${source}$`);
+  } catch {
+    notes?.push(
+      `note: ${label}: pattern ${JSON.stringify(line)} is invalid; skipped`,
+    );
+    return null;
+  }
   return { negated, dirOnly, regex, pattern: line, anchored };
 }
 
-export function parseIgnoreFile(text: string): IgnoreRule[] {
+export function parseIgnoreFile(
+  text: string,
+  notes?: string[],
+  label = "ignore file",
+): IgnoreRule[] {
   const rules: IgnoreRule[] = [];
   for (const line of text.split("\n")) {
-    const rule = parseIgnoreLine(line);
+    const rule = parseIgnoreLine(line, false, notes, label);
     if (rule) rules.push(rule);
   }
   return rules;

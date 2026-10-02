@@ -99,12 +99,16 @@ async function pnpmRepo(): Promise<string> {
   return root;
 }
 
-async function hashTree(root: string): Promise<Record<string, string>> {
+async function hashTree(
+  root: string,
+  skip: (rel: string) => boolean = () => false,
+): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   async function rec(dir: string): Promise<void> {
     for (const e of await fs.readdir(dir, { withFileTypes: true })) {
       const p = path.join(dir, e.name);
       const rel = path.relative(root, p);
+      if (skip(rel)) continue;
       if (e.isDirectory()) {
         out[rel + "/"] = "dir";
         await rec(p);
@@ -361,7 +365,7 @@ describe("hexagen observe", () => {
 });
 
 describe("globToRegExp", () => {
-  const m = (g: string, p: string) => globToRegExp(g).test(p);
+  const m = (g: string, p: string) => globToRegExp(g)?.test(p) ?? false;
   it("matches * within one segment only", () => {
     expect(m("packages/*", "packages/a")).toBe(true);
     expect(m("packages/*", "packages/a/b")).toBe(false);
@@ -385,3 +389,391 @@ describe("globToRegExp", () => {
     expect(m("a+(b)", "a+(b)")).toBe(true);
   });
 });
+
+const isWin = process.platform === "win32";
+const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
+
+function gitOut(cwd: string, ...args: string[]): string {
+  return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+}
+
+const EXCLUDE = (root: string) => path.join(root, ".git", "info", "exclude");
+
+describe("hexagen observe: fix round", () => {
+  it("requires --root to be the repo top level", async () => {
+    const root = await messyRepo();
+    const res = await runObserve({ root: path.join(root, "src") });
+    expect(res.exitCode).toBe(2);
+    expect(res.messages.join("\n")).toContain(
+      `--root must be the repo top level (git says ${await fs.realpath(root)})`,
+    );
+  });
+
+  it("exits 2 on a root that is not a git checkout", async () => {
+    const root = await mkRoot();
+    await put(root, "a.ts", "1;\n");
+    const res = await runObserve({ root });
+    expect(res.exitCode).toBe(2);
+    expect(res.messages.join(" ")).toMatch(/not a git checkout/);
+  });
+
+  describe("git exclude", () => {
+    it("adds .hexagen/ once, lists both files in the preflight, and touches nothing else", async () => {
+      const root = await messyRepo();
+      const skip = (rel: string) =>
+        rel === ".hexagen" ||
+        rel.startsWith(".hexagen/") ||
+        rel === path.join(".git", "info", "exclude");
+      const before = await hashTree(root, skip);
+      const args = { root, out: ".hexagen/observed.json", yes: true };
+      const first = await runObserve(args);
+      expect(first.exitCode).toBe(0);
+      expect(first.messages).toContain(
+        `will write: ${path.join(root, ".hexagen", "observed.json")}`,
+      );
+      expect(first.messages).toContain(`will write: ${EXCLUDE(root)}`);
+      expect(first.messages.join("\n")).toMatch(/git add -f/);
+      expect(await fs.readFile(EXCLUDE(root), "utf8")).toContain(".hexagen/\n");
+      expect(await hashTree(root, skip)).toEqual(before);
+      expect(await fs.readdir(path.join(root, ".hexagen"))).toEqual([
+        "observed.json",
+      ]);
+      // ignored by git afterwards
+      execFileSync("git", ["check-ignore", "-q", ".hexagen/observed.json"], {
+        cwd: root,
+      });
+
+      const second = await runObserve(args);
+      expect(second.exitCode).toBe(0);
+      const lines = (await fs.readFile(EXCLUDE(root), "utf8"))
+        .split("\n")
+        .filter((l) => l === ".hexagen/");
+      expect(lines).toHaveLength(1);
+    });
+
+    it("does not list .hexagen contents on a second run", async () => {
+      const root = await messyRepo();
+      const args = { root, out: ".hexagen/observed.json", yes: true };
+      await runObserve(args);
+      const again = await observe({ root });
+      expect(JSON.stringify(again)).not.toMatch(/\.hexagen/);
+    });
+
+    it("never walks .hexagen, even with package.json and sources inside", async () => {
+      const root = await messyRepo();
+      await put(root, ".hexagen/inner/package.json", '{"name":"inner"}');
+      await put(root, ".hexagen/x.ts", "1;\n");
+      const report = await observe({ root });
+      expect(items(report.packages).map((p) => p.name)).not.toContain("inner");
+      const ts = items(report.languages).find((l) => l.name === "TypeScript");
+      expect(ts?.fileCount).toBe(3);
+    });
+
+    it.skipIf(isWin)(
+      "writes the common exclude file for a linked worktree",
+      async () => {
+        const root = await messyRepo();
+        const wt = path.join(await mkRoot(), "wt");
+        git(root, "worktree", "add", "-q", "-b", "side", wt);
+        const skip = (rel: string) =>
+          rel === ".hexagen" || rel.startsWith(".hexagen/");
+        const before = await hashTree(wt, skip);
+        const mainBefore = await hashTree(
+          root,
+          (rel) =>
+            rel === path.join(".git", "info", "exclude") ||
+            rel.startsWith(path.join(".git", "worktrees")),
+        );
+        const res = await runObserve({
+          root: wt,
+          out: ".hexagen/observed.json",
+          yes: true,
+        });
+        expect(res.exitCode).toBe(0);
+        const common = path.resolve(
+          wt,
+          gitOut(wt, "rev-parse", "--git-path", "info/exclude"),
+        );
+        expect(await fs.realpath(common)).toBe(
+          await fs.realpath(EXCLUDE(root)),
+        );
+        expect(await fs.readFile(common, "utf8")).toContain(".hexagen/\n");
+        execFileSync("git", ["check-ignore", "-q", ".hexagen/observed.json"], {
+          cwd: wt,
+        });
+        expect(await hashTree(wt, skip)).toEqual(before);
+        expect(
+          await hashTree(
+            root,
+            (rel) =>
+              rel === path.join(".git", "info", "exclude") ||
+              rel.startsWith(path.join(".git", "worktrees")),
+          ),
+        ).toEqual(mainBefore);
+      },
+    );
+
+    it("fails with exit 2 before writing observed.json when the exclude file cannot be updated", async () => {
+      const root = await messyRepo();
+      await fs.rm(EXCLUDE(root), { force: true });
+      await fs.mkdir(EXCLUDE(root)); // a directory where a file must go
+      const res = await runObserve({
+        root,
+        out: ".hexagen/observed.json",
+        yes: true,
+      });
+      expect(res.exitCode).toBe(2);
+      await expect(
+        fs.stat(path.join(root, ".hexagen", "observed.json")),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe("crash paths from client-controlled text", () => {
+    it("skips a workspace pattern that does not compile, with a note", async () => {
+      const root = await mkRoot();
+      await put(
+        root,
+        "package.json",
+        JSON.stringify({
+          name: "r",
+          workspaces: ["packages/*", "!packages/[z-a]*"],
+        }),
+      );
+      await put(root, "packages/a/package.json", '{"name":"a"}');
+      await commitAll(root);
+      const report = await observe({ root });
+      expect(items(report.packages).map((p) => p.name)).toContain("a");
+      expect(report.limits.reasons.join("\n")).toMatch(/note: .*\[z-a\]/);
+      expect(report.limits.truncated).toBe(false);
+    });
+
+    it("skips a bad .gitattributes glob and a bad nested .gitignore line only", async () => {
+      const root = await messyRepo();
+      await put(
+        root,
+        ".gitattributes",
+        "[z-a] linguist-generated\n*.pb.go linguist-generated\n",
+      );
+      await put(root, "tools/odd-dir/.gitignore", "[z-a]\ncache/\n");
+      await commitAll2(root);
+      const report = await observe({ root });
+      const notes = report.limits.reasons.join("\n");
+      expect(notes).toMatch(/\.gitattributes|ignore file/);
+      expect(notes).toMatch(/tools\/odd-dir\/\.gitignore/);
+      expect(items(report.generated)).toContainEqual({
+        path: "pb/a.pb.go",
+        source: "linguist-generated",
+      });
+      // the good line of the nested .gitignore still applies
+      const js = items(report.languages).find((l) => l.name === "JavaScript");
+      expect(js?.fileCount).toBe(3);
+    });
+
+    it.skipIf(isWin)(
+      "drops a filename with a backslash, with a note",
+      async () => {
+        const root = await messyRepo();
+        await put(root, "weird\\name.ts", "1;\n");
+        await commitAll2(root);
+        const report = await observe({ root });
+        expect(report.limits.reasons.join("\n")).toMatch(/weird.*skipped/);
+        const ts = items(report.languages).find((l) => l.name === "TypeScript");
+        expect(ts?.fileCount).toBe(3);
+      },
+    );
+  });
+
+  describe("--out edge cases", () => {
+    it("exits 2 when .hexagen exists as a regular file", async () => {
+      const root = await messyRepo();
+      await fs.writeFile(path.join(root, ".hexagen"), "x");
+      const res = await runObserve({
+        root,
+        out: ".hexagen/observed.json",
+        yes: true,
+      });
+      expect(res.exitCode).toBe(2);
+      expect(res.messages.join(" ")).toMatch(/not a directory/);
+    });
+
+    it("removes its temp file when the rename fails", async () => {
+      const root = await messyRepo();
+      await fs.mkdir(path.join(root, ".hexagen", "observed.json"), {
+        recursive: true,
+      });
+      const res = await runObserve({
+        root,
+        out: ".hexagen/observed.json",
+        yes: true,
+      });
+      expect(res.exitCode).toBe(2);
+      expect(await fs.readdir(path.join(root, ".hexagen"))).toEqual([
+        "observed.json",
+      ]);
+    });
+
+    it.skipIf(isWin)(
+      "replaces the file by rename, not by rewriting it in place",
+      async () => {
+        const root = await messyRepo();
+        const target = path.join(root, ".hexagen", "observed.json");
+        await fs.mkdir(path.dirname(target));
+        await fs.writeFile(target, "old");
+        const inoBefore = (await fs.stat(target)).ino;
+        const res = await runObserve({
+          root,
+          out: ".hexagen/observed.json",
+          yes: true,
+        });
+        expect(res.exitCode).toBe(0);
+        expect((await fs.stat(target)).ino).not.toBe(inoBefore);
+      },
+    );
+  });
+
+  describe("remote credentials", () => {
+    async function remoteOf(url: string): Promise<string | undefined> {
+      const root = await messyRepo();
+      git(root, "remote", "add", "origin", url);
+      return (await observe({ root })).repo.remote;
+    }
+    it("strips userinfo and query from URL remotes", async () => {
+      const a = await remoteOf("https://user:tok@host/o/r.git?token=abc");
+      expect(a).toBe("https://host/o/r.git");
+      const b = await remoteOf("https://user:p@ss@host/o/r");
+      expect(b).toBe("https://host/o/r");
+      for (const v of [a, b]) {
+        expect(v).not.toMatch(/user|tok|p@ss|ss@|abc|\?/);
+      }
+    });
+    it("leaves scp-like remotes unchanged", async () => {
+      expect(await remoteOf("git@host:o/r")).toBe("git@host:o/r");
+    });
+  });
+
+  it("does not treat .yarn, bower_components or jspm_packages as package roots", async () => {
+    const root = await messyRepo();
+    await put(root, ".yarn/sdks/typescript/package.json", '{"name":"sdk"}');
+    await put(root, "bower_components/b/package.json", '{"name":"bw"}');
+    await put(root, "jspm_packages/j/package.json", '{"name":"jp"}');
+    const names = items((await observe({ root })).packages).map((p) => p.name);
+    expect(names).not.toEqual(expect.arrayContaining(["sdk"]));
+    expect(names).not.toContain("bw");
+    expect(names).not.toContain("jp");
+  });
+
+  it("notes a manifest with no name", async () => {
+    const root = await pnpmRepo();
+    const report = await observe({ root });
+    expect(report.limits.reasons).toContain(
+      "note: apps/noname/package.json has no name; reported under its directory",
+    );
+    expect(report.limits.truncated).toBe(false);
+  });
+
+  it.skipIf(isWin || isRoot)(
+    "notes an unreadable directory and carries on",
+    async () => {
+      const root = await messyRepo();
+      const locked = path.join(root, "locked");
+      await fs.mkdir(locked);
+      await fs.chmod(locked, 0o000);
+      try {
+        const report = await observe({ root });
+        expect(report.limits.reasons).toContain(
+          "note: locked unreadable; skipped",
+        );
+        expect(report.languages.collected).toBe(true);
+      } finally {
+        await fs.chmod(locked, 0o755);
+      }
+    },
+  );
+
+  it("honours a ! negation in npm/yarn workspaces", async () => {
+    const root = await mkRoot();
+    await put(
+      root,
+      "package.json",
+      JSON.stringify({ name: "r", workspaces: ["libs/*", "!libs/skip"] }),
+    );
+    await put(root, "libs/keep/package.json", '{"name":"keep"}');
+    await put(root, "libs/skip/package.json", '{"name":"skip"}');
+    await commitAll(root);
+    const names = items((await observe({ root })).packages).map((p) => p.name);
+    expect(names.sort()).toEqual(["keep", "r"]);
+  });
+
+  it("recognises the build markers", async () => {
+    const root = await mkRoot();
+    for (const f of [
+      "build.gradle.kts",
+      "pyproject.toml",
+      "Cargo.toml",
+      "nx.json",
+    ]) {
+      await put(root, f, "x\n");
+    }
+    await commitAll(root);
+    const markers = items((await observe({ root })).build).map((b) => b.marker);
+    expect(markers.sort()).toEqual(
+      ["Cargo.toml", "build.gradle.kts", "nx.json", "pyproject.toml"].sort(),
+    );
+  });
+
+  it("honours a linguist-generated negation", async () => {
+    const root = await messyRepo();
+    await put(root, "pb/keep.pb.go", "package pb\n");
+    await put(
+      root,
+      ".gitattributes",
+      "*.pb.go linguist-generated\npb/keep.pb.go -linguist-generated\n",
+    );
+    await commitAll2(root);
+    const paths = items((await observe({ root })).generated).map((g) => g.path);
+    expect(paths).toContain("pb/a.pb.go");
+    expect(paths).not.toContain("pb/keep.pb.go");
+  });
+
+  it("rejects a bad --dont-touch before walking", async () => {
+    const root = await messyRepo();
+    let called = 0;
+    const res = await runObserve({
+      root,
+      dontTouch: ["../x"],
+      now: () => ++called,
+    });
+    expect(res.exitCode).toBe(2);
+    expect(called).toBe(0);
+  });
+
+  it("reads CODEOWNERS in GitHub's order: .github/ first", async () => {
+    const root = await messyRepo();
+    await put(root, ".github/CODEOWNERS", "/gh-only/ @gh\n");
+    await commitAll2(root);
+    const dt = items((await observe({ root })).dontTouch);
+    expect(dt).toContainEqual({
+      path: "gh-only/",
+      source: "codeowners",
+      owner: "@gh",
+    });
+    expect(dt.map((d) => d.path)).not.toContain("legacy/");
+  });
+
+  it("reports a bad --max-files as a clean commander error", async () => {
+    observeCommander.exitOverride();
+    observeCommander.configureOutput({
+      writeErr: () => {},
+      writeOut: () => {},
+    });
+    await expect(
+      observeCommander.parseAsync(["--max-files", "abc"], { from: "user" }),
+    ).rejects.toMatchObject({ code: "commander.invalidArgument" });
+  });
+});
+
+async function commitAll2(root: string): Promise<void> {
+  git(root, "add", "-A");
+  git(root, "commit", "-q", "-m", "more", "--no-gpg-sign");
+}

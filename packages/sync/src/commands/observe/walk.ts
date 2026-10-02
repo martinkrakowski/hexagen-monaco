@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { normalizeSlicePath } from "@hexagen/shared";
 import { isIgnored, parseIgnoreFile, type ScopedRules } from "./ignore.js";
 
 /** Never descended into. `.hexagen` is observe's own output directory. */
@@ -10,6 +11,9 @@ export const SKIP_DIRS: ReadonlySet<string> = new Set([
   ".hg",
   ".svn",
   ".hexagen",
+  ".yarn",
+  "bower_components",
+  "jspm_packages",
 ]);
 
 export interface WalkLimits {
@@ -25,6 +29,8 @@ export interface WalkResult {
   readonly dirs: string[];
   /** Gitignored directories named `dist` or `build`, with a trailing `/`. */
   readonly ignoredBuildDirs: string[];
+  /** Non-fatal observations (unreadable directories, skipped entries). */
+  readonly notes: string[];
   /** The reason the walk stopped early, or null when it finished. */
   readonly truncated: string | null;
 }
@@ -46,6 +52,7 @@ export async function walk(
   const files: string[] = [];
   const dirs: string[] = [];
   const ignoredBuildDirs: string[] = [];
+  const notes: string[] = [];
   let truncated: string | null = null;
   let tick = 0;
 
@@ -65,6 +72,7 @@ export async function walk(
     try {
       entries = await fs.readdir(abs, { withFileTypes: true });
     } catch {
+      notes.push(`note: ${rel === "" ? "." : rel} unreadable; skipped`);
       return; // unreadable directory: skipped, not fatal
     }
     entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
@@ -73,7 +81,17 @@ export async function walk(
     if (entries.some((e) => e.name === ".gitignore" && e.isFile())) {
       try {
         const text = await fs.readFile(path.join(abs, ".gitignore"), "utf8");
-        local = [...scopes, { base: rel, rules: parseIgnoreFile(text) }];
+        local = [
+          ...scopes,
+          {
+            base: rel,
+            rules: parseIgnoreFile(
+              text,
+              notes,
+              `${rel === "" ? "" : rel + "/"}.gitignore`,
+            ),
+          },
+        ];
       } catch {
         // unreadable .gitignore: treated as absent
       }
@@ -84,6 +102,15 @@ export async function walk(
       if (truncated) return;
       if (entry.isSymbolicLink()) continue;
       const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
+      if (entry.isDirectory() || entry.isFile()) {
+        const check = normalizeSlicePath(childRel);
+        if (!check.ok) {
+          notes.push(
+            `note: ${JSON.stringify(childRel)} skipped: ${check.reason}`,
+          );
+          continue;
+        }
+      }
       if (entry.isDirectory()) {
         if (SKIP_DIRS.has(entry.name)) continue;
         if (isIgnored(local, childRel, true)) {
@@ -117,5 +144,5 @@ export async function walk(
   files.sort();
   dirs.sort();
   ignoredBuildDirs.sort();
-  return { files, dirs, ignoredBuildDirs, truncated };
+  return { files, dirs, ignoredBuildDirs, notes, truncated };
 }

@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
-import { Command } from "commander";
+import { Command, InvalidArgumentError } from "commander";
 import { execFileSync } from "node:child_process";
-import { promises as fs } from "node:fs";
+import { promises as fs, realpathSync } from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
 import {
@@ -9,6 +9,12 @@ import {
   ObservedReport,
   normalizeSlicePath,
 } from "@hexagen/shared";
+import {
+  ensureExcluded,
+  GitExcludeError,
+  realpathOfExistingAncestor,
+  resolveExcludeFile,
+} from "../shared/git-exclude.js";
 import { globToRegExp } from "./glob.js";
 import { parseIgnoreLine, verdict, type IgnoreRule } from "./ignore.js";
 import { timeCapReason, walk, type WalkResult } from "./walk.js";
@@ -104,9 +110,21 @@ export interface ObserveOptions {
   now?: () => number;
 }
 
-/** Remove `user:password@` from a URL-style remote. */
+/**
+ * Remove credentials, query and fragment from a URL remote. scp-like remotes
+ * (`git@host:o/r`) are not URLs and go through the regex fallback.
+ */
 function stripCredentials(remote: string): string {
-  return remote.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^@/]+@/i, "$1");
+  try {
+    const url = new URL(remote);
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return remote.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^@/]+@/i, "$1");
+  }
 }
 
 function git(root: string, args: string[]): string | null {
@@ -129,6 +147,12 @@ function readRepo(root: string): { remote?: string; commit: string } {
   if (!commit) {
     throw new ObserveError(
       `${root} is not a git checkout with at least one commit; observe records the commit it read`,
+    );
+  }
+  const top = git(root, ["rev-parse", "--show-toplevel"]);
+  if (!top || realpathSync(top) !== realpathSync(root)) {
+    throw new ObserveError(
+      `--root must be the repo top level (git says ${top ?? "unknown"})`,
     );
   }
   const remote = git(root, ["config", "--get", "remote.origin.url"]);
@@ -190,9 +214,16 @@ async function workspaceExclusions(
       notes.push("note: pnpm-workspace.yaml is not valid YAML");
     }
   }
-  return patterns
-    .filter((p) => p.startsWith("!"))
-    .map((p) => globToRegExp(normalizeWorkspaceGlob(p.slice(1))));
+  const out: RegExp[] = [];
+  for (const p of patterns.filter((q) => q.startsWith("!"))) {
+    const re = globToRegExp(normalizeWorkspaceGlob(p.slice(1)));
+    if (re) out.push(re);
+    else
+      notes.push(
+        `note: workspace pattern ${JSON.stringify(p)} is invalid; skipped`,
+      );
+  }
+  return out;
 }
 
 async function collectPackages(
@@ -223,6 +254,9 @@ async function collectPackages(
     // basename for ".". Nothing is made up beyond what is on disk.
     const fallback =
       dir === "." ? path.basename(path.resolve(root)) || "root" : dir;
+    if (name === undefined) {
+      notes.push(`note: ${file} has no name; reported under its directory`);
+    }
     items.push({ name: name ?? fallback, root: dir, manifestFile: file });
   }
   items.sort((a, b) =>
@@ -263,7 +297,7 @@ function collectBuild(
 }
 
 /** `.gitattributes` rules for `linguist-generated`, in file order. */
-function linguistRules(text: string): IgnoreRule[] {
+function linguistRules(text: string, notes: string[]): IgnoreRule[] {
   const rules: IgnoreRule[] = [];
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
@@ -283,7 +317,7 @@ function linguistRules(text: string): IgnoreRule[] {
       }
     }
     if (decision === undefined) continue;
-    const rule = parseIgnoreLine(pattern, !decision);
+    const rule = parseIgnoreLine(pattern, !decision, notes, ".gitattributes");
     if (rule) rules.push(rule);
   }
   return rules;
@@ -310,6 +344,7 @@ async function collectGenerated(
   now: () => number,
   start: number,
   maxMs: number,
+  notes: string[],
 ): Promise<
   Section<{
     path: string;
@@ -324,7 +359,7 @@ async function collectGenerated(
 
   const attrText = await readText(path.join(root, ".gitattributes"));
   if (attrText) {
-    const rules = linguistRules(attrText);
+    const rules = linguistRules(attrText, notes);
     const entries = [
       ...tree.dirs.map((p) => ({ p, dir: true })),
       ...tree.files.map((p) => ({ p, dir: false })),
@@ -398,7 +433,7 @@ async function collectDontTouch(
   }
 
   let codeowners: string | null = null;
-  for (const rel of ["CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS"]) {
+  for (const rel of [".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"]) {
     codeowners = await readText(path.join(root, rel));
     if (codeowners !== null) break;
   }
@@ -445,22 +480,23 @@ export async function observe(
   const maxFiles = options.maxFiles ?? DEFAULT_MAX_FILES;
   const maxMs = options.maxMs ?? DEFAULT_MAX_MS;
   const now = options.now ?? Date.now;
-  const start = now();
   const repo = readRepo(root);
   const notes: string[] = [];
-
-  const tree = await walk(root, { maxFiles, maxMs, now });
-  const truncatedReason = tree.truncated;
-  const notCollected = <T>(): Section<T> => ({
-    collected: false,
-    reason: truncatedReason ?? "walk did not complete",
-  });
-
+  // Validated before the walk so a bad flag fails fast.
   const dontTouch = await collectDontTouch(
     root,
     options.dontTouch ?? [],
     notes,
   );
+  const start = now();
+
+  const tree = await walk(root, { maxFiles, maxMs, now });
+  notes.unshift(...tree.notes);
+  const truncatedReason = tree.truncated;
+  const notCollected = <T>(): Section<T> => ({
+    collected: false,
+    reason: truncatedReason ?? "walk did not complete",
+  });
 
   const report = {
     schemaVersion: BROWNFIELD_SCHEMA_VERSION,
@@ -473,7 +509,7 @@ export async function observe(
     build: truncatedReason ? notCollected() : collectBuild(tree.files),
     generated: truncatedReason
       ? notCollected()
-      : await collectGenerated(root, tree, now, start, maxMs),
+      : await collectGenerated(root, tree, now, start, maxMs, notes),
     dontTouch,
     edges: { collected: false as const, reason: IMPORT_PASS_PENDING },
     unresolved: { collected: false as const, reason: IMPORT_PASS_PENDING },
@@ -488,7 +524,14 @@ export async function observe(
     report.limits.truncated = true;
     report.limits.reasons.push(generated.reason);
   }
-  report.limits.reasons.push(...notes);
+  // `note:` lines are observations, not truncation; `truncated` stays false.
+  const MAX_NOTES = 50;
+  report.limits.reasons.push(...notes.slice(0, MAX_NOTES));
+  if (notes.length > MAX_NOTES) {
+    report.limits.reasons.push(
+      `note: ${notes.length - MAX_NOTES} more note(s) omitted`,
+    );
+  }
   return ObservedReport.parse(report);
 }
 
@@ -503,21 +546,6 @@ export interface RunObserveResult {
   stdout?: string;
   /** Preflight and error lines, in order, for stderr. */
   messages: string[];
-}
-
-/** The nearest existing ancestor of `p`, resolved through symlinks. */
-async function realpathOfExistingAncestor(p: string): Promise<string> {
-  let current = p;
-  for (;;) {
-    try {
-      const real = await fs.realpath(current);
-      return path.join(real, path.relative(current, p));
-    } catch {
-      const parent = path.dirname(current);
-      if (parent === current) return p;
-      current = parent;
-    }
-  }
 }
 
 /**
@@ -539,54 +567,92 @@ async function resolveOut(root: string, out: string): Promise<string | null> {
   return abs;
 }
 
+/** Why a path is not a usable `.hexagen` directory, or null when it is fine. */
+async function sidecarProblem(root: string): Promise<string | null> {
+  try {
+    const st = await fs.stat(path.join(root, ".hexagen"));
+    return st.isDirectory()
+      ? null
+      : `${path.join(root, ".hexagen")} exists and is not a directory`;
+  } catch {
+    return null; // absent: it will be created
+  }
+}
+
 export async function runObserve(
   options: RunObserveOptions,
 ): Promise<RunObserveResult> {
   const root = path.resolve(options.root);
   const messages: string[] = [];
   let target: string | null = null;
+  let excludeFile: string | null = null;
 
-  if (options.out !== undefined) {
-    target = await resolveOut(root, options.out);
-    if (!target) {
+  try {
+    if (options.out !== undefined) {
+      target = await resolveOut(root, options.out);
+      if (!target) {
+        messages.push(
+          `--out must name a file under ${path.join(root, ".hexagen")}${path.sep}; got "${options.out}"`,
+        );
+        return { exitCode: 2, messages };
+      }
+      const problem = await sidecarProblem(root);
+      if (problem) {
+        messages.push(problem);
+        return { exitCode: 2, messages };
+      }
+      readRepo(root); // --root must be the top level before anything is promised
+      excludeFile = await resolveExcludeFile(root);
+      messages.push(`will write: ${target}`);
+      messages.push(`will write: ${excludeFile}`);
       messages.push(
-        `--out must name a file under ${path.join(root, ".hexagen")}${path.sep}; got "${options.out}"`,
+        "note: .hexagen/ is excluded through the exclude file above, not .gitignore; `git add -f` can still stage it.",
+      );
+      if (!options.yes) {
+        messages.push("Re-run with --yes to write it.");
+        return { exitCode: 2, messages };
+      }
+    }
+
+    const report = await observe(options);
+    const json = `${JSON.stringify(report, null, 2)}\n`;
+    if (!target) return { exitCode: 0, stdout: json, messages };
+
+    // The exclude is updated first: if it fails, no observed.json exists.
+    await ensureExcluded(root, ".hexagen/");
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    const tmp = `${target}.${process.pid}.tmp`;
+    // The check-then-rename window can only be raced by another process in the
+    // FDE's own clone, which is outside this tool's threat model.
+    try {
+      await fs.writeFile(tmp, json, "utf8");
+      await fs.rename(tmp, target);
+    } catch (e) {
+      await fs.rm(tmp, { force: true });
+      messages.push(
+        `could not write ${target}: ${e instanceof Error ? e.message : String(e)}`,
       );
       return { exitCode: 2, messages };
     }
-    messages.push(`will write: ${target}`);
-    if (!options.yes) {
-      messages.push("Re-run with --yes to write it.");
-      return { exitCode: 2, messages };
-    }
-  }
-
-  let report: ObservedReport;
-  try {
-    report = await observe(options);
+    return { exitCode: 0, messages };
   } catch (e) {
-    if (e instanceof ObserveError) {
+    if (
+      e instanceof ObserveError ||
+      e instanceof GitExcludeError ||
+      (e instanceof Error && e.name === "ZodError")
+    ) {
       messages.push(e.message);
       return { exitCode: 2, messages };
     }
     throw e;
   }
-  const json = `${JSON.stringify(report, null, 2)}\n`;
-
-  if (!target) return { exitCode: 0, stdout: json, messages };
-
-  await fs.mkdir(path.dirname(target), { recursive: true });
-  const tmp = `${target}.${process.pid}.tmp`;
-  await fs.writeFile(tmp, json, "utf8");
-  await fs.rename(tmp, target);
-  return { exitCode: 0, messages };
 }
 
 function parsePositiveInt(name: string): (v: string) => number {
   return (value) => {
     const n = Number(value);
     if (!Number.isInteger(n) || n <= 0) {
-      throw new ObserveError(`${name} must be a positive integer`);
+      throw new InvalidArgumentError(`${name} must be a positive integer`);
     }
     return n;
   };

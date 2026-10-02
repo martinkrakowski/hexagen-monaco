@@ -8,6 +8,16 @@
  *
  * Patterns are matched against repo-relative POSIX paths with no leading or
  * trailing slash.
+ *
+ * Known limits (they fail open on match, and never crash):
+ * - `packages/**` matches what is inside `packages`, not `packages` itself.
+ * - `a**` (a `**` that is not a whole segment) behaves like `a.*`, so it can
+ *   cross separators.
+ * - A `]` as the first class member (`[]]`) is not supported.
+ * - Extglob (`+(a|b)`, `@(a)`, `!(a)`) is not supported; the characters are
+ *   matched literally.
+ * - A pattern that does not compile (for example `[z-a]`) yields null and the
+ *   caller skips that one pattern with a note.
  */
 
 function escapeRegex(ch: string): string {
@@ -75,7 +85,14 @@ export function globToRegexSource(glob: string, braces = true): string {
   return out;
 }
 
-/** Anchored regex for a whole-path glob match. */
-export function globToRegExp(glob: string): RegExp {
-  return new RegExp(`^${globToRegexSource(glob)}$`);
+/**
+ * Anchored regex for a whole-path glob match, or null when the pattern cannot
+ * be compiled (client-controlled text must never crash the scan).
+ */
+export function globToRegExp(glob: string): RegExp | null {
+  try {
+    return new RegExp(`^${globToRegexSource(glob)}$`);
+  } catch {
+    return null;
+  }
 }
