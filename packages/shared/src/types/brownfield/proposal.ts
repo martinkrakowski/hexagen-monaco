@@ -9,7 +9,8 @@ export const ProposalMeta = z
     sliceId: z.string().min(1),
     tool: z.string().min(1),
     paths: z.array(FilePathString),
-    traceSeq: z.number().int().min(0),
+    /** The evidence line's seq; null when the trace is unchained (no seq). */
+    traceSeq: z.number().int().min(0).nullable(),
     createdAt: IsoDateTime,
   })
   .strict();

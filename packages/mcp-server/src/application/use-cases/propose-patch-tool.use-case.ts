@@ -23,6 +23,10 @@ export const PROPOSE_PATCH_TOOL = "hexagen_propose_patch";
 
 const RESERVED_ROOTS: ReadonlySet<string> = new Set([".hexagen", ".git"]);
 
+function isReserved(p: string): boolean {
+  return RESERVED_ROOTS.has(p.split("/")[0] ?? "");
+}
+
 /**
  * ProposePatchToolUseCase: `hexagen_propose_patch`, propose-only (plan BW-D9).
  *
@@ -88,16 +92,19 @@ export class ProposePatchToolUseCase implements ProposePatchToolPort {
     const windowCheck = checkGrantWindow(verified, this.now());
     if (!windowCheck.allowed) return deny(windowCheck.code, windowCheck.reason);
 
-    const parsed = parseUnifiedDiff(input.patch);
-    if (!parsed.ok)
+    const patchText: unknown = input.patch;
+    if (typeof patchText !== "string") {
+      return deny("grant_denied", "Patch refused: patch must be a string");
+    }
+    const parsed = parseUnifiedDiff(patchText);
+    if (!parsed.ok) {
       return deny("grant_denied", `Patch refused: ${parsed.reason}`);
+    }
     const paths = parsed.paths;
 
     // The sidecar and git's own directory are never a proposal's business.
     // First-segment, case-sensitive; the on-disk re-check covers case tricks.
-    const reserved = paths.find((p) =>
-      RESERVED_ROOTS.has(p.split("/")[0] ?? ""),
-    );
+    const reserved = paths.find(isReserved);
     if (reserved !== undefined) {
       return deny(
         "grant_denied",
@@ -141,6 +148,15 @@ export class ProposePatchToolUseCase implements ProposePatchToolPort {
       }
       reals.push(entry.real);
     }
+    // The same refusal on the real spelling: a parent symlinked into .git/ or
+    // .hexagen/ is the same write.
+    const realReserved = reals.find(isReserved);
+    if (realReserved !== undefined) {
+      return deny(
+        "grant_denied",
+        `On-disk path '${realReserved}' is refused: .hexagen/ and .git/ are never proposed`,
+      );
+    }
     const realGrant: GrantCheck = checkWriteAgainstGrant(verified, {
       tool: PROPOSE_PATCH_TOOL,
       paths: reals,
@@ -157,19 +173,26 @@ export class ProposePatchToolUseCase implements ProposePatchToolPort {
       }
     }
 
-    return this.store(input, verified.id, slice.id, goalId, paths);
+    return this.store(patchText, verified.id, slice.id, goalId, paths);
   }
 
   private async store(
-    input: ProposePatchToolInput,
+    patch: string,
     grantId: string,
     sliceId: string,
     goalId: string,
     paths: readonly string[],
   ): Promise<ProposePatchToolResult> {
-    const saved = await this.workspace.savePatch(input.patch);
+    const saved = await this.workspace.savePatch(patch);
     if (!saved.success) {
-      return this.failed(`could not store the patch: ${saved.error.message}`);
+      const reason = `could not store the patch: ${saved.error.message}`;
+      await this.traceError(
+        grantId,
+        goalId,
+        { patch },
+        { stored: false, reason },
+      );
+      return this.failed(reason);
     }
     const id = saved.value.id;
     const time = this.now().toISOString();
@@ -178,7 +201,7 @@ export class ProposePatchToolUseCase implements ProposePatchToolPort {
       goal_id: goalId,
       tool_call: {
         name: PROPOSE_PATCH_TOOL,
-        args: { patch: input.patch },
+        args: { patch },
         result: { halt_reason: "completed", proposal_id: id, paths },
         time,
       },
@@ -194,7 +217,8 @@ export class ProposePatchToolUseCase implements ProposePatchToolPort {
       );
     }
     // An unchained (greenfield) trace has no sequence numbers.
-    const traceSeq = (traced.value as TraceAppendReceipt | undefined)?.seq ?? 0;
+    const traceSeq =
+      (traced.value as TraceAppendReceipt | undefined)?.seq ?? null;
     const meta: ProposalMeta = {
       id,
       grantId,
@@ -208,7 +232,12 @@ export class ProposePatchToolUseCase implements ProposePatchToolPort {
     if (!metaSaved.success) {
       await this.workspace.discardPatch(id);
       const reason = `could not store the proposal metadata: ${metaSaved.error.message}`;
-      await this.compensate(grantId, goalId, id, reason);
+      await this.traceError(
+        grantId,
+        goalId,
+        { proposal_id: id },
+        { proposal_id: id, discarded: true, reason },
+      );
       return this.failed(reason);
     }
     return {
@@ -223,27 +252,23 @@ export class ProposePatchToolUseCase implements ProposePatchToolPort {
   }
 
   /**
-   * The `completed` line already cites a proposal that was then discarded.
-   * Best effort: append an `error` line saying so; a failure here is ignored
-   * (the call is already reporting an error).
+   * An `error` line for a failure after the call was authorised: a patch that
+   * could not be stored, or a `completed` line that cites a proposal which was
+   * then discarded. Best effort: a failure to write it is ignored, because the
+   * call is already reporting an error.
    */
-  private async compensate(
+  private async traceError(
     grantId: string,
     goalId: string,
-    proposalId: string,
-    reason: string,
+    args: unknown,
+    result: unknown,
   ): Promise<void> {
     const time = this.now().toISOString();
     await this.traceWritePort
       .appendLine({
         grant_id: grantId,
         goal_id: goalId,
-        tool_call: {
-          name: PROPOSE_PATCH_TOOL,
-          args: { proposal_id: proposalId },
-          result: { proposal_id: proposalId, discarded: true, reason },
-          time,
-        },
+        tool_call: { name: PROPOSE_PATCH_TOOL, args, result, time },
         halt_reason: "error",
         transaction_ids: [],
         started_at: time,

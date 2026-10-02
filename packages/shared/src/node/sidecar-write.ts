@@ -4,8 +4,13 @@ import path from "node:path";
 
 export class SidecarFileExistsError extends Error {}
 
-async function writeTemp(target: string, text: string): Promise<string> {
+async function writeTemp(
+  target: string,
+  text: string,
+  guard?: () => Promise<void>,
+): Promise<string> {
   await mkdir(path.dirname(target), { recursive: true });
+  await guard?.();
   const tmp = `${target}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
   const handle = await open(tmp, "wx");
   try {
@@ -27,9 +32,16 @@ async function writeTemp(target: string, text: string): Promise<string> {
 export async function writeFileExclusive(
   target: string,
   text: string,
+  /**
+   * Called before the temp file is created and again just before the link; a
+   * throw aborts the write (the temp file is removed). For a caller that must
+   * re-check where the directory really points.
+   */
+  guard?: () => Promise<void>,
 ): Promise<void> {
-  const tmp = await writeTemp(target, text);
+  const tmp = await writeTemp(target, text, guard);
   try {
+    await guard?.();
     await link(tmp, target);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") {

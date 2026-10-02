@@ -36,11 +36,16 @@ function fail<T>(error: unknown): Result<T, Error> {
  * (temp file, then link: never overwritten) under a random hex id.
  */
 export class ProposalWorkspaceAdapter implements ProposalWorkspacePort {
-  /** `newId` is a test seam; the default is 24 random hex characters. */
+  /**
+   * `newId` (default: 24 random hex characters) and `afterValidate` (runs after
+   * the proposals directory is validated, before anything is written) are test
+   * seams.
+   */
   constructor(
     private readonly workspaceRoot: string,
     private readonly newId: () => string = () =>
       randomBytes(12).toString("hex"),
+    private readonly afterValidate?: () => Promise<void>,
   ) {}
 
   async readSlice(): Promise<Result<Slice, Error>> {
@@ -151,10 +156,31 @@ export class ProposalWorkspaceAdapter implements ProposalWorkspacePort {
     }
     const dir = path.join(realRoot, ...PROPOSALS_DIR);
     await fs.mkdir(dir, { recursive: true });
-    if (!inside(await realpathNative(dir))) {
+    const realDir = await realpathNative(dir);
+    if (!inside(realDir)) {
       throw new Error(".hexagen/proposals resolves outside the repository");
     }
-    return dir;
+    // Every write uses the real path, and re-checks it (see `writeInto`).
+    return realDir;
+  }
+
+  /**
+   * Writes `name` into the validated real proposals directory. The directory is
+   * re-resolved before the temp file is created and again just before the link,
+   * and must still be the validated one, so a swap for a symlink after
+   * validation writes nothing outside.
+   */
+  private async writeInto(
+    dir: string,
+    name: string,
+    text: string,
+  ): Promise<void> {
+    await this.afterValidate?.();
+    await writeFileExclusive(path.join(dir, name), text, async () => {
+      if ((await realpathNative(dir)) !== dir) {
+        throw new Error(".hexagen/proposals changed after it was validated");
+      }
+    });
   }
 
   async savePatch(patch: string): Promise<Result<{ id: string }, Error>> {
@@ -163,7 +189,7 @@ export class ProposalWorkspaceAdapter implements ProposalWorkspacePort {
       for (let attempt = 0; attempt < 5; attempt++) {
         const id = this.newId();
         try {
-          await writeFileExclusive(path.join(dir, `${id}.patch`), patch);
+          await this.writeInto(dir, `${id}.patch`, patch);
           return { success: true, value: { id } };
         } catch (error) {
           if (error instanceof SidecarFileExistsError) continue;
@@ -181,8 +207,9 @@ export class ProposalWorkspaceAdapter implements ProposalWorkspacePort {
       if (!ID_PATTERN.test(meta.id)) throw new Error("unsafe proposal id");
       const checked = ProposalMeta.parse(meta);
       const dir = await this.proposalsDir();
-      await writeFileExclusive(
-        path.join(dir, `${meta.id}.json`),
+      await this.writeInto(
+        dir,
+        `${meta.id}.json`,
         `${JSON.stringify(checked, null, 2)}\n`,
       );
       return { success: true, value: undefined };
@@ -193,8 +220,11 @@ export class ProposalWorkspaceAdapter implements ProposalWorkspacePort {
 
   async discardPatch(id: string): Promise<void> {
     if (!ID_PATTERN.test(id)) return;
-    await fs
-      .unlink(path.join(this.workspaceRoot, ...PROPOSALS_DIR, `${id}.patch`))
-      .catch(() => undefined);
+    try {
+      const dir = await this.proposalsDir();
+      await fs.unlink(path.join(dir, `${id}.patch`));
+    } catch {
+      // Best effort: nothing more can be done for a patch we cannot reach.
+    }
   }
 }

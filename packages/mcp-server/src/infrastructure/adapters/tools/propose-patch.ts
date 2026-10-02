@@ -28,12 +28,6 @@ export const proposePatchTool: ToolDefinition = {
   },
   handler: async (args, deps) => {
     const a = args as Record<string, unknown>;
-    if (typeof a.patch !== "string") {
-      return {
-        isError: true,
-        content: [{ type: "text" as const, text: "patch must be a string" }],
-      };
-    }
     const result = await deps.proposePatchToolUseCase.execute({
       patch: a.patch,
       grant: a.grant as Grant | undefined,

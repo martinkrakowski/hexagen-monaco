@@ -84,7 +84,9 @@ function unquote(token: string): string | null {
   if (token.length < 2 || !token.startsWith('"') || !token.endsWith('"')) {
     return null;
   }
-  const inner = token.slice(1, -1);
+  // By code point, never by UTF-16 unit: a literal non-BMP character (an
+  // emoji) must become its four UTF-8 bytes, not two replacement characters.
+  const inner = Array.from(token.slice(1, -1));
   const bytes: number[] = [];
   const encoder = new TextEncoder();
   for (let i = 0; i < inner.length; i++) {
@@ -102,7 +104,7 @@ function unquote(token: string): string | null {
       i += 1;
       continue;
     }
-    const octal = /^[0-3][0-7][0-7]/.exec(inner.slice(i + 1, i + 4));
+    const octal = /^[0-3][0-7][0-7]/.exec(inner.slice(i + 1, i + 4).join(""));
     if (octal === null) return null;
     bytes.push(Number.parseInt(octal[0], 8));
     i += 3;
@@ -118,14 +120,20 @@ function unquote(token: string): string | null {
 
 /** A path token as git writes it: quoted, or raw. */
 function pathToken(token: string, context: string): string {
+  let name = token;
   if (token.startsWith('"')) {
     const decoded = unquote(token);
     if (decoded === null) {
       refuse(`quoted path that cannot be decoded safely: ${show(context)}`);
     }
-    return decoded;
+    name = decoded;
   }
-  return token;
+  // A replacement character means the name we would judge is not the name
+  // git writes.
+  if (name.includes("\uFFFD")) {
+    refuse(`path contains U+FFFD (undecodable bytes): ${show(context)}`);
+  }
+  return name;
 }
 
 function stripPrefix(name: string, prefix: "a/" | "b/", line: string): string {
@@ -181,11 +189,22 @@ function parseDiffGit(line: string): [string, string] {
 /** A `---` or `+++` name: null for /dev/null. Git may append a tab and a stamp. */
 function parseFileLine(line: string, prefix: "a/" | "b/"): string | null {
   const body = line.slice(4);
-  const token = body.startsWith('"') ? body : (body.split("\t")[0] as string);
+  let token: string;
+  if (body.startsWith('"')) {
+    const q = closingQuote(body, 0);
+    const rest = q === -1 ? "x" : body.slice(q + 1);
+    if (q === -1 || (rest !== "" && !rest.startsWith("\t"))) {
+      refuse(`unreadable quoted path: ${show(line)}`);
+    }
+    token = body.slice(0, q + 1);
+  } else {
+    token = body.split("\t")[0] as string;
+  }
   if (token === DEV_NULL) return null;
   return stripPrefix(pathToken(token, line), prefix, line);
 }
 
+const NO_NEWLINE = "\\ No newline at end of file";
 const HUNK = /^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/;
 const INDEX_LINE = /^index [0-9a-f]+\.\.[0-9a-f]+(?: (\d{6}))?$/;
 const SIMILARITY = /^(?:dis)?similarity index \d+%$/;
@@ -200,6 +219,7 @@ function skipHunks(lines: readonly string[], start: number): number {
     let oldLeft = header[1] === undefined ? 1 : Number(header[1]);
     let newLeft = header[2] === undefined ? 1 : Number(header[2]);
     i++;
+    let afterHunkLine = false;
     for (;;) {
       const line = lines[i];
       if (line === undefined) {
@@ -207,6 +227,12 @@ function skipHunks(lines: readonly string[], start: number): number {
         break;
       }
       if (line.startsWith("\\")) {
+        if (line !== NO_NEWLINE || !afterHunkLine) {
+          refuse(
+            `backslash line that is not a no-newline marker after a hunk line: ${show(line)}`,
+          );
+        }
+        afterHunkLine = false;
         i++;
         continue;
       }
@@ -229,6 +255,7 @@ function skipHunks(lines: readonly string[], start: number): number {
       } else {
         refuse(`unexpected line inside a hunk: ${show(line)}`);
       }
+      afterHunkLine = true;
       i++;
     }
   }

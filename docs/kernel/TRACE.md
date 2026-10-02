@@ -95,7 +95,7 @@ code (`grant_denied`, `grant_expired`, `grant_revoked`; a patch the tool refuses
 to read is `grant_denied` too), and `transaction_ids` is empty. A call with no
 grant, or a grant with no `id`, is a `grant_missing` record. The proposal's
 metadata (`.hexagen/proposals/<id>.json`) holds the `seq` of its `completed` line
-as `traceSeq`. If the proposal's metadata cannot be stored after that
+as `traceSeq` (`null` when the trace is unchained and has no seq). A patch that cannot be stored, or a call whose `patch` is missing or not a string, is traced too (`error`, and `grant_denied` with reason "patch must be a string"). If the proposal's metadata cannot be stored after that
 line was written, the patch is discarded and a best-effort `error` line follows
 (`result`: `{proposal_id, discarded: true, reason}`), so no `completed` line is
 left citing a proposal that does not exist. "Every call writes a trace line"

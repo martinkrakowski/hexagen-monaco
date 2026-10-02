@@ -418,3 +418,20 @@ describe("contract reserved rule id", () => {
     expect(UNRESOLVED_IMPORT_RULE_ID).toBe("unresolved-import");
   });
 });
+
+describe("proposal traceSeq", () => {
+  const ajv = new Ajv({ strict: false, validateFormats: false });
+  const validate = ajv.compile(loadSchema("proposal.schema.json"));
+  it("may be null (an unchained trace has no seq), in both schemas", () => {
+    const v = { ...proposal, traceSeq: null };
+    expect(ProposalMeta.safeParse(v).success).toBe(true);
+    expect(validate(v)).toBe(true);
+  });
+  it("is still required and still not a string", () => {
+    const { traceSeq: _drop, ...without } = proposal;
+    for (const v of [without, { ...proposal, traceSeq: "4" }]) {
+      expect(ProposalMeta.safeParse(v).success).toBe(false);
+      expect(validate(v)).toBe(false);
+    }
+  });
+});

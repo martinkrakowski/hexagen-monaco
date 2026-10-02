@@ -145,3 +145,44 @@ describe("parseUnifiedDiff", () => {
     expect(refusal(big)).toMatch(/larger than/);
   });
 });
+
+describe("parseUnifiedDiff round 3", () => {
+  const body = (q: string): string => `diff --git "a/${q}" "b/${q}"\n`;
+
+  it("decodes a literal emoji and an octal-escaped emoji to the same real name", () => {
+    expect(paths(body("src/\u{1F600}.ts"))).toEqual(["src/\u{1F600}.ts"]);
+    expect(paths(body("src/\\360\\237\\230\\200.ts"))).toEqual([
+      "src/\u{1F600}.ts",
+    ]);
+  });
+
+  it("refuses anything that would decode to U+FFFD", () => {
+    expect(refusal(body("src/\\357\\277\\275.ts"))).toMatch(/U\+FFFD/);
+    expect(refusal(body("src/�.ts"))).toMatch(/U\+FFFD/);
+  });
+
+  it("accepts only the exact no-newline marker, directly after a hunk line", () => {
+    const head = "diff --git a/x b/x\n--- a/x\n+++ b/x\n";
+    expect(refusal(`${head}@@ -1 +1 @@\n-a\n\\ garbage\n+b\n`)).toMatch(
+      /backslash/,
+    );
+    expect(
+      refusal(`${head}@@ -1 +1 @@\n\\ No newline at end of file\n-a\n+b\n`),
+    ).toMatch(/backslash/);
+    expect(
+      refusal(
+        `${head}@@ -1 +1 @@\n-a\n\\ No newline at end of file\n\\ No newline at end of file\n+b\n`,
+      ),
+    ).toMatch(/backslash/);
+    expect(
+      refusal(`${head}@@ -1 +1 @@\n-a\n+b\n\\ No newline at end of file \n`),
+    ).toMatch(/backslash/);
+  });
+
+  it("lets a tab-separated stamp follow a quoted ---/+++ path", () => {
+    const patch = `diff --git "a/src/q\\"x.ts" "b/src/q\\"x.ts"\n--- "a/src/q\\"x.ts"\t2020-01-01\n+++ "b/src/q\\"x.ts"\t2020-01-01\n${HUNK}`;
+    expect(paths(patch)).toEqual(['src/q"x.ts']);
+    const junk = patch.replace('x.ts"\t2020', 'x.ts" junk');
+    expect(refusal(junk)).toMatch(/quoted/);
+  });
+});

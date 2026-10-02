@@ -154,7 +154,7 @@ diff and the FDE applies it. The MCP tool `hexagen_propose_patch` (input:
 `patch`, `grant`, optional `goal_id`) is **propose-only**: it never applies the
 patch and never writes anywhere in the working tree. An allowed patch is
 stored as `.hexagen/proposals/<id>.patch` with `<id>.json` beside it (the
-`ProposalMeta` format: id, grantId, sliceId, tool, paths, traceSeq, createdAt),
+`ProposalMeta` format: id, grantId, sliceId, tool, paths, traceSeq (null for an unchained trace), createdAt),
 and the FDE applies it with `git apply -p1`. A grant names the tool in `tools`
 (`--tools hexagen_propose_patch`) like any other. Checks, in order, each
 denying before the next runs:
@@ -170,7 +170,7 @@ denying before the next runs:
    file headers, any line outside the header/hunk grammar and a patch over
    1 MiB are refused.
    Any path equal to or under `.hexagen/` or `.git/` (first segment,
-   case-sensitive) is refused right after the parse, whatever the grant or
+   case-sensitive), as parsed or as resolved on disk, is refused, whatever the grant or
    slice say;
 4. `checkWriteAgainstGrant` with tool `hexagen_propose_patch` over every path;
 5. the slice: every path inside `slice.paths` and outside `excludes`; no
