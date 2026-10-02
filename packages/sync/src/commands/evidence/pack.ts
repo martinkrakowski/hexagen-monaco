@@ -1,7 +1,12 @@
 import { createHash, randomBytes } from "node:crypto";
 import { promises as fs, realpathSync } from "node:fs";
 import path from "node:path";
-import { BROWNFIELD_SCHEMA_VERSION, BundleIndex, Tip } from "@hexagen/shared";
+import {
+  BROWNFIELD_SCHEMA_VERSION,
+  BUNDLE_FORBIDDEN_PATH_PATTERN,
+  BundleIndex,
+  Tip,
+} from "@hexagen/shared";
 import {
   readGrantKey,
   readSliceEngagementId,
@@ -13,8 +18,10 @@ import {
   signTip,
   splitTrace,
   verifyTip,
+  withTraceLock,
 } from "@hexagen/shared/node/trace-chain";
 import { writeZipStore, type ZipEntry } from "../report/zip-store.js";
+import { realpathOfExistingAncestor } from "../shared/git-exclude.js";
 import { resolveSidecarOut } from "../shared/sidecar-out.js";
 import {
   checkLines,
@@ -35,6 +42,10 @@ export interface EvidencePackOptions {
   /** Test seam; defaults to `os.homedir()`. */
   readonly homeDir?: string;
   readonly now?: () => Date;
+  /** Test seam: replaces the atomic write of `tip.json`. */
+  /** Test seam: runs just before the bundle is written. */
+  readonly beforeWrite?: () => Promise<void>;
+  readonly writeTip?: (target: string, data: string) => Promise<void>;
 }
 
 export interface EvidencePackResult {
@@ -92,6 +103,33 @@ export async function runEvidencePack(
     return usage(
       `--out must name a file under ${path.join(root, ".hexagen")}${path.sep}; got "${options.out}"`,
     );
+  }
+  const evidenceDir = path.join(root, ".hexagen", "evidence");
+  const underEvidence = async (): Promise<boolean> => {
+    const inside = (base: string, target: string): boolean => {
+      const rel = path.relative(base, target);
+      return rel === "" || !(rel.startsWith("..") || path.isAbsolute(rel));
+    };
+    if (inside(evidenceDir, out)) return true;
+    const realEvidence = await realpathOfExistingAncestor(evidenceDir);
+    return inside(realEvidence, await realpathOfExistingAncestor(out));
+  };
+  if (await underEvidence()) {
+    return usage(
+      `--out must not be under ${evidenceDir}: the bundle must never replace the evidence it verified`,
+    );
+  }
+  const relOut = path.relative(root, out).split(path.sep).join("/");
+  if (new RegExp(BUNDLE_FORBIDDEN_PATH_PATTERN).test(relOut)) {
+    return usage(`--out "${relOut}" names a key or env file; refusing`);
+  }
+  if (
+    await fs.lstat(out).then(
+      () => true,
+      () => false,
+    )
+  ) {
+    return usage(`--out ${out} already exists; refusing to replace it`);
   }
   if (options.grantFiles.length === 0) {
     return usage("at least one --grant <file> is required");
@@ -168,10 +206,15 @@ export async function runEvidencePack(
     grants.set(g.id, g as PackGrant);
   }
 
-  const traceBytes = await fs.readFile(tracePath);
+  // Read under the writer's lock so a half-finished append is never seen.
+  const traceBytes = await withTraceLock(tracePath, () =>
+    fs.readFile(tracePath),
+  );
   const split = splitTrace(traceBytes.toString("utf8"));
+  if (split.lines.length === 0) {
+    return usage("the trace has no lines; there is nothing to pack");
+  }
   const problems: string[] = [...grantProblems];
-  if (split.lines.length === 0) problems.push("the trace has no lines");
   if (split.torn) {
     problems.push(
       "the last line is torn (invalid JSON or no trailing newline)",
@@ -184,6 +227,7 @@ export async function runEvidencePack(
   // which a chain that only looks backwards cannot.
   const tipPath = path.join(root, ...TIP_RELATIVE);
   let tipChecked = false;
+  let previousTip: { seq: number; hash: string } | null = null;
   let tipText: string | null = null;
   try {
     tipText = await fs.readFile(tipPath, "utf8");
@@ -207,6 +251,7 @@ export async function runEvidencePack(
         problems.push("tip.json HMAC does not verify with the engagement key");
       } else {
         tipChecked = true;
+        previousTip = { seq: tip.seq, hash: tip.hash };
         const at = split.lines[tip.seq];
         if (at === undefined) {
           problems.push(
@@ -264,6 +309,7 @@ export async function runEvidencePack(
     })),
     evidence: { count: evidence.length, seqs: evidence.map((v) => v.index) },
     tipAnchoredBefore: tipChecked,
+    previousTip,
   };
 
   const referenced = [
@@ -312,27 +358,32 @@ export async function runEvidencePack(
     sliceId: sliceId ?? options.engagement ?? "unspecified",
     files,
   };
-  const index = BundleIndex.parse({
-    ...indexBody,
-    hmac: signBundleIndex(indexBody, keyHex),
-  });
-  entries.unshift({
-    name: "bundle.json",
-    content: `${JSON.stringify(index, null, 2)}\n`,
-  });
-
   try {
+    const index = BundleIndex.parse({
+      ...indexBody,
+      hmac: signBundleIndex(indexBody, keyHex),
+    });
+    entries.unshift({
+      name: "bundle.json",
+      content: `${JSON.stringify(index, null, 2)}\n`,
+    });
     await fs.mkdir(path.dirname(out), { recursive: true });
+    await options.beforeWrite?.();
+    // Temp file, then a hard link: link fails with EEXIST rather than
+    // replacing, so a bundle that was already there is never overwritten.
     const tmp = `${out}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
     try {
       await fs.writeFile(tmp, writeZipStore(entries), { flag: "wx" });
-      await fs.rename(tmp, out);
-    } catch (error) {
+      await fs.link(tmp, out);
+    } finally {
       await fs.unlink(tmp).catch(() => undefined);
-      throw error;
     }
+    // From here `out` is ours, so rolling it back cannot touch anyone else's.
     try {
-      await writeAtomic(tipPath, `${JSON.stringify(newTip, null, 2)}\n`);
+      await (options.writeTip ?? writeAtomic)(
+        tipPath,
+        `${JSON.stringify(newTip, null, 2)}\n`,
+      );
     } catch (error) {
       await fs.unlink(out).catch(() => undefined);
       throw error;
@@ -349,6 +400,7 @@ export async function runEvidencePack(
     messages: [
       `evidence pack ok: ${evidence.length} evidence line(s), ${denials.length} denial(s); tip seq ${lastSeq}`,
       `bundle: ${out}`,
+      `new tip (record it out of band): seq ${newTip.seq} hash ${newTip.hash} hmac ${newTip.hmac}`,
     ],
     verdicts,
     bundle: out,

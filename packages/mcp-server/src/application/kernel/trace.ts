@@ -12,6 +12,7 @@
  *
  * See docs/kernel/trace.schema.json for the wire shape.
  */
+import { traceRuleReasons } from "@hexagen/shared";
 import type { Grant } from "./grant.js";
 
 export interface ToolCallRecord {
@@ -84,23 +85,6 @@ export type TraceCheck =
   | { readonly valid: true }
   | { readonly valid: false; readonly reason: string };
 
-function isoToMillis(iso: string): number {
-  const millis = Date.parse(iso);
-  if (Number.isNaN(millis)) {
-    throw new Error(`Not a valid ISO 8601 timestamp: ${iso}`);
-  }
-  return millis;
-}
-
-/**
- * `hexagen_accept_transaction` itself is never listed in `grant.tools` —
- * grants name the seven mutation tools they authorize, not the accept step
- * that carries them. A record whose only call is this one documents an
- * accept with no pending mutation (nothing was written), so it is always
- * in-scope for whatever grant it cites.
- */
-const IMPLICITLY_ALLOWED_TOOL = "hexagen_accept_transaction";
-
 /**
  * Retrospective validator for a Trace against the Grant(s) it names.
  * Checks that the grant_id resolves to a known Grant, and — only for a
@@ -117,49 +101,6 @@ export function checkTrace(
   trace: TraceRecord,
   grants: readonly Grant[],
 ): TraceCheck {
-  if (!trace.grant_id) {
-    return { valid: false, reason: "Trace has no grant_id" };
-  }
-
-  const grant = grants.find((candidate) => candidate.id === trace.grant_id);
-  if (!grant) {
-    return {
-      valid: false,
-      reason: `Trace grant_id '${trace.grant_id}' matches no known Grant.id`,
-    };
-  }
-
-  if (trace.halt_reason !== "completed") {
-    return { valid: true };
-  }
-
-  const expiresAt = isoToMillis(grant.expires_at);
-  const revokedAt = grant.revoked_at ? isoToMillis(grant.revoked_at) : null;
-
-  for (const call of trace.tool_calls) {
-    if (
-      call.name !== IMPLICITLY_ALLOWED_TOOL &&
-      !grant.tools.includes(call.name)
-    ) {
-      return {
-        valid: false,
-        reason: `Tool call '${call.name}' is not in grant '${grant.id}' tools`,
-      };
-    }
-    const callTime = isoToMillis(call.time);
-    if (revokedAt !== null && callTime >= revokedAt) {
-      return {
-        valid: false,
-        reason: `Tool call '${call.name}' at ${call.time} is at or after grant '${grant.id}' revoked_at (${grant.revoked_at})`,
-      };
-    }
-    if (callTime > expiresAt) {
-      return {
-        valid: false,
-        reason: `Tool call '${call.name}' at ${call.time} is after grant '${grant.id}' expires_at (${grant.expires_at})`,
-      };
-    }
-  }
-
-  return { valid: true };
+  const [reason] = traceRuleReasons(trace, grants);
+  return reason === undefined ? { valid: true } : { valid: false, reason };
 }

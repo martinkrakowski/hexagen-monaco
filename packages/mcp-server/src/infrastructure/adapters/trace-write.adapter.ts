@@ -3,7 +3,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { Result } from "@hexagen/shared";
 import { isRepoMode } from "@hexagen/shared/node/grant-key";
-import { appendChainedLine } from "@hexagen/shared/node/trace-chain";
+import {
+  appendChainedLine,
+  peekTraceMode,
+} from "@hexagen/shared/node/trace-chain";
 import type { TraceRecord } from "../../application/kernel/trace.js";
 import type {
   GrantMissingAppendInput,
@@ -27,16 +30,26 @@ function digest(value: unknown): string {
  * adapter's job the arch linter treats as I/O, so it stays out of the
  * application-layer use case that calls this port.
  *
- * Two modes, decided per call by the same test the grant-key resolver uses
- * (a `.architecture/manifest.yaml` under the workspace root means repo mode):
- * - repo mode (greenfield): today's plain, unchained append, byte for byte;
- *   it never reads the file, and `grant_missing` is a no-op.
- * - no manifest (brownfield): lines carry `seq` and `prev_hash`, appended
- *   under a file lock (docs/kernel/TRACE.md "Chain and tip"). An existing
- *   unchained file is refused, never read as a chain or rewritten.
+ * Two modes, decided per call. An existing file's last line decides: a chained
+ * line means the chain continues, an unchained line means the plain append
+ * continues (the file is never converted). Only for a new (or empty, or torn)
+ * file does the manifest decide, by the test the grant-key resolver uses (a
+ * `.architecture/manifest.yaml` under the workspace root means repo mode):
+ * - plain (greenfield): today's unchained append, byte for byte; it never takes
+ *   a lock, and `grant_missing` is a no-op.
+ * - chained (brownfield): lines carry `seq` and `prev_hash`, appended under a
+ *   file lock (docs/kernel/TRACE.md "Chain and tip"). A torn last line is an
+ *   error, never appended after.
  */
 export class TraceWriteAdapter implements TraceWritePort {
   constructor(private readonly workspaceRoot: string) {}
+
+  private async isChained(filePath: string): Promise<boolean> {
+    const mode = await peekTraceMode(filePath);
+    if (mode === "chained") return true;
+    if (mode === "unchained") return false;
+    return !isRepoMode(this.workspaceRoot);
+  }
 
   async appendLine(input: TraceAppendInput): Promise<Result<void, Error>> {
     try {
@@ -59,7 +72,7 @@ export class TraceWriteAdapter implements TraceWritePort {
 
       const dir = path.join(this.workspaceRoot, ...EVIDENCE_DIR);
       const filePath = path.join(dir, EVIDENCE_FILE);
-      if (!isRepoMode(this.workspaceRoot)) {
+      if (await this.isChained(filePath)) {
         await appendChainedLine(filePath, (next) => ({ ...trace, ...next }));
         return { success: true, value: undefined };
       }
@@ -77,16 +90,16 @@ export class TraceWriteAdapter implements TraceWritePort {
   async appendGrantMissing(
     input: GrantMissingAppendInput,
   ): Promise<Result<void, Error>> {
-    // Greenfield keeps today's no-op so its trace file stays byte-identical.
-    if (isRepoMode(this.workspaceRoot)) {
-      return { success: true, value: undefined };
-    }
     try {
       const filePath = path.join(
         this.workspaceRoot,
         ...EVIDENCE_DIR,
         EVIDENCE_FILE,
       );
+      // An unchained trace keeps today's no-op so its file stays byte-identical.
+      if (!(await this.isChained(filePath))) {
+        return { success: true, value: undefined };
+      }
       await appendChainedLine(filePath, (next) => ({
         kind: "grant_missing",
         ...next,

@@ -1,8 +1,10 @@
 import {
   GENESIS_PREV_HASH,
   lineHash,
+  safeEqualHex,
   type SplitLine,
 } from "@hexagen/shared/node/trace-chain";
+import { traceRuleReasons, type TraceRuleLine } from "@hexagen/shared";
 import { signGrantPayload } from "../grant/sign.js";
 import { canonicalGrantPayload, type GrantFields } from "../grant/canonical.js";
 
@@ -10,12 +12,9 @@ import { canonicalGrantPayload, type GrantFields } from "../grant/canonical.js";
  * Reader-side checks for `hexagen evidence pack`: chain, line shape and the
  * Rules of docs/kernel/TRACE.md. Pure; no fs.
  *
- * `checkLineRules` is a pinned duplicate of `checkTrace` in
- * `packages/mcp-server/src/application/kernel/trace.ts` (sync cannot import
- * mcp-server; the same arrangement as `grant/canonical.ts`): a line whose
- * `halt_reason` is not "completed" documents a refused attempt, so it skips the
- * allowlist and window checks, because a real denial violates them by
- * definition. It still has to cite a known grant.
+ * The Rule 1-3 logic itself is `traceRuleReasons` in `@hexagen/shared`, the same
+ * function the MCP server's `checkTrace` calls: a denial skips the allowlist and
+ * window checks, but still has to cite a known grant.
  */
 
 export interface PackGrant extends GrantFields {
@@ -39,9 +38,6 @@ export interface LineVerdict {
   readonly reason?: string;
 }
 
-/** `hexagen_accept_transaction` is never listed in a grant's `tools`; see checkTrace. */
-const IMPLICITLY_ALLOWED_TOOL = "hexagen_accept_transaction";
-
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -58,8 +54,9 @@ function millis(iso: string): number | null {
 /** True when the signature on `grant` verifies under `keyHex`. */
 export function grantSignatureOk(grant: PackGrant, keyHex: string): boolean {
   if (!grant.signature) return false;
-  return (
-    signGrantPayload(canonicalGrantPayload(grant), keyHex) === grant.signature
+  return safeEqualHex(
+    signGrantPayload(canonicalGrantPayload(grant), keyHex),
+    grant.signature,
   );
 }
 
@@ -137,38 +134,10 @@ function evidenceShapeReasons(value: Record<string, unknown>): string[] {
 function ruleReasons(
   value: Record<string, unknown>,
   grants: ReadonlyMap<string, PackGrant>,
-  denial: boolean,
 ): string[] {
-  const grantId = value.grant_id as string;
-  const grant = grants.get(grantId);
-  if (!grant) {
-    return [`grant_id '${grantId}' matches no known, verified Grant.id`];
-  }
-  if (denial) return [];
-  const expiresAt = millis(grant.expires_at);
-  const revokedAt = grant.revoked_at ? millis(grant.revoked_at) : null;
-  if (expiresAt === null) {
-    return [`grant '${grant.id}' has an invalid expires_at`];
-  }
-  const reasons: string[] = [];
-  for (const call of value.tool_calls as Record<string, unknown>[]) {
-    const name = call.name as string;
-    const time = millis(call.time as string) as number;
-    if (name !== IMPLICITLY_ALLOWED_TOOL && !grant.tools.includes(name)) {
-      reasons.push(`tool '${name}' is not in grant '${grant.id}' tools`);
-    }
-    if (revokedAt !== null && time >= revokedAt) {
-      reasons.push(
-        `call '${name}' at ${call.time as string} is at or after grant '${grant.id}' revoked_at`,
-      );
-    }
-    if (time > expiresAt) {
-      reasons.push(
-        `call '${name}' at ${call.time as string} is after grant '${grant.id}' expires_at`,
-      );
-    }
-  }
-  return reasons;
+  return traceRuleReasons(value as unknown as TraceRuleLine, [
+    ...grants.values(),
+  ]);
 }
 
 /**
@@ -231,7 +200,7 @@ export function checkLines(
     reasons.push(...shape);
     const haltReason = str(value.halt_reason) ? value.halt_reason : undefined;
     const denial = haltReason !== undefined && haltReason !== "completed";
-    if (shape.length === 0) reasons.push(...ruleReasons(value, grants, denial));
+    if (shape.length === 0) reasons.push(...ruleReasons(value, grants));
     const first = Array.isArray(value.tool_calls)
       ? (value.tool_calls[0] as Record<string, unknown> | undefined)
       : undefined;

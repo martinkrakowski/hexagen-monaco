@@ -78,6 +78,8 @@ const LOCK_TIMEOUT_MS = 15_000;
 const LOCK_MAX_AGE_MS = 30_000;
 /** A lock file that exists but is still empty is a creator between `open` and `write`. */
 const LOCK_EMPTY_GRACE_MS = 2_000;
+/** The break file is held for microseconds; one this old belonged to a crashed process. */
+const BREAK_MAX_AGE_MS = 10_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -93,36 +95,96 @@ function pidAlive(pid: number): boolean {
   }
 }
 
-/** True when the lock was stale and has been moved aside, so the caller retries at once. */
-async function breakIfStale(lockPath: string): Promise<boolean> {
-  let content: string;
-  let mtimeMs: number;
+/** `<pid>:<epoch ms>:<random>`; the timestamp is what staleness is judged from. */
+function newToken(): string {
+  return `${process.pid}:${Date.now()}:${randomBytes(8).toString("hex")}`;
+}
+
+function judgeStale(content: string, mtimeMs: number): boolean {
+  const m = /^(\d+):(\d+):[0-9a-f]+$/.exec(content);
+  if (m === null) {
+    // Empty or foreign: a creator between open and write, or a crashed one.
+    return Date.now() - mtimeMs > LOCK_EMPTY_GRACE_MS;
+  }
+  return Date.now() - Number(m[2]) > LOCK_MAX_AGE_MS || !pidAlive(Number(m[1]));
+}
+
+/**
+ * Runs `fn` holding `<lock>.break`, a second O_EXCL file that serialises every
+ * removal of the lock (breaking a stale one, releasing a live one). Without it
+ * two waiters that both judge a lock stale can each remove it, the second
+ * removing the live lock the first just took.
+ */
+async function withBreakFile<T>(
+  lockPath: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const breakPath = `${lockPath}.break`;
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  for (;;) {
+    try {
+      const handle = await open(breakPath, "wx");
+      await handle.close();
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+    try {
+      if (Date.now() - (await stat(breakPath)).mtimeMs > BREAK_MAX_AGE_MS) {
+        await unlink(breakPath);
+        continue;
+      }
+    } catch {
+      continue;
+    }
+    if (Date.now() > deadline) {
+      throw new TraceChainError(
+        "lock-timeout",
+        `could not take ${breakPath} within ${LOCK_TIMEOUT_MS} ms`,
+      );
+    }
+    await sleep(2 + Math.floor(Math.random() * 10));
+  }
   try {
-    content = await readFile(lockPath, "utf8");
-    mtimeMs = (await stat(lockPath)).mtimeMs;
+    return await fn();
+  } finally {
+    await unlink(breakPath).catch(() => undefined);
+  }
+}
+
+/** Test seam: runs after a lock is judged stale, before it is broken. */
+export const lockTestHooks: { afterJudgedStale?: () => Promise<void> } = {};
+
+/** True when the lock was stale and has been removed (or already gone), so the caller retries at once. */
+async function breakIfStale(lockPath: string): Promise<boolean> {
+  let judged: string;
+  let judgedIno: number;
+  try {
+    judged = await readFile(lockPath, "utf8");
+    const st = await stat(lockPath);
+    if (!judgeStale(judged, st.mtimeMs)) return false;
+    judgedIno = st.ino;
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === "ENOENT";
   }
-  const age = Date.now() - mtimeMs;
-  const pid = /^(\d+):/.exec(content)?.[1];
-  let stale: boolean;
-  if (pid === undefined) stale = age > LOCK_EMPTY_GRACE_MS;
-  else stale = age > LOCK_MAX_AGE_MS || !pidAlive(Number(pid));
-  if (!stale) return false;
-  // rename is atomic, so only one breaker wins. A live holder that replaced the
-  // stale file between our read and this rename is the one remaining window.
-  const aside = `${lockPath}.stale-${randomBytes(6).toString("hex")}`;
-  try {
-    await rename(lockPath, aside);
-    await unlink(aside).catch(() => undefined);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-  return true;
+  await lockTestHooks.afterJudgedStale?.();
+  return withBreakFile(lockPath, async () => {
+    // Re-read under the break file: the lock may have been broken and
+    // re-taken since it was judged. Only the very file judged stale goes.
+    try {
+      const now = await readFile(lockPath, "utf8");
+      const st = await stat(lockPath);
+      if (now !== judged || st.ino !== judgedIno) return true;
+      await unlink(lockPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    return true;
+  });
 }
 
 async function acquireLock(lockPath: string): Promise<string> {
-  const token = `${process.pid}:${randomBytes(8).toString("hex")}`;
+  const token = newToken();
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
   for (;;) {
     try {
@@ -147,11 +209,39 @@ async function acquireLock(lockPath: string): Promise<string> {
   }
 }
 
+/**
+ * Removes the lock only if it still holds our token, under the break file, so
+ * a holder that outlived LOCK_MAX_AGE_MS (its lock broken and re-taken) never
+ * removes the new holder's lock.
+ */
 async function releaseLock(lockPath: string, token: string): Promise<void> {
   try {
-    if ((await readFile(lockPath, "utf8")) === token) await unlink(lockPath);
+    await withBreakFile(lockPath, async () => {
+      try {
+        if ((await readFile(lockPath, "utf8")) === token) {
+          await unlink(lockPath);
+        }
+      } catch {
+        // Already gone; nothing of ours to release.
+      }
+    });
   } catch {
-    // Already gone; nothing of ours to release.
+    // The lock goes stale by age if it cannot be released here.
+  }
+}
+
+/** Runs `fn` holding the trace's exclusive lock (`<file>.lock`). */
+export async function withTraceLock<T>(
+  filePath: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  const lockPath = `${filePath}.lock`;
+  const token = await acquireLock(lockPath);
+  try {
+    return await fn();
+  } finally {
+    await releaseLock(lockPath, token);
   }
 }
 
@@ -209,6 +299,24 @@ async function readLastLine(
   }
 }
 
+export type TraceFileMode = "absent" | "chained" | "unchained" | "torn";
+
+/**
+ * What the file's last line says about it, without taking the lock: `chained`
+ * (`seq`/`prev_hash` present), `unchained` (a greenfield line), `absent`
+ * (missing or empty) or `torn`.
+ */
+export async function peekTraceMode(filePath: string): Promise<TraceFileMode> {
+  try {
+    const last = await readLastLine(filePath);
+    if (last === null) return "absent";
+    return isChainFields(last.value) ? "chained" : "unchained";
+  } catch (error) {
+    if (error instanceof TraceChainError) return "torn";
+    throw error;
+  }
+}
+
 export interface AppendedLine {
   readonly seq: number;
   readonly hash: string;
@@ -216,8 +324,8 @@ export interface AppendedLine {
 
 /**
  * Appends one chained line to `filePath`, creating it at genesis when absent.
- * An exclusive lock file (`<file>.lock`, created with O_EXCL, pid inside, stale
- * locks broken by liveness and age) is held across reading the last line,
+ * An exclusive lock file (`<file>.lock`, created with O_EXCL, pid and time
+ * inside; stale locks broken under a second O_EXCL `.break` file) is held across reading the last line,
  * appending and fsync, so concurrent writers cannot fork the chain.
  *
  * Refuses, rather than guesses, when the existing last line is torn or has no
@@ -227,10 +335,7 @@ export async function appendChainedLine(
   filePath: string,
   build: (next: ChainPosition) => Record<string, unknown>,
 ): Promise<AppendedLine> {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  const lockPath = `${filePath}.lock`;
-  const token = await acquireLock(lockPath);
-  try {
+  return withTraceLock(filePath, async () => {
     const last = await readLastLine(filePath);
     let next: ChainPosition = { seq: 0, prev_hash: GENESIS_PREV_HASH };
     if (last !== null) {
@@ -255,9 +360,7 @@ export async function appendChainedLine(
       await handle.close();
     }
     return { seq: next.seq, hash: lineHash(line) };
-  } finally {
-    await releaseLock(lockPath, token);
-  }
+  });
 }
 
 export interface SplitLine {
@@ -296,7 +399,7 @@ function hmacHex(domain: string, payload: unknown, keyHex: string): string {
     .digest("hex");
 }
 
-function safeEqualHex(a: string, b: string): boolean {
+export function safeEqualHex(a: string, b: string): boolean {
   if (!HEX64.test(a) || !HEX64.test(b)) return false;
   return timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
 }

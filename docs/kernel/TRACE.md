@@ -172,18 +172,28 @@ no `id`:
 ## Chain and tip
 
 A greenfield trace is plain JSONL with no integrity of its own; it is left
-exactly as it was, and a pack refuses it. A **brownfield** trace (no
-`.architecture/manifest.yaml` under the workspace root, the same test the
-grant-key resolver uses) is a hash chain:
+exactly as it was, and a pack refuses it. A **brownfield** trace is a hash
+chain. Which one a file is follows from the file: when it exists, its last line
+decides (chained: the chain continues; unchained: plain appends continue, and
+`grant_missing` is not written). Only for a new, empty or torn file does the
+manifest decide: no `.architecture/manifest.yaml` under the workspace root (the
+test the grant-key resolver uses) means chained.
 
 - Every line carries `seq` (0 for the first line, then +1) and `prev_hash`:
   the SHA-256 (hex) of the previous line's canonical bytes, where canonical
   means JSON with keys sorted at every depth, including that line's own
-  `prev_hash`. The first line's `prev_hash` is 64 zeros (genesis). Lines are
+  `prev_hash`. Keys sort in JavaScript's own order, so integer-like keys
+  (`"2"`, `"10"`) come first, in numeric order. Lines may hold plain JSON values
+  only (no `undefined`, dates, `NaN` or other non-JSON values): a verifier in
+  another language must reproduce the same bytes. The first line's `prev_hash` is 64 zeros (genesis). Lines are
   written in their canonical form.
 - The writer holds an exclusive lock (`trace.jsonl.lock`, created with
-  `O_EXCL`, holding the pid; a lock whose process is gone, or that is older
-  than 30 s, is broken) across reading the last line, appending and fsync, so
+  `O_EXCL`, holding `pid:time:random`; a lock whose process is gone, or whose
+  inner timestamp is older than 30 s, is stale). Removing a lock, whether
+  breaking a stale one or releasing one's own, happens under a second `O_EXCL`
+  file, `trace.jsonl.lock.break`, and re-checks that the file is the one judged
+  stale (or still holds the releaser's token), so a late waiter or a holder that
+  outlived the age limit never removes a live lock. The lock is held across reading the last line, appending and fsync, so
   concurrent writers cannot fork the chain. It refuses, never guesses, when the
   last line is torn or the file is unchained, and never rewrites the file. A
   brownfield trace always starts a new file at genesis; an older greenfield
@@ -197,9 +207,13 @@ grant-key resolver uses) is a hash chain:
 HMACs use the engagement key (the grant-signing key resolved by
 `@hexagen/shared/node/grant-key`), over `hexagen-tip-v1\n<canonical {seq,hash}>`
 for the tip and `hexagen-bundle-v1\n<canonical index without hmac>` for the
-bundle. Limit: a tip protects only what a pack has already anchored. Deleting
+bundle. Limits: a tip protects only what a pack has already anchored. Deleting
 `tip.json` removes the anchor, and the next pack then passes on the chain
-checks alone.
+checks alone. Restoring an older bundle's `tip.json`, after truncating the
+trace to that `seq`, also passes, so the anchor protects only against
+truncation below the oldest tip an attacker cannot restore. Record each new tip
+out of band: the pack prints it on stderr (`seq`, hash, hmac) and each
+`verdicts.json` records the previous tip's `seq` and hash (`previousTip`).
 
 ## Relationship to Grant and Transaction
 
@@ -239,6 +253,8 @@ hexagen evidence pack <trace> --grant <file>... --out <zip>
 Reads every line of `<trace>` (which must be `<root>/.hexagen/evidence/trace.jsonl`,
 the one file the tip anchors; one Trace per line, per "Storage") and checks:
 
+0. the trace is read under the writer's lock, so a half-finished append is not
+   seen;
 1. the chain over every line: `seq` equals the position, `prev_hash` equals
    the hash of the previous line, the first line starts at genesis. An edited,
    reordered or deleted interior line breaks it; an unchained line fails;
@@ -250,7 +266,9 @@ the one file the tip anchors; one Trace per line, per "Storage") and checks:
 4. the anchored tip: when `tip.json` exists, its HMAC must verify and the line
    at `tip.seq` must exist with that hash. Otherwise the pack fails.
 
-On success it writes `<zip>` (which must resolve under `<root>/.hexagen/`):
+On success it writes `<zip>` (which must resolve under `<root>/.hexagen/`, never
+under `.hexagen/evidence/`, never a name `BUNDLE_FORBIDDEN_PATH_PATTERN`
+forbids, and never an existing file: it is linked into place, not replaced):
 `bundle.json` (the BW0 index, `hmac` over it with the engagement key),
 `evidence/trace.jsonl`, `evidence/verdicts.json` (a verdict per line, a
 `denials` section and the `evidence` count), `evidence/tip.json` and the grants

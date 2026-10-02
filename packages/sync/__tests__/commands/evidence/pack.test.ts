@@ -198,11 +198,27 @@ describe("evidence pack, a sound trace", () => {
 
   it("a second pack after more lines advances the tip", async () => {
     await append(evLine());
-    expect((await run()).exitCode).toBe(0);
+    const first = await run();
+    expect(first.exitCode).toBe(0);
+    expect(first.messages.join("\n")).toMatch(
+      /new tip \(record it out of band\): seq 0 hash [0-9a-f]{64} hmac [0-9a-f]{64}/,
+    );
+    const verdict = async (): Promise<Record<string, unknown>> =>
+      JSON.parse(
+        (await unzip(bundlePath())).get("evidence/verdicts.json") as string,
+      );
+    const v1 = await verdict();
+    expect(v1.tipAnchoredBefore).toBe(false);
+    expect(v1.previousTip).toBeNull();
+    const firstTip = JSON.parse(await readFile(tipPath(), "utf8"));
+    await rm(bundlePath());
     await append(evLine());
     await append(evLine());
     expect((await run()).exitCode).toBe(0);
     expect(JSON.parse(await readFile(tipPath(), "utf8")).seq).toBe(2);
+    const v2 = await verdict();
+    expect(v2.tipAnchoredBefore).toBe(true);
+    expect(v2.previousTip).toEqual({ seq: 0, hash: firstTip.hash });
   });
 });
 
@@ -226,7 +242,10 @@ describe("evidence pack, tampering", () => {
     [lines[1], lines[2]] = [lines[2] as string, lines[1] as string];
     await setLines(lines);
     const r = await run();
-    await failsClean(r, /seq/);
+    await failsClean(
+      r,
+      /seq 2: seq 2 does not match position 1; prev_hash does not match the previous line/,
+    );
     expect(r.verdicts?.some((v) => !v.valid)).toBe(true);
   });
 
@@ -376,6 +395,61 @@ describe("evidence pack, denials", () => {
   });
 });
 
+describe("evidence pack, window and shape", () => {
+  const callAt = (time: string, name = "hexagen_propose_patch") => ({
+    tool_calls: [
+      { name, args_digest: "sha256:aa", result_digest: "sha256:bb", time },
+    ],
+  });
+
+  it("a call exactly at expires_at is valid, one millisecond later is not", async () => {
+    await append(evLine(callAt("2026-12-01T00:00:00.000Z")));
+    expect((await run()).exitCode).toBe(0);
+    await rm(bundlePath());
+    await rm(tipPath());
+    await rm(traceFile);
+    await append(evLine(callAt("2026-12-01T00:00:00.001Z")));
+    await failsClean(await run(), /after grant 'grant-1' expires_at/);
+  });
+
+  it("hexagen_accept_transaction is allowed without being in grant.tools", async () => {
+    await append(
+      evLine(callAt("2026-10-01T10:00:00.000Z", "hexagen_accept_transaction")),
+    );
+    expect((await run()).exitCode).toBe(0);
+  });
+
+  it("names every missing field of a grant_missing record", async () => {
+    await append({ kind: "grant_missing" });
+    const r = await run();
+    await failsClean(
+      r,
+      /tool is missing; reason is missing; time is not an ISO timestamp/,
+    );
+  });
+
+  it("rejects a malformed evidence line field by field", async () => {
+    await append({
+      grant_id: "grant-1",
+      halt_reason: "completed",
+      started_at: "yesterday",
+      ended_at: "2026-10-01T10:00:00.000Z",
+      transaction_ids: "tx",
+      tool_calls: [{ name: "hexagen_propose_patch" }],
+    });
+    const r = await run();
+    await failsClean(
+      r,
+      /goal_id is missing; started_at is not an ISO timestamp; transaction_ids is not an array; tool_calls\[0\] is malformed/,
+    );
+  });
+
+  it("rejects an unknown record kind", async () => {
+    await append({ kind: "mystery" });
+    await failsClean(await run(), /unknown record kind 'mystery'/);
+  });
+});
+
 describe("evidence pack, preconditions", () => {
   beforeEach(async () => {
     await append(evLine());
@@ -403,9 +477,91 @@ describe("evidence pack, preconditions", () => {
     );
   });
 
-  it("refuses an empty trace", async () => {
+  it("refuses an empty trace as a precondition failure", async () => {
     await writeFile(traceFile, "");
-    await failsClean(await run(), /no lines/);
+    const r = await run();
+    expect(r.exitCode).toBe(2);
+    expect(r.messages.join("\n")).toMatch(/no lines/);
+    expect(await exists(bundlePath())).toBe(false);
+  });
+
+  it("refuses --out under .hexagen/evidence/ and leaves the evidence alone", async () => {
+    const before = await readFile(traceFile, "utf8");
+    for (const out of [
+      ".hexagen/evidence/trace.jsonl",
+      ".hexagen/evidence/bundle.zip",
+      ".hexagen/evidence/tip.json",
+    ]) {
+      const r = await run({ out });
+      expect(r.exitCode).toBe(2);
+      expect(r.messages.join("\n")).toMatch(/must not be under/);
+    }
+    expect(await readFile(traceFile, "utf8")).toBe(before);
+    expect(
+      await exists(path.join(root, ".hexagen", "evidence", "bundle.zip")),
+    ).toBe(false);
+  });
+
+  it("refuses --out names that BUNDLE_FORBIDDEN_PATH_PATTERN forbids", async () => {
+    for (const out of [
+      ".hexagen/engagement.key",
+      ".hexagen/keys/b.zip",
+      ".hexagen/.env.zip",
+    ]) {
+      const r = await run({ out });
+      expect(r.exitCode).toBe(2);
+      expect(r.messages.join("\n")).toMatch(/key or env file/);
+      expect(await exists(path.join(root, out))).toBe(false);
+    }
+  });
+
+  it("refuses an existing --out and never alters or deletes it", async () => {
+    await writeFile(bundlePath(), "precious");
+    const r = await run();
+    expect(r.exitCode).toBe(2);
+    expect(r.messages.join("\n")).toMatch(/already exists/);
+    expect(await readFile(bundlePath(), "utf8")).toBe("precious");
+    expect(await exists(tipPath())).toBe(false);
+  });
+
+  it("an --out that appears during the pack is never replaced or rolled back", async () => {
+    const r = await run({
+      beforeWrite: async () => {
+        await writeFile(bundlePath(), "raced");
+      },
+    });
+    expect(r.exitCode).toBe(2);
+    expect(await readFile(bundlePath(), "utf8")).toBe("raced");
+    expect(await exists(tipPath())).toBe(false);
+  });
+
+  it("a failed tip write rolls back its own bundle and writes no tip", async () => {
+    const r = await run({
+      writeTip: async () => {
+        throw new Error("disk full");
+      },
+    });
+    expect(r.exitCode).toBe(2);
+    expect(r.messages.join("\n")).toMatch(/disk full/);
+    expect(await exists(bundlePath())).toBe(false);
+    expect(await exists(tipPath())).toBe(false);
+    // Nothing is left behind, so the same pack can be retried.
+    expect((await run()).exitCode).toBe(0);
+  });
+
+  it("reads the trace under the writer's lock", async () => {
+    const lock = `${traceFile}.lock`;
+    await writeFile(lock, `${process.pid}:${Date.now()}:cafebabe`);
+    let done = false;
+    const pending = run().then((r) => {
+      done = true;
+      return r;
+    });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(done).toBe(false);
+    await rm(lock);
+    expect((await pending).exitCode).toBe(0);
+    expect(await exists(lock)).toBe(false);
   });
 });
 

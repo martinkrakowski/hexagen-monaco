@@ -83,14 +83,13 @@ describe("TraceWriteAdapter, no manifest (brownfield)", () => {
     expect(l[0]).toHaveProperty("grant_id", "g1");
   });
 
-  it("refuses an existing unchained trace and leaves it byte-identical", async () => {
+  it("keeps extending an existing unchained trace plainly; grant_missing is a no-op", async () => {
     const root = await tmp();
     await mkdir(path.dirname(tracePath(root)), { recursive: true });
     const old = `${JSON.stringify({ grant_id: "old", halt_reason: "completed" })}\n`;
     await writeFile(tracePath(root), old);
     const adapter = new TraceWriteAdapter(root);
-    const r = await adapter.appendLine(input());
-    expect(r.success).toBe(false);
+    expect((await adapter.appendLine(input())).success).toBe(true);
     expect(
       (
         await adapter.appendGrantMissing({
@@ -99,12 +98,43 @@ describe("TraceWriteAdapter, no manifest (brownfield)", () => {
           time: "2026-10-01T10:00:00.000Z",
         })
       ).success,
-    ).toBe(false);
-    expect(await readFile(tracePath(root), "utf8")).toBe(old);
+    ).toBe(true);
+    const text = await readFile(tracePath(root), "utf8");
+    expect(text.startsWith(old)).toBe(true);
+    const rows = text.trim().split("\n");
+    expect(rows).toHaveLength(2);
+    expect(JSON.parse(rows[1] as string)).not.toHaveProperty("seq");
+  });
+
+  it("refuses to append after a torn last line", async () => {
+    const root = await tmp();
+    const adapter = new TraceWriteAdapter(root);
+    await adapter.appendLine(input());
+    await writeFile(tracePath(root), '{"seq":1,"pre', { flag: "a" });
+    const before = await readFile(tracePath(root), "utf8");
+    expect((await adapter.appendLine(input())).success).toBe(false);
+    expect(await readFile(tracePath(root), "utf8")).toBe(before);
   });
 });
 
 describe("TraceWriteAdapter, manifest present (greenfield)", () => {
+  it("continues an existing chained trace, grant_missing included", async () => {
+    const root = await tmp();
+    const adapter = new TraceWriteAdapter(root);
+    await adapter.appendLine(input());
+    await makeRepoMode(root);
+    await adapter.appendLine(input());
+    await adapter.appendGrantMissing({
+      tool: "t",
+      reason: "r",
+      time: "2026-10-01T10:00:00.000Z",
+    });
+    const l = await lines(root);
+    expect(l.map((x) => x.seq)).toEqual([0, 1, 2]);
+    expect(l[1]?.prev_hash).toBe(lineHash(l[0]));
+    expect(l[2]).toHaveProperty("kind", "grant_missing");
+  });
+
   it("keeps today's unchained line and writes nothing for grant_missing", async () => {
     const root = await tmp();
     await makeRepoMode(root);

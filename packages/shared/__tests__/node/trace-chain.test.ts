@@ -6,12 +6,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   GENESIS_PREV_HASH,
+  lockTestHooks,
   TraceChainError,
   appendChainedLine,
   canonicalJson,
   lineHash,
   signBundleIndex,
+  peekTraceMode,
   signTip,
+  withTraceLock,
   splitTrace,
   verifyBundleIndex,
   verifyTip,
@@ -41,6 +44,15 @@ async function readLines(file: string): Promise<Record<string, unknown>[]> {
 }
 
 describe("canonicalJson / lineHash", () => {
+  it("golden vectors", () => {
+    expect(lineHash({ seq: 0, prev_hash: "0".repeat(64), a: 1 })).toBe(
+      "546292765c06e0ed22b9054d4f278593d020b2cf88b00b125a219f1dbebdaaa5",
+    );
+    expect(
+      canonicalJson({ b: [{ z: 1, a: "é\n" }], a: null, "10": 1, "2": 2 }),
+    ).toBe('{"2":2,"10":1,"a":null,"b":[{"a":"é\\n","z":1}]}');
+  });
+
   it("sorts keys at every depth and drops undefined", () => {
     expect(
       canonicalJson({ b: 1, a: { d: [{ z: 1, y: 2 }], c: undefined } }),
@@ -108,7 +120,7 @@ describe("appendChainedLine", () => {
   it("breaks a lock left by a dead process", async () => {
     const file = path.join(await tmp(), "t.jsonl");
     // pid 2^22+ is beyond any real pid on the platforms we run on.
-    await writeFile(`${file}.lock`, `${4_194_999}:deadbeef`);
+    await writeFile(`${file}.lock`, `${4_194_999}:${Date.now()}:deadbeef`);
     const r = await appendChainedLine(file, (n) => ({ ...n }));
     expect(r.seq).toBe(0);
   });
@@ -121,6 +133,108 @@ describe("appendChainedLine", () => {
     const r = await appendChainedLine(file, (n) => ({ ...n }));
     expect(r.seq).toBe(0);
   });
+
+  it("judges staleness from the timestamp inside the lock, not mtime", async () => {
+    const file = path.join(await tmp(), "t.jsonl");
+    // A live pid (ours) but a timestamp far in the past, with a fresh mtime.
+    await writeFile(
+      `${file}.lock`,
+      `${process.pid}:${Date.now() - 120_000}:deadbeef`,
+    );
+    expect((await appendChainedLine(file, (n) => ({ ...n }))).seq).toBe(0);
+  });
+
+  it("a live lock is not broken by mtime alone", async () => {
+    const file = path.join(await tmp(), "t.jsonl");
+    await writeFile(`${file}.lock`, `${process.pid}:${Date.now()}:deadbeef`);
+    const old = new Date(Date.now() - 120_000);
+    await utimes(`${file}.lock`, old, old);
+    let took = false;
+    const pending = appendChainedLine(file, (n) => {
+      took = true;
+      return { ...n };
+    });
+    await new Promise((r) => setTimeout(r, 150));
+    expect(took).toBe(false);
+    await rm(`${file}.lock`);
+    await pending;
+    expect(took).toBe(true);
+  });
+
+  it("release never removes a lock another holder took after ours was broken", async () => {
+    const file = path.join(await tmp(), "t.jsonl");
+    const other = `${process.pid}:${Date.now()}:cafebabe`;
+    await withTraceLock(file, async () => {
+      await writeFile(`${file}.lock`, other);
+    });
+    expect(await readFile(`${file}.lock`, "utf8")).toBe(other);
+    await expect(readFile(`${file}.lock.break`)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("peekTraceMode reads the last line", async () => {
+    const dir = await tmp();
+    const f = path.join(dir, "t.jsonl");
+    expect(await peekTraceMode(f)).toBe("absent");
+    await appendChainedLine(f, (n) => ({ ...n }));
+    expect(await peekTraceMode(f)).toBe("chained");
+    await writeFile(f, '{"grant_id":"g"}\n');
+    expect(await peekTraceMode(f)).toBe("unchained");
+    await writeFile(f, '{"grant_id":');
+    expect(await peekTraceMode(f)).toBe("torn");
+  });
+
+  it("a waiter that judged a lock stale does not remove the live lock that replaced it", async () => {
+    const file = path.join(await tmp(), "t.jsonl");
+    const lock = `${file}.lock`;
+    await writeFile(lock, `${4_194_999}:${Date.now()}:deadbeef`);
+    const live = `${process.pid}:${Date.now()}:cafebabe`;
+    // Between the waiter's judgement and its break, another process breaks the
+    // stale lock and takes it.
+    lockTestHooks.afterJudgedStale = async () => {
+      lockTestHooks.afterJudgedStale = undefined;
+      await rm(lock);
+      await writeFile(lock, live);
+    };
+    let took = false;
+    const pending = appendChainedLine(file, (n) => {
+      took = true;
+      return { ...n };
+    });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(took).toBe(false);
+    expect(await readFile(lock, "utf8")).toBe(live);
+    await rm(lock);
+    await pending;
+    expect(took).toBe(true);
+  });
+
+  it("two racing waiters on a pre-existing stale lock keep seq contiguous", async () => {
+    const file = path.join(await tmp(), "t.jsonl");
+    await writeFile(`${file}.lock`, `${4_194_999}:${Date.now()}:deadbeef`);
+    const child = path.join(here, "trace-chain.child.ts");
+    const N = 12;
+    const run = (who: string): Promise<number> =>
+      new Promise((resolve, reject) => {
+        const p = spawn(
+          process.execPath,
+          ["--import", "tsx", child, file, who, String(N)],
+          { cwd: pkgDir, stdio: ["ignore", "ignore", "inherit"] },
+        );
+        p.on("error", reject);
+        p.on("exit", (code) => resolve(code ?? -1));
+      });
+    const who = ["a", "b", "c", "d", "e", "f"];
+    expect(await Promise.all(who.map((w) => run(w)))).toEqual(who.map(() => 0));
+    const lines = await readLines(file);
+    expect(lines.map((l) => l.seq)).toEqual(
+      Array.from({ length: 6 * N }, (_, i) => i),
+    );
+    for (let i = 1; i < lines.length; i++) {
+      expect(lines[i]?.prev_hash).toBe(lineHash(lines[i - 1]));
+    }
+  }, 60_000);
 
   it("two processes appending concurrently keep the chain intact", async () => {
     const file = path.join(await tmp(), "t.jsonl");
