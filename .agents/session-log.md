@@ -513,3 +513,92 @@ to the orchestrator too: write each run's cost into `events.jsonl` when it finis
   unrelated commits on 2026-09-30.
 
 - Records in this log were edited on 2026-10-01 to remove references to another project, at the owner's instruction.
+
+## Wave 5 — orchestration parity, `orchestration-parity-w02` (2026-10-01)
+
+Plan: `docs/planning/2026-10-01_orchestration-parity-plan.md`, with owner decisions P-D1 to P-D7.
+Lanes PB1 to PB8. Events: `$HOME/.waves-hexagen/wave-orchestration-parity-w02/events.jsonl`.
+
+### What merged, with the squash commits
+
+| Lane                                         | PR   | Squash     |
+| -------------------------------------------- | ---- | ---------- |
+| plan                                         | #709 | `27033c3a` |
+| PB1 — sweep `--post`, brief line, 0.1.1      | #710 | `c659ffe9` |
+| PB4 — `fix-brief`                            | #712 | `036966ee` |
+| de-flake the Ctrl-C group-kill handlers      | #713 | `0bd23834` |
+| PB8 — plan-review lane/decision markers      | #714 | `1e35ff11` |
+| PB2 — gate-lock slots, one gate per worktree | #715 | `294ac746` |
+| reference scrub of tracked files             | #716 | `139a39ad` |
+| 0.2.0 bump (published, 0.1.0 deprecated)     | #717 | `1c1a1f87` |
+| PB6 — `brief-new`                            | #718 | `fe77c28e` |
+| PB3 — `gate-run.sh` signal hygiene           | #720 | `b93f04f6` |
+| PB5 — `lane-watch`                           | #719 | `d9989e33` |
+| PB7 — process rules, `installProbes`         | #725 | `6c6a07fa` |
+
+`main` stayed green. Every red CI run was the `apps/web` `AIGenerationPage.workbench` flake, now
+filed as #723, and each passed on re-run.
+
+### What the review layer bought
+
+Fable 5.1 reviewed every lane before its first push. Normal-risk lanes got one combined pass;
+high-risk lanes got their own. The review bots ran on every PR. The findings that mattered:
+
+- **PB3: a step could hold the caller's pipe.** Saving fds 3 and 4 for cleanup leaked them into
+  every step, so a background child left by a step kept the gate's caller from seeing EOF. Each
+  step now runs as `( exec 3>&- 4>&-; eval … )`. The plan row's "never on the eval" wording was
+  what left this open.
+- **PB3: a pause hook that pinned the wrong ordering.** One flag-placement mutant survived until
+  the hook moved between the heartbeat `kill` and its `wait`.
+- **PB6: a remote `full` host dropped the lane-host variant.** That would have let a remote lane
+  push. Fixed before the first push.
+- **PB5: a dotted session id passed the allowlist.** `/session/..` normalised to `GET /`. Ctrl-C
+  was also swallowed during `usage`.
+- **PB5 (bots):**
+  - the final SSE frame skipped the size cap;
+  - a whole chunk was buffered before yielding;
+  - a mismatched session record was accepted;
+  - doctor missed lane-watch behind a launcher (`npx`, `env`).
+- **PB7: two shipped rule texts contradicted practice.**
+  - "Verified before its PR opens" cannot hold for a local host, whose CI only runs on a PR.
+  - "Before dispatch" excluded the combined post-implementation pass that is actually run.
+- **PB7 (bots):**
+  - remote probes ran in the remote home directory, not the worktree;
+  - unknown probe keys were ignored;
+  - the README's example repair could not repair;
+  - doctor failed forever on another platform's probe, now fixed with a `platform` field.
+
+### What was refuted, and why
+
+- **qodo, "process-rule tests read the real disk."** They exist to pin the shipped skill text, so
+  reading the shipped files is the point. The mirror and coverage tests follow the same pattern.
+- **qodo, "a signal between `RELEASE_STARTED=1` and the fork skips the release."** POSIX sh
+  cannot mask signals, so the window is inherent. It is documented, and the next acquire
+  self-heals the lock.
+
+### Verified outside CI
+
+- **`lane-watch usage` works against the midnight opencode server.** `GET /session/<id>`
+  carries numeric `time`, `tokens` (input, output, reasoning, cache read and write) and `cost`.
+  The built bin exited 0 through a short tunnel.
+
+### Runs per seat
+
+| seat                                        | runs                                                       | measured     |
+| ------------------------------------------- | ---------------------------------------------------------- | ------------ |
+| Sonnet subagents on the orchestrator's host | PB3, PB5, PB6 and PB7, with 2 to 4 resumed fix rounds each | not recorded |
+| Fable 5.1 (reviewer)                        | 4 pre-PR reviews                                           | not recorded |
+
+Costs were again not written into `events.jsonl` as the runs finished. This is the third wave
+in a row with that gap.
+
+### Deferred
+
+- **Switch host `m`'s usage reader to lane-watch.** Add `server:` and change `usage:`.
+- **`gate-run.sh`: a second INT or TERM during cleanup resets to the default handler.** For
+  parity with gate-lock, ignore both during release.
+- **The P-D2 owner question: who keeps the loopback tunnel open during `lane-watch follow`.**
+  The skill states "the caller" as the working assumption.
+- **A `follow` started after the lane went idle reports a stall.** No allowed endpoint gives
+  the session's current status.
+- **#723: the `AIGenerationPage.workbench` flake.**
