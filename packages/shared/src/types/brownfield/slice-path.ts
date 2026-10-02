@@ -63,7 +63,7 @@ function matches(entry: string, candidate: string): boolean {
  * file. Applied to the candidate and to every slice entry before comparing,
  * so an exclude bites whichever form either side uses.
  */
-const nfc = (text: string): string => text.normalize("NFC");
+export const nfc = (text: string): string => text.normalize("NFC");
 
 /** Shape the helper needs; the full `Slice` satisfies it. */
 export interface SlicePaths {

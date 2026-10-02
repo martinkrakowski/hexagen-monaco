@@ -6,6 +6,7 @@ import {
   Contract,
   ObservedReport,
   Slice,
+  nfc,
   normalizeSlicePath,
   type SlicePaths,
 } from "@hexagen/shared";
@@ -48,9 +49,10 @@ export const SIDECAR_ENTRY = ".hexagen/";
 
 /** `entry` is a directory prefix (trailing `/`) or an exact file path. */
 export function underPrefix(entry: string, candidate: string): boolean {
-  return entry.endsWith("/")
-    ? candidate.startsWith(entry)
-    : candidate === entry;
+  // NFC on both sides, as isPathInSlice does, so an exclude bites in either form.
+  const e = nfc(entry);
+  const c = nfc(candidate);
+  return e.endsWith("/") ? c.startsWith(e) : c === e;
 }
 
 /**
