@@ -182,19 +182,22 @@ describe("RightPanel: denials", () => {
         bundle={await loadSpec({
           trace: [
             traceLine({ seq: 0 }),
-            traceLine({ seq: 1, halt_reason: "grant_denied" }),
+            traceLine({
+              seq: 1,
+              halt_reason: "grant_denied",
+              tool_calls: [
+                {
+                  name: "hexagen_propose_patch",
+                  args_digest: "a",
+                  result_digest: "b",
+                  time: "2026-10-01T09:30:00.000Z",
+                },
+              ],
+            }),
             traceLine({ seq: 2, halt_reason: "grant_expired" }),
             traceLine({ seq: 3, halt_reason: "grant_revoked" }),
             traceLine({ seq: 4, halt_reason: "error" }),
             missingLine({ seq: 5, reason: "no grant\u001b[0m supplied" }),
-          ],
-          verdictDenials: [
-            {
-              seq: 1,
-              haltReason: "grant_denied",
-              tool: "t",
-              reason: "outside the slice: core/x.ts",
-            },
           ],
         })}
       />,
@@ -212,10 +215,9 @@ describe("RightPanel: denials", () => {
       within(items[0] as HTMLElement).getByText(/hexagen_propose_patch/),
     ).toBeTruthy();
     expect(
-      within(items[0] as HTMLElement).getByText(
-        /outside the slice: core\/x\.ts/,
-      ),
+      within(items[0] as HTMLElement).getByText(/2026-10-01T09:30:00\.000Z/),
     ).toBeTruthy();
+    expect(within(items[0] as HTMLElement).queryByText(/reason/i)).toBeNull();
     expect(
       within(items[3] as HTMLElement).getByText(/no grant supplied/),
     ).toBeTruthy();
@@ -233,6 +235,137 @@ describe("RightPanel: denials", () => {
     expect(
       within(screen.getByTestId("denials")).getAllByRole("listitem"),
     ).toHaveLength(1);
+  });
+});
+
+describe("RightPanel: more of the record", () => {
+  it("says revoked at bundle time", async () => {
+    render(
+      <RightPanel
+        bundle={await loadSpec({
+          grants: [grantDoc({ revoked_at: "2026-10-01T10:00:00.000Z" })],
+        })}
+      />,
+    );
+    expect(screen.getByText(/revoked at bundle time/i)).toBeTruthy();
+  });
+
+  it("says an unreadable expiry is denied", async () => {
+    render(
+      <RightPanel
+        bundle={await loadSpec({ grants: [grantDoc({ expires_at: "soon" })] })}
+      />,
+    );
+    expect(
+      screen.getByText(/unreadable expiry; such a grant is denied/i),
+    ).toBeTruthy();
+  });
+
+  it("shows max_files when present", async () => {
+    render(
+      <RightPanel
+        bundle={await loadSpec({ grants: [grantDoc({ max_files: 7 })] })}
+      />,
+    );
+    expect(within(screen.getByTestId("grant-g1")).getByText("7")).toBeTruthy();
+  });
+
+  it("notes that error lines are counted by the pack but not listed here", async () => {
+    render(
+      <RightPanel
+        bundle={await loadSpec({
+          trace: [traceLine({ halt_reason: "error" })],
+        })}
+      />,
+    );
+    expect(
+      screen.getByText(/1 other non-completed line.*only grant denials/i),
+    ).toBeTruthy();
+  });
+
+  it("lists proposal entries it cannot show", async () => {
+    render(
+      <RightPanel
+        bundle={await loadSpec({
+          proposals: [
+            ...proposalFiles(),
+            { path: "proposals/q.json", role: "proposal", content: "{}" },
+            { path: "proposals/sub/z.patch", role: "proposal", content: "x" },
+          ],
+        })}
+      />,
+    );
+    expect(screen.getByText(/not shown/i)).toBeTruthy();
+    expect(screen.getByText(/proposals\/q\.json/)).toBeTruthy();
+    expect(screen.getByText(/proposals\/sub\/z\.patch/)).toBeTruthy();
+    expect(screen.queryByTestId("proposal-sub/z")).toBeNull();
+  });
+
+  it("shows an unreadable grant as such, and the page still renders", async () => {
+    render(
+      <RightPanel
+        bundle={await loadSpec({ grants: ["{not json", grantDoc()] })}
+      />,
+    );
+    expect(screen.getByText(/could not be read as a grant/i)).toBeTruthy();
+    expect(screen.getByTestId("grant-g1")).toBeTruthy();
+  });
+
+  it("strips control characters from every rendered field", async () => {
+    const h = (t: string) => `${t}\u001b[31m\u0007\u0085\u009b`;
+    const { container } = render(
+      <RightPanel
+        bundle={await loadSpec({
+          grants: [
+            grantDoc({
+              id: h("g1"),
+              principal: h("p"),
+              agent: h("a"),
+              mode: h("m"),
+              tools: [h("t")],
+              paths: [h("x/")],
+              expires_at: h("2026-10-01T09:00:00.000Z"),
+              revoked_at: h("2026-10-01T09:00:00.000Z"),
+            }),
+          ],
+          trace: [
+            traceLine({
+              grant_id: h("g1"),
+              halt_reason: "grant_denied",
+              tool_calls: [
+                {
+                  name: h("tool"),
+                  args_digest: "a",
+                  result_digest: "b",
+                  time: h("t"),
+                },
+              ],
+            }),
+            missingLine({ tool: h("tool"), reason: h("why"), time: h("t") }),
+          ],
+          proposals: [
+            {
+              path: "proposals/p1.patch",
+              role: "proposal",
+              content: h("+diff\n"),
+            },
+            {
+              path: "proposals/p1.json",
+              role: "proposal",
+              content: proposalMeta({
+                grantId: h("g"),
+                tool: h("tool"),
+                paths: [h("core/a.ts")],
+              }),
+            },
+          ],
+        })}
+      />,
+    );
+    const text = container.textContent ?? "";
+    expect(text.length).toBeGreaterThan(0);
+    // population-guard: the text is non-empty (asserted above)
+    expect(text).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/);
   });
 });
 

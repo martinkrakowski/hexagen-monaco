@@ -90,11 +90,14 @@ function Grant({
           <List items={grant.paths} />
         </Row>
         <Row label="expires">
-          {grant.expiresAt === null ? (
-            "not recorded"
+          {grant.expiryUnreadable ? (
+            <span className="font-medium">
+              unreadable expiry; such a grant is denied
+              {grant.expiresAt !== null && <> ({safe(grant.expiresAt)})</>}
+            </span>
           ) : (
             <>
-              {safe(grant.expiresAt)}
+              {safe(grant.expiresAt ?? "")}
               {grant.expiredAtBundle && (
                 <span className="ml-2 font-medium">
                   expired at bundle time ({safe(bundleTime)})
@@ -103,6 +106,9 @@ function Grant({
             </>
           )}
         </Row>
+        {grant.maxFiles !== null && (
+          <Row label="max files">{grant.maxFiles}</Row>
+        )}
         {grant.revokedAt !== null && (
           <Row label="revoked">
             {safe(grant.revokedAt)}
@@ -200,7 +206,13 @@ function Denial({ denial }: { readonly denial: DenialView }) {
       {" / "}
       {denial.tool === null ? "tool not recorded" : safe(denial.tool)}
       {" / "}
-      {denial.reason === null ? "no reason recorded" : safe(denial.reason)}
+      {denial.time === null ? "time not recorded" : safe(denial.time)}
+      {denial.reason !== null && (
+        <>
+          {" / "}
+          {safe(denial.reason)}
+        </>
+      )}
     </li>
   );
 }
@@ -257,6 +269,18 @@ export function RightPanel({ bundle }: { readonly bundle: LoadedBundle }) {
 
       <section aria-label="Proposals" className="space-y-2">
         <h3 className="font-medium">Proposals</h3>
+        {v.proposalsNotShown.length > 0 && (
+          <div role="note" className="text-sm">
+            <p>Proposal entries not shown:</p>
+            <ul className="list-disc pl-4">
+              {v.proposalsNotShown.map((p) => (
+                <li key={p} className="break-all">
+                  {safe(p)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {v.proposals.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No proposals in this bundle.
@@ -273,9 +297,15 @@ export function RightPanel({ bundle }: { readonly bundle: LoadedBundle }) {
       <section aria-label="Denials" className="space-y-2">
         <h3 className="font-medium">Denials</h3>
         <p className="text-xs text-muted-foreground">
-          The trace stores digests of arguments, not the paths themselves; the
-          reason is what the pack recorded.
+          Each line shows the code, trace line, tool and time as recorded. The
+          trace stores digests of arguments, not paths.
         </p>
+        {v.otherHaltLines > 0 && (
+          <p role="note" className="text-xs">
+            {v.otherHaltLines} other non-completed line(s) (such as errors) are
+            counted by the pack; this panel lists only grant denials.
+          </p>
+        )}
         {v.denials.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No denials in the trace.

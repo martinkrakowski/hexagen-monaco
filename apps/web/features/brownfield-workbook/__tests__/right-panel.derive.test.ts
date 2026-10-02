@@ -28,17 +28,25 @@ describe("decodeProposal", () => {
     expect(d.replaced).toBe(true);
   });
 
-  it("truncates at the cap on a character boundary", () => {
+  it("backs the cap up to a character boundary", () => {
     const bytes = new TextEncoder().encode(
-      "é".repeat(PROPOSAL_DISPLAY_CAP_BYTES),
+      "a" + "é".repeat(PROPOSAL_DISPLAY_CAP_BYTES),
     );
     const d = decodeProposal(bytes);
     expect(d.truncated).toBe(true);
     expect(d.totalBytes).toBe(bytes.length);
-    expect(d.shownBytes).toBeLessThanOrEqual(PROPOSAL_DISPLAY_CAP_BYTES);
+    // The cap lands on a continuation byte, so one byte is given back.
+    expect(d.shownBytes).toBe(PROPOSAL_DISPLAY_CAP_BYTES - 1);
     expect(d.text.length).toBeGreaterThan(0);
-    expect(d.text).not.toContain("�");
+    expect(d.text).not.toContain("\uFFFD");
     expect(d.replaced).toBe(false);
+  });
+
+  it("gives back at most three bytes (a UTF-8 character is at most four)", () => {
+    const bytes = new Uint8Array(PROPOSAL_DISPLAY_CAP_BYTES + 10).fill(0x80);
+    const d = decodeProposal(bytes);
+    expect(d.shownBytes).toBe(PROPOSAL_DISPLAY_CAP_BYTES - 3);
+    expect(d.replaced).toBe(true);
   });
 });
 
@@ -74,6 +82,23 @@ describe("deriveRightPanel: the active grant", () => {
   });
 });
 
+describe("deriveRightPanel: the active grant, strictly", () => {
+  it("is unknown when the latest grant-bearing line cites a grant that is not bundled, with no walking back", async () => {
+    const v = deriveRightPanel(
+      await loadSpec({
+        grants: [grantDoc({ id: "g1" }), grantDoc({ id: "g2" })],
+        trace: [
+          traceLine({ grant_id: "g2" }),
+          traceLine({ grant_id: "gX" }),
+          missingLine(),
+        ],
+      }),
+    );
+    expect(v.activeGrantId).toBeNull();
+    expect(v.activeNote).toMatch(/cannot tell/i);
+  });
+});
+
 describe("deriveRightPanel: expiry is judged at bundle time", () => {
   it("never reads the wall clock", async () => {
     const bundle = await loadSpec({
@@ -94,6 +119,61 @@ describe("deriveRightPanel: expiry is judged at bundle time", () => {
     expect(at("2020-01-01T00:00:00Z")).toEqual([true, false]);
     expect(at("2040-01-01T00:00:00Z")).toEqual([true, false]);
     expect(deriveRightPanel(bundle).bundleTime).toBe(BUNDLE_TIME);
+  });
+});
+
+describe("deriveRightPanel: the window boundary", () => {
+  const at = (ms: number) =>
+    new Date(Date.parse(BUNDLE_TIME) + ms).toISOString();
+  it("treats expires_at == bundle time as in-window, one ms earlier as expired", async () => {
+    const v = deriveRightPanel(
+      await loadSpec({
+        grants: [
+          grantDoc({ id: "eq", expires_at: BUNDLE_TIME }),
+          grantDoc({ id: "before", expires_at: at(-1) }),
+          grantDoc({ id: "after", expires_at: at(1) }),
+        ],
+      }),
+    );
+    expect(v.grants.map((g) => [g.id, g.expiredAtBundle])).toEqual([
+      ["eq", false],
+      ["before", true],
+      ["after", false],
+    ]);
+  });
+
+  it("treats revoked_at == bundle time as revoked, one ms later as not", async () => {
+    const v = deriveRightPanel(
+      await loadSpec({
+        grants: [
+          grantDoc({ id: "eq", revoked_at: BUNDLE_TIME }),
+          grantDoc({ id: "after", revoked_at: at(1) }),
+          grantDoc({ id: "before", revoked_at: at(-1) }),
+        ],
+      }),
+    );
+    expect(v.grants.map((g) => [g.id, g.revokedAtBundle])).toEqual([
+      ["eq", true],
+      ["after", false],
+      ["before", true],
+    ]);
+  });
+
+  it("flags a missing or unparseable expiry", async () => {
+    const v = deriveRightPanel(
+      await loadSpec({
+        grants: [
+          grantDoc({ id: "none", expires_at: undefined }),
+          grantDoc({ id: "bad", expires_at: "soon" }),
+          grantDoc({ id: "ok" }),
+        ],
+      }),
+    );
+    expect(v.grants.map((g) => g.expiryUnreadable)).toEqual([
+      true,
+      true,
+      false,
+    ]);
   });
 });
 
@@ -118,5 +198,59 @@ describe("deriveRightPanel: denials", () => {
       [3, "grant_revoked"],
       [5, "grant_missing"],
     ]);
+  });
+
+  it("numbers a line by its index, as the pack does, not by its own seq field", async () => {
+    const v = deriveRightPanel(
+      await loadSpec({
+        trace: [
+          traceLine({ seq: 40 }),
+          traceLine({ seq: 99, halt_reason: "grant_denied" }),
+        ],
+      }),
+    );
+    expect(v.denials.map((d) => d.seq)).toEqual([1]);
+  });
+
+  it("takes the time from the line, and a reason only from grant_missing", async () => {
+    const v = deriveRightPanel(
+      await loadSpec({
+        trace: [
+          traceLine({
+            halt_reason: "grant_denied",
+            tool_calls: [
+              {
+                name: "t",
+                args_digest: "a",
+                result_digest: "b",
+                time: "2026-10-01T09:30:00.000Z",
+              },
+            ],
+          }),
+          missingLine({ time: "2026-10-01T09:31:00.000Z" }),
+        ],
+        verdictDenials: [
+          { seq: 0, haltReason: "grant_denied", reason: "invented" },
+        ],
+      }),
+    );
+    expect(v.denials.map((d) => [d.time, d.reason])).toEqual([
+      ["2026-10-01T09:30:00.000Z", null],
+      ["2026-10-01T09:31:00.000Z", "no grant supplied"],
+    ]);
+  });
+
+  it("counts non-denial halts (such as error) apart", async () => {
+    const v = deriveRightPanel(
+      await loadSpec({
+        trace: [
+          traceLine({ halt_reason: "error" }),
+          traceLine({ halt_reason: "completed" }),
+          traceLine({ halt_reason: "grant_denied" }),
+        ],
+      }),
+    );
+    expect(v.otherHaltLines).toBe(1);
+    expect(v.denials).toHaveLength(1);
   });
 });

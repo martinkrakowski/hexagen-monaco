@@ -28,8 +28,15 @@ export function decodeProposal(bytes: Uint8Array): DecodedProposal {
   }
   let cut = Math.min(bytes.length, PROPOSAL_DISPLAY_CAP_BYTES);
   // Do not split a multi-byte character at the cap.
+  // A UTF-8 character is at most four bytes, so give back at most three.
   if (cut < bytes.length) {
-    while (cut > 0 && ((bytes[cut] as number) & 0xc0) === 0x80) cut -= 1;
+    for (
+      let back = 0;
+      back < 3 && cut > 0 && ((bytes[cut] as number) & 0xc0) === 0x80;
+      back += 1
+    ) {
+      cut -= 1;
+    }
   }
   return {
     text: lenient.decode(bytes.subarray(0, cut)),

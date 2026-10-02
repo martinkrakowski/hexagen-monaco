@@ -40,6 +40,8 @@ export interface GrantView {
   readonly tools: readonly string[];
   readonly paths: readonly string[];
   readonly maxFiles: number | null;
+  /** `expires_at` is missing or not a timestamp: such a grant is denied (fail closed). */
+  readonly expiryUnreadable: boolean;
   readonly expiresAt: string | null;
   readonly revokedAt: string | null;
   /** Strictly before the bundle's time (a call exactly at `expires_at` is still in-window). */
@@ -63,7 +65,9 @@ export interface DenialView {
   readonly seq: number;
   readonly code: DenialCode;
   readonly tool: string | null;
-  /** The reason as recorded (the pack's verdict, or the line's own `reason`). */
+  /** The line's own time (`tool_calls[0].time`, or `time` on a grant_missing record). */
+  readonly time: string | null;
+  /** Only a grant_missing record carries a reason; the other denial lines do not. */
   readonly reason: string | null;
 }
 
@@ -77,6 +81,10 @@ export interface RightPanelView {
   readonly activeNote: string | null;
   readonly proposals: readonly ProposalView[];
   readonly denials: readonly DenialView[];
+  /** Lines with a halt_reason that is neither "completed" nor a denial code (e.g. "error"). */
+  readonly otherHaltLines: number;
+  /** Proposal entries the panel cannot show (no matching .patch, or an odd path). */
+  readonly proposalsNotShown: readonly string[];
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -95,10 +103,8 @@ function traceRecords(
     try {
       const value: unknown = JSON.parse(text);
       if (!isRecord(value)) return;
-      out.push({
-        seq: typeof value.seq === "number" ? value.seq : index,
-        value,
-      });
+      // The pack numbers a line by its index in the file, whatever its own `seq` says.
+      out.push({ seq: index, value });
     } catch {
       // An unreadable line is the pack's to report, not the panel's.
     }
@@ -124,6 +130,7 @@ function grantView(
     tools: doc.tools ?? [],
     paths: doc.paths ?? [],
     maxFiles: doc.max_files ?? null,
+    expiryUnreadable: Number.isNaN(expires),
     expiresAt: doc.expires_at ?? null,
     revokedAt: doc.revoked_at ?? null,
     expiredAtBundle: expires < bundleMs,
@@ -137,17 +144,26 @@ function lineKind(text: string): "add" | "del" | "ctx" {
   return "ctx";
 }
 
-function proposals(b: LoadedBundle): ProposalView[] {
+const PATCH_PATH = /^proposals\/([^/]+)\.patch$/;
+
+function proposals(b: LoadedBundle): {
+  shown: ProposalView[];
+  notShown: string[];
+} {
   const strict = new TextDecoder("utf-8", { fatal: true });
-  const out: ProposalView[] = [];
+  const shown: ProposalView[] = [];
+  const used = new Set<string>();
   for (const path of b.proposals) {
-    const m = /^proposals\/(.+)\.patch$/.exec(path);
+    const m = PATCH_PATH.exec(path);
     const bytes = b.proposalFiles.get(path);
     if (m === null || bytes === undefined) continue;
     const id = m[1] as string;
+    used.add(path);
     let meta: ProposalMeta | null = null;
-    const metaBytes = b.proposalFiles.get(`proposals/${id}.json`);
+    const metaPath = `proposals/${id}.json`;
+    const metaBytes = b.proposalFiles.get(metaPath);
     if (metaBytes !== undefined) {
+      used.add(metaPath);
       try {
         const parsed = ProposalMeta.safeParse(
           JSON.parse(strict.decode(metaBytes)),
@@ -158,7 +174,7 @@ function proposals(b: LoadedBundle): ProposalView[] {
       }
     }
     const decoded = decodeProposal(bytes);
-    out.push({
+    shown.push({
       path,
       id,
       meta,
@@ -168,7 +184,7 @@ function proposals(b: LoadedBundle): ProposalView[] {
         .map((text) => ({ text, kind: lineKind(text) })),
     });
   }
-  return out;
+  return { shown, notShown: b.proposals.filter((p) => !used.has(p)) };
 }
 
 export function deriveRightPanel(b: LoadedBundle): RightPanelView {
@@ -186,25 +202,27 @@ export function deriveRightPanel(b: LoadedBundle): RightPanelView {
   }
 
   const records = traceRecords(b.trace);
-  const verdicts = b.verdicts !== "invalid" ? b.verdicts : null;
-  const reasonBySeq = new Map(
-    (verdicts?.denials ?? []).map((d) => [d.seq, d.reason ?? null] as const),
-  );
-
   const denials: DenialView[] = [];
-  let activeGrantId: string | null = null;
-  for (let i = records.length - 1; i >= 0 && activeGrantId === null; i -= 1) {
-    const id = str(
+  let otherHaltLines = 0;
+  // The latest line that names a grant decides. If that grant is not bundled
+  // the answer is "unknown": never walk back to an older line.
+  let latestGrantId: string | null = null;
+  for (let i = records.length - 1; i >= 0 && latestGrantId === null; i -= 1) {
+    latestGrantId = str(
       (records[i] as { value: Record<string, unknown> }).value.grant_id,
     );
-    if (id !== null && grants.some((g) => g.id === id)) activeGrantId = id;
   }
+  const activeGrantId =
+    latestGrantId !== null && grants.some((g) => g.id === latestGrantId)
+      ? latestGrantId
+      : null;
   for (const { seq, value } of records) {
     if (value.kind === "grant_missing") {
       denials.push({
         seq,
         code: "grant_missing",
         tool: str(value.tool),
+        time: str(value.time),
         reason: str(value.reason),
       });
       continue;
@@ -212,7 +230,11 @@ export function deriveRightPanel(b: LoadedBundle): RightPanelView {
     const code = DENIAL_CODES.find(
       (c) => c !== "grant_missing" && c === value.halt_reason,
     );
-    if (code === undefined) continue;
+    if (code === undefined) {
+      const halt = str(value.halt_reason);
+      if (halt !== null && halt !== "completed") otherHaltLines += 1;
+      continue;
+    }
     const first = Array.isArray(value.tool_calls)
       ? value.tool_calls[0]
       : undefined;
@@ -220,10 +242,12 @@ export function deriveRightPanel(b: LoadedBundle): RightPanelView {
       seq,
       code,
       tool: isRecord(first) ? str(first.name) : null,
-      reason: reasonBySeq.get(seq) ?? null,
+      time: isRecord(first) ? str(first.time) : null,
+      reason: null,
     });
   }
 
+  const shownProposals = proposals(b);
   return {
     bundleTime: b.index.createdAt,
     slice:
@@ -235,9 +259,11 @@ export function deriveRightPanel(b: LoadedBundle): RightPanelView {
     activeGrantId,
     activeNote:
       activeGrantId === null && grants.length > 0
-        ? "Cannot tell which grant is active: no trace line cites a grant in this bundle. All grants are listed."
+        ? "Cannot tell which grant is active: the latest trace line that names a grant does not name one in this bundle. All grants are listed."
         : null,
-    proposals: proposals(b),
+    proposals: shownProposals.shown,
+    proposalsNotShown: shownProposals.notShown,
     denials,
+    otherHaltLines,
   };
 }
