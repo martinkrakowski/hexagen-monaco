@@ -1,5 +1,9 @@
-import { describe, it } from "vitest";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { afterAll, beforeAll, describe, it } from "vitest";
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 
 // Importing the real authOptions (not a mock) is safe here: GITHUB_ID and
 // GITHUB_SECRET default to "" in auth.ts, so no env is required at module
@@ -43,6 +47,78 @@ describe("authOptions GitHub provider", () => {
     // still exists as a redirect; this pin is the canonical target.
     assert.equal(authOptions.pages?.signIn, "/login");
     assert.ok(authOptions.adapter);
+  });
+});
+
+// GitHub sends the RFC 9207 `iss` parameter on the authorization response.
+// openid-client's oauthCallback rejects it with "issuer must be configured on
+// the issuer" unless the provider carries an issuer. These tests drive
+// next-auth's real provider parsing and openidClient() helper, with the token
+// endpoint pointed at a local server so nothing leaves the machine.
+const GITHUB_ISSUER = "https://github.com/login/oauth";
+const nodeRequire = createRequire(import.meta.url);
+// next-auth's "exports" map hides core/lib, so load those internals by path.
+// They are the exact modules the /callback route runs.
+const nextAuthDir = dirname(nodeRequire.resolve("next-auth"));
+
+describe("authOptions GitHub provider issuer (RFC 9207)", () => {
+  let tokenServer: Server;
+  let tokenUrl = "";
+
+  beforeAll(async () => {
+    tokenServer = createServer((_req, res) => {
+      res.setHeader("content-type", "application/json");
+      res.end(
+        JSON.stringify({ access_token: "gho_test", token_type: "bearer" }),
+      );
+    });
+    await new Promise<void>((resolve) =>
+      tokenServer.listen(0, "127.0.0.1", resolve),
+    );
+    tokenUrl = `http://127.0.0.1:${(tokenServer.address() as AddressInfo).port}/token`;
+  });
+  afterAll(
+    () =>
+      new Promise<void>((resolve) => {
+        tokenServer.close(() => resolve());
+        // Drop any keep-alive sockets so close() can finish.
+        tokenServer.closeAllConnections();
+      }),
+  );
+
+  async function githubClient() {
+    const parseProviders = nodeRequire(
+      join(nextAuthDir, "core/lib/providers"),
+    ).default;
+    const { openidClient } = nodeRequire(
+      join(nextAuthDir, "core/lib/oauth/client"),
+    );
+    const { provider } = parseProviders({
+      providers: authOptions.providers,
+      url: new URL("http://localhost:3000/api/auth"),
+      providerId: "github",
+    });
+    // CI has no GITHUB_ID/GITHUB_SECRET, so supply placeholders.
+    provider.clientId = "test-id";
+    provider.clientSecret = "test-secret";
+    provider.token = { ...provider.token, url: tokenUrl };
+    return { provider, client: await openidClient({ provider }) };
+  }
+
+  it("carries the GitHub issuer through to the openid-client Issuer", async () => {
+    const { provider, client } = await githubClient();
+    assert.equal(provider.issuer, GITHUB_ISSUER);
+    assert.equal(client.issuer.issuer, GITHUB_ISSUER);
+  });
+
+  it("accepts a callback that includes iss, instead of throwing 'issuer must be configured'", async () => {
+    const { client } = await githubClient();
+    const tokens = await client.oauthCallback(
+      "http://localhost:3000/api/auth/callback/github",
+      { code: "abc", state: "st", iss: GITHUB_ISSUER },
+      { state: "st" },
+    );
+    assert.equal(tokens.access_token, "gho_test");
   });
 });
 
