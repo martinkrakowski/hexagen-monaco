@@ -540,6 +540,62 @@ describe("evidence pack, a raced output directory", () => {
   });
 });
 
+describe("evidence pack, locking", () => {
+  beforeEach(async () => {
+    for (let i = 0; i < 3; i++) await append(evLine());
+  });
+
+  it("a lock that cannot be taken is a precondition failure (2), not invalid evidence", async () => {
+    await writeFile(
+      `${traceFile}.lock`,
+      `${process.pid}:${Date.now()}:cafebabe`,
+    );
+    const r = await run({ lockTimeoutMs: 150 });
+    expect(r.exitCode).toBe(2);
+    expect(r.messages.join("\n")).toMatch(
+      /could not take .*\.lock within 150 ms/,
+    );
+    expect(await exists(bundlePath())).toBe(false);
+    expect(await exists(tipPath())).toBe(false);
+  });
+
+  it("a trace that becomes unreadable after the path check is exit 2", async () => {
+    // A directory in place of the file passes the path check, then the read
+    // inside the lock fails (EISDIR).
+    await rm(traceFile);
+    await mkdir(traceFile);
+    const r = await run();
+    expect(r.exitCode).toBe(2);
+    expect(r.messages.join("\n")).toMatch(/cannot read the trace/);
+    expect(await exists(bundlePath())).toBe(false);
+  });
+
+  it("two packs racing never move the tip backwards", async () => {
+    const bOut = ".hexagen/b.zip";
+    let b: Promise<Awaited<ReturnType<typeof run>>> | undefined;
+    const sleep = (ms: number): Promise<void> =>
+      new Promise((resolve) => setTimeout(resolve, ms));
+    const a = await run({
+      out: ".hexagen/a.zip",
+      beforeTipWrite: async () => {
+        // Another writer appends and a second pack runs while this one is
+        // between validating and writing its tip.
+        b = (async () => {
+          await append(evLine());
+          await append(evLine());
+          return run({ out: bOut });
+        })();
+        await Promise.race([b, sleep(400)]);
+      },
+    });
+    expect(a.exitCode).toBe(0);
+    const bResult = await b;
+    expect(bResult?.exitCode).toBe(0);
+    const tip = JSON.parse(await readFile(tipPath(), "utf8"));
+    expect(tip.seq).toBe(4);
+  });
+});
+
 describe("evidence pack, preconditions", () => {
   beforeEach(async () => {
     await append(evLine());

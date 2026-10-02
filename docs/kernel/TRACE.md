@@ -173,11 +173,13 @@ no `id`:
 
 A greenfield trace is plain JSONL with no integrity of its own; it is left
 exactly as it was, and a pack refuses it. A **brownfield** trace is a hash
-chain. Which one a file is follows from the file: when it exists, its last line
-decides (chained: the chain continues; unchained: plain appends continue, and
-`grant_missing` is not written). Only for a new, empty or torn file does the
-manifest decide: no `.architecture/manifest.yaml` under the workspace root (the
-test the grant-key resolver uses) means chained.
+chain. Which one a file is follows from the file: the last _complete_ line (one
+that ends in a newline and parses) decides, even when a torn tail follows it
+(chained: the chain continues; unchained: plain appends continue, and
+`grant_missing` is not written). The manifest decides only for an absent file,
+an empty file, or one with no complete line at all: no
+`.architecture/manifest.yaml` under the workspace root (the test the grant-key
+resolver uses) means chained.
 
 - Every line carries `seq` (0 for the first line, then +1) and `prev_hash`:
   the SHA-256 (hex) of the previous line's canonical bytes, where canonical
@@ -206,8 +208,11 @@ test the grant-key resolver uses) means chained.
   continues; an existing unchained (greenfield) file stays plain, is never
   converted or rewritten, and cannot be packed. To start a chained trace where
   an unchained file exists, move that file aside first (rename it; the next
-  write creates a new chained file at genesis). A torn last line refuses every
-  append, in either format, until the file is moved aside or repaired.
+  write creates a new chained file at genesis). A torn tail refuses only on a
+  chained file, until it is moved aside or repaired. A plain file's torn tail is
+  appended after, exactly as before the chain existed. A lone fragment (no
+  complete line) is appended to in repo mode (a manifest is present) and
+  refused when there is no manifest.
 - `.hexagen/evidence/tip.json` (`{seq, hash, hmac}`) anchors the head: the
   `seq` and hash of the last line a pack accepted, HMAC'd with the engagement
   key. A chain that only looks backwards cannot see tail truncation or a file

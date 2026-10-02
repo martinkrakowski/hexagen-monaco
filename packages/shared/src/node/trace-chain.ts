@@ -210,9 +210,12 @@ async function breakIfStale(lockPath: string): Promise<boolean> {
   });
 }
 
-async function acquireLock(lockPath: string): Promise<string> {
+async function acquireLock(
+  lockPath: string,
+  timeoutMs: number,
+): Promise<string> {
   const token = newToken();
-  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
   for (;;) {
     try {
       const handle = await open(lockPath, "wx");
@@ -229,7 +232,7 @@ async function acquireLock(lockPath: string): Promise<string> {
     if (Date.now() > deadline) {
       throw new TraceChainError(
         "lock-timeout",
-        `could not take ${lockPath} within ${LOCK_TIMEOUT_MS} ms`,
+        `could not take ${lockPath} within ${timeoutMs} ms`,
       );
     }
     await sleep(5 + Math.floor(Math.random() * 20));
@@ -278,9 +281,13 @@ async function canonicalTracePath(filePath: string): Promise<string> {
 export async function withTraceLock<T>(
   filePath: string,
   fn: () => Promise<T>,
+  options: { readonly timeoutMs?: number } = {},
 ): Promise<T> {
   const lockPath = `${await canonicalTracePath(filePath)}.lock`;
-  const token = await acquireLock(lockPath);
+  const token = await acquireLock(
+    lockPath,
+    options.timeoutMs ?? LOCK_TIMEOUT_MS,
+  );
   try {
     return await fn();
   } finally {
