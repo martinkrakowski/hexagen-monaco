@@ -11,6 +11,7 @@ import {
   TIER_A_MAX_UNCOMPRESSED_BYTES,
   TIER_A_MAX_ZIP_ENTRIES,
 } from "./limits";
+import { isUnsafeEntryName } from "./zip-entry-name";
 
 /**
  * Zip-slip: an archive entry whose resolved path would escape `destRoot`.
@@ -97,31 +98,16 @@ export const TIER_A_ZIP_UNPACK_LIMITS: ZipUnpackLimits = {
   maxUncompressedBytes: TIER_A_MAX_UNCOMPRESSED_BYTES,
 };
 
-const WINDOWS_ABS = /^[a-zA-Z]:[\\/]/;
-const UNC = /^[\\/]{2}/;
-
 /**
  * True when `entryName` would write outside `destRoot` (zip-slip).
  *
- * Rejects: `..` segments, absolute POSIX/Windows/UNC paths, NUL bytes, and
- * any resolve() that escapes the destination even after normalization.
+ * Rejects: `..` segments, absolute POSIX/Windows/UNC paths, NUL bytes (the
+ * shared browser-safe check), and any resolve() that escapes the destination
+ * even after normalization.
  */
 export function isUnsafeZipEntry(destRoot: string, entryName: string): boolean {
-  if (entryName.length === 0 || entryName.includes("\0")) return true;
-  if (
-    path.isAbsolute(entryName) ||
-    WINDOWS_ABS.test(entryName) ||
-    UNC.test(entryName)
-  ) {
-    return true;
-  }
+  if (isUnsafeEntryName(entryName) || path.isAbsolute(entryName)) return true;
   const posix = entryName.replace(/\\/g, "/");
-  if (
-    posix.startsWith("/") ||
-    posix.split("/").some((segment) => segment === "..")
-  ) {
-    return true;
-  }
   const resolvedRoot = path.resolve(destRoot);
   const resolvedDest = path.resolve(destRoot, posix);
   const prefix = resolvedRoot.endsWith(path.sep)

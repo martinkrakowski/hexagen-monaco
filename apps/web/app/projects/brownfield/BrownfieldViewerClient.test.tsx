@@ -1,7 +1,7 @@
 import React from "react";
 import { describe, it, vi, beforeEach } from "vitest";
 import assert from "node:assert/strict";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 // BW-D7: the viewer mounts none of the greenfield write surfaces. Each is
 // mocked to THROW if it is rendered or called, so importing-and-mounting any
@@ -49,6 +49,7 @@ vi.mock("@/hooks/useSavedProjects", () => ({
   }),
 }));
 
+import { buildBundle } from "@/brownfield-workbook/__tests__/bundle-fixtures";
 import { BrownfieldViewerClient } from "./BrownfieldViewerClient";
 
 describe("brownfield viewer page", () => {
@@ -61,24 +62,55 @@ describe("brownfield viewer page", () => {
       { id: "wb-1", name: "Client engagement", mode: "brownfield" },
       { id: "gf-1", name: "Greenfield app" },
     ];
-    vi.stubGlobal("fetch", vi.fn());
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => {
+        throw new Error("fetch must not be called");
+      }),
+    );
   });
 
-  it("shows the workbook name, the later-lane note and the CLI steps as text", () => {
+  it("shows the workbook name and the intake, with no step until a bundle is open", () => {
     render(<BrownfieldViewerClient />);
     assert.ok(screen.getByText("Client engagement"));
-    assert.ok(screen.getByText(/bundle viewer arrives in a later release/i));
-    for (const step of [
-      "Checkout",
-      "Observe",
-      "Slice",
-      "Contract",
-      "Grant",
-      "Evidence",
-    ]) {
-      assert.ok(screen.getByText(step), step);
+    assert.ok(screen.getByLabelText(/open a workbook bundle/i));
+    assert.equal(screen.queryByTestId("step-observe"), null);
+  });
+
+  it("reads a chosen bundle in the browser: six steps appear, and no request is made", async () => {
+    vi.stubGlobal("XMLHttpRequest", function () {
+      throw new Error("XHR must not be used");
+    });
+    render(<BrownfieldViewerClient />);
+    const zip = await buildBundle();
+    const file = new File([zip as BlobPart], "engagement.zip");
+    // jsdom's File has no arrayBuffer(); browsers do.
+    Object.defineProperty(file, "arrayBuffer", {
+      value: async () =>
+        zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength),
+    });
+    fireEvent.change(screen.getByLabelText(/open a workbook bundle/i), {
+      target: { files: [file] },
+    });
+    await waitFor(() => assert.ok(screen.getByTestId("step-evidence")));
+    for (const id of ["checkout", "observe", "slice", "contract", "grant"]) {
+      assert.ok(screen.getByTestId("step-" + id), id);
     }
-    assert.equal(screen.queryAllByRole("button").length, 0, "no controls");
+    assert.equal(vi.mocked(fetch).mock.calls.length, 0);
+    assert.deepEqual(forbidden.hit, []);
+  });
+
+  it("refuses a file that is not a bundle, with a message", async () => {
+    const notZip = new File(["not a zip"], "x.zip");
+    Object.defineProperty(notZip, "arrayBuffer", {
+      value: async () => new TextEncoder().encode("not a zip").buffer,
+    });
+    render(<BrownfieldViewerClient />);
+    fireEvent.change(screen.getByLabelText(/open a workbook bundle/i), {
+      target: { files: [notZip] },
+    });
+    await waitFor(() => assert.ok(screen.getByRole("alert")));
+    assert.equal(screen.queryByTestId("step-observe"), null);
   });
 
   it("mounts none of GovernancePanelWrapper, useEditorPush, the generate flow, and calls no route", () => {
@@ -103,5 +135,106 @@ describe("brownfield viewer page", () => {
     state.project = "nope";
     render(<BrownfieldViewerClient />);
     assert.ok(screen.getByText(/workbook not found/i));
+  });
+
+  it("refuses an oversized file before reading it into memory", async () => {
+    render(<BrownfieldViewerClient />);
+    const big = new File(["x"], "huge.zip");
+    Object.defineProperty(big, "size", { value: 300 * 1024 * 1024 });
+    const read = vi.fn();
+    Object.defineProperty(big, "arrayBuffer", { value: read });
+    fireEvent.change(screen.getByLabelText(/open a workbook bundle/i), {
+      target: { files: [big] },
+    });
+    await waitFor(() => assert.ok(screen.getByRole("alert")));
+    assert.match(screen.getByRole("alert").textContent ?? "", /too large/i);
+    assert.equal(read.mock.calls.length, 0);
+  });
+
+  it("a slower first read cannot overwrite the second file's state", async () => {
+    render(<BrownfieldViewerClient />);
+    const good = await buildBundle();
+    const slow = new File(["x"], "slow.zip");
+    let release!: () => void;
+    Object.defineProperty(slow, "arrayBuffer", {
+      value: () =>
+        new Promise<ArrayBuffer>((resolve) => {
+          release = () => resolve(new TextEncoder().encode("not a zip").buffer);
+        }),
+    });
+    const fast = new File(["x"], "fast.zip");
+    Object.defineProperty(fast, "arrayBuffer", {
+      value: async () =>
+        good.buffer.slice(good.byteOffset, good.byteOffset + good.byteLength),
+    });
+    const input = screen.getByLabelText(/open a workbook bundle/i);
+    fireEvent.change(input, { target: { files: [slow] } });
+    fireEvent.change(input, { target: { files: [fast] } });
+    await waitFor(() => assert.ok(screen.getByTestId("step-evidence")));
+    release();
+    await new Promise((r) => setTimeout(r, 50));
+    assert.ok(screen.getByTestId("step-evidence"), "still the second file");
+    assert.equal(screen.queryByRole("alert"), null);
+  });
+
+  describe("navigating between two workbooks", () => {
+    const withBundle = async () => {
+      const good = await buildBundle();
+      const file = new File(["x"], "one.zip");
+      Object.defineProperty(file, "arrayBuffer", {
+        value: async () =>
+          good.buffer.slice(good.byteOffset, good.byteOffset + good.byteLength),
+      });
+      return file;
+    };
+    beforeEach(() => {
+      state.projects = [
+        { id: "wb-1", name: "First", mode: "brownfield" },
+        { id: "wb-2", name: "Second", mode: "brownfield" },
+      ];
+    });
+
+    it("does not show the first workbook's bundle under the second id", async () => {
+      const view = render(<BrownfieldViewerClient />);
+      fireEvent.change(screen.getByLabelText(/open a workbook bundle/i), {
+        target: { files: [await withBundle()] },
+      });
+      await waitFor(() => assert.ok(screen.getByTestId("step-evidence")));
+      state.project = "wb-2";
+      view.rerender(<BrownfieldViewerClient />);
+      assert.ok(screen.getByText("Second"));
+      assert.equal(screen.queryByTestId("step-evidence"), null);
+      assert.ok(screen.getByLabelText(/open a workbook bundle/i));
+    });
+
+    it("drops a read still in flight when the id changes", async () => {
+      const view = render(<BrownfieldViewerClient />);
+      const good = await buildBundle();
+      const slow = new File(["x"], "slow.zip");
+      let release!: () => void;
+      Object.defineProperty(slow, "arrayBuffer", {
+        value: () =>
+          new Promise<ArrayBuffer>((resolve) => {
+            release = () =>
+              resolve(
+                good.buffer.slice(
+                  good.byteOffset,
+                  good.byteOffset + good.byteLength,
+                ) as ArrayBuffer,
+              );
+          }),
+      });
+      fireEvent.change(screen.getByLabelText(/open a workbook bundle/i), {
+        target: { files: [slow] },
+      });
+      state.project = "wb-2";
+      view.rerender(<BrownfieldViewerClient />);
+      release();
+      await new Promise((r) => setTimeout(r, 50));
+      assert.equal(screen.queryByTestId("step-evidence"), null);
+      state.project = "wb-1";
+      view.rerender(<BrownfieldViewerClient />);
+      assert.equal(screen.queryByTestId("step-evidence"), null);
+    });
   });
 });
