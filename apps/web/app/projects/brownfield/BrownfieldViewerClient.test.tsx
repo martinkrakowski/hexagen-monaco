@@ -54,6 +54,7 @@ import { BrownfieldViewerClient } from "./BrownfieldViewerClient";
 describe("brownfield viewer page", () => {
   beforeEach(() => {
     forbidden.hit.length = 0;
+    state.clear.mockReset();
     state.project = "wb-1";
     state.isLoading = false;
     state.projects = [

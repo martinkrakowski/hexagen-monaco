@@ -177,8 +177,10 @@ describe("useSavedProjects — layer mutations", () => {
       stored.find((p) => p.id === brownId)?.mode,
       "brownfield",
     );
+    const green = stored.find((p) => p.id === greenId);
+    assert.ok(green, "the greenfield record was saved");
     assert.ok(
-      !("mode" in (stored.find((p) => p.id === greenId) ?? {})),
+      !("mode" in green),
       "greenfield rows stay byte-identical: no mode key",
     );
   });

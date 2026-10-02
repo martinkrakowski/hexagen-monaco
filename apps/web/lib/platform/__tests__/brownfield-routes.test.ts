@@ -1,7 +1,8 @@
-import { describe, it, vi, beforeEach } from "vitest";
+import { describe, it, vi, beforeEach, afterEach } from "vitest";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import type { SavedProject } from "@hexagen/shared";
+import { logger } from "../../structured-logger";
 import { createPlatformStore, type PlatformStore } from "../store";
 
 // BW-D7: the three greenfield routes refuse a stored brownfield project.
@@ -69,6 +70,7 @@ const THEIRS = "33333333-3333-4333-8333-333333333333";
 const SHARED_GREEN = "55555555-5555-4555-8555-555555555555";
 const SHARED_BROWN = "66666666-6666-4666-8666-666666666666";
 const ORG_BROWN = "77777777-7777-4777-8777-777777777777";
+const DUP = "88888888-8888-4888-8888-888888888888";
 const UNKNOWN = "44444444-4444-4444-8444-444444444444";
 
 function project(id: string, mode?: "brownfield" | "greenfield"): SavedProject {
@@ -94,6 +96,8 @@ function post(url: string, body: unknown): NextRequest {
 
 interface RouteCase {
   name: string;
+  /** A full URL for this route (its pathname is what the guard logs). */
+  url: string;
   call: (extra: Record<string, unknown>, qs?: string) => Promise<Response>;
   /** The collaborator that proves the route got past the guard. */
   reached: () => boolean;
@@ -107,6 +111,7 @@ interface RouteCase {
 const cases: RouteCase[] = [
   {
     name: "/api/architecture/modify/accept",
+    url: "http://localhost/api/architecture/modify/accept",
     call: (extra, qs = "") =>
       accept(
         post(`/api/architecture/modify/accept${qs}`, {
@@ -118,6 +123,7 @@ const cases: RouteCase[] = [
   },
   {
     name: "/api/push/github",
+    url: "http://localhost/api/push/github",
     call: (extra, qs = "") =>
       push(
         post(`/api/push/github${qs}`, {
@@ -131,6 +137,7 @@ const cases: RouteCase[] = [
   },
   {
     name: "/api/export/github",
+    url: "http://localhost/api/export/github",
     call: (extra, qs = "") =>
       exportGithub(
         post(`/api/export/github${qs}`, {
@@ -146,6 +153,7 @@ const cases: RouteCase[] = [
   },
   {
     name: "/api/generate",
+    url: "http://localhost/api/generate",
     call: (extra, qs = "") =>
       generate(
         post(`/api/generate${qs}`, { manifest: { system: "s" }, ...extra }),
@@ -155,6 +163,7 @@ const cases: RouteCase[] = [
 ];
 
 describe("brownfield route guards (BW-D7)", () => {
+  afterEach(() => vi.restoreAllMocks());
   beforeEach(async () => {
     store = createPlatformStore(":memory:");
     const mine = store.projectsFor("owner-a");
@@ -177,6 +186,18 @@ describe("brownfield route guards (BW-D7)", () => {
         grantedBy: "owner-b",
       });
     }
+    // The SAME id under two reachable owners: caller-owned greenfield, and a
+    // brownfield workbook shared by owner-b. Ids are scoped by owner.
+    await mine.createProjectRecord(project(DUP));
+    await theirs.createProjectRecord(project(DUP, "brownfield"));
+    await store.shares.grant({
+      ownerId: "owner-b",
+      projectId: DUP,
+      granteeType: "user",
+      granteeId: "owner-a",
+      role: "read",
+      grantedBy: "owner-b",
+    });
     // An org-owned brownfield project; owner-a is a member.
     const org = await store.orgs.createOrg({
       slug: "acme",
@@ -295,17 +316,39 @@ describe("brownfield route guards (BW-D7)", () => {
         }
       });
 
-      it("a store that throws: strict routes 500 persistence, lenient routes proceed", async () => {
+      it("the same id under two reachable owners: any brownfield match refuses (409)", async () => {
+        const res = await c.call({ projectId: DUP });
+        assert.equal(res.status, 409);
+        assert.equal((await res.json()).error, "brownfield_mode");
+        assert.equal(c.reached(), false);
+      });
+
+      it("a store that throws: logs server-side; strict routes 500 with a generic body, lenient routes proceed", async () => {
+        const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
         vi.spyOn(store, "projectsFor").mockImplementation(() => {
-          throw new Error("db down");
+          throw new TypeError("SELECT secret FROM saved_projects exploded");
         });
         const res = await c.call({ projectId: GREEN });
+
+        assert.equal(warn.mock.calls.length, 1);
+        const [, meta] = warn.mock.calls[0]!;
+        assert.deepEqual(meta, {
+          route: new URL(c.url).pathname,
+          policy: c.lenient ? "refuse-brownfield-only" : "strict",
+          projectId: GREEN,
+          errorClass: "TypeError",
+        });
+
         if (c.lenient) {
           assert.notEqual(res.status, 409);
           assert.equal(c.reached(), true);
         } else {
           assert.equal(res.status, 500);
-          assert.equal((await res.json()).error, "persistence");
+          assert.deepEqual(await res.json(), {
+            error: "persistence",
+            message: "Project lookup failed",
+            statusCode: 500,
+          });
           assert.equal(c.reached(), false);
         }
       });

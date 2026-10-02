@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { projectMode, type SavedProject } from "@hexagen/shared";
 import { requirePersistenceOwner } from "./require-owner";
 import { getPlatformStore } from "./store";
+import { logger } from "../structured-logger";
 
 /**
  * BW-D7. The greenfield accept, push and generate routes write the server's
@@ -43,9 +44,9 @@ import { getPlatformStore } from "./store";
 export type BrownfieldGuardPolicy = "strict" | "refuse-brownfield-only";
 
 type Lookup =
-  | { kind: "found"; project: SavedProject }
+  | { kind: "found"; projects: SavedProject[] }
   | { kind: "missing" }
-  | { kind: "error"; message: string };
+  | { kind: "error"; cause: unknown };
 
 export async function guardBrownfieldProject(
   request: NextRequest,
@@ -62,26 +63,39 @@ export async function guardBrownfieldProject(
     return strict ? forbidden() : null;
   }
 
+  const id = projectId.trim();
   let found: Lookup;
   try {
-    found = await lookup(owner.ownerId, projectId.trim());
+    found = await lookup(owner.ownerId, id);
   } catch (e) {
-    found = {
-      kind: "error",
-      message: e instanceof Error ? e.message : "Project lookup failed",
-    };
+    found = { kind: "error", cause: e };
   }
   if (found.kind === "error") {
+    // Server-side only: route, policy, id and error CLASS. Never the project
+    // content, and never the raw store message (it can carry SQL detail).
+    logger.warn("[brownfield-guard] project lookup failed", {
+      route: request.nextUrl.pathname,
+      policy,
+      projectId: id,
+      errorClass: errorClass(found.cause),
+    });
     return strict
       ? NextResponse.json(
-          { error: "persistence", message: found.message, statusCode: 500 },
+          {
+            error: "persistence",
+            message: "Project lookup failed",
+            statusCode: 500,
+          },
           { status: 500 },
         )
       : null;
   }
   if (found.kind === "missing") return strict ? forbidden() : null;
 
-  if (projectMode(found.project) === "brownfield") {
+  // Ids are scoped by owner, so the same id can exist under several reachable
+  // owners. If ANY of them is a brownfield workbook, refuse (fail toward
+  // refusal): the caller cannot be shown to mean the greenfield one.
+  if (found.projects.some((p) => projectMode(p) === "brownfield")) {
     return NextResponse.json(
       {
         error: "brownfield_mode",
@@ -93,6 +107,12 @@ export async function guardBrownfieldProject(
     );
   }
   return null;
+}
+
+function errorClass(cause: unknown): string {
+  if (cause instanceof Error) return cause.constructor.name;
+  const kind = (cause as { kind?: unknown } | null)?.kind;
+  return typeof kind === "string" ? kind : "unknown";
 }
 
 async function lookup(sub: string, projectId: string): Promise<Lookup> {
@@ -109,12 +129,30 @@ async function lookup(sub: string, projectId: string): Promise<Lookup> {
     ...new Set([sub, ...orgIds, ...grants.map((g) => g.ownerId)]),
   ];
 
+  const projects: SavedProject[] = [];
+  let failure: Lookup | null = null;
   for (const ownerId of candidates) {
-    const got = store.projectsFor(ownerId).getProject(projectId);
-    if (!got.success) return { kind: "error", message: got.error.message };
-    if (got.value !== null) return { kind: "found", project: got.value };
+    let got: ReturnType<ReturnType<typeof store.projectsFor>["getProject"]>;
+    try {
+      got = store.projectsFor(ownerId).getProject(projectId);
+    } catch (e) {
+      failure ??= { kind: "error", cause: e };
+      continue;
+    }
+    if (!got.success) {
+      failure ??= { kind: "error", cause: got.error };
+      continue;
+    }
+    if (got.value !== null) projects.push(got.value);
   }
-  return { kind: "missing" };
+  // A brownfield match found before a later failure still refuses.
+  if (projects.some((p) => projectMode(p) === "brownfield")) {
+    return { kind: "found", projects };
+  }
+  if (failure) return failure;
+  return projects.length > 0
+    ? { kind: "found", projects }
+    : { kind: "missing" };
 }
 
 // Same body and status as `projectForbidden` in require-owner.ts.
