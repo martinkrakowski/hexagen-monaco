@@ -29,6 +29,7 @@ import type { TraceRecord } from "../../src/application/kernel/trace.js";
 import type { ManifestWritePort } from "../../src/application/ports/out/manifest-write.port.js";
 import type { ScaffoldingPort } from "../../src/application/ports/out/scaffolding.port.js";
 import type {
+  GrantMissingAppendInput,
   TraceAppendInput,
   TraceWritePort,
 } from "../../src/application/ports/out/trace-write.port.js";
@@ -111,6 +112,13 @@ class EventBusFake implements EventBusPort {
 }
 
 class TraceWriteSpy implements TraceWritePort {
+  missing: GrantMissingAppendInput[] = [];
+  async appendGrantMissing(
+    input: GrantMissingAppendInput,
+  ): Promise<Result<void, Error>> {
+    this.missing.push(input);
+    return { success: true, value: undefined };
+  }
   lines: TraceRecord[] = [];
   async appendLine(input: TraceAppendInput): Promise<Result<void, Error>> {
     this.lines.push({

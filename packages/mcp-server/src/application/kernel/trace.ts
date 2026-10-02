@@ -51,8 +51,9 @@ export interface GreenfieldTraceRecord extends TraceLineFields {
 
 /**
  * Brownfield line (docs/kernel/trace.schema.json `brownfield_line`): `seq` and
- * `prev_hash` chain it to the line before it. Types only — the writer that
- * fills them is a later lane, and `checkTrace` ignores them.
+ * `prev_hash` chain it to the line before it. `TraceWriteAdapter` fills them in
+ * brownfield mode; `checkTrace` ignores them (the chain is verified by
+ * `hexagen evidence pack`).
  */
 export interface ChainedTraceRecord extends TraceLineFields {
   readonly seq: number;
@@ -65,7 +66,8 @@ export type TraceRecord = GreenfieldTraceRecord | ChainedTraceRecord;
 /**
  * A denied call that carried no grant, or a grant with no id. It has no
  * `grant_id` to cite, so it is its own record kind (schema `grant_missing`),
- * never evidence of a write. Types only; nothing writes or reads it yet.
+ * never evidence of a write. Written by `TraceWriteAdapter.appendGrantMissing`
+ * in brownfield mode only.
  */
 export interface GrantMissingRecord {
   readonly kind: "grant_missing";

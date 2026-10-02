@@ -97,6 +97,8 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
           tx.id,
           pending,
           grantCheck.code,
+          undefined,
+          grantCheck.reason,
         );
         const reason = traceResult.success
           ? grantCheck.reason
@@ -243,16 +245,26 @@ export class AcceptTransactionToolUseCase implements AcceptTransactionToolPort {
     pending: PendingManifestMutation | null,
     haltReason: HaltReason,
     appliedResult?: AppliedMutation,
+    denialReason?: string,
   ): Promise<Result<void, Error>> {
     const grant = input.grant;
-    if (!grant?.id) return { success: true, value: undefined };
-
     const toolName = pending
       ? deriveMutationRef(pending).tool
       : "hexagen_accept_transaction";
     const args: unknown = pending
       ? pending.input
       : { transaction_id: input.transaction_id };
+    if (!grant?.id) {
+      // No grant_id to cite, so this is its own record kind, never evidence of
+      // a write. The adapter decides whether its trace can hold it.
+      return this.traceWritePort.appendGrantMissing({
+        tool: toolName,
+        args,
+        goal_id: input.goal_id,
+        reason: denialReason ?? "no grant",
+        time: this.now().toISOString(),
+      });
+    }
     const result: unknown = appliedResult ?? { halt_reason: haltReason };
     const now = this.now().toISOString();
 

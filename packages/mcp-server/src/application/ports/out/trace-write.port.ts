@@ -20,6 +20,17 @@ export interface TraceAppendInput {
   readonly ended_at: string;
 }
 
+export interface GrantMissingAppendInput {
+  /** The tool the denied call named. */
+  readonly tool: string;
+  /** Raw call arguments; the adapter digests them. */
+  readonly args?: unknown;
+  readonly goal_id?: string;
+  /** Why the call was denied. */
+  readonly reason: string;
+  readonly time: string;
+}
+
 /**
  * Append-only evidence sink for `.hexagen/evidence/trace.jsonl`. One line
  * per accept or grant-deny at the `hexagen_accept_transaction` choke point
@@ -27,4 +38,13 @@ export interface TraceAppendInput {
  */
 export interface TraceWritePort {
   appendLine(input: TraceAppendInput): Promise<Result<void, Error>>;
+  /**
+   * Records a call denied for carrying no grant, or a grant with no id, as a
+   * `grant_missing` record. Only a chained (brownfield) trace has a place for
+   * it; an adapter whose trace is unchained resolves success without writing,
+   * so greenfield traces stay byte-identical.
+   */
+  appendGrantMissing(
+    input: GrantMissingAppendInput,
+  ): Promise<Result<void, Error>>;
 }

@@ -23,6 +23,7 @@ import type { TraceRecord } from "../../src/application/kernel/trace.js";
 import type { ManifestWritePort } from "../../src/application/ports/out/manifest-write.port.js";
 import type { ScaffoldingPort } from "../../src/application/ports/out/scaffolding.port.js";
 import type {
+  GrantMissingAppendInput,
   TraceAppendInput,
   TraceWritePort,
 } from "../../src/application/ports/out/trace-write.port.js";
@@ -87,6 +88,13 @@ class EventBusFake implements EventBusPort {
 }
 
 class TraceWriteSpy implements TraceWritePort {
+  missing: GrantMissingAppendInput[] = [];
+  async appendGrantMissing(
+    input: GrantMissingAppendInput,
+  ): Promise<Result<void, Error>> {
+    this.missing.push(input);
+    return { success: true, value: undefined };
+  }
   lines: TraceRecord[] = [];
   async appendLine(input: TraceAppendInput): Promise<Result<void, Error>> {
     this.lines.push({
@@ -110,6 +118,10 @@ class TraceWriteSpy implements TraceWritePort {
 }
 
 class FailingTraceWriteSpy implements TraceWritePort {
+  async appendGrantMissing(): Promise<Result<void, Error>> {
+    this.calls += 1;
+    return { success: false, error: new Error("disk full") };
+  }
   calls = 0;
   async appendLine(): Promise<Result<void, Error>> {
     this.calls += 1;
@@ -226,9 +238,13 @@ describe("Grant enforcement at hexagen_accept_transaction", () => {
     assert.equal(result.success, false);
     assert.match(String(result.error), /No Grant supplied/);
     assert.equal(h.write.writes.length, 0);
-    // No grant id to reference — no trace line is written (Trace without a
-    // Grant id is not evidence, per docs/kernel/TRACE.md).
+    // No grant id to reference — no evidence line is written (Trace without a
+    // Grant id is not evidence, per docs/kernel/TRACE.md). The denial goes to
+    // the port as its own grant_missing record instead.
     assert.equal(h.trace.lines.length, 0);
+    assert.equal(h.trace.missing.length, 1);
+    assert.match(h.trace.missing[0]?.reason ?? "", /No Grant supplied/);
+    assert.equal(h.trace.missing[0]?.tool, "hexagen_create_context");
   });
 
   it("denies a call at or after the grant's revoked_at, even before expires_at", async () => {
