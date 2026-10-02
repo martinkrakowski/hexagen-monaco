@@ -149,8 +149,14 @@ What it reads:
 .cts .js .jsx .mjs .cjs` files from the same walk. It is a tokenizer, not a
   parser, and never uses ts-morph or the TypeScript compiler API. It reads
   `import … from 'x'`, `import 'x'`, `export … from 'x'`, `import('x')`,
-  `require('x')` and `import x = require('x')`; comments, strings and
-  template literals (including `${…}` contents) are skipped. Only files up to
+  `require('x')` (also `require?.('x')` and `(require)('x')`) and
+  `import x = require('x')`; comments, strings and
+  template literals (including `${…}` contents) are skipped. Source files and
+  tsconfigs are opened without following a symlink in the last path component
+  (`O_NOFOLLOW`; on Windows an `lstat` check instead), and the size limit and the
+  read both use the opened handle. Bytes read from tsconfigs count toward
+  `--max-import-bytes`, and the time cap is checked while they load. Only files
+  up to
   1 MiB are read. A larger or unreadable file is skipped, noted in
   `limits.reasons` (the notes are capped at 50), and given its own `unresolved`
   row, so its missing edges never read as clean. The scan is linear in the file
@@ -183,9 +189,11 @@ What it reads:
     root, deduplicated.
   - **`unresolved[]`** are `{from, specifier, reason}`. Reasons:
     `not-found` (a relative or alias target that is not in the walk),
-    `exports-subpath` (`@scope/pkg/sub`; `exports` maps are not read),
-    `non-literal` (`import(x)`, `require(a + b)`; the specifier is recorded as
-    `import(<non-literal>)` or `require(<non-literal>)`), `outside-repo` (the
+    `exports-subpath` (`@scope/pkg/sub`, when no tsconfig `paths` alias matches it;
+    `exports` maps are not read),
+    `non-literal` (`import(x)`, `require(a + b)`, and an escaped or empty static
+    specifier such as `import '\u0061'`; recorded as `import(<non-literal>)`,
+    `require(<non-literal>)`, `import <non-literal>` or `export <non-literal>`), `outside-repo` (the
     target leaves the repo root, or is an absolute or drive path),
     `package-imports` (a `#` specifier) and `not-scanned` (the file itself was
     skipped: the specifier reads `<not scanned: larger than 1 MiB>` or

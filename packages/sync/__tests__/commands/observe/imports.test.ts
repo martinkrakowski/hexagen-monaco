@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { ObservedReport, edgesComplete } from "@hexagen/shared";
 import { observe } from "../../../src/commands/observe/index.js";
+import { runImportPass } from "../../../src/commands/observe/imports/pass.js";
 
 const tmpDirs: string[] = [];
 
@@ -404,7 +405,8 @@ describe("hexagen observe: import pass", () => {
   });
 
   it("reports an unreadable file as not-scanned (F2)", async () => {
-    if (process.getuid?.() === 0) return; // root reads anything
+    // root reads anything, and chmod 0 does not hide a file on Windows
+    if (process.getuid?.() === 0 || process.platform === "win32") return;
     const root = await mkRepo({
       "package.json": '{"name":"p"}',
       "locked.ts": "import './b';\n",
@@ -632,5 +634,129 @@ describe("hexagen observe: import pass", () => {
       { from: "a.ts", to: "packages/core", specifier: "@acme/core" },
     ]);
     expect(unresolved).toEqual([]);
+  });
+
+  it("trips the byte cap while loading a tsconfig, not only while scanning (bot 3)", async () => {
+    const root = await mkRepo({
+      "package.json": '{"name":"p"}',
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: { paths: { "@a/*": ["a/*"] } },
+        pad: "x".repeat(400),
+      }),
+      "a.ts": "export {};\n",
+    });
+    // The source is tiny; only the tsconfig can push the total over the cap.
+    const report = await observe({ root, maxImportBytes: 100 });
+    expect(report.edges).toEqual({
+      collected: false,
+      reason: "import pass byte cap reached (maxImportBytes=100)",
+    });
+    expect(report.unresolved.collected).toBe(false);
+    expect(report.limits.truncated).toBe(true);
+  });
+
+  it("trips the time cap while loading a tsconfig chain (bot 3)", async () => {
+    const root = await mkRepo({
+      "package.json": '{"name":"p"}',
+      "tsconfig.json": JSON.stringify({ extends: "./b.json" }),
+      "b.json": JSON.stringify({ extends: "./c.json" }),
+      // c extends b again: only reached if loading ignores the time cap.
+      "c.json": JSON.stringify({ extends: "./b.json" }),
+      "a.ts": "export {};\n",
+    });
+    let t = 0;
+    // 600 ms per read: the third read inside config loading is past 1000 ms.
+    const report = await observe({
+      root,
+      maxMs: 10_000_000,
+      maxImportMs: 1000,
+      now: () => (t += 600),
+    });
+    expect(report.edges).toEqual({
+      collected: false,
+      reason: "import pass time cap reached (maxImportMs=1000)",
+    });
+    expect(report.unresolved.collected).toBe(false);
+    expect(report.limits.reasons.join("\n")).not.toMatch(/extends cycle/);
+  });
+
+  it("reports a file swapped for a symlink after the walk as not-scanned (bot 4)", async () => {
+    if (process.platform === "win32") return;
+    const root = await mkRepo({
+      "package.json": '{"name":"p"}',
+      "b.ts": "export {};\n",
+    });
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), "hexagen-out-"));
+    tmpDirs.push(outside);
+    await put(outside, "secret.ts", "import './b';\n");
+    await fs.symlink(path.join(outside, "secret.ts"), path.join(root, "a.ts"));
+    const notes: string[] = [];
+    const result = await runImportPass({
+      root,
+      files: ["a.ts", "b.ts"],
+      packages: [],
+      maxFiles: 100,
+      maxBytes: 1_000_000,
+      maxMs: 100_000,
+      now: () => 0,
+      start: 0,
+      notes,
+    });
+    expect(result).toEqual({
+      collected: true,
+      edges: [],
+      unresolved: [
+        {
+          from: "a.ts",
+          specifier: "<not scanned: unreadable>",
+          reason: "not-scanned",
+        },
+      ],
+    });
+  });
+
+  it("tries a tsconfig alias before calling a workspace subpath exports-subpath (bot 6)", async () => {
+    const root = await mkRepo({
+      "package.json": '{"name":"p"}',
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: { paths: { "@acme/core/*": ["packages/core/src/*"] } },
+      }),
+      "packages/core/package.json": '{"name":"@acme/core"}',
+      "packages/core/src/util.ts": "export {};\n",
+      "a.ts": "import '@acme/core/util'; import '@acme/core/other';\n",
+    });
+    const { edges, unresolved } = await run(root);
+    expect(edges).toEqual([
+      {
+        from: "a.ts",
+        to: "packages/core/src/util.ts",
+        specifier: "@acme/core/util",
+      },
+    ]);
+    // The alias matched but the target is absent: that is the alias's verdict.
+    expect(unresolved).toEqual([
+      { from: "a.ts", specifier: "@acme/core/other", reason: "not-found" },
+    ]);
+  });
+
+  it("keeps an escaped or empty static specifier as a non-literal row (bot 7)", async () => {
+    const root = await mkRepo({
+      "package.json": '{"name":"p"}',
+      "a.ts": "import '\\u0061'; export * from '';\n",
+    });
+    const { edges, unresolved } = await run(root);
+    expect(edges).toEqual([]);
+    expect(unresolved).toEqual([
+      {
+        from: "a.ts",
+        specifier: "export <non-literal>",
+        reason: "non-literal",
+      },
+      {
+        from: "a.ts",
+        specifier: "import <non-literal>",
+        reason: "non-literal",
+      },
+    ]);
   });
 });

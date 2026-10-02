@@ -251,17 +251,36 @@ export function scanSpecifiers(text: string): ScannedSpecifier[] {
         fromKind = t.v === "import" ? "import" : "export-from";
       }
     }
+    // The `(` that opens the call: `require(`, `import(`, `require?.(` or
+    // `(require)(`. A fixed lookahead, so matching stays bounded.
+    let open = -1;
+    if (isP(next, "(")) open = i + 1;
+    else if (
+      t.v === "require" &&
+      isP(next, "?") &&
+      isP(toks[i + 2], ".") &&
+      isP(toks[i + 3], "(")
+    ) {
+      open = i + 3;
+    } else if (
+      t.v === "require" &&
+      isP(toks[i - 1], "(") &&
+      isP(next, ")") &&
+      isP(toks[i + 2], "(")
+    ) {
+      open = i + 2;
+    }
     if (
       (t.v === "import" || t.v === "require") &&
-      isP(next, "(") &&
+      open !== -1 &&
       !isId(toks[i - 1], "function")
     ) {
-      const arg = toks[i + 2];
-      const after = toks[i + 3];
+      const arg = toks[open + 1];
+      const after = toks[open + 2];
       const plain =
         literal(arg) !== null && (isP(after, ")") || isP(after, ","));
       // A method named require/import in a class body is not a call.
-      if (!plain && isMethodDefinition(toks, i + 1)) continue;
+      if (!plain && isMethodDefinition(toks, open)) continue;
       out.push({
         specifier: plain ? literal(arg) : null,
         kind: t.v === "import" ? "dynamic-import" : "require",

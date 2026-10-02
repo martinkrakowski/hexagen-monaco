@@ -1,4 +1,3 @@
-import { promises as fs } from "node:fs";
 import path from "node:path";
 import { parseJsonc } from "./jsonc.js";
 import {
@@ -8,7 +7,11 @@ import {
   type UnresolvedReason,
   type WorkspacePackage,
 } from "./resolve.js";
+import { safeReadText } from "./safe-read.js";
 import { scanSpecifiers } from "./scan.js";
+
+/** Thrown inside the pass when a cap trips; caught once at the top. */
+class CapTrip extends Error {}
 
 /** Extensions the pass reads. Every other counted language is unread. */
 export const READ_EXTENSIONS: ReadonlySet<string> = new Set([
@@ -69,12 +72,38 @@ export function isReadable(file: string): boolean {
 const NON_LITERAL = {
   "dynamic-import": "import(<non-literal>)",
   require: "require(<non-literal>)",
+  import: "import <non-literal>",
+  "export-from": "export <non-literal>",
 } as const;
 
 export async function runImportPass(
   options: ImportPassOptions,
 ): Promise<ImportPassResult> {
+  try {
+    return await runPass(options);
+  } catch (e) {
+    if (e instanceof CapTrip) return { collected: false, reason: e.message };
+    throw e;
+  }
+}
+
+async function runPass(options: ImportPassOptions): Promise<ImportPassResult> {
   const { root, files, notes } = options;
+  let bytes = 0;
+  const timeReason = `import pass time cap reached (maxImportMs=${options.maxMs})`;
+  const checkTime = (): void => {
+    if (options.now() - options.start > options.maxMs) {
+      throw new CapTrip(timeReason);
+    }
+  };
+  const addBytes = (n: number): void => {
+    bytes += n;
+    if (bytes > options.maxBytes) {
+      throw new CapTrip(
+        `import pass byte cap reached (maxImportBytes=${options.maxBytes})`,
+      );
+    }
+  };
   const fileSet = new Set(files);
   const maxFileBytes = options.maxFileBytes ?? MAX_FILE_BYTES;
   const sources = files.filter(isReadable);
@@ -91,19 +120,17 @@ export async function runImportPass(
   const readConfig = async (
     file: string,
   ): Promise<Record<string, unknown> | null> => {
-    try {
-      const size = (await fs.stat(path.join(root, file))).size;
-      if (size > maxFileBytes) {
-        notes.push(`note: ${file} is larger than 1 MiB; ignored`);
-        return null;
-      }
-      const text = await fs.readFile(path.join(root, file), "utf8");
-      const parsed = parseJsonc(text);
+    const read = await safeReadText(path.join(root, file), maxFileBytes);
+    if (read.ok) {
+      // A tsconfig counts toward the byte cap like any other file read.
+      addBytes(read.size);
+      const parsed = parseJsonc(read.text);
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
         return parsed as Record<string, unknown>;
       }
-    } catch {
-      // fall through to the note
+    } else if (read.why === "too-large") {
+      notes.push(`note: ${file} is larger than 1 MiB; ignored`);
+      return null;
     }
     notes.push(`note: ${file} is not readable JSON; ignored`);
     return null;
@@ -116,6 +143,7 @@ export async function runImportPass(
     const seen = new Set<string>();
     let cur: string | null = file;
     while (cur !== null) {
+      checkTime();
       if (seen.has(cur)) {
         notes.push(`note: tsconfig extends cycle at ${cur}; chain cut`);
         break;
@@ -247,7 +275,6 @@ export async function runImportPass(
   const unresolvedKeys = new Set<string>();
   const unresolved: UnresolvedRow[] = [];
   let external = 0;
-  let bytes = 0;
 
   /** A file the pass could not read: a note, and a row so the edges never read clean. */
   const skip = (
@@ -268,49 +295,27 @@ export async function runImportPass(
 
   const BATCH = 32;
   for (let i = 0; i < sources.length; i += BATCH) {
-    if (options.now() - options.start > options.maxMs) {
-      return {
-        collected: false,
-        reason: `import pass time cap reached (maxImportMs=${options.maxMs})`,
-      };
-    }
+    checkTime();
     const batch = sources.slice(i, i + BATCH);
     const texts: (string | null)[] = [];
     for (const f of batch) {
-      let size: number;
-      try {
-        size = (await fs.stat(path.join(root, f))).size;
-      } catch {
-        skip(f, "unreadable");
+      const read = await safeReadText(path.join(root, f), maxFileBytes);
+      if (!read.ok) {
+        skip(f, read.why === "too-large" ? "larger than 1 MiB" : "unreadable");
         texts.push(null);
         continue;
       }
-      if (size > maxFileBytes) {
-        skip(f, "larger than 1 MiB");
-        texts.push(null);
-        continue;
-      }
-      bytes += size;
-      if (bytes > options.maxBytes) {
-        return {
-          collected: false,
-          reason: `import pass byte cap reached (maxImportBytes=${options.maxBytes})`,
-        };
-      }
-      try {
-        texts.push(await fs.readFile(path.join(root, f), "utf8"));
-      } catch {
-        skip(f, "unreadable");
-        texts.push(null);
-      }
+      addBytes(read.size);
+      texts.push(read.text);
     }
     batch.forEach((from, idx) => {
       const text = texts[idx];
       if (text == null) return;
       for (const found of scanSpecifiers(text)) {
         if (found.specifier === null) {
-          const specifier = NON_LITERAL[found.kind as keyof typeof NON_LITERAL];
-          if (!specifier) continue; // a static import always has a literal
+          // An escaped or empty static specifier is as unknowable as a
+          // computed one: it gets a row rather than vanishing.
+          const specifier = NON_LITERAL[found.kind];
           const key = `${from}\0${specifier}`;
           if (!unresolvedKeys.has(key)) {
             unresolvedKeys.add(key);
@@ -341,12 +346,7 @@ export async function runImportPass(
       }
     });
   }
-  if (options.now() - options.start > options.maxMs) {
-    return {
-      collected: false,
-      reason: `import pass time cap reached (maxImportMs=${options.maxMs})`,
-    };
-  }
+  checkTime();
   if (external > 0) {
     notes.push(
       `note: ${external} external specifier(s) (node builtins and dependencies) are neither edges nor unresolved`,

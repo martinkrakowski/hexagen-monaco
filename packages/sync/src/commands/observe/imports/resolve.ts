@@ -127,14 +127,21 @@ function relativeStep(ctx: ResolveContext): Step {
   };
 }
 
-function workspaceStep(ctx: ResolveContext): Step {
-  return (spec) => {
+function workspaceStep(ctx: ResolveContext, alias: Step): Step {
+  return (spec, fromDir) => {
     for (const pkg of ctx.packages) {
       if (spec === pkg.name) return { kind: "edge", to: pkg.root };
     }
     for (const pkg of ctx.packages) {
       if (spec.startsWith(`${pkg.name}/`)) {
-        return { kind: "unresolved", reason: "exports-subpath" };
+        // A tsconfig alias for the subpath gets the first word; only when none
+        // matches is it an `exports` subpath, which this pass does not read.
+        return (
+          alias(spec, fromDir) ?? {
+            kind: "unresolved",
+            reason: "exports-subpath",
+          }
+        );
       }
     }
     return null;
@@ -218,10 +225,11 @@ const packageImportsStep: Step = (spec) =>
 export function makeResolver(
   ctx: ResolveContext,
 ): (spec: string, fromFile: string) => Resolution {
+  const alias = tsconfigStep(ctx);
   const steps: Step[] = [
     relativeStep(ctx),
-    workspaceStep(ctx),
-    tsconfigStep(ctx),
+    workspaceStep(ctx, alias),
+    alias,
     packageImportsStep,
   ];
   return (spec, fromFile) => {

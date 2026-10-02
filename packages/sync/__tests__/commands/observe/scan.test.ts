@@ -132,9 +132,42 @@ describe("scanSpecifiers", () => {
 
 describe("scanSpecifiers: hostile and JSX input", () => {
   it("stays linear on a failed-regex pattern (F1)", () => {
-    const t0 = Date.now();
+    // Scale-relative, so a loaded CI machine does not fail it: 8x the input
+    // costs about 8x when linear and about 64x when quadratic.
+    const time = (kib: number): number => {
+      const input = "/[".repeat((kib * 1024) / 2);
+      const t0 = performance.now();
+      scanSpecifiers(input);
+      return performance.now() - t0;
+    };
+    const small = Math.max(Math.min(time(16), time(16), time(16)), 3);
+    const large = time(128);
+    expect(large / small).toBeLessThan(20);
+    // A generous ceiling for the full 1 MiB; the quadratic scan needs minutes.
+    const t0 = performance.now();
     scanSpecifiers("/[".repeat(512 * 1024));
-    expect(Date.now() - t0).toBeLessThan(500);
+    expect(performance.now() - t0).toBeLessThan(5000);
+  });
+
+  it("recognizes require?.() and (require)() calls (bot 5)", () => {
+    expect(
+      specs(
+        "const a = require?.('./a'); const b = (require)('./b'); const c = (require)(name); const d = require?.(name);",
+      ),
+    ).toEqual(["./a", "./b", null, null]);
+    expect(specs("x.require?.('./no'); obj?.require('./no2');")).toEqual([]);
+  });
+
+  it("keeps an escaped or empty static specifier as null (bot 7)", () => {
+    expect(
+      scanSpecifiers(
+        "import '\\u0061'; export * from ''; import x from './ok';",
+      ).map((s) => [s.kind, s.specifier]),
+    ).toEqual([
+      ["import", null],
+      ["export-from", null],
+      ["import", "./ok"],
+    ]);
   });
 
   it("keeps correct results on the short form of that pattern", () => {
