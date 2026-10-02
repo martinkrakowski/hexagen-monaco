@@ -1,6 +1,8 @@
+import { useMemo } from "react";
 import { cleanText } from "@hexagen/shared";
 import type { Contract, ObservedReport, Slice } from "@hexagen/shared";
 import {
+  contractApplies,
   incompleteReasons,
   mismatchNotices,
   sliceView,
@@ -17,8 +19,8 @@ export interface ProposedLayerProps {
   readonly observed: ObservedReport | null;
   readonly slice: Slice | null;
   readonly contract: Contract | null;
-  /** The bundle's date: baseline expiries are judged against it, never the wall clock. */
-  readonly now: Date;
+  /** The bundle's date (ISO): baseline expiries are judged against it, never the wall clock. */
+  readonly createdAt: string;
   readonly visible: boolean;
   readonly onToggle: () => void;
 }
@@ -80,13 +82,25 @@ export function ProposedLayer({
   observed,
   slice,
   contract,
-  now,
+  createdAt,
   visible,
   onToggle,
 }: ProposedLayerProps) {
   const missing = slice === null && contract === null;
-  const view =
-    observed && slice ? sliceView(observed, slice, contract, now) : null;
+  // Judged only while the body shows, and only against a contract for this slice.
+  const applies = slice !== null && contractApplies(slice, contract);
+  const view = useMemo(
+    () =>
+      visible && observed && slice
+        ? sliceView(
+            observed,
+            slice,
+            applies ? contract : null,
+            new Date(createdAt),
+          )
+        : null,
+    [visible, observed, slice, contract, applies, createdAt],
+  );
   const reasons = observed ? incompleteReasons(observed) : [];
   const notices = mismatchNotices(observed, slice, contract);
   return (
@@ -120,6 +134,12 @@ export function ProposedLayer({
                 {clean(n)}
               </p>
             ))}
+            {slice !== null && contract !== null && !applies && (
+              <p role="note" className="text-sm">
+                No contract rule was applied: the contract belongs to another
+                slice.
+              </p>
+            )}
             {slice !== null && observed === null && (
               <p role="note" className="text-sm text-muted-foreground">
                 No observed report, so no edge was judged.

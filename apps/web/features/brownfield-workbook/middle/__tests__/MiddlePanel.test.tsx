@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import type { Contract, ObservedReport, Slice } from "@hexagen/shared";
 import { MiddlePanel } from "../MiddlePanel";
+import { packageEdges } from "../derive";
 import type { LoadedBundle } from "../../bundle/read-bundle";
 
 const NOW = "2026-10-01T10:00:00.000Z";
@@ -1234,3 +1235,132 @@ describe("packages are grouped by root", () => {
     ).toHaveLength(2);
   });
 });
+
+describe("a contract for another slice", () => {
+  const slice = sliceOf(["apps/web/"]);
+  const bad: Edge = {
+    from: "apps/web/a.ts",
+    to: "libs/shared/x.ts",
+    specifier: "bad",
+  };
+  const mismatched = {
+    ...contractOf([
+      {
+        id: "no-shared",
+        kind: "forbid",
+        from: "apps/web/",
+        to: "libs/shared/",
+        severity: "error",
+      },
+    ]),
+    sliceId: "slice-2",
+    knownViolations: [
+      { rule: "no-shared", file: "apps/web/a.ts", specifier: "bad" },
+    ],
+  };
+
+  it("applies no rule: no violation and no known mark, and says so", () => {
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({ packages: PKGS, edges: [bad] }),
+          slice,
+          contract: mismatched,
+        })}
+      />,
+    );
+    const p = within(proposedRegion());
+    expect(p.getAllByTestId("slice-edge")).toHaveLength(1);
+    expect(p.queryAllByTestId("violation")).toHaveLength(0);
+    expect(p.queryAllByTestId("known-mark")).toHaveLength(0);
+    expect(p.getByTestId("slice-edge").getAttribute("data-violation")).toBe(
+      "false",
+    );
+    expect(proposedRegion().textContent).toContain(
+      "No contract rule was applied",
+    );
+    expect(proposedRegion().textContent).toContain("belongs to another slice");
+  });
+
+  it("still applies the same rules once the ids match", () => {
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({ packages: PKGS, edges: [bad] }),
+          slice,
+          contract: { ...mismatched, sliceId: "slice-1" },
+        })}
+      />,
+    );
+    expect(screen.getAllByTestId("violation")).toHaveLength(1);
+    expect(proposedRegion().textContent).not.toContain(
+      "No contract rule was applied",
+    );
+  });
+
+  it("still flags an in-slice unresolved import, which needs no contract rule", () => {
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({
+            packages: PKGS,
+            unresolved: [
+              { from: "apps/web/a.ts", specifier: "ghost", reason: "r" },
+            ],
+          }),
+          slice,
+          contract: mismatched,
+        })}
+      />,
+    );
+    expect(screen.getAllByTestId("slice-unresolved")).toHaveLength(1);
+  });
+});
+
+describe("a large report", () => {
+  it("derives every package edge group correctly", () => {
+    const P = 2000;
+    const packages = Array.from({ length: P }, (_, i) => ({
+      name: `pkg-${i}`,
+      root: `p${i}`,
+      manifestFile: `p${i}/package.json`,
+    }));
+    const edges = Array.from({ length: 20000 }, (_, k) => {
+      const i = k % P;
+      return {
+        from: `p${i}/f${k}.ts`,
+        to: `p${(i + 1) % P}/x.ts`,
+        specifier: "s",
+      };
+    });
+    const groups = packageEdges(packages, edges);
+    expect(groups).toHaveLength(P);
+    expect(groups.every((g) => g.edges.length === 10)).toBe(true);
+    expect(groups[0].from).toBe("pkg-0");
+    expect(groups[0].to).toBe("pkg-1");
+    expect(groups[P - 1].to).toBe("pkg-0");
+  });
+});
+
+describe("two packages declaring the same root", () => {
+  it("attributes the root to the first one listed", () => {
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({
+            packages: [
+              { name: "first", root: "d" },
+              { name: "second", root: "d" },
+              { name: "o", root: "o" },
+            ],
+            edges: [{ from: "d/x.ts", to: "o/y.ts", specifier: "s" }],
+          }),
+        })}
+      />,
+    );
+    expect(
+      within(observedRegion()).getByTestId("package-edge").textContent,
+    ).toContain("first -> o");
+  });
+});
+// population-guard: the violation count above proves the layer rendered

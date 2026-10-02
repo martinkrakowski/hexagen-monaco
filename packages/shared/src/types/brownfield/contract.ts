@@ -23,6 +23,19 @@ const Rule = z
   })
   .strict();
 
+/** True for a YYYY-MM-DD string that names a real calendar day (2026-02-30 is not one). */
+function isRealCalendarDate(text: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!m) return false;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const utc = new Date(Date.UTC(y, mo - 1, d));
+  return (
+    utc.getUTCFullYear() === y &&
+    utc.getUTCMonth() === mo - 1 &&
+    utc.getUTCDate() === d
+  );
+}
+
 /**
  * Entry shape of the ratchet baseline (`tools/arch-linter/src/ratchet-baseline.ts`
  * `BaselineEntry`): `rule`, `file` and `specifier`, with the optional `reason`
@@ -39,7 +52,16 @@ const KnownViolation = z
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((k, ctx) => {
+    if (k.expires !== undefined && !isRealCalendarDate(k.expires)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["expires"],
+        message: `knownViolations entry ${k.rule} ${k.file} ${k.specifier}: 'expires' is not a real calendar date (${k.expires})`,
+      });
+    }
+  });
 
 /** `.hexagen/contract.json`: what the slice may and may not depend on. */
 export const Contract = z

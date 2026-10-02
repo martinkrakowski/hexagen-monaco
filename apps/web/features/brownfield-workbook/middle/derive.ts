@@ -41,30 +41,57 @@ export function itemsOf<T>(
     : { items: null, reason: section.reason };
 }
 
-function under(root: string, file: string): boolean {
-  if (root === ".") return true;
-  const r = nfc(root).replace(/\/$/, "");
-  const f = nfc(file);
-  return f === r || f.startsWith(`${r}/`);
+const stripSlash = (root: string): string => nfc(root).replace(/\/$/, "");
+
+export interface OwnerIndex {
+  /** The package that owns `path` (the longest matching root). `key` is its root, so two packages with the same name stay apart; `label` is its own name. A path no package owns is its own key and label. */
+  readonly of: (path: string) => { key: string; label: string };
 }
 
 /**
- * The package that owns `path` (the longest matching root). `key` is its root,
- * so two packages with the same name stay apart; `label` is its own name. A
- * path no package owns is its own key and label.
+ * A root lookup built once per package list: each root maps to its first
+ * package, and a path is resolved by walking its ancestor directories from the
+ * longest, so the longest matching root wins at a cost of one lookup per path
+ * segment, not one per package. The root package (".") owns whatever is left.
  */
+export function ownerIndex(packages: readonly PackageItem[]): OwnerIndex {
+  const byRoot = new Map<string, PackageItem>();
+  let rootPackage: PackageItem | undefined;
+  for (const p of packages) {
+    if (p.root === ".") {
+      rootPackage ??= p;
+      continue;
+    }
+    const r = stripSlash(p.root);
+    if (!byRoot.has(r)) byRoot.set(r, p);
+  }
+  const owner = (pkg: PackageItem) => ({
+    key: `root:${pkg.root}`,
+    label: pkg.name,
+  });
+  return {
+    of(path) {
+      const f = nfc(path);
+      let end = f.length;
+      for (;;) {
+        const hit = byRoot.get(f.slice(0, end));
+        if (hit) return owner(hit);
+        end = f.lastIndexOf("/", end - 1);
+        if (end <= 0) break;
+      }
+      return rootPackage
+        ? owner(rootPackage)
+        : { key: `path:${path}`, label: path };
+    },
+  };
+}
+
+/** One-off lookup; prefer `ownerIndex` when resolving many paths. */
 export function ownerOf(
   packages: readonly PackageItem[],
   path: string,
 ): { key: string; label: string } {
-  let best: PackageItem | undefined;
-  for (const p of packages) {
-    if (!under(p.root, path)) continue;
-    if (!best || nfc(best.root).length < nfc(p.root).length) best = p;
-  }
-  return best
-    ? { key: `root:${best.root}`, label: best.name }
-    : { key: `path:${path}`, label: path };
+  return ownerIndex(packages).of(path);
 }
 
 export interface PackageEdgeGroup {
@@ -78,13 +105,14 @@ export function packageEdges(
   packages: readonly PackageItem[],
   edges: readonly ObservedEdge[],
 ): PackageEdgeGroup[] {
+  const owners = ownerIndex(packages);
   const groups = new Map<
     string,
     { from: string; to: string; edges: ObservedEdge[] }
   >();
   for (const e of edges) {
-    const from = ownerOf(packages, e.from);
-    const to = ownerOf(packages, e.to);
+    const from = owners.of(e.from);
+    const to = owners.of(e.to);
     if (from.key === to.key) continue;
     const key = `${from.key}\u0000${to.key}`;
     const hit = groups.get(key);
@@ -243,4 +271,12 @@ export function mismatchNotices(
 /** Number of CRLF line endings in `text`. */
 export function crlfCount(text: string): number {
   return text.split("\r\n").length - 1;
+}
+
+/** True when the contract belongs to this slice: only then may its rules be applied. */
+export function contractApplies(
+  slice: Slice,
+  contract: Contract | null,
+): boolean {
+  return contract !== null && contract.sliceId === slice.id;
 }

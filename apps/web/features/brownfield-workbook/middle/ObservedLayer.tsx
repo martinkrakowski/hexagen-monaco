@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { cleanText, edgesComplete, isPathInSlice } from "@hexagen/shared";
 import type { ObservedReport, Slice } from "@hexagen/shared";
 import { itemsOf, packageEdges } from "./derive";
@@ -84,7 +85,11 @@ function ObservedBody({
   const ed = itemsOf(observed.edges);
   const un = itemsOf(observed.unresolved);
   const packages = pk.items ?? [];
-  const groups = ed.items ? packageEdges(packages, ed.items) : [];
+  const groups = useMemo(
+    () => (ed.items ? packageEdges(packages, ed.items) : []),
+    // keyed on `observed`: packages and edges both come from it
+    [observed],
+  );
   const empty =
     packages.length === 0 &&
     (ed.items?.length ?? 0) === 0 &&
