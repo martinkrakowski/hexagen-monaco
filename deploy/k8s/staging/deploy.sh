@@ -18,6 +18,8 @@ if [ "$#" -eq 1 ]; then
   esac
 fi
 
+shift "$#" # "$@" is reused below for the build arguments
+
 cd "$(git rev-parse --show-toplevel)"
 DIR=deploy/k8s/staging
 
