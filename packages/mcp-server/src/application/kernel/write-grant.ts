@@ -23,7 +23,8 @@ export interface WriteRef {
  * no Unicode (NFC) normalisation; the caller's on-disk spelling check is the
  * guard. A candidate ending `/` is refused (a write target is a file). An
  * empty `paths` input is a denial, never an allow. The tool is checked
- * before the paths.
+ * before the paths, and the distinct-path count is checked against
+ * `max_files` (when set) after the per-path checks.
  */
 export function checkWriteAgainstGrant(
   grant: Grant,
@@ -59,6 +60,14 @@ export function checkWriteAgainstGrant(
         reason: `Grant does not include path '${candidate}' (tool: ${write.tool})`,
       };
     }
+  }
+  const distinct = new Set(write.paths).size;
+  if (grant.max_files !== undefined && distinct > grant.max_files) {
+    return {
+      allowed: false,
+      code: "grant_denied",
+      reason: `Grant's max_files (${grant.max_files}) is smaller than the ${distinct} distinct path(s) requested (tool: ${write.tool})`,
+    };
   }
   return { allowed: true };
 }

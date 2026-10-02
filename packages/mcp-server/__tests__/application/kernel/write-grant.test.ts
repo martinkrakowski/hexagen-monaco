@@ -147,6 +147,55 @@ describe("checkWriteAgainstGrant ordering and strictness", () => {
   });
 });
 
+describe("checkWriteAgainstGrant max_files", () => {
+  const two = ["packages/bill/a.ts", "packages/bill/b.ts"];
+
+  it("denies more distinct paths than the cap, naming count and cap", () => {
+    const reason = denied(
+      checkWriteAgainstGrant(clientGrant({ max_files: 1 }), {
+        tool: "edit_file",
+        paths: two,
+      }),
+    );
+    assert.match(reason, /2/);
+    assert.match(reason, /max_files \(1\)/);
+  });
+
+  it("counts a duplicated path once", () => {
+    const result = checkWriteAgainstGrant(clientGrant({ max_files: 1 }), {
+      tool: "edit_file",
+      paths: [two[0]!, two[0]!],
+    });
+    assert.deepEqual(result, { allowed: true });
+  });
+
+  it("applies no cap when max_files is unset", () => {
+    const result = checkWriteAgainstGrant(clientGrant(), {
+      tool: "edit_file",
+      paths: two,
+    });
+    assert.deepEqual(result, { allowed: true });
+  });
+
+  it("allows exactly max_files paths", () => {
+    const result = checkWriteAgainstGrant(clientGrant({ max_files: 2 }), {
+      tool: "edit_file",
+      paths: two,
+    });
+    assert.deepEqual(result, { allowed: true });
+  });
+
+  it("reports an out-of-grant path before the cap", () => {
+    const reason = denied(
+      checkWriteAgainstGrant(clientGrant({ max_files: 1 }), {
+        tool: "edit_file",
+        paths: ["etc/x", ...two],
+      }),
+    );
+    assert.match(reason, /etc\/x/);
+  });
+});
+
 describe("checkMutationAgainstGrant with contexts absent", () => {
   it("denies without throwing", () => {
     const pending = {
