@@ -34,6 +34,11 @@ import { discoverWorkspaceRoot, loadSlice } from "./workspace.js";
 import { grantShowCommand, type ShowOptions } from "./show.js";
 import { grantCheckCommand, type CheckOptions } from "./check.js";
 
+/** Commander parser that keeps every occurrence of a repeated flag. */
+function collectValues(value: string, previous?: string[]): string[] {
+  return [...(previous ?? []), value];
+}
+
 function splitCsv(value: string): string[] {
   return value
     .split(",")
@@ -539,10 +544,15 @@ grantCommander
     "[transaction-id]",
     "Monaco form: a pending transaction id (not built; exits 2)",
   )
-  .option("--tool <tool>", "Tool the write would use")
+  .option(
+    "--tool <tool>",
+    "Tool the write would use (once; a repeat exits 2)",
+    collectValues,
+  )
   .option(
     "--path <path...>",
-    "Repo-relative file path(s) the write would touch",
+    "Repo-relative file path(s) the write would touch; repeat the flag or list several",
+    collectValues,
   )
   .option(
     "--workspace-root <path>",

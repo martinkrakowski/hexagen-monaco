@@ -30,7 +30,14 @@ export async function grantShowCommand(options: ShowOptions): Promise<void> {
     return;
   }
   const { grant } = loaded;
-  const workspaceRoot = discoverWorkspaceRoot(options.workspaceRoot);
+  let workspaceRoot: string;
+  try {
+    workspaceRoot = discoverWorkspaceRoot(options.workspaceRoot);
+  } catch (error) {
+    console.error((error as Error).message);
+    process.exitCode = 2;
+    return;
+  }
   if (!isRepoMode(workspaceRoot)) {
     try {
       await loadSlice(workspaceRoot);

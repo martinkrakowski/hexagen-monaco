@@ -254,7 +254,12 @@ hexagen grant check <grant-file> --tool <tool> --path <path>...
     key the server would use without the override, with both fingerprints.
     Exit 0 allow; 1 deny (including a missing, weak or mismatched key);
     2 bad input (missing --tool or --path, a malformed path, an unreadable
-    grant file, an invalid .hexagen/slice.json, a transaction id).
+    grant file, an invalid .hexagen/slice.json, an invalid expires_at/revoked_at (an ISO
+    date-time with an offset is required), a repeated --tool, a repo with a
+    manifest, a transaction id). --path may be repeated or list several
+    paths; every one is checked. The Field Kit form is for client repos: in a
+    repo with a manifest, mutations are checked at accept, so check exits 2.
+    The workspace root is the git toplevel unless --workspace-root is given.
     In a client repo with no .hexagen/slice.json, check denies (exit 1): the
     slice bounds every write. Paths are judged by text only; the MCP propose
     tool (BW10) also checks the on-disk spelling, which this CLI does not.

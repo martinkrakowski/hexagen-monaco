@@ -8,6 +8,7 @@ import { canonicalGrantPayload } from "../../../src/commands/grant/canonical.js"
 import { signGrantPayload } from "../../../src/commands/grant/sign.js";
 import { grantShowCommand } from "../../../src/commands/grant/show.js";
 import { grantCheckCommand } from "../../../src/commands/grant/check.js";
+import { realpathSync } from "node:fs";
 
 const dirs: string[] = [];
 async function tmp(prefix: string): Promise<string> {
@@ -117,6 +118,23 @@ async function fixture(
 }
 
 const text = (): string => out.join("\n");
+
+async function repoFixture(): Promise<Fixture> {
+  const root = await tmp("sc-root-");
+  const home = await tmp("sc-home-");
+  await mkdir(path.join(root, ".architecture"), { recursive: true });
+  await writeFile(path.join(root, ".architecture", "manifest.yaml"), "x: 1\n");
+  await mkdir(path.join(root, ".hexagen"), { recursive: true });
+  const keyPath = path.join(root, ".hexagen", "grant-signing.key");
+  const keyHex = "ab".repeat(32);
+  await writeFile(keyPath, keyHex + "\n");
+  const grantFile = path.join(root, "g.json");
+  await writeFile(
+    grantFile,
+    JSON.stringify(signed(keyHex, { paths: ["lib/"] })),
+  );
+  return { root, home, keyHex, keyPath, grantFile };
+}
 
 function show(f: Fixture, extra: Record<string, unknown> = {}) {
   return grantShowCommand({
@@ -425,30 +443,23 @@ describe("grant check (Field Kit form)", () => {
     expect(process.exitCode).toBe(2);
   });
 
-  it("repo mode (manifest present): skips the slice and uses the in-repo key", async () => {
-    const root = await tmp("sc-root-");
-    const home = await tmp("sc-home-");
-    await mkdir(path.join(root, ".architecture"), { recursive: true });
-    await writeFile(
-      path.join(root, ".architecture", "manifest.yaml"),
-      "x: 1\n",
-    );
-    await mkdir(path.join(root, ".hexagen"), { recursive: true });
-    const keyPath = path.join(root, ".hexagen", "grant-signing.key");
-    const keyHex = "ab".repeat(32);
-    await writeFile(keyPath, keyHex + "\n");
-    const grantFile = path.join(root, "g.json");
-    await writeFile(
-      grantFile,
-      JSON.stringify(signed(keyHex, { paths: ["lib/"] })),
-    );
-    const f = { root, home, keyHex, keyPath, grantFile };
+  it("repo mode (manifest present): the Field Kit form exits 2", async () => {
+    const f = await repoFixture();
     await check(f, "hexagen_propose_patch", ["lib/x.ts"]);
+    expect(process.exitCode).toBe(2);
+    expect(text()).toContain(
+      "the Field Kit form is for client repos; in a repo with a manifest, mutations are checked at accept",
+    );
+    expect(text()).not.toContain("ALLOW");
+  });
+
+  it("repo mode: show still verifies with the in-repo key", async () => {
+    const f = await repoFixture();
+    await show(f);
     expect(process.exitCode).toBe(0);
-    expect(text()).toContain(keyPath);
+    expect(text()).toContain(f.keyPath);
     expect(text()).toContain("[repo]");
-    expect(text()).not.toContain("slice");
-    expect(text()).not.toContain(keyHex);
+    expect(text()).not.toContain(f.keyHex);
   });
 
   it("a tampered and expired grant reports the signature first", async () => {
@@ -479,5 +490,189 @@ describe("grant check (Field Kit form)", () => {
     await check(f, "nope", ["src/a.ts"]);
     await show(f);
     expect(text()).not.toContain(f.keyHex);
+  });
+});
+
+describe("root discovery, validation and diagnostics", () => {
+  const cwd0 = process.cwd();
+  afterEach(() => process.chdir(cwd0));
+
+  it("uses the git toplevel when run from a subdirectory (no workspace-root flag)", async () => {
+    const f = await fixture();
+    await mkdir(path.join(f.root, "src", "deep"), { recursive: true });
+    process.chdir(path.join(f.root, "src", "deep"));
+    for (const run of [
+      () =>
+        grantCheckCommand({
+          grantFile: f.grantFile,
+          tool: "hexagen_propose_patch",
+          path: ["src/a.ts"],
+          homeDir: f.home,
+          env: {},
+          now: NOW,
+        }),
+      () =>
+        grantShowCommand({
+          grantFile: f.grantFile,
+          homeDir: f.home,
+          env: {},
+          now: NOW,
+        }),
+    ]) {
+      out.length = 0;
+      process.exitCode = 99;
+      await run();
+      expect(process.exitCode).toBe(0);
+      expect(text()).toContain(realpathSync.native(f.root));
+    }
+  });
+
+  it("a malformed ancestor package.json exits 2 with the message, in both commands", async () => {
+    const f = await fixture();
+    await writeFile(path.join(f.root, "package.json"), "{bad");
+    process.chdir(f.root);
+    const o = { grantFile: f.grantFile, homeDir: f.home, env: {}, now: NOW };
+    await grantShowCommand(o);
+    expect(process.exitCode).toBe(2);
+    expect(text()).toContain("Unreadable package.json");
+    out.length = 0;
+    process.exitCode = 99;
+    await grantCheckCommand({
+      ...o,
+      tool: "hexagen_propose_patch",
+      path: ["src/a.ts"],
+    });
+    expect(process.exitCode).toBe(2);
+    expect(text()).toContain("Unreadable package.json");
+  });
+
+  it.each([
+    ["no offset", "2026-10-01T18:00:00"],
+    ["not a date", "tomorrow"],
+    ["impossible date", "2026-13-45T00:00:00Z"],
+    ["date only", "2026-10-01"],
+  ])("an invalid expires_at (%s) exits 2 in both commands", async (_n, ts) => {
+    const f = await fixture({ expires_at: ts });
+    await show(f);
+    expect(process.exitCode).toBe(2);
+    expect(text()).toContain("expires_at");
+    process.exitCode = 99;
+    await check(f, "hexagen_propose_patch", ["src/a.ts"]);
+    expect(process.exitCode).toBe(2);
+  });
+
+  it("an invalid revoked_at exits 2 in both commands", async () => {
+    const f = await fixture({ revoked_at: "yesterday" });
+    await show(f);
+    expect(process.exitCode).toBe(2);
+    expect(text()).toContain("revoked_at");
+    process.exitCode = 99;
+    await check(f, "hexagen_propose_patch", ["src/a.ts"]);
+    expect(process.exitCode).toBe(2);
+  });
+
+  it("accepts offset timestamps", async () => {
+    const f = await fixture({ expires_at: "2026-10-01T20:00:00+02:00" });
+    await check(f, "hexagen_propose_patch", ["src/a.ts"]);
+    expect(process.exitCode).toBe(0);
+  });
+
+  it("a missing --engagement override still names the server-default key", async () => {
+    const f = await fixture();
+    await check(f, "hexagen_propose_patch", ["src/a.ts"], {
+      engagement: "eng-9",
+    });
+    expect(process.exitCode).toBe(1);
+    const t = text();
+    expect(t).toContain("grant key mismatch");
+    expect(t).toContain(f.keyPath);
+    expect(t).toContain("eng-9.key");
+    expect(t).toMatch(/fingerprint [0-9a-f]{16}/);
+  });
+
+  it("a weak --key-file override still names the server-default key", async () => {
+    const f = await fixture();
+    const weak = path.join(f.home, "weak.key");
+    await writeFile(weak, "abcd\n");
+    await show(f, { keyFile: weak });
+    expect(process.exitCode).toBe(1);
+    const t = text();
+    expect(t).toContain("64 hex");
+    expect(t).toContain("grant key mismatch");
+    expect(t).toContain(f.keyPath);
+  });
+});
+
+describe("the command line", () => {
+  const savedHome = process.env.HOME;
+  afterEach(() => {
+    process.env.HOME = savedHome;
+  });
+
+  async function run(f: Fixture, args: string[]): Promise<void> {
+    process.env.HOME = f.home;
+    process.exitCode = 99;
+    out.length = 0;
+    vi.resetModules();
+    const { grantCommander } =
+      await import("../../../src/commands/grant/index.js");
+    await grantCommander.parseAsync(
+      ["check", f.grantFile, "--workspace-root", f.root, ...args],
+      { from: "user" },
+    );
+  }
+
+  const far = { expires_at: "2099-01-01T00:00:00Z" };
+
+  it("repeated --path keeps every path: a denied first path is not lost", async () => {
+    const f = await fixture({ ...far, paths: ["src/allowed.txt"] }, ["src/"]);
+    await run(f, [
+      "--tool",
+      "hexagen_propose_patch",
+      "--path",
+      "src/denied.txt",
+      "--path",
+      "src/allowed.txt",
+    ]);
+    expect(process.exitCode).toBe(1);
+    expect(text()).toContain("src/denied.txt");
+    await run(f, [
+      "--tool",
+      "hexagen_propose_patch",
+      "--path",
+      "src/allowed.txt",
+      "--path",
+      "src/denied.txt",
+    ]);
+    expect(process.exitCode).toBe(1);
+    expect(text()).toContain("src/denied.txt");
+  });
+
+  it("space-separated and repeated forms agree, and all paths are checked", async () => {
+    const f = await fixture({ ...far, paths: ["src/"] });
+    await run(f, [
+      "--tool",
+      "hexagen_propose_patch",
+      "--path",
+      "src/a.ts",
+      "src/b.ts",
+      "--path",
+      "src/c.ts",
+    ]);
+    expect(process.exitCode).toBe(0);
+    expect(text()).toContain("3 path(s)");
+  });
+
+  it("a repeated --tool exits 2", async () => {
+    const f = await fixture(far);
+    await run(f, [
+      "--tool",
+      "hexagen_propose_patch",
+      "--tool",
+      "other",
+      "--path",
+      "src/a.ts",
+    ]);
+    expect(process.exitCode).toBe(2);
   });
 });

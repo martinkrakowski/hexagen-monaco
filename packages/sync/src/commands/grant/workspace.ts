@@ -46,8 +46,12 @@ function gitToplevel(cwd: string): string | null {
 export function discoverWorkspaceRoot(workspaceRootOption?: string): string {
   if (workspaceRootOption) return path.resolve(workspaceRootOption);
   const cwd = process.cwd();
-  const discovered = findWorkspaceRoot(cwd) ?? cwd;
+  const found = findWorkspaceRoot(cwd);
   const top = gitToplevel(cwd);
+  // Nothing declares a workspace: the git toplevel is the repo boundary, not
+  // whichever subdirectory the command happened to run in.
+  if (found === null) return top ?? cwd;
+  const discovered = found;
   if (top === null) return discovered;
   try {
     // `top` came from git (forward slashes, maybe another case or an 8.3 name

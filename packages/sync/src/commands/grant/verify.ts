@@ -11,6 +11,18 @@ import {
 } from "@hexagen/shared/node/grant-key";
 import { canonicalGrantPayload } from "./canonical.js";
 
+/** RFC 3339 date-time with a mandatory offset, and a real calendar instant (the Field Kit schema's `date-time`). */
+const isoDateTime = z
+  .string()
+  .regex(
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/,
+    "must be an ISO date-time with an offset, e.g. 2026-10-01T18:00:00Z",
+  )
+  .refine(
+    (value) => !Number.isNaN(Date.parse(value)),
+    "is not a real date-time",
+  );
+
 /** The wire shape of a signed grant (docs/kernel/grant.schema.json). Unknown fields are refused: they would be unsigned. */
 const GrantFile = z
   .object({
@@ -22,8 +34,8 @@ const GrantFile = z
     tools: z.array(z.string().min(1)),
     mode: z.enum(["write", "propose"]),
     max_files: z.number().int().min(1).optional(),
-    expires_at: z.string().min(1),
-    revoked_at: z.string().min(1).optional(),
+    expires_at: isoDateTime,
+    revoked_at: isoDateTime.optional(),
     signature: z.string().optional(),
   })
   .strict();
@@ -88,6 +100,29 @@ export function resolveVerifyKey(ctx: VerifyContext): ResolvedGrantKey {
 }
 
 /**
+ * When the operator overrode the key (`--key-file` / `--engagement`) and
+ * verification fails for any reason, name the key the MCP server would use
+ * without the override, with both paths and fingerprints.
+ */
+function overrideMismatch(ctx: VerifyContext, key: ResolvedGrantKey): string {
+  if (!ctx.keyFile && !ctx.engagement) return "";
+  const server = resolveGrantKey({
+    env: ctx.env,
+    engagementId: readSliceEngagementId(ctx.workspaceRoot),
+    workspaceRoot: ctx.workspaceRoot,
+    homeDir: ctx.homeDir,
+  });
+  if (server.path === null) return "";
+  const mismatch = describeKeyMismatch(
+    "verifying with",
+    key,
+    "server default",
+    server,
+  );
+  return mismatch ? `; ${mismatch}` : "";
+}
+
+/**
  * Verifies `grant.signature` (HMAC-SHA256 hex over the canonical payload)
  * against the key the shared resolver finds. Fails closed on every way trust
  * can fail to be established: no signature, a malformed one, no key location,
@@ -102,7 +137,7 @@ export function verifyGrantSignature(
   const key = resolveVerifyKey(ctx);
   const fail = (reason: string): GrantVerification => ({
     verified: false,
-    reason,
+    reason: reason + overrideMismatch(ctx, key),
     key,
   });
 
@@ -122,24 +157,7 @@ export function verifyGrantSignature(
     return { verified: true, key };
   }
 
-  let reason =
-    "signature does not match: the grant was edited after signing or signed under a different key";
-  if (ctx.keyFile || ctx.engagement) {
-    const server = resolveGrantKey({
-      env: ctx.env,
-      engagementId: readSliceEngagementId(ctx.workspaceRoot),
-      workspaceRoot: ctx.workspaceRoot,
-      homeDir: ctx.homeDir,
-    });
-    if (server.path !== null) {
-      const mismatch = describeKeyMismatch(
-        "verifying with",
-        key,
-        "server default",
-        server,
-      );
-      if (mismatch) reason += `; ${mismatch}`;
-    }
-  }
-  return fail(reason);
+  return fail(
+    "signature does not match: the grant was edited after signing or signed under a different key",
+  );
 }

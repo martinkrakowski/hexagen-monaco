@@ -13,7 +13,7 @@ import { loadGrantFile, verifyGrantSignature } from "./verify.js";
 export interface CheckOptions {
   grantFile: string;
   /** Field Kit form. */
-  tool?: string;
+  tool?: string | string[];
   path?: string[];
   /** Monaco form (`grant check <grant-file> <transaction-id>`); not built. */
   transactionId?: string;
@@ -47,7 +47,12 @@ export async function grantCheckCommand(options: CheckOptions): Promise<void> {
     );
   }
   const paths = options.path ?? [];
-  if (!options.tool || paths.length === 0) {
+  const tools = [options.tool ?? []].flat();
+  if (tools.length > 1) {
+    return badInput("--tool may be given only once.");
+  }
+  const tool = tools[0];
+  if (!tool || paths.length === 0) {
     return badInput(
       "grant check needs --tool <tool> and at least one --path <path>.",
     );
@@ -62,7 +67,17 @@ export async function grantCheckCommand(options: CheckOptions): Promise<void> {
   if (!loaded.ok) return badInput(loaded.problem);
   const { grant } = loaded;
 
-  const workspaceRoot = discoverWorkspaceRoot(options.workspaceRoot);
+  let workspaceRoot: string;
+  try {
+    workspaceRoot = discoverWorkspaceRoot(options.workspaceRoot);
+  } catch (error) {
+    return badInput((error as Error).message);
+  }
+  if (isRepoMode(workspaceRoot)) {
+    return badInput(
+      "the Field Kit form is for client repos; in a repo with a manifest, mutations are checked at accept",
+    );
+  }
   let slice: Slice | undefined;
   const brownfield = !isRepoMode(workspaceRoot);
   if (brownfield) {
@@ -103,7 +118,7 @@ export async function grantCheckCommand(options: CheckOptions): Promise<void> {
   }
   const window = checkGrantWindow(grant, options.now ?? new Date());
   if (!window.allowed) return finish(false, window.reason);
-  const write = checkWriteAgainstGrant(grant, { tool: options.tool, paths });
+  const write = checkWriteAgainstGrant(grant, { tool, paths });
   if (!write.allowed) return finish(false, write.reason);
 
   if (brownfield && !slice) {
@@ -129,6 +144,6 @@ export async function grantCheckCommand(options: CheckOptions): Promise<void> {
   }
   return finish(
     true,
-    `tool '${options.tool}' on ${paths.length} path(s) is within grant '${grant.id}'${slice ? " and the slice" : ""}`,
+    `tool '${tool}' on ${paths.length} path(s) is within grant '${grant.id}'${slice ? " and the slice" : ""}`,
   );
 }
