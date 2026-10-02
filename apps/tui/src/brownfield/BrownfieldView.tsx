@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import path from "node:path";
 import { Box, Text, useInput } from "ink";
 import {
+  clean,
   listGrantFiles,
   loadGrantShow,
   loadSliceSummary,
@@ -29,6 +30,8 @@ interface Snapshot {
   readonly slice: Loaded<SliceSummary>;
   readonly grants: Loaded<readonly string[]>;
   readonly trace: Loaded<TraceTail>;
+  /** Bumped on every load, so a reload re-runs `grant show`. */
+  readonly version: number;
 }
 
 function Message({ text }: { readonly text: string }) {
@@ -72,7 +75,7 @@ function GrantPane(props: {
     <>
       {grants.value.map((file, i) => (
         <Text key={file} color={i === selected ? "green" : undefined}>
-          {i === selected ? ">" : " "} {path.basename(file)}
+          {i === selected ? ">" : " "} {clean(path.basename(file))}
         </Text>
       ))}
       <Box marginTop={1} flexDirection="column">
@@ -90,11 +93,16 @@ function GrantPane(props: {
 
 function TracePane({ trace }: { readonly trace: Loaded<TraceTail> }) {
   if (!trace.ok) return <Message text={trace.message} />;
-  const { rows, unreadable, total } = trace.value;
+  const { rows, unreadable, total, truncated } = trace.value;
   return (
     <>
       <Text>
-        last {rows.length + unreadable} of {total} line(s)
+        last {rows.length + unreadable} of {truncated ? "≥" : ""}
+        {total} line(s)
+      </Text>
+      <Text dimColor>
+        unverified tail: chain and signatures not checked; `hexagen evidence
+        pack` verifies
       </Text>
       {rows.map((row, i) => (
         <Text
@@ -120,6 +128,7 @@ function TracePane({ trace }: { readonly trace: Loaded<TraceTail> }) {
 export function BrownfieldView(props: BrownfieldViewProps) {
   const { workspaceRoot, onQuit, interactive } = props;
   const run = props.grantShowRunner ?? runGrantShow;
+  const loads = useRef(0);
   const [snapshot, setSnapshot] = useState<Snapshot | undefined>();
   const [pane, setPane] = useState<Pane>("slice");
   const [grantIndex, setGrantIndex] = useState(0);
@@ -131,16 +140,20 @@ export function BrownfieldView(props: BrownfieldViewProps) {
       listGrantFiles(workspaceRoot),
       loadTraceTail(workspaceRoot),
     ]);
-    setSnapshot({ slice, grants, trace });
+    loads.current += 1;
+    setSnapshot({ slice, grants, trace, version: loads.current });
   }, [workspaceRoot]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
+  const grantCount =
+    snapshot?.grants.ok === true ? snapshot.grants.value.length : 0;
+  const selectedGrant = Math.min(grantIndex, Math.max(0, grantCount - 1));
   const grantFile =
     snapshot?.grants.ok === true
-      ? snapshot.grants.value[grantIndex]
+      ? snapshot.grants.value[selectedGrant]
       : undefined;
   useEffect(() => {
     if (grantFile === undefined) return undefined;
@@ -152,7 +165,7 @@ export function BrownfieldView(props: BrownfieldViewProps) {
     return () => {
       cancelled = true;
     };
-  }, [grantFile, workspaceRoot, run]);
+  }, [grantFile, workspaceRoot, run, snapshot?.version]);
 
   useInput(
     (input, key) => {
@@ -165,9 +178,9 @@ export function BrownfieldView(props: BrownfieldViewProps) {
       } else if (pane === "grant" && snapshot?.grants.ok) {
         const last = snapshot.grants.value.length - 1;
         if (input === "j" || key.downArrow) {
-          setGrantIndex(Math.min(grantIndex + 1, last));
+          setGrantIndex(Math.min(selectedGrant + 1, last));
         } else if (input === "k" || key.upArrow) {
-          setGrantIndex(Math.max(grantIndex - 1, 0));
+          setGrantIndex(Math.max(selectedGrant - 1, 0));
         }
       }
     },
@@ -200,7 +213,7 @@ export function BrownfieldView(props: BrownfieldViewProps) {
             <Text>Grant</Text>
             <GrantPane
               grants={snapshot.grants}
-              selected={grantIndex}
+              selected={selectedGrant}
               shown={shown}
             />
           </Box>

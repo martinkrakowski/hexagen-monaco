@@ -15,7 +15,8 @@ server (`packages/mcp-server/dist/cli.js`). Keys: `j/k` move, `Tab` switch pane,
 ## Brownfield view (`--brownfield`)
 
 ```sh
-yarn workspace @hexagen/tui dev --brownfield [--workspace-root <dir>]
+yarn workspace @hexagen/tui exec tsx src/index.tsx --brownfield [--workspace-root <dir>]
+# or, built: node dist/index.js --brownfield [--workspace-root <dir>]
 ```
 
 A read-only projection of a client repo's `.hexagen/` directory. `--workspace-root`
@@ -28,12 +29,17 @@ Three panes:
   and its edge list is complete (`edgesComplete`).
 - **Grant**: the files in `.hexagen/grants/*.json`; pick one with `j/k`. The
   detail is the output of `hexagen grant show <file>` (the `hexagen` CLI must be
-  on `PATH`), including the signature status and the key's path and fingerprint.
+  on `PATH`: link `@hexagen/sync` with `yarn`, or `npm i -g`), including the signature status and the key's path and fingerprint.
   Signature verification lives in `@hexagen/sync`, so the view shells out rather
   than duplicate it.
 - **Trace tail**: the last 20 lines of `.hexagen/evidence/trace.jsonl` with seq,
-  time, tool, halt reason (or `grant_missing`) and a `DENIAL` marker.
+  time, tool, halt reason (or `grant_missing`) and a `DENIAL` marker. Only the
+  last 256 KiB is read, so the line count is shown as a lower bound (`≥`). The
+  tail is labelled unverified: the chain and signatures are not checked here;
+  `hexagen evidence pack` verifies them.
 
+Files that resolve (through a symlink) outside `.hexagen/` are refused, and
+terminal control sequences in file contents are stripped before display.
 A missing or invalid file shows a message in its pane; it never stops the view.
 
 Read-only by construction: this mode has no `r` action, never starts a
