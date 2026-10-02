@@ -28,9 +28,12 @@ stays on 0.12.x until the pin is changed.
 Generated projects get a root Prettier config (#684), registered as a protected
 file, so a re-sync does not overwrite a hand-edited copy. Before this, a
 generated project had a `format` script but no config, so its first format run
-reformatted everything to Prettier's defaults. On an existing project, the next
-`sync` creates the file. A `sync --check` reports it as one `created` op until
-then. The emitted format glob no longer includes `md`.
+reformatted everything to Prettier's defaults. **A new project** gets the file
+at generation. **An existing project does not:** `.prettierrc.json` is a
+protected root file, so a plain `sync` skips it (`skipped (root protected, use
+--force-root)`) even when it is absent. To add it, run `hexagen sync
+--force-root --only .prettierrc.json`. `--only` limits the forced write to
+that one file, so no other protected root file is overwritten. The emitted format glob no longer includes `md`.
 
 ### New commands (`@hexagen-monaco/sync`)
 
