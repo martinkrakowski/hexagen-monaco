@@ -451,7 +451,8 @@ signature verified first), `proposals/<id>.patch` and `<id>.json`, the packed
 evidence (`evidence/trace.jsonl`, `evidence/verdicts.json`, with the denials in
 `verdicts.json`) and `tip.json`. Export runs the `evidence pack` logic, so a
 broken chain, a truncated tail or a bad grant fails the export (exit 1, nothing
-written) and the anchored tip advances as it does for `evidence pack`.
+written) and the anchored tip advances as it does for `evidence pack`, even when
+the final bundle write then fails.
 
 **Allow-list.** The bundle is built from named files only; nothing else in
 `.hexagen/` is read. A key or env file is never included: `grant-signing.key`,

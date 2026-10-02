@@ -43,7 +43,17 @@ const mcpDist = path.join(mcpDir, "dist/cli.js");
 
 const GIT = ["-c", "user.email=t@example.test", "-c", "user.name=t"];
 const git = (cwd: string, ...args: string[]): string =>
-  execFileSync("git", [...GIT, ...args], { cwd, encoding: "utf8" }).trim();
+  execFileSync("git", [...GIT, ...args], {
+    cwd,
+    encoding: "utf8",
+    // Hermetic, read at call time: a developer's gpgsign, hooks or aliases never apply.
+    env: {
+      ...process.env,
+      HOME: work,
+      GIT_CONFIG_GLOBAL: path.join(work, "empty.gitconfig"),
+      GIT_CONFIG_NOSYSTEM: "1",
+    },
+  }).trim();
 
 let work: string;
 let clone: string;
@@ -143,6 +153,7 @@ beforeAll(async () => {
     `${syncCli} is missing: build @hexagen/sync first (turbo does, via ^build)`,
   ).toBe(true);
   work = await mkdtemp(path.join(tmpdir(), "bf-e2e-"));
+  await writeFile(path.join(work, "empty.gitconfig"), "");
   const upstream = path.join(work, "upstream");
   clone = path.join(work, "clone");
   keyFile = path.join(work, "keys", "eng-e2e.key");
@@ -282,6 +293,11 @@ describe("brownfield workbook, end to end with no web app", () => {
       await readFile(path.join(clone, ".hexagen/grants/g1.json"), "utf8"),
     );
     const useDist = existsSync(mcpDist);
+    if (!useDist) {
+      process.stderr.write(
+        "[e2e] packages/mcp-server/dist/cli.js is missing: running the mcp-server from source through tsx\n",
+      );
+    }
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: useDist
@@ -405,21 +421,37 @@ describe("brownfield workbook, end to end with no web app", () => {
     expect(git(clone, "status", "--porcelain")).toBe("");
   }, 120_000);
 
-  it("export refuses the signing key and a planted key file", async () => {
-    await put(clone, ".hexagen/grant-signing.key", "x".repeat(64));
+  it("(a) a planted root grant-signing.key is never exported", async () => {
+    const secret = "9f".repeat(32);
+    await put(clone, ".hexagen/grant-signing.key", secret);
+    const r = cli(["workbook", "export", "--out", ".hexagen/key-a.zip"]);
+    expect(r.code).toBe(0);
+    const entries = await unzip(path.join(clone, ".hexagen/key-a.zip"));
+    for (const [name, text] of entries) {
+      expect(name).not.toMatch(/\.key$|keys\/|\.env/);
+      expect(text, name).not.toContain(secret);
+    }
+    await rm(path.join(clone, ".hexagen/grant-signing.key"));
+  }, 60_000);
+
+  it("(b) a planted grants/planted.key refuses the export and writes no zip", async () => {
     await put(clone, ".hexagen/grants/planted.key", "x".repeat(64));
     const refused = cli(
-      ["workbook", "export", "--out", ".hexagen/refused.zip"],
+      ["workbook", "export", "--out", ".hexagen/key-b.zip"],
       2,
     );
     expect(refused.out).toMatch(/key/i);
-    expect(existsSync(path.join(clone, ".hexagen/refused.zip"))).toBe(false);
+    expect(existsSync(path.join(clone, ".hexagen/key-b.zip"))).toBe(false);
+    await rm(path.join(clone, ".hexagen/grants/planted.key"));
+  }, 60_000);
+
+  it("(c) --stage of grant-signing.key refuses and stages nothing", async () => {
+    await put(clone, ".hexagen/grant-signing.key", "x".repeat(64));
     cli(
       ["workbook", "export", "--stage", ".hexagen/grant-signing.key", "--yes"],
       2,
     );
     expect(git(clone, "diff", "--cached", "--name-only")).toBe("");
-    await rm(path.join(clone, ".hexagen/grants/planted.key"));
     await rm(path.join(clone, ".hexagen/grant-signing.key"));
   }, 60_000);
 });

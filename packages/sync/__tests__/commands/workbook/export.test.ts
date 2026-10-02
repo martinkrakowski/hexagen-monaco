@@ -17,6 +17,7 @@ import {
   appendChainedLine,
   verifyBundleIndex,
 } from "@hexagen/shared/node/trace-chain";
+import { ensureExcluded } from "../../../src/commands/shared/git-exclude.js";
 import { runWorkbookExport } from "../../../src/commands/workbook/export.js";
 import { canonicalGrantPayload } from "../../../src/commands/grant/canonical.js";
 import { signGrantPayload } from "../../../src/commands/grant/sign.js";
@@ -247,6 +248,71 @@ describe("workbook export, the bundle", () => {
   });
 });
 
+describe("workbook export, fix round", () => {
+  it("fails with exit 1 and writes nothing when the temp pack is tampered after it was verified", async () => {
+    const r = await run({
+      afterPack: async (zip: string) => {
+        const buf = await readFile(zip);
+        const at = buf.indexOf("grant_denied");
+        const i = at >= 0 ? at : buf.indexOf("completed");
+        buf[i] = buf[i] === 0x78 ? 0x79 : 0x78;
+        await writeFile(zip, buf);
+      },
+    });
+    expect(r.exitCode).toBe(1);
+    expect(await exists(bundle())).toBe(false);
+    expect(
+      (await readdir(path.join(root, ".hexagen"))).filter((n) =>
+        n.startsWith(".workbook-pack"),
+      ),
+    ).toEqual([]);
+  });
+
+  it("refuses with exit 2 when a trace exists but no verified grant does", async () => {
+    await rm(path.join(root, ".hexagen/grants"), { recursive: true });
+    const r = await run();
+    expect(r.exitCode).toBe(2);
+    expect(r.messages.join("\n")).toBe(
+      "the trace exists but .hexagen/grants/ holds no verified grant; export cannot pack it",
+    );
+    expect(await exists(bundle())).toBe(false);
+  });
+
+  it("exits 1 for a shape-invalid grant", async () => {
+    await put(root, ".hexagen/grants/bad.json", JSON.stringify({ id: "x" }));
+    const r = await run();
+    expect(r.exitCode).toBe(1);
+    expect(await exists(bundle())).toBe(false);
+  });
+
+  it("reports ENOENT as the missing-slice hint only", async () => {
+    await rm(path.join(root, ".hexagen/slice.json"));
+    expect((await run()).messages.join("\n")).toMatch(/slice init/);
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "propagates the real cause for a symlinked slice",
+    async () => {
+      await rm(path.join(root, ".hexagen/slice.json"));
+      await symlink(keyFile, path.join(root, ".hexagen/slice.json"));
+      const r = await run();
+      expect(r.exitCode).toBe(2);
+      expect(r.messages.join("\n")).toMatch(/not a regular file/);
+      expect(r.messages.join("\n")).not.toMatch(/slice init/);
+    },
+  );
+
+  it("propagates the real cause for an oversized slice", async () => {
+    await writeFile(
+      path.join(root, ".hexagen/slice.json"),
+      Buffer.alloc(33 * 1024 * 1024, 32),
+    );
+    const r = await run();
+    expect(r.exitCode).toBe(2);
+    expect(r.messages.join("\n")).toMatch(/larger than/);
+  });
+});
+
 describe("workbook export, the allow-list", () => {
   it("never lists planted key files that sit outside the allow-listed names", async () => {
     await put(root, ".hexagen/grant-signing.key", SECRET);
@@ -284,15 +350,18 @@ describe("workbook export, the allow-list", () => {
     expect([...zip.values()].some((t) => t.includes(SECRET))).toBe(false);
   });
 
-  it("refuses a symlinked entry in a bundle directory", async () => {
-    await symlink(
-      path.join(home, "engagement.key"),
-      path.join(root, ".hexagen/grants/link.json"),
-    );
-    const r = await run();
-    expect(r.exitCode).toBe(2);
-    expect(await exists(bundle())).toBe(false);
-  });
+  it.skipIf(process.platform === "win32")(
+    "refuses a symlinked entry in a bundle directory",
+    async () => {
+      await symlink(
+        path.join(home, "engagement.key"),
+        path.join(root, ".hexagen/grants/link.json"),
+      );
+      const r = await run();
+      expect(r.exitCode).toBe(2);
+      expect(await exists(bundle())).toBe(false);
+    },
+  );
 });
 
 describe("workbook export, --out", () => {
@@ -310,14 +379,17 @@ describe("workbook export, --out", () => {
     expect(await exists(bundle())).toBe(false);
   });
 
-  it("refuses an --out that resolves out of the sidecar through a symlink", async () => {
-    const elsewhere = await mkdtemp(path.join(tmpdir(), "wb-else-"));
-    dirs.push(elsewhere);
-    await symlink(elsewhere, path.join(root, ".hexagen/link"));
-    const r = await run({ out: ".hexagen/link/b.zip" });
-    expect(r.exitCode).toBe(2);
-    expect(await readdir(elsewhere)).toEqual([]);
-  });
+  it.skipIf(process.platform === "win32")(
+    "refuses an --out that resolves out of the sidecar through a symlink",
+    async () => {
+      const elsewhere = await mkdtemp(path.join(tmpdir(), "wb-else-"));
+      dirs.push(elsewhere);
+      await symlink(elsewhere, path.join(root, ".hexagen/link"));
+      const r = await run({ out: ".hexagen/link/b.zip" });
+      expect(r.exitCode).toBe(2);
+      expect(await readdir(elsewhere)).toEqual([]);
+    },
+  );
 
   it("never overwrites an existing file", async () => {
     await put(root, ".hexagen/workbook.zip", "precious");
@@ -350,6 +422,8 @@ describe("workbook export --stage", () => {
   });
 
   it("stages exactly the named files, with git add -f, on --yes", async () => {
+    await ensureExcluded(root, ".hexagen/");
+    expect(git(root, "status", "--porcelain")).toBe("");
     const r = await run({
       out: undefined,
       stage: [".hexagen/slice.json", ".hexagen/proposals/p1.patch"],
@@ -404,21 +478,24 @@ describe("workbook export --stage", () => {
     expect(cached()).toBe("");
   });
 
-  it("refuses a symlink and a key reached through the home keys directory", async () => {
-    await mkdir(path.join(home, ".hexagen/keys"), { recursive: true });
-    await writeFile(path.join(home, ".hexagen/keys/e.key"), SECRET);
-    await symlink(
-      path.join(home, ".hexagen/keys/e.key"),
-      path.join(root, ".hexagen/grants/link.json"),
-    );
-    const r = await run({
-      out: undefined,
-      stage: [".hexagen/grants/link.json"],
-      yes: true,
-    });
-    expect(r.exitCode).toBe(2);
-    expect(cached()).toBe("");
-  });
+  it.skipIf(process.platform === "win32")(
+    "refuses a symlink and a key reached through the home keys directory",
+    async () => {
+      await mkdir(path.join(home, ".hexagen/keys"), { recursive: true });
+      await writeFile(path.join(home, ".hexagen/keys/e.key"), SECRET);
+      await symlink(
+        path.join(home, ".hexagen/keys/e.key"),
+        path.join(root, ".hexagen/grants/link.json"),
+      );
+      const r = await run({
+        out: undefined,
+        stage: [".hexagen/grants/link.json"],
+        yes: true,
+      });
+      expect(r.exitCode).toBe(2);
+      expect(cached()).toBe("");
+    },
+  );
 
   it("does not touch the working tree", async () => {
     const before = await stat(path.join(root, "src/a.ts"));

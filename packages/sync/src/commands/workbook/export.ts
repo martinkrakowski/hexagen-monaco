@@ -16,7 +16,10 @@ import {
   readSliceEngagementId,
   resolveGrantKey,
 } from "@hexagen/shared/node/grant-key";
-import { signBundleIndex } from "@hexagen/shared/node/trace-chain";
+import {
+  signBundleIndex,
+  verifyBundleIndex,
+} from "@hexagen/shared/node/trace-chain";
 import { writeZipStore, type ZipEntry } from "../report/zip-store.js";
 import { realpathOfExistingAncestor } from "../shared/git-exclude.js";
 import { resolveSidecarOut } from "../shared/sidecar-out.js";
@@ -46,6 +49,8 @@ export interface WorkbookExportOptions {
   /** Test seam; defaults to `os.homedir()`. */
   readonly homeDir?: string;
   readonly now?: () => Date;
+  /** Test seam: runs after the temporary pack was written, before it is read back. */
+  readonly afterPack?: (zipPath: string) => Promise<void>;
 }
 
 export interface WorkbookExportResult {
@@ -236,10 +241,16 @@ async function runExport(
   const sliceRead = await readAllowed(
     sc,
     allowListEntry("slice.json") as AllowedFile,
-  ).catch(() => {
-    throw new Refusal(
-      ".hexagen/slice.json is required: run `hexagen slice init` first",
-    );
+  ).catch((error: unknown) => {
+    if (
+      error instanceof Refusal &&
+      error.message === "slice.json: does not exist"
+    ) {
+      throw new Refusal(
+        ".hexagen/slice.json is required: run `hexagen slice init` first",
+      );
+    }
+    throw error;
   });
   let slice: Slice;
   try {
@@ -322,10 +333,14 @@ async function runExport(
         try {
           parsed = JSON.parse(read.text.toString("utf8"));
         } catch {
-          throw new Refusal(`.hexagen/${rel} is not valid JSON`);
+          grantProblems.push(`.hexagen/${rel} is not valid JSON`);
+          continue;
         }
         const checked = parseGrant(parsed, `.hexagen/${rel}`);
-        if (!checked.ok) throw new Refusal(checked.problem);
+        if (!checked.ok) {
+          grantProblems.push(checked.problem);
+          continue;
+        }
         const signature = verifyGrantSignature(checked.grant, {
           workspaceRoot: sc.root,
           keyFile: options.keyFile,
@@ -372,6 +387,11 @@ async function runExport(
       () => false,
     )
   ) {
+    if (grantFiles.length === 0) {
+      throw new Refusal(
+        "the trace exists but .hexagen/grants/ holds no verified grant; export cannot pack it",
+      );
+    }
     const tmpName = `.workbook-pack-${process.pid}-${randomBytes(4).toString("hex")}.zip`;
     const tmpRel = `.hexagen/${tmpName}`;
     const tmpAbs = path.join(sc.dir, tmpName);
@@ -396,7 +416,31 @@ async function runExport(
           ],
         };
       }
+      await options.afterPack?.(tmpAbs);
+      // Re-verify the pack before adopting anything from it: its own index
+      // must verify with the engagement key, and each adopted entry must match
+      // the index's sha256.
       const zip = readZipStore(await fs.readFile(tmpAbs));
+      const tampered = (why: string) => ({
+        exitCode: 1 as const,
+        messages: [
+          "workbook export FAILED; no bundle written:",
+          `  - the temporary evidence pack failed re-verification (${why})`,
+        ],
+      });
+      let packIndex: BundleIndex;
+      try {
+        packIndex = BundleIndex.parse(
+          JSON.parse(
+            (zip.get("bundle.json") ?? Buffer.alloc(0)).toString("utf8"),
+          ),
+        );
+      } catch {
+        return tampered("its bundle.json is missing or invalid");
+      }
+      if (!verifyBundleIndex(packIndex as never, key.keyHex)) {
+        return tampered("its bundle.json HMAC does not verify");
+      }
       for (const [name, role, target] of [
         ["evidence/trace.jsonl", "evidence", "evidence/trace.jsonl"],
         ["evidence/verdicts.json", "evidence", "evidence/verdicts.json"],
@@ -404,6 +448,10 @@ async function runExport(
       ] as const) {
         const content = zip.get(name);
         if (content === undefined) throw new Refusal(`the pack lacks ${name}`);
+        const listed = packIndex.files.find((e) => e.path === name);
+        if (listed === undefined || listed.sha256 !== sha256(content)) {
+          return tampered(`${name} does not match the pack's index`);
+        }
         add(c, target, role, content);
       }
       c.notes.push(
