@@ -59,6 +59,9 @@ spec:
             - name: data
               mountPath: /data
           securityContext:
+            # readOnlyRootFilesystem stays off on purpose: repository scans
+            # write to /app/.scan-workspaces, and bootstrap and governance
+            # write to os.tmpdir().
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
@@ -87,11 +90,13 @@ spec:
             requests:
               cpu: 250m
               memory: 256Mi
+              ephemeral-storage: 256Mi
             limits:
               cpu: "1"
               # 512Mi is tight for a Next server that also clones and scans
               # repositories in child processes; 1Gi gives headroom.
               memory: 1Gi
+              ephemeral-storage: 2Gi
       volumes:
         - name: data
           persistentVolumeClaim:
