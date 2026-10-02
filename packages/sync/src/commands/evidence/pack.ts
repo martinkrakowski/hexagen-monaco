@@ -22,6 +22,7 @@ import {
   withTraceLock,
 } from "@hexagen/shared/node/trace-chain";
 import { writeZipStore, type ZipEntry } from "../report/zip-store.js";
+import { writeFileReplace } from "../shared/sidecar-write.js";
 import { realpathOfExistingAncestor } from "../shared/git-exclude.js";
 import { resolveSidecarOut } from "../shared/sidecar-out.js";
 import { parseGrant, verifyGrantSignature } from "../grant/verify.js";
@@ -64,18 +65,6 @@ const sha256 = (data: string | Uint8Array): string =>
 
 function usage(message: string): EvidencePackResult {
   return { exitCode: 2, messages: [message] };
-}
-
-async function writeAtomic(target: string, data: string): Promise<void> {
-  await fs.mkdir(path.dirname(target), { recursive: true });
-  const tmp = `${target}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
-  try {
-    await fs.writeFile(tmp, data, { flag: "wx" });
-    await fs.rename(tmp, target);
-  } catch (error) {
-    await fs.unlink(tmp).catch(() => undefined);
-    throw error;
-  }
 }
 
 /**
@@ -429,7 +418,7 @@ export async function runEvidencePack(
     }
     // From here `out` is ours, so rolling it back cannot touch anyone else's.
     try {
-      await (options.writeTip ?? writeAtomic)(
+      await (options.writeTip ?? writeFileReplace)(
         tipPath,
         `${JSON.stringify(newTip, null, 2)}\n`,
       );
