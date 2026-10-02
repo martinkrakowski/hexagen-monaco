@@ -214,3 +214,64 @@ export function lieAboutSize(
   }
   throw new Error(`no entry ${name}`);
 }
+
+/** Renames an entry in its LOCAL header only; the central directory keeps the old name. */
+export function renameLocalOnly(
+  zip: Uint8Array,
+  from: string,
+  to: string,
+): Uint8Array {
+  if (from.length !== to.length) throw new Error("same length required");
+  const out = Uint8Array.from(zip);
+  const buf = Buffer.from(out.buffer, out.byteOffset, out.byteLength);
+  const eocd = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  const cd = buf.readUInt32LE(eocd + 16);
+  const a = Buffer.from(from);
+  let at = buf.indexOf(a);
+  while (at >= 0 && at < cd) {
+    Buffer.from(to).copy(buf, at);
+    at = buf.indexOf(a, at + 1);
+  }
+  return out;
+}
+
+/** Sets the encrypted flag (bit 0) on the central-directory record of `name`. */
+export function markEncrypted(zip: Uint8Array, name: string): Uint8Array {
+  const out = Uint8Array.from(zip);
+  const buf = Buffer.from(out.buffer, out.byteOffset, out.byteLength);
+  let p = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  const count = buf.readUInt16LE(p + 10);
+  p = buf.readUInt32LE(p + 16);
+  for (let i = 0; i < count; i++) {
+    const nameLen = buf.readUInt16LE(p + 28);
+    const skip = nameLen + buf.readUInt16LE(p + 30) + buf.readUInt16LE(p + 32);
+    if (buf.subarray(p + 46, p + 46 + nameLen).toString() === name) {
+      buf.writeUInt16LE(buf.readUInt16LE(p + 8) | 1, p + 8);
+      return out;
+    }
+    p += 46 + skip;
+  }
+  throw new Error(`no entry ${name}`);
+}
+
+/** Writes a 16-bit value into the end-of-central-directory record at `offset` (4, 6, 8 or 10). */
+export function patchEocd16(
+  zip: Uint8Array,
+  offset: 4 | 6 | 8 | 10,
+  value: number,
+): Uint8Array {
+  const out = Uint8Array.from(zip);
+  const buf = Buffer.from(out.buffer, out.byteOffset, out.byteLength);
+  const eocd = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  buf.writeUInt16LE(value, eocd + offset);
+  return out;
+}
+
+/** Breaks the signature of the first central-directory record. */
+export function damageCentralDirectory(zip: Uint8Array): Uint8Array {
+  const out = Uint8Array.from(zip);
+  const buf = Buffer.from(out.buffer, out.byteOffset, out.byteLength);
+  const eocd = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  buf.writeUInt32LE(0xdeadbeef, buf.readUInt32LE(eocd + 16));
+  return out;
+}

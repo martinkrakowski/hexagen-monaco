@@ -62,7 +62,12 @@ describe("brownfield viewer page", () => {
       { id: "wb-1", name: "Client engagement", mode: "brownfield" },
       { id: "gf-1", name: "Greenfield app" },
     ];
-    vi.stubGlobal("fetch", vi.fn());
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => {
+        throw new Error("fetch must not be called");
+      }),
+    );
   });
 
   it("shows the workbook name and the intake, with no step until a bundle is open", () => {
@@ -130,5 +135,45 @@ describe("brownfield viewer page", () => {
     state.project = "nope";
     render(<BrownfieldViewerClient />);
     assert.ok(screen.getByText(/workbook not found/i));
+  });
+
+  it("refuses an oversized file before reading it into memory", async () => {
+    render(<BrownfieldViewerClient />);
+    const big = new File(["x"], "huge.zip");
+    Object.defineProperty(big, "size", { value: 300 * 1024 * 1024 });
+    const read = vi.fn();
+    Object.defineProperty(big, "arrayBuffer", { value: read });
+    fireEvent.change(screen.getByLabelText(/open a workbook bundle/i), {
+      target: { files: [big] },
+    });
+    await waitFor(() => assert.ok(screen.getByRole("alert")));
+    assert.match(screen.getByRole("alert").textContent ?? "", /too large/i);
+    assert.equal(read.mock.calls.length, 0);
+  });
+
+  it("a slower first read cannot overwrite the second file's state", async () => {
+    render(<BrownfieldViewerClient />);
+    const good = await buildBundle();
+    const slow = new File(["x"], "slow.zip");
+    let release!: () => void;
+    Object.defineProperty(slow, "arrayBuffer", {
+      value: () =>
+        new Promise<ArrayBuffer>((resolve) => {
+          release = () => resolve(new TextEncoder().encode("not a zip").buffer);
+        }),
+    });
+    const fast = new File(["x"], "fast.zip");
+    Object.defineProperty(fast, "arrayBuffer", {
+      value: async () =>
+        good.buffer.slice(good.byteOffset, good.byteOffset + good.byteLength),
+    });
+    const input = screen.getByLabelText(/open a workbook bundle/i);
+    fireEvent.change(input, { target: { files: [slow] } });
+    fireEvent.change(input, { target: { files: [fast] } });
+    await waitFor(() => assert.ok(screen.getByTestId("step-evidence")));
+    release();
+    await new Promise((r) => setTimeout(r, 50));
+    assert.ok(screen.getByTestId("step-evidence"), "still the second file");
+    assert.equal(screen.queryByRole("alert"), null);
   });
 });

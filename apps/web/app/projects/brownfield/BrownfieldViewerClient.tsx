@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { projectMode } from "@hexagen/shared";
 import { useSavedProjects } from "@/hooks/useSavedProjects";
@@ -9,7 +9,10 @@ import {
   BrownfieldViewerPage,
   type IntakeState,
 } from "@/brownfield-workbook/BrownfieldViewerPage";
-import { readBundle } from "@/brownfield-workbook/bundle/read-bundle";
+import {
+  BUNDLE_LIMITS,
+  readBundle,
+} from "@/brownfield-workbook/bundle/read-bundle";
 
 /**
  * Container for the brownfield viewer: resolves `?project=<id>` to a saved
@@ -27,17 +30,34 @@ export function BrownfieldViewerClient() {
   const { clearActiveWorkspace } = useActiveWorkspace();
   const [intake, setIntake] = useState<IntakeState>({ phase: "idle" });
 
+  // Only the latest chosen file may set state: a slower earlier read is dropped.
+  const latest = useRef(0);
+
   const onFile = useCallback(async (file: File) => {
-    setIntake({ phase: "reading", fileName: file.name });
+    const mine = ++latest.current;
+    const apply = (next: IntakeState) => {
+      if (latest.current === mine) setIntake(next);
+    };
+    if (file.size > BUNDLE_LIMITS.maxTotalBytes) {
+      apply({
+        phase: "refused",
+        fileName: file.name,
+        errors: [
+          `the file is too large (over ${BUNDLE_LIMITS.maxTotalBytes.toLocaleString()} bytes)`,
+        ],
+      });
+      return;
+    }
+    apply({ phase: "reading", fileName: file.name });
     try {
       const result = await readBundle(new Uint8Array(await file.arrayBuffer()));
-      setIntake(
+      apply(
         result.ok
           ? { phase: "ready", fileName: file.name, bundle: result.bundle }
           : { phase: "refused", fileName: file.name, errors: result.errors },
       );
     } catch {
-      setIntake({
+      apply({
         phase: "refused",
         fileName: file.name,
         errors: ["the file could not be read"],

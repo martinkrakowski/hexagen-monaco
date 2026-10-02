@@ -5,7 +5,6 @@ import {
   buildBundle,
   contract,
   observed,
-  slice,
   validFiles,
   type FixtureFile,
 } from "./bundle-fixtures";
@@ -32,10 +31,10 @@ describe("deriveSteps", () => {
       "Evidence",
     ]);
     expect(STEP_IDS).toHaveLength(6);
-    expect(steps.find((s) => s.id === "evidence")?.command).toBe(
+    expect(steps.find((s) => s.id === "evidence")?.commands[0]).toContain(
       "hexagen evidence pack",
     );
-    for (const s of steps) expect(s.command.length).toBeGreaterThan(0);
+    for (const s of steps) expect(s.commands.length).toBeGreaterThan(0);
   });
 
   it("marks a complete bundle present everywhere", async () => {
@@ -116,7 +115,18 @@ describe("deriveSteps", () => {
     const s = status(await load(without("grants/0-g1.json")));
     expect(s.slice).toBe("present");
     expect(s.grant).toBe("missing");
-    expect(slice).toContain("slice-1");
+  });
+
+  it("indexes trace lines by their raw position, blank lines included", async () => {
+    const files = validFiles().map((f) =>
+      f.path === "evidence/trace.jsonl"
+        ? { ...f, content: '{"a":1}\n\n{"b":2}\n' }
+        : f,
+    );
+    const ev = deriveSteps(await load(files)).find(
+      (s) => s.id === "evidence",
+    )?.evidence;
+    expect(ev?.tail.map((l) => l.seq)).toEqual([0, 1, 2]);
   });
 
   it("builds the evidence view: tail with denials marked, and the recorded verdict", async () => {

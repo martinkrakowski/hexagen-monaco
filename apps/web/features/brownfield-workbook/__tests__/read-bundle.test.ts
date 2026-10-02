@@ -1,8 +1,14 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import JSZip from "jszip";
+import { writeZipStore } from "../../../../../packages/sync/src/commands/report/zip-store";
 import { readBundle } from "../bundle/read-bundle";
 import {
   buildBundle,
+  damageCentralDirectory,
+  markEncrypted,
+  patchEocd16,
+  renameLocalOnly,
+  sha,
   lieAboutSize,
   markSymlink,
   renameEntry,
@@ -95,12 +101,17 @@ describe("readBundle: caps", () => {
 
   it("stops inflating mid-stream when an entry lies about its size", async () => {
     const zip = lieAboutSize(await bigTrace(), "evidence/trace.jsonl", 10);
-    const msg = await refused(zip, {
+    const r = await readBundle(zip, {
       maxEntries: 20,
       maxEntryBytes: 5_000,
       maxTotalBytes: 50_000,
     });
-    expect(msg).toMatch(/entry .*exceeds/i);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors.join("\n")).toMatch(/entry .*exceeds/i);
+    // Streaming proof: nowhere near the 100 000 bytes the entry holds.
+    expect(r.bytesRead).toBeDefined();
+    expect(r.bytesRead as number).toBeLessThanOrEqual(5_000 + 16 * 1024);
   });
 
   it("stops inflating when the actual total passes the aggregate cap", async () => {
@@ -176,5 +187,96 @@ describe("readBundle: the index", () => {
     expect(await refused(new TextEncoder().encode("not a zip"))).toMatch(
       /zip/i,
     );
+  });
+});
+
+describe("readBundle: BW7a's real writer", () => {
+  it("opens a bundle written by writeZipStore", async () => {
+    const files = validFiles();
+    const index = {
+      schemaVersion: "1.0.0",
+      createdAt: "2026-10-01T10:00:00.000Z",
+      sliceId: "slice-1",
+      files: files.map((f) => ({
+        path: f.path,
+        role: f.role,
+        sha256: sha(f.content),
+      })),
+      hmac: "0".repeat(64),
+    };
+    const zip = writeZipStore([
+      { name: "bundle.json", content: JSON.stringify(index) },
+      ...files.map((f) => ({ name: f.path, content: f.content })),
+    ]);
+    const r = await readBundle(new Uint8Array(zip));
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("readBundle: container-level refusals", () => {
+  it("refuses an encrypted entry", async () => {
+    const zip = markEncrypted(await buildBundle(), "slice.json");
+    expect(await refused(zip)).toMatch(/encrypted/i);
+  });
+
+  it("refuses zip64 markers in the end record", async () => {
+    for (const offset of [4, 6, 8, 10] as const) {
+      const zip = patchEocd16(await buildBundle(), offset, 0xffff);
+      expect(await refused(zip), "offset " + offset).toMatch(/zip64/i);
+    }
+  });
+
+  it("refuses a directory entry with its own message", async () => {
+    const zip = await buildBundle(validFiles(), {
+      extra: [{ name: "somedir/", content: "" }],
+    });
+    expect(await refused(zip)).toMatch(/directory entry/i);
+  });
+
+  it("refuses a damaged central directory", async () => {
+    const zip = damageCentralDirectory(await buildBundle());
+    expect(await refused(zip)).toMatch(/damaged/i);
+  });
+
+  it("refuses a name the reader would normalise", async () => {
+    const zip = renameEntry(await buildBundle(), "tip.json", "./tip.js");
+    expect(await refused(zip)).toMatch(/disagree/i);
+  });
+
+  it("refuses when the local-header name differs from the central-directory name", async () => {
+    const zip = renameLocalOnly(await buildBundle(), "tip.json", "tap.json");
+    expect(await refused(zip)).toMatch(/local header/i);
+  });
+});
+
+describe("readBundle: fixed paths, BOM, WebCrypto", () => {
+  it("refuses a role at the wrong path", async () => {
+    const files = validFiles().map((f) =>
+      f.path === "slice.json" ? { ...f, path: "elsewhere/slice.json" } : f,
+    );
+    expect(await refused(await buildBundle(files))).toMatch(
+      /slice.*expected path/i,
+    );
+  });
+
+  it("keeps a UTF-8 BOM so the text matches the bytes", async () => {
+    const files = validFiles().map((f) =>
+      f.path === "evidence/trace.jsonl"
+        ? { ...f, content: "\uFEFF" + f.content }
+        : f,
+    );
+    const r = await readBundle(await buildBundle(files));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.bundle.trace?.charCodeAt(0)).toBe(0xfeff);
+  });
+
+  it("refuses with a clear message when WebCrypto is unavailable", async () => {
+    const zip = await buildBundle();
+    vi.stubGlobal("crypto", {});
+    try {
+      expect(await refused(zip)).toMatch(/HTTPS or localhost/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

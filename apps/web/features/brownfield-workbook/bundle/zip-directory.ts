@@ -40,10 +40,20 @@ export function readZipDirectory(
     }
   }
   if (eocd < 0) throw new ZipDirectoryError("not a readable zip file");
+  const diskNo = view.getUint16(eocd + 4, true);
+  const cdDisk = view.getUint16(eocd + 6, true);
+  const onDisk = view.getUint16(eocd + 8, true);
   const count = view.getUint16(eocd + 10, true);
   const cdSize = view.getUint32(eocd + 12, true);
   let p = view.getUint32(eocd + 16, true);
-  if (count === 0xffff || cdSize === 0xffffffff || p === 0xffffffff) {
+  if (
+    diskNo === 0xffff ||
+    cdDisk === 0xffff ||
+    onDisk === 0xffff ||
+    count === 0xffff ||
+    cdSize === 0xffffffff ||
+    p === 0xffffffff
+  ) {
     throw new ZipDirectoryError("zip64 archives are not supported");
   }
   if (count > maxEntries) {

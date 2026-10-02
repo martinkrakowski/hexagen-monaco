@@ -6,12 +6,14 @@ import {
   fireEvent,
   within,
   waitFor,
+  act,
 } from "@testing-library/react";
 import {
   BrownfieldViewerPage,
   INTEGRITY_NOTICE,
   type IntakeState,
 } from "../BrownfieldViewerPage";
+import { STEP_COMMANDS } from "../steps";
 import { readBundle, type LoadedBundle } from "../bundle/read-bundle";
 import {
   buildBundle,
@@ -43,6 +45,7 @@ const page = (intake: IntakeState, onFile = vi.fn()) =>
     />,
   );
 
+const GRANT = STEP_COMMANDS.grant.commands[0] as string;
 const writeText = vi.fn();
 beforeEach(() => {
   writeText.mockReset().mockResolvedValue(undefined);
@@ -123,8 +126,10 @@ describe("BrownfieldViewerPage: the left rail", () => {
         within(screen.getByTestId(`step-${id}`)).getByText("present"),
       ).toBeTruthy();
     }
-    expect(screen.getByText("hexagen evidence pack")).toBeTruthy();
-    expect(screen.getByText("hexagen grant issue")).toBeTruthy();
+    expect(
+      screen.getByText(STEP_COMMANDS.evidence.commands[0] as string),
+    ).toBeTruthy();
+    expect(screen.getByText(GRANT)).toBeTruthy();
   });
 
   it("shows Observe as incomplete when the edge list is incomplete", async () => {
@@ -156,9 +161,12 @@ describe("BrownfieldViewerPage: the left rail", () => {
   it("labels the Evidence step as recorded by the pack, marks denials, and shows the verdict", async () => {
     page(ready(await load()));
     const ev = screen.getByTestId("step-evidence");
+    expect(within(ev).getByText(/as recorded by/)).toBeTruthy();
     expect(
-      within(ev).getByText(/as recorded by `hexagen evidence pack`/),
-    ).toBeTruthy();
+      within(ev)
+        .getByText(/as recorded by/)
+        .querySelector("code")?.textContent,
+    ).toBe("hexagen evidence pack");
     expect(within(ev).getByText(/all 2 trace lines valid/i)).toBeTruthy();
     expect(within(ev).getAllByText(/denial/i).length).toBeGreaterThan(0);
     expect(within(ev).getByText(/outside the slice/)).toBeTruthy();
@@ -175,7 +183,7 @@ describe("BrownfieldViewerPage: the left rail", () => {
     const names = screen
       .getAllByRole("button")
       .map((b) => b.getAttribute("aria-label"));
-    expect(names).toHaveLength(6);
+    expect(names).toHaveLength(7);
     for (const n of names) expect(n).toMatch(/^Copy /);
   });
 });
@@ -186,11 +194,26 @@ describe("BrownfieldViewerPage: copy", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /copy grant command/i }),
     );
-    await waitFor(() =>
-      expect(writeText).toHaveBeenCalledWith("hexagen grant issue"),
-    );
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(GRANT));
     expect(writeText).toHaveBeenCalledTimes(1);
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+
+  it("resets Copied after about two seconds", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      page(ready(await load()));
+      fireEvent.click(
+        screen.getByRole("button", { name: /copy grant command/i }),
+      );
+      expect(await screen.findByText("Copied")).toBeTruthy();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2100);
+      });
+      expect(screen.queryByText("Copied")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("reports a failed copy without any fallback", async () => {

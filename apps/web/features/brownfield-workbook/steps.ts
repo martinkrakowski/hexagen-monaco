@@ -19,18 +19,42 @@ export const STEP_IDS = [
 export type StepId = (typeof STEP_IDS)[number];
 export type StepStatus = "present" | "missing" | "incomplete";
 
+/**
+ * The real invocations, with <placeholders>. Pinned against the commander
+ * definitions in `packages/sync/src/commands/` by `steps.commands.test.ts`.
+ * `--out` needs `--yes`; `contract check` needs an existing contract.json.
+ */
 export const STEP_COMMANDS: Readonly<
-  Record<StepId, { label: string; command: string }>
+  Record<StepId, { label: string; commands: readonly string[] }>
 > = {
-  checkout: { label: "Checkout", command: "git clone <client-repo>" },
+  checkout: { label: "Checkout", commands: ["git clone <client-repo>"] },
   observe: {
     label: "Observe",
-    command: "hexagen observe --out .hexagen/observed.json",
+    commands: ["hexagen observe --out .hexagen/observed.json --yes"],
   },
-  slice: { label: "Slice", command: "hexagen slice init --path <path>" },
-  contract: { label: "Contract", command: "hexagen contract check" },
-  grant: { label: "Grant", command: "hexagen grant issue" },
-  evidence: { label: "Evidence", command: "hexagen evidence pack" },
+  slice: {
+    label: "Slice",
+    commands: ["hexagen slice init --path <prefix/> --yes"],
+  },
+  contract: {
+    label: "Contract",
+    commands: [
+      "hexagen contract add-rule --kind forbid --from <prefix> --to <prefix> --yes",
+      "hexagen contract check",
+    ],
+  },
+  grant: {
+    label: "Grant",
+    commands: [
+      "hexagen grant issue --principal <id> --agent <id> --tools <tool,...> --expires-in 4h --mode propose --out .hexagen/grants/<id>.json --yes",
+    ],
+  },
+  evidence: {
+    label: "Evidence",
+    commands: [
+      "hexagen evidence pack .hexagen/evidence/trace.jsonl --grant .hexagen/grants/<id>.json --out .hexagen/pack.zip",
+    ],
+  },
 };
 
 export interface TraceTailLine {
@@ -50,7 +74,7 @@ export interface EvidenceView {
 export interface StepView {
   readonly id: StepId;
   readonly label: string;
-  readonly command: string;
+  readonly commands: readonly string[];
   readonly status: StepStatus;
   readonly detail: readonly string[];
   readonly evidence?: EvidenceView;
@@ -89,7 +113,10 @@ function evidenceStep(
   if (b.trace === null) {
     return { status: "missing", detail: ["no evidence/trace.jsonl"] };
   }
-  const lines = b.trace.split("\n").filter((l) => l.trim() !== "");
+  // Raw, 0-based line index (the pack's `seq`): strip one trailing newline only.
+  const lines = (b.trace.endsWith("\n") ? b.trace.slice(0, -1) : b.trace).split(
+    "\n",
+  );
   const verdicts = b.verdicts !== "invalid" ? b.verdicts : null;
   const denialSeqs = new Set(verdicts?.denials.map((d) => d.seq) ?? []);
   const tail = lines

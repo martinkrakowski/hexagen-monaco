@@ -56,9 +56,21 @@ export interface LoadedBundle {
 
 export type ReadBundleResult =
   | { readonly ok: true; readonly bundle: LoadedBundle }
-  | { readonly ok: false; readonly errors: readonly string[] };
+  | {
+      readonly ok: false;
+      readonly errors: readonly string[];
+      /** Bytes inflated before a size cap stopped the read (proves the cap streams). */
+      readonly bytesRead?: number;
+    };
 
-class Refusal extends Error {}
+class Refusal extends Error {
+  constructor(
+    message: string,
+    readonly bytesRead?: number,
+  ) {
+    super(message);
+  }
+}
 
 const shown = (name: string): string => JSON.stringify(cleanText(name));
 
@@ -99,6 +111,7 @@ function inflateCapped(
         reject(
           new Refusal(
             `entry ${shown(name)} exceeds the ${maxEntryBytes.toLocaleString()}-byte entry limit`,
+            size,
           ),
         );
         return;
@@ -108,6 +121,7 @@ function inflateCapped(
         reject(
           new Refusal(
             `the bundle's total size exceeds its limit (reached at entry ${shown(name)})`,
+            size,
           ),
         );
         return;
@@ -139,8 +153,15 @@ export async function readBundle(
   try {
     return { ok: true, bundle: await load(data, limits) };
   } catch (error) {
-    if (error instanceof Refusal)
-      return { ok: false, errors: error.message.split("\n") };
+    if (error instanceof Refusal) {
+      return {
+        ok: false,
+        errors: error.message.split("\n"),
+        ...(error.bytesRead === undefined
+          ? {}
+          : { bytesRead: error.bytesRead }),
+      };
+    }
     if (error instanceof ZipDirectoryError) {
       return { ok: false, errors: [error.message] };
     }
@@ -159,6 +180,9 @@ async function load(
   data: Uint8Array,
   limits: BundleLimits,
 ): Promise<LoadedBundle> {
+  if (typeof crypto === "undefined" || crypto.subtle === undefined) {
+    refuse("the viewer needs HTTPS or localhost (WebCrypto unavailable)");
+  }
   if (data.length > limits.maxTotalBytes) {
     refuse(
       `the file is too large (over ${limits.maxTotalBytes.toLocaleString()} bytes)`,
@@ -174,6 +198,8 @@ async function load(
     }
     if (seen.has(e.name)) refuse(`duplicate entry name ${shown(e.name)}`);
     seen.add(e.name);
+    if (e.isDirectory)
+      refuse(`directory entry ${shown(e.name)} is not allowed`);
     if (e.isSymlink) refuse(`symlink entry ${shown(e.name)} is not allowed`);
     if (e.encrypted) refuse(`entry ${shown(e.name)} is encrypted`);
     if (e.declaredSize > limits.maxEntryBytes) {
@@ -198,6 +224,20 @@ async function load(
     return refuse("the file could not be read as a zip archive");
   }
 
+  // JSZip's view must match the central-directory view we just checked: it keys
+  // entries by its own (normalised) name and could hide a name we refused.
+  const zipNames = Object.keys(zip.files);
+  const agree =
+    zipNames.length === seen.size &&
+    zipNames.every(
+      (n) => seen.has(n) && zip.files[n]?.unsafeOriginalName === n,
+    );
+  if (!agree) {
+    refuse(
+      "the zip's entry names disagree between its local headers and its central directory",
+    );
+  }
+
   const budget = { remaining: limits.maxTotalBytes };
   const read = async (name: string): Promise<Uint8Array> => {
     const entry = zip.files[name];
@@ -207,7 +247,7 @@ async function load(
   };
 
   if (!seen.has("bundle.json")) refuse("bundle.json is missing from the zip");
-  const strict = new TextDecoder("utf-8", { fatal: true });
+  const strict = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
   const decode = (bytes: Uint8Array, name: string): string => {
     try {
       return strict.decode(bytes);
@@ -254,16 +294,30 @@ async function load(
   }
   if (problems.length > 0) throw new Refusal(problems.join("\n"));
 
+  // The fixed path of each typed document, mirroring the export allow-list.
+  const FIXED_PATH = {
+    observed: "observed.json",
+    slice: "slice.json",
+    contract: "contract.json",
+    tip: "tip.json",
+  } as const;
+  for (const f of index.files) {
+    const want = FIXED_PATH[f.role as keyof typeof FIXED_PATH];
+    if (want !== undefined && f.path !== want) {
+      refuse(`${shown(f.path)} has role ${f.role}, expected path ${want}`);
+    }
+  }
   const typed = <T>(
-    role: string,
+    role: keyof typeof FIXED_PATH,
     schema: { parse(v: unknown): T },
   ): T | null => {
-    const f = index.files.find((x) => x.role === role);
-    if (f === undefined) return null;
+    const path = FIXED_PATH[role];
+    const text = texts.get(path);
+    if (text === undefined) return null;
     try {
-      return schema.parse(JSON.parse(texts.get(f.path) as string));
+      return schema.parse(JSON.parse(text));
     } catch {
-      return refuse(`${shown(f.path)} is not a valid ${role} document`);
+      return refuse(`${shown(path)} is not a valid ${role} document`);
     }
   };
 

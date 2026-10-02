@@ -10,7 +10,9 @@ function EvidenceDetail({ step }: { readonly step: StepView }) {
   if (ev === undefined) return null;
   return (
     <div className="mt-2 space-y-2 text-xs">
-      <p className="font-medium">as recorded by `hexagen evidence pack`</p>
+      <p className="font-medium">
+        as recorded by <code>hexagen evidence pack</code>
+      </p>
       {ev.verdict !== null && <p>{safe(ev.verdict)}</p>}
       {ev.denials.length > 0 && (
         <ul className="space-y-1">
@@ -63,12 +65,18 @@ export function StepRail({ steps }: { readonly steps: readonly StepView[] }) {
               </li>
             ))}
           </ul>
-          <div className="mt-2 flex items-center">
-            <code className="mr-2 break-all font-mono text-xs">
-              {step.command}
-            </code>
-            <CopyCommandButton stepLabel={step.label} command={step.command} />
-          </div>
+          {step.commands.map((command, i) => (
+            <div key={command} className="mt-2 flex items-center">
+              <code className="mr-2 break-all font-mono text-xs">
+                {command}
+              </code>
+              <CopyCommandButton
+                stepLabel={step.label}
+                command={command}
+                ordinal={step.commands.length > 1 ? i + 1 : undefined}
+              />
+            </div>
+          ))}
           <EvidenceDetail step={step} />
         </li>
       ))}
