@@ -43,6 +43,7 @@ export function MiddlePanel({ bundle }: { readonly bundle: LoadedBundle }) {
           observed={bundle.observed}
           slice={bundle.slice}
           contract={bundle.contract}
+          now={new Date(bundle.index.createdAt)}
           visible={proposedVisible}
           onToggle={() => setProposedVisible((v) => !v)}
         />

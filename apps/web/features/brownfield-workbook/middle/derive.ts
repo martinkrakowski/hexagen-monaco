@@ -1,6 +1,8 @@
 import {
   UNRESOLVED_IMPORT_RULE_ID,
   edgeViolatesRule,
+  edgesComplete,
+  findKnownViolation,
   isPathInSlice,
   nfc,
   type Contract,
@@ -46,17 +48,23 @@ function under(root: string, file: string): boolean {
   return f === r || f.startsWith(`${r}/`);
 }
 
-/** The package that owns `path` (the longest matching root), as its own name; else the path itself. */
-export function ownerLabel(
+/**
+ * The package that owns `path` (the longest matching root). `key` is its root,
+ * so two packages with the same name stay apart; `label` is its own name. A
+ * path no package owns is its own key and label.
+ */
+export function ownerOf(
   packages: readonly PackageItem[],
   path: string,
-): string {
+): { key: string; label: string } {
   let best: PackageItem | undefined;
   for (const p of packages) {
     if (!under(p.root, path)) continue;
-    if (!best || best.root.length < p.root.length) best = p;
+    if (!best || nfc(best.root).length < nfc(p.root).length) best = p;
   }
-  return best ? best.name : path;
+  return best
+    ? { key: `root:${best.root}`, label: best.name }
+    : { key: `path:${path}`, label: path };
 }
 
 export interface PackageEdgeGroup {
@@ -65,7 +73,7 @@ export interface PackageEdgeGroup {
   readonly edges: readonly ObservedEdge[];
 }
 
-/** Edges that cross from one package to another, grouped by the pair, in first-seen order. */
+/** Edges that cross from one package to another, grouped by root pair, in first-seen order. */
 export function packageEdges(
   packages: readonly PackageItem[],
   edges: readonly ObservedEdge[],
@@ -75,27 +83,38 @@ export function packageEdges(
     { from: string; to: string; edges: ObservedEdge[] }
   >();
   for (const e of edges) {
-    const from = ownerLabel(packages, e.from);
-    const to = ownerLabel(packages, e.to);
-    if (from === to) continue;
-    const key = `${from}\u0000${to}`;
+    const from = ownerOf(packages, e.from);
+    const to = ownerOf(packages, e.to);
+    if (from.key === to.key) continue;
+    const key = `${from.key}\u0000${to.key}`;
     const hit = groups.get(key);
     if (hit) hit.edges.push(e);
-    else groups.set(key, { from, to, edges: [e] });
+    else groups.set(key, { from: from.label, to: to.label, edges: [e] });
   }
   return [...groups.values()];
+}
+
+/** A baseline entry that covers a violation at the bundle's date. */
+export interface KnownMark {
+  readonly expires: string | undefined;
+}
+
+export interface BrokenRule {
+  readonly rule: ContractRule;
+  readonly known: KnownMark | null;
 }
 
 export interface SliceEdgeView {
   readonly edge: ObservedEdge;
   /** The contract rules this edge breaks. Empty means legal. */
-  readonly broken: readonly ContractRule[];
+  readonly broken: readonly BrokenRule[];
 }
 
 export interface SliceUnresolvedView {
   readonly item: UnresolvedItem;
   /** Always the built-in rule, as in `hexagen contract check`. */
   readonly ruleId: string;
+  readonly known: KnownMark | null;
 }
 
 export interface SliceView {
@@ -108,7 +127,17 @@ export function sliceView(
   observed: ObservedReport,
   slice: Slice,
   contract: Contract | null,
+  /** The date expiries are judged against: the bundle's, never the wall clock. */
+  now: Date,
 ): SliceView {
+  const known = (v: {
+    rule: string;
+    file: string;
+    specifier: string;
+  }): KnownMark | null => {
+    const k = findKnownViolation(contract ?? undefined, v, now);
+    return k ? { expires: k.expires } : null;
+  };
   const rules = contract?.rules ?? [];
   const edges: SliceEdgeView[] = [];
   if (observed.edges.collected) {
@@ -116,7 +145,16 @@ export function sliceView(
       if (!isPathInSlice(slice, edge.from)) continue;
       edges.push({
         edge,
-        broken: rules.filter((r) => edgeViolatesRule(slice, r, edge)),
+        broken: rules
+          .filter((r) => edgeViolatesRule(slice, r, edge))
+          .map((rule) => ({
+            rule,
+            known: known({
+              rule: rule.id,
+              file: edge.from,
+              specifier: edge.specifier,
+            }),
+          })),
       });
     }
   }
@@ -124,7 +162,15 @@ export function sliceView(
   if (observed.unresolved.collected) {
     for (const item of observed.unresolved.items) {
       if (isPathInSlice(slice, item.from)) {
-        unresolved.push({ item, ruleId: UNRESOLVED_IMPORT_RULE_ID });
+        unresolved.push({
+          item,
+          ruleId: UNRESOLVED_IMPORT_RULE_ID,
+          known: known({
+            rule: UNRESOLVED_IMPORT_RULE_ID,
+            file: item.from,
+            specifier: item.specifier,
+          }),
+        });
       }
     }
   }
@@ -149,4 +195,52 @@ export function codeFiles(
   }
   for (const g of grants) out.push({ path: g.path, text: g.text });
   return out;
+}
+
+/** Why `hexagen contract check` would not call this bundle clean: the same conditions it reports. */
+export function incompleteReasons(observed: ObservedReport): string[] {
+  const out: string[] = [];
+  const { edges, unresolved } = observed;
+  if (!edges.collected) {
+    out.push(
+      `the check cannot be clean: edges were not collected (${edges.reason})`,
+    );
+  } else if (!unresolved.collected) {
+    out.push(
+      `the check cannot be clean: unresolved imports were not collected (${unresolved.reason})`,
+    );
+  }
+  if (edges.collected && !edgesComplete(edges)) {
+    for (const ext of edges.unreadLanguages) {
+      out.push(
+        `\`hexagen contract check\` would also flag every in-slice .${ext} file; this bundle cannot list them`,
+      );
+    }
+  }
+  return out;
+}
+
+/** Notices about a slice, contract and observed report that do not belong together. */
+export function mismatchNotices(
+  observed: ObservedReport | null,
+  slice: Slice | null,
+  contract: Contract | null,
+): string[] {
+  const out: string[] = [];
+  if (slice && contract && contract.sliceId !== slice.id) {
+    out.push(
+      `the contract is for slice "${contract.sliceId}", but the slice is "${slice.id}"`,
+    );
+  }
+  if (slice && observed && observed.repo.commit !== slice.repo.commit) {
+    out.push(
+      `the observed report is at commit ${observed.repo.commit}, but the slice is at ${slice.repo.commit}`,
+    );
+  }
+  return out;
+}
+
+/** Number of CRLF line endings in `text`. */
+export function crlfCount(text: string): number {
+  return text.split("\r\n").length - 1;
 }

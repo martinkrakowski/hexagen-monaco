@@ -2,7 +2,12 @@ import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { open, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
-import { Contract, ObservedReport, Slice } from "@hexagen/shared";
+import {
+  Contract,
+  ObservedReport,
+  Slice,
+  isSuppressionExpired,
+} from "@hexagen/shared";
 import { ObserveError } from "../observe/index.js";
 import { samePath } from "../observe/same-path.js";
 import { GitExcludeError, excludeWouldChange } from "./git-exclude.js";
@@ -196,37 +201,8 @@ export async function loadObserved(root: string): Promise<ObservedReport> {
   );
 }
 
-const EXPIRES_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
-
-/**
- * Inclusive end-of-day UTC: an entry that expires on date D is still valid
- * throughout that UTC day and expires at D+1 00:00:00.000Z. Moved here so the contract loader can validate dates; a copy of
- * `isSuppressionExpired` in `tools/arch-linter/src/ratchet-baseline.ts`
- * (this package does not depend on the linter); a test pins the same cases.
- */
-export function isSuppressionExpired(
-  expires: string,
-  now: Date = new Date(),
-): boolean {
-  const match = EXPIRES_RE.exec(expires);
-  if (!match) {
-    throw new Error(
-      `'expires' must be YYYY-MM-DD (got ${JSON.stringify(expires)})`,
-    );
-  }
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const utc = new Date(Date.UTC(year, month - 1, day));
-  if (
-    utc.getUTCFullYear() !== year ||
-    utc.getUTCMonth() !== month - 1 ||
-    utc.getUTCDate() !== day
-  ) {
-    throw new Error(`'expires' is not a real calendar date (${expires})`);
-  }
-  return now.getTime() > Date.UTC(year, month - 1, day, 23, 59, 59, 999);
-}
+// Moved to @hexagen/shared so the web viewer judges expiry the same way.
+export { isSuppressionExpired } from "@hexagen/shared";
 
 /** The contract, or undefined when none exists yet. */
 export async function loadContract(

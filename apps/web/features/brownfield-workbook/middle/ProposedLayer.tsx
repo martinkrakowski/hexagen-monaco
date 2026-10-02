@@ -1,6 +1,11 @@
 import { cleanText } from "@hexagen/shared";
 import type { Contract, ObservedReport, Slice } from "@hexagen/shared";
-import { sliceView } from "./derive";
+import {
+  incompleteReasons,
+  mismatchNotices,
+  sliceView,
+  type KnownMark,
+} from "./derive";
 
 /**
  * The proposed layer: the slice boundary and the contract rules, with the
@@ -12,6 +17,8 @@ export interface ProposedLayerProps {
   readonly observed: ObservedReport | null;
   readonly slice: Slice | null;
   readonly contract: Contract | null;
+  /** The bundle's date: baseline expiries are judged against it, never the wall clock. */
+  readonly now: Date;
   readonly visible: boolean;
   readonly onToggle: () => void;
 }
@@ -32,20 +39,39 @@ function Badge({ children }: { children: string }) {
 function Violation({
   ruleId,
   severity,
+  known,
 }: {
   ruleId: string;
-  severity?: string;
+  severity: string;
+  known: KnownMark | null;
 }) {
+  const warn = severity === "warn";
   return (
-    <span data-testid="violation">
+    <span data-testid="violation" data-severity={severity}>
       <span
         data-badge
-        className="rounded border border-destructive bg-destructive/10 px-1 text-xs uppercase tracking-wide"
+        className={
+          warn
+            ? "rounded border px-1 text-xs uppercase tracking-wide"
+            : "rounded border border-destructive bg-destructive/10 px-1 text-xs uppercase tracking-wide"
+        }
       >
-        violation
+        {warn ? "warning" : "violation"}
       </span>{" "}
-      <span className="font-mono">{clean(ruleId)}</span>
-      {severity !== undefined && <> ({clean(severity)})</>}
+      <span className="font-mono">{clean(ruleId)}</span> ({clean(severity)})
+      {known !== null && (
+        <>
+          {" "}
+          <span
+            data-badge
+            data-testid="known-mark"
+            className="rounded border px-1 text-xs uppercase tracking-wide"
+          >
+            known
+          </span>
+          {known.expires !== undefined && <> expires {clean(known.expires)}</>}
+        </>
+      )}
     </span>
   );
 }
@@ -54,11 +80,15 @@ export function ProposedLayer({
   observed,
   slice,
   contract,
+  now,
   visible,
   onToggle,
 }: ProposedLayerProps) {
   const missing = slice === null && contract === null;
-  const view = observed && slice ? sliceView(observed, slice, contract) : null;
+  const view =
+    observed && slice ? sliceView(observed, slice, contract, now) : null;
+  const reasons = observed ? incompleteReasons(observed) : [];
+  const notices = mismatchNotices(observed, slice, contract);
   return (
     <section
       aria-label="Proposed"
@@ -70,7 +100,6 @@ export function ProposedLayer({
         {!missing && (
           <button
             type="button"
-            aria-pressed={!visible}
             onClick={onToggle}
             className="rounded border px-2 text-xs"
           >
@@ -86,6 +115,27 @@ export function ProposedLayer({
       ) : (
         visible && (
           <div data-testid="proposed-layer-body" className="mt-2 space-y-4">
+            {notices.map((n, i) => (
+              <p key={i} role="note" className="rounded border p-2 text-sm">
+                {clean(n)}
+              </p>
+            ))}
+            {slice !== null && observed === null && (
+              <p role="note" className="text-sm text-muted-foreground">
+                No observed report, so no edge was judged.
+              </p>
+            )}
+            {slice !== null && reasons.length > 0 && (
+              <div
+                role="alert"
+                aria-label="Contract check incomplete"
+                className="rounded border border-destructive p-2 text-sm"
+              >
+                {reasons.map((r, i) => (
+                  <p key={i}>{clean(r)}</p>
+                ))}
+              </div>
+            )}
             <div>
               <h3 className="font-medium">Slice</h3>
               {slice === null ? (
@@ -168,8 +218,9 @@ export function ProposedLayer({
                         {v.broken.map((r, j) => (
                           <Violation
                             key={j}
-                            ruleId={r.id}
-                            severity={r.severity}
+                            ruleId={r.rule.id}
+                            severity={r.rule.severity}
+                            known={r.known}
                           />
                         ))}
                       </li>
@@ -184,7 +235,11 @@ export function ProposedLayer({
                     >
                       {clean(u.item.from)} {"->"} {clean(u.item.specifier)}{" "}
                       <Badge>unresolved</Badge>{" "}
-                      <Violation ruleId={u.ruleId} severity="error" />
+                      <Violation
+                        ruleId={u.ruleId}
+                        severity="error"
+                        known={u.known}
+                      />
                     </li>
                   ))}
                 </ul>

@@ -73,6 +73,7 @@ function bundleOf(p: {
   sliceText?: string;
   contractText?: string;
   grants?: { path: string; text: string }[];
+  createdAt?: string;
 }): LoadedBundle {
   const texts = new Map<string, string>();
   const sl = p.slice ?? null;
@@ -84,7 +85,7 @@ function bundleOf(p: {
   return {
     index: {
       schemaVersion: "1.0.0",
-      createdAt: NOW,
+      createdAt: p.createdAt ?? NOW,
       sliceId: "slice-1",
       files: [],
       hmac: Z,
@@ -276,7 +277,6 @@ describe("observed layer", () => {
     expect(container.querySelector("img")).toBeNull();
     expect(container.querySelector("script")).toBeNull();
     expect(container.textContent).toContain(evil);
-    expect(container.textContent?.length).toBeGreaterThan(0);
     // population-guard: non-empty asserted just above / by the loop over controls
     expect(container.textContent).not.toMatch(
       /[\u0000-\u0008\u000b-\u001f\u007f]/,
@@ -426,7 +426,7 @@ describe("proposed layer", () => {
       .map((r) => r.textContent)
       .join("|");
     expect(inSlice).toContain("apps/web/a.ts");
-    expect(inSlice.length).toBeGreaterThan(0);
+    // population-guard: the toContain above proves inSlice is non-empty
     expect(inSlice).not.toContain("libs/shared/z.ts");
   });
 
@@ -470,11 +470,17 @@ describe("proposed layer", () => {
     expect(screen.getByTestId("proposed-layer-body")).toBeTruthy();
   });
 
-  it("no button or toggle, clicked in any order, removes the observed layer", () => {
-    render(
+  it("no control, clicked in any order, hides or removes the observed layer", () => {
+    const { container } = render(
       <MiddlePanel
         bundle={bundleOf({
-          observed: observedOf({ packages: PKGS, edges: EDGES }),
+          observed: observedOf({
+            packages: PKGS,
+            edges: EDGES,
+            unresolved: [
+              { from: "apps/web/a.ts", specifier: "g", reason: "r" },
+            ],
+          }),
           slice,
           contract: contractOf([forbid]),
           grants: [{ path: "grants/0-g.json", text: "{}" }],
@@ -487,23 +493,61 @@ describe("proposed layer", () => {
       ...screen.queryAllByRole("switch"),
       ...screen.queryAllByRole("tab"),
       ...screen.queryAllByRole("radio"),
+      ...container.querySelectorAll("summary"),
+      ...container.querySelectorAll("a[href]"),
     ];
+    const edgesBefore =
+      within(observedRegion()).getAllByTestId("package-edge").length;
+    const marksBefore =
+      within(observedRegion()).getAllByTestId("unresolved-mark").length;
     expect(controls().length).toBeGreaterThan(2);
     for (const c of controls()) {
-      // population-guard: non-empty asserted just above / by the loop over controls
+      // population-guard: the control count is asserted above
       expect(c.textContent ?? "").not.toMatch(/observed/i);
-      // population-guard: non-empty asserted just above / by the loop over controls
+      // population-guard: the control count is asserted above
       expect(c.getAttribute("aria-label") ?? "").not.toMatch(/observed/i);
     }
+    const concealed = (el: Element | null): string[] => {
+      const why: string[] = [];
+      for (
+        let e = el;
+        e && e !== container.parentElement;
+        e = e.parentElement
+      ) {
+        if (e.hasAttribute("hidden")) why.push("hidden attribute");
+        if (e.hasAttribute("aria-hidden")) why.push("aria-hidden");
+        for (const c of ["hidden", "invisible", "sr-only"]) {
+          if (e.classList.contains(c)) why.push(`class ${c}`);
+        }
+      }
+      return why;
+    };
     for (let round = 0; round < 2; round++) {
       for (const c of controls()) {
         fireEvent.click(c);
-        expect(screen.getByTestId("observed-layer")).toBeTruthy();
-        expect(
-          within(observedRegion()).getAllByText("@acme/web-app").length,
-        ).toBeGreaterThan(0);
+        const layer = screen.getByTestId("observed-layer");
+        // population-guard: concealed() returns reasons; [] means none, the layer lookup above proves it exists
+        expect(concealed(layer)).toEqual([]);
+        const o = within(layer);
+        expect(o.getAllByTestId("package-edge")).toHaveLength(edgesBefore);
+        expect(o.getAllByTestId("unresolved-mark")).toHaveLength(marksBefore);
+        expect(o.getAllByText("@acme/web-app").length).toBeGreaterThan(0);
       }
     }
+  });
+
+  it("flips the hide control's label and does not also set aria-pressed", () => {
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf(),
+          slice,
+          contract: contractOf([]),
+        })}
+      />,
+    );
+    const b = screen.getByRole("button", { name: /hide proposed/i });
+    expect(b.hasAttribute("aria-pressed")).toBe(false);
   });
 });
 
@@ -590,33 +634,60 @@ describe("code panel", () => {
 });
 
 describe("no invented vocabulary", () => {
-  const FIXED = new Set(
-    [
-      "observed",
-      "proposed",
-      "slice",
-      "contract",
-      "unresolved",
-      "edge",
-      "edges",
-      "package",
-      "packages",
-      "violation",
-      "in slice",
-      "excludes",
-      "code",
-      "forbid",
-      "allow-only",
-    ].map((s) => s.toLowerCase()),
-  );
+  const FIXED = new Set([
+    "observed",
+    "proposed",
+    "slice",
+    "contract",
+    "unresolved",
+    "edge",
+    "edges",
+    "package",
+    "packages",
+    "violation",
+    "warning",
+    "known",
+    "in slice",
+    "excludes",
+    "code",
+    "forbid",
+    "allow-only",
+    "expand files",
+    "collapse files",
+    "hide proposed",
+    "show proposed",
+    "edges incomplete",
+    "scan truncated",
+    "contract check incomplete",
+  ]);
 
-  it("every badge and heading is a fixed UI word or comes from observed.json", () => {
-    const names = ["zeta-unit", "q9.kernel", "@odd/theme"];
-    const observed = observedOf({
+  // every data value the fixture feeds in: the only non-fixed text allowed
+  const NAMES = ["zeta-unit", "q9.kernel", "@odd/theme"];
+  const DATA = new Set<string>([
+    ...NAMES,
+    "zu",
+    "qk",
+    "ot",
+    "zu/a.ts",
+    "qk/b.ts",
+    "q",
+    "nope",
+    "not-found",
+    "go",
+    "cap",
+    "zu/",
+    "r1",
+    "slice.json",
+    "contract.json",
+    "grants/0-g.json",
+  ]);
+
+  function fixture() {
+    return observedOf({
       packages: [
-        { name: names[0], root: "zu" },
-        { name: names[1], root: "qk" },
-        { name: names[2], root: "ot" },
+        { name: NAMES[0], root: "zu" },
+        { name: NAMES[1], root: "qk" },
+        { name: NAMES[2], root: "ot" },
       ],
       edges: [{ from: "zu/a.ts", to: "qk/b.ts", specifier: "q" }],
       unresolved: [{ from: "zu/a.ts", specifier: "nope", reason: "not-found" }],
@@ -624,10 +695,12 @@ describe("no invented vocabulary", () => {
       truncated: true,
       truncReasons: ["cap"],
     });
-    const { container } = render(
+  }
+  function renderFixture() {
+    return render(
       <MiddlePanel
         bundle={bundleOf({
-          observed,
+          observed: fixture(),
           slice: sliceOf(["zu/"]),
           contract: contractOf([
             {
@@ -642,37 +715,521 @@ describe("no invented vocabulary", () => {
         })}
       />,
     );
-    for (const b of container.querySelectorAll("button")) fireEvent.click(b);
-    // the proposed layer was hidden by the click above: show it again
-    const show = screen.queryByRole("button", { name: /show proposed/i });
-    if (show) fireEvent.click(show);
+  }
+
+  function labelsOf(container: HTMLElement): string[] {
     for (const b of container.querySelectorAll("button[aria-expanded=false]"))
       fireEvent.click(b);
-    const corpus = JSON.stringify(observed);
-    const labels = [
-      ...container.querySelectorAll("[data-badge], h2, h3, h4, th"),
-    ].map((e) => (e.textContent ?? "").trim());
-    expect(labels.length).toBeGreaterThan(8);
+    const out: string[] = [];
+    const textSel =
+      "[data-badge], h2, h3, h4, th, button, span[class*=rounded]";
+    for (const el of container.querySelectorAll(textSel)) {
+      out.push((el.textContent ?? "").trim());
+    }
+    for (const el of container.querySelectorAll("[aria-label], [title]")) {
+      for (const attr of ["aria-label", "title"]) {
+        const v = el.getAttribute(attr);
+        if (v !== null) out.push(v.trim());
+      }
+    }
+    return out;
+  }
+
+  it("every badge, heading, label, title and button is a fixed UI word or a data value", () => {
+    const { container } = renderFixture();
+    const labels = labelsOf(container);
+    expect(labels.length).toBeGreaterThan(15);
     for (const label of labels) {
+      expect(
+        label.length,
+        "a label must have at least two characters",
+      ).toBeGreaterThanOrEqual(2);
       const ok =
         FIXED.has(label.toLowerCase()) ||
-        corpus.includes(label) ||
+        DATA.has(label) ||
         /^\d+ (edge|edges|package|packages)$/.test(label);
-      expect(ok, `label "${label}" is neither fixed nor in observed.json`).toBe(
-        true,
-      );
+      expect(
+        ok,
+        `label "${label}" is neither fixed nor a fixture data value`,
+      ).toBe(true);
     }
+  });
+
+  it("names no type, layer or plane anywhere in the text", () => {
+    const { container } = renderFixture();
+    labelsOf(container);
+    // text nodes joined by a space, so adjacent elements never fuse into one word
+    const nodes: string[] = [];
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      nodes.push(n.textContent ?? "");
+    }
+    const text = nodes.join(" ");
+    expect(text.length).toBeGreaterThan(50);
     for (const word of [
       "domain",
       "adapter",
       "port",
       "application",
       "infrastructure",
+      "core",
+      "layer",
+      "service",
+      "ui",
+      "presentation",
     ]) {
-      // population-guard: non-empty asserted just above / by the loop over controls
-      expect(container.textContent).not.toMatch(
-        new RegExp(`\\b${word}\\b`, "i"),
-      );
+      // population-guard: the text length is asserted above
+      expect(text).not.toMatch(new RegExp(`\\b${word}\\b`, "i"));
     }
+  });
+});
+
+describe("cleanText on every free string", () => {
+  const dirty = (t: string) => `${t}\u001b[31m\u0007`;
+  const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/;
+
+  it("strips control characters from every rendered string", () => {
+    const o = observedOf({
+      packages: [{ name: dirty("pk"), root: dirty("rt") }],
+      edges: [
+        {
+          from: "apps/web/a.ts",
+          to: "libs/shared/x.ts",
+          specifier: dirty("sp"),
+        },
+      ],
+      unresolved: [
+        { from: "apps/web/b.ts", specifier: dirty("us"), reason: dirty("why") },
+      ],
+      unread: [dirty("xx")],
+      truncated: true,
+      truncReasons: [dirty("cap")],
+    });
+    const { container } = render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: o,
+          slice: sliceOf(["apps/web/"], [dirty("apps/web/gen/")]),
+          contract: {
+            ...contractOf([
+              {
+                id: dirty("rid"),
+                kind: "forbid",
+                from: "apps/web/",
+                to: "libs/shared/",
+                severity: "error",
+              },
+              {
+                id: "rb",
+                kind: "forbid",
+                from: dirty("fr"),
+                to: dirty("to"),
+                severity: "warn",
+              },
+            ]),
+            sliceId: dirty("other-slice"),
+            knownViolations: [
+              {
+                rule: dirty("rid"),
+                file: "apps/web/a.ts",
+                specifier: dirty("sp"),
+                expires: "2026-10-05",
+              },
+            ],
+          },
+        })}
+      />,
+    );
+    for (const b of container.querySelectorAll("button[aria-expanded=false]"))
+      fireEvent.click(b);
+    expect(container.innerHTML).toContain("pk");
+    expect(container.innerHTML).toContain("rid");
+    expect(CONTROL.test(container.innerHTML)).toBe(false);
+  });
+
+  it("strips control characters from section reasons that stand in for data", () => {
+    const o = observedOf();
+    o.packages = { collected: false, reason: dirty("no-pk") };
+    o.edges = { collected: false, reason: dirty("no-ed") };
+    o.unresolved = { collected: false, reason: dirty("no-un") };
+    const { container } = render(
+      <MiddlePanel
+        bundle={bundleOf({ observed: o, slice: sliceOf(["a/"]) })}
+      />,
+    );
+    expect(container.innerHTML).toContain("no-pk");
+    expect(container.innerHTML).toContain("no-ed");
+    expect(container.innerHTML).toContain("no-un");
+    expect(CONTROL.test(container.innerHTML)).toBe(false);
+  });
+
+  it("strips control characters from a section reason when only unresolved is missing", () => {
+    const o = observedOf({ packages: PKGS });
+    o.unresolved = { collected: false, reason: dirty("no-un2") };
+    const { container } = render(
+      <MiddlePanel
+        bundle={bundleOf({ observed: o, slice: sliceOf(["apps/web/"]) })}
+      />,
+    );
+    expect(container.innerHTML).toContain("no-un2");
+    expect(CONTROL.test(container.innerHTML)).toBe(false);
+  });
+});
+
+describe("code panel keeps CRLF", () => {
+  const crlf = '{\r\n\t"id": "g1",\r\n  "tools": []\r\n}\r\n';
+  const show = (text: string) =>
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf(),
+          grants: [{ path: "grants/0-g.json", text }],
+        })}
+      />,
+    );
+
+  it("shows CRLF text byte for byte and counts the line endings", () => {
+    show(crlf);
+    expect(screen.getByTestId("code-text").textContent).toBe(crlf);
+    expect(screen.getByText("4 CRLF line endings")).toBeTruthy();
+  });
+
+  it("strips a lone CR, and shows no note for LF-only text", () => {
+    show("a\rb\nc\n");
+    expect(screen.getByTestId("code-text").textContent).toBe("ab\nc\n");
+    expect(screen.queryByText(/CRLF line endings/)).toBeNull();
+  });
+});
+
+describe("contract check completeness, mismatches and known violations", () => {
+  const slice = sliceOf(["apps/web/"]);
+  const forbid = {
+    id: "no-shared",
+    kind: "forbid" as const,
+    from: "apps/web/",
+    to: "libs/shared/",
+    severity: "error" as const,
+  };
+  const bad: Edge = {
+    from: "apps/web/a.ts",
+    to: "libs/shared/x.ts",
+    specifier: "bad",
+  };
+
+  it("says the check cannot be clean when edges were not collected", () => {
+    const o = observedOf({ packages: PKGS });
+    o.edges = { collected: false, reason: "no import pass" };
+    render(
+      <MiddlePanel
+        bundle={bundleOf({ observed: o, slice, contract: contractOf([]) })}
+      />,
+    );
+    const alert = within(proposedRegion()).getByRole("alert", {
+      name: /contract check incomplete/i,
+    });
+    expect(alert.textContent).toContain("the check cannot be clean");
+    expect(alert.textContent).toContain(
+      "edges were not collected (no import pass)",
+    );
+  });
+
+  it("says the check cannot be clean when unresolved imports were not collected", () => {
+    const o = observedOf({ packages: PKGS });
+    o.unresolved = { collected: false, reason: "skipped" };
+    render(<MiddlePanel bundle={bundleOf({ observed: o, slice })} />);
+    expect(proposedRegion().textContent).toContain(
+      "unresolved imports were not collected (skipped)",
+    );
+  });
+
+  it("says what an unread language would add, per extension", () => {
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({ packages: PKGS, unread: ["go", "rs"] }),
+          slice,
+        })}
+      />,
+    );
+    const t = within(proposedRegion()).getByRole("alert", {
+      name: /contract check incomplete/i,
+    }).textContent;
+    expect(t).toContain("every in-slice .go file");
+    expect(t).toContain("every in-slice .rs file");
+    expect(t).toContain("this bundle cannot list them");
+  });
+
+  it("raises no completeness alert in Proposed for a complete scan", () => {
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({ packages: PKGS }),
+          slice,
+          contract: contractOf([]),
+        })}
+      />,
+    );
+    expect(within(proposedRegion()).queryByRole("alert")).toBeNull();
+  });
+
+  it("keeps a known violation shown, marks it known and shows its expiry", () => {
+    const c = {
+      ...contractOf([forbid]),
+      knownViolations: [
+        {
+          rule: "no-shared",
+          file: "apps/web/a.ts",
+          specifier: "bad",
+          expires: "2026-10-01",
+        },
+      ],
+    };
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({ packages: PKGS, edges: [bad] }),
+          slice,
+          contract: c,
+        })}
+      />,
+    );
+    const row = within(proposedRegion()).getByTestId("slice-edge");
+    expect(row.getAttribute("data-violation")).toBe("true");
+    expect(within(row).getByTestId("violation")).toBeTruthy();
+    expect(within(row).getByTestId("known-mark").textContent).toBe("known");
+    expect(row.textContent).toContain("expires 2026-10-01");
+  });
+
+  it("judges expiry at the bundle's date, not the wall clock", () => {
+    const c = {
+      ...contractOf([forbid]),
+      knownViolations: [
+        {
+          rule: "no-shared",
+          file: "apps/web/a.ts",
+          specifier: "bad",
+          expires: "2026-10-01",
+        },
+      ],
+    };
+    // valid on the bundle's day although long past by the wall clock
+    const { unmount } = render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({ packages: PKGS, edges: [bad] }),
+          slice,
+          contract: c,
+          createdAt: "2026-10-01T23:00:00.000Z",
+        })}
+      />,
+    );
+    expect(screen.getAllByTestId("known-mark")).toHaveLength(1);
+    unmount();
+    // expired on a later bundle date: the violation stays, the marker goes
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({ packages: PKGS, edges: [bad] }),
+          slice,
+          contract: c,
+          createdAt: "2026-10-02T00:00:00.000Z",
+        })}
+      />,
+    );
+    expect(screen.queryByTestId("known-mark")).toBeNull();
+    expect(screen.getAllByTestId("violation")).toHaveLength(1);
+  });
+
+  it("marks only the matching violation as known", () => {
+    const c = {
+      ...contractOf([forbid]),
+      knownViolations: [
+        { rule: "no-shared", file: "apps/web/a.ts", specifier: "other" },
+      ],
+    };
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({ packages: PKGS, edges: [bad] }),
+          slice,
+          contract: c,
+        })}
+      />,
+    );
+    expect(screen.queryByTestId("known-mark")).toBeNull();
+  });
+
+  it("shows a warn rule as a warning, not a violation", () => {
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({ packages: PKGS, edges: [bad] }),
+          slice,
+          contract: contractOf([{ ...forbid, severity: "warn" }]),
+        })}
+      />,
+    );
+    const badges = [...proposedRegion().querySelectorAll("[data-badge]")].map(
+      (e) => e.textContent,
+    );
+    expect(badges).toContain("warning");
+    // population-guard: toContain("warning") above proves badges is non-empty
+    expect(badges).not.toContain("violation");
+    expect(
+      within(proposedRegion())
+        .getByTestId("slice-edge")
+        .getAttribute("data-violation"),
+    ).toBe("true");
+  });
+
+  it("notes a contract for another slice", () => {
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({ packages: PKGS }),
+          slice,
+          contract: { ...contractOf([]), sliceId: "slice-2" },
+        })}
+      />,
+    );
+    expect(proposedRegion().textContent).toContain(
+      'the contract is for slice "slice-2", but the slice is "slice-1"',
+    );
+  });
+
+  it("notes an observed report at another commit", () => {
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({ packages: PKGS }),
+          slice: { ...slice, repo: { commit: "f".repeat(40) } },
+          contract: contractOf([]),
+        })}
+      />,
+    );
+    expect(proposedRegion().textContent).toContain(
+      "the observed report is at commit",
+    );
+  });
+
+  it("raises no mismatch note when slice, contract and report agree", () => {
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({ packages: PKGS }),
+          slice,
+          contract: contractOf([]),
+        })}
+      />,
+    );
+    expect(within(proposedRegion()).queryAllByRole("note")).toHaveLength(0);
+  });
+
+  it("says no edge was judged when there is a slice but no observed report", () => {
+    render(<MiddlePanel bundle={bundleOf({ observed: null, slice })} />);
+    expect(proposedRegion().textContent).toContain(
+      "No observed report, so no edge was judged.",
+    );
+  });
+});
+
+describe("shared semantics, pinned in the viewer", () => {
+  const slice = sliceOf(["apps/web/"]);
+  const render1 = (edges: Edge[], rule: Contract["rules"][number]) =>
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({ packages: PKGS, edges }),
+          slice,
+          contract: contractOf([rule]),
+        })}
+      />,
+    );
+  const rule = (kind: "forbid" | "allow-only", to: string) => ({
+    id: "r",
+    kind,
+    from: "apps/web/",
+    to,
+    severity: "error" as const,
+  });
+
+  it("a package-root target (no trailing slash) hits a directory prefix", () => {
+    render1(
+      [{ from: "apps/web/a.ts", to: "libs/shared", specifier: "pkg" }],
+      rule("forbid", "libs/shared/"),
+    );
+    expect(screen.getAllByTestId("violation")).toHaveLength(1);
+  });
+
+  it("a root-package target (.) always violates allow-only", () => {
+    render1(
+      [{ from: "apps/web/a.ts", to: ".", specifier: "root-pkg" }],
+      rule("allow-only", "libs/shared/"),
+    );
+    expect(screen.getAllByTestId("violation")).toHaveLength(1);
+  });
+
+  it("a root-package target (.) never violates forbid", () => {
+    render1(
+      [{ from: "apps/web/a.ts", to: ".", specifier: "root-pkg" }],
+      rule("forbid", "libs/shared/"),
+    );
+    expect(within(proposedRegion()).getAllByTestId("slice-edge")).toHaveLength(
+      1,
+    );
+    expect(screen.queryAllByTestId("violation")).toHaveLength(0);
+  });
+});
+
+describe("packages are grouped by root", () => {
+  it("attributes a file to the package with the longest matching root", () => {
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({
+            packages: [
+              { name: "outer", root: "apps" },
+              { name: "inner", root: "apps/web" },
+              { name: "lib", root: "libs" },
+            ],
+            edges: [
+              { from: "apps/web/a.ts", to: "libs/x.ts", specifier: "l" },
+              { from: "apps/other/b.ts", to: "libs/y.ts", specifier: "l" },
+              { from: "apps/web/c.ts", to: "apps/other/d.ts", specifier: "o" },
+            ],
+          }),
+        })}
+      />,
+    );
+    const rows = within(observedRegion())
+      .getAllByTestId("package-edge")
+      .map((r) => r.textContent ?? "");
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toContain("inner -> lib");
+    expect(rows[1]).toContain("outer -> lib");
+    expect(rows[2]).toContain("inner -> outer");
+  });
+
+  it("keeps two packages with the same name apart", () => {
+    render(
+      <MiddlePanel
+        bundle={bundleOf({
+          observed: observedOf({
+            packages: [
+              { name: "twin", root: "a" },
+              { name: "twin", root: "b" },
+              { name: "other", root: "o" },
+            ],
+            edges: [
+              { from: "a/x.ts", to: "o/z.ts", specifier: "s" },
+              { from: "b/y.ts", to: "o/z.ts", specifier: "s" },
+            ],
+          }),
+        })}
+      />,
+    );
+    expect(
+      within(observedRegion()).getAllByTestId("package-edge"),
+    ).toHaveLength(2);
   });
 });

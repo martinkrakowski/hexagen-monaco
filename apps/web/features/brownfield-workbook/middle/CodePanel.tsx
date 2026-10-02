@@ -1,5 +1,5 @@
-import { cleanText } from "@hexagen/shared";
-import type { CodeFile } from "./derive";
+import { cleanText, cleanTextKeepingCrlf } from "@hexagen/shared";
+import { crlfCount, type CodeFile } from "./derive";
 
 /**
  * The file is the truth: slice.json, contract.json and each grant are shown as
@@ -41,11 +41,16 @@ export function CodePanel({ files, selected, onSelect }: CodePanelProps) {
               </button>
             ))}
           </div>
+          {crlfCount(current.text) > 0 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {crlfCount(current.text)} CRLF line endings
+            </p>
+          )}
           <pre
             data-testid="code-text"
             className="mt-2 overflow-x-auto whitespace-pre p-2 text-xs"
           >
-            {cleanText(current.text)}
+            {cleanTextKeepingCrlf(current.text)}
           </pre>
         </>
       )}
