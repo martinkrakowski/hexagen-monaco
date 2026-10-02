@@ -645,7 +645,9 @@ describe("installProbes (P-D5)", () => {
 
   test("a probe without repair keeps no repair key", () => {
     const config = ok(
-      ["installProbes:", "  - package: esbuild", "    check: ['true']"].join("\n"),
+      ["installProbes:", "  - package: esbuild", "    check: ['true']"].join(
+        "\n",
+      ),
     );
     expect(config.installProbes).toEqual([
       { package: "esbuild", check: ["true"] },
@@ -682,9 +684,12 @@ describe("installProbes (P-D5)", () => {
 
   test("an invalid probe is dropped, so a gate never runs half of one", () => {
     const result = parseConfig(
-      ["installProbes:", "  - package: a", "    check: ['true']", "    repair: []"].join(
-        "\n",
-      ),
+      [
+        "installProbes:",
+        "  - package: a",
+        "    check: ['true']",
+        "    repair: []",
+      ].join("\n"),
     );
     expect(result.config?.installProbes).toEqual([]);
   });

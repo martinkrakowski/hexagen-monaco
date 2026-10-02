@@ -30,7 +30,7 @@ describe("process rules in the orchestrate-wave skill", () => {
   it("P-D3: review tiering is keyed to the plan row's risk column", () => {
     expect(skill).toContain("follows the plan row's risk column");
     expect(skill).toContain(
-      "A normal-risk lane gets ONE combined reviewer pass over the plan row and the brief",
+      "A normal-risk lane gets ONE combined reviewer pass covering the plan row, the brief and the implementation diff together",
     );
     expect(skill).toContain(
       "A high-risk lane keeps separate row, brief and pre-PR reviews",
@@ -40,10 +40,12 @@ describe("process rules in the orchestrate-wave skill", () => {
 
   it("P-D4: a lane's result is verified on a second host, CI for a local one", () => {
     expect(skill).toContain(
-      "verified on a host other than the one it ran on, before its PR opens",
+      "verified on a host other than the one it ran on before it is merged",
     );
     expect(skill).toContain("the second host is yours");
-    expect(skill).toContain("the second host is CI");
+    expect(skill).toContain("CI is the second host");
+    expect(skill).toContain("before the PR opens");
+    expect(skill).not.toContain("before its PR opens");
   });
 
   it("P-D6: fix rounds resume, fork on a moved branch, and stagger forks", () => {

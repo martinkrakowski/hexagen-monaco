@@ -299,7 +299,8 @@ that did not happen.
    ```sh
    # Names any platform package left with metadata only, exits non-zero when it names one, and
    # exits non-zero when it discovers NO platform package at all: a loop over nothing proves nothing,
-   # and an unmatched glob must not read as healthy. Run it on a Darwin host.
+   # and an unmatched glob must not read as healthy. Run it on a Darwin host, and run it under `sh`
+   # (zsh's `nomatch` aborts the loop on an unmatched glob).
    #
    # `find node_modules -name '*.node' | head` is NOT a check: a stripped package simply
    # contributes no line, so the command prints the survivors and exits 0 — it reports what
@@ -377,10 +378,10 @@ that did not happen.
       `sessionID` recorded in rule 6. These flags are orchestrator-side: they go in the dispatch
       command, never in a lane brief. **Stagger forked resumes by about 20 s.** Two forks launched
       in the same second fail with "database is locked" (opencode's sqlite). (why: [rationale](references/rationale.md#a-fix-round-resumes-the-lanes-own-session))
-   8. **A lane's result is verified on a host other than the one it ran on, before its PR opens.**
-      For a remote lane host the second host is yours: fetch the lane's commits back and run the
-      full gate here. For a local lane host the second host is CI: open the PR, then read CI's
-      conclusion on the PR's final head rather than trusting your own gate alone. (why: [rationale](references/rationale.md#a-lanes-result-is-verified-on-a-second-host))
+   8. **A lane's result is verified on a host other than the one it ran on before it is merged.**
+      For a remote lane host, the second host is yours: run the gate after fetching the commits,
+      before the PR opens. For a local lane host, CI is the second host: open the PR and read CI's
+      conclusion on the PR's final head before merging, never your own gate alone. (why: [rationale](references/rationale.md#a-lanes-result-is-verified-on-a-second-host))
 
    **Every brief carries the checkpoint rule**: commit failing tests once seen to fail, commit
    again after each green step, push only when the gate passes — a scoped, owner-confirmed exception
@@ -393,8 +394,8 @@ that did not happen.
    numbers `config.yaml` requires (statements, branches, functions, lines) in `--detail` once the
    gate has run.
 2. **Review.** **How many model reviews a lane gets follows the plan row's risk column.** A
-   normal-risk lane gets ONE combined reviewer pass over the plan row and the brief together,
-   before dispatch. A high-risk lane keeps separate row, brief and pre-PR reviews, each its own
+   normal-risk lane gets ONE combined reviewer pass covering the plan row, the brief and the
+   implementation diff together. A high-risk lane keeps separate row, brief and pre-PR reviews, each its own
    pass. The review bots stay on every PR at either tier: they have found real defects after the
    model reviewer approved. (why: [rationale](references/rationale.md#review-tiering-follows-the-plan-rows-risk)) Per PR, two independent inputs, both required: a read-only review from a model that
    is **not** the implementer, and the bot comments (`gh pr checks`, `gh api …/comments`). Verify

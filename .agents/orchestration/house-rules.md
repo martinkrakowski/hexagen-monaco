@@ -13,7 +13,8 @@ record, and all three come from this overlay rather than from a constant:
 wave did. Nothing is inferred from a process list or a directory name.
 
 **Status.** `hexagen-orchestration-wave-status` serves the wave from that
-log. Its port is `waveStatusPort` in `.agents/orchestration/config.yaml` (default 4318), and it refuses every port in `forbiddenPorts`.
+log. The server is read-only and loopback-only: it answers GET requests on
+127.0.0.1, and it starts, kills and merges nothing. Its port is `waveStatusPort` in `.agents/orchestration/config.yaml` (default 4318), and it refuses every port in `forbiddenPorts`.
 
 **The log directory is yours.** `waveLogDir` decides where waves are read
 from. It is per-repository on purpose. This project sets it to

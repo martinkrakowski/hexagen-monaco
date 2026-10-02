@@ -34,6 +34,31 @@ name sets it, for example `ciWorkflow: .github/workflows/sync-integrity.yml`;
 non-empty string, not absolute, with no `..` segment and no NUL. `init` does
 not write it, so a scaffolded overlay keeps the default.
 
+### `installProbes`
+
+`installProbes` is an optional list of `{ package, check, repair? }`. It guards
+against a dependency whose postinstall output is silently skipped when installs
+run concurrently on one host. `check` and `repair` are argv lists, validated
+like `laneHosts[].check`.
+
+```yaml
+installProbes:
+  - package: "@esbuild/darwin-arm64"
+    check: [node, -e, "require.resolve('@esbuild/darwin-arm64/bin/esbuild')"]
+    repair: [yarn, install]
+```
+
+- On a remote lane host, the orchestrator runs each probe as
+  `ssh <alias> -- <check>` inside the new worktree. On a local host it runs the
+  `check` in the worktree directly.
+- After a failed `check` the orchestrator runs `repair` once, in the same
+  worktree on the same host, then runs `check` again. A repair is logged as a
+  wave event. If `check` still fails, or `repair` is absent or exits non-zero,
+  the worktree is not dispatched, and the failure names the package and both
+  exit codes.
+- `doctor` runs each `check` on the orchestrator's host only, never runs
+  `repair`, and reports a failing `check` as `FAIL`.
+
 ## Lane hosts and seats
 
 A delegated lane can run on a remote opencode server that executes tools on the
@@ -93,31 +118,6 @@ first `--format json` event of the dispatch. These flags are orchestrator-side:
 they never appear in a lane brief. Stagger forked resumes by about 20 s, because
 two forks launched in the same second fail with "database is locked" (opencode's
 sqlite).
-
-### `installProbes`
-
-`installProbes` is an optional list of `{ package, check, repair? }`. It guards
-against a dependency whose postinstall output is silently skipped when installs
-run concurrently on one host. `check` and `repair` are argv lists, validated
-like `laneHosts[].check`.
-
-```yaml
-installProbes:
-  - package: "@esbuild/darwin-arm64"
-    check: [node, -e, "require.resolve('@esbuild/darwin-arm64/bin/esbuild')"]
-    repair: [yarn, install]
-```
-
-- On a remote lane host, the orchestrator runs each probe as
-  `ssh <alias> -- <check>` inside the new worktree. On a local host it runs the
-  `check` in the worktree directly.
-- After a failed `check` the orchestrator runs `repair` once, in the same
-  worktree on the same host, then runs `check` again. A repair is logged as a
-  wave event. If `check` still fails, or `repair` is absent or exits non-zero,
-  the worktree is not dispatched, and the failure names the package and both
-  exit codes.
-- `doctor` runs each `check` on the orchestrator's host only, never runs
-  `repair`, and reports a failing `check` as `FAIL`.
 
 ## Bins
 
