@@ -146,6 +146,40 @@ tools — it is scoped only for a future, generic Field Kit adapter that
 doesn't check `contexts`, not for `hexagen_accept_transaction` as it exists
 today. Prints the grant JSON to stdout, or to `--out <file>` if given.
 
+### `hexagen grant show` and `hexagen grant check`
+
+```bash
+npx hexagen grant show .hexagen/grants/<id>.json
+npx hexagen grant check .hexagen/grants/<id>.json \
+  --tool hexagen_propose_patch --path src/a.ts src/b.ts
+```
+
+Both resolve the verification key exactly as `grant issue` and the MCP server
+do (`--key-file`, then `HEXAGEN_GRANT_KEY_FILE`, then the engagement from
+`.hexagen/slice.json` or `--engagement`, or the in-repo key in repo mode), and
+print the workspace root, the key path and its fingerprint, never the key.
+
+- `show` pretty-prints id, principal, agent, contexts (when present), paths,
+  tools, mode, `max_files`, `expires_at` and `revoked_at`, the window status,
+  and whether the signature verifies. Exit 0 verified, 1 not verified (the
+  reason is printed), 2 bad input. A revoked or expired grant with a valid
+  signature still exits 0; `check` enforces the window.
+- `check` verifies the signature, then the window, then the tool, the paths
+  and `max_files` (`checkWriteAgainstGrant`). It never runs the mode check, so
+  a propose-only grant is allowed. In a client repo (no manifest) it also
+  denies a path outside the slice or inside its excludes, even if the grant
+  allows it, and with no `.hexagen/slice.json` it denies (the slice bounds every
+  write). Paths are judged by text only; the MCP propose tool also checks the
+  on-disk spelling. `--path` may be repeated or list several paths, and every one is checked.
+  The Field Kit form is for client repos; in a repo with a manifest it exits 2.
+  The root is the git toplevel unless `--workspace-root` is given. Exit 0
+  allow, 1 deny, 2 bad input (including an invalid `.hexagen/slice.json` or
+  timestamp, which `show` also rejects). A missing or weak key, or a
+  signature made under another key, is a denial; with `--key-file` or
+  `--engagement` it names both keys' fingerprints.
+- The monaco form, `grant check <grant-file> <transaction-id>`, is not built:
+  pending transactions live in the MCP server's memory. It exits 2.
+
 ### `hexagen observe`
 
 A read-only scan of a repo you do not control. It reports what is already
