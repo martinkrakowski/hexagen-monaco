@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -208,6 +216,55 @@ describe("appendChainedLine", () => {
     await rm(lock);
     await pending;
     expect(took).toBe(true);
+  });
+
+  it("an aged break file is removed only if it is still the file judged stale", async () => {
+    const file = path.join(await tmp(), "t.jsonl");
+    const lock = `${file}.lock`;
+    const brk = `${lock}.break`;
+    await writeFile(lock, `${4_194_999}:${Date.now()}:deadbeef`);
+    await writeFile(brk, `${4_194_999}:${Date.now()}:aaaaaaaa`);
+    const old = new Date(Date.now() - 60_000);
+    await utimes(brk, old, old);
+    const live = `${process.pid}:${Date.now()}:bbbbbbbb`;
+    // Another waiter clears the aged file and takes a fresh one in the gap.
+    lockTestHooks.afterJudgedBreakStale = async () => {
+      lockTestHooks.afterJudgedBreakStale = undefined;
+      await rm(brk);
+      await writeFile(brk, live);
+    };
+    let took = false;
+    const pending = appendChainedLine(file, (n) => {
+      took = true;
+      return { ...n };
+    });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(took).toBe(false);
+    expect(await readFile(brk, "utf8")).toBe(live);
+    await rm(brk);
+    await pending;
+    expect(took).toBe(true);
+  });
+
+  it("locks the same file through a symlinked trace file", async () => {
+    const dir = await tmp();
+    const real = path.join(dir, "real");
+    await mkdir(real);
+    await writeFile(path.join(real, "t.jsonl"), "");
+    await symlink(path.join(real, "t.jsonl"), path.join(dir, "alias.jsonl"));
+    await writeFile(
+      path.join(real, "t.jsonl.lock"),
+      `${process.pid}:${Date.now()}:cafebabe`,
+    );
+    let done = false;
+    const pending = withTraceLock(path.join(dir, "alias.jsonl"), async () => {
+      done = true;
+    });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(done).toBe(false);
+    await rm(path.join(real, "t.jsonl.lock"));
+    await pending;
+    expect(done).toBe(true);
   });
 
   it("two racing waiters on a pre-existing stale lock keep seq contiguous", async () => {

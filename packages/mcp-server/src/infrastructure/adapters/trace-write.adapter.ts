@@ -4,8 +4,10 @@ import path from "node:path";
 import type { Result } from "@hexagen/shared";
 import { isRepoMode } from "@hexagen/shared/node/grant-key";
 import {
-  appendChainedLine,
+  TraceChainError,
+  appendChainedLineLocked,
   peekTraceMode,
+  withTraceLock,
 } from "@hexagen/shared/node/trace-chain";
 import type { TraceRecord } from "../../application/kernel/trace.js";
 import type {
@@ -30,24 +32,36 @@ function digest(value: unknown): string {
  * adapter's job the arch linter treats as I/O, so it stays out of the
  * application-layer use case that calls this port.
  *
- * Two modes, decided per call. An existing file's last line decides: a chained
- * line means the chain continues, an unchained line means the plain append
- * continues (the file is never converted). Only for a new (or empty, or torn)
- * file does the manifest decide, by the test the grant-key resolver uses (a
- * `.architecture/manifest.yaml` under the workspace root means repo mode):
- * - plain (greenfield): today's unchained append, byte for byte; it never takes
- *   a lock, and `grant_missing` is a no-op.
- * - chained (brownfield): lines carry `seq` and `prev_hash`, appended under a
- *   file lock (docs/kernel/TRACE.md "Chain and tip"). A torn last line is an
- *   error, never appended after.
+ * Two modes, decided per call, under the trace lock. An existing file's last
+ * line decides: a chained line means the chain continues, an unchained line
+ * means the plain append continues (the file is never converted). Only for a
+ * new or empty file does the manifest decide, by the test the grant-key
+ * resolver uses (a `.architecture/manifest.yaml` under the workspace root means
+ * repo mode). A torn last line refuses in either mode, never a plain append.
+ * - plain (greenfield): today's unchained line, byte for byte; `grant_missing`
+ *   is a no-op.
+ * - chained (brownfield): lines carry `seq` and `prev_hash`
+ *   (docs/kernel/TRACE.md "Chain and tip").
  */
 export class TraceWriteAdapter implements TraceWritePort {
   constructor(private readonly workspaceRoot: string) {}
 
-  private async isChained(filePath: string): Promise<boolean> {
+  /**
+   * Which format to append. Call only while holding the trace lock, so the
+   * choice and the append are one lock hold: a writer that sees a half-written
+   * line, or a manifest that flips between two writers, cannot mix formats.
+   * A torn tail is never a reason to fall back to the plain format: it refuses.
+   */
+  private async isChainedLocked(filePath: string): Promise<boolean> {
     const mode = await peekTraceMode(filePath);
     if (mode === "chained") return true;
     if (mode === "unchained") return false;
+    if (mode === "torn") {
+      throw new TraceChainError(
+        "torn-tail",
+        `${filePath} has a torn last line; refusing to append (move it aside or repair it)`,
+      );
+    }
     return !isRepoMode(this.workspaceRoot);
   }
 
@@ -72,12 +86,17 @@ export class TraceWriteAdapter implements TraceWritePort {
 
       const dir = path.join(this.workspaceRoot, ...EVIDENCE_DIR);
       const filePath = path.join(dir, EVIDENCE_FILE);
-      if (await this.isChained(filePath)) {
-        await appendChainedLine(filePath, (next) => ({ ...trace, ...next }));
-        return { success: true, value: undefined };
-      }
-      await fs.mkdir(dir, { recursive: true });
-      await fs.appendFile(filePath, `${JSON.stringify(trace)}\n`, "utf-8");
+      await withTraceLock(filePath, async () => {
+        if (await this.isChainedLocked(filePath)) {
+          await appendChainedLineLocked(filePath, (next) => ({
+            ...trace,
+            ...next,
+          }));
+          return;
+        }
+        await fs.mkdir(dir, { recursive: true });
+        await fs.appendFile(filePath, `${JSON.stringify(trace)}\n`, "utf-8");
+      });
       return { success: true, value: undefined };
     } catch (error) {
       return {
@@ -96,21 +115,21 @@ export class TraceWriteAdapter implements TraceWritePort {
         ...EVIDENCE_DIR,
         EVIDENCE_FILE,
       );
-      // An unchained trace keeps today's no-op so its file stays byte-identical.
-      if (!(await this.isChained(filePath))) {
-        return { success: true, value: undefined };
-      }
-      await appendChainedLine(filePath, (next) => ({
-        kind: "grant_missing",
-        ...next,
-        ...(input.goal_id === undefined ? {} : { goal_id: input.goal_id }),
-        tool: input.tool,
-        ...(input.args === undefined
-          ? {}
-          : { args_digest: digest(input.args) }),
-        reason: input.reason,
-        time: input.time,
-      }));
+      await withTraceLock(filePath, async () => {
+        // An unchained trace keeps today's no-op so its file stays byte-identical.
+        if (!(await this.isChainedLocked(filePath))) return;
+        await appendChainedLineLocked(filePath, (next) => ({
+          kind: "grant_missing",
+          ...next,
+          ...(input.goal_id === undefined ? {} : { goal_id: input.goal_id }),
+          tool: input.tool,
+          ...(input.args === undefined
+            ? {}
+            : { args_digest: digest(input.args) }),
+          reason: input.reason,
+          time: input.time,
+        }));
+      });
       return { success: true, value: undefined };
     } catch (error) {
       return {

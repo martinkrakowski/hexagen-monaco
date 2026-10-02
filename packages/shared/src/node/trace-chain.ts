@@ -4,7 +4,14 @@ import {
   randomBytes,
   timingSafeEqual,
 } from "node:crypto";
-import { mkdir, open, readFile, rename, stat, unlink } from "node:fs/promises";
+import {
+  mkdir,
+  open,
+  readFile,
+  realpath,
+  stat,
+  unlink,
+} from "node:fs/promises";
 import path from "node:path";
 
 /**
@@ -109,6 +116,12 @@ function judgeStale(content: string, mtimeMs: number): boolean {
   return Date.now() - Number(m[2]) > LOCK_MAX_AGE_MS || !pidAlive(Number(m[1]));
 }
 
+/** Test seams: run after a lock (or a break file) is judged stale, before it is removed. */
+export const lockTestHooks: {
+  afterJudgedStale?: () => Promise<void>;
+  afterJudgedBreakStale?: () => Promise<void>;
+} = {};
+
 /**
  * Runs `fn` holding `<lock>.break`, a second O_EXCL file that serialises every
  * removal of the lock (breaking a stale one, releasing a live one). Without it
@@ -124,14 +137,31 @@ async function withBreakFile<T>(
   for (;;) {
     try {
       const handle = await open(breakPath, "wx");
-      await handle.close();
+      try {
+        await handle.writeFile(newToken(), "utf8");
+      } finally {
+        await handle.close();
+      }
       break;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     }
     try {
-      if (Date.now() - (await stat(breakPath)).mtimeMs > BREAK_MAX_AGE_MS) {
-        await unlink(breakPath);
+      const judged = await stat(breakPath);
+      if (Date.now() - judged.mtimeMs > BREAK_MAX_AGE_MS) {
+        const judgedContent = await readFile(breakPath, "utf8");
+        await lockTestHooks.afterJudgedBreakStale?.();
+        // Remove it only if it is still the very file judged stale. The
+        // check-then-unlink gap that remains is a few microseconds wide and
+        // needs a crashed breaker plus a waiter that takes the file in
+        // exactly that gap; it is documented rather than closed.
+        const again = await stat(breakPath);
+        if (
+          again.ino === judged.ino &&
+          (await readFile(breakPath, "utf8")) === judgedContent
+        ) {
+          await unlink(breakPath);
+        }
         continue;
       }
     } catch {
@@ -151,9 +181,6 @@ async function withBreakFile<T>(
     await unlink(breakPath).catch(() => undefined);
   }
 }
-
-/** Test seam: runs after a lock is judged stale, before it is broken. */
-export const lockTestHooks: { afterJudgedStale?: () => Promise<void> } = {};
 
 /** True when the lock was stale and has been removed (or already gone), so the caller retries at once. */
 async function breakIfStale(lockPath: string): Promise<boolean> {
@@ -230,13 +257,29 @@ async function releaseLock(lockPath: string, token: string): Promise<void> {
   }
 }
 
+/**
+ * The trace's real path: symlinks in its directory chain, or the file itself,
+ * resolved, so every caller (writer, pack, a path through an alias) locks the
+ * same lock file. Creates the directory.
+ */
+async function canonicalTracePath(filePath: string): Promise<string> {
+  const dir = path.dirname(path.resolve(filePath));
+  await mkdir(dir, { recursive: true });
+  const target = path.join(await realpath(dir), path.basename(filePath));
+  try {
+    return await realpath(target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return target;
+    throw error;
+  }
+}
+
 /** Runs `fn` holding the trace's exclusive lock (`<file>.lock`). */
 export async function withTraceLock<T>(
   filePath: string,
   fn: () => Promise<T>,
 ): Promise<T> {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  const lockPath = `${filePath}.lock`;
+  const lockPath = `${await canonicalTracePath(filePath)}.lock`;
   const token = await acquireLock(lockPath);
   try {
     return await fn();
@@ -335,32 +378,44 @@ export async function appendChainedLine(
   filePath: string,
   build: (next: ChainPosition) => Record<string, unknown>,
 ): Promise<AppendedLine> {
-  return withTraceLock(filePath, async () => {
-    const last = await readLastLine(filePath);
-    let next: ChainPosition = { seq: 0, prev_hash: GENESIS_PREV_HASH };
-    if (last !== null) {
-      if (!isChainFields(last.value)) {
-        throw new TraceChainError(
-          "unchained",
-          `${filePath} has a last line with no seq/prev_hash (an unchained trace); refusing to extend it. Move it aside to start a chained trace.`,
-        );
-      }
-      next = {
-        seq: last.value.seq + 1,
-        prev_hash: lineHash(last.value),
-      };
+  return withTraceLock(filePath, () =>
+    appendChainedLineLocked(filePath, build),
+  );
+}
+
+/**
+ * `appendChainedLine` for a caller that already holds `withTraceLock(filePath)`
+ * (so it can choose a format and append inside one lock hold). The lock is not
+ * reentrant: never call this without it.
+ */
+export async function appendChainedLineLocked(
+  filePath: string,
+  build: (next: ChainPosition) => Record<string, unknown>,
+): Promise<AppendedLine> {
+  const last = await readLastLine(filePath);
+  let next: ChainPosition = { seq: 0, prev_hash: GENESIS_PREV_HASH };
+  if (last !== null) {
+    if (!isChainFields(last.value)) {
+      throw new TraceChainError(
+        "unchained",
+        `${filePath} has a last line with no seq/prev_hash (an unchained trace); refusing to extend it. Move it aside to start a chained trace.`,
+      );
     }
-    const line = build(next);
-    const bytes = `${canonicalJson(line)}\n`;
-    const handle = await open(filePath, "a");
-    try {
-      await handle.writeFile(bytes, "utf8");
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
-    return { seq: next.seq, hash: lineHash(line) };
-  });
+    next = {
+      seq: last.value.seq + 1,
+      prev_hash: lineHash(last.value),
+    };
+  }
+  const line = build(next);
+  const bytes = `${canonicalJson(line)}\n`;
+  const handle = await open(filePath, "a");
+  try {
+    await handle.writeFile(bytes, "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  return { seq: next.seq, hash: lineHash(line) };
 }
 
 export interface SplitLine {

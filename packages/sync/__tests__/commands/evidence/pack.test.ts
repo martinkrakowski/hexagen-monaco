@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   mkdir,
   mkdtemp,
+  readdir,
+  rename,
+  symlink,
   readFile,
   rm,
   stat,
@@ -447,6 +450,93 @@ describe("evidence pack, window and shape", () => {
   it("rejects an unknown record kind", async () => {
     await append({ kind: "mystery" });
     await failsClean(await run(), /unknown record kind 'mystery'/);
+  });
+});
+
+describe("evidence pack, grant and shape validation", () => {
+  const resign = (g: Record<string, unknown>): Record<string, unknown> => {
+    const rest = { ...g };
+    delete rest.signature;
+    return {
+      ...rest,
+      signature: signGrantPayload(canonicalGrantPayload(rest as never), KEY),
+    };
+  };
+
+  it("a validly signed grant that is not a strict Field Kit grant is not verified", async () => {
+    await append(evLine());
+    const base = signedGrant();
+    const noPrincipal = { ...base };
+    delete noPrincipal.principal;
+    const cases: [string, Record<string, unknown>][] = [
+      ["an unknown field", { ...base, extra: 1 }],
+      [
+        "a date with no offset",
+        resign({ ...base, expires_at: "2026-12-01T00:00:00" }),
+      ],
+      ["a missing principal", resign(noPrincipal)],
+      ["an empty tool name", resign({ ...base, tools: [""] })],
+    ];
+    for (const [label, grant] of cases) {
+      await writeFile(grantFile, JSON.stringify(grant));
+      const r = await run();
+      expect(r.exitCode, label).toBe(1);
+      expect(r.messages.join("\n"), label).toMatch(/not a valid grant/);
+      expect(await exists(bundlePath()), label).toBe(false);
+    }
+  });
+
+  it("every transaction_ids entry must be a non-empty string", async () => {
+    await append(evLine({ transaction_ids: ["tx", ""] }));
+    await failsClean(
+      await run(),
+      /transaction_ids\[1\] is not a non-empty string/,
+    );
+    await rm(traceFile);
+    await append(evLine({ transaction_ids: [7] }));
+    await failsClean(
+      await run(),
+      /transaction_ids\[0\] is not a non-empty string/,
+    );
+  });
+});
+
+describe("evidence pack, a raced output directory", () => {
+  beforeEach(async () => {
+    await append(evLine());
+  });
+
+  const swap = (outside: string) => async (): Promise<void> => {
+    await rename(
+      path.join(root, ".hexagen", "sub"),
+      path.join(root, ".hexagen", "sub-moved"),
+    );
+    await symlink(outside, path.join(root, ".hexagen", "sub"));
+  };
+
+  it("refuses an ancestor swapped for a symlink after the preflight", async () => {
+    const outside = await mkdtemp(path.join(tmpdir(), "evidence-outside-"));
+    dirs.push(outside);
+    const r = await run({
+      out: ".hexagen/sub/bundle.zip",
+      beforeWrite: swap(outside),
+    });
+    expect(r.exitCode).toBe(2);
+    expect(r.messages.join("\n")).toMatch(/moved while|resolves outside/);
+    expect(await readdir(outside)).toEqual([]);
+    expect(await exists(tipPath())).toBe(false);
+  });
+
+  it("refuses a directory swapped after the temp file was written", async () => {
+    const outside = await mkdtemp(path.join(tmpdir(), "evidence-outside-"));
+    dirs.push(outside);
+    const r = await run({
+      out: ".hexagen/sub/bundle.zip",
+      beforeLink: swap(outside),
+    });
+    expect(r.exitCode).toBe(2);
+    expect(await readdir(outside)).toEqual([]);
+    expect(await exists(tipPath())).toBe(false);
   });
 });
 

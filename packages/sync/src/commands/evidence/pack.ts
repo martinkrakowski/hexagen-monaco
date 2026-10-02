@@ -23,6 +23,7 @@ import {
 import { writeZipStore, type ZipEntry } from "../report/zip-store.js";
 import { realpathOfExistingAncestor } from "../shared/git-exclude.js";
 import { resolveSidecarOut } from "../shared/sidecar-out.js";
+import { parsePackGrant } from "./grant-file.js";
 import {
   checkLines,
   grantSignatureOk,
@@ -43,8 +44,10 @@ export interface EvidencePackOptions {
   readonly homeDir?: string;
   readonly now?: () => Date;
   /** Test seam: replaces the atomic write of `tip.json`. */
-  /** Test seam: runs just before the bundle is written. */
+  /** Test seam: runs after the output directory is validated, before the temp file is created. */
   readonly beforeWrite?: () => Promise<void>;
+  /** Test seam: runs after the temp bundle is written, before it is linked. */
+  readonly beforeLink?: () => Promise<void>;
   readonly writeTip?: (target: string, data: string) => Promise<void>;
 }
 
@@ -77,6 +80,29 @@ async function writeAtomic(target: string, data: string): Promise<void> {
     await fs.unlink(tmp).catch(() => undefined);
     throw error;
   }
+}
+
+/**
+ * The real path of `dir`, which must lie under the real `<root>/.hexagen/` and
+ * not under its `evidence/` directory. Throws otherwise.
+ */
+async function realOutDirInsideSidecar(
+  root: string,
+  dir: string,
+): Promise<string> {
+  const realDir = await fs.realpath(dir);
+  const sidecar = await fs.realpath(path.join(root, ".hexagen"));
+  const inside = (base: string, target: string): boolean => {
+    const rel = path.relative(base, target);
+    return rel === "" || !(rel.startsWith("..") || path.isAbsolute(rel));
+  };
+  if (!inside(sidecar, realDir)) {
+    throw new Error(`${dir} resolves outside ${sidecar}`);
+  }
+  if (inside(path.join(sidecar, "evidence"), realDir)) {
+    throw new Error(`${dir} resolves into the evidence directory`);
+  }
+  return realDir;
 }
 
 function describe(v: LineVerdict): string {
@@ -180,30 +206,23 @@ export async function runEvidencePack(
     } catch (error) {
       return usage(`cannot read grant ${file}: ${(error as Error).message}`);
     }
-    const g = parsed as Partial<PackGrant> | null;
-    if (
-      g === null ||
-      typeof g !== "object" ||
-      typeof g.id !== "string" ||
-      g.id.length === 0 ||
-      !Array.isArray(g.tools) ||
-      typeof g.expires_at !== "string"
-    ) {
-      return usage(
-        `grant ${file} is not a Grant (needs id, tools, expires_at)`,
-      );
+    const checked = parsePackGrant(parsed);
+    if (!checked.ok) {
+      grantProblems.push(`grant ${file}: ${checked.problem}`);
+      continue;
     }
+    const g = checked.grant;
     if (grantTexts.has(g.id)) {
       return usage(`grant id '${g.id}' is given twice`);
     }
     grantTexts.set(g.id, text);
-    if (!grantSignatureOk(g as PackGrant, keyHex)) {
+    if (!grantSignatureOk(g, keyHex)) {
       grantProblems.push(
         `grant '${g.id}' (${file}): signature does not verify with the engagement key`,
       );
       continue;
     }
-    grants.set(g.id, g as PackGrant);
+    grants.set(g.id, g);
   }
 
   // Read under the writer's lock so a half-finished append is never seen.
@@ -367,13 +386,40 @@ export async function runEvidencePack(
       name: "bundle.json",
       content: `${JSON.stringify(index, null, 2)}\n`,
     });
-    await fs.mkdir(path.dirname(out), { recursive: true });
+    const outDir = path.dirname(out);
+    await fs.mkdir(outDir, { recursive: true });
+    // The preflight above ran before anything was created; a directory in the
+    // chain may have been swapped for a symlink since. Re-resolve the real
+    // directory now, and again just before the link.
+    const realOutDir = await realOutDirInsideSidecar(root, outDir);
     await options.beforeWrite?.();
-    // Temp file, then a hard link: link fails with EEXIST rather than
-    // replacing, so a bundle that was already there is never overwritten.
-    const tmp = `${out}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+    // Temp file in the validated directory, then a hard link: link fails with
+    // EEXIST rather than replacing, so a bundle that was already there is never
+    // overwritten. The temp is checked to be the file we made before it is
+    // linked. Residual window: a swap between the final realpath check and the
+    // link syscall itself, which needs write access to the sidecar directory.
+    const tmp = path.join(
+      outDir,
+      `.${path.basename(out)}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`,
+    );
     try {
-      await fs.writeFile(tmp, writeZipStore(entries), { flag: "wx" });
+      const handle = await fs.open(tmp, "wx");
+      let tmpIno: number | bigint;
+      try {
+        await handle.writeFile(writeZipStore(entries));
+        tmpIno = (await handle.stat()).ino;
+      } finally {
+        await handle.close();
+      }
+      await options.beforeLink?.();
+      if ((await realOutDirInsideSidecar(root, outDir)) !== realOutDir) {
+        throw new Error(`${outDir} moved while the bundle was being written`);
+      }
+      if ((await fs.lstat(tmp)).ino !== tmpIno) {
+        throw new Error(
+          "the temporary bundle was replaced; refusing to link it",
+        );
+      }
       await fs.link(tmp, out);
     } finally {
       await fs.unlink(tmp).catch(() => undefined);

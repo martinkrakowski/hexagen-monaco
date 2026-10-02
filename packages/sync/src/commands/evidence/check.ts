@@ -110,6 +110,11 @@ function evidenceShapeReasons(value: Record<string, unknown>): string[] {
   }
   if (!Array.isArray(value.transaction_ids)) {
     reasons.push("transaction_ids is not an array");
+  } else {
+    value.transaction_ids.forEach((id, i) => {
+      if (!str(id))
+        reasons.push(`transaction_ids[${i}] is not a non-empty string`);
+    });
   }
   const calls = value.tool_calls;
   if (!Array.isArray(calls)) {

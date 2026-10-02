@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { GENESIS_PREV_HASH, lineHash } from "@hexagen/shared/node/trace-chain";
@@ -44,7 +46,7 @@ function input(over: Partial<TraceAppendInput> = {}): TraceAppendInput {
   };
 }
 
-async function lines(root: string): Promise<Record<string, unknown>[]> {
+async function readLines(root: string): Promise<Record<string, unknown>[]> {
   return (await readFile(tracePath(root), "utf8"))
     .trim()
     .split("\n")
@@ -67,7 +69,7 @@ describe("TraceWriteAdapter, no manifest (brownfield)", () => {
       ).success,
     ).toBe(true);
     expect((await adapter.appendLine(input())).success).toBe(true);
-    const l = await lines(root);
+    const l = await readLines(root);
     expect(l.map((x) => x.seq)).toEqual([0, 1, 2]);
     expect(l[0]?.prev_hash).toBe(GENESIS_PREV_HASH);
     expect(l[1]?.prev_hash).toBe(lineHash(l[0]));
@@ -129,7 +131,7 @@ describe("TraceWriteAdapter, manifest present (greenfield)", () => {
       reason: "r",
       time: "2026-10-01T10:00:00.000Z",
     });
-    const l = await lines(root);
+    const l = await readLines(root);
     expect(l.map((x) => x.seq)).toEqual([0, 1, 2]);
     expect(l[1]?.prev_hash).toBe(lineHash(l[0]));
     expect(l[2]).toHaveProperty("kind", "grant_missing");
@@ -167,4 +169,62 @@ describe("TraceWriteAdapter, manifest present (greenfield)", () => {
       code: "ENOENT",
     });
   });
+});
+
+describe("TraceWriteAdapter, one format per file", () => {
+  it("a chained file with a torn tail and a manifest present refuses, never appends plain", async () => {
+    const root = await tmp();
+    const adapter = new TraceWriteAdapter(root);
+    await adapter.appendLine(input());
+    await makeRepoMode(root);
+    await writeFile(tracePath(root), '{"seq":1,"pre', { flag: "a" });
+    const before = await readFile(tracePath(root), "utf8");
+    const r = await adapter.appendLine(input());
+    expect(r.success).toBe(false);
+    expect(
+      (
+        await adapter.appendGrantMissing({
+          tool: "t",
+          reason: "r",
+          time: "2026-10-01T10:00:00.000Z",
+        })
+      ).success,
+    ).toBe(false);
+    expect(await readFile(tracePath(root), "utf8")).toBe(before);
+  });
+
+  it("two writers racing a flipping manifest never mix formats", async () => {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const pkgDir = path.resolve(here, "..", "..", "..");
+    const child = path.join(here, "trace-write.child.ts");
+    for (let round = 0; round < 3; round++) {
+      const root = await tmp();
+      const run = (role: string, n: number): Promise<number> =>
+        new Promise((resolve, reject) => {
+          const p = spawn(
+            process.execPath,
+            ["--import", "tsx", child, root, role, String(n)],
+            { cwd: pkgDir, stdio: ["ignore", "ignore", "inherit"] },
+          );
+          p.on("error", reject);
+          p.on("exit", (code) => resolve(code ?? -1));
+        });
+      const codes = await Promise.all([
+        run("a", 25),
+        run("b", 25),
+        run("flipper", 60),
+      ]);
+      expect(codes).toEqual([0, 0, 0]);
+      const rows = (await readLines(root)) as Record<string, unknown>[];
+      expect(rows).toHaveLength(50);
+      const chained = rows.map((r) => "seq" in r);
+      expect(new Set(chained).size).toBe(1);
+      if (chained[0]) {
+        rows.forEach((r, i) => {
+          expect(r.seq).toBe(i);
+          if (i > 0) expect(r.prev_hash).toBe(lineHash(rows[i - 1]));
+        });
+      }
+    }
+  }, 120_000);
 });

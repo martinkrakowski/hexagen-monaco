@@ -193,11 +193,21 @@ test the grant-key resolver uses) means chained.
   breaking a stale one or releasing one's own, happens under a second `O_EXCL`
   file, `trace.jsonl.lock.break`, and re-checks that the file is the one judged
   stale (or still holds the releaser's token), so a late waiter or a holder that
-  outlived the age limit never removes a live lock. The lock is held across reading the last line, appending and fsync, so
-  concurrent writers cannot fork the chain. It refuses, never guesses, when the
-  last line is torn or the file is unchained, and never rewrites the file. A
-  brownfield trace always starts a new file at genesis; an older greenfield
-  file is neither read as a chain nor rewritten.
+  outlived the age limit never removes a live lock. An aged break file is
+  removed only after re-checking that it is still the file judged stale; the
+  few microseconds between that check and the unlink are not closed, and need a
+  crashed breaker plus a waiter taking the file in exactly that gap. The lock is
+  keyed on the trace's real path, so the writer and the pack lock the same file
+  through any alias. It is held across reading the last line, appending and
+  fsync, so concurrent writers cannot fork the chain.
+- The format is chosen inside that same lock hold, never before it, so a
+  manifest that appears or vanishes, or a writer caught mid-append, cannot mix
+  formats in one file. A new file starts at genesis; an existing chained file
+  continues; an existing unchained (greenfield) file stays plain, is never
+  converted or rewritten, and cannot be packed. To start a chained trace where
+  an unchained file exists, move that file aside first (rename it; the next
+  write creates a new chained file at genesis). A torn last line refuses every
+  append, in either format, until the file is moved aside or repaired.
 - `.hexagen/evidence/tip.json` (`{seq, hash, hmac}`) anchors the head: the
   `seq` and hash of the last line a pack accepted, HMAC'd with the engagement
   key. A chain that only looks backwards cannot see tail truncation or a file
@@ -207,7 +217,10 @@ test the grant-key resolver uses) means chained.
 HMACs use the engagement key (the grant-signing key resolved by
 `@hexagen/shared/node/grant-key`), over `hexagen-tip-v1\n<canonical {seq,hash}>`
 for the tip and `hexagen-bundle-v1\n<canonical index without hmac>` for the
-bundle. Limits: a tip protects only what a pack has already anchored. Deleting
+bundle. Limits: the bundle is linked into place from a temp file in the
+validated directory after re-resolving that directory's real path; a swap in
+the few microseconds between that check and the link, by someone who can
+already write in `.hexagen/`, is not closed. A tip protects only what a pack has already anchored. Deleting
 `tip.json` removes the anchor, and the next pack then passes on the chain
 checks alone. Restoring an older bundle's `tip.json`, after truncating the
 trace to that `seq`, also passes, so the anchor protects only against
