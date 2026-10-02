@@ -1,13 +1,44 @@
 /* eslint-disable no-console */
-import { mkdir, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { realpathSync } from "node:fs";
+import {
+  link,
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { Command } from "commander";
+import {
+  Slice,
+  isPathInSlice,
+  normalizeSlicePath,
+  type SlicePaths,
+} from "@hexagen/shared";
+import {
+  describeKeyMismatch,
+  isRepoMode,
+  readGrantKey,
+  resolveGrantKey,
+} from "@hexagen/shared/node/grant-key";
 import {
   buildGrant,
   deriveContextsFromPaths,
   expandContexts,
   type IssuedGrant,
 } from "./build.js";
+import {
+  GitExcludeError,
+  ensureExcluded,
+  excludeWouldChange,
+} from "../shared/git-exclude.js";
+import { isSameOrInside } from "../observe/same-path.js";
+import { resolveSidecarOut } from "../shared/sidecar-out.js";
+import { grantKeyCommander } from "./key-init.js";
 import { signGrantPayload } from "./sign.js";
 import { loadOrCreateSigningKey } from "./signing-key.js";
 import { findWorkspaceRoot } from "../shared/project-root.js";
@@ -30,17 +61,105 @@ interface IssueOptions {
   maxFiles?: string;
   workspaceRoot?: string;
   out?: string;
+  keyFile?: string;
+  engagement?: string;
+  /** Test seam; defaults to `os.homedir()`. */
+  homeDir?: string;
+  /** Brownfield: consent to the writes listed in the preflight. */
+  yes?: boolean;
+}
+
+/** Brownfield failures exit 2 (usage/precondition), distinct from repo mode's 1. */
+function failBrownfield(message: string): void {
+  console.error(message);
+  process.exitCode = 2;
+}
+
+async function loadSlice(workspaceRoot: string): Promise<Slice | undefined> {
+  let raw: string;
+  try {
+    raw = await readFile(
+      path.join(workspaceRoot, ".hexagen", "slice.json"),
+      "utf-8",
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+  return Slice.parse(JSON.parse(raw));
+}
+
+/** Real path of the git work tree containing `cwd`, or null outside git. */
+function gitToplevel(cwd: string): string | null {
+  try {
+    const top = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return top ? realpathSync.native(path.resolve(top)) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where to issue from. `findWorkspaceRoot` walks up to ANY parent manifest,
+ * so a client repo checked out beneath a monorepo would inherit its repo mode
+ * (and its key). The git toplevel is the repo boundary: when discovery lands
+ * outside it, the toplevel wins. A manifest at or below the toplevel (a HexaGen
+ * project inside a larger repo) stays the root. `--workspace-root` overrides.
+ */
+function discoverRoot(options: IssueOptions): string {
+  if (options.workspaceRoot) return path.resolve(options.workspaceRoot);
+  const cwd = process.cwd();
+  const discovered = findWorkspaceRoot(cwd) ?? cwd;
+  const top = gitToplevel(cwd);
+  if (top === null) return discovered;
+  try {
+    // `top` came from git (forward slashes, maybe another case or an 8.3 name
+    // on Windows); resolve both sides the same way before comparing.
+    const realTop = realpathSync.native(path.resolve(top));
+    const realDiscovered = realpathSync.native(path.resolve(discovered));
+    return isSameOrInside(realTop, realDiscovered) ? discovered : top;
+  } catch {
+    return top;
+  }
+}
+
+class GrantFileExistsError extends Error {}
+
+/**
+ * Temp file, then a hard link to the final name: `link` fails with EEXIST
+ * instead of replacing, so an existing grant is never overwritten, and a
+ * reader never sees a half-written grant.
+ */
+async function writeGrantFileExclusive(
+  target: string,
+  text: string,
+): Promise<void> {
+  await mkdir(path.dirname(target), { recursive: true });
+  const tmp = `${target}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+  const handle = await open(tmp, "wx");
+  try {
+    try {
+      await handle.writeFile(text, "utf-8");
+    } finally {
+      await handle.close();
+    }
+    await link(tmp, target);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new GrantFileExistsError(`${target} already exists`);
+    }
+    throw error;
+  } finally {
+    await unlink(tmp).catch(() => undefined);
+  }
 }
 
 export async function issueGrantCommand(options: IssueOptions): Promise<void> {
-  // Discovered root, not raw cwd — invoked from a package subdirectory,
-  // cwd would separate the manifest lookup and the signing key from the
-  // workspace the verifier actually reads (see Qodo "Nested-directory
-  // issuance uses the wrong key"). `--workspace-root` still overrides this
-  // outright, same as before.
-  const workspaceRoot = options.workspaceRoot
-    ? path.resolve(options.workspaceRoot)
-    : (findWorkspaceRoot(process.cwd()) ?? process.cwd());
+  const workspaceRoot = discoverRoot(options);
 
   if (options.mode !== "write" && options.mode !== "propose") {
     console.error(`--mode must be 'write' or 'propose', got '${options.mode}'`);
@@ -48,7 +167,36 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
     return;
   }
 
-  const paths = options.paths ? splitCsv(options.paths) : [];
+  const brownfield = !isRepoMode(workspaceRoot);
+  let slice: Slice | undefined;
+  if (brownfield) {
+    try {
+      slice = await loadSlice(workspaceRoot);
+    } catch (error) {
+      failBrownfield(
+        `.hexagen/slice.json is not a valid slice: ${(error as Error).message}`,
+      );
+      return;
+    }
+    if (options.contexts) {
+      failBrownfield(
+        "--contexts needs a manifest; there is none here. Pass --paths (or rely on the slice's paths).",
+      );
+      return;
+    }
+    if (slice && !options.paths && slice.paths.length === 0) {
+      failBrownfield(
+        "The slice names no paths, so a grant from it would deny everything. Edit .hexagen/slice.json or pass --paths.",
+      );
+      return;
+    }
+  }
+
+  const paths = options.paths
+    ? splitCsv(options.paths)
+    : brownfield && slice
+      ? [...slice.paths]
+      : [];
   const contexts = options.contexts ? splitCsv(options.contexts) : [];
   const tools = splitCsv(options.tools);
 
@@ -98,9 +246,179 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
     return;
   }
 
+  const engagementId = options.engagement ?? slice?.id;
+  let brownfieldKey:
+    | { keyHex: string; path: string; fingerprint: string }
+    | undefined;
+  let brownfieldOut: string | undefined;
+  let applyExclude = false;
+  if (brownfield) {
+    if (engagementId === undefined) {
+      failBrownfield(
+        "No manifest and no .hexagen/slice.json: name the engagement with --engagement <id> (or create the slice first).",
+      );
+      return;
+    }
+    for (const entry of paths) {
+      const normalized = normalizeSlicePath(entry);
+      if (!normalized.ok) {
+        failBrownfield(
+          `--paths entry '${entry}' is malformed: ${normalized.reason}`,
+        );
+        return;
+      }
+      if (slice && !isPathInSlice(slice as SlicePaths, entry)) {
+        failBrownfield(
+          `--paths entry '${entry}' is outside the slice (or excluded by it)`,
+        );
+        return;
+      }
+    }
+    // Grants carry no excludes, so a directory entry would silently re-admit
+    // anything the slice excludes beneath it.
+    for (const entry of paths) {
+      const beneath = slice?.excludes.find(
+        (e) => e !== entry && e.startsWith(entry) && entry.endsWith("/"),
+      );
+      if (beneath !== undefined) {
+        failBrownfield(
+          `--paths entry '${entry}' contains the slice exclude '${beneath}'; a grant carries no excludes, so issue narrower paths that avoid it.`,
+        );
+        return;
+      }
+    }
+    if (options.out !== undefined) {
+      const target = await resolveSidecarOut(workspaceRoot, options.out).catch(
+        () => null,
+      );
+      if (!target) {
+        failBrownfield(
+          `--out must name a file under ${path.join(workspaceRoot, ".hexagen")}${path.sep}; got "${options.out}"`,
+        );
+        return;
+      }
+      if (
+        await lstat(target).then(
+          () => true,
+          () => false,
+        )
+      ) {
+        console.error(
+          `[grant issue] ${target} already exists; refusing to overwrite a grant.`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+      brownfieldOut = target;
+    }
+    const env = process.env;
+    const resolved = resolveGrantKey({
+      keyFile: options.keyFile,
+      env,
+      engagementId,
+      workspaceRoot,
+      homeDir: options.homeDir,
+    });
+    if (resolved.path === null) {
+      failBrownfield(`Cannot locate a signing key: ${resolved.problem}`);
+      return;
+    }
+    const read = readGrantKey(resolved.path);
+    if (!read.ok) {
+      failBrownfield(
+        `${read.problem}. Create one with: hexagen grant key init --engagement ${engagementId}`,
+      );
+      return;
+    }
+    brownfieldKey = {
+      keyHex: read.keyHex,
+      path: resolved.path,
+      fingerprint: read.fingerprint,
+    };
+    const engagementOverride =
+      options.engagement !== undefined &&
+      slice !== undefined &&
+      options.engagement !== slice.id;
+    if (options.keyFile || engagementOverride) {
+      // What the MCP server resolves without the flags (the slice's own id): a
+      // split here means it will deny this grant, so say so at issue time,
+      // with both engagement ids, paths and fingerprints.
+      const server = resolveGrantKey({
+        env,
+        engagementId: slice?.id,
+        workspaceRoot,
+        homeDir: options.homeDir,
+      });
+      if (server.path !== null) {
+        const mismatch = describeKeyMismatch(
+          `issuing (engagement ${engagementId})`,
+          resolved,
+          `server default (engagement ${slice?.id ?? "none"})`,
+          server,
+        );
+        if (mismatch) console.error(`[grant issue] warning: ${mismatch}`);
+      }
+    }
+    console.error(
+      `[grant issue] workspace root ${workspaceRoot}; key ${brownfieldKey.path}; fingerprint ${brownfieldKey.fingerprint}`,
+    );
+
+    // The sidecar dir stays out of `git status` via .git/info/exclude (never
+    // the client's .gitignore). List every write; --yes is required only when
+    // something will actually be written (the grant file or an exclude change).
+    let exclude: { file: string; changes: boolean };
+    try {
+      exclude = await excludeWouldChange(workspaceRoot, ".hexagen/");
+    } catch (error) {
+      failBrownfield(`[grant issue] ${(error as Error).message}`);
+      return;
+    }
+    const writes: string[] = [];
+    if (brownfieldOut) writes.push(`grant file: ${brownfieldOut}`);
+    if (exclude.changes) {
+      writes.push(`exclude file: ${exclude.file} (adds .hexagen/)`);
+    }
+    if (writes.length > 0) {
+      console.error(
+        `[grant issue] preflight, will write:\n${writes.map((w) => `  - ${w}`).join("\n")}`,
+      );
+      if (!options.yes) {
+        failBrownfield(
+          "[grant issue] nothing written; re-run with --yes to proceed.",
+        );
+        return;
+      }
+    }
+    applyExclude = exclude.changes;
+  }
+
   let keyHex: string;
   try {
-    const key = await loadOrCreateSigningKey(workspaceRoot);
+    const explicit =
+      !brownfield && (options.keyFile || process.env.HEXAGEN_GRANT_KEY_FILE)
+        ? resolveGrantKey({
+            keyFile: options.keyFile,
+            env: process.env,
+            workspaceRoot,
+          })
+        : undefined;
+    let key: { keyHex: string; created: boolean; path: string };
+    if (brownfieldKey) {
+      key = {
+        keyHex: brownfieldKey.keyHex,
+        created: false,
+        path: brownfieldKey.path,
+      };
+    } else if (explicit?.path) {
+      const read = readGrantKey(explicit.path);
+      if (!read.ok) throw new Error(read.problem);
+      key = { keyHex: read.keyHex, created: false, path: explicit.path };
+      console.error(
+        `[grant issue] workspace root ${workspaceRoot}; key ${explicit.path}; fingerprint ${read.fingerprint}`,
+      );
+    } else {
+      key = await loadOrCreateSigningKey(workspaceRoot);
+    }
     keyHex = key.keyHex;
     if (key.created) {
       console.error(
@@ -128,6 +446,7 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
         expiresIn: options.expiresIn,
         contexts: allContexts.length > 0 ? allContexts : undefined,
         maxFiles,
+        omitContexts: brownfield,
       },
       keyHex,
       signGrantPayload,
@@ -140,6 +459,37 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
   }
 
   const json = JSON.stringify(grant, null, 2);
+  if (brownfield) {
+    // Everything is validated and the grant is signed; only now touch the
+    // exclude file, and still before the grant file is written.
+    if (applyExclude) {
+      try {
+        await ensureExcluded(workspaceRoot, ".hexagen/");
+      } catch (error) {
+        failBrownfield(
+          `[grant issue] ${error instanceof GitExcludeError ? error.message : String(error)}`,
+        );
+        return;
+      }
+    }
+    if (brownfieldOut) {
+      try {
+        await writeGrantFileExclusive(brownfieldOut, `${json}\n`);
+      } catch (error) {
+        console.error(
+          `[grant issue] could not write ${brownfieldOut}: ${(error as Error).message}`,
+        );
+        process.exitCode = error instanceof GrantFileExistsError ? 1 : 2;
+        return;
+      }
+      console.error(
+        `[grant issue] wrote ${brownfieldOut} (id: ${grant.id}, expires: ${grant.expires_at})`,
+      );
+    } else {
+      console.log(json);
+    }
+    return;
+  }
   if (options.out) {
     const outPath = path.resolve(workspaceRoot, options.out);
     await mkdir(path.dirname(outPath), { recursive: true });
@@ -155,6 +505,8 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
 export const grantCommander = new Command("grant").description(
   "Issue and inspect Grant objects (docs/kernel/GRANT.md)",
 );
+
+grantCommander.addCommand(grantKeyCommander);
 
 grantCommander
   .command("issue")
@@ -191,7 +543,22 @@ grantCommander
     "--workspace-root <path>",
     "Workspace root to resolve .hexagen/grant-signing.key and manifest.yaml against (default: nearest project/workspace root found by walking up from cwd)",
   )
-  .option("--out <file>", "Write the signed grant JSON here instead of stdout")
+  .option(
+    "--key-file <path>",
+    "Signing key file (overrides HEXAGEN_GRANT_KEY_FILE and ~/.hexagen/keys/<engagement>.key)",
+  )
+  .option(
+    "--engagement <id>",
+    "Brownfield: engagement id naming ~/.hexagen/keys/<id>.key (default: the id in .hexagen/slice.json)",
+  )
+  .option(
+    "--yes",
+    "Brownfield: required when the preflight lists a write (the --out grant file or a .git/info/exclude change)",
+  )
+  .option(
+    "--out <file>",
+    "Write the signed grant JSON here instead of stdout (brownfield: must be a new file under <root>/.hexagen/)",
+  )
   .action(async (options: IssueOptions) => {
     await issueGrantCommand(options);
   });

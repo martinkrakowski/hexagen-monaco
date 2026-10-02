@@ -117,6 +117,45 @@ describe("buildGrant", () => {
     assert.match(grant.signature, /^sig\(deadbeef:\d+\)$/);
   });
 
+  it("omitContexts leaves the contexts key off the grant and signs without it", async () => {
+    const sign = (payload: string) => payload;
+    const grant = await buildGrant(
+      {
+        principal: "martin",
+        agent: "a",
+        paths: ["src/"],
+        tools: ["write_file"],
+        mode: "write",
+        expiresIn: "1h",
+        omitContexts: true,
+      },
+      "deadbeef",
+      sign,
+    );
+    assert.equal("contexts" in grant, false);
+    assert.equal(JSON.parse(grant.signature).contexts, undefined);
+    assert.equal(grant.signature.includes("contexts"), false);
+  });
+
+  it("omitContexts never injects .architecture/, even when contexts were passed", async () => {
+    const grant = await buildGrant(
+      {
+        principal: "martin",
+        agent: "a",
+        paths: ["src/"],
+        tools: ["write_file"],
+        mode: "write",
+        expiresIn: "1h",
+        contexts: ["billing"],
+        omitContexts: true,
+      },
+      "deadbeef",
+      (payload) => payload,
+    );
+    assert.equal("contexts" in grant, false);
+    assert.deepEqual(grant.paths, ["src/"]);
+  });
+
   it("merges --paths with context-derived paths and de-duplicates", async () => {
     const grant = await buildGrant(
       {

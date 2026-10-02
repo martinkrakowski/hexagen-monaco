@@ -68,12 +68,63 @@ npx hexagen grant issue \
   --out .hexagen/grants/<id>.json
 ```
 
-Signs with the HMAC-SHA256 key at `.hexagen/grant-signing.key` (created on
-first use if missing, with a `.gitignore` entry added for it — never commit
-it; the key must be a full 32-byte hex value, so a hand-edited or truncated
-key file is rejected rather than silently used). `--contexts
-<name[,name...]>` is a monaco-only convenience: it looks each name up in
-`manifest.yaml` and expands it to `packages/<name>/`, appended to `--paths`.
+Signs with an HMAC-SHA256 key. Which key, and where it lives, depends on the
+mode, and `hexagen_accept_transaction`'s server resolves it the same way
+(one shared resolver), in this order:
+
+1. `--key-file <path>`
+2. `HEXAGEN_GRANT_KEY_FILE`
+3. **Repo mode** (`.architecture/manifest.yaml` exists): `.hexagen/grant-signing.key`,
+   created on first use if missing, with a `.gitignore` entry added for it.
+   Never commit it. **Brownfield** (no manifest, a client repo you do not
+   control): `~/.hexagen/keys/<engagement>.key`, never inside the repo. There
+   is no fallback to an in-repo key.
+
+The key must be a full 32-byte hex value, so a hand-edited or truncated key
+file is rejected by the issuer and denied by the server rather than silently
+used. Keys are shown by path and
+fingerprint (first 16 hex chars of the SHA-256 of the key bytes), never
+printed.
+
+#### Brownfield: `grant key init` and `--engagement`
+
+```bash
+npx hexagen grant key init --engagement acme-q3 [--key-file <path>]
+```
+
+The only command that mints a key outside repo mode. It writes 32 random bytes
+as hex at mode 0600 in `~/.hexagen/keys/` (0700, tightened if it was loose),
+refuses to overwrite an existing key (exit 1), and accepts engagement ids
+matching `^[A-Za-z0-9._-]{1,64}$` with no `..`. `grant issue` in a repo with no
+manifest never mints and never edits `.gitignore`:
+
+- The engagement id is `--engagement <id>`, or the `id` of a valid
+  `.hexagen/slice.json`. Without either, exit 2.
+- `--paths` defaults to the slice's paths; every entry must be a valid slice
+  path inside the slice, and no slice exclude may sit beneath a directory entry
+  (grants carry no excludes, so issue narrower paths; exit 2). `--contexts` is
+  refused (exit 2), and the grant omits `contexts`.
+- The root is the git toplevel of the current directory when the discovered
+  manifest root lies outside it, so a client repo nested under a directory with
+  a manifest is still brownfield. A manifest at or below the toplevel keeps repo
+  mode. `--workspace-root` overrides both.
+- `--out` must be a new file under `<root>/.hexagen/` (symlink escapes are
+  refused, exit 2; an existing file is never overwritten, exit 1) and is written
+  via a temp file plus a hard link.
+- `.hexagen/` is added to `.git/info/exclude`. When a write is pending (the
+  `--out` file or an exclude change) the preflight lists it and `--yes` is
+  required; otherwise exit 2 without writing. With nothing to write, `--yes`
+  is not needed.
+- It prints the workspace root, key path and fingerprint on stderr. If
+  `--key-file` points somewhere the server would not look by default, it warns
+  with both paths and fingerprints (likewise when `--engagement` differs from the
+  slice's id). The grant is validated and signed before `.git/info/exclude` is
+  touched. The MCP server takes `--key-file` and
+  `--engagement` too, and logs the same line at startup.
+
+`--contexts <name[,name...]>` is a monaco-only convenience (repo mode): it
+looks each name up in `manifest.yaml` and expands it to `packages/<name>/`,
+appended to `--paths`.
 
 `hexagen_accept_transaction`'s enforcement (`checkMutationAgainstGrant`)
 requires `grant.contexts` to independently name every context a mutation

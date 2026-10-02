@@ -130,6 +130,11 @@ async function issueSignedGrant(
   overrides: Partial<Grant> = {},
 ): Promise<Grant> {
   const keyHex = randomBytes(32).toString("hex");
+  await mkdir(path.join(workspaceRoot, ".architecture"), { recursive: true });
+  await writeFile(
+    path.join(workspaceRoot, ".architecture", "manifest.yaml"),
+    "bounded_contexts: []\n",
+  );
   await mkdir(path.join(workspaceRoot, ".hexagen"), { recursive: true });
   await writeFile(
     path.join(workspaceRoot, ".hexagen", "grant-signing.key"),

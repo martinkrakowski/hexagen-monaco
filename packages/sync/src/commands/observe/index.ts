@@ -13,9 +13,9 @@ import {
 import {
   ensureExcluded,
   GitExcludeError,
-  realpathOfExistingAncestor,
   resolveExcludeFile,
 } from "../shared/git-exclude.js";
+import { resolveSidecarOut as resolveOut } from "../shared/sidecar-out.js";
 import { globToRegExp } from "../shared/glob.js";
 import { parseIgnoreLine, verdict, type IgnoreRule } from "../shared/ignore.js";
 import { samePath } from "./same-path.js";
@@ -597,25 +597,6 @@ export interface RunObserveResult {
   stdout?: string;
   /** Preflight and error lines, in order, for stderr. */
   messages: string[];
-}
-
-/**
- * Resolve `--out` against the root and require it to land strictly under
- * `<root>/.hexagen/`, including through symlinks. Returns the absolute path.
- */
-async function resolveOut(root: string, out: string): Promise<string | null> {
-  if (out.endsWith("/") || out.endsWith(path.sep)) return null;
-  const abs = path.resolve(root, out);
-  const sidecar = path.join(root, ".hexagen");
-  const rel = path.relative(sidecar, abs);
-  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) return null;
-  const realRoot = await fs.realpath(root);
-  const realTarget = await realpathOfExistingAncestor(abs);
-  const realRel = path.relative(path.join(realRoot, ".hexagen"), realTarget);
-  if (realRel === "" || realRel.startsWith("..") || path.isAbsolute(realRel)) {
-    return null;
-  }
-  return abs;
 }
 
 /** Why a path is not a usable `.hexagen` directory, or null when it is fine. */

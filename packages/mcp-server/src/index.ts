@@ -48,7 +48,10 @@ import { SyncEngineAdapter } from "./infrastructure/adapters/sync-engine.adapter
 import { InMemoryEventBusAdapter } from "./infrastructure/adapters/in-memory-event-bus.adapter.js";
 import { OpenAIManifestGenerationAdapter } from "./infrastructure/adapters/manifest-generation.adapter.js";
 import { ReportGovernanceAdapter } from "./infrastructure/adapters/report-governance.adapter.js";
-import { GrantSignatureAdapter } from "./infrastructure/adapters/grant-signature.adapter.js";
+import {
+  GrantSignatureAdapter,
+  type GrantSignatureOptions,
+} from "./infrastructure/adapters/grant-signature.adapter.js";
 import { TraceWriteAdapter } from "./infrastructure/adapters/trace-write.adapter.js";
 
 function envOptional(name: string): string | undefined {
@@ -73,6 +76,7 @@ export interface MCPCompositionRoot {
 
 export function createDefaultMCPCompositionRoot(
   workspaceRoot: string = process.cwd(),
+  grantKeyOptions: GrantSignatureOptions = {},
 ): MCPCompositionRoot {
   const syncEngineAdapter = new SyncEngineAdapter(workspaceRoot);
   const manifestWritePort = new ManifestWriteAdapter(workspaceRoot);
@@ -103,7 +107,10 @@ export function createDefaultMCPCompositionRoot(
     transactionManagerPort: new InMemoryTransactionManager(),
     manifestGenerationPort,
     traceWritePort: new TraceWriteAdapter(workspaceRoot),
-    grantSignaturePort: new GrantSignatureAdapter(workspaceRoot),
+    grantSignaturePort: new GrantSignatureAdapter(
+      workspaceRoot,
+      grantKeyOptions,
+    ),
   };
 }
 
@@ -226,6 +233,8 @@ export async function startMCPServer(root: MCPCompositionRoot): Promise<void> {
 
 export async function startDefaultMCPServer(
   workspaceRoot: string = process.cwd(),
+  grantKeyOptions: GrantSignatureOptions = {},
 ): Promise<void> {
-  await startMCPServer(createDefaultMCPCompositionRoot(workspaceRoot));
+  const root = createDefaultMCPCompositionRoot(workspaceRoot, grantKeyOptions);
+  await startMCPServer(root);
 }

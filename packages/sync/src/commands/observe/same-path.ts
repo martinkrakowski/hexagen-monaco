@@ -18,3 +18,19 @@ export function samePath(
 ): boolean {
   return canonical(a, platform) === canonical(b, platform);
 }
+
+/**
+ * True when `child` is `parent` itself or lies beneath it, judged on the same
+ * canonical text as `samePath` (separators, case on win32, trailing slashes).
+ * Both inputs must already be resolved with `fs.realpath.native`. Pure, so a
+ * Windows decision can be tested on any OS.
+ */
+export function isSameOrInside(
+  parent: string,
+  child: string,
+  platform: string = process.platform,
+): boolean {
+  const p = canonical(parent, platform);
+  const c = canonical(child, platform);
+  return c === p || c.startsWith(p.endsWith("/") ? p : `${p}/`);
+}

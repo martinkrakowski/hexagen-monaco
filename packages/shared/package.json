@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./node/grant-key": {
+      "types": "./dist/node/grant-key.d.ts",
+      "default": "./dist/node/grant-key.js"
     }
   },
   "types": "dist/index.d.ts",

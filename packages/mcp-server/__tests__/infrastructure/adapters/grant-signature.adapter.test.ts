@@ -18,9 +18,9 @@ import {
 import { GrantSignatureAdapter } from "../../../src/infrastructure/adapters/grant-signature.adapter.js";
 
 const TRUSTED_KEY_HEX =
-  "a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff";
+  "a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00";
 const OTHER_KEY_HEX =
-  "ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff";
+  "ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00";
 
 function baseGrant(overrides: Partial<Grant> = {}): Grant {
   return {
@@ -50,6 +50,12 @@ async function withTrustedKey<T>(
     path.join(os.tmpdir(), "grant-signature-test-"),
   );
   try {
+    // Repo mode: a manifest makes the in-repo key path the trust root.
+    await fs.mkdir(path.join(tmpDir, ".architecture"), { recursive: true });
+    await fs.writeFile(
+      path.join(tmpDir, ".architecture", "manifest.yaml"),
+      "bounded_contexts: []\n",
+    );
     if (keyHex !== null) {
       const dir = path.join(tmpDir, ".hexagen");
       await fs.mkdir(dir, { recursive: true });
@@ -121,6 +127,28 @@ describe("GrantSignatureAdapter", () => {
       const signed = { ...grant, signature: signWith(TRUSTED_KEY_HEX, grant) };
       const result = await new GrantSignatureAdapter(root).verify(signed);
       assert.deepEqual(result, { success: true, value: false });
+    });
+  });
+
+  it("fails closed on a weak key (not 64 hex chars), even when the signature matches it", async () => {
+    for (const weak of ["00", "a1b2c3d4e5f6"]) {
+      await withTrustedKey(weak, async (root) => {
+        const grant = baseGrant();
+        const signed = { ...grant, signature: signWith(weak, grant) };
+        const result = await new GrantSignatureAdapter(root).verify(signed);
+        assert.deepEqual(result, { success: true, value: false });
+      });
+    }
+  });
+
+  it("still verifies a full-strength key", async () => {
+    await withTrustedKey("ab".repeat(32), async (root) => {
+      const grant = baseGrant();
+      const signed = { ...grant, signature: signWith("ab".repeat(32), grant) };
+      assert.deepEqual(await new GrantSignatureAdapter(root).verify(signed), {
+        success: true,
+        value: true,
+      });
     });
   });
 });
