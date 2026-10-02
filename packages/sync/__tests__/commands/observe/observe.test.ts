@@ -157,18 +157,12 @@ describe("hexagen observe", () => {
     expect(JSON.stringify(report)).not.toMatch(/node_modules|vendor/);
   });
 
-  it("validates against the observed schema, with edges and unresolved not collected", async () => {
+  it("validates against the observed schema, with edges and unresolved collected", async () => {
     const root = await messyRepo();
     const report = await observe({ root });
     expect(ObservedReport.safeParse(report).success).toBe(true);
-    expect(report.edges).toEqual({
-      collected: false,
-      reason: "import pass not run (BW4b)",
-    });
-    expect(report.unresolved).toEqual({
-      collected: false,
-      reason: "import pass not run (BW4b)",
-    });
+    expect(report.edges.collected).toBe(true);
+    expect(report.unresolved.collected).toBe(true);
     expect(report.limits.truncated).toBe(false);
   });
 

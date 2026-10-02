@@ -177,8 +177,16 @@ npx hexagen observe --dont-touch src/legacy/ vendor-patches/ # report-only
   walk. A tripped cap marks `packages`, `languages`, `build` and `generated` as
   `collected: false` with the reason, and sets `limits.truncated`.
 - The output validates against `ObservedReport` (`docs/kernel/observed.schema.json`)
-  and has no `type`, layer, plane or context key. `edges` and `unresolved` are
-  `collected: false` ("import pass not run (BW4b)") until the import pass lands.
+  and has no `type`, layer, plane or context key.
+- `--max-import-files <n>` (default 20000: the pass refuses to run when there
+  are more than `n` JS/TS files), `--max-import-bytes <n>` (default 268435456)
+  and `--max-import-ms <n>` (default 30000) cap the import pass. It has its own
+  clock, started when it begins, and runs after `generated` is collected, so it
+  cannot use up the time `--max-ms` gives the walk and `generated`. A tripped
+  cap sets `edges` and `unresolved` to `collected: false` with the reason, and
+  sets `limits.truncated`; the other sections keep what they collected. If the
+  walk itself was truncated, the pass does not run and both sections carry the
+  walk's reason.
 
 What it reads:
 
@@ -188,6 +196,69 @@ What it reads:
   `.gitignore` files (not `info/exclude` or `core.excludesFile`). A path that
   fails the slice-path rules (a backslash or control character) is skipped
   with a note.
+- **Import pass (`edges`, `unresolved`).** A lexical scan of `.ts .tsx .mts
+.cts .js .jsx .mjs .cjs` files from the same walk. It is a tokenizer, not a
+  parser, and never uses ts-morph or the TypeScript compiler API. It reads
+  `import … from 'x'`, `import 'x'`, `export … from 'x'`, `import('x')`,
+  `require('x')` (also `require?.('x')` and `(require)('x')`) and
+  `import x = require('x')`; comments, strings and
+  template literals (including `${…}` contents) are skipped. Source files and
+  tsconfigs are opened without following a symlink in the last path component
+  (`O_NOFOLLOW`; on Windows an `lstat` check instead), and the size limit and the
+  read both use the opened handle. Bytes read from tsconfigs count toward
+  `--max-import-bytes`, and the time cap is checked while they load. Only files
+  up to
+  1 MiB are read. A larger or unreadable file is skipped, noted in
+  `limits.reasons` (the notes are capped at 50), and given its own `unresolved`
+  row, so its missing edges never read as clean. The scan is linear in the file
+  size. Known limits: JSX text with an apostrophe opens a string that ends at the
+  line end; a regex literal right after `)` (`if (x) /re/.test(y)`) is read as
+  division, so a specifier-shaped string inside it can appear as a phantom
+  import; a wrong regex or string guess can swallow a backtick and misread the
+  template state until the next one; and a `/` after `>` starts a regex (so
+  `x => /re/.test(x)` works) but after `<` it does not (`</p>`); a postfix
+  `++`/`--` followed by an unbalanced `[` in a divisor string can make the line
+  guard hide a later quote-bearing regex on the same line
+  (`x = i++ / "["; y = /it's/.test(s);`); a block statement after a
+  semicolon-less non-literal `require(x)` (ASI only) is dropped. A class method named `require` or `import`
+  (`require(id) {}`) is not reported.
+  - **Resolution order, per specifier:** (1) a relative specifier (`./`, `../`)
+    against the walked files: the exact file, then `.js`→`.ts/.tsx`
+    (`.jsx`→`.tsx`, `.mjs`→`.mts`, `.cjs`→`.cts`), then each extension, then
+    `/index.*` (a trailing slash, `.` and `..` name a directory and match only
+    its `index.*`; `C:/x` and `C:\x` are `outside-repo`; `.\x` is `not-found`); (2) a workspace package name, exactly as declared including
+    scope, mapped to that package's root (`"."` for the root package); (3) the
+    nearest `tsconfig.json` at or above the file, within the repo:
+    `compilerOptions.paths` (longest matching prefix wins) and `baseUrl`,
+    following `extends` only to repo-relative files, at most 5 levels past the
+    nearest file, with a note on a cycle, an unreadable or over-1-MiB file or an
+    `extends` that leaves the repo; for an `extends` array only the last entry
+    is followed (noted), not TypeScript's merge of all of them;
+    (4) a `#` specifier (package `imports`). A tsconfig further up the tree is
+    not consulted when the nearest one has no `paths`/`baseUrl`.
+  - **`edges[]`** are `{from, to, specifier}` with `to` a file or a package
+    root, deduplicated.
+  - **`unresolved[]`** are `{from, specifier, reason}`. Reasons:
+    `not-found` (a relative or alias target that is not in the walk),
+    `exports-subpath` (`@scope/pkg/sub`, when no tsconfig `paths` alias matches it;
+    `exports` maps are not read),
+    `non-literal` (`import(x)`, `require(a + b)`, and an escaped or empty static
+    specifier such as `import '\u0061'`; recorded as `import(<non-literal>)`,
+    `require(<non-literal>)`, `import <non-literal>` or `export <non-literal>`), `outside-repo` (the
+    target leaves the repo root, or is an absolute or drive path),
+    `package-imports` (a `#` specifier) and `not-scanned` (the file itself was
+    skipped: the specifier reads `<not scanned: larger than 1 MiB>` or
+    `<not scanned: unreadable>`).
+  - **External specifiers** (node builtins, `node:` URLs, dependencies) are
+    neither edges nor unresolved. They are counted in one note in
+    `limits.reasons`.
+  - **`edgesComplete`.** `edges.unreadLanguages` lists the file extension of
+    every counted language the pass does not read (`go`, `py`, `rs`, `vue`, …).
+    These are extensions, whereas `languages[].name` holds display names
+    (`Go`, `Python`); a consumer must join on the extension, not the name.
+    A non-empty list makes `edgesComplete(edges)` false, so an empty edge list
+    for such a repo never reads as a clean bill. Consumers must call
+    `edgesComplete`, never read `collected` alone.
 - **Metadata files** (`package.json`, `pnpm-workspace.yaml`, `.gitattributes`,
   `CODEOWNERS`) are never read through a symlink; a link is noted and skipped.
 - **Packages.** Every `package.json` the walk reaches is a package: a repo with no
