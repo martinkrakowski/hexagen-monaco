@@ -37,7 +37,7 @@ function gitToplevel(cwd: string): string | null {
 }
 
 /**
- * Where to issue from. `findWorkspaceRoot` walks up to ANY parent manifest,
+ * Which workspace root the grant commands (issue, show, check) work from. `findWorkspaceRoot` walks up to ANY parent manifest,
  * so a client repo checked out beneath a monorepo would inherit its repo mode
  * (and its key). The git toplevel is the repo boundary: when discovery lands
  * outside it, the toplevel wins. A manifest at or below the toplevel (a HexaGen

@@ -20,13 +20,15 @@ async function tmp(prefix: string): Promise<string> {
 let out: string[];
 beforeEach(() => {
   out = [];
+  // A sentinel: a command that forgets to set its exit code must not pass as 0.
+  process.exitCode = 99;
   vi.spyOn(console, "log").mockImplementation((...a) => {
     out.push(a.join(" "));
   });
   vi.spyOn(console, "error").mockImplementation((...a) => {
     out.push(a.join(" "));
   });
-  process.exitCode = 0;
+  process.exitCode = 99;
 });
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -194,8 +196,9 @@ describe("grant show", () => {
     await show(f);
     expect(process.exitCode).toBe(0);
     expect(text()).toContain("revoked_at");
-    expect(text()).toContain("2026-10-01T10:00:00Z");
-    expect(text()).toMatch(/revoked/i);
+    expect(text()).toContain(
+      "window: Grant 'g-1' was revoked at 2026-10-01T10:00:00Z",
+    );
     out.length = 0;
     const raw = JSON.parse(await readFile(f.grantFile, "utf-8"));
     delete raw.revoked_at;
@@ -231,6 +234,23 @@ describe("grant show", () => {
     expect(process.exitCode).toBe(2);
     process.exitCode = 0;
     await writeFile(f.grantFile, JSON.stringify({ id: "x" }));
+    await show(f);
+    expect(process.exitCode).toBe(2);
+  });
+
+  it("an invalid slice.json exits 2 with the parse problem, like check", async () => {
+    const f = await fixture();
+    await writeFile(path.join(f.root, ".hexagen", "slice.json"), "{nope");
+    await show(f);
+    expect(process.exitCode).toBe(2);
+    expect(text()).toContain("slice.json is not a valid slice");
+  });
+
+  it("a grant with an extra key exits 2", async () => {
+    const f = await fixture();
+    const raw = JSON.parse(await readFile(f.grantFile, "utf-8"));
+    raw.extra = 1;
+    await writeFile(f.grantFile, JSON.stringify(raw));
     await show(f);
     expect(process.exitCode).toBe(2);
   });
@@ -374,6 +394,83 @@ describe("grant check (Field Kit form)", () => {
       grantFile: path.join(f.root, "missing.json"),
     });
     expect(process.exitCode).toBe(2);
+  });
+
+  it("denies when there is no slice.json in a client repo", async () => {
+    const f = await fixture();
+    await rm(path.join(f.root, ".hexagen", "slice.json"));
+    await check(f, "hexagen_propose_patch", ["src/a.ts"], {
+      engagement: "eng-1",
+    });
+    expect(process.exitCode).toBe(1);
+    expect(text()).toContain(
+      "no .hexagen/slice.json: in a client repo the slice bounds every write; create one first",
+    );
+    expect(text()).not.toContain("ALLOW");
+  });
+
+  it("an invalid slice.json exits 2", async () => {
+    const f = await fixture();
+    await writeFile(path.join(f.root, ".hexagen", "slice.json"), "{nope");
+    await check(f, "hexagen_propose_patch", ["src/a.ts"]);
+    expect(process.exitCode).toBe(2);
+  });
+
+  it("a grant with an extra key exits 2", async () => {
+    const f = await fixture();
+    const raw = JSON.parse(await readFile(f.grantFile, "utf-8"));
+    raw.extra = 1;
+    await writeFile(f.grantFile, JSON.stringify(raw));
+    await check(f, "hexagen_propose_patch", ["src/a.ts"]);
+    expect(process.exitCode).toBe(2);
+  });
+
+  it("repo mode (manifest present): skips the slice and uses the in-repo key", async () => {
+    const root = await tmp("sc-root-");
+    const home = await tmp("sc-home-");
+    await mkdir(path.join(root, ".architecture"), { recursive: true });
+    await writeFile(
+      path.join(root, ".architecture", "manifest.yaml"),
+      "x: 1\n",
+    );
+    await mkdir(path.join(root, ".hexagen"), { recursive: true });
+    const keyPath = path.join(root, ".hexagen", "grant-signing.key");
+    const keyHex = "ab".repeat(32);
+    await writeFile(keyPath, keyHex + "\n");
+    const grantFile = path.join(root, "g.json");
+    await writeFile(
+      grantFile,
+      JSON.stringify(signed(keyHex, { paths: ["lib/"] })),
+    );
+    const f = { root, home, keyHex, keyPath, grantFile };
+    await check(f, "hexagen_propose_patch", ["lib/x.ts"]);
+    expect(process.exitCode).toBe(0);
+    expect(text()).toContain(keyPath);
+    expect(text()).toContain("[repo]");
+    expect(text()).not.toContain("slice");
+    expect(text()).not.toContain(keyHex);
+  });
+
+  it("a tampered and expired grant reports the signature first", async () => {
+    const f = await fixture({ expires_at: "2026-10-01T11:00:00Z" });
+    const raw = JSON.parse(await readFile(f.grantFile, "utf-8"));
+    raw.paths = ["src/", "lib/"];
+    await writeFile(f.grantFile, JSON.stringify(raw));
+    await check(f, "hexagen_propose_patch", ["src/a.ts"]);
+    expect(process.exitCode).toBe(1);
+    expect(text()).toMatch(/signature/i);
+    expect(text()).not.toMatch(/expired/);
+  });
+
+  it("a short even-length hex signature is denied without throwing", async () => {
+    const f = await fixture();
+    const raw = JSON.parse(await readFile(f.grantFile, "utf-8"));
+    raw.signature = "abcd";
+    await writeFile(f.grantFile, JSON.stringify(raw));
+    await check(f, "hexagen_propose_patch", ["src/a.ts"]);
+    expect(process.exitCode).toBe(1);
+    expect(text()).toMatch(/signature/i);
+    expect(text()).toContain("DENY");
   });
 
   it("never prints key hex on any path of a full run", async () => {

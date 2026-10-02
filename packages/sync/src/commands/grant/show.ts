@@ -1,7 +1,8 @@
 /* eslint-disable no-console */
 import { checkGrantWindow } from "@hexagen/shared";
 import { describeResolvedKey } from "@hexagen/shared/node/grant-key";
-import { discoverWorkspaceRoot } from "./workspace.js";
+import { isRepoMode } from "@hexagen/shared/node/grant-key";
+import { discoverWorkspaceRoot, loadSlice } from "./workspace.js";
 import { loadGrantFile, verifyGrantSignature } from "./verify.js";
 
 export interface ShowOptions {
@@ -30,6 +31,17 @@ export async function grantShowCommand(options: ShowOptions): Promise<void> {
   }
   const { grant } = loaded;
   const workspaceRoot = discoverWorkspaceRoot(options.workspaceRoot);
+  if (!isRepoMode(workspaceRoot)) {
+    try {
+      await loadSlice(workspaceRoot);
+    } catch (error) {
+      console.error(
+        `.hexagen/slice.json is not a valid slice: ${(error as Error).message}`,
+      );
+      process.exitCode = 2;
+      return;
+    }
+  }
   const verification = verifyGrantSignature(grant, {
     workspaceRoot,
     keyFile: options.keyFile,

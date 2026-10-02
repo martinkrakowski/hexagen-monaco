@@ -1,14 +1,6 @@
 /* eslint-disable no-console */
 import { randomBytes } from "node:crypto";
-import {
-  link,
-  lstat,
-  mkdir,
-  open,
-  readFile,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
+import { link, lstat, mkdir, open, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Command } from "commander";
 import {

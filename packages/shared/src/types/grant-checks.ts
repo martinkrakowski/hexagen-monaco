@@ -1,8 +1,8 @@
 import { isPathInSlice } from "./brownfield/slice-path.js";
 
 /**
- * The scope and window checks of a Grant, shared by the MCP accept path and
- * the `hexagen grant check` CLI so the two cannot drift. Pure: no fs, no
+ * The scope and window checks of a Grant, shared by the MCP server's accept
+ * path and the `hexagen grant check` CLI so the two cannot drift. Pure: no fs, no
  * clock (the caller passes `now`), no signature handling.
  */
 
@@ -94,9 +94,9 @@ export function checkGrantWindow(grant: Grant, now: Date): GrantCheck {
 
 /**
  * Field Kit scope check: tools and paths only (no contexts, no manifest, no
- * `packages/<ctx>/` derivation). Like `checkMutationAgainstGrant`, it is
- * scope-only: it does not verify provenance or timing. The caller must run
- * `checkGrantSignature` and then `checkGrantWindow` first, and must touch
+ * `packages/<ctx>/` derivation). It is
+ * scope-only: it does not verify provenance or timing. The caller must verify
+ * the signature and then run `checkGrantWindow` first, and must touch
  * no write port if either denies. It must NOT run `checkGrantMode` on the
  * propose path: client grants are propose-only (`mode: "propose"`), so the
  * mode check would deny every patch.

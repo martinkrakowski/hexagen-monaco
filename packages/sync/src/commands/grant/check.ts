@@ -106,6 +106,12 @@ export async function grantCheckCommand(options: CheckOptions): Promise<void> {
   const write = checkWriteAgainstGrant(grant, { tool: options.tool, paths });
   if (!write.allowed) return finish(false, write.reason);
 
+  if (brownfield && !slice) {
+    return finish(
+      false,
+      "no .hexagen/slice.json: in a client repo the slice bounds every write; create one first",
+    );
+  }
   if (slice) {
     for (const entry of paths) {
       if (isPathInSlice(slice, entry)) continue;
@@ -121,12 +127,8 @@ export async function grantCheckCommand(options: CheckOptions): Promise<void> {
       );
     }
   }
-  const note =
-    brownfield && !slice
-      ? "; no .hexagen/slice.json here, so the slice was not checked"
-      : "";
   return finish(
     true,
-    `tool '${options.tool}' on ${paths.length} path(s) is within grant '${grant.id}'${slice ? " and the slice" : ""}${note}`,
+    `tool '${options.tool}' on ${paths.length} path(s) is within grant '${grant.id}'${slice ? " and the slice" : ""}`,
   );
 }

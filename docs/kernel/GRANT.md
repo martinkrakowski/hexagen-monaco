@@ -125,11 +125,12 @@ throwing past the check.
 **Signature verification.** This closes the "self-asserted grant" gap (a
 Qodo finding on PR #697) on the verification side: `hexagen_accept_
 transaction` now refuses anything not signed by `.hexagen/grant-signing.key`.
-`hexagen grant issue` (see "Commands" below) mints a signed grant. Before it
-existed, whoever tested or dogfooded this adapter signed a grant themselves with the same
-`canonicalGrantPayload` + HMAC-SHA256 scheme, using the key at
-`.hexagen/grant-signing.key` (create it — a single hex-encoded secret — if
-it doesn't exist; treat it like any other credential, never commit it).
+`hexagen grant issue` (see "Commands" below) mints a signed grant. The key
+is found by the shared resolver (`@hexagen/shared/node/grant-key`): `--key-file`,
+`HEXAGEN_GRANT_KEY_FILE`, then `~/.hexagen/keys/<engagement>.key` in a client
+repo (create it with `hexagen grant key init --engagement <id>`) or
+`.hexagen/grant-signing.key` in repo mode (created by `issue` on first use).
+Treat it like any other credential; never commit it.
 
 **The general rule:** any write — through any tool, MCP or otherwise —
 whose target path falls outside `grant.paths`, or whose tool identity falls
@@ -235,7 +236,8 @@ hexagen grant show <grant-file>
     .hexagen/slice.json or --engagement, or the in-repo key in repo mode).
     Prints the key path and fingerprint, never the key.
     Exit 0 the signature verifies; 1 it does not (the reason is printed);
-    2 bad input (unreadable file, not JSON, not a grant). The window is
+    2 bad input (unreadable file, not JSON, not a grant, an invalid
+    .hexagen/slice.json in a client repo). The window is
     informational here: a revoked or expired grant with a valid signature
     still exits 0. `check` enforces it.
 
@@ -246,14 +248,16 @@ hexagen grant check <grant-file> --tool <tool> --path <path>...
     max_files). It does not run checkGrantMode: client grants are
     propose-only. With no manifest at the workspace root (a client repo) it
     also denies a path outside slice.paths or inside slice.excludes, even if
-    the grant allows it; with no .hexagen/slice.json the slice is not checked
-    and the output says so. Prints ALLOW or DENY with the reason, the
+    the grant allows it. Prints ALLOW or DENY with the reason, the
     workspace root, the key path and the key fingerprint. When --key-file or
     --engagement was given and the signature fails, the reason also names the
     key the server would use without the override, with both fingerprints.
     Exit 0 allow; 1 deny (including a missing, weak or mismatched key);
     2 bad input (missing --tool or --path, a malformed path, an unreadable
-    grant file, a transaction id).
+    grant file, an invalid .hexagen/slice.json, a transaction id).
+    In a client repo with no .hexagen/slice.json, check denies (exit 1): the
+    slice bounds every write. Paths are judged by text only; the MCP propose
+    tool (BW10) also checks the on-disk spelling, which this CLI does not.
 
 hexagen grant check <grant-file> <transaction-id>
     The monaco form. NOT built: pending transactions live in the MCP

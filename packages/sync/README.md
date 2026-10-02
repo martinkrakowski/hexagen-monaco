@@ -168,7 +168,10 @@ print the workspace root, the key path and its fingerprint, never the key.
   and `max_files` (`checkWriteAgainstGrant`). It never runs the mode check, so
   a propose-only grant is allowed. In a client repo (no manifest) it also
   denies a path outside the slice or inside its excludes, even if the grant
-  allows it. Exit 0 allow, 1 deny, 2 bad input. A missing or weak key, or a
+  allows it, and with no `.hexagen/slice.json` it denies (the slice bounds every
+  write). Paths are judged by text only; the MCP propose tool also checks the
+  on-disk spelling. Exit 0 allow, 1 deny, 2 bad input (including an invalid
+  `.hexagen/slice.json`, which `show` also rejects). A missing or weak key, or a
   signature made under another key, is a denial; with `--key-file` or
   `--engagement` it names both keys' fingerprints.
 - The monaco form, `grant check <grant-file> <transaction-id>`, is not built:
