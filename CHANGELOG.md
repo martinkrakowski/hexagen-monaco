@@ -9,6 +9,66 @@ Release notes for the co-published `@hexagen-monaco/sync` and
 (F1 preflight, #432): a merged bump blocks deploys until it is published. That
 is the guard working, not a fault to bypass.
 
+## 0.13.0
+
+**The brownfield workbook CLI.** `hexagen` can now work inside an existing client
+repository without generating anything. It observes what the repo actually
+contains, lets you draw a slice and a contract over it, issues a signed grant
+that bounds an agent to that slice, records what the agent did in a
+hash-chained trace, and packs the result into one evidence bundle. Everything it
+writes lives in a `.hexagen/` sidecar that is git-excluded by default. Nothing
+reaches the client's history unless you stage it explicitly.
+
+**Minor, not patch.** New commands, plus the generated-project change below.
+Generated projects pin `^<engine version>`, so a project scaffolded by 0.12.x
+stays on 0.12.x until the pin is changed.
+
+### ⚠️ `hexagen sync` now emits a Prettier config
+
+Generated projects get a root Prettier config (#684), registered as a protected
+file, so a re-sync does not overwrite a hand-edited copy. Before this, a
+generated project had a `format` script but no config, so its first format run
+reformatted everything to Prettier's defaults. On an existing project, the next
+`sync` creates the file. A `sync --check` reports it as one `created` op until
+then. The emitted format glob no longer includes `md`.
+
+### New commands (`@hexagen-monaco/sync`)
+
+- **`hexagen observe`.** A read-only scan of a client repo. It records the
+  packages, the cross-package import edges and the unresolved imports, in the
+  repo's own names, with no invented layers or types (#727, #731). It writes
+  `.hexagen/observed.json` only with `--out … --yes`.
+- **`hexagen slice init|show|check` and `hexagen contract add-rule|check`.** These
+  draw the slice an engagement may touch and the `forbid` / `allow-only` rules
+  between path prefixes. `check` is fail-closed: an incomplete scan never
+  reports clean (#734).
+- **`hexagen grant key init|issue|show|check|revoke`.** These manage the
+  engagement key and HMAC-signed grants that bound an agent's tools, paths,
+  mode and expiry (#711, #729, #732, #735). The key stays under `~/.hexagen/keys/`,
+  outside the repo.
+- **`hexagen evidence pack`.** It verifies the hash-chained trace against the
+  grants and writes a signed evidence zip (#733).
+- **`hexagen workbook export`.** It writes the whole workbook (observed report,
+  slice, contract, grants, proposals and evidence) as one HMAC-indexed bundle
+  for the browser viewer. `--stage` is the only path into client history: it
+  stages the exact pinned bytes and never commits (#739).
+
+### Also in this release
+
+- **The MCP server's `hexagen_propose_patch`** (in the monorepo; the MCP
+  server is not published to npm). It writes propose-only patches
+  under `.hexagen/proposals/`, bounded by the grant and the slice. You apply
+  them yourself with `git apply -p1` (#738).
+- **The contract rule semantics moved into the shared kernel,** so the CLI and
+  the web viewer judge edges with one implementation (#743). Behaviour is
+  unchanged with one exception: a `knownViolations[].expires` value that is not
+  a real calendar date (for example `2026-02-30`) is now rejected when the
+  contract is parsed. `hexagen contract check` still exits 2 on it, as before;
+  the error now comes from the schema and still names the entry and the date.
+
+`@hexagen-monaco/arch-linter` is re-published at the same version for the
+co-release. It has no functional change in this release; only two findings documents were added to its tree.
+
 ## 0.12.1
 
 **Patch. `@hexagen-monaco/arch-linter` could not analyse a single file on
