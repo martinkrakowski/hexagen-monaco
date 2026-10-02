@@ -1,4 +1,3 @@
-/* eslint-disable turbo/no-undeclared-env-vars */
 // turbo/no-undeclared-env-vars: CI + HEXAGEN_NO_PROMPT are observed by
 // prompt-service.ts; this suite mutates them transiently and restores
 // originals. Not a turbo task input.

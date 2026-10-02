@@ -28,14 +28,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
  * flat config, `@eslint/js` + `typescript-eslint`) as a devDependency before it
  * can get one, which is a dependency change — deliberately NOT bundled into the
  * CI-wiring change that introduced this file. Shrink this list; do not grow it.
- *
- * @hexagen/sync is the published CLI, so it is the highest-value entry to close.
  */
 const UNLINTED = new Set([
   "@hexagen/arch-linter",
   "@hexagen/manifest-generation",
   "@hexagen/project-generation",
-  "@hexagen/sync",
   "@hexagen/template-engine",
 ]);
 
@@ -53,7 +50,9 @@ function readJson(path) {
  * to say so here rather than pass by accident.
  */
 function invokesEslint(script) {
-  return typeof script === "string" && /(^|[\s/&|;()])eslint(\s|$)/.test(script);
+  return (
+    typeof script === "string" && /(^|[\s/&|;()])eslint(\s|$)/.test(script)
+  );
 }
 
 function workspaceGlobs() {
@@ -119,9 +118,7 @@ if (unexpected.length > 0) {
   console.error(
     "   `turbo run lint` skips (or no-ops) these silently. Add a `lint`",
   );
-  console.error(
-    "   script that runs eslint,",
-  );
+  console.error("   script that runs eslint,");
   console.error(
     "   or add the package to UNLINTED in this file with a reason.",
   );
