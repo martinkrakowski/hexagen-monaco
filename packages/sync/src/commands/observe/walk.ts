@@ -1,0 +1,154 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { normalizeSlicePath } from "@hexagen/shared";
+import {
+  isIgnored,
+  parseIgnoreFile,
+  type ScopedRules,
+} from "../shared/ignore.js";
+
+/** Never descended into. `.hexagen` is observe's own output directory. */
+export const SKIP_DIRS: ReadonlySet<string> = new Set([
+  "node_modules",
+  "vendor",
+  ".git",
+  ".hg",
+  ".svn",
+  ".hexagen",
+  ".yarn",
+  "bower_components",
+  "jspm_packages",
+]);
+
+export interface WalkLimits {
+  readonly maxFiles: number;
+  readonly maxMs: number;
+  readonly now: () => number;
+  /** When the deadline started; defaults to the start of the walk. */
+  readonly start?: number;
+}
+
+export interface WalkResult {
+  /** Repo-relative POSIX paths of non-ignored regular files, sorted. */
+  readonly files: string[];
+  /** Repo-relative POSIX paths of walked directories (not the root), sorted. */
+  readonly dirs: string[];
+  /** Gitignored directories named `dist` or `build`, with a trailing `/`. */
+  readonly ignoredBuildDirs: string[];
+  /** Non-fatal observations (unreadable directories, skipped entries). */
+  readonly notes: string[];
+  /** The reason the walk stopped early, or null when it finished. */
+  readonly truncated: string | null;
+}
+
+export function timeCapReason(maxMs: number): string {
+  return `time cap reached (maxMs=${maxMs})`;
+}
+
+/**
+ * Walk `root` without following symlinks. Skips VCS, vendored and dependency
+ * directories, and honours the root `.gitignore` and any nested `.gitignore`.
+ * Ignored directories are not descended into.
+ */
+export async function walk(
+  root: string,
+  limits: WalkLimits,
+): Promise<WalkResult> {
+  const start = limits.start ?? limits.now();
+  const files: string[] = [];
+  const dirs: string[] = [];
+  const ignoredBuildDirs: string[] = [];
+  const notes: string[] = [];
+  let truncated: string | null = null;
+  let tick = 0;
+
+  const overTime = (): boolean => limits.now() - start > limits.maxMs;
+
+  async function visit(
+    rel: string,
+    scopes: readonly ScopedRules[],
+  ): Promise<void> {
+    if (truncated) return;
+    if (overTime()) {
+      truncated = timeCapReason(limits.maxMs);
+      return;
+    }
+    const abs = rel === "" ? root : path.join(root, rel);
+    let entries;
+    try {
+      entries = await fs.readdir(abs, { withFileTypes: true });
+    } catch {
+      notes.push(`note: ${rel === "" ? "." : rel} unreadable; skipped`);
+      return; // unreadable directory: skipped, not fatal
+    }
+    entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+
+    let local = scopes;
+    if (entries.some((e) => e.name === ".gitignore" && e.isFile())) {
+      try {
+        const text = await fs.readFile(path.join(abs, ".gitignore"), "utf8");
+        local = [
+          ...scopes,
+          {
+            base: rel,
+            rules: parseIgnoreFile(
+              text,
+              notes,
+              `${rel === "" ? "" : rel + "/"}.gitignore`,
+            ),
+          },
+        ];
+      } catch {
+        // unreadable .gitignore: treated as absent
+      }
+    }
+
+    const subdirs: string[] = [];
+    for (const entry of entries) {
+      if (truncated) return;
+      if (entry.isSymbolicLink()) continue;
+      const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
+      if (entry.isDirectory() || entry.isFile()) {
+        const check = normalizeSlicePath(childRel);
+        if (!check.ok) {
+          notes.push(
+            `note: ${JSON.stringify(childRel)} skipped: ${check.reason}`,
+          );
+          continue;
+        }
+      }
+      if (entry.isDirectory()) {
+        if (SKIP_DIRS.has(entry.name)) continue;
+        if (isIgnored(local, childRel, true)) {
+          if (entry.name === "dist" || entry.name === "build") {
+            ignoredBuildDirs.push(`${childRel}/`);
+          }
+          continue;
+        }
+        subdirs.push(childRel);
+      } else if (entry.isFile()) {
+        if (isIgnored(local, childRel, false)) continue;
+        if (files.length >= limits.maxFiles) {
+          truncated = `file cap reached (maxFiles=${limits.maxFiles})`;
+          return;
+        }
+        files.push(childRel);
+        if (++tick % 256 === 0 && overTime()) {
+          truncated = timeCapReason(limits.maxMs);
+          return;
+        }
+      }
+    }
+    for (const sub of subdirs) {
+      dirs.push(sub);
+      await visit(sub, local);
+      if (truncated) return;
+    }
+  }
+
+  await visit("", []);
+  files.sort();
+  dirs.sort();
+  ignoredBuildDirs.sort();
+  return { files, dirs, ignoredBuildDirs, notes, truncated };
+}

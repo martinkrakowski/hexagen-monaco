@@ -20,6 +20,7 @@ import { manifestCommander } from "./commands/manifest/index.js";
 import { adoptCommander } from "./commands/adopt/index.js";
 import { bootstrapCommander } from "./commands/bootstrap/index.js";
 import { scanCommander } from "./commands/scan/index.js";
+import { observeCommander } from "./commands/observe/index.js";
 import { grantCommander } from "./commands/grant/index.js";
 import { runReportCommand } from "./commands/report/index.js";
 import { resolveToolchainVersion } from "./toolchain-version.js";
@@ -154,6 +155,7 @@ function buildProgram(): Command {
   program.addCommand(adoptCommander);
   program.addCommand(bootstrapCommander);
   program.addCommand(scanCommander);
+  program.addCommand(observeCommander);
   program.addCommand(grantCommander);
 
   const templatesCommand = program
