@@ -47,6 +47,8 @@ export interface ResolvedGrantKey {
   readonly mode: "repo" | "brownfield";
   /** Why the key could not be used, when it could not. Never contains key material. */
   readonly problem?: string;
+  /** Set with `problem` when the key file exists and reads but is not a full-strength key. */
+  readonly weakKey?: boolean;
 }
 
 /** Strict alphabet, 1-64 chars, and no `..` (so it can never climb out of the key dir). */
@@ -78,7 +80,13 @@ export function keyFingerprint(keyHex: string): string {
 
 export type ReadKeyResult =
   | { readonly ok: true; readonly keyHex: string; readonly fingerprint: string }
-  | { readonly ok: false; readonly missing: boolean; readonly problem: string };
+  | {
+      readonly ok: false;
+      readonly missing: boolean;
+      /** `invalid`: present and readable but not a 64-hex key. */
+      readonly kind: "missing" | "unreadable" | "invalid";
+      readonly problem: string;
+    };
 
 /** Reads and validates the key at `keyPath`. Never returns key material in `problem`. */
 export function readGrantKey(keyPath: string): ReadKeyResult {
@@ -90,6 +98,7 @@ export function readGrantKey(keyPath: string): ReadKeyResult {
     return {
       ok: false,
       missing,
+      kind: missing ? "missing" : "unreadable",
       problem: missing
         ? `no key file at ${keyPath}`
         : `could not read ${keyPath}: ${(error as Error).message}`,
@@ -99,6 +108,7 @@ export function readGrantKey(keyPath: string): ReadKeyResult {
     return {
       ok: false,
       missing: false,
+      kind: "invalid",
       problem: `key at ${keyPath} must be exactly ${GRANT_KEY_HEX_LENGTH} hex characters (32 bytes); got ${raw.length}`,
     };
   }
@@ -112,7 +122,11 @@ function withFingerprint(
   const read = readGrantKey(base.path);
   return read.ok
     ? { ...base, fingerprint: read.fingerprint }
-    : { ...base, problem: read.problem };
+    : {
+        ...base,
+        problem: read.problem,
+        ...(read.kind === "invalid" ? { weakKey: true } : {}),
+      };
 }
 
 /**

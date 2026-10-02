@@ -81,7 +81,8 @@ mode, and `hexagen_accept_transaction`'s server resolves it the same way
    is no fallback to an in-repo key.
 
 The key must be a full 32-byte hex value, so a hand-edited or truncated key
-file is rejected rather than silently used. Keys are shown by path and
+file is rejected by the issuer and denied by the server rather than silently
+used. Keys are shown by path and
 fingerprint (first 16 hex chars of the SHA-256 of the key bytes), never
 printed.
 
@@ -94,100 +95,36 @@ npx hexagen grant key init --engagement acme-q3 [--key-file <path>]
 The only command that mints a key outside repo mode. It writes 32 random bytes
 as hex at mode 0600 in `~/.hexagen/keys/` (0700, tightened if it was loose),
 refuses to overwrite an existing key (exit 1), and accepts engagement ids
-matching `^[A-Za-z0-9._-]{1,64}# @hexagen-monaco/sync
-
-> The Hexagen-Monaco sync engine — a CLI that generates and maintains modular, Hexagonal-architecture monorepos from a single `manifest.yaml`.
-
----
-
-## Installation
-
-```bash
-npm install @hexagen-monaco/sync
-# or
-yarn add @hexagen-monaco/sync
-# or
-pnpm add @hexagen-monaco/sync
-```
-
-`@hexagen-monaco/sync` ships as a self-contained ESM package with only two runtime
-dependencies (`commander`, `js-yaml`). All internal Hexagen-Monaco packages
-(`@hexagen/governance`, `@hexagen/project-configuration`,
-`@hexagen/shared`, `@hexagen/visualization`) are bundled into the published
-artifact — consumers never see them in their `node_modules`.
-
----
-
-## CLI Usage
-
-The package installs a single binary, `hexagen`:
-
-```bash
-# Show top-level help
-npx hexagen --help
-
-# Run the sync engine against your manifest
-npx hexagen sync
-
-# Manage the architecture manifest
-npx hexagen arch --help
-```
-
-### Typical Workflow
-
-```bash
-# 1. Add a bounded context to your manifest
-npx hexagen arch context add billing --type=core
-
-# 2. Declare a port on that context
-npx hexagen arch port add --context=billing --name=InvoiceRepository --direction=out
-
-# 3. Run sync to regenerate the monorepo artifacts
-npx hexagen sync
-```
-
-Consult `npx hexagen arch --help` for the full list of manifest operations.
-
-### `hexagen grant issue`
-
-Mints a signed Grant — the file `hexagen_accept_transaction` trusts as its
-`grant` argument (see `docs/kernel/GRANT.md`). Local, no server:
-
-```bash
-npx hexagen grant issue \
-  --principal martin \
-  --agent lane-ow3b \
-  --paths .architecture/,packages/billing/ \
-  --tools hexagen_accept_transaction,hexagen_create_port \
-  --mode write \
-  --expires-in 4h \
-  --out .hexagen/grants/<id>.json
-```
-
-with no `..`. `grant issue` in a repo with no
+matching `^[A-Za-z0-9._-]{1,64}$` with no `..`. `grant issue` in a repo with no
 manifest never mints and never edits `.gitignore`:
 
 - The engagement id is `--engagement <id>`, or the `id` of a valid
   `.hexagen/slice.json`. Without either, exit 2.
 - `--paths` defaults to the slice's paths; every entry must be a valid slice
-  path inside the slice. `--contexts` is refused (exit 2), and the grant omits
-  `contexts`.
-- The root is the git toplevel of the current directory, so a client repo
-  nested under a directory with a manifest is still brownfield
-  (`--workspace-root` overrides).
+  path inside the slice, and no slice exclude may sit beneath a directory entry
+  (grants carry no excludes, so issue narrower paths; exit 2). `--contexts` is
+  refused (exit 2), and the grant omits `contexts`.
+- The root is the git toplevel of the current directory when the discovered
+  manifest root lies outside it, so a client repo nested under a directory with
+  a manifest is still brownfield. A manifest at or below the toplevel keeps repo
+  mode. `--workspace-root` overrides both.
 - `--out` must be a new file under `<root>/.hexagen/` (symlink escapes are
   refused, exit 2; an existing file is never overwritten, exit 1) and is written
-  via a temp file and rename.
+  via a temp file plus a hard link.
 - `.hexagen/` is added to `.git/info/exclude`. When a write is pending (the
   `--out` file or an exclude change) the preflight lists it and `--yes` is
   required; otherwise exit 2 without writing. With nothing to write, `--yes`
   is not needed.
 - It prints the workspace root, key path and fingerprint on stderr. If
   `--key-file` points somewhere the server would not look by default, it warns
-  with both paths and fingerprints. The MCP server takes `--key-file` and
-  `--engagement` too, and logs the same line at startup. `--contexts
-<name[,name...]>` is a monaco-only convenience: it looks each name up in
-  `manifest.yaml` and expands it to `packages/<name>/`, appended to `--paths`.
+  with both paths and fingerprints (likewise when `--engagement` differs from the
+  slice's id). The grant is validated and signed before `.git/info/exclude` is
+  touched. The MCP server takes `--key-file` and
+  `--engagement` too, and logs the same line at startup.
+
+`--contexts <name[,name...]>` is a monaco-only convenience (repo mode): it
+looks each name up in `manifest.yaml` and expands it to `packages/<name>/`,
+appended to `--paths`.
 
 `hexagen_accept_transaction`'s enforcement (`checkMutationAgainstGrant`)
 requires `grant.contexts` to independently name every context a mutation

@@ -454,3 +454,85 @@ describe("fix round: custody boundaries", () => {
     expect(process.exitCode).toBe(2);
   });
 });
+
+describe("round 3: bot findings", () => {
+  it("a manifest in a subdirectory of the git repo keeps repo mode", async () => {
+    const top = await tmp("bf-root-"); // git init'd
+    const home = await tmp("bf-home-");
+    const sub = path.join(top, "sub");
+    await mkdir(path.join(sub, ".architecture"), { recursive: true });
+    await writeFile(
+      path.join(sub, ".architecture", "manifest.yaml"),
+      "bounded_contexts:\n  - name: billing\n    type: core\n",
+    );
+    vi.spyOn(process, "cwd").mockReturnValue(sub);
+    const { workspaceRoot: _omit, ...rest } = base(sub, home);
+    void _omit;
+    await issueGrantCommand({
+      ...rest,
+      paths: ".architecture/,packages/billing/",
+      out: "g.json",
+    });
+    expect(process.exitCode).toBe(0);
+    expect(existsSync(path.join(sub, ".hexagen", "grant-signing.key"))).toBe(
+      true,
+    );
+    const grant = JSON.parse(await readFile(path.join(sub, "g.json"), "utf-8"));
+    expect(grant.contexts).toEqual(["billing"]);
+    expect(existsSync(path.join(top, ".hexagen"))).toBe(false);
+  });
+
+  it("refuses a directory entry that has a slice exclude beneath it, including the slice default", async () => {
+    const root = await tmp("bf-root-");
+    const home = await tmp("bf-home-");
+    await writeSlice(root, "eng-x1", ["src/"], ["src/private/"]);
+    await mintKey(home, "eng-x1");
+    await issueGrantCommand(base(root, home));
+    expect(process.exitCode).toBe(2);
+    let text = out.join("\n");
+    expect(text).toContain("src/");
+    expect(text).toContain("src/private/");
+    expect(text).toContain("narrower");
+    out.length = 0;
+    process.exitCode = 0;
+    await issueGrantCommand({ ...base(root, home), paths: "src/public/" });
+    expect(process.exitCode).toBe(0);
+    text = out.join("\n");
+    expect(text).toContain('"paths"');
+  });
+
+  it("builds the grant before touching the exclude file: a bad --expires-in with --yes changes nothing", async () => {
+    const root = await tmp("bf-root-");
+    const home = await tmp("bf-home-");
+    await writeSlice(root, "eng-x2", ["src/"]);
+    await mintKey(home, "eng-x2");
+    const exclude = path.join(root, ".git", "info", "exclude");
+    const before = await readFile(exclude, "utf-8").catch(() => "");
+    await issueGrantCommand({
+      ...base(root, home),
+      expiresIn: "not-a-duration",
+      out: ".hexagen/grants/x.json",
+    });
+    expect(process.exitCode).toBe(1);
+    expect(await readFile(exclude, "utf-8").catch(() => "")).toBe(before);
+    expect(existsSync(path.join(root, ".hexagen", "grants"))).toBe(false);
+  });
+
+  it("warns, naming both engagement ids, paths and fingerprints, when --engagement differs from the slice id", async () => {
+    const root = await tmp("bf-root-");
+    const home = await tmp("bf-home-");
+    await writeSlice(root, "eng-slice", ["src/"]);
+    await mintKey(home, "eng-slice");
+    await mintKey(home, "eng-flag");
+    await issueGrantCommand({ ...base(root, home), engagement: "eng-flag" });
+    expect(process.exitCode).toBe(0);
+    const text = out.join("\n");
+    expect(text).toContain("grant key mismatch");
+    expect(text).toContain("eng-slice");
+    expect(text).toContain("eng-flag");
+    expect(text).toContain(
+      path.join(home, ".hexagen", "keys", "eng-slice.key"),
+    );
+    expect(text).toContain(path.join(home, ".hexagen", "keys", "eng-flag.key"));
+  });
+});

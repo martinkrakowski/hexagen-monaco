@@ -106,7 +106,8 @@ function gitToplevel(cwd: string): string | null {
  * Where to issue from. `findWorkspaceRoot` walks up to ANY parent manifest,
  * so a client repo checked out beneath a monorepo would inherit its repo mode
  * (and its key). The git toplevel is the repo boundary: when discovery lands
- * anywhere else, the toplevel wins. `--workspace-root` still overrides all.
+ * outside it, the toplevel wins. A manifest at or below the toplevel (a HexaGen
+ * project inside a larger repo) stays the root. `--workspace-root` overrides.
  */
 function discoverRoot(options: IssueOptions): string {
   if (options.workspaceRoot) return path.resolve(options.workspaceRoot);
@@ -115,7 +116,10 @@ function discoverRoot(options: IssueOptions): string {
   const top = gitToplevel(cwd);
   if (top === null) return discovered;
   try {
-    return realpathSync(discovered) === top ? discovered : top;
+    const rel = path.relative(top, realpathSync(discovered));
+    const outside =
+      rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel);
+    return outside ? top : discovered;
   } catch {
     return top;
   }
@@ -245,6 +249,7 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
     | { keyHex: string; path: string; fingerprint: string }
     | undefined;
   let brownfieldOut: string | undefined;
+  let applyExclude = false;
   if (brownfield) {
     if (engagementId === undefined) {
       failBrownfield(
@@ -263,6 +268,19 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
       if (slice && !isPathInSlice(slice as SlicePaths, entry)) {
         failBrownfield(
           `--paths entry '${entry}' is outside the slice (or excluded by it)`,
+        );
+        return;
+      }
+    }
+    // Grants carry no excludes, so a directory entry would silently re-admit
+    // anything the slice excludes beneath it.
+    for (const entry of paths) {
+      const beneath = slice?.excludes.find(
+        (e) => e !== entry && e.startsWith(entry) && entry.endsWith("/"),
+      );
+      if (beneath !== undefined) {
+        failBrownfield(
+          `--paths entry '${entry}' contains the slice exclude '${beneath}'; a grant carries no excludes, so issue narrower paths that avoid it.`,
         );
         return;
       }
@@ -315,20 +333,25 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
       path: resolved.path,
       fingerprint: read.fingerprint,
     };
-    if (options.keyFile) {
-      // What the MCP server resolves without the flag: a split here means it
-      // will deny this grant, so say so at issue time, with both fingerprints.
+    const engagementOverride =
+      options.engagement !== undefined &&
+      slice !== undefined &&
+      options.engagement !== slice.id;
+    if (options.keyFile || engagementOverride) {
+      // What the MCP server resolves without the flags (the slice's own id): a
+      // split here means it will deny this grant, so say so at issue time,
+      // with both engagement ids, paths and fingerprints.
       const server = resolveGrantKey({
         env,
-        engagementId,
+        engagementId: slice?.id,
         workspaceRoot,
         homeDir: options.homeDir,
       });
       if (server.path !== null) {
         const mismatch = describeKeyMismatch(
-          "issuing",
+          `issuing (engagement ${engagementId})`,
           resolved,
-          "server default",
+          `server default (engagement ${slice?.id ?? "none"})`,
           server,
         );
         if (mismatch) console.error(`[grant issue] warning: ${mismatch}`);
@@ -364,16 +387,7 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
         return;
       }
     }
-    if (exclude.changes) {
-      try {
-        await ensureExcluded(workspaceRoot, ".hexagen/");
-      } catch (error) {
-        failBrownfield(
-          `[grant issue] ${error instanceof GitExcludeError ? error.message : String(error)}`,
-        );
-        return;
-      }
-    }
+    applyExclude = exclude.changes;
   }
 
   let keyHex: string;
@@ -444,6 +458,18 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
 
   const json = JSON.stringify(grant, null, 2);
   if (brownfield) {
+    // Everything is validated and the grant is signed; only now touch the
+    // exclude file, and still before the grant file is written.
+    if (applyExclude) {
+      try {
+        await ensureExcluded(workspaceRoot, ".hexagen/");
+      } catch (error) {
+        failBrownfield(
+          `[grant issue] ${error instanceof GitExcludeError ? error.message : String(error)}`,
+        );
+        return;
+      }
+    }
     if (brownfieldOut) {
       try {
         await writeGrantFileExclusive(brownfieldOut, `${json}\n`);

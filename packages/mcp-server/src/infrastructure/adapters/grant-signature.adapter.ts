@@ -81,9 +81,12 @@ export class GrantSignatureAdapter implements GrantSignaturePort {
         return { success: true, value: false };
       }
 
-      // TODO(BW2a F4): ignores resolved.problem and re-reads the key below; fixing it changes repo-mode behaviour, so it is a follow-up.
-      const keyPath = this.resolveKey().path;
-      if (keyPath === null) {
+      const resolved = this.resolveKey();
+      const keyPath = resolved.path;
+      // A key that is present but not full strength (64 hex chars) is no
+      // trust root: the issuer refuses to sign with one, so the verifier
+      // must not accept one either. A missing key is handled below.
+      if (keyPath === null || resolved.weakKey) {
         return { success: true, value: false };
       }
       let keyHex: string;
