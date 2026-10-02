@@ -1,13 +1,26 @@
 /* eslint-disable no-console */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Command } from "commander";
+import {
+  Slice,
+  isPathInSlice,
+  normalizeSlicePath,
+  type SlicePaths,
+} from "@hexagen/shared";
+import {
+  describeKeyMismatch,
+  isRepoMode,
+  readGrantKey,
+  resolveGrantKey,
+} from "@hexagen/shared/node/grant-key";
 import {
   buildGrant,
   deriveContextsFromPaths,
   expandContexts,
   type IssuedGrant,
 } from "./build.js";
+import { grantKeyCommander } from "./key-init.js";
 import { signGrantPayload } from "./sign.js";
 import { loadOrCreateSigningKey } from "./signing-key.js";
 import { findWorkspaceRoot } from "../shared/project-root.js";
@@ -30,6 +43,30 @@ interface IssueOptions {
   maxFiles?: string;
   workspaceRoot?: string;
   out?: string;
+  keyFile?: string;
+  engagement?: string;
+  /** Test seam; defaults to `os.homedir()`. */
+  homeDir?: string;
+}
+
+/** Brownfield failures exit 2 (usage/precondition), distinct from repo mode's 1. */
+function failBrownfield(message: string): void {
+  console.error(message);
+  process.exitCode = 2;
+}
+
+async function loadSlice(workspaceRoot: string): Promise<Slice | undefined> {
+  let raw: string;
+  try {
+    raw = await readFile(
+      path.join(workspaceRoot, ".hexagen", "slice.json"),
+      "utf-8",
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+  return Slice.parse(JSON.parse(raw));
 }
 
 export async function issueGrantCommand(options: IssueOptions): Promise<void> {
@@ -48,7 +85,24 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
     return;
   }
 
-  const paths = options.paths ? splitCsv(options.paths) : [];
+  const brownfield = !isRepoMode(workspaceRoot);
+  let slice: Slice | undefined;
+  if (brownfield) {
+    try {
+      slice = await loadSlice(workspaceRoot);
+    } catch (error) {
+      failBrownfield(
+        `.hexagen/slice.json is not a valid slice: ${(error as Error).message}`,
+      );
+      return;
+    }
+  }
+
+  const paths = options.paths
+    ? splitCsv(options.paths)
+    : brownfield && slice
+      ? [...slice.paths]
+      : [];
   const contexts = options.contexts ? splitCsv(options.contexts) : [];
   const tools = splitCsv(options.tools);
 
@@ -98,9 +152,104 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
     return;
   }
 
+  const engagementId = options.engagement ?? slice?.id;
+  let brownfieldKey:
+    | { keyHex: string; path: string; fingerprint: string }
+    | undefined;
+  if (brownfield) {
+    if (engagementId === undefined) {
+      failBrownfield(
+        "No manifest and no .hexagen/slice.json: name the engagement with --engagement <id> (or create the slice first).",
+      );
+      return;
+    }
+    for (const entry of paths) {
+      const normalized = normalizeSlicePath(entry);
+      if (!normalized.ok) {
+        failBrownfield(
+          `--paths entry '${entry}' is malformed: ${normalized.reason}`,
+        );
+        return;
+      }
+      if (slice && !isPathInSlice(slice as SlicePaths, entry)) {
+        failBrownfield(
+          `--paths entry '${entry}' is outside the slice (or excluded by it)`,
+        );
+        return;
+      }
+    }
+    const env = process.env;
+    const resolved = resolveGrantKey({
+      keyFile: options.keyFile,
+      env,
+      engagementId,
+      workspaceRoot,
+      homeDir: options.homeDir,
+    });
+    if (resolved.path === null) {
+      failBrownfield(`Cannot locate a signing key: ${resolved.problem}`);
+      return;
+    }
+    const read = readGrantKey(resolved.path);
+    if (!read.ok) {
+      failBrownfield(
+        `${read.problem}. Create one with: hexagen grant key init --engagement ${engagementId}`,
+      );
+      return;
+    }
+    brownfieldKey = {
+      keyHex: read.keyHex,
+      path: resolved.path,
+      fingerprint: read.fingerprint,
+    };
+    if (options.keyFile) {
+      // What the MCP server resolves without the flag: a split here means it
+      // will deny this grant, so say so at issue time, with both fingerprints.
+      const server = resolveGrantKey({
+        env,
+        engagementId,
+        workspaceRoot,
+        homeDir: options.homeDir,
+      });
+      if (server.path !== null) {
+        const mismatch = describeKeyMismatch(
+          "issuing",
+          resolved,
+          "server default",
+          server,
+        );
+        if (mismatch) console.error(`[grant issue] warning: ${mismatch}`);
+      }
+    }
+    console.error(
+      `[grant issue] workspace root ${workspaceRoot}; key ${brownfieldKey.path}; fingerprint ${brownfieldKey.fingerprint}`,
+    );
+  }
+
   let keyHex: string;
   try {
-    const key = await loadOrCreateSigningKey(workspaceRoot);
+    const explicit =
+      !brownfield && (options.keyFile || process.env.HEXAGEN_GRANT_KEY_FILE)
+        ? resolveGrantKey({
+            keyFile: options.keyFile,
+            env: process.env,
+            workspaceRoot,
+          })
+        : undefined;
+    let key: { keyHex: string; created: boolean; path: string };
+    if (brownfieldKey) {
+      key = {
+        keyHex: brownfieldKey.keyHex,
+        created: false,
+        path: brownfieldKey.path,
+      };
+    } else if (explicit?.path) {
+      const read = readGrantKey(explicit.path);
+      if (!read.ok) throw new Error(read.problem);
+      key = { keyHex: read.keyHex, created: false, path: explicit.path };
+    } else {
+      key = await loadOrCreateSigningKey(workspaceRoot);
+    }
     keyHex = key.keyHex;
     if (key.created) {
       console.error(
@@ -128,6 +277,7 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
         expiresIn: options.expiresIn,
         contexts: allContexts.length > 0 ? allContexts : undefined,
         maxFiles,
+        omitContexts: brownfield,
       },
       keyHex,
       signGrantPayload,
@@ -155,6 +305,8 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
 export const grantCommander = new Command("grant").description(
   "Issue and inspect Grant objects (docs/kernel/GRANT.md)",
 );
+
+grantCommander.addCommand(grantKeyCommander);
 
 grantCommander
   .command("issue")
@@ -190,6 +342,14 @@ grantCommander
   .option(
     "--workspace-root <path>",
     "Workspace root to resolve .hexagen/grant-signing.key and manifest.yaml against (default: nearest project/workspace root found by walking up from cwd)",
+  )
+  .option(
+    "--key-file <path>",
+    "Signing key file (overrides HEXAGEN_GRANT_KEY_FILE and ~/.hexagen/keys/<engagement>.key)",
+  )
+  .option(
+    "--engagement <id>",
+    "Brownfield: engagement id naming ~/.hexagen/keys/<id>.key (default: the id in .hexagen/slice.json)",
   )
   .option("--out <file>", "Write the signed grant JSON here instead of stdout")
   .action(async (options: IssueOptions) => {

@@ -50,6 +50,12 @@ async function withTrustedKey<T>(
     path.join(os.tmpdir(), "grant-signature-test-"),
   );
   try {
+    // Repo mode: a manifest makes the in-repo key path the trust root.
+    await fs.mkdir(path.join(tmpDir, ".architecture"), { recursive: true });
+    await fs.writeFile(
+      path.join(tmpDir, ".architecture", "manifest.yaml"),
+      "bounded_contexts: []\n",
+    );
     if (keyHex !== null) {
       const dir = path.join(tmpDir, ".hexagen");
       await fs.mkdir(dir, { recursive: true });

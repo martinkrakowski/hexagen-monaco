@@ -14,6 +14,14 @@ bounded_contexts:
 
 const tempDirs: string[] = [];
 
+/** A workspace with a manifest: repo mode, where the issuer mints the in-repo key. */
+async function makeRepoWorkspace(): Promise<string> {
+  const dir = await makeWorkspace();
+  await mkdir(path.join(dir, ".architecture"), { recursive: true });
+  await writeFile(path.join(dir, ".architecture", "manifest.yaml"), MANIFEST);
+  return dir;
+}
+
 async function makeWorkspace(): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "grant-issue-cmd-"));
   tempDirs.push(dir);
@@ -30,7 +38,7 @@ afterEach(async () => {
 
 describe("issueGrantCommand", () => {
   it("writes a signed grant to --out, verifiable against the key it created", async () => {
-    const workspaceRoot = await makeWorkspace();
+    const workspaceRoot = await makeRepoWorkspace();
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     await issueGrantCommand({
       principal: "martin",
@@ -76,7 +84,7 @@ describe("issueGrantCommand", () => {
   });
 
   it("prints to stdout when --out is omitted", async () => {
-    const workspaceRoot = await makeWorkspace();
+    const workspaceRoot = await makeRepoWorkspace();
     vi.spyOn(console, "error").mockImplementation(() => {});
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     await issueGrantCommand({

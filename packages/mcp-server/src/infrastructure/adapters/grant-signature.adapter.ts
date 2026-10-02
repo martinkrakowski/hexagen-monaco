@@ -1,14 +1,17 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import fs from "node:fs/promises";
-import path from "node:path";
 import type { Result } from "@hexagen/shared";
+import {
+  describeResolvedKey,
+  readSliceEngagementId,
+  resolveGrantKey,
+  type ResolvedGrantKey,
+} from "@hexagen/shared/node/grant-key";
 import {
   canonicalGrantPayload,
   type Grant,
 } from "../../application/kernel/grant.js";
 import type { GrantSignaturePort } from "../../application/ports/out/grant-signature.port.js";
-
-const SIGNING_KEY_PATH = [".hexagen", "grant-signing.key"];
 
 function hexToBuffer(hex: string): Buffer | null {
   if (hex.length === 0 || hex.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(hex)) {
@@ -17,12 +20,24 @@ function hexToBuffer(hex: string): Buffer | null {
   return Buffer.from(hex, "hex");
 }
 
+export interface GrantSignatureOptions {
+  /** `--key-file`. */
+  readonly keyFile?: string;
+  /** `--engagement`; otherwise the id in `<workspaceRoot>/.hexagen/slice.json`. */
+  readonly engagementId?: string;
+  /** Defaults to `process.env` (`HEXAGEN_GRANT_KEY_FILE`). */
+  readonly env?: Readonly<Record<string, string | undefined>>;
+  /** Test seam; defaults to `os.homedir()`. */
+  readonly homeDir?: string;
+}
+
 /**
  * Verifies `grant.signature` as HMAC-SHA256 (hex) over
- * `canonicalGrantPayload(grant)`, keyed by the trusted secret at
- * `<workspaceRoot>/.hexagen/grant-signing.key` (a single hex-encoded
- * string; no issuer CLI mints this yet — see the PR that introduced this
- * adapter for what still has to sign a grant with it).
+ * `canonicalGrantPayload(grant)`, keyed by the trusted secret that the shared
+ * resolver (`@hexagen/shared/node/grant-key`, the same one `hexagen grant
+ * issue` uses) finds: `--key-file`, then `HEXAGEN_GRANT_KEY_FILE`, then, in
+ * repo mode (a manifest exists), `<workspaceRoot>/.hexagen/grant-signing.key`
+ * exactly as before, or, in a client repo, `~/.hexagen/keys/<engagement>.key`.
  *
  * Every way a signature can fail to establish trust — no signature on the
  * grant, no key file at the trust root, a key file that isn't valid hex, a
@@ -33,7 +48,27 @@ function hexToBuffer(hex: string): Buffer | null {
  * error (not "file missing") while reading the key is a `Result` failure.
  */
 export class GrantSignatureAdapter implements GrantSignaturePort {
-  constructor(private readonly workspaceRoot: string) {}
+  constructor(
+    private readonly workspaceRoot: string,
+    private readonly options: GrantSignatureOptions = {},
+  ) {}
+
+  /** Resolved on each call so a key minted after startup is picked up. */
+  private resolveKey(): ResolvedGrantKey {
+    return resolveGrantKey({
+      keyFile: this.options.keyFile,
+      env: this.options.env ?? process.env,
+      engagementId:
+        this.options.engagementId ?? readSliceEngagementId(this.workspaceRoot),
+      workspaceRoot: this.workspaceRoot,
+      homeDir: this.options.homeDir,
+    });
+  }
+
+  /** Workspace root, key path and fingerprint for the startup log; never the key. */
+  describeKey(): string {
+    return describeResolvedKey(this.workspaceRoot, this.resolveKey());
+  }
 
   async verify(grant: Grant): Promise<Result<boolean, Error>> {
     try {
@@ -46,7 +81,10 @@ export class GrantSignatureAdapter implements GrantSignaturePort {
         return { success: true, value: false };
       }
 
-      const keyPath = path.join(this.workspaceRoot, ...SIGNING_KEY_PATH);
+      const keyPath = this.resolveKey().path;
+      if (keyPath === null) {
+        return { success: true, value: false };
+      }
       let keyHex: string;
       try {
         keyHex = (await fs.readFile(keyPath, "utf-8")).trim();

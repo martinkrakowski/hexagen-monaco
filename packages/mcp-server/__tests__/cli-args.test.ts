@@ -40,3 +40,26 @@ describe("parseArgs", () => {
     assert.equal(result.workspaceRoot, "/fallback");
   });
 });
+
+describe("parseArgs: grant key custody flags", () => {
+  it("parses --key-file and --engagement in both syntaxes", () => {
+    const a = parseArgs(["--key-file", "/k/a.key", "--engagement", "eng-1"]);
+    assert.equal(a.keyFile, "/k/a.key");
+    assert.equal(a.engagementId, "eng-1");
+    const b = parseArgs(["--key-file=/k/b.key", "--engagement=eng-2"]);
+    assert.equal(b.keyFile, "/k/b.key");
+    assert.equal(b.engagementId, "eng-2");
+  });
+
+  it("leaves them undefined when absent", () => {
+    const r = parseArgs([]);
+    assert.equal(r.keyFile, undefined);
+    assert.equal(r.engagementId, undefined);
+  });
+
+  it("does not let a flag value swallow the next flag", () => {
+    const r = parseArgs(["--key-file", "--help"]);
+    assert.equal(r.keyFile, undefined);
+    assert.equal(r.showHelp, true);
+  });
+});

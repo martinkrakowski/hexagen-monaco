@@ -14,6 +14,11 @@ export interface IssueGrantInput {
   readonly expiresIn: string;
   readonly contexts?: readonly string[];
   readonly maxFiles?: number;
+  /**
+   * Brownfield (no manifest): leave `contexts` off the grant entirely. Absent
+   * and `[]` sign differently, and a client-repo grant never writes `[]`.
+   */
+  readonly omitContexts?: boolean;
   readonly now?: Date;
 }
 
@@ -135,7 +140,7 @@ export async function buildGrant(
     id: randomUUID(),
     principal: input.principal,
     agent: input.agent,
-    contexts,
+    ...(input.omitContexts ? {} : { contexts }),
     paths: [
       ...new Set([
         ...input.paths,
