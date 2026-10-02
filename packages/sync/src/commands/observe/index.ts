@@ -109,7 +109,7 @@ function isBuildMarker(base: string): boolean {
   return BUILD_MARKERS.has(base) || base.startsWith("build.gradle");
 }
 
-function extOf(file: string): string {
+export function extOf(file: string): string {
   return file.slice(file.lastIndexOf(".") + 1).toLowerCase();
 }
 
@@ -137,7 +137,7 @@ export interface ObserveOptions {
  * Remove credentials, query and fragment from a URL remote. scp-like remotes
  * (`git@host:o/r`) are not URLs and go through the regex fallback.
  */
-function stripCredentials(remote: string): string {
+export function stripCredentials(remote: string): string {
   if (!remote.includes("://")) {
     // scp-like `[user[:pass]@]host:path`: only the plain `git` user is kept.
     const scp = /^([^@/]+)@([^/:]+:.*)$/.exec(remote);
@@ -178,7 +178,7 @@ function realNative(p: string): string {
   }
 }
 
-function readRepo(root: string): { remote?: string; commit: string } {
+export function readRepo(root: string): { remote?: string; commit: string } {
   realNative(root);
   const commit = git(root, ["rev-parse", "HEAD"]);
   if (!commit) {

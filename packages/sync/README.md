@@ -315,6 +315,102 @@ What it reads:
   unnamed package, a pattern that does not compile) while `truncated` is
   `false`; only a tripped cap sets `truncated`.
 
+### `hexagen slice` and `hexagen contract`
+
+Bind work to part of a repo you do not control, then gate it. Both read the
+`.hexagen/observed.json` that `hexagen observe` wrote, so run `observe` first
+(and again after the repo moves). Neither runs `adopt`, `bootstrap`, `sync` or
+`hexagen-lint`, and neither needs a manifest. Every command takes
+`--root <dir>` (default cwd, never searched upward, must be the repo top level).
+
+```bash
+npx hexagen observe --out .hexagen/observed.json --yes
+npx hexagen slice init --path src/billing/ --exclude src/billing/generated/ --yes
+npx hexagen slice check                      # drift report
+npx hexagen contract propose                 # candidate rules; writes nothing
+npx hexagen contract add-rule --kind forbid --from src/billing/ --to src/auth/ --yes
+npx hexagen contract check                   # gate; exit 1 on a new violation
+npx hexagen contract check --baseline --yes  # record today's violations
+```
+
+**`slice`** writes `.hexagen/slice.json`.
+
+- `slice init --path <p>… [--exclude <p>…] [--id <id>] [--by <who>]`. Each entry
+  must pass the slice-path rules (a trailing `/` is a directory prefix, anything
+  else is one file). `--id` matches `[A-Za-z0-9._-]{1,64}` without `..` and
+  defaults to a random slug. `repo.commit` is `HEAD` and `repo.remote` is
+  `origin` with credentials stripped. `createdBy` is `--by`, else
+  `git config user.email`. It never overwrites an existing slice.
+- `slice show` prints the slice.
+- `slice check` reports drift (exit 1): a `paths` entry that matches no file; a
+  file under the slice changed between `repo.commit` and `HEAD` (`excludes`
+  applied; uncommitted working-tree edits are not drift, only commits since
+  `repo.commit` are); and incomplete edges (`edgesComplete` is false: an unread
+  language, or edges not collected), which are never clean. An `excludes` entry
+  that matches no file only gets a `note:` line. Observed edges that cross the
+  slice boundary are always listed (`leaves` and `enters`, with counts; a
+  package-root target is judged with excludes first, under both spellings) but
+  fail the check only with `--closed`. `--strict` is described below.
+
+**`contract`** writes `.hexagen/contract.json`, whose `sliceId` comes from
+`slice.json`.
+
+- `contract propose` prints each pair of slice `paths` entries joined by an
+  in-slice edge (both ends inside the slice, different entries) as a candidate
+  `forbid` rule. It writes nothing.
+- `contract add-rule --kind forbid|allow-only --from <prefix> --to <prefix>
+[--severity error|warn] [--id <id>]` appends a rule (`error` by default). The
+  built-in id `unresolved-import` and duplicate ids are refused.
+- `contract show` prints the contract.
+- `contract check [--baseline]` evaluates the rules against the observed edges
+  whose `from` is inside the slice. A `forbid` rule fails on an edge from its
+  `from` prefix to its `to` prefix. An `allow-only` rule fails on an edge from
+  its `from` prefix to anywhere that is neither its `to` prefix nor its own
+  `from` prefix. A `warn` rule is printed but does not fail the check. The
+  built-in rule `unresolved-import` fails on **every** `unresolved` row whose
+  `from` is in the slice (including `not-scanned`, `package-imports` and
+  `non-literal`) and on every in-slice file whose extension is in
+  `edges.unreadLanguages` (`go`, `py`, … joined on the extension, never on the
+  display name), so a green result never means "the pass could not see the
+  imports". If edges were not collected at all the check cannot be clean (exit
+  code 1) and cannot be baselined. `--baseline` writes the current failing violations
+  to `knownViolations` (keeping any `reason`/`expires` already there) and needs
+  `--yes`; without it, any violation not in the baseline names its rule, file
+  and specifier and exits 1. A known violation is matched on rule, file and
+  specifier, and an entry whose `expires` date has passed (inclusive to the end
+  of that UTC day) no longer hides its violation. A root-package target (`.`)
+  is never inside a `to` prefix, so it always violates an `allow-only` rule.
+
+**Concurrent edits.** `add-rule` and `check --baseline` (with `--yes`) hold
+`.hexagen/contract.json.lock`, created exclusively with the process id inside,
+while they read and rewrite `contract.json`, and remove it when they finish. If
+the lock is already there they exit 2 ("another contract command is running").
+A lock left behind by a killed command is never broken automatically: delete
+the file yourself. A `knownViolations[].expires` that is not a real calendar
+date is refused at load (exit 2).
+
+**Writes.** `slice init`, `contract add-rule` and `contract check --baseline`
+print a `will write:` line for each file, including the git exclude file when
+`.hexagen/` is not yet in it, and write nothing without `--yes` (exit 2). The
+exclude is updated first (a failure stops the command), then the file is written
+as a temp file plus a link (a new file, never replacing one) or a rename (an
+update of `contract.json`). The client's `.gitignore` is never edited, and
+`git add -f` can still stage `.hexagen/`.
+
+**Stale inputs.** `observed.json` must exist and its `repo.commit` must be the
+slice's `repo.commit` or a descendant of it. If it was read at a commit other
+than `HEAD` the commands warn, and with `--strict` fail.
+
+**Exit codes** (`slice check`, `contract check`, `contract propose`):
+
+| Code | Meaning                                                                                                                                                                                            |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | Clean (`slice check`, `contract check`), or the command succeeded                                                                                                                                  |
+| 1    | Drift (`slice check`) or a violation not in the baseline, or incomplete edges (`contract check`)                                                                                                   |
+| 2    | Bad input or refused: a missing or invalid file, a bad path or id, a refused overwrite, no `--yes`, a slice commit not in the repository, a stale `observed.json`, `--strict` and a different HEAD |
+
+`init`, `add-rule`, `show` and `--baseline` return 0 on success and 2 otherwise.
+
 ---
 
 ## Programmatic Usage
