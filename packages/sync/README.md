@@ -137,6 +137,8 @@ What it reads:
   `.gitignore` files (not `info/exclude` or `core.excludesFile`). A path that
   fails the slice-path rules (a backslash or control character) is skipped
   with a note.
+- **Metadata files** (`package.json`, `pnpm-workspace.yaml`, `.gitattributes`,
+  `CODEOWNERS`) are never read through a symlink; a link is noted and skipped.
 - **Packages.** Every `package.json` the walk reaches is a package: a repo with no
   workspaces has one at `"."`. Names are exactly as written, scope included; a
   manifest with no `name` is reported under its directory path (the root

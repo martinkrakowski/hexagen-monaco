@@ -42,6 +42,29 @@ describe("git-exclude helper", () => {
     expect(await fs.readFile(file, "utf8")).toBe("keep-me\n.hexagen/\n");
   });
 
+  it("appends again when a later line re-includes the entry", async () => {
+    const root = await repo();
+    const file = await resolveExcludeFile(root);
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, ".hexagen/\n!.hexagen/\n");
+    const res = await ensureExcluded(root, ".hexagen/");
+    expect(res.wrote).toBe(true);
+    expect(await fs.readFile(file, "utf8")).toBe(
+      ".hexagen/\n!.hexagen/\n.hexagen/\n",
+    );
+    execFileSync("git", ["check-ignore", "-q", ".hexagen/x.json"], {
+      cwd: root,
+    });
+  });
+
+  it("does not append when the last matching line already excludes it", async () => {
+    const root = await repo();
+    const file = await resolveExcludeFile(root);
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, "!.hexagen/\n.hexagen/\n");
+    expect((await ensureExcluded(root, ".hexagen/")).wrote).toBe(false);
+  });
+
   it.skipIf(process.platform === "win32")(
     "refuses an exclude file that is a symlink out of the repository",
     async () => {

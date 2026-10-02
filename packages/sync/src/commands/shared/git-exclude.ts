@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { parseIgnoreFile, verdict } from "./ignore.js";
 
 /**
  * Keep a sidecar directory out of `git status` without touching the client's
@@ -77,17 +78,14 @@ export async function resolveExcludeFile(root: string): Promise<string> {
   );
 }
 
-function hasEntry(text: string, entry: string): boolean {
-  const bare = entry.replace(/\/$/, "");
-  return text.split("\n").some((raw) => {
-    const line = raw.trim();
-    return (
-      line === entry ||
-      line === bare ||
-      line === `/${entry}` ||
-      line === `/${bare}`
-    );
-  });
+/**
+ * True when the exclude file, read with last-match-wins like git, already
+ * ignores `entry` (a directory such as `.hexagen/`). A later negation
+ * (`!.hexagen/`) means it is not excluded and the entry must be appended.
+ */
+function isExcluded(text: string, entry: string): boolean {
+  const rules = parseIgnoreFile(text);
+  return verdict(rules, entry.replace(/\/$/, ""), true) === true;
 }
 
 /**
@@ -107,7 +105,7 @@ export async function ensureExcluded(
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
     }
-    if (hasEntry(text, entry)) return { file, wrote: false };
+    if (isExcluded(text, entry)) return { file, wrote: false };
     await fs.mkdir(path.dirname(file), { recursive: true });
     const prefix = text === "" || text.endsWith("\n") ? "" : "\n";
     await fs.appendFile(file, `${prefix}${entry}\n`, "utf8");

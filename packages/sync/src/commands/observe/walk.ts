@@ -1,7 +1,11 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { normalizeSlicePath } from "@hexagen/shared";
-import { isIgnored, parseIgnoreFile, type ScopedRules } from "./ignore.js";
+import {
+  isIgnored,
+  parseIgnoreFile,
+  type ScopedRules,
+} from "../shared/ignore.js";
 
 /** Never descended into. `.hexagen` is observe's own output directory. */
 export const SKIP_DIRS: ReadonlySet<string> = new Set([
@@ -20,6 +24,8 @@ export interface WalkLimits {
   readonly maxFiles: number;
   readonly maxMs: number;
   readonly now: () => number;
+  /** When the deadline started; defaults to the start of the walk. */
+  readonly start?: number;
 }
 
 export interface WalkResult {
@@ -48,7 +54,7 @@ export async function walk(
   root: string,
   limits: WalkLimits,
 ): Promise<WalkResult> {
-  const start = limits.now();
+  const start = limits.start ?? limits.now();
   const files: string[] = [];
   const dirs: string[] = [];
   const ignoredBuildDirs: string[] = [];

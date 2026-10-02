@@ -10,7 +10,7 @@ import {
   observeCommander,
   runObserve,
 } from "../../../src/commands/observe/index.js";
-import { globToRegExp } from "../../../src/commands/observe/glob.js";
+import { globToRegExp } from "../../../src/commands/shared/glob.js";
 
 const tmpDirs: string[] = [];
 
@@ -770,6 +770,127 @@ describe("hexagen observe: fix round", () => {
     await expect(
       observeCommander.parseAsync(["--max-files", "abc"], { from: "user" }),
     ).rejects.toMatchObject({ code: "commander.invalidArgument" });
+  });
+});
+
+describe("hexagen observe: round 2", () => {
+  async function remoteOf2(url: string): Promise<string | undefined> {
+    const root = await messyRepo();
+    git(root, "remote", "add", "origin", url);
+    return (await observe({ root })).repo.remote;
+  }
+
+  it("strips credentials from scp-style remotes, keeping the git user", async () => {
+    expect(await remoteOf2("ghp_abc@github.com:o/r")).toBe("github.com:o/r");
+    expect(await remoteOf2("git@github.com:o/r")).toBe("git@github.com:o/r");
+    expect(await remoteOf2("u:p@host:o/r")).toBe("host:o/r");
+  });
+
+  it("starts the deadline before metadata and checks it after the last generated batch", async () => {
+    const root = await mkRoot();
+    await put(root, "a.ts", "// @generated\n");
+    await commitAll(root);
+    let calls = 0;
+    // calls 1 and 2 (deadline start, walk) see t=0; every later call is late
+    const now = () => (++calls <= 2 ? 0 : 1000);
+    const report = await observe({ root, maxMs: 10, now });
+    expect(report.languages.collected).toBe(true);
+    expect(report.generated).toMatchObject({ collected: false });
+    expect(report.limits.truncated).toBe(true);
+    expect(report.limits.reasons.join(" ")).toMatch(/time cap/);
+  });
+
+  it.skipIf(isWin)("refuses a symlinked CODEOWNERS with a note", async () => {
+    const root = await messyRepo();
+    const outside = await mkRoot();
+    await fs.writeFile(path.join(outside, "CO"), "/secret/ @leak\n");
+    await fs.rm(path.join(root, "CODEOWNERS"));
+    await fs.symlink(path.join(outside, "CO"), path.join(root, "CODEOWNERS"));
+    const report = await observe({ root });
+    expect(items(report.dontTouch).map((d) => d.path)).not.toContain("secret/");
+    expect(report.limits.reasons.join("\n")).toMatch(/CODEOWNERS.*symlink/);
+  });
+
+  it.skipIf(isWin)(
+    "refuses a symlinked .gitattributes and pnpm-workspace.yaml",
+    async () => {
+      const root = await messyRepo();
+      const outside = await mkRoot();
+      await fs.writeFile(path.join(outside, "ga"), "*.ts linguist-generated\n");
+      await fs.writeFile(path.join(outside, "pw"), "packages:\n  - '!**'\n");
+      await fs.rm(path.join(root, ".gitattributes"));
+      await fs.symlink(
+        path.join(outside, "ga"),
+        path.join(root, ".gitattributes"),
+      );
+      await fs.symlink(
+        path.join(outside, "pw"),
+        path.join(root, "pnpm-workspace.yaml"),
+      );
+      const report = await observe({ root });
+      expect(items(report.generated).map((g) => g.path)).not.toContain(
+        "src/index.ts",
+      );
+      expect(items(report.packages).length).toBeGreaterThan(0);
+      const notes = report.limits.reasons.join("\n");
+      expect(notes).toMatch(/\.gitattributes.*symlink/);
+      expect(notes).toMatch(/pnpm-workspace\.yaml.*symlink/);
+    },
+  );
+
+  it("exits 2 with a clear message for a missing --root, with and without --out", async () => {
+    const missing = path.join(os.tmpdir(), "hexagen-observe-missing-root-xyz");
+    for (const extra of [{}, { out: ".hexagen/o.json", yes: true }]) {
+      const res = await runObserve({ root: missing, ...extra });
+      expect(res.exitCode).toBe(2);
+      expect(res.messages.join(" ")).toMatch(
+        /--root .* (does not exist|not accessible)/,
+      );
+    }
+  });
+
+  it("exits 2 when a nested output parent is blocked by a file", async () => {
+    const root = await messyRepo();
+    await fs.mkdir(path.join(root, ".hexagen"));
+    await fs.writeFile(path.join(root, ".hexagen", "nested"), "x");
+    const res = await runObserve({
+      root,
+      out: ".hexagen/nested/o.json",
+      yes: true,
+    });
+    expect(res.exitCode).toBe(2);
+    expect(res.messages.join(" ")).toMatch(/could not write/);
+  });
+
+  it("never removes a directory at the temp path and reports the original error", async () => {
+    const root = await messyRepo();
+    const tmpDir = path.join(root, ".hexagen", "conflict.tmp");
+    await fs.mkdir(tmpDir, { recursive: true });
+    await fs.writeFile(path.join(tmpDir, "keep"), "k");
+    const res = await runObserve({
+      root,
+      out: ".hexagen/observed.json",
+      yes: true,
+      tmpPath: () => tmpDir,
+    });
+    expect(res.exitCode).toBe(2);
+    expect(res.messages.join(" ")).toMatch(/could not write.*(EEXIST|EISDIR)/);
+    expect(await fs.readFile(path.join(tmpDir, "keep"), "utf8")).toBe("k");
+  });
+
+  it("does not delete a pre-existing temp file it did not create", async () => {
+    const root = await messyRepo();
+    const tmpFile = path.join(root, ".hexagen", "squat.tmp");
+    await fs.mkdir(path.dirname(tmpFile), { recursive: true });
+    await fs.writeFile(tmpFile, "mine");
+    const res = await runObserve({
+      root,
+      out: ".hexagen/observed.json",
+      yes: true,
+      tmpPath: () => tmpFile,
+    });
+    expect(res.exitCode).toBe(2);
+    expect(await fs.readFile(tmpFile, "utf8")).toBe("mine");
   });
 });
 

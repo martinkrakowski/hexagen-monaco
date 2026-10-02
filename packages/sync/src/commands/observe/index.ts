@@ -1,6 +1,7 @@
 /* eslint-disable no-console */
 import { Command, InvalidArgumentError } from "commander";
 import { execFileSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { promises as fs, realpathSync } from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
@@ -15,8 +16,9 @@ import {
   realpathOfExistingAncestor,
   resolveExcludeFile,
 } from "../shared/git-exclude.js";
-import { globToRegExp } from "./glob.js";
-import { parseIgnoreLine, verdict, type IgnoreRule } from "./ignore.js";
+import { globToRegExp } from "../shared/glob.js";
+import { parseIgnoreLine, verdict, type IgnoreRule } from "../shared/ignore.js";
+import { samePath } from "./same-path.js";
 import { timeCapReason, walk, type WalkResult } from "./walk.js";
 
 /**
@@ -115,6 +117,11 @@ export interface ObserveOptions {
  * (`git@host:o/r`) are not URLs and go through the regex fallback.
  */
 function stripCredentials(remote: string): string {
+  if (!remote.includes("://")) {
+    // scp-like `[user[:pass]@]host:path`: only the plain `git` user is kept.
+    const scp = /^([^@/]+)@([^/:]+:.*)$/.exec(remote);
+    return scp && scp[1] !== "git" ? (scp[2] as string) : remote;
+  }
   try {
     const url = new URL(remote);
     url.username = "";
@@ -142,7 +149,16 @@ function git(root: string, args: string[]): string | null {
 
 export class ObserveError extends Error {}
 
+function realNative(p: string): string {
+  try {
+    return realpathSync.native(path.resolve(p));
+  } catch {
+    throw new ObserveError(`--root ${p} does not exist or is not accessible`);
+  }
+}
+
 function readRepo(root: string): { remote?: string; commit: string } {
+  realNative(root);
   const commit = git(root, ["rev-parse", "HEAD"]);
   if (!commit) {
     throw new ObserveError(
@@ -150,7 +166,7 @@ function readRepo(root: string): { remote?: string; commit: string } {
     );
   }
   const top = git(root, ["rev-parse", "--show-toplevel"]);
-  if (!top || realpathSync(top) !== realpathSync(root)) {
+  if (!top || !samePath(realNative(top), realNative(root))) {
     throw new ObserveError(
       `--root must be the repo top level (git says ${top ?? "unknown"})`,
     );
@@ -165,6 +181,31 @@ async function readText(file: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Read a metadata file under `root`, refusing to read through a symlink: each
+ * path component is `lstat`ed, matching the walk's no-symlink policy. A link
+ * is recorded as a note and the file treated as absent.
+ */
+async function readMeta(
+  root: string,
+  rel: string,
+  notes: string[],
+): Promise<string | null> {
+  let current = root;
+  for (const part of rel.split("/")) {
+    current = path.join(current, part);
+    try {
+      if ((await fs.lstat(current)).isSymbolicLink()) {
+        notes.push(`note: ${rel} is a symlink; not read`);
+        return null;
+      }
+    } catch {
+      return null; // absent
+    }
+  }
+  return readText(current);
 }
 
 function normalizeWorkspaceGlob(raw: string): string {
@@ -182,7 +223,7 @@ async function workspaceExclusions(
   notes: string[],
 ): Promise<RegExp[]> {
   const patterns: string[] = [];
-  const pkgText = await readText(path.join(root, "package.json"));
+  const pkgText = await readMeta(root, "package.json", notes);
   if (pkgText) {
     try {
       const pkg = JSON.parse(pkgText) as { workspaces?: unknown };
@@ -201,7 +242,7 @@ async function workspaceExclusions(
       notes.push("note: root package.json is not valid JSON");
     }
   }
-  const pnpmText = await readText(path.join(root, "pnpm-workspace.yaml"));
+  const pnpmText = await readMeta(root, "pnpm-workspace.yaml", notes);
   if (pnpmText) {
     try {
       const doc = yaml.load(pnpmText) as { packages?: unknown } | null;
@@ -238,7 +279,7 @@ async function collectPackages(
     const dir =
       file === "package.json" ? "." : file.slice(0, -"/package.json".length);
     if (dir !== "." && exclusions.some((re) => re.test(dir))) continue;
-    const text = await readText(path.join(root, file));
+    const text = await readMeta(root, file, notes);
     let name: string | undefined;
     try {
       const parsed = JSON.parse(text ?? "") as { name?: unknown };
@@ -357,7 +398,7 @@ async function collectGenerated(
   };
   const found = new Map<string, Item>();
 
-  const attrText = await readText(path.join(root, ".gitattributes"));
+  const attrText = await readMeta(root, ".gitattributes", notes);
   if (attrText) {
     const rules = linguistRules(attrText, notes);
     const entries = [
@@ -384,9 +425,6 @@ async function collectGenerated(
   );
   const BATCH = 64;
   for (let i = 0; i < candidates.length; i += BATCH) {
-    if (now() - start > maxMs) {
-      return { collected: false, reason: timeCapReason(maxMs) };
-    }
     const batch = candidates.slice(i, i + BATCH);
     const hits = await Promise.all(
       batch.map((f) => hasGeneratedHeader(path.join(root, f))),
@@ -394,6 +432,10 @@ async function collectGenerated(
     batch.forEach((f, idx) => {
       if (hits[idx]) found.set(f, { path: f, source: "header" });
     });
+    // Checked after every batch, the last included.
+    if (now() - start > maxMs) {
+      return { collected: false, reason: timeCapReason(maxMs) };
+    }
   }
   const items = [...found.values()].sort((a, b) =>
     a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
@@ -434,7 +476,7 @@ async function collectDontTouch(
 
   let codeowners: string | null = null;
   for (const rel of [".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"]) {
-    codeowners = await readText(path.join(root, rel));
+    codeowners = await readMeta(root, rel, notes);
     if (codeowners !== null) break;
   }
   if (codeowners !== null) {
@@ -482,15 +524,22 @@ export async function observe(
   const now = options.now ?? Date.now;
   const repo = readRepo(root);
   const notes: string[] = [];
-  // Validated before the walk so a bad flag fails fast.
+  // A bad flag fails fast, before the clock starts.
+  for (const raw of options.dontTouch ?? []) {
+    const check = normalizeSlicePath(raw.replace(/^\.\//, ""));
+    if (!check.ok) {
+      throw new ObserveError(`--dont-touch "${raw}": ${check.reason}`);
+    }
+  }
+  // The deadline covers metadata collection, the walk and the header pass.
+  const start = now();
   const dontTouch = await collectDontTouch(
     root,
     options.dontTouch ?? [],
     notes,
   );
-  const start = now();
 
-  const tree = await walk(root, { maxFiles, maxMs, now });
+  const tree = await walk(root, { maxFiles, maxMs, now, start });
   notes.unshift(...tree.notes);
   const truncatedReason = tree.truncated;
   const notCollected = <T>(): Section<T> => ({
@@ -538,6 +587,8 @@ export async function observe(
 export interface RunObserveOptions extends ObserveOptions {
   out?: string;
   yes?: boolean;
+  /** Test seam: the temp file path for a given target. */
+  tmpPath?: (target: string) => string;
 }
 
 export interface RunObserveResult {
@@ -588,6 +639,7 @@ export async function runObserve(
   let excludeFile: string | null = null;
 
   try {
+    realNative(root); // a missing root is a clear exit 2 before anything else
     if (options.out !== undefined) {
       target = await resolveOut(root, options.out);
       if (!target) {
@@ -620,15 +672,29 @@ export async function runObserve(
 
     // The exclude is updated first: if it fails, no observed.json exists.
     await ensureExcluded(root, ".hexagen/");
-    await fs.mkdir(path.dirname(target), { recursive: true });
-    const tmp = `${target}.${process.pid}.tmp`;
+    const tmp =
+      options.tmpPath?.(target) ??
+      `${target}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+    // True only once this run created the temp file, so cleanup can never
+    // remove something it did not make (a directory, or someone's file).
+    let created = false;
     // The check-then-rename window can only be raced by another process in the
     // FDE's own clone, which is outside this tool's threat model.
     try {
-      await fs.writeFile(tmp, json, "utf8");
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      const handle = await fs.open(tmp, "wx");
+      created = true;
+      try {
+        await handle.writeFile(json, "utf8");
+      } finally {
+        await handle.close();
+      }
       await fs.rename(tmp, target);
     } catch (e) {
-      await fs.rm(tmp, { force: true });
+      if (created) {
+        // Best effort: never masks the original error.
+        await fs.unlink(tmp).catch(() => undefined);
+      }
       messages.push(
         `could not write ${target}: ${e instanceof Error ? e.message : String(e)}`,
       );
