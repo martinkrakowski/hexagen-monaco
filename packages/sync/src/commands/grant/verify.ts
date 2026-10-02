@@ -12,7 +12,7 @@ import {
 import { canonicalGrantPayload } from "./canonical.js";
 
 /** RFC 3339 date-time with a mandatory offset, and a real calendar instant (the Field Kit schema's `date-time`). */
-const isoDateTime = z
+export const isoDateTime = z
   .string()
   .regex(
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/,

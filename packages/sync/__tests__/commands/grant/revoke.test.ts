@@ -6,6 +6,8 @@ import {
   readdir,
   rm,
   stat,
+  symlink,
+  chmod,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -277,5 +279,99 @@ describe("grant revoke", () => {
     await revoke(f);
     expect(text()).not.toContain(f.keyHex);
     expect(await readFile(f.grantFile, "utf-8")).not.toContain(f.keyHex);
+  });
+
+  it("warns on a future --at, and check still ALLOWs before it", async () => {
+    const f = await fixture();
+    await revoke(f, { at: "2026-10-01T15:00:00Z" });
+    expect(process.exitCode).toBe(0);
+    expect(text()).toContain("warning: --at is in the future");
+    expect(text()).not.toContain("at or after expires_at");
+    out = [];
+    await grantCheckCommand({
+      grantFile: f.grantFile,
+      tool: "hexagen_propose_patch",
+      path: ["src/a.ts"],
+      workspaceRoot: f.root,
+      homeDir: f.home,
+      env: {},
+      now: NOW,
+    });
+    expect(process.exitCode).toBe(0);
+    expect(text()).toContain("ALLOW");
+  });
+
+  it("warns when --at is at or after expires_at", async () => {
+    const f = await fixture();
+    await revoke(f, { at: "2026-10-01T18:00:00Z" });
+    expect(text()).toContain("warning: --at is at or after expires_at");
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "refuses a grant file that is a symlink to an outside file",
+    async () => {
+      const f = await fixture();
+      const outsideDir = await tmp("rv-outside-");
+      const outside = path.join(outsideDir, "g.json");
+      await writeFile(outside, await readFile(f.grantFile, "utf-8"));
+      await rm(f.grantFile);
+      await symlink(outside, f.grantFile);
+      const before = await readFile(outside, "utf-8");
+      await revoke(f);
+      expect(process.exitCode).toBe(2);
+      expect(await readFile(outside, "utf-8")).toBe(before);
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "preserves the grant file's mode",
+    async () => {
+      const f = await fixture();
+      await chmod(f.grantFile, 0o640);
+      await revoke(f);
+      expect((await stat(f.grantFile)).mode & 0o777).toBe(0o640);
+    },
+  );
+
+  it("revokes in repo mode with the in-repo key, showing [repo]", async () => {
+    const root = await tmp("rv-root-");
+    const home = await tmp("rv-home-");
+    await mkdir(path.join(root, ".architecture"), { recursive: true });
+    await writeFile(
+      path.join(root, ".architecture", "manifest.yaml"),
+      "x: 1\n",
+    );
+    await mkdir(path.join(root, ".hexagen"), { recursive: true });
+    const keyHex = "ab".repeat(32);
+    await writeFile(
+      path.join(root, ".hexagen", "grant-signing.key"),
+      keyHex + "\n",
+    );
+    const grantFile = path.join(root, "g.json");
+    await writeFile(
+      grantFile,
+      JSON.stringify(signed(keyHex, { paths: ["lib/"] })),
+    );
+    const f: Fixture = {
+      root,
+      home,
+      keyHex,
+      keyPath: path.join(root, ".hexagen", "grant-signing.key"),
+      grantFile,
+    };
+    await revoke(f, { at: "2026-10-01T11:00:00Z" });
+    expect(process.exitCode).toBe(0);
+    expect((await read(f)).revoked_at).toBe("2026-10-01T11:00:00Z");
+    expect(text()).toContain("[repo]");
+    expect(text()).not.toContain(keyHex);
+    out = [];
+    await grantShowCommand({
+      grantFile,
+      workspaceRoot: root,
+      homeDir: home,
+      env: {},
+      now: NOW,
+    });
+    expect(text()).toContain("signature: verified");
   });
 });

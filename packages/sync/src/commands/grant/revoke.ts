@@ -1,12 +1,12 @@
 /* eslint-disable no-console */
 import { randomBytes } from "node:crypto";
-import { open, realpath, rename, unlink } from "node:fs/promises";
+import { open, realpath, rename, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { isRepoMode, readGrantKey } from "@hexagen/shared/node/grant-key";
 import { canonicalGrantPayload } from "./canonical.js";
 import { signGrantPayload } from "./sign.js";
 import { discoverWorkspaceRoot, loadSlice } from "./workspace.js";
-import { loadGrantFile, verifyGrantSignature } from "./verify.js";
+import { isoDateTime, loadGrantFile, verifyGrantSignature } from "./verify.js";
 import { resolveSidecarOut } from "../shared/sidecar-out.js";
 
 export interface RevokeOptions {
@@ -23,9 +23,6 @@ export interface RevokeOptions {
   now?: Date;
 }
 
-const ISO_WITH_OFFSET =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
-
 function fail(code: 1 | 2, message: string): void {
   console.error(message);
   process.exitCode = code;
@@ -35,9 +32,10 @@ function fail(code: 1 | 2, message: string): void {
 async function replaceFileAtomically(
   target: string,
   text: string,
+  mode: number,
 ): Promise<void> {
   const tmp = `${target}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
-  const handle = await open(tmp, "wx", 0o600);
+  const handle = await open(tmp, "wx", mode);
   try {
     try {
       await handle.writeFile(text, "utf-8");
@@ -65,10 +63,7 @@ export async function grantRevokeCommand(
 ): Promise<void> {
   const now = options.now ?? new Date();
   if (options.at !== undefined) {
-    if (
-      !ISO_WITH_OFFSET.test(options.at) ||
-      Number.isNaN(Date.parse(options.at))
-    ) {
+    if (!isoDateTime.safeParse(options.at).success) {
       return fail(
         2,
         `--at must be an ISO date-time with an offset, e.g. 2026-10-01T18:00:00Z; got '${options.at}'`,
@@ -137,10 +132,23 @@ export async function grantRevokeCommand(
 
   const read = readGrantKey(keyPath);
   if (!read.ok) return fail(1, read.problem);
+  if (read.fingerprint !== verification.key.fingerprint) {
+    return fail(1, "key changed during revoke; nothing written");
+  }
 
   console.error(
     `[grant revoke] preflight, will write:\n  - grant file: ${target} (revoked_at ${grant.revoked_at ?? "(unset)"} -> ${requested}, re-signed with key ${keyPath})`,
   );
+  if (Date.parse(requested) > now.getTime()) {
+    console.error(
+      "[grant revoke] warning: --at is in the future: this schedules the revocation; the grant stays valid until then",
+    );
+  }
+  if (Date.parse(requested) >= Date.parse(grant.expires_at)) {
+    console.error(
+      "[grant revoke] warning: --at is at or after expires_at: the revocation has no effect",
+    );
+  }
   if (!options.yes) {
     return fail(
       2,
@@ -148,8 +156,7 @@ export async function grantRevokeCommand(
     );
   }
 
-  const { signature: _old, ...rest } = grant;
-  const revoked = { ...rest, revoked_at: requested };
+  const revoked = { ...grant, revoked_at: requested };
   const signed = {
     ...revoked,
     signature: signGrantPayload(canonicalGrantPayload(revoked), read.keyHex),
@@ -157,7 +164,12 @@ export async function grantRevokeCommand(
   try {
     // Write through a symlink's target, not over the link itself.
     const real = await realpath(target);
-    await replaceFileAtomically(real, `${JSON.stringify(signed, null, 2)}\n`);
+    const mode = (await stat(real)).mode & 0o777;
+    await replaceFileAtomically(
+      real,
+      `${JSON.stringify(signed, null, 2)}\n`,
+      mode,
+    );
   } catch (error) {
     return fail(
       2,
@@ -168,7 +180,7 @@ export async function grantRevokeCommand(
     [
       `revoked grant '${grant.id}' at ${requested}`,
       `grant file ${target}`,
-      `key ${keyPath}`,
+      `key ${keyPath} [${verification.key.source}]`,
       `fingerprint ${read.fingerprint}`,
     ].join("\n"),
   );

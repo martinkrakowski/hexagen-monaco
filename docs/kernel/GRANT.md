@@ -289,6 +289,13 @@ hexagen grant revoke <grant-file> [--at <iso>] [--yes]
     .hexagen/, no --yes).
 ```
 
+`revoke` works in a repo with a manifest too: it verifies and re-signs with the
+in-repo key (`.hexagen/grant-signing.key`), and the grant file may be anywhere
+(the `.hexagen/` restriction applies to client repos only). A future `--at`
+schedules the revocation: the grant stays valid until then, and the preflight
+warns. A value at or after `expires_at` has no effect, and the preflight warns
+about that too. The file's permission bits are preserved.
+
 Two different ways to end up with a `revoked_at` field, and they read
 differently (BW-D5):
 

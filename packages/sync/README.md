@@ -189,6 +189,9 @@ print the workspace root, the key path and its fingerprint, never the key.
   signature, so `check` denies the grant as a signature failure; `revoke`
   re-signs it, so `check` reports `grant_revoked`. Deleting the engagement key
   revokes every grant in that engagement (an emergency stop).
+  A future `--at` schedules the revocation (the grant stays valid until then,
+  and the preflight warns); a value at or after `expires_at` has no effect. In
+  a repo with a manifest it re-signs with the in-repo key.
 
 ### `hexagen observe`
 

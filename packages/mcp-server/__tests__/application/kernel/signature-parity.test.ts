@@ -96,4 +96,19 @@ describe("CLI and server signature verification agree", () => {
       server: false,
     });
   });
+
+  it("both accept a revoked grant signed by the issuer path, and both deny revoked_at added after signing", async () => {
+    const keyHex = randomBytes(32).toString("hex");
+    const revoked = { ...base, revoked_at: "2026-10-01T11:00:00Z" };
+    const grant: Grant = {
+      ...revoked,
+      signature: signGrantPayload(canonicalGrantPayload(revoked), keyHex),
+    };
+    assert.deepEqual(await both(grant, keyHex), { cli: true, server: true });
+    const edited: Grant = {
+      ...revoked,
+      signature: signGrantPayload(canonicalGrantPayload(base), keyHex),
+    };
+    assert.deepEqual(await both(edited, keyHex), { cli: false, server: false });
+  });
 });
