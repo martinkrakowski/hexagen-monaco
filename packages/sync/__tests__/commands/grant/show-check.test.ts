@@ -604,13 +604,17 @@ describe("root discovery, validation and diagnostics", () => {
 });
 
 describe("the command line", () => {
-  const savedHome = process.env.HOME;
+  // The commander path has no home-directory seam, and os.homedir() reads HOME
+  // on POSIX but USERPROFILE on Windows. Name the key by HEXAGEN_GRANT_KEY_FILE
+  // (resolver step 2) so the test does not depend on either.
+  const savedKeyFile = process.env.HEXAGEN_GRANT_KEY_FILE;
   afterEach(() => {
-    process.env.HOME = savedHome;
+    if (savedKeyFile === undefined) delete process.env.HEXAGEN_GRANT_KEY_FILE;
+    else process.env.HEXAGEN_GRANT_KEY_FILE = savedKeyFile;
   });
 
   async function run(f: Fixture, args: string[]): Promise<void> {
-    process.env.HOME = f.home;
+    process.env.HEXAGEN_GRANT_KEY_FILE = f.keyPath;
     process.exitCode = 99;
     out.length = 0;
     vi.resetModules();
