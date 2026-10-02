@@ -33,6 +33,7 @@ import { loadOrCreateSigningKey } from "./signing-key.js";
 import { discoverWorkspaceRoot, loadSlice } from "./workspace.js";
 import { grantShowCommand, type ShowOptions } from "./show.js";
 import { grantCheckCommand, type CheckOptions } from "./check.js";
+import { grantRevokeCommand, type RevokeOptions } from "./revoke.js";
 
 /** Commander parser that keeps every occurrence of a repeated flag. */
 function collectValues(value: string, previous?: string[]): string[] {
@@ -447,7 +448,7 @@ export async function issueGrantCommand(options: IssueOptions): Promise<void> {
 }
 
 export const grantCommander = new Command("grant").description(
-  "Issue, show and check Grant objects (docs/kernel/GRANT.md)",
+  "Issue, show, check and revoke Grant objects (docs/kernel/GRANT.md)",
 );
 
 grantCommander.addCommand(grantKeyCommander);
@@ -573,5 +574,40 @@ grantCommander
       options: Omit<CheckOptions, "grantFile" | "transactionId">,
     ): Promise<void> => {
       await grantCheckCommand({ ...options, grantFile, transactionId });
+    },
+  );
+
+grantCommander
+  .command("revoke")
+  .description(
+    "Set revoked_at on a grant and re-sign it with the key that verifies it (refused if the signature does not verify). Exit 0 revoked or already revoked, 1 not verified, 2 bad input",
+  )
+  .argument(
+    "<grant-file>",
+    "Path to a signed grant JSON file (updated in place)",
+  )
+  .option(
+    "--at <iso>",
+    "Revocation time, an ISO date-time with an offset (default: now)",
+  )
+  .option(
+    "--workspace-root <path>",
+    "Workspace root (default: nearest project/workspace root, bounded by the git toplevel)",
+  )
+  .option(
+    "--key-file <path>",
+    "Signing key file (overrides HEXAGEN_GRANT_KEY_FILE and ~/.hexagen/keys/<engagement>.key)",
+  )
+  .option(
+    "--engagement <id>",
+    "Brownfield: engagement id naming ~/.hexagen/keys/<id>.key (default: the id in .hexagen/slice.json)",
+  )
+  .option("--yes", "Required: consent to rewriting the grant file")
+  .action(
+    async (
+      grantFile: string,
+      options: Omit<RevokeOptions, "grantFile">,
+    ): Promise<void> => {
+      await grantRevokeCommand({ ...options, grantFile });
     },
   );

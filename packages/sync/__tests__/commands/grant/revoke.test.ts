@@ -1,0 +1,281 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { grantKeyInitCommand } from "../../../src/commands/grant/key-init.js";
+import { canonicalGrantPayload } from "../../../src/commands/grant/canonical.js";
+import { signGrantPayload } from "../../../src/commands/grant/sign.js";
+import { grantRevokeCommand } from "../../../src/commands/grant/revoke.js";
+import { grantShowCommand } from "../../../src/commands/grant/show.js";
+import { grantCheckCommand } from "../../../src/commands/grant/check.js";
+
+const dirs: string[] = [];
+async function tmp(prefix: string): Promise<string> {
+  const d = await mkdtemp(path.join(tmpdir(), prefix));
+  dirs.push(d);
+  if (prefix === "rv-root-") execFileSync("git", ["init", "-q", d]);
+  return d;
+}
+
+let out: string[];
+beforeEach(() => {
+  out = [];
+  vi.spyOn(console, "log").mockImplementation((...a) => {
+    out.push(a.join(" "));
+  });
+  vi.spyOn(console, "error").mockImplementation((...a) => {
+    out.push(a.join(" "));
+  });
+  process.exitCode = 99;
+});
+afterEach(async () => {
+  vi.restoreAllMocks();
+  process.exitCode = 0;
+  while (dirs.length > 0) {
+    await rm(dirs.pop() as string, { recursive: true, force: true });
+  }
+});
+
+const NOW = new Date("2026-10-01T12:00:00Z");
+const text = (): string => out.join("\n");
+
+interface Fixture {
+  root: string;
+  home: string;
+  keyHex: string;
+  keyPath: string;
+  grantFile: string;
+}
+
+function signed(
+  keyHex: string,
+  over: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const grant = {
+    id: "g-1",
+    principal: "martin",
+    agent: "lane-1",
+    paths: ["src/"],
+    tools: ["hexagen_propose_patch"],
+    mode: "propose" as const,
+    expires_at: "2026-10-01T18:00:00Z",
+    ...over,
+  };
+  return {
+    ...grant,
+    signature: signGrantPayload(canonicalGrantPayload(grant as never), keyHex),
+  };
+}
+
+async function fixture(
+  grantOver: Record<string, unknown> = {},
+): Promise<Fixture> {
+  const root = await tmp("rv-root-");
+  const home = await tmp("rv-home-");
+  await mkdir(path.join(root, ".hexagen", "grants"), { recursive: true });
+  await writeFile(
+    path.join(root, ".hexagen", "slice.json"),
+    JSON.stringify({
+      schemaVersion: "1.0.0",
+      id: "eng-1",
+      repo: { commit: "0123456789abcdef" },
+      paths: ["src/"],
+      excludes: [],
+      createdBy: "test",
+      createdAt: "2026-10-01T00:00:00Z",
+    }),
+  );
+  await grantKeyInitCommand({ engagement: "eng-1", homeDir: home });
+  const keyPath = path.join(home, ".hexagen", "keys", "eng-1.key");
+  const keyHex = (await readFile(keyPath, "utf-8")).trim();
+  const grantFile = path.join(root, ".hexagen", "grants", "g.json");
+  await writeFile(
+    grantFile,
+    JSON.stringify(signed(keyHex, grantOver), null, 2),
+  );
+  return { root, home, keyHex, keyPath, grantFile };
+}
+
+function revoke(f: Fixture, extra: Record<string, unknown> = {}) {
+  return grantRevokeCommand({
+    grantFile: f.grantFile,
+    workspaceRoot: f.root,
+    homeDir: f.home,
+    env: {},
+    now: NOW,
+    yes: true,
+    ...extra,
+  });
+}
+
+const read = async (f: Fixture): Promise<Record<string, unknown>> =>
+  JSON.parse(await readFile(f.grantFile, "utf-8")) as Record<string, unknown>;
+
+describe("grant revoke", () => {
+  it("revokes, re-signs, and check denies with grant_revoked while show shows the window", async () => {
+    const f = await fixture();
+    await revoke(f, { at: "2026-10-01T11:00:00Z" });
+    expect(process.exitCode).toBe(0);
+    expect((await read(f)).revoked_at).toBe("2026-10-01T11:00:00Z");
+    expect(text()).toContain("g-1");
+    expect(text()).toContain(f.keyPath);
+    expect(text()).toContain("fingerprint");
+    out = [];
+
+    await grantCheckCommand({
+      grantFile: f.grantFile,
+      tool: "hexagen_propose_patch",
+      path: ["src/a.ts"],
+      workspaceRoot: f.root,
+      homeDir: f.home,
+      env: {},
+      now: NOW,
+    });
+    expect(process.exitCode).toBe(1);
+    expect(text()).toContain("was revoked at 2026-10-01T11:00:00Z");
+    expect(text()).not.toContain("signature is not verified");
+    out = [];
+
+    await grantShowCommand({
+      grantFile: f.grantFile,
+      workspaceRoot: f.root,
+      homeDir: f.home,
+      env: {},
+      now: NOW,
+    });
+    expect(process.exitCode).toBe(0);
+    expect(text()).toContain("revoked_at  2026-10-01T11:00:00Z");
+    expect(text()).toContain("was revoked at");
+    expect(text()).toContain("signature: verified");
+  });
+
+  it("defaults --at to now", async () => {
+    const f = await fixture();
+    await revoke(f);
+    expect((await read(f)).revoked_at).toBe(NOW.toISOString());
+  });
+
+  it("a hand-edited revoked_at is denied as a signature failure by check", async () => {
+    const f = await fixture();
+    const g = await read(f);
+    await writeFile(
+      f.grantFile,
+      JSON.stringify({ ...g, revoked_at: "2026-10-01T11:00:00Z" }),
+    );
+    await grantCheckCommand({
+      grantFile: f.grantFile,
+      tool: "hexagen_propose_patch",
+      path: ["src/a.ts"],
+      workspaceRoot: f.root,
+      homeDir: f.home,
+      env: {},
+      now: NOW,
+    });
+    expect(process.exitCode).toBe(1);
+    expect(text()).toContain("signature is not verified");
+    expect(text()).not.toContain("was revoked at");
+  });
+
+  it("is idempotent: a second revoke, or a later --at, writes nothing", async () => {
+    const f = await fixture();
+    await revoke(f, { at: "2026-10-01T11:00:00Z" });
+    const before = await readFile(f.grantFile, "utf-8");
+    const ino = (await stat(f.grantFile)).ino;
+    out = [];
+    await revoke(f);
+    expect(process.exitCode).toBe(0);
+    expect(text()).toContain("already revoked at 2026-10-01T11:00:00Z");
+    await revoke(f, { at: "2026-10-01T11:30:00Z" });
+    expect(process.exitCode).toBe(0);
+    expect(await readFile(f.grantFile, "utf-8")).toBe(before);
+    expect((await stat(f.grantFile)).ino).toBe(ino);
+  });
+
+  it("an earlier --at moves the revocation earlier, still verifying", async () => {
+    const f = await fixture();
+    await revoke(f, { at: "2026-10-01T11:00:00Z" });
+    await revoke(f, { at: "2026-10-01T10:00:00Z" });
+    expect(process.exitCode).toBe(0);
+    expect((await read(f)).revoked_at).toBe("2026-10-01T10:00:00Z");
+    out = [];
+    await grantShowCommand({
+      grantFile: f.grantFile,
+      workspaceRoot: f.root,
+      homeDir: f.home,
+      env: {},
+      now: NOW,
+    });
+    expect(text()).toContain("signature: verified");
+  });
+
+  it("refuses a grant signed under a different key and leaves the file unchanged", async () => {
+    const f = await fixture();
+    await writeFile(
+      f.grantFile,
+      JSON.stringify(signed("cd".repeat(32)), null, 2),
+    );
+    const before = await readFile(f.grantFile, "utf-8");
+    await revoke(f);
+    expect(process.exitCode).toBe(1);
+    expect(text()).toContain("signature is not verified");
+    expect(await readFile(f.grantFile, "utf-8")).toBe(before);
+  });
+
+  it("writes nothing without --yes", async () => {
+    const f = await fixture();
+    const before = await readFile(f.grantFile, "utf-8");
+    await revoke(f, { yes: false });
+    expect(process.exitCode).toBe(2);
+    expect(text()).toContain("preflight");
+    expect(text()).toContain("--yes");
+    expect(await readFile(f.grantFile, "utf-8")).toBe(before);
+  });
+
+  it("replaces the file by atomic rename and leaves no temp files", async () => {
+    const f = await fixture();
+    const ino = (await stat(f.grantFile)).ino;
+    await revoke(f);
+    expect((await stat(f.grantFile)).ino).not.toBe(ino);
+    expect(await readdir(path.dirname(f.grantFile))).toEqual(["g.json"]);
+  });
+
+  it("refuses a grant file outside .hexagen/ in brownfield", async () => {
+    const f = await fixture();
+    const outside = path.join(f.root, "g.json");
+    await writeFile(outside, await readFile(f.grantFile, "utf-8"));
+    const before = await readFile(outside, "utf-8");
+    await revoke(f, { grantFile: outside });
+    expect(process.exitCode).toBe(2);
+    expect(text()).toContain(".hexagen");
+    expect(await readFile(outside, "utf-8")).toBe(before);
+  });
+
+  it.each(["tomorrow", "2026-10-01T11:00:00", "2026-13-45T00:00:00Z"])(
+    "exits 2 on an invalid --at (%s)",
+    async (at) => {
+      const f = await fixture();
+      const before = await readFile(f.grantFile, "utf-8");
+      await revoke(f, { at });
+      expect(process.exitCode).toBe(2);
+      expect(await readFile(f.grantFile, "utf-8")).toBe(before);
+    },
+  );
+
+  it("never prints the key", async () => {
+    const f = await fixture();
+    await revoke(f, { yes: false });
+    await revoke(f);
+    await revoke(f);
+    expect(text()).not.toContain(f.keyHex);
+    expect(await readFile(f.grantFile, "utf-8")).not.toContain(f.keyHex);
+  });
+});
