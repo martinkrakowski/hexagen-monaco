@@ -190,7 +190,7 @@ export function BrownfieldView(props: BrownfieldViewProps) {
   const border = (p: Pane) => (pane === p ? "green" : "gray");
   return (
     <Box flexDirection="column" padding={1}>
-      <Text>HexaGen TUI | brownfield (read-only) | {workspaceRoot}</Text>
+      <Text>HexaGen TUI | brownfield (read-only) | {clean(workspaceRoot)}</Text>
       {snapshot === undefined ? (
         <Text>Loading...</Text>
       ) : (

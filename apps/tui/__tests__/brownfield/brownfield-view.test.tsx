@@ -146,7 +146,7 @@ describe("brownfield mode is read-only", () => {
     expect(before).not.toMatch(/refactor/i);
   });
 
-  it("constructs no MCP client and never loads the architecture app", async () => {
+  it("routes --brownfield to the brownfield starter, not the architecture app", async () => {
     const startBrownfield = vi.fn();
     const startGreenfield = vi.fn();
     await main(["--brownfield", "--workspace-root", "/x/y"], {
@@ -157,10 +157,9 @@ describe("brownfield mode is read-only", () => {
     });
     expect(startBrownfield).toHaveBeenCalledWith("/x/y");
     expect(startGreenfield).not.toHaveBeenCalled();
-    expect(mcpConstructed).not.toHaveBeenCalled();
   });
 
-  it("defaults the workspace root to cwd and starts the real view without MCP", async () => {
+  it("defaults the workspace root to cwd; importing the brownfield entry constructs no MCP client", async () => {
     const startBrownfield = vi.fn();
     await main(["--brownfield"], {
       startBrownfield,
@@ -169,7 +168,7 @@ describe("brownfield mode is read-only", () => {
       fail: vi.fn(),
     });
     expect(startBrownfield).toHaveBeenCalledWith("/cwd");
-    // The real runner path must not pull in the MCP client either.
+    // The real entry module, under the throwing MCP mock: importing it must not construct a client.
     const run = await import("../../src/brownfield/run.js");
     expect(typeof run.startBrownfield).toBe("function");
     expect(mcpConstructed).not.toHaveBeenCalled();
@@ -191,6 +190,8 @@ describe("brownfield mode is read-only", () => {
       cwd: "/c",
       fail,
     });
-    expect(fail).toHaveBeenCalledWith("--workspace-root needs a directory");
+    expect(fail).toHaveBeenCalledWith(
+      expect.stringContaining("--workspace-root needs a directory"),
+    );
   });
 });

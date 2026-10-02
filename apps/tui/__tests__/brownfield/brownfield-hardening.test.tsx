@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BrownfieldView } from "../../src/brownfield/BrownfieldView.js";
 import {
   clean,
+  listGrantFiles,
   loadGrantShow,
   loadTraceTail,
   makeGrantShowRunner,
@@ -41,6 +42,13 @@ function view(root: string, runner = okRunner) {
   );
   open.push(m.unmount);
   return m;
+}
+
+async function grantWs() {
+  const root = makeWorkspace({ ".hexagen/grants/g.json": GRANT });
+  const listed = await listGrantFiles(root);
+  if (!listed.ok) throw new Error(listed.message);
+  return { root, file: listed.value[0] as string };
 }
 
 const EVIL = "\u001b]0;x\u0007\u001b[2J";
@@ -82,7 +90,8 @@ describe("terminal escape injection", () => {
   });
 
   it("cleans grant show output", async () => {
-    const r = await loadGrantShow("/g.json", "/w", async () => ({
+    const { root, file } = await grantWs();
+    const r = await loadGrantShow(file, root, async () => ({
       stdout: `Grant ${EVIL}g`,
       stderr: "",
       exitCode: 0,
@@ -194,9 +203,10 @@ describe("grant show runner error mapping", () => {
     }) as never);
 
   it("maps a timeout", async () => {
+    const { root, file } = await grantWs();
     const r = await loadGrantShow(
-      "/g",
-      "/w",
+      file,
+      root,
       mk({ killed: true, signal: "SIGTERM" }),
     );
     expect(!r.ok && r.message).toMatch(/timed out/);
@@ -204,9 +214,10 @@ describe("grant show runner error mapping", () => {
   });
 
   it("maps output over the buffer", async () => {
+    const { root, file } = await grantWs();
     const r = await loadGrantShow(
-      "/g",
-      "/w",
+      file,
+      root,
       mk({ code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" }),
     );
     expect(!r.ok && r.message).toMatch(/too large/);
@@ -214,7 +225,8 @@ describe("grant show runner error mapping", () => {
   });
 
   it("hints at PATH only for ENOENT", async () => {
-    const r = await loadGrantShow("/g", "/w", mk({ code: "ENOENT" }));
+    const { root, file } = await grantWs();
+    const r = await loadGrantShow(file, root, mk({ code: "ENOENT" }));
     expect(!r.ok && r.message).toMatch(/PATH/);
   });
 });
@@ -262,5 +274,73 @@ describe("grant pane", () => {
     const out = await until(m.frame, "Grant a.json");
     expect(out).toContain("Grant a.json");
     expect(out).not.toContain("b.json");
+  });
+});
+
+describe.skipIf(process.platform === "win32")("containment, round 3", () => {
+  it("refuses a .hexagen symlinked outside the workspace", async () => {
+    const outside = makeWorkspace({
+      "slice.json": SLICE,
+      "grants/g.json": GRANT,
+      "evidence/trace.jsonl": TRACE,
+    });
+    const root = makeWorkspace({});
+    symlinkSync(outside, path.join(root, ".hexagen"));
+    const m = view(root);
+    const out = await until(m.frame, "outside the workspace");
+    expect(out).toContain(".hexagen resolves outside the workspace");
+    expect(out).not.toContain("abc1234");
+    expect(out).not.toContain("tool_alpha");
+    expect(out).not.toContain("g.json");
+  });
+
+  it("refuses a grant that is swapped for an outside link after listing", async () => {
+    const outside = makeWorkspace({ "g.json": GRANT });
+    const { root, file } = await grantWs();
+    const runner = vi.fn(async () => ({
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+    }));
+    rmSync(file);
+    symlinkSync(path.join(outside, "g.json"), file);
+    const r = await loadGrantShow(file, root, runner);
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.message).toMatch(/outside \.hexagen/);
+    expect(runner).not.toHaveBeenCalled();
+  });
+
+  it("lists the real path of each grant", async () => {
+    const root = makeWorkspace({ ".hexagen/real/g.json": GRANT });
+    mkdirSync(path.join(root, ".hexagen", "grants"));
+    symlinkSync(
+      path.join(root, ".hexagen", "real", "g.json"),
+      path.join(root, ".hexagen", "grants", "link.json"),
+    );
+    const listed = await listGrantFiles(root);
+    expect(listed.ok && listed.value[0]).toMatch(/real\/g\.json$/);
+  });
+
+  it("cleans the workspace root in the header", async () => {
+    const parent = makeWorkspace({});
+    const root = path.join(parent, `d${EVIL}x`);
+    mkdirSync(root);
+    const m = view(root);
+    const out = await until(m.frame, "brownfield");
+    expect(out).toMatch(/\/dx(\s|$)/m);
+    expect(out).not.toContain("\u001b");
+    expect(out).not.toContain("\u0007");
+  });
+});
+
+describe("oversized trace record", () => {
+  it("says so instead of reporting an empty file", async () => {
+    const root = makeWorkspace({
+      ".hexagen/evidence/trace.jsonl": `{"pad":"${"x".repeat(300 * 1024)}"}\n`,
+    });
+    const r = await loadTraceTail(root);
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.message).toMatch(/larger than 256 KiB/);
+    expect(!r.ok && r.message).not.toMatch(/empty/);
   });
 });

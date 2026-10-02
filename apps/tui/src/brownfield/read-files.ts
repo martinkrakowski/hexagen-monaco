@@ -35,24 +35,57 @@ export function clean(text: string): string {
 }
 /* eslint-enable no-control-regex */
 
+type Contained =
+  | { readonly kind: "ok"; readonly real: string }
+  | { readonly kind: "missing" }
+  | { readonly kind: "refused"; readonly message: string };
+
+const isInside = (base: string, target: string): boolean => {
+  const rel = path.relative(base, target);
+  return rel === "" || !(rel.startsWith("..") || path.isAbsolute(rel));
+};
+
 /**
- * Real path of `.hexagen/<segments>`, refused when it resolves outside the
- * real `.hexagen` (a symlink out). Missing files are reported as such.
+ * Real path of `.hexagen`, which must itself resolve inside the real
+ * workspace root: a `.hexagen` symlinked elsewhere is refused outright.
  */
-async function resolveInside(
+async function realSidecar(
   workspaceRoot: string,
-  ...segments: string[]
 ): Promise<
   | { readonly kind: "ok"; readonly real: string }
   | { readonly kind: "missing" }
   | { readonly kind: "refused"; readonly message: string }
 > {
-  const label = segments.join("/");
   try {
-    const sidecar = await realpath(path.join(workspaceRoot, ".hexagen"));
-    const real = await realpath(path.join(sidecar, ...segments));
-    const rel = path.relative(sidecar, real);
-    if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) {
+    const root = await realpath(workspaceRoot);
+    const sidecar = await realpath(path.join(root, ".hexagen"));
+    if (sidecar === root || !isInside(root, sidecar)) {
+      return {
+        kind: "refused",
+        message: ".hexagen resolves outside the workspace; refusing to read it",
+      };
+    }
+    return { kind: "ok", real: sidecar };
+  } catch (error) {
+    if (isMissing(error)) return { kind: "missing" };
+    return {
+      kind: "refused",
+      message: `cannot read .hexagen: ${errorText(error)}`,
+    };
+  }
+}
+
+/** Real path of `target`, refused unless it is inside the real `.hexagen`. */
+async function containInSidecar(
+  workspaceRoot: string,
+  target: string,
+  label: string,
+): Promise<Contained> {
+  const sidecar = await realSidecar(workspaceRoot);
+  if (sidecar.kind !== "ok") return sidecar;
+  try {
+    const real = await realpath(target);
+    if (real === sidecar.real || !isInside(sidecar.real, real)) {
       return {
         kind: "refused",
         message: `${label} resolves outside .hexagen; refusing to read it`,
@@ -66,6 +99,18 @@ async function resolveInside(
       message: `cannot read ${label}: ${errorText(error)}`,
     };
   }
+}
+
+/** Real path of `.hexagen/<segments>`, contained as above. */
+async function resolveInside(
+  workspaceRoot: string,
+  ...segments: string[]
+): Promise<Contained> {
+  return containInSidecar(
+    workspaceRoot,
+    path.join(workspaceRoot, ".hexagen", ...segments),
+    segments.join("/"),
+  );
 }
 
 function errorText(error: unknown): string {
@@ -151,7 +196,7 @@ export async function listGrantFiles(
   for (const n of names) {
     const r = await resolveInside(workspaceRoot, "grants", n);
     if (r.kind === "ok") {
-      files.push(path.join(workspaceRoot, ".hexagen", "grants", n));
+      files.push(r.real);
     } else {
       refused += 1;
     }
@@ -233,7 +278,15 @@ export async function loadGrantShow(
   workspaceRoot: string,
   run: GrantShowRunner = runGrantShow,
 ): Promise<Loaded<string>> {
-  const result = await run(grantFile, workspaceRoot);
+  // The link can change after listing: contain the path again just before use.
+  const contained = await containInSidecar(
+    workspaceRoot,
+    grantFile,
+    path.basename(grantFile),
+  );
+  if (contained.kind === "refused") return fail(contained.message);
+  if (contained.kind === "missing") return fail("grant file no longer exists");
+  const result = await run(contained.real, workspaceRoot);
   if (result.exitCode === null) {
     switch (result.failure) {
       case "timeout":
@@ -352,7 +405,13 @@ export async function loadTraceTail(
     return fail(`cannot read trace.jsonl: ${errorText(error)}`);
   }
   const lines = raw.split("\n").filter((l) => l.trim() !== "");
-  if (lines.length === 0) return fail("trace.jsonl is empty");
+  if (lines.length === 0) {
+    return fail(
+      truncated
+        ? "last trace record is larger than 256 KiB; showing nothing"
+        : "trace.jsonl is empty",
+    );
+  }
   const rows: TraceRow[] = [];
   let unreadable = 0;
   for (const text of lines.slice(-count)) {

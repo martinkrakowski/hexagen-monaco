@@ -8,6 +8,8 @@ export interface TuiArgs {
   readonly problem?: string;
 }
 
+export const USAGE = "Usage: tui [--brownfield [--workspace-root <dir>]]";
+
 /** Parses `--brownfield` and `--workspace-root <dir>` (also `--workspace-root=<dir>`). */
 export function parseTuiArgs(argv: readonly string[], cwd: string): TuiArgs {
   let brownfield = false;
@@ -28,8 +30,14 @@ export function parseTuiArgs(argv: readonly string[], cwd: string): TuiArgs {
     } else if (arg.startsWith("--workspace-root=")) {
       root = arg.slice("--workspace-root=".length);
       if (root === "") problem = "--workspace-root needs a directory";
+    } else {
+      problem ??= `unknown argument: ${arg}`;
     }
   }
+  if (root !== undefined && !brownfield) {
+    problem ??= "--workspace-root requires --brownfield";
+  }
+  if (problem !== undefined) problem = `${problem}\n${USAGE}`;
   return {
     brownfield,
     workspaceRoot: path.resolve(cwd, root ?? "."),
