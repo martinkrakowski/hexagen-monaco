@@ -7,6 +7,8 @@ import {
   rm,
   stat,
   symlink,
+  rename,
+  copyFile,
   chmod,
   writeFile,
 } from "node:fs/promises";
@@ -373,5 +375,90 @@ describe("grant revoke", () => {
       now: NOW,
     });
     expect(text()).toContain("signature: verified");
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "refuses when an ancestor is swapped to an outside symlink after the preflight",
+    async () => {
+      const f = await fixture();
+      const outsideDir = await tmp("rv-outside-");
+      const outside = path.join(outsideDir, "g.json");
+      await writeFile(outside, await readFile(f.grantFile, "utf-8"));
+      const before = await readFile(outside, "utf-8");
+      const dir = path.dirname(f.grantFile);
+      await revoke(f, {
+        beforeRename: async () => {
+          await rename(dir, `${dir}-moved`);
+          await symlink(outsideDir, dir);
+          // Make the redirected rename succeed if nothing stops it.
+          for (const name of await readdir(`${dir}-moved`)) {
+            if (name.endsWith(".tmp")) {
+              await copyFile(
+                `${dir}-moved/${name}`,
+                path.join(outsideDir, name),
+              );
+            }
+          }
+        },
+      });
+      expect(process.exitCode).toBe(2);
+      expect(await readFile(outside, "utf-8")).toBe(before);
+      expect(await readdir(outsideDir)).toEqual(["g.json"]);
+    },
+  );
+
+  it("exits 2 and leaves the file unchanged when the lock is already held", async () => {
+    const f = await fixture();
+    const lock = `${f.grantFile}.lock`;
+    await writeFile(lock, "12345\n");
+    const before = await readFile(f.grantFile, "utf-8");
+    await revoke(f);
+    expect(process.exitCode).toBe(2);
+    expect(text()).toContain("another revoke");
+    expect(await readFile(f.grantFile, "utf-8")).toBe(before);
+    expect(await readFile(lock, "utf-8")).toBe("12345\n");
+  });
+
+  it("removes its lock after a successful revoke", async () => {
+    const f = await fixture();
+    await revoke(f);
+    expect(await readdir(path.dirname(f.grantFile))).toEqual(["g.json"]);
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "keeps permission bits the umask would strip",
+    async () => {
+      const f = await fixture();
+      await chmod(f.grantFile, 0o666);
+      const old = process.umask(0o022);
+      try {
+        await revoke(f);
+      } finally {
+        process.umask(old);
+      }
+      expect((await stat(f.grantFile)).mode & 0o777).toBe(0o666);
+    },
+  );
+
+  it("warns, naming both keys, when --key-file differs from the server default", async () => {
+    const f = await fixture();
+    const otherHex = "cd".repeat(32);
+    const otherKey = path.join(f.home, "other.key");
+    await writeFile(otherKey, otherHex + "\n");
+    await writeFile(f.grantFile, JSON.stringify(signed(otherHex), null, 2));
+    await revoke(f, { keyFile: otherKey });
+    expect(process.exitCode).toBe(0);
+    const t = text();
+    expect(t).toContain("grant key mismatch");
+    expect(t).toContain(otherKey);
+    expect(t).toContain(f.keyPath);
+    expect(t).toContain("signature failure");
+    expect(t).not.toContain(otherHex);
+  });
+
+  it("does not warn when no override is given", async () => {
+    const f = await fixture();
+    await revoke(f);
+    expect(text()).not.toContain("grant key mismatch");
   });
 });

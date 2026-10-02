@@ -295,6 +295,14 @@ in-repo key (`.hexagen/grant-signing.key`), and the grant file may be anywhere
 schedules the revocation: the grant stays valid until then, and the preflight
 warns. A value at or after `expires_at` has no effect, and the preflight warns
 about that too. The file's permission bits are preserved.
+The grant path is resolved once and, in a client repo, its directory is checked
+to still be under `.hexagen/` right before the rename; a swap of an ancestor
+in the instant between that check and the rename is a residual window that this
+narrows but does not close. A `<grant>.lock` file (created exclusively, holding
+the pid, never auto-broken) serialises concurrent revokes: a held lock exits 2.
+When `--key-file` or `--engagement` selects a key other than the server's
+default, `revoke` warns with both paths and fingerprints, because the server
+would deny that grant as a signature failure, not report it as revoked.
 
 Two different ways to end up with a `revoked_at` field, and they read
 differently (BW-D5):

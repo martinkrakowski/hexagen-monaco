@@ -192,6 +192,9 @@ print the workspace root, the key path and its fingerprint, never the key.
   A future `--at` schedules the revocation (the grant stays valid until then,
   and the preflight warns); a value at or after `expires_at` has no effect. In
   a repo with a manifest it re-signs with the in-repo key.
+  Concurrent revokes are serialised by `<grant>.lock` (a held lock exits 2, never
+  auto-broken), and `--key-file`/`--engagement` pointing at a key other than the
+  server default produces a warning naming both keys.
 
 ### `hexagen observe`
 
