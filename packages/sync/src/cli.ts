@@ -21,6 +21,7 @@ import { adoptCommander } from "./commands/adopt/index.js";
 import { bootstrapCommander } from "./commands/bootstrap/index.js";
 import { scanCommander } from "./commands/scan/index.js";
 import { observeCommander } from "./commands/observe/index.js";
+import { evidenceCommander } from "./commands/evidence/index.js";
 import { sliceCommander } from "./commands/slice/index.js";
 import { contractCommander } from "./commands/contract/index.js";
 import { grantCommander } from "./commands/grant/index.js";
@@ -159,6 +160,7 @@ function buildProgram(): Command {
   program.addCommand(scanCommander);
   program.addCommand(observeCommander);
   program.addCommand(grantCommander);
+  program.addCommand(evidenceCommander);
   program.addCommand(sliceCommander);
   program.addCommand(contractCommander);
 

@@ -13,6 +13,10 @@
     "./node/grant-key": {
       "types": "./dist/node/grant-key.d.ts",
       "default": "./dist/node/grant-key.js"
+    },
+    "./node/trace-chain": {
+      "types": "./dist/node/trace-chain.d.ts",
+      "default": "./dist/node/trace-chain.js"
     }
   },
   "types": "dist/index.d.ts",
@@ -39,6 +43,7 @@
     "@types/node": "^20.0.0",
     "ajv": "^8.17.1",
     "eslint": "^8.57.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.4.5",
     "vitest": "^4.1.9"
   },

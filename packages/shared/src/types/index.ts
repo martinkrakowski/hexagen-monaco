@@ -3,4 +3,5 @@ export * from "./workspace-template-id.js";
 export * from "./interpolate.js";
 export * from "./scan-envelope.js";
 export * from "./brownfield/index.js";
+export * from "./trace-rules.js";
 export * from "./grant-checks.js";

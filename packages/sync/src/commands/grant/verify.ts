@@ -61,12 +61,20 @@ export async function loadGrantFile(file: string): Promise<LoadedGrant> {
   } catch {
     return { ok: false, problem: `${file} is not valid JSON` };
   }
+  return parseGrant(json, file);
+}
+
+/**
+ * Shape-checks already-parsed JSON against the one strict grant schema (also
+ * used by `hexagen evidence pack`, so there is exactly one).
+ */
+export function parseGrant(json: unknown, label: string): LoadedGrant {
   const parsed = GrantFile.safeParse(json);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     return {
       ok: false,
-      problem: `${file} is not a grant: ${issue?.path.join(".") || "(root)"}: ${issue?.message}`,
+      problem: `${label} is not a grant: ${issue?.path.join(".") || "(root)"}: ${issue?.message}`,
     };
   }
   return { ok: true, grant: parsed.data };
