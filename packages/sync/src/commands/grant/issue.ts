@@ -1,16 +1,7 @@
 /* eslint-disable no-console */
 import { execFileSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
 import { realpathSync } from "node:fs";
-import {
-  link,
-  lstat,
-  mkdir,
-  open,
-  readFile,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
+import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Command } from "commander";
 import {
@@ -38,6 +29,10 @@ import {
 } from "../shared/git-exclude.js";
 import { isSameOrInside } from "../observe/same-path.js";
 import { resolveSidecarOut } from "../shared/sidecar-out.js";
+import {
+  SidecarFileExistsError as GrantFileExistsError,
+  writeFileExclusive as writeGrantFileExclusive,
+} from "../shared/sidecar-write.js";
 import { grantKeyCommander } from "./key-init.js";
 import { signGrantPayload } from "./sign.js";
 import { loadOrCreateSigningKey } from "./signing-key.js";
@@ -124,37 +119,6 @@ function discoverRoot(options: IssueOptions): string {
     return isSameOrInside(realTop, realDiscovered) ? discovered : top;
   } catch {
     return top;
-  }
-}
-
-class GrantFileExistsError extends Error {}
-
-/**
- * Temp file, then a hard link to the final name: `link` fails with EEXIST
- * instead of replacing, so an existing grant is never overwritten, and a
- * reader never sees a half-written grant.
- */
-async function writeGrantFileExclusive(
-  target: string,
-  text: string,
-): Promise<void> {
-  await mkdir(path.dirname(target), { recursive: true });
-  const tmp = `${target}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
-  const handle = await open(tmp, "wx");
-  try {
-    try {
-      await handle.writeFile(text, "utf-8");
-    } finally {
-      await handle.close();
-    }
-    await link(tmp, target);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-      throw new GrantFileExistsError(`${target} already exists`);
-    }
-    throw error;
-  } finally {
-    await unlink(tmp).catch(() => undefined);
   }
 }
 
