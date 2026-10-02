@@ -429,6 +429,55 @@ than `HEAD` the commands warn, and with `--strict` fail.
 
 ---
 
+### `hexagen workbook export`
+
+Writes the brownfield workbook as one zip, or stages named `.hexagen/` files
+into the client's history. Neither mode touches the client's working tree.
+
+```bash
+# the bundle: one new file under .hexagen/, never overwritten
+npx hexagen workbook export --out .hexagen/workbook.zip [--root <dir>] [--key-file <path>] [--engagement <id>]
+
+# the only way anything from .hexagen/ reaches the client's history (BW-D1)
+npx hexagen workbook export --stage .hexagen/slice.json .hexagen/contract.json        # prints the diff, stages nothing
+npx hexagen workbook export --stage .hexagen/slice.json .hexagen/contract.json --yes  # git add -f on exactly those files
+```
+
+**Bundle.** `bundle.json` (the index, with an HMAC from the engagement key,
+resolved the same way as `grant` and `evidence pack`), `observed.json`,
+`slice.json`, `contract.json` (the last two optional; `slice.json` is required),
+`grants/<id>.json` (every grant in `.hexagen/grants/`, byte for byte, each
+signature verified first), `proposals/<id>.patch` and `<id>.json`, the packed
+evidence (`evidence/trace.jsonl`, `evidence/verdicts.json`, with the denials in
+`verdicts.json`) and `tip.json`. Export runs the `evidence pack` logic, so a
+broken chain, a truncated tail or a bad grant fails the export (exit 1, nothing
+written) and the anchored tip advances as it does for `evidence pack`.
+
+**Allow-list.** The bundle is built from named files only; nothing else in
+`.hexagen/` is read. A key or env file is never included: `grant-signing.key`,
+any `*.key`, anything under `keys/` or `~/.hexagen/keys/`, any `.env*`. The
+check runs on the source path and again on the bundle path. A key or env file
+found inside `.hexagen/grants/` or `.hexagen/proposals/` refuses the whole
+export (exit 2); a symlink there is refused too.
+
+**`--out`** must resolve under `<root>/.hexagen/`, not under `evidence/`, and must
+not exist; the bundle is written to a temporary file and hard-linked.
+
+**`--stage`** accepts only allow-listed `.hexagen/` files (`observed.json`,
+`slice.json`, `contract.json`, `grants/*.json`, `proposals/*.patch|json`,
+`evidence/trace.jsonl`, `evidence/tip.json`). Without `--yes` it prints the
+unified diff and stages nothing. With `--yes` it runs `git add -f` on exactly
+those files; it never commits. One refused path (a key, a file off the list, a
+path outside `.hexagen/`, a symlink) refuses the whole call and stages nothing.
+
+| Code | Meaning                                                                                      |
+| ---- | -------------------------------------------------------------------------------------------- |
+| 0    | Bundle written, or the stage diff printed / files staged                                     |
+| 1    | A grant signature, the trace chain or the anchored tip is invalid; nothing written           |
+| 2    | Bad input or refused: a bad `--out`, an existing file, a key or off-list path, no slice, ... |
+
+---
+
 ## Programmatic Usage
 
 > **The supported contract of this package is the `hexagen` binary.** The root

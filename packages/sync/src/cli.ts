@@ -24,6 +24,7 @@ import { observeCommander } from "./commands/observe/index.js";
 import { evidenceCommander } from "./commands/evidence/index.js";
 import { sliceCommander } from "./commands/slice/index.js";
 import { contractCommander } from "./commands/contract/index.js";
+import { workbookCommander } from "./commands/workbook/index.js";
 import { grantCommander } from "./commands/grant/index.js";
 import { runReportCommand } from "./commands/report/index.js";
 import { resolveToolchainVersion } from "./toolchain-version.js";
@@ -163,6 +164,7 @@ function buildProgram(): Command {
   program.addCommand(evidenceCommander);
   program.addCommand(sliceCommander);
   program.addCommand(contractCommander);
+  program.addCommand(workbookCommander);
 
   const templatesCommand = program
     .command("templates")
