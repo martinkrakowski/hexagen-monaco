@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { promises as fs } from "node:fs";
+import { promises as fs, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { ObservedReport } from "@hexagen/shared";
@@ -10,6 +10,7 @@ import {
   observeCommander,
   runObserve,
 } from "../../../src/commands/observe/index.js";
+import { samePath } from "../../../src/commands/observe/same-path.js";
 import { globToRegExp } from "../../../src/commands/shared/glob.js";
 
 const tmpDirs: string[] = [];
@@ -404,9 +405,18 @@ describe("hexagen observe: fix round", () => {
     const root = await messyRepo();
     const res = await runObserve({ root: path.join(root, "src") });
     expect(res.exitCode).toBe(2);
-    expect(res.messages.join("\n")).toContain(
-      `--root must be the repo top level (git says ${await fs.realpath(root)})`,
-    );
+    const message = res.messages.join("\n");
+    expect(message).toContain("--root must be the repo top level (git says ");
+    // Git prints the top level in its own form on Windows (forward slashes,
+    // short names, case), so compare paths rather than strings.
+    const reported = /\(git says (.*)\)/.exec(message)?.[1] ?? "";
+    expect(
+      samePath(
+        realpathSync.native(reported),
+        realpathSync.native(root),
+        process.platform,
+      ),
+    ).toBe(true);
   });
 
   it("exits 2 on a root that is not a git checkout", async () => {
