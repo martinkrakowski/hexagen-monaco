@@ -13,8 +13,8 @@ import {
 
 describe("creation-path domain", () => {
   describe("CREATION_PATH_OPTIONS", () => {
-    it("has exactly 3 options", () => {
-      assert.strictEqual(CREATION_PATH_OPTIONS.length, 3);
+    it("has exactly 4 options", () => {
+      assert.strictEqual(CREATION_PATH_OPTIONS.length, 4);
     });
 
     it("has unique ids", () => {
@@ -23,7 +23,12 @@ describe("creation-path domain", () => {
     });
 
     it("covers all CreationPathId values", () => {
-      const expected: CreationPathId[] = ["blank", "import", "ai"];
+      const expected: CreationPathId[] = [
+        "blank",
+        "import",
+        "ai",
+        "brownfield",
+      ];
       const actual = CREATION_PATH_OPTIONS.map((o) => o.id);
       assert.deepStrictEqual(actual.sort(), expected.sort());
     });

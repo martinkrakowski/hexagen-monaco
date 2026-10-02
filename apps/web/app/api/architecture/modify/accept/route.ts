@@ -9,6 +9,7 @@ import { createWebLogger } from "@/lib/wire.shared";
 import { guardMutation } from "@/lib/request-guards";
 import { validateManifestPath } from "@/lib/manifest-path";
 import { AcceptTransactionUseCase } from "@hexagen/transaction-system";
+import { guardBrownfieldProject } from "../../../../../lib/platform/brownfield-guard";
 
 export async function POST(request: NextRequest) {
   // Same-origin + rate-limit gate (D1): commits speculative patches to the
@@ -24,6 +25,14 @@ export async function POST(request: NextRequest) {
       manifestPath?: string;
     };
     transactionId = (body as { transactionId?: string }).transactionId;
+
+    // BW-D7: a stored brownfield workbook never reaches this route. The id is
+    // optional; without one the greenfield behaviour is unchanged.
+    const brownfield = await guardBrownfieldProject(
+      request,
+      (body as { projectId?: unknown }).projectId,
+    );
+    if (brownfield) return brownfield;
 
     if (!transactionId) {
       return NextResponse.json(

@@ -95,6 +95,70 @@ tools — it is scoped only for a future, generic Field Kit adapter that
 doesn't check `contexts`, not for `hexagen_accept_transaction` as it exists
 today. Prints the grant JSON to stdout, or to `--out <file>` if given.
 
+### `hexagen observe`
+
+A read-only scan of a repo you do not control. It reports what is already
+there, in the repo's own names, and never runs `adopt`, `bootstrap`, `sync`
+or `hexagen-lint`:
+
+```bash
+npx hexagen observe --root ../client-repo                    # JSON to stdout
+npx hexagen observe --root ../client-repo \
+  --out .hexagen/observed.json --yes                         # write the file
+npx hexagen observe --dont-touch src/legacy/ vendor-patches/ # report-only
+```
+
+- `--root <dir>` is used exactly as given (default: cwd); it is never searched
+  upward, and it must be the repo top level (exit 2 otherwise, naming the
+  top level git reports). The directory must be a git checkout with at least one
+  commit, whose `HEAD` is recorded in `repo.commit`. Credentials, query and fragment in the `origin` URL are stripped.
+- `--out <file>` must resolve under `<root>/.hexagen/` (symlinks included);
+  anything else exits 2, as does a `.hexagen` that is a regular file. It
+  prints a `will write:` line for `observed.json` and one for the exclude file,
+  and writes only with `--yes` (without it, exit 2). The report is written as a
+  temp file plus rename. `.hexagen/` is then kept out of `git status` by
+  appending it, if absent, to the file `git rev-parse --git-path info/exclude`
+  prints (correct in linked worktrees and submodules); the tracked
+  `.gitignore` is never edited, and `git add -f` can still stage the
+  directory. If that update fails, the command exits 2 before writing the
+  report.
+- `--max-files <n>` (default 50000) and `--max-ms <n>` (default 30000) cap the
+  walk. A tripped cap marks `packages`, `languages`, `build` and `generated` as
+  `collected: false` with the reason, and sets `limits.truncated`.
+- The output validates against `ObservedReport` (`docs/kernel/observed.schema.json`)
+  and has no `type`, layer, plane or context key. `edges` and `unresolved` are
+  `collected: false` ("import pass not run (BW4b)") until the import pass lands.
+
+What it reads:
+
+- **Walk.** Skips `node_modules`, `vendor`, `bower_components`, `jspm_packages`,
+  `.yarn`, `.git`, `.hg`, `.svn` and `.hexagen`,
+  does not follow symlinks, and honours the root `.gitignore` and nested
+  `.gitignore` files (not `info/exclude` or `core.excludesFile`). A path that
+  fails the slice-path rules (a backslash or control character) is skipped
+  with a note.
+- **Metadata files** (`package.json`, `pnpm-workspace.yaml`, `.gitattributes`,
+  `CODEOWNERS`) are never read through a symlink; a link is noted and skipped.
+- **Packages.** Every `package.json` the walk reaches is a package: a repo with no
+  workspaces has one at `"."`. Names are exactly as written, scope included; a
+  manifest with no `name` is reported under its directory path (the root
+  directory's basename for `"."`). Workspace `!` exclusions from `workspaces`
+  (array or `{packages}`) and `pnpm-workspace.yaml` are honoured, with full glob
+  syntax (`*`, `**`, `?`, `[..]`, `{a,b}`); include globs add nothing the walk
+  has not already found.
+- **Languages** by extension (file counts), **build markers** (`package.json`,
+  `nx.json`, `turbo.json`, `go.mod`, `Cargo.toml`, `pom.xml`, `build.gradle*`,
+  `pyproject.toml`, `Makefile`).
+- **Generated** paths: root `.gitattributes` `linguist-generated`, `@generated`
+  in the first 5 lines of a source file, and gitignored `dist/` or `build/`.
+- **dontTouch**: `--dont-touch` plus literal anchored `CODEOWNERS` paths
+  (`.github/CODEOWNERS`, then `CODEOWNERS`, then `docs/CODEOWNERS`; the first found is read), reported with their
+  owners and never turned into a rule. Glob and unanchored CODEOWNERS patterns
+  cannot be a path, so they are skipped and noted in `limits.reasons`.
+  `limits.reasons` may carry `note:` lines (an unreadable directory, an
+  unnamed package, a pattern that does not compile) while `truncated` is
+  `false`; only a tripped cap sets `truncated`.
+
 ---
 
 ## Programmatic Usage

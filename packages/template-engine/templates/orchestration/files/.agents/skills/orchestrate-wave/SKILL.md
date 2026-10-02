@@ -54,6 +54,7 @@ absent, or a field of it is absent, these are the defaults and you state them in
   `seats` says who runs it (an agent and a model, each naming a host). Both are declared in
   `.agents/orchestration/config.yaml`. With none declared, ask the owner which host and seat; never
   start a server.
+- `installProbes` — `[]`, no probes. Each is `{package, check, repair?}`; stage 1 says when the orchestrator runs them.
 - `waveLogDir` — `$HOME/.waves-<name>`, where `<name>` is the name half of `repo`. Never a
   bare shared wave-log root: another project's status server scans one, and a wave logged there
   reports against the wrong repository.
@@ -144,8 +145,11 @@ stops at the first failure by name. `ci.yml` runs **one** step it does not:
 **`yarn install --immutable`** is not in the gate. Say in the brief whether a lane may add
 a dependency, and if it may, that the regenerated `yarn.lock` travels with it. (why: [rationale](references/rationale.md#yarn-install---immutable))
 
-**The gate's byte-level scan is in the step list deliberately — it is not inside the
-typecheck step.** Nothing else in a usual gate set looks at bytes. (why: [rationale](references/rationale.md#the-byte-level-scan))
+**Where a project's `gateSteps` carry a byte-level scan, it is its own step — it is not inside the
+typecheck step.** Nothing else in a usual gate set looks at bytes. The scaffolded config does not add
+one: the gate is a subset of CI, and a scaffold-added step the project did not choose would be a
+required step that fails wherever the scan's bin is not installed (only a `yarn <script>` step can
+skip), so adding it is the project's own decision. (why: [rationale](references/rationale.md#the-byte-level-scan))
 
 **A project-specific guard (for example a route-registry scan) belongs in `gateSteps` as its own
 step**, so a lane that adds or moves a test file into a scanned directory is covered by the gate
@@ -278,22 +282,46 @@ that did not happen.
    Skip the install **only for a lane that runs no local command needing dependencies** (a
    docs-only lane and little else — a deletion lane still needs `node_modules`). (why: [rationale](references/rationale.md#yarn-berry-hardlinks-package-contents-from-a-shared-global-cache))
 
+   **Run the config's `installProbes` once the install finishes, before the worktree is
+   dispatched.** Under concurrent installs on one host a dependency's postinstall binary can be
+   silently skipped, and a lane then fails on a missing binary it cannot repair. Each probe is
+   `{package, check, repair?, platform?}`. On a remote lane host run it as
+   `ssh <alias> -- sh -c 'cd "$1" && shift && exec "$@"' sh <remote worktree path> <check argv…>`, which runs the probe in the new worktree and passes every argv word
+   as its own argument, so nothing is shell-joined; `repair` uses the same form. On a local host
+   run `check` with its cwd set to the new worktree. A probe with a `platform` (`darwin`, `linux`
+   or `win32`) runs only on a lane host whose platform matches; on a remote host find it with
+   `ssh <alias> -- uname -s` (`Darwin` is darwin, `Linux` is linux). When a `check` fails, run its
+   `repair` ONCE (same host, same worktree), emit the repair as a wave event, then run `check`
+   again. A repair for a stripped package removes the package directory before it reinstalls, as the
+   native-binary check below says. If `check` still fails, or `repair` is absent or exits non-zero, **do not dispatch that
+   worktree**: report the package and both exit codes. `hexagen-orchestration-doctor` runs the
+   `check` of each probe whose platform matches your own host, never a `repair`, and reports a failing
+   `check` as FAIL.
+   (why: [rationale](references/rationale.md#install-probes))
+
    And **after a wave's installs, verify the main checkout still has its native binaries** rather
    than letting the owner's next dev start find out:
 
    ```sh
-   # Names any platform package left with metadata only, and is silent when healthy.
+   # Names any platform package left with metadata only, exits non-zero when it names one, and
+   # exits non-zero when it discovers NO platform package at all: a loop over nothing proves nothing,
+   # and an unmatched glob must not read as healthy. Run it on a Darwin host, and run it under `sh`
+   # (zsh's `nomatch` aborts the loop on an unmatched glob).
    #
    # `find node_modules -name '*.node' | head` is NOT a check: a stripped package simply
    # contributes no line, so the command prints the survivors and exits 0 — it reports what
    # exists, never what is missing. Nor is "has a .node file" the test: @esbuild ships
    # `bin/esbuild`, @img/sharp-libvips ships `lib/`, and both are healthy with no .node at
    # all. The payload test below has neither false negative nor false positive on this repo.
+   found=0 stripped=0
    for d in node_modules/@*/*darwin*/ node_modules/*darwin*/; do
      [ -d "$d" ] || continue
+     found=$((found + 1))
      n=$(find "$d" -type f ! -name '*.json' ! -name '*.md' ! -name 'LICENSE*' | wc -l)
-     [ "$n" -eq 0 ] && echo "STRIPPED: $d"
+     if [ "$n" -eq 0 ]; then echo "STRIPPED: $d"; stripped=$((stripped + 1)); fi
    done
+   [ "$found" -gt 0 ] || echo "NOTHING DISCOVERED: no *darwin* package under node_modules"
+   [ "$found" -gt 0 ] && [ "$stripped" -eq 0 ]
    ```
 
 (why: [rationale](references/rationale.md#what-the-stripped-binary-check-found))
@@ -350,6 +378,16 @@ that did not happen.
       `hexagen-orchestration-lane-watch follow` takes the same two flags to watch the session. Both
       need the host's `server` (a loopback URL, reached through a tunnel; the caller is assumed to keep it open, which is an open owner question in P-D2). A
       `usage` reading that prints `unknown` and exits 3 is incomplete, not zero.
+   7. **A fix round resumes the lane's own session when the dispatch transport supports it, and
+      forks it when the branch has moved** since the lane's last turn (a merge, a refresh). With
+      opencode that is `run -s <sessionID>`, plus `--fork` when the branch moved, using the
+      `sessionID` recorded in rule 6. These flags are orchestrator-side: they go in the dispatch
+      command, never in a lane brief. **Stagger forked resumes by about 20 s.** Two forks launched
+      in the same second fail with "database is locked" (opencode's sqlite). (why: [rationale](references/rationale.md#a-fix-round-resumes-the-lanes-own-session))
+   8. **A lane's result is verified on a host other than the one it ran on before it is merged.**
+      For a remote lane host, the second host is yours: run the gate after fetching the commits,
+      before the PR opens. For a local lane host, CI is the second host: open the PR and read CI's
+      conclusion on the PR's final head before merging, never your own gate alone. (why: [rationale](references/rationale.md#a-lanes-result-is-verified-on-a-second-host))
 
    **Every brief carries the checkpoint rule**: commit failing tests once seen to fail, commit
    again after each green step, push only when the gate passes — a scoped, owner-confirmed exception
@@ -361,7 +399,11 @@ that did not happen.
    marker or a lane killed without one; and `gate settled` with the gate exit and the coverage
    numbers `config.yaml` requires (statements, branches, functions, lines) in `--detail` once the
    gate has run.
-2. **Review.** Two independent inputs per PR, both required: a read-only review from a model that
+2. **Review.** **How many model reviews a lane gets follows the plan row's risk column.** A
+   normal-risk lane gets ONE combined reviewer pass covering the plan row, the brief and the
+   implementation diff together. A high-risk lane keeps separate row, brief and pre-PR reviews, each its own
+   pass. The review bots stay on every PR at either tier: they have found real defects after the
+   model reviewer approved. (why: [rationale](references/rationale.md#review-tiering-follows-the-plan-rows-risk)) Per PR, two independent inputs, both required: a read-only review from a model that
    is **not** the implementer, and the bot comments (`gh pr checks`, `gh api …/comments`). Verify
    every finding — yours and the bots' — against the branch diff before acting on it. Require the
    reviewer to remove any throwaway worktree it created, and check: two have been left behind.

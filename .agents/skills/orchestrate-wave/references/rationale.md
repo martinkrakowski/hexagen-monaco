@@ -132,9 +132,11 @@ edge is already sanctioned before assuming it is not.
 
 ### The byte-level scan
 
-**The byte-level scan** is in the gate above rather than in this list, deliberately. It is
-cheap and runnable locally, so a lane should meet it before CI
-does. **Note it is NOT inside the typecheck step** — that chain type-checks the tool, it does not run
+**The byte-level scan**, where a project's gate carries one, is its own step rather than part of
+another, deliberately. It is cheap and runnable locally, so a lane should meet it before CI does.
+The scaffolded config does not add it: the gate is a subset of CI, and only a `yarn <script>` step
+can skip, so a scaffolded bin step marked optional would still be a required one wherever the bin is
+not installed. Adding the step is the project's own decision. **Note it is NOT inside the typecheck step** — that chain type-checks the tool, it does not run
 the scan; a typecheck on a tree containing a raw NUL exits 0, measured. Nothing else in a usual gate
 set looks at bytes, and a raw `\x00` inside a string literal can survive build, typecheck, lint,
 format check and a full test run with nothing noticing.
@@ -309,6 +311,27 @@ brief's mistake faithfully, which costs the full cycle and passes review.
    itself — and a bundler binding nothing had asked for yet and would have failed later, with no
    obvious cause.
 
+**The superseded form of the check, kept as the counter-example it became.** It walked the glob and
+printed only what it found stripped, so a tree where the glob matched nothing printed nothing and
+exited with the status of its last test. A loop over nothing proved nothing, and that read as
+healthy. The skill's current form counts what it discovered and fails when that is zero. Do not
+paste this one:
+
+   ```sh
+   # Names any platform package left with metadata only, and is silent when healthy.
+   #
+   # `find node_modules -name '*.node' | head` is NOT a check: a stripped package simply
+   # contributes no line, so the command prints the survivors and exits 0 — it reports what
+   # exists, never what is missing. Nor is "has a .node file" the test: @esbuild ships
+   # `bin/esbuild`, @img/sharp-libvips ships `lib/`, and both are healthy with no .node at
+   # all. The payload test below has neither false negative nor false positive on this repo.
+   for d in node_modules/@*/*darwin*/ node_modules/*darwin*/; do
+     [ -d "$d" ] || continue
+     n=$(find "$d" -type f ! -name '*.json' ! -name '*.md' ! -name 'LICENSE*' | wc -l)
+     [ "$n" -eq 0 ] && echo "STRIPPED: $d"
+   done
+   ```
+
 ### A lane is not done until the PR exists, and lanes routinely stop one step short
 
    **A lane is not done until the PR exists, and lanes routinely stop one step short.** On
@@ -463,3 +486,35 @@ brief's mistake faithfully, which costs the full cycle and passes review.
   `sed`/`perl` substitution that silently misses produces a passing suite that is indistinguishable
   from a vacuous test, and the wrong conclusion is expensive in both directions. Observed twice in
   one wave.
+
+## Process rules added by the parity plan
+
+### Review tiering follows the plan row's risk
+
+A normal-risk lane's row and brief are short, and a second pass over each finds the same things as
+the first, so they get one combined pass. A high-risk lane's failures cost more than the reviews do,
+so each of its row, brief and pre-PR reviews stays its own pass with its own context. The review bots
+stay on every PR at either tier because they have found real defects after the model reviewer
+approved.
+
+### A lane's result is verified on a second host
+
+A result checked only on the host that produced it inherits that host's faults: a stale cache, a
+missing dependency that happens to be present, a CPU the goldens do not fit. For a remote lane host
+the orchestrator's own host is the second one. For a local lane host there is no other machine to
+hand, so CI is the second host, and CI's conclusion on the final head is what is read.
+
+### A fix round resumes the lane's own session
+
+A resumed round keeps what the lane already learned about its own diff and takes fewer steps than a
+fresh one. When the branch has moved under the session (a merge, a refresh), a plain resume would
+carry a stale picture of the tree, so the round forks the session instead. The flags are an
+orchestrator-side detail of one transport, so a brief never names them. Two forks started in the
+same second collide in opencode's sqlite ("database is locked"), hence the stagger.
+
+### Install probes
+
+Concurrent installs on one host can leave a dependency's postinstall output unwritten while
+the install itself exits 0, and nothing then says so until a lane needs the binary. A probe makes
+the absence a refusal at worktree setup. The repair runs once and is followed by a second check, so
+a repair that does nothing cannot be mistaken for a fix.

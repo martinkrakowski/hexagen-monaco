@@ -66,6 +66,7 @@ const configFor = (over: Partial<Config> = {}): Config => ({
   repo: "acme/demo",
   waveStatusPort: 4318,
   ciWorkflow: ".github/workflows/ci.yml",
+  installProbes: [],
   ...over,
 });
 

@@ -155,6 +155,36 @@ describe("useSavedProjects — layer mutations", () => {
     assert.strictEqual(saved.layers[0].turns[0].content, "the session");
   });
 
+  it("saveProject threads mode through to the stored record, and omits it by default", async () => {
+    persistence.state.projects = [seed("existing")];
+    const { result } = await mountLoaded();
+
+    let brownId: string | null = null;
+    let greenId: string | null = null;
+    await act(async () => {
+      brownId = await result.current.saveProject(
+        "Workbook",
+        {} as never,
+        "",
+        [],
+        "brownfield",
+      );
+      greenId = await result.current.saveProject("Plain", {} as never, "");
+    });
+
+    const stored = persistence.state.projects;
+    assert.strictEqual(
+      stored.find((p) => p.id === brownId)?.mode,
+      "brownfield",
+    );
+    const green = stored.find((p) => p.id === greenId);
+    assert.ok(green, "the greenfield record was saved");
+    assert.ok(
+      !("mode" in green),
+      "greenfield rows stay byte-identical: no mode key",
+    );
+  });
+
   it("saveProject round-trips optional provenance fields (link, sourceLayerId) on initial layers", async () => {
     // Pins the field-spreading contract the accept-flow provenance write
     // (ManifestAcceptPage → produced-manifest link) depends on: a refactor of

@@ -125,6 +125,8 @@ export interface DoctorDeps {
    * unset. Optional: a caller with no environment says nothing about it.
    */
   readonly gateSlots?: () => string | undefined;
+  /** This host's `process.platform`. Defaults to the real one; injected by tests. */
+  readonly platform?: () => string;
 }
 
 /**
@@ -406,6 +408,31 @@ export async function runDoctor(
 
   for (const host of config.laneHosts) {
     findings.push(...(await checkLaneHost(host, deps)));
+  }
+
+  // P-D5: each install probe's `check`, on THIS host only. `repair` is the
+  // orchestrator's to run after a worktree install and is never run here: a
+  // diagnostic that mutates the tree it is diagnosing reports a state it made.
+  const hostPlatform = (deps.platform ?? (() => process.platform))();
+  for (const probe of config.installProbes) {
+    if (probe.platform !== undefined && probe.platform !== hostPlatform) {
+      findings.push({
+        check: `install-probe ${probe.package}`,
+        severity: "info",
+        message: `skipped (platform ${probe.platform}, this host ${hostPlatform})`,
+      });
+      continue;
+    }
+    const status = await deps.runCheck(probe.check, CHECK_TIMEOUT_MS);
+    if (status === "ok") continue;
+    findings.push({
+      check: `install-probe ${probe.package}`,
+      severity: "fail",
+      message:
+        `check ${JSON.stringify(probe.check)} ${howItFailed(status)}. The package's ` +
+        `install output is missing or broken on this host, so a worktree installed here ` +
+        `would be dispatched without it.`,
+    });
   }
 
   if (deps.gateSlots !== undefined) {

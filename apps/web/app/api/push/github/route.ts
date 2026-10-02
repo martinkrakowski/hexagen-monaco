@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import type { RepositoryLink } from "@hexagen/external-integration";
 import { getRepositoryWriter } from "@/lib/wire.server";
+import { guardBrownfieldProject } from "../../../../lib/platform/brownfield-guard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,16 @@ interface PushGithubRequest {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as PushGithubRequest;
+
+    // BW-D7: a resolved brownfield workbook never reaches this route. Callers
+    // already send ids of projects that may be IndexedDB-only or shared, so
+    // this only ADDS a refusal; every other case is today's behaviour.
+    const brownfield = await guardBrownfieldProject(
+      request,
+      body.projectId,
+      "refuse-brownfield-only",
+    );
+    if (brownfield) return brownfield;
 
     const token = await getToken({
       req: request,
