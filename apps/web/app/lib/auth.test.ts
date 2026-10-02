@@ -77,9 +77,14 @@ describe("authOptions GitHub provider issuer (RFC 9207)", () => {
     );
     tokenUrl = `http://127.0.0.1:${(tokenServer.address() as AddressInfo).port}/token`;
   });
-  afterAll(() => {
-    tokenServer.close();
-  });
+  afterAll(
+    () =>
+      new Promise<void>((resolve) => {
+        tokenServer.close(() => resolve());
+        // Drop any keep-alive sockets so close() can finish.
+        tokenServer.closeAllConnections();
+      }),
+  );
 
   async function githubClient() {
     const parseProviders = nodeRequire(
