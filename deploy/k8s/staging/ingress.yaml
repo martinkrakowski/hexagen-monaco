@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hexagen-web
+  labels:
+    app: hexagen-web
+  annotations:
+    cert-manager.io/cluster-issuer: midnight-ca
+    # <namespace>-<middleware name>@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: webapps-redirect-https@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - hexagen.midnight.lan
+      secretName: hexagen-web-tls
+  rules:
+    - host: hexagen.midnight.lan
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hexagen-web
+                port:
+                  name: http
