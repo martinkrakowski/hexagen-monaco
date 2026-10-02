@@ -18,7 +18,8 @@ export interface Grant {
   readonly id: string;
   readonly principal: string;
   readonly agent: string;
-  readonly contexts: readonly string[];
+  /** Absent on a client-repo grant (never `[]`); absent denies every monaco mutation. */
+  readonly contexts?: readonly string[];
   readonly paths: readonly string[];
   readonly tools: readonly string[];
   readonly mode: "write" | "propose";
@@ -210,7 +211,7 @@ export function checkMutationAgainstGrant(
       reason: `Grant does not include tool '${mutation.tool}'`,
     };
   }
-  if (!grant.contexts.includes(mutation.context)) {
+  if (!(grant.contexts ?? []).includes(mutation.context)) {
     return {
       allowed: false,
       code: "grant_denied",
