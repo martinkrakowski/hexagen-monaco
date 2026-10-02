@@ -2,14 +2,7 @@ import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { open, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
-import {
-  Contract,
-  ObservedReport,
-  Slice,
-  nfc,
-  normalizeSlicePath,
-  type SlicePaths,
-} from "@hexagen/shared";
+import { Contract, ObservedReport, Slice } from "@hexagen/shared";
 import { ObserveError } from "../observe/index.js";
 import { samePath } from "../observe/same-path.js";
 import { GitExcludeError, excludeWouldChange } from "./git-exclude.js";
@@ -47,39 +40,13 @@ export function asResult(e: unknown, messages: string[]): CommandResult {
 
 export const SIDECAR_ENTRY = ".hexagen/";
 
-/** `entry` is a directory prefix (trailing `/`) or an exact file path. */
-export function underPrefix(entry: string, candidate: string): boolean {
-  // NFC on both sides, as isPathInSlice does, so an exclude bites in either form.
-  const e = nfc(entry);
-  const c = nfc(candidate);
-  return e.endsWith("/") ? c.startsWith(e) : c === e;
-}
-
-/**
- * True when `to` (an edge target: a file, or a package root written without a
- * trailing `/`, or `.` for the root package) lies inside the slice. A package
- * root is a directory, so it is also tried with a trailing `/`.
- */
-export function targetInSlice(slice: SlicePaths, to: string): boolean {
-  if (to === "." || !normalizeSlicePath(to).ok) return false;
-  const hit = (entry: string): boolean =>
-    underPrefix(entry, to) || underPrefix(entry, `${to}/`);
-  // Excludes win under either spelling, then paths.
-  if (slice.excludes.some(hit)) return false;
-  return slice.paths.some(hit);
-}
-
-/** The first slice `paths` entry that contains `p` (a file or package root). */
-export function sliceEntryOf(slice: SlicePaths, p: string): string | undefined {
-  if (!targetInSlice(slice, p)) return undefined;
-  return slice.paths.find((e) => underPrefix(e, p) || underPrefix(e, `${p}/`));
-}
-
-/** True when `prefix` (a rule prefix) contains the edge target `to`. */
-export function prefixHasTarget(prefix: string, to: string): boolean {
-  if (to === ".") return false;
-  return underPrefix(prefix, to) || underPrefix(prefix, `${to}/`);
-}
+// The edge-rule helpers live in @hexagen/shared so the web viewer shares them.
+export {
+  prefixHasTarget,
+  sliceEntryOf,
+  targetInSlice,
+  underPrefix,
+} from "@hexagen/shared";
 
 export function git(root: string, args: string[]): string | null {
   try {

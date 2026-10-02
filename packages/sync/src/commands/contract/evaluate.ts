@@ -1,5 +1,6 @@
 import {
   UNRESOLVED_IMPORT_RULE_ID,
+  edgeViolatesRule,
   edgesComplete,
   isPathInSlice,
   type Contract,
@@ -9,9 +10,7 @@ import {
 import { extOf } from "../observe/index.js";
 import {
   isSuppressionExpired,
-  prefixHasTarget,
   sliceEntryOf,
-  underPrefix,
 } from "../shared/brownfield-sidecar.js";
 
 export interface Violation {
@@ -68,14 +67,7 @@ export function evaluateContract(input: {
   if (edges.collected) {
     for (const rule of contract?.rules ?? []) {
       for (const e of edges.items) {
-        if (!isPathInSlice(slice, e.from)) continue;
-        if (!underPrefix(rule.from, e.from)) continue;
-        const hitsTo = prefixHasTarget(rule.to, e.to);
-        const bad =
-          rule.kind === "forbid"
-            ? hitsTo
-            : !hitsTo && !prefixHasTarget(rule.from, e.to);
-        if (bad) {
+        if (edgeViolatesRule(slice, rule, e)) {
           violations.push({
             rule: rule.id,
             file: e.from,
