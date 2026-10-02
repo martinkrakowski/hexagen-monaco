@@ -140,7 +140,11 @@ export interface ProjectSharesRepository {
    * (write > read). Projects the caller already owns — personal tenant or
    * org membership — are excluded: those are owned, not shared.
    */
-  selectSharedWith(identity: GranteeIdentity): Promise<SharedProjectGrant[]>;
+  selectSharedWith(
+    identity: GranteeIdentity,
+    /** Restrict to one project, so the query is bounded by it, not by the caller's share count. */
+    projectId?: string,
+  ): Promise<SharedProjectGrant[]>;
 }
 
 interface ShareRow {
@@ -339,7 +343,7 @@ export function createProjectSharesRepository(
       return row ? (row.role as ShareRole) : null;
     },
 
-    async selectSharedWith(identity) {
+    async selectSharedWith(identity, projectId) {
       const { userId, orgIds, teamIds } = identity;
       // Joined to saved_projects so a grant pointing at a deleted project does
       // not surface as a phantom entry in someone's shared list. Owned
@@ -357,6 +361,7 @@ export function createProjectSharesRepository(
              ${teamIds.length ? `OR (s.grantee_type = 'team' AND s.grantee_id IN (${placeholders(teamIds.length)}))` : ""} )
           AND s.owner_id != ?
           ${orgIds.length ? `AND s.owner_id NOT IN (${placeholders(orgIds.length)})` : ""}
+          ${projectId !== undefined ? "AND s.project_id = ?" : ""}
         ORDER BY p.ord ASC, CASE s.role WHEN 'write' THEN 0 ELSE 1 END
       `;
       const rows = db
@@ -367,6 +372,7 @@ export function createProjectSharesRepository(
           ...teamIds,
           userId,
           ...orgIds,
+          ...(projectId !== undefined ? [projectId] : []),
         ) as SharedGrantRow[];
       return collapseToStrongest(rows);
     },

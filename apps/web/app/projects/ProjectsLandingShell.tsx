@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { projectMode } from "@hexagen/shared";
 
 import { useSavedProjects } from "@/hooks/useSavedProjects";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
@@ -49,9 +50,16 @@ export function ProjectsLandingShell() {
 
   const handleLoadProject = useCallback(
     (id: string) => {
+      // BW-D7: a brownfield workbook opens its own viewer, never the
+      // greenfield wizard / ProjectWorkspace.
+      const project = projects.find((p) => p.id === id);
+      if (project && projectMode(project) === "brownfield") {
+        router.push(`/projects/brownfield?project=${encodeURIComponent(id)}`);
+        return;
+      }
       routeToWizard(id);
     },
-    [routeToWizard],
+    [projects, router, routeToWizard],
   );
 
   return (

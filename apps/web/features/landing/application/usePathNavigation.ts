@@ -21,6 +21,11 @@ export function usePathNavigation() {
         case "ai":
           router.push("/projects/new/name?path=ai");
           break;
+        case "brownfield":
+          // Named by the shared step, saved with mode "brownfield", then the
+          // viewer page: never the greenfield wizard or ProjectWorkspace.
+          router.push("/projects/new/name?path=brownfield");
+          break;
         default: {
           const _exhaustive: never = pathId;
           throw new Error(`Unhandled creation path: ${_exhaustive}`);

@@ -1,5 +1,5 @@
 /** Top-level creation path identifiers */
-export type CreationPathId = "blank" | "import" | "ai";
+export type CreationPathId = "blank" | "import" | "ai" | "brownfield";
 
 /** A top-level creation option shown on the landing page */
 export interface CreationPathOption {
@@ -172,6 +172,16 @@ export const CREATION_PATH_OPTIONS: readonly CreationPathOption[] = [
     iconName: "Layers",
     isRecommended: true,
     href: "/projects/new/ai",
+  },
+  {
+    id: "brownfield",
+    label: "Brownfield workbook",
+    description:
+      "Work on a client's existing repository from your own clone. Slice, contract, grants and evidence stay on your machine; this app only views the exported bundle.",
+    colorTheme: "info",
+    iconName: "Upload",
+    isRecommended: false,
+    href: "/projects/new/name?path=brownfield",
   },
 ] as const;
 

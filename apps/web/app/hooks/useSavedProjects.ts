@@ -313,6 +313,9 @@ export function useSavedProjects() {
       // the accept flow) — persisted atomically with the project so a separate
       // follow-up write can't fail and leave the project without its layer.
       initialLayers: NewProjectLayer[] = [],
+      // Workbook mode. Omitted = greenfield: the key is NOT written, so
+      // greenfield rows stay byte-identical to those saved before the field.
+      mode?: ProjectMode,
     ): Promise<string | null> => {
       const id = crypto.randomUUID();
       const now = Date.now();
@@ -324,6 +327,7 @@ export function useSavedProjects() {
         updatedAt: now,
         formState,
         manifestYaml,
+        ...(mode ? { mode } : {}),
         layers: initialLayers.map((layer) => ({
           ...layer,
           id: crypto.randomUUID(),

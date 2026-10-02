@@ -8,8 +8,11 @@ import { wizardToManifest } from "@hexagen/wizard-orchestration";
 import type { ExportConfig } from "@hexagen/project-generation";
 import { readAddOnAnswers } from "@/lib/add-on-answers";
 import { getToken } from "next-auth/jwt";
+import { guardBrownfieldProject } from "../../../lib/platform/brownfield-guard";
 
 interface GenerateRequestBody {
+  /** Optional stored-project id; a brownfield workbook is refused (BW-D7). */
+  projectId?: string;
   wizardData?: Record<string, unknown>;
   manifest?: Record<string, unknown>;
   destination?: "archive" | "github";
@@ -25,6 +28,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as GenerateRequestBody;
     const { wizardData, manifest, outputFormat = "json", githubConfig } = body;
+
+    // BW-D7: a stored brownfield workbook never reaches this route. Without a
+    // projectId the greenfield behaviour is unchanged (quota-D2: ungated).
+    const brownfield = await guardBrownfieldProject(request, body.projectId);
+    if (brownfield) return brownfield;
 
     // Use outputFormat to determine what to return
     // outputFormat: "json" returns file map, "zip" returns binary
